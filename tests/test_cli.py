@@ -50,7 +50,9 @@ def test_inspect(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["inspect", str(SHOEBOX)]) == 0
     out = capsys.readouterr().out
     assert "volume 144.00 m3" in out
-    assert "Sabine" in out and "Eyring" in out
+    assert "Sabine" in out and "Eyring" in out and "Arau-Puchades" in out
+    # The example's absorption sits on the floor and ceiling: its decay is no diffuse one.
+    assert "note: the absorption is spread unevenly" in out
     assert "seat-a" in out and "inside" in out
 
 

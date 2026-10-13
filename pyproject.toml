@@ -51,6 +51,11 @@ acoustic-spaces = "acoustic_spaces.cli:main"
 Repository = "https://github.com/naelolaiz/acoustic_spaces_simulator"
 Changelog = "https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/CHANGELOG.md"
 
+# What `uv sync` installs along with the package in a source checkout; for pip, the
+# `dev` extra holds the same.
+[dependency-groups]
+dev = ["pytest>=7", "h5py>=3.8", "ruff>=0.6"]
+
 [tool.scikit-build]
 minimum-version = "build-system.requires"
 build-dir = "build/{wheel_tag}"
@@ -62,6 +67,16 @@ sdist.exclude = ["docs/_build", "validation/results"]
 # The version lives in one place, src/acoustic_spaces/_version.py.
 provider = "scikit_build_core.metadata.regex"
 input = "src/acoustic_spaces/_version.py"
+
+[tool.uv]
+# Rebuild the compiled core on `uv sync` when the C++ sources or the build files change,
+# not only when pyproject.toml does.
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "CMakeLists.txt" },
+    { file = "cpp/**/*" },
+    { file = "src/acoustic_spaces/_version.py" },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

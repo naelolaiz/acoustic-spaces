@@ -7,15 +7,17 @@ Pull requests are welcome.
 You need Python 3.10 or newer, a C++17 compiler and CMake 3.18 or newer.
 
 ```sh
-python -m pip install -e ".[dev,viz]"
+uv sync --extra viz                  # or, with pip: python -m pip install -e ".[dev,viz]"
 ```
 
-The compiled core is rebuilt on every `pip install -e .`.
+`uv sync` installs the `dev` group (pytest, h5py, ruff) along with the package, and
+rebuilds the compiled core when the C++ sources or the build files change; pip rebuilds
+it on every `pip install -e .`.
 
 ## Checks
 
 CI runs these on Linux, macOS and Windows, and its logs are kept free of warnings, not
-only of errors:
+only of errors (with uv, put `uv run` in front of each):
 
 ```sh
 ruff check .
@@ -29,7 +31,7 @@ Tests that draw with OpenGL carry the `render` marker; without a display, run th
 ## Documentation
 
 ```sh
-python -m pip install -e ".[docs]"
+python -m pip install -e ".[docs]"     # or: uv sync --extra docs
 python -m sphinx -W -b html docs docs/_build/html
 ```
 
