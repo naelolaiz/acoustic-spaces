@@ -82,6 +82,31 @@ def test_convolver_matches_offline_convolution(block: int) -> None:
     np.testing.assert_allclose(y, expected, atol=1e-5 * np.abs(expected).max())
 
 
+@pytest.mark.parametrize(
+    ("growth", "max_block"), [(1, 8192), (2, 8192), (8, 8192), (4, 64), (16, 1 << 20)]
+)
+def test_partitions_of_every_size_add_up(growth: int, max_block: int) -> None:
+    from acoustic_spaces import _native
+
+    rng = np.random.default_rng(6)
+    ir = rng.standard_normal((1, 2, 3_000)).astype(np.float32)
+    x = rng.standard_normal((8_000, 1)).astype(np.float32)
+    convolver = _native.Convolver(ir, 16, growth, max_block)
+    starts = [start for start, _, _ in convolver.segments]
+    assert starts[0] == 0
+    for (start, size, parts), nxt in zip(convolver.segments, [*starts[1:], 3_000], strict=True):
+        assert start in (0, 2 * size) and size <= max(16, max_block)
+        assert (parts - 1) * size < nxt - start <= parts * size
+    y = np.concatenate([convolver.process(b) for b in x.reshape(-1, 16, 1)])
+    expected = convolve(x[:, 0], ir[0].T)[: len(x)]
+    np.testing.assert_allclose(y, expected, atol=1e-5 * np.abs(expected).max())
+
+
+def test_long_responses_get_longer_partitions() -> None:
+    segments = Convolver(np.ones((144_000, 2)), 128).segments
+    assert segments == [(0, 128, 16), (2_048, 1_024, 14), (16_384, 8_192, 16)]
+
+
 def test_convolver_streams_and_resets() -> None:
     rng = np.random.default_rng(4)
     ir = rng.standard_normal((500, 2))
@@ -94,8 +119,12 @@ def test_convolver_streams_and_resets() -> None:
 
 
 def test_convolver_rejects_bad_settings() -> None:
+    from acoustic_spaces import _native
+
     with pytest.raises(ValueError, match="power of two"):
         Convolver(np.ones(10), 100)
+    with pytest.raises(ValueError, match="growth"):
+        _native.Convolver(np.ones((1, 1, 10), np.float32), 64, 3)
     with pytest.raises(ValueError, match="taps"):
         Convolver(np.ones((2, 2, 2, 2)), 64)
     convolver = Convolver(np.ones((10, 2)), 64)

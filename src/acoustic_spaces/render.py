@@ -191,9 +191,11 @@ class Convolver:
 
     ``ir`` is (taps,), (taps, outputs) for one input, or (taps, inputs, outputs), where
     each output sums its inputs, each through its own response. ``block`` is a power of
-    two. Work per block grows with inputs x outputs x taps, so per second it falls as
-    the block grows: 256 frames take about 0.4 ms for a 3 s binaural response on a
-    current x86-64 core, well within the 5.3 ms a block lasts at 48 kHz.
+    two, and the only latency. The response is split into segments whose partitions
+    grow along it (see :attr:`segments`), and the work of the long partitions is spread
+    over the blocks in between, so the cost per block stays even and grows slowly with
+    the response's length: a 3 s, 16-channel response in blocks of 128 frames takes
+    about 0.3 ms of the 2.7 ms each block lasts at 48 kHz, on one current x86-64 core.
     """
 
     def __init__(self, ir: np.ndarray, block: int = 256) -> None:
@@ -225,6 +227,11 @@ class Convolver:
     @property
     def block(self) -> int:
         return self._native.block
+
+    @property
+    def segments(self) -> list[tuple[int, int, int]]:
+        """(first tap, partition length, partitions) of each segment of the response."""
+        return list(self._native.segments)
 
     def process(self, block: np.ndarray) -> np.ndarray:
         """One block, (block,) or (block, inputs), to (block, outputs) float32."""

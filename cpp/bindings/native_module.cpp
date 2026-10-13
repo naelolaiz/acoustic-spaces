@@ -4,10 +4,13 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
+#include <nanobind/stl/tuple.h>
+#include <nanobind/stl/vector.h>
 
 #include <complex>
 #include <cstdint>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -226,14 +229,18 @@ NB_MODULE(_native, m) {
           "Inverse of real_fft (as numpy.fft.irfft).");
 
     nb::class_<Convolver>(m, "Convolver",
-                          "Uniformly partitioned real-time convolution (float32).")
+                          "Non-uniformly partitioned real-time convolution (float32).")
         .def(
             "__init__",
-            [](Convolver *self, FloatResponses ir, std::size_t block) {
-                new (self) Convolver(ir.data(), ir.shape(0), ir.shape(1), ir.shape(2), block);
+            [](Convolver *self, FloatResponses ir, std::size_t block, std::size_t growth,
+               std::size_t max_block) {
+                new (self) Convolver(ir.data(), ir.shape(0), ir.shape(1), ir.shape(2), block,
+                                     growth, max_block);
             },
-            nb::arg("ir"), nb::arg("block"),
-            "ir: (inputs, outputs, taps) float32; block: frames per call, a power of two.")
+            nb::arg("ir"), nb::arg("block"), nb::arg("growth") = 8, nb::arg("max_block") = 8192,
+            "ir: (inputs, outputs, taps) float32; block: frames per call, a power of two; "
+            "partitions grow `growth` times per segment up to `max_block` (growth 1: "
+            "uniform).")
         .def("process", &convolver_process, nb::arg("block"),
              "One block (block, inputs) in, (block, outputs) out.")
         .def("reset", &Convolver::reset, "Forget all past input.")
@@ -241,7 +248,17 @@ NB_MODULE(_native, m) {
         .def_prop_ro("outputs", &Convolver::outputs)
         .def_prop_ro("taps", &Convolver::taps)
         .def_prop_ro("block", &Convolver::block)
-        .def_prop_ro("partitions", &Convolver::partitions);
+        .def_prop_ro(
+            "segments",
+            [](const Convolver &c) {
+                std::vector<std::tuple<std::size_t, std::size_t, std::size_t>> out;
+                for (std::size_t k = 0; k < c.segments(); ++k) {
+                    out.emplace_back(c.segment_start(k), c.segment_block(k),
+                                     c.segment_partitions(k));
+                }
+                return out;
+            },
+            "(first tap, block, partitions) of each segment of the response.");
 
     m.def("scatter_kernels", &scatter_kernels, nb::arg("length"), nb::arg("positions"),
           nb::arg("index"), nb::arg("amplitudes"), nb::arg("kernels"),
