@@ -19,6 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
+from acoustic_spaces._extras import install_hint
 from acoustic_spaces.spatial.directions import fibonacci_sphere, from_angles
 
 
@@ -128,9 +129,7 @@ def read_sofa(path: str | Path) -> HRTF:
     try:
         import h5py
     except ImportError as exc:
-        raise ImportError(
-            "reading SOFA files needs h5py: pip install acoustic-spaces[sofa]"
-        ) from exc
+        raise ImportError(f"reading SOFA files needs h5py: {install_hint('sofa')}") from exc
     path = Path(path)
     with h5py.File(path, "r") as f:
         if "Data.IR" not in f or "SourcePosition" not in f:

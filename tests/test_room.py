@@ -54,6 +54,32 @@ def test_sabine_and_eyring_match_the_formulas() -> None:
         room.reverberation_time("millington")
 
 
+def test_arau_puchades_allows_for_uneven_absorption(tmp_path: Path) -> None:
+    room = Room.from_yaml(SHOEBOX)
+    materials = room.scene.materials
+    k = OCTAVE_BANDS_HZ.index(1000)
+    walls = materials["painted_concrete"].absorption[k]
+    floor_ceiling = (
+        materials["carpet_on_concrete"].absorption[k] + materials["acoustic_ceiling"].absorption[k]
+    ) / 2
+    constant = 24 * math.log(10) * 144 / speed_of_sound(20.0)
+    # Eyring per axis from the walls facing it, weighted by their share of the area.
+    x, y, z = (constant / (-180 * math.log(1 - a)) for a in (walls, walls, floor_ceiling))
+    expected = x ** (36 / 180) * y ** (48 / 180) * z ** (96 / 180)
+    assert room.reverberation_time("arau_puchades")[k] == pytest.approx(expected)
+    # The absorbing ceiling and floor face one way: far longer than Eyring here.
+    assert room.reverberation_time("arau_puchades")[k] > 2 * room.reverberation_time("eyring")[k]
+
+    # Spread evenly, the absorption gives Eyring's time.
+    data = yaml.safe_load(SHOEBOX.read_text(encoding="utf-8"))
+    path = _scene(tmp_path, assignments={name: "painted_concrete" for name in data["assignments"]})
+    room = Room.from_yaml(path)
+    np.testing.assert_allclose(
+        room.reverberation_time("arau_puchades", air_absorption=True),
+        room.reverberation_time("eyring", air_absorption=True),
+    )
+
+
 def test_names_matching_materials_and_default_material(tmp_path: Path) -> None:
     scene = Scene.from_yaml(_scene(tmp_path, assignments={"floor": "carpet_on_concrete"}))
     # "ceiling" and "walls" match nothing yet.
