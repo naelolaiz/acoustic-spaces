@@ -210,6 +210,100 @@ def test_splitting_keeps_a_sparse_tail_together() -> None:
     assert np.mean(np.median(error, axis=1)) < 4.0
 
 
+#: Absorption of the example scene's materials: painted concrete walls, carpet on the
+#: floor and an absorbing tile ceiling.
+EXAMPLE_ABSORPTION = {
+    "walls": [0.01, 0.01, 0.01, 0.02, 0.02, 0.02, 0.02, 0.02],
+    "floor": [0.03, 0.03, 0.09, 0.25, 0.31, 0.33, 0.44, 0.44],
+    "ceiling": [0.49, 0.49, 0.53, 0.53, 0.75, 0.92, 0.99, 0.99],
+}
+
+
+def _box(absorption: dict[str, list[float]], scattering: float, **simulation) -> Room:
+    """The example's 8 x 6 x 3 m box with the given absorption per surface."""
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"box": SIZE.tolist()},
+                "materials": {
+                    name: {"absorption": alpha, "scattering": scattering}
+                    for name, alpha in absorption.items()
+                },
+                "assignments": {name: name for name in absorption},
+                "sources": [{"name": "s", "position": [2.0, 3.0, 1.5]}],
+                "listeners": [
+                    {"name": f"l{k}", "position": p}
+                    for k, p in enumerate([[6.0, 3.5, 1.2], [5.0, 1.5, 1.2], [3.5, 4.8, 1.2]])
+                ],
+                "simulation": {"seed": 3, **simulation},
+            }
+        )
+    )
+
+
+def _specular_box_decay(absorption: dict[str, list[float]], t: np.ndarray, room: Room):
+    """Sound energy left at times ``t`` in the box with specular walls (times, bands).
+
+    A specular ray travelling in direction d meets the walls facing axis k c |d_k| / L_k
+    times a second, so each direction decays at its own fixed rate; image sources fill
+    space evenly, so a listener receives the average over all directions.
+    """
+    n = 20_000
+    z = 1.0 - (2.0 * np.arange(n) + 1.0) / n
+    phi = math.pi * (3.0 - math.sqrt(5.0)) * np.arange(n)
+    r = np.sqrt(1.0 - z * z)
+    d = np.abs(np.column_stack([r * np.cos(phi), r * np.sin(phi), z]))
+    walls, floor, ceiling = (
+        -np.log1p(-np.array(absorption[k])) for k in ("walls", "floor", "ceiling")
+    )
+    # Nepers per metre: half the vertical crossings end on the floor, half on the ceiling.
+    rate = np.outer(d[:, 0] / SIZE[0] + d[:, 1] / SIZE[1], walls) + np.outer(
+        d[:, 2] / SIZE[2], (floor + ceiling) / 2
+    )
+    c = room.speed_of_sound()
+    left = np.column_stack([np.exp(-c * np.outer(t, band)).mean(axis=1) for band in rate.T])
+    return left * np.exp(-c * np.outer(t, room.air_attenuation()))
+
+
+def _slopes(t: np.ndarray, energy: np.ndarray, start: float, stop: float) -> np.ndarray:
+    """Decay rate (dB/s) of each band (columns) between two times."""
+    inside = (t >= start) & (t <= stop)
+    return np.polyfit(t[inside], 10.0 * np.log10(energy[inside]), 1)[0]
+
+
+@pytest.mark.parametrize("absorption", ["uniform", "example"])
+def test_specular_box_decays_as_its_directions_predict(absorption) -> None:
+    # Specular walls make the decay far from Eyring's, but exactly predictable. With the
+    # example's absorption, rays parallel to the floor never meet the absorbing ceiling:
+    # T30 is many times Eyring's estimate, and the stochastic tail must follow.
+    if absorption == "uniform":
+        areas = {"walls": 84.0, "floor": 48.0, "ceiling": 48.0}
+        mean = sum(a * np.array(EXAMPLE_ABSORPTION[n]) for n, a in areas.items()) / 180.0
+        alpha = dict.fromkeys(areas, list(mean))
+        length, window, bands = 1.2, (0.15, 1.0), slice(0, 7)  # 8 kHz is gone by 1 s
+    else:
+        alpha = EXAMPLE_ABSORPTION
+        length, window, bands = 2.0, (0.3, 1.8), slice(0, 8)
+    room = _box(alpha, 0.0, late={"rays": 20_000}, ir_length_s=length)
+    step = 0.05
+    # Every listener sees the same decay; their sum is steadier than each one.
+    simulated = sum(response.energy(step) for response in simulate(room)).T[:, bands]
+    t = (np.arange(len(simulated)) + 0.5) * step
+    expected = _specular_box_decay(alpha, t, room)[:, bands]
+    ratio = _slopes(t, simulated, *window) / _slopes(t, expected, *window)
+    np.testing.assert_allclose(ratio, 1.0, atol=0.1)
+
+
+def test_example_box_decays_as_eyring_says_once_its_surfaces_diffuse() -> None:
+    # The same absorption as the example, but every reflection diffuse: sound reaches all
+    # surfaces alike, and Eyring holds within its own error for uneven absorption (it
+    # reads about 5 % long at 63 and 125 Hz, where the ceiling absorbs almost alone).
+    room = _box(EXAMPLE_ABSORPTION, 1.0, late={"rays": 20_000}, ir_length_s=2.0)
+    response = simulate(room, listeners=["l0"])["s", "l0"]
+    ratio = response.parameters().t30 / room.reverberation_time("eyring", air_absorption=True)
+    assert np.all((ratio > 0.9) & (ratio < 1.1)), ratio
+
+
 def test_statistical_tail_follows_eyring() -> None:
     room = _diffuse_box({"late": {"method": "statistical"}})
     result = simulate(room)

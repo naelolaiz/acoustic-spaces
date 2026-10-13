@@ -1,4 +1,7 @@
 # A plain rectangular room, the simplest case every method must get right.
+# Its absorption sits on the ceiling and the carpet while the walls are hard and smooth,
+# so sound running between the walls dies away slowly: the simulated T30 is several times
+# the Sabine and Eyring estimates of `inspect`, which assume a diffuse field.
 name: Shoebox 8 x 6 x 3 m
 geometry:
   file: shoebox.obj

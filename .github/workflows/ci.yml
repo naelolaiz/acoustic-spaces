@@ -56,6 +56,22 @@ jobs:
           acoustic-spaces convolve sweep.wav sim/talker__seat-a.binaural.wav --out wet.wav --normalize
           acoustic-spaces auralize sim talker=sweep.wav --format ambix3 --out mix.wav --normalize
 
+  uv:
+    # The setup the README gives for a source checkout: `uv sync` with its dev group.
+    name: Source checkout with uv
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv
+      - name: Build and install with the test tools
+        run: uv sync
+      - name: Test
+        run: uv run pytest -q
+      - run: uv run acoustic-spaces info
+
   viz:
     name: 3D view (off-screen)
     runs-on: ubuntu-24.04
@@ -199,7 +215,7 @@ jobs:
   github-release:
     name: GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [lint, test, viz, editor, wheels, sdist, docs]
+    needs: [lint, test, uv, viz, editor, wheels, sdist, docs]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -223,7 +239,7 @@ jobs:
   pypi:
     name: Publish to PyPI
     if: startsWith(github.ref, 'refs/tags/v') && vars.PYPI_PUBLISH == 'true'
-    needs: [lint, test, viz, editor, wheels, sdist, docs]
+    needs: [lint, test, uv, viz, editor, wheels, sdist, docs]
     runs-on: ubuntu-24.04
     environment:
       name: pypi
