@@ -52,6 +52,8 @@ jobs:
           python examples/measurement/virtual_recording.py sweep.wav sim/talker__seat-a.wav rec.wav
           acoustic-spaces deconvolve rec.wav --sweep sweep.json --out ir.wav --loopback 2
           acoustic-spaces analyze ir.wav --reference-energy 0.01
+          acoustic-spaces convolve sweep.wav sim/talker__seat-a.binaural.wav --out wet.wav --normalize
+          acoustic-spaces auralize sim talker=sweep.wav --format ambix3 --out mix.wav --normalize
 
   viz:
     name: 3D view (off-screen)

@@ -539,6 +539,168 @@ def _cmd_measure(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_dry(path: str, sample_rate: int):
+    """A dry signal, mixed down to mono and resampled to ``sample_rate``."""
+    from acoustic_spaces.audio import read_wav
+    from acoustic_spaces.render import resample
+
+    dry, rate = read_wav(path)
+    if dry.shape[1] > 1:
+        print(f"note: mixed the {dry.shape[1]} channels of {path} down to mono", file=sys.stderr)
+    if rate != sample_rate:
+        print(f"note: resampled {path} from {rate} Hz to {sample_rate} Hz", file=sys.stderr)
+    return resample(dry.mean(axis=1), rate, sample_rate)
+
+
+def _write_wet(path: Path, data, sample_rate: int, mask: int | None, normalize: bool) -> None:
+    from acoustic_spaces.audio import write_wav
+
+    peak = float(abs(data).max(initial=0.0))
+    gain = 10.0 ** (-1.0 / 20.0) / peak if normalize and peak > 0 else 1.0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_wav(path, data * gain, sample_rate, mask)
+    level = f"{20.0 * math.log10(peak * gain):+.1f} dBFS" if peak > 0 else "silent"
+    print(
+        f"wrote {path}: {data.shape[1]} channel(s), {len(data) / sample_rate:.2f} s at "
+        f"{sample_rate} Hz, peak {level}"
+    )
+    if peak * gain > 1.0:
+        print("note: the float WAV exceeds full scale; use --normalize to scale it for playback")
+
+
+def _cmd_convolve(args: argparse.Namespace) -> int:
+    from acoustic_spaces.audio import channel_mask, read_wav
+    from acoustic_spaces.render import convolve
+
+    try:
+        ir, rate = read_wav(args.ir)
+        mask = channel_mask(args.ir)
+        dry = _read_dry(args.signal, rate)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    _write_wet(Path(args.out), convolve(dry, ir), rate, mask, args.normalize)
+    return 0
+
+
+def _simulated_irs(folder: Path, listener: str | None, label: str) -> tuple[str, dict[str, Path]]:
+    """The listener and, per source, the response file of format ``label`` in a folder
+    written by ``simulate``."""
+    report = json.loads((folder / "parameters.json").read_text(encoding="utf-8"))
+    entries = report["responses"]
+    listeners = sorted({e["listener"] for e in entries})
+    if listener is None:
+        if len(listeners) != 1:
+            raise ValueError(f"pick a listener with --listener: {', '.join(listeners)}")
+        listener = listeners[0]
+    elif listener not in listeners:
+        raise ValueError(f"no listener {listener!r}; the results have {', '.join(listeners)}")
+    files, labels = {}, set()
+    for entry in entries:
+        if entry["listener"] != listener:
+            continue
+        outputs = entry.get("outputs") or [{"format": "mono", "wav": entry["wav"]}]
+        labels.update(o["format"] for o in outputs)
+        for output in outputs:
+            if output["format"] == label:
+                files[entry["source"]] = folder / output["wav"]
+    if not files:
+        raise ValueError(f"no {label} responses; the results have {', '.join(sorted(labels))}")
+    return listener, files
+
+
+def _cmd_auralize(args: argparse.Namespace) -> int:
+    import numpy as np
+
+    from acoustic_spaces.audio import channel_mask, read_wav
+    from acoustic_spaces.render import convolve
+
+    try:
+        listener, files = _simulated_irs(Path(args.results), args.listener, args.format)
+        pairs = [text.partition("=") for text in args.signals]
+        bad = [text for text in args.signals if not text.partition("=")[2]]
+        if bad:
+            raise ValueError(f"expected SOURCE=WAV, got {bad[0]!r}")
+        missing = [name for name, _, _ in pairs if name not in files]
+        if missing:
+            raise ValueError(f"no source {missing[0]!r}; the results have {', '.join(files)}")
+        mix, rate, mask = None, None, None
+        for name, _, wav in pairs:
+            ir, ir_rate = read_wav(files[name])
+            if rate is None:
+                rate, mask = ir_rate, channel_mask(files[name])
+            wet = convolve(_read_dry(wav, rate), ir)
+            if mix is None:
+                mix = np.zeros((0, wet.shape[1]))
+            if len(wet) > len(mix):
+                mix = np.concatenate([mix, np.zeros((len(wet) - len(mix), mix.shape[1]))])
+            mix[: len(wet)] += wet
+            print(f"{name} -> {listener}: {files[name].name}", file=sys.stderr)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    _write_wet(Path(args.out), mix, rate, mask, args.normalize)
+    return 0
+
+
+def _cmd_play(args: argparse.Namespace) -> int:
+    import numpy as np
+
+    from acoustic_spaces.audio import read_wav
+    from acoustic_spaces.measurement import _sounddevice
+    from acoustic_spaces.render import play
+
+    if (args.signal is None) == (not args.live):
+        print("error: give a signal to play or --live, not both", file=sys.stderr)
+        return 1
+    try:
+        _sounddevice()
+        ir, rate = read_wav(args.ir)
+        dry = None if args.live else _read_dry(args.signal, rate)
+    except (ImportError, OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    gain = 10.0 ** (args.gain / 20.0)
+    if not args.absolute:
+        energy = float((ir**2).sum(axis=0).max())
+        if energy > 0:
+            gain /= math.sqrt(energy)
+            print(
+                f"response scaled by {-10.0 * math.log10(energy):+.1f} dB so the result plays "
+                "about as loud as the dry signal (--absolute keeps the simulated level)",
+                file=sys.stderr,
+            )
+    device = int(args.device) if args.device and args.device.isdigit() else args.device
+    what = "live input" if args.live else args.signal
+    print(
+        f"playing {what} through {args.ir} ({ir.shape[1]} channel(s)); Ctrl-C stops",
+        file=sys.stderr,
+    )
+    try:
+        result = play(
+            ir.astype(np.float32),
+            rate,
+            dry,
+            block=args.block,
+            gain=gain,
+            device=device,
+            seconds=args.seconds,
+        )
+    except (ImportError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(
+        f"played {result.frames / rate:.1f} s; convolution took up to {100 * result.load:.0f} % "
+        f"of each {args.block}-frame block"
+    )
+    if result.xruns:
+        print(
+            f"warning: {result.xruns} block(s) dropped out; try a larger --block",
+            file=sys.stderr,
+        )
+    return 0
+
+
 def _add_sweep_arguments(parser: argparse.ArgumentParser) -> None:
     group = parser.add_argument_group("sweep")
     group.add_argument("--sample-rate", type=int, default=48_000, help="Hz (default 48000)")
@@ -676,6 +838,47 @@ def build_parser() -> argparse.ArgumentParser:
     _add_sweep_arguments(measure)
     _add_analysis_arguments(measure)
     measure.set_defaults(func=_cmd_measure)
+
+    convolve = sub.add_parser("convolve", help="run a dry recording through an impulse response")
+    convolve.add_argument("signal", help="dry WAV (mixed down to mono, resampled to the IR rate)")
+    convolve.add_argument("ir", help="impulse response WAV, any number of channels")
+    convolve.add_argument("--out", required=True, help="WAV file for the result")
+    convolve.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")
+    convolve.set_defaults(func=_cmd_convolve)
+
+    auralize = sub.add_parser(
+        "auralize", help="mix every source's dry signal as heard at a simulated listener"
+    )
+    auralize.add_argument("results", help="folder written by simulate")
+    auralize.add_argument(
+        "signals", nargs="+", metavar="SOURCE=WAV", help="dry signal of each source to play"
+    )
+    auralize.add_argument("--listener", help="listener (default: the only one)")
+    auralize.add_argument(
+        "--format",
+        default="mono",
+        help="output as written by simulate: mono, binaural, ambix3, 5.0, ... (default mono)",
+    )
+    auralize.add_argument("--out", required=True, help="WAV file for the result")
+    auralize.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")
+    auralize.set_defaults(func=_cmd_auralize)
+
+    play = sub.add_parser(
+        "play", help="real-time convolution on the sound card (needs the measure extra)"
+    )
+    play.add_argument("ir", help="impulse response WAV; each channel goes to an output")
+    play.add_argument("signal", nargs="?", help="dry WAV to play through it")
+    play.add_argument("--live", action="store_true", help="run the first input through it live")
+    play.add_argument("--seconds", type=float, help="stop live input after this long")
+    play.add_argument("--block", type=int, default=256, help="frames per block (default 256)")
+    play.add_argument("--device", help="audio device name or number (see 'devices')")
+    play.add_argument("--gain", type=float, default=0.0, help="extra gain, dB (default 0)")
+    play.add_argument(
+        "--absolute",
+        action="store_true",
+        help="keep the response's level (default: scaled to play as loud as the dry signal)",
+    )
+    play.set_defaults(func=_cmd_play)
 
     devices = sub.add_parser("devices", help="list audio devices (needs the measure extra)")
     devices.set_defaults(func=_cmd_devices)

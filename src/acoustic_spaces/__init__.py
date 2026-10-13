@@ -11,7 +11,8 @@ The package is organised as a pipeline:
 - ``audio``: WAV files
 - ``viz``: 3D view (optional, needs PyVista)
 - ``spatial``: binaural, Ambisonics and loudspeaker outputs
-- ``render``: offline and real-time convolution (M4)
+- ``render``: auralisation: offline and real-time convolution, playback
+- ``measurement``: sweeps, recording and deconvolution of measured responses
 """
 
 from __future__ import annotations

@@ -213,3 +213,77 @@ def test_devices_without_sounddevice(
     monkeypatch.setitem(sys.modules, "sounddevice", None)
     assert main(["devices"]) == 1
     assert "acoustic-spaces[measure]" in capsys.readouterr().err
+
+
+@pytest.fixture(scope="module")
+def simulated(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    out = tmp_path_factory.mktemp("sim")
+    args = ["simulate", str(SHOEBOX), "--out", str(out), "--rays", "1000", "--length", "0.3"]
+    assert main([*args, "--seed", "1", "--output=mono", "--output=loudspeakers:5.0"]) == 0
+    return out
+
+
+def _dry(path: Path, sample_rate: int = 44_100, channels: int = 1) -> None:
+    import numpy as np
+
+    from acoustic_spaces.audio import write_wav
+
+    click = np.zeros((sample_rate // 10, channels))
+    click[0] = 0.5
+    write_wav(path, click, sample_rate)
+
+
+def test_convolve_and_auralize(
+    simulated: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from acoustic_spaces.audio import channel_mask, read_wav
+
+    _dry(tmp_path / "dry.wav", channels=2)
+    ir, fs = read_wav(simulated / "talker__seat-a.5.0.wav")
+    wet = tmp_path / "wet.wav"
+    assert (
+        main(
+            [
+                "convolve",
+                str(tmp_path / "dry.wav"),
+                str(simulated / "talker__seat-a.5.0.wav"),
+                "--out",
+                str(wet),
+            ]
+        )
+        == 0
+    )
+    err = capsys.readouterr().err
+    assert "mixed the 2 channels" in err and "from 44100 Hz to 48000 Hz" in err
+    data, rate = read_wav(wet)
+    assert rate == fs and data.shape == (len(ir) + fs // 10 - 1, 5)
+    assert channel_mask(wet) == channel_mask(simulated / "talker__seat-a.5.0.wav")
+
+    mix = tmp_path / "mix.wav"
+    args = ["auralize", str(simulated), f"talker={tmp_path / 'dry.wav'}", "--out", str(mix)]
+    assert main([*args, "--normalize"]) == 0
+    assert "peak -1.0 dBFS" in capsys.readouterr().out
+    data, _ = read_wav(mix)
+    assert data.shape[1] == 1
+    assert abs(abs(data).max() - 10 ** (-1 / 20)) < 1e-6
+    assert main([*args, "--format", "binaural"]) == 1
+    assert "the results have 5.0, mono" in capsys.readouterr().err
+    assert main([*args[:2], "piano=x.wav", "--out", str(mix)]) == 1
+    assert "no source 'piano'" in capsys.readouterr().err
+    assert main([*args, "--listener", "seat-b"]) == 1
+
+
+def test_play_command(
+    simulated: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], fake_sounddevice
+) -> None:
+    ir = str(simulated / "talker__seat-a.wav")
+    _dry(tmp_path / "dry.wav", sample_rate=48_000)
+    assert main(["play", ir]) == 1
+    assert "give a signal to play or --live" in capsys.readouterr().err
+    assert main(["play", ir, str(tmp_path / "dry.wav"), "--block", "512"]) == 0
+    captured = capsys.readouterr()
+    assert "as loud as the dry signal" in captured.err
+    assert "dropped out" in captured.err  # the fake sound card reports one
+    assert "played 0.4 s" in captured.out
+    assert main(["play", ir, "--live", "--seconds", "0.1", "--absolute"]) == 0
+    assert "as loud" not in capsys.readouterr().err
