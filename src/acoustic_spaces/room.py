@@ -66,17 +66,26 @@ class Room:
         return cls.from_scene(Scene.from_yaml(path))
 
     @classmethod
-    def from_scene(cls, scene: Scene) -> Room:
+    def from_scene(cls, scene: Scene, *, reuse: Room | None = None) -> Room:
+        """Load the scene's geometry and give every surface its material.
+
+        ``reuse`` is an earlier room: when its geometry settings equal the scene's, its
+        mesh is kept instead of being loaded and checked again (an editor changing
+        materials or positions).
+        """
         geometry = scene.geometry
-        scale = UNIT_SCALE[geometry.units]
-        if geometry.file is not None:
-            raw = load_mesh(geometry.file, units=geometry.units, up_axis=geometry.up_axis)
-        elif geometry.box is not None:
-            raw = box_mesh(tuple(scale * v for v in geometry.box))
+        if reuse is not None and reuse.scene.geometry == geometry:
+            mesh, report = reuse.mesh, reuse.report
         else:
-            raw = extruded_mesh(scale * np.array(geometry.floor_plan), scale * geometry.height)
-        mesh, merged, removed = clean_mesh(raw)
-        report = check_mesh(mesh, merged, removed)
+            scale = UNIT_SCALE[geometry.units]
+            if geometry.file is not None:
+                raw = load_mesh(geometry.file, units=geometry.units, up_axis=geometry.up_axis)
+            elif geometry.box is not None:
+                raw = box_mesh(tuple(scale * v for v in geometry.box))
+            else:
+                raw = extruded_mesh(scale * np.array(geometry.floor_plan), scale * geometry.height)
+            mesh, merged, removed = clean_mesh(raw)
+            report = check_mesh(mesh, merged, removed)
 
         material_names = list(scene.materials)
         index = {name: k for k, name in enumerate(material_names)}

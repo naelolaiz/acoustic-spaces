@@ -1,0 +1,51 @@
+# A stone church: a nave 34 m long and 14 m wide that ends in a five-sided apse, 18 m
+# high (9500 m3), with wooden pews. Reverberation lasts about six seconds at 500 Hz and
+# 1 kHz, and longer in the bass. wall_1 and wall_6 are the long sides, wall_2 to wall_5
+# the apse, wall_7 the entrance wall with the organ gallery.
+name: Church (stone nave, 9500 m3)
+geometry:
+  floor_plan: [[0, -7], [34, -7], [38, -4], [40, 0], [38, 4], [34, 7], [0, 7]]
+  height: 18
+materials:
+  stone:
+    preset: limestone_wall
+    scattering: 0.2
+  vault:
+    preset: rough_lime_wash
+    scattering: 0.3
+  pews:
+    # Wooden pews with a few people on them, per octave band from 63 Hz to 8 kHz.
+    absorption: [0.10, 0.12, 0.15, 0.20, 0.25, 0.28, 0.30, 0.30]
+    scattering: 0.5
+    source: estimate between unoccupied wooden chairs and a seated audience
+  entrance:
+    preset: wooden_lining
+    scattering: 0.2
+assignments:
+  floor: pews
+  ceiling: vault
+  wall_7: entrance
+  walls: stone
+sources:
+  - name: altar
+    position: [35.0, 0.0, 1.7]
+    orientation: {yaw: 180}      # facing the nave
+    directivity: cardioid
+  - name: organ
+    position: [1.5, 0.0, 9.0]    # in the gallery above the entrance
+    orientation: {yaw: 0}
+listeners:
+  - name: nave-front
+    position: [28.0, 3.0, 1.2]
+    orientation: {yaw: 0}        # facing the altar
+  - name: nave-middle
+    position: [18.0, -4.0, 1.2]
+  - name: nave-back
+    position: [5.0, 2.0, 1.2]
+simulation:
+  early: {method: ray_tracing, max_order: 3}
+  late: {method: stochastic_ray_tracing, rays: 50000}
+  ir_length_s: 7.0
+outputs:
+  - mono
+  - binaural

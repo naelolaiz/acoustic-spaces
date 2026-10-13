@@ -443,5 +443,27 @@ class Scene(_Model):
         return cls.model_validate(data, context={"base_dir": path.resolve().parent})
 
     def to_yaml(self, path: str | Path) -> None:
-        with Path(path).open("w", encoding="utf-8") as fh:
-            yaml.safe_dump(self.model_dump(mode="json"), fh, sort_keys=False)
+        """Write the scene file. Paths to files under its folder are written relative to
+        it, so the folder can move; others stay absolute."""
+        path = Path(path)
+        data = self.model_dump(mode="json", exclude_none=True)
+        base = path.resolve().parent
+        geometry = data["geometry"]
+        if "file" in geometry:
+            geometry["file"] = _portable(geometry["file"], base)
+        for material in data["materials"].values():
+            if "file" in material:
+                material["file"] = _portable(material["file"], base)
+        for output in data["outputs"]:
+            if "hrtf" in output:
+                output["hrtf"] = _portable(output["hrtf"], base)
+        with path.open("w", encoding="utf-8") as fh:
+            yaml.safe_dump(data, fh, sort_keys=False)
+
+
+def _portable(file: str, base: Path) -> str:
+    """``file`` relative to ``base`` when it lies inside it, with forward slashes."""
+    try:
+        return Path(file).resolve().relative_to(base).as_posix()
+    except ValueError:
+        return file
