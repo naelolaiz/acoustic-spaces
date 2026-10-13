@@ -17,6 +17,7 @@ reads too short; the tail is estimated from the last part of the decay and added
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, fields
 
 import numpy as np
@@ -40,6 +41,23 @@ PARAMETERS = {
 #: at the end of the response, and spans at most ``_TAIL_SPAN_DB``.
 _TAIL_HEADROOM_DB = 10.0
 _TAIL_SPAN_DB = 20.0
+
+#: Ratio between adjacent octave mid-band frequencies, base 10 (IEC 61260-1).
+OCTAVE_RATIO = 10.0**0.3
+#: Order of the Butterworth octave filters for impulse responses.
+FILTER_ORDER = 3
+#: Room before an impulse response for the ringing of its band filters (s).
+_FILTER_LEAD_S = 0.2
+
+#: Noise floor search (Lundeby et al., 1995): first averaging interval (s), intervals
+#: per 10 dB of decay afterwards, margin of the late-decay fit above the noise and its
+#: span, how far past the crosspoint the noise is measured (dB), and iterations.
+_LUNDEBY_INTERVAL_S = 0.01
+_LUNDEBY_INTERVALS_PER_10DB = 5
+_LUNDEBY_MARGIN_DB = 5.0
+_LUNDEBY_SPAN_DB = 20.0
+_LUNDEBY_NOISE_AFTER_DB = 10.0
+_LUNDEBY_ITERATIONS = 5
 
 
 @dataclass
@@ -141,7 +159,7 @@ def decay_curve(energy: np.ndarray, time_step: float) -> np.ndarray:
     if len(remaining) == 0 or remaining[0] <= 0:
         return np.full(len(e), -np.inf)
     with np.errstate(divide="ignore"):
-        return 10.0 * np.log10(remaining / remaining[0])
+        return 10.0 * np.log10(np.maximum(remaining, 0.0) / remaining[0])
 
 
 def _clarity(early: float, late: float) -> float:
@@ -211,32 +229,207 @@ def onset(ir: np.ndarray, threshold_db: float = -20.0) -> int:
     return int(np.argmax(power >= peak * 10.0 ** (threshold_db / 10.0)))
 
 
+def octave_midbands() -> np.ndarray:
+    """Exact mid-band frequencies (Hz) of ``OCTAVE_BANDS_HZ``, base 10 (IEC 61260-1)."""
+    nominal = np.array(OCTAVE_BANDS_HZ, dtype=float)
+    k = np.round(np.log(nominal / 1000.0) / math.log(OCTAVE_RATIO))
+    return 1000.0 * OCTAVE_RATIO**k
+
+
+def octave_filter_gains(n_fft: int, sample_rate: float, order: int = FILTER_ORDER) -> np.ndarray:
+    """Magnitudes (bands, n_fft // 2 + 1) of Butterworth octave band-pass filters.
+
+    A band-pass of ``order`` (that of its low-pass prototype; 3 meets IEC 61260-1
+    class 1) has 1 at mid-band, -3 dB at the band edges fm G^(+-1/2) and about -20 dB
+    at the neighbouring mid-bands.
+    """
+    f = np.maximum(np.fft.rfftfreq(n_fft, 1.0 / sample_rate), 1e-9)
+    fm = octave_midbands()[:, None]
+    width = math.sqrt(OCTAVE_RATIO) - 1.0 / math.sqrt(OCTAVE_RATIO)
+    return 1.0 / np.sqrt(1.0 + ((f / fm - fm / f) / width) ** (2 * order))
+
+
+def octave_bands(signal: np.ndarray, sample_rate: float, filters: str = "iec") -> np.ndarray:
+    """Split a signal into octave bands: (n,) -> (bands, n).
+
+    ``filters="iec"`` applies the magnitudes of :func:`octave_filter_gains` with zero
+    phase, so no band is delayed against another; ``"crossover"`` uses the crossovers of
+    :mod:`acoustic_spaces.synthesis`, whose bands sum back to the input.
+    """
+    from acoustic_spaces import synthesis
+
+    if filters == "crossover":
+        return synthesis.split_bands(signal, sample_rate)
+    if filters != "iec":
+        raise ValueError(f"unknown filters {filters!r}; use 'iec' or 'crossover'")
+    signal = np.asarray(signal, dtype=float)
+    n = len(signal)
+    n_fft = synthesis.fft_size(n, sample_rate)
+    spectrum = np.fft.rfft(signal, n_fft)
+    gains = octave_filter_gains(n_fft, sample_rate)
+    return np.fft.irfft(spectrum[None, :] * gains, n_fft, axis=1)[:, :n]
+
+
+def band_energy_share(sample_rate: float, filters: str = "iec") -> np.ndarray:
+    """Energy of a unit impulse inside each band, for converting broadband references."""
+    from acoustic_spaces import synthesis
+
+    if filters == "crossover":
+        return synthesis.band_energy_share(sample_rate)
+    n_fft = 1 << 16
+    g = octave_filter_gains(n_fft, sample_rate) ** 2
+    weights = np.full(g.shape[1], 2.0)
+    weights[0] = weights[-1] = 1.0
+    return (g * weights).sum(axis=1) / n_fft
+
+
+def _levels(e: np.ndarray, width: int, sample_rate: float) -> tuple[np.ndarray, np.ndarray]:
+    """Mid times (s) and levels (dB) of ``e`` averaged over blocks of ``width`` samples."""
+    blocks = len(e) // width
+    mean = e[: blocks * width].reshape(blocks, width).mean(axis=1)
+    t = (np.arange(blocks) + 0.5) * width / sample_rate
+    return t, 10.0 * np.log10(np.maximum(mean, 1e-300))
+
+
+def noise_crosspoint(energy: np.ndarray, sample_rate: float) -> tuple[int, float, float]:
+    """Where a squared response sinks into its background noise (Lundeby et al., 1995).
+
+    ``energy`` is one band's squared response from the direct sound on. Returns the
+    crosspoint (samples), the mean noise power per sample and the decay range (dB, from
+    the start of the late decay down to the noise). A response that ends in silence, or
+    is still decaying in its last tenth, has no crosspoint (``len(energy)``), no noise
+    and an infinite range; one with no decay above its noise has a range of 0.
+    """
+    e = np.asarray(energy, dtype=float)
+    n = len(e)
+    last = e[int(0.9 * n) :]
+    if len(last) == 0 or last.mean() <= 0:
+        return n, 0.0, math.inf
+    noise = float(last.mean())
+    noise_db = 10.0 * math.log10(noise)
+    width = max(1, int(round(_LUNDEBY_INTERVAL_S * sample_rate)))
+    t, level = _levels(e, width, sample_rate)
+    line = None
+    if len(level) >= 3:
+        line = _line(level, t, float(level.max()), noise_db + 2.0 * _LUNDEBY_MARGIN_DB)
+    if line is None:
+        return n, 0.0, 0.0
+    slope, intercept = line
+    cross = (noise_db - intercept) / slope
+    for _ in range(_LUNDEBY_ITERATIONS):
+        width = max(1, int(round(-10.0 / slope / _LUNDEBY_INTERVALS_PER_10DB * sample_rate)))
+        t, level = _levels(e, width, sample_rate)
+        start = min(cross - _LUNDEBY_NOISE_AFTER_DB / slope, 0.9 * n / sample_rate)
+        tail = e[int(start * sample_rate) :]
+        if len(level) < 3 or tail.mean() <= 0:
+            break
+        noise_db = 10.0 * math.log10(float(tail.mean()))
+        bottom = noise_db + _LUNDEBY_MARGIN_DB
+        line = _line(level, t, min(bottom + _LUNDEBY_SPAN_DB, float(level.max())), bottom)
+        if line is None:
+            break
+        slope, intercept = line
+        previous, cross = cross, (noise_db - intercept) / slope
+        if abs(cross - previous) < width / sample_rate:
+            break
+    stop = int(round(cross * sample_rate))
+    if stop >= 0.9 * n:
+        return n, 0.0, math.inf  # the "noise" is the end of the decay itself
+    return max(1, stop), 10.0 ** (noise_db / 10.0), intercept - noise_db
+
+
+@dataclass
+class BandDecay:
+    """Squared octave-band responses of one impulse response, from its onset on."""
+
+    energy: np.ndarray  # (bands, samples)
+    sample_rate: float
+    #: Arrival of the direct sound in the impulse response (s).
+    onset_s: float
+    #: Per band: sample where the response sinks into the background noise (the length
+    #: when no noise floor shows), the noise power per sample, and the decay range (dB).
+    crosspoint: np.ndarray
+    noise: np.ndarray
+    decay_range_db: np.ndarray
+
+    def cleaned(self, band: int) -> np.ndarray:
+        """One band's energy up to its crosspoint, with the noise taken off."""
+        return self.energy[band, : self.crosspoint[band]] - self.noise[band]
+
+
+def band_decay(
+    ir: np.ndarray, sample_rate: float, *, filters: str = "iec", noise: bool = True
+) -> BandDecay:
+    """Filter ``ir`` into octave bands and, with ``noise``, find each band's noise floor."""
+    ir = np.asarray(ir, dtype=float)
+    start = onset(ir)
+    # Zero-phase filters ring before an impulse as much as after it. Room is made for
+    # that ringing, and everything before the onset counts as arriving with it.
+    lead = int(round(_FILTER_LEAD_S * sample_rate))
+    padded = np.concatenate([np.zeros(lead), ir])
+    squared = octave_bands(padded, sample_rate, filters) ** 2
+    energy = squared[:, lead + start :]
+    energy[:, 0] += squared[:, : lead + start].sum(axis=1)
+    found = [
+        noise_crosspoint(row, sample_rate) if noise else (len(row), 0.0, math.inf) for row in energy
+    ]
+    return BandDecay(
+        energy=energy,
+        sample_rate=sample_rate,
+        onset_s=start / sample_rate,
+        crosspoint=np.array([c for c, _, _ in found], dtype=np.int64),
+        noise=np.array([x for _, x, _ in found]),
+        decay_range_db=np.array([r for _, _, r in found]),
+    )
+
+
 def from_impulse_response(
     ir: np.ndarray,
     sample_rate: float,
-    reference_energy: float | None = None,
+    reference_energy: float | Sequence[float] | None = None,
+    *,
+    filters: str = "iec",
+    noise: bool = True,
 ) -> RoomParameters:
     """Parameters from a mono impulse response, split into octave bands.
 
-    ``reference_energy`` is the energy of the broadband impulse response of the same
-    source at 10 m in free field; for responses made by this package that is 0.01.
+    ``reference_energy`` is the energy of the same source at 10 m in free field: per
+    band (as from :func:`free_field_reference`), or that of a broadband impulse, which
+    for responses made by this package is 0.01. ``filters`` picks the band filters
+    (see :func:`octave_bands`). With ``noise``, each band is cut where it sinks into the
+    background noise, the noise is subtracted and the decay beyond the cut estimated
+    (ISO 3382-1, 5.3.4); decay times whose range does not clear the noise by 10 dB
+    (EDT 20 dB, T20 35 dB, T30 45 dB) are NaN.
     """
-    from acoustic_spaces.synthesis import band_energy_share, split_bands
-
-    ir = np.asarray(ir, dtype=float)
-    start = onset(ir)
-    bands = split_bands(ir, sample_rate) ** 2
+    decay = band_decay(ir, sample_rate, filters=filters, noise=noise)
     reference = None
     if reference_energy is not None:
-        reference = reference_energy * band_energy_share(sample_rate)
+        reference = np.asarray(reference_energy, dtype=float)
+        if reference.ndim == 0:
+            reference = reference * band_energy_share(sample_rate, filters)
     dt = 1.0 / sample_rate
-    per_band = [
-        _band_parameters(row[start:], dt, 0.0, None if reference is None else reference[b])
-        for b, row in enumerate(bands)
-    ]
+    per_band = []
+    for b in range(decay.energy.shape[0]):
+        p = _band_parameters(decay.cleaned(b), dt, 0.0, None if reference is None else reference[b])
+        for name, (_, bottom) in DECAY_RANGES.items():
+            if decay.decay_range_db[b] < -bottom + 10.0:
+                p[name] = math.nan
+        per_band.append(p)
     return RoomParameters(
         **{f.name: np.array([p[f.name] for p in per_band]) for f in fields(RoomParameters)}
     )
+
+
+def free_field_reference(
+    ir: np.ndarray, sample_rate: float, distance_m: float, *, filters: str = "iec"
+) -> np.ndarray:
+    """Per-band reference energies for G from a free-field impulse response.
+
+    ``ir`` is the source measured at ``distance_m`` with no reflections (or with them
+    windowed out); the result is its band energies moved to 10 m (inverse square law).
+    """
+    energy = octave_bands(np.asarray(ir, dtype=float), sample_rate, filters) ** 2
+    return energy.sum(axis=1) * (distance_m / 10.0) ** 2
 
 
 __all__ = [
@@ -245,6 +438,16 @@ __all__ = [
     "RoomParameters",
     "decay_curve",
     "from_energy",
+    "BandDecay",
+    "FILTER_ORDER",
+    "OCTAVE_RATIO",
+    "band_decay",
+    "band_energy_share",
+    "free_field_reference",
     "from_impulse_response",
+    "noise_crosspoint",
+    "octave_bands",
+    "octave_filter_gains",
+    "octave_midbands",
     "onset",
 ]

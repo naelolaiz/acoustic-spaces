@@ -33,6 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 viz = ["matplotlib>=3.6", "pyvista>=0.43"]
+measure = ["sounddevice>=0.4"]
 test = ["pytest>=7"]
 dev = ["pytest>=7", "ruff>=0.6"]
 

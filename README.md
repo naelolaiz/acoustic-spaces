@@ -7,8 +7,9 @@ loudspeaker formats.
 
 **Status: pre-alpha.** Scenes can be built, checked and simulated in mono: CAD
 import, a material database, ray-traced early reflections, a stochastic late tail,
-impulse responses as WAV files and ISO 3382-1 parameters. Spatial encoders and the
-real-time convolver follow milestone by milestone.
+impulse responses as WAV files and ISO 3382-1 parameters. Real rooms can be measured
+with sine sweeps and analysed the same way. Spatial encoders and the real-time
+convolver follow milestone by milestone.
 
 ## Design in one paragraph
 
@@ -28,6 +29,7 @@ Requirements: Python 3.10+, a C++17 compiler and CMake 3.18+.
 git clone https://github.com/naelolaiz/acoustic_spaces_simulator
 cd acoustic_spaces_simulator
 python -m pip install -e ".[dev,viz]"     # viz adds the 3D view (PyVista)
+python -m pip install -e ".[measure]"     # sounddevice, to play and record sweeps
 ```
 
 Check the installation and look at the example scene:
@@ -167,8 +169,9 @@ of the direct sound at 10 m (0.01) is the reference for strength G.
 
 **Parameters** follow ISO 3382-1 per octave band: EDT, T20, T30, C50, C80, D50, Ts
 and G. `Response.parameters()` computes them from the simulated energies;
-`acoustic_spaces.parameters.from_impulse_response` does the same for any mono IR.
-A response that ends before it has decayed is extended by its fitted decay rate.
+`acoustic_spaces.parameters.from_impulse_response` does the same for any mono IR (see
+[Measuring impulse responses](#measuring-impulse-responses)). A response that ends
+before it has decayed is extended by its fitted decay rate.
 Air absorption follows ISO 9613-1 for the scene's temperature, humidity and pressure.
 
 ### Validation so far
@@ -183,9 +186,69 @@ The tests check, on Linux, macOS and Windows:
   for the spread of free path lengths predicts;
 - G in the same box against Barron's revised theory: within 1 dB;
 - every ISO 3382-1 parameter on synthetic exponential decays, and the air
-  absorption against the ISO 9613-1 table.
+  absorption against the ISO 9613-1 table;
+- sweep measurements of synthetic rooms through a distorting loudspeaker, with
+  noise and interface latency: from 250 Hz up, the room's response comes back with
+  errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
+  within 5 % of the noise-free value.
 
 Comparison with BRAS measurements needs the BRAS models exported to OBJ (see above).
+
+## Measuring impulse responses
+
+The same parameters can be measured in a real room with an exponential sine sweep,
+a loudspeaker, a measurement microphone and an audio interface:
+
+```sh
+acoustic-spaces devices                                # pick the interface
+acoustic-spaces measure --out hall --device 3 --input 1 2 --loopback 4 \
+    --duration 10 --silence 4 --repeats 3 --plot
+```
+
+`measure` plays the sweep on `--output` (1 by default), records every `--input`,
+deconvolves the recording and prints the parameters of each microphone. It writes
+`sweep.wav` and its settings, the raw `recording.wav`, the impulse responses in
+`ir.wav` (one channel per input), `measurement.json` and, with `--plot`, a level and
+decay plot per input. A `--loopback` input wired straight to the output removes the
+latency of the interface, so arrival times are true times of flight.
+
+Any other player and recorder works too: write the excitation, play it while
+recording, then deconvolve and analyse:
+
+```sh
+acoustic-spaces sweep sweep.wav --duration 10 --silence 4 --repeats 3
+# ... play sweep.wav and record recording.wav, starting together ...
+acoustic-spaces deconvolve recording.wav --sweep sweep.json --out ir.wav
+acoustic-spaces analyze ir.wav --plot ir.png --json ir.json
+```
+
+How it works:
+
+- The sweep is synchronized (Novak et al., 2015), so harmonic distortion of the
+  loudspeaker lands before the linear response and is cut away. Make the silence
+  after each sweep longer than the reverberation time; repeats are averaged, each
+  doubling lowering the background noise by 3 dB.
+- Deconvolution divides spectra, regularised outside the swept band.
+- `analyze` filters with IEC 61260-1 octave filters (Butterworth, order 3, zero
+  phase), finds where each band sinks into the background noise (Lundeby et al.,
+  1995), cuts it there, subtracts the noise and adds the missing tail (ISO 3382-1,
+  5.3.4). Decay times are left out when a band's decay does not clear the noise by
+  enough: 20 dB for EDT, 35 dB for T20, 45 dB for T30.
+- G needs the source's free-field level: `--free-field ff.wav --distance 3` uses a
+  measurement of the same source in free field (or with reflections windowed out),
+  and `--reference-energy 0.01` suits responses made by `simulate`.
+
+From Python:
+
+```python
+from acoustic_spaces.measurement import Sweep, deconvolve, measure
+from acoustic_spaces.parameters import from_impulse_response
+
+sweep = Sweep(duration_s=10, silence_s=4, repeats=3)
+result = measure(sweep, inputs=[1, 2], loopback=4, device=3)
+for ir in result.impulse_responses.T:
+    print(from_impulse_response(ir, sweep.sample_rate).table())
+```
 
 ## Repository layout
 
@@ -198,9 +261,10 @@ src/acoustic_spaces/   Python package
   engine/              early reflections, late reverberation, responses, simulate()
   air.py               ISO 9613-1 air absorption and speed of sound
   synthesis.py         octave filter bank and impulse response synthesis
-  parameters.py        ISO 3382-1 parameters
+  parameters.py        ISO 3382-1 parameters, octave filters, noise floor detection
+  measurement.py       sine sweeps, playback and recording, deconvolution
   audio.py             WAV files
-  viz.py               3D view, reflection paths and response plots (optional)
+  viz.py               3D view, reflection paths, response and IR plots (optional)
   cli.py               command-line interface
 cpp/include/           header-only C++ core: BVH, ray tracer, convolution (no Python)
 cpp/bindings/          nanobind module exposing the core as acoustic_spaces._native
@@ -212,8 +276,8 @@ examples/              example scenes
 
 - M0 Foundations: package layout, compiled core, scene schema, CI. Done.
 - M1 Scene and geometry: CAD import, material database, 3D view. Done.
-- M2 Mono simulation: ray-traced early reflections, stochastic tail, IR synthesis, ISO 3382 parameters. In review.
-- M2b IR measurement: exponential sine sweeps, playback and recording, deconvolution, parameters of measured IRs.
+- M2 Mono simulation: ray-traced early reflections, stochastic tail, IR synthesis, ISO 3382 parameters. Done.
+- M2b IR measurement: exponential sine sweeps, playback and recording, deconvolution, parameters of measured IRs. In review.
 - M3 Spatial outputs: binaural (SOFA HRTFs), Ambisonics up to 3rd order, loudspeaker layouts.
 - M4 Rendering: offline convolution in Python, real-time partitioned convolver in C++.
 - M5 v1 release: validation report, documentation, wheels.

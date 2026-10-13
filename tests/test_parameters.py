@@ -73,3 +73,84 @@ def test_tail_estimate_ignores_a_late_spike() -> None:
     p = from_energy(energy[None, :], DT, onset_s=0.0, reference_energy=1.0 / k)
     assert abs(p.g[0]) < 0.3  # total energy, against the untruncated decay's 1 / k
     assert p.ts[0] == pytest.approx(1.0 / k, rel=0.2)
+
+
+def test_octave_filters_meet_their_band_edges() -> None:
+    from acoustic_spaces.parameters import OCTAVE_RATIO, octave_filter_gains, octave_midbands
+
+    fs, n_fft = 48_000, 1 << 18
+    gains = octave_filter_gains(n_fft, fs)
+    f = np.fft.rfftfreq(n_fft, 1 / fs)
+
+    def gain_db(band: int, frequency: float) -> float:
+        return 20 * math.log10(np.interp(frequency, f, gains[band]))
+
+    for band, fm in enumerate(octave_midbands()[:-1]):
+        assert gain_db(band, fm) == pytest.approx(0.0, abs=0.01)
+        assert gain_db(band, fm * OCTAVE_RATIO**0.5) == pytest.approx(-3.01, abs=0.05)
+        assert gain_db(band, fm / OCTAVE_RATIO**0.5) == pytest.approx(-3.01, abs=0.05)
+        assert gain_db(band, fm * OCTAVE_RATIO) < -18.0
+        assert gain_db(band, fm / OCTAVE_RATIO) < -18.0
+
+
+def _noisy_decay(t60: float, noise_db: float, length: float, seed: int = 4) -> np.ndarray:
+    fs = 48_000
+    rng = np.random.default_rng(seed)
+    t = np.arange(int(length * fs)) / fs
+    decay = rng.standard_normal(len(t)) * np.exp(-3.0 * math.log(10.0) * t / t60)
+    ir = np.concatenate([np.zeros(480), decay])
+    return ir + 10 ** (noise_db / 20) * rng.standard_normal(len(ir))
+
+
+def test_noise_floor_is_found_and_removed() -> None:
+    from acoustic_spaces.parameters import band_decay
+
+    t60, noise_db = 0.8, -55.0
+    ir = _noisy_decay(t60, noise_db, 2.0)
+    decay = band_decay(ir, 48_000)
+    # The decay meets the noise where it has fallen by noise_db (the same in every band).
+    expected = -noise_db / 60.0 * t60
+    np.testing.assert_allclose(decay.crosspoint / 48_000, expected, rtol=0.15)
+    np.testing.assert_allclose(decay.decay_range_db, -noise_db, atol=6.0)
+    p = from_impulse_response(ir, 48_000)
+    np.testing.assert_allclose(p.t30[2:], t60, rtol=0.05)
+    raw = from_impulse_response(ir, 48_000, noise=False)
+    assert np.all(raw.t30[2:] > p.t30[2:])  # the noise floor stretches the decay
+
+
+def test_decay_times_need_range_above_the_noise() -> None:
+    p = from_impulse_response(_noisy_decay(1.0, -40.0, 2.0), 48_000)
+    assert np.all(np.isnan(p.t30))  # needs 45 dB
+    assert np.all(np.isfinite(p.t20[2:]))  # needs 35 dB
+    np.testing.assert_allclose(p.t20[2:], 1.0, rtol=0.1)
+
+
+def test_a_clean_decay_has_no_noise_floor() -> None:
+    from acoustic_spaces.parameters import noise_crosspoint
+
+    e = _exponential(1.0, 1.0)
+    assert noise_crosspoint(e, 1 / DT) == (len(e), 0.0, math.inf)
+    assert noise_crosspoint(np.zeros(100), 1 / DT) == (100, 0.0, math.inf)
+
+
+def test_free_field_reference_moves_to_ten_metres() -> None:
+    from acoustic_spaces.parameters import band_energy_share, free_field_reference
+
+    fs, distance = 48_000, 2.0
+    ir = np.zeros(fs)
+    ir[4800] = 1.0 / distance  # the direct sound at 2 m
+    reference = free_field_reference(ir, fs, distance)
+    np.testing.assert_allclose(reference, REFERENCE_ENERGY_10M * band_energy_share(fs), rtol=0.02)
+    # A response of that source at 10 m reads G = 0 in every band.
+    ir10 = np.zeros(fs)
+    ir10[4800] = 0.1
+    p = from_impulse_response(ir10, fs, reference)
+    np.testing.assert_allclose(p.g, 0.0, atol=0.1)
+
+
+@pytest.mark.parametrize("filters", ["iec", "crossover"])
+def test_strength_from_a_broadband_reference(filters: str) -> None:
+    ir = np.zeros(48_000)
+    ir[480] = 0.1  # the free-field direct sound at 10 m
+    p = from_impulse_response(ir, 48_000, REFERENCE_ENERGY_10M, filters=filters)
+    np.testing.assert_allclose(p.g, 0.0, atol=0.1)

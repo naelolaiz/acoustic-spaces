@@ -67,3 +67,17 @@ def test_screenshot_with_paths(tmp_path: Path) -> None:
     out = tmp_path / "paths.png"
     show_room(room, screenshot=out, window_size=(320, 200), paths=early_paths(room))
     assert out.stat().st_size > 1000
+
+
+def test_impulse_response_plot(tmp_path: Path) -> None:
+    pytest.importorskip("matplotlib")
+    import numpy as np
+
+    from acoustic_spaces.viz import plot_impulse_response
+
+    rng = np.random.default_rng(0)
+    t = np.arange(48_000) / 48_000
+    ir = rng.standard_normal(len(t)) * np.exp(-6.9 * t / 0.4) + 1e-3 * rng.standard_normal(len(t))
+    out = tmp_path / "ir.png"
+    plot_impulse_response(ir, 48_000, out, title="test")
+    assert out.stat().st_size > 10_000

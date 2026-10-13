@@ -53,7 +53,8 @@ def band_gains(n_fft: int, sample_rate: float) -> np.ndarray:
     return gains
 
 
-def _fft_size(n: int, sample_rate: float) -> int:
+def fft_size(n: int, sample_rate: float) -> int:
+    """FFT length for filtering n samples with zero padding on both sides."""
     return 1 << int(math.ceil(math.log2(n + 2 * int(_PAD_S * sample_rate) + 1)))
 
 
@@ -61,7 +62,7 @@ def combine_bands(band_signals: np.ndarray, sample_rate: float) -> np.ndarray:
     """Filter each band signal with its band and sum: (bands, n) -> (n,)."""
     band_signals = np.asarray(band_signals, dtype=float)
     n = band_signals.shape[1]
-    n_fft = _fft_size(n, sample_rate)
+    n_fft = fft_size(n, sample_rate)
     spectrum = np.fft.rfft(band_signals, n_fft, axis=1)
     out = np.fft.irfft((spectrum * band_gains(n_fft, sample_rate)).sum(axis=0), n_fft)
     return out[:n]
@@ -71,7 +72,7 @@ def split_bands(signal: np.ndarray, sample_rate: float) -> np.ndarray:
     """Split a signal into octave bands: (n,) -> (bands, n); the rows sum to the input."""
     signal = np.asarray(signal, dtype=float)
     n = len(signal)
-    n_fft = _fft_size(n, sample_rate)
+    n_fft = fft_size(n, sample_rate)
     spectrum = np.fft.rfft(signal, n_fft)
     return np.fft.irfft(spectrum[None, :] * band_gains(n_fft, sample_rate), n_fft, axis=1)[:, :n]
 
