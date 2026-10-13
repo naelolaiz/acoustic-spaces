@@ -31,3 +31,39 @@ def test_screenshot(tmp_path: Path) -> None:
     out = tmp_path / "room.png"
     show_room(Room.from_yaml(SHOEBOX), screenshot=out, window_size=(320, 200))
     assert out.stat().st_size > 1000
+
+
+def test_paths_are_drawn_by_order() -> None:
+    from acoustic_spaces.engine import early_paths
+    from acoustic_spaces.viz import paths_polydata, plot_paths
+
+    paths = early_paths(Room.from_yaml(SHOEBOX), max_order=2)
+    poly = paths_polydata(paths, 2)
+    assert poly.n_lines == 18
+    plotter = pv.Plotter(off_screen=True)
+    legend = plot_paths(paths, plotter)
+    assert [entry[0] for entry in legend] == ["direct (1)", "1st order (6)", "2nd order (18)"]
+    plotter.close()
+
+
+def test_response_plot(tmp_path: Path) -> None:
+    from acoustic_spaces import simulate
+    from acoustic_spaces.viz import plot_response
+
+    room = Room.from_yaml(SHOEBOX)
+    settings = room.scene.simulation.model_copy(update={"ir_length_s": 0.5, "seed": 1}, deep=True)
+    settings.late.rays = 2000
+    response = simulate(room, settings=settings)["talker", "seat-a"]
+    out = tmp_path / "response.png"
+    plot_response(response, out)
+    assert out.stat().st_size > 10_000
+
+
+@pytest.mark.render
+def test_screenshot_with_paths(tmp_path: Path) -> None:
+    from acoustic_spaces.engine import early_paths
+
+    room = Room.from_yaml(SHOEBOX)
+    out = tmp_path / "paths.png"
+    show_room(room, screenshot=out, window_size=(320, 200), paths=early_paths(room))
+    assert out.stat().st_size > 1000

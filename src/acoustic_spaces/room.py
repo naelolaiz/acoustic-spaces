@@ -14,6 +14,7 @@ from typing import Literal
 
 import numpy as np
 
+from acoustic_spaces.air import energy_attenuation_per_m, speed_of_sound
 from acoustic_spaces.geometry import (
     MeshReport,
     RoomMesh,
@@ -25,11 +26,6 @@ from acoustic_spaces.geometry import (
 from acoustic_spaces.scene import Scene
 
 UNASSIGNED = -1
-
-
-def speed_of_sound(temperature_c: float) -> float:
-    """Speed of sound in air (m/s) at the given temperature."""
-    return 331.3 * math.sqrt(1.0 + temperature_c / 273.15)
 
 
 def _label_text(label: tuple[str, ...]) -> str:
@@ -172,22 +168,34 @@ class Room:
             total += area * np.asarray(self.scene.materials[name].absorption)
         return total
 
-    def reverberation_time(self, formula: Literal["sabine", "eyring"] = "sabine") -> np.ndarray:
-        """Statistical reverberation time per octave band (s), without air absorption.
+    def air_attenuation(self) -> np.ndarray:
+        """Energy attenuation of the scene's air per octave band (1/m), ISO 9613-1."""
+        air = self.scene.air
+        return energy_attenuation_per_m(air.temperature_c, air.humidity_percent, air.pressure_kpa)
+
+    def speed_of_sound(self) -> float:
+        return speed_of_sound(self.scene.air.temperature_c)
+
+    def reverberation_time(
+        self, formula: Literal["sabine", "eyring"] = "sabine", air_absorption: bool = False
+    ) -> np.ndarray:
+        """Statistical reverberation time per octave band (s).
 
         These assume a diffuse field; they are a sanity check, not a prediction.
+        ``air_absorption`` adds the ``4 m V`` term of ISO 9613-1 air.
         """
         if self.volume_m3 is None:
             raise ValueError("reverberation time needs a closed model")
-        c = speed_of_sound(self.scene.air.temperature_c)
-        constant = 24.0 * math.log(10.0) * self.volume_m3 / c
+        volume = self.volume_m3
+        constant = 24.0 * math.log(10.0) * volume / self.speed_of_sound()
         absorption = self.absorption_area()
+        air = 4.0 * self.air_attenuation() * volume if air_absorption else 0.0
         if formula == "sabine":
             with np.errstate(divide="ignore"):
-                return constant / absorption
+                return constant / (absorption + air)
         if formula == "eyring":
             surface = self.report.surface_area_m2
             mean_alpha = np.clip(absorption / surface, 0.0, 1.0 - 1e-12)
             with np.errstate(divide="ignore"):
-                return constant / (-surface * np.log1p(-mean_alpha))
+                return constant / (-surface * np.log1p(-mean_alpha) + air)
         raise ValueError(f"unknown formula {formula!r}; use 'sabine' or 'eyring'")

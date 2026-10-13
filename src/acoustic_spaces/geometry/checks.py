@@ -28,6 +28,9 @@ class MeshReport:
     bounds_min: tuple[float, float, float]
     bounds_max: tuple[float, float, float]
     notes: list[str] = field(default_factory=list)
+    #: True when face normals point into the room, False outward, None when unknown
+    #: (open model or inconsistent orientation).
+    normals_inward: bool | None = None
 
     @property
     def closed(self) -> bool:
@@ -90,11 +93,13 @@ def check_mesh(mesh: RoomMesh, merged: int = 0, removed: int = 0) -> MeshReport:
     inconsistent = int(np.count_nonzero(directed_counts > 1))
 
     volume = None
+    inward = None
     notes: list[str] = []
     if boundary == 0 and non_manifold == 0 and inconsistent == 0 and len(faces):
         tri = mesh.triangles
         signed = float(np.sum(np.einsum("ij,ij->i", tri[:, 0], np.cross(tri[:, 1], tri[:, 2]))) / 6)
         volume = abs(signed)
+        inward = signed < 0
         notes.append(
             "face normals point into the room" if signed < 0 else "face normals point outward"
         )
@@ -114,6 +119,7 @@ def check_mesh(mesh: RoomMesh, merged: int = 0, removed: int = 0) -> MeshReport:
         bounds_min=tuple(float(v) for v in lo),
         bounds_max=tuple(float(v) for v in hi),
         notes=notes,
+        normals_inward=inward,
     )
 
 
@@ -139,3 +145,40 @@ def points_inside(mesh: RoomMesh, points: np.ndarray) -> np.ndarray:
         winding = np.sum(2.0 * np.arctan2(numerator, denominator)) / (4.0 * np.pi)
         inside[k] = abs(winding) > 0.5
     return inside
+
+
+def distance_to_surface(mesh: RoomMesh, points: np.ndarray) -> np.ndarray:
+    """Distance from each point to the nearest triangle of the mesh (metres)."""
+    points = np.atleast_2d(np.asarray(points, dtype=np.float64))
+    tri = mesh.triangles
+    a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
+    ab, ac = b - a, c - a
+    out = np.empty(len(points))
+    for k, p in enumerate(points):
+        out[k] = np.sqrt(_squared_distance_to_triangles(p, a, ab, ac).min(initial=np.inf))
+    return out
+
+
+def _squared_distance_to_triangles(
+    p: np.ndarray, a: np.ndarray, ab: np.ndarray, ac: np.ndarray
+) -> np.ndarray:
+    """Squared distance from p to each triangle (a, a + ab, a + ac)."""
+    n = np.cross(ab, ac)
+    nn = np.einsum("ij,ij->i", n, n)
+    ap = p - a
+    # Inside the prism over the triangle: the distance to the plane.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        d_plane = np.einsum("ij,ij->i", ap, n) ** 2 / nn
+        u = np.einsum("ij,ij->i", np.cross(ap, ac), n) / nn
+        v = np.einsum("ij,ij->i", np.cross(ab, ap), n) / nn
+    inside = (u >= 0) & (v >= 0) & (u + v <= 1) & (nn > 0)
+    # Otherwise the nearest point is on an edge.
+    best = np.full(len(a), np.inf)
+    for start, edge in ((a, ab), (a, ac), (a + ab, ac - ab)):
+        ee = np.einsum("ij,ij->i", edge, edge)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            t = np.clip(np.einsum("ij,ij->i", p - start, edge) / ee, 0.0, 1.0)
+        t = np.where(ee > 0, t, 0.0)
+        closest = start + edge * t[:, None]
+        best = np.minimum(best, np.einsum("ij,ij->i", p - closest, p - closest))
+    return np.where(inside, d_plane, best)

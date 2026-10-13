@@ -34,4 +34,4 @@ air:
 simulation:
   early: {method: ray_tracing, max_order: 3}
   late: {method: stochastic_ray_tracing}
-  ir_length_s: 1.5
+  ir_length_s: 2.5

@@ -240,14 +240,32 @@ class LateStage(_Model):
 
     method: Literal["stochastic_ray_tracing", "statistical"] = "stochastic_ray_tracing"
     rays: int = Field(default=100_000, ge=1, description="stochastic ray tracing only")
-    diffuse_rain: bool = True
+    reception: Literal["diffuse_rain", "secondary_sources", "detector"] = Field(
+        default="diffuse_rain",
+        description=(
+            "how reflected energy reaches listeners: diffuse_rain (scattered energy "
+            "radiates to each visible listener, specular rays are caught by a detector "
+            "sphere), secondary_sources (all reflected energy radiates, as in ODEON's late "
+            "method; smoother but assumes a diffuse field) or detector (the sphere only)"
+        ),
+    )
+    receiver_radius: float | None = Field(
+        default=None,
+        gt=0.0,
+        description="detector sphere radius in metres; None sizes it from volume and rays",
+    )
 
 
 class Simulation(_Model):
     early: EarlyStage = Field(default_factory=EarlyStage)
     late: LateStage = Field(default_factory=LateStage)
     transition_ms: float | None = Field(
-        default=None, gt=0.0, description="early to late handover; None uses the mixing time"
+        default=None,
+        gt=0.0,
+        description=(
+            "early paths end this long after the direct sound; None hands over by "
+            "reflection order (stochastic) or at the mixing time sqrt(V) ms (statistical)"
+        ),
     )
     ir_length_s: float = Field(default=2.0, gt=0.0)
     sample_rate: int = Field(default=48_000, ge=8_000, le=192_000)

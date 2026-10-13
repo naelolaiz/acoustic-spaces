@@ -1,0 +1,189 @@
+"""Impulse response synthesis from octave-band energies.
+
+The filter bank splits the spectrum into the eight octave bands with zero-phase,
+half-octave raised-cosine crossovers. The band gains sum to exactly one, so a signal
+split into bands and summed again comes back unchanged (perfect reconstruction).
+
+Energy convention: the simulation gives time-integrated intensity for a source of unit
+energy, so the direct sound at r metres carries 1 / (4 pi r^2). Impulse responses are
+scaled by ``ENERGY_TO_IR`` so that this direct sound is an impulse of height 1 / r:
+1 at 1 m, and 0.01 of energy at 10 m (the reference for strength G).
+
+A path or time slot with energy ``E`` in every band becomes a broadband impulse or
+noise burst of energy ``E``. Band energies are spectral levels, so the part of the
+output inside band b carries ``E_b`` times that band's share of the spectrum.
+"""
+
+from __future__ import annotations
+
+import math
+
+import numpy as np
+
+from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+
+#: Impulse response energy per unit of simulated energy (time-integrated intensity).
+ENERGY_TO_IR = 4.0 * math.pi
+#: Energy of the impulse response of the direct sound at 10 m, the reference for G.
+REFERENCE_ENERGY_10M = 0.01
+#: Width of each crossover, in octaves.
+CROSSOVER_WIDTH = 0.5
+#: Zero padding around FFT filtering, seconds; longer than the crossovers ring.
+_PAD_S = 0.2
+
+
+def crossover_frequencies() -> np.ndarray:
+    """Edges between adjacent octave bands (Hz)."""
+    return np.array(OCTAVE_BANDS_HZ[:-1], dtype=float) * math.sqrt(2.0)
+
+
+def band_gains(n_fft: int, sample_rate: float) -> np.ndarray:
+    """Zero-phase gains (bands, n_fft // 2 + 1) on the rFFT grid; they sum to one."""
+    f = np.fft.rfftfreq(n_fft, 1.0 / sample_rate)
+    log_f = np.log2(np.maximum(f, 1e-6))
+    steps = []
+    for edge in np.log2(crossover_frequencies()):
+        x = np.clip((log_f - (edge - CROSSOVER_WIDTH / 2)) / CROSSOVER_WIDTH, 0.0, 1.0)
+        steps.append(np.sin(0.5 * np.pi * x) ** 2)  # 0 below the edge, 1 above
+    steps = np.array(steps)
+    gains = np.empty((len(OCTAVE_BANDS_HZ), len(f)))
+    gains[0] = 1.0 - steps[0]
+    gains[1:-1] = steps[:-1] - steps[1:]
+    gains[-1] = steps[-1]
+    return gains
+
+
+def _fft_size(n: int, sample_rate: float) -> int:
+    return 1 << int(math.ceil(math.log2(n + 2 * int(_PAD_S * sample_rate) + 1)))
+
+
+def combine_bands(band_signals: np.ndarray, sample_rate: float) -> np.ndarray:
+    """Filter each band signal with its band and sum: (bands, n) -> (n,)."""
+    band_signals = np.asarray(band_signals, dtype=float)
+    n = band_signals.shape[1]
+    n_fft = _fft_size(n, sample_rate)
+    spectrum = np.fft.rfft(band_signals, n_fft, axis=1)
+    out = np.fft.irfft((spectrum * band_gains(n_fft, sample_rate)).sum(axis=0), n_fft)
+    return out[:n]
+
+
+def split_bands(signal: np.ndarray, sample_rate: float) -> np.ndarray:
+    """Split a signal into octave bands: (n,) -> (bands, n); the rows sum to the input."""
+    signal = np.asarray(signal, dtype=float)
+    n = len(signal)
+    n_fft = _fft_size(n, sample_rate)
+    spectrum = np.fft.rfft(signal, n_fft)
+    return np.fft.irfft(spectrum[None, :] * band_gains(n_fft, sample_rate), n_fft, axis=1)[:, :n]
+
+
+def band_energy_share(sample_rate: float, n_fft: int = 1 << 16) -> np.ndarray:
+    """Energy of a unit impulse inside each band: its share of the spectrum."""
+    g = band_gains(n_fft, sample_rate) ** 2
+    weights = np.full(g.shape[1], 2.0)
+    weights[0] = 1.0
+    if n_fft % 2 == 0:
+        weights[-1] = 1.0
+    return (g * weights).sum(axis=1) / n_fft
+
+
+def place_impulses(
+    delays_s: np.ndarray,
+    amplitudes: np.ndarray,
+    length: int,
+    sample_rate: float,
+    taps: int = 32,
+) -> np.ndarray:
+    """Band signals (bands, length) with a fractional-delay impulse per path.
+
+    ``amplitudes`` is (paths, bands). Delays between samples use a Hann-windowed sinc.
+    """
+    amplitudes = np.atleast_2d(np.asarray(amplitudes, dtype=float))
+    out = np.zeros((amplitudes.shape[1], length))
+    if len(amplitudes) == 0:
+        return out
+    pos = np.asarray(delays_s, dtype=float) * sample_rate
+    base = np.floor(pos).astype(np.int64)
+    frac = pos - base
+    k = np.arange(-taps // 2 + 1, taps // 2 + 1)
+    x = k[None, :] - frac[:, None]
+    kernel = np.sinc(x) * np.where(np.abs(x) < taps / 2, np.cos(np.pi * x / taps) ** 2, 0.0)
+    idx = base[:, None] + k[None, :]
+    inside = (idx >= 0) & (idx < length)
+    for b in range(out.shape[0]):
+        values = amplitudes[:, b, None] * kernel
+        np.add.at(out[b], idx[inside], values[inside])
+    return out
+
+
+def dirac_sequence(
+    length: int,
+    sample_rate: float,
+    volume_m3: float | None,
+    speed_of_sound: float,
+    rng: np.random.Generator,
+    time_step: float,
+) -> np.ndarray:
+    """Random-sign impulses whose density grows like reflections in a room: 4 pi c^3 t^2 / V.
+
+    Every time slot gets at least one impulse, so no slot's energy is lost.
+    """
+    t = np.arange(length) / sample_rate
+    if volume_m3 is None:
+        density = np.full(length, float(sample_rate))
+    else:
+        density = 4.0 * np.pi * speed_of_sound**3 * t**2 / volume_m3
+        density = np.clip(density, 1000.0, sample_rate)
+    pulses = rng.random(length) < density / sample_rate
+    signs = np.where(rng.random(length) < 0.5, -1.0, 1.0)
+    seq = np.where(pulses, signs, 0.0)
+    per_slot = max(1, int(round(time_step * sample_rate)))
+    slots = int(math.ceil(length / per_slot))
+    for s in np.flatnonzero(np.add.reduceat(np.abs(seq), np.arange(0, length, per_slot)) == 0):
+        start = s * per_slot
+        stop = min(length, start + per_slot)
+        if s < slots and start < stop:
+            seq[rng.integers(start, stop)] = signs[start]
+    return seq
+
+
+def smooth_energy(
+    energy: np.ndarray, time_step: float, start_s: float, window_s: float = 0.01
+) -> np.ndarray:
+    """Spread each slot's energy after ``start_s`` over a ``window_s`` moving window.
+
+    The late energy of a ray tracer is a sum of discrete hits; a single strong ray late
+    in the tail would become a click. Smoothing moves energy by at most half a window
+    and keeps the total, except what spills past the end.
+    """
+    energy = np.asarray(energy, dtype=float)
+    half = int(round(window_s / time_step / 2.0))
+    start = int(math.ceil(start_s / time_step))
+    if half < 1 or start >= energy.shape[-1]:
+        return energy.copy()
+    late = energy.copy()
+    late[..., :start] = 0.0
+    width = 2 * half + 1
+    padded = np.pad(late, [(0, 0)] * (late.ndim - 1) + [(half, half)])
+    cumulative = np.cumsum(padded, axis=-1)
+    cumulative = np.concatenate([np.zeros_like(cumulative[..., :1]), cumulative], axis=-1)
+    smoothed = (cumulative[..., width:] - cumulative[..., :-width]) / width
+    out = energy.copy()
+    out[..., start:] = 0.0
+    return out + smoothed
+
+
+def shape_noise(
+    energy: np.ndarray,
+    time_step: float,
+    noise: np.ndarray,
+    sample_rate: float,
+) -> np.ndarray:
+    """Band signals (bands, n): ``noise`` scaled so each slot carries ``energy[band, slot]``."""
+    n = len(noise)
+    per_slot = sample_rate * time_step
+    slot = np.floor(np.arange(n) / per_slot + 1e-9).astype(np.int64)
+    slot = np.minimum(slot, energy.shape[1] - 1)
+    noise_energy = np.bincount(slot, weights=noise**2, minlength=energy.shape[1])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        gain = np.where(noise_energy > 0, np.sqrt(energy / noise_energy), 0.0)
+    return gain[:, slot] * noise[None, :]

@@ -1,0 +1,101 @@
+"""The simulated response from one source to one listener."""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+import numpy as np
+
+from acoustic_spaces import parameters as iso3382
+from acoustic_spaces import synthesis
+from acoustic_spaces.engine.early import EarlyReflections
+
+#: The synthesized late part is smoothed over 10 ms from this long after the direct sound.
+SMOOTH_AFTER_S = 0.05
+
+
+@dataclass
+class Response:
+    """Early specular paths plus late energy per band and time slot.
+
+    Energies are time-integrated intensity for a source of unit energy (the direct sound
+    at r metres carries 1 / (4 pi r^2)); times are measured from emission.
+    """
+
+    source: str
+    listener: str
+    early: EarlyReflections
+    late: np.ndarray  # (bands, slots)
+    time_step: float  # s, slot width of ``late``
+    length_s: float
+    #: Arrival time of the direct sound (s), whether or not the direct path is blocked.
+    direct_delay_s: float
+    #: Early paths end here (s, from emission); the late part covers everything else.
+    transition_s: float
+    volume_m3: float | None
+    speed_of_sound: float
+    #: Seed for the noise of the synthesized late part.
+    seed: int = 0
+
+    @property
+    def bands(self) -> int:
+        return self.late.shape[0]
+
+    def energy(self, time_step: float | None = None) -> np.ndarray:
+        """Echogram: energy per band and time slot (bands, slots), early paths included."""
+        step = self.time_step if time_step is None else time_step
+        slots = int(math.ceil(self.length_s / step - 1e-9))
+        if math.isclose(step, self.time_step):
+            out = self.late[:, :slots].copy()
+            if out.shape[1] < slots:
+                out = np.pad(out, ((0, 0), (0, slots - out.shape[1])))
+        else:
+            # Spread each late slot evenly over the slots it overlaps.
+            edges = np.arange(self.late.shape[1] + 1) * self.time_step
+            cumulative = np.concatenate(
+                [np.zeros((self.bands, 1)), np.cumsum(self.late, axis=1)], axis=1
+            )
+            new_edges = np.arange(slots + 1) * step
+            out = np.diff(
+                np.array([np.interp(new_edges, edges, row) for row in cumulative]), axis=1
+            )
+        idx = (self.early.delay_s / step).astype(np.int64)
+        keep = idx < slots
+        for b in range(self.bands):
+            np.add.at(out[b], idx[keep], self.early.energy[keep, b])
+        return out
+
+    def parameters(self) -> iso3382.RoomParameters:
+        """ISO 3382-1 parameters per octave band, straight from the energies."""
+        reference = 1.0 / (4.0 * math.pi * 100.0)  # free field at 10 m
+        return iso3382.from_energy(
+            self.energy(), self.time_step, self.direct_delay_s, reference_energy=reference
+        )
+
+    def impulse_response(self, sample_rate: int = 48_000, seed: int | None = None) -> np.ndarray:
+        """Mono impulse response; the direct sound at r metres is an impulse of height 1 / r.
+
+        Early paths become fractional-delay impulses filtered per band; the late energy
+        drives a random-sign Dirac sequence with the density of reflections in the room.
+        From 50 ms after the direct sound the late energy is smoothed over 10 ms first,
+        so a single strong ray late in the tail does not become a click.
+        """
+        n = int(math.ceil(self.length_s * sample_rate))
+        scale = synthesis.ENERGY_TO_IR
+        band_signals = synthesis.place_impulses(
+            self.early.delay_s, np.sqrt(scale * self.early.energy), n, sample_rate
+        )
+        if np.any(self.late > 0):
+            rng = np.random.default_rng(self.seed if seed is None else seed)
+            noise = synthesis.dirac_sequence(
+                n, sample_rate, self.volume_m3, self.speed_of_sound, rng, self.time_step
+            )
+            late = synthesis.smooth_energy(
+                self.late, self.time_step, self.direct_delay_s + SMOOTH_AFTER_S
+            )
+            band_signals += synthesis.shape_noise(scale * late, self.time_step, noise, sample_rate)
+        return synthesis.combine_bands(band_signals, sample_rate)
+
+
+__all__ = ["Response"]
