@@ -82,3 +82,9 @@ The names most scripts need are also importable from the package itself:
 ```{eval-rst}
 .. automodule:: acoustic_spaces.viz
 ```
+
+## Export to Blender (glTF)
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.gltf
+```

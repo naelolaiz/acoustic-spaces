@@ -58,6 +58,7 @@ acoustic-spaces inspect examples/shoebox/scene.yaml    # geometry, materials, RT
 acoustic-spaces view examples/shoebox/scene.yaml       # 3D window; --screenshot out.png
 acoustic-spaces view examples/shoebox/scene.yaml --paths --max-order 2  # reflection paths
 acoustic-spaces animate examples/lecture_hall/scene.yaml               # sound particles
+acoustic-spaces export examples/concert_hall/scene.yaml hall.glb --paths --particles  # Blender
 acoustic-spaces materials carpet                       # search the material database
 acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
 pytest
@@ -145,6 +146,36 @@ The editor works on the same scene files as the command line:
   `measure` extra).
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
   as you edit.
+- **File > Export to Blender** writes the room with the reflection paths on show, and
+  **File > Export particle animation to Blender** the sound particles leaving the
+  selected source (see below).
+
+### Exporting to Blender
+
+`acoustic-spaces export` writes a scene as glTF 2.0 (`.glb`) for Blender or another 3D
+tool; the editor does the same from its File menu.
+
+```sh
+acoustic-spaces export examples/concert_hall/scene.yaml hall.glb              # the room
+acoustic-spaces export examples/concert_hall/scene.yaml hall.glb --paths      # + reflection paths
+acoustic-spaces export examples/concert_hall/scene.yaml hall.glb --particles  # + particle animation
+```
+
+In Blender, use **File > Import > glTF 2.0 (.glb/.gltf)** and pick the file. The axes are
+the scene's (+z up, metres).
+
+- Each surface is an object named as in the editor, with a see-through material per
+  scene material; the material's custom properties hold its absorption and scattering
+  per octave band. Sources (red) and listeners (blue) are spheres turned the way they
+  face, with an arrow along the aim.
+- `--paths` adds the early reflection paths from `--source` to `--listener` up to
+  `--max-order`, one object of edges per order. Edges do not render: to render them,
+  use Object > Convert > Curve and give the curve a bevel depth.
+- `--particles` adds the particles of `animate` as small spheres that move with them and
+  shrink with their level, gone 60 dB down. The animation runs 40 times slower than the
+  sound (`--slow-motion`): the default 100 ms take 4 s, 96 frames at 24 fps. If the
+  timeline ends sooner, set its end frame, then press play. With the default 1000
+  particles (`--count`) the file is about 3 MB.
 
 ### Example scenes
 
@@ -441,6 +472,7 @@ src/acoustic_spaces/   Python package
   measurement.py       sine sweeps, playback and recording, deconvolution
   audio.py             WAV files
   viz.py               3D view, reflection paths, particle animations, response plots
+  gltf.py              export to glTF (.glb) for Blender: room, paths, particle animation
   results.py           writing a simulation's responses and parameters to a folder
   examples.py          the example scenes that ship with the package
   gui/                 the graphical editor (Qt)

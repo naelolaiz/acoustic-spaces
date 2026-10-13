@@ -14,6 +14,13 @@
   parameters, echograms, decay curves, arrival directions and reflection paths in 3D;
   export to the files `simulate` writes; listening to a WAV file through a response.
 
+**Export to Blender**
+
+- `acoustic-spaces export` and the editor's File menu write a scene as glTF 2.0
+  (`.glb`) for Blender: the surfaces with their materials (absorption and scattering as
+  custom properties), sources and listeners facing their way, the early reflection
+  paths by order, and sound particles as an animation in slow motion.
+
 **Examples**
 
 - New example rooms: a concert hall, a control room and a church.

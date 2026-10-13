@@ -268,7 +268,7 @@ def test_place_remove_and_add_material(window, monkeypatch) -> None:
     assert window.selection == ("material", "carpet_cotton")
 
 
-def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
+def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, monkeypatch) -> None:
     window.open_example(example_path("studio"))
     _quick(window.document)
     window.run_simulation()
@@ -286,6 +286,13 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice) -
 
     report = window.write_results(tmp_path / "out")
     assert report is not None and (tmp_path / "out" / "parameters.json").is_file()
+    from PySide6.QtWidgets import QFileDialog
+
+    glb = tmp_path / "studio.glb"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(glb), ""))
+    window.blender_action.trigger()
+    assert glb.read_bytes()[:4] == b"glTF"
+    assert "reflection paths from left-speaker to mix-position" in window.messages.toPlainText()
 
     fake_sounddevice.play = lambda data, rate: fake_sounddevice.played.append((data, rate))
     fake_sounddevice.stop = lambda: None
@@ -301,6 +308,23 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice) -
     assert window._stale() and "changed" in results.stale.text()
     window.undo()
     assert not window._stale()
+
+
+def test_export_to_blender(window, monkeypatch, tmp_path: Path) -> None:
+    from PySide6.QtWidgets import QFileDialog
+
+    window.open_example(example_path("studio"))
+    target = tmp_path / "particles.glb"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    window.select("sources", 1)
+    window.particles_action.trigger()
+    assert target.read_bytes()[:4] == b"glTF"
+    assert "particles from right-speaker, 100 ms of sound over 4 s" in window.messages.toPlainText()
+    target.unlink()
+    assert window.export_blender()  # no run yet: the room alone
+    assert window.messages.toPlainText().splitlines()[-1].startswith(f"Wrote {target}: the room.")
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: ("", ""))
+    assert not window.export_blender(particles=True)
 
 
 def test_run_refuses_a_scene_with_problems(window) -> None:
