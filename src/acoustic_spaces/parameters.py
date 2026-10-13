@@ -296,9 +296,9 @@ def noise_crosspoint(energy: np.ndarray, sample_rate: float) -> tuple[int, float
 
     ``energy`` is one band's squared response from the direct sound on. Returns the
     crosspoint (samples), the mean noise power per sample and the decay range (dB, from
-    the start of the late decay down to the noise). A response that ends in silence, or
-    is still decaying in its last tenth, has no crosspoint (``len(energy)``), no noise
-    and an infinite range; one with no decay above its noise has a range of 0.
+    the loudest 10 ms down to the noise). A response that ends in silence, or is still
+    decaying in its last tenth, has no crosspoint (``len(energy)``), no noise and an
+    infinite range; one with no decay above its noise has a range of 0.
     """
     e = np.asarray(energy, dtype=float)
     n = len(e)
@@ -309,6 +309,7 @@ def noise_crosspoint(energy: np.ndarray, sample_rate: float) -> tuple[int, float
     noise_db = 10.0 * math.log10(noise)
     width = max(1, int(round(_LUNDEBY_INTERVAL_S * sample_rate)))
     t, level = _levels(e, width, sample_rate)
+    peak_db = float(level.max(initial=-np.inf))
     line = None
     if len(level) >= 3:
         line = _line(level, t, float(level.max()), noise_db + 2.0 * _LUNDEBY_MARGIN_DB)
@@ -335,7 +336,7 @@ def noise_crosspoint(energy: np.ndarray, sample_rate: float) -> tuple[int, float
     stop = int(round(cross * sample_rate))
     if stop >= 0.9 * n:
         return n, 0.0, math.inf  # the "noise" is the end of the decay itself
-    return max(1, stop), 10.0 ** (noise_db / 10.0), intercept - noise_db
+    return max(1, stop), 10.0 ** (noise_db / 10.0), peak_db - noise_db
 
 
 @dataclass
