@@ -13,7 +13,9 @@ find_package(nanobind CONFIG REQUIRED)
 add_library(acoustic_spaces_core INTERFACE)
 target_include_directories(acoustic_spaces_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
 
-nanobind_add_module(_native NB_STATIC cpp/bindings/native_module.cpp)
+# NOMINSIZE: nanobind otherwise builds with -Os, which made the tracer and the
+# convolver several times slower.
+nanobind_add_module(_native NB_STATIC NOMINSIZE cpp/bindings/native_module.cpp)
 target_link_libraries(_native PRIVATE acoustic_spaces_core)
 
 if(MSVC)

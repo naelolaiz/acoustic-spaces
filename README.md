@@ -8,8 +8,9 @@ loudspeaker formats.
 **Status: pre-alpha.** Scenes can be built, checked and simulated: CAD import, a
 material database, ray-traced early reflections, a stochastic late tail, impulse
 responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker formats as WAV files,
-and ISO 3382-1 parameters. Real rooms can be measured with sine sweeps and analysed the
-same way. Convolution and real-time rendering follow.
+and ISO 3382-1 parameters. Dry recordings can be run through them offline or in real
+time on the sound card, and real rooms can be measured with sine sweeps and analysed
+the same way.
 
 ## Design in one paragraph
 
@@ -29,7 +30,7 @@ Requirements: Python 3.10+, a C++17 compiler and CMake 3.18+.
 git clone https://github.com/naelolaiz/acoustic_spaces_simulator
 cd acoustic_spaces_simulator
 python -m pip install -e ".[dev,viz]"     # viz adds the 3D view (PyVista)
-python -m pip install -e ".[measure]"     # sounddevice, to play and record sweeps
+python -m pip install -e ".[measure]"     # sounddevice: sweeps, real-time playback
 python -m pip install -e ".[sofa]"        # h5py, to read HRTFs from SOFA files
 ```
 
@@ -214,6 +215,10 @@ The tests check, on Linux, macOS and Windows:
   direction in first-order Ambisonics, the mono energy kept by panned layouts (direct
   sound within 1 %, late part within 5 %), a binaural render through flat HRTFs equal
   to the mono response, and the spherical head's interaural delay (0.6 ms at the side);
+- rendering: the compiled FFT against NumPy, the real-time convolver and the offline
+  convolution against direct convolution (float32 and float64 precision), resampling
+  of tones within 1e-3 of the exact signal up to 15 kHz with nothing above the new
+  Nyquist frequency left, and playback through a simulated sound card block by block;
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
@@ -256,6 +261,46 @@ The statistical tail arrives evenly from all around.
 
 Levels match the mono response: an arrival from straight ahead has the same height in
 W, in the speaker it is panned to, and, below the head's influence, at both ears.
+
+## Listening: convolution and real-time playback
+
+Run a dry (anechoic) recording through a simulated or measured response:
+
+```sh
+acoustic-spaces convolve speech.wav results/talker__seat-a.binaural.wav --out wet.wav
+acoustic-spaces auralize results talker=speech.wav piano=piano.wav --format 5.0 --out mix.wav
+acoustic-spaces play results/talker__seat-a.binaural.wav speech.wav   # real time
+acoustic-spaces play results/talker__seat-a.binaural.wav --live      # microphone in
+```
+
+`convolve` takes any response WAV, with any number of channels; `auralize` reads a
+`simulate` folder and mixes every source's own signal as heard at one `--listener`, in
+one of the formats it wrote (`mono`, `binaural`, `ambix3`, `5.0`, ...), keeping the
+levels the simulation gives each source. Dry signals are mixed down to mono, as
+sources are points, and resampled to the response's rate. The results are 32-bit float
+WAV files; `--normalize` scales them to a -1 dBFS peak.
+
+`play` convolves in real time on the sound card (it needs the `measure` extra). The
+compiled convolver cuts the response into blocks of `--block` frames (256 by default)
+and multiplies them in the frequency domain, so the only delay is one block (5.3 ms at
+48 kHz) whatever the response's length, and nothing allocates memory while it runs.
+A 3 s binaural response takes about 0.4 ms of each 5.3 ms block on one current x86-64
+core; 16 Ambisonics channels take about 4 ms, so larger blocks suit those. By default
+the response is scaled to unit energy so the result plays about as loud as the dry
+signal; `--absolute` keeps the simulated level.
+
+From Python:
+
+```python
+from acoustic_spaces.render import Convolver, auralize, convolve, play, resample
+from acoustic_spaces.spatial import Binaural
+
+mix = auralize(result, {"talker": (speech, 44_100)}, "seat-a", Binaural())  # (samples, 2)
+wet = convolve(speech_48k, binaural)  # offline, float64
+convolver = Convolver(binaural, block=256)  # block by block, float32
+out = convolver.process(next_block)  # (256, 2)
+play(binaural, 48_000, speech_48k)  # through the sound card
+```
 
 ## Measuring impulse responses
 
@@ -326,11 +371,13 @@ src/acoustic_spaces/   Python package
   synthesis.py         octave filter bank and impulse response synthesis
   spatial/             Ambisonics, VBAP loudspeaker layouts, HRTFs, spatial rendering
   parameters.py        ISO 3382-1 parameters, octave filters, noise floor detection
+  render.py            convolution, resampling, auralisation, real-time playback
   measurement.py       sine sweeps, playback and recording, deconvolution
   audio.py             WAV files
   viz.py               3D view, reflection paths, response, IR and direction plots
   cli.py               command-line interface
-cpp/include/           header-only C++ core: BVH, ray tracer, convolution (no Python)
+cpp/include/           header-only C++ core: BVH, ray tracer, FFT, partitioned
+                       convolver (no Python, so a plugin or player can reuse it)
 cpp/bindings/          nanobind module exposing the core as acoustic_spaces._native
 tests/                 pytest suite, run on Linux, macOS and Windows in CI
 examples/              example scenes
@@ -343,7 +390,7 @@ examples/              example scenes
 - M2 Mono simulation: ray-traced early reflections, stochastic tail, IR synthesis, ISO 3382 parameters. Done.
 - M2b IR measurement: exponential sine sweeps, playback and recording, deconvolution, parameters of measured IRs. In review.
 - M3 Spatial outputs: binaural (SOFA HRTFs or a spherical head), Ambisonics (AmbiX) up to 7th order, VBAP loudspeaker layouts. In review.
-- M4 Rendering: offline convolution in Python, real-time partitioned convolver in C++.
+- M4 Rendering: offline convolution and auralisation in Python, real-time partitioned convolver in C++, playback. In review.
 - M5 v1 release: validation report, documentation, wheels.
 
 ## Contributing

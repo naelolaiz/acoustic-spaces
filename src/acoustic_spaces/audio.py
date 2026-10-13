@@ -93,4 +93,25 @@ def read_wav(path: str | Path) -> tuple[np.ndarray, int]:
     return samples[: frames * channels].reshape(frames, channels), int(sample_rate)
 
 
-__all__ = ["read_wav", "write_wav"]
+def channel_mask(path: str | Path) -> int | None:
+    """The speaker positions (WAVE_FORMAT_EXTENSIBLE channel mask) of a WAV file, or
+    ``None`` for a file in the plain format."""
+    with Path(path).open("rb") as f:
+        header = f.read(12)
+        if header[:4] != b"RIFF" or header[8:12] != b"WAVE":
+            raise ValueError(f"{path}: not a WAV file")
+        while chunk := f.read(8):
+            if len(chunk) < 8:
+                break
+            tag, size = chunk[:4], struct.unpack("<I", chunk[4:])[0]
+            if tag == b"fmt ":
+                body = f.read(size)
+                kind = struct.unpack("<H", body[:2])[0]
+                if kind == _EXTENSIBLE and len(body) >= 24:
+                    return int(struct.unpack("<I", body[20:24])[0])
+                return None
+            f.seek(size + (size % 2), 1)
+    raise ValueError(f"{path}: missing fmt chunk")
+
+
+__all__ = ["channel_mask", "read_wav", "write_wav"]

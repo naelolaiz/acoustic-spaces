@@ -5,13 +5,16 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 
+#include <complex>
 #include <cstdint>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
 #include "acoustic_spaces/bvh.hpp"
+#include "acoustic_spaces/convolver.hpp"
 #include "acoustic_spaces/direct_convolution.hpp"
+#include "acoustic_spaces/fft.hpp"
 #include "acoustic_spaces/ray_tracer.hpp"
 
 namespace nb = nanobind;
@@ -57,6 +60,40 @@ OutArray convolve_direct(InArray signal, InArray ir) {
 }
 
 using Kernels = nb::ndarray<const double, nb::ndim<3>, nb::c_contig, nb::device::cpu>;
+using Spectrum =
+    nb::ndarray<const std::complex<double>, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
+using FloatResponses = nb::ndarray<const float, nb::ndim<3>, nb::c_contig, nb::device::cpu>;
+using FloatBlock = nb::ndarray<const float, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+using Convolver = as::PartitionedConvolver<float>;
+
+nb::ndarray<nb::numpy, std::complex<double>> real_fft(InArray x) {
+    as::RealFft<double> fft(x.shape(0));
+    std::vector<std::complex<double>> out(fft.bins());
+    fft.forward(x.data(), out.data());
+    return to_numpy(std::move(out), {fft.bins()});
+}
+
+nb::ndarray<nb::numpy, double> inverse_real_fft(Spectrum bins, std::size_t n) {
+    as::RealFft<double> fft(n);
+    if (bins.shape(0) != fft.bins()) {
+        throw std::invalid_argument("inverse_real_fft: expected n / 2 + 1 bins");
+    }
+    std::vector<double> out(n);
+    fft.inverse(bins.data(), out.data());
+    return to_numpy(std::move(out), {n});
+}
+
+nb::ndarray<nb::numpy, float> convolver_process(Convolver &convolver, FloatBlock block) {
+    if (block.shape(0) != convolver.block() || block.shape(1) != convolver.inputs()) {
+        throw std::invalid_argument("Convolver.process: expected a (block, inputs) array");
+    }
+    std::vector<float> out(convolver.block() * convolver.outputs());
+    {
+        nb::gil_scoped_release release;
+        convolver.process(block.data(), out.data());
+    }
+    return to_numpy(std::move(out), {convolver.block(), convolver.outputs()});
+}
 
 nb::ndarray<nb::numpy, double> scatter_kernels(std::size_t length, Indices positions,
                                                Indices index, InArray amplitudes,
@@ -182,6 +219,29 @@ NB_MODULE(_native, m) {
 
     m.def("convolve_direct", &convolve_direct, nb::arg("signal"), nb::arg("ir"),
           "Full linear convolution of two 1-D float64 arrays (reference implementation).");
+
+    m.def("real_fft", &real_fft, nb::arg("x"),
+          "FFT of a real signal of power-of-two length: n / 2 + 1 bins (as numpy.fft.rfft).");
+    m.def("inverse_real_fft", &inverse_real_fft, nb::arg("bins"), nb::arg("n"),
+          "Inverse of real_fft (as numpy.fft.irfft).");
+
+    nb::class_<Convolver>(m, "Convolver",
+                          "Uniformly partitioned real-time convolution (float32).")
+        .def(
+            "__init__",
+            [](Convolver *self, FloatResponses ir, std::size_t block) {
+                new (self) Convolver(ir.data(), ir.shape(0), ir.shape(1), ir.shape(2), block);
+            },
+            nb::arg("ir"), nb::arg("block"),
+            "ir: (inputs, outputs, taps) float32; block: frames per call, a power of two.")
+        .def("process", &convolver_process, nb::arg("block"),
+             "One block (block, inputs) in, (block, outputs) out.")
+        .def("reset", &Convolver::reset, "Forget all past input.")
+        .def_prop_ro("inputs", &Convolver::inputs)
+        .def_prop_ro("outputs", &Convolver::outputs)
+        .def_prop_ro("taps", &Convolver::taps)
+        .def_prop_ro("block", &Convolver::block)
+        .def_prop_ro("partitions", &Convolver::partitions);
 
     m.def("scatter_kernels", &scatter_kernels, nb::arg("length"), nb::arg("positions"),
           nb::arg("index"), nb::arg("amplitudes"), nb::arg("kernels"),
