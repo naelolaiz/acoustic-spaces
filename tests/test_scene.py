@@ -43,3 +43,26 @@ def test_round_trip(tmp_path: Path) -> None:
     scene.to_yaml(out)
     again = Scene.from_yaml(out)
     assert again.model_dump() == scene.model_dump()
+
+
+def test_orientation_forward() -> None:
+    from acoustic_spaces.scene.model import Orientation
+
+    assert Orientation().forward() == pytest.approx((1.0, 0.0, 0.0))
+    assert Orientation(yaw=90).forward() == pytest.approx((0.0, 1.0, 0.0), abs=1e-12)
+    assert Orientation(yaw=180, pitch=90).forward() == pytest.approx((0.0, 0.0, 1.0), abs=1e-12)
+
+
+def test_default_material_must_exist() -> None:
+    data = yaml.safe_load((EXAMPLES / "shoebox" / "scene.yaml").read_text(encoding="utf-8"))
+    data["default_material"] = "velvet"
+    with pytest.raises(ValidationError, match="velvet"):
+        Scene.model_validate(data)
+
+
+def test_example_materials_come_from_presets() -> None:
+    scene = Scene.from_yaml(EXAMPLES / "shoebox" / "scene.yaml")
+    for material in scene.materials.values():
+        assert material.preset is not None
+        assert len(material.absorption) == len(OCTAVE_BANDS_HZ)
+        assert "pyroomacoustics" in material.source
