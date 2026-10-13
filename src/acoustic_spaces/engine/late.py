@@ -45,7 +45,19 @@ class LateEnergy:
     time_step: float  # s
     escaped_rays: int = 0
     rays: int = 0
+    #: Rays traced, counting those split off (stochastic ray tracing only).
+    traced_rays: int = 0
 
+
+#: Weight window of the stochastic tracer (see :func:`stochastic_energy`): resolution of
+#: the expected ray energy (s), how far (as a factor) a ray may stray from it before it
+#: is split or thinned out, the most copies per split and per original ray, and the
+#: fewest rays of the first batch.
+SPLIT_WINDOW_S = 0.05
+SPLIT_RATIO = 4.0
+MAX_SPLIT = 8
+MAX_FAMILY = 256
+MIN_FIRST_RAYS = 1000
 
 #: Smallest and largest automatic detector radius (m). Below about 0.5 m the specular
 #: part of the tail in rooms with reflective, smooth walls gets noisy at usual ray counts.
@@ -75,6 +87,24 @@ def receiver_radius(
     return np.maximum(np.minimum(r, 0.9 * np.asarray(clearance, dtype=float)), 1e-3)
 
 
+def _split_target(ray_energy: np.ndarray, reflections: np.ndarray) -> np.ndarray:
+    """The expected energy of a ray per window, from a first batch of rays.
+
+    Never rising, and rounded to quarter octaves: splitting only needs its order of
+    magnitude, and rounding keeps results independent of how threads sum the batch.
+    """
+    mean = np.divide(ray_energy, reflections, out=np.zeros_like(ray_energy), where=reflections > 0)
+    target = np.zeros_like(mean)
+    level = math.inf
+    for j, value in enumerate(mean):
+        if value > 0:
+            level = min(level, value)
+        target[j] = level if math.isfinite(level) else 0.0
+    with np.errstate(divide="ignore"):
+        quarter_octaves = np.round(4.0 * np.log2(target))
+    return np.where(target > 0, np.exp2(quarter_octaves / 4.0), 0.0)
+
+
 def stochastic_energy(
     model: TraceModel,
     source: np.ndarray,
@@ -89,6 +119,7 @@ def stochastic_energy(
     covered_order: int = -1,
     covered_time: np.ndarray | None = None,
     radius: np.ndarray | float | None = None,
+    splitting: bool = True,
     seed: int = 0,
     directivity_a: float = 1.0,
     forward: np.ndarray | None = None,
@@ -99,6 +130,13 @@ def stochastic_energy(
     Specular-only paths with up to ``covered_order`` reflections reaching listener k
     no later than ``covered_time[k]`` (s, from emission) are left out; ``None`` puts no
     time limit on that.
+
+    With ``splitting``, a first tenth of the rays measures how much energy a ray
+    usually carries over time; the rest are split when they carry much more and thinned
+    out by Russian roulette when they carry much less (a weight window). The result is
+    unbiased either way, but late tails in rooms where a few rays escape the absorption
+    for a long time (smooth walls, absorption on the ceiling) no longer break up when
+    those rays run out.
     """
     from acoustic_spaces import _native
 
@@ -113,30 +151,54 @@ def stochastic_energy(
         radius = receiver_radius(model.room.volume_m3, rays, max_time, speed_of_sound)
     radius = np.broadcast_to(np.asarray(radius, dtype=np.float64), (len(listeners),))
     forward = np.array([1.0, 0.0, 0.0]) if forward is None else np.asarray(forward, float)
-    energy, _, escaped = _native.trace_stochastic(
-        model.bvh,
-        np.asarray(source, dtype=np.float64),
-        float(directivity_a),
-        forward,
-        model.absorption,
-        model.scattering,
-        np.ascontiguousarray(air, dtype=np.float64),
-        listeners,
-        np.zeros((0, 3)),
-        int(rays),
-        float(max_time),
-        float(time_step),
-        float(max(time_step, 0.01)),
-        float(speed_of_sound),
-        np.ascontiguousarray(radius),
-        bool(diffuse_rain),
-        bool(specular_rain),
-        int(covered_order),
-        np.ascontiguousarray(covered, dtype=np.float64),
-        int(seed) & 0xFFFFFFFFFFFFFFFF,
-        int(threads),
+
+    def trace(count: int, first: int, target: np.ndarray):
+        return _native.trace_stochastic(
+            model.bvh,
+            np.asarray(source, dtype=np.float64),
+            float(directivity_a),
+            forward,
+            model.absorption,
+            model.scattering,
+            np.ascontiguousarray(air, dtype=np.float64),
+            listeners,
+            np.zeros((0, 3)),
+            int(count),
+            float(max_time),
+            float(time_step),
+            float(max(time_step, 0.01)),
+            float(speed_of_sound),
+            np.ascontiguousarray(radius),
+            bool(diffuse_rain),
+            bool(specular_rain),
+            int(covered_order),
+            np.ascontiguousarray(covered, dtype=np.float64),
+            int(seed) & 0xFFFFFFFFFFFFFFFF,
+            int(threads),
+            SPLIT_WINDOW_S,
+            int(first),
+            np.ascontiguousarray(target, dtype=np.float64),
+            SPLIT_RATIO,
+            MAX_SPLIT,
+            MAX_FAMILY,
+        )
+
+    first = max(min(rays // 2, MIN_FIRST_RAYS), rays // 10) if splitting else rays
+    energy, _, escaped, ray_energy, reflections, traced = trace(first, 0, np.zeros(0))
+    if first < rays:
+        # Each batch carries the whole source energy; weight them by their share of rays.
+        target = _split_target(ray_energy, reflections) * first / (rays - first)
+        more, _, more_escaped, _, _, more_traced = trace(rays - first, first, target)
+        energy = (first * energy + (rays - first) * more) / rays
+        escaped += more_escaped
+        traced += more_traced
+    return LateEnergy(
+        energy=energy,
+        time_step=time_step,
+        escaped_rays=int(escaped),
+        rays=rays,
+        traced_rays=int(traced),
     )
-    return LateEnergy(energy=energy, time_step=time_step, escaped_rays=int(escaped), rays=rays)
 
 
 def statistical_energy(

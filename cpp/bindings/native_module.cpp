@@ -98,7 +98,9 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, double directivit
                            double speed_of_sound, InArray receiver_radius, bool diffuse_rain,
                            bool specular_rain,
                            int covered_order, InArray covered_time, std::uint64_t seed,
-                           std::size_t threads) {
+                           std::size_t threads, double window_time_step,
+                           std::uint64_t first_ray, InArray split_target, double split_ratio,
+                           std::size_t max_split, std::size_t max_family) {
     const std::size_t faces = bvh.face_count();
     const std::size_t bands = air.shape(0);
     if (absorption.shape(0) != faces || absorption.shape(1) != bands ||
@@ -122,6 +124,7 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, double directivit
     settings.max_time = max_time;
     settings.time_step = time_step;
     settings.dir_time_step = dir_time_step;
+    settings.window_time_step = window_time_step;
     settings.speed_of_sound = speed_of_sound;
     settings.receiver_radius.assign(receiver_radius.data(),
                                     receiver_radius.data() + receiver_radius.shape(0));
@@ -132,6 +135,12 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, double directivit
                                  covered_time.data() + covered_time.shape(0));
     settings.seed = seed;
     settings.threads = threads;
+    settings.first_ray = first_ray;
+    settings.split_target.assign(split_target.data(),
+                                 split_target.data() + split_target.shape(0));
+    settings.split_ratio = split_ratio;
+    settings.max_split = max_split;
+    settings.max_family = max_family;
 
     as::StochasticResult result;
     {
@@ -143,7 +152,8 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, double directivit
     return nb::make_tuple(
         to_numpy(std::move(result.energy), {n_rec, bands, result.bins}),
         to_numpy(std::move(result.directional), {n_rec, n_dirs, bands, result.dir_bins}),
-        result.escaped_rays);
+        result.escaped_rays, to_numpy(std::move(result.ray_energy), {result.windows}),
+        to_numpy(std::move(result.reflections), {result.windows}), result.traced_rays);
 }
 
 }  // namespace
@@ -178,7 +188,10 @@ NB_MODULE(_native, m) {
           nb::arg("speed_of_sound"), nb::arg("receiver_radius"), nb::arg("diffuse_rain"),
           nb::arg("specular_rain"),
           nb::arg("covered_order"), nb::arg("covered_time"), nb::arg("seed"),
-          nb::arg("threads") = 0,
+          nb::arg("threads"), nb::arg("window_time_step"), nb::arg("first_ray"),
+          nb::arg("split_target"), nb::arg("split_ratio"), nb::arg("max_split"),
+          nb::arg("max_family"),
           "Stochastic ray tracing: (energy[r, band, bin], directional[r, dir, band, bin], "
-          "escaped rays).");
+          "escaped rays, ray_energy[window], reflections[window], traced rays); "
+          "ray_energy / reflections is the mean band-mean energy of a ray per window.");
 }

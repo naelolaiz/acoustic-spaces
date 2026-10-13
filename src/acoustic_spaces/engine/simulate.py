@@ -234,6 +234,7 @@ def simulate(
                 covered_order=early_cfg.max_order,
                 covered_time=cutoff,
                 radius=radius,
+                splitting=late_cfg.splitting,
                 seed=info["seed"],
                 directivity_a=a,
                 forward=forward,
@@ -241,6 +242,7 @@ def simulate(
             )
             info["rays"] = float(late.rays)
             info["escaped_rays"] = float(late.escaped_rays)
+            info["traced_rays"] = float(late.traced_rays)
             info["receiver_radius_m"] = float(np.min(radius))
         info["late_s"] = time.perf_counter() - started
         details[source.name] = info
