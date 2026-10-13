@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from collections.abc import Sequence
@@ -255,6 +256,276 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _sweep_from(args: argparse.Namespace):
+    from acoustic_spaces.measurement import Sweep
+
+    return Sweep(
+        sample_rate=args.sample_rate,
+        duration_s=args.duration,
+        f_start=args.f_start,
+        f_stop=args.f_stop,
+        level_db=args.level,
+        silence_s=args.silence,
+        repeats=args.repeats,
+    )
+
+
+def _describe(sweep) -> str:
+    seconds = sweep.period * sweep.repeats / sweep.sample_rate
+    return (
+        f"{sweep.repeats} x {sweep.sweep_length / sweep.sample_rate:.2f} s sweep, "
+        f"{sweep.f_start:g} Hz to {sweep.f_stop:g} Hz at {sweep.level_db:g} dBFS, "
+        f"{sweep.silence_s:g} s silence after each ({seconds:.1f} s in all, "
+        f"{sweep.sample_rate} Hz)"
+    )
+
+
+def _cmd_sweep(args: argparse.Namespace) -> int:
+    try:
+        sweep = _sweep_from(args)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    out = Path(args.out)
+    sweep.save(out)
+    print(_describe(sweep))
+    print(f"wrote {out} and {out.with_suffix('.json')}")
+    return 0
+
+
+def _load_sweep(path: str):
+    from acoustic_spaces.measurement import Sweep
+
+    try:
+        return Sweep.load(path)
+    except (OSError, ValueError, TypeError) as exc:
+        print(f"error: cannot read the sweep settings for {path}: {exc}", file=sys.stderr)
+        return None
+
+
+def _channel_index(channel: int, count: int, what: str) -> int | None:
+    if not 1 <= channel <= count:
+        print(f"error: {what} {channel} is not among channels 1 to {count}", file=sys.stderr)
+        return None
+    return channel - 1
+
+
+def _cmd_deconvolve(args: argparse.Namespace) -> int:
+    from acoustic_spaces.audio import read_wav, write_wav
+    from acoustic_spaces.measurement import deconvolve, remove_latency
+
+    sweep = _load_sweep(args.sweep)
+    if sweep is None:
+        return 1
+    recording, sample_rate = read_wav(args.recording)
+    if sample_rate != sweep.sample_rate:
+        print(
+            f"error: the recording is at {sample_rate} Hz, the sweep at {sweep.sample_rate} Hz",
+            file=sys.stderr,
+        )
+        return 1
+    responses = deconvolve(recording, sweep, length_s=args.length)
+    if args.loopback is not None:
+        column = _channel_index(args.loopback, responses.shape[1], "loopback channel")
+        if column is None:
+            return 1
+        responses, lag = remove_latency(responses, column)
+        print(f"latency from the loopback channel: {lag / sample_rate * 1e3:.2f} ms")
+    write_wav(args.out, responses, sample_rate)
+    print(
+        f"wrote {responses.shape[1]} impulse response(s) of "
+        f"{len(responses) / sample_rate:.2f} s to {args.out}"
+    )
+    return 0
+
+
+def _reference_energy(args: argparse.Namespace, sample_rate: int):
+    """Reference for G from --reference-energy or --free-field and --distance."""
+    from acoustic_spaces.audio import read_wav
+    from acoustic_spaces.parameters import free_field_reference
+
+    if args.free_field is None:
+        return args.reference_energy
+    if args.distance is None:
+        raise ValueError("--free-field needs --distance")
+    data, rate = read_wav(args.free_field)
+    if rate != sample_rate:
+        raise ValueError(f"{args.free_field} is at {rate} Hz, the response at {sample_rate} Hz")
+    return free_field_reference(data[:, 0], rate, args.distance, filters=args.filters)
+
+
+def _analysis(ir, sample_rate: int, args: argparse.Namespace, reference) -> dict:
+    """Print and return the parameters of one impulse response."""
+    from acoustic_spaces.parameters import band_decay, from_impulse_response
+
+    noise = not args.no_noise
+    params = from_impulse_response(ir, sample_rate, reference, filters=args.filters, noise=noise)
+    decay = band_decay(ir, sample_rate, filters=args.filters, noise=noise)
+    print(f"direct sound at {decay.onset_s * 1e3:.1f} ms")
+    if noise:
+        ranges = [f"{r:6.0f}" if r != float("inf") else f"{'-':>6}" for r in decay.decay_range_db]
+        print(f"{'decay range (dB)':<18}" + "".join(ranges))
+    print(params.table())
+    return {
+        "onset_s": decay.onset_s,
+        "crosspoint_s": (decay.crosspoint / sample_rate).tolist() if noise else None,
+        "decay_range_db": [None if r == float("inf") else float(r) for r in decay.decay_range_db]
+        if noise
+        else None,
+        "parameters": params.as_dict(),
+    }
+
+
+def _plot_ir(ir, sample_rate: int, path: Path, title: str, args: argparse.Namespace) -> bool:
+    try:
+        from acoustic_spaces.viz import plot_impulse_response
+
+        plot_impulse_response(
+            ir, sample_rate, path, title=title, filters=args.filters, noise=not args.no_noise
+        )
+    except ImportError as exc:
+        print(f"warning: {exc}", file=sys.stderr)
+        return False
+    return True
+
+
+def _cmd_analyze(args: argparse.Namespace) -> int:
+    from acoustic_spaces.audio import read_wav
+
+    data, sample_rate = read_wav(args.ir)
+    channels = range(data.shape[1]) if args.channel is None else [args.channel - 1]
+    if args.channel is not None and _channel_index(args.channel, data.shape[1], "channel") is None:
+        return 1
+    try:
+        reference = _reference_energy(args, sample_rate)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    report = {"file": Path(args.ir).name, "bands_hz": list(OCTAVE_BANDS_HZ), "channels": []}
+    for c in channels:
+        print(f"\n{Path(args.ir).name}, channel {c + 1}")
+        entry = {"channel": c + 1, **_analysis(data[:, c], sample_rate, args, reference)}
+        if args.plot:
+            plot = Path(args.plot)
+            if len(channels) > 1:
+                plot = plot.with_name(f"{plot.stem}_{c + 1}{plot.suffix}")
+            if _plot_ir(data[:, c], sample_rate, plot, f"{Path(args.ir).name}, ch {c + 1}", args):
+                print(f"saved {plot}")
+        report["channels"].append(entry)
+    if args.json:
+        Path(args.json).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print(f"\nwrote {args.json}")
+    return 0
+
+
+def _cmd_devices(_: argparse.Namespace) -> int:
+    from acoustic_spaces.measurement import list_devices
+
+    try:
+        print(list_devices())
+    except ImportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _cmd_measure(args: argparse.Namespace) -> int:
+    from acoustic_spaces.audio import write_wav
+    from acoustic_spaces.measurement import measure
+
+    try:
+        sweep = _sweep_from(args)
+        reference = _reference_energy(args, sweep.sample_rate)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    device = int(args.device) if args.device and args.device.isdigit() else args.device
+    print(_describe(sweep), file=sys.stderr)
+    print("playing and recording...", file=sys.stderr)
+    try:
+        result = measure(
+            sweep,
+            inputs=args.input,
+            output=args.output,
+            loopback=args.loopback,
+            device=device,
+            length_s=args.length,
+        )
+    except ImportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    sweep.save(out / "sweep.wav")
+    write_wav(out / "recording.wav", result.recording, sweep.sample_rate)
+    write_wav(out / "ir.wav", result.impulse_responses, sweep.sample_rate)
+    peak = float(abs(result.recording).max(initial=0.0))
+    if peak >= 0.99:
+        print("warning: the recording clips; lower --level or the gain", file=sys.stderr)
+    report = {
+        "sweep": "sweep.json",
+        "recording": "recording.wav",
+        "impulse_responses": "ir.wav",
+        "inputs": list(args.input),
+        "output": args.output,
+        "loopback": args.loopback,
+        "latency_s": result.latency_s,
+        "recording_peak_dbfs": 20.0 * math.log10(peak) if peak > 0 else None,
+        "bands_hz": list(OCTAVE_BANDS_HZ),
+        "channels": [],
+    }
+    if result.latency_s is not None:
+        print(f"latency from the loopback channel: {result.latency_s * 1e3:.2f} ms")
+    for k, channel in enumerate(args.input):
+        ir = result.impulse_responses[:, k]
+        print(f"\ninput {channel}")
+        entry = {"input": channel, **_analysis(ir, sweep.sample_rate, args, reference)}
+        if args.plot and _plot_ir(
+            ir, sweep.sample_rate, out / f"ir_{channel}.png", f"input {channel}", args
+        ):
+            entry["plot"] = f"ir_{channel}.png"
+        report["channels"].append(entry)
+    (out / "measurement.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f"\nwrote sweep, recording, impulse responses and measurement.json to {out}")
+    return 0
+
+
+def _add_sweep_arguments(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_argument_group("sweep")
+    group.add_argument("--sample-rate", type=int, default=48_000, help="Hz (default 48000)")
+    group.add_argument("--duration", type=float, default=6.0, help="sweep length, s (default 6)")
+    group.add_argument("--f-start", type=float, default=20.0, help="Hz (default 20)")
+    group.add_argument("--f-stop", type=float, default=20_000.0, help="Hz (default 20000)")
+    group.add_argument("--level", type=float, default=-6.0, help="peak dBFS (default -6)")
+    group.add_argument(
+        "--silence", type=float, default=3.0, help="silence after each sweep, s (default 3)"
+    )
+    group.add_argument("--repeats", type=int, default=1, help="sweeps to average (default 1)")
+
+
+def _add_analysis_arguments(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_argument_group("analysis")
+    group.add_argument(
+        "--filters",
+        choices=["iec", "crossover"],
+        default="iec",
+        help="octave filters: IEC 61260 Butterworth (default) or the synthesis crossovers",
+    )
+    group.add_argument(
+        "--no-noise", action="store_true", help="skip the noise floor detection and correction"
+    )
+    ref = group.add_mutually_exclusive_group()
+    ref.add_argument(
+        "--reference-energy",
+        type=float,
+        help="energy of a broadband impulse response of the source at 10 m in free field, "
+        "for G (0.01 for responses made by acoustic-spaces)",
+    )
+    ref.add_argument("--free-field", metavar="WAV", help="free-field response of the source, for G")
+    group.add_argument("--distance", type=float, help="distance of the --free-field response, m")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="acoustic-spaces", description=__doc__)
     parser.add_argument("--version", action="version", version=__version__)
@@ -304,6 +575,52 @@ def build_parser() -> argparse.ArgumentParser:
         "--plot", action="store_true", help="save echogram and decay plots (needs viz extra)"
     )
     simulate.set_defaults(func=_cmd_simulate)
+
+    sweep = sub.add_parser("sweep", help="write an exponential sweep excitation (WAV and JSON)")
+    sweep.add_argument("out", help="WAV file to write; its settings go next to it as .json")
+    _add_sweep_arguments(sweep)
+    sweep.set_defaults(func=_cmd_sweep)
+
+    deconvolve = sub.add_parser(
+        "deconvolve", help="turn a recording of a sweep into impulse responses"
+    )
+    deconvolve.add_argument("recording", help="WAV recorded while the sweep played")
+    deconvolve.add_argument(
+        "--sweep", required=True, help="the sweep's .json (or the .wav next to it)"
+    )
+    deconvolve.add_argument("--out", required=True, help="WAV file for the impulse responses")
+    deconvolve.add_argument("--length", type=float, help="response length, s (default: silence)")
+    deconvolve.add_argument(
+        "--loopback", type=int, help="channel of the recording wired to the output (1-based)"
+    )
+    deconvolve.set_defaults(func=_cmd_deconvolve)
+
+    analyze = sub.add_parser("analyze", help="ISO 3382 parameters of an impulse response WAV")
+    analyze.add_argument("ir", help="impulse response WAV")
+    analyze.add_argument("--channel", type=int, help="analyse only this channel (1-based)")
+    analyze.add_argument("--json", metavar="FILE", help="also write the results as JSON")
+    analyze.add_argument("--plot", metavar="PNG", help="save decay plots (needs viz extra)")
+    _add_analysis_arguments(analyze)
+    analyze.set_defaults(func=_cmd_analyze)
+
+    measure = sub.add_parser(
+        "measure", help="play a sweep, record it and analyse it (needs the measure extra)"
+    )
+    measure.add_argument("--out", required=True, metavar="DIR", help="folder for the results")
+    measure.add_argument("--device", help="audio device name or number (see 'devices')")
+    measure.add_argument(
+        "--input", type=int, nargs="+", default=[1], help="input channels (1-based, default 1)"
+    )
+    measure.add_argument("--output", type=int, default=1, help="output channel (default 1)")
+    measure.add_argument("--loopback", type=int, help="input wired to the output, for latency")
+    measure.add_argument("--length", type=float, help="response length, s (default: silence)")
+    measure.add_argument("--plot", action="store_true", help="save decay plots (needs viz)")
+    _add_sweep_arguments(measure)
+    _add_analysis_arguments(measure)
+    measure.set_defaults(func=_cmd_measure)
+
+    devices = sub.add_parser("devices", help="list audio devices (needs the measure extra)")
+    devices.set_defaults(func=_cmd_devices)
     return parser
 
 

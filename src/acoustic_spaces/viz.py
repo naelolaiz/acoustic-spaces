@@ -249,6 +249,29 @@ def _figure(**kwargs):
     return Figure(**kwargs)
 
 
+def _two_panels():
+    """A dark figure with two stacked panels."""
+    fig = _figure(figsize=(10, 7), layout="constrained")
+    axes = fig.subplots(2, 1)
+    fig.patch.set_facecolor(BACKGROUND[0])
+    for ax in axes:
+        ax.set_facecolor(PANEL)
+        ax.tick_params(colors="white")
+        for spine in ax.spines.values():
+            spine.set_color("#6b6e7a")
+        ax.grid(True, color="#3a3d4a", linewidth=0.6)
+        ax.xaxis.label.set_color("white")
+        ax.yaxis.label.set_color("white")
+        ax.title.set_color("white")
+    return fig, axes
+
+
+def _legend(ax, **kwargs) -> None:
+    legend = ax.legend(facecolor=PANEL, edgecolor="#6b6e7a", fontsize=8, **kwargs)
+    for text in legend.get_texts():
+        text.set_color("white")
+
+
 def plot_response(response: Response, path: str | Path | None = None, *, band: int = 4):
     """Echogram and decay curves of one response; saved to ``path`` if given.
 
@@ -264,18 +287,7 @@ def plot_response(response: Response, path: str | Path | None = None, *, band: i
     t_ms = np.arange(energy.shape[1]) * response.time_step * 1e3
     reference = 1.0 / (4.0 * np.pi * 100.0)  # free field at 10 m, as for G
 
-    fig = _figure(figsize=(10, 7), layout="constrained")
-    ax_e, ax_d = fig.subplots(2, 1)
-    fig.patch.set_facecolor(BACKGROUND[0])
-    for ax in (ax_e, ax_d):
-        ax.set_facecolor(PANEL)
-        ax.tick_params(colors="white")
-        for spine in ax.spines.values():
-            spine.set_color("#6b6e7a")
-        ax.grid(True, color="#3a3d4a", linewidth=0.6)
-        ax.xaxis.label.set_color("white")
-        ax.yaxis.label.set_color("white")
-        ax.title.set_color("white")
+    fig, (ax_e, ax_d) = _two_panels()
 
     with np.errstate(divide="ignore"):
         late_db = 10.0 * np.log10(np.maximum(response.late[band], 1e-30) / reference)
@@ -296,9 +308,7 @@ def plot_response(response: Response, path: str | Path | None = None, *, band: i
     ax_e.set_title(
         f"{response.source} to {response.listener}: echogram, {OCTAVE_BANDS_HZ[band]} Hz band"
     )
-    legend = ax_e.legend(loc="upper right", facecolor=PANEL, edgecolor="#6b6e7a", fontsize=8)
-    for text in legend.get_texts():
-        text.set_color("white")
+    _legend(ax_e, loc="upper right")
 
     start = int(response.direct_delay_s / response.time_step)
     for b, f in enumerate(OCTAVE_BANDS_HZ):
@@ -312,9 +322,78 @@ def plot_response(response: Response, path: str | Path | None = None, *, band: i
     ax_d.set_xlabel("time after the direct sound (ms)")
     ax_d.set_ylabel("decay (dB)")
     ax_d.set_title("backward-integrated decay per octave band")
-    legend = ax_d.legend(ncol=4, facecolor=PANEL, edgecolor="#6b6e7a", fontsize=8)
-    for text in legend.get_texts():
-        text.set_color("white")
+    _legend(ax_d, ncol=4)
+
+    if path is not None:
+        fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
+    return fig
+
+
+def plot_impulse_response(
+    ir: np.ndarray,
+    sample_rate: float,
+    path: str | Path | None = None,
+    *,
+    title: str | None = None,
+    filters: str = "iec",
+    noise: bool = True,
+):
+    """Level and decay curves of a measured (or any) impulse response.
+
+    The top panel shows the squared response in dB over 1 ms windows and, per octave
+    band with ``noise``, the background noise level found for it. The bottom panel shows
+    each band's backward-integrated decay up to where it sinks into the noise, with the
+    noise taken off and the missing tail added, as the parameters are computed.
+    Returns the matplotlib figure; it is saved to ``path`` if given.
+    """
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+    from acoustic_spaces.parameters import band_decay, decay_curve
+
+    ir = np.asarray(ir, dtype=float)
+    decay = band_decay(ir, sample_rate, filters=filters, noise=noise)
+    window = max(1, int(round(1e-3 * sample_rate)))
+    blocks = len(ir) // window
+    power = (ir[: blocks * window] ** 2).reshape(blocks, window).mean(axis=1)
+    peak = float(power.max(initial=0.0)) or 1.0
+    t_ms = (np.arange(blocks) + 0.5) * window / sample_rate * 1e3
+
+    fig, (ax_e, ax_d) = _two_panels()
+    level = 10.0 * np.log10(np.maximum(power / peak, 1e-30))
+    ax_e.plot(t_ms, level, color="#4da3ff", lw=0.8, label="broadband, 1 ms windows")
+    onset_ms = decay.onset_s * 1e3
+    for b in range(len(OCTAVE_BANDS_HZ)):
+        if decay.noise[b] > 0:
+            noise_db = 10.0 * np.log10(decay.noise[b] / peak)
+            end_ms = onset_ms + decay.crosspoint[b] / sample_rate * 1e3
+            ax_e.hlines(noise_db, end_ms, t_ms[-1], color=BAND_COLOURS[b], lw=1.0)
+            ax_e.plot([end_ms], [noise_db], "o", color=BAND_COLOURS[b], ms=3)
+    if np.any(decay.noise > 0):
+        ax_e.plot([], [], "o-", color="#d0d0d0", ms=3, label="band noise from its crosspoint")
+    ax_e.set_ylim(max(float(level.min()), -120.0) - 5.0, 5.0)
+    ax_e.set_xlim(0, t_ms[-1] if len(t_ms) else 1)
+    ax_e.set_xlabel("time (ms)")
+    ax_e.set_ylabel("level re peak (dB)")
+    ax_e.set_title(f"{title}: level" if title else "level")
+    _legend(ax_e, loc="upper right")
+
+    step = 1e-3
+    for b, f in enumerate(OCTAVE_BANDS_HZ):
+        e = decay.cleaned(b)
+        slots = len(e) // window
+        if slots < 2:
+            continue
+        per_ms = e[: slots * window].reshape(slots, window).sum(axis=1)
+        curve = decay_curve(per_ms, step)
+        if not np.isfinite(curve[0]):
+            continue
+        label = f"{f} Hz" if f < 1000 else f"{f // 1000} kHz"
+        ax_d.plot(np.arange(slots) * step * 1e3, curve, color=BAND_COLOURS[b], lw=1.2, label=label)
+    ax_d.set_ylim(-70, 2)
+    ax_d.set_xlim(0, max(t_ms[-1] - onset_ms, 1.0) if len(t_ms) else 1)
+    ax_d.set_xlabel("time after the direct sound (ms)")
+    ax_d.set_ylabel("decay (dB)")
+    ax_d.set_title("backward-integrated decay per octave band, noise removed")
+    _legend(ax_d, ncol=4)
 
     if path is not None:
         fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())

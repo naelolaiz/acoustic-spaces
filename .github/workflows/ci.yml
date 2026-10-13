@@ -42,11 +42,16 @@ jobs:
       - name: Test
         run: python -m pytest -q
       - name: Smoke-test the command line
+        shell: bash  # stops at the first failing command on every platform
         run: |
           acoustic-spaces info
           acoustic-spaces validate examples/shoebox/scene.yaml
           acoustic-spaces inspect examples/shoebox/scene.yaml
           acoustic-spaces simulate examples/shoebox/scene.yaml --out sim --rays 5000 --length 0.8 --seed 1
+          acoustic-spaces sweep sweep.wav --duration 2 --silence 1 --repeats 2
+          python examples/measurement/virtual_recording.py sweep.wav sim/talker__seat-a.wav rec.wav
+          acoustic-spaces deconvolve rec.wav --sweep sweep.json --out ir.wav --loopback 2
+          acoustic-spaces analyze ir.wav --reference-energy 0.01
 
   viz:
     name: 3D view (off-screen)
@@ -70,12 +75,17 @@ jobs:
           acoustic-spaces view examples/shoebox/scene.yaml --screenshot shoebox.png
           acoustic-spaces view examples/shoebox/scene.yaml --paths --max-order 2 --screenshot paths.png
           acoustic-spaces simulate examples/shoebox/scene.yaml --out sim --plot --seed 1
+          acoustic-spaces sweep sweep.wav --duration 4 --silence 3 --repeats 2
+          python examples/measurement/virtual_recording.py sweep.wav sim/talker__seat-a.wav rec.wav --noise-db -70
+          acoustic-spaces deconvolve rec.wav --sweep sweep.json --out ir.wav --loopback 2
+          acoustic-spaces analyze ir.wav --reference-energy 0.01 --plot ir.png
       - uses: actions/upload-artifact@v6
         with:
           name: scene-view
           path: |
             shoebox.png
             paths.png
+            ir.png
             sim/
 
   wheels:
