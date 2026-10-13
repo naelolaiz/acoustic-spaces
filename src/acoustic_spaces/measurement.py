@@ -31,6 +31,8 @@ from pathlib import Path
 
 import numpy as np
 
+from acoustic_spaces._extras import install_hint
+
 #: Regularisation inside and outside the swept band, relative to the peak power.
 _EPS_IN, _EPS_OUT = 1e-8, 1.0
 
@@ -185,7 +187,7 @@ def _sounddevice():
         import sounddevice
     except (ImportError, OSError) as exc:  # OSError: PortAudio library missing
         raise ImportError(
-            'playing and recording needs sounddevice: pip install "acoustic-spaces[measure]"'
+            f"playing and recording needs sounddevice: {install_hint('measure')}"
         ) from exc
     return sounddevice
 

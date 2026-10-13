@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- `uv sync` installs the test tools (a `dev` dependency group: pytest, h5py, ruff), so
+  `uv run pytest` works in a fresh checkout, and rebuilds the compiled core when the C++
+  sources change. The README shows the uv and pip setups side by side, and messages about
+  a missing extra name `uv sync --extra ...` as well as pip.
+- `inspect` adds the Arau-Puchades reverberation time, which allows for absorption that
+  faces one way (also `Room.reverberation_time("arau_puchades")`), and a note when the
+  absorption is too uneven for Sabine and Eyring to hold, as in the example shoebox,
+  whose simulated T30 is several times their estimates.
+- Tests check the decay of a box with specular walls against its closed form, with even
+  and with uneven absorption, and the example's absorption with diffusing walls against
+  Eyring.
+
 ## 1.0.0
 
 The first release: everything the v1 plan set out, from a CAD model to a room you can
