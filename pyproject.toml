@@ -66,3 +66,8 @@ skip = "*-musllinux_* *-win32 *_i686"
 test-requires = ["pytest"]
 test-sources = ["tests", "examples"]
 test-command = "pytest -q tests"
+
+[tool.cibuildwheel.windows]
+# delvewheel bundles the first msvcp140.dll it finds on PATH; on GitHub's Windows runners
+# that is an older copy shipped with Java. Search the system's VC++ runtime first.
+repair-wheel-command = 'delvewheel repair --add-path C:\Windows\System32 -w {dest_dir} -v {wheel}'
