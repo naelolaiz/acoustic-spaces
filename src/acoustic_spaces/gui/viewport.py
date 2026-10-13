@@ -26,6 +26,7 @@ from acoustic_spaces.viz import (
     SOURCE_COLOUR,
     UNASSIGNED_COLOUR,
     _outline,
+    balloon_polydata,
     plot_paths,
     room_polydata,
 )
@@ -190,11 +191,26 @@ class Viewport(QWidget):
                 )
                 self._actors[_key(actor)] = (group, index)
                 self._markers.append(actor)
-                if group == "listeners" or item.directivity != "omni":
+                directivity = room.directivities[index] if group == "sources" else None
+                if directivity is None or not directivity.omni:
                     arrow = pv.Arrow(
                         start=item.position, direction=item.orientation.forward(), scale=6 * radius
                     )
                     plotter.add_mesh(arrow, color=colour, render=False)
+                if chosen and directivity is not None and not directivity.omni:
+                    balloon = balloon_polydata(
+                        directivity, item.position, item.orientation.rotation(), size=10 * radius
+                    )
+                    plotter.add_mesh(
+                        balloon,
+                        scalars="level",
+                        cmap="magma",
+                        clim=(-30, 0),
+                        opacity=0.55,
+                        show_scalar_bar=False,
+                        pickable=False,
+                        render=False,
+                    )
                 points.append(item.position)
                 names.append(item.name)
         if points:

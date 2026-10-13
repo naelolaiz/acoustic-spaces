@@ -12,7 +12,7 @@ import numpy as np
 
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
-from acoustic_spaces.engine.model import DIRECTIVITY_A, TraceModel
+from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.geometry import distance_to_surface
 from acoustic_spaces.parameters import RoomParameters
@@ -115,8 +115,8 @@ def early_paths(
         speed_of_sound=room.speed_of_sound(),
         air=room.air_attenuation(),
         max_delay_s=scene.simulation.ir_length_s,
-        directivity_a=DIRECTIVITY_A[src.directivity],
-        forward=np.array(src.orientation.forward()),
+        directivity=room.directivity(src.name),
+        orientation=np.array(src.orientation.rotation()),
     )
 
 
@@ -174,8 +174,8 @@ def simulate(
     details: dict[str, dict[str, float]] = {}
     for s_index, source in enumerate(chosen_sources):
         src = np.array(source.position, dtype=float)
-        a = DIRECTIVITY_A[source.directivity]
-        forward = np.array(source.orientation.forward())
+        directivity = room.directivity(source.name)
+        orientation = np.array(source.orientation.rotation())
         direct = np.linalg.norm(listener_pos - src, axis=1) / c
         cutoff = np.minimum(direct + transition, length)
         info: dict[str, float] = {"seed": _seed(seed, s_index)}
@@ -194,8 +194,8 @@ def simulate(
                 speed_of_sound=c,
                 air=air,
                 max_delay_s=float(cutoff[k]),
-                directivity_a=a,
-                forward=forward,
+                directivity=directivity,
+                orientation=orientation,
             )
             for k in range(len(chosen_listeners))
         ]
@@ -238,8 +238,8 @@ def simulate(
                 directions=fibonacci_sphere(late_cfg.directions),
                 splitting=late_cfg.splitting,
                 seed=info["seed"],
-                directivity_a=a,
-                forward=forward,
+                directivity=directivity,
+                orientation=orientation,
                 threads=threads,
             )
             info["rays"] = float(late.rays)

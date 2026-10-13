@@ -13,6 +13,12 @@ The names most scripts need are also importable from the package itself:
 .. automodule:: acoustic_spaces.room
 ```
 
+## Source directivity
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.directivity
+```
+
 ## Geometry
 
 ```{eval-rst}

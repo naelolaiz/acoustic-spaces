@@ -237,7 +237,9 @@ its peak (single precision).
 - **Wave effects.** The simulation is geometric: no diffraction, no room modes. Below the Schroeder frequency of a room (about
   2000 √(T/V) Hz) its results are a statistical average, not the response of one point.
 - **Source directivity** was not part of the cross-check (both programs ran
-  omnidirectional sources); the directivity patterns are checked by the tests only.
+  omnidirectional sources). The tests check that every pattern keeps the sound power,
+  that SOFA and CSV data come out in the source's frame, and that the direct sound,
+  early paths, late rays and particles all follow the same weights.
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
 

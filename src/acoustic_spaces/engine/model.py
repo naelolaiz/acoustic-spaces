@@ -6,27 +6,30 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from acoustic_spaces.directivity import PATTERNS, Directivity
+from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.room import UNASSIGNED, Room
 
 #: Faces whose normals and offsets agree to this (unit normal components, metres) share
 #: a plane, and so share image sources.
 PLANE_TOLERANCE = 1e-5
 
-#: Pressure pattern a + (1 - a) cos(theta) for each source directivity.
-DIRECTIVITY_A = {
-    "omni": 1.0,
-    "subcardioid": 0.7,
-    "cardioid": 0.5,
-    "supercardioid": 0.37,
-    "hypercardioid": 0.25,
-    "figure8": 0.0,
-}
+#: Pressure pattern a + (1 - a) cos(theta) for each named source directivity (the same
+#: as :data:`acoustic_spaces.directivity.PATTERNS`).
+DIRECTIVITY_A = PATTERNS
 
 
-def directivity_weight(a: float, forward: np.ndarray, directions: np.ndarray) -> np.ndarray:
-    """Energy weight of a first-order pattern, averaging 1 over the sphere."""
-    p = a + (1.0 - a) * (np.asarray(directions) @ np.asarray(forward))
-    return p**2 / (a**2 + (1.0 - a) ** 2 / 3.0)
+def source_weights(
+    directivity: Directivity | None, orientation: np.ndarray | None, directions: np.ndarray
+) -> np.ndarray:
+    """Energy weights (n, bands) of a source's directivity for unit vectors (n, 3) in
+    room coordinates; ``orientation`` has the source's forward, left and up axes as
+    columns (default: the room's)."""
+    directions = np.asarray(directions, dtype=float).reshape(-1, 3)
+    if directivity is None:
+        return np.ones((len(directions), len(OCTAVE_BANDS_HZ)))
+    local = directions if orientation is None else directions @ np.asarray(orientation)
+    return directivity.energy(local)
 
 
 @dataclass

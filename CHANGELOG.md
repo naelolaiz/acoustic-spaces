@@ -21,6 +21,21 @@
   custom properties), sources and listeners facing their way, the early reflection
   paths by order, and sound particles as an animation in slow motion.
 
+**Source directivity**
+
+- Directivity per octave band: a pattern name or a first-order `a` for each band, or
+  measured data from a SOFA file (AES69 `FreeFieldDirectivityTF`, or impulse responses)
+  or a CSV table of levels by azimuth and elevation, interpolated over the sphere.
+- It applies to the direct sound, the early paths, the rays of the late part (in the
+  compiled tracer) and the sound particles, in the source's own frame including roll.
+- `acoustic-spaces directivity` prints a directivity's index and front-to-back ratio
+  per band and draws its polar patterns (`--plot`); `inspect` lists each source's
+  index. The editor picks a pattern or a file, shows the index and the polar patterns,
+  and draws the selected source's balloon in 3D. The control room example's monitors
+  narrow from omni in the bass to supercardioid at 8 kHz.
+- `acoustic_spaces.directivity` has the patterns, balloons and file readers;
+  `Room.directivities` holds each source's.
+
 **Examples**
 
 - New example rooms: a concert hall, a control room and a church.

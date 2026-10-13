@@ -239,6 +239,44 @@ def test_selection_and_forms(window) -> None:
     assert window.selection == ("scene", None)
 
 
+def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
+    from PySide6.QtWidgets import QFileDialog
+
+    from acoustic_spaces.gui.inspector import DIRECTIVITIES, MEASURED
+
+    window.open_example(example_path("studio"))
+    window.select("sources", 0)
+    page = window.inspector.pages["sources"]
+    box = page.directivity
+    assert box.currentText().startswith("per band: omni, omni, omni, subcardioid")
+    assert page.directivity_index.text().startswith("Directivity index: 0.0, 0.0, 0.0, 2.8")
+    box.activated.emit(DIRECTIVITIES.index("cardioid"))
+    assert window.document.scene.sources[0].directivity == "cardioid"
+    assert box.currentText() == "cardioid"
+    assert "4.8, 4.8" in page.directivity_index.text()
+
+    table = tmp_path / "speaker.csv"
+    rows = ["0, 0, 0", "180, 0, -20", "90, 0, -6", "270, 0, -6", "0, 90, -6", "0, -90, -6"]
+    table.write_text("azimuth, elevation, 1000 Hz\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(table), ""))
+    box.activated.emit(box.findText(MEASURED))
+    assert window.document.scene.sources[0].directivity.file == table
+    assert box.currentText() == "file: speaker.csv"
+    assert "Hz copied from the nearest octave" in page.directivity_index.text()
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: ("", ""))
+    box.activated.emit(box.findText(MEASURED))  # cancelled: nothing changes
+    assert window.document.scene.sources[0].directivity.file == table
+    assert box.currentText() == "file: speaker.csv"
+
+    page.show_pattern()
+    assert page.pattern_window.isVisible()
+    assert page.pattern_window.windowTitle() == "Directivity of left-speaker"
+    window.undo()
+    assert window.document.scene.sources[0].directivity == "cardioid"
+    page.pattern_window.close()
+
+
 def test_tree_selects(window) -> None:
     tree = window.tree
     for item in tree._items():

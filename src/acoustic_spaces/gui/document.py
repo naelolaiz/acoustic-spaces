@@ -109,9 +109,15 @@ def model_scene(path: str | Path) -> Scene:
 
 
 def referenced_files(scene: Scene) -> list[Path]:
-    """The files ``scene`` uses: its model, material tables and HRTFs."""
+    """The files ``scene`` uses: its model, material tables, source directivities and
+    HRTFs."""
     files = [scene.geometry.file] if scene.geometry.file is not None else []
     files += [m.file for m in scene.materials.values() if m.file is not None]
+    files += [
+        s.directivity.file
+        for s in scene.sources
+        if not isinstance(s.directivity, str) and s.directivity.file is not None
+    ]
     files += [o.hrtf for o in scene.outputs if o.hrtf is not None]
     return [Path(f) for f in files]
 
@@ -253,6 +259,10 @@ class Document(QObject):
         for material in data["materials"].values():
             if material.get("file") in moved:
                 material["file"] = moved[material["file"]]
+        for source in data["sources"]:
+            directivity = source.get("directivity")
+            if isinstance(directivity, dict) and directivity.get("file") in moved:
+                directivity["file"] = moved[directivity["file"]]
         for output in data["outputs"]:
             if output.get("hrtf") in moved:
                 output["hrtf"] = moved[output["hrtf"]]

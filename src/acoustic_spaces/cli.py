@@ -119,6 +119,12 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     if unassigned:
         print(_band_row("(no material)", [], width) + f"  {sum(unassigned.values()):9.2f}")
 
+    print("\nsources (directivity index per octave band, dB)")
+    print(_band_header("", width))
+    for source, directivity in zip(scene.sources, room.directivities, strict=True):
+        print(_band_row(source.name, directivity.index(), width, "6.1f"))
+        print(f"  {_directivity_text(directivity)}")
+
     if room.volume_m3 is not None:
         print("\nstatistical reverberation time (s), without air absorption")
         print(_band_header("", width))
@@ -141,6 +147,46 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
             print(f"  {kind:<9}{item.name:<{width}}({x:.2f}, {y:.2f}, {z:.2f}){where}")
     print()
     return 0 if _print_checks(room) else 1
+
+
+def _directivity_text(directivity) -> str:
+    text = directivity.name or "omni"
+    if directivity.extrapolated:
+        bands = ", ".join(str(f) for f in directivity.extrapolated)
+        text += f" ({bands} Hz copied from the nearest octave)"
+    return text
+
+
+def _cmd_directivity(args: argparse.Namespace) -> int:
+    import numpy as np
+
+    from acoustic_spaces.directivity import PATTERNS, FirstOrder, read_directivity
+
+    try:
+        if args.source in PATTERNS:
+            directivity = FirstOrder.pattern(args.source)
+        else:
+            directivity = read_directivity(args.source, args.measurement)
+    except (ImportError, ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    width = 22
+    print(_directivity_text(directivity))
+    print(_band_header("", width))
+    print(_band_row("directivity index dB", directivity.index(), width, "6.1f"))
+    front, back = directivity.energy([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]])
+    with np.errstate(divide="ignore"):
+        print(_band_row("front to back dB", 10.0 * np.log10(front / back), width, "6.1f"))
+    if args.plot:
+        try:
+            from acoustic_spaces.viz import plot_directivity
+
+            plot_directivity(directivity, args.plot)
+        except ImportError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(f"saved {args.plot}")
+    return 0
 
 
 def _cmd_materials(args: argparse.Namespace) -> int:
@@ -862,6 +908,16 @@ def build_parser() -> argparse.ArgumentParser:
     materials.add_argument("query", nargs="*", help="words to look for, e.g. carpet concrete")
     materials.add_argument("--kind", choices=["absorption", "scattering"], default=None)
     materials.set_defaults(func=_cmd_materials)
+
+    directivity = sub.add_parser(
+        "directivity", help="directivity index of a SOFA or CSV directivity file, or a pattern"
+    )
+    directivity.add_argument("source", help="a .sofa or .csv file, or a pattern such as cardioid")
+    directivity.add_argument(
+        "--measurement", type=int, help="SOFA: the measurement to use (default: all averaged)"
+    )
+    directivity.add_argument("--plot", metavar="PNG", help="save polar plots (needs matplotlib)")
+    directivity.set_defaults(func=_cmd_directivity)
 
     examples = sub.add_parser("examples", help="list the example scenes, or copy them")
     examples.add_argument("names", nargs="*", help="examples to show or copy (default: all)")
