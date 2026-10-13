@@ -57,6 +57,11 @@ def test_response_plot(tmp_path: Path) -> None:
     out = tmp_path / "response.png"
     plot_response(response, out)
     assert out.stat().st_size > 10_000
+    from acoustic_spaces.viz import plot_directions
+
+    out = tmp_path / "directions.png"
+    plot_directions(response, out)
+    assert out.stat().st_size > 10_000
 
 
 @pytest.mark.render

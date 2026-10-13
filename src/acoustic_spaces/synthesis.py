@@ -16,6 +16,7 @@ output inside band b carries ``E_b`` times that band's share of the spectrum.
 
 from __future__ import annotations
 
+import functools
 import math
 
 import numpy as np
@@ -39,6 +40,11 @@ def crossover_frequencies() -> np.ndarray:
 
 def band_gains(n_fft: int, sample_rate: float) -> np.ndarray:
     """Zero-phase gains (bands, n_fft // 2 + 1) on the rFFT grid; they sum to one."""
+    return _band_gains(int(n_fft), float(sample_rate)).copy()
+
+
+@functools.lru_cache(maxsize=8)
+def _band_gains(n_fft: int, sample_rate: float) -> np.ndarray:
     f = np.fft.rfftfreq(n_fft, 1.0 / sample_rate)
     log_f = np.log2(np.maximum(f, 1e-6))
     steps = []
@@ -50,6 +56,7 @@ def band_gains(n_fft: int, sample_rate: float) -> np.ndarray:
     gains[0] = 1.0 - steps[0]
     gains[1:-1] = steps[:-1] - steps[1:]
     gains[-1] = steps[-1]
+    gains.flags.writeable = False
     return gains
 
 
@@ -64,7 +71,7 @@ def combine_bands(band_signals: np.ndarray, sample_rate: float) -> np.ndarray:
     n = band_signals.shape[1]
     n_fft = fft_size(n, sample_rate)
     spectrum = np.fft.rfft(band_signals, n_fft, axis=1)
-    out = np.fft.irfft((spectrum * band_gains(n_fft, sample_rate)).sum(axis=0), n_fft)
+    out = np.fft.irfft((spectrum * _band_gains(n_fft, float(sample_rate))).sum(axis=0), n_fft)
     return out[:n]
 
 
@@ -74,7 +81,9 @@ def split_bands(signal: np.ndarray, sample_rate: float) -> np.ndarray:
     n = len(signal)
     n_fft = fft_size(n, sample_rate)
     spectrum = np.fft.rfft(signal, n_fft)
-    return np.fft.irfft(spectrum[None, :] * band_gains(n_fft, sample_rate), n_fft, axis=1)[:, :n]
+    return np.fft.irfft(spectrum[None, :] * _band_gains(n_fft, float(sample_rate)), n_fft, axis=1)[
+        :, :n
+    ]
 
 
 def band_energy_share(sample_rate: float, n_fft: int = 1 << 16) -> np.ndarray:

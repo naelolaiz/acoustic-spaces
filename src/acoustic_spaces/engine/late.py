@@ -13,13 +13,16 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
 from acoustic_spaces.engine.model import TraceModel
 
 _DECAY = 6.0 * math.log(10.0)  # 60 dB in nepers of energy
+
+#: Time resolution of the late energy's arrival directions (s).
+DIRECTION_STEP = 0.01
 
 #: Reception modes: (diffuse rain, specular rain) in the compiled tracer.
 #:
@@ -47,6 +50,12 @@ class LateEnergy:
     rays: int = 0
     #: Rays traced, counting those split off (stochastic ray tracing only).
     traced_rays: int = 0
+    #: Arrival directions (room coordinates, towards where the energy comes from) and the
+    #: same energy split between them (listeners, directions, bands, slots of
+    #: ``direction_step``); empty without directions.
+    directions: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))
+    directional: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0, 0)))
+    direction_step: float = DIRECTION_STEP
 
 
 #: Weight window of the stochastic tracer (see :func:`stochastic_energy`): resolution of
@@ -119,6 +128,7 @@ def stochastic_energy(
     covered_order: int = -1,
     covered_time: np.ndarray | None = None,
     radius: np.ndarray | float | None = None,
+    directions: np.ndarray | None = None,
     splitting: bool = True,
     seed: int = 0,
     directivity_a: float = 1.0,
@@ -129,7 +139,8 @@ def stochastic_energy(
 
     Specular-only paths with up to ``covered_order`` reflections reaching listener k
     no later than ``covered_time[k]`` (s, from emission) are left out; ``None`` puts no
-    time limit on that.
+    time limit on that. With ``directions`` (unit vectors in room coordinates), each
+    arrival is also counted at the nearest of them, every ``DIRECTION_STEP``.
 
     With ``splitting``, a first tenth of the rays measures how much energy a ray
     usually carries over time; the rest are split when they carry much more and thinned
@@ -151,6 +162,7 @@ def stochastic_energy(
         radius = receiver_radius(model.room.volume_m3, rays, max_time, speed_of_sound)
     radius = np.broadcast_to(np.asarray(radius, dtype=np.float64), (len(listeners),))
     forward = np.array([1.0, 0.0, 0.0]) if forward is None else np.asarray(forward, float)
+    directions = np.zeros((0, 3)) if directions is None else np.asarray(directions, float)
 
     def trace(count: int, first: int, target: np.ndarray):
         return _native.trace_stochastic(
@@ -162,11 +174,11 @@ def stochastic_energy(
             model.scattering,
             np.ascontiguousarray(air, dtype=np.float64),
             listeners,
-            np.zeros((0, 3)),
+            np.ascontiguousarray(directions.reshape(-1, 3)),
             int(count),
             float(max_time),
             float(time_step),
-            float(max(time_step, 0.01)),
+            DIRECTION_STEP,
             float(speed_of_sound),
             np.ascontiguousarray(radius),
             bool(diffuse_rain),
@@ -184,12 +196,13 @@ def stochastic_energy(
         )
 
     first = max(min(rays // 2, MIN_FIRST_RAYS), rays // 10) if splitting else rays
-    energy, _, escaped, ray_energy, reflections, traced = trace(first, 0, np.zeros(0))
+    energy, directional, escaped, ray_energy, reflections, traced = trace(first, 0, np.zeros(0))
     if first < rays:
         # Each batch carries the whole source energy; weight them by their share of rays.
         target = _split_target(ray_energy, reflections) * first / (rays - first)
-        more, _, more_escaped, _, _, more_traced = trace(rays - first, first, target)
+        more, more_directional, more_escaped, _, _, more_traced = trace(rays - first, first, target)
         energy = (first * energy + (rays - first) * more) / rays
+        directional = (first * directional + (rays - first) * more_directional) / rays
         escaped += more_escaped
         traced += more_traced
     return LateEnergy(
@@ -198,6 +211,8 @@ def stochastic_energy(
         escaped_rays=int(escaped),
         rays=rays,
         traced_rays=int(traced),
+        directions=directions,
+        directional=directional,
     )
 
 

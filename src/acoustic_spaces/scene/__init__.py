@@ -6,8 +6,10 @@ from acoustic_spaces.scene.model import (
     Geometry,
     Listener,
     Material,
+    Output,
     Scene,
     Source,
+    Speaker,
 )
 
 __all__ = [
@@ -16,6 +18,8 @@ __all__ = [
     "Geometry",
     "Listener",
     "Material",
+    "Output",
     "Scene",
     "Source",
+    "Speaker",
 ]

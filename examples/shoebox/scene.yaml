@@ -35,3 +35,9 @@ simulation:
   early: {method: ray_tracing, max_order: 3}
   late: {method: stochastic_ray_tracing}
   ir_length_s: 2.5
+# Formats the simulate command writes; see the README's "Spatial outputs".
+outputs:
+  - mono
+  - binaural
+  - {format: ambisonics, order: 3}
+  - {format: loudspeakers, layout: "5.0"}

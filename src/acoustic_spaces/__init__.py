@@ -10,7 +10,7 @@ The package is organised as a pipeline:
   and ISO 3382-1 parameters
 - ``audio``: WAV files
 - ``viz``: 3D view (optional, needs PyVista)
-- ``spatial``: binaural, Ambisonics and loudspeaker encoders (M3)
+- ``spatial``: binaural, Ambisonics and loudspeaker outputs
 - ``render``: offline and real-time convolution (M4)
 """
 
