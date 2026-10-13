@@ -76,13 +76,15 @@ def test_orientation_turns_room_directions_into_head_directions() -> None:
 @pytest.mark.parametrize("name", list(LAYOUTS))
 def test_vbap_pans_with_unit_power(name: str) -> None:
     layout = Loudspeakers.layout(name)
+    mains = [i for i, s in enumerate(layout.speakers) if not s.lfe]
     np.testing.assert_allclose(
-        layout.gains(layout.directions()), np.eye(layout.channels), atol=1e-12
+        layout.gains(layout.directions()[mains])[:, mains], np.eye(len(mains)), atol=1e-12
     )
-    grid = fibonacci_sphere(600)
+    grid = np.vstack([fibonacci_sphere(600), [[0, 0, 1], [0, 0, -1]]])
     gains = layout.gains(grid)
     np.testing.assert_allclose((gains**2).sum(axis=1), 1.0)
     assert gains.min() >= 0.0
+    np.testing.assert_array_equal(np.delete(gains, mains, axis=1), 0.0)  # LFE stays silent
     if name == "7.0.4":
         # Above the horizon the speakers surround every direction: the gains point there.
         up = grid[:, 2] >= 0
@@ -108,6 +110,12 @@ def test_vbap_between_and_outside_speakers() -> None:
         Loudspeakers.layout("22.2")
     with pytest.raises(ValueError, match="at least two"):
         Loudspeakers((Speaker("a", 0),))
+    with pytest.raises(ValueError, match="at least two"):
+        Loudspeakers((Speaker("a", 0), Speaker("LFE", 0, lfe=True)))
+    surround = Loudspeakers.layout("7.1.4")
+    assert surround.channel_names[:4] == ["L", "R", "C", "LFE"]
+    assert surround.channel_mask() == 0x2D63F
+    assert Loudspeakers.layout("5.1").channel_mask() == 0x3F
 
 
 def test_spherical_head_delays_and_shadows_the_far_ear() -> None:

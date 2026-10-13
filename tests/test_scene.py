@@ -66,3 +66,22 @@ def test_example_materials_come_from_presets() -> None:
         assert material.preset is not None
         assert len(material.absorption) == len(OCTAVE_BANDS_HZ)
         assert "pyroomacoustics" in material.source
+
+
+def test_geometry_from_dimensions() -> None:
+    data = yaml.safe_load((EXAMPLES / "shoebox" / "scene.yaml").read_text(encoding="utf-8"))
+    data["geometry"] = {"box": [8, 6, 3]}
+    assert Scene.model_validate(data).geometry.describe() == "box 8 x 6 x 3 m"
+    data["geometry"] = {"floor_plan": [[0, 0], [8, 0], [8, 6]], "height": 300, "units": "cm"}
+    described = Scene.model_validate(data).geometry.describe()
+    assert described == "floor plan with 3 corners, 300 cm high"
+    for bad, message in [
+        ({"box": [8, 6, 3], "file": "x.obj"}, "exactly one"),
+        ({}, "exactly one"),
+        ({"floor_plan": [[0, 0], [8, 0], [8, 6]]}, "needs it"),
+        ({"box": [8, 6, 3], "height": 3}, "height goes with floor_plan"),
+        ({"box": [8, -6, 3]}, "greater than 0"),
+    ]:
+        data["geometry"] = bad
+        with pytest.raises(ValidationError, match=message):
+            Scene.model_validate(data)

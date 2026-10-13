@@ -96,3 +96,13 @@ def test_open_model_skips_volume_and_inside_checks(tmp_path: Path) -> None:
     assert "not closed" in room.warnings()[0]
     with pytest.raises(ValueError, match="closed"):
         room.reverberation_time()
+
+
+@pytest.mark.parametrize(
+    "scene", sorted(EXAMPLES.glob("*/scene.yaml")), ids=lambda p: p.parent.name
+)
+def test_example_scenes_are_ready_to_simulate(scene: Path) -> None:
+    room = Room.from_yaml(scene)
+    assert room.problems() == []
+    assert room.warnings() == []
+    assert room.report.closed and room.report.normals_inward

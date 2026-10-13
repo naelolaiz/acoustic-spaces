@@ -81,6 +81,7 @@ jobs:
           python examples/measurement/virtual_recording.py sweep.wav sim/talker__seat-a.wav rec.wav --noise-db -70
           acoustic-spaces deconvolve rec.wav --sweep sweep.json --out ir.wav --loopback 2
           acoustic-spaces analyze ir.wav --reference-energy 0.01 --plot ir.png
+          acoustic-spaces animate examples/lecture_hall/scene.yaml --out particles.gif --frames 50
       - uses: actions/upload-artifact@v6
         with:
           name: scene-view
@@ -88,6 +89,7 @@ jobs:
             shoebox.png
             paths.png
             ir.png
+            particles.gif
             sim/
 
   wheels:

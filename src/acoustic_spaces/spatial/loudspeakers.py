@@ -5,6 +5,8 @@ height) of loudspeakers around its direction, with gains of unit total power. La
 with height but nothing below the listener get an imaginary loudspeaker straight down
 (and one straight up when nothing is high). Its share is dropped, so arrivals from below
 play from the speakers at their azimuth; straight down, all its neighbours play alike.
+Low-frequency effects channels (LFE) take no part in panning and stay silent: a room's
+bass reaches every speaker already, and bass management belongs to the playback system.
 """
 
 from __future__ import annotations
@@ -23,10 +25,16 @@ class Speaker:
     name: str
     azimuth: float  # degrees, positive to the left
     elevation: float = 0.0  # degrees, positive up
+    lfe: bool = False  # a low-frequency effects channel: silent
 
 
 def _layout(*speakers: tuple[str, float, float]) -> tuple[Speaker, ...]:
     return tuple(Speaker(*s) for s in speakers)
+
+
+def _with_lfe(speakers: tuple[Speaker, ...]) -> tuple[Speaker, ...]:
+    """The layout with an LFE channel after the centre, as in WAV channel order."""
+    return (*speakers[:3], Speaker("LFE", 0.0, 0.0, lfe=True), *speakers[3:])
 
 
 #: Named layouts after ITU-R BS.2051, in the channel order of multichannel WAV files.
@@ -67,12 +75,14 @@ LAYOUTS: dict[str, tuple[Speaker, ...]] = {
         ("Rtb", -135, 30),
     ),
 }
+LAYOUTS.update({f"{name[0]}.1{name[3:]}": _with_lfe(LAYOUTS[name]) for name in list(LAYOUTS)[1:]})
 
 #: WAVE_FORMAT_EXTENSIBLE speaker positions, for the channel mask of named layouts.
 _WAV_POSITIONS = {
     "L": 0x1,
     "R": 0x2,
     "C": 0x4,
+    "LFE": 0x8,
     "Lrs": 0x10,
     "Rrs": 0x20,
     "Ls": 0x200,
@@ -129,6 +139,8 @@ class Loudspeakers:
         names = [s.name for s in self.speakers]
         if len(set(names)) != len(names):
             raise ValueError("loudspeaker names must be unique")
+        if sum(not s.lfe for s in self.speakers) < 2:
+            raise ValueError("a loudspeaker layout needs at least two speakers besides LFE")
         object.__setattr__(self, "speakers", tuple(self.speakers))
         object.__setattr__(self, "_bases", self._make_bases())
 
@@ -146,7 +158,10 @@ class Loudspeakers:
 
     @property
     def horizontal(self) -> bool:
-        return all(abs(s.elevation) < 1e-6 for s in self.speakers)
+        return all(abs(s.elevation) < 1e-6 for s in self._mains())
+
+    def _mains(self) -> list[Speaker]:
+        return [s for s in self.speakers if not s.lfe]
 
     def channel_mask(self) -> int:
         """WAV channel mask of a named layout; 0 (no assignment) for others."""
@@ -162,16 +177,18 @@ class Loudspeakers:
         return from_angles([s.azimuth for s in self.speakers], [s.elevation for s in self.speakers])
 
     def _make_bases(self):
-        real = self.directions()
+        """Pairs or triangles of the speakers other than LFE, by their index among them."""
+        mains = self._mains()
+        real = from_angles([s.azimuth for s in mains], [s.elevation for s in mains])
         if self.horizontal:
-            order = np.argsort([s.azimuth % 360.0 for s in self.speakers])
+            order = np.argsort([s.azimuth % 360.0 for s in mains])
             pairs = []
             for a, b in zip(order, np.roll(order, -1), strict=True):
-                span = (self.speakers[b].azimuth - self.speakers[a].azimuth) % 360.0
+                span = (mains[b].azimuth - mains[a].azimuth) % 360.0
                 if 0.0 < span < 180.0 - 1e-6:
                     pairs.append((np.linalg.inv(real[[a, b], :2].T), (a, b)))
             return pairs
-        elevations = np.array([s.elevation for s in self.speakers])
+        elevations = np.array([s.elevation for s in mains])
         extra = []
         if elevations.min() > -10.0:
             extra.append([0.0, 0.0, -1.0])
@@ -188,14 +205,16 @@ class Loudspeakers:
     def gains(self, directions: np.ndarray) -> np.ndarray:
         """VBAP gains (dirs, channels) of unit power for head directions (dirs, 3)."""
         v = np.atleast_2d(np.asarray(directions, dtype=float))
-        n_real = self.channels
+        mains = self._mains()
+        n_real = len(mains)
+        main_directions = from_angles([s.azimuth for s in mains], [s.elevation for s in mains])
         out = np.zeros((len(v), n_real))
         horizontal = self.horizontal
         for row, p in enumerate(v):
             if horizontal:
                 p = p[:2]
                 if np.linalg.norm(p) < _EPS:  # straight up or down: all speakers alike
-                    out[row] = 1.0
+                    out[row] = 1.0 / math.sqrt(n_real)
                     continue
             best, best_g, best_idx = -math.inf, None, None
             for inverse, idx in self._bases:
@@ -204,7 +223,7 @@ class Loudspeakers:
                     best, best_g, best_idx = g.min(), g, idx
             if best_g is None or best < -1e-6:
                 # Outside every pair (behind a stereo pair): the nearest speaker.
-                out[row, int(np.argmax(self.directions()[:, : len(p)] @ p))] = 1.0
+                out[row, int(np.argmax(main_directions[:, : len(p)] @ p))] = 1.0
             else:
                 g = np.maximum(best_g, 0.0)
                 for k, i in enumerate(best_idx):
@@ -216,7 +235,9 @@ class Loudspeakers:
                         if imaginary in face:
                             out[row, [j for j in face if j < n_real]] = 1.0
             out[row] /= np.linalg.norm(out[row])
-        return out
+        full = np.zeros((len(v), self.channels))
+        full[:, [i for i, s in enumerate(self.speakers) if not s.lfe]] = out
+        return full
 
 
 __all__ = ["LAYOUTS", "Loudspeakers", "Speaker"]

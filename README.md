@@ -5,12 +5,13 @@ CATT-Acoustic and ODEON: load a 3D model of a space, place sources and listeners
 compute impulse responses, and listen to the result in binaural, Ambisonics or
 loudspeaker formats.
 
-**Status: pre-alpha.** Scenes can be built, checked and simulated: CAD import, a
-material database, ray-traced early reflections, a stochastic late tail, impulse
-responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker formats as WAV files,
-and ISO 3382-1 parameters. Dry recordings can be run through them offline or in real
-time on the sound card, and real rooms can be measured with sine sweeps and analysed
-the same way.
+**Status: pre-alpha.** Scenes can be built, checked, viewed and simulated: CAD import
+or rooms from dimensions, a material database, ray-traced early reflections, a
+stochastic late tail, impulse responses in mono, binaural, Ambisonics (AmbiX) and
+loudspeaker formats as WAV files, ISO 3382-1 parameters, and animations of sound
+particles. Dry recordings can be run through the responses offline or in real time on
+the sound card, and real rooms can be measured with sine sweeps and analysed the same
+way.
 
 ## Design in one paragraph
 
@@ -42,10 +43,17 @@ acoustic-spaces validate examples/shoebox/scene.yaml   # errors exit with status
 acoustic-spaces inspect examples/shoebox/scene.yaml    # geometry, materials, RT estimates
 acoustic-spaces view examples/shoebox/scene.yaml       # 3D window; --screenshot out.png
 acoustic-spaces view examples/shoebox/scene.yaml --paths --max-order 2  # reflection paths
+acoustic-spaces animate examples/lecture_hall/scene.yaml               # sound particles
 acoustic-spaces materials carpet                       # search the material database
 acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
 pytest
 ```
+
+`animate` shows sound particles leaving a source and spreading through the room, each
+reflecting off the walls (specularly, or diffusely with the surface's scattering
+coefficient) and losing the absorbed share of its energy at every hit, coloured by
+level or by reflection order. It opens a window with a time slider, or saves a GIF
+(`--out particles.gif`) or, with `imageio[ffmpeg]` installed, an MP4 video.
 
 `simulate` writes impulse responses for every source and listener in each format the
 scene's `outputs` list (`results/talker__seat-a.wav` in mono, `.binaural.wav`,
@@ -69,15 +77,16 @@ From Python:
 ```python
 from acoustic_spaces import Room, simulate
 from acoustic_spaces.audio import write_wav
-from acoustic_spaces.engine import early_paths
+from acoustic_spaces.engine import early_paths, trace_particles
 from acoustic_spaces.spatial import Ambisonics, Binaural, Loudspeakers
-from acoustic_spaces.viz import plot_directions, plot_response, show_room
+from acoustic_spaces.viz import animate_particles, plot_directions, plot_response, show_room
 
 room = Room.from_yaml("examples/shoebox/scene.yaml")
 print(room.report.summary())
 print(room.problems(), room.warnings())
 print(room.reverberation_time("eyring"))  # per octave band, seconds
 show_room(room, paths=early_paths(room, max_order=2))
+animate_particles(room, trace_particles(room, duration=0.1), "particles.gif")
 
 result = simulate(room)
 response = result["talker", "seat-a"]
@@ -107,6 +116,21 @@ Frequency-dependent data uses eight octave bands from 63 Hz to 8 kHz.
 | DXF | [ezdxf](https://ezdxf.mozman.de/) (3DFACE, MESH, polyface, block references) | layer |
 | glTF / GLB | [trimesh](https://trimesh.org/) | material, node and mesh names |
 | STL, PLY, OFF | trimesh | file name |
+
+Simple rooms need no CAD file: `geometry: {box: [8, 6, 3]}` builds a rectangular
+room from the origin, and a floor plan is raised to a height (see
+[`examples/lecture_hall/scene.yaml`](examples/lecture_hall/scene.yaml)):
+
+```yaml
+geometry:
+  floor_plan: [[0, -4], [0, 4], [14, 8], [14, -8]]  # corners, in order, any shape
+  height: 6
+assignments:
+  floor: audience
+  ceiling: plaster
+  wall_1: wood       # the edge from the first corner to the second
+  walls: concrete    # every other wall
+```
 
 OBJ is the recommended exchange format: SketchUp, Rhino, Revit and Blender all
 export it with material names. Set `geometry.units` (`m`, `cm`, `mm`, `in`, `ft`)
@@ -236,7 +260,7 @@ outputs:
   - binaural                              # spherical head model
   - {format: binaural, hrtf: kemar.sofa}  # measured HRTFs
   - {format: ambisonics, order: 3}        # AmbiX: ACN order, SN3D, orders 0 to 7
-  - {format: loudspeakers, layout: "5.0"} # stereo, 5.0, 7.0, 5.0.4, 7.0.4
+  - {format: loudspeakers, layout: "5.1"} # stereo, 5.0, 7.0, 5.0.4, 7.0.4, and .1 with LFE
   - format: loudspeakers                  # or any layout, in channel order
     speakers: [{name: L, azimuth: 30}, {name: R, azimuth: -30}, {name: Top, azimuth: 0, elevation: 60}]
 ```
@@ -252,7 +276,8 @@ The statistical tail arrives evenly from all around.
   W is the mono response exactly.
 - **Loudspeakers** get vector base amplitude panning (VBAP, unit power). Layouts with
   height but nothing below the listener get an imaginary speaker straight down whose
-  share is dropped. Named layouts carry their WAV channel mask.
+  share is dropped. Named layouts carry their WAV channel mask; the LFE channel of the
+  `.1` layouts stays silent, leaving bass management to the playback system.
 - **Binaural** uses the HRTF of the nearest measured direction for every reflection and
   for each late direction. Without a SOFA file it uses Brown and Duda's spherical head
   model: interaural time and level differences, but no pinna cues. `read_sofa` reads
@@ -376,7 +401,7 @@ src/acoustic_spaces/   Python package
   render.py            convolution, resampling, auralisation, real-time playback
   measurement.py       sine sweeps, playback and recording, deconvolution
   audio.py             WAV files
-  viz.py               3D view, reflection paths, response, IR and direction plots
+  viz.py               3D view, reflection paths, particle animations, response plots
   cli.py               command-line interface
 cpp/include/           header-only C++ core: BVH, ray tracer, FFT, partitioned
                        convolver (no Python, so a plugin or player can reuse it)

@@ -79,7 +79,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         return 1
     scene = room.scene
     print(scene.name)
-    print(f"geometry: {scene.geometry.file.name}")
+    print(f"geometry: {scene.geometry.describe()}")
     for line in room.report.summary().splitlines():
         print(f"  {line}")
 
@@ -167,6 +167,33 @@ def _cmd_view(args: argparse.Namespace) -> int:
         return 1
     if args.screenshot:
         print(f"saved {args.screenshot}")
+    return 0
+
+
+def _cmd_animate(args: argparse.Namespace) -> int:
+    from acoustic_spaces.engine import trace_particles
+
+    room = _load_room(args.scene)
+    if room is None or not _print_checks(room):
+        return 1
+    try:
+        particles = trace_particles(
+            room,
+            args.source,
+            count=args.particles,
+            duration=args.duration / 1e3,
+            frames=args.frames,
+            band=OCTAVE_BANDS_HZ.index(args.band),
+            seed=args.seed,
+        )
+        from acoustic_spaces.viz import animate_particles
+
+        animate_particles(room, particles, args.out, fps=args.fps, color=args.color)
+    except (ImportError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.out:
+        print(f"saved {args.out}: {args.frames} frames, {args.duration:g} ms of sound")
     return 0
 
 
@@ -769,6 +796,31 @@ def build_parser() -> argparse.ArgumentParser:
     view.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
     view.set_defaults(func=_cmd_view)
 
+    animate = sub.add_parser(
+        "animate", help="animate sound particles leaving a source (needs the viz extra)"
+    )
+    animate.add_argument("scene", help="path to a scene YAML file")
+    animate.add_argument("--out", metavar="FILE", help="save a .gif or .mp4 instead of a window")
+    animate.add_argument("--source", help="source to emit from (default: the first)")
+    animate.add_argument("--particles", type=int, default=4000, help="particles (default 4000)")
+    animate.add_argument(
+        "--duration", type=float, default=100.0, help="sound to show, ms (default 100)"
+    )
+    animate.add_argument("--frames", type=int, default=100, help="frames (default 100)")
+    animate.add_argument("--fps", type=int, default=25, help="frames per second (default 25)")
+    animate.add_argument(
+        "--band",
+        type=int,
+        default=1000,
+        choices=OCTAVE_BANDS_HZ,
+        help="octave band whose absorption applies, Hz (default 1000)",
+    )
+    animate.add_argument(
+        "--color", choices=["energy", "order"], default="energy", help="colour particles by"
+    )
+    animate.add_argument("--seed", type=int, default=0, help="seed for diffuse reflections")
+    animate.set_defaults(func=_cmd_animate)
+
     simulate = sub.add_parser("simulate", help="simulate impulse responses and ISO 3382 parameters")
     simulate.add_argument("scene", help="path to a scene YAML file")
     simulate.add_argument("--out", required=True, metavar="DIR", help="folder for the results")
@@ -784,7 +836,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FORMAT",
         help=(
             "write this format instead of the scene's outputs (repeatable): mono, binaural, "
-            "ambisonics[:ORDER] or loudspeakers:LAYOUT (stereo, 5.0, 7.0, 5.0.4, 7.0.4)"
+            "ambisonics[:ORDER] or loudspeakers:LAYOUT (stereo, 5.0, 7.0, 5.0.4, 7.0.4, "
+            "5.1, 7.1, 5.1.4, 7.1.4)"
         ),
     )
     simulate.add_argument("--hrtf", metavar="SOFA", help="HRTF file for binaural output")

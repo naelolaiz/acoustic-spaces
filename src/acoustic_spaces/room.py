@@ -16,10 +16,13 @@ import numpy as np
 
 from acoustic_spaces.air import energy_attenuation_per_m, speed_of_sound
 from acoustic_spaces.geometry import (
+    UNIT_SCALE,
     MeshReport,
     RoomMesh,
+    box_mesh,
     check_mesh,
     clean_mesh,
+    extruded_mesh,
     load_mesh,
     points_inside,
 )
@@ -65,7 +68,13 @@ class Room:
     @classmethod
     def from_scene(cls, scene: Scene) -> Room:
         geometry = scene.geometry
-        raw = load_mesh(geometry.file, units=geometry.units, up_axis=geometry.up_axis)
+        scale = UNIT_SCALE[geometry.units]
+        if geometry.file is not None:
+            raw = load_mesh(geometry.file, units=geometry.units, up_axis=geometry.up_axis)
+        elif geometry.box is not None:
+            raw = box_mesh(tuple(scale * v for v in geometry.box))
+        else:
+            raw = extruded_mesh(scale * np.array(geometry.floor_plan), scale * geometry.height)
         mesh, merged, removed = clean_mesh(raw)
         report = check_mesh(mesh, merged, removed)
 

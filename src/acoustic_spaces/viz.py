@@ -2,6 +2,8 @@
 
 - 3D view (PyVista): surfaces coloured by material, sources, listeners, and early
   reflection paths coloured by order.
+- Animation (PyVista): sound particles spreading from a source and reflecting around
+  the room, in a window with a time slider or saved as a GIF or MP4 video.
 - Response plots (matplotlib): echogram with the early paths, decay curves per band, and
   arrival directions as the listener faces.
 
@@ -22,6 +24,7 @@ if TYPE_CHECKING:
     import pyvista
 
     from acoustic_spaces.engine import EarlyReflections, Response
+    from acoustic_spaces.engine.particles import Particles
 
 #: ColorBrewer Set3: light colours, so the saturated source and listener markers stand out.
 MATERIAL_COLOURS = (
@@ -234,6 +237,107 @@ def show_room(
         plotter.close()
     else:
         plotter.show()
+
+
+def _particle_scalars(particles: Particles, frame: int, color: str, db_range: float):
+    if color == "order":
+        return particles.order[frame].astype(float)
+    level = 10.0 * np.log10(np.maximum(particles.energy[frame], 1e-30))
+    return np.maximum(level, -db_range)
+
+
+def animate_particles(
+    room: Room,
+    particles: Particles,
+    path: str | Path | None = None,
+    *,
+    fps: int = 25,
+    color: str = "energy",
+    db_range: float = 40.0,
+    window_size: tuple[int, int] = (1024, 640),
+) -> None:
+    """Show sound particles (from :func:`acoustic_spaces.engine.trace_particles`) moving
+    through the room: in a window with a time slider, or saved to ``path`` as an animated
+    GIF or, with imageio and ffmpeg installed, an MP4 video.
+
+    ``color`` is ``"energy"`` (level in dB relative to a particle's share at emission,
+    down to ``-db_range``) or ``"order"`` (reflections so far).
+    """
+    if color not in ("energy", "order"):
+        raise ValueError("color must be 'energy' or 'order'")
+    suffix = None if path is None else Path(path).suffix.lower()
+    if suffix not in (None, ".gif", ".mp4"):
+        raise ValueError("animations are saved as .gif or .mp4")
+    pv = _pyvista()
+    plotter = pv.Plotter(off_screen=path is not None, window_size=list(window_size))
+    plot_room(room, plotter, opacity=0.12)
+    cloud = pv.PolyData(particles.positions[0].copy())
+    cloud["value"] = _particle_scalars(particles, 0, color, db_range)
+    if color == "order":
+        top = max(int(particles.order.max()), 1)
+        title, clim, cmap = "reflections", [0, top], "turbo"
+    else:
+        title, clim, cmap = f"level at {particles.band_hz} Hz (dB)", [-db_range, 0.0], "inferno"
+    plotter.add_mesh(
+        cloud,
+        scalars="value",
+        clim=clim,
+        cmap=cmap,
+        render_points_as_spheres=True,
+        point_size=max(3.0, window_size[0] / 200.0),
+        scalar_bar_args={"title": title, "color": "white", "fmt": "%.0f"},
+    )
+    clock = plotter.add_text("t = 0.0 ms", position="lower_left", font_size=12, color="white")
+
+    def show(frame: int) -> None:
+        cloud.points = particles.positions[frame]
+        cloud["value"] = _particle_scalars(particles, frame, color, db_range)
+        clock.SetText(0, f"t = {1e3 * particles.times[frame]:.1f} ms")
+
+    if path is None:
+        last = len(particles.times) - 1
+
+        def on_slider(value: float) -> None:
+            show(int(round(value / (1e3 * particles.times[-1] or 1.0) * last)))
+
+        plotter.add_slider_widget(
+            on_slider,
+            [0.0, 1e3 * float(particles.times[-1])],
+            value=0.0,
+            title="time (ms)",
+            color="white",
+            pointa=(0.35, 0.92),
+            pointb=(0.95, 0.92),
+        )
+        plotter.show()
+        return
+    if suffix == ".mp4":
+        try:
+            plotter.open_movie(str(path), framerate=fps)
+        except ImportError as exc:
+            plotter.close()
+            raise ImportError(
+                'MP4 needs imageio and ffmpeg: pip install "imageio[ffmpeg]"'
+            ) from exc
+    images = []
+    for frame in range(len(particles.times)):
+        show(frame)
+        if suffix == ".mp4":
+            plotter.write_frame()
+        else:
+            plotter.render()
+            images.append(plotter.screenshot(return_img=True))
+    plotter.close()
+    if suffix == ".gif":
+        from PIL import Image
+
+        # One palette for every frame, so colours that stay put do not flicker.
+        sample = np.concatenate([images[0], images[len(images) // 2], images[-1]])
+        palette = Image.fromarray(sample).quantize(colors=255)
+        frames = [Image.fromarray(image).quantize(palette=palette, dither=0) for image in images]
+        frames[0].save(
+            str(path), save_all=True, append_images=frames[1:], duration=1000 / fps, loop=0
+        )
 
 
 # -- response plots ----------------------------------------------------------------

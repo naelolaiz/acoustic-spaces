@@ -13,6 +13,7 @@ The usual entry point is :func:`simulate`::
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.late import LateEnergy
 from acoustic_spaces.engine.model import DIRECTIVITY_A, TraceModel
+from acoustic_spaces.engine.particles import Particles, trace_particles
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.simulate import (
     TIME_STEP,
@@ -27,10 +28,12 @@ __all__ = [
     "TIME_STEP",
     "EarlyReflections",
     "LateEnergy",
+    "Particles",
     "Response",
     "SimulationResult",
     "TraceModel",
     "early_paths",
     "mixing_time",
     "simulate",
+    "trace_particles",
 ]
