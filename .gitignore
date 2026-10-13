@@ -25,3 +25,6 @@ venv/
 *.wav
 *.sofa
 !examples/**/*.wav
+
+# Documentation
+docs/_build/

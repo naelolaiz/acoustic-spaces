@@ -5,13 +5,14 @@ CATT-Acoustic and ODEON: load a 3D model of a space, place sources and listeners
 compute impulse responses, and listen to the result in binaural, Ambisonics or
 loudspeaker formats.
 
-**Status: pre-alpha.** Scenes can be built, checked, viewed and simulated: CAD import
+**Status: 1.0, beta.** Scenes can be built, checked, viewed and simulated: CAD import
 or rooms from dimensions, a material database, ray-traced early reflections, a
 stochastic late tail, impulse responses in mono, binaural, Ambisonics (AmbiX) and
 loudspeaker formats as WAV files, ISO 3382-1 parameters, and animations of sound
 particles. Dry recordings can be run through the responses offline or in real time on
 the sound card, and real rooms can be measured with sine sweeps and analysed the same
-way.
+way. The [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
+says how far the results can be trusted.
 
 ## Design in one paragraph
 
@@ -22,6 +23,17 @@ reflections and stochastic processing for the late reverberation. Both write a
 format-independent *directional reflectogram*, from which binaural, Ambisonics and
 loudspeaker impulse responses are encoded, so one simulation serves every output
 format.
+
+## Install
+
+Every release has wheels for Linux, macOS and Windows (CPython 3.10 to 3.14), with the
+compiled core inside, on its
+[GitHub release page](https://github.com/naelolaiz/acoustic_spaces_simulator/releases):
+`pip install` the wheel for your platform, with the extras below in brackets if you
+want them. Until the package is published on PyPI, everything else installs from source.
+
+The documentation (this README, the validation report and an API reference generated
+from the docstrings) builds with Sphinx; see CONTRIBUTING.md.
 
 ## Install from source
 
@@ -104,8 +116,8 @@ plot_directions(response, "talker__seat-a.directions.png")
 
 A scene is a YAML file that names the geometry, the materials, which surface gets
 which material, and where the sources and listeners are. See
-[`examples/shoebox/scene.yaml`](examples/shoebox/scene.yaml) and the schema in
-[`src/acoustic_spaces/scene/model.py`](src/acoustic_spaces/scene/model.py).
+[`examples/shoebox/scene.yaml`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/examples/shoebox/scene.yaml) and the schema in
+[`src/acoustic_spaces/scene/model.py`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/src/acoustic_spaces/scene/model.py).
 Frequency-dependent data uses eight octave bands from 63 Hz to 8 kHz.
 
 ### Geometry
@@ -119,7 +131,7 @@ Frequency-dependent data uses eight octave bands from 63 Hz to 8 kHz.
 
 Simple rooms need no CAD file: `geometry: {box: [8, 6, 3]}` builds a rectangular
 room from the origin, and a floor plan is raised to a height (see
-[`examples/lecture_hall/scene.yaml`](examples/lecture_hall/scene.yaml)):
+[`examples/lecture_hall/scene.yaml`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/examples/lecture_hall/scene.yaml)):
 
 ```yaml
 geometry:
@@ -218,37 +230,16 @@ and G. `Response.parameters()` computes them from the simulated energies;
 before it has decayed is extended by its fitted decay rate.
 Air absorption follows ISO 9613-1 for the scene's temperature, humidity and pressure.
 
-### Validation so far
+### Validation
 
-The tests check, on Linux, macOS and Windows:
-
-- an 8 x 6 x 3 m box against analytic image sources up to 4th order (1, 6, 18, 38
-  and 66 paths), for both early methods and for symmetric placements where paths
-  hit edges and corners: positions, delays and energies agree to rounding;
-- T30 in a box with fully diffusing surfaces against Eyring with air absorption:
-  within 10 %, and slightly longer as absorption grows, as Kuttruff's correction
-  for the spread of free path lengths predicts;
-- G in the same box against Barron's revised theory: within 1 dB;
-- the late tail of the example box (absorbing ceiling, smooth walls) from 10k rays
-  with splitting against 1 million rays: within 4 dB on average from 0.5 to 2.5 s,
-  and splitting or thinning out every ray keeps the energy of plain ray tracing;
-- every ISO 3382-1 parameter on synthetic exponential decays, and the air
-  absorption against the ISO 9613-1 table;
-- spatial outputs: SN3D spherical harmonics against closed forms and orthogonality,
-  VBAP gains of unit power that point at the panned direction, the direct sound's
-  direction in first-order Ambisonics, the mono energy kept by panned layouts (direct
-  sound within 1 %, late part within 5 %), a binaural render through flat HRTFs equal
-  to the mono response, and the spherical head's interaural delay (0.6 ms at the side);
-- rendering: the compiled FFT against NumPy, the real-time convolver and the offline
-  convolution against direct convolution (float32 and float64 precision), resampling
-  of tones within 1e-3 of the exact signal up to 15 kHz with nothing above the new
-  Nyquist frequency left, and playback through a simulated sound card block by block;
-- sweep measurements of synthetic rooms through a distorting loudspeaker, with
-  noise and interface latency: from 250 Hz up, the room's response comes back with
-  errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
-  within 5 % of the noise-free value.
-
-Comparison with BRAS measurements needs the BRAS models exported to OBJ (see above).
+The tests check the simulation against theory on Linux, macOS and Windows: exact image
+sources in a box, Eyring's reverberation time and Barron's revised theory in a diffusing
+box, ISO 3382-1 parameters of known decays, spatial encoders against closed forms, the
+convolvers against direct convolution, and sweep measurements of synthetic rooms. A
+cross-check against pyroomacoustics in four rooms agrees within 6 % on T30 where both
+programs model the same physics, and shows where their scattering models part ways.
+The [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
+has the details, the numbers and the scripts to reproduce them.
 
 ## Spatial outputs
 
@@ -418,19 +409,24 @@ examples/              example scenes
 - M2b IR measurement: exponential sine sweeps, playback and recording, deconvolution, parameters of measured IRs. In review.
 - M3 Spatial outputs: binaural (SOFA HRTFs or a spherical head), Ambisonics (AmbiX) up to 7th order, VBAP loudspeaker layouts. In review.
 - M4 Rendering: offline convolution and auralisation in Python, real-time partitioned convolver in C++, playback. In review.
-- M5 v1 release: validation report, documentation, wheels.
+- M5 v1 release: validation report, documentation, wheels and release workflow. In review.
+
+After v1: a graphical editor, head tracking, diffraction, a wave-based solver for low
+frequencies, and coverage maps.
 
 ## Contributing
 
 Pull requests are welcome. Run `ruff check . && ruff format --check . && pytest`
 before opening one; CI runs the same checks on all three platforms.
+[CONTRIBUTING.md](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/CONTRIBUTING.md)
+covers the development setup, the documentation, the validation scripts and releases.
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+GPL-3.0-or-later. See [LICENSE](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/LICENSE).
 
 The built-in material table comes from
 [pyroomacoustics](https://github.com/LCAV/pyroomacoustics) (MIT, see
-[`materials/data/LICENSE-pyroomacoustics.txt`](src/acoustic_spaces/materials/data/LICENSE-pyroomacoustics.txt)).
+[`materials/data/LICENSE-pyroomacoustics.txt`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/src/acoustic_spaces/materials/data/LICENSE-pyroomacoustics.txt)).
 That table does not cite a source for most entries; check values that matter
 against manufacturer data or a measured database.
