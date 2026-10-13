@@ -2,7 +2,8 @@
 
 - 3D view (PyVista): surfaces coloured by material, sources, listeners, and early
   reflection paths coloured by order.
-- Response plots (matplotlib): echogram with the early paths, and decay curves per band.
+- Response plots (matplotlib): echogram with the early paths, decay curves per band, and
+  arrival directions as the listener faces.
 
 Needs the viz extra (``pip install "acoustic-spaces[viz]"``). The 3D view works in a
 desktop window, in Jupyter, and off screen for screenshots.
@@ -323,6 +324,95 @@ def plot_response(response: Response, path: str | Path | None = None, *, band: i
     ax_d.set_ylabel("decay (dB)")
     ax_d.set_title("backward-integrated decay per octave band")
     _legend(ax_d, ncol=4)
+
+    if path is not None:
+        fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
+    return fig
+
+
+def _direction_axes(ax, title: str) -> None:
+    ax.set_xlim(180, -180)  # left of the listener on the left
+    ax.set_ylim(-90, 90)
+    ax.set_xticks([180, 135, 90, 45, 0, -45, -90, -135, -180])
+    ax.set_xticklabels(["back", "135", "left", "45", "front", "-45", "right", "-135", "back"])
+    ax.set_yticks([-90, -45, 0, 45, 90])
+    ax.set_xlabel("azimuth (degrees)")
+    ax.set_ylabel("elevation (degrees)")
+    ax.set_title(title)
+
+
+def plot_directions(response: Response, path: str | Path | None = None, *, band: int = 4):
+    """Where the sound comes from, as the listener faces: early reflections (dots sized
+    by level and coloured by delay) and the late energy per arrival direction, in one
+    octave band (``band`` indexes ``OCTAVE_BANDS_HZ``; 4 is 1 kHz). Azimuth runs from
+    the left to the right of the listener. Returns the matplotlib figure.
+    """
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+    from acoustic_spaces.spatial.directions import from_angles, to_angles, to_head
+
+    fig, (ax_e, ax_l) = _two_panels()
+    reference = 1.0 / (4.0 * np.pi * 100.0)
+    early = response.early
+    if len(early):
+        az, el = to_angles(to_head(early.direction, response.orientation))
+        with np.errstate(divide="ignore"):
+            level = 10.0 * np.log10(np.maximum(early.energy[:, band], 1e-30) / reference)
+        floor = level.max() - 40.0
+        keep = level > floor
+        delay_ms = (early.delay_s - response.direct_delay_s) * 1e3
+        order = np.argsort(-delay_ms[keep])  # earliest on top
+        dots = ax_e.scatter(
+            az[keep][order],
+            el[keep][order],
+            s=4 + 200 * ((level[keep][order] - floor) / 40.0) ** 2,
+            c=delay_ms[keep][order],
+            cmap="plasma",
+            edgecolors="white",
+            linewidths=0.4,
+        )
+        bar = fig.colorbar(dots, ax=ax_e, pad=0.01)
+        bar.set_label("delay after the direct sound (ms)", color="white")
+        bar.ax.tick_params(colors="white")
+    _direction_axes(
+        ax_e,
+        f"{response.source} to {response.listener}: early reflections, "
+        f"{OCTAVE_BANDS_HZ[band]} Hz band (dot size: level, top 40 dB)",
+    )
+
+    if len(response.late_directions) and response.late_directional.size:
+        energy = response.late_directional[:, band].sum(axis=1)
+        heads = to_head(response.late_directions, response.orientation)
+        grid_az, grid_el = np.meshgrid(np.arange(179, -180, -2.0), np.arange(-89, 90, 2.0))
+        cells = from_angles(grid_az, grid_el)
+        nearest = np.argmax(cells.reshape(-1, 3) @ heads.T, axis=1).reshape(grid_az.shape)
+        # Energy per steradian: each direction stands for an equal share of the sphere.
+        with np.errstate(divide="ignore"):
+            level = 10.0 * np.log10(np.maximum(energy / energy.max(), 1e-6))
+        image = ax_l.imshow(
+            level[nearest],
+            extent=(180, -180, -90, 90),
+            origin="lower",
+            cmap="magma",
+            vmin=-20,
+            vmax=0,
+            aspect="auto",
+            interpolation="nearest",
+        )
+        bar = fig.colorbar(image, ax=ax_l, pad=0.01)
+        bar.set_label("level re loudest direction (dB)", color="white")
+        bar.ax.tick_params(colors="white")
+        title = f"late energy by arrival direction, {OCTAVE_BANDS_HZ[band]} Hz band"
+    else:
+        ax_l.text(
+            0,
+            0,
+            "late energy arrives evenly from all directions",
+            color="white",
+            ha="center",
+            va="center",
+        )
+        title = "late energy by arrival direction"
+    _direction_axes(ax_l, title)
 
     if path is not None:
         fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())

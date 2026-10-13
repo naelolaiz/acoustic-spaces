@@ -56,6 +56,25 @@ OutArray convolve_direct(InArray signal, InArray ir) {
     return OutArray(result->data(), {result->size()}, owner);
 }
 
+using Kernels = nb::ndarray<const double, nb::ndim<3>, nb::c_contig, nb::device::cpu>;
+
+nb::ndarray<nb::numpy, double> scatter_kernels(std::size_t length, Indices positions,
+                                               Indices index, InArray amplitudes,
+                                               Kernels kernels) {
+    const std::size_t n = positions.shape(0);
+    if (index.shape(0) != n || amplitudes.shape(0) != n) {
+        throw std::invalid_argument("scatter_kernels: inputs must have the same length");
+    }
+    const std::size_t channels = kernels.shape(1);
+    std::vector<double> out;
+    {
+        nb::gil_scoped_release release;
+        out = as::scatter_kernels(length, positions.data(), index.data(), amplitudes.data(), n,
+                                  kernels.data(), kernels.shape(0), channels, kernels.shape(2));
+    }
+    return to_numpy(std::move(out), {channels, length});
+}
+
 nb::tuple intersect(const as::Bvh &bvh, Points origins, Points directions, InArray t_max,
                     Indices ignore) {
     const std::size_t n = origins.shape(0);
@@ -163,6 +182,11 @@ NB_MODULE(_native, m) {
 
     m.def("convolve_direct", &convolve_direct, nb::arg("signal"), nb::arg("ir"),
           "Full linear convolution of two 1-D float64 arrays (reference implementation).");
+
+    m.def("scatter_kernels", &scatter_kernels, nb::arg("length"), nb::arg("positions"),
+          nb::arg("index"), nb::arg("amplitudes"), nb::arg("kernels"),
+          "Adds amplitudes[i] * kernels[index[i]] (channels x taps) at sample positions[i]; "
+          "returns (channels, length).");
 
     nb::class_<as::Bvh>(m, "Bvh", "Bounding volume hierarchy over a triangle mesh.")
         .def(

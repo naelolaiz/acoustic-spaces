@@ -5,11 +5,11 @@ CATT-Acoustic and ODEON: load a 3D model of a space, place sources and listeners
 compute impulse responses, and listen to the result in binaural, Ambisonics or
 loudspeaker formats.
 
-**Status: pre-alpha.** Scenes can be built, checked and simulated in mono: CAD
-import, a material database, ray-traced early reflections, a stochastic late tail,
-impulse responses as WAV files and ISO 3382-1 parameters. Real rooms can be measured
-with sine sweeps and analysed the same way. Spatial encoders and the real-time
-convolver follow milestone by milestone.
+**Status: pre-alpha.** Scenes can be built, checked and simulated: CAD import, a
+material database, ray-traced early reflections, a stochastic late tail, impulse
+responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker formats as WAV files,
+and ISO 3382-1 parameters. Real rooms can be measured with sine sweeps and analysed the
+same way. Convolution and real-time rendering follow.
 
 ## Design in one paragraph
 
@@ -30,6 +30,7 @@ git clone https://github.com/naelolaiz/acoustic_spaces_simulator
 cd acoustic_spaces_simulator
 python -m pip install -e ".[dev,viz]"     # viz adds the 3D view (PyVista)
 python -m pip install -e ".[measure]"     # sounddevice, to play and record sweeps
+python -m pip install -e ".[sofa]"        # h5py, to read HRTFs from SOFA files
 ```
 
 Check the installation and look at the example scene:
@@ -45,10 +46,12 @@ acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
 pytest
 ```
 
-`simulate` writes one impulse response per source and listener
-(`results/talker__seat-a.wav`, 32-bit float), `parameters.json` with every ISO 3382-1
-parameter per octave band, and with `--plot` an echogram and decay curves as PNG. It
-prints the parameters as it goes:
+`simulate` writes impulse responses for every source and listener in each format the
+scene's `outputs` list (`results/talker__seat-a.wav` in mono, `.binaural.wav`,
+`.ambix3.wav`, `.5.0.wav` and so on, 32-bit float), `parameters.json` with every
+ISO 3382-1 parameter per octave band, and with `--plot` an echogram, decay curves and a
+map of arrival directions as PNG. `--output ambisonics:3` (repeatable) picks formats on
+the command line. It prints the parameters as it goes:
 
 ```
 talker -> seat-a: direct sound at 11.7 ms, 63 early paths
@@ -66,7 +69,8 @@ From Python:
 from acoustic_spaces import Room, simulate
 from acoustic_spaces.audio import write_wav
 from acoustic_spaces.engine import early_paths
-from acoustic_spaces.viz import plot_response, show_room
+from acoustic_spaces.spatial import Ambisonics, Binaural, Loudspeakers
+from acoustic_spaces.viz import plot_directions, plot_response, show_room
 
 room = Room.from_yaml("examples/shoebox/scene.yaml")
 print(room.report.summary())
@@ -79,6 +83,11 @@ response = result["talker", "seat-a"]
 print(response.parameters().table())
 write_wav("talker__seat-a.wav", response.impulse_response(48_000), 48_000)
 plot_response(response, "talker__seat-a.png")
+
+binaural = response.spatial_impulse_response(Binaural(), 48_000)  # (samples, 2)
+ambix = response.spatial_impulse_response(Ambisonics(order=3), 48_000)  # 16 channels
+surround = response.spatial_impulse_response(Loudspeakers.layout("5.0"), 48_000)
+plot_directions(response, "talker__seat-a.directions.png")
 ```
 
 ## Scene files
@@ -200,12 +209,53 @@ The tests check, on Linux, macOS and Windows:
   and splitting or thinning out every ray keeps the energy of plain ray tracing;
 - every ISO 3382-1 parameter on synthetic exponential decays, and the air
   absorption against the ISO 9613-1 table;
+- spatial outputs: SN3D spherical harmonics against closed forms and orthogonality,
+  VBAP gains of unit power that point at the panned direction, the direct sound's
+  direction in first-order Ambisonics, the mono energy kept by panned layouts (direct
+  sound within 1 %, late part within 5 %), a binaural render through flat HRTFs equal
+  to the mono response, and the spherical head's interaural delay (0.6 ms at the side);
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
   within 5 % of the noise-free value.
 
 Comparison with BRAS measurements needs the BRAS models exported to OBJ (see above).
+
+## Spatial outputs
+
+The scene's `outputs` list says which formats `simulate` writes (mono by default):
+
+```yaml
+outputs:
+  - mono
+  - binaural                              # spherical head model
+  - {format: binaural, hrtf: kemar.sofa}  # measured HRTFs
+  - {format: ambisonics, order: 3}        # AmbiX: ACN order, SN3D, orders 0 to 7
+  - {format: loudspeakers, layout: "5.0"} # stereo, 5.0, 7.0, 5.0.4, 7.0.4
+  - format: loudspeakers                  # or any layout, in channel order
+    speakers: [{name: L, azimuth: 30}, {name: R, azimuth: -30}, {name: Top, azimuth: 0, elevation: 60}]
+```
+
+Directions are those of the listener's head as its `orientation` turns it: azimuth
+counts to the left, elevation up, as in SOFA and AmbiX. Every early reflection keeps
+its exact arrival direction. For the late part the stochastic tracer sorts arriving
+energy into 64 directions (`simulation.late.directions`) every 10 ms; each impulse of
+the synthesized tail then comes from one of them, drawn in proportion to that energy.
+The statistical tail arrives evenly from all around.
+
+- **Ambisonics** channels are the real spherical harmonics with SN3D normalisation, so
+  W is the mono response exactly.
+- **Loudspeakers** get vector base amplitude panning (VBAP, unit power). Layouts with
+  height but nothing below the listener get an imaginary speaker straight down whose
+  share is dropped. Named layouts carry their WAV channel mask.
+- **Binaural** uses the HRTF of the nearest measured direction for every reflection and
+  for each late direction. Without a SOFA file it uses Brown and Duda's spherical head
+  model: interaural time and level differences, but no pinna cues. `read_sofa` reads
+  SimpleFreeFieldHRIR files, which most HRTF databases (for example those listed by
+  [sofaconventions.org](https://www.sofaconventions.org)) provide; it needs h5py.
+
+Levels match the mono response: an arrival from straight ahead has the same height in
+W, in the speaker it is panned to, and, below the head's influence, at both ears.
 
 ## Measuring impulse responses
 
@@ -274,10 +324,11 @@ src/acoustic_spaces/   Python package
   engine/              early reflections, late reverberation, responses, simulate()
   air.py               ISO 9613-1 air absorption and speed of sound
   synthesis.py         octave filter bank and impulse response synthesis
+  spatial/             Ambisonics, VBAP loudspeaker layouts, HRTFs, spatial rendering
   parameters.py        ISO 3382-1 parameters, octave filters, noise floor detection
   measurement.py       sine sweeps, playback and recording, deconvolution
   audio.py             WAV files
-  viz.py               3D view, reflection paths, response and IR plots (optional)
+  viz.py               3D view, reflection paths, response, IR and direction plots
   cli.py               command-line interface
 cpp/include/           header-only C++ core: BVH, ray tracer, convolution (no Python)
 cpp/bindings/          nanobind module exposing the core as acoustic_spaces._native
@@ -291,7 +342,7 @@ examples/              example scenes
 - M1 Scene and geometry: CAD import, material database, 3D view. Done.
 - M2 Mono simulation: ray-traced early reflections, stochastic tail, IR synthesis, ISO 3382 parameters. Done.
 - M2b IR measurement: exponential sine sweeps, playback and recording, deconvolution, parameters of measured IRs. In review.
-- M3 Spatial outputs: binaural (SOFA HRTFs), Ambisonics up to 3rd order, loudspeaker layouts.
+- M3 Spatial outputs: binaural (SOFA HRTFs or a spherical head), Ambisonics (AmbiX) up to 7th order, VBAP loudspeaker layouts. In review.
 - M4 Rendering: offline convolution in Python, real-time partitioned convolver in C++.
 - M5 v1 release: validation report, documentation, wheels.
 

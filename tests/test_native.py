@@ -140,3 +140,20 @@ def test_weight_window_keeps_the_expected_energy() -> None:
 def test_weight_window_rejects_bad_settings(setting) -> None:
     with pytest.raises(ValueError, match="bad settings"):
         _trace_stochastic(10, **setting)
+
+
+def test_scatter_kernels_places_filters_at_impulses() -> None:
+    from acoustic_spaces import _native
+
+    rng = np.random.default_rng(1)
+    kernels = rng.standard_normal((3, 2, 5))
+    positions = np.array([0, 4, 4, 18], dtype=np.int64)
+    index = np.array([2, 0, 1, 2], dtype=np.int64)
+    amplitudes = np.array([1.0, -0.5, 2.0, 3.0])
+    out = _native.scatter_kernels(20, positions, index, amplitudes, kernels)
+    want = np.zeros((2, 25))
+    for p, i, a in zip(positions, index, amplitudes, strict=True):
+        want[:, p : p + 5] += a * kernels[i]
+    np.testing.assert_allclose(out, want[:, :20])  # past the end is dropped
+    with pytest.raises(ValueError, match="out of range"):
+        _native.scatter_kernels(20, positions, index + 1, amplitudes, kernels)

@@ -10,10 +10,18 @@ import numpy as np
 _PCM, _FLOAT, _EXTENSIBLE = 1, 3, 0xFFFE
 
 
-def write_wav(path: str | Path, data: np.ndarray, sample_rate: int) -> None:
+#: KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, the sub-format of extensible float WAV files.
+_FLOAT_GUID = struct.pack("<IHH8B", 3, 0, 0x10, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71)
+
+
+def write_wav(
+    path: str | Path, data: np.ndarray, sample_rate: int, channel_mask: int | None = None
+) -> None:
     """Write samples (frames,) or (frames, channels) as 32-bit float WAV.
 
     Float WAV keeps levels above full scale, so relative levels between files survive.
+    Files with more than two channels, or a ``channel_mask`` (WAVE_FORMAT_EXTENSIBLE
+    speaker positions; 0 for none, as in AmbiX), use the extensible format.
     """
     data = np.asarray(data, dtype="<f4")
     if data.ndim == 1:
@@ -23,9 +31,20 @@ def write_wav(path: str | Path, data: np.ndarray, sample_rate: int) -> None:
     channels = data.shape[1]
     payload = np.ascontiguousarray(data).tobytes()
     block = 4 * channels
+    extensible = channels > 2 or channel_mask is not None
     fmt = struct.pack(
-        "<HHIIHHH", _FLOAT, channels, int(sample_rate), int(sample_rate) * block, block, 32, 0
+        "<HHIIHH",
+        _EXTENSIBLE if extensible else _FLOAT,
+        channels,
+        int(sample_rate),
+        int(sample_rate) * block,
+        block,
+        32,
     )
+    if extensible:
+        fmt += struct.pack("<HHI", 22, 32, int(channel_mask or 0)) + _FLOAT_GUID
+    else:
+        fmt += struct.pack("<H", 0)
     fact = struct.pack("<I", data.shape[0])
     chunks = [
         b"fmt " + struct.pack("<I", len(fmt)) + fmt,

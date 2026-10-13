@@ -19,6 +19,7 @@ from acoustic_spaces.parameters import RoomParameters
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene import Scene
 from acoustic_spaces.scene.model import Simulation as SimulationSettings
+from acoustic_spaces.spatial.directions import fibonacci_sphere
 
 #: Slot width of the late energy (s).
 TIME_STEP = 1e-3
@@ -234,6 +235,7 @@ def simulate(
                 covered_order=early_cfg.max_order,
                 covered_time=cutoff,
                 radius=radius,
+                directions=fibonacci_sphere(late_cfg.directions),
                 splitting=late_cfg.splitting,
                 seed=info["seed"],
                 directivity_a=a,
@@ -260,6 +262,12 @@ def simulate(
                 volume_m3=volume,
                 speed_of_sound=c,
                 seed=_seed(info["seed"], k + 1),
+                orientation=np.array(listener.orientation.rotation()),
+                late_directions=late.directions,
+                late_directional=late.directional[k]
+                if late.directional.size
+                else np.zeros((0, 0, 0)),
+                direction_step=late.direction_step,
             )
     return SimulationResult(room=room, settings=settings, responses=responses, details=details)
 

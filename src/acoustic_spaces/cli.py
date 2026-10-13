@@ -174,10 +174,40 @@ def _file_name(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", text).strip("_") or "unnamed"
 
 
+def _output_spec(text: str):
+    """An outputs entry from the command line: mono, binaural, ambisonics[:ORDER] or
+    loudspeakers:LAYOUT."""
+    from acoustic_spaces.scene import Output
+
+    name, _, value = text.partition(":")
+    entry: dict = {"format": name}
+    if name == "ambisonics" and value:
+        entry["order"] = int(value)
+    elif name == "loudspeakers":
+        entry["layout"] = value or None
+    elif value:
+        raise ValueError(f"--output {text}: {name} takes no option")
+    return Output.model_validate(entry)
+
+
+def _outputs(room: Room, args: argparse.Namespace) -> list:
+    """The scene's outputs, or those given with --output; --hrtf applies to binaural."""
+    outputs = [_output_spec(t) for t in args.output] if args.output else room.scene.outputs
+    if args.hrtf:
+        if not any(o.format == "binaural" for o in outputs):
+            outputs = [*outputs, _output_spec("binaural")]
+        outputs = [
+            o.model_copy(update={"hrtf": Path(args.hrtf)}) if o.format == "binaural" else o
+            for o in outputs
+        ]
+    return outputs
+
+
 def _cmd_simulate(args: argparse.Namespace) -> int:
     from acoustic_spaces.audio import write_wav
     from acoustic_spaces.engine import simulate
     from acoustic_spaces.materials import OCTAVE_BANDS_HZ
+    from acoustic_spaces.spatial import from_output
 
     room = _load_room(args.scene)
     if room is None or not _print_checks(room):
@@ -193,6 +223,13 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         settings.ir_length_s = args.length
     sample_rate = args.sample_rate or settings.sample_rate
     try:
+        outputs = _outputs(room, args)
+        formats = [from_output(o) for o in outputs]
+    except (ValueError, ImportError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    try:
         result = simulate(
             room,
             settings=settings,
@@ -205,7 +242,11 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    irs = {key: r.impulse_response(sample_rate) for key, r in result.responses.items()}
+    irs = {}
+    for key, response in result.responses.items():
+        for fmt in formats:
+            print(f"{key[0]} -> {key[1]}: rendering {fmt.label}", file=sys.stderr)
+            irs[key, fmt.label] = response.spatial_impulse_response(fmt, sample_rate)
     peak = max(float(abs(ir).max(initial=0.0)) for ir in irs.values())
     gain = 10.0 ** (-1.0 / 20.0) / peak if args.normalize and peak > 0 else 1.0
 
@@ -220,7 +261,12 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
     }
     for (source, listener), response in result.responses.items():
         stem = f"{_file_name(source)}__{_file_name(listener)}"
-        write_wav(out / f"{stem}.wav", irs[(source, listener)] * gain, sample_rate)
+        written = []
+        for fmt in formats:
+            name = f"{stem}.wav" if fmt.label == "mono" else f"{stem}.{_file_name(fmt.label)}.wav"
+            mask = fmt.channel_mask() if hasattr(fmt, "channel_mask") else None
+            write_wav(out / name, irs[(source, listener), fmt.label] * gain, sample_rate, mask)
+            written.append({"format": fmt.label, "wav": name, "channels": fmt.channel_names})
         params = response.parameters()
         print(
             f"\n{source} -> {listener}: direct sound at {response.direct_delay_s * 1e3:.1f} ms, "
@@ -230,23 +276,25 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         entry = {
             "source": source,
             "listener": listener,
-            "wav": f"{stem}.wav",
+            "outputs": written,
             "direct_delay_s": response.direct_delay_s,
             "early_paths": len(response.early),
             "parameters": params.as_dict(),
         }
         if args.plot:
             try:
-                from acoustic_spaces.viz import plot_response
+                from acoustic_spaces.viz import plot_directions, plot_response
 
                 plot_response(response, out / f"{stem}.png")
+                plot_directions(response, out / f"{stem}.directions.png")
                 entry["plot"] = f"{stem}.png"
+                entry["directions_plot"] = f"{stem}.directions.png"
             except ImportError as exc:
                 print(f"warning: {exc}", file=sys.stderr)
                 args.plot = False
         report["responses"].append(entry)
     (out / "parameters.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(f"\nwrote {len(irs)} impulse responses and parameters.json to {out}")
+    print(f"\nwrote {len(irs)} impulse response files and parameters.json to {out}")
     if peak * gain > 1.0:
         print(
             "note: the float WAV files exceed full scale (a listener is closer than 1 m to a "
@@ -568,6 +616,16 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--rays", type=int, help="override simulation.late.rays")
     simulate.add_argument("--max-order", type=int, help="override simulation.early.max_order")
     simulate.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    simulate.add_argument(
+        "--output",
+        action="append",
+        metavar="FORMAT",
+        help=(
+            "write this format instead of the scene's outputs (repeatable): mono, binaural, "
+            "ambisonics[:ORDER] or loudspeakers:LAYOUT (stereo, 5.0, 7.0, 5.0.4, 7.0.4)"
+        ),
+    )
+    simulate.add_argument("--hrtf", metavar="SOFA", help="HRTF file for binaural output")
     simulate.add_argument(
         "--normalize", action="store_true", help="scale all responses to a -1 dBFS peak"
     )

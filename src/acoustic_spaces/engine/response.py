@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -37,6 +37,14 @@ class Response:
     speed_of_sound: float
     #: Seed for the noise of the synthesized late part.
     seed: int = 0
+    #: The listener's head axes (forward, left, up) as columns, in room coordinates.
+    orientation: np.ndarray = field(default_factory=lambda: np.eye(3))
+    #: Arrival directions of the late energy (room coordinates) and the late energy
+    #: split between them (directions, bands, slots of ``direction_step``). Without
+    #: them the late part arrives evenly from all directions.
+    late_directions: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))
+    late_directional: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
+    direction_step: float = 0.01
 
     @property
     def bands(self) -> int:
@@ -96,6 +104,16 @@ class Response:
             )
             band_signals += synthesis.shape_noise(scale * late, self.time_step, noise, sample_rate)
         return synthesis.combine_bands(band_signals, sample_rate)
+
+    def spatial_impulse_response(
+        self, fmt, sample_rate: int = 48_000, seed: int | None = None
+    ) -> np.ndarray:
+        """Impulse responses (samples, channels) in a format of
+        :mod:`acoustic_spaces.spatial`: ``Ambisonics(order)``, ``Loudspeakers.layout(name)``,
+        ``Binaural(hrtf)`` or ``Mono()``."""
+        from acoustic_spaces.spatial.render import spatial_impulse_response
+
+        return spatial_impulse_response(self, fmt, sample_rate, seed)
 
 
 __all__ = ["Response"]

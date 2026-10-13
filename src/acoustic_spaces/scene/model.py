@@ -29,6 +29,11 @@ A scene file is YAML with this shape::
     simulation:
       early: {method: ray_tracing, max_order: 3}
       late: {method: stochastic_ray_tracing}
+    outputs:                   # formats for the simulate command (default: mono)
+      - mono
+      - binaural               # spherical head model; or {format: binaural, hrtf: x.sofa}
+      - {format: ambisonics, order: 3}
+      - {format: loudspeakers, layout: "5.0"}
 
 Coordinates are in metres after unit conversion, with +z up. Coefficient lists
 always have one value per octave band in ``OCTAVE_BANDS_HZ``. Relative paths are
@@ -87,7 +92,11 @@ def _describe(origin: str, extrapolated: list[int]) -> str:
 
 
 class Orientation(_Model):
-    """Yaw, pitch and roll in degrees; all zero looks down +x with +z up."""
+    """Yaw, pitch and roll in degrees; all zero looks down +x with +z up.
+
+    Yaw turns left (from +x towards +y), pitch looks up, and roll tilts the head to the
+    right (the left ear goes up), applied in the order roll, pitch, yaw.
+    """
 
     yaw: float = 0.0
     pitch: float = 0.0
@@ -101,6 +110,21 @@ class Orientation(_Model):
             math.cos(pitch) * math.sin(yaw),
             math.sin(pitch),
         )
+
+    def rotation(self) -> list[list[float]]:
+        """3 x 3 matrix whose columns are the forward, left and up axes in room
+        coordinates; it turns head coordinates (x forward, y left, z up) into room ones."""
+        cy, sy = math.cos(math.radians(self.yaw)), math.sin(math.radians(self.yaw))
+        cp, sp = math.cos(math.radians(self.pitch)), math.sin(math.radians(self.pitch))
+        cr, sr = math.cos(math.radians(self.roll)), math.sin(math.radians(self.roll))
+        forward = (cp * cy, cp * sy, sp)
+        left = (-cy * sp * sr - sy * cr, -sy * sp * sr + cy * cr, cp * sr)
+        up = (
+            forward[1] * left[2] - forward[2] * left[1],
+            forward[2] * left[0] - forward[0] * left[2],
+            forward[0] * left[1] - forward[1] * left[0],
+        )
+        return [[forward[i], left[i], up[i]] for i in range(3)]
 
 
 class Geometry(_Model):
@@ -254,6 +278,15 @@ class LateStage(_Model):
         gt=0.0,
         description="detector sphere radius in metres; None sizes it from volume and rays",
     )
+    directions: int = Field(
+        default=64,
+        ge=0,
+        le=1024,
+        description=(
+            "arrival directions the late energy is sorted into, for spatial outputs "
+            "(stochastic ray tracing; the statistical tail arrives evenly from all around)"
+        ),
+    )
     splitting: bool = Field(
         default=True,
         description=(
@@ -261,6 +294,64 @@ class LateStage(_Model):
             "carry much less (unbiased); keeps late tails smooth where few rays survive"
         ),
     )
+
+
+LAYOUT_NAMES = ("stereo", "5.0", "7.0", "5.0.4", "7.0.4")
+
+
+class Speaker(_Model):
+    name: str
+    azimuth: float = Field(description="degrees, positive to the left")
+    elevation: float = Field(default=0.0, ge=-90.0, le=90.0, description="degrees, positive up")
+
+
+class Output(_Model):
+    """A format every response is rendered in: ``mono``, ``binaural``, ``ambisonics``
+    (AmbiX) or ``loudspeakers``. A bare name stands for the format with its defaults."""
+
+    format: Literal["mono", "binaural", "ambisonics", "loudspeakers"]
+    order: int = Field(default=1, ge=0, le=7, description="ambisonics: the order")
+    hrtf: Path | None = Field(
+        default=None, description="binaural: a SOFA file; None uses a spherical head model"
+    )
+    layout: str | None = Field(
+        default=None, description=f"loudspeakers: one of {', '.join(LAYOUT_NAMES)}"
+    )
+    speakers: list[Speaker] | None = Field(
+        default=None, description="loudspeakers: a layout of your own, in channel order"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _shorthand(cls, value):
+        if isinstance(value, str):
+            return {"format": value}
+        if isinstance(value, dict) and isinstance(value.get("layout"), int | float):
+            # YAML reads `layout: 5.0` as a number.
+            return {**value, "layout": f"{float(value['layout']):.1f}"}
+        return value
+
+    @field_validator("hrtf")
+    @classmethod
+    def _resolve_hrtf(cls, value: Path | None, info: ValidationInfo) -> Path | None:
+        return None if value is None else _resolve_path(value, info)
+
+    @model_validator(mode="after")
+    def _check_format(self) -> Output:
+        if self.format == "loudspeakers":
+            if (self.layout is None) == (self.speakers is None):
+                raise ValueError("loudspeakers need either a layout or a list of speakers")
+            if self.layout is not None and self.layout not in LAYOUT_NAMES:
+                raise ValueError(
+                    f"unknown layout {self.layout!r}; use one of {', '.join(LAYOUT_NAMES)}"
+                )
+            if self.speakers is not None and len(self.speakers) < 2:
+                raise ValueError("a loudspeaker layout needs at least two speakers")
+        elif self.layout is not None or self.speakers is not None:
+            raise ValueError("layout and speakers are for the loudspeakers format")
+        if self.hrtf is not None and self.format != "binaural":
+            raise ValueError("hrtf is for the binaural format")
+        return self
 
 
 class Simulation(_Model):
@@ -293,6 +384,10 @@ class Scene(_Model):
     listeners: list[Listener] = Field(min_length=1)
     air: Air = Field(default_factory=Air)
     simulation: Simulation = Field(default_factory=Simulation)
+    outputs: list[Output] = Field(
+        default_factory=lambda: [Output(format="mono")],
+        description="formats to write every response in (simulate command)",
+    )
 
     @model_validator(mode="after")
     def _check_references(self) -> Scene:

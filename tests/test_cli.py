@@ -85,6 +85,31 @@ def test_simulate_writes_responses_and_parameters(
     assert len(response["parameters"]["c80"]) == 8
 
 
+def test_simulate_writes_spatial_outputs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    from acoustic_spaces.audio import read_wav
+
+    out = tmp_path / "out"
+    args = ["simulate", str(SHOEBOX), "--out", str(out), "--rays", "1000", "--length", "0.3"]
+    formats = ["binaural", "ambisonics:2", "loudspeakers:5.0"]
+    assert main([*args, "--seed", "1", *(f"--output={f}" for f in formats)]) == 0
+    capsys.readouterr()
+    channels = {"binaural": 2, "ambix2": 9, "5.0": 5}
+    for label, count in channels.items():
+        data, fs = read_wav(out / f"talker__seat-a.{label}.wav")
+        assert data.shape == (int(0.3 * fs), count)
+    assert not (out / "talker__seat-a.wav").exists()
+    (response,) = json.loads((out / "parameters.json").read_text(encoding="utf-8"))["responses"]
+    assert [o["format"] for o in response["outputs"]] == list(channels)
+    assert response["outputs"][2]["channels"] == ["L", "R", "C", "Ls", "Rs"]
+    assert main([*args, "--output", "loudspeakers:9.1"]) == 1
+    assert "unknown layout" in capsys.readouterr().err
+    assert main([*args, "--hrtf", str(tmp_path / "missing.sofa")]) == 1
+
+
 def _write_recording(sweep_wav: Path, out: Path, latency: int = 0) -> None:
     """Play the sweep through a synthetic room: direct sound and a 0.5 s decay."""
     import math
