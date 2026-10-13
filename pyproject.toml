@@ -40,7 +40,7 @@ dependencies = [
 [project.optional-dependencies]
 viz = ["matplotlib>=3.6", "pyvista>=0.43"]
 measure = ["sounddevice>=0.4"]
-gui = ["PySide6>=6.6", "pyvistaqt>=0.11", "pyvista>=0.43", "matplotlib>=3.6"]
+gui = ["PySide6-Essentials>=6.6", "pyvistaqt>=0.11", "pyvista>=0.43", "matplotlib>=3.6"]
 sofa = ["h5py>=3.8"]
 test = ["pytest>=7", "h5py>=3.8"]
 dev = ["pytest>=7", "h5py>=3.8", "ruff>=0.6"]
