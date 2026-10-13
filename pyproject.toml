@@ -24,12 +24,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
+    "ezdxf>=1.1",
     "numpy>=1.24",
     "pydantic>=2.6",
     "pyyaml>=6.0",
+    "trimesh>=4.0",
 ]
 
 [project.optional-dependencies]
+viz = ["pyvista>=0.43"]
 test = ["pytest>=7"]
 dev = ["pytest>=7", "ruff>=0.6"]
 
@@ -48,6 +51,7 @@ wheel.packages = ["src/acoustic_spaces"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers"]
+markers = ["render: draws with OpenGL, so needs a display or off-screen rendering"]
 
 [tool.ruff]
 line-length = 100

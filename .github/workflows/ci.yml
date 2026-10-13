@@ -45,6 +45,28 @@ jobs:
         run: |
           acoustic-spaces info
           acoustic-spaces validate examples/shoebox/scene.yaml
+          acoustic-spaces inspect examples/shoebox/scene.yaml
+
+  viz:
+    name: 3D view (off-screen)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install off-screen OpenGL
+        run: sudo apt-get update && sudo apt-get install -y libosmesa6 libegl1 libgl1 libxrender1
+      - name: Build and install
+        run: python -m pip install ".[test,viz]"
+      - name: Test
+        run: python -m pytest -q tests/test_viz.py
+      - name: Render the example scene
+        run: acoustic-spaces view examples/shoebox/scene.yaml --screenshot shoebox.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scene-view
+          path: shoebox.png
 
   wheels:
     name: Wheel (${{ matrix.os }})

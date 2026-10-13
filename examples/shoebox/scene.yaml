@@ -4,19 +4,17 @@ geometry:
   file: shoebox.obj
   units: m
 materials:
-  # Absorption per octave band at 63, 125, 250, 500, 1000, 2000, 4000, 8000 Hz.
+  # Built-in database entries; `acoustic-spaces materials` lists them all.
+  # Explicit lists (one value per octave band, 63 Hz to 8 kHz) override a preset.
   painted_concrete:
-    absorption: [0.01, 0.01, 0.01, 0.02, 0.02, 0.02, 0.03, 0.03]
+    preset: smooth_brickwork_flush_pointing
     scattering: 0.05
-    source: placeholder values, replace with database entries in M1
   carpet_on_concrete:
-    absorption: [0.02, 0.02, 0.06, 0.14, 0.37, 0.60, 0.65, 0.65]
+    preset: carpet_6mm_closed_cell_foam
     scattering: 0.1
-    source: placeholder values, replace with database entries in M1
   acoustic_ceiling:
-    absorption: [0.30, 0.40, 0.60, 0.70, 0.75, 0.75, 0.75, 0.75]
+    preset: ceiling_fissured_tile
     scattering: 0.2
-    source: placeholder values, replace with database entries in M1
 assignments:
   walls: painted_concrete
   floor: carpet_on_concrete
