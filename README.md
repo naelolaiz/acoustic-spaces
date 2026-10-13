@@ -43,13 +43,33 @@ Requirements: Python 3.10+, a C++17 compiler and CMake 3.18+.
 ```sh
 git clone https://github.com/naelolaiz/acoustic_spaces_simulator
 cd acoustic_spaces_simulator
+```
+
+With [uv](https://docs.astral.sh/uv/), `uv sync` builds the package into `.venv` together
+with the test tools (pytest, ruff), and `--extra` adds the optional parts:
+
+```sh
+uv sync --extra viz                    # viz: the 3D view (PyVista) and plots (matplotlib)
+uv sync --extra viz --extra measure    # measure: sounddevice, for sweeps and playback
+uv sync --extra gui                    # gui: the graphical editor (Qt, PySide6)
+uv sync --all-extras                   # everything, with sofa (h5py) and docs
+```
+
+`uv sync` installs exactly what it is asked for, so name every extra each time. It
+rebuilds the compiled core when the C++ sources change.
+
+With pip, in a virtual environment:
+
+```sh
 python -m pip install -e ".[dev,viz]"     # viz adds the 3D view (PyVista)
 python -m pip install -e ".[measure]"     # sounddevice: sweeps, real-time playback
 python -m pip install -e ".[sofa]"        # h5py, to read HRTFs from SOFA files
 python -m pip install -e ".[gui]"         # the graphical editor (Qt, PySide6)
 ```
 
-Check the installation and look at the example scene:
+Check the installation and look at the example scene. The commands run in the environment
+you installed into: activate it (`source .venv/bin/activate`, or `.venv\Scripts\activate`
+on Windows), or with uv put `uv run` in front of each.
 
 ```sh
 acoustic-spaces info
@@ -62,7 +82,7 @@ acoustic-spaces export examples/concert_hall/scene.yaml hall.glb --paths --parti
 acoustic-spaces materials carpet                       # search the material database
 acoustic-spaces directivity hypercardioid --plot polar.png  # a source directivity
 acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
-pytest
+python -m pytest                                       # the test suite
 ```
 
 `animate` shows sound particles leaving a source and spreading through the room, each
@@ -87,6 +107,17 @@ C80 (dB)       1.3     1.3     1.9     3.0     3.9     4.7     6.0     9.4
 G (dB)        22.8    22.8    22.1    21.0    19.3    18.1    16.9    15.5
 ...
 ```
+
+T30 comes out several times the Sabine and Eyring estimates that `inspect` prints, and
+that is the room, not a fault. Its absorption sits on the ceiling and the carpet while
+the walls are hard and smooth (scattering 0.05), so sound running between the walls meets
+little absorption and dies away slowly. Sabine and Eyring assume a diffuse field, where
+sound meets every surface alike; `inspect` says when a room is far from that and adds the
+Arau-Puchades estimate, which allows for absorption that faces one way. With every surface
+fully diffusing, the same room decays in Eyring's 0.37 s at 1 kHz; with every surface
+scattering 0.3, in about 0.6 s. The
+[validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
+checks both kinds of room.
 
 From Python:
 
@@ -118,8 +149,11 @@ plot_directions(response, "talker__seat-a.directions.png")
 
 ## Graphical editor
 
+The editor needs the `gui` extra: `uv sync --extra gui` in a source checkout, then
+`uv run acoustic-spaces edit`, or `pip install "acoustic-spaces[gui]"`.
+
 ```sh
-acoustic-spaces edit                              # needs the gui extra
+acoustic-spaces edit                              # a new box room
 acoustic-spaces edit examples/studio/scene.yaml   # or open a scene file
 ```
 

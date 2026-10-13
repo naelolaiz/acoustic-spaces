@@ -7,8 +7,9 @@
 - Response plots (matplotlib): echogram with the early paths, decay curves per band, and
   arrival directions as the listener faces; polar patterns of a source directivity.
 
-Needs the viz extra (``pip install "acoustic-spaces[viz]"``). The 3D view works in a
-desktop window, in Jupyter, and off screen for screenshots.
+Needs the viz extra (``pip install "acoustic-spaces[viz]"``, or ``uv sync --extra viz`` in
+a source checkout). The 3D view works in a desktop window, in Jupyter, and off screen for
+screenshots.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from acoustic_spaces._extras import install_hint
 from acoustic_spaces.room import UNASSIGNED, Room
 
 if TYPE_CHECKING:
@@ -78,7 +80,7 @@ def _pyvista():
     try:
         import pyvista
     except ImportError as exc:  # pragma: no cover - exercised without the extra
-        raise ImportError('the 3D view needs PyVista: pip install "acoustic-spaces[viz]"') from exc
+        raise ImportError(f"the 3D view needs PyVista: {install_hint('viz')}") from exc
     return pyvista
 
 
@@ -389,9 +391,7 @@ def _figure(**kwargs):
     try:
         from matplotlib.figure import Figure
     except ImportError as exc:  # pragma: no cover - exercised without the extra
-        raise ImportError(
-            'response plots need matplotlib: pip install "acoustic-spaces[viz]"'
-        ) from exc
+        raise ImportError(f"response plots need matplotlib: {install_hint('viz')}") from exc
     return Figure(**kwargs)
 
 

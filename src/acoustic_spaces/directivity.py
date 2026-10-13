@@ -36,6 +36,7 @@ from pathlib import Path
 
 import numpy as np
 
+from acoustic_spaces._extras import install_hint
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 
 #: The first-order patterns by name: the pressure is a + (1 - a) cos(theta).
@@ -313,9 +314,7 @@ def read_directivity_sofa(path: str | Path, measurement: int | None = None) -> B
     try:
         import h5py
     except ImportError as exc:
-        raise ImportError(
-            'reading SOFA files needs h5py: pip install "acoustic-spaces[sofa]"'
-        ) from exc
+        raise ImportError(f"reading SOFA files needs h5py: {install_hint('sofa')}") from exc
     from acoustic_spaces.spatial.hrtf import _positions, _text
 
     path = Path(path)

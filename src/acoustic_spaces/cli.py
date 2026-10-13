@@ -6,6 +6,7 @@ import argparse
 import json
 import math
 import sys
+import textwrap
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -73,6 +74,29 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+#: Arau-Puchades this many times Eyring in some band: the absorption is spread too
+#: unevenly for a diffuse field.
+_UNEVEN_ABSORPTION = 1.25
+
+
+def _uneven_absorption_note(ratio: Sequence[float]) -> str | None:
+    """Why the decay will be longer than Sabine and Eyring say, when it will."""
+    finite = [(r, k) for k, r in enumerate(ratio) if math.isfinite(r)]
+    if not finite or max(finite)[0] <= _UNEVEN_ABSORPTION:
+        return None
+    worst, band = max(finite)
+    frequency = OCTAVE_BANDS_HZ[band]
+    where = f"{frequency // 1000} kHz" if frequency >= 1000 else f"{frequency} Hz"
+    text = (
+        f"note: the absorption is spread unevenly (Arau-Puchades, which allows for that, is "
+        f"{worst:.1f} times Eyring at {where}). Sabine and Eyring assume a diffuse field and "
+        "underestimate the decay of such rooms: sound travelling parallel to the absorbing "
+        "surfaces dies away slowly, the more so the less the other surfaces scatter. "
+        "simulate traces it."
+    )
+    return textwrap.fill(text, width=88, subsequent_indent="  ")
+
+
 def _cmd_inspect(args: argparse.Namespace) -> int:
     room = _load_room(args.scene)
     if room is None:
@@ -104,8 +128,13 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     if room.volume_m3 is not None:
         print("\nstatistical reverberation time (s), without air absorption")
         print(_band_header("", width))
-        print(_band_row("Sabine", room.reverberation_time("sabine"), width))
-        print(_band_row("Eyring", room.reverberation_time("eyring"), width))
+        times = {}
+        for label in ("Sabine", "Eyring", "Arau-Puchades"):
+            times[label] = room.reverberation_time(label.lower().replace("-", "_"))
+            print(_band_row(label, times[label], width))
+        note = _uneven_absorption_note(times["Arau-Puchades"] / times["Eyring"])
+        if note:
+            print(note)
 
     print("\npositions")
     for kind, items, inside in (

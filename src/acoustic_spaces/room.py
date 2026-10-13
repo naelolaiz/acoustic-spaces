@@ -225,25 +225,48 @@ class Room:
         return speed_of_sound(self.scene.air.temperature_c)
 
     def reverberation_time(
-        self, formula: Literal["sabine", "eyring"] = "sabine", air_absorption: bool = False
+        self,
+        formula: Literal["sabine", "eyring", "arau_puchades"] = "sabine",
+        air_absorption: bool = False,
     ) -> np.ndarray:
         """Statistical reverberation time per octave band (s).
 
-        These assume a diffuse field; they are a sanity check, not a prediction.
-        ``air_absorption`` adds the ``4 m V`` term of ISO 9613-1 air.
+        Sabine and Eyring assume a diffuse field; they are a sanity check, not a
+        prediction. ``arau_puchades`` (Arau-Puchades, Acustica 65, 1988) allows for
+        absorption spread unevenly between the room's directions: an Eyring time for each
+        of the x, y and z axes from the surfaces facing it, combined as a geometric mean
+        weighted by their area. Each face's area is shared between the axes by the
+        squares of its normal's components, so in a box aligned with the axes every wall
+        counts for the axis it faces. ``air_absorption`` adds the ``4 m V`` term of
+        ISO 9613-1 air.
         """
         if self.volume_m3 is None:
             raise ValueError("reverberation time needs a closed model")
         volume = self.volume_m3
         constant = 24.0 * math.log(10.0) * volume / self.speed_of_sound()
-        absorption = self.absorption_area()
         air = 4.0 * self.air_attenuation() * volume if air_absorption else 0.0
-        if formula == "sabine":
-            with np.errstate(divide="ignore"):
-                return constant / (absorption + air)
-        if formula == "eyring":
-            surface = self.report.surface_area_m2
-            mean_alpha = np.clip(absorption / surface, 0.0, 1.0 - 1e-12)
+        surface = self.report.surface_area_m2
+
+        def eyring(absorption: np.ndarray, area: float) -> np.ndarray:
+            mean_alpha = np.clip(absorption / area, 0.0, 1.0 - 1e-12)
             with np.errstate(divide="ignore"):
                 return constant / (-surface * np.log1p(-mean_alpha) + air)
-        raise ValueError(f"unknown formula {formula!r}; use 'sabine' or 'eyring'")
+
+        if formula == "sabine":
+            with np.errstate(divide="ignore"):
+                return constant / (self.absorption_area() + air)
+        if formula == "eyring":
+            return eyring(self.absorption_area(), surface)
+        if formula == "arau_puchades":
+            share = self.mesh.face_areas()[:, None] * self.mesh.face_normals() ** 2  # (F, 3)
+            alpha = np.array([self.scene.materials[n].absorption for n in self.material_names])
+            face_alpha = np.where(
+                (self.face_materials == UNASSIGNED)[:, None], 0.0, alpha[self.face_materials]
+            )
+            total = share.sum()
+            log_time = np.zeros(face_alpha.shape[1])
+            for area, absorption in zip(share.sum(axis=0), share.T @ face_alpha, strict=True):
+                if area > 0:
+                    log_time += area / total * np.log(eyring(absorption, area))
+            return np.exp(log_time)
+        raise ValueError(f"unknown formula {formula!r}; use 'sabine', 'eyring' or 'arau_puchades'")

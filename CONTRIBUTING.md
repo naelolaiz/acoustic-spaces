@@ -7,15 +7,17 @@ Pull requests are welcome.
 You need Python 3.10 or newer, a C++17 compiler and CMake 3.18 or newer.
 
 ```sh
-python -m pip install -e ".[dev,viz]"
+uv sync --extra viz                  # or, with pip: python -m pip install -e ".[dev,viz]"
 ```
 
-The compiled core is rebuilt on every `pip install -e .`.
+`uv sync` installs the `dev` group (pytest, h5py, ruff) along with the package, and
+rebuilds the compiled core when the C++ sources or the build files change; pip rebuilds
+it on every `pip install -e .`.
 
 ## Checks
 
 CI runs these on Linux, macOS and Windows, and its logs are kept free of warnings, not
-only of errors:
+only of errors (with uv, put `uv run` in front of each):
 
 ```sh
 ruff check .
@@ -26,10 +28,11 @@ pytest -W error
 Tests that draw with OpenGL carry the `render` marker; without a display, run them with
 `VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow` (Linux, with OSMesa installed).
 
-The editor's tests (`tests/test_gui.py`, with the `gui` extra installed) use Qt's
-off-screen platform unless `QT_QPA_PLATFORM` says otherwise; there the 3D view shows a
-note instead and its click tests are skipped. To run those too on Linux without a
-display: `QT_QPA_PLATFORM=xcb xvfb-run -a pytest tests/test_gui.py`.
+The editor's tests (`tests/test_gui.py`, with the `gui` extra installed:
+`uv sync --extra gui`) use Qt's off-screen platform unless `QT_QPA_PLATFORM` says
+otherwise; there the 3D view shows a note instead and its click tests are skipped. To
+run those too on Linux without a display:
+`QT_QPA_PLATFORM=xcb xvfb-run -a uv run pytest tests/test_gui.py`.
 
 Example scenes live in `examples/<name>/scene.yaml`, with a comment at the top that
 `acoustic-spaces examples` shows; wheels carry them as `acoustic_spaces/example_scenes`.
@@ -37,7 +40,7 @@ Example scenes live in `examples/<name>/scene.yaml`, with a comment at the top t
 ## Documentation
 
 ```sh
-python -m pip install -e ".[docs]"
+python -m pip install -e ".[docs]"     # or: uv sync --extra docs
 python -m sphinx -W -b html docs docs/_build/html
 ```
 

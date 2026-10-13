@@ -15,7 +15,13 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   hit edges and corners: positions, delays and energies agree to rounding;
 - T30 in a box with fully diffusing surfaces against Eyring with air absorption:
   within 10 %, and slightly longer as absorption grows, as Kuttruff's correction
-  for the spread of free path lengths predicts;
+  for the spread of free path lengths predicts; also within 10 % with the example's
+  uneven absorption (absorbing ceiling and carpet, hard walls) once every surface
+  diffuses;
+- the decay in the same box with specular walls against its closed form, where each
+  direction of travel meets the walls at its own fixed rate: within 10 % with the
+  absorption spread evenly, and with the example's, where rays parallel to the floor
+  never meet the ceiling and T30 is 5 to 20 times Eyring's estimate;
 - G in the same box against Barron's revised theory: within 1 dB;
 - the late tail of the example box (absorbing ceiling, smooth walls) from 10k rays
   with splitting against 1 million rays: within 4 dB on average from 0.5 to 2.5 s,
