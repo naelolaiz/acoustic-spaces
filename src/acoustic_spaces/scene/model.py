@@ -22,6 +22,7 @@ A scene file is YAML with this shape::
     sources:
       - name: speaker
         position: [2.0, 1.5, 1.2]
+        directivity: cardioid  # or {pattern: [...per band]} or {file: speaker.sofa}
     listeners:
       - name: row-3
         position: [6.0, 1.5, 1.2]
@@ -259,13 +260,57 @@ def _clip(values: list[float]) -> list[float]:
     return [min(max(float(v), 0.0), 1.0) for v in values]
 
 
+PatternName = Literal[
+    "omni", "subcardioid", "cardioid", "supercardioid", "hypercardioid", "figure8"
+]
+
+
+class DirectivitySpec(_Model):
+    """A source's directivity per octave band: first-order patterns (a name, or the
+    ``a`` of ``a + (1 - a) cos(theta)``, for each band) or a measured balloon from a
+    SOFA file or a CSV table (see :mod:`acoustic_spaces.directivity`)."""
+
+    pattern: list[PatternName | Coefficient] | None = Field(
+        default=None, description="one pattern name or value of a per octave band"
+    )
+    file: Path | None = Field(
+        default=None, description="measured data: a SOFA file (FreeFieldDirectivityTF) or CSV"
+    )
+    measurement: int | None = Field(
+        default=None,
+        ge=0,
+        description="SOFA: the measurement to use (a note, say); None averages them all",
+    )
+
+    @field_validator("pattern")
+    @classmethod
+    def _check_pattern(cls, value: list | None) -> list | None:
+        return None if value is None else _per_band("pattern", value)
+
+    @field_validator("file")
+    @classmethod
+    def _resolve_file(cls, value: Path | None, info: ValidationInfo) -> Path | None:
+        return None if value is None else _resolve_path(value, info)
+
+    @model_validator(mode="after")
+    def _one_kind(self) -> DirectivitySpec:
+        if (self.pattern is None) == (self.file is None):
+            raise ValueError("give a directivity pattern per band or a file, not both")
+        if self.measurement is not None and (
+            self.file is None or self.file.suffix.lower() != ".sofa"
+        ):
+            raise ValueError("measurement is for SOFA directivity files")
+        return self
+
+
 class Source(_Model):
     name: str
     position: Vector3
     orientation: Orientation = Field(default_factory=Orientation)
-    directivity: Literal[
-        "omni", "subcardioid", "cardioid", "supercardioid", "hypercardioid", "figure8"
-    ] = "omni"
+    directivity: PatternName | DirectivitySpec = Field(
+        default="omni",
+        description="a pattern for every band, or per-band patterns or measured data",
+    )
     level_db: float = Field(default=94.0, description="sound power level in dB re 1 pW")
 
 
@@ -457,6 +502,10 @@ class Scene(_Model):
         for output in data["outputs"]:
             if "hrtf" in output:
                 output["hrtf"] = _portable(output["hrtf"], base)
+        for source in data["sources"]:
+            directivity = source.get("directivity")
+            if isinstance(directivity, dict) and "file" in directivity:
+                directivity["file"] = _portable(directivity["file"], base)
         with path.open("w", encoding="utf-8") as fh:
             yaml.safe_dump(data, fh, sort_keys=False)
 

@@ -60,6 +60,7 @@ acoustic-spaces view examples/shoebox/scene.yaml --paths --max-order 2  # reflec
 acoustic-spaces animate examples/lecture_hall/scene.yaml               # sound particles
 acoustic-spaces export examples/concert_hall/scene.yaml hall.glb --paths --particles  # Blender
 acoustic-spaces materials carpet                       # search the material database
+acoustic-spaces directivity hypercardioid --plot polar.png  # a source directivity
 acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
 pytest
 ```
@@ -144,6 +145,9 @@ The editor works on the same scene files as the command line:
   writes the same files as `simulate`; **Listen** plays a dry WAV file through the
   response on the sound card (binaural when the scene has a binaural output; needs the
   `measure` extra).
+- A source's form sets its directivity: a pattern, or a SOFA or CSV file of measured
+  data. It shows the directivity index per band, opens the polar patterns, and the
+  selected source shows its balloon in the 3D view.
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
   as you edit.
 - **File > Export to Blender** writes the room with the reflection paths on show, and
@@ -251,6 +255,50 @@ by having the same name as a material, or through `default_material`.
 
 The BRAS room models are distributed as SketchUp files only; export them to OBJ
 from SketchUp to use them here.
+
+### Sources and directivity
+
+A source has a position, an orientation (`yaw`, `pitch` and `roll` in degrees; all zero
+faces +x with +z up), a sound power level (`level_db`, dB re 1 pW) and a
+`directivity`:
+
+```yaml
+sources:
+  - name: talker
+    position: [2.0, 3.0, 1.5]
+    orientation: {yaw: 30}
+    directivity: cardioid   # or omni, subcardioid, supercardioid, hypercardioid, figure8
+  - name: monitor
+    position: [0.7, 1.3, 1.2]
+    directivity:            # a pattern, or the a of a + (1 - a) cos(theta), per octave band
+      pattern: [omni, omni, omni, subcardioid, subcardioid, cardioid, cardioid, 0.3]
+  - name: loudspeaker
+    position: [0.7, 3.3, 1.2]
+    directivity: {file: speaker.sofa}   # measured data: SOFA or CSV
+```
+
+- A directivity says where the sound power goes, not how much: its weights average 1
+  over the sphere in every band. It shapes the direct sound, each early path (by the
+  direction it leaves the source in), the rays of the late part and the particles of
+  `animate`.
+- **SOFA** files follow the AES69 `FreeFieldDirectivityTF` convention (spectra measured
+  by microphones around the source, as published for loudspeakers and instruments), or
+  hold impulse responses in `Data.IR`. Directions are the microphones' positions as the
+  source sees them (`SourceView` and `SourceUp`). `measurement: 3` picks one
+  measurement, for example one note of an instrument; by default all are averaged.
+  Reading SOFA files needs the `sofa` extra (h5py).
+- A **CSV** table has the header `azimuth, elevation` followed by frequencies in Hz,
+  then one row per direction with levels in dB (any reference; only differences
+  matter). Azimuth turns from the front towards the source's left and elevation is
+  positive upwards, in degrees. Any set of directions works: they are interpolated
+  onto a 5 degree grid. Bands are averaged into octaves, and octaves with no data copy
+  the nearest one.
+- CLF (Common Loudspeaker Format) files are not read: their specification is not
+  public. Convert them to SOFA or CSV.
+
+`acoustic-spaces directivity speaker.sofa --plot polar.png` prints the directivity
+index and front-to-back ratio per octave band and draws the polar patterns;
+`acoustic-spaces inspect` lists every source's directivity index.
 
 ## Simulation
 
@@ -462,6 +510,7 @@ src/acoustic_spaces/   Python package
   scene/               scene model and YAML schema
   geometry/            CAD import, triangulation, mesh cleanup and checks
   materials/           material database and coefficient files
+  directivity.py       source directivity: patterns per band, SOFA and CSV balloons
   room.py              a scene with its geometry loaded: materials per face, checks
   engine/              early reflections, late reverberation, responses, simulate()
   air.py               ISO 9613-1 air absorption and speed of sound
@@ -499,6 +548,9 @@ v1, version 1.0.0:
 v2:
 
 - [x] A graphical editor: scenes, materials, sources and listeners, runs, results and listening.
+- [x] Export to Blender: rooms, reflection paths and particle animations as glTF.
+- [x] Source directivity per octave band: patterns, and measured data from SOFA or CSV files.
+- [ ] CLF loudspeaker files, once their specification is available.
 - [ ] Editing geometry in the editor: drawing rooms and moving points by dragging.
 - [ ] Head tracking.
 - [ ] Diffraction.

@@ -150,8 +150,9 @@ nb::ndarray<nb::numpy, std::int64_t> specular_sequences(const as::Bvh &bvh, InAr
     return to_numpy(std::move(out), {rays, max_order});
 }
 
-nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, double directivity_a,
-                           InArray forward, Matrix absorption, Matrix scattering, InArray air,
+nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivity_a,
+                           Matrix orientation, Kernels directivity_table, Matrix absorption,
+                           Matrix scattering, InArray air,
                            Points receivers, Points directions, std::size_t rays,
                            double max_time, double time_step, double dir_time_step,
                            double speed_of_sound, InArray receiver_radius, bool diffuse_rain,
@@ -166,11 +167,34 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, double directivit
         scattering.shape(0) != faces || scattering.shape(1) != bands) {
         throw std::invalid_argument("trace_stochastic: coefficients must be faces x bands");
     }
+    if (directivity_a.shape(0) != 0 && directivity_a.shape(0) != bands) {
+        throw std::invalid_argument("trace_stochastic: directivity_a must have one per band");
+    }
+    if (orientation.shape(0) != 3 || orientation.shape(1) != 3) {
+        throw std::invalid_argument("trace_stochastic: orientation must be 3 x 3");
+    }
+    const std::size_t table_size = directivity_table.size();
+    if (table_size != 0 &&
+        (directivity_table.shape(0) < 2 || directivity_table.shape(2) != bands)) {
+        throw std::invalid_argument(
+            "trace_stochastic: directivity_table must be elevations (2 or more) x azimuths x "
+            "bands");
+    }
     as::StochasticScene scene;
     scene.bvh = &bvh;
     scene.source = vec3(source, "source");
-    scene.directivity.a = directivity_a;
-    scene.directivity.forward = as::normalized(vec3(forward, "forward"));
+    auto &directivity = scene.directivity;
+    directivity.a.assign(directivity_a.data(), directivity_a.data() + directivity_a.shape(0));
+    if (table_size != 0) {
+        directivity.table.assign(directivity_table.data(),
+                                 directivity_table.data() + table_size);
+        directivity.elevations = directivity_table.shape(0);
+        directivity.azimuths = directivity_table.shape(1);
+    }
+    // Columns: the source's forward, left and up axes in room coordinates.
+    directivity.forward = {orientation(0, 0), orientation(1, 0), orientation(2, 0)};
+    directivity.left = {orientation(0, 1), orientation(1, 1), orientation(2, 1)};
+    directivity.up = {orientation(0, 2), orientation(1, 2), orientation(2, 2)};
     scene.bands = bands;
     scene.absorption = absorption.data();
     scene.scattering = scattering.data();
@@ -283,7 +307,8 @@ NB_MODULE(_native, m) {
           "Faces hit by deterministic specular rays, rays x max_order, -1 padded.");
 
     m.def("trace_stochastic", &trace_stochastic, nb::arg("bvh"), nb::arg("source"),
-          nb::arg("directivity_a"), nb::arg("forward"), nb::arg("absorption"),
+          nb::arg("directivity_a"), nb::arg("orientation"), nb::arg("directivity_table"),
+          nb::arg("absorption"),
           nb::arg("scattering"), nb::arg("air"), nb::arg("receivers"), nb::arg("directions"),
           nb::arg("rays"), nb::arg("max_time"), nb::arg("time_step"), nb::arg("dir_time_step"),
           nb::arg("speed_of_sound"), nb::arg("receiver_radius"), nb::arg("diffuse_rain"),
@@ -294,5 +319,8 @@ NB_MODULE(_native, m) {
           nb::arg("max_family"),
           "Stochastic ray tracing: (energy[r, band, bin], directional[r, dir, band, bin], "
           "escaped rays, ray_energy[window], reflections[window], traced rays); "
-          "ray_energy / reflections is the mean band-mean energy of a ray per window.");
+          "ray_energy / reflections is the mean band-mean energy of a ray per window. The "
+          "source radiates with a first-order pattern per band (directivity_a; empty: omni) "
+          "times directivity_table (elevations x azimuths x bands; empty: none), in the "
+          "frame whose forward, left and up axes are the columns of orientation.");
 }

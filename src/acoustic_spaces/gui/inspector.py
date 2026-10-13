@@ -41,6 +41,8 @@ from acoustic_spaces.scene.model import LAYOUT_NAMES
 
 BAND_LABELS = [f"{f} Hz" if f < 1000 else f"{f // 1000} kHz" for f in OCTAVE_BANDS_HZ]
 DIRECTIVITIES = ["omni", "subcardioid", "cardioid", "supercardioid", "hypercardioid", "figure8"]
+#: The directivity list entry that asks for a SOFA or CSV file.
+MEASURED = "Measured data from a file…"
 SAMPLE_RATES = [16_000, 22_050, 32_000, 44_100, 48_000, 88_200, 96_000]
 #: Shown in the material list of a surface for "no assignment of its own".
 FALLBACK = "(default material)"
@@ -527,6 +529,13 @@ class MaterialPage(Page):
         self.run(lambda: self.document.set_material(self.key, fields))
 
 
+def _directivity_label(spec) -> str:
+    """How the directivity list shows a source's setting that is not a pattern name."""
+    if spec.file is not None:
+        return f"file: {spec.file.name}"
+    return "per band: " + ", ".join(str(v) for v in spec.pattern)
+
+
 class PointPage(Page):
     """A source or listener: name, position and orientation; sources also have a
     directivity and a sound power level."""
@@ -547,12 +556,22 @@ class PointPage(Page):
             box.valueChanged.connect(self._orientation)
             form.addRow(label, box)
         self.directivity = QComboBox()
-        self.directivity.addItems(DIRECTIVITIES)
-        self.directivity.currentTextChanged.connect(self._directivity)
+        self.directivity.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.directivity.setMinimumContentsLength(12)
+        self.directivity.activated.connect(self._directivity)
+        self.directivity_index = QLabel()
+        self.directivity_index.setWordWrap(True)
+        self.pattern = QPushButton("Show the pattern")
+        self.pattern.clicked.connect(self.show_pattern)
+        self.pattern_window = None
         self.level = spin(0, 200, 1, 1, "dB")
         self.level.valueChanged.connect(self._level)
         if kind == "sources":
             form.addRow("Directivity", self.directivity)
+            form.addRow(self.directivity_index)
+            form.addRow(self.pattern)
             form.addRow("Sound power", self.level)
         remove = QPushButton("Remove " + ("source" if kind == "sources" else "listener"))
         remove.clicked.connect(self._remove)
@@ -576,8 +595,29 @@ class PointPage(Page):
         for box, value in zip(self.angles, (o.yaw, o.pitch, o.roll), strict=True):
             box.setValue(value)
         if self.kind == "sources":
-            self.directivity.setCurrentText(item.directivity)
+            self.directivity.clear()
+            self.directivity.addItems(DIRECTIVITIES)
+            if isinstance(item.directivity, str):
+                self.directivity.setCurrentText(item.directivity)
+            else:
+                self.directivity.addItem(_directivity_label(item.directivity))
+                self.directivity.setCurrentIndex(len(DIRECTIVITIES))
+            self.directivity.addItem(MEASURED)
+            self.directivity.setToolTip(self.directivity.currentText())
+            directivity = self.document.room.directivities[self.key]
+            index = directivity.index()
+            text = (
+                "Directivity index: "
+                + ", ".join(f"{v:.1f}" for v in index)
+                + " dB (63 Hz to 8 kHz)"
+            )
+            if directivity.extrapolated:
+                bands = ", ".join(str(f) for f in directivity.extrapolated)
+                text += f"; {bands} Hz copied from the nearest octave"
+            self.directivity_index.setText(text)
             self.level.setValue(item.level_db)
+            if self.pattern_window is not None and self.pattern_window.isVisible():
+                self.show_pattern()
 
     def _remove(self) -> None:
         if self.run(lambda: self.document.remove_point(self.kind, self.key) or True):
@@ -599,8 +639,40 @@ class PointPage(Page):
         yaw, pitch, roll = (box.value() for box in self.angles)
         self._update(orientation={"yaw": yaw, "pitch": pitch, "roll": roll})
 
-    def _directivity(self, value: str) -> None:
-        self._update(directivity=value)
+    def _directivity(self, index: int) -> None:
+        value = self.directivity.itemText(index)
+        if value in DIRECTIVITIES:
+            self._update(directivity=value)
+        elif value == MEASURED:
+            path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Source directivity",
+                str(self.document.base_dir),
+                "Directivity data (*.sofa *.csv);;All files (*)",
+            )
+            if path:
+                self._update(directivity={"file": path})
+            else:
+                self.reload()
+
+    def show_pattern(self) -> None:
+        """Open (or refresh) a window with the polar patterns of the source."""
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+
+        from acoustic_spaces.viz import plot_directivity
+
+        directivity = self.document.room.directivities[self.key]
+        if self.pattern_window is None:
+            self.pattern_window = QWidget(self, Qt.WindowType.Window)
+            QVBoxLayout(self.pattern_window)
+            self.pattern_window.resize(1000, 520)
+        layout = self.pattern_window.layout()
+        while layout.count():
+            layout.takeAt(0).widget().deleteLater()
+        layout.addWidget(FigureCanvasQTAgg(plot_directivity(directivity)))
+        self.pattern_window.setWindowTitle(f"Directivity of {self._item().name}")
+        self.pattern_window.show()
+        self.pattern_window.raise_()
 
     def _level(self, value: float) -> None:
         self._update(level_db=value)

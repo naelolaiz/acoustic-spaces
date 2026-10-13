@@ -4,6 +4,7 @@ The package is organised as a pipeline:
 
 - ``scene``: the scene model (geometry, materials, sources, listeners) and its YAML schema
 - ``geometry``, ``materials``: CAD import and checks, the material database
+- ``directivity``: source directivity per octave band, from patterns, SOFA or CSV files
 - ``room``: a scene with its geometry loaded, the input of every simulation
 - ``engine``: early specular paths and the late tail; ``simulate`` runs a whole scene
 - ``air``, ``synthesis``, ``parameters``: air absorption, impulse response synthesis

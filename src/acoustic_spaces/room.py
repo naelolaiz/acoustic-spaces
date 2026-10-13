@@ -15,6 +15,7 @@ from typing import Literal
 import numpy as np
 
 from acoustic_spaces.air import energy_attenuation_per_m, speed_of_sound
+from acoustic_spaces.directivity import Directivity, load_directivity
 from acoustic_spaces.geometry import (
     UNIT_SCALE,
     MeshReport,
@@ -46,6 +47,10 @@ def _material_for(label: tuple[str, ...], scene: Scene) -> str | None:
     return scene.default_material
 
 
+def _directivity_key(spec) -> str:
+    return spec if isinstance(spec, str) else spec.model_dump_json()
+
+
 @dataclass
 class Room:
     scene: Scene
@@ -60,6 +65,8 @@ class Room:
     listeners_inside: np.ndarray | None
     #: Assignment keys that match no name in the geometry.
     unused_assignments: list[str]
+    #: Each source's directivity, in ``scene.sources`` order.
+    directivities: list[Directivity]
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> Room:
@@ -71,7 +78,7 @@ class Room:
 
         ``reuse`` is an earlier room: when its geometry settings equal the scene's, its
         mesh is kept instead of being loaded and checked again (an editor changing
-        materials or positions).
+        materials or positions), and so are directivities read from the same settings.
         """
         geometry = scene.geometry
         if reuse is not None and reuse.scene.geometry == geometry:
@@ -103,6 +110,21 @@ class Room:
 
         names = set(mesh.label_names())
         unused = [key for key in scene.assignments if key not in names]
+        loaded = {}
+        if reuse is not None:
+            for source, directivity in zip(reuse.scene.sources, reuse.directivities, strict=True):
+                loaded[_directivity_key(source.directivity)] = directivity
+        directivities = []
+        for source in scene.sources:
+            key = _directivity_key(source.directivity)
+            if key not in loaded:
+                try:
+                    loaded[key] = load_directivity(source.directivity)
+                except ImportError as exc:
+                    raise ValueError(f"source {source.name!r}: {exc}") from exc
+                except ValueError as exc:
+                    raise ValueError(f"source {source.name!r}: {exc}") from None
+            directivities.append(loaded[key])
         return cls(
             scene=scene,
             mesh=mesh,
@@ -112,7 +134,15 @@ class Room:
             sources_inside=sources_inside,
             listeners_inside=listeners_inside,
             unused_assignments=unused,
+            directivities=directivities,
         )
+
+    def directivity(self, source: str) -> Directivity:
+        """The directivity of the source with this name."""
+        for item, directivity in zip(self.scene.sources, self.directivities, strict=True):
+            if item.name == source:
+                return directivity
+        raise KeyError(f"no source named {source!r}")
 
     # -- checks -------------------------------------------------------------------
 

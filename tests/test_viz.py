@@ -1,11 +1,17 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 pv = pytest.importorskip("pyvista")
 
 from acoustic_spaces.room import Room  # noqa: E402
-from acoustic_spaces.viz import plot_room, room_polydata, show_room  # noqa: E402
+from acoustic_spaces.viz import (  # noqa: E402
+    balloon_polydata,
+    plot_room,
+    room_polydata,
+    show_room,
+)
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
 
@@ -24,6 +30,20 @@ def test_plot_room_adds_surfaces_and_markers() -> None:
     # three materials (surface + outline each), a source and a listener with its arrow
     assert len(plotter.renderer.actors) >= 3 * 2 + 3
     plotter.close()
+
+
+def test_directivity_balloon_points_where_the_source_faces() -> None:
+    from acoustic_spaces.directivity import FirstOrder
+    from acoustic_spaces.scene.model import Orientation
+
+    turn = Orientation(yaw=90).rotation()
+    balloon = balloon_polydata(FirstOrder.pattern("cardioid"), [1, 2, 3], turn, size=2.0)
+    points = np.asarray(balloon.points) - [1, 2, 3]
+    length = np.linalg.norm(points, axis=1)
+    assert length.max() == pytest.approx(2.0, rel=1e-3)
+    # The sphere has no ring exactly on the equator: the tip is a few degrees off.
+    np.testing.assert_allclose(points[np.argmax(length)] / length.max(), [0, 1, 0], atol=0.06)
+    assert balloon.point_data["level"].max() == 0.0
 
 
 @pytest.mark.render

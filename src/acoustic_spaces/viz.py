@@ -1,11 +1,11 @@
 """Pictures of rooms and responses.
 
-- 3D view (PyVista): surfaces coloured by material, sources, listeners, and early
-  reflection paths coloured by order.
+- 3D view (PyVista): surfaces coloured by material, sources with their directivity
+  balloons, listeners, and early reflection paths coloured by order.
 - Animation (PyVista): sound particles spreading from a source and reflecting around
   the room, in a window with a time slider or saved as a GIF or MP4 video.
 - Response plots (matplotlib): echogram with the early paths, decay curves per band, and
-  arrival directions as the listener faces.
+  arrival directions as the listener faces; polar patterns of a source directivity.
 
 Needs the viz extra (``pip install "acoustic-spaces[viz]"``). The 3D view works in a
 desktop window, in Jupyter, and off screen for screenshots.
@@ -23,6 +23,7 @@ from acoustic_spaces.room import UNASSIGNED, Room
 if TYPE_CHECKING:
     import pyvista
 
+    from acoustic_spaces.directivity import Directivity
     from acoustic_spaces.engine import EarlyReflections, Response
     from acoustic_spaces.engine.particles import Particles
 
@@ -140,6 +141,35 @@ def plot_paths(
     return legend
 
 
+def balloon_polydata(
+    directivity: Directivity,
+    center,
+    rotation=None,
+    *,
+    band: int = 4,
+    size: float = 1.0,
+    db_range: float = 30.0,
+) -> pyvista.PolyData:
+    """A directivity balloon around ``center`` in one octave band (``band`` indexes
+    ``OCTAVE_BANDS_HZ``; 4 is 1 kHz): its radius grows from 0 at ``db_range`` dB below
+    the loudest direction to ``size`` there. ``rotation`` has the source's forward, left
+    and up axes as columns (``Orientation.rotation()``). The point data ``level`` holds
+    the level in dB re the loudest direction.
+    """
+    pv = _pyvista()
+    sphere = pv.Sphere(radius=1.0, theta_resolution=72, phi_resolution=36)
+    local = np.asarray(sphere.points, dtype=float)
+    local /= np.linalg.norm(local, axis=1, keepdims=True)
+    with np.errstate(divide="ignore"):
+        level = 10.0 * np.log10(np.maximum(directivity.energy(local)[:, band], 1e-30))
+    level -= level.max()
+    radius = size * np.clip(1.0 + level / db_range, 0.0, 1.0)
+    turn = np.eye(3) if rotation is None else np.asarray(rotation, dtype=float)
+    sphere.points = np.asarray(center, dtype=float) + (local * radius[:, None]) @ turn.T
+    sphere.point_data["level"] = level
+    return sphere
+
+
 def plot_room(
     room: Room,
     plotter: pyvista.Plotter | None = None,
@@ -180,12 +210,23 @@ def plot_room(
     arrow = 6 * radius
 
     points, names = [], []
-    for source in room.scene.sources:
+    for source, directivity in zip(room.scene.sources, room.directivities, strict=True):
         plotter.add_mesh(pv.Sphere(radius=radius, center=source.position), color=SOURCE_COLOUR)
-        if source.directivity != "omni":
+        if not directivity.omni:
             direction = source.orientation.forward()
             shape = pv.Arrow(start=source.position, direction=direction, scale=arrow)
             plotter.add_mesh(shape, color=SOURCE_COLOUR)
+            balloon = balloon_polydata(
+                directivity, source.position, source.orientation.rotation(), size=arrow
+            )
+            plotter.add_mesh(
+                balloon,
+                scalars="level",
+                cmap="magma",
+                clim=(-30, 0),
+                opacity=0.55,
+                show_scalar_bar=False,
+            )
         points.append(source.position)
         names.append(source.name)
     for listener in room.scene.listeners:
@@ -518,6 +559,81 @@ def plot_directions(response: Response, path: str | Path | None = None, *, band:
         title = "late energy by arrival direction"
     _direction_axes(ax_l, title)
 
+    if path is not None:
+        fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
+    return fig
+
+
+def _polar_panels():
+    """A dark figure with two polar panels side by side."""
+    fig = _figure(figsize=(11, 5.6), layout="constrained")
+    axes = fig.subplots(1, 2, subplot_kw={"projection": "polar"})
+    fig.patch.set_facecolor(BACKGROUND[0])
+    for ax in axes:
+        ax.set_facecolor(PANEL)
+        ax.tick_params(colors="white")
+        ax.spines["polar"].set_color("#6b6e7a")
+        ax.grid(True, color="#4a4d5a", linewidth=0.6)
+        ax.title.set_color("white")
+    return fig, axes
+
+
+def plot_directivity(
+    directivity: Directivity, path: str | Path | None = None, *, db_range: float = 30.0
+):
+    """Polar patterns of a source directivity in every octave band, in dB re the loudest
+    direction of each band: the horizontal plane (seen from above, front at the top and
+    the source's left on the left) and the vertical plane through the front (seen from
+    the side, front on the right and up at the top). Returns the matplotlib figure.
+    """
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+
+    angle = np.radians(np.arange(0.0, 360.5, 1.0))
+    planes = {
+        "horizontal": np.column_stack([np.cos(angle), np.sin(angle), np.zeros_like(angle)]),
+        "vertical": np.column_stack([np.cos(angle), np.zeros_like(angle), np.sin(angle)]),
+    }
+    loudest = directivity.energy(planes["horizontal"]).max(axis=0)
+    loudest = np.maximum(loudest, directivity.energy(planes["vertical"]).max(axis=0))
+    fig, axes = _polar_panels()
+    for ax, (plane, directions), title, zero in zip(
+        axes,
+        planes.items(),
+        ("horizontal plane (from above)", "vertical plane (from the side)"),
+        ("N", "E"),
+        strict=True,
+    ):
+        ax.set_theta_zero_location(zero)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            level = 10.0 * np.log10(directivity.energy(directions) / loudest)
+        same = np.allclose(level, level[:, :1], atol=0.01, equal_nan=True)
+        for b, f in enumerate(OCTAVE_BANDS_HZ):
+            if same and b != 4:
+                continue  # the same pattern in every band: one line
+            label = "every band" if same else f"{f} Hz" if f < 1000 else f"{f // 1000} kHz"
+            ax.plot(
+                angle,
+                np.clip(level[:, b], -db_range, 0.0),
+                color=BAND_COLOURS[b],
+                lw=1.3,
+                label=label,
+            )
+        ax.set_rlim(-db_range, 0.0)
+        ticks = np.arange(-db_range, 0.1, 10.0)
+        ax.set_rticks(ticks, [f"{t:.0f} dB" for t in ticks])
+        ax.set_rlabel_position(200 if plane == "horizontal" else 290)
+        if plane == "horizontal":
+            ax.set_xticks(np.radians([0, 90, 180, 270]), ["front", "left", "back", "right"])
+        else:
+            ax.set_xticks(np.radians([0, 90, 180, 270]), ["front", "up", "back", "down"])
+        ax.set_title(title, pad=14)
+    _legend(axes[1], loc="upper left", bbox_to_anchor=(1.02, 1.0))
+    index = directivity.index()[4]
+    name = directivity.name or "directivity"
+    fig.suptitle(
+        f"{name}: dB re the loudest direction; directivity index {index:.1f} dB at 1 kHz",
+        color="white",
+    )
     if path is not None:
         fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
     return fig

@@ -20,7 +20,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.directivity import Directivity
+from acoustic_spaces.engine.model import TraceModel, source_weights
 
 #: Distance (metres) below which a point counts as lying on a plane.
 _ON_PLANE = 1e-9
@@ -173,15 +174,17 @@ def find_paths(
     speed_of_sound: float,
     air: np.ndarray,
     max_delay_s: float,
-    directivity_a: float = 1.0,
-    forward: np.ndarray | None = None,
+    directivity: Directivity | None = None,
+    orientation: np.ndarray | None = None,
 ) -> EarlyReflections:
-    """Validate candidate plane sequences for one listener; add the direct sound."""
-    from acoustic_spaces.engine.model import directivity_weight
+    """Validate candidate plane sequences for one listener; add the direct sound.
 
+    Each path's energy is weighted by the source's ``directivity`` (default: omni) in
+    the direction it leaves the source; ``orientation`` has the source's forward, left
+    and up axes as columns.
+    """
     source = np.asarray(source, dtype=np.float64)
     listener = np.asarray(listener, dtype=np.float64)
-    forward = np.array([1.0, 0.0, 0.0]) if forward is None else np.asarray(forward, float)
     bands = model.absorption.shape[1]
     reflection = (1.0 - model.absorption) * (1.0 - model.scattering)  # specular energy
 
@@ -253,7 +256,7 @@ def find_paths(
         first = points[0][idx] if k else np.broadcast_to(listener, (len(idx), 3))
         departure = first - source
         departure /= np.maximum(np.linalg.norm(departure, axis=1), 1e-300)[:, None]
-        energy *= directivity_weight(directivity_a, forward, departure)[:, None]
+        energy *= source_weights(directivity, orientation, departure)
         last = points[k - 1][idx] if k else np.broadcast_to(source, (len(idx), 3))
         arrival = last - listener
         arrival /= np.maximum(np.linalg.norm(arrival, axis=1), 1e-300)[:, None]

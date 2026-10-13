@@ -89,8 +89,9 @@ def _trace_stochastic(rays: int, **settings):
     args = dict(
         bvh=_native.Bvh(vertices, faces),
         source=np.array([0.3, 0.4, 0.6]),
-        directivity_a=1.0,
-        forward=np.array([1.0, 0.0, 0.0]),
+        directivity_a=np.zeros(0),
+        orientation=np.eye(3),
+        directivity_table=np.zeros((0, 0, 1)),
         absorption=np.full((12, 1), 0.3),
         scattering=np.full((12, 1), 0.5),
         air=np.zeros(1),

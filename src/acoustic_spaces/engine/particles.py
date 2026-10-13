@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from acoustic_spaces.engine.model import DIRECTIVITY_A, TraceModel, directivity_weight
+from acoustic_spaces.engine.model import TraceModel, source_weights
 from acoustic_spaces.room import Room
 from acoustic_spaces.spatial.directions import fibonacci_sphere
 
@@ -84,8 +84,8 @@ def trace_particles(
 
     origin = np.asarray(spec.position, dtype=float)
     directions = fibonacci_sphere(count)
-    forward = np.asarray(spec.orientation.forward(), dtype=float)
-    energy = directivity_weight(DIRECTIVITY_A[spec.directivity], forward, directions)
+    rotation = np.asarray(spec.orientation.rotation(), dtype=float)
+    energy = source_weights(room.directivity(source), rotation, directions)[:, band]
 
     # Segments: particle k leaves start[s, k] at time t0[s, k] along direction[s, k].
     t0 = [np.zeros(count)]

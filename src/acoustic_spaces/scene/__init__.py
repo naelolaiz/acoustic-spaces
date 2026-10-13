@@ -3,6 +3,7 @@
 from acoustic_spaces.scene.model import (
     OCTAVE_BANDS_HZ,
     Air,
+    DirectivitySpec,
     Geometry,
     Listener,
     Material,
@@ -15,6 +16,7 @@ from acoustic_spaces.scene.model import (
 __all__ = [
     "OCTAVE_BANDS_HZ",
     "Air",
+    "DirectivitySpec",
     "Geometry",
     "Listener",
     "Material",

@@ -97,14 +97,45 @@ inline Vec3 cosine_hemisphere(const Vec3 &n, Rng &rng) {
                       n * std::sqrt(std::max(0.0, 1.0 - u1)));
 }
 
-// First-order pattern a + (1 - a) cos(theta); energy weights average to 1 over the sphere.
+// How a source shares its power between directions: energy weights per band that
+// average 1 over the sphere. A first-order pattern a + (1 - a) cos(theta) per band (none:
+// omni), times a table of weights on a grid of elevations (-90 to 90 degrees) and
+// azimuths (0 up to 360) in the source's frame, read bilinearly (none: 1).
 struct Directivity {
-    double a = 1.0;
-    Vec3 forward{1.0, 0.0, 0.0};
+    std::vector<double> a;      // bands; empty for omni
+    std::vector<double> table;  // elevations x azimuths x bands; may be empty
+    std::size_t elevations = 0, azimuths = 0;
+    Vec3 forward{1.0, 0.0, 0.0}, left{0.0, 1.0, 0.0}, up{0.0, 0.0, 1.0};
 
-    double energy_weight(const Vec3 &dir) const {
-        const double p = a + (1.0 - a) * dot(dir, forward);
-        return p * p / (a * a + (1.0 - a) * (1.0 - a) / 3.0);
+    void energy_weights(const Vec3 &dir, std::size_t bands, double *out) const {
+        const double x = dot(dir, forward);
+        for (std::size_t b = 0; b < bands; ++b) {
+            if (a.empty()) {
+                out[b] = 1.0;
+                continue;
+            }
+            const double p = a[b] + (1.0 - a[b]) * x;
+            out[b] = p * p / (a[b] * a[b] + (1.0 - a[b]) * (1.0 - a[b]) / 3.0);
+        }
+        if (table.empty()) return;
+        const double el = std::asin(std::clamp(dot(dir, up), -1.0, 1.0)) * 180.0 / kPi;
+        double az = std::atan2(dot(dir, left), x) * 180.0 / kPi;
+        if (az < 0.0) az += 360.0;
+        const double fi = (el + 90.0) / (180.0 / static_cast<double>(elevations - 1));
+        const double fj = az / (360.0 / static_cast<double>(azimuths));
+        const auto i0 = static_cast<std::size_t>(
+            std::clamp(std::floor(fi), 0.0, static_cast<double>(elevations - 2)));
+        const double floor_j = std::floor(fj);
+        const std::size_t j0 = static_cast<std::size_t>(floor_j) % azimuths;
+        const std::size_t j1 = (j0 + 1) % azimuths;
+        const double ti = fi - static_cast<double>(i0), tj = fj - floor_j;
+        const auto at = [&](std::size_t i, std::size_t j, std::size_t b) {
+            return table[(i * azimuths + j) * bands + b];
+        };
+        for (std::size_t b = 0; b < bands; ++b) {
+            out[b] *= (1.0 - ti) * ((1.0 - tj) * at(i0, j0, b) + tj * at(i0, j1, b)) +
+                      ti * ((1.0 - tj) * at(i0 + 1, j0, b) + tj * at(i0 + 1, j1, b));
+        }
     }
 };
 
@@ -345,13 +376,18 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         for (std::size_t ray = begin; ray < end; ++ray) {
             Rng first_rng(settings.seed, settings.first_ray + ray);
             const Vec3 first_dir = uniform_sphere(first_rng);
-            const double start = scene.directivity.energy_weight(first_dir) /
-                                 static_cast<double>(settings.rays);
-            const double cutoff = start * 1e-14;
+            std::array<double, kMaxBands> start{};
+            scene.directivity.energy_weights(first_dir, bands, start.data());
+            double loudest = 0.0;
+            for (std::size_t b = 0; b < bands; ++b) {
+                start[b] /= static_cast<double>(settings.rays);
+                loudest = std::max(loudest, start[b]);
+            }
+            if (loudest <= 0.0) continue;  // the source sends nothing this way
+            const double cutoff = loudest * 1e-14;
             stack.clear();
-            stack.push_back(detail::RayState{scene.source, first_dir, {}, 0.0, 0, true, true,
-                                             -1, first_rng});
-            for (std::size_t b = 0; b < bands; ++b) stack.back().energy[b] = start;
+            stack.push_back(detail::RayState{scene.source, first_dir, start, 0.0, 0, true,
+                                             true, -1, first_rng});
             std::size_t family = 1;
 
             while (!stack.empty()) {

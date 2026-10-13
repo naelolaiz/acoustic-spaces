@@ -31,11 +31,16 @@ sources:
   - name: left-speaker
     position: [0.67, 1.25, 1.2]
     orientation: {yaw: 30}       # aimed at the listening position
-    directivity: subcardioid
+    # A small two-way monitor: omni in the bass, narrowing towards the treble (one
+    # pattern per octave band, 63 Hz to 8 kHz). A SOFA or CSV file of measured data
+    # works too: {file: monitor.sofa}.
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid, cardioid, cardioid, supercardioid]
   - name: right-speaker
     position: [0.67, 3.25, 1.2]
     orientation: {yaw: -30}
-    directivity: subcardioid
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid, cardioid, cardioid, supercardioid]
 listeners:
   - name: mix-position
     position: [2.4, 2.25, 1.2]

@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.model import TraceModel
 
 _DECAY = 6.0 * math.log(10.0)  # 60 dB in nepers of energy
@@ -131,8 +132,8 @@ def stochastic_energy(
     directions: np.ndarray | None = None,
     splitting: bool = True,
     seed: int = 0,
-    directivity_a: float = 1.0,
-    forward: np.ndarray | None = None,
+    directivity: Directivity | None = None,
+    orientation: np.ndarray | None = None,
     threads: int = 0,
 ) -> LateEnergy:
     """Energy per listener, band and time slot by stochastic ray tracing.
@@ -161,15 +162,20 @@ def stochastic_energy(
     if radius is None:
         radius = receiver_radius(model.room.volume_m3, rays, max_time, speed_of_sound)
     radius = np.broadcast_to(np.asarray(radius, dtype=np.float64), (len(listeners),))
-    forward = np.array([1.0, 0.0, 0.0]) if forward is None else np.asarray(forward, float)
     directions = np.zeros((0, 3)) if directions is None else np.asarray(directions, float)
+    if directivity is None:
+        directivity_a, table = np.zeros(0), np.zeros((0, 0, model.absorption.shape[1]))
+    else:
+        directivity_a, table = directivity.native()
+    orientation = np.eye(3) if orientation is None else np.asarray(orientation, float)
 
     def trace(count: int, first: int, target: np.ndarray):
         return _native.trace_stochastic(
             model.bvh,
             np.asarray(source, dtype=np.float64),
-            float(directivity_a),
-            forward,
+            np.ascontiguousarray(directivity_a, dtype=np.float64),
+            np.ascontiguousarray(orientation, dtype=np.float64),
+            np.ascontiguousarray(table, dtype=np.float64),
             model.absorption,
             model.scattering,
             np.ascontiguousarray(air, dtype=np.float64),
