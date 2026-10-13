@@ -36,10 +36,10 @@ PARAMETERS = {
     "ts": ("s", "centre time"),
     "g": ("dB", "strength"),
 }
-#: Share of the response, at its end, used to estimate the missing tail.
-_TAIL_SHARE = 0.25
-#: Slots for the tail estimate, so that sparse energy does not skew it (s).
-_TAIL_SLOT = 0.01
+#: The fit for the missing tail stays this far (dB) above the level the decay reaches
+#: at the end of the response, and spans at most ``_TAIL_SPAN_DB``.
+_TAIL_HEADROOM_DB = 10.0
+_TAIL_SPAN_DB = 20.0
 
 
 @dataclass
@@ -80,38 +80,53 @@ def _band_label(f: int) -> str:
     return f"{f} Hz" if f < 1000 else f"{f // 1000} kHz"
 
 
+def _line(level: np.ndarray, t: np.ndarray, top: float, bottom: float):
+    """Least-squares line (slope dB/s, intercept dB) through ``level`` between two
+    levels, or None when the curve does not fall that far or does not fall at all."""
+    if not np.any(level <= bottom):
+        return None
+    start = int(np.argmax(level <= top))
+    stop = int(np.argmax(level <= bottom))
+    if stop - start < 2:
+        return None
+    slope, intercept = np.polyfit(t[start : stop + 1], level[start : stop + 1], 1)
+    return (float(slope), float(intercept)) if slope < 0 else None
+
+
 def _tail(e: np.ndarray, dt: float) -> tuple[float, float]:
-    """Energy after the end of ``e`` (per-slot energies) and its decay rate (1/s),
-    from an exponential fitted to the last part of the response."""
-    per_slot = max(1, int(round(_TAIL_SLOT / dt)))
-    n = (len(e) // per_slot) * per_slot
-    if n < 4 * per_slot:
+    """Energy after the end of ``e`` (per-slot energies) and its decay rate (1/s).
+
+    A line is fitted to the backward-integrated curve of the data alone, low on the
+    decay but ``_TAIL_HEADROOM_DB`` above where it would have reached by the end, where
+    the missing tail barely bends it; extended to the end, that line gives the energy
+    still to come. Integrated curves are smooth even when the energy per slot is
+    sparse, so the estimate stays stable with few rays.
+    """
+    remaining = np.cumsum(e[::-1])[::-1]
+    if len(remaining) == 0 or remaining[0] <= 0:
         return 0.0, math.inf
-    slots = e[len(e) - n :].reshape(-1, per_slot).sum(axis=1)
-    last = slots[-max(3, int(len(slots) * _TAIL_SHARE)) :]
-    width = per_slot * dt
-    t = (np.arange(len(last)) + 0.5) * width
-    ok = last > 0
-    if ok.sum() < 3:
+    total = float(remaining[0])
+    t = np.arange(len(e)) * dt
+    end = len(e) * dt
+    with np.errstate(divide="ignore"):
+        level = 10.0 * np.log10(np.maximum(remaining / total, 1e-300))
+    line = _line(level, t, -5.0, -15.0)
+    for _ in range(2):
+        if line is None:
+            return 0.0, math.inf
+        bottom = min(max(line[0] * end + line[1] + _TAIL_HEADROOM_DB, -60.0), -15.0)
+        line = _line(level, t, min(bottom + _TAIL_SPAN_DB, -5.0), bottom)
+    if line is None:
         return 0.0, math.inf
-    slope, intercept = np.polyfit(t[ok], np.log(last[ok]), 1)
-    if slope >= 0:
-        return 0.0, math.inf
-    # Energy rate at the end of the response, integrated over the exponential tail.
-    end_rate = math.exp(intercept + slope * len(last) * width) / width
-    return float(end_rate / -slope), float(-slope)
+    slope, intercept = line
+    tail = total * 10.0 ** ((slope * end + intercept) / 10.0)
+    return float(tail), float(-slope * math.log(10.0) / 10.0)
 
 
 def _decay_time(level: np.ndarray, t: np.ndarray, top: float, bottom: float) -> float:
     """-60 dB over the slope of a line fitted to ``level`` between two levels."""
-    if not np.any(level <= bottom):
-        return math.nan
-    start = int(np.argmax(level <= top))
-    stop = int(np.argmax(level <= bottom))
-    if stop - start < 2:
-        return math.nan
-    slope, _ = np.polyfit(t[start : stop + 1], level[start : stop + 1], 1)
-    return -60.0 / slope if slope < 0 else math.nan
+    line = _line(level, t, top, bottom)
+    return math.nan if line is None else -60.0 / line[0]
 
 
 def decay_curve(energy: np.ndarray, time_step: float) -> np.ndarray:

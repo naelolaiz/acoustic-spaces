@@ -46,7 +46,7 @@ jobs:
           acoustic-spaces info
           acoustic-spaces validate examples/shoebox/scene.yaml
           acoustic-spaces inspect examples/shoebox/scene.yaml
-          acoustic-spaces simulate examples/shoebox/scene.yaml --out sim --rays 5000 --length 0.8
+          acoustic-spaces simulate examples/shoebox/scene.yaml --out sim --rays 5000 --length 0.8 --seed 1
 
   viz:
     name: 3D view (off-screen)

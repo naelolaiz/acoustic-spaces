@@ -61,3 +61,15 @@ def test_from_impulse_response_of_decaying_noise() -> None:
     p = from_impulse_response(ir, fs, REFERENCE_ENERGY_10M)
     np.testing.assert_allclose(p.t30[2:], t60, rtol=0.1)
     assert np.all(np.isfinite(p.g))
+
+
+def test_tail_estimate_ignores_a_late_spike() -> None:
+    # With few rays, one strong ray can land in the last few milliseconds of a response
+    # that stops long before it has decayed. That must not read as a decay that stopped.
+    t60 = 2.5
+    k = 6.0 * math.log(10.0) / t60
+    energy = _exponential(t60, 0.8)
+    energy[790] += 0.03 * energy.sum()
+    p = from_energy(energy[None, :], DT, onset_s=0.0, reference_energy=1.0 / k)
+    assert abs(p.g[0]) < 0.3  # total energy, against the untruncated decay's 1 / k
+    assert p.ts[0] == pytest.approx(1.0 / k, rel=0.2)
