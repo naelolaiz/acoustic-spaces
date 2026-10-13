@@ -5,7 +5,13 @@ each triangle the names it carried in the source file (material, group, object o
 layer) so the scene's ``assignments`` can map them to acoustic materials.
 """
 
-from acoustic_spaces.geometry.checks import MeshReport, check_mesh, clean_mesh, points_inside
+from acoustic_spaces.geometry.checks import (
+    MeshReport,
+    check_mesh,
+    clean_mesh,
+    distance_to_surface,
+    points_inside,
+)
 from acoustic_spaces.geometry.io import SUPPORTED_SUFFIXES, load_mesh
 from acoustic_spaces.geometry.mesh import RoomMesh
 
@@ -15,6 +21,7 @@ __all__ = [
     "RoomMesh",
     "check_mesh",
     "clean_mesh",
+    "distance_to_surface",
     "load_mesh",
     "points_inside",
 ]

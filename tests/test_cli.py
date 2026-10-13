@@ -60,3 +60,26 @@ def test_materials_search(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["materials", "--kind", "scattering"]) == 0
     assert "rpg_qrd" in capsys.readouterr().out
     assert main(["materials", "no-such-material"]) == 1
+
+
+def test_simulate_writes_responses_and_parameters(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    from acoustic_spaces.audio import read_wav
+
+    out = tmp_path / "out"
+    args = ["simulate", str(SHOEBOX), "--out", str(out), "--rays", "2000", "--length", "0.6"]
+    assert main([*args, "--seed", "3", "--sample-rate", "16000", "--normalize"]) == 0
+    stdout = capsys.readouterr().out
+    assert "talker -> seat-a" in stdout
+    assert "T30 (s)" in stdout
+    data, fs = read_wav(out / "talker__seat-a.wav")
+    assert fs == 16000 and data.shape == (9600, 1)
+    assert abs(data).max() == pytest.approx(10 ** (-1 / 20), rel=1e-6)
+    report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
+    assert report["settings"]["seed"] == 3
+    (response,) = report["responses"]
+    assert response["early_paths"] == 63
+    assert len(response["parameters"]["c80"]) == 8

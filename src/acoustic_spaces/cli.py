@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -136,16 +139,119 @@ def _cmd_view(args: argparse.Namespace) -> int:
     room = _load_room(args.scene)
     if room is None:
         return 1
-    _print_checks(room)
+    ok = _print_checks(room)
+    paths = None
+    if args.paths:
+        if not ok:
+            return 1
+        from acoustic_spaces.engine import early_paths
+
+        try:
+            paths = early_paths(
+                room, args.source, args.listener, max_order=args.max_order, threads=args.threads
+            )
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        counts = ", ".join(
+            f"{(paths.order == k).sum()} of order {k}" for k in range(int(paths.order.max()) + 1)
+        )
+        print(f"{len(paths)} specular paths: {counts}")
     try:
         from acoustic_spaces.viz import show_room
 
-        show_room(room, screenshot=args.screenshot)
+        show_room(room, screenshot=args.screenshot, paths=paths)
     except ImportError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     if args.screenshot:
         print(f"saved {args.screenshot}")
+    return 0
+
+
+def _file_name(text: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", text).strip("_") or "unnamed"
+
+
+def _cmd_simulate(args: argparse.Namespace) -> int:
+    from acoustic_spaces.audio import write_wav
+    from acoustic_spaces.engine import simulate
+    from acoustic_spaces.materials import OCTAVE_BANDS_HZ
+
+    room = _load_room(args.scene)
+    if room is None or not _print_checks(room):
+        return 1
+    settings = room.scene.simulation.model_copy(deep=True)
+    if args.seed is not None:
+        settings.seed = args.seed
+    if args.rays is not None:
+        settings.late.rays = args.rays
+    if args.max_order is not None:
+        settings.early.max_order = args.max_order
+    if args.length is not None:
+        settings.ir_length_s = args.length
+    sample_rate = args.sample_rate or settings.sample_rate
+    try:
+        result = simulate(
+            room,
+            settings=settings,
+            threads=args.threads,
+            progress=lambda message: print(message, file=sys.stderr),
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    irs = {key: r.impulse_response(sample_rate) for key, r in result.responses.items()}
+    peak = max(float(abs(ir).max(initial=0.0)) for ir in irs.values())
+    gain = 10.0 ** (-1.0 / 20.0) / peak if args.normalize and peak > 0 else 1.0
+
+    report = {
+        "scene": room.scene.name,
+        "bands_hz": list(OCTAVE_BANDS_HZ),
+        "sample_rate": sample_rate,
+        "ir_gain": gain,
+        "settings": settings.model_dump(mode="json"),
+        "details": result.details,
+        "responses": [],
+    }
+    for (source, listener), response in result.responses.items():
+        stem = f"{_file_name(source)}__{_file_name(listener)}"
+        write_wav(out / f"{stem}.wav", irs[(source, listener)] * gain, sample_rate)
+        params = response.parameters()
+        print(
+            f"\n{source} -> {listener}: direct sound at {response.direct_delay_s * 1e3:.1f} ms, "
+            f"{len(response.early)} early paths"
+        )
+        print(params.table())
+        entry = {
+            "source": source,
+            "listener": listener,
+            "wav": f"{stem}.wav",
+            "direct_delay_s": response.direct_delay_s,
+            "early_paths": len(response.early),
+            "parameters": params.as_dict(),
+        }
+        if args.plot:
+            try:
+                from acoustic_spaces.viz import plot_response
+
+                plot_response(response, out / f"{stem}.png")
+                entry["plot"] = f"{stem}.png"
+            except ImportError as exc:
+                print(f"warning: {exc}", file=sys.stderr)
+                args.plot = False
+        report["responses"].append(entry)
+    (out / "parameters.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f"\nwrote {len(irs)} impulse responses and parameters.json to {out}")
+    if peak * gain > 1.0:
+        print(
+            "note: the float WAV files exceed full scale (a listener is closer than 1 m to a "
+            "source); use --normalize to scale them for playback",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -175,7 +281,29 @@ def build_parser() -> argparse.ArgumentParser:
     view = sub.add_parser("view", help="show the room in 3D (needs the viz extra)")
     view.add_argument("scene", help="path to a scene YAML file")
     view.add_argument("--screenshot", metavar="PNG", help="save an image instead of a window")
+    view.add_argument("--paths", action="store_true", help="draw early reflection paths")
+    view.add_argument("--source", help="source for --paths (default: the first)")
+    view.add_argument("--listener", help="listener for --paths (default: the first)")
+    view.add_argument("--max-order", type=int, help="highest reflection order for --paths")
+    view.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
     view.set_defaults(func=_cmd_view)
+
+    simulate = sub.add_parser("simulate", help="simulate impulse responses and ISO 3382 parameters")
+    simulate.add_argument("scene", help="path to a scene YAML file")
+    simulate.add_argument("--out", required=True, metavar="DIR", help="folder for the results")
+    simulate.add_argument("--sample-rate", type=int, help="override simulation.sample_rate")
+    simulate.add_argument("--length", type=float, help="override simulation.ir_length_s")
+    simulate.add_argument("--seed", type=int, help="override simulation.seed")
+    simulate.add_argument("--rays", type=int, help="override simulation.late.rays")
+    simulate.add_argument("--max-order", type=int, help="override simulation.early.max_order")
+    simulate.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    simulate.add_argument(
+        "--normalize", action="store_true", help="scale all responses to a -1 dBFS peak"
+    )
+    simulate.add_argument(
+        "--plot", action="store_true", help="save echogram and decay plots (needs viz extra)"
+    )
+    simulate.set_defaults(func=_cmd_simulate)
     return parser
 
 

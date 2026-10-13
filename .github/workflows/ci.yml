@@ -46,6 +46,7 @@ jobs:
           acoustic-spaces info
           acoustic-spaces validate examples/shoebox/scene.yaml
           acoustic-spaces inspect examples/shoebox/scene.yaml
+          acoustic-spaces simulate examples/shoebox/scene.yaml --out sim --rays 5000 --length 0.8 --seed 1
 
   viz:
     name: 3D view (off-screen)
@@ -65,11 +66,17 @@ jobs:
       - name: Test
         run: python -m pytest -q tests/test_viz.py
       - name: Render the example scene
-        run: acoustic-spaces view examples/shoebox/scene.yaml --screenshot shoebox.png
+        run: |
+          acoustic-spaces view examples/shoebox/scene.yaml --screenshot shoebox.png
+          acoustic-spaces view examples/shoebox/scene.yaml --paths --max-order 2 --screenshot paths.png
+          acoustic-spaces simulate examples/shoebox/scene.yaml --out sim --plot --seed 1
       - uses: actions/upload-artifact@v6
         with:
           name: scene-view
-          path: shoebox.png
+          path: |
+            shoebox.png
+            paths.png
+            sim/
 
   wheels:
     name: Wheel (${{ matrix.os }})
