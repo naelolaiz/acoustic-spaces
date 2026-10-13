@@ -25,3 +25,14 @@ else()
 endif()
 
 install(TARGETS _native LIBRARY DESTINATION acoustic_spaces)
+
+# The example scenes ship inside the package; acoustic_spaces.examples finds them.
+install(
+  DIRECTORY examples/
+  DESTINATION acoustic_spaces/example_scenes
+  FILES_MATCHING
+  PATTERN "*.yaml"
+  PATTERN "*.obj"
+  PATTERN "*.csv"
+  PATTERN "*.sofa"
+)

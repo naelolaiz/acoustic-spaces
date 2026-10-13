@@ -85,3 +85,18 @@ def test_geometry_from_dimensions() -> None:
         data["geometry"] = bad
         with pytest.raises(ValidationError, match=message):
             Scene.model_validate(data)
+
+
+def test_saved_paths_are_relative_to_the_scene_folder(tmp_path: Path) -> None:
+    import shutil
+
+    shutil.copytree(EXAMPLES / "shoebox", tmp_path / "shoebox")
+    scene = Scene.from_yaml(tmp_path / "shoebox" / "scene.yaml")
+    scene.to_yaml(tmp_path / "shoebox" / "again.yaml")
+    text = (tmp_path / "shoebox" / "again.yaml").read_text(encoding="utf-8")
+    assert "file: shoebox.obj" in text
+    assert "null" not in text
+    (tmp_path / "elsewhere").mkdir()
+    scene.to_yaml(tmp_path / "elsewhere" / "scene.yaml")
+    moved = Scene.from_yaml(tmp_path / "elsewhere" / "scene.yaml")
+    assert moved.geometry.file == (tmp_path / "shoebox" / "shoebox.obj").resolve()

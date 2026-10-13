@@ -63,10 +63,18 @@ The names most scripts need are also importable from the package itself:
 .. automodule:: acoustic_spaces.measurement
 ```
 
-## Audio files
+## Audio files and results
 
 ```{eval-rst}
 .. automodule:: acoustic_spaces.audio
+
+.. automodule:: acoustic_spaces.results
+```
+
+## Example scenes
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.examples
 ```
 
 ## 3D view and plots

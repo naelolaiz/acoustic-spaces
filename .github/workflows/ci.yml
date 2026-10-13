@@ -45,6 +45,7 @@ jobs:
         shell: bash  # stops at the first failing command on every platform
         run: |
           acoustic-spaces info
+          acoustic-spaces examples
           acoustic-spaces validate examples/shoebox/scene.yaml
           acoustic-spaces inspect examples/shoebox/scene.yaml
           acoustic-spaces simulate examples/shoebox/scene.yaml --out sim --rays 5000 --length 0.8 --seed 1
@@ -92,6 +93,39 @@ jobs:
             particles.gif
             sim/
 
+  editor:
+    name: Editor (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    env:
+      # Qt without a display; the 3D view shows a note instead, and the Xvfb step below
+      # covers it on Linux.
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install the libraries Qt and its X11 platform load
+        if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update && sudo apt-get install -y xvfb libegl1 libgl1 libopengl0
+          libfontconfig1 libdbus-1-3 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0
+          libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0
+          libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1
+      - name: Build and install
+        run: python -m pip install ".[test,gui]"
+      - name: Test
+        run: python -m pytest -q tests/test_gui.py
+      - name: Test with a display and the 3D view (Xvfb)
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: xcb
+        run: xvfb-run -a -s "-screen 0 1600x1200x24" python -m pytest -q tests/test_gui.py
+
   wheels:
     name: Wheel (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -130,6 +164,8 @@ jobs:
         run: |
           python -m pip install dist/*.tar.gz
           cd "$RUNNER_TEMP" && python -c "import acoustic_spaces as a; assert a.native_available(); print(a.__version__)"
+          acoustic-spaces examples --copy examples
+          acoustic-spaces validate examples/concert_hall/scene.yaml
       - name: Check that the tag names the package's version
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -163,7 +199,7 @@ jobs:
   github-release:
     name: GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [lint, test, viz, wheels, sdist, docs]
+    needs: [lint, test, viz, editor, wheels, sdist, docs]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -187,7 +223,7 @@ jobs:
   pypi:
     name: Publish to PyPI
     if: startsWith(github.ref, 'refs/tags/v') && vars.PYPI_PUBLISH == 'true'
-    needs: [lint, test, viz, wheels, sdist, docs]
+    needs: [lint, test, viz, editor, wheels, sdist, docs]
     runs-on: ubuntu-24.04
     environment:
       name: pypi

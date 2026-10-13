@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+**Graphical editor** (`acoustic-spaces edit`, or `acoustic-spaces-editor`; the `gui` extra)
+
+- A Qt window with the room in 3D, a scene tree, a form for each item and a message log.
+  Every change is checked against the scene schema and can be undone.
+- Sources and listeners placed by clicking a floor or wall; surfaces given materials,
+  materials added from the database and their coefficients edited per octave band.
+- New rooms as a box or from a model file, box and floor plan dimensions, model units
+  and up axis, simulation settings and output formats, all from forms.
+- Simulations in the background with progress and cancel; results with ISO 3382-1
+  parameters, echograms, decay curves, arrival directions and reflection paths in 3D;
+  export to the files `simulate` writes; listening to a WAV file through a response.
+
+**Examples**
+
+- New example rooms: a concert hall, a control room and a church.
+- The examples ship inside the package. `acoustic-spaces examples` lists them and
+  copies them (`--copy DIR`); `acoustic_spaces.examples` finds them from Python.
+
+**Other changes**
+
+- Saved scene files refer to model, material and HRTF files under their folder by
+  relative paths, so the folder can move, and leave out unset fields.
+- `acoustic_spaces.results.write_results` writes a simulation's responses and
+  `parameters.json`, as `simulate` does.
+
 ## 1.0.0
 
 The first release: everything the v1 plan set out, from a CAD model to a room you can

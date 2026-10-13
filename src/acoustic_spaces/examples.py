@@ -1,0 +1,114 @@
+"""Example scenes that come with the package.
+
+They are the scenes in the repository's ``examples`` folder, which wheels carry as
+``acoustic_spaces/example_scenes``::
+
+    from acoustic_spaces import Room
+    from acoustic_spaces.examples import example_path, list_examples
+
+    for example in list_examples():
+        print(example.name, example.title)
+    room = Room.from_yaml(example_path("concert_hall"))
+
+``acoustic-spaces examples`` lists them, and ``--copy DIR`` copies them to a folder you
+can edit; the editor opens them from its File menu.
+"""
+
+from __future__ import annotations
+
+import shutil
+from dataclasses import dataclass
+from importlib import resources
+from pathlib import Path
+
+import yaml
+
+SCENE_FILE = "scene.yaml"
+
+
+@dataclass(frozen=True)
+class Example:
+    #: Folder name, used to pick the example.
+    name: str
+    #: The scene's ``name``.
+    title: str
+    #: The comment at the top of the scene file.
+    description: str
+    #: The scene file.
+    path: Path
+
+
+def examples_dir() -> Path:
+    """The folder that holds one sub-folder per example.
+
+    Installed packages carry it as ``acoustic_spaces/example_scenes``; a source checkout
+    (an editable install) uses the repository's ``examples`` folder.
+    """
+    installed = Path(str(resources.files("acoustic_spaces"))) / "example_scenes"
+    if installed.is_dir():
+        return installed
+    checkout = Path(__file__).resolve().parents[2] / "examples"
+    if checkout.is_dir():
+        return checkout
+    raise FileNotFoundError("the example scenes are missing from this installation")
+
+
+def _description(scene_file: Path) -> str:
+    lines = []
+    for line in scene_file.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("#"):
+            break
+        lines.append(line.lstrip("#").strip())
+    return " ".join(lines)
+
+
+def list_examples() -> list[Example]:
+    """Every example scene, sorted by folder name."""
+    out = []
+    for folder in sorted(examples_dir().iterdir()):
+        scene_file = folder / SCENE_FILE
+        if not scene_file.is_file():
+            continue
+        data = yaml.safe_load(scene_file.read_text(encoding="utf-8"))
+        out.append(
+            Example(
+                name=folder.name,
+                title=str(data.get("name", folder.name)),
+                description=_description(scene_file),
+                path=scene_file,
+            )
+        )
+    return out
+
+
+def example_path(name: str) -> Path:
+    """The scene file of the example ``name`` (a folder name from :func:`list_examples`)."""
+    scene_file = examples_dir() / name / SCENE_FILE
+    if not scene_file.is_file():
+        names = ", ".join(e.name for e in list_examples())
+        raise ValueError(f"no example named {name!r}; examples: {names}")
+    return scene_file
+
+
+def copy_examples(destination: str | Path, names: list[str] | None = None) -> list[Path]:
+    """Copy examples (all, or ``names``) into ``destination``, one folder each, and
+    return their scene files. Raises ``FileExistsError`` rather than overwrite a folder."""
+    destination = Path(destination)
+    chosen = list_examples()
+    if names is not None:
+        chosen = [e for e in chosen if e.name in names]
+        missing = sorted(set(names) - {e.name for e in chosen})
+        if missing:
+            raise ValueError(f"no example named {', '.join(missing)}")
+    destination.mkdir(parents=True, exist_ok=True)
+    copied = []
+    for example in chosen:
+        target = destination / example.name
+        if target.exists():
+            raise FileExistsError(f"{target} already exists")
+        shutil.copytree(example.path.parent, target)
+        copied.append(target / SCENE_FILE)
+    return copied
+
+
+__all__ = ["Example", "copy_examples", "example_path", "examples_dir", "list_examples"]

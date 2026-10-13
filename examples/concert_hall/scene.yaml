@@ -1,0 +1,56 @@
+# A shoebox concert hall, 32 x 20 x 15 m (9440 m3), with a raised stage, upholstered
+# seats, diffusing side walls and a coffered ceiling. Two sources on the stage, three
+# seats in the stalls.
+name: Concert hall (shoebox, 9440 m3)
+geometry:
+  file: concert_hall.obj
+materials:
+  audience:
+    preset: audience_upholstered_chairs_1
+    scattering: theatre_audience
+  stage_floor:
+    preset: stage_floor
+    scattering: 0.1
+  wood_panels:
+    preset: wooden_lining
+    scattering: 0.2
+  plaster:
+    preset: plasterboard
+    scattering: 0.3   # walls broken up by pilasters and boxes
+  ceiling:
+    preset: ceiling_plasterboard
+    scattering: 0.4   # coffered
+assignments:
+  audience_floor: audience
+  stage_floor: stage_floor
+  stage_front: wood_panels
+  stage_wall: wood_panels
+  rear_wall: wood_panels
+  side_walls: plaster
+  ceiling: ceiling
+sources:
+  - name: soloist
+    position: [4.5, 10.0, 2.6]   # 1.6 m above the stage floor
+    orientation: {yaw: 0}        # facing the audience
+    directivity: subcardioid
+  - name: piano
+    position: [3.0, 7.0, 2.0]
+    orientation: {yaw: 15}
+listeners:
+  - name: stalls-front
+    position: [12.0, 10.0, 1.2]
+    orientation: {yaw: 180}      # facing the stage
+  - name: stalls-middle
+    position: [20.0, 6.0, 1.2]
+    orientation: {yaw: 180}
+  - name: stalls-rear
+    position: [29.0, 14.0, 1.2]
+    orientation: {yaw: 180}
+simulation:
+  early: {method: ray_tracing, max_order: 3}
+  late: {method: stochastic_ray_tracing, rays: 50000}
+  ir_length_s: 3.5
+outputs:
+  - mono
+  - binaural
+  - {format: ambisonics, order: 3}

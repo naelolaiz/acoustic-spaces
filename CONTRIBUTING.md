@@ -26,6 +26,14 @@ pytest -W error
 Tests that draw with OpenGL carry the `render` marker; without a display, run them with
 `VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow` (Linux, with OSMesa installed).
 
+The editor's tests (`tests/test_gui.py`, with the `gui` extra installed) use Qt's
+off-screen platform unless `QT_QPA_PLATFORM` says otherwise; there the 3D view shows a
+note instead and its click tests are skipped. To run those too on Linux without a
+display: `QT_QPA_PLATFORM=xcb xvfb-run -a pytest tests/test_gui.py`.
+
+Example scenes live in `examples/<name>/scene.yaml`, with a comment at the top that
+`acoustic-spaces examples` shows; wheels carry them as `acoustic_spaces/example_scenes`.
+
 ## Documentation
 
 ```sh

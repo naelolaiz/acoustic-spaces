@@ -12,7 +12,8 @@ loudspeaker formats as WAV files, ISO 3382-1 parameters, and animations of sound
 particles. Dry recordings can be run through the responses offline or in real time on
 the sound card, and real rooms can be measured with sine sweeps and analysed the same
 way. The [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
-says how far the results can be trusted.
+says how far the results can be trusted. A [graphical editor](#graphical-editor) does all
+of this in one window, starting from the bundled example rooms.
 
 ## Design in one paragraph
 
@@ -45,6 +46,7 @@ cd acoustic_spaces_simulator
 python -m pip install -e ".[dev,viz]"     # viz adds the 3D view (PyVista)
 python -m pip install -e ".[measure]"     # sounddevice: sweeps, real-time playback
 python -m pip install -e ".[sofa]"        # h5py, to read HRTFs from SOFA files
+python -m pip install -e ".[gui]"         # the graphical editor (Qt, PySide6)
 ```
 
 Check the installation and look at the example scene:
@@ -111,6 +113,52 @@ ambix = response.spatial_impulse_response(Ambisonics(order=3), 48_000)  # 16 cha
 surround = response.spatial_impulse_response(Loudspeakers.layout("5.0"), 48_000)
 plot_directions(response, "talker__seat-a.directions.png")
 ```
+
+## Graphical editor
+
+```sh
+acoustic-spaces edit                              # needs the gui extra
+acoustic-spaces edit examples/studio/scene.yaml   # or open a scene file
+```
+
+![The editor with the concert hall example: the scene tree, the room with its early reflection paths, the source's properties and the echogram of a run](docs/images/editor.png)
+
+The editor works on the same scene files as the command line:
+
+- **File > Open example** opens the bundled rooms. Saving one asks where to keep your
+  copy and takes its model file along. **New box room** and **New from model file**
+  (OBJ, STL, PLY, OFF, glTF or DXF) start from scratch.
+- The **scene tree** lists the geometry and its surfaces, the materials, sources,
+  listeners, simulation settings and output formats. Selecting an entry, there or by
+  clicking it in the 3D view, shows its form under **Properties**. Every change is
+  checked against the scene schema; a refused change says why under **Messages**, and
+  every change can be undone.
+- **Place source** and **Place listener**, then click a surface: on a floor the new
+  point stands at ear or mouth height, on a wall or ceiling it goes half a metre into
+  the room. Surfaces take materials from their form, or from a new material picked from
+  the database (**Edit > Add material**).
+- **Simulation > Run** (F5) works in the background. The **Results** panel shows the
+  ISO 3382-1 parameters, the echogram and decay curves and the arrival directions of
+  any source and listener, and draws their reflection paths in the room. **Export**
+  writes the same files as `simulate`; **Listen** plays a dry WAV file through the
+  response on the sound card (binaural when the scene has a binaural output; needs the
+  `measure` extra).
+- The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
+  as you edit.
+
+### Example scenes
+
+| Example | What it is |
+| --- | --- |
+| `shoebox` | An 8 × 6 × 3 m room from an OBJ file, the simplest case every method must get right. |
+| `lecture_hall` | A fan-shaped lecture hall built from its floor plan, no CAD file needed. |
+| `concert_hall` | A 32 × 20 × 15 m shoebox hall with a raised stage and upholstered seats; two sources on stage, three seats in the stalls. |
+| `studio` | A 6 × 4.5 × 3 m control room with side panels, a diffuser and stereo loudspeakers at ±30°. |
+| `church` | A stone nave with an apse, 18 m high, with about six seconds of reverberation. |
+
+`acoustic-spaces examples` lists them with where they are installed, and
+`acoustic-spaces examples --copy my-rooms` copies them to a folder you can edit. From
+Python, `acoustic_spaces.examples.example_path("church")` gives a scene file.
 
 ## Scene files
 
@@ -393,12 +441,15 @@ src/acoustic_spaces/   Python package
   measurement.py       sine sweeps, playback and recording, deconvolution
   audio.py             WAV files
   viz.py               3D view, reflection paths, particle animations, response plots
+  results.py           writing a simulation's responses and parameters to a folder
+  examples.py          the example scenes that ship with the package
+  gui/                 the graphical editor (Qt)
   cli.py               command-line interface
 cpp/include/           header-only C++ core: BVH, ray tracer, FFT, partitioned
                        convolver (no Python, so a plugin or player can reuse it)
 cpp/bindings/          nanobind module exposing the core as acoustic_spaces._native
 tests/                 pytest suite, run on Linux, macOS and Windows in CI
-examples/              example scenes
+examples/              example scenes, installed with the package
 ```
 
 ## Roadmap
@@ -415,7 +466,8 @@ v1, version 1.0.0:
 
 v2:
 
-- [ ] A graphical editor (in progress).
+- [x] A graphical editor: scenes, materials, sources and listeners, runs, results and listening.
+- [ ] Editing geometry in the editor: drawing rooms and moving points by dragging.
 - [ ] Head tracking.
 - [ ] Diffraction.
 - [ ] A wave-based solver for low frequencies.

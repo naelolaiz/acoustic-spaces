@@ -106,3 +106,17 @@ def test_example_scenes_are_ready_to_simulate(scene: Path) -> None:
     assert room.problems() == []
     assert room.warnings() == []
     assert room.report.closed and room.report.normals_inward
+
+
+def test_rooms_reuse_an_unchanged_mesh() -> None:
+    room = Room.from_yaml(SHOEBOX)
+    data = room.scene.model_dump(mode="json", exclude_none=True)
+    data["sources"][0]["position"] = [2.0, 2.0, 1.5]
+    moved = Room.from_scene(Scene.model_validate(data), reuse=room)
+    assert moved.mesh is room.mesh
+    assert moved.scene.sources[0].position == (2.0, 2.0, 1.5)
+    data["geometry"] = {"box": [5.0, 4.0, 3.0]}
+    data["assignments"] = {}
+    boxed = Room.from_scene(Scene.model_validate(data), reuse=room)
+    assert boxed.mesh is not room.mesh
+    assert boxed.volume_m3 == pytest.approx(60.0)

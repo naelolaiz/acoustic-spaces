@@ -1,0 +1,49 @@
+# A small control room, 6 x 4.5 x 3 m, treated for mixing: an absorbing ceiling, panels
+# on the side walls and a diffuser on the back wall. Two loudspeakers form an
+# equilateral triangle with the listening position, 2 m to each side.
+name: Control room (6 x 4.5 x 3 m)
+geometry:
+  box: [6.0, 4.5, 3.0]   # wall_1 and wall_3 are the sides, wall_2 the back, wall_4 the front
+materials:
+  wooden_floor:
+    preset: stage_floor
+    scattering: 0.05
+  ceiling_absorber:
+    preset: ceiling_fibre_absorber
+    scattering: 0.1
+  side_panels:
+    preset: perforated_veneered_chipboard
+    scattering: 0.2
+  diffuser:
+    preset: wood_16mm
+    scattering: rpg_qrd
+  front_wall:
+    preset: plasterboard
+    scattering: 0.05
+assignments:
+  floor: wooden_floor
+  ceiling: ceiling_absorber
+  wall_1: side_panels
+  wall_3: side_panels
+  wall_2: diffuser
+  wall_4: front_wall
+sources:
+  - name: left-speaker
+    position: [0.67, 1.25, 1.2]
+    orientation: {yaw: 30}       # aimed at the listening position
+    directivity: subcardioid
+  - name: right-speaker
+    position: [0.67, 3.25, 1.2]
+    orientation: {yaw: -30}
+    directivity: subcardioid
+listeners:
+  - name: mix-position
+    position: [2.4, 2.25, 1.2]
+    orientation: {yaw: 180}      # facing the loudspeakers
+simulation:
+  early: {method: ray_tracing, max_order: 4}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 1.0
+outputs:
+  - mono
+  - binaural

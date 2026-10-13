@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -136,6 +135,42 @@ def _cmd_materials(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_examples(args: argparse.Namespace) -> int:
+    import textwrap
+
+    from acoustic_spaces.examples import copy_examples, list_examples
+
+    try:
+        if args.copy:
+            for scene_file in copy_examples(args.copy, args.names or None):
+                print(scene_file)
+            return 0
+        examples = list_examples()
+        unknown = sorted(set(args.names) - {e.name for e in examples})
+        if unknown:
+            raise ValueError(f"no example named {', '.join(unknown)}")
+    except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    for example in examples:
+        if args.names and example.name not in args.names:
+            continue
+        print(f"{example.name}: {example.title}")
+        print(textwrap.fill(example.description, 88, initial_indent="  ", subsequent_indent="  "))
+        print(f"  {example.path}")
+    return 0
+
+
+def _cmd_edit(args: argparse.Namespace) -> int:
+    try:
+        from acoustic_spaces.gui import main as editor
+
+        return editor([args.scene] if args.scene else [])
+    except ImportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
 def _cmd_view(args: argparse.Namespace) -> int:
     room = _load_room(args.scene)
     if room is None:
@@ -197,10 +232,6 @@ def _cmd_animate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _file_name(text: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", text).strip("_") or "unnamed"
-
-
 def _output_spec(text: str):
     """An outputs entry from the command line: mono, binaural, ambisonics[:ORDER] or
     loudspeakers:LAYOUT."""
@@ -231,9 +262,8 @@ def _outputs(room: Room, args: argparse.Namespace) -> list:
 
 
 def _cmd_simulate(args: argparse.Namespace) -> int:
-    from acoustic_spaces.audio import write_wav
     from acoustic_spaces.engine import simulate
-    from acoustic_spaces.materials import OCTAVE_BANDS_HZ
+    from acoustic_spaces.results import REPORT_FILE, write_results
     from acoustic_spaces.spatial import from_output
 
     room = _load_room(args.scene)
@@ -268,61 +298,24 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         return 1
 
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    irs = {}
-    for key, response in result.responses.items():
-        for fmt in formats:
-            print(f"{key[0]} -> {key[1]}: rendering {fmt.label}", file=sys.stderr)
-            irs[key, fmt.label] = response.spatial_impulse_response(fmt, sample_rate)
-    peak = max(float(abs(ir).max(initial=0.0)) for ir in irs.values())
-    gain = 10.0 ** (-1.0 / 20.0) / peak if args.normalize and peak > 0 else 1.0
-
-    report = {
-        "scene": room.scene.name,
-        "bands_hz": list(OCTAVE_BANDS_HZ),
-        "sample_rate": sample_rate,
-        "ir_gain": gain,
-        "settings": settings.model_dump(mode="json"),
-        "details": result.details,
-        "responses": [],
-    }
+    report = write_results(
+        result,
+        out,
+        formats,
+        sample_rate=sample_rate,
+        normalize=args.normalize,
+        plots=args.plot,
+        progress=lambda message: print(message, file=sys.stderr),
+    )
     for (source, listener), response in result.responses.items():
-        stem = f"{_file_name(source)}__{_file_name(listener)}"
-        written = []
-        for fmt in formats:
-            name = f"{stem}.wav" if fmt.label == "mono" else f"{stem}.{_file_name(fmt.label)}.wav"
-            mask = fmt.channel_mask() if hasattr(fmt, "channel_mask") else None
-            write_wav(out / name, irs[(source, listener), fmt.label] * gain, sample_rate, mask)
-            written.append({"format": fmt.label, "wav": name, "channels": fmt.channel_names})
-        params = response.parameters()
         print(
             f"\n{source} -> {listener}: direct sound at {response.direct_delay_s * 1e3:.1f} ms, "
             f"{len(response.early)} early paths"
         )
-        print(params.table())
-        entry = {
-            "source": source,
-            "listener": listener,
-            "outputs": written,
-            "direct_delay_s": response.direct_delay_s,
-            "early_paths": len(response.early),
-            "parameters": params.as_dict(),
-        }
-        if args.plot:
-            try:
-                from acoustic_spaces.viz import plot_directions, plot_response
-
-                plot_response(response, out / f"{stem}.png")
-                plot_directions(response, out / f"{stem}.directions.png")
-                entry["plot"] = f"{stem}.png"
-                entry["directions_plot"] = f"{stem}.directions.png"
-            except ImportError as exc:
-                print(f"warning: {exc}", file=sys.stderr)
-                args.plot = False
-        report["responses"].append(entry)
-    (out / "parameters.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(f"\nwrote {len(irs)} impulse response files and parameters.json to {out}")
-    if peak * gain > 1.0:
+        print(response.parameters().table())
+    files = sum(len(entry["outputs"]) for entry in report["responses"])
+    print(f"\nwrote {files} impulse response files and {REPORT_FILE} to {out}")
+    if report["peak"] > 1.0:
         print(
             "note: the float WAV files exceed full scale (a listener is closer than 1 m to a "
             "source); use --normalize to scale them for playback",
@@ -785,6 +778,15 @@ def build_parser() -> argparse.ArgumentParser:
     materials.add_argument("query", nargs="*", help="words to look for, e.g. carpet concrete")
     materials.add_argument("--kind", choices=["absorption", "scattering"], default=None)
     materials.set_defaults(func=_cmd_materials)
+
+    examples = sub.add_parser("examples", help="list the example scenes, or copy them")
+    examples.add_argument("names", nargs="*", help="examples to show or copy (default: all)")
+    examples.add_argument("--copy", metavar="DIR", help="copy the examples into this folder")
+    examples.set_defaults(func=_cmd_examples)
+
+    edit = sub.add_parser("edit", help="open the graphical editor (needs the gui extra)")
+    edit.add_argument("scene", nargs="?", help="scene YAML file to open")
+    edit.set_defaults(func=_cmd_edit)
 
     view = sub.add_parser("view", help="show the room in 3D (needs the viz extra)")
     view.add_argument("scene", help="path to a scene YAML file")
