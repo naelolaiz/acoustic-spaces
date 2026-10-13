@@ -64,6 +64,19 @@ def test_materials_search(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["materials", "no-such-material"]) == 1
 
 
+def test_export_for_blender(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    out = tmp_path / "shoebox.glb"
+    args = ["export", str(SHOEBOX), str(out), "--paths", "--max-order", "1", "--particles"]
+    assert main([*args, "--count", "20", "--duration", "30", "--frames", "4"]) == 0
+    printed = capsys.readouterr().out
+    assert "3 surfaces, 1 sources, 1 listeners" in printed
+    assert "7 specular paths from talker to seat-a: 1 of order 0, 6 of order 1" in printed
+    assert "20 particles from talker: 30 ms of sound over 1.2 s (29 frames at 24 fps)" in printed
+    assert out.read_bytes()[:4] == b"glTF"
+    assert main(["export", str(SHOEBOX), str(out), "--particles", "--source", "piano"]) == 1
+    assert "no source 'piano'" in capsys.readouterr().err
+
+
 def test_simulate_writes_responses_and_parameters(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

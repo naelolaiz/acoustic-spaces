@@ -13,6 +13,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from acoustic_spaces import __version__, native_available
+from acoustic_spaces.gltf import PARTICLE_COUNT, SLOW_MOTION
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
@@ -258,6 +259,60 @@ def _cmd_animate(args: argparse.Namespace) -> int:
         return 1
     if args.out:
         print(f"saved {args.out}: {args.frames} frames, {args.duration:g} ms of sound")
+    return 0
+
+
+def _cmd_export(args: argparse.Namespace) -> int:
+    from acoustic_spaces.engine import early_paths, trace_particles
+    from acoustic_spaces.gltf import export_gltf
+
+    room = _load_room(args.scene)
+    if room is None:
+        return 1
+    if not _print_checks(room) and (args.paths or args.particles):
+        return 1
+    scene = room.scene
+    paths = particles = None
+    try:
+        if args.paths:
+            paths = early_paths(
+                room, args.source, args.listener, max_order=args.max_order, threads=args.threads
+            )
+        if args.particles:
+            particles = trace_particles(
+                room,
+                args.source,
+                count=args.count,
+                duration=args.duration / 1e3,
+                frames=args.frames,
+                band=OCTAVE_BANDS_HZ.index(args.band),
+                seed=args.seed,
+            )
+        export_gltf(room, args.out, paths=paths, particles=particles, slow_motion=args.slow_motion)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    size = Path(args.out).stat().st_size
+    size_text = f"{size / 1e6:.1f} MB" if size >= 1e6 else f"{size / 1e3:.0f} kB"
+    surfaces = len(set(room.mesh.face_labels.tolist()))
+    print(
+        f"saved {args.out} ({size_text}): {surfaces} surfaces, "
+        f"{len(scene.sources)} sources, {len(scene.listeners)} listeners"
+    )
+    if paths is not None:
+        counts = ", ".join(
+            f"{(paths.order == k).sum()} of order {k}" for k in range(int(paths.order.max()) + 1)
+        )
+        source = args.source or scene.sources[0].name
+        listener = args.listener or scene.listeners[0].name
+        print(f"  {len(paths)} specular paths from {source} to {listener}: {counts}")
+    if particles is not None:
+        seconds = args.slow_motion * float(particles.times[-1])
+        print(
+            f"  {args.count} particles from {particles.source}: {args.duration:g} ms of sound "
+            f"over {seconds:g} s ({round(24 * seconds)} frames at 24 fps)"
+        )
+    print("Open it in Blender with File > Import > glTF 2.0.")
     return 0
 
 
@@ -851,6 +906,43 @@ def build_parser() -> argparse.ArgumentParser:
     )
     animate.add_argument("--seed", type=int, default=0, help="seed for diffuse reflections")
     animate.set_defaults(func=_cmd_animate)
+
+    export = sub.add_parser(
+        "export", help="write the room as glTF (.glb) for Blender, with paths or particles"
+    )
+    export.add_argument("scene", help="path to a scene YAML file")
+    export.add_argument("out", help="glTF binary file to write (.glb)")
+    export.add_argument("--paths", action="store_true", help="add early reflection paths")
+    export.add_argument("--source", help="source for paths and particles (default: the first)")
+    export.add_argument("--listener", help="listener for --paths (default: the first)")
+    export.add_argument("--max-order", type=int, help="highest reflection order for --paths")
+    export.add_argument("--particles", action="store_true", help="add a particle animation")
+    export.add_argument(
+        "--count",
+        type=int,
+        default=PARTICLE_COUNT,
+        help=f"particles (default {PARTICLE_COUNT})",
+    )
+    export.add_argument(
+        "--duration", type=float, default=100.0, help="sound to animate, ms (default 100)"
+    )
+    export.add_argument("--frames", type=int, default=100, help="keyframes (default 100)")
+    export.add_argument(
+        "--band",
+        type=int,
+        default=1000,
+        choices=OCTAVE_BANDS_HZ,
+        help="octave band whose absorption applies, Hz (default 1000)",
+    )
+    export.add_argument(
+        "--slow-motion",
+        type=float,
+        default=SLOW_MOTION,
+        help=f"seconds of animation per second of sound (default {SLOW_MOTION:g})",
+    )
+    export.add_argument("--seed", type=int, default=0, help="seed for diffuse reflections")
+    export.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    export.set_defaults(func=_cmd_export)
 
     simulate = sub.add_parser("simulate", help="simulate impulse responses and ISO 3382 parameters")
     simulate.add_argument("scene", help="path to a scene YAML file")

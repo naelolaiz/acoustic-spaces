@@ -54,6 +54,7 @@ from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 TITLE = "Acoustic Spaces editor"
 SCENE_FILTER = "Scenes (*.yaml *.yml)"
 MODEL_FILTER = "Models (*.obj *.stl *.ply *.off *.gltf *.glb *.dxf)"
+GLB_FILTER = "glTF binary (*.glb)"
 #: Kinds of item Edit > Remove works on.
 REMOVABLE = ("sources", "listeners", "material")
 
@@ -170,6 +171,16 @@ class MainWindow(QMainWindow):
         self.save_action = a("&Save", self.save, keys.Save)
         self.save_as_action = a("Save &as…", self.save_as, keys.SaveAs)
         self.export_action = a("&Export results…", self.export_results, None)
+        self.blender_action = a(
+            "Export to &Blender…",
+            self.export_blender,
+            tip="The room, and the reflection paths on show, as glTF",
+        )
+        self.particles_action = a(
+            "Export &particle animation to Blender…",
+            lambda: self.export_blender(particles=True),
+            tip="Sound particles from the selected source (or the first) as a glTF animation",
+        )
         self.quit_action = a("&Quit", self.close, keys.Quit)
         self.undo_action = a("&Undo", self.undo, keys.Undo)
         self.redo_action = a("&Redo", self.redo, keys.Redo)
@@ -224,6 +235,7 @@ class MainWindow(QMainWindow):
         self.examples_menu.setEnabled(bool(examples))
         file.addSeparator()
         file.addActions([self.save_action, self.save_as_action, self.export_action])
+        file.addActions([self.blender_action, self.particles_action])
         file.addSeparator()
         file.addAction(self.quit_action)
 
@@ -347,12 +359,16 @@ class MainWindow(QMainWindow):
         if kind == "surface":
             self.log(f"Surface {label_text(self.document.room.mesh.labels[key])}")
 
+    def _shown_response(self):
+        """The response whose reflection paths the 3D view shows, if any."""
+        if self.results.paths.isChecked() and not self._stale():
+            return self.results.response()
+        return None
+
     def _draw(self) -> None:
         self.remove_action.setEnabled(self.selection[0] in REMOVABLE)
-        paths = None
-        if self.results.paths.isChecked() and not self._stale():
-            response = self.results.response()
-            paths = None if response is None else response.early
+        response = self._shown_response()
+        paths = None if response is None else response.early
         self.viewport.show_room(self.document.room, self.selection, paths)
 
     def _paths_toggled(self, on: bool) -> None:
@@ -537,6 +553,47 @@ class MainWindow(QMainWindow):
         if path:
             self.viewport.screenshot(path)
             self.log(f"Saved {path}")
+
+    def export_blender(self, particles: bool = False) -> bool:
+        """Write the room as glTF for Blender, with the reflection paths on show, or with
+        sound particles from the selected source (or the first) as an animation."""
+        from acoustic_spaces.engine import trace_particles
+        from acoustic_spaces.gltf import PARTICLE_COUNT, SLOW_MOTION, export_gltf
+
+        title = "Export particle animation to Blender" if particles else "Export to Blender"
+        start = "particles.glb" if particles else "room.glb"
+        path, _ = QFileDialog.getSaveFileName(self, title, start, GLB_FILTER)
+        if not path:
+            return False
+        room = self.document.room
+        response = None if particles else self._shown_response()
+        traced = None
+        try:
+            with busy():
+                if particles:
+                    kind, key = self.selection
+                    source = room.scene.sources[key if kind == "sources" else 0].name
+                    traced = trace_particles(room, source, count=PARTICLE_COUNT)
+                paths = None if response is None else response.early
+                export_gltf(room, path, paths=paths, particles=traced)
+        except (OSError, ValueError) as exc:
+            self._error("Could not export", str(exc))
+            return False
+        if traced is not None:
+            sound = float(traced.times[-1])
+            what = (
+                f"{PARTICLE_COUNT} particles from {traced.source}, {1e3 * sound:g} ms of "
+                f"sound over {SLOW_MOTION * sound:g} s"
+            )
+        elif response is not None:
+            what = (
+                f"the room with {len(response.early)} reflection paths from "
+                f"{response.source} to {response.listener}"
+            )
+        else:
+            what = "the room"
+        self.log(f"Wrote {path}: {what}. In Blender: File > Import > glTF 2.0.")
+        return True
 
     def _error(self, title: str, text: str) -> None:
         self.log(f"{title}: {text}")

@@ -10,6 +10,7 @@ The package is organised as a pipeline:
   and ISO 3382-1 parameters
 - ``audio``: WAV files
 - ``viz``: 3D view (optional, needs PyVista)
+- ``gltf``: export to glTF for Blender, with reflection paths and particle animations
 - ``spatial``: binaural, Ambisonics and loudspeaker outputs
 - ``render``: auralisation: offline and real-time convolution, playback
 - ``measurement``: sweeps, recording and deconvolution of measured responses

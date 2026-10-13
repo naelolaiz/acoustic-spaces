@@ -33,6 +33,8 @@ class Particles:
     #: Reflections so far (frames, particles).
     order: np.ndarray
     band_hz: int
+    #: Name of the source the particles left.
+    source: str = ""
 
 
 def _lambert(normals: np.ndarray, rng: np.random.Generator) -> np.ndarray:
@@ -129,7 +131,7 @@ def trace_particles(
         positions[f] = start_all[s, columns] + c * elapsed[:, None] * direction_all[s, columns]
         energy_out[f] = energy_all[s, columns] * np.exp(-air * c * elapsed)
         order_out[f] = s
-    return Particles(times, positions, energy_out, order_out, OCTAVE_BANDS_HZ[band])
+    return Particles(times, positions, energy_out, order_out, OCTAVE_BANDS_HZ[band], source)
 
 
 __all__ = ["MAX_REFLECTIONS", "Particles", "trace_particles"]
