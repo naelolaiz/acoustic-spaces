@@ -403,16 +403,23 @@ examples/              example scenes
 
 ## Roadmap
 
-- M0 Foundations: package layout, compiled core, scene schema, CI. Done.
-- M1 Scene and geometry: CAD import, material database, 3D view. Done.
-- M2 Mono simulation: ray-traced early reflections, stochastic tail, IR synthesis, ISO 3382 parameters. Done.
-- M2b IR measurement: exponential sine sweeps, playback and recording, deconvolution, parameters of measured IRs. In review.
-- M3 Spatial outputs: binaural (SOFA HRTFs or a spherical head), Ambisonics (AmbiX) up to 7th order, VBAP loudspeaker layouts. In review.
-- M4 Rendering: offline convolution and auralisation in Python, real-time partitioned convolver in C++, playback. In review.
-- M5 v1 release: validation report, documentation, wheels and release workflow. In review.
+v1, version 1.0.0:
 
-After v1: a graphical editor, head tracking, diffraction, a wave-based solver for low
-frequencies, and coverage maps.
+- [x] M0 Foundations: package layout, compiled core, scene schema, CI.
+- [x] M1 Scene and geometry: CAD import, material database, 3D view.
+- [x] M2 Mono simulation: ray-traced early reflections, stochastic tail, IR synthesis, ISO 3382 parameters.
+- [x] M2b IR measurement: exponential sine sweeps, playback and recording, deconvolution, parameters of measured IRs.
+- [x] M3 Spatial outputs: binaural (SOFA HRTFs or a spherical head), Ambisonics (AmbiX) up to 7th order, VBAP loudspeaker layouts.
+- [x] M4 Rendering: offline convolution and auralisation in Python, real-time partitioned convolver in C++, playback.
+- [x] M5 v1 release: validation report, documentation, wheels and release workflow.
+
+v2:
+
+- [ ] A graphical editor (in progress).
+- [ ] Head tracking.
+- [ ] Diffraction.
+- [ ] A wave-based solver for low frequencies.
+- [ ] Coverage maps.
 
 ## Contributing
 
