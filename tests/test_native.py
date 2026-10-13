@@ -79,3 +79,64 @@ def test_specular_sequences_stay_inside_a_closed_box() -> None:
     assert seq.min() >= 0 and seq.max() < 12
     # Consecutive hits are never on the same face.
     assert np.all(seq[:, 1:] != seq[:, :-1])
+
+
+def _trace_stochastic(rays: int, **settings):
+    """Stochastic ray tracing in the unit cube, one band, one listener."""
+    from acoustic_spaces import _native
+
+    vertices, faces = _unit_cube()
+    args = dict(
+        bvh=_native.Bvh(vertices, faces),
+        source=np.array([0.3, 0.4, 0.6]),
+        directivity_a=1.0,
+        forward=np.array([1.0, 0.0, 0.0]),
+        absorption=np.full((12, 1), 0.3),
+        scattering=np.full((12, 1), 0.5),
+        air=np.zeros(1),
+        receivers=np.array([[0.7, 0.6, 0.4]]),
+        directions=np.zeros((0, 3)),
+        rays=rays,
+        max_time=0.05,
+        time_step=1e-3,
+        dir_time_step=1e-2,
+        speed_of_sound=343.0,
+        receiver_radius=np.array([0.2]),
+        diffuse_rain=True,
+        specular_rain=False,
+        covered_order=-1,
+        covered_time=np.zeros(0),
+        seed=1,
+        threads=0,
+        window_time_step=0.01,
+        first_ray=0,
+        split_target=np.zeros(0),
+        split_ratio=4.0,
+        max_split=8,
+        max_family=256,
+    )
+    energy, _, _, ray_energy, reflections, traced = _native.trace_stochastic(**{**args, **settings})
+    return energy[0, 0], ray_energy / reflections, traced
+
+
+def test_weight_window_keeps_the_expected_energy() -> None:
+    reference, mean, traced = _trace_stochastic(100_000)
+    assert traced == 100_000
+    # Far below the rays' energy every ray splits until its family is full; far above,
+    # nearly all are thinned out by roulette. Either way the energy stays the same.
+    for rays, scale, families, tolerance in ((500, 1e-2, 64, 0.12), (50_000, 20.0, 256, 0.06)):
+        target = mean * 100_000 / rays * scale
+        energy, _, traced = _trace_stochastic(rays, split_target=target, max_family=families)
+        assert energy.sum() == pytest.approx(reference.sum(), rel=tolerance)
+        if scale < 1:
+            assert traced == rays * families
+        else:
+            assert traced < 1.1 * rays
+
+
+@pytest.mark.parametrize(
+    "setting", [{"split_ratio": 1.0}, {"max_split": 1}, {"max_family": 0}, {"window_time_step": 0}]
+)
+def test_weight_window_rejects_bad_settings(setting) -> None:
+    with pytest.raises(ValueError, match="bad settings"):
+        _trace_stochastic(10, **setting)

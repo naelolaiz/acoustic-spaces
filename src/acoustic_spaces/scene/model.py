@@ -254,6 +254,13 @@ class LateStage(_Model):
         gt=0.0,
         description="detector sphere radius in metres; None sizes it from volume and rays",
     )
+    splitting: bool = Field(
+        default=True,
+        description=(
+            "split rays that carry much more energy than usual and thin out those that "
+            "carry much less (unbiased); keeps late tails smooth where few rays survive"
+        ),
+    )
 
 
 class Simulation(_Model):

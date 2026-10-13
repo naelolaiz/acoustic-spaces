@@ -154,6 +154,16 @@ or in a corner.
     method. Much smoother tails, but it treats specular energy as diffuse: in the
     example box (smooth walls, absorbing ceiling) EDT comes out about 20 % shorter.
   - `detector`: classic ray tracing, everything counted by the sphere.
+
+  In rooms with absorption in one place and smooth walls, most late energy rides on
+  the few rays that keep clear of the absorber, and the tail breaks up where those
+  run out. With `splitting` (on by default), a first tenth of the rays measures how
+  much energy a ray usually carries over time; the rest are split into copies when
+  they carry more than 4 times that and thinned out by Russian roulette when they
+  carry less than a quarter (a weight window). The expected result is unchanged; in
+  the example box the late tail (0.5 to 2.5 s) misses a 1-million-ray reference by
+  0.5 to 2 dB per band instead of 1 to 8 dB at the default 100k rays (1 to 4 dB
+  instead of 4 to 17 dB at 10k), for about 1.5 times the run time.
 - `statistical`: an exponential decay at the Eyring reverberation time, at the
   level of Barron's revised theory, from `transition_ms` after the direct sound
   (by default the mixing time, the square root of the volume in milliseconds).
@@ -185,6 +195,9 @@ The tests check, on Linux, macOS and Windows:
   within 10 %, and slightly longer as absorption grows, as Kuttruff's correction
   for the spread of free path lengths predicts;
 - G in the same box against Barron's revised theory: within 1 dB;
+- the late tail of the example box (absorbing ceiling, smooth walls) from 10k rays
+  with splitting against 1 million rays: within 4 dB on average from 0.5 to 2.5 s,
+  and splitting or thinning out every ray keeps the energy of plain ray tracing;
 - every ISO 3382-1 parameter on synthetic exponential decays, and the air
   absorption against the ISO 9613-1 table;
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with

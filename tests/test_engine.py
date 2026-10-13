@@ -8,10 +8,12 @@ import pytest
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import TraceModel, early_paths
 from acoustic_spaces.engine import early as early_stage
+from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.parameters import from_impulse_response
 from acoustic_spaces.synthesis import REFERENCE_ENERGY_10M
 
 SHOEBOX_OBJ = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "shoebox.obj"
+SHOEBOX_YAML = SHOEBOX_OBJ.with_name("scene.yaml")
 SIZE = np.array([8.0, 6.0, 3.0])
 
 
@@ -156,6 +158,56 @@ def test_reception_modes_agree_in_a_diffuse_box(diffuse_result) -> None:
             a, b = response.parameters(), result[key].parameters()
             np.testing.assert_allclose(b.g, a.g, atol=0.5)
             np.testing.assert_allclose(b.t30, a.t30, rtol=0.08)
+
+
+def test_splitting_leaves_a_diffuse_box_alone(diffuse_result) -> None:
+    # Every ray carries about the expected energy here, so the weight window hardly acts,
+    # and each ray keeps its random stream with or without it.
+    _, split = diffuse_result
+    plain = simulate(_diffuse_box({"late": {"rays": 20_000, "splitting": False}}))
+    assert 20_000 < split.details["s"]["traced_rays"] < 22_000
+    assert plain.details["s"]["traced_rays"] == 20_000
+    for key, response in split.responses.items():
+        a, b = response.parameters(), plain[key].parameters()
+        np.testing.assert_allclose(b.g, a.g, atol=0.05)
+        np.testing.assert_allclose(b.t30, a.t30, rtol=0.01)
+
+
+#: Late energy (dB, 100 ms windows from 0.5 to 2.5 s) at 500 Hz, 1 kHz and 2 kHz in the
+#: shoebox example, from 1 million rays with splitting; 2 million without agree within
+#: 0.3 to 0.9 dB.
+SHOEBOX_TAIL_DB = np.array(
+    [
+        [-31.1, -33.9, -36.2, -38.9, -41.3, -43.5, -46.1, -48.1, -50.4, -52.8,
+         -54.8, -56.8, -58.9, -60.2, -63.5, -65.7, -66.5, -67.9, -70.4, -69.2],
+        [-33.6, -36.5, -38.9, -41.6, -44.2, -46.4, -49.2, -51.3, -53.8, -56.2,
+         -58.1, -60.2, -62.4, -63.7, -67.3, -69.7, -70.4, -72.4, -74.8, -73.5],
+        [-35.9, -39.0, -41.6, -44.4, -47.3, -49.6, -52.8, -54.9, -57.8, -60.4,
+         -62.5, -64.7, -66.9, -68.6, -72.4, -75.1, -76.1, -79.2, -81.3, -81.2],
+    ]
+)  # fmt: skip
+
+
+def test_splitting_keeps_a_sparse_tail_together() -> None:
+    # Absorbing ceiling, smooth walls: late energy rides on the few rays that keep away
+    # from the ceiling. Without splitting, 10k rays miss the tail by 5 to 17 dB.
+    room = Room.from_yaml(SHOEBOX_YAML)
+    late = late_stage.stochastic_energy(
+        TraceModel.from_room(room),
+        np.array([2.0, 3.0, 1.5]),
+        np.array([[6.0, 3.0, 1.2]]),
+        rays=10_000,
+        max_time=2.5,
+        time_step=1e-3,
+        speed_of_sound=room.speed_of_sound(),
+        air=room.air_attenuation(),
+        covered_order=3,
+        radius=0.5,
+        seed=1,
+    )
+    windows = late.energy[0].reshape(8, 25, 100).sum(axis=-1)[3:6, 5:]
+    error = np.abs(10 * np.log10(windows) - SHOEBOX_TAIL_DB)
+    assert np.mean(np.median(error, axis=1)) < 4.0
 
 
 def test_statistical_tail_follows_eyring() -> None:

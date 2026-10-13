@@ -48,6 +48,9 @@ public:
     // Uniform in [0, 1).
     double uniform() { return static_cast<double>(next() >> 11) * (1.0 / 9007199254740992.0); }
 
+    // A generator for a new, independent stream (for a ray split off this one).
+    Rng split() { return Rng(next(), next()); }
+
 private:
     std::array<std::uint64_t, 4> state_{};
 
@@ -158,6 +161,7 @@ struct StochasticSettings {
     double max_time = 2.0;          // s
     double time_step = 1e-3;        // s, energy histogram resolution
     double dir_time_step = 1e-2;    // s, directional histogram resolution
+    double window_time_step = 5e-2;  // s, resolution of split_target and ray_energy
     double speed_of_sound = 343.0;  // m/s
     std::vector<double> receiver_radius;  // m, detector sphere per receiver
     // How reflected energy reaches the receivers:
@@ -173,6 +177,19 @@ struct StochasticSettings {
     // finder computes those exactly. -1 keeps everything.
     int covered_order = -1;
     std::vector<double> covered_time;  // per receiver; empty: no time limit
+    // Rays use random streams first_ray .. first_ray + rays - 1, and each carries
+    // 1 / rays of the source energy.
+    std::uint64_t first_ray = 0;
+    // Weight window (variance reduction): the expected band-mean energy of a ray per
+    // window of window_time_step. After a reflection, a ray above split_ratio times it
+    // is split into copies that share its energy; one below 1 / split_ratio times it
+    // survives with probability energy / expected, with its energy raised to match. Both
+    // keep every expectation unchanged; they spend the rays where the energy is. Empty:
+    // off. A ray and its copies never number more than max_family.
+    std::vector<double> split_target;
+    double split_ratio = 4.0;
+    std::size_t max_split = 8;
+    std::size_t max_family = 256;
     std::uint64_t seed = 0;
     std::size_t threads = 0;
 };
@@ -190,13 +207,29 @@ struct StochasticScene {
 };
 
 struct StochasticResult {
-    std::size_t bins = 0, dir_bins = 0;
+    std::size_t bins = 0, dir_bins = 0, windows = 0;
     std::vector<double> energy;       // receivers x bands x bins
     std::vector<double> directional;  // receivers x directions x bands x dir_bins
+    // windows: the sum and count of the band-mean energy of rays at each reflection, so
+    // ray_energy / reflections is the expected energy of a ray in the window.
+    std::vector<double> ray_energy, reflections;
     std::size_t escaped_rays = 0;
+    std::size_t traced_rays = 0;  // rays including the copies split off
 };
 
 namespace detail {
+
+// Everything a ray carries from one leg to the next.
+struct RayState {
+    Vec3 pos, dir;
+    std::array<double, kMaxBands> energy;
+    double travelled;
+    int order;
+    bool specular_only;  // no diffuse reflection yet
+    bool detectable;     // the detector spheres count this leg
+    std::int64_t last;   // face of the last reflection, ignored by the next intersection
+    Rng rng;
+};
 
 struct Accumulator {
     const StochasticScene &scene;
@@ -253,7 +286,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         settings.receiver_radius.size() != scene.receivers.size() ||
         std::any_of(settings.receiver_radius.begin(), settings.receiver_radius.end(),
                     [](double r) { return !(r > 0.0); }) ||
-        settings.dir_time_step <= 0.0 ||
+        settings.dir_time_step <= 0.0 || settings.window_time_step <= 0.0 ||
+        !(settings.split_ratio > 1.0) || settings.max_split < 2 || settings.max_family < 1 ||
         (!settings.covered_time.empty() &&
          settings.covered_time.size() != scene.receivers.size())) {
         throw std::invalid_argument("trace_stochastic: bad settings");
@@ -291,6 +325,10 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
             static_cast<std::size_t>(std::ceil(settings.max_time / settings.dir_time_step));
         res.energy.assign(n_rec * bands * res.bins, 0.0);
         if (n_dirs > 0) res.directional.assign(n_rec * n_dirs * bands * res.dir_bins, 0.0);
+        res.windows =
+            static_cast<std::size_t>(std::ceil(settings.max_time / settings.window_time_step));
+        res.ray_energy.assign(res.windows, 0.0);
+        res.reflections.assign(res.windows, 0.0);
         return res;
     };
     std::vector<StochasticResult> partial(threads);
@@ -300,106 +338,146 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                              std::size_t worker) {
         StochasticResult &out = partial[worker];
         detail::Accumulator acc{scene, settings, out};
-        std::array<double, kMaxBands> energy{}, reflected{}, rain{};
+        std::array<double, kMaxBands> reflected{}, rain{};
+
+        std::vector<detail::RayState> stack;
 
         for (std::size_t ray = begin; ray < end; ++ray) {
-            Rng rng(settings.seed, ray);
-            Vec3 dir = uniform_sphere(rng);
-            const double start = scene.directivity.energy_weight(dir) /
+            Rng first_rng(settings.seed, settings.first_ray + ray);
+            const Vec3 first_dir = uniform_sphere(first_rng);
+            const double start = scene.directivity.energy_weight(first_dir) /
                                  static_cast<double>(settings.rays);
-            energy.fill(0.0);
-            for (std::size_t b = 0; b < bands; ++b) energy[b] = start;
             const double cutoff = start * 1e-14;
+            stack.clear();
+            stack.push_back(detail::RayState{scene.source, first_dir, {}, 0.0, 0, true, true,
+                                             -1, first_rng});
+            for (std::size_t b = 0; b < bands; ++b) stack.back().energy[b] = start;
+            std::size_t family = 1;
 
-            Vec3 pos = scene.source;
-            double travelled = 0.0;
-            int order = 0;
-            bool specular_only = true;
-            bool detectable = true;
-            std::int64_t last = -1;
+            while (!stack.empty()) {
+                detail::RayState ray_state = stack.back();
+                stack.pop_back();
+                ++out.traced_rays;
+                auto &[pos, dir, energy, travelled, order, specular_only, detectable, last,
+                       rng] = ray_state;
 
-            while (travelled < max_length) {
-                const Hit hit = bvh.intersect(pos, dir, max_length - travelled, last);
-                const double segment = hit.found() ? hit.t : max_length - travelled;
+                while (travelled < max_length) {
+                    const Hit hit = bvh.intersect(pos, dir, max_length - travelled, last);
+                    const double segment = hit.found() ? hit.t : max_length - travelled;
 
-                if (detectable && !settings.specular_rain) {
-                    for (std::size_t k = 0; k < n_rec; ++k) {
-                        const Vec3 rel = scene.receivers[k] - pos;
-                        const double s = dot(rel, dir);
-                        const double d2 = dot(rel, rel) - s * s;
-                        const double r = settings.receiver_radius[k];
-                        if (d2 >= r * r) continue;
-                        const double half = std::sqrt(r * r - d2);
-                        const double t0 = std::max(s - half, 0.0);
-                        const double t1 = std::min(s + half, segment);
-                        if (t1 <= t0) continue;
-                        const double distance = travelled + std::clamp(s, t0, t1);
-                        const bool covered =
-                            specular_only && order <= settings.covered_order &&
-                            (settings.covered_time.empty() ||
-                             distance / c <= settings.covered_time[k]);
-                        if (covered) continue;
-                        acc.add(k, energy.data(), (t1 - t0) / sphere_volume[k], distance, -dir);
+                    if (detectable && !settings.specular_rain) {
+                        for (std::size_t k = 0; k < n_rec; ++k) {
+                            const Vec3 rel = scene.receivers[k] - pos;
+                            const double s = dot(rel, dir);
+                            const double d2 = dot(rel, rel) - s * s;
+                            const double r = settings.receiver_radius[k];
+                            if (d2 >= r * r) continue;
+                            const double half = std::sqrt(r * r - d2);
+                            const double t0 = std::max(s - half, 0.0);
+                            const double t1 = std::min(s + half, segment);
+                            if (t1 <= t0) continue;
+                            const double distance = travelled + std::clamp(s, t0, t1);
+                            const bool covered =
+                                specular_only && order <= settings.covered_order &&
+                                (settings.covered_time.empty() ||
+                                 distance / c <= settings.covered_time[k]);
+                            if (covered) continue;
+                            acc.add(k, energy.data(), (t1 - t0) / sphere_volume[k], distance,
+                                    -dir);
+                        }
                     }
-                }
-                if (!hit.found()) {
-                    if (travelled + segment < max_length) ++out.escaped_rays;
-                    break;
-                }
-
-                travelled += hit.t;
-                pos = pos + dir * hit.t;
-                const auto face = static_cast<std::size_t>(hit.face);
-                Vec3 n = bvh.normal(face);
-                if (dot(n, dir) > 0.0) n = -n;  // face the side the ray came from
-                ++order;
-                last = hit.face;
-
-                const double *alpha = scene.absorption + face * bands;
-                const double *scatter = scene.scattering + face * bands;
-                double peak = 0.0;
-                for (std::size_t b = 0; b < bands; ++b) {
-                    reflected[b] = energy[b] * (1.0 - alpha[b]);
-                    rain[b] = reflected[b] * scatter[b];
-                    peak = std::max(peak, reflected[b]);
-                }
-
-                if (settings.diffuse_rain || settings.specular_rain) {
-                    const Vec3 origin = pos + n * offset;
-                    for (std::size_t k = 0; k < n_rec; ++k) {
-                        const Vec3 v = scene.receivers[k] - origin;
-                        const double dist = std::max(norm(v), settings.receiver_radius[k]);
-                        const double cos_theta = dot(n, v) / dist;
-                        if (cos_theta <= 0.0) continue;
-                        const Vec3 toward = v / norm(v);
-                        if (bvh.occluded(origin, toward, norm(v), last)) continue;
-                        // The specular part of a path the early stage computes exactly
-                        // stays out; only its scattered part radiates.
-                        const bool covered =
-                            specular_only && order <= settings.covered_order &&
-                            (settings.covered_time.empty() ||
-                             (travelled + dist) / c <= settings.covered_time[k]);
-                        const bool all = settings.specular_rain && !covered;
-                        acc.add(k, all ? reflected.data() : rain.data(),
-                                cos_theta / (kPi * dist * dist), travelled + dist, -toward);
+                    if (!hit.found()) {
+                        if (travelled + segment < max_length) ++out.escaped_rays;
+                        break;
                     }
-                }
-                if (peak < cutoff) break;
 
-                // Specular or diffuse continuation, re-weighted per band so each band's
-                // expected energy follows its own scattering coefficient.
-                const double p = diffuse_probability[face];
-                if (rng.uniform() < p) {
-                    for (std::size_t b = 0; b < bands; ++b) energy[b] = rain[b] / p;
-                    dir = cosine_hemisphere(n, rng);
-                    specular_only = false;
-                    detectable = !settings.diffuse_rain;  // the rain covered this leg
-                } else {
+                    travelled += hit.t;
+                    pos = pos + dir * hit.t;
+                    const auto face = static_cast<std::size_t>(hit.face);
+                    Vec3 n = bvh.normal(face);
+                    if (dot(n, dir) > 0.0) n = -n;  // face the side the ray came from
+                    ++order;
+                    last = hit.face;
+
+                    const double *alpha = scene.absorption + face * bands;
+                    const double *scatter = scene.scattering + face * bands;
+                    double peak = 0.0, mean = 0.0;
                     for (std::size_t b = 0; b < bands; ++b) {
-                        energy[b] = (reflected[b] - rain[b]) / (1.0 - p);
+                        mean += energy[b];
+                        reflected[b] = energy[b] * (1.0 - alpha[b]);
+                        rain[b] = reflected[b] * scatter[b];
+                        peak = std::max(peak, reflected[b]);
                     }
-                    dir = reflect(dir, n);
-                    detectable = true;
+                    const std::size_t window =
+                        std::min(out.windows - 1,
+                                 static_cast<std::size_t>(travelled / c / settings.window_time_step));
+                    out.ray_energy[window] += mean / static_cast<double>(bands);
+                    out.reflections[window] += 1.0;
+
+                    if (settings.diffuse_rain || settings.specular_rain) {
+                        const Vec3 origin = pos + n * offset;
+                        for (std::size_t k = 0; k < n_rec; ++k) {
+                            const Vec3 v = scene.receivers[k] - origin;
+                            const double dist = std::max(norm(v), settings.receiver_radius[k]);
+                            const double cos_theta = dot(n, v) / dist;
+                            if (cos_theta <= 0.0) continue;
+                            const Vec3 toward = v / norm(v);
+                            if (bvh.occluded(origin, toward, norm(v), last)) continue;
+                            // The specular part of a path the early stage computes exactly
+                            // stays out; only its scattered part radiates.
+                            const bool covered =
+                                specular_only && order <= settings.covered_order &&
+                                (settings.covered_time.empty() ||
+                                 (travelled + dist) / c <= settings.covered_time[k]);
+                            const bool all = settings.specular_rain && !covered;
+                            acc.add(k, all ? reflected.data() : rain.data(),
+                                    cos_theta / (kPi * dist * dist), travelled + dist, -toward);
+                        }
+                    }
+                    if (peak < cutoff) break;
+
+                    // Specular or diffuse continuation, re-weighted per band so each band's
+                    // expected energy follows its own scattering coefficient.
+                    const double p = diffuse_probability[face];
+                    if (rng.uniform() < p) {
+                        for (std::size_t b = 0; b < bands; ++b) energy[b] = rain[b] / p;
+                        dir = cosine_hemisphere(n, rng);
+                        specular_only = false;
+                        detectable = !settings.diffuse_rain;  // the rain covered this leg
+                    } else {
+                        for (std::size_t b = 0; b < bands; ++b) {
+                            energy[b] = (reflected[b] - rain[b]) / (1.0 - p);
+                        }
+                        dir = reflect(dir, n);
+                        detectable = true;
+                    }
+
+                    if (settings.split_target.empty()) continue;
+                    const double expected =
+                        settings.split_target[std::min(window, settings.split_target.size() - 1)];
+                    if (!(expected > 0.0)) continue;
+                    double now = 0.0;
+                    for (std::size_t b = 0; b < bands; ++b) now += energy[b];
+                    now /= static_cast<double>(bands);
+                    if (now > settings.split_ratio * expected && family < settings.max_family) {
+                        const auto copies = static_cast<std::size_t>(std::min<double>(
+                            {std::ceil(now / expected), static_cast<double>(settings.max_split),
+                             static_cast<double>(settings.max_family - family + 1)}));
+                        if (copies >= 2) {
+                            for (std::size_t b = 0; b < bands; ++b) {
+                                energy[b] /= static_cast<double>(copies);
+                            }
+                            for (std::size_t i = 1; i < copies; ++i) {
+                                stack.push_back(ray_state);
+                                stack.back().rng = rng.split();
+                            }
+                            family += copies - 1;
+                        }
+                    } else if (now * settings.split_ratio < expected) {
+                        const double survive = now / expected;
+                        if (rng.uniform() >= survive) break;
+                        for (std::size_t b = 0; b < bands; ++b) energy[b] /= survive;
+                    }
                 }
             }
         }
@@ -411,7 +489,12 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         for (std::size_t i = 0; i < total.directional.size(); ++i) {
             total.directional[i] += p.directional[i];
         }
+        for (std::size_t i = 0; i < total.windows; ++i) {
+            total.ray_energy[i] += p.ray_energy[i];
+            total.reflections[i] += p.reflections[i];
+        }
         total.escaped_rays += p.escaped_rays;
+        total.traced_rays += p.traced_rays;
     }
     return total;
 }
