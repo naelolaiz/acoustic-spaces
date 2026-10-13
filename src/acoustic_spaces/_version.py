@@ -1,3 +1,3 @@
-"""Package version. Keep in sync with ``project.version`` in pyproject.toml."""
+"""Package version: the only place it is written (pyproject.toml reads it from here)."""
 
-__version__ = "0.1.0.dev0"
+__version__ = "1.0.0"

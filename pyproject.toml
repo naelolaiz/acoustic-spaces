@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "acoustic-spaces"
-version = "0.1.0.dev0"
+dynamic = ["version"]
 description = "Open-source room acoustics simulator: geometric acoustics, spatial impulse responses and auralisation"
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -13,13 +13,18 @@ requires-python = ">=3.10"
 authors = [{ name = "acoustic_spaces contributors" }]
 keywords = ["acoustics", "room acoustics", "ray tracing", "auralization", "ambisonics", "binaural"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: C++",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Multimedia :: Sound/Audio :: Analysis",
     "Topic :: Scientific/Engineering :: Physics",
 ]
@@ -37,18 +42,26 @@ measure = ["sounddevice>=0.4"]
 sofa = ["h5py>=3.8"]
 test = ["pytest>=7", "h5py>=3.8"]
 dev = ["pytest>=7", "h5py>=3.8", "ruff>=0.6"]
+docs = ["sphinx>=7.2", "furo>=2024.1", "myst-parser>=3"]
 
 [project.scripts]
 acoustic-spaces = "acoustic_spaces.cli:main"
 
 [project.urls]
 Repository = "https://github.com/naelolaiz/acoustic_spaces_simulator"
+Changelog = "https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/CHANGELOG.md"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
 build-dir = "build/{wheel_tag}"
 cmake.build-type = "Release"
 wheel.packages = ["src/acoustic_spaces"]
+sdist.exclude = ["docs/_build", "validation/results"]
+
+[tool.scikit-build.metadata.version]
+# The version lives in one place, src/acoustic_spaces/_version.py.
+provider = "scikit_build_core.metadata.regex"
+input = "src/acoustic_spaces/_version.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -63,7 +76,7 @@ target-version = "py310"
 select = ["E", "F", "W", "I", "UP", "B"]
 
 [tool.cibuildwheel]
-build = "cp310-* cp311-* cp312-* cp313-*"
+build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux_* *-win32 *_i686"
 test-requires = ["pytest", "h5py"]
 test-sources = ["tests", "examples"]
