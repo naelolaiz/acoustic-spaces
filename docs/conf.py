@@ -19,7 +19,7 @@ exclude_patterns = ["_build"]
 
 # Markdown: anchors for headings, so links like (#measuring-impulse-responses) resolve.
 myst_heading_anchors = 3
-myst_enable_extensions = ["dollarmath"]
+myst_enable_extensions = ["dollarmath", "tasklist"]
 
 autodoc_member_order = "bysource"
 autodoc_typehints = "signature"
