@@ -1,0 +1,27 @@
+# Build
+build/
+dist/
+wheelhouse/
+*.egg-info/
+*.so
+*.pyd
+*.dylib
+_skbuild/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+
+# Simulation outputs
+*.wav
+*.sofa
+!examples/**/*.wav
