@@ -86,3 +86,24 @@ def test_impulse_response_plot(tmp_path: Path) -> None:
     out = tmp_path / "ir.png"
     plot_impulse_response(ir, 48_000, out, title="test")
     assert out.stat().st_size > 10_000
+
+
+@pytest.mark.render
+def test_particle_animation(tmp_path: Path) -> None:
+    from PIL import Image
+
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.engine import trace_particles
+    from acoustic_spaces.viz import animate_particles
+
+    room = Room.from_yaml(SHOEBOX)
+    particles = trace_particles(room, count=300, duration=0.03, frames=3)
+    out = tmp_path / "particles.gif"
+    animate_particles(room, particles, out, color="order", window_size=(320, 200))
+    with Image.open(out) as gif:
+        assert gif.n_frames == 3 and gif.size == (320, 200)
+    with pytest.raises(ValueError, match="gif or .mp4"):
+        animate_particles(room, particles, tmp_path / "particles.avi")
+    args = ["animate", str(SHOEBOX), "--out", str(tmp_path / "cli.gif"), "--frames", "2"]
+    assert main([*args, "--particles", "200", "--duration", "20", "--band", "500"]) == 0
+    assert (tmp_path / "cli.gif").stat().st_size > 1000

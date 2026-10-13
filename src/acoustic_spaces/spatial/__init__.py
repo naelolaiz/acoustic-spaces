@@ -4,7 +4,7 @@ Every format turns the arrival directions of a simulated response into channels:
 
 - :class:`Ambisonics`: AmbiX (ACN channel order, SN3D normalisation), orders 0 to 7;
 - :class:`Loudspeakers`: vector base amplitude panning onto a named layout (stereo, 5.0,
-  7.0, 5.0.4, 7.0.4) or any list of speakers;
+  7.0, 5.0.4, 7.0.4, and 5.1 to 7.1.4 with a silent LFE channel) or any list of speakers;
 - :class:`Binaural`: the two ears, with HRTFs from a SOFA file or a spherical head model;
 - :class:`Mono`: the omnidirectional response.
 

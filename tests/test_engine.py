@@ -237,3 +237,26 @@ def test_simulate_checks_the_room() -> None:
     scene = _scene([0.1] * 8, 0.1, source=(2, 2, 1), listeners=[(5, 4, 1)])
     with pytest.raises(ValueError, match="unknown listener"):
         simulate(scene, listeners=["nobody"])
+
+
+def test_particles_spread_reflect_and_fade() -> None:
+    from acoustic_spaces.engine import trace_particles
+    from acoustic_spaces.room import Room
+
+    room = Room.from_yaml(Path(__file__).resolve().parent.parent / "examples/shoebox/scene.yaml")
+    particles = trace_particles(room, count=500, duration=0.1, frames=21, seed=3)
+    assert particles.positions.shape == (21, 500, 3)
+    lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
+    assert np.all((particles.positions >= lo - 1e-9) & (particles.positions <= hi + 1e-9))
+    # Before any reflection, particles sit on a sphere of radius c t around the source.
+    source = np.array(room.scene.sources[0].position)
+    first = particles.order[1] == 0
+    radius = np.linalg.norm(particles.positions[1, first] - source, axis=1)
+    np.testing.assert_allclose(radius, room.speed_of_sound() * particles.times[1])
+    assert np.all(np.diff(particles.order, axis=0) >= 0)
+    assert np.all(np.diff(particles.energy, axis=0) <= 1e-15)
+    assert particles.order[-1].mean() > 5 and particles.energy[-1].mean() < 0.5
+    with pytest.raises(ValueError, match="no source 'piano'"):
+        trace_particles(room, "piano")
+    with pytest.raises(ValueError, match="band"):
+        trace_particles(room, band=8)

@@ -1,0 +1,43 @@
+# A fan-shaped lecture hall built from its floor plan, no CAD file needed.
+# The plan's corners go round the floor; wall_1 is the stage wall, from (0, -4) to
+# (0, 4), and the side walls open out to the back wall, 16 m wide and 14 m away.
+name: Lecture hall (fan-shaped, 168 m2)
+geometry:
+  floor_plan: [[0, -4], [0, 4], [14, 8], [14, -8]]
+  height: 6
+materials:
+  plaster:
+    preset: ceiling_plasterboard
+    scattering: 0.1
+  wood:
+    preset: wooden_lining
+    scattering: 0.15
+  audience:
+    preset: audience_wooden_chairs_1_m2
+    scattering: 0.7
+  concrete:
+    preset: smooth_brickwork_flush_pointing
+    scattering: 0.1
+assignments:
+  floor: audience
+  ceiling: plaster
+  wall_1: wood       # stage wall
+  walls: concrete    # the side and back walls
+sources:
+  - name: lecturer
+    position: [1.5, 0.0, 1.6]
+    directivity: cardioid
+listeners:
+  - name: front
+    position: [4.0, 1.0, 1.2]
+    orientation: {yaw: 180}
+  - name: back
+    position: [12.0, -3.0, 1.2]
+    orientation: {yaw: 165}
+simulation:
+  early: {method: ray_tracing, max_order: 3}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 2.0
+outputs:
+  - mono
+  - binaural

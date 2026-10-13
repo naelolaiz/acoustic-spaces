@@ -223,3 +223,29 @@ def test_points_inside_either_orientation() -> None:
     assert points_inside(box, points).tolist() == expected
     flipped = RoomMesh(box.vertices, box.faces[:, ::-1], box.face_labels, box.labels)
     assert points_inside(flipped, points).tolist() == expected
+
+
+@pytest.mark.parametrize("clockwise", [False, True])
+def test_extruded_floor_plan_is_a_closed_room(clockwise: bool) -> None:
+    from acoustic_spaces.geometry import box_mesh, extruded_mesh
+
+    plan = np.array([[0, 0], [10, 0], [10, 4], [4, 4], [4, 9], [0, 9]], dtype=float)
+    plan = plan[::-1] if clockwise else plan
+    mesh = extruded_mesh(plan, 3.0)
+    report = check_mesh(mesh)
+    assert report.closed and report.normals_inward
+    assert report.volume_m3 == pytest.approx(180.0)
+    areas = mesh.face_areas()
+    by_label = {label[0]: areas[mesh.face_labels == k].sum() for k, label in enumerate(mesh.labels)}
+    assert by_label["floor"] == pytest.approx(60.0) and by_label["ceiling"] == pytest.approx(60.0)
+    # Wall k is the plan's edge from corner k to corner k + 1, whichever way it runs.
+    edges = np.linalg.norm(np.roll(plan, -1, axis=0) - plan, axis=1)
+    for k, length in enumerate(edges, start=1):
+        assert by_label[f"wall_{k}"] == pytest.approx(3.0 * length)
+    assert all(label[1:] == ("walls",) for label in mesh.labels[2:])
+    box = box_mesh((8.0, 6.0, 3.0))
+    assert check_mesh(box).volume_m3 == pytest.approx(144.0)
+    with pytest.raises(ValueError, match="positive"):
+        box_mesh((8.0, 0.0, 3.0))
+    with pytest.raises(ValueError, match="no area"):
+        extruded_mesh(np.array([[0, 0], [1, 1], [2, 2]]), 3.0)

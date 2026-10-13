@@ -51,6 +51,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PositiveFloat,
     ValidationInfo,
     field_validator,
     model_validator,
@@ -128,7 +129,19 @@ class Orientation(_Model):
 
 
 class Geometry(_Model):
-    file: Path = Field(description="mesh file: OBJ, STL, PLY, OFF, glTF/GLB or DXF")
+    """The room's surfaces: a CAD file, or a box or extruded floor plan built from
+    dimensions (surfaces ``floor``, ``ceiling``, ``walls`` and ``wall_1``, ``wall_2``...)."""
+
+    file: Path | None = Field(
+        default=None, description="mesh file: OBJ, STL, PLY, OFF, glTF/GLB or DXF"
+    )
+    box: tuple[PositiveFloat, PositiveFloat, PositiveFloat] | None = Field(
+        default=None, description="length (x), width (y) and height (z) of a rectangular room"
+    )
+    floor_plan: list[tuple[float, float]] | None = Field(
+        default=None, min_length=3, description="(x, y) corners of the floor, in order"
+    )
+    height: PositiveFloat | None = Field(default=None, description="floor_plan: room height")
     units: Literal["m", "cm", "mm", "in", "ft"] = "m"
     up_axis: Literal["y", "z"] | None = Field(
         default=None, description="vertical axis of the file; None uses the format's convention"
@@ -136,8 +149,25 @@ class Geometry(_Model):
 
     @field_validator("file")
     @classmethod
-    def _resolve_file(cls, value: Path, info: ValidationInfo) -> Path:
-        return _resolve_path(value, info)
+    def _resolve_file(cls, value: Path | None, info: ValidationInfo) -> Path | None:
+        return None if value is None else _resolve_path(value, info)
+
+    @model_validator(mode="after")
+    def _one_kind(self) -> Geometry:
+        given = [k for k in ("file", "box", "floor_plan") if getattr(self, k) is not None]
+        if len(given) != 1:
+            raise ValueError("geometry needs exactly one of file, box or floor_plan")
+        if (self.floor_plan is None) != (self.height is None):
+            raise ValueError("height goes with floor_plan, and floor_plan needs it")
+        return self
+
+    def describe(self) -> str:
+        if self.file is not None:
+            return self.file.name
+        if self.box is not None:
+            return "box " + " x ".join(f"{v:g}" for v in self.box) + f" {self.units}"
+        corners = len(self.floor_plan or [])
+        return f"floor plan with {corners} corners, {self.height:g} {self.units} high"
 
 
 DEFAULT_SCATTERING = 0.1
@@ -296,13 +326,14 @@ class LateStage(_Model):
     )
 
 
-LAYOUT_NAMES = ("stereo", "5.0", "7.0", "5.0.4", "7.0.4")
+LAYOUT_NAMES = ("stereo", "5.0", "7.0", "5.0.4", "7.0.4", "5.1", "7.1", "5.1.4", "7.1.4")
 
 
 class Speaker(_Model):
     name: str
     azimuth: float = Field(description="degrees, positive to the left")
     elevation: float = Field(default=0.0, ge=-90.0, le=90.0, description="degrees, positive up")
+    lfe: bool = Field(default=False, description="a low-frequency effects channel (silent)")
 
 
 class Output(_Model):

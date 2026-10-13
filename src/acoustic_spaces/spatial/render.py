@@ -207,7 +207,7 @@ def from_output(output) -> Format:
         return Binaural(read_sofa(output.hrtf), label=f"binaural-{Path(output.hrtf).stem}")
     if output.layout is not None:
         return Loudspeakers.layout(output.layout)
-    speakers = tuple(Speaker(s.name, s.azimuth, s.elevation) for s in output.speakers)
+    speakers = tuple(Speaker(s.name, s.azimuth, s.elevation, s.lfe) for s in output.speakers)
     return Loudspeakers(speakers)
 
 
