@@ -53,7 +53,7 @@ Download and unpack `1_scene_descriptions-CR2.zip`, `1_scene_descriptions-CR3.zi
 [BRAS page](https://depositonce.tu-berlin.de/handle/11303/7506.3) into one folder, then:
 
 ```sh
-pip install openskp                     # MIT; reads SketchUp files, used only here
+pip install openskp                     # the sketchup extra: reads SketchUp files
 python validation/bras/convert_skp.py "BRAS/1 Scene descriptions/CR2 small room (seminar room)/Geometry/CR2.skp" validation/bras/CR2/CR2.obj
 python validation/bras/convert_skp.py "BRAS/1 Scene descriptions/CR3 medium room (chamber music hall)/Geometry/CR3.skp" validation/bras/CR3/CR3.obj
 python validation/bras/prepare.py BRAS   # needs the sofa extra (h5py)

@@ -3,11 +3,11 @@
     python validation/bras/convert_skp.py ".../CR2 small room (seminar room)/Geometry/CR2.skp" \
         validation/bras/CR2/CR2.obj
 
-Needs ``pip install openskp`` (MIT), which reads SketchUp files without SketchUp; the
-simulator itself does not use it. The room is written in metres with +z up, in the
-model's own coordinates (those of the source and receiver positions in the BRAS SOFA
-files), one ``usemtl`` per BRAS material (``mat_CR2_plaster`` and so on). Along the
-way:
+Needs openskp (MIT, the ``sketchup`` extra), which reads SketchUp files without
+SketchUp. The simulator reads them with it too, but without the repairs below, which
+CR3 needs. The room is written in metres with +z up, in the model's own coordinates
+(those of the source and receiver positions in the BRAS SOFA files), one ``usemtl``
+per BRAS material (``mat_CR2_plaster`` and so on). Along the way:
 
 - the back faces of the model, which carry no material, are left out;
 - corners closer than 12 mm are merged: CR3 has cracks under 1 mm and, on its attic

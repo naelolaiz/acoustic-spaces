@@ -61,7 +61,7 @@ with the test tools (pytest, ruff), and `--extra` adds the optional parts:
 uv sync --extra viz                    # viz: the 3D view (PyVista) and plots (matplotlib)
 uv sync --extra viz --extra measure    # measure: sounddevice, for sweeps and playback
 uv sync --extra gui                    # gui: the graphical editor (Qt, PySide6)
-uv sync --all-extras                   # everything, with sofa (h5py) and docs
+uv sync --all-extras                   # everything, with sofa (h5py), sketchup and docs
 ```
 
 `uv sync` installs exactly what it is asked for, so name every extra each time. It
@@ -73,6 +73,7 @@ With pip, in a virtual environment:
 python -m pip install -e ".[dev,viz]"     # viz adds the 3D view (PyVista)
 python -m pip install -e ".[measure]"     # sounddevice: sweeps, real-time playback
 python -m pip install -e ".[sofa]"        # h5py, to read HRTFs from SOFA files
+python -m pip install -e ".[sketchup]"    # openskp, to read SketchUp files (experimental)
 python -m pip install -e ".[gui]"         # the graphical editor (Qt, PySide6)
 ```
 
@@ -185,7 +186,8 @@ The editor works on the same scene files as the command line:
 
 - **File > Open example** opens the bundled rooms. Saving one asks where to keep your
   copy and takes its model file along. **New box room**, **New room from a floor plan**
-  and **New from model file** (OBJ, STL, PLY, OFF, glTF or DXF) start from scratch.
+  and **New from model file** (OBJ, STL, PLY, OFF, glTF, DXF or SketchUp) start from
+  scratch.
 - The **Plan** tab, next to the 3D view, shows the room from above and draws rooms (see
   below).
 - The **scene tree** lists the geometry and its surfaces, the materials, sources,
@@ -307,6 +309,7 @@ Frequency-dependent data uses eight octave bands from 63 Hz to 8 kHz.
 | DXF | [ezdxf](https://ezdxf.mozman.de/) (3DFACE, MESH, polyface, block references) | layer |
 | glTF / GLB | [trimesh](https://trimesh.org/) | material, node and mesh names |
 | STL, PLY, OFF | trimesh | file name |
+| SketchUp (`.skp`), experimental | [openskp](https://github.com/iamahsanmehmood/openskp), the `sketchup` extra | material |
 
 Simple rooms need no CAD file: `geometry: {box: [8, 6, 3]}` builds a rectangular
 room from the origin, and a floor plan is raised to a height (see
@@ -328,6 +331,12 @@ export it with material names. Set `geometry.units` (`m`, `cm`, `mm`, `in`, `ft`
 and, when the file is +y up (Blender's OBJ default, glTF always), `geometry.up_axis: y`.
 Without `units`, a DXF file is read in the units its header records (`$INSUNITS`),
 and any other file in metres.
+
+SketchUp files can also be read as they are, with the `sketchup` extra: openskp reads
+them without SketchUp, in metres. That reader is young. Faces are matched to materials
+by colour, so give each material its own colour; a face painted differently on its two
+sides takes its front's material; and some files do not read at all (the BRAS
+auditorium, for one). An OBJ export from SketchUp is then the way.
 
 Polygons are triangulated, duplicate vertices merged and degenerate faces dropped,
 and faces that meet along an edge are turned to agree with each other (each part of
@@ -1029,6 +1038,7 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] Comparing a simulation with a measurement in just noticeable differences
   (`acoustic-spaces compare`).
 - [x] Validation against measured rooms: two rooms of the BRAS benchmark.
+- [x] SketchUp files read directly (experimental, the `sketchup` extra).
 - [ ] More parameters: LF, LFC, IACC, ST1, ST early and late, U50, STIPA, echo criteria.
 - [ ] Scattering that follows surface size and frequency, and third-octave bands.
 - [ ] Sources with their own spectra, delay and EQ, line and surface sources, arrays.
@@ -1037,8 +1047,8 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [ ] The wave solver with impedance boundaries and a GPU path through WebGPU (AMD,
   NVIDIA, Intel and Apple GPUs alike).
 - [ ] Second-order edge diffraction.
-- [ ] Walkthroughs with moving sources and listeners; IFC, Collada and SketchUp import;
-  CATT and ODEON material libraries.
+- [ ] Walkthroughs with moving sources and listeners; IFC and Collada import; CATT and
+  ODEON material libraries.
 
 ## Contributing
 

@@ -375,7 +375,7 @@ class GeometryPage(Page):
             self,
             "Room model",
             str(self.document.base_dir),
-            "Room models (*.obj *.stl *.ply *.off *.gltf *.glb *.dxf);;All files (*)",
+            "Room models (*.obj *.stl *.ply *.off *.gltf *.glb *.dxf *.skp);;All files (*)",
         )
         if path:
             self.apply("replace model", lambda data: data["geometry"].update(file=path))

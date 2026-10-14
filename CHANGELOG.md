@@ -22,6 +22,12 @@
   responses (CC BY-SA 4.0, like BRAS). `validation/bras_validation.py` compares
   simulations with them; the validation report has the results.
 
+**SketchUp files** (experimental)
+
+- `.skp` models read directly with the `sketchup` extra, through openskp (MIT), which
+  needs no SketchUp: faces labelled by their material, matched by colour. The editor
+  opens them too. OBJ exported from SketchUp stays the recommended path.
+
 **Geometry**
 
 - Where a face's edge runs past the corners of faces on its other side (a T-junction,

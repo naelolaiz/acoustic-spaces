@@ -136,7 +136,8 @@ class Geometry(_Model):
     dimensions (surfaces ``floor``, ``ceiling``, ``walls`` and ``wall_1``, ``wall_2``...)."""
 
     file: Path | None = Field(
-        default=None, description="mesh file: OBJ, STL, PLY, OFF, glTF/GLB or DXF"
+        default=None,
+        description="mesh file: OBJ, STL, PLY, OFF, glTF/GLB, DXF or SketchUp (sketchup extra)",
     )
     box: tuple[PositiveFloat, PositiveFloat, PositiveFloat] | None = Field(
         default=None, description="length (x), width (y) and height (z) of a rectangular room"

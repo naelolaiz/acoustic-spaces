@@ -58,7 +58,7 @@ from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 
 TITLE = "Acoustic Spaces editor"
 SCENE_FILTER = "Scenes (*.yaml *.yml)"
-MODEL_FILTER = "Models (*.obj *.stl *.ply *.off *.gltf *.glb *.dxf)"
+MODEL_FILTER = "Models (*.obj *.stl *.ply *.off *.gltf *.glb *.dxf *.skp)"
 GLB_FILTER = "glTF binary (*.glb)"
 MAP_FILTERS = "PNG picture (*.png);;JSON, every map (*.json)"
 #: Kinds of item Edit > Remove works on.
