@@ -278,6 +278,15 @@ def test_screen_attenuation_follows_maekawa(tmp_path: Path) -> None:
     np.testing.assert_allclose(loss, maekawa, atol=1.5)
 
 
+def test_paths_reflecting_at_the_ends_of_an_edge() -> None:
+    # At (2, 8) the listener is as far from the corner as the source and as high: the
+    # paths over the corner by the floor or the ceiling touch it at its ends, where
+    # reflecting before the edge and after it is the same path.
+    room = _l_room([[2.0, 8.0 + d, 1.5] for d in (-1e-4, 0.0, 1e-4)])
+    levels = _levels(room, max_order=1, diffraction="first_order")
+    assert np.abs(np.diff(levels, axis=0)).max() < 0.01
+
+
 def test_a_listener_on_the_source() -> None:
     # A map point can fall on a source: next to its direct sound, nothing over an edge
     # counts.

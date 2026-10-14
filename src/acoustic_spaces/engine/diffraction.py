@@ -541,7 +541,11 @@ class EdgeDiffraction:
         t_k = t_s + (t_r - t_s) * rho_s / (rho_s + rho_r)
         r1 = np.hypot(rho_s, t_k - t_s)
         r2 = np.hypot(rho_r, t_r - t_k)
-        ok = (t_k >= 0.0) & (t_k < edges.length[edge])
+        # At an end of the edge that lies in the plane, the path reflecting there before
+        # the edge and the one reflecting after it are the same path: only the first
+        # counts at the start of the edge, only the second at its end.
+        length = edges.length[edge]
+        ok = np.where(kind == 2, (t_k > 0.0) & (t_k <= length), (t_k >= 0.0) & (t_k < length))
         ok &= (r1 + r2) / self.speed_of_sound <= max_delay_s
         if not ok.any():
             return None
@@ -552,8 +556,11 @@ class EdgeDiffraction:
         point = edges.start[edge] + t_k[:, None] * edges.direction[edge]
 
         # Unobstructed, with the reflection on the expected plane before or after the
-        # edge. Rays start just off the edge, in the middle of its open side.
-        start = point + _OFFSET * self.size * edges.bisector()[edge]
+        # edge. Rays start just off the edge, in the middle of its open side, and just
+        # inside its ends (where a plane they may be meant to reflect off begins).
+        offset = _OFFSET * self.size
+        along = np.clip(t_k, offset, edges.length[edge] - offset) - t_k
+        start = point + along[:, None] * edges.direction[edge] + offset * edges.bisector()[edge]
         reflected = np.full(len(edge), -1, dtype=np.int64)
         bounce = np.zeros((len(edge), 3))
         ok = np.ones(len(edge), dtype=bool)
