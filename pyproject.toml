@@ -32,6 +32,7 @@ classifiers = [
 dependencies = [
     "ezdxf>=1.1",
     "numpy>=1.24",
+    "scipy>=1.11",
     "pydantic>=2.6",
     "pyyaml>=6.0",
     "trimesh>=4.0",
