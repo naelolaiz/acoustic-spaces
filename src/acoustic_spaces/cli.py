@@ -591,7 +591,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
     if args.json:
         path = Path(args.json)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(result.as_dict(), indent=1), encoding="utf-8")
+        path.write_text(json.dumps(result.as_dict(), indent=2) + "\n", encoding="utf-8")
         print(f"\nwrote {path}")
     try:
         if args.plot:
@@ -677,21 +677,25 @@ def _cmd_deconvolve(args: argparse.Namespace) -> int:
     sweep = _load_sweep(args.sweep)
     if sweep is None:
         return 1
-    recording, sample_rate = read_wav(args.recording)
-    if sample_rate != sweep.sample_rate:
-        print(
-            f"error: the recording is at {sample_rate} Hz, the sweep at {sweep.sample_rate} Hz",
-            file=sys.stderr,
-        )
+    try:
+        recording, sample_rate = read_wav(args.recording)
+        if sample_rate != sweep.sample_rate:
+            raise ValueError(
+                f"the recording is at {sample_rate} Hz, the sweep at {sweep.sample_rate} Hz"
+            )
+        responses = deconvolve(recording, sweep, length_s=args.length)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 1
-    responses = deconvolve(recording, sweep, length_s=args.length)
     if args.loopback is not None:
         column = _channel_index(args.loopback, responses.shape[1], "loopback channel")
         if column is None:
             return 1
         responses, lag = remove_latency(responses, column)
         print(f"latency from the loopback channel: {lag / sample_rate * 1e3:.2f} ms")
-    write_wav(args.out, responses, sample_rate)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    write_wav(out, responses, sample_rate)
     print(
         f"wrote {responses.shape[1]} impulse response(s) of "
         f"{len(responses) / sample_rate:.2f} s to {args.out}"
@@ -740,6 +744,7 @@ def _plot_ir(ir, sample_rate: int, path: Path, title: str, args: argparse.Namesp
     try:
         from acoustic_spaces.viz import plot_impulse_response
 
+        path.parent.mkdir(parents=True, exist_ok=True)
         plot_impulse_response(
             ir, sample_rate, path, title=title, filters=args.filters, noise=not args.no_noise
         )
@@ -752,7 +757,11 @@ def _plot_ir(ir, sample_rate: int, path: Path, title: str, args: argparse.Namesp
 def _cmd_analyze(args: argparse.Namespace) -> int:
     from acoustic_spaces.audio import read_wav
 
-    data, sample_rate = read_wav(args.ir)
+    try:
+        data, sample_rate = read_wav(args.ir)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     channels = range(data.shape[1]) if args.channel is None else [args.channel - 1]
     if args.channel is not None and _channel_index(args.channel, data.shape[1], "channel") is None:
         return 1
@@ -773,8 +782,10 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
                 print(f"saved {plot}")
         report["channels"].append(entry)
     if args.json:
-        Path(args.json).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-        print(f"\nwrote {args.json}")
+        path = Path(args.json)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print(f"\nwrote {path}")
     return 0
 
 

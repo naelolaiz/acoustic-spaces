@@ -201,7 +201,9 @@ def test_map_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
     assert "12 map points 2 m apart, 1.2 m above the audience surfaces" in stdout
     assert "talker (bands: 1 kHz)" in stdout
     assert "STI" in stdout and "Ts (ms)" in stdout
-    report = json.loads(out.read_text(encoding="utf-8"))
+    text = out.read_text(encoding="utf-8")
+    assert text.startswith('{\n  "') and text.endswith("}\n")  # as the other JSON files
+    report = json.loads(text)
     assert report["settings"]["noise_db"] == 35.0 and report["settings"]["rays"] == 2000
     assert len(report["points"]) == 12
     assert len(report["maps"]["talker"]["values"]["c80"][0]) == 8
@@ -294,6 +296,48 @@ def test_deconvolve_rejects_a_mismatched_sample_rate(
     args = ["deconvolve", str(tmp_path / "rec.wav"), "--sweep", str(tmp_path / "sweep.json")]
     assert main([*args, "--out", str(tmp_path / "ir.wav")]) == 1
     assert "44100 Hz" in capsys.readouterr().err
+
+
+def test_deconvolve_and_analyze_report_unreadable_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["sweep", str(tmp_path / "sweep.wav"), "--duration", "1", "--silence", "0.5"])
+    capsys.readouterr()
+    (tmp_path / "notes.wav").write_text("not audio", encoding="utf-8")
+    sweep = ["--sweep", str(tmp_path / "sweep.json"), "--out", str(tmp_path / "ir.wav")]
+    # These ended in tracebacks.
+    for args, message in [
+        (["deconvolve", str(tmp_path / "missing.wav"), *sweep], "missing.wav"),
+        (["deconvolve", str(tmp_path / "notes.wav"), *sweep], "notes.wav: not a WAV file"),
+        (["analyze", str(tmp_path / "missing.wav")], "missing.wav"),
+        (["analyze", str(tmp_path / "notes.wav")], "notes.wav: not a WAV file"),
+    ]:
+        assert main(args) == 1
+        err = capsys.readouterr().err
+        assert err.startswith("error: ") and message in err
+
+
+def test_deconvolve_and_analyze_make_their_output_folders(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    sweep = tmp_path / "sweep.wav"
+    main(["sweep", str(sweep), "--duration", "1", "--silence", "0.5"])
+    _write_recording(sweep, tmp_path / "recording.wav")
+    ir = tmp_path / "irs" / "ir.wav"
+    args = ["deconvolve", str(tmp_path / "recording.wav"), "--sweep", str(sweep)]
+    assert main([*args, "--out", str(ir)]) == 0
+    assert ir.exists()
+    report = tmp_path / "reports" / "ir.json"
+    args = ["analyze", str(ir), "--channel", "1", "--json", str(report)]
+    if importlib.util.find_spec("matplotlib") is not None:
+        args += ["--plot", str(tmp_path / "plots" / "ir.png")]
+    assert main(args) == 0
+    capsys.readouterr()
+    assert json.loads(report.read_text(encoding="utf-8"))["channels"][0]["channel"] == 1
+    if importlib.util.find_spec("matplotlib") is not None:
+        assert (tmp_path / "plots" / "ir.png").exists()
 
 
 def test_measure_with_a_mocked_audio_device(
