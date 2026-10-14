@@ -972,6 +972,8 @@ class MainWindow(QMainWindow):
         pair = self.results.pair()
         if pair is None:
             return False
+        if self.results.stop.isEnabled():  # one playback at a time
+            self.stop_playing()
         if self.results.tracking.isChecked():
             return self.play_tracked(path)
         try:
@@ -1014,6 +1016,8 @@ class MainWindow(QMainWindow):
         pair = self.results.pair()
         if pair is None:
             return False
+        if self.results.stop.isEnabled():  # one playback at a time
+            self.stop_playing()
         sample_rate = int(self.result.settings.sample_rate)
         order = self._tracking_order()
         fmt = self._listening_format()

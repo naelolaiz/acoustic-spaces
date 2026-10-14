@@ -549,6 +549,30 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, m
     assert not window._stale()
 
 
+def test_one_playback_at_a_time(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
+    _quick(window.document)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    stops = []
+    fake_sounddevice.play = lambda data, rate: fake_sounddevice.played.append((data, rate))
+    fake_sounddevice.stop = lambda: stops.append(1)
+    write_wav(tmp_path / "dry.wav", np.r_[1.0, np.zeros(5 * 16_000)], 16_000)  # 5 s
+    results = window.results
+    assert window.play_file(tmp_path / "dry.wav")
+    assert results.stop.isEnabled() and not results.listen.isEnabled()
+    window.run_simulation()  # ends while the sound plays: Listen waits for Stop
+    _wait(qapp, lambda: window.job is None)
+    assert results.stop.isEnabled() and not results.listen.isEnabled()
+    # Playing again (here head-tracked) stops what plays first.
+    results.head.port.setValue(0)  # no head tracker
+    results.tracking.setChecked(True)
+    assert window.play_file(tmp_path / "dry.wav")
+    assert stops and not window._play_timer.isActive()
+    _wait(qapp, lambda: window._player is None, timeout=30)
+    assert not results.stop.isEnabled() and results.listen.isEnabled()
+    results.tracking.setChecked(False)
+
+
 def test_results_follow_the_selected_listener(window, qapp) -> None:
     window.open_example(example_path("church"))
     _quick(window.document)
