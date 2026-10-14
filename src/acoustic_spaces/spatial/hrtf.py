@@ -1,8 +1,10 @@
 """Head-related transfer functions: SOFA files and a spherical head model.
 
 An :class:`HRTF` holds head-related impulse responses (left and right ear) for a set of
-directions in head coordinates (x forward, y left, z up). Responses are looked up by
-nearest direction.
+directions in head coordinates (x forward, y left, z up). Responses between the
+measured directions are interpolated (:meth:`HRTF.interpolate`): the three nearest are
+aligned at their onsets, mixed, and delayed by the mix of their onsets, so the
+interaural time difference changes smoothly with the direction.
 
 ``read_sofa`` reads SimpleFreeFieldHRIR files (the AES69 convention most HRTF databases
 use); it needs h5py (the ``sofa`` extra). ``spherical_head`` needs no
@@ -14,13 +16,20 @@ and back, up and down are hard to tell apart with it.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
 from acoustic_spaces._extras import install_hint
 from acoustic_spaces.spatial.directions import fibonacci_sphere, from_angles
+
+#: A response's onset: its first sample within this many dB of its peak.
+_ONSET_DB = -20.0
+#: Directions interpolated in one go, and directions times triangles searched in one go
+#: (memory).
+_CHUNK = 256
+_SEARCH = 1 << 20
 
 
 @dataclass
@@ -29,6 +38,8 @@ class HRTF:
     hrir: np.ndarray  # (m, 2, taps): left, right
     sample_rate: float
     name: str = "hrtf"
+    _aligned: tuple | None = field(default=None, init=False, repr=False, compare=False)
+    _triangles: tuple | None = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         directions = np.atleast_2d(np.asarray(self.directions, dtype=float))
@@ -47,6 +58,126 @@ class HRTF:
         """Index of the nearest measured direction for each of (dirs, 3)."""
         v = np.atleast_2d(np.asarray(directions, dtype=float))
         return np.argmax(v @ self.directions.T, axis=1)
+
+    def onsets(self) -> np.ndarray:
+        """(m, 2) onset of each response (samples, fractions included): where it first
+        rises to within 20 dB of its peak."""
+        return self._alignment()[0]
+
+    def _alignment(self) -> tuple[np.ndarray, np.ndarray]:
+        """The onsets, and the spectra (m, 2, bins) of the responses moved to start
+        there, on an FFT twice the responses long. The samples before an onset wrap
+        round to the end of the FFT, so delaying the response again brings them back."""
+        if self._aligned is None:
+            magnitude = np.abs(self.hrir)
+            threshold = magnitude.max(axis=-1, keepdims=True) * 10.0 ** (_ONSET_DB / 20.0)
+            first = np.argmax(magnitude >= threshold, axis=-1)
+            # Between the sample before the crossing and the crossing, linearly.
+            after = np.take_along_axis(magnitude, first[..., None], axis=-1)[..., 0]
+            before = np.take_along_axis(magnitude, np.maximum(first - 1, 0)[..., None], -1)
+            rise = after - before[..., 0]
+            fraction = np.where(
+                (first > 0) & (rise > 0),
+                (after - threshold[..., 0]) / np.where(rise > 0, rise, 1),
+                0,
+            )
+            onsets = first - fraction
+            n_fft = 2 * self.taps
+            spectra = np.fft.rfft(self.hrir, n_fft, axis=-1)
+            spectra *= np.exp(2j * np.pi * np.fft.rfftfreq(n_fft) * onsets[..., None])
+            self._aligned = (onsets, spectra)
+        return self._aligned
+
+    def interpolate(self, directions: np.ndarray) -> np.ndarray:
+        """Responses (dirs, 2, taps) for head directions (dirs, 3), between the measured
+        ones.
+
+        The measured directions are triangulated (the faces of their convex hull, as
+        for VBAP). Each direction mixes the responses at the corners of the triangle it
+        falls in, aligned at their onsets, with its barycentric weights, and the mix is
+        delayed by the same mix of the onsets, to a fraction of a sample. A measured
+        direction gives its own response, and the weights, and with them the responses
+        and the interaural time difference, change smoothly with the direction. Where no
+        triangle covers a direction (a set that leaves part of the sphere out), the
+        nearest response is used.
+        """
+        v = np.atleast_2d(np.asarray(directions, dtype=float))
+        v = v / np.linalg.norm(v, axis=1, keepdims=True)
+        if len(self.directions) < 4:
+            return self.hrir[self.nearest(v)]
+        onsets, spectra = self._alignment()
+        n_fft = spectra.shape[-1] * 2 - 2
+        frequency = np.fft.rfftfreq(n_fft)  # cycles per sample
+        out = np.empty((len(v), 2, self.taps))
+        for start in range(0, len(v), _CHUNK):
+            index, weights = self._corners(v[start : start + _CHUNK])
+            spectrum = np.einsum("kj,kjeb->keb", weights, spectra[index])
+            delay = np.einsum("kj,kje->ke", weights, onsets[index])
+            spectrum *= np.exp(-2j * np.pi * frequency * delay[..., None])
+            out[start : start + _CHUNK] = np.fft.irfft(spectrum, n_fft, axis=-1)[..., : self.taps]
+        return out
+
+    def _corners(self, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """The measured directions (k, 3) to mix for unit directions (k, 3), and their
+        weights (k, 3)."""
+        faces, inverse, around, real = self._triangulation()
+        nearest = np.argmax(v @ self.directions.T, axis=1)
+        # The triangles round the nearest direction first, then all of them.
+        candidates = around[nearest]
+        g = np.einsum("kc,ktcd->ktd", v, inverse[candidates])
+        g[candidates < 0] = -np.inf
+        best = np.argmax(g.min(axis=2), axis=1)
+        face = candidates[np.arange(len(v)), best]
+        weights = g[np.arange(len(v)), best]
+        missed = np.flatnonzero(weights.min(axis=1) < -1e-9)
+        step = max(1, _SEARCH // len(faces))
+        for start in range(0, len(missed), step):
+            some = missed[start : start + step]
+            g = np.einsum("kc,tcd->ktd", v[some], inverse)
+            best = np.argmax(g.min(axis=2), axis=1)
+            face[some] = best
+            weights[some] = g[np.arange(len(some)), best]
+        index = faces[face]
+        made_up = index >= real
+        weights[made_up] = 0.0
+        index[made_up] = 0
+        total = weights.sum(axis=1, keepdims=True)
+        uncovered = (weights.min(axis=1) < -1e-9) | (total[:, 0] <= 1e-12)
+        weights = np.maximum(weights, 0.0) / np.where(uncovered[:, None], 1.0, total)
+        index[uncovered] = nearest[uncovered, None]
+        weights[uncovered] = [1.0, 0.0, 0.0]
+        return index, weights
+
+    def _triangulation(self):
+        """Triangles (t, 3) of the measured directions, the inverse of each one's corner
+        matrix (t, 3, 3), the triangles round each direction (m, n) padded with -1, and
+        how many of the corners are measured directions (the rest are made up)."""
+        if self._triangles is None:
+            from scipy.spatial import ConvexHull, QhullError
+
+            points = self.directions
+            try:
+                faces = ConvexHull(points).simplices
+            except QhullError:
+                # All in one plane (a ring of directions): two made-up directions on
+                # either side of it, which give their weight to the others.
+                normal = np.linalg.svd(points - points.mean(axis=0))[2][-1]
+                points = np.vstack([points, normal, -normal])
+                faces = ConvexHull(points).simplices
+            # Triangles through the centre (a set covering half the sphere, cut along
+            # its rim) cover no direction.
+            faces = faces[np.abs(np.linalg.det(points[faces])) > 1e-12]
+            inverse = np.linalg.inv(points[faces])
+            real = len(self.directions)
+            count = np.bincount(faces.ravel(), minlength=len(points))[:real]
+            around = np.full((real, max(int(count.max()), 1)), -1)
+            filled = np.zeros(real, dtype=int)
+            for t, face in enumerate(faces):
+                for corner in face[face < real]:
+                    around[corner, filled[corner]] = t
+                    filled[corner] += 1
+            self._triangles = (faces, inverse, around, real)
+        return self._triangles
 
     def resampled(self, sample_rate: float) -> HRTF:
         """The same responses at another sample rate (band-limited, by FFT).
@@ -105,6 +236,22 @@ def spherical_head(
         phase = np.exp(-1j * omega * (lead + delay[:, None]))
         hrir[:, ear] = np.fft.irfft(shadow * phase, taps, axis=-1)
     return HRTF(grid, hrir, float(sample_rate), "spherical head")
+
+
+def _delayed(ir: np.ndarray, delay: np.ndarray) -> np.ndarray:
+    """Responses (m, 2, taps) delayed by (m, 2) samples, fractions included, and made
+    longer by the largest delay."""
+    taps = ir.shape[2] + int(math.ceil(delay.max()))
+    n_fft = 2 * taps
+    whole = np.floor(delay).astype(int)
+    fraction = delay - whole
+    spectrum = np.fft.rfft(ir, n_fft, axis=-1)
+    frequency = np.fft.rfftfreq(n_fft)
+    shifted = np.fft.irfft(spectrum * np.exp(-2j * np.pi * frequency * fraction[..., None]), n_fft)
+    out = np.zeros((*ir.shape[:2], taps))
+    for (m, r), start in np.ndenumerate(whole):
+        out[m, r, start:] = shifted[m, r, : taps - start]
+    return out
 
 
 def _text(value) -> str:
@@ -178,14 +325,10 @@ def read_sofa(path: str | Path) -> HRTF:
             if len(ears) >= 2 and ears[0, 1] < ears[1, 1]:
                 ir = ir[:, ::-1]
         if "Data.Delay" in f:
-            delay = np.rint(np.asarray(f["Data.Delay"][()], dtype=float)).astype(int)
+            delay = np.asarray(f["Data.Delay"][()], dtype=float)
             delay = np.broadcast_to(delay.reshape(-1, 2), (len(ir), 2))
             if delay.any():
-                shifted = np.zeros((*ir.shape[:2], ir.shape[2] + int(delay.max())))
-                for m in range(len(ir)):
-                    for r in range(2):
-                        shifted[m, r, delay[m, r] : delay[m, r] + ir.shape[2]] = ir[m, r]
-                ir = shifted
+                ir = _delayed(ir, delay)
         name = _text(f.attrs.get("Title", path.stem)) or path.stem
     return HRTF(directions, ir, rate, name)
 

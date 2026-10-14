@@ -162,7 +162,7 @@ def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, see
         half = n_k // 2
         gains = synthesis.band_gains(n_k, sample_rate)
         amplitudes = np.sqrt(synthesis.ENERGY_TO_IR * early.energy)
-        nearest = hrtf.nearest(to_head(early.direction, response.orientation))
+        heads = to_head(early.direction, response.orientation)
         position = early.delay_s * sample_rate
         base = np.floor(position).astype(np.int64)
         # The fractional delay of the mono response: a Hann-windowed sinc.
@@ -173,7 +173,7 @@ def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, see
             sinc = np.zeros((len(x), n_k))
             sinc[:, taps % n_k] = np.sinc(x) * np.cos(np.pi * x / _SINC_TAPS) ** 2
             spectrum = (amplitudes[part] @ gains) * np.fft.rfft(sinc, axis=1)
-            ears = np.fft.rfft(hrtf.hrir[nearest[part]], n_k, axis=-1)
+            ears = np.fft.rfft(hrtf.interpolate(heads[part]), n_k, axis=-1)
             kernels = np.roll(np.fft.irfft(spectrum[:, None, :] * ears, n_k, axis=-1), half, -1)
             for k, offset in enumerate(base[part] - half):
                 lo, hi = max(offset, 0), min(offset + n_k, out.shape[1])
@@ -186,12 +186,12 @@ def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, see
         from acoustic_spaces import _native
 
         signals, at, chosen, directions = _late_impulses(response, n, sample_rate, seed)
-        nearest = hrtf.nearest(to_head(directions, response.orientation))
-        kernels = np.ascontiguousarray(hrtf.hrir)
+        # One interpolated response per direction of the late energy.
+        kernels = np.ascontiguousarray(hrtf.interpolate(to_head(directions, response.orientation)))
         ears = np.empty((signals.shape[0], 2, out.shape[1]))
         for b in range(signals.shape[0]):
             ears[b] = _native.scatter_kernels(
-                out.shape[1], at, nearest[chosen[:, b]], signals[b, at], kernels
+                out.shape[1], at, np.ascontiguousarray(chosen[:, b]), signals[b, at], kernels
             )
         for ear in range(2):
             out[ear] += synthesis.combine_bands(ears[:, ear], sample_rate)
@@ -238,7 +238,7 @@ def _with_wave(
     if isinstance(fmt, Binaural):
         hrtf = fmt.at(sample_rate)
         size = 1 << int(math.ceil(math.log2(n + hrtf.taps)))
-        ears = np.fft.rfft(hrtf.hrir[hrtf.nearest(head)], size, axis=-1)  # (planes, 2, bins)
+        ears = np.fft.rfft(hrtf.interpolate(head), size, axis=-1)  # (planes, 2, bins)
         spectrum = np.einsum("bk,keb->be", np.fft.rfft(planes, size, axis=0), ears)
         return out + np.fft.irfft(spectrum, size, axis=0)[:n]
     return out + planes @ fmt.gains(head)

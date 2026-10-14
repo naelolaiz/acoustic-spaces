@@ -74,6 +74,17 @@
   needs no SketchUp: faces labelled by their material, matched by colour. The editor
   opens them too. OBJ exported from SketchUp stays the recommended path.
 
+**Smoother binaural**
+
+- HRTFs are interpolated between the measured directions instead of taking the nearest:
+  barycentric weights on a triangulation of the measured directions (as in VBAP), with
+  the responses aligned at their onsets and the mix delayed by the mixed onsets, to a
+  fraction of a sample. Reflections between measured directions get an interaural time
+  difference between theirs, so moving a source or the listener's head in a scene no
+  longer makes it jump in steps. A set measured round the horizon only works too.
+- Delays in SOFA files (`Data.Delay`) keep their fractions of a sample.
+- scipy is a new dependency (for the triangulation).
+
 **Geometry**
 
 - Where a face's edge runs past the corners of faces on its other side (a T-junction,
@@ -82,6 +93,13 @@
 - Rooms touching along an edge, with four faces on it, count as closed when the faces
   pair up. Edges shared by an odd number of faces still leave a model open, and the
   report and the warning count them.
+
+**Head tracking**
+
+- Turning the sound field is exact and about three times faster (0.3 ms instead of
+  0.8 ms per orientation at seventh order): each order's rotation follows from the one
+  below by Ivanic and Ruedenberg's recursion instead of a least-squares fit on a grid of
+  directions.
 
 **Fixes**
 
