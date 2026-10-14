@@ -376,6 +376,48 @@ def test_mesh_without_faces_is_not_closed() -> None:
     assert "no faces" in report.summary()
 
 
+@pytest.mark.parametrize("sliver", [False, True])
+def test_faces_are_split_where_an_edge_runs_past_a_corner(sliver: bool) -> None:
+    # The floor is cut in two across its middle, the walls along it are not: their bottom
+    # edges run past the floor's middle corners (T-junctions). SketchUp's exports close
+    # such a gap with zero-area slivers, which cleaning drops.
+    box = _box(8, 6, 3)
+    vertices = np.vstack([box.vertices, [[4, 0, 0], [4, 6, 0]]])
+    floor = [[0, 8, 9], [0, 9, 3], [8, 1, 2], [8, 2, 9]]
+    faces = np.vstack([floor, box.faces[2:]] + ([[[0, 1, 8], [2, 3, 9]]] if sliver else []))
+    mesh = RoomMesh(vertices, faces, np.zeros(len(faces)), [("box",)])
+    assert check_mesh(mesh).closed == sliver  # the sliver closes it, without area
+
+    cleaned, _, removed = clean_mesh(mesh)
+    report = check_mesh(cleaned)
+    assert removed == (2 if sliver else 0)
+    assert report.closed and report.inconsistent_edges == 0 and report.normals_inward
+    assert report.volume_m3 == pytest.approx(144.0)
+    assert report.surface_area_m2 == pytest.approx(180.0)
+    assert len(cleaned.faces) == 4 + 10 + 2  # each wall's bottom face split in two
+
+
+def test_rooms_touching_along_an_edge_are_closed() -> None:
+    # Two boxes that share one vertical edge: four faces meet along it, in pairs.
+    a = _box(1, 1, 1)
+    b = RoomMesh(a.vertices + [1.0, 1.0, 0.0], a.faces, a.face_labels, a.labels)
+    cleaned, merged, _ = clean_mesh(RoomMesh.concatenate([a, b]))
+    report = check_mesh(cleaned)
+    assert merged == 2
+    assert report.non_manifold_edges == 1 and report.odd_edges == 0
+    assert report.closed and report.inconsistent_edges == 0
+    assert report.volume_m3 == pytest.approx(2.0)
+
+
+def test_a_face_given_twice_leaves_the_model_open() -> None:
+    box = _box(8, 6, 3)
+    faces = np.vstack([box.faces, box.faces[:1]])
+    report = check_mesh(RoomMesh(box.vertices, faces, np.zeros(len(faces)), box.labels))
+    assert report.boundary_edges == 0 and report.odd_edges == 3
+    assert not report.closed and report.volume_m3 is None
+    assert "3 edges shared by an odd number of faces" in report.summary()
+
+
 def test_points_inside_either_orientation() -> None:
     box = _box(8, 6, 3)
     points = [[4, 3, 1.5], [9, 3, 1.5], [4, 3, -0.1], [0.01, 0.01, 0.01]]

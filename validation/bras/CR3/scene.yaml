@@ -1,0 +1,38 @@
+# BRAS CR3 (chamber music hall), from the BRAS benchmark (Aspöck et al., 2020),
+# DOI 10.14279/depositonce-6726.3, CC BY-SA 4.0.
+# Made by validation/bras/prepare.py: the model converted from SketchUp, the surface
+# data as published (absorption fitted to the measured reverberation time; the
+# initial estimates are in materials/initial), and the dodecahedron loudspeaker and
+# microphone positions of the measured responses.
+name: BRAS CR3 (chamber music hall)
+geometry:
+  file: CR3.obj
+materials:
+  mat_CR3_ceiling:
+    file: materials/fitted/mat_CR3_ceiling.csv
+  mat_CR3_floor:
+    file: materials/fitted/mat_CR3_floor.csv
+  mat_CR3_plaster:
+    file: materials/fitted/mat_CR3_plaster.csv
+  mat_CR3_seating:
+    file: materials/fitted/mat_CR3_seating.csv
+  mat_CR3_stagePanels:
+    file: materials/fitted/mat_CR3_stagePanels.csv
+  mat_CR3_structuredPlaster:
+    file: materials/fitted/mat_CR3_structuredPlaster.csv
+  mat_CR3_windows:
+    file: materials/fitted/mat_CR3_windows.csv
+air: {temperature_c: 22.4, humidity_percent: 40.9}
+sources:
+  - {name: LS1, position: [-2.02, 2.0, 2.38]}
+  - {name: LS2, position: [-3.32, -2.0, 2.38]}
+listeners:
+  - {name: MP1, position: [7.84, 0.0, 1.23]}
+  - {name: MP2, position: [2.165, 3.441, 1.23]}
+  - {name: MP3, position: [9.227, 2.366, 1.23]}
+  - {name: MP4, position: [5.86, -2.359, 1.23]}
+  - {name: MP5, position: [12.726, -3.24, 1.23]}
+simulation:
+  ir_length_s: 2.5
+  seed: 1
+outputs: [mono]

@@ -13,6 +13,9 @@ from acoustic_spaces.geometry.mesh import RoomMesh
 MERGE_TOLERANCE_M = 1e-6
 #: Faces smaller than this (square metres) are dropped as degenerate.
 MIN_FACE_AREA_M2 = 1e-10
+#: A vertex closer than this (metres) to an open edge of another face, between its ends,
+#: splits that edge (a T-junction).
+T_JUNCTION_TOLERANCE_M = 1e-5
 
 
 @dataclass
@@ -33,10 +36,15 @@ class MeshReport:
     #: (open model or inconsistent orientation).
     normals_inward: bool | None = None
 
+    #: Edges shared by three or another odd number of faces: a fin or a crack, which
+    #: leaves the model open.
+    odd_edges: int = 0
+
     @property
     def closed(self) -> bool:
-        """True when there are faces and every edge is shared by exactly two of them."""
-        return self.faces > 0 and self.boundary_edges == 0 and self.non_manifold_edges == 0
+        """True when there are faces and every edge is shared by an even number of them:
+        two, or four where two parts of the room touch along an edge."""
+        return self.faces > 0 and self.boundary_edges == 0 and self.odd_edges == 0
 
     def summary(self) -> str:
         lo, hi = np.array(self.bounds_min), np.array(self.bounds_max)
@@ -45,6 +53,8 @@ class MeshReport:
             state = "closed"
         elif self.faces:
             state = f"open: {self.boundary_edges} boundary edges"
+            if self.odd_edges:
+                state += f", {self.odd_edges} edges shared by an odd number of faces"
         else:
             state = "no faces"
         lines = [
@@ -66,9 +76,13 @@ class MeshReport:
 
 
 def clean_mesh(mesh: RoomMesh) -> tuple[RoomMesh, int, int]:
-    """Merge duplicate vertices, drop degenerate faces and orient the faces alike.
+    """Merge duplicate vertices, drop degenerate faces, split faces at T-junctions and
+    orient the faces alike.
 
-    Faces that meet along an edge are turned to agree with each other, so a closed
+    A face whose edge runs past a corner of the faces on its other side (a T-junction,
+    which CAD exporters leave, or close with a zero-area sliver that is dropped here) is
+    split at that corner, so the faces share the edge and the model can close. Faces
+    that meet along an edge are turned to agree with each other, so a closed
     model with a few faces flipped by its exporter still has a volume and an inside
     test that works; each connected part keeps the orientation most of its area had.
     Returns the cleaned mesh, the number of merged vertices and of removed faces.
@@ -86,9 +100,84 @@ def clean_mesh(mesh: RoomMesh) -> tuple[RoomMesh, int, int]:
         (faces[:, 0] != faces[:, 1]) & (faces[:, 1] != faces[:, 2]) & (faces[:, 0] != faces[:, 2])
     )
     keep = distinct & (area > MIN_FACE_AREA_M2)
-    faces = _orient_faces(faces[keep], area[keep])
-    cleaned = RoomMesh(vertices, faces, mesh.face_labels[keep], list(mesh.labels))
+    faces, labels = _split_t_junctions(vertices, faces[keep], mesh.face_labels[keep])
+    tri = vertices[faces]
+    area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+    faces = _orient_faces(faces, area)
+    cleaned = RoomMesh(vertices, faces, labels, list(mesh.labels))
     return cleaned, merged, int(np.count_nonzero(~keep))
+
+
+def _edge_counts(faces: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Every face edge (the three of face i are rows i, n + i and 2n + i) as corner
+    pairs, the index of its undirected edge, and how many faces share each of those."""
+    directed = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
+    key = directed.min(axis=1) * (int(faces.max(initial=0)) + 1) + directed.max(axis=1)
+    _, edge, counts = np.unique(key, return_inverse=True, return_counts=True)
+    return directed, edge.reshape(-1), counts
+
+
+def _split_t_junctions(
+    vertices: np.ndarray, faces: np.ndarray, labels: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """The faces split at the vertices that lie on their open edges, with their labels.
+
+    An open edge is one no other face shares. Each vertex within
+    ``T_JUNCTION_TOLERANCE_M`` of it, between its ends, becomes a corner: the face turns
+    into a fan of faces from its opposite corner, in the same orientation. A face with
+    T-junctions on more than one edge is split one edge per pass.
+    """
+    for _ in range(8):
+        if len(faces) == 0:
+            break
+        directed, edge, counts = _edge_counts(faces)
+        open_rows = np.flatnonzero(counts[edge] == 1)
+        if len(open_rows) == 0:
+            break
+        # Only the ends of open edges can lie on another open edge: sorted along x, the
+        # ones within an edge's reach are one slice.
+        ends = np.unique(directed[open_rows])
+        order = np.argsort(vertices[ends, 0], kind="stable")
+        ends, xs = ends[order], vertices[ends[order], 0]
+        n = len(faces)
+        replaced: dict[int, list[list[int]]] = {}
+        for row in open_rows.tolist():
+            face = row % n
+            if face in replaced:
+                continue
+            a, b = directed[row]
+            pa, pb = vertices[a], vertices[b]
+            lo, hi = sorted((pa[0], pb[0]))
+            near = ends[
+                np.searchsorted(xs, lo - T_JUNCTION_TOLERANCE_M) : np.searchsorted(
+                    xs, hi + T_JUNCTION_TOLERANCE_M, side="right"
+                )
+            ]
+            if len(near) == 0:
+                continue
+            d = pb - pa
+            length = float(np.linalg.norm(d))
+            t = (vertices[near] - pa) @ d / length**2
+            off = np.linalg.norm(vertices[near] - (pa + np.outer(t, d)), axis=1)
+            inside = (
+                (off < T_JUNCTION_TOLERANCE_M)
+                & (t * length > T_JUNCTION_TOLERANCE_M)
+                & ((1.0 - t) * length > T_JUNCTION_TOLERANCE_M)
+            )
+            if not inside.any():
+                continue
+            corners = [int(a), *near[inside][np.argsort(t[inside])].tolist(), int(b)]
+            k = row // n  # the face runs a -> b from its corner k
+            c = int(faces[face, (k + 2) % 3])
+            replaced[face] = [[p, q, c] for p, q in zip(corners[:-1], corners[1:], strict=True)]
+        if not replaced:
+            break
+        kept = np.setdiff1d(np.arange(n), list(replaced))
+        new = [f for split in replaced.values() for f in split]
+        new_labels = [labels[face] for face, split in replaced.items() for _ in split]
+        faces = np.concatenate([faces[kept], np.array(new, dtype=faces.dtype)])
+        labels = np.concatenate([labels[kept], np.array(new_labels, dtype=labels.dtype)])
+    return faces, labels
 
 
 def _orient_faces(faces: np.ndarray, areas: np.ndarray) -> np.ndarray:
@@ -107,12 +196,8 @@ def _orient_faces(faces: np.ndarray, areas: np.ndarray) -> np.ndarray:
         return faces.copy()
 
     # Every edge of every face, and the faces on both sides of each two-face edge.
-    directed = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
+    directed, edge, counts = _edge_counts(faces)
     owner = np.tile(np.arange(count), 3)
-    # One number per undirected edge (faster to sort than pairs).
-    key = directed.min(axis=1) * (int(faces.max()) + 1) + directed.max(axis=1)
-    _, edge, counts = np.unique(key, return_inverse=True, return_counts=True)
-    edge = edge.reshape(-1)
     shared = np.flatnonzero(counts[edge] == 2)
     pairs = shared[np.argsort(edge[shared], kind="stable")].reshape(-1, 2)
     a, b = owner[pairs[:, 0]], owner[pairs[:, 1]]
@@ -155,19 +240,20 @@ def _orient_faces(faces: np.ndarray, areas: np.ndarray) -> np.ndarray:
 def check_mesh(mesh: RoomMesh, merged: int = 0, removed: int = 0) -> MeshReport:
     """Topology, size and orientation checks on a cleaned mesh."""
     faces = mesh.faces
-    directed = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
-    undirected = np.sort(directed, axis=1)
-    _, counts = np.unique(undirected, axis=0, return_counts=True)
-    _, directed_counts = np.unique(directed, axis=0, return_counts=True)
+    directed, edge, counts = _edge_counts(faces)
+    # Faces agree along an edge when as many run along it one way as the other.
+    way = np.where(directed[:, 0] < directed[:, 1], 1.0, -1.0)
+    balance = np.bincount(edge, weights=way, minlength=len(counts))
 
     boundary = int(np.count_nonzero(counts == 1))
     non_manifold = int(np.count_nonzero(counts > 2))
-    inconsistent = int(np.count_nonzero(directed_counts > 1))
+    odd = int(np.count_nonzero((counts > 2) & (counts % 2 == 1)))
+    inconsistent = int(np.count_nonzero((counts > 1) & (balance != 0)))
 
     volume = None
     inward = None
     notes: list[str] = []
-    if boundary == 0 and non_manifold == 0 and inconsistent == 0 and len(faces):
+    if boundary == 0 and odd == 0 and inconsistent == 0 and len(faces):
         tri = mesh.triangles
         signed = float(np.sum(np.einsum("ij,ij->i", tri[:, 0], np.cross(tri[:, 1], tri[:, 2]))) / 6)
         volume = abs(signed)
@@ -192,6 +278,7 @@ def check_mesh(mesh: RoomMesh, merged: int = 0, removed: int = 0) -> MeshReport:
         bounds_max=tuple(float(v) for v in hi),
         notes=notes,
         normals_inward=inward,
+        odd_edges=odd,
     )
 
 

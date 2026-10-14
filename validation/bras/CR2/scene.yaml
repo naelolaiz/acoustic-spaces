@@ -1,0 +1,34 @@
+# BRAS CR2 (seminar room), from the BRAS benchmark (Aspöck et al., 2020),
+# DOI 10.14279/depositonce-6726.3, CC BY-SA 4.0.
+# Made by validation/bras/prepare.py: the model converted from SketchUp, the surface
+# data as published (absorption fitted to the measured reverberation time; the
+# initial estimates are in materials/initial), and the dodecahedron loudspeaker and
+# microphone positions of the measured responses.
+name: BRAS CR2 (seminar room)
+geometry:
+  file: CR2.obj
+materials:
+  mat_CR2_ceiling:
+    file: materials/fitted/mat_CR2_ceiling.csv
+  mat_CR2_concrete:
+    file: materials/fitted/mat_CR2_concrete.csv
+  mat_CR2_floor:
+    file: materials/fitted/mat_CR2_floor.csv
+  mat_CR2_plaster:
+    file: materials/fitted/mat_CR2_plaster.csv
+  mat_CR2_windows:
+    file: materials/fitted/mat_CR2_windows.csv
+air: {temperature_c: 19.5, humidity_percent: 41.7}
+sources:
+  - {name: LS1, position: [0.931, -2.547, 0.723]}
+  - {name: LS2, position: [0.119, 2.88, 0.723]}
+listeners:
+  - {name: MP1, position: [-0.993, 1.426, 1.23]}
+  - {name: MP2, position: [0.439, -0.147, 1.23]}
+  - {name: MP3, position: [1.361, -0.603, 1.23]}
+  - {name: MP4, position: [-1.11, -0.256, 1.23]}
+  - {name: MP5, position: [-0.998, -1.409, 1.23]}
+simulation:
+  ir_length_s: 2.5
+  seed: 1
+outputs: [mono]
