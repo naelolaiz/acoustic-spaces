@@ -280,7 +280,7 @@ Frequency-dependent data uses eight octave bands from 63 Hz to 8 kHz.
 
 | Format | Read with | Names used for material assignment |
 | --- | --- | --- |
-| OBJ | built-in reader | `usemtl` material, `g` group, `o` object |
+| OBJ | built-in reader | `usemtl` material, `g` groups, `o` object |
 | DXF | [ezdxf](https://ezdxf.mozman.de/) (3DFACE, MESH, polyface, block references) | layer |
 | glTF / GLB | [trimesh](https://trimesh.org/) | material, node and mesh names |
 | STL, PLY, OFF | trimesh | file name |

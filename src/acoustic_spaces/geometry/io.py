@@ -1,7 +1,8 @@
 """CAD importers.
 
-- OBJ: read directly, keeping ``usemtl`` material names, ``g`` groups and ``o``
-  objects. This is the main path: SketchUp, Rhino, Revit and Blender all export it.
+- OBJ: read directly, keeping ``usemtl`` material names, ``g`` groups (several on
+  one line, too) and ``o`` objects. This is the main path: SketchUp, Rhino, Revit and
+  Blender all export it.
 - STL, PLY, OFF, glTF/GLB: read through trimesh; names come from glTF materials
   and nodes, or from the file name for formats without groups.
 - DXF: read through ezdxf; 3DFACE, MESH and polyface entities, also inside block
@@ -12,7 +13,8 @@ All importers return metres with +z up.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import math
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import numpy as np
@@ -107,35 +109,68 @@ def _label(*names: str | None) -> tuple[str, ...]:
     return tuple(out)
 
 
+def _obj_statements(lines: Iterable[str]) -> Iterator[tuple[int, str]]:
+    """The statements of an OBJ file and the line each starts on: comments removed, and
+    a line that ends in a backslash joined to the next."""
+    pending, start = "", 0
+    for lineno, raw in enumerate(lines, start=1):
+        text = raw.split("#", 1)[0].strip()
+        if not pending:
+            start = lineno
+        if text.endswith("\\"):
+            pending += text[:-1] + " "
+            continue
+        statement = (pending + text).strip()
+        pending = ""
+        if statement:
+            yield start, statement
+    if pending.strip():
+        yield start, pending.strip()
+
+
 def read_obj(path: Path) -> RoomMesh:
-    """Wavefront OBJ: polygons with their usemtl / g / o names, in file units."""
+    """Wavefront OBJ: polygons with their usemtl / g / o names, in file units.
+
+    ``g`` may name several groups at once; the faces after it carry all of them.
+    """
     builder = _MeshBuilder()
-    material = group = obj = None
+    material = obj = None
+    groups: list[str] = []
     with path.open(encoding="utf-8", errors="replace") as fh:
-        for lineno, raw in enumerate(fh, start=1):
-            line = raw.split("#", 1)[0].strip()
-            if not line:
-                continue
+        for lineno, line in _obj_statements(fh):
             parts = line.split(maxsplit=1)
             tag, rest = parts[0], (parts[1].strip() if len(parts) > 1 else "")
             if tag == "v":
                 values = rest.split()
                 if len(values) < 3:
                     raise ValueError(f"{path}:{lineno}: vertex needs three coordinates")
-                builder.vertices.append((float(values[0]), float(values[1]), float(values[2])))
+                try:
+                    vertex = (float(values[0]), float(values[1]), float(values[2]))
+                except ValueError:
+                    raise ValueError(
+                        f"{path}:{lineno}: vertex coordinates must be numbers"
+                    ) from None
+                if not all(math.isfinite(v) for v in vertex):
+                    raise ValueError(f"{path}:{lineno}: vertex coordinates must be finite")
+                builder.vertices.append(vertex)
             elif tag == "f":
                 corners = []
                 for token in rest.split():
-                    index = int(token.split("/", 1)[0])
+                    try:
+                        index = int(token.split("/", 1)[0])
+                    except ValueError:
+                        raise ValueError(
+                            f"{path}:{lineno}: face corner {token!r} is no vertex number"
+                        ) from None
                     index = index - 1 if index > 0 else len(builder.vertices) + index
                     if not 0 <= index < len(builder.vertices):
                         raise ValueError(f"{path}:{lineno}: face refers to a missing vertex")
                     corners.append(index)
-                builder.add_polygon(corners, _label(material, group, obj))
+                builder.add_polygon(corners, _label(material, *groups, obj))
             elif tag == "usemtl":
                 material = rest or None
             elif tag == "g":
-                group = rest or None
+                groups = rest.split()
             elif tag == "o":
                 obj = rest or None
     return builder.build(path)

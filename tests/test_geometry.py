@@ -128,6 +128,45 @@ def test_obj_quads_negative_indices_texture_normals_and_labels(tmp_path: Path) -
     assert mesh.label_names() == ["oak", "floor", "hall", "front"]
 
 
+def test_obj_with_several_groups_on_one_line(tmp_path: Path) -> None:
+    obj = tmp_path / "room.obj"
+    obj.write_text(
+        "v 0 0 0\nv 8 0 0\nv 8 6 0\nv 0 6 0\nusemtl oak\ng floor stage\nf 1 2 3 4\n",
+        encoding="utf-8",
+    )
+    # Each name can take an assignment (it was one name, "floor stage").
+    assert load_mesh(obj).labels == [("oak", "floor", "stage")]
+
+
+def test_obj_line_continuation(tmp_path: Path) -> None:
+    obj = tmp_path / "room.obj"
+    obj.write_text(
+        "v 0 0 0\nv 4 0 \\\n 0\nv 4 5 0\nv 0 5 0  # a corner\ng floor\nf 1 2 \\\n3 4\n",
+        encoding="utf-8",
+    )
+    mesh = load_mesh(obj)
+    np.testing.assert_allclose(mesh.vertices[1], [4, 0, 0])
+    assert len(mesh.faces) == 2 and mesh.face_areas().sum() == pytest.approx(20.0)
+    assert mesh.labels == [("floor",)]
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ("v 1e400 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n", r":1: vertex coordinates must be finite"),
+        ("v 0 0 0\nv nan 0 0\nv 0 1 0\nf 1 2 3\n", r":2: vertex coordinates must be finite"),
+        ("v 0 0 0\nv 1 0 x\nv 0 1 0\nf 1 2 3\n", r":2: vertex coordinates must be numbers"),
+        ("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 \\ 3\n", r":4: face corner '\\\\' is no vertex"),
+    ],
+    ids=["infinite", "nan", "text", "stray backslash"],
+)
+def test_obj_bad_numbers_name_their_line(tmp_path: Path, content: str, message: str) -> None:
+    obj = tmp_path / "bad.obj"
+    obj.write_text(content, encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
+        load_mesh(obj)
+
+
 def test_units_and_up_axis(tmp_path: Path) -> None:
     obj = tmp_path / "tri.obj"
     obj.write_text("v 0 0 0\nv 100 0 0\nv 0 250 0\nf 1 2 3\n", encoding="utf-8")
