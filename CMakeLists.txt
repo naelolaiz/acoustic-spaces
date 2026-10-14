@@ -26,7 +26,8 @@ endif()
 
 install(TARGETS _native LIBRARY DESTINATION acoustic_spaces)
 
-# The example scenes ship inside the package; acoustic_spaces.examples finds them.
+# The example scenes and their scripts ship inside the package; acoustic_spaces.examples
+# finds them.
 install(
   DIRECTORY examples/
   DESTINATION acoustic_spaces/example_scenes
@@ -35,4 +36,6 @@ install(
   PATTERN "*.obj"
   PATTERN "*.csv"
   PATTERN "*.sofa"
+  PATTERN "*.py"
+  PATTERN "*.sh"
 )

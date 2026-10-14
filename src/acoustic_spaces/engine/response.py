@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -14,6 +15,9 @@ from acoustic_spaces.engine.wave import WaveResponse
 
 #: The synthesized late part is smoothed over 10 ms from this long after the direct sound.
 SMOOTH_AFTER_S = 0.05
+#: Stage support is given for listeners at most this far from the source (m); ISO 3382-1
+#: measures it at 1 m.
+STAGE_DISTANCE_M = 1.5
 
 
 @dataclass
@@ -49,6 +53,9 @@ class Response:
     direction_step: float = 0.01
     #: The lowest octave bands from the wave solver, or None.
     wave: WaveResponse | None = None
+    #: Unit vector from the listener towards the source (room coordinates); None takes
+    #: the direct path's, or the listener's forward axis without one.
+    source_direction: np.ndarray | None = None
 
     @property
     def bands(self) -> int:
@@ -56,36 +63,123 @@ class Response:
 
     def energy(self, time_step: float | None = None) -> np.ndarray:
         """Echogram: energy per band and time slot (bands, slots), early paths included."""
+        return self._echogram(time_step)
+
+    def weighted_energy(
+        self, axis: np.ndarray, exponent: int = 2, time_step: float | None = None
+    ) -> np.ndarray:
+        """Echogram of a figure of eight facing ``axis`` (a unit vector, room
+        coordinates): each arrival's energy times the cosine of its angle to the axis,
+        taken without its sign, to the power ``exponent``. With 2 that is the energy the
+        figure of eight picks up; with 1 the magnitude of its product with the pressure,
+        as LFC takes it. Late energy without directions counts as arriving evenly from
+        all of them."""
+        return self._echogram(time_step, np.asarray(axis, dtype=float), exponent)
+
+    def _echogram(
+        self, time_step: float | None, axis: np.ndarray | None = None, exponent: int = 2
+    ) -> np.ndarray:
         step = self.time_step if time_step is None else time_step
         slots = int(math.ceil(self.length_s / step - 1e-9))
+        late = self.late if axis is None else self.late * self._late_weights(axis, exponent)
         if math.isclose(step, self.time_step):
-            out = self.late[:, :slots].copy()
+            out = late[:, :slots].copy()
             if out.shape[1] < slots:
                 out = np.pad(out, ((0, 0), (0, slots - out.shape[1])))
         else:
             # Spread each late slot evenly over the slots it overlaps.
-            edges = np.arange(self.late.shape[1] + 1) * self.time_step
+            edges = np.arange(late.shape[1] + 1) * self.time_step
             cumulative = np.concatenate(
-                [np.zeros((self.bands, 1)), np.cumsum(self.late, axis=1)], axis=1
+                [np.zeros((self.bands, 1)), np.cumsum(late, axis=1)], axis=1
             )
             new_edges = np.arange(slots + 1) * step
             out = np.diff(
                 np.array([np.interp(new_edges, edges, row) for row in cumulative]), axis=1
             )
+        early = self.early.energy
+        if axis is not None:
+            early = early * (np.abs(self.early.direction @ axis) ** exponent)[:, None]
         idx = (self.early.delay_s / step).astype(np.int64)
         keep = idx < slots
         for b in range(self.bands):
-            np.add.at(out[b], idx[keep], self.early.energy[keep, b])
+            np.add.at(out[b], idx[keep], early[keep, b])
         if self.wave is not None:
-            out[: self.wave.bands] = self.wave.energy(step, slots)
+            out[: self.wave.bands] = self.wave.energy(step, slots, axis, exponent)
         return out
 
+    def _late_weights(self, axis: np.ndarray, exponent: int) -> np.ndarray:
+        """Per band and slot of ``late``, the mean |cos|^exponent of the late energy's
+        directions to ``axis``: 1/3 or 1/2 for energy from all directions alike."""
+        even = 1.0 / (exponent + 1.0)
+        shape = self.late.shape
+        energy = self.late_directional
+        if len(self.late_directions) == 0 or energy.size == 0:
+            return np.full(shape, even)
+        gain = np.abs(self.late_directions @ axis) ** exponent
+        total = energy.sum(axis=0)
+        mean = np.full(total.shape, even)
+        np.divide(np.tensordot(gain, energy, axes=1), total, out=mean, where=total > 0)
+        coarse = (np.arange(shape[1]) * self.time_step / self.direction_step + 1e-9).astype(int)
+        inside = coarse < mean.shape[1]
+        return np.where(inside, mean[:, np.minimum(coarse, mean.shape[1] - 1)], even)
+
+    def lateral_axis(self) -> np.ndarray:
+        """The axis of a figure of eight with its null on the source (ISO 3382-1): level,
+        across the direction of the source, towards the listener's left side of it."""
+        towards = self.source_direction
+        if towards is None:
+            direct = np.flatnonzero((self.early.order == 0) & ~self.early.diffracted)
+            towards = self.early.direction[direct[0]] if len(direct) else self.orientation[:, 0]
+        side = np.cross([0.0, 0.0, 1.0], towards)
+        if np.linalg.norm(side) < 1e-9:  # the source straight above or below
+            side = self.orientation[:, 1]
+        return side / np.linalg.norm(side)
+
     def parameters(self) -> iso3382.RoomParameters:
-        """ISO 3382-1 parameters per octave band, straight from the energies."""
+        """ISO 3382-1 parameters per octave band, straight from the energies.
+
+        Those of a figure of eight with its null on the source (LF, LFC, LJ) and the
+        decay times of figures of eight along the listener's axes come from the
+        directions the energy arrives from; stage support only for a listener within
+        ``STAGE_DISTANCE_M`` of the source. IACC needs a binaural response:
+        :func:`~acoustic_spaces.parameters.interaural_cross_correlation`.
+        """
         reference = 1.0 / (4.0 * math.pi * 100.0)  # free field at 10 m
+        side = self.lateral_axis()
         return iso3382.from_energy(
-            self.energy(), self.time_step, self.direct_delay_s, reference_energy=reference
+            self.energy(),
+            self.time_step,
+            self.direct_delay_s,
+            reference_energy=reference,
+            stage=self.direct_delay_s * self.speed_of_sound <= STAGE_DISTANCE_M,
+            lateral=(self.weighted_energy(side), self.weighted_energy(side, 1)),
+            directional=[self.weighted_energy(self.orientation[:, k]) for k in range(3)],
         )
+
+    def speech(
+        self,
+        level_db: float = 94.0,
+        noise_db: float | Sequence[float] | None = None,
+        parameters: iso3382.RoomParameters | None = None,
+    ) -> iso3382.SpeechParameters:
+        """STI, STIPA and U50 for speech from a source of sound power ``level_db`` (dB
+        re 1 pW, spread evenly over the octave bands), with background noise
+        ``noise_db`` (dB SPL, one value or one per band), as the coverage maps take
+        them. ``parameters`` are this response's, when already at hand."""
+        params = self.parameters() if parameters is None else parameters
+        reference = 1.0 / (4.0 * math.pi * 100.0)
+        power = level_db - 10.0 * math.log10(self.bands)
+        level = power + params.g + 10.0 * math.log10(reference)
+        signal = np.where(np.isfinite(level), level, -100.0)
+        energy = self.energy()
+        sti, stipa = (
+            iso3382.speech_transmission_index(
+                energy, self.time_step, signal_db=signal, noise_db=noise_db, stipa=short
+            )
+            for short in (False, True)
+        )
+        u50 = iso3382.useful_to_detrimental(params.d50, signal, noise_db)
+        return iso3382.SpeechParameters(sti=sti, stipa=stipa, u50=u50, signal_db=level)
 
     def impulse_response(self, sample_rate: int = 48_000, seed: int | None = None) -> np.ndarray:
         """Mono impulse response; the direct sound at r metres is an impulse of height 1 / r.

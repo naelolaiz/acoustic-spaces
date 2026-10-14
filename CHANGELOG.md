@@ -15,12 +15,36 @@
 - A channel and a reference for G per file, `--json`, and `--plot` with the two decays
   in each octave band (`plot_comparison` in `acoustic_spaces.viz`).
 
+**More parameters**
+
+- LF, LFC and LJ (ISO 3382-1, annex A) from the directions the energy arrives from,
+  with a figure of eight whose null points at the source; IACC early and late
+  (annex B) from the binaural response when one is written; stage support ST early and
+  ST late (annex C) for listeners within 1.5 m of a source; and the T30 of figures of
+  eight facing forward, left and up from the listener.
+- STIPA next to the STI (IEC 60268-16), U50, and the echo criteria of Dietsch and Kraak
+  for speech and music. `parameters.json` has them for every response, at the source's
+  level and the coverage noise, and `simulate` prints them.
+- `analyze --lateral CH`, `--ambisonic` (first-order AmbiX) and `--binaural` give the
+  same from measured responses, and `--stage` the stage support; `analyze` prints the
+  STI, STIPA and echo criteria of each channel. `compare` takes LF, LFC and the
+  directional decay times where both responses have them.
+- The editor's results table shows the further parameters where a response has them.
+
 **Validation against measured rooms**
 
 - Two rooms of the BRAS benchmark, a seminar room and a chamber music hall, as scenes in
   `validation/bras`, with their surface data and the parameters of their measured
   responses (CC BY-SA 4.0, like BRAS). `validation/bras_validation.py` compares
   simulations with them; the validation report has the results.
+
+**Examples**
+
+- `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)
+  on the stage of the concert hall, one source for each of its 61 tracks, with scripts
+  that mix a movement at a seat, draw pictures of the hall and the seating, and make a
+  video of the mix. The README links the video made with them.
+- Scripts in the example folders (`.py`, `.sh`) are installed with the scenes.
 
 **SketchUp files** (experimental)
 

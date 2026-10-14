@@ -29,6 +29,7 @@ from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import (
     _MIN_DECAY_DB,
     _NOISE_CLEARANCE_DB,
+    ALL_PARAMETERS,
     DECAY_RANGES,
     PARAMETERS,
     RoomParameters,
@@ -41,7 +42,9 @@ from acoustic_spaces.parameters import (
 
 #: Just noticeable differences (ISO 3382-1:2009, annex A, table A.1), per parameter: the
 #: JND, and whether it is a fraction of the measured value (the decay times) rather than
-#: a step in the parameter's own unit (dB, s, or none for D50).
+#: a step in the parameter's own unit (dB, s, or none for D50). The directional decay
+#: times take that of T30. The standard gives none for LJ, IACC and stage support, which
+#: are not compared.
 JND: dict[str, tuple[float, bool]] = {
     "edt": (0.05, True),
     "t20": (0.05, True),
@@ -51,6 +54,11 @@ JND: dict[str, tuple[float, bool]] = {
     "d50": (0.05, False),
     "ts": (0.010, False),
     "g": (1.0, False),
+    "lf": (0.05, False),
+    "lfc": (0.05, False),
+    "t30_x": (0.05, True),
+    "t30_y": (0.05, True),
+    "t30_z": (0.05, True),
 }
 #: The octave bands the mean difference of each parameter is taken over (Hz).
 SUMMARY_BANDS_HZ: tuple[int, ...] = (125, 250, 500, 1000, 2000, 4000)
@@ -112,7 +120,8 @@ class Comparison:
 
     ``simulated`` and ``measured`` are the parameters of each side, and ``parameters``
     a :class:`ParameterComparison` for each name of
-    :data:`~acoustic_spaces.parameters.PARAMETERS`, which indexing gives as well:
+    :data:`~acoustic_spaces.parameters.PARAMETERS`, and of those further ones with a JND
+    that both sides give, which indexing gives as well:
     ``comparison["t30"].difference_jnd``.
     """
 
@@ -155,7 +164,7 @@ class Comparison:
         # Missing bands, grouped: (reason, bands) -> the parameters it applies to.
         groups: dict[tuple[str, tuple[int, ...]], list[str]] = {}
         for name, p in self.parameters.items():
-            fmt = ".1f" if PARAMETERS[name][0] == "dB" else ".3f"
+            fmt = ".1f" if ALL_PARAMETERS[name][0] == "dB" else ".3f"
             for row, (what, values) in enumerate((("sim", p.simulated), ("meas", p.measured))):
                 cells = "".join(_cell(f"{v:{fmt}}" if np.isfinite(v) else "-") for v in values)
                 lines.append(f"{_label(name) if row == 0 else '':<10}{what:<6}{cells}")
@@ -237,8 +246,15 @@ def _compare(
                 f"the {side} parameters need one value per octave band, "
                 f"{_band_label(OCTAVE_BANDS_HZ[0])} to {_band_label(OCTAVE_BANDS_HZ[-1])}"
             )
+    names = list(PARAMETERS) + [
+        name
+        for name in ALL_PARAMETERS
+        if name not in PARAMETERS
+        and name in JND
+        and all(np.isfinite(getattr(p, name)).any() for p in (simulated, measured))
+    ]
     compared = {}
-    for name in PARAMETERS:
+    for name in names:
         s = np.asarray(getattr(simulated, name), dtype=float)
         m = np.asarray(getattr(measured, name), dtype=float)
         step, relative = JND[name]
@@ -278,6 +294,7 @@ def compare_parameters(simulated: RoomParameters, measured: RoomParameters) -> C
     a band with no parameter at all decays by less than 20 dB, G alone is NaN without a
     reference, and a decay time alone when the decay does not reach the bottom of its fit
     range (:func:`compare_impulse_responses` also tells when the noise is in the way).
+    LF, LFC and the directional decay times are compared where both sides give them.
     """
     return _compare(simulated, measured)
 

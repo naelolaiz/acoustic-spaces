@@ -56,6 +56,13 @@ class SimulationResult:
         return len(self.responses)
 
 
+def _towards(source: np.ndarray, listener: np.ndarray) -> np.ndarray | None:
+    """Unit vector from the listener towards the source, or None where they meet."""
+    d = np.asarray(source, dtype=float) - np.asarray(listener, dtype=float)
+    length = float(np.linalg.norm(d))
+    return d / length if length > 0 else None
+
+
 def _seed(base: int, index: int) -> int:
     return int(np.random.SeedSequence([base, index]).generate_state(1, np.uint64)[0])
 
@@ -344,6 +351,7 @@ def simulate(
                 else np.zeros((0, 0, 0)),
                 direction_step=late.direction_step,
                 wave=waves[k],
+                source_direction=_towards(src, listener_pos[k]),
             )
     return SimulationResult(room=room, settings=settings, responses=responses, details=details)
 

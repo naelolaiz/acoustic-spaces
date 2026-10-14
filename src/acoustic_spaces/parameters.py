@@ -9,7 +9,25 @@ All parameters are per octave band and measured from the arrival of the direct s
 - ``ts``: centre time (s), the energy-weighted mean arrival time.
 - ``g``: strength (dB), total energy over that of the same source at 10 m in free field.
 
-:func:`speech_transmission_index` gives the STI of IEC 60268-16 from the same energies.
+Where the response has them (see :data:`MORE_PARAMETERS`), also:
+
+- ``lf``, ``lfc``: early lateral energy fractions (annex A), the energy a figure of eight
+  with its null on the source picks up from 5 to 80 ms over all the energy up to 80 ms;
+  ``lfc`` weights each arrival by the cosine of its angle to the figure's axis, not
+  the square.
+- ``lj``: late lateral sound level (dB), the figure of eight's energy from 80 ms on over
+  the free-field energy at 10 m, as for G.
+- ``iacc_e``, ``iacc_l``: interaural cross-correlation coefficients (annex B) of a
+  binaural response, 0 to 80 ms and from 80 ms to the end.
+- ``st_early``, ``st_late``: stage support (dB), measured 1 m from the source: the
+  energy from 20 to 100 ms and from 100 to 1000 ms over that of the first 10 ms.
+  ``st_early`` is Gade's ST1.
+- ``t30_x``, ``t30_y``, ``t30_z``: T30 of figure-of-eight pickups facing forward, left
+  and up from the listener, the directional decay of a first-order Ambisonics response.
+
+:func:`speech_transmission_index` gives the STI of IEC 60268-16 from the same energies,
+or STIPA, :func:`useful_to_detrimental` U50, and :func:`echo_criterion` the echo
+criteria of Dietsch and Kraak from an impulse response.
 
 A response that stops before it has decayed loses the energy of its missing tail and
 reads too short; the tail is estimated from the last part of the decay and added back
@@ -41,6 +59,46 @@ PARAMETERS = {
     "ts": ("s", "centre time"),
     "g": ("dB", "strength"),
 }
+#: Parameters only some responses give, in display order: those of a lateral or a
+#: binaural response, those 1 m from the source and those of first-order Ambisonics.
+#: They are NaN in every band of a response that cannot give them.
+MORE_PARAMETERS = {
+    "lf": ("", "early lateral energy fraction"),
+    "lfc": ("", "early lateral energy fraction, cosine weighted"),
+    "lj": ("dB", "late lateral sound level"),
+    "iacc_e": ("", "interaural cross-correlation, 0 to 80 ms"),
+    "iacc_l": ("", "interaural cross-correlation, 80 ms on"),
+    "st_early": ("dB", "early stage support"),
+    "st_late": ("dB", "late stage support"),
+    "t30_x": ("s", "T30 of a figure of eight facing forward"),
+    "t30_y": ("s", "T30 of a figure of eight facing left"),
+    "t30_z": ("s", "T30 of a figure of eight facing up"),
+}
+#: Every parameter, in display order.
+ALL_PARAMETERS = {**PARAMETERS, **MORE_PARAMETERS}
+_SYMBOLS = {
+    "ts": "Ts",
+    "iacc_e": "IACC_E",
+    "iacc_l": "IACC_L",
+    "st_early": "ST_early",
+    "st_late": "ST_late",
+    "t30_x": "T30_X",
+    "t30_y": "T30_Y",
+    "t30_z": "T30_Z",
+}
+#: Time windows, from the direct sound (s): the lateral fractions compare 5 to 80 ms of
+#: the lateral energy with 0 to 80 ms of all of it, and LJ and IACC_L start at 80 ms.
+_LATERAL_START_S = 0.005
+_EARLY_END_S = 0.080
+#: Stage support: the energy of the first 10 ms against that from 20 to 100 ms and from
+#: 100 to 1000 ms.
+_STAGE_DIRECT_S = 0.010
+_STAGE_EARLY_S = (0.020, 0.100)
+_STAGE_LATE_S = (0.100, 1.000)
+#: IACC: the largest cross-correlation of the ears within this lag (s).
+_IACC_LAG_S = 0.001
+#: The STI of an impulse response takes its energy in slots this long (s).
+_STI_SLOT_S = 0.001
 #: The fit for the missing tail stays this far (dB) above the level the decay reaches
 #: at the end of the response, and spans at most ``_TAIL_SPAN_DB``. A response must
 #: decay to ``_MIN_DECAY_DB`` for any parameter.
@@ -77,7 +135,9 @@ _NO_NOISE_DB = 120.0
 
 @dataclass
 class RoomParameters:
-    """ISO 3382-1 parameters, one value per octave band (NaN where undefined)."""
+    """ISO 3382-1 parameters, one value per octave band (NaN where undefined).
+
+    Those of :data:`MORE_PARAMETERS` are NaN in every band unless given."""
 
     edt: np.ndarray
     t20: np.ndarray
@@ -87,6 +147,33 @@ class RoomParameters:
     d50: np.ndarray
     ts: np.ndarray
     g: np.ndarray
+    lf: np.ndarray | None = None
+    lfc: np.ndarray | None = None
+    lj: np.ndarray | None = None
+    iacc_e: np.ndarray | None = None
+    iacc_l: np.ndarray | None = None
+    st_early: np.ndarray | None = None
+    st_late: np.ndarray | None = None
+    t30_x: np.ndarray | None = None
+    t30_y: np.ndarray | None = None
+    t30_z: np.ndarray | None = None
+
+    def __post_init__(self) -> None:
+        for name in MORE_PARAMETERS:
+            if getattr(self, name) is None:
+                setattr(self, name, np.full(np.shape(self.edt), math.nan))
+
+    @classmethod
+    def from_dict(cls, data: dict) -> RoomParameters:
+        """The parameters :meth:`as_dict` gave (None for undefined values); those of
+        :data:`MORE_PARAMETERS` it lacks are NaN."""
+        return cls(
+            **{
+                name: np.array([math.nan if v is None else v for v in data[name]], dtype=float)
+                for name in ALL_PARAMETERS
+                if name in data or name in PARAMETERS
+            }
+        )
 
     def as_dict(self) -> dict[str, list[float | None]]:
         """Plain lists, with None for undefined values (JSON friendly)."""
@@ -95,16 +182,28 @@ class RoomParameters:
             for f in fields(self)
         }
 
+    def given(self) -> list[str]:
+        """The parameters with a value in at least one band, and those of
+        :data:`PARAMETERS` always, in display order."""
+        return [
+            name
+            for name in ALL_PARAMETERS
+            if name in PARAMETERS or np.isfinite(getattr(self, name)).any()
+        ]
+
     def table(self) -> str:
-        """A text table: one row per parameter, one column per band."""
+        """A text table: one row per parameter (see :meth:`given`), one column per band."""
+        names = self.given()
+        width = max(10, *(len(_label(name)) + 1 for name in names))
         bands = "".join(f"{_band_label(f):>8}" for f in OCTAVE_BANDS_HZ)
-        lines = [f"{'':<10}{bands}"]
-        for name, (unit, _) in PARAMETERS.items():
+        lines = [f"{'':<{width}}{bands}"]
+        for name in names:
+            unit = ALL_PARAMETERS[name][0]
             fmt = "8.3f" if unit == "s" or not unit else "8.1f"
             cells = "".join(
                 f"{v:{fmt}}" if np.isfinite(v) else f"{'-':>8}" for v in getattr(self, name)
             )
-            lines.append(f"{_label(name):<10}{cells}")
+            lines.append(f"{_label(name):<{width}}{cells}")
         return "\n".join(lines)
 
 
@@ -113,13 +212,13 @@ def _band_label(f: int) -> str:
 
 
 def _symbol(name: str) -> str:
-    """A parameter's symbol: "T30", "Ts"."""
-    return "Ts" if name == "ts" else name.upper()
+    """A parameter's symbol: "T30", "Ts", "ST_early"."""
+    return _SYMBOLS.get(name, name.upper())
 
 
 def _label(name: str) -> str:
     """A parameter's symbol and unit, as tables show it: "T30 (s)", "D50"."""
-    unit = PARAMETERS[name][0]
+    unit = ALL_PARAMETERS[name][0]
     return _symbol(name) + (f" ({unit})" if unit else "")
 
 
@@ -198,14 +297,27 @@ def _clarity(early: float, late: float) -> float:
     return 10.0 * math.log10(early / late) if late > 0 else math.inf
 
 
-def _band_parameters(e: np.ndarray, dt: float, offset: float, reference: float | None):
+def _arrived(edges: np.ndarray, cumulative: np.ndarray, tail: float, rate: float, t: float):
+    """Energy arrived by ``t`` (s after the onset): ``cumulative`` at the slot ``edges``,
+    then the estimated tail, which decays at ``rate`` from the end."""
+    if t <= edges[-1]:
+        return float(np.interp(t, edges, cumulative))
+    missing = tail * math.exp(-rate * (t - edges[-1])) if tail > 0 else 0.0
+    return float(cumulative[-1]) + tail - missing
+
+
+def _band_parameters(
+    e: np.ndarray, dt: float, offset: float, reference: float | None, stage: bool = False
+):
     """Parameters of one band; ``e`` starts at the slot holding the onset, which lies
-    ``offset`` seconds into it."""
+    ``offset`` seconds into it. With ``stage``, ST_early and ST_late as well."""
     edges = np.arange(len(e) + 1) * dt - offset  # slot edges, time after the onset
     tail, rate = _tail(e, dt)
     total = float(e.sum()) + tail
     nan = math.nan
-    undefined = dict(edt=nan, t20=nan, t30=nan, c50=nan, c80=nan, d50=nan, ts=nan, g=nan)
+    undefined = dict.fromkeys(PARAMETERS, nan)
+    if stage:
+        undefined.update(st_early=nan, st_late=nan)
     if total <= 0:
         return undefined
 
@@ -232,7 +344,53 @@ def _band_parameters(e: np.ndarray, dt: float, offset: float, reference: float |
     tail_moment = tail * (edges[-1] + 1.0 / rate) if tail > 0 else 0.0
     out["ts"] = float((centre * e).sum() + tail_moment) / total
     out["g"] = 10.0 * math.log10(total / reference) if reference else nan
+    if stage:
+        direct = _arrived(edges, cumulative, tail, rate, _STAGE_DIRECT_S)
+        for name, (start, stop) in (("st_early", _STAGE_EARLY_S), ("st_late", _STAGE_LATE_S)):
+            part = _arrived(edges, cumulative, tail, rate, stop)
+            part -= _arrived(edges, cumulative, tail, rate, start)
+            out[name] = 10.0 * math.log10(part / direct) if part > 0 and direct > 0 else nan
     return out
+
+
+def _lateral(
+    e: np.ndarray,
+    figure8: np.ndarray,
+    cosine: np.ndarray,
+    dt: float,
+    offset: float,
+    reference: float | None,
+    late: np.ndarray | None = None,
+) -> dict[str, float]:
+    """LF, LFC and LJ of one band from the energies (slots from the one holding the
+    onset, ``offset`` seconds into it) of the pressure, a figure of eight with its null
+    on the source, and their product. ``late`` is the figure of eight's energy for LJ,
+    cleaned of noise, when it differs from ``figure8``."""
+    edges = np.arange(len(e) + 1) * dt - offset
+
+    def window(x: np.ndarray, start: float, stop: float, tail=(0.0, math.inf)) -> float:
+        cumulative = np.concatenate([[0.0], np.cumsum(x)])
+        arrived = [_arrived(edges[: len(cumulative)], cumulative, *tail, t) for t in (start, stop)]
+        return arrived[1] - arrived[0]
+
+    nan = math.nan
+    early = window(e, -math.inf, _EARLY_END_S, _tail(e, dt))
+    out = {"lf": nan, "lfc": nan, "lj": nan}
+    if early > 0:
+        out["lf"] = window(figure8, _LATERAL_START_S, _EARLY_END_S) / early
+        out["lfc"] = window(cosine, _LATERAL_START_S, _EARLY_END_S) / early
+    late = figure8 if late is None else late
+    lateral = window(late, _EARLY_END_S, math.inf, _tail(late, dt))
+    if reference and lateral > 0:
+        out["lj"] = 10.0 * math.log10(lateral / reference)
+    return out
+
+
+def _collect(per_band: list[dict[str, float]], **more: np.ndarray) -> RoomParameters:
+    """RoomParameters from the parameters of each band, and arrays of more of them."""
+    names = [name for name in ALL_PARAMETERS if per_band and name in per_band[0]]
+    values = {name: np.array([p[name] for p in per_band]) for name in names}
+    return RoomParameters(**values, **more)
 
 
 def from_energy(
@@ -240,21 +398,44 @@ def from_energy(
     time_step: float,
     onset_s: float,
     reference_energy: float | None = None,
+    *,
+    stage: bool = False,
+    lateral: tuple[np.ndarray, np.ndarray] | None = None,
+    directional: Sequence[np.ndarray] | None = None,
 ) -> RoomParameters:
     """Parameters from energy per band and time slot (bands, slots), slot 0 at emission.
 
     ``onset_s`` is the arrival time of the direct sound. ``reference_energy`` is the
-    energy of the same source at 10 m in free field; without it ``g`` is NaN.
+    energy of the same source at 10 m in free field; without it ``g`` and ``lj`` are
+    NaN. With ``stage``, ``st_early`` and ``st_late`` (for a listener 1 m from the
+    source). ``lateral`` is the energy a figure of eight with its null on the source
+    picks up and its product with the pressure, each on the slots of ``energy``, for
+    ``lf``, ``lfc`` and ``lj``; ``directional`` the energies of figure-of-eight pickups
+    facing forward, left and up, for ``t30_x``, ``t30_y`` and ``t30_z``.
     """
     energy = np.atleast_2d(np.asarray(energy, dtype=float))
     first = min(int(onset_s / time_step), energy.shape[1] - 1)
     offset = onset_s - first * time_step
     per_band = [
-        _band_parameters(row[first:], time_step, offset, reference_energy) for row in energy
+        _band_parameters(row[first:], time_step, offset, reference_energy, stage) for row in energy
     ]
-    return RoomParameters(
-        **{f.name: np.array([p[f.name] for p in per_band]) for f in fields(RoomParameters)}
-    )
+    if lateral is not None:
+        figure8, cosine = (np.atleast_2d(np.asarray(x, dtype=float)) for x in lateral)
+        for b, p in enumerate(per_band):
+            defined = any(np.isfinite(p[name]) for name in PARAMETERS)
+            if defined:
+                args = (figure8[b, first:], cosine[b, first:], time_step, offset)
+                p.update(_lateral(energy[b, first:], *args, reference_energy))
+            else:
+                p.update(lf=math.nan, lfc=math.nan, lj=math.nan)
+    more = {}
+    if directional is not None:
+        for axis, x in zip("xyz", directional, strict=True):
+            x = np.atleast_2d(np.asarray(x, dtype=float))
+            more[f"t30_{axis}"] = np.array(
+                [_band_parameters(row[first:], time_step, offset, None)["t30"] for row in x]
+            )
+    return _collect(per_band, **more)
 
 
 #: Speech transmission index (IEC 60268-16:2020, annex A): its octave bands, the
@@ -269,23 +450,33 @@ _STI_BETA = np.array([0.085, 0.078, 0.065, 0.011, 0.047, 0.095])
 _STI_THRESHOLD_DB = np.array([46.0, 27.0, 12.0, 6.5, 7.5, 8.0, 12.0])
 
 
-def modulation_transfer(energy: np.ndarray, time_step: float) -> np.ndarray:
+#: STIPA (IEC 60268-16:2020, annex B): the two modulation frequencies of each band (Hz).
+STIPA_MODULATION_HZ: tuple[tuple[float, float], ...] = (
+    (1.6, 8.0), (1.0, 5.0), (0.63, 3.15), (2.0, 10.0), (1.25, 6.25), (0.8, 4.0), (2.5, 12.5)
+)  # fmt: skip
+
+
+def modulation_transfer(
+    energy: np.ndarray, time_step: float, frequencies: Sequence[float] = STI_MODULATION_HZ
+) -> np.ndarray:
     """Modulation transfer function (bands, modulation frequencies) of an energy
     response e(t) (bands, slots): the magnitude of the sum of e(t) exp(-2 pi j F t)
-    over the sum of e(t), at each F of ``STI_MODULATION_HZ`` (Schroeder's method)."""
+    over the sum of e(t), at each F of ``frequencies`` (Schroeder's method)."""
     energy = np.atleast_2d(np.asarray(energy, dtype=float))
     slots = energy.shape[1]
     # One kernel serves every response up to a power of two long.
-    kernel = _modulation_kernel(1 << max(10, (slots - 1).bit_length()), float(time_step))
+    kernel = _modulation_kernel(
+        1 << max(10, (slots - 1).bit_length()), float(time_step), tuple(frequencies)
+    )
     kernel = kernel[:slots]
     total = energy.sum(axis=1, keepdims=True)
     return np.abs(energy @ kernel) / np.where(total > 0, total, np.inf)
 
 
 @functools.lru_cache(maxsize=8)
-def _modulation_kernel(slots: int, time_step: float) -> np.ndarray:
+def _modulation_kernel(slots: int, time_step: float, frequencies: tuple[float, ...]) -> np.ndarray:
     t = (np.arange(slots) + 0.5) * time_step
-    kernel = np.exp(-2j * np.pi * np.outer(t, STI_MODULATION_HZ))
+    kernel = np.exp(-2j * np.pi * np.outer(t, frequencies))
     kernel.flags.writeable = False
     return kernel
 
@@ -305,9 +496,12 @@ def speech_transmission_index(
     *,
     signal_db: Sequence[float] | np.ndarray | None = None,
     noise_db: Sequence[float] | np.ndarray | float | None = None,
+    stipa: bool = False,
 ) -> float:
     """STI (0 to 1) of an energy response per octave band (bands, slots), from the
     modulation transfer function (IEC 60268-16:2020, indirect method, male weighting).
+    With ``stipa``, STIPA instead: two modulation frequencies per band, not fourteen
+    (``STIPA_MODULATION_HZ``).
 
     ``energy`` has the bands of ``OCTAVE_BANDS_HZ`` (the 63 Hz band is not used) or of
     ``STI_BANDS_HZ``. ``signal_db`` is the speech level per band at the listener (dB
@@ -332,7 +526,11 @@ def speech_transmission_index(
         energy = energy[1:]
     elif energy.shape[0] != bands:
         raise ValueError("energy must have the octave bands 63 Hz (or 125 Hz) to 8 kHz")
-    m = modulation_transfer(energy, time_step)
+    if stipa:
+        m = modulation_transfer(energy, time_step, np.ravel(STIPA_MODULATION_HZ))
+        m = np.stack([m[b, 2 * b : 2 * b + 2] for b in range(bands)])
+    else:
+        m = modulation_transfer(energy, time_step)
     if noise_db is not None and signal_db is None:
         raise ValueError("noise_db needs signal_db, the speech level at the listener")
     if signal_db is not None:
@@ -351,6 +549,103 @@ def speech_transmission_index(
     mti = transmission.mean(axis=1)
     sti = float(_STI_ALPHA @ mti - _STI_BETA @ np.sqrt(mti[:-1] * mti[1:]))
     return min(max(sti, 0.0), 1.0)
+
+
+@dataclass
+class SpeechParameters:
+    """Speech intelligibility at a listener: STI and STIPA (0 to 1), U50 per octave band
+    (dB), and the speech level (dB SPL per band) they take."""
+
+    sti: float
+    stipa: float
+    u50: np.ndarray
+    signal_db: np.ndarray
+
+    def as_dict(self) -> dict:
+        """Plain numbers and lists, with None for undefined values (JSON friendly)."""
+
+        def plain(v: float) -> float | None:
+            return float(v) if np.isfinite(v) else None
+
+        return {
+            "sti": plain(self.sti),
+            "stipa": plain(self.stipa),
+            "u50": [plain(v) for v in self.u50],
+            "signal_db": [plain(v) for v in self.signal_db],
+        }
+
+
+def useful_to_detrimental(
+    d50: Sequence[float] | np.ndarray,
+    signal_db: Sequence[float] | np.ndarray | float,
+    noise_db: Sequence[float] | np.ndarray | float | None = None,
+) -> np.ndarray:
+    """U50 (dB) per band (Bradley, 1986): the energy of the first 50 ms over that of the
+    rest and the background noise, from the definition ``d50`` and the speech and noise
+    levels at the listener (dB SPL, one value or one per band). Without noise it is C50.
+    """
+    d = np.asarray(d50, dtype=float)
+    noise = 0.0
+    if noise_db is not None:
+        noise = 10.0 ** ((np.asarray(noise_db, dtype=float) - np.asarray(signal_db)) / 10.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return 10.0 * np.log10(d / (1.0 - d + noise))
+
+
+#: Echo criteria (Dietsch and Kraak, 1986): the power n of the pressure's magnitude, the
+#: window (s), the octave bands the response is filtered to, and the EC at which 10 % and
+#: 50 % of listeners hear an echo.
+ECHO_CRITERIA: dict[str, tuple[float, float, tuple[int, ...], tuple[float, float]]] = {
+    "speech": (2.0 / 3.0, 0.009, (1000,), (0.9, 1.0)),
+    "music": (1.0, 0.014, (1000, 2000), (1.5, 1.8)),
+}
+
+
+def echo_criterion(
+    ir: np.ndarray, sample_rate: float, kind: str = "speech", *, filters: str = "iec"
+) -> tuple[float, float]:
+    """The echo criterion EC of Dietsch and Kraak (1986) of a mono impulse response, and
+    the time (s after the direct sound) where it peaks.
+
+    The response, filtered to the bands of ``ECHO_CRITERIA[kind]`` (1 kHz for speech,
+    1 and 2 kHz for music), gives the build-up of its centre time ts(t), the mean
+    arrival time up to t weighted by the pressure's magnitude to the power n; EC is the
+    steepest rise of ts over the window, in units of the window. An echo makes ts jump:
+    listeners hear one where EC exceeds 1.0 for speech or 1.8 for music (half of them;
+    0.9 and 1.5 for a tenth).
+    NaN for a response shorter than the window.
+    """
+    if kind not in ECHO_CRITERIA:
+        raise ValueError(f"unknown echo criterion {kind!r}; use 'speech' or 'music'")
+    exponent, window, bands, _ = ECHO_CRITERIA[kind]
+    ir = _mono(ir)
+    start = onset(ir)
+    after, before = _from_onset(ir, sample_rate, filters, start)
+    chosen = [OCTAVE_BANDS_HZ.index(f) for f in bands]
+    # The filters' ringing ahead of the direct sound counts, at its own (negative)
+    # times, or the direct sound would weigh half of what an echo does.
+    p = np.concatenate([before[chosen], after[chosen]], axis=1).sum(axis=0)
+    weight = np.abs(p) ** exponent
+    t = (np.arange(len(p)) - before.shape[1]) / sample_rate
+    arrived = np.cumsum(weight)
+    centre = np.cumsum(t * weight) / np.where(arrived > 0, arrived, np.inf)
+    centre = centre[before.shape[1] :]
+    step = max(1, int(round(window * sample_rate)))
+    if len(centre) <= step or arrived[-1] <= 0:
+        return math.nan, math.nan
+    rise = (centre[step:] - centre[:-step]) * sample_rate / step
+    peak = int(np.argmax(rise))
+    return float(rise[peak]), float((peak + step) / sample_rate)
+
+
+def _mono(ir: np.ndarray) -> np.ndarray:
+    """``ir`` as (samples,), from (samples,) or (samples, 1)."""
+    ir = np.asarray(ir, dtype=float)
+    if ir.ndim == 2 and ir.shape[1] == 1:
+        ir = ir[:, 0]
+    if ir.ndim != 1:
+        raise ValueError("the impulse response must have one channel: (samples,) or (samples, 1)")
+    return ir
 
 
 def onset(ir: np.ndarray, threshold_db: float = -20.0) -> int:
@@ -494,28 +789,43 @@ class BandDecay:
         return self.energy[band, : self.crosspoint[band]] - self.noise[band]
 
 
+def _from_onset(
+    ir: np.ndarray, sample_rate: float, filters: str, start: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Octave bands of ``ir`` (bands, samples) from sample ``start`` on, and before it,
+    with the ringing the zero-phase filters spread ahead of the response."""
+    # Zero-phase filters ring before an impulse as much as after it. Room is made for
+    # that ringing, and everything before the onset counts as arriving with it.
+    lead = int(round(_FILTER_LEAD_S * sample_rate))
+    bands = octave_bands(np.concatenate([np.zeros(lead), ir]), sample_rate, filters)
+    return bands[:, lead + start :], bands[:, : lead + start]
+
+
+def _folded(after: np.ndarray, before: np.ndarray) -> np.ndarray:
+    """Energies (bands, samples) from the onset on, what came before counted in the first."""
+    out = after.copy()
+    if out.shape[1]:
+        out[:, 0] += before.sum(axis=1)
+    return out
+
+
 def band_decay(
-    ir: np.ndarray, sample_rate: float, *, filters: str = "iec", noise: bool = True
+    ir: np.ndarray,
+    sample_rate: float,
+    *,
+    filters: str = "iec",
+    noise: bool = True,
+    start: int | None = None,
 ) -> BandDecay:
     """Filter ``ir`` into octave bands and, with ``noise``, find each band's noise floor.
 
     ``ir`` is (samples,) or (samples, 1), as :func:`~acoustic_spaces.audio.read_wav`
-    gives a mono file.
+    gives a mono file. The bands start at its onset, or at sample ``start``.
     """
-    ir = np.asarray(ir, dtype=float)
-    if ir.ndim == 2 and ir.shape[1] == 1:
-        ir = ir[:, 0]
-    if ir.ndim != 1:
-        raise ValueError("the impulse response must have one channel: (samples,) or (samples, 1)")
-    start = onset(ir)
-    # Zero-phase filters ring before an impulse as much as after it. Room is made for
-    # that ringing, and everything before the onset counts as arriving with it.
-    lead = int(round(_FILTER_LEAD_S * sample_rate))
-    padded = np.concatenate([np.zeros(lead), ir])
-    squared = octave_bands(padded, sample_rate, filters) ** 2
-    energy = squared[:, lead + start :]
-    if energy.shape[1]:
-        energy[:, 0] += squared[:, : lead + start].sum(axis=1)
+    ir = _mono(ir)
+    start = onset(ir) if start is None else int(start)
+    after, before = _from_onset(ir, sample_rate, filters, start)
+    energy = _folded(after**2, before**2)
     # Digital silence at the end (zero padding, the shift that removes latency) is no
     # background noise: the noise floor is looked for before it, unless too little is
     # left for that, as after a lone impulse, whose filtered ringing then shows no noise.
@@ -539,6 +849,27 @@ def band_decay(
     )
 
 
+def _decay_parameters(
+    decay: BandDecay, reference: np.ndarray | None, stage: bool = False
+) -> list[dict[str, float]]:
+    """The parameters of each band of ``decay``, without the decay times whose range does
+    not clear the background noise."""
+    per_band = []
+    for b in range(decay.energy.shape[0]):
+        p = _band_parameters(
+            decay.cleaned(b),
+            1.0 / decay.sample_rate,
+            0.0,
+            None if reference is None else reference[b],
+            stage,
+        )
+        for name, (_, bottom) in DECAY_RANGES.items():
+            if decay.decay_range_db[b] < _NOISE_CLEARANCE_DB - bottom:
+                p[name] = math.nan
+        per_band.append(p)
+    return per_band
+
+
 def from_impulse_response(
     ir: np.ndarray,
     sample_rate: float,
@@ -546,6 +877,9 @@ def from_impulse_response(
     *,
     filters: str = "iec",
     noise: bool = True,
+    stage: bool = False,
+    lateral: np.ndarray | None = None,
+    directional: np.ndarray | None = None,
 ) -> RoomParameters:
     """Parameters from a mono impulse response, split into octave bands.
 
@@ -557,24 +891,113 @@ def from_impulse_response(
     background noise, the noise is subtracted and the decay beyond the cut estimated
     (ISO 3382-1, 5.3.4); decay times whose range does not clear the noise by 10 dB
     (EDT 20 dB, T20 35 dB, T30 45 dB) are NaN.
+
+    With ``stage``, ``st_early`` and ``st_late`` as well, for a response measured 1 m
+    from the source. ``lateral`` is the response of a figure of eight with its null on
+    the source, measured with ``ir`` and at the same sensitivity on its axis, for
+    ``lf``, ``lfc`` and ``lj``; ``directional`` (samples, 3) those of figure-of-eight
+    pickups facing forward, left and up, as the X, Y and Z of first-order Ambisonics
+    (SN3D), for ``t30_x``, ``t30_y`` and ``t30_z``. Both are taken from the onset of
+    ``ir``.
     """
+    ir = _mono(ir)
     decay = band_decay(ir, sample_rate, filters=filters, noise=noise)
     reference = None
     if reference_energy is not None:
         reference = np.asarray(reference_energy, dtype=float)
         if reference.ndim == 0:
             reference = reference * band_energy_share(sample_rate, filters)
-    dt = 1.0 / sample_rate
-    per_band = []
-    for b in range(decay.energy.shape[0]):
-        p = _band_parameters(decay.cleaned(b), dt, 0.0, None if reference is None else reference[b])
-        for name, (_, bottom) in DECAY_RANGES.items():
-            if decay.decay_range_db[b] < _NOISE_CLEARANCE_DB - bottom:
-                p[name] = math.nan
-        per_band.append(p)
-    return RoomParameters(
-        **{f.name: np.array([p[f.name] for p in per_band]) for f in fields(RoomParameters)}
-    )
+    per_band = _decay_parameters(decay, reference, stage)
+    start = int(round(decay.onset_s * sample_rate))
+    if lateral is not None:
+        figure8 = _mono(lateral)
+        if len(figure8) != len(ir):
+            raise ValueError("the lateral response must be as long as the impulse response")
+        pressure, pressure_before = _from_onset(ir, sample_rate, filters, start)
+        side, side_before = _from_onset(figure8, sample_rate, filters, start)
+        side_energy = _folded(side**2, side_before**2)
+        product = _folded(np.abs(side * pressure), np.abs(side_before * pressure_before))
+        cleaned = band_decay(figure8, sample_rate, filters=filters, noise=noise, start=start)
+        dt = 1.0 / sample_rate
+        for b, p in enumerate(per_band):
+            if any(np.isfinite(p[name]) for name in PARAMETERS):
+                args = (side_energy[b], product[b], dt, 0.0)
+                ref = None if reference is None else reference[b]
+                p.update(_lateral(decay.energy[b], *args, ref, cleaned.cleaned(b)))
+            else:
+                p.update(lf=math.nan, lfc=math.nan, lj=math.nan)
+    more = {}
+    if directional is not None:
+        directional = np.asarray(directional, dtype=float)
+        if directional.shape != (len(ir), 3):
+            raise ValueError("directional needs (samples, 3): X, Y and Z, as long as the response")
+        for k, axis in enumerate("xyz"):
+            channel = band_decay(
+                directional[:, k], sample_rate, filters=filters, noise=noise, start=start
+            )
+            more[f"t30_{axis}"] = np.array([p["t30"] for p in _decay_parameters(channel, None)])
+    return _collect(per_band, **more)
+
+
+def sti_from_impulse_response(
+    ir: np.ndarray,
+    sample_rate: float,
+    *,
+    filters: str = "iec",
+    noise: bool = True,
+    stipa: bool = False,
+) -> float:
+    """STI, or with ``stipa`` STIPA, of the room alone from a mono impulse response:
+    from its octave bands (125 Hz to 8 kHz) from the onset on, with ``noise`` cut where
+    they sink into the background noise and the noise taken off, as
+    :func:`from_impulse_response` takes them."""
+    decay = band_decay(ir, sample_rate, filters=filters, noise=noise)
+    width = max(1, int(round(_STI_SLOT_S * sample_rate)))
+    slots = -(-decay.energy.shape[1] // width)
+    energy = np.zeros((decay.energy.shape[0], slots * width))
+    for b in range(len(energy)):
+        cleaned = decay.cleaned(b)
+        energy[b, : len(cleaned)] = cleaned
+    energy = energy.reshape(len(energy), slots, width).sum(axis=2)
+    return speech_transmission_index(energy, width / sample_rate, stipa=stipa)
+
+
+def interaural_cross_correlation(
+    binaural: np.ndarray, sample_rate: float, *, filters: str = "iec"
+) -> dict[str, np.ndarray]:
+    """IACC_E and IACC_L of a binaural impulse response (samples, 2), per octave band.
+
+    The interaural cross-correlation coefficient (ISO 3382-1, annex B) is the largest
+    magnitude of the normalised cross-correlation of the two ears' responses within
+    1 ms either way; ``iacc_e`` takes them from the direct sound's arrival at the nearer
+    ear to 80 ms later, ``iacc_l`` from there to the end.
+    """
+    binaural = np.asarray(binaural, dtype=float)
+    if binaural.ndim != 2 or binaural.shape[1] != 2:
+        raise ValueError("a binaural response has two channels: (samples, 2)")
+    start = min(onset(binaural[:, 0]), onset(binaural[:, 1]))
+    left, left_before = _from_onset(binaural[:, 0], sample_rate, filters, start)
+    right, right_before = _from_onset(binaural[:, 1], sample_rate, filters, start)
+    left = np.concatenate([left_before, left], axis=1)
+    right = np.concatenate([right_before, right], axis=1)
+    split = left_before.shape[1] + int(round(_EARLY_END_S * sample_rate))
+    lag = int(round(_IACC_LAG_S * sample_rate))
+    out = {"iacc_e": [], "iacc_l": []}
+    for b in range(left.shape[0]):
+        for name, part in (("iacc_e", slice(0, split)), ("iacc_l", slice(split, None))):
+            out[name].append(_iacc(left[b, part], right[b, part], lag))
+    return {name: np.array(values) for name, values in out.items()}
+
+
+def _iacc(left: np.ndarray, right: np.ndarray, lag: int) -> float:
+    """Largest |cross-correlation| of two signals within ``lag`` samples, normalised."""
+    norm = math.sqrt(float(left @ left) * float(right @ right))
+    if norm <= 0:
+        return math.nan
+    n_fft = 1 << (len(left) + lag).bit_length()
+    correlation = np.fft.irfft(np.fft.rfft(left, n_fft) * np.conj(np.fft.rfft(right, n_fft)), n_fft)
+    lags = np.concatenate([correlation[-lag:], correlation[: lag + 1]]) if lag else correlation[:1]
+    return float(np.abs(lags).max() / norm)
 
 
 def free_field_reference(
@@ -590,15 +1013,24 @@ def free_field_reference(
 
 
 __all__ = [
+    "ALL_PARAMETERS",
     "DECAY_RANGES",
+    "ECHO_CRITERIA",
+    "MORE_PARAMETERS",
     "PARAMETERS",
+    "STIPA_MODULATION_HZ",
     "STI_BANDS_HZ",
     "STI_MODULATION_HZ",
     "RoomParameters",
+    "SpeechParameters",
     "decay_curve",
+    "echo_criterion",
     "from_energy",
+    "interaural_cross_correlation",
     "modulation_transfer",
     "speech_transmission_index",
+    "sti_from_impulse_response",
+    "useful_to_detrimental",
     "BandDecay",
     "FILTER_ORDER",
     "OCTAVE_RATIO",

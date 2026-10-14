@@ -11,6 +11,7 @@ from acoustic_spaces.compare import (
     compare_parameters,
 )
 from acoustic_spaces.parameters import (
+    ALL_PARAMETERS,
     PARAMETERS,
     RoomParameters,
     from_energy,
@@ -45,8 +46,11 @@ def _tones(t60: float, sample_rate: int, length: float = 2.0) -> np.ndarray:
 
 
 def test_jnds_of_iso_3382_annex_a() -> None:
-    assert set(JND) == set(PARAMETERS)
+    assert set(PARAMETERS) <= set(JND) <= set(ALL_PARAMETERS)
     assert JND["t30"] == JND["t20"] == JND["edt"] == (0.05, True)  # 5 % of the value
+    assert JND["t30_x"] == JND["t30_y"] == JND["t30_z"] == JND["t30"]
+    assert JND["lf"] == JND["lfc"] == (0.05, False)
+    assert not {"lj", "iacc_e", "iacc_l", "st_early", "st_late"} & set(JND)  # none known
     assert JND["c80"] == JND["c50"] == JND["g"] == (1.0, False)  # 1 dB
     assert JND["d50"] == (0.05, False) and JND["ts"] == (0.010, False)  # 10 ms
     assert SUMMARY_BANDS_HZ[0] == 125 and SUMMARY_BANDS_HZ[-1] == 4000

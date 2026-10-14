@@ -1,0 +1,310 @@
+# The orchestra of an anechoic recording of Beethoven's Symphony No. 8 on the stage of the
+# concert hall: 61 sources, one per track, and four seats. The tracks (TU Berlin, CC BY 4.0,
+# https://doi.org/10.14279/depositonce-6729.2) are not included: download a movement and
+# mix it at a seat with auralize.sh.
+name: Beethoven 8 orchestra (concert hall, 61 sources)
+geometry:
+  file: concert_hall.obj
+materials:
+  audience:
+    preset: audience_upholstered_chairs_1
+    scattering: theatre_audience
+  stage_floor:
+    preset: stage_floor
+    scattering: 0.1
+  wood_panels:
+    preset: wooden_lining
+    scattering: 0.2
+  plaster:
+    preset: plasterboard
+    scattering: 0.3   # walls broken up by pilasters and boxes
+  ceiling:
+    preset: ceiling_plasterboard
+    scattering: 0.4   # coffered
+assignments:
+  audience_floor: audience
+  stage_floor: stage_floor
+  stage_front: wood_panels
+  stage_wall: wood_panels
+  rear_wall: wood_panels
+  side_walls: plaster
+  ceiling: ceiling
+# Seating is German (antiphonal): first violins on the conductor's left (low y), seconds
+# on the right, cellos and violas behind them, basses at the back left, winds in the
+# centre on risers, horns back left, trumpets and timpani back right. The stage runs from
+# x = 0 (back wall) to x = 8 (front edge, floor at z = 1); the conductor stands at
+# (7.3, 10) and the audience is at +x, so it sees the same sides. Risers (0.3 and 0.6 m)
+# only raise the sources; the model has no riser surfaces.
+#
+# Every source has the same power (the default level_db), so the balance is the one in the
+# tracks. Directivities are rough per-octave first-order patterns (63 Hz to 8 kHz) after
+# Meyer, "Acoustics and the Performance of Music": near omni at low frequencies, narrowing
+# above 1 kHz, most for the brass. Horn bells point back and to the player's right, trumpet
+# bells to the hall, oboes and clarinets 30 degrees down, bassoons 45 degrees up, timpani
+# up; everyone else faces the conductor. Source names match the track files (comments).
+sources:
+  - name: vl1_01   # 14_Vl_1_1_1.wav
+    position: [6.5, 3.6, 2.0]
+    orientation: {yaw: 83}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_02   # 15_Vl_1_1_2.wav
+    position: [6.5, 4.5, 2.0]
+    orientation: {yaw: 82}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_03   # 16_Vl_1_1_3.wav
+    position: [6.5, 5.4, 2.0]
+    orientation: {yaw: 80}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_04   # 17_Vl_1_1_4.wav
+    position: [6.5, 6.3, 2.0]
+    orientation: {yaw: 78}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_05   # 18_Vl_1_1_5.wav
+    position: [6.5, 7.2, 2.0]
+    orientation: {yaw: 74}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_06   # 19_Vl_1_1_6.wav
+    position: [6.5, 8.1, 2.0]
+    orientation: {yaw: 67}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_07   # 20_Vl_1_1_7.wav
+    position: [6.5, 9.0, 2.0]
+    orientation: {yaw: 51}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl2_01   # 28_Vl_2_1_1.wav
+    position: [6.5, 11.0, 2.0]
+    orientation: {yaw: -51}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl2_02   # 29_Vl_2_1_2.wav
+    position: [6.5, 11.9, 2.0]
+    orientation: {yaw: -67}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl2_03   # 30_Vl_2_1_3.wav
+    position: [6.5, 12.8, 2.0]
+    orientation: {yaw: -74}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl2_04   # 31_Vl_2_1_4.wav
+    position: [6.5, 13.7, 2.0]
+    orientation: {yaw: -78}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl2_05   # 32_Vl_2_1_5.wav
+    position: [6.5, 14.6, 2.0]
+    orientation: {yaw: -80}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl2_06   # 33_Vl_2_1_6.wav
+    position: [6.5, 15.5, 2.0]
+    orientation: {yaw: -82}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_08   # 21_Vl_1_2_1.wav
+    position: [5.6, 3.6, 2.0]
+    orientation: {yaw: 75}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_09   # 22_Vl_1_2_2.wav
+    position: [5.6, 4.5, 2.0]
+    orientation: {yaw: 73}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_10   # 23_Vl_1_2_3.wav
+    position: [5.6, 5.4, 2.0]
+    orientation: {yaw: 70}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_11   # 24_Vl_1_2_4.wav
+    position: [5.6, 6.3, 2.0]
+    orientation: {yaw: 65}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_12   # 25_Vl_1_2_5.wav
+    position: [5.6, 7.2, 2.0]
+    orientation: {yaw: 59}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_13   # 26_Vl_1_2_6.wav
+    position: [5.6, 8.1, 2.0]
+    orientation: {yaw: 48}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl1_14   # 27_Vl_1_2_7.wav
+    position: [5.6, 9.0, 2.0]
+    orientation: {yaw: 30}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl2_07   # 34_Vl_2_2_1.wav
+    position: [5.6, 11.0, 2.0]
+    orientation: {yaw: -30}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl2_08   # 35_Vl_2_2_2.wav
+    position: [5.6, 11.9, 2.0]
+    orientation: {yaw: -48}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl2_09   # 36_Vl_2_2_3.wav
+    position: [5.6, 12.8, 2.0]
+    orientation: {yaw: -59}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl2_10   # 37_Vl_2_2_4.wav
+    position: [5.6, 13.7, 2.0]
+    orientation: {yaw: -65}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vl2_11   # 38_Vl_2_2_5.wav
+    position: [5.6, 14.6, 2.0]
+    orientation: {yaw: -70}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.75, 0.6, 0.55, 0.5]}
+  - name: vc_1   # 50_Vc_1.wav
+    position: [4.7, 5.2, 1.6]
+    orientation: {yaw: 62}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.55, 0.5]}
+  - name: vc_2   # 51_Vc_2.wav
+    position: [4.7, 6.1, 1.6]
+    orientation: {yaw: 56}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.55, 0.5]}
+  - name: vc_3   # 52_Vc_3.wav
+    position: [4.7, 7.0, 1.6]
+    orientation: {yaw: 49}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.55, 0.5]}
+  - name: vc_4   # 53_Vc_4.wav
+    position: [4.7, 7.9, 1.6]
+    orientation: {yaw: 39}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.55, 0.5]}
+  - name: vc_5   # 54_Vc_5.wav
+    position: [4.7, 8.8, 1.6]
+    orientation: {yaw: 25}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.55, 0.5]}
+  - name: vc_6   # 55_Vc_6.wav
+    position: [4.7, 9.7, 1.6]
+    orientation: {yaw: 7}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.55, 0.5]}
+  - name: vla_01   # 39_Vla_1_1.wav
+    position: [4.7, 10.6, 2.0]
+    orientation: {yaw: -13}
+    directivity: {pattern: [1, 1, 0.95, 0.85, 0.7, 0.6, 0.55, 0.5]}
+  - name: vla_02   # 40_Vla_1_2.wav
+    position: [4.7, 11.5, 2.0]
+    orientation: {yaw: -30}
+    directivity: {pattern: [1, 1, 0.95, 0.85, 0.7, 0.6, 0.55, 0.5]}
+  - name: vla_03   # 41_Vla_1_3.wav
+    position: [4.7, 12.4, 2.0]
+    orientation: {yaw: -43}
+    directivity: {pattern: [1, 1, 0.95, 0.85, 0.7, 0.6, 0.55, 0.5]}
+  - name: vla_04   # 42_Vla_1_4.wav
+    position: [4.7, 13.3, 2.0]
+    orientation: {yaw: -52}
+    directivity: {pattern: [1, 1, 0.95, 0.85, 0.7, 0.6, 0.55, 0.5]}
+  - name: vla_05   # 43_Vla_1_5.wav
+    position: [4.7, 14.2, 2.0]
+    orientation: {yaw: -58}
+    directivity: {pattern: [1, 1, 0.95, 0.85, 0.7, 0.6, 0.55, 0.5]}
+  - name: vla_06   # 44_Vla_1_6.wav
+    position: [4.7, 15.1, 2.0]
+    orientation: {yaw: -63}
+    directivity: {pattern: [1, 1, 0.95, 0.85, 0.7, 0.6, 0.55, 0.5]}
+  - name: db_1   # 56_Db_1.wav
+    position: [3.8, 3.8, 2.0]
+    orientation: {yaw: 61}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.6, 0.6]}
+  - name: db_2   # 57_Db_2.wav
+    position: [3.8, 4.7, 2.0]
+    orientation: {yaw: 57}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.6, 0.6]}
+  - name: db_3   # 58_Db_3.wav
+    position: [3.8, 5.6, 2.0]
+    orientation: {yaw: 51}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.6, 0.6]}
+  - name: db_4   # 59_Db_4.wav
+    position: [3.8, 6.5, 2.0]
+    orientation: {yaw: 45}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.6, 0.6]}
+  - name: db_5   # 60_Db_5.wav
+    position: [3.8, 7.4, 2.0]
+    orientation: {yaw: 37}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.6, 0.6]}
+  - name: db_6   # 61_Db_6.wav
+    position: [3.8, 8.3, 2.0]
+    orientation: {yaw: 26}
+    directivity: {pattern: [1, 1, 0.9, 0.8, 0.7, 0.6, 0.6, 0.6]}
+  - name: vla_07   # 45_Vla_2_1.wav
+    position: [3.8, 10.6, 2.0]
+    orientation: {yaw: -10}
+    directivity: {pattern: [1, 1, 0.95, 0.85, 0.7, 0.6, 0.55, 0.5]}
+  - name: vla_08   # 46_Vla_2_2.wav
+    position: [3.8, 11.5, 2.0]
+    orientation: {yaw: -23}
+    directivity: {pattern: [1, 1, 0.95, 0.85, 0.7, 0.6, 0.55, 0.5]}
+  - name: vla_09   # 47_Vla_2_3.wav
+    position: [3.8, 12.4, 2.0]
+    orientation: {yaw: -34}
+    directivity: {pattern: [1, 1, 0.95, 0.85, 0.7, 0.6, 0.55, 0.5]}
+  - name: vla_10   # 48_Vla_2_4.wav
+    position: [3.8, 13.3, 2.0]
+    orientation: {yaw: -43}
+    directivity: {pattern: [1, 1, 0.95, 0.85, 0.7, 0.6, 0.55, 0.5]}
+  - name: vla_11   # 49_Vla_2_5.wav
+    position: [3.8, 14.2, 2.0]
+    orientation: {yaw: -50}
+    directivity: {pattern: [1, 1, 0.95, 0.85, 0.7, 0.6, 0.55, 0.5]}
+  - name: fl2   # 02_Fl_2.wav
+    position: [2.9, 8.65, 2.4]
+    orientation: {yaw: 17}
+    directivity: {pattern: [1, 1, 1, 1, 0.9, 0.8, 0.7, 0.6]}
+  - name: fl1   # 01_Fl_1.wav
+    position: [2.9, 9.55, 2.4]
+    orientation: {yaw: 6}
+    directivity: {pattern: [1, 1, 1, 1, 0.9, 0.8, 0.7, 0.6]}
+  - name: ob1   # 03_Ob_1.wav
+    position: [2.9, 10.45, 2.3]
+    orientation: {yaw: -6, pitch: -30}
+    directivity: {pattern: [1, 1, 1, 0.95, 0.8, 0.65, 0.5, 0.4]}
+  - name: ob2   # 04_Ob_2.wav
+    position: [2.9, 11.35, 2.3]
+    orientation: {yaw: -17, pitch: -30}
+    directivity: {pattern: [1, 1, 1, 0.95, 0.8, 0.65, 0.5, 0.4]}
+  - name: cl2   # 06_Cl_2.wav
+    position: [2.0, 8.65, 2.6]
+    orientation: {yaw: 14, pitch: -30}
+    directivity: {pattern: [1, 1, 1, 0.95, 0.8, 0.65, 0.5, 0.4]}
+  - name: cl1   # 05_Cl_1.wav
+    position: [2.0, 9.55, 2.6]
+    orientation: {yaw: 5, pitch: -30}
+    directivity: {pattern: [1, 1, 1, 0.95, 0.8, 0.65, 0.5, 0.4]}
+  - name: bn1   # 07_Bn_1.wav
+    position: [2.0, 10.45, 2.8]
+    orientation: {yaw: -5, pitch: 45}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.8, 0.7, 0.6, 0.5]}
+  - name: bn2   # 08_Bn_2.wav
+    position: [2.0, 11.35, 2.8]
+    orientation: {yaw: -14, pitch: 45}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.8, 0.7, 0.6, 0.5]}
+  - name: hn2   # 10_Hrn_2.wav
+    position: [2.0, 6.0, 2.5]
+    orientation: {yaw: -135}
+    directivity: {pattern: [1, 1, 0.9, 0.7, 0.5, 0.37, 0.3, 0.25]}
+  - name: hn1   # 09_Hrn_1.wav
+    position: [2.0, 6.9, 2.5]
+    orientation: {yaw: -135}
+    directivity: {pattern: [1, 1, 0.9, 0.7, 0.5, 0.37, 0.3, 0.25]}
+  - name: tp1   # 11_Trp_1.wav
+    position: [2.0, 13.1, 2.7]
+    orientation: {yaw: 0}
+    directivity: {pattern: [1, 1, 0.9, 0.7, 0.5, 0.37, 0.25, 0.25]}
+  - name: tp2   # 12_Trp_2.wav
+    position: [2.0, 14.0, 2.7]
+    orientation: {yaw: 0}
+    directivity: {pattern: [1, 1, 0.9, 0.7, 0.5, 0.37, 0.25, 0.25]}
+  - name: timpani   # 13_Tp.wav
+    position: [1.0, 14.6, 2.5]
+    orientation: {yaw: 0, pitch: 90}
+    directivity: {pattern: [1, 1, 1, 0.9, 0.8, 0.7, 0.6, 0.5]}
+listeners:
+  - name: conductor
+    position: [7.3, 10.0, 2.7]   # on the podium, ears 1.7 m above the stage floor
+    orientation: {yaw: 180}      # facing the orchestra
+  - name: stalls-front
+    position: [12.0, 10.0, 1.2]
+    orientation: {yaw: 180}      # facing the stage
+  - name: stalls-middle
+    position: [20.0, 6.0, 1.2]
+    orientation: {yaw: 180}
+  - name: stalls-rear
+    position: [29.0, 14.0, 1.2]
+    orientation: {yaw: 180}
+simulation:
+  sample_rate: 48000             # the rate of the tracks
+  early: {method: ray_tracing, max_order: 3}
+  late: {method: stochastic_ray_tracing, rays: 50000}
+  ir_length_s: 3.5
+outputs:
+  - mono
+  - binaural
