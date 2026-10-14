@@ -512,7 +512,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
             values = chosen.value(name, band if info.per_band else None)
             finite = values[np.isfinite(values)]
             if len(finite) == 0:
-                row = ["–"] * 3
+                row = ["-"] * 3
             else:
                 row = [info.text(float(v)) for v in (finite.min(), np.median(finite), finite.max())]
             print(f"{info.label:<14}" + "".join(f"{cell:>8}" for cell in row))

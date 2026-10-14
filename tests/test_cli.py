@@ -1,3 +1,4 @@
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -140,9 +141,10 @@ def test_map_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
     assert len(report["points"]) == 12
     assert len(report["maps"]["talker"]["values"]["c80"][0]) == 8
 
-    plot = tmp_path / "map.png"
-    assert main([*args, "--parameter", "sti", "--plot", str(plot)]) == 0
-    assert plot.stat().st_size > 10_000
+    if importlib.util.find_spec("matplotlib") is not None:
+        plot = tmp_path / "map.png"
+        assert main([*args, "--parameter", "sti", "--plot", str(plot)]) == 0
+        assert plot.stat().st_size > 10_000
 
     assert main([*args, "--surfaces", "ceiling"]) == 1
     assert "no map point lies inside the room" in capsys.readouterr().err
