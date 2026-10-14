@@ -85,8 +85,10 @@ public:
     FlushDenormals(const FlushDenormals &) = delete;
     FlushDenormals &operator=(const FlushDenormals &) = delete;
 
+#ifdef ACOUSTIC_SPACES_HAS_MXCSR
 private:
     unsigned saved_ = 0;
+#endif
 };
 
 class WaveSolver {
