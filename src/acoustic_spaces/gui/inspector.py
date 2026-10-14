@@ -750,7 +750,7 @@ class SimulationPage(Page):
         self.directions = int_spin(0, 1024, 16)
         self.splitting = QCheckBox("Split strong rays, thin out weak ones")
         late_form.addRow("Method", self.late_method)
-        late_form.addRow("Rays", self.late_rays)
+        late_form.addRow("Rays per band", self.late_rays)
         late_form.addRow("Reception", self.reception)
         late_form.addRow("Arrival directions", self.directions)
         late_form.addRow(self.splitting)
@@ -1031,7 +1031,7 @@ class CoveragePage(Page):
         self.same_rays = QCheckBox("As for the late reverberation")
         self.rays = int_spin(1, 100_000_000, 10_000)
         rays_form.addRow(self.same_rays)
-        rays_form.addRow("Rays per source", self.rays)
+        rays_form.addRow("Rays per source and band", self.rays)
         layout.addWidget(rays)
 
         noise = QGroupBox("Speech transmission index")

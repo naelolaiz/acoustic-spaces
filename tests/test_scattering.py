@@ -146,15 +146,15 @@ def _late(room: Room, covered_order: int, rays: int, **kwargs) -> np.ndarray:
     ).energy
 
 
-@pytest.mark.parametrize("method", ["vector", "random"])
-def test_early_and_late_add_up_to_the_whole(method) -> None:
+@pytest.mark.parametrize(("method", "rays"), [("vector", 25_000), ("random", 100_000)])
+def test_early_and_late_add_up_to_the_whole(method, rays) -> None:
     # Left out of the late part, the specular-only share of the paths up to order 3 is
     # what the early stage brings: together they hold what the tracer finds on its own.
     room = _box(0.3, scattering={"method": method}, early={"diffraction": "none"})
     model = TraceModel.from_room(room)
     source = np.array(room.scene.sources[0].position)
-    whole = _late(room, -1, 100_000).sum(axis=2)
-    late = _late(room, 3, 100_000).sum(axis=2)
+    whole = _late(room, -1, rays).sum(axis=2)  # per band: each traced on its own
+    late = _late(room, 3, rays).sum(axis=2)
     candidates = exhaustive_candidates(model, source, 3)
     for k, listener in enumerate(room.scene.listeners):
         early = find_paths(
@@ -187,3 +187,31 @@ def test_small_surfaces_scatter_a_specular_box_into_a_diffuse_one() -> None:
     eyring = 60.0 / room.reverberation_time("eyring")
     np.testing.assert_allclose(diffuse, eyring, rtol=0.1)
     assert np.all(specular < 0.9 * eyring)
+
+
+def test_each_band_follows_its_own_scattering() -> None:
+    # Diffuse in the bass, specular in the treble: traced with one direction for all
+    # bands, every band would decay alike. Each band has rays of its own instead.
+    split = [1.0] * 4 + [0.0] * 4
+    room = _box(0.0, absorption=0.1, ir_length_s=1.0, scattering={"from_size": False})
+    room.scene.materials["m"].scattering = split
+    room = Room.from_scene(room.scene)
+    model = TraceModel.from_room(room)
+    assert late_stage.band_groups(model) == [slice(b, b + 1) for b in range(8)]
+    eyring = 60.0 / room.reverberation_time("eyring")
+    t = np.arange(300) * 1e-3
+    inside = (t > 0.05) & (t < 0.3)
+    level = 10 * np.log10(_late(room, -1, 20_000).sum(axis=0)[:, inside] + 1e-300)
+    rate = -np.polyfit(t[inside], level.T, 1)[0]
+    np.testing.assert_allclose(rate[:4], eyring[:4], rtol=0.1)
+    assert np.all(rate[4:] < 0.9 * eyring[4:])
+
+
+def test_one_ray_carries_all_bands_where_they_scatter_alike() -> None:
+    def groups(**settings) -> int:
+        return len(late_stage.band_groups(TraceModel.from_room(_box(**settings))))
+
+    assert groups(coefficient=0.1) == 8  # the size makes the bands differ
+    assert groups(coefficient=1.0) == 1  # fully diffuse at any size
+    assert groups(coefficient=0.1, scattering={"from_size": False}) == 1
+    assert groups(coefficient=0.1, scattering={"method": "random"}) == 1

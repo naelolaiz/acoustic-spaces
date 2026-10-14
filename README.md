@@ -514,6 +514,44 @@ LF read from that response with `analyze --ambisonic` is then lower than the
 echogram's; off the centre line the two agree on average, band by band within the
 interference of reflections close in time.
 
+### Scattering
+
+A surface's scattering coefficient (ISO 17497-1) is the share of the reflected energy
+that leaves it diffusely rather than specularly. `simulation.scattering` says how rays
+carry it out:
+
+```yaml
+simulation:
+  scattering:
+    method: vector     # or random
+    from_size: true    # small, distant and grazed surfaces scatter more
+```
+
+- `vector` (default): every reflection sends the ray in the direction of the sum of its
+  specular direction and a random Lambert direction, weighted by the scattering
+  coefficient averaged over the bands, as ODEON and pyroomacoustics do. The ray keeps
+  all the reflected energy: the diffuse rain sends the scattered share to the listeners,
+  and the detector spheres count only the rest.
+- `random`: the ray reflects specularly or, with the coefficient as probability, in a
+  Lambert direction. This was the only model up to version 2. With smooth walls a few
+  rays then keep running between them, and the decay comes out longer.
+- `from_size` (default on): a surface also scatters for its size, after Christensen and
+  Rindel (2005), as in ODEON. The specular share falls below f_w = c d / (2 (w cos θ)²)
+  and again below f_l = c d / (2 l²), where w and l are the surface's width and length,
+  d the distance the sound came from and θ its angle of incidence. A large wall reflects
+  specularly down to low frequencies, while a small panel, a distant one or one met at a
+  grazing angle scatters. Each flat surface (the faces of one plane joined at their
+  edges, of any material) counts as the rectangle with its area and perimeter. Early
+  reflections lose that share too and the late part picks it up. Reflections that
+  [edge diffraction](#edge-diffraction) already completes keep their own coefficient:
+  the first two orders with `first_order` diffraction (the default), the first with
+  `direct`.
+
+In the two measured rooms of the [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md),
+the default model brings the reverberation time of a chamber music hall from 20 to 32 %
+long down to 5 to 17 %, and keeps a seminar room within 4 % from 500 Hz to 4 kHz.
+Without the surfaces' sizes, neither model fits both rooms.
+
 ### Edge diffraction
 
 Sound bends round the edges of walls, screens and balconies: a listener round a corner
@@ -625,8 +663,9 @@ convolvers against direct convolution, and sweep measurements of synthetic rooms
 cross-check against pyroomacoustics in four rooms agrees within 6 % on T30 where both
 programs model the same physics, and shows where their scattering models part ways.
 Against measurements in two rooms of the BRAS benchmark, a seminar room comes out
-within one to two JNDs on reverberation time and one on clarity, and a chamber music
-hall within one on clarity but 20 to 32 % long on reverberation time. Edge diffraction
+within 4 % on reverberation time from 500 Hz to 4 kHz and within one JND on clarity, and
+a chamber music hall within about one JND on clarity and 5 to 17 % long on reverberation
+time. Edge diffraction
 is checked against the exact solutions for a half-plane and for wedges, and against
 Maekawa's chart. The
 wave solver matches the frequencies and decay rates of a box's modes within 0.5 %, the
@@ -1110,7 +1149,8 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] SketchUp files read directly (experimental, the `sketchup` extra).
 - [x] More parameters: LF, LFC, LJ, IACC, ST early and late, U50, STIPA, echo criteria,
   directional decay.
-- [ ] Scattering that follows surface size and frequency, and third-octave bands.
+- [x] Vector-based scattering, and scattering that follows surface size and frequency.
+- [ ] Third-octave bands.
 - [ ] Sources with their own spectra, delay and EQ, line and surface sources, arrays.
 - [ ] Sound through walls and between coupled rooms.
 - [ ] Fitting absorption to measured parameters.

@@ -251,7 +251,8 @@ scenes (its README says how they were made):
 In each, a dodecahedron loudspeaker stood at two positions and an omnidirectional
 microphone at five, giving ten measured responses. Each scene was simulated as it stands,
 with this package's defaults: ray tracing up to the 3rd order, first-order edge
-diffraction and 100,000 late rays, in the air measured on the day. Simulated and measured
+diffraction, 100,000 late rays and vector-based scattering with the scattering of each
+surface's size, in the air measured on the day. Simulated and measured
 parameters were compared pair by pair in just noticeable differences
 (`acoustic_spaces.compare`, the same JNDs as `acoustic-spaces compare`) and averaged over
 the ten pairs. The measured responses were analysed by this package too. Its octave values
@@ -270,58 +271,79 @@ band values are within one JND:
 
 | | CR2 fitted | CR3 fitted | CR2 initial | CR3 initial |
 |---|---:|---:|---:|---:|
-| EDT | 1.7 (18) | 3.8 (4) | 5.3 (8) | 6.4 (11) |
-| T20 | 1.5 (16) | 4.6 (0) | 5.3 (9) | 7.0 (15) |
-| T30 | 1.5 (22) | 4.9 (0) | 5.1 (7) | 7.2 (12) |
-| C50 | 1.0 (41) | 1.2 (34) | 1.6 (27) | 1.6 (19) |
-| C80 | 0.7 (47) | 1.0 (40) | 1.6 (28) | 1.4 (26) |
-| D50 | 1.0 (42) | 1.3 (32) | 1.6 (27) | 1.8 (17) |
-| Ts | 1.1 (30) | 1.4 (22) | 3.0 (15) | 3.0 (21) |
+| EDT | 1.1 (39) | 2.7 (10) | 5.4 (5) | 5.7 (7) |
+| T20 | 1.0 (44) | 1.9 (13) | 5.9 (1) | 5.6 (9) |
+| T30 | 1.0 (46) | 1.6 (14) | 6.0 (0) | 5.6 (10) |
+| C50 | 1.0 (39) | 1.3 (35) | 1.6 (27) | 1.7 (20) |
+| C80 | 0.8 (45) | 1.0 (35) | 1.6 (29) | 1.5 (24) |
+| D50 | 1.1 (40) | 1.4 (29) | 1.6 (27) | 1.9 (20) |
+| Ts | 1.0 (35) | 1.3 (23) | 3.0 (17) | 2.9 (18) |
 
 ![CR2, fitted absorption](validation/bras_CR2_fitted.png)
 
-**Seminar room, fitted absorption.** From 250 Hz to 4 kHz the reverberation time comes
-out 0 to 10 % long (T20 2.07 s against 1.94 s at 1 kHz), one to two JNDs. C50, C80 and
-D50 are within one JND in most bands, slightly low, as a slightly long decay predicts. At
-8 kHz the simulated decay is about 20 % short, and so is Eyring's formula with the same
-absorption and air (0.93 s against 1.11 s measured; from 500 Hz to 4 kHz it is within
-3 %). So the fitted coefficients assume less air absorption in that octave than
-ISO 9613-1 gives at its centre frequency. A measured decay follows the octave's slowest
-part, its lowest third (6.3 kHz), which could explain it (inferred, not tested).
+**Seminar room, fitted absorption.** From 500 Hz to 4 kHz the reverberation time is
+within 4 % of the measured one (T20 1.96 s against 1.94 s at 1 kHz), within one JND, and
+C50, C80 and D50 are within one JND in most bands. At 250 Hz and 8 kHz the simulated
+decay is 16 % short, and so is Eyring's formula with the same absorption and air (1.48 s
+against 1.72 s measured at 250 Hz, 0.93 s against 1.11 s at 8 kHz), so there the fitted
+coefficients, averaged onto octaves, do not give the measured decay even in a diffuse
+field. At 8 kHz they assume less air absorption than ISO 9613-1 gives at the octave's
+centre frequency; a measured decay follows the octave's slowest part, its lowest third
+(6.3 kHz), which could explain it (inferred, not tested).
 
 ![CR3, fitted absorption](validation/bras_CR3_fitted.png)
 
-**Chamber music hall, fitted absorption.** The clarity measures agree within about one
-JND, but the reverberation time is 20 to 32 % long from 63 Hz to 2 kHz (T20 1.65 s
-against 1.34 s at 1 kHz), and EDT 11 to 24 % up to 4 kHz. It is the model hall as a whole, not the
-listener positions. The total sound energy traced in the room without listeners (as in
-the cross-check above, with scattering averaged over the bands) decays as slowly: T20
-1.55 to 1.73 s from 250 Hz to 2 kHz, against 1.28 to 1.46 s measured. Eyring's formula
-with the same absorption and air gives 1.28 to 1.49 s, within 5 % of the measurement
-from 63 Hz to 4 kHz, as the fitting intends. So in the model,
-sound reaches the absorbing seating less often than Eyring's diffuse field assumes, and
-less often than in the real hall, whose details the simplified BRAS model smooths away.
+**Chamber music hall, fitted absorption.** The reverberation time comes out 5 to 17 % long
+from 63 Hz to 4 kHz (T20 1.47 s against 1.34 s at 1 kHz), one to three and a half JNDs,
+and EDT 6 to 17 % long. From 125 Hz up, C50, C80 and D50 are within about one JND,
+slightly low, as a slightly long decay predicts. Eyring's formula with the same absorption and air is
+within 5 % of the measurement from 63 Hz to 4 kHz, as the fitting intends, so in the
+model sound still reaches the absorbing seating a little less often than Eyring's
+diffuse field assumes, and than in the real hall, whose details the simplified BRAS
+model smooths away.
 
-Vector-based scattering, the alternative the cross-check left open, closes about half of
-that gap in CR3, with the room's energy decaying in 1.41 to 1.56 s. In CR2, though, it
-makes the decay 5 to 23 % shorter than measured from 250 Hz to 4 kHz (1.75 s against
-2.00 s at 500 Hz), where this package's model is within 7 %. Neither model fits both rooms. The v3 milestones
-on scattering (scattering that depends on the size of a surface and on frequency) and on
-fitting absorption to measured parameters with this tracer instead of Eyring's formula
-will be measured against these two rooms.
+**What scattering does.** Up to version 2 this package scattered a ray with the
+coefficient as probability, and from the surface's own coefficient alone. The hall then
+came out 20 to 32 % long, EDT 11 to 24 %, and the seminar room 0 to 10 % long from 250 Hz
+to 4 kHz. Tracing the total sound energy in each room without listeners (as in the
+cross-check above, with scattering averaged over the bands) and fitting T20 to its decay
+shows what each part of the new model does:
+
+| T20 (s) | 63 Hz | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz | 8 kHz |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| CR2 measured | 1.56 | 1.34 | 1.72 | 2.00 | 1.94 | 1.75 | 1.54 | 1.11 |
+| CR2 room energy, random scattering (version 2) | 1.50 | 1.44 | 1.62 | 2.12 | 2.05 | 1.83 | 1.64 | 0.94 |
+| CR2 room energy, vector-based scattering | 1.60 | 1.27 | 1.33 | 1.75 | 1.77 | 1.67 | 1.45 | 0.90 |
+| CR2 room energy, vector-based with surface size (default) | 1.61 | 1.38 | 1.45 | 1.97 | 1.96 | 1.80 | 1.57 | 0.93 |
+| CR2 Eyring | 1.45 | 1.34 | 1.48 | 2.00 | 1.95 | 1.76 | 1.59 | 0.93 |
+| CR3 measured | 1.77 | 1.57 | 1.46 | 1.28 | 1.34 | 1.30 | 1.03 | 0.78 |
+| CR3 room energy, random scattering (version 2) | 2.08 | 1.96 | 1.73 | 1.55 | 1.61 | 1.57 | 1.21 | 0.77 |
+| CR3 room energy, vector-based scattering | 1.86 | 1.77 | 1.56 | 1.41 | 1.46 | 1.43 | 1.12 | 0.74 |
+| CR3 room energy, vector-based with surface size (default) | 1.95 | 1.83 | 1.59 | 1.39 | 1.47 | 1.40 | 1.11 | 0.74 |
+| CR3 Eyring | 1.79 | 1.65 | 1.49 | 1.28 | 1.33 | 1.33 | 1.06 | 0.71 |
+
+Vector-based scattering alone closes most of the gap in the hall but makes the seminar
+room 5 to 23 % short of the measurement from 250 Hz to 4 kHz. Adding the scattering of
+each surface's size brings the seminar room back to Eyring's diffuse field, within 3 %
+from 125 Hz to 8 kHz, and keeps the hall where vector-based scattering put it: one model
+now fits both rooms. The simulated responses decay like these room-energy curves, within
+4 % in every band. The v3 milestone on fitting absorption to measured parameters with
+this tracer instead of Eyring's formula will be measured against these two rooms.
 
 ![CR2, initial absorption](validation/bras_CR2_initial.png)
 
 ![CR3, initial absorption](validation/bras_CR3_initial.png)
 
 **Initial absorption.** With the absorption estimated before fitting, the decay at 63
-and 125 Hz comes out 1.6 to 2 times as long as measured in both rooms, and at 250 Hz in
-the hall too (T20 2.66 s against 1.34 s in CR2 at 125 Hz). The initial coefficients have
+and 125 Hz comes out 1.5 to 2.1 times as long as measured in both rooms, and at 250 Hz in
+the hall too (T20 2.52 s against 1.34 s in CR2 at 125 Hz). The initial coefficients have
 far less absorption there than the fitted ones. In real rooms much of it comes from
 structures that flex, such as panels, windows and doors, which tables of materials
-rarely capture. From 1 to 4 kHz the seminar room's decay is 7 to 23 % short; at 2 and
-4 kHz the hall's is within 5 %. This is the error to expect from tabulated coefficients
-alone, before a room has been measured.
+rarely capture. From 500 Hz to 4 kHz the seminar room's decay is 10 to 27 % short, and at
+2 and 4 kHz the hall's is 8 to 20 % short. The simulation follows Eyring's formula with
+the same coefficients within 11 % in every band of both rooms, so the error is in the
+coefficients. This is the error to expect from tabulated coefficients alone, before a
+room has been measured.
 
 ## Wave-based solver
 

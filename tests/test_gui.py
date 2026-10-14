@@ -744,7 +744,7 @@ def test_coverage_settings_form(window) -> None:
     assert window.document.scene.coverage.rays == 12_345
     assert window.undo_action.text() == "&Undo change coverage map settings"
     window.undo()
-    assert window.document.scene.coverage.rays == 50_000  # the late rays, when unticked
+    assert window.document.scene.coverage.rays == 25_000  # the late rays, when unticked
     window.undo()
     assert window.document.scene.coverage.rays is None
 

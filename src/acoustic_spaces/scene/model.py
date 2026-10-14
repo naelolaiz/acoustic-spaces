@@ -356,7 +356,14 @@ class LateStage(_Model):
     """Late reverberation: stochastic energy decay per band, time slot and direction."""
 
     method: Literal["stochastic_ray_tracing", "statistical"] = "stochastic_ray_tracing"
-    rays: int = Field(default=100_000, ge=1, description="stochastic ray tracing only")
+    rays: int = Field(
+        default=50_000,
+        ge=1,
+        description=(
+            "stochastic ray tracing only: rays per octave band (vector-based scattering "
+            "traces each band with rays of its own where the bands scatter differently)"
+        ),
+    )
     reception: Literal["diffuse_rain", "secondary_sources", "detector"] = Field(
         default="diffuse_rain",
         description=(
@@ -522,7 +529,7 @@ class Coverage(_Model):
     height: float = Field(default=1.2, gt=0.0, description="listening height above them (m)")
     spacing: float = Field(default=1.0, gt=0.0, description="distance between map points (m)")
     rays: int | None = Field(
-        default=None, ge=1, description="rays per source; None uses simulation.late.rays"
+        default=None, ge=1, description="rays per source and band; None uses simulation.late.rays"
     )
     noise_db: list[float] | float | None = Field(
         default=None,
