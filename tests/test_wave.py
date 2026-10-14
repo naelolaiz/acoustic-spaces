@@ -360,8 +360,11 @@ def test_hybrid_tail_is_flat_across_the_crossover() -> None:
 def test_simulate_with_the_wave_solver() -> None:
     room = Room.from_yaml(SHOEBOX)
     settings = room.scene.simulation.model_copy(deep=True)
-    settings.ir_length_s = 0.6
+    # Long enough for the 250 Hz decay to pass 20 dB, which every parameter needs: this
+    # room's EDT there is up to 1.7 s with 2000 rays.
+    settings.ir_length_s = 0.8
     settings.late.rays = 2000
+    settings.seed = 1
     settings.wave.enabled = True
     settings.wave.max_band_hz = 125
     result = simulate(room, settings=settings)
