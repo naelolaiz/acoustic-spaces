@@ -48,6 +48,9 @@ MEASURED = "Measured data from a file…"
 SAMPLE_RATES = [16_000, 22_050, 32_000, 44_100, 48_000, 88_200, 96_000]
 #: Shown in the material list of a surface for "no assignment of its own".
 FALLBACK = "(default material)"
+#: Largest side or height of a box or floor plan room the forms take, in the room's
+#: units: a kilometre in millimetres.
+LARGEST = 1e6
 
 
 def spin(low: float, high: float, decimals: int = 2, step: float = 0.1, suffix: str = ""):
@@ -234,9 +237,9 @@ class GeometryPage(Page):
         self.kind.setWordWrap(True)
         layout.addWidget(self.kind)
 
-        self.box_group = QGroupBox("Box (m)")
+        self.box_group = QGroupBox("Box")
         box_form = QFormLayout(self.box_group)
-        self.box = [spin(0.1, 1000, 2, 0.5) for _ in range(3)]
+        self.box = [spin(0.1, LARGEST, 2, 0.5) for _ in range(3)]
         for k, (label, box) in enumerate(
             zip(("Length (x)", "Width (y)", "Height (z)"), self.box, strict=True)
         ):
@@ -244,7 +247,7 @@ class GeometryPage(Page):
             box_form.addRow(label, box)
         layout.addWidget(self.box_group)
 
-        self.plan_group = QGroupBox("Floor plan (m)")
+        self.plan_group = QGroupBox("Floor plan")
         plan_layout = QVBoxLayout(self.plan_group)
         self.plan = QTableWidget(0, 2)
         self.plan.setHorizontalHeaderLabels(["x", "y"])
@@ -259,7 +262,7 @@ class GeometryPage(Page):
         buttons.addWidget(remove)
         plan_layout.addLayout(buttons)
         height_form = QFormLayout()
-        self.height = spin(0.1, 1000, 2, 0.5)
+        self.height = spin(0.1, LARGEST, 2, 0.5)
         self.height.valueChanged.connect(self._height)
         height_form.addRow("Height", self.height)
         plan_layout.addLayout(height_form)
@@ -295,6 +298,9 @@ class GeometryPage(Page):
         self.box_group.setVisible(geometry.box is not None)
         self.plan_group.setVisible(geometry.floor_plan is not None)
         self.file_group.setVisible(geometry.file is not None)
+        units = geometry.units or "m"  # a box or floor plan without units is in metres
+        self.box_group.setTitle(f"Box ({units})")
+        self.plan_group.setTitle(f"Floor plan ({units})")
         if geometry.box is not None:
             for box, value in zip(self.box, geometry.box, strict=True):
                 box.setValue(value)

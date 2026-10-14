@@ -408,6 +408,23 @@ def test_forms_write_back_only_what_changed(window) -> None:
     assert (source.orientation.yaw, source.orientation.pitch) == (12.345, 10.0)
 
 
+def test_geometry_form_shows_the_room_units(window) -> None:
+    from acoustic_spaces.scene import Scene
+
+    window.select("geometry", None)
+    page = window.inspector.pages["geometry"]
+    assert page.box_group.title() == "Box (m)"  # no units given: metres
+    data = box_scene().model_dump(mode="json", exclude_none=True)
+    data["geometry"] = {"box": [8000, 6000, 3000], "units": "mm"}
+    window._attach(Document(Scene.model_validate(data)))
+    window.select("geometry", None)
+    assert page.box_group.title() == "Box (mm)"
+    assert [box.value() for box in page.box] == [8000, 6000, 3000]
+    window.document.set_floor_plan([[0, 0], [8, 0], [8, 6]])  # corners in metres
+    assert page.plan_group.title() == "Floor plan (mm)"
+    assert page.plan.item(1, 0).text() == "8000" and page.height.value() == 3000
+
+
 def test_model_units_default_to_the_file(window) -> None:
     window.open_example(example_path("shoebox"))  # its scene says units: m
     window.select("geometry", None)
