@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 2.0.0
+
+Coverage maps, edge diffraction, drawing rooms in the editor, head tracking and a
+wave-based solver for low frequencies.
+
+Simulations now include edge diffraction by default, so rooms with convex corners or
+thin screens sound and measure differently than in 1.1.0. Set
+`simulation.early.diffraction: none` (or `--diffraction none`) for purely specular
+early reflections as before. The wave solver is off unless switched on.
 
 **Coverage maps** (`acoustic-spaces map`, the editor's Simulation > Run coverage map)
 
