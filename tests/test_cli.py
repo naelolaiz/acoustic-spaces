@@ -47,6 +47,20 @@ def test_validate_reports_schema_errors(tmp_path: Path, capsys: pytest.CaptureFi
     assert "materials.painted_concrete: no absorption material named 'smooth_brickwork'" in err
 
 
+def test_validate_refuses_a_model_of_degenerate_faces(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "line.obj").write_text("v 0 0 0\nv 1 0 0\nv 2 0 0\nf 1 2 3\n", encoding="utf-8")
+    data = yaml.safe_load(SHOEBOX.read_text(encoding="utf-8"))
+    data["geometry"]["file"] = "line.obj"
+    path = tmp_path / "scene.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    assert main(["validate", str(path)]) == 1
+    err = capsys.readouterr().err
+    assert "error: line.obj has no faces left: all 1 of them have no area" in err
+    assert "outside the room" not in err
+
+
 def test_inspect(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["inspect", str(SHOEBOX)]) == 0
     out = capsys.readouterr().out
@@ -99,6 +113,34 @@ def test_simulate_writes_responses_and_parameters(
     (response,) = report["responses"]
     assert response["early_paths"] == 63
     assert len(response["parameters"]["c80"]) == 8
+
+
+def test_simulate_checks_the_options_that_override_the_scene(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    out = tmp_path / "out"
+    args = ["simulate", str(SHOEBOX), "--out", str(out), "--length", "0.3"]
+    for option, value, message in [
+        ("--rays", "0", "greater than or equal to 1"),  # was a ZeroDivisionError
+        ("--sample-rate", "-8000", "greater than or equal to 8000"),
+        ("--sample-rate", "100", "greater than or equal to 8000"),  # was accepted
+        ("--max-order", "21", "less than or equal to 20"),
+        ("--length", "nan", "a finite number"),
+    ]:
+        assert main([*args, option, value]) == 1
+        assert f"error: {option}: Input should be {message}" in capsys.readouterr().err
+    assert not out.exists()
+    assert main([*args, "--length", "0", "--rays", "500"]) == 1
+    assert "error: --length: Input should be greater than 0" in capsys.readouterr().err
+
+    # The sample rate is the simulation's, which the wave solver works at.
+    assert main([*args, "--rays", "500", "--max-order", "1", "--sample-rate", "16000"]) == 0
+    capsys.readouterr()
+    report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
+    assert report["sample_rate"] == 16000
+    assert report["settings"]["sample_rate"] == 16000
 
 
 def test_simulate_with_the_wave_solver(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -159,7 +201,9 @@ def test_map_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
     assert "12 map points 2 m apart, 1.2 m above the audience surfaces" in stdout
     assert "talker (bands: 1 kHz)" in stdout
     assert "STI" in stdout and "Ts (ms)" in stdout
-    report = json.loads(out.read_text(encoding="utf-8"))
+    text = out.read_text(encoding="utf-8")
+    assert text.startswith('{\n  "') and text.endswith("}\n")  # as the other JSON files
+    report = json.loads(text)
     assert report["settings"]["noise_db"] == 35.0 and report["settings"]["rays"] == 2000
     assert len(report["points"]) == 12
     assert len(report["maps"]["talker"]["values"]["c80"][0]) == 8
@@ -173,6 +217,24 @@ def test_map_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
     assert "no map point lies inside the room" in capsys.readouterr().err
     assert main([*args, "--noise", "30", "40"]) == 1
     assert "noise_db" in capsys.readouterr().err
+
+
+def test_map_checks_the_options_that_override_the_scene(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    args = ["map", str(SHOEBOX), "--spacing", "2", "--length", "0.3"]
+    for option, value, message in [
+        ("--rays", "0", "greater than or equal to 1"),
+        ("--length", "0", "greater than 0"),
+        ("--max-order", "-1", "greater than or equal to 0"),
+        ("--spacing", "-1", "greater than 0"),
+    ]:
+        assert main([*args, option, value]) == 1
+        err = capsys.readouterr().err
+        assert f"error: {option}: Input should be {message}" in err
+        assert "validation error" not in err and "errors.pydantic.dev" not in err
+    assert main([*args, "--noise", "30", "40"]) == 1
+    assert "error: --noise: expected 8 noise_db values, got 2" in capsys.readouterr().err
 
 
 def _write_recording(sweep_wav: Path, out: Path, latency: int = 0) -> None:
@@ -201,9 +263,9 @@ def test_sweep_deconvolve_and_analyze(tmp_path: Path, capsys: pytest.CaptureFixt
 
     from acoustic_spaces.audio import read_wav
 
-    sweep = tmp_path / "sweep.wav"
+    sweep = tmp_path / "new" / "sweep.wav"  # the folder is made
     assert main(["sweep", str(sweep), "--duration", "1.5", "--silence", "1", "--repeats", "2"]) == 0
-    assert (tmp_path / "sweep.json").exists()
+    assert (tmp_path / "new" / "sweep.json").exists()
     _write_recording(sweep, tmp_path / "recording.wav", latency=48)
     ir = tmp_path / "ir.wav"
     args = ["deconvolve", str(tmp_path / "recording.wav"), "--sweep", str(sweep)]
@@ -234,6 +296,48 @@ def test_deconvolve_rejects_a_mismatched_sample_rate(
     args = ["deconvolve", str(tmp_path / "rec.wav"), "--sweep", str(tmp_path / "sweep.json")]
     assert main([*args, "--out", str(tmp_path / "ir.wav")]) == 1
     assert "44100 Hz" in capsys.readouterr().err
+
+
+def test_deconvolve_and_analyze_report_unreadable_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["sweep", str(tmp_path / "sweep.wav"), "--duration", "1", "--silence", "0.5"])
+    capsys.readouterr()
+    (tmp_path / "notes.wav").write_text("not audio", encoding="utf-8")
+    sweep = ["--sweep", str(tmp_path / "sweep.json"), "--out", str(tmp_path / "ir.wav")]
+    # These ended in tracebacks.
+    for args, message in [
+        (["deconvolve", str(tmp_path / "missing.wav"), *sweep], "missing.wav"),
+        (["deconvolve", str(tmp_path / "notes.wav"), *sweep], "notes.wav: not a WAV file"),
+        (["analyze", str(tmp_path / "missing.wav")], "missing.wav"),
+        (["analyze", str(tmp_path / "notes.wav")], "notes.wav: not a WAV file"),
+    ]:
+        assert main(args) == 1
+        err = capsys.readouterr().err
+        assert err.startswith("error: ") and message in err
+
+
+def test_deconvolve_and_analyze_make_their_output_folders(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    sweep = tmp_path / "sweep.wav"
+    main(["sweep", str(sweep), "--duration", "1", "--silence", "0.5"])
+    _write_recording(sweep, tmp_path / "recording.wav")
+    ir = tmp_path / "irs" / "ir.wav"
+    args = ["deconvolve", str(tmp_path / "recording.wav"), "--sweep", str(sweep)]
+    assert main([*args, "--out", str(ir)]) == 0
+    assert ir.exists()
+    report = tmp_path / "reports" / "ir.json"
+    args = ["analyze", str(ir), "--channel", "1", "--json", str(report)]
+    if importlib.util.find_spec("matplotlib") is not None:
+        args += ["--plot", str(tmp_path / "plots" / "ir.png")]
+    assert main(args) == 0
+    capsys.readouterr()
+    assert json.loads(report.read_text(encoding="utf-8"))["channels"][0]["channel"] == 1
+    if importlib.util.find_spec("matplotlib") is not None:
+        assert (tmp_path / "plots" / "ir.png").exists()
 
 
 def test_measure_with_a_mocked_audio_device(

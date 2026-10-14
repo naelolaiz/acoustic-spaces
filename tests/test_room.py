@@ -111,6 +111,78 @@ def test_points_outside_and_unused_assignments(tmp_path: Path) -> None:
     assert any("balcony" in w for w in room.warnings())
 
 
+def test_listener_at_a_source_is_a_problem(tmp_path: Path) -> None:
+    # At the source the direct sound has no finite level: the response came out NaN.
+    path = _scene(
+        tmp_path,
+        listeners=[
+            {"name": "on-talker", "position": [2.0, 3.0, 1.5]},
+            {"name": "near-talker", "position": [2.005, 3.0, 1.5]},
+            {"name": "close", "position": [2.02, 3.0, 1.5]},
+        ],
+    )
+    room = Room.from_yaml(path)
+    problems = room.problems()
+    assert len(problems) == 2
+    for problem, name in zip(problems, ["on-talker", "near-talker"], strict=True):
+        assert problem.startswith(f"listener {name!r} at [")
+        assert "within 1 cm of source 'talker'" in problem
+    from acoustic_spaces.engine import simulate
+
+    with pytest.raises(ValueError, match="within 1 cm of source 'talker'"):
+        simulate(room, listeners=["close"])
+
+
+def test_flipped_faces_do_not_put_points_outside(tmp_path: Path) -> None:
+    # The shoebox with its floor written the other way round.
+    obj = tmp_path / "flipped.obj"
+    text = (EXAMPLES / "shoebox" / "shoebox.obj").read_text(encoding="utf-8")
+    obj.write_text(text.replace("f 1 2 3\nf 1 3 4", "f 3 2 1\nf 4 3 1"), encoding="utf-8")
+    path = _scene(
+        tmp_path,
+        geometry={"file": str(obj)},
+        listeners=[{"name": "low", "position": [6.0, 3.0, 0.3]}],
+    )
+    room = Room.from_yaml(path)
+    assert room.problems() == []
+    assert room.warnings() == []
+    assert room.sources_inside.tolist() == [True]
+    assert room.listeners_inside.tolist() == [True]
+    assert room.volume_m3 == pytest.approx(144.0)
+
+
+def test_dxf_in_millimetres_without_scene_units(tmp_path: Path) -> None:
+    ezdxf = pytest.importorskip("ezdxf")
+    from acoustic_spaces.geometry import box_mesh
+
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 4  # millimetres
+    for corners in box_mesh((8000.0, 6000.0, 3000.0)).triangles:
+        doc.modelspace().add_3dface([tuple(c) for c in corners])
+    dxf = tmp_path / "room.dxf"
+    doc.saveas(dxf)
+    path = _scene(tmp_path, geometry={"file": str(dxf)}, default_material="painted_concrete")
+    room = Room.from_yaml(path)
+    assert room.scene.geometry.units is None
+    assert room.volume_m3 == pytest.approx(144.0)  # not 8000 x 6000 x 3000 m
+    assert room.problems() == []
+    # Units in the scene win over the file's.
+    path = _scene(
+        tmp_path,
+        geometry={"file": str(dxf), "units": "cm"},
+        default_material="painted_concrete",
+    )
+    assert Room.from_yaml(path).volume_m3 == pytest.approx(144.0 * 1000.0)
+
+
+def test_model_of_degenerate_faces_is_refused(tmp_path: Path) -> None:
+    obj = tmp_path / "line.obj"
+    obj.write_text("v 0 0 0\nv 1 0 0\nv 2 0 0\nv 3 0 0\ng floor\nf 1 2 3\nf 2 3 4\n")
+    # It loaded as a closed room of no triangles, its points all "outside the room".
+    with pytest.raises(ValueError, match="line.obj has no faces left: all 2 of them have no area"):
+        Room.from_yaml(_scene(tmp_path, geometry={"file": str(obj)}))
+
+
 def test_open_model_skips_volume_and_inside_checks(tmp_path: Path) -> None:
     obj = tmp_path / "open.obj"
     lines = (EXAMPLES / "shoebox" / "shoebox.obj").read_text(encoding="utf-8").splitlines()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -34,17 +35,23 @@ class MeshReport:
 
     @property
     def closed(self) -> bool:
-        """True when every edge is shared by exactly two faces."""
-        return self.boundary_edges == 0 and self.non_manifold_edges == 0
+        """True when there are faces and every edge is shared by exactly two of them."""
+        return self.faces > 0 and self.boundary_edges == 0 and self.non_manifold_edges == 0
 
     def summary(self) -> str:
         lo, hi = np.array(self.bounds_min), np.array(self.bounds_max)
         size = " x ".join(f"{d:.2f}" for d in hi - lo)
+        if self.closed:
+            state = "closed"
+        elif self.faces:
+            state = f"open: {self.boundary_edges} boundary edges"
+        else:
+            state = "no faces"
         lines = [
             f"{self.faces} triangles, {self.vertices} vertices, extent {size} m",
             f"surface area {self.surface_area_m2:.2f} m2"
             + (f", volume {self.volume_m3:.2f} m3" if self.volume_m3 is not None else ""),
-            "closed" if self.closed else f"open: {self.boundary_edges} boundary edges",
+            state,
         ]
         if self.non_manifold_edges:
             lines.append(f"{self.non_manifold_edges} edges shared by more than two faces")
@@ -59,8 +66,11 @@ class MeshReport:
 
 
 def clean_mesh(mesh: RoomMesh) -> tuple[RoomMesh, int, int]:
-    """Merge duplicate vertices and drop degenerate faces.
+    """Merge duplicate vertices, drop degenerate faces and orient the faces alike.
 
+    Faces that meet along an edge are turned to agree with each other, so a closed
+    model with a few faces flipped by its exporter still has a volume and an inside
+    test that works; each connected part keeps the orientation most of its area had.
     Returns the cleaned mesh, the number of merged vertices and of removed faces.
     """
     keys = np.round(mesh.vertices / MERGE_TOLERANCE_M).astype(np.int64)
@@ -76,8 +86,70 @@ def clean_mesh(mesh: RoomMesh) -> tuple[RoomMesh, int, int]:
         (faces[:, 0] != faces[:, 1]) & (faces[:, 1] != faces[:, 2]) & (faces[:, 0] != faces[:, 2])
     )
     keep = distinct & (area > MIN_FACE_AREA_M2)
-    cleaned = RoomMesh(vertices, faces[keep], mesh.face_labels[keep], list(mesh.labels))
+    faces = _orient_faces(faces[keep], area[keep])
+    cleaned = RoomMesh(vertices, faces, mesh.face_labels[keep], list(mesh.labels))
     return cleaned, merged, int(np.count_nonzero(~keep))
+
+
+def _orient_faces(faces: np.ndarray, areas: np.ndarray) -> np.ndarray:
+    """The faces with their corner order reversed where needed to agree with their
+    neighbours.
+
+    Two faces sharing an edge agree when they run along it in opposite directions. The
+    orientation spreads from one face of each connected part to the rest, breadth
+    first, across every edge that exactly two faces share; each part then keeps the
+    orientation that most of its area (``areas``, one per face) had. Edges shared by
+    more than two faces pass nothing on, and a part that cannot be oriented (a Moebius
+    strip) keeps the edges where its orientation clashes.
+    """
+    count = len(faces)
+    if count == 0:
+        return faces.copy()
+
+    # Every edge of every face, and the faces on both sides of each two-face edge.
+    directed = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
+    owner = np.tile(np.arange(count), 3)
+    # One number per undirected edge (faster to sort than pairs).
+    key = directed.min(axis=1) * (int(faces.max()) + 1) + directed.max(axis=1)
+    _, edge, counts = np.unique(key, return_inverse=True, return_counts=True)
+    edge = edge.reshape(-1)
+    shared = np.flatnonzero(counts[edge] == 2)
+    pairs = shared[np.argsort(edge[shared], kind="stable")].reshape(-1, 2)
+    a, b = owner[pairs[:, 0]], owner[pairs[:, 1]]
+    # Running the same way along their edge, one of the two faces has to turn.
+    clash = np.all(directed[pairs[:, 0]] == directed[pairs[:, 1]], axis=1)
+
+    # Neighbours of each face, as ranges of one sorted list.
+    ends = np.concatenate([a, b])
+    order = np.argsort(ends, kind="stable")
+    start = np.searchsorted(ends[order], np.arange(count + 1)).tolist()
+    neighbours = np.concatenate([b, a])[order].tolist()
+    clashes = np.concatenate([clash, clash])[order].tolist()
+
+    turn = [False] * count
+    seen = [False] * count
+    for seed in range(count):
+        if seen[seed]:
+            continue
+        seen[seed] = True
+        part, queue = [seed], deque([seed])
+        while queue:
+            face = queue.popleft()
+            for k in range(start[face], start[face + 1]):
+                other = neighbours[k]
+                if not seen[other]:
+                    seen[other] = True
+                    turn[other] = turn[face] != clashes[k]
+                    part.append(other)
+                    queue.append(other)
+        turned = np.array([turn[f] for f in part])
+        if areas[part][turned].sum() > areas[part][~turned].sum():
+            for f in part:
+                turn[f] = not turn[f]
+    out = faces.copy()
+    flip = np.array(turn)
+    out[flip] = out[flip][:, ::-1]
+    return out
 
 
 def check_mesh(mesh: RoomMesh, merged: int = 0, removed: int = 0) -> MeshReport:

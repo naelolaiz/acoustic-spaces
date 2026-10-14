@@ -2,10 +2,13 @@
 
 ## Unreleased
 
-Fixes from a review of the simulation, the parameters, the wave solver and the spatial
-outputs. Levels and parameters change slightly: G with the statistical late method by
-up to 1.8 dB, levels near diffraction boundaries by up to 2 dB, and the wave bands'
-timing by a grid step.
+Fixes from a review of the simulation, the parameters, the wave solver, the spatial
+outputs, the geometry import and the command line. Levels and parameters change
+slightly: G with the statistical late method by up to 1.8 dB, levels near diffraction
+boundaries by up to 2 dB, and the wave bands' timing by a grid step.
+
+A scene's `geometry.units` now defaults to the units a DXF file records, and to metres
+for other files, as before.
 
 **Simulation and parameters**
 
@@ -55,6 +58,24 @@ timing by a grid step.
 - A head path given to `HeadTrackedBinaural.run` is not inverted by the tracker's
   `invert`.
 - Ambisonic encoding refuses directions of zero length instead of giving NaN.
+
+**Geometry, scene files and the command line**
+
+- Faces of a closed model that point the wrong way are turned to agree with their
+  neighbours, so the inside test no longer puts sources outside the room.
+- DXF files are read in the units their header records when the scene gives none, and
+  3DFACE triangles no longer get a fourth corner at the origin.
+- Polygons that repeat a corner are triangulated correctly: an L-shaped floor had 8 m²
+  instead of 5 m².
+- OBJ files with several groups on one line, lines continued with `\`, or coordinates
+  that are not finite numbers are read or refused properly.
+- A model whose faces all have no area is refused with a clear error.
+- NaN and infinity are refused in scene files and coefficient CSV files.
+- A listener within 1 cm of a source is reported as a problem instead of giving a NaN
+  response.
+- Command-line overrides are checked as the scene file is, and `--sample-rate` now
+  reaches the wave solver. `analyze`, `deconvolve` and `sweep` report unreadable inputs
+  as errors and create their output folders.
 
 ## 2.0.0
 

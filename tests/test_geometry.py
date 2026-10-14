@@ -49,6 +49,47 @@ def test_triangulate_concave_l_shape_keeps_area() -> None:
     assert area == pytest.approx(5.0)
 
 
+def _signed_areas(pts: np.ndarray, tris: list[tuple[int, int, int]]) -> list[float]:
+    return [0.5 * float(np.cross(pts[b] - pts[a], pts[c] - pts[a])[2]) for a, b, c in tris]
+
+
+@pytest.mark.parametrize(("repeated", "at"), [(1, 2), (4, 5), (0, 6)])
+def test_triangulate_skips_a_repeated_corner(repeated: int, at: int) -> None:
+    # The L-shaped floor with one corner written twice: a convex one, the reflex one or
+    # the first corner again at the end. A repeat at a convex corner kept every ear next
+    # to it from being clipped, and the fan it fell back to covered 8 m2.
+    pts = np.array([[0, 0, 0], [3, 0, 0], [3, 3, 0], [2, 3, 0], [2, 1, 0], [0, 1, 0]], float)
+    pts = np.insert(pts, at, pts[repeated], axis=0)
+    areas = _signed_areas(pts, triangulate_polygon(pts))
+    assert len(areas) == 4 and min(areas) > 0  # the winding kept, nothing degenerate
+    assert sum(areas) == pytest.approx(5.0)
+
+
+def test_triangulate_polygon_round_a_hole() -> None:
+    # A 4 x 4 m outline joined to a 2 x 2 m hole along an edge that runs both ways, so
+    # the corners at either end of it appear twice.
+    corners = [(0, 0), (4, 0), (4, 4), (0, 4), (0, 0), (1, 1), (1, 3), (3, 3), (3, 1), (1, 1)]
+    pts = np.array([[x, y, 0.0] for x, y in corners])
+    areas = _signed_areas(pts, triangulate_polygon(pts))
+    assert min(areas) > 0
+    assert sum(areas) == pytest.approx(12.0)
+
+
+def test_obj_room_with_a_repeated_floor_corner(tmp_path: Path) -> None:
+    obj = tmp_path / "l_room.obj"
+    plan = [(0, 0), (3, 0), (3, 0), (3, 3), (2, 3), (2, 1), (0, 1)]
+    lines = [f"v {x} {y} 0" for x, y in plan] + [f"v {x} {y} 2" for x, y in plan]
+    lines += ["g floor", "f 1 2 3 4 5 6 7", "g ceiling", "f 14 13 12 11 10 9 8", "g walls"]
+    lines += [f"f {k} {k + 7} {k % 7 + 8} {k % 7 + 1}" for k in range(1, 8) if k != 2]
+    obj.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    mesh, _, _ = clean_mesh(load_mesh(obj))
+    report = check_mesh(mesh)
+    assert report.closed and report.normals_inward
+    assert report.volume_m3 == pytest.approx(10.0)
+    assert _area_by_name(mesh)["floor"] == pytest.approx(5.0)
+    assert report.surface_area_m2 == pytest.approx(5.0 + 5.0 + 2.0 * 12.0)
+
+
 def test_triangulate_keeps_winding_on_vertical_polygon() -> None:
     pts = np.array([[0, 0, 0], [0, 0, 3], [0, 4, 3], [0, 4, 0]], float)
     normal = np.cross(pts[1] - pts[0], pts[2] - pts[0])
@@ -85,6 +126,45 @@ def test_obj_quads_negative_indices_texture_normals_and_labels(tmp_path: Path) -
     assert mesh.labels == [("oak", "floor", "hall"), ("front", "hall")]
     assert _area_by_name(mesh)["oak"] == pytest.approx(20.0)
     assert mesh.label_names() == ["oak", "floor", "hall", "front"]
+
+
+def test_obj_with_several_groups_on_one_line(tmp_path: Path) -> None:
+    obj = tmp_path / "room.obj"
+    obj.write_text(
+        "v 0 0 0\nv 8 0 0\nv 8 6 0\nv 0 6 0\nusemtl oak\ng floor stage\nf 1 2 3 4\n",
+        encoding="utf-8",
+    )
+    # Each name can take an assignment (it was one name, "floor stage").
+    assert load_mesh(obj).labels == [("oak", "floor", "stage")]
+
+
+def test_obj_line_continuation(tmp_path: Path) -> None:
+    obj = tmp_path / "room.obj"
+    obj.write_text(
+        "v 0 0 0\nv 4 0 \\\n 0\nv 4 5 0\nv 0 5 0  # a corner\ng floor\nf 1 2 \\\n3 4\n",
+        encoding="utf-8",
+    )
+    mesh = load_mesh(obj)
+    np.testing.assert_allclose(mesh.vertices[1], [4, 0, 0])
+    assert len(mesh.faces) == 2 and mesh.face_areas().sum() == pytest.approx(20.0)
+    assert mesh.labels == [("floor",)]
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ("v 1e400 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n", r":1: vertex coordinates must be finite"),
+        ("v 0 0 0\nv nan 0 0\nv 0 1 0\nf 1 2 3\n", r":2: vertex coordinates must be finite"),
+        ("v 0 0 0\nv 1 0 x\nv 0 1 0\nf 1 2 3\n", r":2: vertex coordinates must be numbers"),
+        ("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 \\ 3\n", r":4: face corner '\\\\' is no vertex"),
+    ],
+    ids=["infinite", "nan", "text", "stray backslash"],
+)
+def test_obj_bad_numbers_name_their_line(tmp_path: Path, content: str, message: str) -> None:
+    obj = tmp_path / "bad.obj"
+    obj.write_text(content, encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
+        load_mesh(obj)
 
 
 def test_units_and_up_axis(tmp_path: Path) -> None:
@@ -169,6 +249,54 @@ def test_dxf_3dfaces_mesh_and_blocks_by_layer(tmp_path: Path) -> None:
     np.testing.assert_allclose(absorber[..., 1], 5.0)  # moved by the block insert
 
 
+def _box_dxf(path: Path, size: tuple[float, float, float], insunits: int) -> None:
+    """A closed box of 3DFACEs whose header records the drawing units ($INSUNITS)."""
+    ezdxf = pytest.importorskip("ezdxf")
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = insunits
+    box = _box(*size)
+    for corners in box.triangles:
+        doc.modelspace().add_3dface([tuple(c) for c in corners], dxfattribs={"layer": "WALLS"})
+    doc.saveas(path)
+
+
+@pytest.mark.parametrize(
+    ("insunits", "extent"), [(4, 8.0), (5, 80.0), (1, 203.2), (6, 8000.0), (0, 8000.0)]
+)
+def test_dxf_units_from_the_header(tmp_path: Path, insunits: int, extent: float) -> None:
+    # Drawn as 8000 x 6000 x 3000: millimetres, centimetres, inches, metres, no units.
+    path = tmp_path / "box.dxf"
+    _box_dxf(path, (8000.0, 6000.0, 3000.0), insunits)
+    mesh = load_mesh(path)
+    size = mesh.vertices.max(axis=0) - mesh.vertices.min(axis=0)
+    np.testing.assert_allclose(size, np.array([8.0, 6.0, 3.0]) * extent / 8.0)
+    # Units given by the caller win over the file's.
+    mesh = load_mesh(path, units="cm")
+    assert np.ptp(mesh.vertices[:, 0]) == pytest.approx(80.0)
+
+
+def test_dxf_triangle_without_a_fourth_corner(tmp_path: Path) -> None:
+    ezdxf = pytest.importorskip("ezdxf")
+    doc = ezdxf.new()
+    doc.modelspace().add_3dface([(10, 10, 0), (14, 10, 0), (14, 15, 0)])
+    path = tmp_path / "triangle.dxf"
+    doc.saveas(path)
+    # Leave out the fourth corner (group codes 13, 23 and 33), as the format allows.
+    lines = path.read_text(encoding="utf-8").splitlines()
+    pairs = [(code.strip(), value) for code, value in zip(lines[::2], lines[1::2], strict=True)]
+    start = pairs.index(("2", "ENTITIES"))
+    end = pairs.index(("0", "ENDSEC"), start)
+    pairs[start:end] = [p for p in pairs[start:end] if p[0] not in ("13", "23", "33")]
+    path.write_text("".join(f"{code}\n{value}\n" for code, value in pairs), encoding="utf-8")
+    assert not ezdxf.readfile(path).modelspace()[0].dxf.hasattr("vtx3")
+
+    mesh = load_mesh(path)
+    # Not a quad with a phantom corner at the origin (15 m2).
+    assert len(mesh.faces) == 1
+    assert mesh.face_areas().sum() == pytest.approx(10.0)
+    assert mesh.triangles.min(axis=(0, 1)).tolist() == [10.0, 10.0, 0.0]
+
+
 # -- cleanup and checks -------------------------------------------------------------
 
 
@@ -200,6 +328,26 @@ def test_flipped_face_is_reported() -> None:
     assert report.volume_m3 is None
 
 
+def test_clean_turns_flipped_faces_to_agree_with_their_neighbours() -> None:
+    # A closed box whose floor was written the other way round: the floor's solid angle
+    # counted against the rest and put points near it outside the room.
+    box = _box(8, 6, 3)
+    faces = box.faces.copy()
+    faces[:2] = faces[:2, ::-1]
+    flipped = RoomMesh(box.vertices, faces, box.face_labels, box.labels)
+    points = [[4, 3, 0.05], [4, 3, 0.3], [4, 3, 1.5]]
+    assert not points_inside(flipped, points).any()
+
+    cleaned, _, _ = clean_mesh(flipped)
+    report = check_mesh(cleaned)
+    assert report.closed and report.inconsistent_edges == 0
+    assert report.volume_m3 == pytest.approx(144.0)
+    # The floor turns back, not the larger rest: the normals still point inward.
+    assert report.normals_inward
+    np.testing.assert_allclose(cleaned.triangles, box.triangles)
+    assert points_inside(cleaned, points).all()
+
+
 def test_clean_merges_duplicates_and_drops_degenerate_faces() -> None:
     box = _box(8, 6, 3)
     # Unshared corners, as many exporters write them, plus a zero-area sliver.
@@ -214,6 +362,18 @@ def test_clean_merges_duplicates_and_drops_degenerate_faces() -> None:
     assert merged == 36 - 8
     assert removed == 1
     assert check_mesh(cleaned).closed
+
+
+def test_mesh_without_faces_is_not_closed() -> None:
+    # Two triangles whose corners lie on one line: both are dropped.
+    vertices = np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]], float)
+    mesh = RoomMesh(vertices, [[0, 1, 2], [1, 2, 3]], [0, 0], [("floor",)])
+    cleaned, _, removed = clean_mesh(mesh)
+    report = check_mesh(cleaned, removed=removed)
+    assert report.faces == 0 and removed == 2
+    assert not report.closed  # it was closed, with nothing to close
+    assert report.volume_m3 is None
+    assert "no faces" in report.summary()
 
 
 def test_points_inside_either_orientation() -> None:

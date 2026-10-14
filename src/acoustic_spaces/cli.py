@@ -373,6 +373,35 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _override(model, options: dict[str, tuple[str, object]]):
+    """A copy of ``model`` with the fields the command line sets, checked as in a scene.
+
+    ``options`` maps each option (``--rays``) to the field it sets (``late.rays``) and
+    the value given, None when it was not. A value out of range is printed as an error
+    naming its option, and None returned.
+    """
+    data = model.model_dump()
+    for field, value in options.values():
+        if value is not None:
+            *parents, name = field.split(".")
+            target = data
+            for key in parents:
+                target = target[key]
+            target[name] = value
+    try:
+        return type(model).model_validate(data)
+    except ValidationError as exc:
+        for err in exc.errors():
+            where = ".".join(str(part) for part in err["loc"])
+            option = next(
+                (o for o, (field, _) in options.items() if f"{where}.".startswith(f"{field}.")),
+                where or "options",
+            )
+            message = err["msg"].removeprefix("Value error, ")
+            print(f"error: {option}: {message}", file=sys.stderr)
+        return None
+
+
 def _output_spec(text: str):
     """An outputs entry from the command line: mono, binaural, ambisonics[:ORDER] or
     loudspeakers:LAYOUT."""
@@ -410,22 +439,21 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
     room = _load_room(args.scene)
     if room is None or not _print_checks(room):
         return 1
-    settings = room.scene.simulation.model_copy(deep=True)
-    if args.seed is not None:
-        settings.seed = args.seed
-    if args.rays is not None:
-        settings.late.rays = args.rays
-    if args.max_order is not None:
-        settings.early.max_order = args.max_order
-    if args.diffraction is not None:
-        settings.early.diffraction = args.diffraction
-    if args.wave is not None:
-        settings.wave.enabled = args.wave
-    if args.wave_band is not None:
-        settings.wave.max_band_hz = args.wave_band
-    if args.length is not None:
-        settings.ir_length_s = args.length
-    sample_rate = args.sample_rate or settings.sample_rate
+    settings = _override(
+        room.scene.simulation,
+        {
+            "--seed": ("seed", args.seed),
+            "--rays": ("late.rays", args.rays),
+            "--max-order": ("early.max_order", args.max_order),
+            "--diffraction": ("early.diffraction", args.diffraction),
+            "--wave": ("wave.enabled", args.wave),
+            "--wave-band": ("wave.max_band_hz", args.wave_band),
+            "--length": ("ir_length_s", args.length),
+            "--sample-rate": ("sample_rate", args.sample_rate),
+        },
+    )
+    if settings is None:
+        return 1
     try:
         outputs = _outputs(room, args)
         formats = [from_output(o) for o in outputs]
@@ -449,7 +477,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         result,
         out,
         formats,
-        sample_rate=sample_rate,
+        sample_rate=settings.sample_rate,
         normalize=args.normalize,
         plots=args.plot,
         progress=lambda message: print(message, file=sys.stderr),
@@ -504,23 +532,29 @@ def _cmd_map(args: argparse.Namespace) -> int:
     for warning in room.warnings():
         print(f"warning: {warning}", file=sys.stderr)
     scene = room.scene
-    simulation = scene.simulation.model_copy(deep=True)
-    if args.seed is not None:
-        simulation.seed = args.seed
-    if args.max_order is not None:
-        simulation.early.max_order = args.max_order
-    if args.diffraction is not None:
-        simulation.early.diffraction = args.diffraction
-    if args.length is not None:
-        simulation.ir_length_s = args.length
-    settings = (scene.coverage or Coverage()).model_dump()
-    for key in ("surfaces", "height", "spacing", "rays"):
-        if getattr(args, key) is not None:
-            settings[key] = getattr(args, key)
-    if args.noise is not None:
-        settings["noise_db"] = args.noise[0] if len(args.noise) == 1 else args.noise
+    simulation = _override(
+        scene.simulation,
+        {
+            "--seed": ("seed", args.seed),
+            "--max-order": ("early.max_order", args.max_order),
+            "--diffraction": ("early.diffraction", args.diffraction),
+            "--length": ("ir_length_s", args.length),
+        },
+    )
+    noise = args.noise[0] if args.noise is not None and len(args.noise) == 1 else args.noise
+    settings = _override(
+        scene.coverage or Coverage(),
+        {
+            "--surfaces": ("surfaces", args.surfaces),
+            "--height": ("height", args.height),
+            "--spacing": ("spacing", args.spacing),
+            "--rays": ("rays", args.rays),
+            "--noise": ("noise_db", noise),
+        },
+    )
+    if simulation is None or settings is None:
+        return 1
     try:
-        settings = Coverage.model_validate(settings)
         result = coverage_map(
             room,
             settings=settings,
@@ -529,7 +563,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
             threads=args.threads,
             progress=lambda message: print(message, file=sys.stderr),
         )
-    except (ValidationError, ValueError) as exc:
+    except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
@@ -557,7 +591,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
     if args.json:
         path = Path(args.json)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(result.as_dict(), indent=1), encoding="utf-8")
+        path.write_text(json.dumps(result.as_dict(), indent=2) + "\n", encoding="utf-8")
         print(f"\nwrote {path}")
     try:
         if args.plot:
@@ -613,7 +647,12 @@ def _cmd_sweep(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     out = Path(args.out)
-    sweep.save(out)
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        sweep.save(out)
+    except OSError as exc:
+        print(f"error: cannot write {out}: {exc}", file=sys.stderr)
+        return 1
     print(_describe(sweep))
     print(f"wrote {out} and {out.with_suffix('.json')}")
     return 0
@@ -643,21 +682,25 @@ def _cmd_deconvolve(args: argparse.Namespace) -> int:
     sweep = _load_sweep(args.sweep)
     if sweep is None:
         return 1
-    recording, sample_rate = read_wav(args.recording)
-    if sample_rate != sweep.sample_rate:
-        print(
-            f"error: the recording is at {sample_rate} Hz, the sweep at {sweep.sample_rate} Hz",
-            file=sys.stderr,
-        )
+    try:
+        recording, sample_rate = read_wav(args.recording)
+        if sample_rate != sweep.sample_rate:
+            raise ValueError(
+                f"the recording is at {sample_rate} Hz, the sweep at {sweep.sample_rate} Hz"
+            )
+        responses = deconvolve(recording, sweep, length_s=args.length)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 1
-    responses = deconvolve(recording, sweep, length_s=args.length)
     if args.loopback is not None:
         column = _channel_index(args.loopback, responses.shape[1], "loopback channel")
         if column is None:
             return 1
         responses, lag = remove_latency(responses, column)
         print(f"latency from the loopback channel: {lag / sample_rate * 1e3:.2f} ms")
-    write_wav(args.out, responses, sample_rate)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    write_wav(out, responses, sample_rate)
     print(
         f"wrote {responses.shape[1]} impulse response(s) of "
         f"{len(responses) / sample_rate:.2f} s to {args.out}"
@@ -706,6 +749,7 @@ def _plot_ir(ir, sample_rate: int, path: Path, title: str, args: argparse.Namesp
     try:
         from acoustic_spaces.viz import plot_impulse_response
 
+        path.parent.mkdir(parents=True, exist_ok=True)
         plot_impulse_response(
             ir, sample_rate, path, title=title, filters=args.filters, noise=not args.no_noise
         )
@@ -718,7 +762,11 @@ def _plot_ir(ir, sample_rate: int, path: Path, title: str, args: argparse.Namesp
 def _cmd_analyze(args: argparse.Namespace) -> int:
     from acoustic_spaces.audio import read_wav
 
-    data, sample_rate = read_wav(args.ir)
+    try:
+        data, sample_rate = read_wav(args.ir)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     channels = range(data.shape[1]) if args.channel is None else [args.channel - 1]
     if args.channel is not None and _channel_index(args.channel, data.shape[1], "channel") is None:
         return 1
@@ -739,8 +787,10 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
                 print(f"saved {plot}")
         report["channels"].append(entry)
     if args.json:
-        Path(args.json).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-        print(f"\nwrote {args.json}")
+        path = Path(args.json)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print(f"\nwrote {path}")
     return 0
 
 

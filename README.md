@@ -280,7 +280,7 @@ Frequency-dependent data uses eight octave bands from 63 Hz to 8 kHz.
 
 | Format | Read with | Names used for material assignment |
 | --- | --- | --- |
-| OBJ | built-in reader | `usemtl` material, `g` group, `o` object |
+| OBJ | built-in reader | `usemtl` material, `g` groups, `o` object |
 | DXF | [ezdxf](https://ezdxf.mozman.de/) (3DFACE, MESH, polyface, block references) | layer |
 | glTF / GLB | [trimesh](https://trimesh.org/) | material, node and mesh names |
 | STL, PLY, OFF | trimesh | file name |
@@ -303,12 +303,17 @@ assignments:
 OBJ is the recommended exchange format: SketchUp, Rhino, Revit and Blender all
 export it with material names. Set `geometry.units` (`m`, `cm`, `mm`, `in`, `ft`)
 and, when the file is +y up (Blender's OBJ default, glTF always), `geometry.up_axis: y`.
+Without `units`, a DXF file is read in the units its header records (`$INSUNITS`),
+and any other file in metres.
 
-Polygons are triangulated, duplicate vertices merged and degenerate faces dropped.
-`validate` then reports surfaces without a material and sources or listeners
-outside the room; it warns about models that are not closed (rays would escape)
-and assignments that match nothing. Normals may point either way: absorption is
-applied on both sides.
+Polygons are triangulated, duplicate vertices merged and degenerate faces dropped,
+and faces that meet along an edge are turned to agree with each other (each part of
+the model keeps the orientation most of its area has), so a few faces flipped by the
+exporter do not spoil the volume or the inside checks. A model with no faces left
+is refused. `validate` then reports surfaces without a material, sources or listeners
+outside the room and listeners within 1 cm of a source; it warns about models that
+are not closed (rays would escape) and assignments that match nothing. Normals may
+point either way: absorption is applied on both sides.
 
 ### Materials
 

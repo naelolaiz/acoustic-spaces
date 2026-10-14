@@ -8,6 +8,7 @@ semicolons or whitespace separate values; lines starting with ``#`` are ignored.
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 
@@ -25,11 +26,14 @@ def read_coefficients_csv(path: str | Path) -> tuple[list[float], list[float], l
                 continue
             tokens = [t for t in _SPLIT.split(line) if t]
             try:
-                rows.append([float(t) for t in tokens])
+                values = [float(t) for t in tokens]
             except ValueError:
                 if not rows:
                     continue  # a text header line
                 raise ValueError(f"{path}:{lineno}: expected numbers, got {line!r}") from None
+            if not all(math.isfinite(v) for v in values):
+                raise ValueError(f"{path}:{lineno}: expected finite numbers, got {line!r}")
+            rows.append(values)
     if len(rows) < 2:
         raise ValueError(f"{path}: expected rows of frequencies and absorption coefficients")
     frequencies, absorption = rows[0], rows[1]

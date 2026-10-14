@@ -270,7 +270,8 @@ class GeometryPage(Page):
         choose = QPushButton("Choose another file…")
         choose.clicked.connect(self._choose)
         self.units = QComboBox()
-        self.units.addItems(["m", "cm", "mm", "in", "ft"])
+        self.units.addItems(["file default", "m", "cm", "mm", "in", "ft"])
+        self.units.setToolTip("file default: the units a DXF file records, else metres")
         self.units.currentTextChanged.connect(self._units)
         self.up_axis = QComboBox()
         self.up_axis.addItems(["format default", "y", "z"])
@@ -305,7 +306,7 @@ class GeometryPage(Page):
             self.height.setValue(geometry.height)
         if geometry.file is not None:
             self.file.setText(str(geometry.file))
-            self.units.setCurrentText(geometry.units)
+            self.units.setCurrentText(geometry.units or "file default")
             self.up_axis.setCurrentText(geometry.up_axis or "format default")
         r = room.report
         closed = "closed" if r.closed else "not closed"
@@ -369,7 +370,13 @@ class GeometryPage(Page):
             self.apply("replace model", lambda data: data["geometry"].update(file=path))
 
     def _units(self, units: str) -> None:
-        self.apply("change units", lambda data: data["geometry"].update(units=units))
+        def change(data: dict) -> None:
+            if units == "file default":
+                data["geometry"].pop("units", None)
+            else:
+                data["geometry"]["units"] = units
+
+        self.apply("change units", change)
 
     def _up_axis(self, axis: str) -> None:
         def change(data: dict) -> None:

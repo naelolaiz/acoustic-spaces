@@ -70,7 +70,9 @@ Coefficient = Annotated[float, Field(ge=0.0, le=1.0)]
 
 
 class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Unknown keys are typing mistakes; NaN and infinity (YAML's .nan and .inf) are
+    # no positions, angles or coefficients.
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
 def _per_band(name: str, value: list[float]) -> list[float]:
@@ -143,7 +145,13 @@ class Geometry(_Model):
         default=None, min_length=3, description="(x, y) corners of the floor, in order"
     )
     height: PositiveFloat | None = Field(default=None, description="floor_plan: room height")
-    units: Literal["m", "cm", "mm", "in", "ft"] = "m"
+    units: Literal["m", "cm", "mm", "in", "ft"] | None = Field(
+        default=None,
+        description=(
+            "unit of the coordinates and dimensions; None takes the units a DXF file "
+            "records ($INSUNITS), and metres otherwise"
+        ),
+    )
     up_axis: Literal["y", "z"] | None = Field(
         default=None, description="vertical axis of the file; None uses the format's convention"
     )
@@ -165,10 +173,11 @@ class Geometry(_Model):
     def describe(self) -> str:
         if self.file is not None:
             return self.file.name
+        units = self.units or "m"
         if self.box is not None:
-            return "box " + " x ".join(f"{v:g}" for v in self.box) + f" {self.units}"
+            return "box " + " x ".join(f"{v:g}" for v in self.box) + f" {units}"
         corners = len(self.floor_plan or [])
-        return f"floor plan with {corners} corners, {self.height:g} {self.units} high"
+        return f"floor plan with {corners} corners, {self.height:g} {units} high"
 
 
 DEFAULT_SCATTERING = 0.1

@@ -100,3 +100,46 @@ def test_saved_paths_are_relative_to_the_scene_folder(tmp_path: Path) -> None:
     scene.to_yaml(tmp_path / "elsewhere" / "scene.yaml")
     moved = Scene.from_yaml(tmp_path / "elsewhere" / "scene.yaml")
     assert moved.geometry.file == (tmp_path / "shoebox" / "shoebox.obj").resolve()
+
+
+@pytest.mark.parametrize(
+    "where",
+    [
+        ("sources", 0, "position", 0),
+        ("listeners", 0, "position", 1),
+        ("sources", 0, "orientation", "yaw"),
+        ("sources", 0, "level_db"),
+        ("air", "temperature_c"),
+        ("simulation", "ir_length_s"),
+    ],
+)
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_nan_and_infinity_are_rejected(tmp_path: Path, where: tuple, value: float) -> None:
+    # YAML reads .nan and .inf as numbers, and they used to pass every check: a NaN
+    # source was only reported "outside the room", a NaN yaw not at all.
+    data = yaml.safe_load((EXAMPLES / "shoebox" / "scene.yaml").read_text(encoding="utf-8"))
+    data["geometry"]["file"] = str(EXAMPLES / "shoebox" / "shoebox.obj")
+    target = data
+    for key in where[:-1]:
+        target = target[key]
+    target[where[-1]] = value
+    path = tmp_path / "scene.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ValidationError, match="finite number") as info:
+        Scene.from_yaml(path)
+    assert [err["loc"] for err in info.value.errors()] == [where]
+
+
+def test_nan_and_infinity_in_dimensions_are_rejected() -> None:
+    data = yaml.safe_load((EXAMPLES / "shoebox" / "scene.yaml").read_text(encoding="utf-8"))
+    for geometry in [
+        {"box": [float("inf"), 6, 3]},
+        {"floor_plan": [[0, 0], [4, 0], [4, float("nan")], [0, 4]], "height": 3},
+    ]:
+        data["geometry"] = geometry
+        with pytest.raises(ValidationError, match="finite number"):
+            Scene.model_validate(data)
+    data["geometry"] = {"box": [8, 6, 3]}
+    data["materials"]["painted_concrete"] = {"absorption": [float("nan")] * 8}
+    with pytest.raises(ValidationError, match="finite number"):
+        Scene.model_validate(data)
