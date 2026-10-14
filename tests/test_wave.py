@@ -103,6 +103,15 @@ def test_band_grid_resolves_the_band_and_divides_the_output_rate(band: int) -> N
     assert C / (band_top(band) * grid.cell) < 8.0 * 1.2
 
 
+def test_band_grid_runs_faster_than_a_low_output_rate() -> None:
+    # 8 kHz output and the 500 Hz band: the grid needs more than 8000 steps a second, and
+    # takes twice that rather than coarser cells.
+    grid = band_grid(3, 8000, C, points_per_wavelength=8.0)
+    assert grid.rate == pytest.approx(16000)
+    assert C / grid.rate == pytest.approx(COURANT * grid.cell)
+    assert C / (band_top(3) * grid.cell) >= 8.0
+
+
 def test_source_signal_adds_no_air() -> None:
     rate = band_grid(0, FS, C).rate
     signal, delay = source_signal(rate, 0.4)

@@ -123,7 +123,7 @@ class BandGrid:
     band: int
     #: Cell size (m).
     cell: float
-    #: Sample rate of the run (Hz): the output rate over a whole number.
+    #: Sample rate of the run (Hz): the output rate over or times a whole number.
     rate: float
 
 
@@ -131,11 +131,15 @@ def band_grid(
     band: int, sample_rate: float, speed_of_sound: float, points_per_wavelength: float = 8.0
 ) -> BandGrid:
     """The coarsest grid with ``points_per_wavelength`` cells per wavelength at the top of
-    band ``band``, whose time step divides the output's sample period."""
+    band ``band`` whose time step is a whole number of the output's sample periods, or
+    one of them over a whole number where the grid needs more steps per second than the
+    output has samples."""
     cell = speed_of_sound / (points_per_wavelength * band_top(band))
     rate = speed_of_sound / (COURANT * cell)  # one step crosses COURANT cells
-    ratio = max(1, math.floor(sample_rate / rate))
-    rate = sample_rate / ratio
+    if rate <= sample_rate:
+        rate = sample_rate / math.floor(sample_rate / rate)
+    else:
+        rate = sample_rate * math.ceil(rate / sample_rate)
     return BandGrid(band, speed_of_sound / (COURANT * rate), rate)
 
 
