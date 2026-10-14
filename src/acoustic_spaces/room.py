@@ -95,6 +95,11 @@ class Room:
             else:
                 raw = extruded_mesh(scale * np.array(geometry.floor_plan), scale * geometry.height)
             mesh, merged, removed = clean_mesh(raw)
+            if len(mesh.faces) == 0:
+                raise ValueError(
+                    f"{geometry.describe()} has no faces left: all {removed} of them have no "
+                    "area (their corners lie in one place or on one line)"
+                )
             report = check_mesh(mesh, merged, removed)
 
         material_names = list(scene.materials)

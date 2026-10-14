@@ -325,6 +325,18 @@ def test_clean_merges_duplicates_and_drops_degenerate_faces() -> None:
     assert check_mesh(cleaned).closed
 
 
+def test_mesh_without_faces_is_not_closed() -> None:
+    # Two triangles whose corners lie on one line: both are dropped.
+    vertices = np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]], float)
+    mesh = RoomMesh(vertices, [[0, 1, 2], [1, 2, 3]], [0, 0], [("floor",)])
+    cleaned, _, removed = clean_mesh(mesh)
+    report = check_mesh(cleaned, removed=removed)
+    assert report.faces == 0 and removed == 2
+    assert not report.closed  # it was closed, with nothing to close
+    assert report.volume_m3 is None
+    assert "no faces" in report.summary()
+
+
 def test_points_inside_either_orientation() -> None:
     box = _box(8, 6, 3)
     points = [[4, 3, 1.5], [9, 3, 1.5], [4, 3, -0.1], [0.01, 0.01, 0.01]]

@@ -175,6 +175,14 @@ def test_dxf_in_millimetres_without_scene_units(tmp_path: Path) -> None:
     assert Room.from_yaml(path).volume_m3 == pytest.approx(144.0 * 1000.0)
 
 
+def test_model_of_degenerate_faces_is_refused(tmp_path: Path) -> None:
+    obj = tmp_path / "line.obj"
+    obj.write_text("v 0 0 0\nv 1 0 0\nv 2 0 0\nv 3 0 0\ng floor\nf 1 2 3\nf 2 3 4\n")
+    # It loaded as a closed room of no triangles, its points all "outside the room".
+    with pytest.raises(ValueError, match="line.obj has no faces left: all 2 of them have no area"):
+        Room.from_yaml(_scene(tmp_path, geometry={"file": str(obj)}))
+
+
 def test_open_model_skips_volume_and_inside_checks(tmp_path: Path) -> None:
     obj = tmp_path / "open.obj"
     lines = (EXAMPLES / "shoebox" / "shoebox.obj").read_text(encoding="utf-8").splitlines()

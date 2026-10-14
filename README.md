@@ -309,8 +309,8 @@ and any other file in metres.
 Polygons are triangulated, duplicate vertices merged and degenerate faces dropped,
 and faces that meet along an edge are turned to agree with each other (each part of
 the model keeps the orientation most of its area has), so a few faces flipped by the
-exporter do not spoil the volume or the inside checks.
-`validate` then reports surfaces without a material, sources or listeners
+exporter do not spoil the volume or the inside checks. A model with no faces left
+is refused. `validate` then reports surfaces without a material, sources or listeners
 outside the room and listeners within 1 cm of a source; it warns about models that
 are not closed (rays would escape) and assignments that match nothing. Normals may
 point either way: absorption is applied on both sides.

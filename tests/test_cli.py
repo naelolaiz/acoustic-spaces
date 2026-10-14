@@ -47,6 +47,20 @@ def test_validate_reports_schema_errors(tmp_path: Path, capsys: pytest.CaptureFi
     assert "materials.painted_concrete: no absorption material named 'smooth_brickwork'" in err
 
 
+def test_validate_refuses_a_model_of_degenerate_faces(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "line.obj").write_text("v 0 0 0\nv 1 0 0\nv 2 0 0\nf 1 2 3\n", encoding="utf-8")
+    data = yaml.safe_load(SHOEBOX.read_text(encoding="utf-8"))
+    data["geometry"]["file"] = "line.obj"
+    path = tmp_path / "scene.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    assert main(["validate", str(path)]) == 1
+    err = capsys.readouterr().err
+    assert "error: line.obj has no faces left: all 1 of them have no area" in err
+    assert "outside the room" not in err
+
+
 def test_inspect(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["inspect", str(SHOEBOX)]) == 0
     out = capsys.readouterr().out

@@ -35,17 +35,23 @@ class MeshReport:
 
     @property
     def closed(self) -> bool:
-        """True when every edge is shared by exactly two faces."""
-        return self.boundary_edges == 0 and self.non_manifold_edges == 0
+        """True when there are faces and every edge is shared by exactly two of them."""
+        return self.faces > 0 and self.boundary_edges == 0 and self.non_manifold_edges == 0
 
     def summary(self) -> str:
         lo, hi = np.array(self.bounds_min), np.array(self.bounds_max)
         size = " x ".join(f"{d:.2f}" for d in hi - lo)
+        if self.closed:
+            state = "closed"
+        elif self.faces:
+            state = f"open: {self.boundary_edges} boundary edges"
+        else:
+            state = "no faces"
         lines = [
             f"{self.faces} triangles, {self.vertices} vertices, extent {size} m",
             f"surface area {self.surface_area_m2:.2f} m2"
             + (f", volume {self.volume_m3:.2f} m3" if self.volume_m3 is not None else ""),
-            "closed" if self.closed else f"open: {self.boundary_edges} boundary edges",
+            state,
         ]
         if self.non_manifold_edges:
             lines.append(f"{self.non_manifold_edges} edges shared by more than two faces")
