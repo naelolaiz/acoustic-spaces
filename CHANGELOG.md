@@ -13,6 +13,9 @@
 - Simulations in the background with progress and cancel; results with ISO 3382-1
   parameters, echograms, decay curves, arrival directions and reflection paths in 3D;
   export to the files `simulate` writes; listening to a WAV file through a response.
+- The results show the source and listener selected in the scene, and stay on them
+  after another run. The selected point has arrows to its front and to its top, so
+  yaw, pitch and roll all show in 3D.
 
 **Export to Blender**
 
