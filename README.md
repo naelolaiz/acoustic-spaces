@@ -15,6 +15,8 @@ way. The [validation report](https://github.com/naelolaiz/acoustic_spaces_simula
 says how far the results can be trusted. A [graphical editor](#graphical-editor) does all
 of this in one window, starting from the bundled example rooms.
 
+![The church example in 3D: the stone nave with its early reflection paths from the altar to the front of the nave, coloured by order up to the third](docs/images/church_paths.png)
+
 ## Design in one paragraph
 
 Python is the main language; a small C++ core (bound with nanobind) carries the
@@ -93,6 +95,8 @@ coefficient) and losing the absorbed share of its energy at every hit, coloured 
 level or by reflection order. It opens a window with a time slider, or saves a GIF
 (`--out particles.gif`) or, with `imageio[ffmpeg]` installed, an MP4 video.
 
+![Sound particles leaving the soloist of the concert hall example, coloured by level at 1 kHz, over the first 90 ms](docs/images/particles.gif)
+
 `simulate` writes impulse responses for every source and listener in each format the
 scene's `outputs` list (`results/talker__seat-a.wav` in mono, `.binaural.wav`,
 `.ambix3.wav`, `.5.0.wav` and so on, 32-bit float), `parameters.json` with every
@@ -109,6 +113,14 @@ C80 (dB)       1.3     1.3     1.9     3.0     3.9     4.7     6.0     9.4
 G (dB)        22.8    22.8    22.1    21.0    19.3    18.1    16.9    15.5
 ...
 ```
+
+With `--plot`, each response gets an echogram (the late energy per millisecond and the
+early paths by order) with the decay curves of every band, and a map of where the sound
+comes from:
+
+![Echogram and decay curves of a seat in the middle of the concert hall's stalls](docs/images/response.png)
+
+![Arrival directions at the same seat: early reflections by delay and level, and the late energy per direction](docs/images/directions.png)
 
 T30 comes out several times the Sabine and Eyring estimates that `inspect` prints, and
 that is the room, not a fault. Its absorption sits on the ceiling and the carpet while
@@ -185,6 +197,9 @@ The editor works on the same scene files as the command line:
   and band from above, for one source or all of them together, and **Map in 3D** lays
   it over the room; **Save** writes the picture or every map as JSON. The scene tree's
   **Coverage map** entry sets the surfaces, height, spacing, rays and background noise.
+
+  ![The editor with the lecture hall example and its speech transmission index map laid over the room](docs/images/editor_map.png)
+
 - **Simulation > Run** (F5) works in the background. The **Results** panel shows the
   ISO 3382-1 parameters, the echogram and decay curves and the arrival directions of
   any source and listener, and draws their reflection paths in the room. **Export**
@@ -377,6 +392,8 @@ sources:
 `acoustic-spaces directivity speaker.sofa --plot polar.png` prints the directivity
 index and front-to-back ratio per octave band and draws the polar patterns;
 `acoustic-spaces inspect` lists every source's directivity index.
+
+![Polar patterns of the per-band directivity above, from omni in the bass to a narrow pattern at 8 kHz](docs/images/directivity.png)
 
 ## Simulation
 
@@ -787,6 +804,12 @@ How it works:
 - G needs the source's free-field level: `--free-field ff.wav --distance 3` uses a
   measurement of the same source in free field (or with reflections windowed out),
   and `--reference-energy 0.01` suits responses made by `simulate`.
+
+![analyze on a measured response: the level with each band's noise floor from where the decay meets it, and the decay curves with the noise taken out](docs/images/measured.png)
+
+The response above was measured in a seminar room of the BRAS benchmark (Aspöck et al.,
+DOI 10.14279/depositonce-6726.3, CC BY-SA 4.0, which the picture keeps): room CR2,
+loudspeaker 1 to microphone 1.
 
 From Python:
 
