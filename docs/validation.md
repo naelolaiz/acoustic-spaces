@@ -50,10 +50,12 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   specular paths alone drop by more than 5 dB, and across the boundary of a reflection
   off one of the corner's walls within 0.05 dB;
 - the wave solver: the modes of a rigid box (within 0.6 Hz), the reflection off the end
-  of a duct for four admittances (within 0.005, and below 0.05 for a matched end), the
-  free-field level of the 63 Hz band (within 1 dB of the rays), the direction of the
-  direct sound, open models and thin screens (stable, and the sound leaves), and runs
-  shared by bands with the same absorption;
+  of a duct for four admittances (within 0.005, and below 0.05 for a matched end, and
+  off the inner face of a wall thinner than a cell), the free-field level of the 63 Hz
+  band (within 1 dB of the rays), the arrival time and direction of the direct sound,
+  open models and thin screens (stable, and the sound leaves), runs shared by bands with
+  the same absorption, and the level of the late part across the crossover to the rays
+  (flat within 1 dB in sixth octaves);
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
@@ -237,7 +239,7 @@ the mode varies, 2/L along the others), within 0.4 %:
 |---|---:|---:|---:|---:|
 | (1, 0, 0) | 24.50 | 24.48 | 1.405 | 1.404 |
 | (0, 1, 0) | 34.30 | 34.31 | 1.503 | 1.501 |
-| (1, 1, 0) | 42.15 | 42.15 | 1.748 | 1.745 |
+| (1, 1, 0) | 42.15 | 42.15 | 1.748 | 1.746 |
 | (2, 0, 0) | 49.00 | 49.00 | 1.405 | 1.403 |
 | (0, 0, 1) | 57.17 | 57.11 | 1.731 | 1.727 |
 | (0, 2, 1) | 89.30 | 89.29 | 2.074 | 2.067 |
@@ -252,7 +254,7 @@ as exp(−βP/(2A)) per metre (perimeter P, cross-section A), whatever the cell 
 | end admittance β | 0 | 0.1 | 0.25 | 0.5 | 1 |
 |---|---:|---:|---:|---:|---:|
 | reflection, theory | 1.000 | 0.818 | 0.600 | 0.333 | 0 |
-| wave solver (60 to 150 Hz) | 0.999 | 0.818 | 0.601 | 0.336 | 0.044 |
+| wave solver (60 to 150 Hz) | 0.998 | 0.817 | 0.601 | 0.336 | 0.044 |
 
 | walls β = 0.05, amplitude after 10 m | theory | wave solver, 10 cm cells | 5 cm cells |
 |---|---:|---:|---:|
@@ -260,7 +262,7 @@ as exp(−βP/(2A)) per metre (perimeter P, cross-section A), whatever the cell 
 
 **Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's
 energy in the 63 and 125 Hz bands at 1 to 8 m is within 0.35 dB of the free-field level
-the rays give (−0.06 to −0.13 dB at 63 Hz, −0.16 to −0.33 dB at 125 Hz).
+the rays give (−0.05 to −0.13 dB at 63 Hz, −0.16 to −0.33 dB at 125 Hz).
 
 **A whole room.** A 7 x 5 x 3 m box with 15 % absorption on every surface, simulated
 with the default settings (the 63 and 125 Hz bands from the wave solver, 20 cm cells),
@@ -270,8 +272,8 @@ analysed alike (ISO 3382-1, octave filters):
 | model | G 63 Hz (dB) | G 125 Hz | EDT 63 Hz (s) | EDT 125 Hz | T20 63 Hz (s) | T20 125 Hz |
 |---|---:|---:|---:|---:|---:|---:|
 | sum of the modes | 20.3 | 23.5 | 1.02 | 0.96 | 0.94 | 0.90 |
-| wave solver | 21.1 | 22.7 | 1.04 | 0.92 | 0.94 | 0.89 |
-| wave solver, 16 cells per wavelength | 20.8 | 23.6 | 1.01 | 0.81 | 0.95 | 0.94 |
+| wave solver | 21.1 | 22.9 | 1.04 | 0.95 | 0.94 | 0.86 |
+| wave solver, 16 cells per wavelength | 20.8 | 23.7 | 1.01 | 0.86 | 0.90 | 0.93 |
 | rays only | 25.7 | 21.9 | 0.67 | 0.77 | 0.92 | 0.83 |
 
 ![Transfer function of the box from the sum of its modes, the wave solver and rays](images/wave.png)
@@ -279,10 +281,10 @@ analysed alike (ISO 3382-1, octave filters):
 The wave solver follows the modes peak for peak from 22 Hz up. What is left comes
 mostly from where the grid puts the walls: within half a cell of the model's, here
 6.93 x 4.95 x 2.97 m with 20 cm cells, which moves each mode by up to 1 %. In a room
-this sparse in modes, that moves G by up to 1 dB and EDT by up to 16 %; more cells per
-wavelength move the walls but do not make every figure converge. Rays give the average
-over the room instead: 5.4 dB more at this seat in the 63 Hz band, where the listener
-sits near the nodes of most modes.
+this sparse in modes, that moves G by up to 1 dB, EDT by up to 11 % and T20 by up to
+4 %; more cells per wavelength move the walls but do not make every figure converge.
+Rays give the average over the room instead: 5.4 dB more at this seat in the 63 Hz
+band, where the listener sits near the nodes of most modes.
 
 ## Real-time convolver
 

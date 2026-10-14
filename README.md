@@ -529,13 +529,16 @@ cells are refused.
 
 In a 7 x 5 x 3 m box with 15 % absorption, the wave solver follows the sum of the box's
 modes from 22 Hz up; rays give the average level instead. In the 63 and 125 Hz bands,
-G is within 1 dB of the modes and T20 within 2 %; rays are up to 5.4 dB and 8 % off.
+G is within 1 dB of the modes and T20 within 5 %; rays are up to 5.4 dB and 8 % off.
 
 What it leaves out: the absorption of a surface is real-valued and the same across a
 band; walls on the grid lie within half a cell of the model's, which can move a small
-room's modes by a few percent (more `points_per_wavelength` moves them less); sources
-radiate equally in all directions in the wave bands; and air absorption, negligible
-there, is left out.
+room's modes by a few percent (more `points_per_wavelength` moves them less); waves on
+the grid travel slower the shorter they are, by up to 1.7 % at the top of the highest
+band with 8 points per wavelength (along the grid's axes, not at all along its
+diagonals), which nothing corrects, so the modes there come out up to that much low;
+sources radiate equally in all directions in the wave bands; and air absorption,
+negligible there, is left out.
 
 ### Validation
 
