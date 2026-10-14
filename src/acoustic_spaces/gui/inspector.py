@@ -296,10 +296,12 @@ class GeometryPage(Page):
             for box, value in zip(self.box, geometry.box, strict=True):
                 box.setValue(value)
         if geometry.floor_plan is not None:
+            self.plan.blockSignals(True)  # a half-filled table is no floor plan
             self.plan.setRowCount(len(geometry.floor_plan))
             for row, corner in enumerate(geometry.floor_plan):
                 for col, value in enumerate(corner):
                     self.plan.setItem(row, col, QTableWidgetItem(f"{value:g}"))
+            self.plan.blockSignals(False)
             self.height.setValue(geometry.height)
         if geometry.file is not None:
             self.file.setText(str(geometry.file))
@@ -325,6 +327,8 @@ class GeometryPage(Page):
         return corners
 
     def _plan(self) -> None:
+        if self._loading:
+            return
         corners = self._corners()
         if corners is None:
             self.failed.emit("floor plan corners need two numbers each")

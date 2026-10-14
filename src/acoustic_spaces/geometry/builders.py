@@ -2,7 +2,8 @@
 
 - :func:`box_mesh`: a rectangular room from the origin to (length, width, height);
 - :func:`extruded_mesh`: a floor plan (any simple polygon, convex or not) raised to a
-  height, as for most halls, classrooms and offices.
+  height, as for most halls, classrooms and offices; :func:`plan_problem` says why a
+  polygon cannot be one.
 
 Faces point into the room. Surfaces are named ``floor``, ``ceiling`` and ``walls``; each
 wall is also ``wall_1``, ``wall_2``, ... in the order of the plan's edges (for a box:
@@ -22,17 +23,66 @@ def _signed_area(points: np.ndarray) -> float:
     return 0.5 * float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
 
 
-def extruded_mesh(plan: np.ndarray, height: float) -> RoomMesh:
-    """A room whose floor is the polygon ``plan`` (N, 2) at z = 0 and whose ceiling is
-    the same polygon at z = ``height``."""
+def plan_problem(plan: np.ndarray) -> str | None:
+    """Why the polygon ``plan`` (N, 2) cannot be a floor plan, or None: too few corners,
+    two corners in one place, no area, or walls that cross or touch."""
     plan = np.asarray(plan, dtype=np.float64)
     if plan.ndim != 2 or plan.shape[1] != 2 or len(plan) < 3:
-        raise ValueError("a floor plan needs at least three (x, y) corners")
+        return "a floor plan needs at least three (x, y) corners"
+    n = len(plan)
+    ends = np.roll(plan, -1, axis=0)
+    size = float(np.ptp(plan, axis=0).max())
+    tolerance = 1e-9 * max(size, 1.0)
+    lengths = np.linalg.norm(ends - plan, axis=1)
+    if np.any(lengths <= tolerance):
+        k = int(np.argmax(lengths <= tolerance))
+        return f"corners {k + 1} and {(k + 1) % n + 1} of the floor plan are in one place"
+    # A wall that runs straight back along the one before it.
+    into, out = plan - np.roll(plan, 1, axis=0), ends - plan
+    turn = into[:, 0] * out[:, 1] - into[:, 1] * out[:, 0]
+    back = (np.abs(turn) <= tolerance * lengths * np.roll(lengths, 1)) & (
+        np.sum(into * out, axis=1) < 0
+    )
+    if back.any():
+        return f"the floor plan turns straight back at corner {int(np.argmax(back)) + 1}"
+    # Walls i and j (not neighbours) must not meet: a segment test for every pair.
+    i, j = np.triu_indices(n, k=2)
+    keep = (j - i) % n != n - 1  # the last wall and the first are neighbours
+    i, j = i[keep], j[keep]
+    a, b, c, d = plan[i], ends[i], plan[j], ends[j]
+
+    def cross(o, p, q):
+        return (p[:, 0] - o[:, 0]) * (q[:, 1] - o[:, 1]) - (p[:, 1] - o[:, 1]) * (q[:, 0] - o[:, 0])
+
+    d1, d2, d3, d4 = cross(c, d, a), cross(c, d, b), cross(a, b, c), cross(a, b, d)
+    scale = tolerance * np.maximum(lengths[i], lengths[j])
+    proper = (d1 * d2 < -(scale**2)) & (d3 * d4 < -(scale**2))
+
+    def on(o, p, q, side):  # q on the segment o-p (collinear and inside its box)
+        lo, hi = np.minimum(o, p) - tolerance, np.maximum(o, p) + tolerance
+        return (np.abs(side) <= scale) & np.all((q >= lo) & (q <= hi), axis=1)
+
+    touch = on(c, d, a, d1) | on(c, d, b, d2) | on(a, b, c, d3) | on(a, b, d, d4)
+    bad = np.flatnonzero(proper | touch)
+    if len(bad):
+        k = bad[0]
+        return f"walls {i[k] + 1} and {j[k] + 1} of the floor plan cross or touch"
+    if abs(_signed_area(plan)) < 1e-9:
+        return "the floor plan has no area"
+    return None
+
+
+def extruded_mesh(plan: np.ndarray, height: float) -> RoomMesh:
+    """A room whose floor is the polygon ``plan`` (N, 2) at z = 0 and whose ceiling is
+    the same polygon at z = ``height``. The plan must be a simple polygon (see
+    :func:`plan_problem`)."""
+    plan = np.asarray(plan, dtype=np.float64)
+    problem = plan_problem(plan)
+    if problem is not None:
+        raise ValueError(problem)
     if height <= 0:
         raise ValueError("the room height must be positive")
     area = _signed_area(plan)
-    if abs(area) < 1e-9:
-        raise ValueError("the floor plan has no area")
     counterclockwise = plan if area > 0 else plan[::-1]
     n = len(plan)
     floor = np.column_stack([counterclockwise, np.zeros(n)])
@@ -68,4 +118,4 @@ def box_mesh(size: tuple[float, float, float]) -> RoomMesh:
     return extruded_mesh(plan, height)
 
 
-__all__ = ["box_mesh", "extruded_mesh"]
+__all__ = ["box_mesh", "extruded_mesh", "plan_problem"]

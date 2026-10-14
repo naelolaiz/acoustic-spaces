@@ -164,8 +164,10 @@ acoustic-spaces edit examples/studio/scene.yaml   # or open a scene file
 The editor works on the same scene files as the command line:
 
 - **File > Open example** opens the bundled rooms. Saving one asks where to keep your
-  copy and takes its model file along. **New box room** and **New from model file**
-  (OBJ, STL, PLY, OFF, glTF or DXF) start from scratch.
+  copy and takes its model file along. **New box room**, **New room from a floor plan**
+  and **New from model file** (OBJ, STL, PLY, OFF, glTF or DXF) start from scratch.
+- The **Plan** tab, next to the 3D view, shows the room from above and draws rooms (see
+  below).
 - The **scene tree** lists the geometry and its surfaces, the materials, sources,
   listeners, simulation settings and output formats. Selecting an entry, there or by
   clicking it in the 3D view, shows its form under **Properties**. Every change is
@@ -173,8 +175,11 @@ The editor works on the same scene files as the command line:
   every change can be undone.
 - **Place source** and **Place listener**, then click a surface: on a floor the new
   point stands at ear or mouth height, on a wall or ceiling it goes half a metre into
-  the room. Surfaces take materials from their form, or from a new material picked from
-  the database (**Edit > Add material**).
+  the room. In the plan, the click places it above the floor there. Sources and
+  listeners move by dragging, in the 3D view or the plan, and keep their height above
+  the floor (up a raked floor too); with Shift in the 3D view they move up and down.
+  Surfaces take materials from their form, or from a new material picked from the
+  database (**Edit > Add material**).
 - **Simulation > Run coverage map** (F6) maps every source over the audience area (see
   [Coverage maps](#coverage-maps)). The **Coverage map** panel shows any parameter
   and band from above, for one source or all of them together, and **Map in 3D** lays
@@ -194,6 +199,31 @@ The editor works on the same scene files as the command line:
 - **File > Export to Blender** writes the room with the reflection paths on show, and
   **File > Export particle animation to Blender** the sound particles leaving the
   selected source (see below).
+
+### Drawing rooms
+
+![The plan of the gallery example while a corner is dragged, with the lengths of the two walls it moves](docs/images/plan.png)
+
+The **Plan** tab shows the room from above on a grid in metres. In a floor plan or box
+room every corner is a handle:
+
+- Drag a corner to move it; the two walls it joins show their lengths as it moves. A
+  box becomes a floor plan with the same walls, so its materials stay where they were.
+- Double-click a wall to add a corner there, or right-click a corner to remove it.
+  Clicking a wall selects that surface, to give it a material.
+- **Draw room** (or **Edit > Draw floor plan**) draws a new floor plan: click its corners
+  in turn and close it on the first one, with a double-click or with Enter. Backspace
+  takes the last corner back and Esc stops. The new room keeps the old one's height
+  (change it under **Geometry**). Sources and listeners that would end up outside move
+  inside, keeping their arrangement. Over a model file, the editor asks before
+  replacing it.
+- Corners and points snap to the grid chosen under **Snap** (10 cm unless changed);
+  hold Shift to place them freely. A move that would make walls cross is refused, with
+  the reason under **Messages**.
+- The wheel zooms, dragging empty space pans and **Fit** shows the whole room again.
+
+Rooms from model files show their outline, and their sources and listeners move the
+same way. Every change can be undone.
 
 ### Exporting to Blender
 
@@ -695,11 +725,12 @@ v2 (version 1.1.0 has the first three):
 - [x] Export to Blender: rooms, reflection paths and particle animations as glTF.
 - [x] Source directivity per octave band: patterns, and measured data from SOFA or CSV files.
 - [ ] CLF loudspeaker files, once their specification is available.
-- [ ] Editing geometry in the editor: drawing rooms and moving points by dragging.
 - [ ] Head tracking.
 - [ ] A wave-based solver for low frequencies.
 - [x] Coverage maps: parameters and STI over the audience area.
 - [x] Edge diffraction (UTD) of the direct sound and first-order reflections.
+- [x] Editing geometry in the editor: drawing floor plans, dragging corners, sources and
+  listeners.
 
 ## Contributing
 

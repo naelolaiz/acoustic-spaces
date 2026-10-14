@@ -2,20 +2,21 @@
 listeners, the selection, early reflection paths and a coverage map.
 
 A click selects what is under the mouse (sources and listeners before the surfaces in
-front of them). In placing mode a click on a surface asks for a new source or listener
-there instead. Without OpenGL (a headless session) the view shows a note and the rest
-of the editor works as usual.
+front of them). Dragging a source or listener moves it across the room, keeping its
+height above the floor; with Shift it moves up and down instead. In placing mode a click
+on a surface asks for a new source or listener there. Without OpenGL (a headless
+session) the view shows a note and the rest of the editor works as usual.
 """
 
 from __future__ import annotations
 
 import numpy as np
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
+from PySide6.QtGui import QGuiApplication, QMouseEvent
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from acoustic_spaces.geometry import points_inside
-from acoustic_spaces.gui.document import LISTENER_HEIGHT, SOURCE_HEIGHT
+from acoustic_spaces.gui.document import LISTENER_HEIGHT, SOURCE_HEIGHT, follow_floor
 from acoustic_spaces.room import UNASSIGNED, Room
 from acoustic_spaces.viz import (
     BACKGROUND,
@@ -94,9 +95,11 @@ def _key(actor) -> str:
 class Viewport(QWidget):
     """The room in 3D. Emits ``picked(kind, key)`` when something is clicked (kind
     "surface" with a label index, "sources" or "listeners" with an index, or "" for
-    empty space) and ``place(kind, position)`` in placing mode."""
+    empty space), ``moved(kind, index, position)`` when a source or listener was
+    dragged, and ``place(kind, position)`` in placing mode."""
 
     picked = Signal(str, object)
+    moved = Signal(str, int, tuple)
     place = Signal(str, tuple)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -111,7 +114,9 @@ class Viewport(QWidget):
         self._actors: dict[str, tuple[str, object]] = {}
         self._markers: list = []
         self._surfaces: list = []
+        self._point_actors: dict[tuple[str, int], list] = {}
         self._press = (0, 0)
+        self._drag: dict | None = None
         if opengl_available():
             try:
                 from pyvistaqt import QtInteractor
@@ -120,6 +125,8 @@ class Viewport(QWidget):
                 layout.addWidget(self.plotter.interactor)
                 self.plotter.iren.add_observer("LeftButtonPressEvent", self._on_press)
                 self.plotter.iren.add_observer("LeftButtonReleaseEvent", self._on_release)
+                # Drags of sources and listeners never reach VTK, so the camera stays.
+                self.plotter.interactor.installEventFilter(self)
                 self.plotter.set_background(BACKGROUND[0], top=BACKGROUND[1])
                 self.plotter.add_axes()
             except Exception as exc:  # no usable OpenGL context
@@ -164,6 +171,8 @@ class Viewport(QWidget):
         plotter.clear()
         self._actors.clear()
         self._markers, self._surfaces = [], []
+        self._point_actors = {}
+        self._drag = None
         kind, key = selection or ("", None)
 
         materials = surface_materials(room)
@@ -199,6 +208,7 @@ class Viewport(QWidget):
                 )
                 self._actors[_key(actor)] = (group, index)
                 self._markers.append(actor)
+                parts = self._point_actors[group, index] = [actor]
                 directivity = room.directivities[index] if group == "sources" else None
                 if directivity is None or not directivity.omni:
                     arrow = pv.Arrow(
@@ -206,26 +216,30 @@ class Viewport(QWidget):
                         direction=item.orientation.forward(),
                         scale=6 * radius * scale,
                     )
-                    plotter.add_mesh(
-                        arrow, color=SELECTED_COLOUR if chosen else colour, render=False
+                    parts.append(
+                        plotter.add_mesh(
+                            arrow, color=SELECTED_COLOUR if chosen else colour, render=False
+                        )
                     )
                     if chosen:  # a short arrow to the top of the head shows the roll
                         up = np.array(item.orientation.rotation())[:, 2]
                         top = pv.Arrow(start=item.position, direction=up, scale=3 * radius * scale)
-                        plotter.add_mesh(top, color=SELECTED_COLOUR, render=False)
+                        parts.append(plotter.add_mesh(top, color=SELECTED_COLOUR, render=False))
                 if chosen and directivity is not None and not directivity.omni:
                     balloon = balloon_polydata(
                         directivity, item.position, item.orientation.rotation(), size=10 * radius
                     )
-                    plotter.add_mesh(
-                        balloon,
-                        scalars="level",
-                        cmap="magma",
-                        clim=(-30, 0),
-                        opacity=0.55,
-                        show_scalar_bar=False,
-                        pickable=False,
-                        render=False,
+                    parts.append(
+                        plotter.add_mesh(
+                            balloon,
+                            scalars="level",
+                            cmap="magma",
+                            clim=(-30, 0),
+                            opacity=0.55,
+                            show_scalar_bar=False,
+                            pickable=False,
+                            render=False,
+                        )
                     )
                 # The label of the selected point goes above its arrow to the top.
                 lift = (3 * scale + 1.8 if chosen else 1.8) * radius
@@ -277,6 +291,106 @@ class Viewport(QWidget):
 
     def _on_press(self, *_) -> None:
         self._press = self.plotter.iren.get_event_position()
+
+    # -- dragging sources and listeners ------------------------------------------------
+
+    def _display(self, widget: QWidget, event: QMouseEvent) -> tuple[int, int]:
+        """VTK display coordinates (pixels from the bottom left) of a mouse event."""
+        ratio = widget.devicePixelRatioF()
+        position = event.position()
+        return round(position.x() * ratio), round((widget.height() - position.y() - 1) * ratio)
+
+    def marker_at(self, x: int, y: int) -> tuple[str, int] | None:
+        """The source or listener at display position (x, y), if any."""
+        if self.plotter is None or not self._markers:
+            return None
+        from vtkmodules.vtkRenderingCore import vtkCellPicker
+
+        picker = vtkCellPicker()
+        picker.SetTolerance(0.005)
+        picker.PickFromListOn()
+        for actor in self._markers:
+            picker.AddPickList(actor)
+        if picker.Pick(x, y, 0, self.plotter.renderer) and picker.GetActor() is not None:
+            return self._actors[_key(picker.GetActor())]
+        return None
+
+    def _ray(self, x: float, y: float) -> tuple[np.ndarray, np.ndarray]:
+        """The line of sight through display position (x, y): a point and a direction."""
+        renderer = self.plotter.renderer
+        ends = []
+        for depth in (0.0, 1.0):
+            renderer.SetDisplayPoint(x, y, depth)
+            renderer.DisplayToWorld()
+            world = np.array(renderer.GetWorldPoint(), dtype=float)
+            ends.append(world[:3] / world[3])
+        direction = ends[1] - ends[0]
+        return ends[0], direction / max(float(np.linalg.norm(direction)), 1e-300)
+
+    def drag_position(self, start, x: float, y: float, vertical: bool = False):
+        """Where a source or listener at ``start`` goes when dragged to display position
+        (x, y): across the room, following the floor (see
+        :func:`~acoustic_spaces.gui.document.follow_floor`), or straight up and down."""
+        start = np.asarray(start, dtype=float)
+        origin, direction = self._ray(x, y)
+        if vertical:
+            # The vertical plane through the point that faces the camera.
+            normal = np.array([direction[0], direction[1], 0.0])
+            if np.linalg.norm(normal) < 1e-6:
+                return tuple(float(v) for v in start)
+            normal /= np.linalg.norm(normal)
+        else:
+            normal = np.array([0.0, 0.0, 1.0])
+        along = float(np.dot(direction, normal))
+        if abs(along) < 1e-9:
+            return tuple(float(v) for v in start)
+        t = float(np.dot(start - origin, normal)) / along
+        if t <= 0:
+            return tuple(float(v) for v in start)
+        hit = origin + t * direction
+        if vertical:
+            return (float(start[0]), float(start[1]), float(hit[2]))
+        return follow_floor(self._room.mesh, start, hit[:2])
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        kind = event.type()
+        if self.plotter is None or watched is not self.plotter.interactor:
+            return False
+        if kind == QEvent.Type.MouseButtonPress:
+            if event.button() != Qt.MouseButton.LeftButton or self.placing is not None:
+                return False
+            x, y = self._display(watched, event)
+            target = self.marker_at(x, y)
+            if target is None:
+                return False
+            group, index = target
+            start = getattr(self._room.scene, group)[index].position
+            self._drag = {"target": target, "press": (x, y), "start": start, "position": None}
+            return True
+        if self._drag is None:
+            return False
+        if kind == QEvent.Type.MouseMove:
+            x, y = self._display(watched, event)
+            px, py = self._drag["press"]
+            if self._drag["position"] is None and max(abs(x - px), abs(y - py)) <= CLICK_PIXELS:
+                return True
+            vertical = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            position = self.drag_position(self._drag["start"], x, y, vertical)
+            self._drag["position"] = position
+            offset = np.subtract(position, self._drag["start"])
+            for actor in self._point_actors.get(self._drag["target"], []):
+                actor.SetPosition(*offset)
+            self.plotter.render()
+            return True
+        if kind == QEvent.Type.MouseButtonRelease:
+            drag, self._drag = self._drag, None
+            group, index = drag["target"]
+            if drag["position"] is None:
+                self.picked.emit(group, index)
+            else:
+                self.moved.emit(group, index, tuple(drag["position"]))
+            return True
+        return False
 
     def _on_release(self, *_) -> None:
         x, y = self.plotter.iren.get_event_position()

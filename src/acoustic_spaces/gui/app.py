@@ -1,6 +1,6 @@
-"""The editor's main window: the 3D view in the middle, the scene tree, the form of the
-selected item, the results of the last run, the coverage map and a message log around
-it."""
+"""The editor's main window: the 3D view and the plan in the middle, the scene tree,
+the form of the selected item, the results of the last run, the coverage map and a
+message log around them."""
 
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QScrollArea,
     QStyle,
+    QTabWidget,
 )
 
 from acoustic_spaces import __version__
@@ -47,6 +48,7 @@ from acoustic_spaces.gui.document import (
 )
 from acoustic_spaces.gui.inspector import BAND_LABELS, Inspector, label_text
 from acoustic_spaces.gui.map_view import MapPanel
+from acoustic_spaces.gui.plan_view import PlanView
 from acoustic_spaces.gui.results_view import ResultsPanel
 from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.viewport import Viewport
@@ -90,7 +92,16 @@ class MainWindow(QMainWindow):
         self.from_example = False
 
         self.viewport = Viewport()
-        self.setCentralWidget(self.viewport)
+        self.plan = PlanView()
+        self.views = QTabWidget()
+        self.views.setDocumentMode(True)
+        self.views.addTab(self.viewport, "3D view")
+        self.views.addTab(self.plan, "Plan")
+        self.views.setTabToolTip(0, "The room in 3D: click to select, drag sources and listeners")
+        self.views.setTabToolTip(
+            1, "The room from above: draw floor plans, drag corners and points"
+        )
+        self.setCentralWidget(self.views)
         self.tree = SceneTree()
         self.inspector = Inspector(lambda: self.document)
         self.results = ResultsPanel()
@@ -136,6 +147,13 @@ class MainWindow(QMainWindow):
         self.tree.selected.connect(lambda kind, key: self.select(kind, key, from_tree=True))
         self.viewport.picked.connect(self._picked)
         self.viewport.place.connect(self._place)
+        self.viewport.moved.connect(self._move_point)
+        self.plan.picked.connect(self._picked)
+        self.plan.place.connect(self._place)
+        self.plan.moved.connect(self._move_point)
+        self.plan.corners_changed.connect(self._set_corners)
+        self.plan.drawn.connect(self._drawn)
+        self.plan.message.connect(self.log)
         self.inspector.failed.connect(self._refused)
         self.inspector.select.connect(self.select)
         self.results.pair_changed.connect(lambda *_: self._draw())
@@ -149,7 +167,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self._escape)
         # Delete removes the selected item only from the tree or the 3D view, so the key
         # keeps its meaning in the forms.
-        for widget in (self.tree, self.viewport):
+        for widget in (self.tree, self.viewport, self.plan):
             shortcut = QShortcut(QKeySequence(QKeySequence.StandardKey.Delete), widget)
             shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             shortcut.activated.connect(self.remove_selected)
@@ -178,6 +196,12 @@ class MainWindow(QMainWindow):
         self.new_model_action = a(
             "New from &model file…", self.new_from_model, None, "Start from an OBJ or DXF model"
         )
+        self.new_plan_action = a(
+            "New room from a &floor plan…",
+            self.new_floor_plan,
+            None,
+            "Draw the floor plan of a new room, corner by corner",
+        )
         self.open_action = a("&Open…", self.open_dialog, keys.Open)
         self.save_action = a("&Save", self.save, keys.Save)
         self.save_as_action = a("Save &as…", self.save_as, keys.SaveAs)
@@ -205,9 +229,19 @@ class MainWindow(QMainWindow):
             lambda: self.start_placing("listeners"),
             tip="Click a floor or wall in the 3D view to put a listener there",
         )
+        self.draw_action = a(
+            "&Draw floor plan",
+            self.draw_room,
+            None,
+            "Draw a new floor plan in the plan view; it replaces the room",
+        )
         self.add_material_action = a("Add &material from the database…", self.add_material)
         self.remove_action = a("Re&move selected", self.remove_selected)
         self.reset_camera_action = a("&Reset camera", self.viewport.reset_camera, "Ctrl+0")
+        self.show_3d_action = a(
+            "&3D view", lambda: self.views.setCurrentWidget(self.viewport), "Ctrl+1"
+        )
+        self.show_plan_action = a("P&lan", lambda: self.views.setCurrentWidget(self.plan), "Ctrl+2")
         self.paths_action = a("Show reflection &paths", lambda: None)
         self.paths_action.setCheckable(True)
         self.paths_action.toggled.connect(self.results.paths.setChecked)
@@ -241,7 +275,9 @@ class MainWindow(QMainWindow):
     def _menus(self) -> None:
         bar = self.menuBar()
         file = bar.addMenu("&File")
-        file.addActions([self.new_action, self.new_model_action, self.open_action])
+        file.addActions(
+            [self.new_action, self.new_plan_action, self.new_model_action, self.open_action]
+        )
         self.examples_menu = file.addMenu("Open e&xample")
         try:
             examples = list_examples()
@@ -262,11 +298,14 @@ class MainWindow(QMainWindow):
         edit.addActions([self.undo_action, self.redo_action])
         edit.addSeparator()
         edit.addActions([self.place_source_action, self.place_listener_action])
+        edit.addAction(self.draw_action)
         edit.addAction(self.add_material_action)
         edit.addSeparator()
         edit.addAction(self.remove_action)
 
         view = bar.addMenu("&View")
+        view.addActions([self.show_3d_action, self.show_plan_action])
+        view.addSeparator()
         view.addActions([self.reset_camera_action, self.paths_action, self.screenshot_action])
         view.addSeparator()
         for dock in self.docks.values():
@@ -304,6 +343,8 @@ class MainWindow(QMainWindow):
         self.map_panel.set_result(None)
         self.selection = ("scene", None)
         self._changed()
+        self.plan.cancel()
+        self.plan.fit()
         self._state()
 
     def _changed(self) -> None:
@@ -404,6 +445,7 @@ class MainWindow(QMainWindow):
         paths = None if response is None else response.early
         coverage = None if self._map_stale() else self.map_panel.shown_in_3d()
         self.viewport.show_room(self.document.room, self.selection, paths, coverage)
+        self.plan.show_room(self.document.room, self.selection)
 
     def _paths_toggled(self, on: bool) -> None:
         self.paths_action.blockSignals(True)
@@ -414,10 +456,14 @@ class MainWindow(QMainWindow):
         self._draw()
 
     def start_placing(self, kind: str) -> None:
-        """Put a new source or listener where the next click on a surface lands."""
-        if self.viewport.available:
+        """Put a new source or listener where the next click on a surface (in the plan,
+        on the floor) lands."""
+        what = "source" if kind == "sources" else "listener"
+        if self.views.currentWidget() is self.plan:
+            self.plan.start_placing(kind)
+            self.statusBar().showMessage(f"Click in the plan to place the {what}; Esc cancels.", 0)
+        elif self.viewport.available:
             self.viewport.start_placing(kind)
-            what = "source" if kind == "sources" else "listener"
             self.statusBar().showMessage(
                 f"Click a floor or wall to place the {what}; Esc cancels.", 0
             )
@@ -427,7 +473,8 @@ class MainWindow(QMainWindow):
     def _escape(self) -> None:
         if self.viewport.placing is not None:
             self.viewport.start_placing(None)
-            self.statusBar().clearMessage()
+        self.plan.cancel()
+        self.statusBar().clearMessage()
 
     def _default_position(self, kind: str) -> tuple[float, float, float]:
         """Where a new source or listener goes without a click: above the middle of the
@@ -451,6 +498,70 @@ class MainWindow(QMainWindow):
         where = ", ".join(f"{v:.2f}" for v in position)
         self.log(f"Added {item.name} at ({where})")
         self.select(kind, index)
+
+    def _move_point(self, kind: str, index: int, position: tuple) -> None:
+        """A source or listener dragged in the 3D view or the plan."""
+        try:
+            self.document.move_point(kind, index, position)
+        except EditError as exc:
+            self._refused(str(exc))
+            self._draw()
+            return
+        item = getattr(self.document.scene, kind)[index]
+        where = ", ".join(f"{v:.2f}" for v in item.position)
+        self.log(f"Moved {item.name} to ({where})")
+        self.select(kind, index)
+
+    def _set_corners(self, corners: list, description: str) -> None:
+        """New corners for the floor plan, from the plan view."""
+        was_box = self.document.scene.geometry.box is not None
+        try:
+            self.document.set_floor_plan(corners, description)
+        except EditError as exc:
+            self._refused(str(exc))
+            self._draw()
+            return
+        if was_box:
+            self.log("The box is now a floor plan with the same walls.")
+
+    def draw_room(self) -> None:
+        """Draw a new floor plan in the plan view."""
+        self.views.setCurrentWidget(self.plan)
+        self.plan.start_drawing()
+
+    def _drawn(self, corners: list) -> None:
+        if self.document.scene.geometry.file is not None and not self.confirm_replace_model():
+            return
+        default = self.document.scene.default_material
+        try:
+            moved = self.document.draw_floor_plan(corners)
+        except EditError as exc:
+            self._refused(str(exc))
+            return
+        self.plan.fit()
+        height = self.document.scene.geometry.height
+        self.log(
+            f"New floor plan with {len(corners)} corners, {height:g} m high; change the "
+            "height under Geometry."
+        )
+        if moved:
+            self.log(f"Moved {', '.join(moved)} into the new room.")
+        if self.document.scene.default_material != default:
+            self.log(
+                f"Surfaces without an assignment are now {self.document.scene.default_material} "
+                "(the scene's default material)."
+            )
+        self.select("geometry", None)
+
+    def confirm_replace_model(self) -> bool:
+        answer = QMessageBox.question(
+            self,
+            TITLE,
+            "Replace the model file with the drawn floor plan? Material assignments to the "
+            "model's surfaces will no longer match anything.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
 
     # -- editing --------------------------------------------------------------------
 
@@ -515,6 +626,15 @@ class MainWindow(QMainWindow):
         self.from_example = False
         self._attach(Document(box_scene()))
         self.log("New box room; change its size under Geometry.")
+
+    def new_floor_plan(self) -> None:
+        """A new room whose floor plan the user draws in the plan view."""
+        if not self._discard_ok():
+            return
+        self.from_example = False
+        self._attach(Document(box_scene()))
+        self.draw_room()
+        self.log("New room: click its corners in the plan, and close it on the first one.")
 
     def new_from_model(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Model file", "", MODEL_FILTER)

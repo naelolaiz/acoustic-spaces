@@ -18,7 +18,7 @@ import numpy as np
 from pydantic import ValidationError
 from PySide6.QtCore import QObject, Signal
 
-from acoustic_spaces.geometry import points_inside
+from acoustic_spaces.geometry import UNIT_SCALE, RoomMesh, extruded_mesh, points_inside
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene import Scene
 
@@ -27,6 +27,14 @@ SOURCE_HEIGHT = 1.5
 LISTENER_HEIGHT = 1.2
 #: Undo steps kept.
 HISTORY = 200
+#: Height of a drawn room when the scene had none to keep (m).
+DRAWN_HEIGHT = 3.0
+#: A dragged source or listener keeps its height above the floor while the floor under
+#: it rises or falls by at most this much (m) from one place to the next (a raked
+#: floor); past a bigger step (a balcony edge) it keeps its height instead.
+FOLLOW_STEP = 1.0
+#: Decimals kept in coordinates the editor writes (a micrometre).
+DECIMALS = 6
 
 
 class EditError(ValueError):
@@ -106,6 +114,96 @@ def model_scene(path: str | Path) -> Scene:
     data["sources"][0]["position"] = [float(v) for v in source]
     data["listeners"][0]["position"] = [float(v) for v in listener]
     return Scene.model_validate(data)
+
+
+def plan_corners(scene: Scene) -> np.ndarray | None:
+    """The corners (m) of a floor plan or box room seen from above, in the order of its
+    walls (``wall_1`` runs from the first corner to the second); None for a model file."""
+    geometry = scene.geometry
+    scale = UNIT_SCALE[geometry.units]
+    if geometry.floor_plan is not None:
+        return scale * np.array(geometry.floor_plan, dtype=float)
+    if geometry.box is not None:
+        length, width = scale * geometry.box[0], scale * geometry.box[1]
+        return np.array([[0.0, 0.0], [length, 0.0], [length, width], [0.0, width]])
+    return None
+
+
+def room_height(scene: Scene) -> float | None:
+    """The height (m) of a floor plan or box room; None for a model file."""
+    geometry = scene.geometry
+    scale = UNIT_SCALE[geometry.units]
+    if geometry.floor_plan is not None:
+        return scale * geometry.height
+    if geometry.box is not None:
+        return scale * geometry.box[2]
+    return None
+
+
+def surface_heights(mesh: RoomMesh, x: float, y: float, *, up: bool = False) -> np.ndarray:
+    """Heights of the floors, ceilings and other surfaces facing up or down (only up,
+    with ``up``) that lie over or under the point (x, y)."""
+    triangles = mesh.triangles
+    normals = mesh.face_normals()
+    flat = normals[:, 2] > 0.5 if up else np.abs(normals[:, 2]) > 0.5
+    a, b, c = (triangles[flat, k] for k in range(3))
+    # Barycentric coordinates of (x, y) in each triangle seen from above.
+    v0, v1 = b[:, :2] - a[:, :2], c[:, :2] - a[:, :2]
+    v2 = np.array([x, y]) - a[:, :2]
+    det = v0[:, 0] * v1[:, 1] - v0[:, 1] * v1[:, 0]
+    ok = np.abs(det) > 1e-12
+    det = np.where(ok, det, 1.0)
+    u = (v2[:, 0] * v1[:, 1] - v2[:, 1] * v1[:, 0]) / det
+    v = (v0[:, 0] * v2[:, 1] - v0[:, 1] * v2[:, 0]) / det
+    tolerance = 1e-9
+    hit = ok & (u >= -tolerance) & (v >= -tolerance) & (u + v <= 1 + tolerance)
+    z = a[:, 2] + u * (b[:, 2] - a[:, 2]) + v * (c[:, 2] - a[:, 2])
+    return np.unique(z[hit])
+
+
+def floor_height(mesh: RoomMesh, x: float, y: float, below: float = np.inf) -> float | None:
+    """The highest surface under (x, y) below the height ``below``, or None."""
+    heights = surface_heights(mesh, x, y)
+    heights = heights[heights <= below + 1e-9]
+    return float(heights.max()) if len(heights) else None
+
+
+def follow_floor(mesh: RoomMesh, position, xy) -> tuple[float, float, float]:
+    """``position`` moved to the plan position ``xy``, at the same height above the floor
+    when the floor changes by at most :data:`FOLLOW_STEP`, else at the same height."""
+    x, y, z = (float(v) for v in position)
+    new_x, new_y = (float(v) for v in xy)
+    old = floor_height(mesh, x, y, z)
+    if old is not None:
+        heights = surface_heights(mesh, new_x, new_y)
+        if len(heights):
+            nearest = float(heights[np.argmin(np.abs(heights - old))])
+            if abs(nearest - old) <= FOLLOW_STEP:
+                z += nearest - old
+    return (new_x, new_y, z)
+
+
+def _rounded(values) -> list[float]:
+    return [round(float(v), DECIMALS) + 0.0 for v in values]
+
+
+def _free_spots(plan: np.ndarray, mesh: RoomMesh, height: float, count: int) -> np.ndarray:
+    """Plan positions inside the floor plan ``plan`` (its room is ``mesh``) on a grid,
+    half a metre or more from the walls when at least ``count`` of them are."""
+    lo, hi = plan.min(axis=0), plan.max(axis=0)
+    step = max(float(np.max(hi - lo)) / 40.0, 0.05)
+    xs = np.arange(lo[0] + step / 2, hi[0], step)
+    ys = np.arange(lo[1] + step / 2, hi[1], step)
+    grid = np.stack(np.meshgrid(xs, ys, indexing="ij"), axis=-1).reshape(-1, 2)
+    grid = grid[points_inside(mesh, np.column_stack([grid, np.full(len(grid), height / 2)]))]
+    if len(grid) == 0:
+        return grid
+    a, d = plan, np.roll(plan, -1, axis=0) - plan  # the walls: start and direction
+    t = np.einsum("pnk,nk->pn", grid[:, None] - a[None], d) / np.sum(d * d, axis=1)
+    closest = a[None] + np.clip(t, 0.0, 1.0)[..., None] * d[None]
+    distance = np.linalg.norm(grid[:, None] - closest, axis=2).min(axis=1)
+    clear = grid[distance >= min(0.5, 0.5 * distance.max())]
+    return clear if len(clear) >= count else grid
 
 
 def referenced_files(scene: Scene) -> list[Path]:
@@ -281,6 +379,12 @@ class Document(QObject):
         self.edit(f"add {stem}", lambda data: data[kind].append(entry))
         return len(getattr(self.scene, kind)) - 1
 
+    def move_point(self, kind: str, index: int, position) -> None:
+        """Move a source or listener to ``position`` (m)."""
+        stem = "source" if kind == "sources" else "listener"
+        where = _rounded(position)
+        self.edit(f"move {stem}", lambda data: data[kind][index].update(position=where))
+
     def update_point(self, kind: str, index: int, **fields) -> None:
         """Change fields of a source or listener (name, position, orientation...)."""
         stem = "source" if kind == "sources" else "listener"
@@ -295,6 +399,80 @@ class Document(QObject):
         if len(getattr(self.scene, kind)) == 1:
             raise EditError(f"a scene needs at least one {stem}")
         self.edit(f"remove {stem}", lambda data: data[kind].pop(index))
+
+    def set_floor_plan(self, corners, description: str = "change floor plan") -> None:
+        """New corners (m, seen from above) for a floor plan room. A box becomes a floor
+        plan with the same walls, so its material assignments still apply."""
+        geometry = self.scene.geometry
+        if geometry.file is not None:
+            raise EditError("the room is a model file: draw a floor plan to replace it")
+        scale = UNIT_SCALE[geometry.units]
+        height = geometry.height if geometry.floor_plan is not None else geometry.box[2]
+        plan = [_rounded(np.asarray(corner, dtype=float) / scale) for corner in corners]
+
+        def change(data: dict) -> None:
+            data["geometry"].pop("box", None)
+            data["geometry"].update(floor_plan=plan, height=height)
+
+        self.edit(description, change)
+
+    def draw_floor_plan(self, corners, height: float | None = None) -> list[str]:
+        """Make the room the floor plan ``corners`` (m), ``height`` metres high (by default
+        as high as the room was, else :data:`DRAWN_HEIGHT`). Sources and listeners that
+        would be outside move inside, at their height if it fits; returns their names.
+        Surfaces no assignment covers (after a model file) get the material that covered
+        most of the old room, as the scene's default."""
+        height = float(height or room_height(self.scene) or DRAWN_HEIGHT)
+        plan = [_rounded(corner) for corner in corners]
+        try:
+            mesh = extruded_mesh(np.array(plan, dtype=float), height)
+        except ValueError as exc:
+            raise EditError(str(exc)) from exc
+        items = [
+            (kind, k, item)
+            for kind in ("sources", "listeners")
+            for k, item in enumerate(getattr(self.scene, kind))
+        ]
+        inside = points_inside(mesh, [item.position for _, _, item in items])
+        spots = _free_spots(np.array(plan), mesh, height, int((~inside).sum()))
+        # A point outside goes to the free spot nearest its place in the old room's
+        # footprint stretched over the new one's, so the layout stays recognisable.
+        old_lo = np.array(self.room.report.bounds_min[:2], dtype=float)
+        old_size = np.maximum(np.array(self.room.report.bounds_max[:2]) - old_lo, 1e-9)
+        new_lo, new_hi = np.min(plan, axis=0), np.max(plan, axis=0)
+        moved: dict[tuple[str, int], list[float]] = {}
+        taken = np.zeros(len(spots), dtype=bool)
+        for (kind, k, item), ok in zip(items, inside, strict=True):
+            if ok or not len(spots):
+                continue
+            relative = np.clip((np.asarray(item.position[:2]) - old_lo) / old_size, 0.0, 1.0)
+            target = new_lo + relative * (new_hi - new_lo)
+            distance = np.linalg.norm(spots - target, axis=1)
+            if not taken.all():
+                distance[taken] = np.inf
+            best = int(np.argmin(distance))
+            taken[best] = True
+            usual = SOURCE_HEIGHT if kind == "sources" else LISTENER_HEIGHT
+            z = item.position[2] if 0.0 < item.position[2] < height else min(usual, height / 2)
+            moved[kind, k] = _rounded([*spots[best], z])
+
+        default = None
+        names = set(self.scene.assignments) | set(self.scene.materials)
+        if self.scene.default_material is None and any(
+            not set(label) & names for label in mesh.labels
+        ):
+            areas = self.room.area_by_material()
+            default = max(areas, key=areas.get) if areas else next(iter(self.scene.materials))
+
+        def change(data: dict) -> None:
+            data["geometry"] = {"floor_plan": plan, "height": height}
+            for (kind, k), position in moved.items():
+                data[kind][k]["position"] = position
+            if default is not None:
+                data["default_material"] = default
+
+        self.edit("draw floor plan", change)
+        return [getattr(self.scene, kind)[k].name for kind, k in moved]
 
     def assign(self, surface: str, material: str | None) -> None:
         """Give the surfaces named ``surface`` a material (None removes the assignment)."""
@@ -358,12 +536,19 @@ class Document(QObject):
 
 
 __all__ = [
+    "DRAWN_HEIGHT",
+    "FOLLOW_STEP",
     "LISTENER_HEIGHT",
     "SOURCE_HEIGHT",
     "Document",
     "EditError",
     "box_scene",
+    "floor_height",
+    "follow_floor",
     "model_scene",
+    "plan_corners",
     "referenced_files",
+    "room_height",
+    "surface_heights",
     "unique_name",
 ]
