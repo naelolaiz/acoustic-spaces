@@ -159,6 +159,24 @@ def test_trailing_silence_is_no_noise_floor() -> None:
     assert np.all(decay.decay_range_db == math.inf) and np.all(decay.crosspoint == 47_520)
 
 
+def test_impulse_responses_of_any_length_and_one_column() -> None:
+    from acoustic_spaces.parameters import onset
+
+    # An empty response has no parameters, and one read from a mono WAV file is
+    # (samples, 1).
+    assert onset(np.zeros(0)) == 0
+    empty = from_impulse_response(np.zeros(0), 48_000, REFERENCE_ENERGY_10M)
+    for name in PARAMETERS:
+        assert np.all(np.isnan(getattr(empty, name)))
+    ir = _noisy_decay(0.8, -55.0, 1.0)
+    column = from_impulse_response(ir[:, None], 48_000, REFERENCE_ENERGY_10M)
+    flat = from_impulse_response(ir, 48_000, REFERENCE_ENERGY_10M)
+    for name in PARAMETERS:
+        np.testing.assert_array_equal(getattr(column, name), getattr(flat, name))
+    with pytest.raises(ValueError, match="one channel"):
+        from_impulse_response(np.zeros((100, 2)), 48_000)
+
+
 def test_free_field_reference_moves_to_ten_metres() -> None:
     from acoustic_spaces.parameters import band_energy_share, free_field_reference
 

@@ -142,12 +142,17 @@ def deconvolve(
     ``recording`` is (samples,) or (samples, channels), starting when playback started.
     Each repeat is deconvolved and the repeats are averaged. ``length_s`` defaults to
     the silence after each sweep. ``reference`` replaces the generated sweep, for
-    instance with a loopback recording of one sweep.
+    instance with a loopback recording of one sweep: (samples,) or (samples, 1), as
+    :func:`~acoustic_spaces.audio.read_wav` gives a mono file.
     """
     recording = np.asarray(recording, dtype=float)
     if recording.ndim == 1:
         recording = recording[:, None]
     excitation = sweep.sweep() if reference is None else np.asarray(reference, dtype=float)
+    if excitation.ndim == 2 and excitation.shape[1] == 1:
+        excitation = excitation[:, 0]
+    if excitation.ndim != 1:
+        raise ValueError("the reference must have one channel: (samples,) or (samples, 1)")
     length = int(round((sweep.silence_s if length_s is None else length_s) * sweep.sample_rate))
     length = max(1, min(length, sweep.period - int(sweep.harmonic_delay_s(2) * sweep.sample_rate)))
 

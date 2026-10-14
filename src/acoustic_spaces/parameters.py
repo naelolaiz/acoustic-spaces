@@ -333,7 +333,7 @@ def speech_transmission_index(
 def onset(ir: np.ndarray, threshold_db: float = -20.0) -> int:
     """Sample where the response first rises to ``threshold_db`` below its peak (ISO 3382-1)."""
     power = np.asarray(ir, dtype=float) ** 2
-    peak = power.max()
+    peak = power.max(initial=0.0)
     if peak <= 0:
         return 0
     return int(np.argmax(power >= peak * 10.0 ** (threshold_db / 10.0)))
@@ -474,8 +474,16 @@ class BandDecay:
 def band_decay(
     ir: np.ndarray, sample_rate: float, *, filters: str = "iec", noise: bool = True
 ) -> BandDecay:
-    """Filter ``ir`` into octave bands and, with ``noise``, find each band's noise floor."""
+    """Filter ``ir`` into octave bands and, with ``noise``, find each band's noise floor.
+
+    ``ir`` is (samples,) or (samples, 1), as :func:`~acoustic_spaces.audio.read_wav`
+    gives a mono file.
+    """
     ir = np.asarray(ir, dtype=float)
+    if ir.ndim == 2 and ir.shape[1] == 1:
+        ir = ir[:, 0]
+    if ir.ndim != 1:
+        raise ValueError("the impulse response must have one channel: (samples,) or (samples, 1)")
     start = onset(ir)
     # Zero-phase filters ring before an impulse as much as after it. Room is made for
     # that ringing, and everything before the onset counts as arriving with it.
@@ -483,7 +491,8 @@ def band_decay(
     padded = np.concatenate([np.zeros(lead), ir])
     squared = octave_bands(padded, sample_rate, filters) ** 2
     energy = squared[:, lead + start :]
-    energy[:, 0] += squared[:, : lead + start].sum(axis=1)
+    if energy.shape[1]:
+        energy[:, 0] += squared[:, : lead + start].sum(axis=1)
     # Digital silence at the end (zero padding, the shift that removes latency) is no
     # background noise: the noise floor is looked for before it, unless too little is
     # left for that, as after a lone impulse, whose filtered ringing then shows no noise.
@@ -517,7 +526,8 @@ def from_impulse_response(
 ) -> RoomParameters:
     """Parameters from a mono impulse response, split into octave bands.
 
-    ``reference_energy`` is the energy of the same source at 10 m in free field: per
+    ``ir`` is (samples,) or (samples, 1); an empty or silent one has every parameter
+    NaN. ``reference_energy`` is the energy of the same source at 10 m in free field: per
     band (as from :func:`free_field_reference`), or that of a broadband impulse, which
     for responses made by this package is 0.01. ``filters`` picks the band filters
     (see :func:`octave_bands`). With ``noise``, each band is cut where it sinks into the

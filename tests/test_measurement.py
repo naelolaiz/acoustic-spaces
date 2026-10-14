@@ -100,6 +100,18 @@ def test_harmonic_distortion_lands_before_the_linear_response() -> None:
     assert difference[delay - 100 :].max() < 1e-3 * peak
 
 
+def test_deconvolution_takes_a_reference_read_from_a_wav_file() -> None:
+    # read_wav gives a mono loopback recording as (samples, 1). A short, narrow sweep
+    # keeps what the old code made of it (a spectrum per sample) small.
+    sweep = _sweep(duration_s=0.05, silence_s=0.05, f_start=1000.0, f_stop=2000.0)
+    recording = sweep.signal()
+    expected = deconvolve(recording, sweep)
+    got = deconvolve(recording, sweep, reference=sweep.sweep()[:, None])
+    np.testing.assert_array_equal(got, expected)
+    with pytest.raises(ValueError, match="one channel"):
+        deconvolve(recording, sweep, reference=np.zeros((10, 2)))
+
+
 def test_repeats_average_out_noise() -> None:
     rng = np.random.default_rng(2)
     floors = []
