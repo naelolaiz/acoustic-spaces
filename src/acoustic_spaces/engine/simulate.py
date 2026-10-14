@@ -174,7 +174,8 @@ def simulate(
 
     ``room`` may be a :class:`Room`, a :class:`Scene` or a scene file. ``sources`` and
     ``listeners`` pick names from the scene (all by default). ``threads=0`` uses every
-    core. Raises ``ValueError`` if :meth:`Room.problems` reports anything.
+    core. Raises ``ValueError`` if :meth:`Room.problems` reports anything or there is no
+    listener to simulate.
     """
     room = _as_room(room)
     problems = room.problems()
@@ -186,6 +187,8 @@ def simulate(
 
     chosen_sources = _pick(scene.sources, sources, "source")
     chosen_listeners = _pick(scene.listeners, listeners, "listener")
+    if not chosen_listeners:
+        raise ValueError("no listener to simulate")
 
     model = TraceModel.from_room(room)
     c = room.speed_of_sound()

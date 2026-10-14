@@ -384,6 +384,16 @@ def test_simulate_checks_the_room() -> None:
     scene = _scene([0.1] * 8, 0.1, source=(2, 2, 1), listeners=[(5, 4, 1)])
     with pytest.raises(ValueError, match="unknown listener"):
         simulate(scene, listeners=["nobody"])
+    with pytest.raises(ValueError, match="no listener"):
+        simulate(scene, listeners=[])
+
+
+def test_a_single_ray_still_traces() -> None:
+    # Splitting traces a first batch before the rest; with one ray, that is all of them.
+    result = simulate(_diffuse_box({"late": {"rays": 1}, "ir_length_s": 0.2}))
+    assert result.details["s"]["rays"] == 1
+    for response in result:
+        assert np.all(np.isfinite(response.late)) and np.all(response.late >= 0)
 
 
 def test_particles_spread_reflect_and_fade() -> None:

@@ -124,7 +124,7 @@ def _in_batches(trace, rays: int, splitting: bool):
     ``splitting`` in two batches where the second uses the weight window measured by
     the first. Returns (arrays, escaped rays, traced rays), each array the mean of the
     batches weighted by their share of rays."""
-    first = max(min(rays // 2, MIN_FIRST_RAYS), rays // 10) if splitting else rays
+    first = max(min(rays // 2, MIN_FIRST_RAYS), rays // 10, 1) if splitting else rays
     arrays, escaped, ray_energy, reflections, traced = trace(first, 0, np.zeros(0))
     if first < rays:
         # Each batch carries the whole source energy; weight them by their share of rays.
