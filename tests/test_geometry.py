@@ -169,6 +169,28 @@ def test_dxf_3dfaces_mesh_and_blocks_by_layer(tmp_path: Path) -> None:
     np.testing.assert_allclose(absorber[..., 1], 5.0)  # moved by the block insert
 
 
+def test_dxf_triangle_without_a_fourth_corner(tmp_path: Path) -> None:
+    ezdxf = pytest.importorskip("ezdxf")
+    doc = ezdxf.new()
+    doc.modelspace().add_3dface([(10, 10, 0), (14, 10, 0), (14, 15, 0)])
+    path = tmp_path / "triangle.dxf"
+    doc.saveas(path)
+    # Leave out the fourth corner (group codes 13, 23 and 33), as the format allows.
+    lines = path.read_text(encoding="utf-8").splitlines()
+    pairs = [(code.strip(), value) for code, value in zip(lines[::2], lines[1::2], strict=True)]
+    start = pairs.index(("2", "ENTITIES"))
+    end = pairs.index(("0", "ENDSEC"), start)
+    pairs[start:end] = [p for p in pairs[start:end] if p[0] not in ("13", "23", "33")]
+    path.write_text("".join(f"{code}\n{value}\n" for code, value in pairs), encoding="utf-8")
+    assert not ezdxf.readfile(path).modelspace()[0].dxf.hasattr("vtx3")
+
+    mesh = load_mesh(path)
+    # Not a quad with a phantom corner at the origin (15 m2).
+    assert len(mesh.faces) == 1
+    assert mesh.face_areas().sum() == pytest.approx(10.0)
+    assert mesh.triangles.min(axis=(0, 1)).tolist() == [10.0, 10.0, 0.0]
+
+
 # -- cleanup and checks -------------------------------------------------------------
 
 

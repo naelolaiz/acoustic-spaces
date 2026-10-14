@@ -172,9 +172,11 @@ def read_dxf(path: Path) -> RoomMesh:
         layer = layer_override if entity.dxf.layer == "0" and layer_override else entity.dxf.layer
         label = _label(layer)
         if kind == "3DFACE":
-            corners = [entity.dxf.vtx0, entity.dxf.vtx1, entity.dxf.vtx2, entity.dxf.vtx3]
-            if np.allclose(corners[2], corners[3]):
-                corners = corners[:3]
+            corners = [entity.dxf.vtx0, entity.dxf.vtx1, entity.dxf.vtx2]
+            # A triangle repeats its third corner as the fourth, or leaves the fourth
+            # out, which ezdxf then reads as the origin.
+            if entity.dxf.hasattr("vtx3") and not np.allclose(entity.dxf.vtx3, corners[2]):
+                corners.append(entity.dxf.vtx3)
             builder.add_polygon(add_vertices(corners), label)
         elif kind == "MESH" or (kind == "POLYLINE" and entity.is_poly_face_mesh):
             mesh = (
