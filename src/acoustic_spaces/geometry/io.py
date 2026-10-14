@@ -7,6 +7,8 @@
   and nodes, or from the file name for formats without groups.
 - DXF: read through ezdxf; 3DFACE, MESH and polyface entities, also inside block
   references, labelled by their layer, in the units the file records ($INSUNITS).
+- SketchUp (experimental): read through openskp, the ``sketchup`` extra; faces labelled
+  by their material.
 
 All importers return metres with +z up.
 """
@@ -19,13 +21,15 @@ from pathlib import Path
 
 import numpy as np
 
+from acoustic_spaces._extras import install_hint
 from acoustic_spaces.geometry.mesh import RoomMesh
 from acoustic_spaces.geometry.triangulate import triangulate_polygon
 
 UNIT_SCALE = {"m": 1.0, "cm": 0.01, "mm": 0.001, "in": 0.0254, "ft": 0.3048}
-SUPPORTED_SUFFIXES = (".obj", ".stl", ".ply", ".off", ".gltf", ".glb", ".dxf")
-#: Formats whose convention is +y up; everything else is taken as +z up.
-_Y_UP_SUFFIXES = (".gltf", ".glb")
+SUPPORTED_SUFFIXES = (".obj", ".stl", ".ply", ".off", ".gltf", ".glb", ".dxf", ".skp")
+#: Formats whose convention is +y up (openskp hands SketchUp models over as glTF does);
+#: everything else is taken as +z up.
+_Y_UP_SUFFIXES = (".gltf", ".glb", ".skp")
 #: Metres per drawing unit for the DXF $INSUNITS codes a room may be drawn in: inches,
 #: feet, millimetres, centimetres, metres, yards and decimetres. Files without units
 #: (code 0) or in others are read as metres.
@@ -56,6 +60,8 @@ def load_mesh(path: str | Path, units: str | None = None, up_axis: str | None = 
         mesh = read_obj(path)
     elif suffix == ".dxf":
         mesh, file_scale = _read_dxf(path)
+    elif suffix == ".skp":
+        mesh = read_skp(path)
     else:
         mesh = read_with_trimesh(path)
 
@@ -196,6 +202,47 @@ def read_with_trimesh(path: Path) -> RoomMesh:
     if not parts:
         raise ValueError(f"no faces found in {path}")
     return RoomMesh.concatenate(parts)
+
+
+def read_skp(path: Path) -> RoomMesh:
+    """A SketchUp file through openskp (the ``sketchup`` extra), in metres with +y up.
+
+    openskp hands the faces over grouped by colour, so each face is labelled with the
+    model's material of that colour (``default`` when none has it, as for unpainted
+    faces). A face painted differently on its two sides comes twice, once per side; the
+    first side with a material is kept.
+    """
+    try:
+        from openskp import SkpFile
+    except ImportError as exc:
+        hint = install_hint("sketchup")
+        raise ImportError(f"reading SketchUp files needs openskp: {hint}") from exc
+
+    skp = SkpFile.open(path)
+    by_colour: dict[tuple[int, ...], str] = {}
+    for material in skp.parse().materials:
+        by_colour.setdefault(tuple(int(c) for c in material.color[:3]), material.name)
+    scene = skp.build_scene(include_curve_sets=False)
+    kept: dict[tuple, tuple[np.ndarray, str | None]] = {}
+    for primitive in scene.glb_primitives:
+        pbr = scene.gltf_materials[primitive.material_index].get("pbrMetallicRoughness", {})
+        rgb = pbr.get("baseColorFactor", [1.0, 1.0, 1.0])[:3]
+        name = by_colour.get(tuple(round(c * 255) for c in rgb))
+        corners = np.asarray(primitive.positions, dtype=np.float64).reshape(-1, 3)
+        for triangle in np.asarray(primitive.indices, dtype=np.int64).reshape(-1, 3):
+            points = corners[triangle]
+            key = tuple(sorted(map(tuple, np.round(points, 6))))
+            if key not in kept or (kept[key][1] is None and name is not None):
+                kept[key] = (points, name)
+    if not kept:
+        raise ValueError(f"no faces found in {path}")
+    labels: dict[tuple[str, ...], int] = {}
+    face_labels = [
+        labels.setdefault((name or "default",), len(labels)) for _, name in kept.values()
+    ]
+    vertices = np.concatenate([points for points, _ in kept.values()])
+    faces = np.arange(len(vertices), dtype=np.int64).reshape(-1, 3)
+    return RoomMesh(vertices, faces, np.array(face_labels, dtype=np.int64), list(labels))
 
 
 def read_dxf(path: Path) -> RoomMesh:

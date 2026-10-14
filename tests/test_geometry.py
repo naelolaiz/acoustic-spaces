@@ -188,7 +188,7 @@ def test_obj_errors(tmp_path: Path, content: str, message: str) -> None:
 
 def test_unsupported_suffix_and_units(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="unsupported"):
-        load_mesh(tmp_path / "room.skp")
+        load_mesh(tmp_path / "room.3dm")
     with pytest.raises(ValueError, match="units"):
         load_mesh(SHOEBOX, units="furlong")
     with pytest.raises(FileNotFoundError):

@@ -15,6 +15,12 @@
 - A channel and a reference for G per file, `--json`, and `--plot` with the two decays
   in each octave band (`plot_comparison` in `acoustic_spaces.viz`).
 
+**SketchUp files** (experimental)
+
+- `.skp` models read directly with the `sketchup` extra, through openskp (MIT), which
+  needs no SketchUp: faces labelled by their material, matched by colour. The editor
+  opens them too. OBJ exported from SketchUp stays the recommended path.
+
 ## 2.0.0
 
 Coverage maps, edge diffraction, drawing rooms in the editor, head tracking and a
