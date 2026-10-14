@@ -3,9 +3,9 @@
 ## Unreleased
 
 Fixes from a review of the simulation, the parameters, the wave solver, the spatial
-outputs, the geometry import and the command line. Levels and parameters change
-slightly: G with the statistical late method by up to 1.8 dB, levels near diffraction
-boundaries by up to 2 dB, and the wave bands' timing by a grid step.
+outputs, the geometry import, the command line and the editor. Levels and parameters
+change slightly: G with the statistical late method by up to 1.8 dB, levels near
+diffraction boundaries by up to 2 dB, and the wave bands' timing by a grid step.
 
 A scene's `geometry.units` now defaults to the units a DXF file records, and to metres
 for other files, as before.
@@ -76,6 +76,23 @@ for other files, as before.
 - Command-line overrides are checked as the scene file is, and `--sample-rate` now
   reaches the wave solver. `analyze`, `deconvolve` and `sweep` report unreadable inputs
   as errors and create their output folders.
+
+**Editor**
+
+- Choosing a material for one wall assigns it to that wall, not to every surface that
+  shares a name with it.
+- The 3D view stays lit after it redraws the room, and keeps its camera while the room
+  is edited.
+- Typing in a position, orientation or box field changes only that value; the others
+  were rounded to two decimals. Humidity shows a tenth of a percent.
+- A custom loudspeaker list is shown as it is, without a 5.0 layout added on any change.
+- Results of a run whose scene was closed are dropped, and saving an example elsewhere
+  keeps its results current.
+- One recording plays at a time.
+- Box and floor-plan fields show the units they are in, and boxes may be larger than
+  1000 units.
+- Save As adds `.yaml` to a bare name, asking before it replaces a file, and opening
+  another scene cancels placing a point in the 3D view.
 
 ## 2.0.0
 
