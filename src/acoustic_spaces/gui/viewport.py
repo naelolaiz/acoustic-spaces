@@ -194,9 +194,17 @@ class Viewport(QWidget):
                 directivity = room.directivities[index] if group == "sources" else None
                 if directivity is None or not directivity.omni:
                     arrow = pv.Arrow(
-                        start=item.position, direction=item.orientation.forward(), scale=6 * radius
+                        start=item.position,
+                        direction=item.orientation.forward(),
+                        scale=6 * radius * scale,
                     )
-                    plotter.add_mesh(arrow, color=colour, render=False)
+                    plotter.add_mesh(
+                        arrow, color=SELECTED_COLOUR if chosen else colour, render=False
+                    )
+                    if chosen:  # a short arrow to the top of the head shows the roll
+                        up = np.array(item.orientation.rotation())[:, 2]
+                        top = pv.Arrow(start=item.position, direction=up, scale=3 * radius * scale)
+                        plotter.add_mesh(top, color=SELECTED_COLOUR, render=False)
                 if chosen and directivity is not None and not directivity.omni:
                     balloon = balloon_polydata(
                         directivity, item.position, item.orientation.rotation(), size=10 * radius
@@ -211,11 +219,13 @@ class Viewport(QWidget):
                         pickable=False,
                         render=False,
                     )
-                points.append(item.position)
+                # The label of the selected point goes above its arrow to the top.
+                lift = (3 * scale + 1.8 if chosen else 1.8) * radius
+                points.append(np.add(item.position, [0.0, 0.0, lift]))
                 names.append(item.name)
         if points:
             plotter.add_point_labels(
-                np.asarray(points, dtype=float) + [0.0, 0.0, 1.8 * radius],
+                np.asarray(points, dtype=float),
                 names,
                 font_size=12,
                 text_color="white",

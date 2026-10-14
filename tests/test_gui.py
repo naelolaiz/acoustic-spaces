@@ -348,6 +348,33 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, m
     assert not window._stale()
 
 
+def test_results_follow_the_selected_listener(window, qapp) -> None:
+    window.open_example(example_path("church"))
+    _quick(window.document)
+    window.select("listeners", 2)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    results = window.results
+    assert results.pair() == ("altar", "nave-back")  # the selected listener, not the first
+    window.select("sources", 1)
+    assert results.pair() == ("organ", "nave-back")
+    window.select("material", "stone")
+    assert results.pair() == ("organ", "nave-back")
+
+    # Turning the listener and running again keeps its results on show.
+    window.select("listeners", 2)
+    window.inspector.pages["listeners"].angles[0].setValue(90.0)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    assert results.pair() == ("organ", "nave-back")
+    turned = np.array(window.document.scene.listeners[2].orientation.rotation())
+    np.testing.assert_allclose(results.response().orientation, turned)
+    results.listener.setCurrentText("nave-middle")
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    assert results.pair() == ("organ", "nave-middle")
+
+
 def test_export_to_blender(window, monkeypatch, tmp_path: Path) -> None:
     from PySide6.QtWidgets import QFileDialog
 
@@ -428,3 +455,29 @@ def test_clicks_select_and_place(window, qapp) -> None:
     assert placed and placed[0][0] == "sources"
     assert Room.from_scene(window.document.scene).problems() == []
     assert len(window.document.scene.sources) == 2 and viewport.placing is None
+
+
+@pytest.mark.render
+def test_arrows_show_the_orientation(window, qapp) -> None:
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    import pyvista as pv
+
+    window.select("listeners", 0)
+    page = window.inspector.pages["listeners"]
+    for box, value in zip(page.angles, (90.0, 0.0, 90.0), strict=True):
+        box.setValue(value)
+    listener = window.document.scene.listeners[0]
+    assert (listener.orientation.yaw, listener.orientation.roll) == (90.0, 90.0)
+    qapp.processEvents()
+    arrows = []
+    for actor in viewport.plotter.actors.values():
+        mapper = actor.GetMapper() if hasattr(actor, "GetMapper") else None
+        mesh = pv.wrap(mapper.GetInput()) if hasattr(mapper, "GetInput") else None
+        if mesh is not None and mesh.n_points == pv.Arrow().n_points:
+            offset = mesh.points.mean(axis=0) - listener.position
+            arrows.append(offset / np.linalg.norm(offset))
+    # Facing +y and rolled to the right, the top of the head points to +x.
+    assert any(np.allclose(a, [0, 1, 0], atol=1e-6) for a in arrows)
+    assert any(np.allclose(a, [1, 0, 0], atol=1e-6) for a in arrows)

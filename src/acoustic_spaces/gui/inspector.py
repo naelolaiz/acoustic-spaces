@@ -576,7 +576,10 @@ class PointPage(Page):
         remove = QPushButton("Remove " + ("source" if kind == "sources" else "listener"))
         remove.clicked.connect(self._remove)
         form.addRow(remove)
-        hint = QLabel("Yaw turns left from +x towards +y; pitch looks up.")
+        hint = QLabel(
+            "Yaw turns left from +x towards +y, pitch looks up and roll tilts to the right. "
+            "In the 3D view the long arrow points forward and the short one up."
+        )
         hint.setWordWrap(True)
         form.addRow(hint)
 

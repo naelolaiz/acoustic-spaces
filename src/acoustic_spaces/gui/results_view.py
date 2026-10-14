@@ -114,11 +114,13 @@ class ResultsPanel(QWidget):
     # -- content --------------------------------------------------------------------
 
     def set_result(self, result) -> None:
-        """Show ``result`` (a SimulationResult), or nothing."""
+        """Show ``result`` (a SimulationResult), or nothing. The source and listener on
+        show stay when the new result has them."""
         self.result = result
         for widget in (self.export, self.listen, self.source, self.listener):
             widget.setEnabled(result is not None)
         self._note("" if result is not None else "Run the simulation (F5) to see results here.")
+        shown = [combo.currentText() for combo in (self.source, self.listener)]
         for combo in (self.source, self.listener):
             combo.blockSignals(True)
             combo.clear()
@@ -127,10 +129,26 @@ class ResultsPanel(QWidget):
             listeners = list(dict.fromkeys(lis for _, lis in result.responses))
             self.source.addItems(sources)
             self.listener.addItems(listeners)
+            for combo, name in zip((self.source, self.listener), shown, strict=True):
+                if combo.findText(name) >= 0:
+                    combo.setCurrentText(name)
         for combo in (self.source, self.listener):
             combo.blockSignals(False)
         self._details()
         self._pair()
+
+    def show_pair(self, source: str | None = None, listener: str | None = None) -> None:
+        """Show the results of ``source`` and ``listener`` (None keeps the one on show),
+        if the result has them. Does not emit ``pair_changed``."""
+        before = self.pair()
+        for combo, name in ((self.source, source), (self.listener, listener)):
+            if name is not None and combo.findText(name) >= 0:
+                combo.blockSignals(True)
+                combo.setCurrentText(name)
+                combo.blockSignals(False)
+        if self.pair() != before:
+            self._table()
+            self._draw()
 
     def mark_stale(self, stale: bool) -> None:
         """Say whether the scene changed since the results were computed."""

@@ -351,7 +351,18 @@ class MainWindow(QMainWindow):
         if not from_tree:
             self.tree.select(selection)
         self.inspector.show_item(*selection)
+        self._follow(selection)
         self._draw()
+
+    def _follow(self, selection: tuple[str, object]) -> None:
+        """Show the results of a selected source or listener."""
+        kind, key = selection
+        if kind in ("sources", "listeners"):
+            name = getattr(self.document.scene, kind)[key].name
+            if kind == "sources":
+                self.results.show_pair(source=name)
+            else:
+                self.results.show_pair(listener=name)
 
     def _picked(self, kind: str, key) -> None:
         """A click in the 3D view; empty space selects the scene."""
@@ -636,8 +647,11 @@ class MainWindow(QMainWindow):
         self.log(f"{time.perf_counter() - self._started:6.1f} s  {message}")
 
     def _done(self, result) -> None:
+        first = self.result is None
         self.result, self._result_scene = result, self._job_scene
-        self.results.set_result(result)
+        self.results.set_result(result)  # keeps the source and listener on show
+        if first:
+            self._follow(self.selection)
         self.results.mark_stale(self._stale())
         self.docks["results"].raise_()
         elapsed = time.perf_counter() - self._started
