@@ -30,6 +30,13 @@ SHOEBOX_OBJ = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / 
 FS = 48_000
 
 
+def test_spherical_harmonics_refuse_directions_without_length() -> None:
+    with pytest.raises(ValueError, match="length above zero"):
+        real_spherical_harmonics(1, [[1.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+    with pytest.raises(ValueError, match="length above zero"):
+        Ambisonics(2).gains([[math.nan, 0.0, 1.0]])
+
+
 def test_spherical_harmonics_are_sn3d() -> None:
     grid = fibonacci_sphere(8000)
     y = real_spherical_harmonics(4, grid)
@@ -104,6 +111,15 @@ def test_vbap_between_and_outside_speakers() -> None:
     # Straight down in a layout without low speakers: the horizon plays alike.
     down = Loudspeakers.layout("7.0.4").gains([[0.0, 0.0, -1.0]])[0]
     np.testing.assert_allclose(down[:7], 1 / math.sqrt(7))
+    # 5.x.4 has 140 degrees between its surrounds: arrivals on the horizon there stay on
+    # it, panned as in 5.0, instead of going up to the rear height speakers.
+    horizon = from_angles(np.arange(0.0, 360.0, 2.5), 0.0)
+    for name in ("5.0.4", "5.1.4"):
+        layout = Loudspeakers.layout(name)
+        flat = Loudspeakers.layout(name[:3])
+        gains = layout.gains(horizon)
+        np.testing.assert_allclose(gains[:, : flat.channels], flat.gains(horizon), atol=1e-12)
+        np.testing.assert_array_equal(gains[:, flat.channels :], 0.0)
     custom = Loudspeakers((Speaker("a", 45), Speaker("b", -45), Speaker("c", 180)))
     assert custom.channel_mask() == 0 and custom.label == "speakers"
     with pytest.raises(ValueError, match="unknown layout"):
@@ -131,6 +147,19 @@ def test_spherical_head_delays_and_shadows_the_far_ear() -> None:
     resampled = head.resampled(44_100)
     onset = np.argmax(np.abs(resampled.hrir[left]), axis=1)
     assert (onset[1] - onset[0]) / 44_100 == pytest.approx(itd, abs=0.00005)
+
+
+@pytest.mark.parametrize("rate", [24_000, 44_100, 96_000])
+def test_resampling_keeps_the_gain_of_the_responses(rate: float) -> None:
+    # A flat response (an impulse) stays flat at unit gain at any rate.
+    hrir = np.zeros((1, 2, 256))
+    hrir[0, :, 10] = 1.0
+    directions = np.array([[2, 0, 0]])
+    hrtf = HRTF(directions, hrir, 48_000)
+    np.testing.assert_array_equal(directions, [[2, 0, 0]])  # the caller's array stays
+    spectrum = np.abs(np.fft.rfft(hrtf.resampled(rate).hrir, axis=-1))
+    band = slice(1, int(0.4 * spectrum.shape[-1]))
+    np.testing.assert_allclose(spectrum[..., band], 1.0, atol=1e-9)
 
 
 def _write_sofa(path: Path, right_first: bool = False) -> np.ndarray:
@@ -168,6 +197,27 @@ def test_read_sofa(tmp_path: Path, right_first: bool) -> None:
     )
     np.testing.assert_allclose(hrtf.hrir, ir[:, ::-1] if right_first else ir)
     assert hrtf.nearest(from_angles([80.0, 0.0], [0.0, 70.0])).tolist() == [1, 3]
+
+
+def test_read_sofa_with_a_turning_head_and_spherical_ears(tmp_path: Path) -> None:
+    """The head turns for each measurement ([M C] ListenerView) while the source stays in
+    front of the room; the ears are given in spherical coordinates, right ear first."""
+    h5py = pytest.importorskip("h5py")
+    ir = np.random.default_rng(4).standard_normal((3, 2, 16))
+    yaw = np.radians([0.0, 90.0, -90.0])
+    with h5py.File(tmp_path / "turn.sofa", "w") as f:
+        f["Data.IR"] = ir
+        f["Data.SamplingRate"] = np.array([48_000.0])
+        f["SourcePosition"] = [[1.5, 0.0, 0.0]]
+        f["ListenerView"] = np.column_stack([np.cos(yaw), np.sin(yaw), np.zeros(3)])
+        f["ListenerUp"] = [[0.0, 0.0, 1.0]]
+        ears = f.create_dataset("ReceiverPosition", data=[[-90.0, 0, 0.09], [90.0, 0, 0.09]])
+        ears.attrs["Type"] = "spherical"
+        ears.attrs["Units"] = "degree, degree, metre"
+    hrtf = read_sofa(tmp_path / "turn.sofa")
+    # Turned left, the source is on the right of the head; turned right, on its left.
+    np.testing.assert_allclose(hrtf.directions, [[1, 0, 0], [0, -1, 0], [0, 1, 0]], atol=1e-12)
+    np.testing.assert_allclose(hrtf.hrir, ir[:, ::-1])
 
 
 def test_read_sofa_without_h5py_says_how_to_install(tmp_path: Path, monkeypatch) -> None:

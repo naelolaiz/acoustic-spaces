@@ -279,6 +279,22 @@ def test_turning_crossfades(head) -> None:
     assert _ild(jumped[6_000:9_000]) < -5
 
 
+def test_a_head_path_takes_angles_as_look_does(head) -> None:
+    """A tracker's ``invert`` is for its own readings, not for the angles of ``run``."""
+    tone = np.sin(2 * math.pi * 1_000 * np.arange(4_800) / FS)
+    plain = HeadTrackedBinaural(_plane_wave(1, 90.0), FS, hrtf=head, block=256)
+    inverted = HeadTrackedBinaural(
+        _plane_wave(1, 90.0),
+        FS,
+        hrtf=head,
+        block=256,
+        orientation=HeadOrientation(invert=["yaw", "pitch"]),
+    )
+    path = lambda t: (60.0, 20.0, 0.0)  # noqa: E731
+    np.testing.assert_allclose(inverted.run(tone, head=path), plain.run(tone, head=path))
+    np.testing.assert_allclose(inverted.orientation.angles(), (60, 20, 0), atol=1e-9)
+
+
 def test_play_follows_the_head(fake_sounddevice, head) -> None:
     ir = _plane_wave(1, 90.0)
     signal = np.random.default_rng(2).standard_normal(1_000)

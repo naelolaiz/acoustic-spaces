@@ -31,8 +31,8 @@ class HRTF:
     name: str = "hrtf"
 
     def __post_init__(self) -> None:
-        self.directions = np.atleast_2d(np.asarray(self.directions, dtype=float))
-        self.directions /= np.linalg.norm(self.directions, axis=1, keepdims=True)
+        directions = np.atleast_2d(np.asarray(self.directions, dtype=float))
+        self.directions = directions / np.linalg.norm(directions, axis=1, keepdims=True)
         self.hrir = np.asarray(self.hrir, dtype=float)
         if self.hrir.ndim != 3 or self.hrir.shape[1] != 2:
             raise ValueError("hrir must be (directions, 2, taps)")
@@ -49,7 +49,11 @@ class HRTF:
         return np.argmax(v @ self.directions.T, axis=1)
 
     def resampled(self, sample_rate: float) -> HRTF:
-        """The same responses at another sample rate (band-limited, by FFT)."""
+        """The same responses at another sample rate (band-limited, by FFT).
+
+        The responses are filters: their frequency response, and so their gain, stays
+        the same at every rate.
+        """
         if math.isclose(sample_rate, self.sample_rate):
             return self
         n = self.taps
@@ -61,7 +65,7 @@ class HRTF:
         else:
             pad = np.zeros((*spectrum.shape[:-1], bins - spectrum.shape[-1]), complex)
             spectrum = np.concatenate([spectrum, pad], axis=-1)
-        hrir = np.fft.irfft(spectrum, m, axis=-1) * (m / n)
+        hrir = np.fft.irfft(spectrum, m, axis=-1)
         return HRTF(self.directions, hrir, float(sample_rate), self.name)
 
 
@@ -112,8 +116,15 @@ def _text(value) -> str:
 
 
 def _positions(dataset) -> np.ndarray:
-    """Positions (n, 3) of a SOFA variable as Cartesian coordinates."""
-    values = np.asarray(dataset[()], dtype=float).reshape(-1, 3)
+    """Positions (n, 3) of a SOFA variable as Cartesian coordinates.
+
+    A variable that changes with the measurements as well ([R C M], say) gives those of
+    the first measurement.
+    """
+    values = np.asarray(dataset[()], dtype=float)
+    if values.ndim == 3:
+        values = values[..., 0]
+    values = values.reshape(-1, 3)
     kind = _text(dataset.attrs.get("Type", "cartesian")).lower()
     if kind == "spherical":
         units = _text(dataset.attrs.get("Units", "degree")).lower()
@@ -138,21 +149,32 @@ def read_sofa(path: str | Path) -> HRTF:
         if ir.ndim != 3 or ir.shape[1] != 2:
             raise ValueError(f"{path}: expected responses for 2 ears, got shape {ir.shape}")
         rate = float(np.asarray(f["Data.SamplingRate"][()]).ravel()[0])
-        sources = _positions(f["SourcePosition"])
-        if len(sources) == 1:
-            sources = np.repeat(sources, len(ir), axis=0)
-        listener = _positions(f["ListenerPosition"]) if "ListenerPosition" in f else np.zeros(3)
-        relative = sources - listener.reshape(-1, 3)[: len(sources)]
-        # Head axes from the listener's view and up vectors (SOFA default: x and z).
-        view = _positions(f["ListenerView"])[0] if "ListenerView" in f else np.array([1, 0, 0.0])
-        up = _positions(f["ListenerUp"])[0] if "ListenerUp" in f else np.array([0, 0, 1.0])
-        view = view / np.linalg.norm(view)
-        up = up - (up @ view) * view
-        up = up / np.linalg.norm(up)
-        directions = relative @ np.column_stack([view, np.cross(up, view), up])
+        count = len(ir)
+
+        def per_measurement(name: str, default: list[float]) -> np.ndarray:
+            """(count, 3): one value for all measurements ([I C]) or one each ([M C])."""
+            values = _positions(f[name]) if name in f else np.array([default], dtype=float)
+            if len(values) == count:
+                return values
+            return np.repeat(values[:1], count, axis=0)
+
+        relative = per_measurement("SourcePosition", [1.0, 0.0, 0.0]) - per_measurement(
+            "ListenerPosition", [0.0, 0.0, 0.0]
+        )
+        # Head axes from the listener's view and up vectors (SOFA default: x and z), for
+        # each measurement, as a file may turn the head instead of moving the source.
+        view = per_measurement("ListenerView", [1.0, 0.0, 0.0])
+        up = per_measurement("ListenerUp", [0.0, 0.0, 1.0])
+        view = view / np.linalg.norm(view, axis=1, keepdims=True)
+        up = up - np.sum(up * view, axis=1, keepdims=True) * view
+        up = up / np.linalg.norm(up, axis=1, keepdims=True)
+        left = np.cross(up, view)
+        directions = np.stack(
+            [np.sum(relative * axis, axis=1) for axis in (view, left, up)], axis=1
+        )
         # Receiver 0 is the left ear unless the file places it on the right (y < 0).
         if "ReceiverPosition" in f:
-            ears = np.asarray(f["ReceiverPosition"][()], dtype=float).reshape(-1, 3)
+            ears = _positions(f["ReceiverPosition"])
             if len(ears) >= 2 and ears[0, 1] < ears[1, 1]:
                 ir = ir[:, ::-1]
         if "Data.Delay" in f:

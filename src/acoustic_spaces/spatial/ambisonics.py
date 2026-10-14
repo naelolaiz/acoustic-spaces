@@ -21,7 +21,10 @@ def real_spherical_harmonics(order: int, directions: np.ndarray) -> np.ndarray:
     if not 0 <= order <= MAX_ORDER:
         raise ValueError(f"Ambisonics order must be 0 to {MAX_ORDER}, got {order}")
     v = np.atleast_2d(np.asarray(directions, dtype=float))
-    v = v / np.linalg.norm(v, axis=1, keepdims=True)
+    length = np.linalg.norm(v, axis=1, keepdims=True)
+    if not np.all(length > 0):
+        raise ValueError("every direction needs a length above zero (and no NaN)")
+    v = v / length
     sin_el = np.clip(v[:, 2], -1.0, 1.0)
     cos_el = np.sqrt(np.maximum(0.0, 1.0 - sin_el**2))
     azimuth = np.arctan2(v[:, 1], v[:, 0])

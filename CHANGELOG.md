@@ -2,9 +2,10 @@
 
 ## Unreleased
 
-Fixes from a review of the simulation, the parameters and the wave solver. Levels and
-parameters change slightly: G with the statistical late method by up to 1.8 dB, levels
-near diffraction boundaries by up to 2 dB, and the wave bands' timing by a grid step.
+Fixes from a review of the simulation, the parameters, the wave solver and the spatial
+outputs. Levels and parameters change slightly: G with the statistical late method by
+up to 1.8 dB, levels near diffraction boundaries by up to 2 dB, and the wave bands'
+timing by a grid step.
 
 **Simulation and parameters**
 
@@ -42,6 +43,18 @@ near diffraction boundaries by up to 2 dB, and the wave bands' timing by a grid 
 - A wall thinner than a cell gives each side its own face.
 - The grid runs at a multiple of a low output rate instead of with coarser cells, and
   listeners outside the grid's air are refused before the runs.
+
+**Spatial audio**
+
+- HRTFs keep their gain when resampled: a 96 kHz SOFA file used at 48 kHz played 6 dB
+  quiet.
+- SOFA files that turn the head for each measurement, or give the ears in spherical
+  coordinates, are read with the right directions and ears.
+- 5.0.4 and 5.1.4 keep arrivals from behind on the horizon, panned as in 5.0; they went
+  up to the rear height speakers.
+- A head path given to `HeadTrackedBinaural.run` is not inverted by the tracker's
+  `invert`.
+- Ambisonic encoding refuses directions of zero length instead of giving NaN.
 
 ## 2.0.0
 

@@ -346,8 +346,10 @@ class HeadTrackedBinaural:
     ) -> np.ndarray:
         """A whole signal (samples,) through the renderer: (samples + taps - 1, 2).
 
-        ``head`` gives the yaw, pitch and roll in degrees at a time in seconds; it is
-        asked at the start of every block. Without it, the orientation stays as it is.
+        ``head`` gives the yaw, pitch and roll in degrees at a time in seconds, relative
+        to the centre as :meth:`HeadOrientation.look` takes them (``invert`` does not
+        apply); it is asked at the start of every block. Without it, the orientation
+        stays as it is.
         """
         x = np.asarray(signal, dtype=np.float32)
         if x.ndim == 2 and x.shape[1] == 1:
@@ -361,7 +363,7 @@ class HeadTrackedBinaural:
         out = []
         for k in range(blocks):
             if head is not None:
-                self.orientation.set_angles(*head(k * self.block / self.sample_rate))
+                self.orientation.look(*head(k * self.block / self.sample_rate))
             out.append(self.process(padded[k * self.block : (k + 1) * self.block]))
         return np.concatenate(out)[:length]
 

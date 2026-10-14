@@ -635,7 +635,9 @@ The statistical tail arrives evenly from all around.
   W is the mono response exactly.
 - **Loudspeakers** get vector base amplitude panning (VBAP, unit power). Layouts with
   height but nothing below the listener get an imaginary speaker straight down whose
-  share is dropped. Named layouts carry their WAV channel mask; the LFE channel of the
+  share is dropped. A gap of more than 90 degrees between the speakers on the horizon,
+  as behind the listener in 5.x.4, gets imaginary speakers on the horizon that the two
+  speakers either side play, so arrivals there pan as in 5.0. Named layouts carry their WAV channel mask; the LFE channel of the
   `.1` layouts stays silent, leaving bass management to the playback system.
 - **Binaural** uses the HRTF of the nearest measured direction for every reflection and
   for each late direction. Without a SOFA file it uses Brown and Duda's spherical head
