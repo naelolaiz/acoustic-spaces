@@ -101,6 +101,33 @@ def test_simulate_writes_responses_and_parameters(
     assert len(response["parameters"]["c80"]) == 8
 
 
+def test_simulate_checks_the_options_that_override_the_scene(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    out = tmp_path / "out"
+    args = ["simulate", str(SHOEBOX), "--out", str(out), "--length", "0.3"]
+    for option, value, message in [
+        ("--rays", "0", "greater than or equal to 1"),  # was a ZeroDivisionError
+        ("--sample-rate", "-8000", "greater than or equal to 8000"),
+        ("--sample-rate", "100", "greater than or equal to 8000"),  # was accepted
+        ("--max-order", "21", "less than or equal to 20"),
+    ]:
+        assert main([*args, option, value]) == 1
+        assert f"error: {option}: Input should be {message}" in capsys.readouterr().err
+    assert not out.exists()
+    assert main([*args, "--length", "0", "--rays", "500"]) == 1
+    assert "error: --length: Input should be greater than 0" in capsys.readouterr().err
+
+    # The sample rate is the simulation's, which the wave solver works at.
+    assert main([*args, "--rays", "500", "--max-order", "1", "--sample-rate", "16000"]) == 0
+    capsys.readouterr()
+    report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
+    assert report["sample_rate"] == 16000
+    assert report["settings"]["sample_rate"] == 16000
+
+
 def test_simulate_with_the_wave_solver(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     import json
 
@@ -173,6 +200,24 @@ def test_map_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
     assert "no map point lies inside the room" in capsys.readouterr().err
     assert main([*args, "--noise", "30", "40"]) == 1
     assert "noise_db" in capsys.readouterr().err
+
+
+def test_map_checks_the_options_that_override_the_scene(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    args = ["map", str(SHOEBOX), "--spacing", "2", "--length", "0.3"]
+    for option, value, message in [
+        ("--rays", "0", "greater than or equal to 1"),
+        ("--length", "0", "greater than 0"),
+        ("--max-order", "-1", "greater than or equal to 0"),
+        ("--spacing", "-1", "greater than 0"),
+    ]:
+        assert main([*args, option, value]) == 1
+        err = capsys.readouterr().err
+        assert f"error: {option}: Input should be {message}" in err
+        assert "validation error" not in err and "errors.pydantic.dev" not in err
+    assert main([*args, "--noise", "30", "40"]) == 1
+    assert "error: --noise: expected 8 noise_db values, got 2" in capsys.readouterr().err
 
 
 def _write_recording(sweep_wav: Path, out: Path, latency: int = 0) -> None:

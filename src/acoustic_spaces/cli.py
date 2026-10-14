@@ -373,6 +373,35 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _override(model, options: dict[str, tuple[str, object]]):
+    """A copy of ``model`` with the fields the command line sets, checked as in a scene.
+
+    ``options`` maps each option (``--rays``) to the field it sets (``late.rays``) and
+    the value given, None when it was not. A value out of range is printed as an error
+    naming its option, and None returned.
+    """
+    data = model.model_dump()
+    for field, value in options.values():
+        if value is not None:
+            *parents, name = field.split(".")
+            target = data
+            for key in parents:
+                target = target[key]
+            target[name] = value
+    try:
+        return type(model).model_validate(data)
+    except ValidationError as exc:
+        for err in exc.errors():
+            where = ".".join(str(part) for part in err["loc"])
+            option = next(
+                (o for o, (field, _) in options.items() if f"{where}.".startswith(f"{field}.")),
+                where or "options",
+            )
+            message = err["msg"].removeprefix("Value error, ")
+            print(f"error: {option}: {message}", file=sys.stderr)
+        return None
+
+
 def _output_spec(text: str):
     """An outputs entry from the command line: mono, binaural, ambisonics[:ORDER] or
     loudspeakers:LAYOUT."""
@@ -410,22 +439,21 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
     room = _load_room(args.scene)
     if room is None or not _print_checks(room):
         return 1
-    settings = room.scene.simulation.model_copy(deep=True)
-    if args.seed is not None:
-        settings.seed = args.seed
-    if args.rays is not None:
-        settings.late.rays = args.rays
-    if args.max_order is not None:
-        settings.early.max_order = args.max_order
-    if args.diffraction is not None:
-        settings.early.diffraction = args.diffraction
-    if args.wave is not None:
-        settings.wave.enabled = args.wave
-    if args.wave_band is not None:
-        settings.wave.max_band_hz = args.wave_band
-    if args.length is not None:
-        settings.ir_length_s = args.length
-    sample_rate = args.sample_rate or settings.sample_rate
+    settings = _override(
+        room.scene.simulation,
+        {
+            "--seed": ("seed", args.seed),
+            "--rays": ("late.rays", args.rays),
+            "--max-order": ("early.max_order", args.max_order),
+            "--diffraction": ("early.diffraction", args.diffraction),
+            "--wave": ("wave.enabled", args.wave),
+            "--wave-band": ("wave.max_band_hz", args.wave_band),
+            "--length": ("ir_length_s", args.length),
+            "--sample-rate": ("sample_rate", args.sample_rate),
+        },
+    )
+    if settings is None:
+        return 1
     try:
         outputs = _outputs(room, args)
         formats = [from_output(o) for o in outputs]
@@ -449,7 +477,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         result,
         out,
         formats,
-        sample_rate=sample_rate,
+        sample_rate=settings.sample_rate,
         normalize=args.normalize,
         plots=args.plot,
         progress=lambda message: print(message, file=sys.stderr),
@@ -504,23 +532,29 @@ def _cmd_map(args: argparse.Namespace) -> int:
     for warning in room.warnings():
         print(f"warning: {warning}", file=sys.stderr)
     scene = room.scene
-    simulation = scene.simulation.model_copy(deep=True)
-    if args.seed is not None:
-        simulation.seed = args.seed
-    if args.max_order is not None:
-        simulation.early.max_order = args.max_order
-    if args.diffraction is not None:
-        simulation.early.diffraction = args.diffraction
-    if args.length is not None:
-        simulation.ir_length_s = args.length
-    settings = (scene.coverage or Coverage()).model_dump()
-    for key in ("surfaces", "height", "spacing", "rays"):
-        if getattr(args, key) is not None:
-            settings[key] = getattr(args, key)
-    if args.noise is not None:
-        settings["noise_db"] = args.noise[0] if len(args.noise) == 1 else args.noise
+    simulation = _override(
+        scene.simulation,
+        {
+            "--seed": ("seed", args.seed),
+            "--max-order": ("early.max_order", args.max_order),
+            "--diffraction": ("early.diffraction", args.diffraction),
+            "--length": ("ir_length_s", args.length),
+        },
+    )
+    noise = args.noise[0] if args.noise is not None and len(args.noise) == 1 else args.noise
+    settings = _override(
+        scene.coverage or Coverage(),
+        {
+            "--surfaces": ("surfaces", args.surfaces),
+            "--height": ("height", args.height),
+            "--spacing": ("spacing", args.spacing),
+            "--rays": ("rays", args.rays),
+            "--noise": ("noise_db", noise),
+        },
+    )
+    if simulation is None or settings is None:
+        return 1
     try:
-        settings = Coverage.model_validate(settings)
         result = coverage_map(
             room,
             settings=settings,
@@ -529,7 +563,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
             threads=args.threads,
             progress=lambda message: print(message, file=sys.stderr),
         )
-    except (ValidationError, ValueError) as exc:
+    except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
