@@ -47,6 +47,22 @@
 - `plan_problem` in `acoustic_spaces.geometry`: floor plans whose walls cross, touch or
   run back on themselves are refused with the reason.
 
+**Head tracking** (`play --head-tracking`, the editor's Head tracking controls)
+
+- Binaural playback of an Ambisonics response that turns with the listener's head, in
+  real time: the sound field is turned once per block, crossfading from the previous
+  orientation, then decoded to the ears; the latency is still one block.
+- Head trackers send OSC over UDP: `/ypr`, `/quaternion` (`/quaternions`, `/quat`),
+  `/yaw`, `/pitch` or `/roll` under any prefix; `--invert` for trackers that count an
+  axis the other way round, and a centre to take as straight ahead.
+- In the editor, the Results panel's Head tracking controls turn the head by hand or
+  from a tracker, and Listen plays head-tracked.
+- `binaural_decoder` in `acoustic_spaces.spatial.decoder`: MagLS (or least squares)
+  filters from Ambisonics of any order to the ears, from any HRTF.
+- `FieldRotation` and rotation helpers in `acoustic_spaces.spatial.rotation`: matrices
+  that turn Ambisonics sound fields of any order.
+- `render.play` takes any block processor, such as `HeadTrackedBinaural`.
+
 **Also**
 
 - `speech_transmission_index` and `modulation_transfer` in `acoustic_spaces.parameters`.

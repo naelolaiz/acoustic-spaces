@@ -2,6 +2,8 @@
 with a display (or Xvfb) the 3D view tests run too."""
 
 import os
+import socket
+import struct
 import sys
 import time
 from pathlib import Path
@@ -439,6 +441,39 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, m
     assert np.abs(data).max() == pytest.approx(10 ** (-1 / 20), rel=1e-5)
     window.stop_playing()
     assert not results.stop.isEnabled()
+
+    # Head-tracked listening: a head tracker or the sliders turn the head.
+    head = results.head
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as taken:
+        taken.bind(("127.0.0.1", 0))
+        head.port.setValue(taken.getsockname()[1])
+        results.tracking.setChecked(True)
+        assert head.isVisible() and head.receiver is None
+        assert "Cannot listen for a head tracker on UDP port" in window.messages.toPlainText()
+    head.listen()
+    assert (
+        head.receiver is not None
+        and "Listening for a head tracker" in window.messages.toPlainText()
+    )
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as tracker:
+        ypr = b"/ypr\0\0\0\0,fff\0\0\0\0" + struct.pack(">fff", 30.0, 10.0, 0.0)
+        tracker.sendto(ypr, ("127.0.0.1", head.receiver.port))
+        _wait(qapp, lambda: head.receiver.received == 1, timeout=10)
+    head.refresh()
+    assert (head.yaw.value(), head.pitch.value()) == (30, 10)
+    assert "facing yaw 30°, pitch 10°, roll 0°; 1 tracker messages" in head.facing.text()
+    head.centre.click()
+    assert head.yaw.value() == 0
+    head.yaw.setValue(-45)
+    assert head.head.angles()[0] == pytest.approx(-45)
+    assert window.play_file(tmp_path / "dry.wav")
+    assert results.stop.isEnabled()
+    _wait(qapp, lambda: window._player is None, timeout=30)
+    assert not results.stop.isEnabled()
+    assert fake_sounddevice.played[-1].shape == (512, 2)
+    assert "head-tracked (order 3 Ambisonics to binaural)" in window.messages.toPlainText()
+    results.tracking.setChecked(False)
+    assert head.receiver is None and not head.isVisible()
 
     window.document.update_point("sources", 0, level_db=90.0)
     assert window._stale() and "changed" in results.stale.text()

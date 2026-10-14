@@ -10,7 +10,8 @@
   the response uniformly into blocks and multiplies in the frequency domain, so the only
   latency is the block itself; nothing allocates while it runs.
 - :func:`play`: a signal, or live input, through a response on the sound card (needs the
-  ``measure`` extra: sounddevice).
+  ``measure`` extra: sounddevice); or through any block processor with one input, such
+  as :class:`~acoustic_spaces.headtracking.HeadTrackedBinaural`.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 
 if TYPE_CHECKING:
     from acoustic_spaces.engine.simulate import SimulationResult
+    from acoustic_spaces.headtracking import HeadTrackedBinaural
     from acoustic_spaces.spatial import Format
 
 #: Smallest FFT of the offline overlap-add.
@@ -273,7 +275,7 @@ class Playback:
 
 
 def play(
-    ir: np.ndarray,
+    ir: np.ndarray | Convolver | HeadTrackedBinaural,
     sample_rate: int,
     signal: np.ndarray | None = None,
     *,
@@ -286,13 +288,17 @@ def play(
     """Play ``signal`` through ``ir`` (samples, outputs) on the sound card, convolving in
     real time; without a signal, the sound card's first input goes through it live.
 
-    Playback ends with the signal's reverberation tail; live input runs for ``seconds``,
-    until ``stop`` is set, or until Ctrl-C. ``signal`` must be at ``sample_rate``.
+    ``ir`` may also be a processor that works block by block, as a :class:`Convolver`
+    or :class:`~acoustic_spaces.headtracking.HeadTrackedBinaural` does; its own block
+    size then replaces ``block``. Playback ends with the signal's reverberation tail;
+    live input runs for ``seconds``, until ``stop`` is set, or until Ctrl-C. ``signal``
+    must be at ``sample_rate``.
     """
     from acoustic_spaces.measurement import _sounddevice
 
     sd = _sounddevice()
-    convolver = Convolver(ir, block)
+    convolver = ir if hasattr(ir, "process") else Convolver(ir, block)
+    block = convolver.block
     if convolver.inputs != 1:
         raise ValueError("play takes a response with one input")
     dry = None if signal is None else _as_2d(signal, "signal").mean(axis=1).astype(np.float32)

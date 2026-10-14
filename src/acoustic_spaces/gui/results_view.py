@@ -1,11 +1,12 @@
 """The results of a run: ISO 3382-1 parameters, echogram and decay curves, arrival
-directions and run details for one source and listener; export and listening."""
+directions and run details for one source and listener; export and listening, also
+head-tracked."""
 
 from __future__ import annotations
 
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -15,6 +16,8 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSlider,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -23,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces.gui.inspector import BAND_LABELS
+from acoustic_spaces.headtracking import DEFAULT_OSC_PORT, HeadOrientation, OscReceiver
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import PARAMETERS
 
@@ -40,6 +44,107 @@ ROWS = [
     ("g", "G (dB)", "{:.1f}"),
 ]
 assert {name for name, _, _ in ROWS} == set(PARAMETERS)
+#: How often the head controls show the latest orientation (ms).
+HEAD_REFRESH_MS = 100
+
+
+class HeadControls(QWidget):
+    """The listener's head for head-tracked listening: yaw and pitch by hand, or from a
+    head tracker sending OSC to a UDP port of this computer (off at port 0). Centre takes
+    the tracker's current orientation as straight ahead."""
+
+    #: A line for the messages panel.
+    message = Signal(str)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.head = HeadOrientation()
+        self.receiver: OscReceiver | None = None
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.yaw = QSlider(Qt.Orientation.Horizontal)
+        self.yaw.setRange(-180, 180)
+        self.yaw.setToolTip("Turn the head: left is positive")
+        self.pitch = QSlider(Qt.Orientation.Horizontal)
+        self.pitch.setRange(-90, 90)
+        self.pitch.setToolTip("Tilt the head: up is positive")
+        self.centre = QPushButton("Centre")
+        self.centre.setToolTip("Take the head tracker's current orientation as straight ahead")
+        self.port = QSpinBox()
+        self.port.setRange(0, 65535)
+        self.port.setSpecialValueText("off")
+        self.port.setValue(DEFAULT_OSC_PORT)
+        self.port.setToolTip(
+            "UDP port of this computer a head tracker sends OSC to "
+            "(/ypr, /quaternion, /yaw, /pitch, /roll)"
+        )
+        self.facing = QLabel()
+        for label, widget in (("Yaw", self.yaw), ("Pitch", self.pitch)):
+            layout.addWidget(QLabel(label))
+            layout.addWidget(widget, 1)
+        layout.addWidget(self.centre)
+        layout.addWidget(QLabel("OSC port"))
+        layout.addWidget(self.port)
+        layout.addWidget(self.facing, 1)
+        self._timer = QTimer(self)
+        self._timer.setInterval(HEAD_REFRESH_MS)
+        self._timer.timeout.connect(self.refresh)
+        self.yaw.valueChanged.connect(self._look)
+        self.pitch.valueChanged.connect(self._look)
+        self.centre.clicked.connect(self._centre)
+        self.port.editingFinished.connect(self.listen)
+        self.refresh()
+
+    def start(self) -> None:
+        """Follow the head, and listen for a tracker."""
+        self._timer.start()
+        self.listen()
+
+    def stop(self) -> None:
+        """Stop following the head and free the port."""
+        self._timer.stop()
+        if self.receiver is not None:
+            self.receiver.stop()
+            self.receiver = None
+        self.refresh()
+
+    def listen(self) -> None:
+        """(Re)open the OSC port the spin box shows."""
+        port = self.port.value()
+        if self.receiver is not None:
+            if self.receiver.port == port:
+                return
+            self.receiver.stop()
+            self.receiver = None
+        if port:
+            try:
+                self.receiver = OscReceiver(self.head, port).start()
+            except OSError as exc:
+                self.message.emit(f"Cannot listen for a head tracker on UDP port {port}: {exc}")
+            else:
+                self.message.emit(f"Listening for a head tracker on UDP port {port} (OSC).")
+        self.refresh()
+
+    def refresh(self) -> None:
+        """Show the latest orientation."""
+        yaw, pitch, roll = self.head.angles()
+        for slider, value in ((self.yaw, yaw), (self.pitch, pitch)):
+            if not slider.isSliderDown():
+                slider.blockSignals(True)
+                slider.setValue(round(value))
+                slider.blockSignals(False)
+        text = f"facing yaw {yaw:.0f}°, pitch {pitch:.0f}°, roll {roll:.0f}°"
+        if self.receiver is not None:
+            text += f"; {self.receiver.received} tracker messages"
+        self.facing.setText(text)
+
+    def _look(self) -> None:
+        self.head.look(self.yaw.value(), self.pitch.value(), self.head.angles()[2])
+        self.refresh()
+
+    def _centre(self) -> None:
+        self.head.centre()
+        self.refresh()
 
 
 class ResultsPanel(QWidget):
@@ -64,6 +169,11 @@ class ResultsPanel(QWidget):
         self.band.addItems(BAND_LABELS)
         self.band.setCurrentIndex(OCTAVE_BANDS_HZ.index(1000))
         self.paths = QCheckBox("Paths in 3D")
+        self.tracking = QCheckBox("Head tracking")
+        self.tracking.setToolTip(
+            "Listen binaurally through Ambisonics that turns with the head: by hand, or as "
+            "a head tracker reports it"
+        )
         self.export = QPushButton("Export…")
         self.listen = QPushButton("Listen…")
         self.stop = QPushButton("Stop")
@@ -75,9 +185,12 @@ class ResultsPanel(QWidget):
         bar.addWidget(self.band)
         bar.addWidget(self.paths)
         bar.addStretch()
-        for button in (self.export, self.listen, self.stop):
+        for button in (self.tracking, self.export, self.listen, self.stop):
             bar.addWidget(button)
         layout.addLayout(bar)
+        self.head = HeadControls()
+        self.head.hide()
+        layout.addWidget(self.head)
         self.stale = QLabel()
         self.stale.setWordWrap(True)
         layout.addWidget(self.stale)
@@ -106,6 +219,7 @@ class ResultsPanel(QWidget):
         self.band.currentIndexChanged.connect(self._draw)
         self.tabs.currentChanged.connect(self._draw)
         self.paths.toggled.connect(self.paths_toggled)
+        self.tracking.toggled.connect(self._tracking)
         self.export.clicked.connect(self.export_requested)
         self.listen.clicked.connect(self.listen_requested)
         self.stop.clicked.connect(self.stop_requested)
@@ -231,9 +345,16 @@ class ResultsPanel(QWidget):
             figure = None if response is None else plot_directions(response, band=band)
             self._replace_canvas(self.directions, figure)
 
+    def _tracking(self, on: bool) -> None:
+        self.head.setVisible(on)
+        if on:
+            self.head.start()
+        else:
+            self.head.stop()
+
     def set_playing(self, playing: bool) -> None:
         self.stop.setEnabled(playing)
         self.listen.setEnabled(not playing and self.result is not None)
 
 
-__all__ = ["PLOT_SIZE", "ROWS", "ResultsPanel"]
+__all__ = ["HEAD_REFRESH_MS", "PLOT_SIZE", "ROWS", "HeadControls", "ResultsPanel"]

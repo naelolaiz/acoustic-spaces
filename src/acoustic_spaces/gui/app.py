@@ -5,6 +5,7 @@ message log around them."""
 from __future__ import annotations
 
 import sys
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -141,6 +142,11 @@ class MainWindow(QMainWindow):
         self._play_timer = QTimer(self)
         self._play_timer.setSingleShot(True)
         self._play_timer.timeout.connect(lambda: self.results.set_playing(False))
+        # Head-tracked playback runs in a thread: (thread, stop, outcome).
+        self._player: tuple[threading.Thread, threading.Event, dict] | None = None
+        self._player_timer = QTimer(self)
+        self._player_timer.setInterval(100)
+        self._player_timer.timeout.connect(self._player_poll)
 
         self._actions()
         self._menus()
@@ -161,6 +167,7 @@ class MainWindow(QMainWindow):
         self.results.export_requested.connect(self.export_results)
         self.results.listen_requested.connect(self.listen)
         self.results.stop_requested.connect(self.stop_playing)
+        self.results.head.message.connect(self.log)
         self.map_panel.changed.connect(self._draw)
         self.map_panel.run_requested.connect(self.run_map)
         self.map_panel.save_requested.connect(self.save_map)
@@ -949,6 +956,8 @@ class MainWindow(QMainWindow):
         pair = self.results.pair()
         if pair is None:
             return False
+        if self.results.tracking.isChecked():
+            return self.play_tracked(path)
         try:
             sd = _sounddevice()
             signal, rate = read_wav(path)
@@ -972,9 +981,87 @@ class MainWindow(QMainWindow):
         self.log(f"Playing {Path(path).name} from {pair[0]} at {pair[1]} ({fmt.label})")
         return True
 
+    def _tracking_order(self) -> int:
+        """The highest Ambisonics order among the scene's outputs, or 3."""
+        orders = [o.order for o in self.result.room.scene.outputs if o.format == "ambisonics"]
+        return max([*orders, 1]) if orders else 3
+
+    def play_tracked(self, path: str | Path) -> bool:
+        """Play a WAV file from the shown source to the shown listener binaurally, turned
+        by the head of the head controls, in real time."""
+        from acoustic_spaces.audio import read_wav
+        from acoustic_spaces.headtracking import HeadTrackedBinaural
+        from acoustic_spaces.measurement import _sounddevice
+        from acoustic_spaces.render import resample
+        from acoustic_spaces.spatial import Ambisonics, Binaural
+
+        pair = self.results.pair()
+        if pair is None:
+            return False
+        sample_rate = int(self.result.settings.sample_rate)
+        order = self._tracking_order()
+        fmt = self._listening_format()
+        try:
+            _sounddevice()
+            signal, rate = read_wav(path)
+            with busy():
+                dry = resample(signal.mean(axis=1), rate, sample_rate)
+                response = self.result[pair]
+                ir = response.spatial_impulse_response(Ambisonics(order), sample_rate)
+                renderer = HeadTrackedBinaural(
+                    ir,
+                    sample_rate,
+                    hrtf=fmt.at(sample_rate) if isinstance(fmt, Binaural) else None,
+                    orientation=self.results.head.head,
+                    block=512,
+                )
+        except (ImportError, OSError, ValueError) as exc:
+            self._error("Cannot play", str(exc))
+            return False
+        # Half the dry signal's level, so the room's reverberation does not clip.
+        energy = float((ir[:, 0] ** 2).sum())
+        gain = 0.5 / np.sqrt(energy) if energy > 0 else 1.0
+        stop, outcome = threading.Event(), {}
+
+        def run() -> None:
+            from acoustic_spaces.render import play
+
+            try:
+                outcome["report"] = play(renderer, sample_rate, dry, gain=gain, stop=stop)
+            except Exception as exc:  # PortAudio errors are not one type
+                outcome["error"] = exc
+
+        thread = threading.Thread(target=run, name="head-tracked-playback", daemon=True)
+        self._player = (thread, stop, outcome)
+        thread.start()
+        self._player_timer.start()
+        self.results.set_playing(True)
+        self.log(
+            f"Playing {Path(path).name} from {pair[0]} at {pair[1]}, head-tracked "
+            f"(order {order} Ambisonics to binaural)"
+        )
+        return True
+
+    def _player_poll(self) -> None:
+        if self._player is None or self._player[0].is_alive():
+            return
+        _, _, outcome = self._player
+        self._player = None
+        self._player_timer.stop()
+        self.results.set_playing(False)
+        if "error" in outcome:
+            self._error("Cannot play", str(outcome["error"]))
+        elif outcome["report"].xruns:
+            self.log(f"{outcome['report'].xruns} block(s) dropped out while playing.")
+
     def stop_playing(self) -> None:
         from acoustic_spaces.measurement import _sounddevice
 
+        if self._player is not None:
+            thread, stop, _ = self._player
+            stop.set()
+            thread.join(2.0)
+            self._player_poll()
         self._play_timer.stop()
         self.results.set_playing(False)
         try:
@@ -1017,6 +1104,7 @@ class MainWindow(QMainWindow):
             self.job.wait()
         if self.results.stop.isEnabled():
             self.stop_playing()
+        self.results.head.stop()
         self.viewport.close_view()
         event.accept()
 

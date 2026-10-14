@@ -925,12 +925,14 @@ def _cmd_play(args: argparse.Namespace) -> int:
         _sounddevice()
         ir, rate = read_wav(args.ir)
         dry = None if args.live else _read_dry(args.signal, rate)
+        tracking = _head_tracking(args, ir, rate) if args.head_tracking else None
     except (ImportError, OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     gain = 10.0 ** (args.gain / 20.0)
     if not args.absolute:
-        energy = float((ir**2).sum(axis=0).max())
+        # Binaural decoding keeps the level of the omnidirectional channel, W.
+        energy = float(((ir[:, :1] if tracking else ir) ** 2).sum(axis=0).max())
         if energy > 0:
             gain /= math.sqrt(energy)
             print(
@@ -940,13 +942,25 @@ def _cmd_play(args: argparse.Namespace) -> int:
             )
     device = int(args.device) if args.device and args.device.isdigit() else args.device
     what = "live input" if args.live else args.signal
-    print(
-        f"playing {what} through {args.ir} ({ir.shape[1]} channel(s)); Ctrl-C stops",
-        file=sys.stderr,
-    )
+    if tracking is None:
+        processor, receiver = ir.astype(np.float32), None
+        print(
+            f"playing {what} through {args.ir} ({ir.shape[1]} channel(s)); Ctrl-C stops",
+            file=sys.stderr,
+        )
+    else:
+        processor, receiver = tracking
+        print(
+            f"playing {what} through {args.ir} (order {processor.order} Ambisonics) to the "
+            f"ears, turned by OSC head-tracker messages on {receiver.host} port "
+            f"{receiver.port}; Ctrl-C stops",
+            file=sys.stderr,
+        )
     try:
+        if receiver is not None:
+            receiver.start()
         result = play(
-            ir.astype(np.float32),
+            processor,
             rate,
             dry,
             block=args.block,
@@ -957,16 +971,37 @@ def _cmd_play(args: argparse.Namespace) -> int:
     except (ImportError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    finally:
+        if receiver is not None:
+            receiver.stop()
     print(
         f"played {result.frames / rate:.1f} s; convolution took up to {100 * result.load:.0f} % "
         f"of each {args.block}-frame block"
     )
+    if receiver is not None:
+        print(f"{receiver.received} head-tracker message(s) received")
+        if receiver.rejected:
+            print(f"warning: {receiver.rejected} packet(s) were not OSC", file=sys.stderr)
     if result.xruns:
         print(
             f"warning: {result.xruns} block(s) dropped out; try a larger --block",
             file=sys.stderr,
         )
     return 0
+
+
+def _head_tracking(args: argparse.Namespace, ir, rate: int):
+    """The head-tracked binaural renderer and the OSC receiver that turns it."""
+    from acoustic_spaces.headtracking import HeadOrientation, HeadTrackedBinaural, OscReceiver
+    from acoustic_spaces.spatial import read_sofa
+
+    invert = [axis.strip().lower() for axis in args.invert.split(",") if axis.strip()]
+    orientation = HeadOrientation(invert)
+    hrtf = read_sofa(args.hrtf) if args.hrtf else None
+    processor = HeadTrackedBinaural(
+        ir, rate, hrtf=hrtf, orientation=orientation, block=args.block, decoder=args.decoder
+    )
+    return processor, OscReceiver(orientation, args.osc_port, args.osc_host)
 
 
 def _add_sweep_arguments(parser: argparse.ArgumentParser) -> None:
@@ -1005,6 +1040,9 @@ def _add_analysis_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from acoustic_spaces.headtracking import AXES, DEFAULT_OSC_PORT
+    from acoustic_spaces.spatial.decoder import DECODERS
+
     parser = argparse.ArgumentParser(prog="acoustic-spaces", description=__doc__)
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1282,6 +1320,35 @@ def build_parser() -> argparse.ArgumentParser:
         "--absolute",
         action="store_true",
         help="keep the response's level (default: scaled to play as loud as the dry signal)",
+    )
+    tracking = play.add_argument_group(
+        "head tracking",
+        "an Ambisonics response decoded to the ears and turned against the head, as a "
+        "head tracker reports it over OSC (/ypr, /quaternion, /yaw, /pitch, /roll)",
+    )
+    tracking.add_argument(
+        "--head-tracking", action="store_true", help="turn on head-tracked binaural playback"
+    )
+    tracking.add_argument(
+        "--osc-port",
+        type=int,
+        default=DEFAULT_OSC_PORT,
+        help=f"UDP port the tracker sends to (default {DEFAULT_OSC_PORT})",
+    )
+    tracking.add_argument(
+        "--osc-host",
+        default="127.0.0.1",
+        help="address to listen on (default 127.0.0.1, this computer; 0.0.0.0 for the network)",
+    )
+    tracking.add_argument(
+        "--invert",
+        default="",
+        metavar="AXES",
+        help=f"axes the tracker counts the other way round, as {','.join(AXES)}",
+    )
+    tracking.add_argument("--hrtf", help="SOFA file (default: spherical head model)")
+    tracking.add_argument(
+        "--decoder", choices=DECODERS, default=DECODERS[0], help="binaural decoder (default magls)"
     )
     play.set_defaults(func=_cmd_play)
 
