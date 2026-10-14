@@ -119,6 +119,10 @@ def test_source_signal_adds_no_air() -> None:
     rate = band_grid(0, FS, C).rate
     signal, delay = source_signal(rate, 0.4)
     assert abs(signal.sum()) < 1e-9 * np.abs(signal).max()
+    # A closed room's total pressure has the source's term as its second difference: it
+    # comes back to rest once the source's first moment is zero too.
+    moment = np.arange(len(signal)) * signal
+    assert abs(moment.sum()) < 1e-9 * np.abs(moment).max()
     assert int(np.argmax(signal)) == delay
     spectrum = np.abs(np.fft.rfft(signal, 1 << 16))
     f = np.fft.rfftfreq(1 << 16, 1.0 / rate)
@@ -453,7 +457,9 @@ def test_bands_with_their_own_absorption_get_their_own_run(low: float, runs: int
     assert result.details["s"]["wave_runs"] == runs
     wave = result.responses[("s", "l")].wave
     assert wave.band_runs == ((0, 0) if runs == 1 else (0, 1))
-    # The less absorbing 63 Hz band decays more slowly.
+    # The less absorbing 63 Hz band decays more slowly: more of its sound is left after
+    # 300 ms for what it has between 100 and 300 ms. (Its share of all the sound is no
+    # measure: with the same absorption it has twice the other band's after 100 ms.)
     energy = wave.energy(0.01, 100)
-    late = energy[:, 30:].sum(axis=1) / energy.sum(axis=1)
+    late = energy[:, 30:].sum(axis=1) / energy[:, 10:30].sum(axis=1)
     assert (late[0] > 1.5 * late[1]) == (runs == 2)
