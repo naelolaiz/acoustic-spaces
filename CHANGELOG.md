@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+**Comparing with measurements** (`acoustic-spaces compare`, `acoustic_spaces.compare`)
+
+- A simulated and a measured impulse response, each at its own sample rate, compared by
+  their ISO 3382-1 parameters band by band: both values, the difference, and the
+  difference in just noticeable differences (ISO 3382-1:2009, table A.1), marked where
+  it is more than one; per parameter, the bands within one JND and the mean absolute
+  difference from 125 Hz to 4 kHz.
+- Bands that cannot be compared (a decay of less than 20 dB, a decay time the noise
+  leaves out, G without a reference on both sides) are listed with the reason, not
+  counted as zero.
+- A channel and a reference for G per file, `--json`, and `--plot` with the two decays
+  in each octave band (`plot_comparison` in `acoustic_spaces.viz`).
+
 ## 2.0.0
 
 Coverage maps, edge diffraction, drawing rooms in the editor, head tracking and a
