@@ -47,6 +47,9 @@ PARAMETERS = {
 _TAIL_HEADROOM_DB = 10.0
 _TAIL_SPAN_DB = 20.0
 _MIN_DECAY_DB = -20.0
+#: In a response with background noise, a decay time needs the noise this far (dB)
+#: below the bottom of its fit range.
+_NOISE_CLEARANCE_DB = 10.0
 
 #: Ratio between adjacent octave mid-band frequencies, base 10 (IEC 61260-1).
 OCTAVE_RATIO = 10.0**0.3
@@ -97,17 +100,27 @@ class RoomParameters:
         bands = "".join(f"{_band_label(f):>8}" for f in OCTAVE_BANDS_HZ)
         lines = [f"{'':<10}{bands}"]
         for name, (unit, _) in PARAMETERS.items():
-            label = f"{name.upper() if name != 'ts' else 'Ts'}" + (f" ({unit})" if unit else "")
             fmt = "8.3f" if unit == "s" or not unit else "8.1f"
             cells = "".join(
                 f"{v:{fmt}}" if np.isfinite(v) else f"{'-':>8}" for v in getattr(self, name)
             )
-            lines.append(f"{label:<10}{cells}")
+            lines.append(f"{_label(name):<10}{cells}")
         return "\n".join(lines)
 
 
 def _band_label(f: int) -> str:
     return f"{f} Hz" if f < 1000 else f"{f // 1000} kHz"
+
+
+def _symbol(name: str) -> str:
+    """A parameter's symbol: "T30", "Ts"."""
+    return "Ts" if name == "ts" else name.upper()
+
+
+def _label(name: str) -> str:
+    """A parameter's symbol and unit, as tables show it: "T30 (s)", "D50"."""
+    unit = PARAMETERS[name][0]
+    return _symbol(name) + (f" ({unit})" if unit else "")
 
 
 def _line(level: np.ndarray, t: np.ndarray, top: float, bottom: float):
@@ -556,7 +569,7 @@ def from_impulse_response(
     for b in range(decay.energy.shape[0]):
         p = _band_parameters(decay.cleaned(b), dt, 0.0, None if reference is None else reference[b])
         for name, (_, bottom) in DECAY_RANGES.items():
-            if decay.decay_range_db[b] < -bottom + 10.0:
+            if decay.decay_range_db[b] < _NOISE_CLEARANCE_DB - bottom:
                 p[name] = math.nan
         per_band.append(p)
     return RoomParameters(
