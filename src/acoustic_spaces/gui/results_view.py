@@ -200,9 +200,11 @@ class ResultsPanel(QWidget):
             parts = [f"{key} = {value:g}" for key, value in info.items()]
             lines.append(f"{source}: " + ", ".join(parts))
         for (source, listener), response in self.result.responses.items():
+            diffracted = int(response.early.diffracted.sum())
             lines.append(
                 f"{source} -> {listener}: direct sound at {response.direct_delay_s * 1e3:.1f} ms, "
                 f"{len(response.early)} early paths"
+                + (f" ({diffracted} diffracted)" if diffracted else "")
             )
         self.details.setPlainText("\n".join(lines))
 

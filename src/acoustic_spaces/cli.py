@@ -19,6 +19,8 @@ from acoustic_spaces.room import Room
 
 #: What the map command can plot (the keys of engine.coverage.MAP_PARAMETERS).
 MAP_PARAMETER_NAMES = ("spl", "spl_a", "g", "c50", "c80", "d50", "edt", "t20", "t30", "ts", "sti")
+#: Edge diffraction settings (engine.diffraction.DIFFRACTION_MODES).
+DIFFRACTION_MODES = ("none", "direct", "first_order")
 
 
 def _band_header(label: str, width: int) -> str:
@@ -263,15 +265,17 @@ def _cmd_view(args: argparse.Namespace) -> int:
 
         try:
             paths = early_paths(
-                room, args.source, args.listener, max_order=args.max_order, threads=args.threads
+                room,
+                args.source,
+                args.listener,
+                max_order=args.max_order,
+                diffraction=args.diffraction,
+                threads=args.threads,
             )
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        counts = ", ".join(
-            f"{(paths.order == k).sum()} of order {k}" for k in range(int(paths.order.max()) + 1)
-        )
-        print(f"{len(paths)} specular paths: {counts}")
+        print(f"{len(paths)} paths: {_path_counts(paths)}")
     try:
         from acoustic_spaces.viz import show_room
 
@@ -325,7 +329,12 @@ def _cmd_export(args: argparse.Namespace) -> int:
     try:
         if args.paths:
             paths = early_paths(
-                room, args.source, args.listener, max_order=args.max_order, threads=args.threads
+                room,
+                args.source,
+                args.listener,
+                max_order=args.max_order,
+                diffraction=args.diffraction,
+                threads=args.threads,
             )
         if args.particles:
             particles = trace_particles(
@@ -349,12 +358,9 @@ def _cmd_export(args: argparse.Namespace) -> int:
         f"{len(scene.sources)} sources, {len(scene.listeners)} listeners"
     )
     if paths is not None:
-        counts = ", ".join(
-            f"{(paths.order == k).sum()} of order {k}" for k in range(int(paths.order.max()) + 1)
-        )
         source = args.source or scene.sources[0].name
         listener = args.listener or scene.listeners[0].name
-        print(f"  {len(paths)} specular paths from {source} to {listener}: {counts}")
+        print(f"  {len(paths)} paths from {source} to {listener}: {_path_counts(paths)}")
     if particles is not None:
         seconds = args.slow_motion * float(particles.times[-1])
         print(
@@ -409,6 +415,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         settings.late.rays = args.rays
     if args.max_order is not None:
         settings.early.max_order = args.max_order
+    if args.diffraction is not None:
+        settings.early.diffraction = args.diffraction
     if args.length is not None:
         settings.ir_length_s = args.length
     sample_rate = args.sample_rate or settings.sample_rate
@@ -443,7 +451,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
     for (source, listener), response in result.responses.items():
         print(
             f"\n{source} -> {listener}: direct sound at {response.direct_delay_s * 1e3:.1f} ms, "
-            f"{len(response.early)} early paths"
+            f"{_early_text(response.early)}"
         )
         print(response.parameters().table())
     files = sum(len(entry["outputs"]) for entry in report["responses"])
@@ -455,6 +463,22 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     return 0
+
+
+def _path_counts(paths) -> str:
+    """'3 of order 0, 5 of order 1, 2 diffracted' for early paths."""
+    specular = paths.order[~paths.diffracted]
+    top = int(specular.max()) if len(specular) else -1
+    parts = [f"{int((specular == k).sum())} of order {k}" for k in range(top + 1)]
+    if paths.diffracted.any():
+        parts.append(f"{int(paths.diffracted.sum())} diffracted")
+    return ", ".join(parts) or "none"
+
+
+def _early_text(paths) -> str:
+    """'12 early paths (3 diffracted)'."""
+    diffracted = int(paths.diffracted.sum())
+    return f"{len(paths)} early paths" + (f" ({diffracted} diffracted)" if diffracted else "")
 
 
 def _cmd_map(args: argparse.Namespace) -> int:
@@ -475,6 +499,8 @@ def _cmd_map(args: argparse.Namespace) -> int:
         simulation.seed = args.seed
     if args.max_order is not None:
         simulation.early.max_order = args.max_order
+    if args.diffraction is not None:
+        simulation.early.diffraction = args.diffraction
     if args.length is not None:
         simulation.ir_length_s = args.length
     settings = (scene.coverage or Coverage()).model_dump()
@@ -1027,6 +1053,9 @@ def build_parser() -> argparse.ArgumentParser:
     view.add_argument("--source", help="source for --paths (default: the first)")
     view.add_argument("--listener", help="listener for --paths (default: the first)")
     view.add_argument("--max-order", type=int, help="highest reflection order for --paths")
+    view.add_argument(
+        "--diffraction", choices=DIFFRACTION_MODES, help="edge diffraction for --paths"
+    )
     view.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
     view.set_defaults(func=_cmd_view)
 
@@ -1064,6 +1093,9 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--source", help="source for paths and particles (default: the first)")
     export.add_argument("--listener", help="listener for --paths (default: the first)")
     export.add_argument("--max-order", type=int, help="highest reflection order for --paths")
+    export.add_argument(
+        "--diffraction", choices=DIFFRACTION_MODES, help="edge diffraction for --paths"
+    )
     export.add_argument("--particles", action="store_true", help="add a particle animation")
     export.add_argument(
         "--count",
@@ -1100,6 +1132,9 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--seed", type=int, help="override simulation.seed")
     simulate.add_argument("--rays", type=int, help="override simulation.late.rays")
     simulate.add_argument("--max-order", type=int, help="override simulation.early.max_order")
+    simulate.add_argument(
+        "--diffraction", choices=DIFFRACTION_MODES, help="override simulation.early.diffraction"
+    )
     simulate.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
     simulate.add_argument(
         "--output",
@@ -1143,6 +1178,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     coverage.add_argument("--seed", type=int, help="override simulation.seed")
     coverage.add_argument("--max-order", type=int, help="override simulation.early.max_order")
+    coverage.add_argument(
+        "--diffraction", choices=DIFFRACTION_MODES, help="override simulation.early.diffraction"
+    )
     coverage.add_argument("--length", type=float, help="override simulation.ir_length_s")
     coverage.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
     coverage.add_argument(

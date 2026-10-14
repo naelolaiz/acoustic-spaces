@@ -12,6 +12,7 @@ import numpy as np
 
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
+from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.geometry import distance_to_surface
@@ -84,6 +85,35 @@ def _candidates(
     return early_stage.ray_traced_candidates(model, source, order, rays, threads)
 
 
+class _Edges:
+    """The model's diffracting edges, found when first needed."""
+
+    def __init__(self, model: TraceModel) -> None:
+        self.model = model
+        self._edges: Edges | None = None
+
+    def diffraction(
+        self, mode: str, source: np.ndarray, room: Room, name: str, orientation: np.ndarray
+    ) -> EdgeDiffraction | None:
+        """Diffraction of the sound of source ``name`` at ``source``; None when off."""
+        if mode == "none":
+            return None
+        if self._edges is None:
+            self._edges = find_edges(self.model)
+        if len(self._edges) == 0:
+            return None
+        return EdgeDiffraction(
+            self.model,
+            source,
+            speed_of_sound=room.speed_of_sound(),
+            air=room.air_attenuation(),
+            directivity=room.directivity(name),
+            orientation=orientation,
+            mode=mode,
+            edges=self._edges,
+        )
+
+
 def early_paths(
     room: Room | Scene | str | Path,
     source: str | None = None,
@@ -91,12 +121,14 @@ def early_paths(
     *,
     max_order: int | None = None,
     method: str | None = None,
+    diffraction: str | None = None,
     threads: int = 0,
 ) -> early_stage.EarlyReflections:
-    """Specular paths from one source to one listener, without the late part.
+    """Specular and diffracted paths from one source to one listener, without the late
+    part.
 
-    Names default to the first source and listener; ``max_order`` and ``method``
-    default to ``scene.simulation.early``. Useful for drawing paths.
+    Names default to the first source and listener; ``max_order``, ``method`` and
+    ``diffraction`` default to ``scene.simulation.early``. Useful for drawing paths.
     """
     room = _as_room(room)
     scene = room.scene
@@ -105,19 +137,27 @@ def early_paths(
     lis = _pick(scene.listeners, None if listener is None else [listener], "listener")[0]
     model = TraceModel.from_room(room)
     position = np.array(src.position, dtype=float)
+    target = np.array(lis.position, dtype=float)
     order = cfg.max_order if max_order is None else max_order
+    orientation = np.array(src.orientation.rotation())
     candidates = _candidates(model, position, method or cfg.method, order, cfg.rays, threads)
-    return early_stage.find_paths(
+    paths = early_stage.find_paths(
         model,
         position,
-        np.array(lis.position, dtype=float),
+        target,
         candidates,
         speed_of_sound=room.speed_of_sound(),
         air=room.air_attenuation(),
         max_delay_s=scene.simulation.ir_length_s,
         directivity=room.directivity(src.name),
-        orientation=np.array(src.orientation.rotation()),
+        orientation=orientation,
     )
+    edges = _Edges(model).diffraction(
+        diffraction or cfg.diffraction, position, room, src.name, orientation
+    )
+    if edges is not None:
+        paths = edges.apply(target, paths, scene.simulation.ir_length_s)
+    return paths
 
 
 def simulate(
@@ -170,6 +210,7 @@ def simulate(
         transition = math.inf
 
     listener_pos = np.array([lis.position for lis in chosen_listeners], dtype=float)
+    edges = _Edges(model)
     responses: dict[tuple[str, str], Response] = {}
     details: dict[str, dict[str, float]] = {}
     for s_index, source in enumerate(chosen_sources):
@@ -200,6 +241,15 @@ def simulate(
             for k in range(len(chosen_listeners))
         ]
         info["candidates"] = float(sum(len(x) for x in candidates))
+        diffraction = edges.diffraction(early_cfg.diffraction, src, room, source.name, orientation)
+        if diffraction is not None:
+            say(f"{source.name}: edge diffraction ({early_cfg.diffraction})")
+            paths = [
+                diffraction.apply(listener_pos[k], paths[k], float(cutoff[k]))
+                for k in range(len(chosen_listeners))
+            ]
+            info["edges"] = float(len(diffraction.edges))
+            info["diffracted_paths"] = float(sum(int(p.diffracted.sum()) for p in paths))
         info["early_s"] = time.perf_counter() - started
 
         started = time.perf_counter()

@@ -32,7 +32,14 @@ from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine.model import TraceModel
-from acoustic_spaces.engine.simulate import _as_room, _candidates, _pick, _seed, mixing_time
+from acoustic_spaces.engine.simulate import (
+    _as_room,
+    _candidates,
+    _Edges,
+    _pick,
+    _seed,
+    mixing_time,
+)
 from acoustic_spaces.geometry import points_inside
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.room import Room
@@ -499,6 +506,7 @@ def coverage_map(
     grid = map_grid(room, settings.surfaces, height=settings.height, spacing=settings.spacing)
     say(f"Map: {len(grid)} points, {grid.cell:g} m apart")
     model = TraceModel.from_room(room)
+    edges = _Edges(model)
     c = room.speed_of_sound()
     air = room.air_attenuation()
     volume = room.volume_m3
@@ -537,7 +545,9 @@ def coverage_map(
         candidates = _candidates(
             model, src, sim.early.method, sim.early.max_order, sim.early.rays, threads
         )
+        diffraction = edges.diffraction(sim.early.diffraction, src, room, source.name, orientation)
         early = []
+        diffracted = 0
         for k in range(len(grid)):
             paths = early_stage.find_paths(
                 model,
@@ -550,7 +560,13 @@ def coverage_map(
                 directivity=directivity,
                 orientation=orientation,
             )
+            if diffraction is not None:
+                paths = diffraction.apply(grid.points[k], paths, float(cutoff[k]))
+                diffracted += int(paths.diffracted.sum())
             early.append((paths.delay_s, paths.energy))
+        if diffraction is not None:
+            info["edges"] = float(len(diffraction.edges))
+            info["diffracted_paths"] = float(diffracted)
         info["early_s"] = time.perf_counter() - t
 
         t = time.perf_counter()

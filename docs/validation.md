@@ -37,6 +37,13 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   convolution against direct convolution (float32 and float64 precision), resampling
   of tones within 1e-3 of the exact signal up to 15 kHz with nothing above the new
   Nyquist frequency left, and playback through a simulated sound card block by block;
+- edge diffraction: the UTD coefficient against Sommerfeld's exact solution for a
+  rigid half-plane (to 1e-8, also exactly on the shadow and reflection boundaries) and
+  against the exact eigenmode series for wedges open over 225° to 315° (within
+  0.25 dB); a thin screen against Maekawa's chart (within 1.5 dB), the same from either
+  side; and the early level across the shadow boundary of an L-shaped room, in
+  millimetre steps, continuous within 0.25 dB with first-order reflections where
+  specular paths alone drop by more than 5 dB;
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
@@ -234,8 +241,11 @@ its peak (single precision).
 - **Measurements.** No simulated room has been compared with measurements of the real
   one yet. The BRAS database (Aspöck et al., TU Berlin) has measured rooms with acoustic
   material data, but its models are SketchUp files that need exporting to OBJ first.
-- **Wave effects.** The simulation is geometric: no diffraction, no room modes. Below the Schroeder frequency of a room (about
-  2000 √(T/V) Hz) its results are a statistical average, not the response of one point.
+- **Wave effects.** The simulation is geometric. Edge diffraction is modelled (UTD, for
+  the direct sound and first-order reflections) and checked against exact solutions,
+  but not against measurements in rooms; room modes are not modelled. Below the
+  Schroeder frequency of a room (about 2000 √(T/V) Hz) its results are a statistical
+  average, not the response of one point.
 - **Source directivity** was not part of the cross-check (both programs ran
   omnidirectional sources). The tests check that every pattern keeps the sound power,
   that SOFA and CSV data come out in the source's frame, and that the direct sound,

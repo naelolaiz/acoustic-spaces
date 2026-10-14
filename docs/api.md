@@ -50,6 +50,12 @@ Simulation above; the module also has the parameters a map shows and the A-weigh
    :exclude-members: CoverageMap, CoverageResult, MapGrid, coverage_map, map_grid
 ```
 
+## Edge diffraction
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.engine.diffraction
+```
+
 ## Parameters, air and impulse responses
 
 ```{eval-rst}

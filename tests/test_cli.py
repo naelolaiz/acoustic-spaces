@@ -71,7 +71,7 @@ def test_export_for_blender(tmp_path: Path, capsys: pytest.CaptureFixture[str]) 
     assert main([*args, "--count", "20", "--duration", "30", "--frames", "4"]) == 0
     printed = capsys.readouterr().out
     assert "3 surfaces, 1 sources, 1 listeners" in printed
-    assert "7 specular paths from talker to seat-a: 1 of order 0, 6 of order 1" in printed
+    assert "7 paths from talker to seat-a: 1 of order 0, 6 of order 1" in printed
     assert "20 particles from talker: 30 ms of sound over 1.2 s (29 frames at 24 fps)" in printed
     assert out.read_bytes()[:4] == b"glTF"
     assert main(["export", str(SHOEBOX), str(out), "--particles", "--source", "piano"]) == 1

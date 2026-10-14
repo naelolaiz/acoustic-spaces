@@ -17,6 +17,21 @@
 - The scene's `coverage:` settings (surfaces, height, spacing, rays, noise), with a form
   in the editor; the concert hall, lecture hall and church examples set them.
 
+**Edge diffraction** (`simulation.early.diffraction`, `--diffraction`)
+
+- Sound bends round edges with the uniform theory of diffraction (UTD), averaged over
+  each octave band: the direct sound and first-order reflections (`first_order`, the
+  default), the direct sound only (`direct`), or none.
+- Edges are found in the model: convex corners with more than 195° of open air and the
+  free edges of thin screens; collinear pieces of one edge are joined.
+- In the shadow a diffracted path carries the sound; on the lit side the specular path
+  next to the boundary takes the interference, so levels stay continuous across shadow
+  and reflection boundaries.
+- Simulations, coverage maps, `view --paths`, the Blender export and the editor (a
+  Diffraction choice on the Simulation page) all use it; diffracted paths are drawn in
+  their own colour and counted in the results.
+- A new example, `gallery`: an L-shaped room with a listener round the corner.
+
 **Also**
 
 - `speech_transmission_index` and `modulation_transfer` in `acoustic_spaces.parameters`.

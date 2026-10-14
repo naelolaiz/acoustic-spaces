@@ -77,6 +77,7 @@ acoustic-spaces validate examples/shoebox/scene.yaml   # errors exit with status
 acoustic-spaces inspect examples/shoebox/scene.yaml    # geometry, materials, RT estimates
 acoustic-spaces view examples/shoebox/scene.yaml       # 3D window; --screenshot out.png
 acoustic-spaces view examples/shoebox/scene.yaml --paths --max-order 2  # reflection paths
+acoustic-spaces view examples/gallery/scene.yaml --paths --listener "round the corner"  # diffraction
 acoustic-spaces animate examples/lecture_hall/scene.yaml               # sound particles
 acoustic-spaces export examples/concert_hall/scene.yaml hall.glb --paths --particles  # Blender
 acoustic-spaces materials carpet                       # search the material database
@@ -230,6 +231,7 @@ the scene's (+z up, metres).
 | `concert_hall` | A 32 × 20 × 15 m shoebox hall with a raised stage and upholstered seats; two sources on stage, three seats in the stalls. |
 | `studio` | A 6 × 4.5 × 3 m control room with side panels, a diffuser and stereo loudspeakers at ±30°. |
 | `church` | A stone nave with an apse, 18 m high, with about six seconds of reverberation. |
+| `gallery` | An L-shaped gallery: one listener sees the guide, the other stands round the corner and hears the guide by [edge diffraction](#edge-diffraction). |
 
 `acoustic-spaces examples` lists them with where they are installed, and
 `acoustic-spaces examples --copy my-rooms` copies them to a folder you can edit. From
@@ -352,7 +354,8 @@ default; cost grows with `rays`, not with the number of surfaces) or from every
 sequence of planes (`method: image_sources`; complete, but grows as planes to the
 power of the order). Every candidate is then traced back from the listener, so the
 paths found are exact either way, including paths that reflect exactly on an edge
-or in a corner.
+or in a corner. Sound that bends round edges is added to them (see
+[Edge diffraction](#edge-diffraction)).
 
 **Late reverberation** (`simulation.late`) is either:
 
@@ -397,6 +400,51 @@ and G. `Response.parameters()` computes them from the simulated energies;
 before it has decayed is extended by its fitted decay rate.
 Air absorption follows ISO 9613-1 for the scene's temperature, humidity and pressure.
 
+### Edge diffraction
+
+Sound bends round the edges of walls, screens and balconies: a listener round a corner
+still hears the source, quieter and duller, and the level does not drop off a cliff
+where a wall cuts a path off. `simulation.early.diffraction` adds this to the early
+part with the uniform theory of diffraction (UTD, Kouyoumjian and Pathak), averaged over
+each octave band:
+
+- `first_order` (default): the direct sound and the first-order reflections bend round
+  edges, with the reflection before or after the edge.
+- `direct`: only the direct sound.
+- `none`: specular paths only.
+
+The edges are found in the model: corners where two faces meet with more than 195° of
+open air round them (the inside corner of an L-shaped room, the front of a stage or a
+balcony) and the free edges of thin screens. Each source and listener get the shortest
+path over each edge they can both see. In the shadow of the edge that path carries the
+diffracted sound; on the lit side, near the boundary, it changes the energy of the
+specular path it borders. Across a boundary the level is continuous: the tests cross one
+in an L-shaped room in millimetre steps, with first-order reflections, and the level
+changes by less than 0.25 dB where specular paths alone drop by more than 5 dB. The
+diffraction coefficient matches the exact solutions for a half-plane and for wedges
+(within 0.25 dB), and a thin screen matches Maekawa's chart within 1.5 dB.
+
+```sh
+acoustic-spaces simulate examples/gallery/scene.yaml --out gallery
+acoustic-spaces view examples/gallery/scene.yaml --paths --listener "round the corner"
+acoustic-spaces simulate examples/gallery/scene.yaml --out plain --diffraction none
+```
+
+![Early level along a walk round the corner of the gallery example, with and without diffraction](docs/images/diffraction.png)
+
+The figure walks round the corner of the `gallery` example, away from the guide. Without
+diffraction (dotted) the direct sound and each reflection stop at the line where the
+corner hides them; with it, the level falls smoothly, by more at high frequencies.
+Paths with two or more reflections still stop at their boundaries: with `max_order: 3`
+in the gallery, the early energy still steps by up to 3 dB where the reflections off the
+long wall go out of sight. The late part is unchanged, since its
+scattered rays already find their way round corners.
+
+`view --paths` and the Blender export draw diffracted paths in their own colour, the
+response's `early.diffracted` marks them, and `simulate` reports how many there are. The
+cost grows with the number of edges: in a hall with about 100 edges, `first_order` adds
+about 17 ms per source and listener.
+
 ### Validation
 
 The tests check the simulation against theory on Linux, macOS and Windows: exact image
@@ -404,7 +452,8 @@ sources in a box, Eyring's reverberation time and Barron's revised theory in a d
 box, ISO 3382-1 parameters of known decays, spatial encoders against closed forms, the
 convolvers against direct convolution, and sweep measurements of synthetic rooms. A
 cross-check against pyroomacoustics in four rooms agrees within 6 % on T30 where both
-programs model the same physics, and shows where their scattering models part ways.
+programs model the same physics, and shows where their scattering models part ways. Edge diffraction is checked against
+the exact solutions for a half-plane and for wedges, and against Maekawa's chart.
 The [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
 has the details, the numbers and the scripts to reproduce them.
 
@@ -606,8 +655,8 @@ src/acoustic_spaces/   Python package
   materials/           material database and coefficient files
   directivity.py       source directivity: patterns per band, SOFA and CSV balloons
   room.py              a scene with its geometry loaded: materials per face, checks
-  engine/              early reflections, late reverberation, responses, simulate(),
-                       coverage maps
+  engine/              early reflections, edge diffraction, late reverberation,
+                       responses, simulate(), coverage maps
   air.py               ISO 9613-1 air absorption and speed of sound
   synthesis.py         octave filter bank and impulse response synthesis
   spatial/             Ambisonics, VBAP loudspeaker layouts, HRTFs, spatial rendering
@@ -648,9 +697,9 @@ v2 (version 1.1.0 has the first three):
 - [ ] CLF loudspeaker files, once their specification is available.
 - [ ] Editing geometry in the editor: drawing rooms and moving points by dragging.
 - [ ] Head tracking.
-- [ ] Diffraction.
 - [ ] A wave-based solver for low frequencies.
 - [x] Coverage maps: parameters and STI over the audience area.
+- [x] Edge diffraction (UTD) of the direct sound and first-order reflections.
 
 ## Contributing
 

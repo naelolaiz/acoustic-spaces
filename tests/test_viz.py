@@ -66,6 +66,37 @@ def test_paths_are_drawn_by_order() -> None:
     plotter.close()
 
 
+def test_diffracted_paths_are_drawn_apart() -> None:
+    from acoustic_spaces import Scene
+    from acoustic_spaces.engine import early_paths
+    from acoustic_spaces.viz import DIFFRACTED_COLOUR, path_groups, plot_paths
+
+    scene = Scene.model_validate(
+        {
+            "geometry": {
+                "floor_plan": [[0, 0], [10, 0], [10, 4], [4, 4], [4, 10], [0, 10]],
+                "height": 3.0,
+            },
+            "materials": {"m": {"absorption": [0.3] * 8}},
+            "default_material": "m",
+            "sources": [{"name": "s", "position": [8.0, 2.0, 1.5]}],
+            "listeners": [{"name": "l", "position": [2.0, 8.0, 1.5]}],
+        }
+    )
+    paths = early_paths(Room.from_scene(scene), max_order=1)
+    groups = path_groups(paths)
+    assert groups[-1].label == "diffracted" and groups[-1].colour == DIFFRACTED_COLOUR
+    assert groups[-1].mask.sum() == paths.diffracted.sum() > 0
+    assert not any(g.mask[paths.diffracted].any() for g in groups[:-1])
+    assert len(path_groups(paths, max_order=0)[-1].mask.nonzero()[0]) == np.sum(
+        paths.diffracted & (paths.order == 0)
+    )
+    plotter = pv.Plotter(off_screen=True)
+    legend = plot_paths(paths, plotter)
+    assert legend[-1] == [f"diffracted ({paths.diffracted.sum()})", DIFFRACTED_COLOUR]
+    plotter.close()
+
+
 def test_response_plot(tmp_path: Path) -> None:
     from acoustic_spaces import simulate
     from acoustic_spaces.viz import plot_response
