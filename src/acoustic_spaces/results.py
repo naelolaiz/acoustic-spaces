@@ -4,17 +4,22 @@ and the editor's Export produce.
 For every (source, listener) pair, one WAV file per output format
 (``<source>__<listener>.wav`` for mono, ``<source>__<listener>.<format>.wav`` for the
 others), and for the whole run ``parameters.json``: the settings, run details and the
-ISO 3382-1 parameters of every response. ``acoustic-spaces auralize`` reads that folder.
+ISO 3382-1 parameters of every response (with IACC when a binaural response is written),
+its STI, STIPA and U50, and its echo criteria. ``acoustic-spaces auralize`` reads that
+folder.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
+import math
 import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.audio import write_wav
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 
@@ -71,6 +76,9 @@ def write_results(
     peak = max((float(abs(ir).max(initial=0.0)) for ir in irs.values()), default=0.0)
     gain = 10.0 ** (-1.0 / 20.0) / peak if normalize and peak > 0 else 1.0
 
+    scene = result.room.scene
+    levels = {s.name: s.level_db for s in scene.sources}
+    noise_db = scene.coverage.noise_db if scene.coverage is not None else None
     report = {
         "scene": result.room.scene.name,
         "bands_hz": list(OCTAVE_BANDS_HZ),
@@ -90,6 +98,17 @@ def write_results(
             mask = fmt.channel_mask() if hasattr(fmt, "channel_mask") else None
             write_wav(out / name, irs[(source, listener), label] * gain, sample_rate, mask)
             written.append({"format": label, "wav": name, "channels": fmt.channel_names})
+        params = response.parameters()
+        binaural = [fmt.label for fmt in formats if fmt.label == "binaural"]
+        if binaural:
+            ears = irs[(source, listener), binaural[0]]
+            params = dataclasses.replace(
+                params, **iso3382.interaural_cross_correlation(ears, sample_rate)
+            )
+        if ((source, listener), "mono") in irs:
+            mono = irs[(source, listener), "mono"][:, 0]
+        else:
+            mono = response.impulse_response(sample_rate)
         entry = {
             "source": source,
             "listener": listener,
@@ -97,7 +116,11 @@ def write_results(
             "direct_delay_s": response.direct_delay_s,
             "early_paths": len(response.early),
             "diffracted_paths": int(response.early.diffracted.sum()),
-            "parameters": response.parameters().as_dict(),
+            "parameters": params.as_dict(),
+            "speech": response.speech(
+                levels.get(source, 94.0), noise_db, parameters=params
+            ).as_dict(),
+            "echo": _echo(mono, sample_rate),
         }
         if plots:
             try:
@@ -113,6 +136,18 @@ def write_results(
         report["responses"].append(entry)
     (out / REPORT_FILE).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
+
+
+def _echo(ir, sample_rate: int) -> dict:
+    """The echo criteria of a mono impulse response, for the report."""
+    out = {}
+    for kind in iso3382.ECHO_CRITERIA:
+        value, at = iso3382.echo_criterion(ir, sample_rate, kind)
+        out[kind] = {
+            "ec": value if math.isfinite(value) else None,
+            "at_s": at if math.isfinite(at) else None,
+        }
+    return out
 
 
 __all__ = ["REPORT_FILE", "file_name", "response_stem", "write_results"]

@@ -221,13 +221,23 @@ class WaveResponse:
         g = wave_gains(n_fft, sample_rate, self.bands).sum(axis=0)
         return _filter(signals, np.sqrt(1.0 - g**2) if late else 1.0 - g, n_fft)
 
-    def energy(self, time_step: float, slots: int) -> np.ndarray:
+    def energy(
+        self,
+        time_step: float,
+        slots: int,
+        axis: np.ndarray | None = None,
+        exponent: int = 2,
+    ) -> np.ndarray:
         """Energy per band and time slot (bands, slots), as the ray tracer counts it: the
         energy of the pressure through each octave band's filter (those of the analysis
         of measured responses, :func:`acoustic_spaces.parameters.octave_filter_gains`)
         over that filter's share of the spectrum. The filters spread each arrival a
         little both ways in time; what they spread to before emission counts in the
-        first slot."""
+        first slot.
+
+        With ``axis`` (a unit vector in room coordinates), that of a figure of eight
+        facing it instead, from X, Y and Z: with ``exponent`` 1, the magnitude of its
+        product with the pressure."""
         from acoustic_spaces.parameters import octave_filter_gains
 
         out = np.zeros((self.bands, slots))
@@ -243,7 +253,12 @@ class WaveResponse:
             padded = np.concatenate([np.zeros(lead), self.signals[k, :, 0]])
             pressure = _filter(padded, gain, n_fft)
             share = float((gain**2 * weights).sum() / n_fft)
-            energy = pressure[keep] ** 2 / (synthesis.ENERGY_TO_IR * share)
+            power = pressure[keep] ** 2
+            if axis is not None:
+                figure8 = np.concatenate([np.zeros(lead), self.signals[k, :, 1:] @ axis])
+                side = _filter(figure8, gain, n_fft)[keep]
+                power = side**2 if exponent == 2 else np.abs(side * pressure[keep])
+            energy = power / (synthesis.ENERGY_TO_IR * share)
             out[b] = np.bincount(slot[keep], energy, minlength=slots)[:slots]
         return out
 

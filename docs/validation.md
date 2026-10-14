@@ -32,6 +32,17 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   and splitting or thinning out every ray keeps the energy of plain ray tracing;
 - every ISO 3382-1 parameter on synthetic exponential decays, and the air
   absorption against the ISO 9613-1 table;
+- the further parameters against responses whose values are known: LF and LFC of one
+  reflection from the side, from 45°, from behind and from above, exact from the
+  echogram and within 0.01 from W and Y impulse responses; a third of diffuse late
+  energy lateral (a half for LFC); LJ as the G of the late lateral energy; the T30 of
+  each axis when front-back sound decays in 2 s and the rest in 1 s, exact from the
+  echogram and within 5 % from noise; IACC of 1 for equal ears and ears 0.5 ms apart,
+  and below 0.15 from 2 kHz for unrelated ones; stage support of known energies to
+  rounding; STIPA of exponential decays against Houtgast's closed form within 0.002,
+  and within 0.01 of the STI; U50 against its definition; and the echo criteria of an
+  echo as loud as the direct sound 100 ms later within 10 % of the jump of the centre
+  time, and below the 10 % audibility mark for a smooth decay;
 - spatial outputs: SN3D spherical harmonics against closed forms and orthogonality,
   VBAP gains of unit power that point at the panned direction, the direct sound's
   direction in first-order Ambisonics, the mono energy kept by panned layouts (direct
@@ -401,7 +412,8 @@ its peak (single precision).
 ## Not validated yet
 
 - **More measured rooms.** Two rooms have been compared with measurements, by their
-  ISO 3382-1 parameters. G, the spatial outputs (BRAS also has binaural responses) and
+  ISO 3382-1 parameters. G, the spatial outputs and the parameters that need directions
+  (LF, IACC, stage support, directional decay; BRAS also has binaural responses) and
   BRAS's auditorium, CR4, whose SketchUp file no free reader opens, have not.
 - **Wave effects.** Above the wave solver's bands the simulation is geometric. Edge
   diffraction is modelled (UTD, for the direct sound and first-order reflections) and
