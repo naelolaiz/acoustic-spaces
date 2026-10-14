@@ -234,6 +234,15 @@ def test_levels_are_continuous_across_the_shadow_boundary() -> None:
     assert first.max() < 0.25
 
 
+def test_levels_are_continuous_across_a_reflection_boundary() -> None:
+    # The reflection off the wall y = 4 (x > 4) ends behind the corner on a line through
+    # (2, 3), where the direct sound carries on; the two do not interfere there either.
+    room = _l_room([[2.0, 3.0 + d, 1.5] for d in (-1e-4, 1e-4)])
+    for order, mode in ((1, "direct"), (2, "first_order")):
+        step = np.diff(_levels(room, max_order=order, diffraction=mode), axis=0)
+        assert np.abs(step).max() < 0.05
+
+
 def test_shadow_gets_a_diffracted_path_and_lit_side_barely_changes() -> None:
     room = _l_room([[2.0, 8.0, 1.5], [9.0, 1.0, 1.2]])
     shadow = early_paths(room, listener="l0", max_order=0, diffraction="direct")

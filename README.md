@@ -458,7 +458,9 @@ path over each edge they can both see. In the shadow of the edge that path carri
 diffracted sound; on the lit side, near the boundary, it changes the energy of the
 specular path it borders. Across a boundary the level is continuous: the tests cross one
 in an L-shaped room in millimetre steps, with first-order reflections, and the level
-changes by less than 0.25 dB where specular paths alone drop by more than 5 dB. The
+changes by less than 0.25 dB where specular paths alone drop by more than 5 dB; where a
+reflection off one of the corner's walls ends and the direct sound carries on, by less
+than 0.05 dB. The
 diffraction coefficient matches the exact solutions for a half-plane and for wedges
 (within 0.25 dB), and a thin screen matches Maekawa's chart within 1.5 dB.
 

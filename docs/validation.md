@@ -47,7 +47,8 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   0.25 dB); a thin screen against Maekawa's chart (within 1.5 dB), the same from either
   side; and the early level across the shadow boundary of an L-shaped room, in
   millimetre steps, continuous within 0.25 dB with first-order reflections where
-  specular paths alone drop by more than 5 dB;
+  specular paths alone drop by more than 5 dB, and across the boundary of a reflection
+  off one of the corner's walls within 0.05 dB;
 - the wave solver: the modes of a rigid box (within 0.6 Hz), the reflection off the end
   of a duct for four admittances (within 0.005, and below 0.05 for a matched end), the
   free-field level of the 63 Hz band (within 1 dB of the rays), the direction of the
