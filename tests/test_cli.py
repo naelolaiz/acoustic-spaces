@@ -1,4 +1,5 @@
 import importlib.util
+import math
 from pathlib import Path
 
 import pytest
@@ -113,6 +114,15 @@ def test_simulate_writes_responses_and_parameters(
     (response,) = report["responses"]
     assert response["early_paths"] == 63
     assert len(response["parameters"]["c80"]) == 8
+    # The listener 4 m away: lateral fractions, no stage support; IACC from the scene's
+    # binaural output.
+    params = response["parameters"]
+    assert [v is None for v in params["lf"]] == [v is None for v in params["c80"]]
+    assert params["lf"][4] is not None and params["iacc_e"][4] is not None
+    assert all(v is None for v in params["st_early"])
+    assert 0.0 < response["speech"]["sti"] < 1.0 and 0.0 < response["speech"]["stipa"] < 1.0
+    assert set(response["echo"]) == {"speech", "music"}
+    assert "LF " in stdout and "STI 0." in stdout and "echo criterion" in stdout
 
 
 def test_simulate_checks_the_options_that_override_the_scene(
@@ -185,6 +195,7 @@ def test_simulate_writes_spatial_outputs(
     assert not (out / "talker__seat-a.wav").exists()
     (response,) = json.loads((out / "parameters.json").read_text(encoding="utf-8"))["responses"]
     assert [o["format"] for o in response["outputs"]] == list(channels)
+    assert all(0.0 < v <= 1.0 for v in response["parameters"]["iacc_e"])  # from the ears
     assert response["outputs"][2]["channels"] == ["L", "R", "C", "Ls", "Rs"]
     assert main([*args, "--output", "loudspeakers:9.1"]) == 1
     assert "unknown layout" in capsys.readouterr().err
@@ -296,6 +307,72 @@ def test_deconvolve_rejects_a_mismatched_sample_rate(
     args = ["deconvolve", str(tmp_path / "rec.wav"), "--sweep", str(tmp_path / "sweep.json")]
     assert main([*args, "--out", str(tmp_path / "ir.wav")]) == 1
     assert "44100 Hz" in capsys.readouterr().err
+
+
+def _arrivals(tmp_path: Path) -> Path:
+    """First-order AmbiX: the direct sound from the front, a reflection from the left
+    20 ms later at half its energy, and a tail decaying in 0.5 s from all around."""
+    import numpy as np
+
+    from acoustic_spaces.audio import write_wav
+
+    fs, rng = 48_000, np.random.default_rng(0)
+    t = np.arange(fs) / fs
+    tail = rng.standard_normal((fs, 3)) * np.exp(-6.9 * t / 0.5)[:, None] * 0.02
+    tail[: int(0.02 * fs)] = 0.0
+    xyz = tail / np.sqrt(3.0)
+    w = tail.sum(axis=1) / np.sqrt(3.0)
+    w[480] += 1.0
+    xyz[480, 0] += 1.0
+    w[1440] += math.sqrt(0.5)
+    xyz[1440, 1] += math.sqrt(0.5)
+    path = tmp_path / "ambix.wav"
+    write_wav(path, np.column_stack([w, xyz[:, 1], xyz[:, 2], xyz[:, 0]]), fs)
+    return path
+
+
+def test_analyze_ambisonic_binaural_and_lateral_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    path = _arrivals(tmp_path)
+    report = tmp_path / "ambix.json"
+    assert main(["analyze", str(path), "--ambisonic", "--stage", "--json", str(report)]) == 0
+    out = capsys.readouterr().out
+    assert "ambix.wav, W" in out and "T30_X (s)" in out and "ST_early (dB)" in out
+    (channel,) = json.loads(report.read_text(encoding="utf-8"))["channels"]
+    lf = channel["parameters"]["lf"][4]  # 1 kHz
+    assert lf == pytest.approx(0.5 / 1.5, abs=0.05)
+    assert 0.0 < channel["speech"]["sti"] <= 1.0 and channel["echo"]["speech"]["ec"] > 0
+    # The same W with its figure of eight as a separate channel.
+    assert main(["analyze", str(path), "--lateral", "2", "--json", str(report)]) == 0
+    assert "channel 1" in capsys.readouterr().out
+    (again,) = json.loads(report.read_text(encoding="utf-8"))["channels"]
+    assert again["parameters"]["lf"] == channel["parameters"]["lf"]
+    # Two of the channels as ears.
+    assert main(["analyze", str(path), "--binaural", "--json", str(report)]) == 0
+    assert "left ear" in capsys.readouterr().out
+    ears = json.loads(report.read_text(encoding="utf-8"))["channels"]
+    assert len(ears) == 2 and ears[0]["parameters"]["iacc_e"] == ears[1]["parameters"]["iacc_e"]
+    for options, message in (
+        (["--ambisonic", "--channel", "1"], "--channel does not go with --ambisonic"),
+        (["--lateral", "9"], "lateral channel"),
+    ):
+        assert main(["analyze", str(path), *options]) == 1
+        assert message in capsys.readouterr().err
+
+
+def test_analyze_ambisonic_needs_four_channels(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import numpy as np
+
+    from acoustic_spaces.audio import write_wav
+
+    write_wav(tmp_path / "stereo.wav", np.eye(4800, 2), 48_000)
+    assert main(["analyze", str(tmp_path / "stereo.wav"), "--ambisonic"]) == 1
+    assert "--ambisonic needs 4 channels, the file has 2" in capsys.readouterr().err
 
 
 def test_deconvolve_and_analyze_report_unreadable_files(

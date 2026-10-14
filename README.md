@@ -110,19 +110,25 @@ level or by reflection order. It opens a window with a time slider, or saves a G
 
 `simulate` writes impulse responses for every source and listener in each format the
 scene's `outputs` list (`results/talker__seat-a.wav` in mono, `.binaural.wav`,
-`.ambix3.wav`, `.5.0.wav` and so on, 32-bit float), `parameters.json` with every
-ISO 3382-1 parameter per octave band, and with `--plot` an echogram, decay curves and a
-map of arrival directions as PNG. `--output ambisonics:3` (repeatable) picks formats on
-the command line. It prints the parameters as it goes:
+`.ambix3.wav`, `.5.0.wav` and so on, 32-bit float), `parameters.json` with the room
+acoustic parameters of every response per octave band, its STI and its echo criteria,
+and with `--plot` an echogram, decay curves and a map of arrival directions as PNG.
+`--output ambisonics:3` (repeatable) picks formats on the command line. It prints the
+parameters as it goes:
 
 ```
 talker -> seat-a: direct sound at 11.7 ms, 63 early paths
              63 Hz  125 Hz  250 Hz  500 Hz   1 kHz   2 kHz   4 kHz   8 kHz
-EDT (s)      1.811   1.797   1.703   1.419   1.306   1.200   0.960   0.532
-T30 (s)      2.953   2.918   2.840   2.369   2.280   2.101   1.648   0.849
-C80 (dB)       1.3     1.3     1.9     3.0     3.9     4.7     6.0     9.4
-G (dB)        22.8    22.8    22.1    21.0    19.3    18.1    16.9    15.5
+EDT (s)      1.823   1.811   1.720   1.429   1.330   1.231   0.963   0.529
+T30 (s)      3.093   3.070   3.004   2.494   2.424   2.206   1.591   0.860
+C80 (dB)       1.3     1.3     1.8     2.9     3.9     4.6     5.9     9.3
+G (dB)        22.9    22.9    22.2    21.0    19.3    18.1    16.9    15.5
+LF           0.332   0.332   0.335   0.337   0.344   0.346   0.343   0.327
+IACC_E       0.973   0.970   0.843   0.473   0.496   0.629   0.521   0.571
+T30_X (s)    3.336   3.315   3.297   2.662   2.609   2.390   1.656   0.859
+T30_Z (s)    2.657   2.638   2.566   2.106   2.034   1.886   1.447   0.809
 ...
+STI 0.60 (STIPA 0.61), echo criterion 0.68 for speech (echo above 1.0), 0.69 for music (echo above 1.8)
 ```
 
 With `--plot`, each response gets an echogram (the late energy per millisecond and the
@@ -484,6 +490,28 @@ and G. `Response.parameters()` computes them from the simulated energies;
 before it has decayed is extended by its fitted decay rate; one that ends before it
 has decayed by 20 dB leaves too much to that estimate, and all its parameters are NaN.
 Air absorption follows ISO 9613-1 for the scene's temperature, humidity and pressure.
+
+The directions the sound arrives from give more of them:
+
+- LF, LFC and LJ (ISO 3382-1, annex A), from a figure of eight with its null on the
+  source: the share of the early energy that arrives from the sides, which widens the
+  source, and the level of the late lateral sound, which envelops the listener.
+- IACC early and late (annex B), from the binaural response when the scene writes one.
+- Stage support ST early (Gade's ST1) and ST late (annex C) for listeners within 1.5 m
+  of a source, where musicians hear themselves and each other.
+- T30 of figures of eight facing forward, left and up from the listener: where sound
+  keeps running between two hard walls, the decay along that axis is longer. In the
+  example above, front to back is the room's 8 m length.
+- STI and STIPA (IEC 60268-16) and U50, at the level the source's `level_db` gives and
+  the background noise of `coverage.noise_db`, as the coverage maps take them; and the
+  echo criteria of Dietsch and Kraak for speech and music.
+
+The echogram adds the arrivals in energy, as ODEON and CATT do. A figure of eight on
+the centre line of a symmetric room hears the two side walls' reflections arrive
+together with opposite signs, and they cancel in the rendered Ambisonics response.
+LF read from that response with `analyze --ambisonic` is then lower than the
+echogram's; off the centre line the two agree on average, band by band within the
+interference of reflections close in time.
 
 ### Edge diffraction
 
@@ -910,6 +938,11 @@ How it works:
 - G needs the source's free-field level: `--free-field ff.wav --distance 3` uses a
   measurement of the same source in free field (or with reflections windowed out),
   and `--reference-energy 0.01` suits responses made by `simulate`.
+- `analyze` also prints the STI and STIPA of the room alone and the echo criteria.
+  `--lateral 2` takes channel 2 as a figure of eight with its null on the source, for
+  LF, LFC and LJ; `--ambisonic` reads first-order AmbiX (W, Y, Z, X) facing the source,
+  for those and the T30 of X, Y and Z; `--binaural` takes two channels as the ears and
+  adds IACC; `--stage` adds stage support for a response measured 1 m from the source.
 
 ![analyze on a measured response: the level with each band's noise floor from where the decay meets it, and the decay curves with the noise taken out](docs/images/measured.png)
 
@@ -1070,7 +1103,8 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
   (`acoustic-spaces compare`).
 - [x] Validation against measured rooms: two rooms of the BRAS benchmark.
 - [x] SketchUp files read directly (experimental, the `sketchup` extra).
-- [ ] More parameters: LF, LFC, IACC, ST1, ST early and late, U50, STIPA, echo criteria.
+- [x] More parameters: LF, LFC, LJ, IACC, ST early and late, U50, STIPA, echo criteria,
+  directional decay.
 - [ ] Scattering that follows surface size and frequency, and third-octave bands.
 - [ ] Sources with their own spectra, delay and EQ, line and surface sources, arrays.
 - [ ] Sound through walls and between coupled rooms.

@@ -535,6 +535,10 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, m
     results = window.results
     assert results.pair() == ("left-speaker", "mix-position")
     assert results.table.item(1, 4).text() not in ("", "–")  # T20 at 1 kHz
+    from acoustic_spaces.gui.results_view import ROWS
+
+    shown = [name for row, (name, _, _) in enumerate(ROWS) if not results.table.isRowHidden(row)]
+    assert "lf" in shown and "st_early" not in shown  # the speakers are 2 m away
     for tab in range(results.tabs.count()):
         results.tabs.setCurrentIndex(tab)
     results.paths.setChecked(True)

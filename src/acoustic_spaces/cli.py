@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import math
 import sys
@@ -482,7 +483,11 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         plots=args.plot,
         progress=lambda message: print(message, file=sys.stderr),
     )
-    for (source, listener), response in result.responses.items():
+    from acoustic_spaces.parameters import RoomParameters
+
+    for entry, ((source, listener), response) in zip(
+        report["responses"], result.responses.items(), strict=True
+    ):
         wave = ""
         if response.wave is not None:
             top = OCTAVE_BANDS_HZ[response.wave.bands - 1]
@@ -491,7 +496,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             f"\n{source} -> {listener}: direct sound at {response.direct_delay_s * 1e3:.1f} ms, "
             f"{_early_text(response.early)}{wave}"
         )
-        print(response.parameters().table())
+        print(RoomParameters.from_dict(entry["parameters"]).table())
+        print(_speech_text(entry["speech"], entry["echo"]))
     files = sum(len(entry["outputs"]) for entry in report["responses"])
     print(f"\nwrote {files} impulse response files and {REPORT_FILE} to {out}")
     if report["peak"] > 1.0:
@@ -501,6 +507,26 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     return 0
+
+
+def _number(value, fmt: str = ".2f") -> str:
+    return "-" if value is None else f"{value:{fmt}}"
+
+
+def _speech_text(speech: dict | None, echo: dict) -> str:
+    """One line: STI and STIPA (when given), and the echo criteria with the values at
+    which half of listeners hear an echo."""
+    from acoustic_spaces.parameters import ECHO_CRITERIA
+
+    parts = []
+    if speech is not None:
+        parts.append(f"STI {_number(speech['sti'])} (STIPA {_number(speech['stipa'])})")
+    criteria = ", ".join(
+        f"{_number(echo[kind]['ec'])} for {kind} (echo above {ECHO_CRITERIA[kind][3][1]:.1f})"
+        for kind in ECHO_CRITERIA
+    )
+    parts.append(f"echo criterion {criteria}")
+    return ", ".join(parts)
 
 
 def _path_counts(paths) -> str:
@@ -728,18 +754,42 @@ def _reference_energy(args: argparse.Namespace, sample_rate: int, side: str = ""
     return free_field_reference(data[:, 0], rate, distance, filters=args.filters)
 
 
-def _analysis(ir, sample_rate: int, args: argparse.Namespace, reference) -> dict:
-    """Print and return the parameters of one impulse response."""
-    from acoustic_spaces.parameters import band_decay, from_impulse_response
+def _analysis(ir, sample_rate: int, args: argparse.Namespace, reference, **more) -> dict:
+    """Print and return the parameters of one impulse response; ``more`` are the lateral
+    and directional responses for them, and ``iacc`` the IACC of the ears it is one of."""
+    from acoustic_spaces.parameters import (
+        ECHO_CRITERIA,
+        band_decay,
+        echo_criterion,
+        from_impulse_response,
+        sti_from_impulse_response,
+    )
 
+    iacc = more.pop("iacc", None)
     noise = not args.no_noise
-    params = from_impulse_response(ir, sample_rate, reference, filters=args.filters, noise=noise)
+    params = from_impulse_response(
+        ir, sample_rate, reference, filters=args.filters, noise=noise, stage=args.stage, **more
+    )
+    if iacc is not None:
+        params = dataclasses.replace(params, **iacc)
     decay = band_decay(ir, sample_rate, filters=args.filters, noise=noise)
     print(f"direct sound at {decay.onset_s * 1e3:.1f} ms")
     if noise:
         ranges = [f"{r:6.0f}" if r != float("inf") else f"{'-':>6}" for r in decay.decay_range_db]
         print(f"{'decay range (dB)':<18}" + "".join(ranges))
     print(params.table())
+    speech = {
+        name: sti_from_impulse_response(
+            ir, sample_rate, filters=args.filters, noise=noise, stipa=name == "stipa"
+        )
+        for name in ("sti", "stipa")
+    }
+    echo = {}
+    for kind in ECHO_CRITERIA:
+        value, at = echo_criterion(ir, sample_rate, kind, filters=args.filters)
+        finite = value == value
+        echo[kind] = {"ec": value if finite else None, "at_s": at if finite else None}
+    print(_speech_text(speech, echo))
     return {
         "onset_s": decay.onset_s,
         "crosspoint_s": (decay.crosspoint / sample_rate).tolist() if noise else None,
@@ -747,6 +797,8 @@ def _analysis(ir, sample_rate: int, args: argparse.Namespace, reference) -> dict
         if noise
         else None,
         "parameters": params.as_dict(),
+        "speech": speech,
+        "echo": echo,
     }
 
 
@@ -764,6 +816,44 @@ def _plot_ir(ir, sample_rate: int, path: Path, title: str, args: argparse.Namesp
     return True
 
 
+def _analysed_channels(data, args: argparse.Namespace) -> list[tuple[int, str, dict]] | None:
+    """The channels ``analyze`` reports (0-based), each with its title and the further
+    responses for its parameters; None after printing why the file does not fit."""
+    from acoustic_spaces.parameters import interaural_cross_correlation
+
+    count = data.shape[1]
+    if args.ambisonic or args.binaural:
+        need, what = (4, "--ambisonic") if args.ambisonic else (2, "--binaural")
+        if count < need:
+            print(f"error: {what} needs {need} channels, the file has {count}", file=sys.stderr)
+            return None
+        if args.channel is not None:
+            print(f"error: --channel does not go with {what}", file=sys.stderr)
+            return None
+    if args.ambisonic:
+        # AmbiX: W, Y, Z, X; the figure of eight with its null on the source is Y.
+        more = {"lateral": data[:, 1], "directional": data[:, [3, 1, 2]]}
+        return [(0, "W", more)]
+    if args.binaural:
+        iacc = interaural_cross_correlation(data[:, :2], args.sample_rate, filters=args.filters)
+        return [(c, ear, {"iacc": iacc}) for c, ear in ((0, "left ear"), (1, "right ear"))]
+    more = {}
+    if args.lateral is not None:
+        column = _channel_index(args.lateral, count, "lateral channel")
+        if column is None:
+            return None
+        more["lateral"] = data[:, column]
+    if args.channel is not None:
+        if _channel_index(args.channel, count, "channel") is None:
+            return None
+        channels = [args.channel - 1]
+    elif args.lateral is not None:
+        channels = [0 if args.lateral != 1 else 1]
+    else:
+        channels = list(range(count))
+    return [(c, f"channel {c + 1}", more) for c in channels]
+
+
 def _cmd_analyze(args: argparse.Namespace) -> int:
     from acoustic_spaces.audio import read_wav
 
@@ -772,23 +862,30 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    channels = range(data.shape[1]) if args.channel is None else [args.channel - 1]
-    if args.channel is not None and _channel_index(args.channel, data.shape[1], "channel") is None:
+    args.sample_rate = sample_rate
+    channels = _analysed_channels(data, args)
+    if channels is None:
         return 1
     try:
         reference = _reference_energy(args, sample_rate)
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    report = {"file": Path(args.ir).name, "bands_hz": list(OCTAVE_BANDS_HZ), "channels": []}
-    for c in channels:
-        print(f"\n{Path(args.ir).name}, channel {c + 1}")
-        entry = {"channel": c + 1, **_analysis(data[:, c], sample_rate, args, reference)}
+    name = Path(args.ir).name
+    report = {"file": name, "bands_hz": list(OCTAVE_BANDS_HZ), "channels": []}
+    for c, title, more in channels:
+        print(f"\n{name}, {title}")
+        try:
+            analysis = _analysis(data[:, c], sample_rate, args, reference, **more)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        entry = {"channel": c + 1, **analysis}
         if args.plot:
             plot = Path(args.plot)
             if len(channels) > 1:
                 plot = plot.with_name(f"{plot.stem}_{c + 1}{plot.suffix}")
-            if _plot_ir(data[:, c], sample_rate, plot, f"{Path(args.ir).name}, ch {c + 1}", args):
+            if _plot_ir(data[:, c], sample_rate, plot, f"{name}, ch {c + 1}", args):
                 print(f"saved {plot}")
         report["channels"].append(entry)
     if args.json:
@@ -1177,7 +1274,9 @@ def _add_sweep_arguments(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--repeats", type=int, default=1, help="sweeps to average (default 1)")
 
 
-def _add_analysis_arguments(parser: argparse.ArgumentParser, references: bool = True) -> None:
+def _add_analysis_arguments(
+    parser: argparse.ArgumentParser, references: bool = True, stage: bool = True
+) -> None:
     group = parser.add_argument_group("analysis")
     group.add_argument(
         "--filters",
@@ -1188,6 +1287,12 @@ def _add_analysis_arguments(parser: argparse.ArgumentParser, references: bool = 
     group.add_argument(
         "--no-noise", action="store_true", help="skip the noise floor detection and correction"
     )
+    if stage:
+        group.add_argument(
+            "--stage",
+            action="store_true",
+            help="stage support too, for a response 1 m from the source",
+        )
     if references:
         _add_reference_arguments(group)
 
@@ -1451,6 +1556,24 @@ def build_parser() -> argparse.ArgumentParser:
     analyze = sub.add_parser("analyze", help="ISO 3382 parameters of an impulse response WAV")
     analyze.add_argument("ir", help="impulse response WAV")
     analyze.add_argument("--channel", type=int, help="analyse only this channel (1-based)")
+    kind = analyze.add_mutually_exclusive_group()
+    kind.add_argument(
+        "--lateral",
+        type=int,
+        metavar="CHANNEL",
+        help="the channel of a figure of eight with its null on the source (1-based), for "
+        "LF, LFC and LJ of the omnidirectional channel (--channel, else the first other)",
+    )
+    kind.add_argument(
+        "--ambisonic",
+        action="store_true",
+        help="the file is first-order AmbiX (W, Y, Z, X) facing the source: LF, LFC and LJ "
+        "from Y and the T30 of X, Y and Z",
+    )
+    kind.add_argument(
+        "--binaural", action="store_true", help="the first two channels are the ears: IACC too"
+    )
+
     analyze.add_argument("--json", metavar="FILE", help="also write the results as JSON")
     analyze.add_argument("--plot", metavar="PNG", help="save decay plots (needs viz extra)")
     _add_analysis_arguments(analyze)
@@ -1465,7 +1588,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument(
         "--plot", metavar="PNG", help="save both decays per octave band (needs viz extra)"
     )
-    _add_analysis_arguments(compare, references=False)
+    _add_analysis_arguments(compare, references=False, stage=False)
     for side in ("simulated", "measured"):
         group = compare.add_argument_group(f"{side} response")
         group.add_argument(

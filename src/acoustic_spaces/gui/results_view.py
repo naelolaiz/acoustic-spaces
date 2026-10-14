@@ -28,11 +28,12 @@ from PySide6.QtWidgets import (
 from acoustic_spaces.gui.inspector import BAND_LABELS
 from acoustic_spaces.headtracking import DEFAULT_OSC_PORT, HeadOrientation, OscReceiver
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
-from acoustic_spaces.parameters import PARAMETERS
+from acoustic_spaces.parameters import MORE_PARAMETERS, PARAMETERS
 
 #: Smallest size of a plot (pixels); a smaller panel scrolls instead of squashing it.
 PLOT_SIZE = (720, 480)
-#: Rows of the parameter table: name, label, number format.
+#: Rows of the parameter table: name, label, number format. Those after the first eight
+#: show only where the response gives them (IACC needs a binaural response).
 ROWS = [
     ("edt", "EDT (s)", "{:.2f}"),
     ("t20", "T20 (s)", "{:.2f}"),
@@ -42,8 +43,17 @@ ROWS = [
     ("d50", "D50", "{:.2f}"),
     ("ts", "Ts (ms)", "{:.0f}"),
     ("g", "G (dB)", "{:.1f}"),
+    ("lf", "LF", "{:.2f}"),
+    ("lfc", "LFC", "{:.2f}"),
+    ("lj", "LJ (dB)", "{:.1f}"),
+    ("st_early", "ST early (dB)", "{:.1f}"),
+    ("st_late", "ST late (dB)", "{:.1f}"),
+    ("t30_x", "T30 X (s)", "{:.2f}"),
+    ("t30_y", "T30 Y (s)", "{:.2f}"),
+    ("t30_z", "T30 Z (s)", "{:.2f}"),
 ]
-assert {name for name, _, _ in ROWS} == set(PARAMETERS)
+assert {name for name, _, _ in ROWS[:8]} == set(PARAMETERS)
+assert {name for name, _, _ in ROWS[8:]} <= set(MORE_PARAMETERS)
 #: How often the head controls show the latest orientation (ms).
 HEAD_REFRESH_MS = 100
 
@@ -306,6 +316,7 @@ class ResultsPanel(QWidget):
             for col, value in enumerate(values):
                 text = fmt.format(value) if np.isfinite(value) else "–"
                 self.table.setItem(row, col, QTableWidgetItem(text))
+            self.table.setRowHidden(row, row >= 8 and not np.isfinite(values).any())
 
     def _details(self) -> None:
         if self.result is None:

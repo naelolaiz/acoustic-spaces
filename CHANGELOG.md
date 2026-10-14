@@ -15,6 +15,22 @@
 - A channel and a reference for G per file, `--json`, and `--plot` with the two decays
   in each octave band (`plot_comparison` in `acoustic_spaces.viz`).
 
+**More parameters**
+
+- LF, LFC and LJ (ISO 3382-1, annex A) from the directions the energy arrives from,
+  with a figure of eight whose null points at the source; IACC early and late
+  (annex B) from the binaural response when one is written; stage support ST early and
+  ST late (annex C) for listeners within 1.5 m of a source; and the T30 of figures of
+  eight facing forward, left and up from the listener.
+- STIPA next to the STI (IEC 60268-16), U50, and the echo criteria of Dietsch and Kraak
+  for speech and music. `parameters.json` has them for every response, at the source's
+  level and the coverage noise, and `simulate` prints them.
+- `analyze --lateral CH`, `--ambisonic` (first-order AmbiX) and `--binaural` give the
+  same from measured responses, and `--stage` the stage support; `analyze` prints the
+  STI, STIPA and echo criteria of each channel. `compare` takes LF, LFC and the
+  directional decay times where both responses have them.
+- The editor's results table shows the further parameters where a response has them.
+
 **Validation against measured rooms**
 
 - Two rooms of the BRAS benchmark, a seminar room and a chamber music hall, as scenes in
