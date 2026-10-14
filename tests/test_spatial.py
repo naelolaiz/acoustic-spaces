@@ -30,6 +30,13 @@ SHOEBOX_OBJ = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / 
 FS = 48_000
 
 
+def test_spherical_harmonics_refuse_directions_without_length() -> None:
+    with pytest.raises(ValueError, match="length above zero"):
+        real_spherical_harmonics(1, [[1.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+    with pytest.raises(ValueError, match="length above zero"):
+        Ambisonics(2).gains([[math.nan, 0.0, 1.0]])
+
+
 def test_spherical_harmonics_are_sn3d() -> None:
     grid = fibonacci_sphere(8000)
     y = real_spherical_harmonics(4, grid)
