@@ -437,7 +437,10 @@ class SurfacePage(Page):
         choice = self.material.currentText()
         if not label or not choice:
             return
-        name = next((n for n in label if n in self.document.scene.assignments), label[0])
+        # The first name, as the note says, even when a later one (``walls``, which every
+        # wall of a floor plan has) carries the assignment in use: changing that one
+        # would change every surface that has it.
+        name = label[0]
         self.run(lambda: self.document.assign(name, None if choice == FALLBACK else choice))
 
 

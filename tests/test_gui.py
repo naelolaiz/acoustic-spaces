@@ -347,6 +347,29 @@ def test_selection_and_forms(window) -> None:
     assert window.selection == ("scene", None)
 
 
+def test_a_surface_takes_a_material_of_its_own(window) -> None:
+    from acoustic_spaces.gui.viewport import surface_materials
+
+    window.open_example(example_path("lecture_hall"))  # walls: concrete, wall_1: wood
+    labels = window.document.room.mesh.labels
+    wall = next(k for k, label in enumerate(labels) if label[0] == "wall_2")
+    window.select("surface", wall)
+    page = window.inspector.pages["surface"]
+    assert page.material.currentText() == "concrete"  # from the name all walls share
+    page.material.setCurrentText("wood")
+    assignments = window.document.scene.assignments
+    assert assignments["wall_2"] == "wood" and assignments["walls"] == "concrete"
+    room = window.document.room
+    used = {
+        label[0]: room.material_names[m]
+        for label, m in zip(room.mesh.labels, surface_materials(room), strict=True)
+    }
+    assert used["wall_2"] == "wood" and used["wall_3"] == used["wall_4"] == "concrete"
+    page.material.setCurrentText("(default material)")  # back to what the walls have
+    assert "wall_2" not in window.document.scene.assignments
+    assert window.document.scene.assignments["walls"] == "concrete"
+
+
 def test_model_units_default_to_the_file(window) -> None:
     window.open_example(example_path("shoebox"))  # its scene says units: m
     window.select("geometry", None)
