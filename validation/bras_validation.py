@@ -3,6 +3,7 @@
     python validation/bras_validation.py [--scenes CR2 CR3] [--materials fitted]
                                          [--rays 100000] [--diffraction first_order]
                                          [--json results.json] [--plots DIR]
+    python validation/bras_validation.py --from-json results.json [--plots DIR]
 
 The BRAS benchmark (Aspöck et al., 2020, DOI 10.14279/depositonce-6726.3) measured
 rooms whose geometry and surfaces it describes; ``validation/bras/`` holds two of them
@@ -174,7 +175,8 @@ def plot(result: dict, path: Path) -> None:
         ax.fill_between(x, measured - jnd, measured + jnd, color="C1", alpha=0.2, label="1 JND")
         ax.plot(x, measured, "s-", color="C1", label="measured")
         ax.plot(x, _values(avg["simulated"]), "o-", color="C0", label="simulated")
-        ax.set_xticks(x, [_band(f) for f in bands], fontsize=7)
+        ax.set_xticks(x, [f"{f // 1000}k" if f >= 1000 else str(f) for f in bands], fontsize=7)
+        ax.set_xlabel("octave band (Hz)", fontsize=7)
         ax.set_title(LABELS[p])
         ax.grid(alpha=0.3)
         ax.legend(fontsize=7)
@@ -192,14 +194,21 @@ def main() -> None:
     parser.add_argument("--diffraction", choices=["none", "direct", "first_order"])
     parser.add_argument("--json", type=Path, help="write every number to this file")
     parser.add_argument("--plots", type=Path, help="draw a PNG per room into this folder")
+    parser.add_argument(
+        "--from-json", type=Path, help="print and plot the results of an earlier --json run"
+    )
     args = parser.parse_args()
-    results = []
-    for name in args.scenes:
-        results.append(validate(name, args.materials, args.rays, args.diffraction))
-        print(table(results[-1]) + "\n", flush=True)
+    if args.from_json:
+        results = json.loads(args.from_json.read_text(encoding="utf-8"))
+    else:
+        results = [
+            validate(name, args.materials, args.rays, args.diffraction) for name in args.scenes
+        ]
+    for result in results:
+        print(table(result) + "\n", flush=True)
         if args.plots:
             args.plots.mkdir(parents=True, exist_ok=True)
-            plot(results[-1], args.plots / f"bras_{name}_{args.materials}.png")
+            plot(result, args.plots / f"bras_{result['scene']}_{result['materials']}.png")
     if args.json:
         args.json.write_text(json.dumps(results, indent=1) + "\n", encoding="utf-8")
 
