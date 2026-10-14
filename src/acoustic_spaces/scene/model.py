@@ -70,7 +70,9 @@ Coefficient = Annotated[float, Field(ge=0.0, le=1.0)]
 
 
 class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Unknown keys are typing mistakes; NaN and infinity (YAML's .nan and .inf) are
+    # no positions, angles or coefficients.
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
 def _per_band(name: str, value: list[float]) -> list[float]:

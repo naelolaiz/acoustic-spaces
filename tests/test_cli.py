@@ -113,6 +113,7 @@ def test_simulate_checks_the_options_that_override_the_scene(
         ("--sample-rate", "-8000", "greater than or equal to 8000"),
         ("--sample-rate", "100", "greater than or equal to 8000"),  # was accepted
         ("--max-order", "21", "less than or equal to 20"),
+        ("--length", "nan", "a finite number"),
     ]:
         assert main([*args, option, value]) == 1
         assert f"error: {option}: Input should be {message}" in capsys.readouterr().err
