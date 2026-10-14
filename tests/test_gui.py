@@ -391,6 +391,23 @@ def test_outputs_form_keeps_a_custom_loudspeaker_layout(window) -> None:
     assert page.loudspeakers.isChecked() and page.layout_name.currentText() == "5.0"
 
 
+def test_forms_write_back_only_what_changed(window) -> None:
+    window._attach(Document(box_scene((8.125, 6.0, 3.0))))
+    window.select("geometry", None)
+    page = window.inspector.pages["geometry"]
+    page.box[2].setValue(3.5)  # the length shows rounded, to 8.12 or 8.13
+    assert window.document.scene.geometry.box == (8.125, 6.0, 3.5)
+    window.document.move_point("sources", 0, (1.234567, 2.345678, 1.5))  # as dragged
+    window.document.update_point("sources", 0, orientation={"yaw": 12.345})
+    window.select("sources", 0)
+    page = window.inspector.pages["sources"]
+    page.position[2].setValue(1.6)
+    page.angles[1].setValue(10.0)
+    source = window.document.scene.sources[0]
+    assert source.position == (1.234567, 2.345678, 1.6)
+    assert (source.orientation.yaw, source.orientation.pitch) == (12.345, 10.0)
+
+
 def test_model_units_default_to_the_file(window) -> None:
     window.open_example(example_path("shoebox"))  # its scene says units: m
     window.select("geometry", None)
