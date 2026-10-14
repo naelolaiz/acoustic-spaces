@@ -698,6 +698,8 @@ class MainWindow(QMainWindow):
         if start is None or self.from_example:
             start = Path.home() / (start.parent.name if start else "scene") / "scene.yaml"
         path, _ = QFileDialog.getSaveFileName(self, "Save scene", str(start), SCENE_FILTER)
+        if path and not Path(path).suffix:
+            path += ".yaml"
         return bool(path) and self._save_to(Path(path))
 
     def _save_to(self, path: Path) -> bool:

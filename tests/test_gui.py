@@ -813,6 +813,17 @@ def test_unsaved_changes_are_asked_about(window, monkeypatch, tmp_path: Path) ->
     assert target.is_file() and window.document.path == example_path("shoebox")
 
 
+def test_save_as_adds_the_suffix(window, monkeypatch, tmp_path: Path) -> None:
+    from PySide6.QtWidgets import QFileDialog
+
+    for typed, saved in (("room", "room.yaml"), ("hall.yml", "hall.yml")):
+        answer = (str(tmp_path / typed), "")
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, answer=answer, **k: answer)
+        assert window.save_as()
+        assert window.document.path == tmp_path / saved and (tmp_path / saved).is_file()
+    assert not (tmp_path / "room").exists()
+
+
 def test_entry_points_explain_the_missing_extra(monkeypatch, capsys) -> None:
     from acoustic_spaces.cli import main
     from acoustic_spaces.gui import main as editor
