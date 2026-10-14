@@ -6,7 +6,8 @@
 - Animation (PyVista): sound particles spreading from a source and reflecting around
   the room, in a window with a time slider or saved as a GIF or MP4 video.
 - Response plots (matplotlib): echogram with the early paths, decay curves per band, and
-  arrival directions as the listener faces; polar patterns of a source directivity.
+  arrival directions as the listener faces; the decays of a simulated and a measured
+  response band by band; polar patterns of a source directivity.
 - Coverage maps: a parameter over the audience area, from above (matplotlib) or as
   coloured tiles in the 3D view.
 
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
     from acoustic_spaces.directivity import Directivity
     from acoustic_spaces.engine import CoverageMap, EarlyReflections, Response
     from acoustic_spaces.engine.particles import Particles
+    from acoustic_spaces.parameters import BandDecay
 
 #: ColorBrewer Set3: light colours, so the saturated source and listener markers stand out.
 MATERIAL_COLOURS = (
@@ -68,6 +70,8 @@ BAND_COLOURS = (
     "#f46d43",
     "#d53e4f",
 )
+#: A simulated and a measured response drawn together.
+COMPARISON_COLOURS = ("#4da3ff", "#ffd166")
 
 
 def _outline(part: pyvista.PolyData) -> pyvista.PolyData:
@@ -683,6 +687,28 @@ def plot_directivity(
     return fig
 
 
+def _decay_curves(decay: BandDecay) -> list[tuple[np.ndarray, np.ndarray] | None]:
+    """Each band's backward-integrated decay (dB) over 1 ms slots from the direct sound
+    on, up to where it sinks into the noise, with the noise taken off and the missing
+    tail added, as the parameters are computed: (times in ms, levels) per band, or None
+    for a band with too little to draw."""
+    from acoustic_spaces.parameters import decay_curve
+
+    window = max(1, int(round(1e-3 * decay.sample_rate)))
+    curves = []
+    for b in range(decay.energy.shape[0]):
+        e = decay.cleaned(b)
+        slots = len(e) // window
+        curve = None
+        if slots >= 2:
+            per_ms = e[: slots * window].reshape(slots, window).sum(axis=1)
+            level = decay_curve(per_ms, 1e-3)
+            if np.isfinite(level[0]):
+                curve = (np.arange(slots) * 1.0, level)
+        curves.append(curve)
+    return curves
+
+
 def plot_impulse_response(
     ir: np.ndarray,
     sample_rate: float,
@@ -701,7 +727,7 @@ def plot_impulse_response(
     Returns the matplotlib figure; it is saved to ``path`` if given.
     """
     from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
-    from acoustic_spaces.parameters import band_decay, decay_curve
+    from acoustic_spaces.parameters import band_decay
 
     ir = np.asarray(ir, dtype=float)
     decay = band_decay(ir, sample_rate, filters=filters, noise=noise)
@@ -730,18 +756,9 @@ def plot_impulse_response(
     ax_e.set_title(f"{title}: level" if title else "level")
     _legend(ax_e, loc="upper right")
 
-    step = 1e-3
-    for b, f in enumerate(OCTAVE_BANDS_HZ):
-        e = decay.cleaned(b)
-        slots = len(e) // window
-        if slots < 2:
-            continue
-        per_ms = e[: slots * window].reshape(slots, window).sum(axis=1)
-        curve = decay_curve(per_ms, step)
-        if not np.isfinite(curve[0]):
-            continue
-        label = f"{f} Hz" if f < 1000 else f"{f // 1000} kHz"
-        ax_d.plot(np.arange(slots) * step * 1e3, curve, color=BAND_COLOURS[b], lw=1.2, label=label)
+    for b, (f, curve) in enumerate(zip(OCTAVE_BANDS_HZ, _decay_curves(decay), strict=True)):
+        if curve is not None:
+            ax_d.plot(*curve, color=BAND_COLOURS[b], lw=1.2, label=_band_name(f))
     ax_d.set_ylim(-70, 2)
     ax_d.set_xlim(0, max(t_ms[-1] - onset_ms, 1.0) if len(t_ms) else 1)
     ax_d.set_xlabel("time after the direct sound (ms)")
@@ -749,6 +766,66 @@ def plot_impulse_response(
     ax_d.set_title("backward-integrated decay per octave band, noise removed")
     _legend(ax_d, ncol=4)
 
+    if path is not None:
+        fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
+    return fig
+
+
+def plot_comparison(
+    simulated: np.ndarray,
+    simulated_rate: float,
+    measured: np.ndarray,
+    measured_rate: float,
+    path: str | Path | None = None,
+    *,
+    title: str | None = None,
+    labels: tuple[str, str] = ("simulated", "measured"),
+    filters: str = "iec",
+    noise: bool = True,
+):
+    """Decay curves of a simulated and a measured impulse response, one panel per
+    octave band.
+
+    Each panel overlays the backward-integrated (Schroeder) decays of the two, each from
+    its own direct sound on, as :func:`plot_impulse_response` draws them: up to where the
+    band sinks into its noise, with the noise taken off and the missing tail added.
+    ``labels`` name the two responses in the legend. Returns the matplotlib figure; it
+    is saved to ``path`` if given.
+    """
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+    from acoustic_spaces.parameters import band_decay
+
+    fig = _figure(figsize=(12, 6.5), layout="constrained")
+    fig.patch.set_facecolor(BACKGROUND[0])
+    axes = fig.subplots(2, 4, sharex=True, sharey=True).ravel()
+    for ax, f in zip(axes, OCTAVE_BANDS_HZ, strict=True):
+        _dark(ax)
+        ax.set_title(_band_name(f))
+    floor_db, end_ms = -70.0, 1.0
+    for ir, rate, label, colour in zip(
+        (simulated, measured),
+        (simulated_rate, measured_rate),
+        labels,
+        COMPARISON_COLOURS,
+        strict=True,
+    ):
+        decay = band_decay(np.asarray(ir, dtype=float), rate, filters=filters, noise=noise)
+        for ax, curve in zip(axes, _decay_curves(decay), strict=True):
+            if curve is not None:
+                ax.plot(*curve, color=colour, lw=1.2)
+                # Time runs to where the slowest decay leaves the panel at the bottom.
+                below = np.flatnonzero(curve[1] < floor_db)
+                end_ms = max(end_ms, float(curve[0][below[0] if len(below) else -1]))
+        # The legend's entry, drawn empty: a band may have no curve to label.
+        axes[0].plot([], [], color=colour, lw=1.2, label=label)
+    axes[0].set_xlim(0, end_ms)
+    axes[0].set_ylim(floor_db, 2)
+    for ax in axes[4:]:
+        ax.set_xlabel("time after the direct sound (ms)")
+    for ax in axes[::4]:
+        ax.set_ylabel("decay (dB)")
+    _legend(axes[0], loc="upper right")
+    fig.suptitle(title or "backward-integrated decay per octave band, noise removed", color="white")
     if path is not None:
         fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
     return fig
