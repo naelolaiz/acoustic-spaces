@@ -48,6 +48,9 @@ MEASURED = "Measured data from a file…"
 SAMPLE_RATES = [16_000, 22_050, 32_000, 44_100, 48_000, 88_200, 96_000]
 #: Shown in the material list of a surface for "no assignment of its own".
 FALLBACK = "(default material)"
+#: Largest side or height of a box or floor plan room the forms take, in the room's
+#: units: a kilometre in millimetres.
+LARGEST = 1e6
 
 
 def spin(low: float, high: float, decimals: int = 2, step: float = 0.1, suffix: str = ""):
@@ -159,7 +162,7 @@ class ScenePage(Page):
         self.default.currentIndexChanged.connect(self._default)
         form.addRow("Default material", self.default)
         self.temperature = spin(-20, 50, 1, 1, "°C")
-        self.humidity = spin(0, 100, 0, 5, "%")
+        self.humidity = spin(0, 100, 1, 5, "%")
         self.pressure = spin(50, 110, 3, 0.5, "kPa")
         for box, field in (
             (self.temperature, "temperature_c"),
@@ -234,15 +237,17 @@ class GeometryPage(Page):
         self.kind.setWordWrap(True)
         layout.addWidget(self.kind)
 
-        self.box_group = QGroupBox("Box (m)")
+        self.box_group = QGroupBox("Box")
         box_form = QFormLayout(self.box_group)
-        self.box = [spin(0.1, 1000, 2, 0.5) for _ in range(3)]
-        for label, box in zip(("Length (x)", "Width (y)", "Height (z)"), self.box, strict=True):
-            box.valueChanged.connect(self._box)
+        self.box = [spin(0.1, LARGEST, 2, 0.5) for _ in range(3)]
+        for k, (label, box) in enumerate(
+            zip(("Length (x)", "Width (y)", "Height (z)"), self.box, strict=True)
+        ):
+            box.valueChanged.connect(lambda value, k=k: self._box(k, value))
             box_form.addRow(label, box)
         layout.addWidget(self.box_group)
 
-        self.plan_group = QGroupBox("Floor plan (m)")
+        self.plan_group = QGroupBox("Floor plan")
         plan_layout = QVBoxLayout(self.plan_group)
         self.plan = QTableWidget(0, 2)
         self.plan.setHorizontalHeaderLabels(["x", "y"])
@@ -257,7 +262,7 @@ class GeometryPage(Page):
         buttons.addWidget(remove)
         plan_layout.addLayout(buttons)
         height_form = QFormLayout()
-        self.height = spin(0.1, 1000, 2, 0.5)
+        self.height = spin(0.1, LARGEST, 2, 0.5)
         self.height.valueChanged.connect(self._height)
         height_form.addRow("Height", self.height)
         plan_layout.addLayout(height_form)
@@ -293,6 +298,9 @@ class GeometryPage(Page):
         self.box_group.setVisible(geometry.box is not None)
         self.plan_group.setVisible(geometry.floor_plan is not None)
         self.file_group.setVisible(geometry.file is not None)
+        units = geometry.units or "m"  # a box or floor plan without units is in metres
+        self.box_group.setTitle(f"Box ({units})")
+        self.plan_group.setTitle(f"Floor plan ({units})")
         if geometry.box is not None:
             for box, value in zip(self.box, geometry.box, strict=True):
                 box.setValue(value)
@@ -314,9 +322,12 @@ class GeometryPage(Page):
             f"{len(room.mesh.faces)} triangles, {r.surface_area_m2:.1f} m², {closed}"
         )
 
-    def _box(self) -> None:
-        values = [box.value() for box in self.box]
-        self.apply("resize box", lambda data: data["geometry"].update(box=values))
+    def _box(self, axis: int, value: float) -> None:
+        # Only the side that changed: the others show rounded to the spin boxes' decimals.
+        def change(data: dict) -> None:
+            data["geometry"]["box"][axis] = value
+
+        self.apply("resize box", change)
 
     def _corners(self) -> list[list[float]] | None:
         corners = []
@@ -437,7 +448,10 @@ class SurfacePage(Page):
         choice = self.material.currentText()
         if not label or not choice:
             return
-        name = next((n for n in label if n in self.document.scene.assignments), label[0])
+        # The first name, as the note says, even when a later one (``walls``, which every
+        # wall of a floor plan has) carries the assignment in use: changing that one
+        # would change every surface that has it.
+        name = label[0]
         self.run(lambda: self.document.assign(name, None if choice == FALLBACK else choice))
 
 
@@ -561,13 +575,13 @@ class PointPage(Page):
         self.name.editingFinished.connect(self._name)
         form.addRow("Name", self.name)
         self.position = [spin(-1e4, 1e4, 2, 0.1, "m") for _ in range(3)]
-        for axis, box in zip("xyz", self.position, strict=True):
-            box.valueChanged.connect(self._position)
+        for k, (axis, box) in enumerate(zip("xyz", self.position, strict=True)):
+            box.valueChanged.connect(lambda value, k=k: self._position(k, value))
             form.addRow(axis, box)
         self.angles = [spin(-360, 360, 1, 5, "°") for _ in range(3)]
-        for label, box in zip(("Yaw", "Pitch", "Roll"), self.angles, strict=True):
-            box.valueChanged.connect(self._orientation)
-            form.addRow(label, box)
+        for angle, box in zip(("yaw", "pitch", "roll"), self.angles, strict=True):
+            box.valueChanged.connect(lambda value, a=angle: self._orientation(a, value))
+            form.addRow(angle.capitalize(), box)
         self.directivity = QComboBox()
         self.directivity.setSizeAdjustPolicy(
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
@@ -648,12 +662,19 @@ class PointPage(Page):
         if name and name != self._item().name:
             self._update(name=name)
 
-    def _position(self) -> None:
-        self._update(position=[box.value() for box in self.position])
+    def _position(self, axis: int, value: float) -> None:
+        # One value at a time (the orientation too): the other boxes show theirs rounded,
+        # and a dragged point is placed to the micrometre.
+        if not self._loading:
+            position = list(self._item().position)
+            position[axis] = value
+            self._update(position=position)
 
-    def _orientation(self) -> None:
-        yaw, pitch, roll = (box.value() for box in self.angles)
-        self._update(orientation={"yaw": yaw, "pitch": pitch, "roll": roll})
+    def _orientation(self, angle: str, value: float) -> None:
+        if not self._loading:
+            orientation = self._item().orientation.model_dump()
+            orientation[angle] = value
+            self._update(orientation=orientation)
 
     def _directivity(self, index: int) -> None:
         value = self.directivity.itemText(index)
@@ -893,7 +914,9 @@ class OutputsPage(Page):
         outputs = self.document.scene.outputs
         by_format = {}
         for output in outputs:
-            by_format.setdefault(output.format, output)
+            # Loudspeakers here means a named layout; custom ones are kept as they are.
+            if output.format != "loudspeakers" or not output.speakers:
+                by_format.setdefault(output.format, output)
         self.mono.setChecked("mono" in by_format)
         self.binaural.setChecked("binaural" in by_format)
         binaural = by_format.get("binaural")

@@ -347,6 +347,93 @@ def test_selection_and_forms(window) -> None:
     assert window.selection == ("scene", None)
 
 
+def test_a_surface_takes_a_material_of_its_own(window) -> None:
+    from acoustic_spaces.gui.viewport import surface_materials
+
+    window.open_example(example_path("lecture_hall"))  # walls: concrete, wall_1: wood
+    labels = window.document.room.mesh.labels
+    wall = next(k for k, label in enumerate(labels) if label[0] == "wall_2")
+    window.select("surface", wall)
+    page = window.inspector.pages["surface"]
+    assert page.material.currentText() == "concrete"  # from the name all walls share
+    page.material.setCurrentText("wood")
+    assignments = window.document.scene.assignments
+    assert assignments["wall_2"] == "wood" and assignments["walls"] == "concrete"
+    room = window.document.room
+    used = {
+        label[0]: room.material_names[m]
+        for label, m in zip(room.mesh.labels, surface_materials(room), strict=True)
+    }
+    assert used["wall_2"] == "wood" and used["wall_3"] == used["wall_4"] == "concrete"
+    page.material.setCurrentText("(default material)")  # back to what the walls have
+    assert "wall_2" not in window.document.scene.assignments
+    assert window.document.scene.assignments["walls"] == "concrete"
+
+
+def test_outputs_form_keeps_a_custom_loudspeaker_layout(window) -> None:
+    from acoustic_spaces.scene import Scene
+
+    data = box_scene().model_dump(mode="json", exclude_none=True)
+    custom = {"format": "loudspeakers", "speakers": [{"name": "L", "azimuth": 30}]}
+    custom["speakers"].append({"name": "R", "azimuth": -30})
+    data["outputs"] = [custom]
+    window._attach(Document(Scene.model_validate(data)))
+    window.select("outputs")
+    page = window.inspector.pages["outputs"]
+    assert not page.loudspeakers.isChecked()  # the box is for a named layout
+    assert "1 custom loudspeaker layout" in page.custom.text()
+    page.mono.setChecked(True)
+    outputs = window.document.scene.outputs
+    assert [(o.format, o.layout) for o in outputs] == [("mono", None), ("loudspeakers", None)]
+    assert [s.name for s in outputs[1].speakers] == ["L", "R"]
+    page.loudspeakers.setChecked(True)
+    assert [o.layout for o in window.document.scene.outputs] == [None, "5.0", None]
+    assert page.loudspeakers.isChecked() and page.layout_name.currentText() == "5.0"
+
+
+def test_forms_write_back_only_what_changed(window) -> None:
+    window._attach(Document(box_scene((8.125, 6.0, 3.0))))
+    window.select("geometry", None)
+    page = window.inspector.pages["geometry"]
+    page.box[2].setValue(3.5)  # the length shows rounded, to 8.12 or 8.13
+    assert window.document.scene.geometry.box == (8.125, 6.0, 3.5)
+    window.document.move_point("sources", 0, (1.234567, 2.345678, 1.5))  # as dragged
+    window.document.update_point("sources", 0, orientation={"yaw": 12.345})
+    window.select("sources", 0)
+    page = window.inspector.pages["sources"]
+    page.position[2].setValue(1.6)
+    page.angles[1].setValue(10.0)
+    source = window.document.scene.sources[0]
+    assert source.position == (1.234567, 2.345678, 1.6)
+    assert (source.orientation.yaw, source.orientation.pitch) == (12.345, 10.0)
+
+
+def test_scene_form_keeps_the_humidity_to_a_tenth(window) -> None:
+    window.document.edit("humid", lambda data: data["air"].update(humidity_percent=52.5))
+    window.select("scene", None)
+    page = window.inspector.pages["scene"]
+    assert page.humidity.value() == 52.5
+    page.humidity.stepUp()
+    assert window.document.scene.air.humidity_percent == 57.5
+
+
+def test_geometry_form_shows_the_room_units(window) -> None:
+    from acoustic_spaces.scene import Scene
+
+    window.select("geometry", None)
+    page = window.inspector.pages["geometry"]
+    assert page.box_group.title() == "Box (m)"  # no units given: metres
+    data = box_scene().model_dump(mode="json", exclude_none=True)
+    data["geometry"] = {"box": [8000, 6000, 3000], "units": "mm"}
+    window._attach(Document(Scene.model_validate(data)))
+    window.select("geometry", None)
+    assert page.box_group.title() == "Box (mm)"
+    assert [box.value() for box in page.box] == [8000, 6000, 3000]
+    window.document.set_floor_plan([[0, 0], [8, 0], [8, 6]])  # corners in metres
+    assert page.plan_group.title() == "Floor plan (mm)"
+    assert page.plan.item(1, 0).text() == "8000" and page.height.value() == 3000
+
+
 def test_model_units_default_to_the_file(window) -> None:
     window.open_example(example_path("shoebox"))  # its scene says units: m
     window.select("geometry", None)
@@ -430,6 +517,13 @@ def test_place_remove_and_add_material(window, monkeypatch) -> None:
     assert window.selection == ("material", "carpet_cotton")
 
 
+def test_another_scene_cancels_placing(window) -> None:
+    window.viewport.start_placing("sources")  # waiting for a click in the 3D view
+    window.plan.start_placing("listeners")
+    window.open_example(example_path("studio"))
+    assert window.viewport.placing is None and window.plan.canvas.placing is None
+
+
 def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, monkeypatch) -> None:
     window.open_example(example_path("studio"))
     _quick(window.document)
@@ -503,6 +597,30 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, m
     assert window._stale() and "changed" in results.stale.text()
     window.undo()
     assert not window._stale()
+
+
+def test_one_playback_at_a_time(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
+    _quick(window.document)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    stops = []
+    fake_sounddevice.play = lambda data, rate: fake_sounddevice.played.append((data, rate))
+    fake_sounddevice.stop = lambda: stops.append(1)
+    write_wav(tmp_path / "dry.wav", np.r_[1.0, np.zeros(5 * 16_000)], 16_000)  # 5 s
+    results = window.results
+    assert window.play_file(tmp_path / "dry.wav")
+    assert results.stop.isEnabled() and not results.listen.isEnabled()
+    window.run_simulation()  # ends while the sound plays: Listen waits for Stop
+    _wait(qapp, lambda: window.job is None)
+    assert results.stop.isEnabled() and not results.listen.isEnabled()
+    # Playing again (here head-tracked) stops what plays first.
+    results.head.port.setValue(0)  # no head tracker
+    results.tracking.setChecked(True)
+    assert window.play_file(tmp_path / "dry.wav")
+    assert stops and not window._play_timer.isActive()
+    _wait(qapp, lambda: window._player is None, timeout=30)
+    assert not results.stop.isEnabled() and results.listen.isEnabled()
+    results.tracking.setChecked(False)
 
 
 def test_results_follow_the_selected_listener(window, qapp) -> None:
@@ -638,6 +756,49 @@ def test_export_to_blender(window, monkeypatch, tmp_path: Path) -> None:
     assert not window.export_blender(particles=True)
 
 
+def test_runs_of_a_scene_no_longer_open_are_dropped(window, qapp) -> None:
+    for run in (window.run_simulation, window.run_map):
+        window.open_example(example_path("shoebox"))
+        _quick_map(window.document)
+        run()
+        assert window.job is not None
+        window.job.wait()  # done, but the window has not heard yet
+        window.new_box()
+        _wait(qapp, lambda: window.job is None)
+        assert window.result is None and window.results.result is None
+        assert window.coverage is None and window.map_panel.current() is None
+        assert "no longer open" in window.messages.toPlainText()
+        assert window.run_action.isEnabled() and window.map_action.isEnabled()
+    # Opening another scene while a run goes on stops it.
+    _quick(window.document)
+    window.run_simulation()
+    job = window.job
+    window.new_box()
+    assert job._stop
+    _wait(qapp, lambda: window.job is None)
+    assert window.result is None
+
+
+def test_saving_an_example_keeps_its_results(window, qapp, monkeypatch, tmp_path: Path) -> None:
+    from PySide6.QtWidgets import QFileDialog
+
+    window.open_example(example_path("shoebox"))  # its model file goes along
+    _quick_map(window.document)
+    for run in (window.run_simulation, window.run_map):
+        run()
+        _wait(qapp, lambda: window.job is None)
+    window.results.paths.setChecked(True)
+    assert window._shown_response() is not None
+    target = tmp_path / "box" / "scene.yaml"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    assert window.save()
+    assert window.document.scene.geometry.file == (tmp_path / "box" / "shoebox.obj").resolve()
+    # The same scene with a copy of its model: the run and the map still hold.
+    assert not window._stale() and window.results.stale.text() == ""
+    assert not window._map_stale() and window.map_panel.note.text() == ""
+    assert window._shown_response() is not None
+
+
 def test_run_refuses_a_scene_with_problems(window) -> None:
     window.document.edit("move", lambda data: data["sources"][0].update(position=[50, 0, 0]))
     window.run_simulation()
@@ -657,6 +818,33 @@ def test_unsaved_changes_are_asked_about(window, monkeypatch, tmp_path: Path) ->
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
     assert window.open_file(example_path("shoebox"))
     assert target.is_file() and window.document.path == example_path("shoebox")
+
+
+def test_save_as_adds_the_suffix(window, monkeypatch, tmp_path: Path) -> None:
+    from PySide6.QtWidgets import QFileDialog
+
+    for typed, saved in (("room", "room.yaml"), ("hall.yml", "hall.yml")):
+        answer = (str(tmp_path / typed), "")
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, answer=answer, **k: answer)
+        assert window.save_as()
+        assert window.document.path == tmp_path / saved and (tmp_path / saved).is_file()
+    assert not (tmp_path / "room").exists()
+    # The added suffix names a file the dialog did not ask about: ask before replacing it.
+    asked = []
+    for reply, saved in (
+        (QMessageBox.StandardButton.No, False),
+        (QMessageBox.StandardButton.Yes, True),
+    ):
+        (tmp_path / "room.yaml").write_text("kept\n", encoding="utf-8")
+        monkeypatch.setattr(
+            QFileDialog, "getSaveFileName", lambda *a, **k: (str(tmp_path / "room"), "")
+        )
+        monkeypatch.setattr(
+            QMessageBox, "question", lambda *a, reply=reply, **k: asked.append(a[2]) or reply
+        )
+        assert window.save_as() is saved
+        assert ((tmp_path / "room.yaml").read_text(encoding="utf-8") == "kept\n") is not saved
+    assert asked == ["room.yaml already exists. Replace it?"] * 2
 
 
 def test_entry_points_explain_the_missing_extra(monkeypatch, capsys) -> None:
@@ -861,6 +1049,52 @@ def test_clicks_select_and_place(window, qapp) -> None:
     assert placed and placed[0][0] == "sources"
     assert Room.from_scene(window.document.scene).problems() == []
     assert len(window.document.scene.sources) == 2 and viewport.placing is None
+
+
+@pytest.mark.render
+def test_the_3d_view_keeps_its_lights(window, qapp) -> None:
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    import pyvista as pv
+
+    reference = pv.Plotter(off_screen=True)  # the light kit, as the view starts with
+    lights = len(reference.renderer.lights)
+    reference.close()
+    assert lights > 0
+    # The room is drawn when the window opens, and again for every change.
+    assert len(viewport.plotter.renderer.lights) == lights
+    window.select("sources", 0)
+    window.open_example(example_path("studio"))
+    assert len(viewport.plotter.renderer.lights) == lights
+
+
+@pytest.mark.render
+def test_the_camera_stays_while_the_room_is_edited(window, qapp) -> None:
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    plotter = viewport.plotter
+
+    def camera() -> np.ndarray:  # position, focal point and view up
+        return np.array(plotter.camera_position.to_list(), dtype=float)
+
+    plotter.camera.Azimuth(30)
+    turned = camera()
+    window.select("geometry", None)
+    window.inspector.pages["geometry"].box[2].setValue(3.5)  # a new mesh
+    assert window.document.room.report.bounds_max[2] == pytest.approx(3.5)
+    np.testing.assert_allclose(camera(), turned)
+    window.undo()
+    np.testing.assert_allclose(camera(), turned)
+    # A room drawn anew, or another scene, gets the usual view of the whole room.
+    window.plan.canvas.drawn.emit([[20, 20], [30, 20], [30, 30], [20, 30]])
+    assert window.document.scene.geometry.floor_plan is not None
+    np.testing.assert_allclose(camera()[1, :2], [25, 25], atol=1e-6)
+    plotter.camera.Azimuth(30)
+    turned = camera()
+    window.open_example(example_path("studio"))
+    assert not np.allclose(camera(), turned)
 
 
 @pytest.mark.render

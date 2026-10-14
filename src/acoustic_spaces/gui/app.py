@@ -88,6 +88,7 @@ class MainWindow(QMainWindow):
         self._coverage_scene = None
         self.job: SimulationJob | None = None
         self._job_scene = None
+        self._job_document: Document | None = None
         self._started = 0.0
         #: The document is a bundled example: Save asks for a new place.
         self.from_example = False
@@ -341,6 +342,8 @@ class MainWindow(QMainWindow):
         if old is not document:
             old.changed.disconnect(self._changed)
             old.state_changed.disconnect(self._state)
+            if self.job is not None:  # its results would be of a scene no longer open
+                self.job.cancel()
         self.document = document
         document.changed.connect(self._changed)
         document.state_changed.connect(self._state)
@@ -351,7 +354,9 @@ class MainWindow(QMainWindow):
         self.selection = ("scene", None)
         self._changed()
         self.plan.cancel()
+        self.viewport.start_placing(None)
         self.plan.fit()
+        self.viewport.reset_camera()  # edits keep the camera; another room starts afresh
         self._state()
 
     def _changed(self) -> None:
@@ -546,6 +551,7 @@ class MainWindow(QMainWindow):
             self._refused(str(exc))
             return
         self.plan.fit()
+        self.viewport.reset_camera()
         height = self.document.scene.geometry.height
         self.log(
             f"New floor plan with {len(corners)} corners, {height:g} m high; change the "
@@ -693,18 +699,46 @@ class MainWindow(QMainWindow):
         if start is None or self.from_example:
             start = Path.home() / (start.parent.name if start else "scene") / "scene.yaml"
         path, _ = QFileDialog.getSaveFileName(self, "Save scene", str(start), SCENE_FILTER)
+        if path and not Path(path).suffix:
+            path += ".yaml"
+            # The dialog asked before replacing the name as typed, not this one.
+            if Path(path).exists() and not self._confirm_overwrite(Path(path)):
+                return False
         return bool(path) and self._save_to(Path(path))
 
+    def _confirm_overwrite(self, path: Path) -> bool:
+        answer = QMessageBox.question(
+            self,
+            TITLE,
+            f"{path.name} already exists. Replace it?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
     def _save_to(self, path: Path) -> bool:
+        scene = self.document.scene
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             self.document.save(path, copy_files=self.from_example)
         except (OSError, ValueError) as exc:
             self._error("Could not save", str(exc))
             return False
+        if self.document.scene is not scene:
+            self._files_moved(scene, self.document.scene)
         self.from_example = False
         self.log(f"Saved {path}")
         return True
+
+    def _files_moved(self, old, new) -> None:
+        """The scene ``old`` became ``new``, the same scene with copies of its files (an
+        example saved elsewhere): runs and maps of ``old`` hold for ``new``."""
+        if self._result_scene is old:
+            self._result_scene = new
+        if self._coverage_scene is old:
+            self._coverage_scene = new
+        if self._job_scene is old:
+            self._job_scene = new
+        self._changed()
 
     def save_screenshot(self) -> None:
         if not self.viewport.available:
@@ -797,6 +831,7 @@ class MainWindow(QMainWindow):
     def _start(self, job: SimulationJob, message: str) -> None:
         self.job = job
         self._job_scene = self.document.scene
+        self._job_document = self.document
         job.progress.connect(self._progress)
         # Bound methods, so Qt queues the worker's signals to this window's thread.
         job.failed.connect(self._failed)
@@ -819,7 +854,17 @@ class MainWindow(QMainWindow):
     def _progress(self, message: str) -> None:
         self.log(f"{time.perf_counter() - self._started:6.1f} s  {message}")
 
+    def _closed_meanwhile(self) -> bool:
+        """True (and a message) when the scene of the job that just ended is no longer
+        open: another was opened or started while the job ran."""
+        if self._job_document is self.document:
+            return False
+        self.log("Dropped the results of the run: its scene is no longer open.")
+        return True
+
     def _done(self, result) -> None:
+        if self._closed_meanwhile():
+            return
         first = self.result is None
         self.result, self._result_scene = result, self._job_scene
         self.results.set_result(result)  # keeps the source and listener on show
@@ -833,6 +878,8 @@ class MainWindow(QMainWindow):
         self._draw()
 
     def _map_done(self, result) -> None:
+        if self._closed_meanwhile():
+            return
         self.coverage, self._coverage_scene = result, self._job_scene
         self.map_panel.set_result(result, result.room)
         self.map_panel.mark_stale(self._map_stale())
@@ -956,6 +1003,8 @@ class MainWindow(QMainWindow):
         pair = self.results.pair()
         if pair is None:
             return False
+        if self.results.stop.isEnabled():  # one playback at a time
+            self.stop_playing()
         if self.results.tracking.isChecked():
             return self.play_tracked(path)
         try:
@@ -998,6 +1047,8 @@ class MainWindow(QMainWindow):
         pair = self.results.pair()
         if pair is None:
             return False
+        if self.results.stop.isEnabled():  # one playback at a time
+            self.stop_playing()
         sample_rate = int(self.result.settings.sample_rate)
         order = self._tracking_order()
         fmt = self._listening_format()

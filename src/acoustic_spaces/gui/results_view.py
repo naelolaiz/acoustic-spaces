@@ -231,8 +231,10 @@ class ResultsPanel(QWidget):
         """Show ``result`` (a SimulationResult), or nothing. The source and listener on
         show stay when the new result has them."""
         self.result = result
-        for widget in (self.export, self.listen, self.source, self.listener):
+        for widget in (self.export, self.source, self.listener):
             widget.setEnabled(result is not None)
+        # While something plays, Listen waits for Stop (see set_playing).
+        self.listen.setEnabled(result is not None and not self.stop.isEnabled())
         self._note("" if result is not None else "Run the simulation (F5) to see results here.")
         shown = [combo.currentText() for combo in (self.source, self.listener)]
         for combo in (self.source, self.listener):
