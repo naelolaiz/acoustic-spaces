@@ -699,15 +699,29 @@ class MainWindow(QMainWindow):
         return bool(path) and self._save_to(Path(path))
 
     def _save_to(self, path: Path) -> bool:
+        scene = self.document.scene
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             self.document.save(path, copy_files=self.from_example)
         except (OSError, ValueError) as exc:
             self._error("Could not save", str(exc))
             return False
+        if self.document.scene is not scene:
+            self._files_moved(scene, self.document.scene)
         self.from_example = False
         self.log(f"Saved {path}")
         return True
+
+    def _files_moved(self, old, new) -> None:
+        """The scene ``old`` became ``new``, the same scene with copies of its files (an
+        example saved elsewhere): runs and maps of ``old`` hold for ``new``."""
+        if self._result_scene is old:
+            self._result_scene = new
+        if self._coverage_scene is old:
+            self._coverage_scene = new
+        if self._job_scene is old:
+            self._job_scene = new
+        self._changed()
 
     def save_screenshot(self) -> None:
         if not self.viewport.available:

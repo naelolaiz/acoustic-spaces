@@ -763,6 +763,26 @@ def test_runs_of_a_scene_no_longer_open_are_dropped(window, qapp) -> None:
     assert window.result is None
 
 
+def test_saving_an_example_keeps_its_results(window, qapp, monkeypatch, tmp_path: Path) -> None:
+    from PySide6.QtWidgets import QFileDialog
+
+    window.open_example(example_path("shoebox"))  # its model file goes along
+    _quick_map(window.document)
+    for run in (window.run_simulation, window.run_map):
+        run()
+        _wait(qapp, lambda: window.job is None)
+    window.results.paths.setChecked(True)
+    assert window._shown_response() is not None
+    target = tmp_path / "box" / "scene.yaml"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    assert window.save()
+    assert window.document.scene.geometry.file == (tmp_path / "box" / "shoebox.obj").resolve()
+    # The same scene with a copy of its model: the run and the map still hold.
+    assert not window._stale() and window.results.stale.text() == ""
+    assert not window._map_stale() and window.map_panel.note.text() == ""
+    assert window._shown_response() is not None
+
+
 def test_run_refuses_a_scene_with_problems(window) -> None:
     window.document.edit("move", lambda data: data["sources"][0].update(position=[50, 0, 0]))
     window.run_simulation()
