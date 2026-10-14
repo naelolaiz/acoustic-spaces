@@ -56,6 +56,12 @@ Simulation above; the module also has the parameters a map shows and the A-weigh
 .. automodule:: acoustic_spaces.engine.diffraction
 ```
 
+## Wave-based solver
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.engine.wave
+```
+
 ## Parameters, air and impulse responses
 
 ```{eval-rst}

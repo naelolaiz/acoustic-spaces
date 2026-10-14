@@ -63,6 +63,28 @@
   that turn Ambisonics sound fields of any order.
 - `render.play` takes any block processor, such as `HeadTrackedBinaural`.
 
+**Wave-based solver for low frequencies** (`simulation.wave`, `simulate --wave`)
+
+- The lowest octave bands come from the sound field itself instead of rays: finite
+  differences in time on a cubic grid over the room (the standard leapfrog scheme at
+  its stability limit), in the compiled core, on all cores.
+- Room modes and sound bending round everything at low frequencies; the response
+  joins the ray-traced one through the synthesis's crossovers, from 22 Hz up to the top
+  of the highest wave band (`max_band_hz`: 63, 125 by default, 250 or 500).
+- Surfaces absorb as their materials do in each band (locally reacting, with the
+  admittance whose random-incidence absorption is the material's); bands with
+  different coefficients get runs of their own on the same grid.
+- Closed rooms, open models (the air at the edge of the grid absorbs) and thin
+  screens; a listener outside the source's air is refused with its name.
+- First-order directions from the pressure gradient round the listener, so
+  Ambisonics, binaural and loudspeaker outputs keep the low end's direction.
+- The editor's Simulation page has a Wave solver switch and its highest band;
+  `simulate --wave/--no-wave` and `--wave-band` override the scene.
+- Checked against theory: the modes of a box and their decay rates (within 0.5 %),
+  the reflection off a duct end and the attenuation along absorbing duct walls, the
+  free-field level (within 0.35 dB) and a box's modal response
+  (`validation/wave_solver.py`).
+
 **Also**
 
 - `speech_transmission_index` and `modulation_transfer` in `acoustic_spaces.parameters`.

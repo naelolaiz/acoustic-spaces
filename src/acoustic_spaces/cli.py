@@ -21,6 +21,8 @@ from acoustic_spaces.room import Room
 MAP_PARAMETER_NAMES = ("spl", "spl_a", "g", "c50", "c80", "d50", "edt", "t20", "t30", "ts", "sti")
 #: Edge diffraction settings (engine.diffraction.DIFFRACTION_MODES).
 DIFFRACTION_MODES = ("none", "direct", "first_order")
+#: Highest octave bands the wave solver can compute (scene.model.WaveStage.max_band_hz).
+WAVE_BANDS_HZ = (63, 125, 250, 500)
 
 
 def _band_header(label: str, width: int) -> str:
@@ -417,6 +419,10 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         settings.early.max_order = args.max_order
     if args.diffraction is not None:
         settings.early.diffraction = args.diffraction
+    if args.wave is not None:
+        settings.wave.enabled = args.wave
+    if args.wave_band is not None:
+        settings.wave.max_band_hz = args.wave_band
     if args.length is not None:
         settings.ir_length_s = args.length
     sample_rate = args.sample_rate or settings.sample_rate
@@ -449,9 +455,13 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         progress=lambda message: print(message, file=sys.stderr),
     )
     for (source, listener), response in result.responses.items():
+        wave = ""
+        if response.wave is not None:
+            top = OCTAVE_BANDS_HZ[response.wave.bands - 1]
+            wave = f", {OCTAVE_BANDS_HZ[0]}-{top} Hz from the wave solver"
         print(
             f"\n{source} -> {listener}: direct sound at {response.direct_delay_s * 1e3:.1f} ms, "
-            f"{_early_text(response.early)}"
+            f"{_early_text(response.early)}{wave}"
         )
         print(response.parameters().table())
     files = sum(len(entry["outputs"]) for entry in report["responses"])
@@ -1172,6 +1182,19 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--max-order", type=int, help="override simulation.early.max_order")
     simulate.add_argument(
         "--diffraction", choices=DIFFRACTION_MODES, help="override simulation.early.diffraction"
+    )
+    simulate.add_argument(
+        "--wave",
+        action=argparse.BooleanOptionalAction,
+        help="override simulation.wave.enabled: the lowest octave bands from the wave solver",
+    )
+    simulate.add_argument(
+        "--wave-band",
+        type=int,
+        choices=WAVE_BANDS_HZ,
+        metavar="HZ",
+        help="override simulation.wave.max_band_hz: the highest band it computes (63, 125, "
+        "250 or 500; each costs about 16 times the one below)",
     )
     simulate.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
     simulate.add_argument(

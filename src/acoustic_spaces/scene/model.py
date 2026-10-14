@@ -379,6 +379,27 @@ class LateStage(_Model):
     )
 
 
+class WaveStage(_Model):
+    """The lowest octave bands from a wave-based solver (finite differences in time on a
+    cubic grid) instead of rays: room modes, and sound bending round everything."""
+
+    enabled: bool = Field(
+        default=False, description="compute the lowest octave bands with the wave solver"
+    )
+    max_band_hz: Literal[63, 125, 250, 500] = Field(
+        default=125,
+        description=(
+            "the highest octave band it computes; each octave higher costs about 16 times as much"
+        ),
+    )
+    points_per_wavelength: float = Field(
+        default=8.0,
+        ge=5.0,
+        le=20.0,
+        description="grid cells per wavelength at the top of each band's crossover",
+    )
+
+
 LAYOUT_NAMES = ("stereo", "5.0", "7.0", "5.0.4", "7.0.4", "5.1", "7.1", "5.1.4", "7.1.4")
 
 
@@ -441,6 +462,7 @@ class Output(_Model):
 class Simulation(_Model):
     early: EarlyStage = Field(default_factory=EarlyStage)
     late: LateStage = Field(default_factory=LateStage)
+    wave: WaveStage = Field(default_factory=WaveStage)
     transition_ms: float | None = Field(
         default=None,
         gt=0.0,

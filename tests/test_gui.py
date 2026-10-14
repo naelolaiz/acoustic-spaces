@@ -329,6 +329,14 @@ def test_selection_and_forms(window) -> None:
     window.inspector.pages["simulation"].diffraction.setCurrentText("direct")
     assert window.document.scene.simulation.early.diffraction == "direct"
     assert window.document.scene.simulation.late.rays == 1234
+    page = window.inspector.pages["simulation"]
+    assert not page.wave.isChecked() and not page.wave_band.isEnabled()
+    page.wave.setChecked(True)
+    assert page.wave_band.isEnabled()
+    page.wave_band.setCurrentText("63")
+    wave = window.document.scene.simulation.wave
+    assert wave.enabled and wave.max_band_hz == 63
+    assert window.document.scene.simulation.early.diffraction == "direct"
     window.select("outputs")
     window.inspector.pages["outputs"].binaural.setChecked(False)
     assert [o.format for o in window.document.scene.outputs] == ["mono"]
