@@ -682,6 +682,29 @@ def test_export_to_blender(window, monkeypatch, tmp_path: Path) -> None:
     assert not window.export_blender(particles=True)
 
 
+def test_runs_of_a_scene_no_longer_open_are_dropped(window, qapp) -> None:
+    for run in (window.run_simulation, window.run_map):
+        window.open_example(example_path("shoebox"))
+        _quick_map(window.document)
+        run()
+        assert window.job is not None
+        window.job.wait()  # done, but the window has not heard yet
+        window.new_box()
+        _wait(qapp, lambda: window.job is None)
+        assert window.result is None and window.results.result is None
+        assert window.coverage is None and window.map_panel.current() is None
+        assert "no longer open" in window.messages.toPlainText()
+        assert window.run_action.isEnabled() and window.map_action.isEnabled()
+    # Opening another scene while a run goes on stops it.
+    _quick(window.document)
+    window.run_simulation()
+    job = window.job
+    window.new_box()
+    assert job._stop
+    _wait(qapp, lambda: window.job is None)
+    assert window.result is None
+
+
 def test_run_refuses_a_scene_with_problems(window) -> None:
     window.document.edit("move", lambda data: data["sources"][0].update(position=[50, 0, 0]))
     window.run_simulation()

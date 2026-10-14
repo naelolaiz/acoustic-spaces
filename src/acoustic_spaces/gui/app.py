@@ -88,6 +88,7 @@ class MainWindow(QMainWindow):
         self._coverage_scene = None
         self.job: SimulationJob | None = None
         self._job_scene = None
+        self._job_document: Document | None = None
         self._started = 0.0
         #: The document is a bundled example: Save asks for a new place.
         self.from_example = False
@@ -341,6 +342,8 @@ class MainWindow(QMainWindow):
         if old is not document:
             old.changed.disconnect(self._changed)
             old.state_changed.disconnect(self._state)
+            if self.job is not None:  # its results would be of a scene no longer open
+                self.job.cancel()
         self.document = document
         document.changed.connect(self._changed)
         document.state_changed.connect(self._state)
@@ -797,6 +800,7 @@ class MainWindow(QMainWindow):
     def _start(self, job: SimulationJob, message: str) -> None:
         self.job = job
         self._job_scene = self.document.scene
+        self._job_document = self.document
         job.progress.connect(self._progress)
         # Bound methods, so Qt queues the worker's signals to this window's thread.
         job.failed.connect(self._failed)
@@ -819,7 +823,17 @@ class MainWindow(QMainWindow):
     def _progress(self, message: str) -> None:
         self.log(f"{time.perf_counter() - self._started:6.1f} s  {message}")
 
+    def _closed_meanwhile(self) -> bool:
+        """True (and a message) when the scene of the job that just ended is no longer
+        open: another was opened or started while the job ran."""
+        if self._job_document is self.document:
+            return False
+        self.log("Dropped the results of the run: its scene is no longer open.")
+        return True
+
     def _done(self, result) -> None:
+        if self._closed_meanwhile():
+            return
         first = self.result is None
         self.result, self._result_scene = result, self._job_scene
         self.results.set_result(result)  # keeps the source and listener on show
@@ -833,6 +847,8 @@ class MainWindow(QMainWindow):
         self._draw()
 
     def _map_done(self, result) -> None:
+        if self._closed_meanwhile():
+            return
         self.coverage, self._coverage_scene = result, self._job_scene
         self.map_panel.set_result(result, result.room)
         self.map_panel.mark_stale(self._map_stale())
