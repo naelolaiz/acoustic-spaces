@@ -22,6 +22,14 @@
   responses (CC BY-SA 4.0, like BRAS). `validation/bras_validation.py` compares
   simulations with them; the validation report has the results.
 
+**Examples**
+
+- `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)
+  on the stage of the concert hall, one source for each of its 61 tracks, with scripts
+  that mix a movement at a seat, draw pictures of the hall and the seating, and make a
+  video of the mix. The README links the video made with them.
+- Scripts in the example folders (`.py`, `.sh`) are installed with the scenes.
+
 **SketchUp files** (experimental)
 
 - `.skp` models read directly with the `sketchup` extra, through openskp (MIT), which
