@@ -200,8 +200,8 @@ class Room:
         if not r.closed:
             out.append(
                 f"the model is not closed ({r.boundary_edges} boundary edges, "
-                f"{r.non_manifold_edges} edges shared by more than two faces): rays can "
-                "escape, and the volume and inside checks are skipped"
+                f"{r.odd_edges} edges shared by three or another odd number of faces): "
+                "rays can escape, and the volume and inside checks are skipped"
             )
         if r.inconsistent_edges:
             out.append(

@@ -341,8 +341,11 @@ auditorium, for one). An OBJ export from SketchUp is then the way.
 Polygons are triangulated, duplicate vertices merged and degenerate faces dropped,
 and faces that meet along an edge are turned to agree with each other (each part of
 the model keeps the orientation most of its area has), so a few faces flipped by the
-exporter do not spoil the volume or the inside checks. A model with no faces left
-is refused. `validate` then reports surfaces without a material, sources or listeners
+exporter do not spoil the volume or the inside checks. Where a face's edge runs past
+the corners of faces on its other side (a T-junction, which SketchUp stitches with
+faces of zero area), the edge is split at those corners, so the model stays closed.
+Two rooms touching along an edge, with four faces on it, also count as closed. A model
+with no faces left is refused. `validate` then reports surfaces without a material, sources or listeners
 outside the room and listeners within 1 cm of a source; it warns about models that
 are not closed (rays would escape) and assignments that match nothing. Normals may
 point either way: absorption is applied on both sides.
@@ -363,8 +366,9 @@ tables) take the nearest octave's value and the material's `source` says which.
 Surfaces get a material through `assignments` (any geometry name to a material),
 by having the same name as a material, or through `default_material`.
 
-The BRAS room models are distributed as SketchUp files only; export them to OBJ
-from SketchUp to use them here.
+Two rooms of the BRAS benchmark, converted from its SketchUp models, are in
+[`validation/bras`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/validation/bras)
+as scenes with their surface data and measurements.
 
 ### Sources and directivity
 
@@ -586,8 +590,12 @@ sources in a box, Eyring's reverberation time and Barron's revised theory in a d
 box, ISO 3382-1 parameters of known decays, spatial encoders against closed forms, the
 convolvers against direct convolution, and sweep measurements of synthetic rooms. A
 cross-check against pyroomacoustics in four rooms agrees within 6 % on T30 where both
-programs model the same physics, and shows where their scattering models part ways. Edge diffraction is checked against
-the exact solutions for a half-plane and for wedges, and against Maekawa's chart. The
+programs model the same physics, and shows where their scattering models part ways.
+Against measurements in two rooms of the BRAS benchmark, a seminar room comes out
+within one to two JNDs on reverberation time and one on clarity, and a chamber music
+hall within one on clarity but 20 to 32 % long on reverberation time. Edge diffraction
+is checked against the exact solutions for a half-plane and for wedges, and against
+Maekawa's chart. The
 wave solver matches the frequencies and decay rates of a box's modes within 0.5 %, the
 reflection and absorption of walls, and the free-field level within 0.35 dB.
 The [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
@@ -993,7 +1001,8 @@ cpp/include/           header-only C++ core: BVH, ray tracer, wave solver (FDTD)
 cpp/bindings/          nanobind module exposing the core as acoustic_spaces._native
 tests/                 pytest suite, run on Linux, macOS and Windows in CI
 examples/              example scenes, installed with the package
-validation/            the longer checks behind the validation report
+validation/            the longer checks behind the validation report; bras/ has the
+                       measured rooms of the BRAS benchmark
 docs/                  the Sphinx documentation, the validation report and the pictures
 ```
 
@@ -1028,7 +1037,8 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 
 - [x] Comparing a simulation with a measurement in just noticeable differences
   (`acoustic-spaces compare`).
-- [ ] Validation against measured rooms: the BRAS benchmark.
+- [x] Validation against measured rooms: two rooms of the BRAS benchmark.
+- [x] SketchUp files read directly (experimental, the `sketchup` extra).
 - [ ] More parameters: LF, LFC, IACC, ST1, ST early and late, U50, STIPA, echo criteria.
 - [ ] Scattering that follows surface size and frequency, and third-octave bands.
 - [ ] Sources with their own spectra, delay and EQ, line and surface sources, arrays.
@@ -1037,8 +1047,8 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [ ] The wave solver with impedance boundaries and a GPU path through WebGPU (AMD,
   NVIDIA, Intel and Apple GPUs alike).
 - [ ] Second-order edge diffraction.
-- [ ] Walkthroughs with moving sources and listeners; IFC, Collada and SketchUp import;
-  CATT and ODEON material libraries.
+- [ ] Walkthroughs with moving sources and listeners; IFC and Collada import; CATT and
+  ODEON material libraries.
 
 ## Contributing
 

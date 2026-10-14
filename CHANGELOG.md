@@ -15,11 +15,33 @@
 - A channel and a reference for G per file, `--json`, and `--plot` with the two decays
   in each octave band (`plot_comparison` in `acoustic_spaces.viz`).
 
+**Validation against measured rooms**
+
+- Two rooms of the BRAS benchmark, a seminar room and a chamber music hall, as scenes in
+  `validation/bras`, with their surface data and the parameters of their measured
+  responses (CC BY-SA 4.0, like BRAS). `validation/bras_validation.py` compares
+  simulations with them; the validation report has the results.
+
 **SketchUp files** (experimental)
 
 - `.skp` models read directly with the `sketchup` extra, through openskp (MIT), which
   needs no SketchUp: faces labelled by their material, matched by colour. The editor
   opens them too. OBJ exported from SketchUp stays the recommended path.
+
+**Geometry**
+
+- Where a face's edge runs past the corners of faces on its other side (a T-junction,
+  which SketchUp stitches with faces of zero area), cleaning splits the edge at those
+  corners, so the model stays closed.
+- Rooms touching along an edge, with four faces on it, count as closed when the faces
+  pair up. Edges shared by an odd number of faces still leave a model open, and the
+  report and the warning count them.
+
+**Fixes**
+
+- The hint for a missing extra names the packages to install. It said
+  `pip install "acoustic-spaces[extra]"`, which looks for the package on PyPI, where it
+  is not.
 
 ## 2.0.0
 
