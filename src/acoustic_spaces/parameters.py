@@ -13,7 +13,8 @@ All parameters are per octave band and measured from the arrival of the direct s
 
 A response that stops before it has decayed loses the energy of its missing tail and
 reads too short; the tail is estimated from the last part of the decay and added back
-(ISO 3382-1, 5.3.4).
+(ISO 3382-1, 5.3.4). One that stops before it has decayed by 20 dB leaves too much to
+that estimate, and all its parameters are NaN.
 """
 
 from __future__ import annotations
@@ -41,9 +42,11 @@ PARAMETERS = {
     "g": ("dB", "strength"),
 }
 #: The fit for the missing tail stays this far (dB) above the level the decay reaches
-#: at the end of the response, and spans at most ``_TAIL_SPAN_DB``.
+#: at the end of the response, and spans at most ``_TAIL_SPAN_DB``. A response must
+#: decay to ``_MIN_DECAY_DB`` for any parameter.
 _TAIL_HEADROOM_DB = 10.0
 _TAIL_SPAN_DB = 20.0
+_MIN_DECAY_DB = -20.0
 
 #: Ratio between adjacent octave mid-band frequencies, base 10 (IEC 61260-1).
 OCTAVE_RATIO = 10.0**0.3
@@ -189,8 +192,9 @@ def _band_parameters(e: np.ndarray, dt: float, offset: float, reference: float |
     tail, rate = _tail(e, dt)
     total = float(e.sum()) + tail
     nan = math.nan
+    undefined = dict(edt=nan, t20=nan, t30=nan, c50=nan, c80=nan, d50=nan, ts=nan, g=nan)
     if total <= 0:
-        return dict(edt=nan, t20=nan, t30=nan, c50=nan, c80=nan, d50=nan, ts=nan, g=nan)
+        return undefined
 
     remaining = np.concatenate([np.cumsum(e[::-1])[::-1], [0.0]]) + tail
     with np.errstate(divide="ignore"):
@@ -198,6 +202,12 @@ def _band_parameters(e: np.ndarray, dt: float, offset: float, reference: float |
     out = {
         name: _decay_time(level, edges, top, bottom) for name, (top, bottom) in DECAY_RANGES.items()
     }
+    # A response that stops before its decay has fallen to _MIN_DECAY_DB leaves too much
+    # to the estimated tail: nothing can be read from it, as T20 and T30 already cannot.
+    # The fall counts at the end of the curve, tail included, or along the early decay's
+    # slope, as one strong ray late in a sparse tail can hold the end of the curve up.
+    if level[-1] > _MIN_DECAY_DB and not 60.0 * edges[-1] / out["edt"] >= -_MIN_DECAY_DB:
+        return undefined
     cumulative = total - remaining
     early50 = float(np.interp(0.05, edges, cumulative))
     early80 = float(np.interp(0.08, edges, cumulative))

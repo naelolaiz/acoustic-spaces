@@ -434,7 +434,8 @@ of the direct sound at 10 m (0.01) is the reference for strength G.
 and G. `Response.parameters()` computes them from the simulated energies;
 `acoustic_spaces.parameters.from_impulse_response` does the same for any mono IR (see
 [Measuring impulse responses](#measuring-impulse-responses)). A response that ends
-before it has decayed is extended by its fitted decay rate.
+before it has decayed is extended by its fitted decay rate; one that ends before it
+has decayed by 20 dB leaves too much to that estimate, and all its parameters are NaN.
 Air absorption follows ISO 9613-1 for the scene's temperature, humidity and pressure.
 
 ### Edge diffraction

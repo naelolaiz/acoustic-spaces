@@ -74,13 +74,31 @@ def test_from_impulse_response_of_decaying_noise() -> None:
 def test_tail_estimate_ignores_a_late_spike() -> None:
     # With few rays, one strong ray can land in the last few milliseconds of a response
     # that stops long before it has decayed. That must not read as a decay that stopped.
-    t60 = 2.5
+    # It falls by 26 dB here (one that stops above -20 dB has no parameters at all).
+    t60, length = 2.5, 1.1
     k = 6.0 * math.log(10.0) / t60
-    energy = _exponential(t60, 0.8)
-    energy[790] += 0.03 * energy.sum()
+    energy = _exponential(t60, length)
+    energy[1090] += 0.03 * energy.sum()
     p = from_energy(energy[None, :], DT, onset_s=0.0, reference_energy=1.0 / k)
     assert abs(p.g[0]) < 0.3  # total energy, against the untruncated decay's 1 / k
-    assert p.ts[0] == pytest.approx(1.0 / k, rel=0.2)
+    # Centre time, against that of the same energies followed by the decay's exact tail.
+    tail = math.exp(-k * length) / k
+    moment = (np.arange(len(energy)) + 0.5) * DT @ energy + tail * (length + 1.0 / k)
+    assert p.ts[0] == pytest.approx(moment / (energy.sum() + tail), rel=0.1)
+
+
+def test_a_response_that_stops_early_has_no_parameters() -> None:
+    # A 2 s decay cut off after 6 dB used to read EDT 1.1 s and G 1.1 dB low; cut off
+    # after 25 dB, everything but T30 can be read.
+    k = 6.0 * math.log(10.0) / 2.0
+    short = from_energy(_exponential(2.0, 0.2)[None, :], DT, onset_s=0.0, reference_energy=1 / k)
+    for name in PARAMETERS:
+        assert np.isnan(getattr(short, name)[0]), name
+    longer = from_energy(_exponential(2.0, 0.833)[None, :], DT, 0.0, reference_energy=1 / k)
+    assert np.isnan(longer.t30[0])
+    assert longer.edt[0] == pytest.approx(2.0, rel=0.01) and abs(longer.g[0]) < 0.01
+    for name in ("t20", "c50", "c80", "d50", "ts"):
+        assert np.isfinite(getattr(longer, name)[0]), name
 
 
 def test_octave_filters_meet_their_band_edges() -> None:
