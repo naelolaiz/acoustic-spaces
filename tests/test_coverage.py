@@ -181,6 +181,26 @@ def test_statistical_tail_and_noise() -> None:
     assert np.all((0 <= quiet.value("sti")) & (quiet.value("sti") <= 1))
 
 
+def test_statistical_map_matches_listeners_at_its_points() -> None:
+    # Barron's reflected energy less the early paths, as at a listener: the scattered
+    # share of the early reflections and the higher orders before the transition count.
+    simulation = {
+        "early": {"method": "image_sources", "max_order": 1},
+        "late": {"method": "statistical"},
+        "ir_length_s": 1.5,
+        "seed": 1,
+    }
+    grid = map_grid(_shoebox(), spacing=2.0)
+    picks = [0, len(grid) // 2]
+    listeners = [{"name": f"p{k}", "position": grid.points[k].tolist()} for k in picks]
+    room = _shoebox(simulation=simulation, listeners=listeners)
+    values = coverage_map(room, settings=Coverage(spacing=2.0)).get().values
+    responses = simulate(room)
+    for k in picks:
+        g = responses["talker", f"p{k}"].parameters().g
+        np.testing.assert_allclose(values["g"][k], g, atol=0.01)
+
+
 def test_short_responses_end_within_the_fine_late_slots() -> None:
     # 105 ms: the late energy has coarse slots, but the far points end before them.
     simulation = {

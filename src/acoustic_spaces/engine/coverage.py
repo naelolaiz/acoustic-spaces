@@ -10,7 +10,8 @@ with a slab of air around it. For every source:
 - everything else comes from one stochastic ray tracing run in which every leg of
   every ray adds its track length through each slab it crosses
   (:func:`~acoustic_spaces.engine.late.stochastic_map_energy`), so a map costs about
-  as much as one listener; with the statistical late method, an exponential decay.
+  as much as one listener; with the statistical late method, the exponential decay of
+  :func:`~acoustic_spaces.engine.late.statistical_energy`, as at a listener.
 
 Each point's parameters follow from its energy per band and time slot as at a
 listener (ISO 3382-1), together with the speech transmission index (IEC 60268-16) and
@@ -413,10 +414,10 @@ class _SourceRun:
 
     level_db: float
     onset: np.ndarray  # (n,) arrival of the direct sound
-    early: list[tuple[np.ndarray, np.ndarray]]  # per point: delays, energies (paths, bands)
+    early: list[early_stage.EarlyReflections]  # per point
     late: late_stage.MapEnergy | None
-    #: Statistical tail: (T60 per band, start per point, volume, speed of sound).
-    statistical: tuple[np.ndarray, np.ndarray, float, float] | None
+    #: Statistical tail: (T60 per band, volume, speed of sound).
+    statistical: tuple[np.ndarray, float, float] | None
 
 
 def _curve(run: _SourceRun, k: int, length: float, bands: int) -> np.ndarray:
@@ -424,7 +425,7 @@ def _curve(run: _SourceRun, k: int, length: float, bands: int) -> np.ndarray:
     onset = run.onset[k]
     slots = max(1, int(math.ceil((length - onset) / TIME_STEP - 1e-9)))
     out = np.zeros((bands, slots))
-    delays, energy = run.early[k]
+    delays, energy = run.early[k].delay_s, run.early[k].energy
     idx = np.floor((delays - onset) / TIME_STEP + 1e-9).astype(np.int64)
     keep = (idx >= 0) & (idx < slots)
     for b in range(bands):
@@ -440,12 +441,24 @@ def _curve(run: _SourceRun, k: int, length: float, bands: int) -> np.ndarray:
             end = min(slots, late.fine_bins + spread.shape[1])
             out[:, late.fine_bins : end] += spread[:, : end - late.fine_bins]
     if run.statistical is not None:
-        t60, start, volume, c = run.statistical
-        rate = 6.0 * math.log(10.0) / t60[:, None]
-        edges = onset + np.arange(slots + 1) * TIME_STEP
-        lo = np.maximum(edges[:-1], start[k])
-        hi = np.maximum(edges[1:], start[k])
-        out += c / volume / rate * (np.exp(-rate * lo) - np.exp(-rate * hi))
+        t60, volume, c = run.statistical
+        # As at a listener, on its slots from emission; their running sum carried over
+        # to this point's slots.
+        tail = late_stage.statistical_energy(
+            t60,
+            volume,
+            [onset],
+            [run.early[k]],
+            max_time=length,
+            time_step=TIME_STEP,
+            speed_of_sound=c,
+        ).energy[0]
+        running = np.concatenate([np.zeros((bands, 1)), np.cumsum(tail, axis=1)], axis=1)
+        times = np.arange(running.shape[1]) * TIME_STEP
+        # Nothing arrives before the direct sound, in the slot that holds it either.
+        times[min(int(onset / TIME_STEP), len(times) - 1)] = onset
+        at = onset + np.arange(slots + 1) * TIME_STEP
+        out += np.diff([np.interp(at, times, row) for row in running], axis=1)
     return out
 
 
@@ -564,7 +577,7 @@ def coverage_map(
             if diffraction is not None:
                 paths = diffraction.apply(grid.points[k], paths, float(cutoff[k]))
                 diffracted += int(paths.diffracted.sum())
-            early.append((paths.delay_s, paths.energy))
+            early.append(paths)
         if diffraction is not None:
             info["edges"] = float(len(diffraction.edges))
             info["diffracted_paths"] = float(diffracted)
@@ -575,7 +588,7 @@ def coverage_map(
         stat = None
         if statistical:
             t60 = room.reverberation_time("eyring", air_absorption=True)
-            stat = (np.asarray(t60, dtype=float), onset + transition, float(volume), c)
+            stat = (np.asarray(t60, dtype=float), float(volume), c)
         else:
             say(f"{source.name}: stochastic ray tracing over the map ({rays} rays)")
             late = late_stage.stochastic_map_energy(

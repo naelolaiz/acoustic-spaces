@@ -574,7 +574,8 @@ from one ray tracing run per source in which every ray adds its path length thro
 slab of air around each point (a track-length estimate), so a map of hundreds of
 points costs about as much as a few listeners: the concert hall example (480 points,
 two sources) takes about 15 s. In the shoebox example, full simulations at map points
-give G within 0.3 dB of the map and T30 within 5 %.
+give G within 0.3 dB of the map and T30 within 5 %. With the statistical late method
+each point gets the late part a listener there would, and G agrees within 0.01 dB.
 
 Each source radiates its `level_db` (sound power, dB re 1 pW) spread evenly over the
 octave bands, which sets the sound pressure levels. The STI (IEC 60268-16, male

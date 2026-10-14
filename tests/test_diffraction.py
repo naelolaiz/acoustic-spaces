@@ -348,7 +348,9 @@ def test_coverage_maps_hear_round_corners() -> None:
     assert bent.details["s"]["diffracted_paths"] > 0 and "edges" not in plain.details["s"]
     shadow = (bent.grid.points[:, 0] < 4) & (bent.grid.points[:, 1] > 6)
     assert shadow.any()
-    # Behind the corner, at 125 Hz: more sound, and more of it early.
-    for name, rise in (("g", 0.15), ("c80", 0.2)):
+    # Behind the corner, at 125 Hz: more sound, and more of it early. The statistical
+    # tail is Barron's energy less the early paths', so of what bends round the corner
+    # only the direct sound adds to the total.
+    for name, rise in (("g", 0.02), ("c80", 0.02)):
         values = bent.get().values[name][shadow, 1] - plain.get().values[name][shadow, 1]
         assert np.all(values > rise)
