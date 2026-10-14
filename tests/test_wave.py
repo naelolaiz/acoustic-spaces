@@ -314,6 +314,45 @@ def test_wave_responses_refuse_listeners_outside_and_huge_grids() -> None:
         wave_responses(model, source, [source], ["l"], max_band_hz=100, **common)
 
 
+def test_wave_responses_refuse_before_running(tmp_path: Path) -> None:
+    said: list[str] = []
+    common = {"max_band_hz": 63, "length_s": 0.1, "sample_rate": FS, "speed_of_sound": C}
+    common["say"] = said.append
+    room = Room.from_yaml(SHOEBOX)
+    source = np.array(room.scene.sources[0].position)
+    with pytest.raises(ValueError, match="'out' is not in the air"):
+        wave_responses(TraceModel.from_room(room), source, [[50.0, 50.0, 50.0]], ["out"], **common)
+    assert said == []  # not a step taken
+    # A source shut in a box inside the room leaves every listener out of its air.
+    vertices, faces = [], []
+    for low, size in (((0, 0, 0), (4.0, 3.0, 2.5)), ((1, 1, 1), (0.6, 0.6, 0.6))):
+        mesh = box_mesh(size)
+        faces += [f"f {' '.join(str(len(vertices) + 1 + i) for i in f)}" for f in mesh.faces]
+        vertices += [f"v {x} {y} {z}" for x, y, z in mesh.vertices + low]
+    obj = tmp_path / "boxed.obj"
+    obj.write_text("\n".join([*vertices, "g walls", *faces]))
+    boxed = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"file": str(obj)},
+                "materials": {"m": {"absorption": [0.2] * 8, "scattering": 0.1}},
+                "default_material": "m",
+                "sources": [{"name": "s", "position": [1.3, 1.3, 1.3]}],
+                "listeners": [{"name": "l", "position": [3.0, 2.0, 1.2]}],
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="source 's' is closed in"):
+        wave_responses(
+            TraceModel.from_room(boxed),
+            [1.3, 1.3, 1.3],
+            [[3.0, 2.0, 1.2]],
+            ["l"],
+            label="s",
+            **common,
+        )
+
+
 def test_open_models_absorb_at_the_grid_edge(tmp_path: Path) -> None:
     obj = tmp_path / "floor.obj"
     obj.write_text("v 0 0 0\nv 8 0 0\nv 8 6 3\nv 0 6 3\ng floor\nf 1 2 3 4\n")

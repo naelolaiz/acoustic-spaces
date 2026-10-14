@@ -348,6 +348,18 @@ def wave_responses(
             1.0,
             threads,
         )
+        # Before any step: a listener outside the source's air, or a source closed in.
+        found = [solver.probe_found(p) for p in range(len(probes))]
+        missing = [listener for i, listener in enumerate(names) if not found[7 * i]]
+        if missing:
+            air, volume = solver.air_cells * h**3, model.room.volume_m3
+            if volume and air < 0.1 * volume:
+                who = f"source {label!r}" if label else "the source"
+                raise ValueError(
+                    f"{who} is closed in: the wave grid has {air:.2g} m³ of air round it, "
+                    f"in a room of {volume:.3g} m³"
+                )
+            raise ValueError(f"listener {missing[0]!r} is not in the air of the wave grid")
         covered = [OCTAVE_BANDS_HZ[b] for b, r in enumerate(band_runs) if r == k]
         name = " and ".join(f"{f}" for f in covered) + " Hz"
         say(
@@ -363,7 +375,6 @@ def wave_responses(
                 say(f"{label}: wave solver, {name}, {100 * c // chunks} %")
             recorded.append(solver.run(drive[bounds[c] : bounds[c + 1]]))
         recorded_runs.append(np.concatenate(recorded, axis=1)[:, delay:][:, :samples])
-        found = [solver.probe_found(p) for p in range(len(probes))]
         info["wave_cells"] = float(solver.air_cells)
         if solver.open:
             info["wave_open"] = 1.0
