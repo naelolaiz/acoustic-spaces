@@ -5,11 +5,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from acoustic_spaces import Room, Scene, _native, simulate
+from acoustic_spaces import Room, Scene, _native, simulate, synthesis
+from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.wave import (
     COURANT,
     MAX_ABSORPTION,
+    WaveResponse,
     _first_order,
     absorption_of_impedance,
     admittance,
@@ -264,6 +267,47 @@ def test_first_order_field_points_to_the_source() -> None:
     ambisonics = response.spatial_impulse_response(Ambisonics(1), FS)
     low = response.wave.field(FS, len(ambisonics))
     assert np.dot(ambisonics[:n, 3], low[:n, 0]) < 0
+
+
+def test_hybrid_tail_is_flat_across_the_crossover() -> None:
+    # The rays' late noise and a wave band tail of the same, flat level: they do not
+    # interfere, so they add in energy, and the sum stays flat in 1/6 octaves round 177
+    # Hz, where one hands over to the other (it dipped by 3 dB). The tolerance is what
+    # eight renderings of the noise leave (0.7 dB; 0.2 dB with 32).
+    length, step, energy = 2.0, 1e-3, 1e-4
+    n, slots = int(length * FS), int(length / step)
+    spectrum = np.exp(2j * np.pi * np.random.default_rng(0).random(n // 2 + 1))
+    spectrum[0] = spectrum[-1] = 1.0
+    signals = np.zeros((1, n, 4))
+    signals[0, :, 0] = np.fft.irfft(spectrum, n)
+    signals *= math.sqrt(synthesis.ENERGY_TO_IR * energy * slots / np.sum(signals**2))
+    response = Response(
+        source="s",
+        listener="l",
+        early=EarlyReflections.empty(8),
+        late=np.full((8, slots), energy),
+        time_step=step,
+        length_s=length,
+        direct_delay_s=0.0,
+        transition_s=0.0,
+        volume_m3=200.0,
+        speed_of_sound=C,
+        wave=WaveResponse(FS, signals, (0, 0), 0.2),
+    )
+    f = np.fft.rfftfreq(n, 1.0 / FS)
+    centres = 177.0 * 2.0 ** (np.arange(-6, 7) / 6)
+
+    def levels(render, seeds: int) -> np.ndarray:
+        power = np.zeros(len(centres))
+        for seed in range(seeds):
+            s = np.abs(np.fft.rfft(render(seed))) ** 2
+            power += [s[(f > c * 2 ** (-1 / 12)) & (f < c * 2 ** (1 / 12))].mean() for c in centres]
+        return 10 * np.log10(power)
+
+    mono = levels(lambda seed: response.impulse_response(FS, seed=seed), 8)
+    assert np.ptp(mono) < 1.0
+    w = levels(lambda seed: response.spatial_impulse_response(Ambisonics(1), FS, seed)[:, 0], 4)
+    assert np.ptp(w) < 1.0
 
 
 def test_simulate_with_the_wave_solver() -> None:

@@ -94,13 +94,16 @@ class Response:
         drives a random-sign Dirac sequence with the density of reflections in the room.
         From 50 ms after the direct sound the late energy is smoothed over 10 ms first,
         so a single strong ray late in the tail does not become a click. The wave
-        solver's bands, when it ran, take the place of the lowest ones.
+        solver's bands, when it ran, take the place of the lowest ones: through the
+        crossover the early paths make way for them in pressure and the noise, which
+        does not interfere with them, in energy (``WaveResponse.high_pass``).
         """
         n = int(math.ceil(self.length_s * sample_rate))
         scale = synthesis.ENERGY_TO_IR
         band_signals = synthesis.place_impulses(
             self.early.delay_s, np.sqrt(scale * self.early.energy), n, sample_rate
         )
+        noise_signals = np.zeros_like(band_signals)
         if np.any(self.late > 0):
             rng = np.random.default_rng(self.seed if seed is None else seed)
             noise = synthesis.dirac_sequence(
@@ -109,11 +112,14 @@ class Response:
             late = synthesis.smooth_energy(
                 self.late, self.time_step, self.direct_delay_s + SMOOTH_AFTER_S
             )
-            band_signals += synthesis.shape_noise(scale * late, self.time_step, noise, sample_rate)
-        ir = synthesis.combine_bands(band_signals, sample_rate)
-        if self.wave is not None:
-            ir = self.wave.high_pass(ir, sample_rate) + self.wave.field(sample_rate, n)[:, 0]
-        return ir
+            noise_signals = synthesis.shape_noise(scale * late, self.time_step, noise, sample_rate)
+        if self.wave is None:
+            return synthesis.combine_bands(band_signals + noise_signals, sample_rate)
+        # The wave bands take the early paths' place in pressure, the noise's in energy.
+        early = self.wave.high_pass(synthesis.combine_bands(band_signals, sample_rate), sample_rate)
+        noise = synthesis.combine_bands(noise_signals, sample_rate)
+        late = self.wave.high_pass(noise, sample_rate, late=True)
+        return early + late + self.wave.field(sample_rate, n)[:, 0]
 
     def spatial_impulse_response(
         self, fmt, sample_rate: int = 48_000, seed: int | None = None

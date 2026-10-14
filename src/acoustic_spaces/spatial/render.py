@@ -126,7 +126,9 @@ def _late_impulses(response: Response, n: int, sample_rate: float, seed: int | N
     return signals, at, np.clip(chosen, 0, count - 1), directions
 
 
-def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed) -> np.ndarray:
+def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed):
+    """``response`` in ``fmt`` (n, channels), and its early paths alone when the wave
+    solver's bands are to take their place (else None)."""
     early = response.early
     amplitudes = np.sqrt(synthesis.ENERGY_TO_IR * early.energy)
     early_gains = fmt.gains(to_head(early.direction, response.orientation))
@@ -135,17 +137,21 @@ def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed) -> 
         signals, at, chosen, directions = _late_impulses(response, n, sample_rate, seed)
         late_gains = fmt.gains(to_head(directions, response.orientation))
     out = np.empty((n, fmt.channels))
+    alone = np.empty((n, fmt.channels)) if response.wave is not None else None
     for c in range(fmt.channels):
         bands = synthesis.place_impulses(
             early.delay_s, amplitudes * early_gains[:, c : c + 1], n, sample_rate
         )
+        if alone is not None:
+            alone[:, c] = synthesis.combine_bands(bands, sample_rate)
         if has_late:
             bands[:, at] += signals[:, at] * late_gains[chosen, c].T
         out[:, c] = synthesis.combine_bands(bands, sample_rate)
-    return out
+    return out, alone
 
 
-def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, seed) -> np.ndarray:
+def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, seed):
+    """As :func:`_render_gains`, at the two ears."""
     hrtf = fmt.at(sample_rate)
     out = np.zeros((2, n + hrtf.taps))
 
@@ -173,6 +179,7 @@ def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, see
                 lo, hi = max(offset, 0), min(offset + n_k, out.shape[1])
                 if lo < hi:
                     out[:, lo:hi] += kernels[k, :, lo - offset : hi - offset]
+    alone = out[:, :n].T.copy() if response.wave is not None else None
 
     # Late part: each impulse through the HRIR of its direction, then the band filters.
     if np.any(response.late > 0):
@@ -188,7 +195,7 @@ def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, see
             )
         for ear in range(2):
             out[ear] += synthesis.combine_bands(ears[:, ear], sample_rate)
-    return out[:, :n].T
+    return out[:, :n].T, alone
 
 
 def _icosahedron() -> np.ndarray:
@@ -205,13 +212,17 @@ def _icosahedron() -> np.ndarray:
 WAVE_DIRECTIONS = _icosahedron()
 
 
-def _with_wave(response: Response, fmt, out: np.ndarray, sample_rate: float) -> np.ndarray:
-    """``out`` with its lowest bands replaced by the wave solver's, in ``fmt``."""
+def _with_wave(
+    response: Response, fmt, out: np.ndarray, early: np.ndarray, sample_rate: float
+) -> np.ndarray:
+    """``out`` with its lowest bands replaced by the wave solver's, in ``fmt``: those of
+    its ``early`` paths in pressure, those of the rest, the noise, in energy (as in the
+    mono response)."""
     from acoustic_spaces.spatial.ambisonics import Ambisonics, real_spherical_harmonics
 
     wave = response.wave
     n = len(out)
-    out = wave.high_pass(out, sample_rate)
+    out = wave.high_pass(early, sample_rate) + wave.high_pass(out - early, sample_rate, late=True)
     first = wave.field(sample_rate, n)  # W, X, Y, Z in room coordinates
     if isinstance(fmt, Ambisonics):
         # Exact to first order; the wave solver gives nothing higher.
@@ -268,11 +279,11 @@ def spatial_impulse_response(
     if isinstance(fmt, Mono):
         return response.impulse_response(sample_rate, seed)[:, None]
     if isinstance(fmt, Binaural):
-        out = _render_binaural(response, fmt, n, sample_rate, seed)
+        out, early = _render_binaural(response, fmt, n, sample_rate, seed)
     else:
-        out = _render_gains(response, fmt, n, sample_rate, seed)
+        out, early = _render_gains(response, fmt, n, sample_rate, seed)
     if response.wave is not None:
-        out = _with_wave(response, fmt, out, sample_rate)
+        out = _with_wave(response, fmt, out, early, sample_rate)
     return out
 
 

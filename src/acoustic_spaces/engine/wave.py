@@ -210,10 +210,14 @@ class WaveResponse:
             spectrum = spectrum + np.fft.rfft(run, n_fft, axis=0) * gain[:, None]
         return np.fft.irfft(spectrum, n_fft, axis=0)[:n]
 
-    def high_pass(self, signals: np.ndarray, sample_rate: float) -> np.ndarray:
-        """``signals`` (n, channels) without the frequencies the wave bands cover."""
+    def high_pass(self, signals: np.ndarray, sample_rate: float, late: bool = False) -> np.ndarray:
+        """``signals`` (n, channels) without the frequencies the wave bands cover, which
+        take them at a gain g: the rays' early paths at 1 - g, as they add to the wave
+        bands' sound in pressure, or with ``late`` their noise at sqrt(1 - g^2), as it
+        adds to the wave bands' tail in energy."""
         n_fft = synthesis.fft_size(len(signals), sample_rate)
-        return _filter(signals, 1.0 - wave_gains(n_fft, sample_rate, self.bands).sum(axis=0), n_fft)
+        g = wave_gains(n_fft, sample_rate, self.bands).sum(axis=0)
+        return _filter(signals, np.sqrt(1.0 - g**2) if late else 1.0 - g, n_fft)
 
     def energy(self, time_step: float, slots: int) -> np.ndarray:
         """Energy per band and time slot (bands, slots), as the ray tracer counts it: the
