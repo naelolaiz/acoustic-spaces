@@ -295,7 +295,14 @@ def plot_room(
             always_visible=True,
         )
     plotter.set_background(BACKGROUND[0], top=BACKGROUND[1])
-    plotter.add_legend(legend, bcolor=PANEL, face="rectangle", size=(0.22, 0.04 * len(legend)))
+    # Small and in a corner, where it hides little of the room and no colour bar.
+    plotter.add_legend(
+        legend,
+        bcolor=PANEL,
+        face="rectangle",
+        loc="upper right",
+        size=(0.15, 0.026 * len(legend)),
+    )
     plotter.add_text(room.scene.name, font_size=11, color="white")
     plotter.add_axes()
     plotter.view_isometric()
@@ -675,7 +682,8 @@ def plot_directivity(
     index = directivity.index()[4]
     name = directivity.name or "directivity"
     fig.suptitle(
-        f"{name}: dB re the loudest direction; directivity index {index:.1f} dB at 1 kHz",
+        # The name on a line of its own: a per-band one is long.
+        f"{name}\ndB re the loudest direction; directivity index {index:.1f} dB at 1 kHz",
         color="white",
     )
     if path is not None:
