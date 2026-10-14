@@ -427,7 +427,10 @@ python validation/bras_validation.py --json bras.json --plots docs/validation
 python validation/bras_validation.py --materials initial --plots docs/validation
 ```
 
-The cross-check takes about 6 minutes on 4 cores, the benchmark about 2 minutes and the
-wave solver's checks about 30 seconds. The
-numbers above come from acoustic_spaces 1.0.0 with seed 1; other seeds move them by a few
-percent.
+The cross-check takes about 6 minutes on 4 cores, the benchmark about 2 minutes, the
+wave solver's checks about 30 seconds and each BRAS run about 10 minutes. The
+cross-check's numbers come from acoustic_spaces 1.0.0 with seed 1. Run again after
+2.0.0, this package's numbers came out exactly the same. Those of pyroomacoustics, which
+draws its rays afresh on every run, moved by up to 6 % in T30, 16 % in EDT and 2 dB in
+C80, and the differences in the tables with them. Other seeds move this package's numbers
+by a few percent.
