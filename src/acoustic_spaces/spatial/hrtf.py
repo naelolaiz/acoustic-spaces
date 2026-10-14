@@ -5,7 +5,7 @@ directions in head coordinates (x forward, y left, z up). Responses are looked u
 nearest direction.
 
 ``read_sofa`` reads SimpleFreeFieldHRIR files (the AES69 convention most HRTF databases
-use); it needs h5py (``pip install acoustic-spaces[sofa]``). ``spherical_head`` needs no
+use); it needs h5py (the ``sofa`` extra). ``spherical_head`` needs no
 data: Brown and Duda's (1998) rigid sphere with ears slightly behind the middle, which
 gives the interaural time and level differences of a head but no pinna cues, so front
 and back, up and down are hard to tell apart with it.
