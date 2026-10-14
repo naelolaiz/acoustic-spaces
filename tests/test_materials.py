@@ -78,6 +78,16 @@ def test_csv_with_header_and_semicolons(tmp_path: Path) -> None:
     assert scatter is None
 
 
+def test_csv_refuses_values_that_are_not_finite(tmp_path: Path) -> None:
+    path = tmp_path / "nan.csv"
+    path.write_text("125,250\n0.1,nan\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"nan.csv:2: expected finite numbers"):
+        read_coefficients_csv(path)
+    path.write_text("125,inf\n0.1,0.2\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"nan.csv:1: expected finite numbers"):
+        read_coefficients_csv(path)
+
+
 def test_csv_length_mismatch(tmp_path: Path) -> None:
     path = tmp_path / "bad.csv"
     path.write_text("125,250\n0.1\n", encoding="utf-8")
