@@ -162,7 +162,7 @@ class ScenePage(Page):
         self.default.currentIndexChanged.connect(self._default)
         form.addRow("Default material", self.default)
         self.temperature = spin(-20, 50, 1, 1, "°C")
-        self.humidity = spin(0, 100, 0, 5, "%")
+        self.humidity = spin(0, 100, 1, 5, "%")
         self.pressure = spin(50, 110, 3, 0.5, "kPa")
         for box, field in (
             (self.temperature, "temperature_c"),

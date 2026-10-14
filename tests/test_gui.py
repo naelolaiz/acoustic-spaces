@@ -408,6 +408,15 @@ def test_forms_write_back_only_what_changed(window) -> None:
     assert (source.orientation.yaw, source.orientation.pitch) == (12.345, 10.0)
 
 
+def test_scene_form_keeps_the_humidity_to_a_tenth(window) -> None:
+    window.document.edit("humid", lambda data: data["air"].update(humidity_percent=52.5))
+    window.select("scene", None)
+    page = window.inspector.pages["scene"]
+    assert page.humidity.value() == 52.5
+    page.humidity.stepUp()
+    assert window.document.scene.air.humidity_percent == 57.5
+
+
 def test_geometry_form_shows_the_room_units(window) -> None:
     from acoustic_spaces.scene import Scene
 
