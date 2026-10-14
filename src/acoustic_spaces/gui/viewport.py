@@ -169,6 +169,7 @@ class Viewport(QWidget):
         camera = None if new_geometry else plotter.camera_position
         self._mesh = room.mesh
         plotter.clear()
+        plotter.enable_lightkit()  # clear() takes the lights too, leaving the room unlit
         self._actors.clear()
         self._markers, self._surfaces = [], []
         self._point_actors = {}

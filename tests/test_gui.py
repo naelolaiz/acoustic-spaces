@@ -887,6 +887,24 @@ def test_clicks_select_and_place(window, qapp) -> None:
 
 
 @pytest.mark.render
+def test_the_3d_view_keeps_its_lights(window, qapp) -> None:
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    import pyvista as pv
+
+    reference = pv.Plotter(off_screen=True)  # the light kit, as the view starts with
+    lights = len(reference.renderer.lights)
+    reference.close()
+    assert lights > 0
+    # The room is drawn when the window opens, and again for every change.
+    assert len(viewport.plotter.renderer.lights) == lights
+    window.select("sources", 0)
+    window.open_example(example_path("studio"))
+    assert len(viewport.plotter.renderer.lights) == lights
+
+
+@pytest.mark.render
 def test_arrows_show_the_orientation(window, qapp) -> None:
     viewport = window.viewport
     if not viewport.available:
