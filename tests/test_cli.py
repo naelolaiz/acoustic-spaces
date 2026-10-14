@@ -329,3 +329,32 @@ def test_play_command(
     assert "played 0.4 s" in captured.out
     assert main(["play", ir, "--live", "--seconds", "0.1", "--absolute"]) == 0
     assert "as loud" not in capsys.readouterr().err
+
+
+def test_play_with_head_tracking(
+    simulated: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], fake_sounddevice
+) -> None:
+    import numpy as np
+
+    from acoustic_spaces.audio import write_wav
+    from acoustic_spaces.spatial import Ambisonics, from_angles
+
+    ir = np.zeros((2_400, 4))
+    ir[100] = 0.5 * Ambisonics(1).gains(from_angles(90.0, 0.0)[None])[0]
+    write_wav(tmp_path / "ambix1.wav", ir, 48_000)
+    _dry(tmp_path / "dry.wav", sample_rate=48_000)
+    args = ["play", str(tmp_path / "ambix1.wav"), str(tmp_path / "dry.wav"), "--head-tracking"]
+    assert main([*args, "--osc-port", "0", "--invert", "yaw, Pitch"]) == 0
+    captured = capsys.readouterr()
+    assert "response scaled by +6.0 dB" in captured.err
+    assert "(order 1 Ambisonics) to the ears, turned by OSC head-tracker messages" in captured.err
+    assert "on 127.0.0.1 port" in captured.err
+    assert "0 head-tracker message(s) received" in captured.out
+    played = np.concatenate(fake_sounddevice.played)
+    assert played.shape[1] == 2 and np.abs(played[:, 0]).max() > 2 * np.abs(played[:, 1]).max()
+
+    assert main([*args, "--osc-port", "0", "--invert", "nod"]) == 1
+    assert "cannot invert nod" in capsys.readouterr().err
+    mono = ["play", str(simulated / "talker__seat-a.wav"), str(tmp_path / "dry.wav")]
+    assert main([*mono, "--head-tracking", "--osc-port", "0"]) == 1
+    assert "order 1 or more: 4, 9, 16... channels, not 1" in capsys.readouterr().err

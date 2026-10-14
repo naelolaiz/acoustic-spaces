@@ -73,10 +73,23 @@ Simulation above; the module also has the parameters a map shows and the A-weigh
    :imported-members:
 ```
 
+Rotating sound fields, and decoding them to the ears:
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.spatial.rotation
+.. automodule:: acoustic_spaces.spatial.decoder
+```
+
 ## Rendering and playback
 
 ```{eval-rst}
 .. automodule:: acoustic_spaces.render
+```
+
+## Head tracking
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.headtracking
 ```
 
 ## Measurement

@@ -190,7 +190,8 @@ The editor works on the same scene files as the command line:
   any source and listener, and draws their reflection paths in the room. **Export**
   writes the same files as `simulate`; **Listen** plays a dry WAV file through the
   response on the sound card (binaural when the scene has a binaural output; needs the
-  `measure` extra).
+  `measure` extra), or head-tracked with **Head tracking** ticked (see
+  [Head tracking](#head-tracking)).
 - A source's form sets its directivity: a pattern, or a SOFA or CSV file of measured
   data. It shows the directivity index per band, opens the polar patterns, and the
   selected source shows its balloon in the 3D view.
@@ -620,6 +621,53 @@ out = convolver.process(next_block)  # (256, 2)
 play(binaural, 48_000, speech_48k)  # through the sound card
 ```
 
+### Head tracking
+
+With headphones and a head tracker, a binaural rendering stays put in the room while the
+head turns. `play --head-tracking` takes an Ambisonics response (`--output
+ambisonics:3` writes `.ambix3.wav`), runs the dry signal through it in real time, turns
+the sound field against the head once per block and decodes it to the ears:
+
+```sh
+acoustic-spaces simulate examples/church/scene.yaml --out church --output ambisonics:3
+acoustic-spaces play church/organ__nave-middle.ambix3.wav organ.wav --head-tracking
+```
+
+The head's orientation comes from OSC messages on UDP port 9000 (`--osc-port`) of this
+computer (`--osc-host 0.0.0.0` takes them from the network too, as from a phone): `/ypr`
+with yaw, pitch and roll in degrees, `/quaternion` (or `/quaternions`, `/quat`) with w,
+x, y and z, or `/yaw`, `/pitch` and `/roll` on their own, under any prefix
+(`/SceneRotator/ypr` too). Yaw turns left, pitch looks up and roll tilts the head to the
+right; `--invert yaw,pitch` flips the axes a tracker counts the other way round. Each
+turn crossfades over one block, so the head moves without clicks, and the latency is
+still the block.
+
+The decoder fits the HRTF (a SOFA file with `--hrtf`, or the spherical head model) with
+the spherical harmonics up to the response's order. Above 600 Hz per order it fits the
+magnitudes only (MagLS, after Schörkhuber, Zaunschirm and Höldrich, 2018): with the
+spherical head at third order, every octave from 125 Hz to 16 kHz keeps its level within
+0.1 dB, and the level difference between the ears is within 0.5 dB rms over all
+directions, where a plain least-squares fit (`--decoder ls`) is 16 dB short at 16 kHz.
+
+In the editor, tick **Head tracking** in the Results panel: the yaw and pitch sliders
+turn the head by hand, a tracker sending to the **OSC port** turns it as you move
+(**Centre** takes your current orientation as straight ahead), and **Listen** plays
+through the head-tracked rendering.
+
+From Python:
+
+```python
+from acoustic_spaces.headtracking import HeadTrackedBinaural, OscReceiver
+from acoustic_spaces.render import play
+from acoustic_spaces.spatial import Ambisonics
+
+ambix = response.spatial_impulse_response(Ambisonics(order=3), 48_000)
+renderer = HeadTrackedBinaural(ambix, 48_000, block=256)
+renderer.orientation.look(yaw=30)  # by hand, or let a tracker turn it:
+with OscReceiver(renderer.orientation, port=9000):
+    play(renderer, 48_000, speech_48k)
+```
+
 ## Measuring impulse responses
 
 The same parameters can be measured in a real room with an exponential sine sweep,
@@ -689,9 +737,11 @@ src/acoustic_spaces/   Python package
                        responses, simulate(), coverage maps
   air.py               ISO 9613-1 air absorption and speed of sound
   synthesis.py         octave filter bank and impulse response synthesis
-  spatial/             Ambisonics, VBAP loudspeaker layouts, HRTFs, spatial rendering
+  spatial/             Ambisonics, VBAP loudspeaker layouts, HRTFs, spatial rendering,
+                       sound field rotation, binaural decoding of Ambisonics
   parameters.py        ISO 3382-1 parameters, octave filters, noise floor detection
   render.py            convolution, resampling, auralisation, real-time playback
+  headtracking.py      head-tracked binaural playback, OSC head trackers
   measurement.py       sine sweeps, playback and recording, deconvolution
   audio.py             WAV files
   viz.py               3D view, reflection paths, particle animations, response plots
@@ -725,7 +775,8 @@ v2 (version 1.1.0 has the first three):
 - [x] Export to Blender: rooms, reflection paths and particle animations as glTF.
 - [x] Source directivity per octave band: patterns, and measured data from SOFA or CSV files.
 - [ ] CLF loudspeaker files, once their specification is available.
-- [ ] Head tracking.
+- [x] Head tracking: binaural playback of Ambisonics that turns with the head, from OSC
+  head trackers or by hand.
 - [ ] A wave-based solver for low frequencies.
 - [x] Coverage maps: parameters and STI over the audience area.
 - [x] Edge diffraction (UTD) of the direct sound and first-order reflections.
