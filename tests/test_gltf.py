@@ -215,6 +215,32 @@ def test_reflection_paths_are_lines_by_order(tmp_path: Path) -> None:
     assert white["pbrMetallicRoughness"]["baseColorFactor"] == [1.0, 1.0, 1.0, 1.0]
 
 
+def test_diffracted_paths_have_a_node_of_their_own(tmp_path: Path) -> None:
+    scene = Scene.model_validate(
+        {
+            "geometry": {
+                "floor_plan": [[0, 0], [10, 0], [10, 4], [4, 4], [4, 10], [0, 10]],
+                "height": 3.0,
+            },
+            "materials": {"m": {"absorption": [0.3] * 8}},
+            "default_material": "m",
+            "sources": [{"name": "s", "position": [8.0, 2.0, 1.5]}],
+            "listeners": [{"name": "l", "position": [2.0, 8.0, 1.5]}],
+        }
+    )
+    room = Room.from_scene(scene)
+    paths = early_paths(room, max_order=1)
+    out = tmp_path / "bent.glb"
+    export_gltf(room, out, paths=paths)
+    doc, binary = read_glb(out)
+    check_layout(doc, binary)
+    nodes = {node["name"]: node for node in children_of(doc, "reflection paths")}
+    bent = nodes["paths diffracted"]
+    assert bent["extras"] == {"diffracted": True, "paths": int(paths.diffracted.sum())}
+    specular = sum(node["extras"]["paths"] for name, node in nodes.items() if "order" in name)
+    assert specular == int((~paths.diffracted).sum())
+
+
 def test_particle_animation(tmp_path: Path) -> None:
     room = Room.from_yaml(SHOEBOX)
     particles = trace_particles(room, count=40, duration=0.05, frames=11, seed=2)

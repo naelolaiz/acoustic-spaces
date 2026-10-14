@@ -1,0 +1,44 @@
+# An L-shaped gallery, 4 m high (1150 m3), with a marble floor, rough brick walls and
+# an absorbing ceiling: a guide talks in the long arm, and visitors round the corner hear
+# them only by the sound that bends round it (edge diffraction) and by reflections. The
+# plan's corners go round the floor; wall_4 and wall_5 meet at the inner corner (8, 8).
+name: Gallery (L-shaped, 1150 m3)
+geometry:
+  floor_plan: [[0, 0], [24, 0], [24, 8], [8, 8], [8, 20], [0, 20]]
+  height: 4
+materials:
+  marble:
+    preset: marble_floor
+    scattering: 0.05
+  brick:
+    preset: brick_wall_rough
+    scattering: 0.2
+  ceiling:
+    preset: acoustical_plaster_25mm
+    scattering: 0.1
+assignments:
+  floor: marble
+  ceiling: ceiling
+  walls: brick
+sources:
+  - name: guide
+    position: [20.0, 4.0, 1.6]
+    orientation: {yaw: 180}
+    directivity: cardioid
+listeners:
+  - name: in sight
+    position: [12.0, 5.0, 1.6]
+    orientation: {yaw: 0}
+  - name: round the corner
+    position: [4.0, 15.0, 1.6]
+    orientation: {yaw: -60}
+simulation:
+  early: {method: ray_tracing, max_order: 3, diffraction: first_order}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 3.0
+outputs:
+  - mono
+  - binaural
+# Coverage map (`acoustic-spaces map`): over the floor, with the hum of the building.
+coverage:
+  noise_db: [45, 40, 35, 30, 25, 20, 15, 10]

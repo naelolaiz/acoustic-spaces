@@ -230,6 +230,10 @@ def test_selection_and_forms(window) -> None:
     window.select("simulation")
     window.inspector.pages["simulation"].late_rays.setValue(1234)
     assert window.document.scene.simulation.late.rays == 1234
+    assert window.inspector.pages["simulation"].diffraction.currentText() == "first_order"
+    window.inspector.pages["simulation"].diffraction.setCurrentText("direct")
+    assert window.document.scene.simulation.early.diffraction == "direct"
+    assert window.document.scene.simulation.late.rays == 1234
     window.select("outputs")
     window.inspector.pages["outputs"].binaural.setChecked(False)
     assert [o.format for o in window.document.scene.outputs] == ["mono"]

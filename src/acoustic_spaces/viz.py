@@ -1,7 +1,8 @@
 """Pictures of rooms and responses.
 
 - 3D view (PyVista): surfaces coloured by material, sources with their directivity
-  balloons, listeners, and early reflection paths coloured by order.
+  balloons, listeners, and early reflection paths coloured by order (paths diffracted
+  at an edge in a colour of their own).
 - Animation (PyVista): sound particles spreading from a source and reflecting around
   the room, in a window with a time slider or saved as a GIF or MP4 video.
 - Response plots (matplotlib): echogram with the early paths, decay curves per band, and
@@ -17,7 +18,7 @@ screenshots.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
@@ -54,6 +55,8 @@ PANEL = "#26272f"
 EDGE_COLOUR = "#d0d0d0"
 #: Reflection paths by order, direct sound first; orders past the end reuse the last.
 ORDER_COLOURS = ("#ffffff", "#ffd166", "#f78c6b", "#ef476f", "#b5179e", "#7209b7", "#4361ee")
+#: Paths that bend over an edge.
+DIFFRACTED_COLOUR = "#06d6a0"
 #: Octave band colours for decay curves, low to high.
 BAND_COLOURS = (
     "#5e4fa2",
@@ -107,16 +110,50 @@ def _order_name(order: int) -> str:
     return f"{order}{suffix} order"
 
 
-def paths_polydata(paths: EarlyReflections, order: int) -> pyvista.PolyData:
-    """The paths of one reflection order as polylines."""
+def paths_polydata(
+    paths: EarlyReflections, order: int | None = None, *, mask: np.ndarray | None = None
+) -> pyvista.PolyData:
+    """The specular paths of one reflection order, or the paths ``mask`` picks, as
+    polylines."""
     pv = _pyvista()
-    chosen = [p for p, o in zip(paths.points, paths.order, strict=True) if o == order]
+    if mask is None:
+        mask = (paths.order == order) & ~paths.diffracted
+    chosen = [p for p, keep in zip(paths.points, mask, strict=True) if keep]
     points = np.vstack(chosen) if chosen else np.zeros((0, 3))
     lines, start = [], 0
     for p in chosen:
         lines.extend([len(p), *range(start, start + len(p))])
         start += len(p)
     return pv.PolyData(points, lines=np.array(lines, dtype=np.int64))
+
+
+class PathGroup(NamedTuple):
+    """Paths drawn together: specular paths of one ``order``, or (order None) those
+    diffracted at an edge."""
+
+    label: str
+    colour: str
+    mask: np.ndarray
+    order: int | None
+
+
+def path_groups(paths: EarlyReflections, max_order: int | None = None) -> list[PathGroup]:
+    """The specular paths by order, then those diffracted at an edge (with up to
+    ``max_order`` reflections)."""
+    groups = []
+    specular = ~paths.diffracted
+    top = int(paths.order.max()) if len(paths) else -1
+    if max_order is not None:
+        top = min(top, max_order)
+    for order in range(top + 1):
+        mask = specular & (paths.order == order)
+        if mask.any():
+            colour = ORDER_COLOURS[min(order, len(ORDER_COLOURS) - 1)]
+            groups.append(PathGroup(_order_name(order), colour, mask, order))
+    mask = paths.diffracted & (paths.order <= top)
+    if mask.any():
+        groups.append(PathGroup("diffracted", DIFFRACTED_COLOUR, mask, None))
+    return groups
 
 
 def plot_paths(
@@ -126,22 +163,17 @@ def plot_paths(
     max_order: int | None = None,
     line_width: float = 2.0,
 ) -> list[list[str]]:
-    """Draw specular paths coloured by order; returns their legend entries."""
+    """Draw specular paths coloured by order and diffracted paths in their own colour;
+    returns their legend entries."""
     legend = []
-    top = int(paths.order.max()) if len(paths) else -1
-    if max_order is not None:
-        top = min(top, max_order)
-    for order in range(top + 1):
-        if not np.any(paths.order == order):
-            continue
-        colour = ORDER_COLOURS[min(order, len(ORDER_COLOURS) - 1)]
+    for group in path_groups(paths, max_order):
         plotter.add_mesh(
-            paths_polydata(paths, order),
-            color=colour,
-            line_width=line_width if order else line_width * 1.5,
-            opacity=1.0 if order < 2 else 0.8,
+            paths_polydata(paths, mask=group.mask),
+            color=group.colour,
+            line_width=line_width * 1.5 if group.order == 0 else line_width,
+            opacity=0.8 if (group.order or 0) >= 2 else 1.0,
         )
-        legend.append([f"{_order_name(order)} ({np.sum(paths.order == order)})", colour])
+        legend.append([f"{group.label} ({int(group.mask.sum())})", group.colour])
     return legend
 
 
@@ -455,11 +487,10 @@ def plot_response(response: Response, path: str | Path | None = None, *, band: i
     ax_e.fill_between(late_t, late_db, -100, step="post", color="#4da3ff", alpha=0.35, lw=0)
     ax_e.step(late_t, late_db, where="post", color="#4da3ff", lw=0.8, label="late (per ms)")
     floor = float(np.max(early_db, initial=np.max(late_db, initial=0.0))) - 70.0
-    for order in np.unique(response.early.order):
-        mask = response.early.order == order
-        colour = ORDER_COLOURS[min(int(order), len(ORDER_COLOURS) - 1)]
-        ax_e.vlines(response.early.delay_s[mask] * 1e3, floor, early_db[mask], color=colour, lw=1.2)
-        ax_e.plot([], [], color=colour, label=_order_name(int(order)))
+    for group in path_groups(response.early):
+        delays = response.early.delay_s[group.mask] * 1e3
+        ax_e.vlines(delays, floor, early_db[group.mask], color=group.colour, lw=1.2)
+        ax_e.plot([], [], color=group.colour, label=group.label)
     ax_e.set_ylim(floor, floor + 80.0)
     ax_e.set_xlim(0, t_ms[-1] if len(t_ms) else 1)
     ax_e.set_xlabel("time (ms)")

@@ -23,7 +23,7 @@ import numpy as np
 from acoustic_spaces._version import __version__
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.room import UNASSIGNED, Room, _label_text
-from acoustic_spaces.viz import LISTENER_COLOUR, MATERIAL_COLOURS, ORDER_COLOURS, SOURCE_COLOUR
+from acoustic_spaces.viz import LISTENER_COLOUR, MATERIAL_COLOURS, SOURCE_COLOUR, path_groups
 
 if TYPE_CHECKING:
     from acoustic_spaces.engine import EarlyReflections
@@ -312,20 +312,23 @@ def _add_points(doc: _Document, room: Room, radius: float) -> None:
 
 
 def _add_paths(doc: _Document, paths: EarlyReflections) -> None:
-    """Early reflection paths as lines, one node per order under ``reflection paths``."""
+    """Early reflection paths as lines under ``reflection paths``: one node per order of
+    specular paths, and one for the paths diffracted at an edge."""
     group = doc.node("reflection paths")
-    for order in np.unique(paths.order).tolist():
-        chosen = [p for p, o in zip(paths.points, paths.order, strict=True) if o == order]
+    for kind in path_groups(paths):
+        chosen = [p for p, keep in zip(paths.points, kind.mask, strict=True) if keep]
         points = np.vstack(chosen)
         starts = np.cumsum([len(p) for p in chosen])  # where the next path begins
         first = np.arange(len(points) - 1)
         first = first[~np.isin(first + 1, starts)]
-        name = f"paths order {order}"
-        colour = ORDER_COLOURS[min(order, len(ORDER_COLOURS) - 1)]
-        material = doc.material(name, colour, glow=True)
+        if kind.order is None:
+            name, extras = "paths diffracted", {"diffracted": True, "paths": len(chosen)}
+        else:
+            name, extras = f"paths order {kind.order}", {"order": kind.order, "paths": len(chosen)}
+        material = doc.material(name, kind.colour, glow=True)
         lines = np.column_stack([first, first + 1])
         mesh = doc.mesh(name, points, lines, material, mode=_LINES)
-        doc.node(name, group, mesh=mesh, extras={"order": order, "paths": len(chosen)})
+        doc.node(name, group, mesh=mesh, extras=extras)
 
 
 def _add_particles(

@@ -96,6 +96,7 @@ def write_results(
             "outputs": written,
             "direct_delay_s": response.direct_delay_s,
             "early_paths": len(response.early),
+            "diffracted_paths": int(response.early.diffracted.sum()),
             "parameters": response.parameters().as_dict(),
         }
         if plots:

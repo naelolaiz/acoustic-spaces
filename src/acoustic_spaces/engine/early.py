@@ -33,18 +33,31 @@ MAX_CANDIDATES = 2_000_000
 
 @dataclass
 class EarlyReflections:
-    """Specular paths from one source to one listener (order 0 is the direct sound)."""
+    """Paths from one source to one listener: specular (order 0 is the direct sound),
+    and diffracted at an edge when edge diffraction is on."""
 
     order: np.ndarray  # (n,) reflections along the path
     delay_s: np.ndarray  # (n,)
     distance_m: np.ndarray  # (n,)
     direction: np.ndarray  # (n, 3) unit vectors from the listener towards the arrival
     energy: np.ndarray  # (n, bands) time-integrated intensity, unit-energy source
-    points: list[np.ndarray] = field(default_factory=list)  # (order + 2, 3) per path
+    points: list[np.ndarray] = field(default_factory=list)  # every corner, source first
     faces: list[np.ndarray] = field(default_factory=list)  # faces hit, source side first
+    #: (n,) the edge a path bends over (an index of the model's diffracting edges, see
+    #: :func:`~acoustic_spaces.engine.diffraction.find_edges`), or -1 for specular paths.
+    edge: np.ndarray | None = None
+
+    def __post_init__(self) -> None:
+        if self.edge is None:
+            self.edge = np.full(len(self.order), -1, dtype=np.int64)
 
     def __len__(self) -> int:
         return len(self.order)
+
+    @property
+    def diffracted(self) -> np.ndarray:
+        """(n,) True for paths that bend over an edge."""
+        return self.edge >= 0
 
     @classmethod
     def empty(cls, bands: int) -> EarlyReflections:
@@ -69,6 +82,7 @@ class EarlyReflections:
             energy=np.concatenate([p.energy for p in parts]),
             points=[x for p in parts for x in p.points],
             faces=[x for p in parts for x in p.faces],
+            edge=np.concatenate([p.edge for p in parts]),
         )
         return out.sorted()
 
@@ -83,6 +97,7 @@ class EarlyReflections:
             energy=self.energy[idx],
             points=[self.points[i] for i in idx],
             faces=[self.faces[i] for i in idx],
+            edge=self.edge[idx],
         )
 
 

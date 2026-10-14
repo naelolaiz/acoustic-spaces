@@ -695,9 +695,16 @@ class SimulationPage(Page):
         self.early_method.addItems(["ray_tracing", "image_sources"])
         self.max_order = int_spin(0, 20)
         self.early_rays = int_spin(1, 10_000_000, 1000)
+        self.diffraction = QComboBox()
+        self.diffraction.addItems(["none", "direct", "first_order"])
+        self.diffraction.setToolTip(
+            "Sound bending round edges (pillars, balcony fronts, screens): none, of the "
+            "direct sound only, or of the direct sound and first-order reflections"
+        )
         early_form.addRow("Method", self.early_method)
         early_form.addRow("Highest order", self.max_order)
         early_form.addRow("Rays", self.early_rays)
+        early_form.addRow("Diffraction", self.diffraction)
         layout.addWidget(early)
 
         late = QGroupBox("Late reverberation")
@@ -734,7 +741,13 @@ class SimulationPage(Page):
         layout.addWidget(response)
         layout.addStretch()
 
-        for combo in (self.early_method, self.late_method, self.reception, self.sample_rate):
+        for combo in (
+            self.early_method,
+            self.diffraction,
+            self.late_method,
+            self.reception,
+            self.sample_rate,
+        ):
             combo.currentTextChanged.connect(self._changed)
         for box in (self.max_order, self.early_rays, self.late_rays, self.directions, self.seed):
             box.valueChanged.connect(self._changed)
@@ -748,6 +761,7 @@ class SimulationPage(Page):
         self.early_method.setCurrentText(s.early.method)
         self.max_order.setValue(s.early.max_order)
         self.early_rays.setValue(s.early.rays)
+        self.diffraction.setCurrentText(s.early.diffraction)
         self.late_method.setCurrentText(s.late.method)
         self.late_rays.setValue(s.late.rays)
         self.reception.setCurrentText(s.late.reception)
@@ -776,6 +790,7 @@ class SimulationPage(Page):
                 "method": self.early_method.currentText(),
                 "max_order": self.max_order.value(),
                 "rays": self.early_rays.value(),
+                "diffraction": self.diffraction.currentText(),
             },
             "late": {
                 **self.document.scene.simulation.late.model_dump(mode="json", exclude_none=True),

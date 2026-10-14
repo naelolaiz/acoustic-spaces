@@ -28,7 +28,7 @@ A scene file is YAML with this shape::
         position: [6.0, 1.5, 1.2]
         orientation: {yaw: 180, pitch: 0, roll: 0}
     simulation:
-      early: {method: ray_tracing, max_order: 3}
+      early: {method: ray_tracing, max_order: 3, diffraction: first_order}
       late: {method: stochastic_ray_tracing}
     outputs:                   # formats for the simulate command (default: mono)
       - mono
@@ -327,11 +327,19 @@ class Air(_Model):
 
 
 class EarlyStage(_Model):
-    """Early reflections: exact specular paths with delay and arrival direction."""
+    """Early reflections: exact specular paths with delay and arrival direction, and
+    the sound diffracted at the edges of the room."""
 
     method: Literal["ray_tracing", "image_sources"] = "ray_tracing"
     max_order: int = Field(default=3, ge=0, le=20)
     rays: int = Field(default=20_000, ge=1, description="ray tracing only")
+    diffraction: Literal["none", "direct", "first_order"] = Field(
+        default="first_order",
+        description=(
+            "sound bending round edges (pillars, balcony fronts, screens): none, of the "
+            "direct sound only, or of the direct sound and first-order reflections"
+        ),
+    )
 
 
 class LateStage(_Model):
