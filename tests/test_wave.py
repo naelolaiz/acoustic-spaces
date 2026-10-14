@@ -10,6 +10,7 @@ from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.wave import (
     COURANT,
     MAX_ABSORPTION,
+    _first_order,
     absorption_of_impedance,
     admittance,
     band_grid,
@@ -222,6 +223,19 @@ def test_direct_sound_arrives_on_time() -> None:
     y0, y1, y2 = correlation[lag - 1 : lag + 2]
     arrival = delay + lag + 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2)
     assert arrival == pytest.approx(4.0 / c * wave.rate, abs=0.25)
+
+
+def test_velocity_is_in_step_with_the_pressure() -> None:
+    # A plane wave from -x crosses the probe and its neighbours one cell away (1 / COURANT
+    # steps): X = -W sample by sample, not half a step ahead of it.
+    t = np.arange(400.0)
+    shift = 1.0 / COURANT
+    probes = np.zeros((7, len(t)))
+    for k, delay in ((0, 0.0), (1, shift), (2, -shift)):
+        probes[k] = np.exp(-(((t - 200.0 - delay) / 16.0) ** 2))
+    field = _first_order(probes, [True] * 7, "l")
+    np.testing.assert_allclose(field[:, 1], -field[:, 0], atol=0.01)
+    assert not np.any(field[:, 2:])
 
 
 def test_first_order_field_points_to_the_source() -> None:

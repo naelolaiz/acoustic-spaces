@@ -250,7 +250,8 @@ def _first_order(probes: np.ndarray, found: Sequence[bool], name: str) -> np.nda
     """W, X, Y, Z (samples, 4) from the pressure at the listener and round it.
 
     The velocity is the time integral of the pressure gradient (central differences,
-    or one-sided ones next to a surface); X = rho c u_x points towards the sound.
+    or one-sided ones next to a surface), by the trapezoidal rule so that it falls on
+    the pressure's samples; X = rho c u_x points towards the sound.
     """
     if not found[0]:
         raise ValueError(f"listener {name!r} is not in the air of the wave grid")
@@ -266,7 +267,7 @@ def _first_order(probes: np.ndarray, found: Sequence[bool], name: str) -> np.nda
             difference = probes[0] - probes[minus]
         else:
             continue
-        out[:, 1 + axis] = COURANT * np.cumsum(difference)
+        out[:, 1 + axis] = COURANT * (np.cumsum(difference) - 0.5 * difference)
     return out
 
 
