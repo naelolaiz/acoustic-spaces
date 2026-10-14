@@ -766,8 +766,10 @@ How it works:
 - `analyze` filters with IEC 61260-1 octave filters (Butterworth, order 3, zero
   phase), finds where each band sinks into the background noise (Lundeby et al.,
   1995), cuts it there, subtracts the noise and adds the missing tail (ISO 3382-1,
-  5.3.4). Decay times are left out when a band's decay does not clear the noise by
-  enough: 20 dB for EDT, 35 dB for T20, 45 dB for T30.
+  5.3.4). Digital silence at the end of a file (zero padding, or the shift that
+  removes latency) is not taken for noise: the noise floor is looked for before it.
+  Decay times are left out when a band's decay does not clear the noise by enough:
+  20 dB for EDT, 35 dB for T20, 45 dB for T30.
 - G needs the source's free-field level: `--free-field ff.wav --distance 3` uses a
   measurement of the same source in free field (or with reflections windowed out),
   and `--reference-energy 0.01` suits responses made by `simulate`.

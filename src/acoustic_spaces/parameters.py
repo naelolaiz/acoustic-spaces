@@ -51,16 +51,22 @@ OCTAVE_RATIO = 10.0**0.3
 FILTER_ORDER = 3
 #: Room before an impulse response for the ringing of its band filters (s).
 _FILTER_LEAD_S = 0.2
+#: Samples at the end of an impulse response below this fraction of its peak are
+#: digital silence (zero padding, a latency shift), not background noise.
+_SILENCE = 1e-12
 
 #: Noise floor search (Lundeby et al., 1995): first averaging interval (s), intervals
 #: per 10 dB of decay afterwards, margin of the late-decay fit above the noise and its
-#: span, how far past the crosspoint the noise is measured (dB), and iterations.
+#: span, how far past the crosspoint the noise is measured (dB), and iterations. A
+#: "noise" more than ``_NO_NOISE_DB`` below the loudest interval is the band filters'
+#: ringing in silence.
 _LUNDEBY_INTERVAL_S = 0.01
 _LUNDEBY_INTERVALS_PER_10DB = 5
 _LUNDEBY_MARGIN_DB = 5.0
 _LUNDEBY_SPAN_DB = 20.0
 _LUNDEBY_NOISE_AFTER_DB = 10.0
 _LUNDEBY_ITERATIONS = 5
+_NO_NOISE_DB = 120.0
 
 
 @dataclass
@@ -400,9 +406,10 @@ def noise_crosspoint(energy: np.ndarray, sample_rate: float) -> tuple[int, float
 
     ``energy`` is one band's squared response from the direct sound on. Returns the
     crosspoint (samples), the mean noise power per sample and the decay range (dB, from
-    the loudest 10 ms down to the noise). A response that ends in silence, or is still
-    decaying in its last tenth, has no crosspoint (``len(energy)``), no noise and an
-    infinite range; one with no decay above its noise has a range of 0.
+    the loudest 10 ms down to the noise). A response that ends in silence (its last
+    tenth more than 120 dB below the loudest 10 ms), or is still decaying in its last
+    tenth, has no crosspoint (``len(energy)``), no noise and an infinite range; one with
+    no decay above its noise has a range of 0.
     """
     e = np.asarray(energy, dtype=float)
     n = len(e)
@@ -414,6 +421,8 @@ def noise_crosspoint(energy: np.ndarray, sample_rate: float) -> tuple[int, float
     width = max(1, int(round(_LUNDEBY_INTERVAL_S * sample_rate)))
     t, level = _levels(e, width, sample_rate)
     peak_db = float(level.max(initial=-np.inf))
+    if noise_db < peak_db - _NO_NOISE_DB:
+        return n, 0.0, math.inf
     line = None
     if len(level) >= 3:
         line = _line(level, t, float(level.max()), noise_db + 2.0 * _LUNDEBY_MARGIN_DB)
@@ -475,9 +484,19 @@ def band_decay(
     squared = octave_bands(padded, sample_rate, filters) ** 2
     energy = squared[:, lead + start :]
     energy[:, 0] += squared[:, : lead + start].sum(axis=1)
-    found = [
-        noise_crosspoint(row, sample_rate) if noise else (len(row), 0.0, math.inf) for row in energy
-    ]
+    # Digital silence at the end (zero padding, the shift that removes latency) is no
+    # background noise: the noise floor is looked for before it, unless too little is
+    # left for that, as after a lone impulse, whose filtered ringing then shows no noise.
+    loud = np.flatnonzero(np.abs(ir) > _SILENCE * np.abs(ir).max(initial=0.0))
+    end = loud[-1] + 1 - start if len(loud) else 0
+    if end < 3 * _LUNDEBY_INTERVAL_S * sample_rate:
+        end = energy.shape[1]
+    found = []
+    for row in energy:
+        cross, level, range_db = (
+            noise_crosspoint(row[:end], sample_rate) if noise else (end, 0.0, math.inf)
+        )
+        found.append((len(row) if cross >= end else cross, level, range_db))
     return BandDecay(
         energy=energy,
         sample_rate=sample_rate,

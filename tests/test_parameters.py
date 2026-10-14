@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from acoustic_spaces.parameters import (
+    PARAMETERS,
     STI_MODULATION_HZ,
     decay_curve,
     from_energy,
@@ -138,6 +139,24 @@ def test_a_clean_decay_has_no_noise_floor() -> None:
     e = _exponential(1.0, 1.0)
     assert noise_crosspoint(e, 1 / DT) == (len(e), 0.0, math.inf)
     assert noise_crosspoint(np.zeros(100), 1 / DT) == (100, 0.0, math.inf)
+
+
+def test_trailing_silence_is_no_noise_floor() -> None:
+    from acoustic_spaces.parameters import band_decay
+
+    # Zero padding, or the zeros that removing latency leaves at the end, must not hide
+    # the noise floor before them: with half a second of them, T30 read 1.3 to 1.7 s.
+    ir = _noisy_decay(1.0, -45.0, 1.5)
+    plain = from_impulse_response(ir, 48_000)
+    padded = from_impulse_response(np.concatenate([ir, np.zeros(24_000)]), 48_000)
+    for name in PARAMETERS:
+        np.testing.assert_allclose(getattr(padded, name), getattr(plain, name), rtol=1e-9)
+    # A lone impulse rings in the band filters 190 dB and more below its peak, where a
+    # noise floor used to be found: that is no noise.
+    impulse = np.zeros(48_000)
+    impulse[480] = 0.1
+    decay = band_decay(impulse, 48_000)
+    assert np.all(decay.decay_range_db == math.inf) and np.all(decay.crosspoint == 47_520)
 
 
 def test_free_field_reference_moves_to_ten_metres() -> None:
