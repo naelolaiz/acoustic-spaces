@@ -263,9 +263,9 @@ def test_sweep_deconvolve_and_analyze(tmp_path: Path, capsys: pytest.CaptureFixt
 
     from acoustic_spaces.audio import read_wav
 
-    sweep = tmp_path / "sweep.wav"
+    sweep = tmp_path / "new" / "sweep.wav"  # the folder is made
     assert main(["sweep", str(sweep), "--duration", "1.5", "--silence", "1", "--repeats", "2"]) == 0
-    assert (tmp_path / "sweep.json").exists()
+    assert (tmp_path / "new" / "sweep.json").exists()
     _write_recording(sweep, tmp_path / "recording.wav", latency=48)
     ir = tmp_path / "ir.wav"
     args = ["deconvolve", str(tmp_path / "recording.wav"), "--sweep", str(sweep)]

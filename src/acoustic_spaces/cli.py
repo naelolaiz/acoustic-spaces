@@ -647,7 +647,12 @@ def _cmd_sweep(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     out = Path(args.out)
-    sweep.save(out)
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        sweep.save(out)
+    except OSError as exc:
+        print(f"error: cannot write {out}: {exc}", file=sys.stderr)
+        return 1
     print(_describe(sweep))
     print(f"wrote {out} and {out.with_suffix('.json')}")
     return 0
