@@ -1036,6 +1036,34 @@ def test_the_3d_view_keeps_its_lights(window, qapp) -> None:
 
 
 @pytest.mark.render
+def test_the_camera_stays_while_the_room_is_edited(window, qapp) -> None:
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    plotter = viewport.plotter
+
+    def camera() -> np.ndarray:  # position, focal point and view up
+        return np.array(plotter.camera_position.to_list(), dtype=float)
+
+    plotter.camera.Azimuth(30)
+    turned = camera()
+    window.select("geometry", None)
+    window.inspector.pages["geometry"].box[2].setValue(3.5)  # a new mesh
+    assert window.document.room.report.bounds_max[2] == pytest.approx(3.5)
+    np.testing.assert_allclose(camera(), turned)
+    window.undo()
+    np.testing.assert_allclose(camera(), turned)
+    # A room drawn anew, or another scene, gets the usual view of the whole room.
+    window.plan.canvas.drawn.emit([[20, 20], [30, 20], [30, 30], [20, 30]])
+    assert window.document.scene.geometry.floor_plan is not None
+    np.testing.assert_allclose(camera()[1, :2], [25, 25], atol=1e-6)
+    plotter.camera.Azimuth(30)
+    turned = camera()
+    window.open_example(example_path("studio"))
+    assert not np.allclose(camera(), turned)
+
+
+@pytest.mark.render
 def test_arrows_show_the_orientation(window, qapp) -> None:
     viewport = window.viewport
     if not viewport.available:

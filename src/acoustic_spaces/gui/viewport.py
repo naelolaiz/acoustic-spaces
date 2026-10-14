@@ -110,7 +110,7 @@ class Viewport(QWidget):
         self.note = ""
         self.placing: str | None = None
         self._room: Room | None = None
-        self._mesh = None
+        self._shown = False  # a room was drawn: the camera stays where it is
         self._actors: dict[str, tuple[str, object]] = {}
         self._markers: list = []
         self._surfaces: list = []
@@ -158,16 +158,18 @@ class Viewport(QWidget):
         coverage=None,
     ):
         """Draw ``room`` with ``selection`` highlighted and, if given, early ``paths``
-        and a coverage map: ``coverage`` is (CoverageMap, parameter, band)."""
+        and a coverage map: ``coverage`` is (CoverageMap, parameter, band).
+
+        The camera stays where it is, also when the room changes shape; only the first
+        room gets the usual view (:meth:`reset_camera` gives it again)."""
         self._room = room
         if self.plotter is None:
             return
         import pyvista as pv
 
         plotter = self.plotter
-        new_geometry = room.mesh is not self._mesh
-        camera = None if new_geometry else plotter.camera_position
-        self._mesh = room.mesh
+        camera = plotter.camera_position if self._shown else None
+        self._shown = True
         plotter.clear()
         plotter.enable_lightkit()  # clear() takes the lights too, leaving the room unlit
         self._actors.clear()

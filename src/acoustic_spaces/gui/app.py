@@ -355,6 +355,7 @@ class MainWindow(QMainWindow):
         self._changed()
         self.plan.cancel()
         self.plan.fit()
+        self.viewport.reset_camera()  # edits keep the camera; another room starts afresh
         self._state()
 
     def _changed(self) -> None:
@@ -549,6 +550,7 @@ class MainWindow(QMainWindow):
             self._refused(str(exc))
             return
         self.plan.fit()
+        self.viewport.reset_camera()
         height = self.document.scene.geometry.height
         self.log(
             f"New floor plan with {len(corners)} corners, {height:g} m high; change the "
