@@ -170,7 +170,7 @@ def test_duct_end_reflects_as_its_admittance_says(beta: float) -> None:
     f = np.fft.rfftfreq(n_fft, 1.0 / rate)
     gain = np.clip((f - 40) / 20, 0, 1) * np.clip((200 - f) / 50, 0, 1)
     pressure = np.fft.irfft(np.fft.rfft(pressure, n_fft) * gain, n_fft)[:steps]
-    t = (np.arange(steps) - 1 - delay) / rate
+    t = (np.arange(steps) - delay) / rate
 
     def gated(path: float) -> float:
         x = t - path / C
@@ -193,6 +193,35 @@ def test_free_field_level_matches_the_rays() -> None:
         direct = energy[:, t < (d + 6.5) / C].sum(axis=1) * 4 * math.pi * d * d
         assert 10 * math.log10(direct[0]) == pytest.approx(0.0, abs=1.0)
         assert 10 * math.log10(direct[1]) == pytest.approx(0.0, abs=0.1)  # rays
+
+
+def test_direct_sound_arrives_on_time() -> None:
+    # 4 m from the source, 25 to 100 Hz, against the source's own pulse: the wave bands
+    # arrive r / c after emission, as the rays do, within a fraction of a step (0.67 ms).
+    room = _free_room((4.0,))
+    c = room.speed_of_sound()
+    source = np.array(room.scene.sources[0].position)
+    responses, _ = wave_responses(
+        TraceModel.from_room(room),
+        source,
+        [source + [4.0, 0.0, 0.0]],
+        ["r"],
+        max_band_hz=63,
+        length_s=0.1,
+        sample_rate=FS,
+        speed_of_sound=c,
+    )
+    wave = responses[0]
+    signal, delay = source_signal(wave.rate, wave.cell)
+    n_fft = 1 << 14
+    f = np.fft.rfftfreq(n_fft, 1.0 / wave.rate)
+    band = np.clip((f - 25) / 10, 0, 1) * np.clip((100 - f) / 20, 0, 1)
+    spectrum = np.fft.rfft(wave.signals[0, :, 0], n_fft) * np.conj(np.fft.rfft(signal, n_fft))
+    correlation = np.fft.irfft(spectrum * band**2, n_fft)
+    lag = int(np.argmax(correlation[: n_fft // 2]))
+    y0, y1, y2 = correlation[lag - 1 : lag + 2]
+    arrival = delay + lag + 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2)
+    assert arrival == pytest.approx(4.0 / c * wave.rate, abs=0.25)
 
 
 def test_first_order_field_points_to_the_source() -> None:

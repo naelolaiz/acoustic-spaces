@@ -314,7 +314,7 @@ def wave_responses(
         )
     signal, delay = source_signal(grid.rate, h)
     samples = int(math.ceil(length_s * grid.rate))
-    steps = samples + 1 + delay  # the source reaches the grid one step after it is added
+    steps = samples + delay  # the source's term on step n stands for its value at time n
     drive = np.zeros(steps, np.float32)
     drive[: min(len(signal), steps)] = signal[:steps]
     probes = np.vstack([_probe_points(p, h) for p in listeners])
@@ -357,7 +357,7 @@ def wave_responses(
             if c:
                 say(f"{label}: wave solver, {name}, {100 * c // chunks} %")
             recorded.append(solver.run(drive[bounds[c] : bounds[c + 1]]))
-        recorded_runs.append(np.concatenate(recorded, axis=1)[:, 1 + delay :][:, :samples])
+        recorded_runs.append(np.concatenate(recorded, axis=1)[:, delay:][:, :samples])
         found = [solver.probe_found(p) for p in range(len(probes))]
         info["wave_cells"] = float(solver.air_cells)
         if solver.open:
