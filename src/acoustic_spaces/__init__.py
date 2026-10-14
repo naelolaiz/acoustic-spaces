@@ -15,6 +15,7 @@ The package is organised as a pipeline:
 - ``spatial``: binaural, Ambisonics and loudspeaker outputs
 - ``render``: auralisation: offline and real-time convolution, playback
 - ``measurement``: sweeps, recording and deconvolution of measured responses
+- ``compare``: a simulated response against a measured one, in the JNDs of ISO 3382-1
 """
 
 from __future__ import annotations

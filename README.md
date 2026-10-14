@@ -823,6 +823,76 @@ for ir in result.impulse_responses.T:
     print(from_impulse_response(ir, sweep.sample_rate).table())
 ```
 
+## Comparing with measurements
+
+A model is checked against the room it stands for by comparing its parameters with
+those measured there. `compare` analyses a simulated and a measured impulse response
+the same way, each at its own sample rate, and shows band by band how far apart they
+are in just noticeable differences (JNDs, ISO 3382-1:2009, annex A): 5 % of the
+measured EDT, T20 and T30, 1 dB of C50, C80 and G, 0.05 of D50 and 10 ms of Ts.
+
+```sh
+acoustic-spaces simulate hall.yaml --out sim
+acoustic-spaces compare sim/talker__seat-a.wav hall/ir.wav --measured-channel 2 \
+    --simulated-reference-energy 0.01 --measured-free-field ff.wav --measured-distance 3 \
+    --plot compare.png --json compare.json
+```
+
+```
+simulated: talker__seat-a.wav, channel 1, 48000 Hz, direct sound at 10.1 ms
+measured:  ir.wav, channel 2, 48000 Hz, direct sound at 10.0 ms
+
+                  63 Hz  125 Hz  250 Hz  500 Hz   1 kHz   2 kHz   4 kHz   8 kHz
+...
+T30 (s)   sim     1.533   1.372   1.267   1.111   1.030   1.004   0.899   0.761
+          meas        -   1.252   1.214   1.029   1.040   0.959   0.852   0.731
+          JNDs        -    +1.9*   +0.9    +1.6*   -0.2    +0.9    +1.1*   +0.8
+C50 (dB)  sim      -1.6     2.0    -2.0    -1.9     1.5    -0.1     0.3     1.8
+          meas     -1.9     0.7     2.2    -1.2     1.8     0.5     1.3     2.3
+          JNDs     +0.2    +1.3*   -4.1*   -0.7    -0.4    -0.6    -1.1*   -0.5
+...
+JNDs: simulated minus measured, in just noticeable differences; * beyond one
+missing:
+  T20 at 63 Hz: the measured decay clears the noise by 34 dB, T20 needs 35 dB
+  T30 at 63 Hz: the measured decay clears the noise by 34 dB, T30 needs 45 dB
+
+            within 1 JND   mean |JNDs|
+EDT (s)           4 of 8           2.0
+...
+```
+
+- Each JNDs row is the simulated value minus the measured one; `*` marks the bands
+  more than one JND apart, where the difference can be heard.
+- The summary gives, per parameter, how many of the compared bands are within one JND,
+  and the mean absolute difference in JNDs from 125 Hz to 4 kHz.
+- A band where either side has no value shows `-` and is listed with the reason, never
+  counted as a difference of zero: a response that decays by less than 20 dB, a decay
+  time whose range does not clear the background noise, or G without a reference.
+- Each file has its own channel (`--simulated-channel`, `--measured-channel`, 1 by
+  default) and its own reference for G, given as for `analyze`:
+  `--simulated-reference-energy 0.01` suits responses made by `simulate`, and the
+  measured side takes `--measured-free-field` with `--measured-distance`, or
+  `--measured-reference-energy`. G is compared only when both sides have one.
+- `--filters` and `--no-noise` apply to both files. `--json` writes every value and
+  reason, and `--plot` overlays the two decays in each octave band (viz extra).
+
+From Python, `compare_impulse_responses` does the same, and `compare_parameters`
+compares two sets of parameters already computed:
+
+```python
+from acoustic_spaces.audio import read_wav
+from acoustic_spaces.compare import compare_impulse_responses
+
+sim, sim_rate = read_wav("sim/talker__seat-a.wav")
+meas, meas_rate = read_wav("hall/ir.wav")
+comparison = compare_impulse_responses(
+    sim[:, 0], sim_rate, meas[:, 1], meas_rate, simulated_reference=0.01
+)
+print(comparison.table())
+t30 = comparison["t30"]
+print(t30.difference_jnd, t30.within_jnd, t30.mean_abs_jnd, t30.missing)
+```
+
 ## Repository layout
 
 ```
@@ -842,6 +912,7 @@ src/acoustic_spaces/   Python package
   render.py            convolution, resampling, auralisation, real-time playback
   headtracking.py      head-tracked binaural playback, OSC head trackers
   measurement.py       sine sweeps, playback and recording, deconvolution
+  compare.py           simulated against measured parameters, in JNDs (ISO 3382-1)
   audio.py             WAV files
   viz.py               3D view, reflection paths, particle animations, response plots
   gltf.py              export to glTF (.glb) for Blender: room, paths, particle animation

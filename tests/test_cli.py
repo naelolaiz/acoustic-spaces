@@ -384,6 +384,159 @@ def test_devices_without_sounddevice(
     assert "acoustic-spaces[measure]" in capsys.readouterr().err
 
 
+def _decay_wav(path: Path, t60: float, sample_rate: int, length: float = 2.0, channels: int = 1):
+    """A response that decays exactly exponentially in every octave band (a tone at each
+    mid-band frequency under one envelope, after 10 ms of silence), in every channel."""
+    import math
+
+    import numpy as np
+
+    from acoustic_spaces.audio import write_wav
+    from acoustic_spaces.parameters import octave_midbands
+
+    t = np.arange(int(length * sample_rate)) / sample_rate
+    tones = sum(np.cos(2 * np.pi * f * t + 0.7 * b) for b, f in enumerate(octave_midbands()))
+    decay = 0.1 * tones * np.exp(-3.0 * math.log(10.0) * t / t60)
+    ir = np.concatenate([np.zeros(sample_rate // 100), decay])
+    write_wav(path, np.tile(ir[:, None], (1, channels)), sample_rate)
+
+
+def test_compare_a_simulated_response_with_a_measured_one(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    # Simulated 10 % longer than measured, at another sample rate: 2 JNDs.
+    _decay_wav(tmp_path / "sim.wav", 1.1, 44_100)
+    _decay_wav(tmp_path / "meas.wav", 1.0, 48_000, channels=2)
+    report = tmp_path / "reports" / "compare.json"  # the folder is made
+    args = ["compare", str(tmp_path / "sim.wav"), str(tmp_path / "meas.wav")]
+    args += ["--measured-channel", "2", "--json", str(report)]
+    assert main([*args, "--simulated-reference-energy", "0.01"]) == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""  # the channel was picked: no note
+    lines = captured.out.splitlines()
+    assert lines[:2] == [
+        "simulated: sim.wav, channel 1, 44100 Hz, direct sound at 10.0 ms",
+        "measured:  meas.wav, channel 2, 48000 Hz, direct sound at 10.0 ms",
+    ]
+    t30 = next(i for i, line in enumerate(lines) if line.startswith("T30 (s)"))
+    assert lines[t30].split() == ["T30", "(s)", "sim"] + ["1.100"] * 8
+    assert lines[t30 + 1].split() == ["meas"] + ["1.000"] * 8
+    assert lines[t30 + 2].split() == ["JNDs"] + ["+2.0*"] * 8  # marked: beyond one JND
+    assert "  G in every band: no reference for the measured G" in lines
+    summary = next(line for line in reversed(lines) if line.startswith("T30 (s)"))
+    assert summary.split() == ["T30", "(s)", "0", "of", "8", "2.0"]
+
+    text = report.read_text(encoding="utf-8")
+    assert text.startswith('{\n  "simulated": {') and text.endswith("}\n")
+    data = json.loads(text)
+    assert data["simulated"] == {
+        "file": "sim.wav",
+        "channel": 1,
+        "sample_rate": 44_100,
+        "onset_s": pytest.approx(0.01, abs=1e-4),
+    }
+    assert data["measured"]["channel"] == 2 and data["measured"]["sample_rate"] == 48_000
+    assert data["bands_hz"] == [63, 125, 250, 500, 1000, 2000, 4000, 8000]
+    t30 = data["parameters"]["t30"]
+    assert t30["difference_jnd"] == [pytest.approx(2.0, abs=0.02)] * 8
+    assert (t30["compared"], t30["within_jnd"]) == (8, 0)
+    assert t30["mean_abs_jnd"] == pytest.approx(2.0, abs=0.02)
+    g = data["parameters"]["g"]
+    assert g["difference"] == [None] * 8 and g["mean_abs_jnd"] is None
+    assert g["missing"] == ["no reference for the measured G"] * 8
+
+    # With a reference on both sides, G is compared too; a free-field response works
+    # as for analyze.
+    from acoustic_spaces.audio import write_wav
+
+    impulse = [0.0] * 4800
+    impulse[100] = 1.0
+    write_wav(tmp_path / "ff.wav", impulse, 48_000)
+    reference = ["--measured-free-field", str(tmp_path / "ff.wav"), "--measured-distance", "1"]
+    assert main([*args, "--simulated-reference-energy", "0.01", *reference]) == 0
+    capsys.readouterr()
+    g = json.loads(report.read_text(encoding="utf-8"))["parameters"]["g"]
+    assert g["compared"] == 8 and None not in g["difference_jnd"]
+
+
+def test_compare_reports_missing_bands(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    import json
+
+    # The measured response stops after 0.15 s of a 2 s decay: less than 5 dB.
+    _decay_wav(tmp_path / "sim.wav", 2.0, 48_000)
+    _decay_wav(tmp_path / "meas.wav", 2.0, 48_000, length=0.15, channels=2)
+    report = tmp_path / "compare.json"
+    args = ["compare", str(tmp_path / "sim.wav"), str(tmp_path / "meas.wav")]
+    assert main([*args, "--json", str(report)]) == 0
+    captured = capsys.readouterr()
+    assert "meas.wav has 2 channels; comparing the first (--measured-channel" in captured.err
+    lines = captured.out.splitlines()
+    c80 = next(i for i, line in enumerate(lines) if line.startswith("C80 (dB)"))
+    assert lines[c80 + 1].split() == ["meas"] + ["-"] * 8
+    assert lines[c80 + 2].split() == ["JNDs"] + ["-"] * 8  # missing, not zero
+    assert (
+        "  EDT, T20, T30, C50, C80, D50, Ts in every band: "
+        "the measured response decays by less than 20 dB"
+    ) in lines
+    summary = next(line for line in reversed(lines) if line.startswith("C80 (dB)"))
+    assert summary.split() == ["C80", "(dB)", "0", "of", "0", "-"]
+    c80 = json.loads(report.read_text(encoding="utf-8"))["parameters"]["c80"]
+    assert c80["measured"] == c80["difference_jnd"] == [None] * 8
+    assert c80["missing"] == ["the measured response decays by less than 20 dB"] * 8
+
+
+def test_compare_reports_errors(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    _decay_wav(tmp_path / "ir.wav", 1.0, 48_000, length=0.5)
+    _decay_wav(tmp_path / "ff44.wav", 1.0, 44_100, length=0.1)
+    (tmp_path / "notes.wav").write_text("not audio", encoding="utf-8")
+    ir, missing = str(tmp_path / "ir.wav"), str(tmp_path / "missing.wav")
+    for args, message in [
+        ([missing, ir], "missing.wav"),
+        ([ir, missing], "missing.wav"),
+        ([ir, str(tmp_path / "notes.wav")], "notes.wav: not a WAV file"),
+        ([ir, ir, "--measured-channel", "2"], "measured channel 2 is not among channels 1 to 1"),
+        ([ir, ir, "--simulated-channel", "0"], "simulated channel 0 is not among channels"),
+        (
+            [ir, ir, "--measured-free-field", ir],
+            "--measured-free-field needs --measured-distance",
+        ),
+        (
+            [ir, ir, "--simulated-free-field", str(tmp_path / "ff44.wav")]
+            + ["--simulated-distance", "2"],
+            "ff44.wav is at 44100 Hz, the simulated response at 48000 Hz",
+        ),
+    ]:
+        assert main(["compare", *args, "--json", str(tmp_path / "c.json")]) == 1
+        err = capsys.readouterr().err
+        assert err.startswith("error: ") and message in err, err
+    assert not (tmp_path / "c.json").exists()
+
+
+def test_compare_plots_both_decays(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import sys
+
+    _decay_wav(tmp_path / "sim.wav", 1.1, 44_100, length=1.0)
+    _decay_wav(tmp_path / "meas.wav", 1.0, 48_000, length=1.0)
+    plot = tmp_path / "plots" / "compare.png"
+    args = ["compare", str(tmp_path / "sim.wav"), str(tmp_path / "meas.wav"), "--plot", str(plot)]
+    if importlib.util.find_spec("matplotlib") is not None:
+        assert main(args) == 0
+        assert f"saved {plot}" in capsys.readouterr().out
+        assert plot.stat().st_size > 10_000
+        plot.unlink()
+    # Without matplotlib the comparison is still printed, with a warning.
+    monkeypatch.setitem(sys.modules, "matplotlib.figure", None)
+    assert main(args) == 0
+    captured = capsys.readouterr()
+    assert "T30 (s)" in captured.out and "saved" not in captured.out
+    assert captured.err.startswith("warning: response plots need matplotlib")
+    assert not plot.exists()
+
+
 @pytest.fixture(scope="module")
 def simulated(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("sim")

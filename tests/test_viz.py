@@ -139,6 +139,35 @@ def test_impulse_response_plot(tmp_path: Path) -> None:
     assert out.stat().st_size > 10_000
 
 
+def test_comparison_plot(tmp_path: Path) -> None:
+    pytest.importorskip("matplotlib")
+    import numpy as np
+
+    from acoustic_spaces.viz import COMPARISON_COLOURS, plot_comparison
+
+    rng = np.random.default_rng(0)
+
+    def decay(t60: float, fs: int, length: float) -> np.ndarray:
+        t = np.arange(int(length * fs)) / fs
+        return rng.standard_normal(len(t)) * np.exp(-6.9 * t / t60)
+
+    out = tmp_path / "compare.png"
+    figure = plot_comparison(
+        decay(0.5, 44_100, 1.0), 44_100, decay(0.4, 48_000, 1.0), 48_000, out, title="test"
+    )
+    assert out.stat().st_size > 10_000
+    assert [ax.get_title() for ax in figure.axes][::4] == ["63 Hz", "1 kHz"]
+    for ax in figure.axes:  # both decays in every band
+        colours = {line.get_color() for line in ax.lines if len(line.get_xdata())}
+        assert colours == set(COMPARISON_COLOURS)
+    legend = figure.axes[0].get_legend()
+    assert [t.get_text() for t in legend.get_texts()] == ["simulated", "measured"]
+    # A response too short to draw leaves its side out, and the legend in place.
+    figure = plot_comparison(decay(0.5, 48_000, 1.0), 48_000, np.zeros(10), 48_000)
+    assert all(len(ax.lines) == 1 for ax in figure.axes[1:])
+    assert len(figure.axes[0].get_legend().get_texts()) == 2
+
+
 @pytest.mark.render
 def test_particle_animation(tmp_path: Path) -> None:
     from PIL import Image

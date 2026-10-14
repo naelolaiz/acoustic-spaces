@@ -2,97 +2,18 @@
 
 ## Unreleased
 
-Fixes from a review of the simulation, the parameters, the wave solver, the spatial
-outputs, the geometry import, the command line and the editor. Levels and parameters
-change slightly: G with the statistical late method by up to 1.8 dB, levels near
-diffraction boundaries by up to 2 dB, and the wave bands' timing by a grid step.
+**Comparing with measurements** (`acoustic-spaces compare`, `acoustic_spaces.compare`)
 
-A scene's `geometry.units` now defaults to the units a DXF file records, and to metres
-for other files, as before.
-
-**Simulation and parameters**
-
-- The statistical late method keeps Barron's total energy: its tail starts at the
-  direct sound and takes off the early paths, instead of starting at the transition
-  and losing the scattered share of the early reflections. Coverage maps use the same
-  tail.
-- A response whose decay has not reached -20 dB has every parameter NaN, as T20 and
-  T30 already had, instead of values read from the estimated tail.
-- The noise floor is looked for before trailing digital silence (zero padding, the
-  zeros `remove_latency` leaves), which made T30 read up to 70 % long.
-- Mono WAV columns, as `read_wav` gives them, work in `deconvolve` and the parameter
-  analysis; an empty impulse response has NaN parameters.
-- A run with one late ray, and `simulate` with no listener, give a result or a plain
-  error instead of failing deep inside.
-- Coverage maps no longer fail on points whose response ends within 100 ms of the
-  direct sound.
-
-**Diffraction**
-
-- A specular path interferes with its own wave's diffraction terms only, which keeps
-  the level continuous across reflection boundaries (it stepped by up to 2.1 dB).
-- Paths that reflect off the floor or ceiling where an edge ends are kept once, not
-  twice or never.
-- A listener or map point on the source no longer divides by zero.
-
-**Wave solver**
-
-- The wave bands start at emission; they arrived one grid step early.
-- The listener's velocity sits on the pressure's samples (it led by half a step).
-- The rays' late noise joins the wave bands in energy, which removes a 3 dB dip at
-  the crossover.
-- The source adds no net air, which had left a static pressure and a floor about 50 dB
-  down on the wave bands' decay.
-- A wall thinner than a cell gives each side its own face.
-- The grid runs at a multiple of a low output rate instead of with coarser cells, and
-  listeners outside the grid's air are refused before the runs.
-
-**Spatial audio**
-
-- HRTFs keep their gain when resampled: a 96 kHz SOFA file used at 48 kHz played 6 dB
-  quiet.
-- SOFA files that turn the head for each measurement, or give the ears in spherical
-  coordinates, are read with the right directions and ears.
-- 5.0.4 and 5.1.4 keep arrivals from behind on the horizon, panned as in 5.0; they went
-  up to the rear height speakers.
-- A head path given to `HeadTrackedBinaural.run` is not inverted by the tracker's
-  `invert`.
-- Ambisonic encoding refuses directions of zero length instead of giving NaN.
-
-**Geometry, scene files and the command line**
-
-- Faces of a closed model that point the wrong way are turned to agree with their
-  neighbours, so the inside test no longer puts sources outside the room.
-- DXF files are read in the units their header records when the scene gives none, and
-  3DFACE triangles no longer get a fourth corner at the origin.
-- Polygons that repeat a corner are triangulated correctly: an L-shaped floor had 8 m²
-  instead of 5 m².
-- OBJ files with several groups on one line, lines continued with `\`, or coordinates
-  that are not finite numbers are read or refused properly.
-- A model whose faces all have no area is refused with a clear error.
-- NaN and infinity are refused in scene files and coefficient CSV files.
-- A listener within 1 cm of a source is reported as a problem instead of giving a NaN
-  response.
-- Command-line overrides are checked as the scene file is, and `--sample-rate` now
-  reaches the wave solver. `analyze`, `deconvolve` and `sweep` report unreadable inputs
-  as errors and create their output folders.
-
-**Editor**
-
-- Choosing a material for one wall assigns it to that wall, not to every surface that
-  shares a name with it.
-- The 3D view stays lit after it redraws the room, and keeps its camera while the room
-  is edited.
-- Typing in a position, orientation or box field changes only that value; the others
-  were rounded to two decimals. Humidity shows a tenth of a percent.
-- A custom loudspeaker list is shown as it is, without a 5.0 layout added on any change.
-- Results of a run whose scene was closed are dropped, and saving an example elsewhere
-  keeps its results current.
-- One recording plays at a time.
-- Box and floor-plan fields show the units they are in, and boxes may be larger than
-  1000 units.
-- Save As adds `.yaml` to a bare name, asking before it replaces a file, and opening
-  another scene cancels placing a point in the 3D view.
+- A simulated and a measured impulse response, each at its own sample rate, compared by
+  their ISO 3382-1 parameters band by band: both values, the difference, and the
+  difference in just noticeable differences (ISO 3382-1:2009, table A.1), marked where
+  it is more than one; per parameter, the bands within one JND and the mean absolute
+  difference from 125 Hz to 4 kHz.
+- Bands that cannot be compared (a decay of less than 20 dB, a decay time the noise
+  leaves out, G without a reference on both sides) are listed with the reason, not
+  counted as zero.
+- A channel and a reference for G per file, `--json`, and `--plot` with the two decays
+  in each octave band (`plot_comparison` in `acoustic_spaces.viz`).
 
 ## 2.0.0
 
@@ -191,6 +112,98 @@ early reflections as before. The wave solver is off unless switched on.
 
 - `speech_transmission_index` and `modulation_transfer` in `acoustic_spaces.parameters`.
 - Parameters from energy responses are computed about twice as fast.
+
+A code review before the release fixed 38 bugs in the simulation, the parameters, the
+wave solver, the spatial outputs, the geometry import, the command line and the editor.
+Against 1.1.0, G with the statistical late method rises by up to 1.8 dB, and a response
+that decays less than 20 dB has no parameters instead of wrong ones.
+
+A scene's `geometry.units` now defaults to the units a DXF file records, and to metres
+for other files, as before.
+
+**Fixes: simulation and parameters**
+
+- The statistical late method keeps Barron's total energy: its tail starts at the
+  direct sound and takes off the early paths, instead of starting at the transition
+  and losing the scattered share of the early reflections. Coverage maps use the same
+  tail.
+- A response whose decay has not reached -20 dB has every parameter NaN, as T20 and
+  T30 already had, instead of values read from the estimated tail.
+- The noise floor is looked for before trailing digital silence (zero padding, the
+  zeros `remove_latency` leaves), which made T30 read up to 70 % long.
+- Mono WAV columns, as `read_wav` gives them, work in `deconvolve` and the parameter
+  analysis; an empty impulse response has NaN parameters.
+- A run with one late ray, and `simulate` with no listener, give a result or a plain
+  error instead of failing deep inside.
+- Coverage maps no longer fail on points whose response ends within 100 ms of the
+  direct sound.
+
+**Fixes: diffraction**
+
+- A specular path interferes with its own wave's diffraction terms only, which keeps
+  the level continuous across reflection boundaries (it stepped by up to 2.1 dB).
+- Paths that reflect off the floor or ceiling where an edge ends are kept once, not
+  twice or never.
+- A listener or map point on the source no longer divides by zero.
+
+**Fixes: wave solver**
+
+- The wave bands start at emission; they arrived one grid step early.
+- The listener's velocity sits on the pressure's samples (it led by half a step).
+- The rays' late noise joins the wave bands in energy, which removes a 3 dB dip at
+  the crossover.
+- The source adds no net air, which had left a static pressure and a floor about 50 dB
+  down on the wave bands' decay.
+- A wall thinner than a cell gives each side its own face.
+- The grid runs at a multiple of a low output rate instead of with coarser cells, and
+  listeners outside the grid's air are refused before the runs.
+
+**Fixes: spatial audio**
+
+- HRTFs keep their gain when resampled: a 96 kHz SOFA file used at 48 kHz played 6 dB
+  quiet.
+- SOFA files that turn the head for each measurement, or give the ears in spherical
+  coordinates, are read with the right directions and ears.
+- 5.0.4 and 5.1.4 keep arrivals from behind on the horizon, panned as in 5.0; they went
+  up to the rear height speakers.
+- A head path given to `HeadTrackedBinaural.run` is not inverted by the tracker's
+  `invert`.
+- Ambisonic encoding refuses directions of zero length instead of giving NaN.
+
+**Fixes: geometry, scene files and the command line**
+
+- Faces of a closed model that point the wrong way are turned to agree with their
+  neighbours, so the inside test no longer puts sources outside the room.
+- DXF files are read in the units their header records when the scene gives none, and
+  3DFACE triangles no longer get a fourth corner at the origin.
+- Polygons that repeat a corner are triangulated correctly: an L-shaped floor had 8 m²
+  instead of 5 m².
+- OBJ files with several groups on one line, lines continued with `\`, or coordinates
+  that are not finite numbers are read or refused properly.
+- A model whose faces all have no area is refused with a clear error.
+- NaN and infinity are refused in scene files and coefficient CSV files.
+- A listener within 1 cm of a source is reported as a problem instead of giving a NaN
+  response.
+- Command-line overrides are checked as the scene file is, and `--sample-rate` now
+  reaches the wave solver. `analyze`, `deconvolve` and `sweep` report unreadable inputs
+  as errors and create their output folders.
+
+**Fixes: editor**
+
+- Choosing a material for one wall assigns it to that wall, not to every surface that
+  shares a name with it.
+- The 3D view stays lit after it redraws the room, and keeps its camera while the room
+  is edited.
+- Typing in a position, orientation or box field changes only that value; the others
+  were rounded to two decimals. Humidity shows a tenth of a percent.
+- A custom loudspeaker list is shown as it is, without a 5.0 layout added on any change.
+- Results of a run whose scene was closed are dropped, and saving an example elsewhere
+  keeps its results current.
+- One recording plays at a time.
+- Box and floor-plan fields show the units they are in, and boxes may be larger than
+  1000 units.
+- Save As adds `.yaml` to a bare name, asking before it replaces a file, and opening
+  another scene cancels placing a point in the 3D view.
 
 ## 1.1.0
 
