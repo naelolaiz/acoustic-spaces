@@ -201,8 +201,8 @@ def simulate(
         raise ValueError("the statistical late method needs a closed model")
 
     # Early paths end `transition` after the direct sound. Without a set transition the
-    # stochastic tracer hands over by order alone, and the statistical tail starts at
-    # the mixing time.
+    # stochastic tracer hands over by order alone, and the statistical method keeps
+    # early paths until the mixing time.
     if settings.transition_ms is not None:
         transition = settings.transition_ms * 1e-3
     elif statistical:
@@ -260,7 +260,8 @@ def simulate(
             late = late_stage.statistical_energy(
                 t60,
                 volume,
-                direct + transition,
+                direct,
+                paths,
                 max_time=length,
                 time_step=TIME_STEP,
                 speed_of_sound=c,

@@ -23,6 +23,10 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   absorption spread evenly, and with the example's, where rays parallel to the floor
   never meet the ceiling and T30 is 5 to 20 times Eyring's estimate;
 - G in the same box against Barron's revised theory: within 1 dB;
+- the statistical late method against the stochastic one in the same box, with the
+  same absorption on every surface and scattering 0.3 and 1: G within 0.5 dB, C80
+  within 2.5 dB (higher from 1 kHz up, where the rays decay up to 7 % slower than
+  Eyring);
 - the late tail of the example box (absorbing ceiling, smooth walls) from 10k rays
   with splitting against 1 million rays: within 4 dB on average from 0.5 to 2.5 s,
   and splitting or thinning out every ray keeps the energy of plain ray tracing;
