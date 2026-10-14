@@ -75,7 +75,7 @@ def test_field_rotation_turns_plane_waves() -> None:
     rng = np.random.default_rng(4)
     directions = rng.standard_normal((30, 3))
     directions /= np.linalg.norm(directions, axis=1, keepdims=True)
-    for order in (0, 1, 3, 7):
+    for order in range(8):
         field = FieldRotation(order)
         a = angles_matrix(*rng.uniform(-180, 180, 3))
         b = angles_matrix(*rng.uniform(-180, 180, 3))
