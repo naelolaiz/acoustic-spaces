@@ -354,6 +354,7 @@ class MainWindow(QMainWindow):
         self.selection = ("scene", None)
         self._changed()
         self.plan.cancel()
+        self.viewport.start_placing(None)
         self.plan.fit()
         self.viewport.reset_camera()  # edits keep the camera; another room starts afresh
         self._state()

@@ -517,6 +517,13 @@ def test_place_remove_and_add_material(window, monkeypatch) -> None:
     assert window.selection == ("material", "carpet_cotton")
 
 
+def test_another_scene_cancels_placing(window) -> None:
+    window.viewport.start_placing("sources")  # waiting for a click in the 3D view
+    window.plan.start_placing("listeners")
+    window.open_example(example_path("studio"))
+    assert window.viewport.placing is None and window.plan.canvas.placing is None
+
+
 def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, monkeypatch) -> None:
     window.open_example(example_path("studio"))
     _quick(window.document)
