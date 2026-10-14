@@ -200,6 +200,26 @@ def test_flipped_face_is_reported() -> None:
     assert report.volume_m3 is None
 
 
+def test_clean_turns_flipped_faces_to_agree_with_their_neighbours() -> None:
+    # A closed box whose floor was written the other way round: the floor's solid angle
+    # counted against the rest and put points near it outside the room.
+    box = _box(8, 6, 3)
+    faces = box.faces.copy()
+    faces[:2] = faces[:2, ::-1]
+    flipped = RoomMesh(box.vertices, faces, box.face_labels, box.labels)
+    points = [[4, 3, 0.05], [4, 3, 0.3], [4, 3, 1.5]]
+    assert not points_inside(flipped, points).any()
+
+    cleaned, _, _ = clean_mesh(flipped)
+    report = check_mesh(cleaned)
+    assert report.closed and report.inconsistent_edges == 0
+    assert report.volume_m3 == pytest.approx(144.0)
+    # The floor turns back, not the larger rest: the normals still point inward.
+    assert report.normals_inward
+    np.testing.assert_allclose(cleaned.triangles, box.triangles)
+    assert points_inside(cleaned, points).all()
+
+
 def test_clean_merges_duplicates_and_drops_degenerate_faces() -> None:
     box = _box(8, 6, 3)
     # Unshared corners, as many exporters write them, plus a zero-area sliver.

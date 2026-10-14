@@ -111,6 +111,24 @@ def test_points_outside_and_unused_assignments(tmp_path: Path) -> None:
     assert any("balcony" in w for w in room.warnings())
 
 
+def test_flipped_faces_do_not_put_points_outside(tmp_path: Path) -> None:
+    # The shoebox with its floor written the other way round.
+    obj = tmp_path / "flipped.obj"
+    text = (EXAMPLES / "shoebox" / "shoebox.obj").read_text(encoding="utf-8")
+    obj.write_text(text.replace("f 1 2 3\nf 1 3 4", "f 3 2 1\nf 4 3 1"), encoding="utf-8")
+    path = _scene(
+        tmp_path,
+        geometry={"file": str(obj)},
+        listeners=[{"name": "low", "position": [6.0, 3.0, 0.3]}],
+    )
+    room = Room.from_yaml(path)
+    assert room.problems() == []
+    assert room.warnings() == []
+    assert room.sources_inside.tolist() == [True]
+    assert room.listeners_inside.tolist() == [True]
+    assert room.volume_m3 == pytest.approx(144.0)
+
+
 def test_open_model_skips_volume_and_inside_checks(tmp_path: Path) -> None:
     obj = tmp_path / "open.obj"
     lines = (EXAMPLES / "shoebox" / "shoebox.obj").read_text(encoding="utf-8").splitlines()

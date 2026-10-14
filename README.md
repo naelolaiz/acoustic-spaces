@@ -304,7 +304,10 @@ OBJ is the recommended exchange format: SketchUp, Rhino, Revit and Blender all
 export it with material names. Set `geometry.units` (`m`, `cm`, `mm`, `in`, `ft`)
 and, when the file is +y up (Blender's OBJ default, glTF always), `geometry.up_axis: y`.
 
-Polygons are triangulated, duplicate vertices merged and degenerate faces dropped.
+Polygons are triangulated, duplicate vertices merged and degenerate faces dropped,
+and faces that meet along an edge are turned to agree with each other (each part of
+the model keeps the orientation most of its area has), so a few faces flipped by the
+exporter do not spoil the volume or the inside checks.
 `validate` then reports surfaces without a material and sources or listeners
 outside the room; it warns about models that are not closed (rays would escape)
 and assignments that match nothing. Normals may point either way: absorption is
