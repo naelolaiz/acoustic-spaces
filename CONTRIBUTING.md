@@ -63,12 +63,16 @@ python validation/convolver_benchmark.py
 The version is written in one place, `src/acoustic_spaces/_version.py`.
 
 1. Set the version there and add its section to `CHANGELOG.md` (`## X.Y.Z`).
-2. Merge to `main`, then tag that commit `vX.Y.Z` and push the tag.
+2. Merge to `main`, then tag that commit `vX.Y.Z`: push the tag
+   (`git tag vX.Y.Z && git push origin vX.Y.Z`), or on GitHub's Releases page draft a new
+   release, create the tag `vX.Y.Z` on `main` there and publish it.
 3. CI builds and tests the wheels for every platform and Python version, checks that the
-   tag matches the version, and attaches the wheels and the source distribution to a
-   GitHub release whose notes are that version's changelog section.
+   tag matches the version, and attaches the wheels and the source distribution to the
+   GitHub release. A release made by CI takes that version's changelog section as its
+   notes; one made on the Releases page keeps its own notes, or gets the changelog's
+   when it has none.
 
-Publishing to PyPI needs a one-time setup by a maintainer:
+Publishing to PyPI is off. It needs a one-time setup by a maintainer:
 
 1. On PyPI, add a trusted publisher for the project `acoustic-spaces`: this repository,
    workflow `ci.yml`, environment `pypi`.

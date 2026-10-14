@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
+
+The graphical editor, export to Blender and source directivity.
 
 **Graphical editor** (`acoustic-spaces edit`, or `acoustic-spaces-editor`; the `gui` extra)
 
