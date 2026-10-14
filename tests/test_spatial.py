@@ -149,6 +149,66 @@ def test_spherical_head_delays_and_shadows_the_far_ear() -> None:
     assert (onset[1] - onset[0]) / 44_100 == pytest.approx(itd, abs=0.00005)
 
 
+def _itd(hrir: np.ndarray) -> np.ndarray:
+    """Interaural time difference (s, left ear first) of (dirs, 2, taps) responses, from
+    the phase of the ears' cross-spectrum between 200 and 600 Hz."""
+    f = np.fft.rfftfreq(4096, 1.0 / FS)
+    band = (f > 200) & (f < 600)
+    left, right = np.fft.rfft(hrir, 4096, axis=-1)[:, :, band].transpose(1, 0, 2)
+    phase = np.unwrap(np.angle(right * np.conj(left)), axis=1)
+    return -(phase / (2 * np.pi * f[band])).mean(axis=1)
+
+
+def test_interpolated_hrtfs_give_the_measured_responses_and_a_smooth_itd() -> None:
+    coarse = spherical_head(FS, directions=128)
+    np.testing.assert_allclose(coarse.interpolate(coarse.directions), coarse.hrir, atol=1e-12)
+    # Round the horizontal plane, a degree at a time: the nearest measured response
+    # jumps in steps of about 20 degrees, the interpolated one follows.
+    azimuth = np.arange(0.0, 91.0)
+    heads = from_angles(azimuth, np.zeros_like(azimuth))
+    dense = spherical_head(FS, directions=20_000)
+    truth = _itd(dense.hrir[dense.nearest(heads)])
+    smooth = _itd(coarse.interpolate(heads))
+    steps = _itd(coarse.hrir[coarse.nearest(heads)])
+    assert np.abs(np.diff(smooth)).max() < 50e-6 < 150e-6 < np.abs(np.diff(steps)).max()
+    assert np.abs(smooth - truth).mean() < 0.3 * np.abs(steps - truth).mean()
+    # Fewer than four directions: the nearest one.
+    few = HRTF(coarse.directions[:3], coarse.hrir[:3], FS)
+    np.testing.assert_array_equal(few.interpolate(coarse.directions[1] + 0.01), few.hrir[[1]])
+
+
+def test_interpolating_a_ring_of_directions() -> None:
+    """Measured round the horizon only: between two directions the pulse arrives
+    between their times, and above the horizon a direction takes the ring's response
+    under it (straight up, the nearest)."""
+    azimuth = np.arange(0.0, 360.0, 10.0)
+    arrival = 40.0 + 20.0 * np.sin(np.radians(azimuth))
+    pulse = lambda centre: np.exp(-0.5 * ((np.arange(128) - centre) / 2.0) ** 2)  # noqa: E731
+    hrir = np.stack([np.stack([pulse(t), pulse(t + 3.0)]) for t in arrival])
+    ring = HRTF(from_angles(azimuth, np.zeros_like(azimuth)), hrir, FS)
+    heads = from_angles([5.0, 30.0, 0.0], [0.0, 60.0, 90.0])
+    between, above, top = ring.interpolate(heads)
+    halfway = (arrival[0] + arrival[1]) / 2
+    np.testing.assert_allclose(between, [pulse(halfway), pulse(halfway + 3.0)], atol=0.01)
+    np.testing.assert_allclose(above, hrir[3], atol=1e-12)
+    np.testing.assert_allclose(top, hrir[ring.nearest(heads[2])[0]], atol=1e-12)
+
+
+def test_interpolating_half_a_sphere() -> None:
+    """Measured above the horizon only: below it, nothing is interpolated, and each
+    direction takes the nearest response."""
+    grid = fibonacci_sphere(512)
+    rim = from_angles(np.arange(0.0, 360.0, 15.0), np.zeros(24))
+    directions = np.vstack([grid[grid[:, 2] > 0.05], rim])
+    hrir = np.random.default_rng(6).standard_normal((len(directions), 2, 64))
+    half = HRTF(directions, hrir, FS)
+    heads = fibonacci_sphere(300)
+    below = heads[heads[:, 2] < -0.01]
+    np.testing.assert_allclose(half.interpolate(below), hrir[half.nearest(below)], atol=1e-12)
+    above = heads[heads[:, 2] > 0.1]
+    assert np.abs(half.interpolate(above) - hrir[half.nearest(above)]).max() > 0.1
+
+
 @pytest.mark.parametrize("rate", [24_000, 44_100, 96_000])
 def test_resampling_keeps_the_gain_of_the_responses(rate: float) -> None:
     # A flat response (an impulse) stays flat at unit gain at any rate.
@@ -197,6 +257,21 @@ def test_read_sofa(tmp_path: Path, right_first: bool) -> None:
     )
     np.testing.assert_allclose(hrtf.hrir, ir[:, ::-1] if right_first else ir)
     assert hrtf.nearest(from_angles([80.0, 0.0], [0.0, 70.0])).tolist() == [1, 3]
+
+
+def test_read_sofa_keeps_fractional_delays(tmp_path: Path) -> None:
+    h5py = pytest.importorskip("h5py")
+    _write_sofa(tmp_path / "set.sofa")
+    # Smooth pulses (as good as band-limited) at sample 14, delayed by 0.5 and 2.25.
+    pulse = lambda centre: np.exp(-0.5 * ((np.arange(35) - centre) / 2.0) ** 2)  # noqa: E731
+    with h5py.File(tmp_path / "set.sofa", "r+") as f:
+        f["Data.IR"][...] = np.broadcast_to(pulse(14.0)[:32], (4, 2, 32))
+        f["Data.Delay"][...] = [[0.5, 2.25]]
+    hrtf = read_sofa(tmp_path / "set.sofa")
+    assert hrtf.taps == 35
+    np.testing.assert_allclose(hrtf.hrir[:, 0], np.broadcast_to(pulse(14.5), (4, 35)), atol=1e-6)
+    np.testing.assert_allclose(hrtf.hrir[:, 1], np.broadcast_to(pulse(16.25), (4, 35)), atol=1e-6)
+    np.testing.assert_allclose(hrtf.onsets()[:, 1] - hrtf.onsets()[:, 0], 1.75, atol=0.05)
 
 
 def test_read_sofa_with_a_turning_head_and_spherical_ears(tmp_path: Path) -> None:

@@ -718,8 +718,12 @@ The statistical tail arrives evenly from all around.
   as behind the listener in 5.x.4, gets imaginary speakers on the horizon that the two
   speakers either side play, so arrivals there pan as in 5.0. Named layouts carry their WAV channel mask; the LFE channel of the
   `.1` layouts stays silent, leaving bass management to the playback system.
-- **Binaural** uses the HRTF of the nearest measured direction for every reflection and
-  for each late direction. Without a SOFA file it uses Brown and Duda's spherical head
+- **Binaural** gives every reflection and each late direction an HRTF interpolated
+  between the measured directions: the measured directions are triangulated as for
+  VBAP, and the responses at the corners of the triangle a direction falls in are
+  aligned at their onsets, mixed with its barycentric weights and delayed by the same
+  mix of their onsets, so the interaural time difference follows the direction smoothly
+  even with a coarse set. Without a SOFA file it uses Brown and Duda's spherical head
   model: interaural time and level differences, but no pinna cues. `read_sofa` reads
   SimpleFreeFieldHRIR files, which most HRTF databases (for example those listed by
   [sofaconventions.org](https://www.sofaconventions.org)) provide; it needs h5py.
