@@ -125,6 +125,31 @@ def test_simulate_writes_spatial_outputs(
     assert main([*args, "--hrtf", str(tmp_path / "missing.sofa")]) == 1
 
 
+def test_map_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    import json
+
+    out = tmp_path / "map.json"
+    args = ["map", str(SHOEBOX), "--spacing", "2", "--rays", "2000", "--length", "0.8"]
+    assert main([*args, "--seed", "4", "--noise", "35", "--json", str(out)]) == 0
+    stdout = capsys.readouterr().out
+    assert "12 map points 2 m apart, 1.2 m above the audience surfaces" in stdout
+    assert "talker (bands: 1 kHz)" in stdout
+    assert "STI" in stdout and "Ts (ms)" in stdout
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["settings"]["noise_db"] == 35.0 and report["settings"]["rays"] == 2000
+    assert len(report["points"]) == 12
+    assert len(report["maps"]["talker"]["values"]["c80"][0]) == 8
+
+    plot = tmp_path / "map.png"
+    assert main([*args, "--parameter", "sti", "--plot", str(plot)]) == 0
+    assert plot.stat().st_size > 10_000
+
+    assert main([*args, "--surfaces", "ceiling"]) == 1
+    assert "no map point lies inside the room" in capsys.readouterr().err
+    assert main([*args, "--noise", "30", "40"]) == 1
+    assert "noise_db" in capsys.readouterr().err
+
+
 def _write_recording(sweep_wav: Path, out: Path, latency: int = 0) -> None:
     """Play the sweep through a synthetic room: direct sound and a 0.5 s decay."""
     import math

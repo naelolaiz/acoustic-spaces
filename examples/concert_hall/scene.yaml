@@ -54,3 +54,7 @@ outputs:
   - mono
   - binaural
   - {format: ambisonics, order: 3}
+# Coverage map (`acoustic-spaces map`): the seating only, not the stage.
+coverage:
+  surfaces: [audience_floor]
+  rays: 200000

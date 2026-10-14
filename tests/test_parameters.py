@@ -3,7 +3,14 @@ import math
 import numpy as np
 import pytest
 
-from acoustic_spaces.parameters import decay_curve, from_energy, from_impulse_response
+from acoustic_spaces.parameters import (
+    STI_MODULATION_HZ,
+    decay_curve,
+    from_energy,
+    from_impulse_response,
+    modulation_transfer,
+    speech_transmission_index,
+)
 from acoustic_spaces.synthesis import REFERENCE_ENERGY_10M
 
 DT = 1e-3
@@ -154,3 +161,42 @@ def test_strength_from_a_broadband_reference(filters: str) -> None:
     ir[480] = 0.1  # the free-field direct sound at 10 m
     p = from_impulse_response(ir, 48_000, REFERENCE_ENERGY_10M, filters=filters)
     np.testing.assert_allclose(p.g, 0.0, atol=0.1)
+
+
+def test_modulation_transfer_of_an_exponential() -> None:
+    t60 = 1.2
+    m = modulation_transfer(_exponential(t60, 6.0), DT)
+    f = np.array(STI_MODULATION_HZ)
+    expected = 1.0 / np.sqrt(1.0 + (2.0 * math.pi * f * t60 / (6.0 * math.log(10.0))) ** 2)
+    np.testing.assert_allclose(m[0], expected, atol=2e-3)
+
+
+@pytest.mark.parametrize("t60, sti", [(0.5, 0.74), (1.0, 0.59), (2.0, 0.44)])
+def test_sti_of_reverberation_alone(t60: float, sti: float) -> None:
+    # Published values for an exponential decay without noise (Houtgast and Steeneken).
+    energy = np.tile(_exponential(t60, 8.0), (8, 1))
+    assert speech_transmission_index(energy, DT) == pytest.approx(sti, abs=0.01)
+
+
+def test_sti_falls_with_background_noise() -> None:
+    energy = np.tile(_exponential(0.1, 1.0), (8, 1))
+    speech = np.full(8, 60.0)
+    quiet = speech_transmission_index(energy, DT, signal_db=speech)
+    # Speech at 60 dB is well above the reception threshold except at 125 Hz.
+    assert quiet == pytest.approx(speech_transmission_index(energy, DT), abs=0.03)
+    # Noise as loud as the speech halves the modulation: 0 dB apparent SNR, 0.5 MTI.
+    noisy = speech_transmission_index(energy, DT, signal_db=speech, noise_db=60.0)
+    assert noisy == pytest.approx(0.5, abs=0.04)
+    assert speech_transmission_index(energy, DT, signal_db=speech, noise_db=90.0) < 0.05
+
+
+def test_sti_checks_its_arguments() -> None:
+    energy = np.ones((8, 10))
+    with pytest.raises(ValueError, match="needs signal_db"):
+        speech_transmission_index(energy, DT, noise_db=40.0)
+    with pytest.raises(ValueError, match="one per octave band"):
+        speech_transmission_index(energy, DT, signal_db=[60.0, 60.0])
+    with pytest.raises(ValueError, match="octave bands"):
+        speech_transmission_index(np.ones((3, 10)), DT)
+    # The seven STI bands work as well as the eight octave bands.
+    assert speech_transmission_index(energy[1:], DT) == speech_transmission_index(energy, DT)

@@ -1,5 +1,6 @@
 """The scene as a tree: the room, its geometry and surfaces, materials, sources,
-listeners, simulation settings and outputs. Selecting an entry shows its form."""
+listeners, simulation settings, outputs and the coverage map. Selecting an entry shows
+its form."""
 
 from __future__ import annotations
 
@@ -103,6 +104,10 @@ class SceneTree(QTreeWidget):
             "outputs",
             detail=", ".join(o.format for o in scene.outputs),
         )
+        coverage = scene.coverage
+        where = ", ".join(coverage.surfaces) if coverage and coverage.surfaces else "audience"
+        spacing = coverage.spacing if coverage else 1.0
+        self._item(top, "Coverage map", "coverage", detail=f"{where}, {spacing:g} m apart")
         self.expandAll()
         surfaces.setExpanded(len(materials) <= 12)
         self.resizeColumnToContents(0)

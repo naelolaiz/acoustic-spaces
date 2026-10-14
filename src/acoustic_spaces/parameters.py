@@ -9,6 +9,8 @@ All parameters are per octave band and measured from the arrival of the direct s
 - ``ts``: centre time (s), the energy-weighted mean arrival time.
 - ``g``: strength (dB), total energy over that of the same source at 10 m in free field.
 
+:func:`speech_transmission_index` gives the STI of IEC 60268-16 from the same energies.
+
 A response that stops before it has decayed loses the energy of its missing tail and
 reads too short; the tail is estimated from the last part of the decay and added back
 (ISO 3382-1, 5.3.4).
@@ -16,6 +18,7 @@ reads too short; the tail is estimated from the last part of the decay and added
 
 from __future__ import annotations
 
+import functools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
@@ -107,8 +110,13 @@ def _line(level: np.ndarray, t: np.ndarray, top: float, bottom: float):
     stop = int(np.argmax(level <= bottom))
     if stop - start < 2:
         return None
-    slope, intercept = np.polyfit(t[start : stop + 1], level[start : stop + 1], 1)
-    return (float(slope), float(intercept)) if slope < 0 else None
+    # The closed form of a straight-line fit: maps call this for thousands of points.
+    x, y = t[start : stop + 1], level[start : stop + 1]
+    n = len(x)
+    sx, sy = float(x.sum()), float(y.sum())
+    slope = (n * float(x @ y) - sx * sy) / (n * float(x @ x) - sx * sx)
+    intercept = (sy - slope * sx) / n
+    return (slope, intercept) if slope < 0 else None
 
 
 def _tail(e: np.ndarray, dt: float) -> tuple[float, float]:
@@ -218,6 +226,102 @@ def from_energy(
     return RoomParameters(
         **{f.name: np.array([p[f.name] for p in per_band]) for f in fields(RoomParameters)}
     )
+
+
+#: Speech transmission index (IEC 60268-16:2020, annex A): its octave bands, the
+#: modulation frequencies (Hz), the male weighting factors alpha and beta, and the
+#: absolute speech reception threshold of each band (dB).
+STI_BANDS_HZ: tuple[int, ...] = (125, 250, 500, 1000, 2000, 4000, 8000)
+STI_MODULATION_HZ: tuple[float, ...] = (
+    0.63, 0.8, 1.0, 1.25, 1.6, 2.0, 2.5, 3.15, 4.0, 5.0, 6.3, 8.0, 10.0, 12.5
+)  # fmt: skip
+_STI_ALPHA = np.array([0.085, 0.127, 0.230, 0.233, 0.309, 0.224, 0.173])
+_STI_BETA = np.array([0.085, 0.078, 0.065, 0.011, 0.047, 0.095])
+_STI_THRESHOLD_DB = np.array([46.0, 27.0, 12.0, 6.5, 7.5, 8.0, 12.0])
+
+
+def modulation_transfer(energy: np.ndarray, time_step: float) -> np.ndarray:
+    """Modulation transfer function (bands, modulation frequencies) of an energy
+    response e(t) (bands, slots): the magnitude of the sum of e(t) exp(-2 pi j F t)
+    over the sum of e(t), at each F of ``STI_MODULATION_HZ`` (Schroeder's method)."""
+    energy = np.atleast_2d(np.asarray(energy, dtype=float))
+    slots = energy.shape[1]
+    # One kernel serves every response up to a power of two long.
+    kernel = _modulation_kernel(1 << max(10, (slots - 1).bit_length()), float(time_step))
+    kernel = kernel[:slots]
+    total = energy.sum(axis=1, keepdims=True)
+    return np.abs(energy @ kernel) / np.where(total > 0, total, np.inf)
+
+
+@functools.lru_cache(maxsize=8)
+def _modulation_kernel(slots: int, time_step: float) -> np.ndarray:
+    t = (np.arange(slots) + 0.5) * time_step
+    kernel = np.exp(-2j * np.pi * np.outer(t, STI_MODULATION_HZ))
+    kernel.flags.writeable = False
+    return kernel
+
+
+def _masking_slope_db(level: np.ndarray) -> np.ndarray:
+    """Level-dependent auditory masking of the next band up (IEC 60268-16, A.2.3)."""
+    return np.select(
+        [level < 63.0, level < 67.0, level < 100.0],
+        [0.5 * level - 65.0, 1.8 * level - 146.9, 0.5 * level - 59.8],
+        -10.0,
+    )
+
+
+def speech_transmission_index(
+    energy: np.ndarray,
+    time_step: float,
+    *,
+    signal_db: Sequence[float] | np.ndarray | None = None,
+    noise_db: Sequence[float] | np.ndarray | float | None = None,
+) -> float:
+    """STI (0 to 1) of an energy response per octave band (bands, slots), from the
+    modulation transfer function (IEC 60268-16:2020, indirect method, male weighting).
+
+    ``energy`` has the bands of ``OCTAVE_BANDS_HZ`` (the 63 Hz band is not used) or of
+    ``STI_BANDS_HZ``. ``signal_db`` is the speech level per band at the listener (dB
+    SPL); with it, auditory masking and the reception threshold apply, and
+    ``noise_db`` (dB SPL per band, or one value for all) lowers the modulation by the
+    signal-to-noise ratio. Without either, the STI is that of the room alone.
+    """
+    energy = np.atleast_2d(np.asarray(energy, dtype=float))
+    bands = len(STI_BANDS_HZ)
+
+    def per_band(values, what: str) -> np.ndarray:
+        v = np.broadcast_to(np.asarray(values, dtype=float), (np.size(values),)).ravel()
+        if v.size == 1:
+            return np.full(bands, v[0])
+        if v.size == len(OCTAVE_BANDS_HZ):
+            return v[1:]
+        if v.size == bands:
+            return v
+        raise ValueError(f"{what}: give one value or one per octave band")
+
+    if energy.shape[0] == len(OCTAVE_BANDS_HZ):
+        energy = energy[1:]
+    elif energy.shape[0] != bands:
+        raise ValueError("energy must have the octave bands 63 Hz (or 125 Hz) to 8 kHz")
+    m = modulation_transfer(energy, time_step)
+    if noise_db is not None and signal_db is None:
+        raise ValueError("noise_db needs signal_db, the speech level at the listener")
+    if signal_db is not None:
+        signal = 10.0 ** (per_band(signal_db, "signal_db") / 10.0)
+        noise = 0.0 if noise_db is None else 10.0 ** (per_band(noise_db, "noise_db") / 10.0)
+        m = m / (1.0 + noise / signal)[:, None]
+        intensity = signal + noise
+        level = 10.0 * np.log10(intensity)
+        masking = np.zeros(bands)
+        masking[1:] = intensity[:-1] * 10.0 ** (_masking_slope_db(level[:-1]) / 10.0)
+        threshold = 10.0 ** (_STI_THRESHOLD_DB / 10.0)
+        m = m * (intensity / (intensity + masking + threshold))[:, None]
+    with np.errstate(divide="ignore"):
+        snr = 10.0 * np.log10(m / np.maximum(1.0 - m, 0.0))
+    transmission = (np.clip(np.nan_to_num(snr, nan=-15.0), -15.0, 15.0) + 15.0) / 30.0
+    mti = transmission.mean(axis=1)
+    sti = float(_STI_ALPHA @ mti - _STI_BETA @ np.sqrt(mti[:-1] * mti[1:]))
+    return min(max(sti, 0.0), 1.0)
 
 
 def onset(ir: np.ndarray, threshold_db: float = -20.0) -> int:
@@ -436,9 +540,13 @@ def free_field_reference(
 __all__ = [
     "DECAY_RANGES",
     "PARAMETERS",
+    "STI_BANDS_HZ",
+    "STI_MODULATION_HZ",
     "RoomParameters",
     "decay_curve",
     "from_energy",
+    "modulation_transfer",
+    "speech_transmission_index",
     "BandDecay",
     "FILTER_ORDER",
     "OCTAVE_RATIO",

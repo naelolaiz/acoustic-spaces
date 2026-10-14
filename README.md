@@ -82,6 +82,7 @@ acoustic-spaces export examples/concert_hall/scene.yaml hall.glb --paths --parti
 acoustic-spaces materials carpet                       # search the material database
 acoustic-spaces directivity hypercardioid --plot polar.png  # a source directivity
 acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
+acoustic-spaces map examples/lecture_hall/scene.yaml --plot sti.png --parameter sti
 python -m pytest                                       # the test suite
 ```
 
@@ -173,6 +174,11 @@ The editor works on the same scene files as the command line:
   point stands at ear or mouth height, on a wall or ceiling it goes half a metre into
   the room. Surfaces take materials from their form, or from a new material picked from
   the database (**Edit > Add material**).
+- **Simulation > Run coverage map** (F6) maps every source over the audience area (see
+  [Coverage maps](#coverage-maps)). The **Coverage map** panel shows any parameter
+  and band from above, for one source or all of them together, and **Map in 3D** lays
+  it over the room; **Save** writes the picture or every map as JSON. The scene tree's
+  **Coverage map** entry sets the surfaces, height, spacing, rays and background noise.
 - **Simulation > Run** (F5) works in the background. The **Results** panel shows the
   ISO 3382-1 parameters, the echogram and decay curves and the arrival directions of
   any source and listener, and draws their reflection paths in the room. **Export**
@@ -402,6 +408,60 @@ programs model the same physics, and shows where their scattering models part wa
 The [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
 has the details, the numbers and the scripts to reproduce them.
 
+## Coverage maps
+
+A coverage map gives the parameters on a grid over the audience area, the way CATT and
+ODEON draw them: strength G and sound pressure level, C50, C80, D50, EDT, T20, T30 and
+Ts per octave band, and the A-weighted level and speech transmission index.
+
+```sh
+acoustic-spaces map examples/lecture_hall/scene.yaml --plot sti.png --parameter sti
+acoustic-spaces map examples/concert_hall/scene.yaml --spacing 0.5 --json map.json \
+    --screenshot c80.png --parameter c80 --band 1000
+```
+
+![Coverage map of the speech transmission index in the lecture hall example, seen from above](docs/images/coverage.png)
+
+The map covers the surfaces named in `coverage.surfaces` (by default those whose names
+contain "audience", else the floor) with square columns `spacing` metres wide, with a
+point at the listening `height` above the surface in each; a balcony over the stalls
+gets a second level of points. Columns along a slanted wall keep the part over the
+surface. The early part is exact at every point, as at a listener. The late part comes
+from one ray tracing run per source in which every ray adds its path length through a
+slab of air around each point (a track-length estimate), so a map of hundreds of
+points costs about as much as a few listeners: the concert hall example (480 points,
+two sources) takes about 15 s. In the shoebox example, full simulations at map points
+give G within 0.3 dB of the map and T30 within 5 %.
+
+Each source radiates its `level_db` (sound power, dB re 1 pW) spread evenly over the
+octave bands, which sets the sound pressure levels. The STI (IEC 60268-16, male
+weighting) takes that as the speech level, with auditory masking and the reception
+threshold, and `noise_db` as the background noise. `map` prints the range of every
+parameter, `--plot` saves the top view, `--screenshot` the 3D view and `--json` every
+value of every point. Settings live in the scene:
+
+```yaml
+coverage:
+  surfaces: [audience_floor]   # default: names with "audience", else "floor"
+  height: 1.2                  # listening height above the surface, m
+  spacing: 1.0                 # distance between points, m
+  rays: 200000                 # rays per source (default: simulation.late.rays)
+  noise_db: 35                 # background noise for the STI, dB SPL (or one per band)
+```
+
+From Python:
+
+```python
+from acoustic_spaces.engine import coverage_map
+from acoustic_spaces.viz import plot_map, show_room
+
+result = coverage_map("examples/concert_hall/scene.yaml")
+both = result.get()  # all sources together; result.get("soloist") for one
+c80 = both.value("c80", band=4)  # one value per point, 1 kHz
+plot_map(both, "c80.png", parameter="c80", room=result.room)
+show_room(result.room, coverage=both, parameter="sti")
+```
+
 ## Spatial outputs
 
 The scene's `outputs` list says which formats `simulate` writes (mono by default):
@@ -546,7 +606,8 @@ src/acoustic_spaces/   Python package
   materials/           material database and coefficient files
   directivity.py       source directivity: patterns per band, SOFA and CSV balloons
   room.py              a scene with its geometry loaded: materials per face, checks
-  engine/              early reflections, late reverberation, responses, simulate()
+  engine/              early reflections, late reverberation, responses, simulate(),
+                       coverage maps
   air.py               ISO 9613-1 air absorption and speed of sound
   synthesis.py         octave filter bank and impulse response synthesis
   spatial/             Ambisonics, VBAP loudspeaker layouts, HRTFs, spatial rendering
@@ -579,7 +640,7 @@ v1, version 1.0.0:
 - [x] M4 Rendering: offline convolution and auralisation in Python, real-time partitioned convolver in C++, playback.
 - [x] M5 v1 release: validation report, documentation, wheels and release workflow.
 
-v2 (the ticked items are in version 1.1.0):
+v2 (version 1.1.0 has the first three):
 
 - [x] A graphical editor: scenes, materials, sources and listeners, runs, results and listening.
 - [x] Export to Blender: rooms, reflection paths and particle animations as glTF.
@@ -589,7 +650,7 @@ v2 (the ticked items are in version 1.1.0):
 - [ ] Head tracking.
 - [ ] Diffraction.
 - [ ] A wave-based solver for low frequencies.
-- [ ] Coverage maps.
+- [x] Coverage maps: parameters and STI over the audience area.
 
 ## Contributing
 

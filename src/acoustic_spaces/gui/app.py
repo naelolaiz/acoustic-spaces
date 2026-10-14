@@ -1,5 +1,6 @@
 """The editor's main window: the 3D view in the middle, the scene tree, the form of the
-selected item, the results of the last run and a message log around it."""
+selected item, the results of the last run, the coverage map and a message log around
+it."""
 
 from __future__ import annotations
 
@@ -45,16 +46,18 @@ from acoustic_spaces.gui.document import (
     model_scene,
 )
 from acoustic_spaces.gui.inspector import BAND_LABELS, Inspector, label_text
+from acoustic_spaces.gui.map_view import MapPanel
 from acoustic_spaces.gui.results_view import ResultsPanel
 from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.viewport import Viewport
-from acoustic_spaces.gui.worker import SimulationJob
+from acoustic_spaces.gui.worker import MapJob, SimulationJob
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 
 TITLE = "Acoustic Spaces editor"
 SCENE_FILTER = "Scenes (*.yaml *.yml)"
 MODEL_FILTER = "Models (*.obj *.stl *.ply *.off *.gltf *.glb *.dxf)"
 GLB_FILTER = "glTF binary (*.glb)"
+MAP_FILTERS = "PNG picture (*.png);;JSON, every map (*.json)"
 #: Kinds of item Edit > Remove works on.
 REMOVABLE = ("sources", "listeners", "material")
 
@@ -78,6 +81,8 @@ class MainWindow(QMainWindow):
         self.selection: tuple[str, object] = ("scene", None)
         self.result = None
         self._result_scene = None
+        self.coverage = None
+        self._coverage_scene = None
         self.job: SimulationJob | None = None
         self._job_scene = None
         self._started = 0.0
@@ -89,6 +94,7 @@ class MainWindow(QMainWindow):
         self.tree = SceneTree()
         self.inspector = Inspector(lambda: self.document)
         self.results = ResultsPanel()
+        self.map_panel = MapPanel()
         self.messages = QPlainTextEdit()
         self.messages.setReadOnly(True)
         self.messages.setMaximumBlockCount(2000)
@@ -102,6 +108,7 @@ class MainWindow(QMainWindow):
             ("tree", "Scene", self.tree, Qt.DockWidgetArea.LeftDockWidgetArea),
             ("inspector", "Properties", forms, Qt.DockWidgetArea.RightDockWidgetArea),
             ("results", "Results", self.results, Qt.DockWidgetArea.BottomDockWidgetArea),
+            ("map", "Coverage map", self.map_panel, Qt.DockWidgetArea.BottomDockWidgetArea),
             ("messages", "Messages", self.messages, Qt.DockWidgetArea.BottomDockWidgetArea),
         ):
             dock = QDockWidget(title, self)
@@ -109,7 +116,8 @@ class MainWindow(QMainWindow):
             dock.setWidget(widget)
             self.addDockWidget(area, dock)
             self.docks[name] = dock
-        self.tabifyDockWidget(self.docks["results"], self.docks["messages"])
+        self.tabifyDockWidget(self.docks["results"], self.docks["map"])
+        self.tabifyDockWidget(self.docks["map"], self.docks["messages"])
         self.docks["results"].raise_()
 
         self.progress = QProgressBar()
@@ -135,6 +143,9 @@ class MainWindow(QMainWindow):
         self.results.export_requested.connect(self.export_results)
         self.results.listen_requested.connect(self.listen)
         self.results.stop_requested.connect(self.stop_playing)
+        self.map_panel.changed.connect(self._draw)
+        self.map_panel.run_requested.connect(self.run_map)
+        self.map_panel.save_requested.connect(self.save_map)
         QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self._escape)
         # Delete removes the selected item only from the tree or the 3D view, so the key
         # keeps its meaning in the forms.
@@ -202,6 +213,13 @@ class MainWindow(QMainWindow):
         self.paths_action.toggled.connect(self.results.paths.setChecked)
         self.screenshot_action = a("Save &screenshot…", self.save_screenshot)
         self.run_action = a("&Run", self.run_simulation, "F5", "Simulate every source and listener")
+        self.map_action = a(
+            "Run coverage &map",
+            self.run_map,
+            "F6",
+            "Room parameters on a grid over the audience area, for every source",
+        )
+        self.map_action.setIconText("Map")
         self.cancel_action = a("&Cancel", self.cancel_simulation, "Shift+F5")
         self.cancel_action.setEnabled(False)
         self.about_action = a("&About", self.about)
@@ -215,6 +233,7 @@ class MainWindow(QMainWindow):
             (self.undo_action, pixmaps.SP_ArrowBack),
             (self.redo_action, pixmaps.SP_ArrowForward),
             (self.run_action, pixmaps.SP_MediaPlay),
+            (self.map_action, pixmaps.SP_FileDialogDetailedView),
             (self.cancel_action, pixmaps.SP_MediaStop),
         ):
             action.setIcon(icon(pixmap))
@@ -254,7 +273,7 @@ class MainWindow(QMainWindow):
             view.addAction(dock.toggleViewAction())
 
         simulation = bar.addMenu("&Simulation")
-        simulation.addActions([self.run_action, self.cancel_action])
+        simulation.addActions([self.run_action, self.map_action, self.cancel_action])
         bar.addMenu("&Help").addAction(self.about_action)
 
         tools = self.addToolBar("Main")
@@ -266,7 +285,7 @@ class MainWindow(QMainWindow):
         tools.addSeparator()
         tools.addActions([self.place_source_action, self.place_listener_action])
         tools.addSeparator()
-        tools.addActions([self.run_action, self.cancel_action])
+        tools.addActions([self.run_action, self.map_action, self.cancel_action])
 
     # -- the document ---------------------------------------------------------------
 
@@ -281,6 +300,8 @@ class MainWindow(QMainWindow):
         document.state_changed.connect(self._state)
         self.result = self._result_scene = None
         self.results.set_result(None)
+        self.coverage = self._coverage_scene = None
+        self.map_panel.set_result(None)
         self.selection = ("scene", None)
         self._changed()
         self._state()
@@ -291,6 +312,7 @@ class MainWindow(QMainWindow):
         self.tree.rebuild(self.document.room, self.selection)
         self.inspector.show_item(*self.selection)
         self.results.mark_stale(self._stale())
+        self.map_panel.mark_stale(self._map_stale())
         self._draw()
         self._summary()
 
@@ -380,7 +402,8 @@ class MainWindow(QMainWindow):
         self.remove_action.setEnabled(self.selection[0] in REMOVABLE)
         response = self._shown_response()
         paths = None if response is None else response.early
-        self.viewport.show_room(self.document.room, self.selection, paths)
+        coverage = None if self._map_stale() else self.map_panel.shown_in_3d()
+        self.viewport.show_room(self.document.room, self.selection, paths, coverage)
 
     def _paths_toggled(self, on: bool) -> None:
         self.paths_action.blockSignals(True)
@@ -615,6 +638,9 @@ class MainWindow(QMainWindow):
     def _stale(self) -> bool:
         return self.result is not None and self._result_scene is not self.document.scene
 
+    def _map_stale(self) -> bool:
+        return self.coverage is not None and self._coverage_scene is not self.document.scene
+
     def run_simulation(self) -> None:
         if self.job is not None:
             return
@@ -623,20 +649,40 @@ class MainWindow(QMainWindow):
             self.log("Cannot run: " + "; ".join(problems))
             self.docks["messages"].raise_()
             return
-        self.job = SimulationJob(self.document.room)
+        job = SimulationJob(self.document.room)
+        job.done.connect(self._done)
+        self._start(job, f"Simulating {self.document.scene.name}…")
+
+    def run_map(self) -> None:
+        """Compute the coverage map of every source in the background."""
+        if self.job is not None:
+            return
+        # Listeners play no part in a map.
+        problems = [p for p in self.document.room.problems() if not p.startswith("listener ")]
+        if problems:
+            self.log("Cannot map: " + "; ".join(problems))
+            self.docks["messages"].raise_()
+            return
+        job = MapJob(self.document.room)
+        job.done.connect(self._map_done)
+        self._start(job, f"Mapping {self.document.scene.name}…")
+
+    def _start(self, job: SimulationJob, message: str) -> None:
+        self.job = job
         self._job_scene = self.document.scene
-        self.job.progress.connect(self._progress)
-        self.job.done.connect(self._done)
+        job.progress.connect(self._progress)
         # Bound methods, so Qt queues the worker's signals to this window's thread.
-        self.job.failed.connect(self._failed)
-        self.job.cancelled.connect(self._cancelled)
-        self.job.finished.connect(self._job_ended)
+        job.failed.connect(self._failed)
+        job.cancelled.connect(self._cancelled)
+        job.finished.connect(self._job_ended)
         self._started = time.perf_counter()
         self.run_action.setEnabled(False)
+        self.map_action.setEnabled(False)
+        self.map_panel.set_running(True)
         self.cancel_action.setEnabled(True)
         self.progress.show()
-        self.log(f"Simulating {self.document.scene.name}…")
-        self.job.start()
+        self.log(message)
+        job.start()
 
     def cancel_simulation(self) -> None:
         if self.job is not None:
@@ -659,6 +705,15 @@ class MainWindow(QMainWindow):
         self.log(f"Done in {elapsed:.1f} s: {count} response{'s' if count != 1 else ''}.")
         self._draw()
 
+    def _map_done(self, result) -> None:
+        self.coverage, self._coverage_scene = result, self._job_scene
+        self.map_panel.set_result(result, result.room)
+        self.map_panel.mark_stale(self._map_stale())
+        self.docks["map"].raise_()
+        elapsed = time.perf_counter() - self._started
+        self.log(f"Map done in {elapsed:.1f} s: {len(result.grid)} points.")
+        self._draw()
+
     def _failed(self, message: str) -> None:
         self.log(f"The simulation failed: {message}")
         self.docks["messages"].raise_()
@@ -671,6 +726,8 @@ class MainWindow(QMainWindow):
         if job is not None:
             job.wait()
         self.run_action.setEnabled(True)
+        self.map_action.setEnabled(True)
+        self.map_panel.set_running(False)
         self.cancel_action.setEnabled(False)
         self.progress.hide()
 
@@ -703,6 +760,46 @@ class MainWindow(QMainWindow):
         if self._stale():
             self.log("These results are from before the latest changes to the scene.")
         return report
+
+    def save_map(self) -> None:
+        if self.coverage is None:
+            self.log("No map yet: run the coverage map (F6) first.")
+            return
+        path, chosen = QFileDialog.getSaveFileName(
+            self, "Save the coverage map", str(self.document.base_dir), MAP_FILTERS
+        )
+        if path:
+            if not Path(path).suffix:
+                path += ".json" if "json" in chosen.lower() else ".png"
+            self.write_map(path)
+
+    def write_map(self, path: str | Path) -> bool:
+        """Save the map on show as a PNG picture, or every map as JSON (by the suffix)."""
+        import json
+
+        path = Path(path)
+        try:
+            with busy():
+                if path.suffix.lower() == ".json":
+                    path.write_text(json.dumps(self.coverage.as_dict(), indent=1), "utf-8")
+                else:
+                    from acoustic_spaces.viz import plot_map
+
+                    panel = self.map_panel
+                    plot_map(
+                        panel.current(),
+                        path,
+                        parameter=panel.name(),
+                        band=panel.band_index(),
+                        room=panel.room,
+                    )
+        except (OSError, ValueError) as exc:
+            self._error("Could not save the map", str(exc))
+            return False
+        self.log(f"Wrote {path}")
+        if self._map_stale():
+            self.log("This map is from before the latest changes to the scene.")
+        return True
 
     def _listening_format(self):
         """Binaural (with the scene's HRTF, if it sets one) when the scene has a binaural

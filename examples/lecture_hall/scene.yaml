@@ -41,3 +41,6 @@ simulation:
 outputs:
   - mono
   - binaural
+# Coverage map (`acoustic-spaces map`): over the floor, with ventilation noise for the STI.
+coverage:
+  noise_db: [50, 45, 40, 35, 30, 25, 20, 15]

@@ -6,7 +6,7 @@
 //   early-reflection finder turns these into image sources and checks them exactly.
 // - trace_stochastic: energy-based stochastic ray tracing with diffuse rain, giving
 //   energy per receiver, octave band and time slot (and, optionally, per arrival
-//   direction) for the late part of the response.
+//   direction) for the late part of the response, and optionally over a coverage map.
 //
 // Units: a source of unit energy; results are time-integrated intensity, so the
 // direct sound at distance r contributes 1 / (4 pi r^2).
@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -225,6 +226,55 @@ struct StochasticSettings {
     std::size_t threads = 0;
 };
 
+// A coverage map: a regular grid of columns in x and y over the audience area. Each
+// column holds up to `layers` map points (a balcony above the stalls), each a slab of
+// air between low and high (z). Every leg of every ray adds its track length through a
+// slab over the slab's volume, a track-length estimate of the energy there, whatever
+// the reception mode; the receivers above are not needed.
+struct MapGrid {
+    double x0 = 0.0, y0 = 0.0;  // corner of column (0, 0), m
+    double cell = 1.0;          // column width, m
+    std::size_t nx = 0, ny = 0, layers = 1;
+    std::vector<std::int64_t> point;    // ny x nx x layers: map point index, -1 for none
+    std::vector<double> low, high;      // per point: the slab's bottom and top, m
+    std::vector<double> volume;         // per point: the slab's volume inside the room, m^3
+    std::vector<double> onset;          // per point: arrival of the direct sound, s
+    std::vector<double> covered_time;   // per point, as StochasticSettings::covered_time
+    // Time bins count from each point's onset: fine_bins of fine_step, then coarse_step.
+    double fine_step = 1e-3, coarse_step = 1e-2;
+    std::size_t fine_bins = 100;
+
+    std::size_t points() const { return low.size(); }
+
+    std::size_t bins(double max_time) const {
+        const double rest = std::max(0.0, max_time - fine_step * static_cast<double>(fine_bins));
+        return fine_bins + static_cast<std::size_t>(std::ceil(rest / coarse_step));
+    }
+
+    // Bin of an arrival `after` seconds after the onset (bins() and up: none).
+    std::size_t bin(double after) const {
+        after = std::max(after, 0.0);
+        const double fine = fine_step * static_cast<double>(fine_bins);
+        if (after < fine) return static_cast<std::size_t>(after / fine_step);
+        return fine_bins + static_cast<std::size_t>((after - fine) / coarse_step);
+    }
+
+    bool valid() const {
+        const std::size_t n = points();
+        if (!(cell > 0.0) || !(fine_step > 0.0) || !(coarse_step > 0.0) || layers == 0 ||
+            point.size() != nx * ny * layers || high.size() != n || volume.size() != n ||
+            onset.size() != n || covered_time.size() != n) {
+            return false;
+        }
+        for (std::size_t m = 0; m < n; ++m) {
+            if (!(high[m] > low[m]) || !(volume[m] > 0.0)) return false;
+        }
+        return std::all_of(point.begin(), point.end(), [n](std::int64_t m) {
+            return m >= -1 && m < static_cast<std::int64_t>(n);
+        });
+    }
+};
+
 struct StochasticScene {
     const Bvh *bvh = nullptr;
     Vec3 source;
@@ -235,6 +285,7 @@ struct StochasticScene {
     const double *air = nullptr;         // bands, energy attenuation per metre
     std::vector<Vec3> receivers;
     std::vector<Vec3> directions;  // unit vectors for directional bins; may be empty
+    MapGrid map;                   // no points: no map
 };
 
 struct StochasticResult {
@@ -244,6 +295,8 @@ struct StochasticResult {
     // windows: the sum and count of the band-mean energy of rays at each reflection, so
     // ray_energy / reflections is the expected energy of a ray in the window.
     std::vector<double> ray_energy, reflections;
+    std::size_t map_bins = 0;
+    std::vector<double> map_energy;  // map points x bands x map_bins
     std::size_t escaped_rays = 0;
     std::size_t traced_rays = 0;  // rays including the copies split off
 };
@@ -303,6 +356,99 @@ struct Accumulator {
             if (drow) drow[b * out.dir_bins + dbin] += e;
         }
     }
+
+    // Lowest slab bottom and highest slab top of the map.
+    double map_bottom = 0.0, map_top = 0.0;
+
+    // Adds a leg that leaves `pos` along `dir` (unit) for `length` metres, `travelled`
+    // metres from the source at `pos`, to every map slab it passes through.
+    void add_map(const Vec3 &pos, const Vec3 &dir, double length, double travelled,
+                 const double *energy, bool specular_only, int order) {
+        const MapGrid &map = scene.map;
+        constexpr double kFlat = 1e-12;
+        const double inf = std::numeric_limits<double>::infinity();
+        double t0 = 0.0, t1 = length;
+        // Keeps the part of the leg where p + d t lies in [lo, hi].
+        const auto clip = [&](double p, double d, double lo, double hi) {
+            if (std::abs(d) < kFlat) return p >= lo && p <= hi;
+            double a = (lo - p) / d, b = (hi - p) / d;
+            if (a > b) std::swap(a, b);
+            t0 = std::max(t0, a);
+            t1 = std::min(t1, b);
+            return t0 < t1;
+        };
+        const double width = map.cell * static_cast<double>(map.nx);
+        const double depth = map.cell * static_cast<double>(map.ny);
+        if (!clip(pos.z, dir.z, map_bottom, map_top) ||
+            !clip(pos.x, dir.x, map.x0, map.x0 + width) ||
+            !clip(pos.y, dir.y, map.y0, map.y0 + depth)) {
+            return;
+        }
+        // Walk the columns the leg crosses (Amanatides and Woo).
+        const auto first = [&](double p, double d, double origin, std::size_t n) {
+            const double i = std::floor((p + d * t0 - origin) / map.cell);
+            return static_cast<std::int64_t>(std::clamp(i, 0.0, static_cast<double>(n - 1)));
+        };
+        std::int64_t ix = first(pos.x, dir.x, map.x0, map.nx);
+        std::int64_t iy = first(pos.y, dir.y, map.y0, map.ny);
+        const auto next = [&](double p, double d, double origin, std::int64_t i) {
+            if (std::abs(d) < kFlat) return inf;
+            const double edge = origin + map.cell * static_cast<double>(i + (d > 0.0 ? 1 : 0));
+            return (edge - p) / d;
+        };
+        double next_x = next(pos.x, dir.x, map.x0, ix);
+        double next_y = next(pos.y, dir.y, map.y0, iy);
+        const double step_x = std::abs(dir.x) < kFlat ? inf : map.cell / std::abs(dir.x);
+        const double step_y = std::abs(dir.y) < kFlat ? inf : map.cell / std::abs(dir.y);
+        const std::int64_t sx = dir.x > 0.0 ? 1 : -1, sy = dir.y > 0.0 ? 1 : -1;
+        const double c = settings.speed_of_sound;
+        const std::size_t bands = scene.bands;
+        double t = t0;
+        for (std::size_t guard = 0; guard < map.nx + map.ny + 2; ++guard) {
+            const double t_out = std::min({next_x, next_y, t1});
+            const std::size_t column =
+                (static_cast<std::size_t>(iy) * map.nx + static_cast<std::size_t>(ix)) *
+                map.layers;
+            for (std::size_t layer = 0; layer < map.layers; ++layer) {
+                const std::int64_t m = map.point[column + layer];
+                if (m < 0) continue;
+                const auto k = static_cast<std::size_t>(m);
+                double a = t, b = t_out;
+                if (std::abs(dir.z) < kFlat) {
+                    if (pos.z < map.low[k] || pos.z > map.high[k]) continue;
+                } else {
+                    double za = (map.low[k] - pos.z) / dir.z, zb = (map.high[k] - pos.z) / dir.z;
+                    if (za > zb) std::swap(za, zb);
+                    a = std::max(a, za);
+                    b = std::min(b, zb);
+                }
+                if (!(b > a)) continue;
+                const double distance = travelled + 0.5 * (a + b);
+                const bool covered = specular_only && order <= settings.covered_order &&
+                                     distance / c <= map.covered_time[k];
+                if (covered) continue;
+                const std::size_t bin = map.bin(distance / c - map.onset[k]);
+                if (bin >= out.map_bins) continue;
+                const double factor = (b - a) / map.volume[k];
+                double *row = out.map_energy.data() + k * bands * out.map_bins;
+                for (std::size_t band = 0; band < bands; ++band) {
+                    row[band * out.map_bins + bin] +=
+                        energy[band] * factor * std::exp(-scene.air[band] * distance);
+                }
+            }
+            if (t_out >= t1) break;
+            t = t_out;
+            if (next_x <= next_y) {
+                ix += sx;
+                next_x += step_x;
+                if (ix < 0 || ix >= static_cast<std::int64_t>(map.nx)) break;
+            } else {
+                iy += sy;
+                next_y += step_y;
+                if (iy < 0 || iy >= static_cast<std::int64_t>(map.ny)) break;
+            }
+        }
+    }
 };
 
 }  // namespace detail
@@ -323,6 +469,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
          settings.covered_time.size() != scene.receivers.size())) {
         throw std::invalid_argument("trace_stochastic: bad settings");
     }
+    const MapGrid &map = scene.map;
+    const bool has_map = map.points() > 0;
+    if (has_map && !map.valid()) throw std::invalid_argument("trace_stochastic: bad map");
     const Bvh &bvh = *scene.bvh;
     const std::size_t bands = scene.bands;
     const std::size_t faces = bvh.face_count();
@@ -348,6 +497,17 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
     std::size_t threads = settings.threads;
     if (threads == 0) threads = std::max<std::size_t>(1, std::thread::hardware_concurrency());
     threads = std::max<std::size_t>(1, std::min(threads, settings.rays));
+    double map_bottom = 0.0, map_top = 0.0;
+    if (has_map) {
+        map_bottom = *std::min_element(map.low.begin(), map.low.end());
+        map_top = *std::max_element(map.high.begin(), map.high.end());
+        // Every thread sums its own copy of the map: keep them within kMapMemory.
+        constexpr double kMapMemory = 256.0 * 1024.0 * 1024.0;
+        const double copy = 8.0 * static_cast<double>(map.points() * bands) *
+                            static_cast<double>(map.bins(settings.max_time));
+        threads = std::min(threads, std::max<std::size_t>(
+                                        1, static_cast<std::size_t>(kMapMemory / copy)));
+    }
 
     auto make_result = [&] {
         StochasticResult res;
@@ -360,6 +520,10 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
             static_cast<std::size_t>(std::ceil(settings.max_time / settings.window_time_step));
         res.ray_energy.assign(res.windows, 0.0);
         res.reflections.assign(res.windows, 0.0);
+        if (has_map) {
+            res.map_bins = map.bins(settings.max_time);
+            res.map_energy.assign(map.points() * bands * res.map_bins, 0.0);
+        }
         return res;
     };
     std::vector<StochasticResult> partial(threads);
@@ -369,6 +533,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                              std::size_t worker) {
         StochasticResult &out = partial[worker];
         detail::Accumulator acc{scene, settings, out};
+        acc.map_bottom = map_bottom;
+        acc.map_top = map_top;
         std::array<double, kMaxBands> reflected{}, rain{};
 
         std::vector<detail::RayState> stack;
@@ -421,6 +587,10 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             acc.add(k, energy.data(), (t1 - t0) / sphere_volume[k], distance,
                                     -dir);
                         }
+                    }
+                    if (has_map) {
+                        acc.add_map(pos, dir, segment, travelled, energy.data(), specular_only,
+                                    order);
                     }
                     if (!hit.found()) {
                         if (travelled + segment < max_length) ++out.escaped_rays;
@@ -528,6 +698,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         for (std::size_t i = 0; i < total.windows; ++i) {
             total.ray_energy[i] += p.ray_energy[i];
             total.reflections[i] += p.reflections[i];
+        }
+        for (std::size_t i = 0; i < total.map_energy.size(); ++i) {
+            total.map_energy[i] += p.map_energy[i];
         }
         total.escaped_rays += p.escaped_rays;
         total.traced_rays += p.traced_rays;
