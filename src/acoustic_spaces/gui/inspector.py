@@ -716,8 +716,8 @@ class PointPage(Page):
 
 
 class SimulationPage(Page):
-    """The early and late stages, the wave solver, the response length, sample rate and
-    seed."""
+    """The early and late stages, scattering, the wave solver, the response length,
+    sample rate and seed."""
 
     def __init__(self, document) -> None:
         super().__init__(document)
@@ -755,6 +755,24 @@ class SimulationPage(Page):
         late_form.addRow("Arrival directions", self.directions)
         late_form.addRow(self.splitting)
         layout.addWidget(late)
+
+        scattering = QGroupBox("Scattering")
+        scattering_form = QFormLayout(scattering)
+        self.scattering_method = QComboBox()
+        self.scattering_method.addItems(["vector", "random"])
+        self.scattering_method.setToolTip(
+            "Where a reflected ray goes: vector (between the specular direction and a "
+            "random Lambert one, weighted by the scattering coefficient, as in ODEON) or "
+            "random (specular, or with the scattering coefficient as probability Lambert)"
+        )
+        self.from_size = QCheckBox("Add the scattering of each surface's size")
+        self.from_size.setToolTip(
+            "Small surfaces, distant ones and grazing reflections reflect less "
+            "specularly at low frequencies (Christensen and Rindel, 2005)"
+        )
+        scattering_form.addRow("Direction", self.scattering_method)
+        scattering_form.addRow(self.from_size)
+        layout.addWidget(scattering)
 
         wave = QGroupBox("Low frequencies")
         wave_form = QFormLayout(wave)
@@ -795,6 +813,7 @@ class SimulationPage(Page):
             self.diffraction,
             self.late_method,
             self.reception,
+            self.scattering_method,
             self.wave_band,
             self.sample_rate,
         ):
@@ -803,7 +822,13 @@ class SimulationPage(Page):
             box.valueChanged.connect(self._changed)
         for box in (self.length, self.transition):
             box.valueChanged.connect(self._changed)
-        for check in (self.splitting, self.wave, self.auto_transition, self.random_seed):
+        for check in (
+            self.splitting,
+            self.from_size,
+            self.wave,
+            self.auto_transition,
+            self.random_seed,
+        ):
             check.toggled.connect(self._changed)
 
     def load(self) -> None:
@@ -817,6 +842,8 @@ class SimulationPage(Page):
         self.reception.setCurrentText(s.late.reception)
         self.directions.setValue(s.late.directions)
         self.splitting.setChecked(s.late.splitting)
+        self.scattering_method.setCurrentText(s.scattering.method)
+        self.from_size.setChecked(s.scattering.from_size)
         self.wave.setChecked(s.wave.enabled)
         self.wave_band.setCurrentText(str(s.wave.max_band_hz))
         self.wave_band.setEnabled(s.wave.enabled)
@@ -852,6 +879,10 @@ class SimulationPage(Page):
                 "reception": self.reception.currentText(),
                 "directions": self.directions.value(),
                 "splitting": self.splitting.isChecked(),
+            },
+            "scattering": {
+                "method": self.scattering_method.currentText(),
+                "from_size": self.from_size.isChecked(),
             },
             "wave": {
                 **self.document.scene.simulation.wave.model_dump(mode="json"),

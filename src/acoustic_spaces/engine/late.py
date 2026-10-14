@@ -1,8 +1,9 @@
 """Late reverberation: energy per octave band and time slot at each listener.
 
-- ``stochastic_energy``: stochastic ray tracing in the compiled core. Rays reflect
-  specularly or diffusely by the scattering coefficient; how their energy reaches the
-  listeners is set by ``reception`` (see :data:`RECEPTION`). Specular paths the early
+- ``stochastic_energy``: stochastic ray tracing in the compiled core. Rays reflect as
+  the scene's ``simulation.scattering`` says (vector-based scattering by default, with
+  the scattering of each surface's size added); how their energy reaches the listeners
+  is set by ``reception`` (see :data:`RECEPTION`). Specular paths the early
   stage computes exactly are left out, so the two parts add up without double counting
   or a crossfade.
 - ``stochastic_map_energy``: the same tracer counting energy over a coverage map
@@ -22,6 +23,7 @@ import numpy as np
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 
 _DECAY = 6.0 * math.log(10.0)  # 60 dB in nepers of energy
 
@@ -151,6 +153,16 @@ def _directivity_arrays(directivity: Directivity | None, orientation, bands: int
     )
 
 
+def _scattering_arguments(model: TraceModel) -> tuple:
+    """The tracer's surface_size, band_hz, vector_scattering and size_from_order."""
+    if model.surface_size is None:
+        size, bands = np.zeros((0, 2)), np.zeros(0)
+    else:
+        size = np.ascontiguousarray(model.surface_size, dtype=np.float64)
+        bands = np.asarray(OCTAVE_BANDS_HZ, dtype=np.float64)
+    return size, bands, bool(model.vector_scattering), int(model.size_from_order)
+
+
 def stochastic_energy(
     model: TraceModel,
     source: np.ndarray,
@@ -213,6 +225,7 @@ def stochastic_energy(
             model.absorption,
             model.scattering,
             np.ascontiguousarray(air, dtype=np.float64),
+            *_scattering_arguments(model),
             listeners,
             np.ascontiguousarray(directions.reshape(-1, 3)),
             int(count),
@@ -316,6 +329,7 @@ def stochastic_map_energy(
             model.absorption,
             model.scattering,
             np.ascontiguousarray(air, dtype=np.float64),
+            *_scattering_arguments(model),
             np.asarray(grid.origin, dtype=np.float64),
             float(grid.cell),
             np.ascontiguousarray(grid.index, dtype=np.int64),

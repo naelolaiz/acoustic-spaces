@@ -101,10 +101,11 @@ python -m pytest                                       # the test suite
 ```
 
 `animate` shows sound particles leaving a source and spreading through the room, each
-reflecting off the walls (specularly, or diffusely with the surface's scattering
-coefficient) and losing the absorbed share of its energy at every hit, coloured by
-level or by reflection order. It opens a window with a time slider, or saves a GIF
-(`--out particles.gif`) or, with `imageio[ffmpeg]` installed, an MP4 video.
+reflecting off the walls (turned from the specular direction by as much as the surface
+scatters; see [Scattering](#scattering)) and losing the absorbed share of its energy at
+every hit, coloured by level or by reflection order. It opens a window with a time
+slider, or saves a GIF (`--out particles.gif`) or, with `imageio[ffmpeg]` installed, an
+MP4 video.
 
 ![Sound particles leaving the soloist of the concert hall example, coloured by level at 1 kHz, over the first 90 ms](docs/images/particles.gif)
 
@@ -443,12 +444,12 @@ or in a corner. Sound that bends round edges is added to them (see
 
 **Late reverberation** (`simulation.late`) is either:
 
-- `stochastic_ray_tracing` (default): `rays` rays leave the source and reflect
-  specularly or diffusely by each surface's scattering coefficient, losing energy
-  to absorption and air. Specular paths the early part already computed are left
-  out. How energy reaches the listener is set by `reception`:
+- `stochastic_ray_tracing` (default): `rays` rays leave the source and reflect off the
+  surfaces as [Scattering](#scattering) says, losing energy to absorption and air.
+  Specular paths the early part already computed are left out. How energy reaches the
+  listener is set by `reception`:
   - `diffuse_rain` (default): the scattered part of every reflection radiates to
-    each listener it can see; specular rays count when they cross a detector
+    each listener it can see; the rest counts when a ray crosses a detector
     sphere (`receiver_radius`, 0.5 to 1 m by default and kept clear of walls).
   - `secondary_sources`: all reflected energy radiates that way, as in ODEON's late
     method. Much smoother tails, but it treats specular energy as diffuse: in the

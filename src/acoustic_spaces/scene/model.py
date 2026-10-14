@@ -389,6 +389,28 @@ class LateStage(_Model):
     )
 
 
+class Scattering(_Model):
+    """How reflections scatter, in the early and the late stage alike."""
+
+    method: Literal["vector", "random"] = Field(
+        default="vector",
+        description=(
+            "where a reflected ray goes: vector (the specular direction and a random "
+            "Lambert direction added, weighted by the scattering coefficient, as in "
+            "ODEON) or random (specularly, or with the scattering coefficient as "
+            "probability in a Lambert direction; before 3.0)"
+        ),
+    )
+    from_size: bool = Field(
+        default=True,
+        description=(
+            "add the scattering of a surface's limited size: below a frequency set by its "
+            "width and length, the angle of incidence and the distance the sound came "
+            "from, less of a reflection is specular (Christensen and Rindel, 2005)"
+        ),
+    )
+
+
 class WaveStage(_Model):
     """The lowest octave bands from a wave-based solver (finite differences in time on a
     cubic grid) instead of rays: room modes, and sound bending round everything."""
@@ -472,6 +494,7 @@ class Output(_Model):
 class Simulation(_Model):
     early: EarlyStage = Field(default_factory=EarlyStage)
     late: LateStage = Field(default_factory=LateStage)
+    scattering: Scattering = Field(default_factory=Scattering)
     wave: WaveStage = Field(default_factory=WaveStage)
     transition_ms: float | None = Field(
         default=None,

@@ -2,10 +2,12 @@
 
 Particles leave the source evenly in all directions, weighted by its directivity, and
 travel at the speed of sound. At each wall they lose the absorbed share of their
-energy in the chosen octave band (and some to the air on the way) and reflect
-specularly or, with the wall's scattering coefficient as probability, in a Lambert
-direction, as in the stochastic tracer. Particles that find a gap in an open model fly
-on out of it.
+energy in the chosen octave band (and some to the air on the way) and reflect as in
+the stochastic tracer: by default between the specular direction and a random Lambert
+direction, weighted by the wall's scattering coefficient in that band (with the
+scattering of the wall's size added), or, with the scene's random scattering,
+specularly or with the scattering coefficient as probability in a Lambert direction.
+Particles that find a gap in an open model fly on out of it.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from acoustic_spaces.engine.model import TraceModel, source_weights
+from acoustic_spaces.engine.model import TraceModel, size_scattering, source_weights
 from acoustic_spaces.room import Room
 from acoustic_spaces.spatial.directions import fibonacci_sphere
 
@@ -94,7 +96,7 @@ def trace_particles(
     energies = [energy]
     alive = np.ones(count, dtype=bool)
     face = np.full(count, -1, dtype=np.int64)
-    for _ in range(MAX_REFLECTIONS):
+    for order in range(1, MAX_REFLECTIONS + 1):
         p, d, t = start[-1], direction[-1], t0[-1]
         reach = np.where(alive, np.inf, 0.0)
         dist, hit = model.intersect(p, d, reach, face)
@@ -105,8 +107,18 @@ def trace_particles(
         # Point the normal back at the arriving particle, whichever way the face faces.
         normal = np.where((np.einsum("ij,ij->i", normal, d) > 0)[:, None], -normal, normal)
         specular = d - 2.0 * np.einsum("ij,ij->i", d, normal)[:, None] * normal
-        scattered = rng.random(count) < model.scattering[np.maximum(face, 0), band]
-        new_d = np.where(scattered[:, None], _lambert(normal, rng), specular)
+        s = model.scattering[np.maximum(face, 0), band]
+        if model.surface_size is not None and order >= model.size_from_order:
+            hit_face = np.maximum(face, 0)
+            width, length = model.surface_size[hit_face].T
+            cosine = np.abs(np.einsum("ij,ij->i", normal, d))
+            leg = np.maximum(dist, 1e-9)
+            s = size_scattering(width, length, leg, cosine, c, model.scattering[hit_face])[:, band]
+        if model.vector_scattering:
+            mixed = s[:, None] * _lambert(normal, rng) + (1.0 - s[:, None]) * specular
+            new_d = mixed / np.linalg.norm(mixed, axis=1, keepdims=True)
+        else:
+            new_d = np.where((rng.random(count) < s)[:, None], _lambert(normal, rng), specular)
         kept = (1.0 - model.absorption[np.maximum(face, 0), band]) * np.exp(-air * dist)
         # A particle that escaped keeps flying along its last segment (no next one).
         t_next = np.where(alive, t + dist / c, np.inf)

@@ -38,6 +38,28 @@
   responses (CC BY-SA 4.0, like BRAS). `validation/bras_validation.py` compares
   simulations with them; the validation report has the results.
 
+**Scattering** (changes results: see below for version 2's)
+
+- Vector-based scattering, as in ODEON: every reflection sends a ray in the direction of
+  the sum of its specular direction and a random Lambert direction, weighted by the
+  surface's scattering coefficient, instead of specularly or, with the coefficient as
+  probability, diffusely. The diffuse rain sends the scattered share of each reflection
+  to the listeners and the detector spheres count only the rest, so nothing is counted
+  twice. Particles in `animate` and the editor move the same way.
+- Scattering from the size of a surface (Christensen and Rindel, 2005, as in ODEON): a
+  surface that is small for the wavelength, far from where the sound came from or met at
+  a grazing angle scatters more than its coefficient says. Each flat surface (the faces
+  of one plane joined at their edges, of any material) counts as the rectangle with its
+  area and perimeter. Early reflections lose that share too, and the late part takes it
+  up. Reflections that edge diffraction already completes keep their own coefficient:
+  the first two orders with `first_order` diffraction (the default), the first with
+  `direct`.
+- `simulation.scattering` picks the model: `method: vector` (default) or `random`, and
+  `from_size: true` (default) or `false`; the editor's simulation page has both.
+- Rooms with smooth walls decay faster than with version 2, closer to measured rooms and
+  to ODEON's and pyroomacoustics' model. Scene files need no change; to get version 2's
+  results, set `simulation: {scattering: {method: random, from_size: false}}`.
+
 **Examples**
 
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)
