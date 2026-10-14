@@ -278,6 +278,17 @@ def test_screen_attenuation_follows_maekawa(tmp_path: Path) -> None:
     np.testing.assert_allclose(loss, maekawa, atol=1.5)
 
 
+def test_a_listener_on_the_source() -> None:
+    # A map point can fall on a source: next to its direct sound, nothing over an edge
+    # counts.
+    room = _l_room([[2.0, 8.0, 1.5]])
+    source = np.array(room.scene.sources[0].position)
+    diffraction = EdgeDiffraction(
+        TraceModel.from_room(room), source, speed_of_sound=room.speed_of_sound(), air=np.zeros(8)
+    )
+    assert len(diffraction.apply(source, early_stage.EarlyReflections.empty(8), 1.0)) == 0
+
+
 def test_reflections_bend_round_edges_too() -> None:
     # Behind the corner the floor and ceiling reflections arrive over the edge as well.
     room = _l_room([[2.0, 8.0, 1.5]])

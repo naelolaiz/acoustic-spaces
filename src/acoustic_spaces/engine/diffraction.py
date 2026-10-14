@@ -667,7 +667,9 @@ class EdgeDiffraction:
             np.add.at(total, targets, cross)
             out = _replace_energy(paths, np.maximum(total, 0.0))
 
-        reference = 1.0 / (4.0 * np.pi * float(np.sum((listener - self.source) ** 2)))
+        # The direct sound in free field; a listener on the source counts as just off it.
+        squared = max(float(np.sum((listener - self.source) ** 2)), (_TOLERANCE * self.size) ** 2)
+        reference = 1.0 / (4.0 * np.pi * squared)
         keep = energy.max(axis=1) >= MIN_RELATIVE_ENERGY * reference
         keep &= distance / self.speed_of_sound <= max_delay_s
         if not keep.any():
