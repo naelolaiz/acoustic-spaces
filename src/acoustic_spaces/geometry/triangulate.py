@@ -11,7 +11,10 @@ def triangulate_polygon(points: np.ndarray) -> list[tuple[int, int, int]]:
     ``points`` is (N, 3). Returns index triples into ``points`` that keep the
     polygon's winding, so face normals stay as the source file defined them.
     Triangles and convex polygons are handled exactly; concave polygons such as
-    L-shaped floors use ear clipping on the polygon's dominant plane.
+    L-shaped floors use ear clipping on the polygon's dominant plane. A corner that
+    repeats the one before it is left out, and one that lies on a corner of an ear
+    (where a polygon touches itself, as round a hole joined to the outline) does not
+    stop that ear from being clipped.
     """
     n = len(points)
     if n < 3:
@@ -19,9 +22,27 @@ def triangulate_polygon(points: np.ndarray) -> list[tuple[int, int, int]]:
     if n == 3:
         return [(0, 1, 2)]
 
+    # Some exporters repeat a corner; the zero-length edge would keep every ear
+    # next to it from being clipped. Closer than this counts as the same point.
+    tolerance = 1e-9 * float(np.ptp(points, axis=0).max())
+
+    def same(i: int, j: int) -> bool:
+        return bool(np.linalg.norm(points[i] - points[j]) <= tolerance)
+
+    corners = [0]
+    for k in range(1, n):
+        if not same(k, corners[-1]):
+            corners.append(k)
+    while len(corners) > 1 and same(corners[-1], corners[0]):
+        corners.pop()
+    if len(corners) < 3:
+        return []  # no area
+    if len(corners) == 3:
+        return [(corners[0], corners[1], corners[2])]
+
     normal = _newell_normal(points)
     if not np.any(normal):
-        return [(0, i, i + 1) for i in range(1, n - 1)]
+        return [(corners[0], corners[i], corners[i + 1]) for i in range(1, len(corners) - 1)]
     drop = int(np.argmax(np.abs(normal)))
     keep = [axis for axis in range(3) if axis != drop]
     uv = points[:, keep]
@@ -30,7 +51,7 @@ def triangulate_polygon(points: np.ndarray) -> list[tuple[int, int, int]]:
     if drop == 1:
         sign = -sign  # dropping y flips the handedness of the (x, z) plane
 
-    remaining = list(range(n))
+    remaining = corners
     triangles: list[tuple[int, int, int]] = []
     guard = 0
     while len(remaining) > 3 and guard < 4 * n * n:
@@ -43,7 +64,7 @@ def triangulate_polygon(points: np.ndarray) -> list[tuple[int, int, int]]:
             if any(
                 _inside_triangle(uv[p], uv[a], uv[b], uv[c], sign)
                 for p in remaining
-                if p not in (a, b, c)
+                if p not in (a, b, c) and not (same(p, a) or same(p, b) or same(p, c))
             ):
                 continue
             triangles.append((a, b, c))

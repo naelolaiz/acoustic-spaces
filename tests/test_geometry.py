@@ -49,6 +49,47 @@ def test_triangulate_concave_l_shape_keeps_area() -> None:
     assert area == pytest.approx(5.0)
 
 
+def _signed_areas(pts: np.ndarray, tris: list[tuple[int, int, int]]) -> list[float]:
+    return [0.5 * float(np.cross(pts[b] - pts[a], pts[c] - pts[a])[2]) for a, b, c in tris]
+
+
+@pytest.mark.parametrize(("repeated", "at"), [(1, 2), (4, 5), (0, 6)])
+def test_triangulate_skips_a_repeated_corner(repeated: int, at: int) -> None:
+    # The L-shaped floor with one corner written twice: a convex one, the reflex one or
+    # the first corner again at the end. A repeat at a convex corner kept every ear next
+    # to it from being clipped, and the fan it fell back to covered 8 m2.
+    pts = np.array([[0, 0, 0], [3, 0, 0], [3, 3, 0], [2, 3, 0], [2, 1, 0], [0, 1, 0]], float)
+    pts = np.insert(pts, at, pts[repeated], axis=0)
+    areas = _signed_areas(pts, triangulate_polygon(pts))
+    assert len(areas) == 4 and min(areas) > 0  # the winding kept, nothing degenerate
+    assert sum(areas) == pytest.approx(5.0)
+
+
+def test_triangulate_polygon_round_a_hole() -> None:
+    # A 4 x 4 m outline joined to a 2 x 2 m hole along an edge that runs both ways, so
+    # the corners at either end of it appear twice.
+    corners = [(0, 0), (4, 0), (4, 4), (0, 4), (0, 0), (1, 1), (1, 3), (3, 3), (3, 1), (1, 1)]
+    pts = np.array([[x, y, 0.0] for x, y in corners])
+    areas = _signed_areas(pts, triangulate_polygon(pts))
+    assert min(areas) > 0
+    assert sum(areas) == pytest.approx(12.0)
+
+
+def test_obj_room_with_a_repeated_floor_corner(tmp_path: Path) -> None:
+    obj = tmp_path / "l_room.obj"
+    plan = [(0, 0), (3, 0), (3, 0), (3, 3), (2, 3), (2, 1), (0, 1)]
+    lines = [f"v {x} {y} 0" for x, y in plan] + [f"v {x} {y} 2" for x, y in plan]
+    lines += ["g floor", "f 1 2 3 4 5 6 7", "g ceiling", "f 14 13 12 11 10 9 8", "g walls"]
+    lines += [f"f {k} {k + 7} {k % 7 + 8} {k % 7 + 1}" for k in range(1, 8) if k != 2]
+    obj.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    mesh, _, _ = clean_mesh(load_mesh(obj))
+    report = check_mesh(mesh)
+    assert report.closed and report.normals_inward
+    assert report.volume_m3 == pytest.approx(10.0)
+    assert _area_by_name(mesh)["floor"] == pytest.approx(5.0)
+    assert report.surface_area_m2 == pytest.approx(5.0 + 5.0 + 2.0 * 12.0)
+
+
 def test_triangulate_keeps_winding_on_vertical_polygon() -> None:
     pts = np.array([[0, 0, 0], [0, 0, 3], [0, 4, 3], [0, 4, 0]], float)
     normal = np.cross(pts[1] - pts[0], pts[2] - pts[0])
