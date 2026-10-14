@@ -13,6 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6.QtWidgets")
 pytest.importorskip("pyvistaqt")
 
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from acoustic_spaces.audio import write_wav  # noqa: E402
@@ -25,7 +26,7 @@ from acoustic_spaces.gui.document import (  # noqa: E402
     unique_name,
 )
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
-from acoustic_spaces.gui.worker import SimulationJob  # noqa: E402
+from acoustic_spaces.gui.worker import MapJob, SimulationJob  # noqa: E402
 from acoustic_spaces.room import Room  # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
@@ -373,6 +374,95 @@ def test_results_follow_the_selected_listener(window, qapp) -> None:
     window.run_simulation()
     _wait(qapp, lambda: window.job is None)
     assert results.pair() == ("organ", "nave-middle")
+
+
+def _quick_map(document: Document) -> None:
+    """Make the document's coverage map fast."""
+    _quick(document)
+    document.edit("coarse map", lambda data: data.update(coverage={"spacing": 2.0, "rays": 500}))
+
+
+def test_map_job(qapp) -> None:
+    document = Document(box_scene())
+    _quick_map(document)
+    job = MapJob(document.room)
+    results = []
+    job.done.connect(results.append)
+    job.start()
+    _wait(qapp, lambda: job.isFinished() and results)
+    job.wait()
+    assert len(results[0].grid) > 0 and results[0].combined is None
+
+
+def test_coverage_map_in_the_editor(window, qapp, tmp_path: Path) -> None:
+    import json
+
+    window.open_example(example_path("church"))
+    _quick_map(window.document)
+    panel = window.map_panel
+    assert panel.current() is None and not panel.save.isEnabled()
+    window.map_action.trigger()
+    assert not window.map_action.isEnabled() and not window.run_action.isEnabled()
+    _wait(qapp, lambda: window.job is None)
+    assert window.coverage is not None and window.map_action.isEnabled()
+    assert "Map done in" in window.messages.toPlainText()
+    # Two sources: the map of both together comes first.
+    assert [panel.source.itemText(k) for k in range(panel.source.count())] == [
+        "All sources",
+        "altar",
+        "organ",
+    ]
+    assert panel.name() == "sti" and not panel.band.isEnabled()
+    assert panel.summary.text().startswith("STI: ")
+    panel.parameter.setCurrentIndex(panel.parameter.findData("c80"))
+    assert panel.band.isEnabled() and "C80 (dB), 1 kHz" in panel.summary.text()
+    panel.source.setCurrentText("organ")
+    assert panel.current().source == "organ"
+    panel.in_3d.setChecked(True)
+    assert panel.shown_in_3d()[1:] == ("c80", 4)
+
+    assert window.write_map(tmp_path / "map.png")
+    assert (tmp_path / "map.png").stat().st_size > 10_000
+    assert window.write_map(tmp_path / "map.json")
+    report = json.loads((tmp_path / "map.json").read_text(encoding="utf-8"))
+    assert set(report["maps"]) == {"altar", "organ", "all sources"}
+
+    # A map ignores listeners, even outside the room; a change makes it stale.
+    window.document.update_point("listeners", 0, position=(100.0, 0.0, 1.2))
+    assert "changed" in panel.note.text()
+    window.run_map()
+    _wait(qapp, lambda: window.job is None)
+    assert panel.source.currentText() == "organ"  # kept across runs
+    assert not panel.note.isVisible()
+
+
+def test_coverage_settings_form(window) -> None:
+    window.open_example(example_path("church"))
+    window.select("coverage")
+    page = window.inspector.pages["coverage"]
+    assert window.inspector.currentWidget() is page
+    assert page.automatic.isChecked() and not page.surfaces.isEnabled()
+    assert page.spacing.value() == 1.5  # set in the example
+    page.spacing.setValue(2.0)
+    assert window.document.scene.coverage.spacing == 2.0
+    page.automatic.setChecked(False)  # starts from the surfaces the map would take
+    assert window.document.scene.coverage.surfaces == ["floor"]
+    assert page.surfaces.isEnabled()
+    assert page.surfaces.findItems("floor", Qt.MatchFlag.MatchExactly)[0].checkState() == (
+        Qt.CheckState.Checked
+    )
+    page.noisy.setChecked(True)
+    assert window.document.scene.coverage.noise_db == [35.0] * 8
+    page.noise.item(0, 4).setText("30")
+    assert window.document.scene.coverage.noise_db[4] == 30.0
+    page.same_rays.setChecked(False)
+    page.rays.setValue(12_345)
+    assert window.document.scene.coverage.rays == 12_345
+    assert window.undo_action.text() == "&Undo change coverage map settings"
+    window.undo()
+    assert window.document.scene.coverage.rays == 50_000  # the late rays, when unticked
+    window.undo()
+    assert window.document.scene.coverage.rays is None
 
 
 def test_export_to_blender(window, monkeypatch, tmp_path: Path) -> None:

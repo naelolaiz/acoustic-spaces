@@ -1,5 +1,5 @@
 """Forms for the selected item: the scene, its geometry, a surface, a material, a source
-or listener, the simulation settings and the output formats.
+or listener, the simulation settings, the output formats and the coverage map.
 
 Every form shows the current scene and turns each change into one
 :meth:`Document.edit`; a change the scene schema refuses is reported and the form shows
@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     QSpinBox,
     QStackedWidget,
@@ -896,6 +898,130 @@ class OutputsPage(Page):
             self._changed()
 
 
+class CoveragePage(Page):
+    """Where the coverage map lies, how fine it is, its rays and the background noise
+    for the speech transmission index."""
+
+    def __init__(self, document) -> None:
+        super().__init__(document)
+        layout = QVBoxLayout(self)
+        area = QGroupBox("Audience area")
+        area_layout = QVBoxLayout(area)
+        self.automatic = QCheckBox("Automatic: surfaces named audience, else the floor")
+        self.surfaces = QListWidget()
+        self.surfaces.setMaximumHeight(140)
+        area_layout.addWidget(self.automatic)
+        area_layout.addWidget(self.surfaces)
+        form = QFormLayout()
+        self.height = spin(0.1, 20, 2, 0.1, "m")
+        self.spacing = spin(0.1, 20, 2, 0.25, "m")
+        form.addRow("Listening height", self.height)
+        form.addRow("Point spacing", self.spacing)
+        area_layout.addLayout(form)
+        layout.addWidget(area)
+
+        rays = QGroupBox("Rays")
+        rays_form = QFormLayout(rays)
+        self.same_rays = QCheckBox("As for the late reverberation")
+        self.rays = int_spin(1, 100_000_000, 10_000)
+        rays_form.addRow(self.same_rays)
+        rays_form.addRow("Rays per source", self.rays)
+        layout.addWidget(rays)
+
+        noise = QGroupBox("Speech transmission index")
+        noise_layout = QVBoxLayout(noise)
+        self.noisy = QCheckBox("Background noise (dB SPL per octave band)")
+        self.noise = QTableWidget(1, len(OCTAVE_BANDS_HZ))
+        self.noise.setHorizontalHeaderLabels(BAND_LABELS)
+        self.noise.verticalHeader().hide()
+        self.noise.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.noise.setEditTriggers(QAbstractItemView.EditTrigger.AllEditTriggers)
+        self.noise.setMaximumHeight(60)
+        noise_layout.addWidget(self.noisy)
+        noise_layout.addWidget(self.noise)
+        hint = QLabel(
+            "Each source talks at its sound power level, spread evenly over the bands. "
+            "Run the map with Simulation > Run coverage map (F6)."
+        )
+        hint.setWordWrap(True)
+        noise_layout.addWidget(hint)
+        layout.addWidget(noise)
+        layout.addStretch()
+
+        for check in (self.automatic, self.same_rays, self.noisy):
+            check.toggled.connect(self._changed)
+        for box in (self.height, self.spacing, self.rays):
+            box.valueChanged.connect(self._changed)
+        self.surfaces.itemChanged.connect(self._changed)
+        self.noise.itemChanged.connect(self._changed)
+
+    def load(self) -> None:
+        settings = self.document.scene.coverage
+        room = self.document.room
+        chosen = set(settings.surfaces or []) if settings else set()
+        self.automatic.setChecked(settings is None or not settings.surfaces)
+        self.surfaces.clear()
+        for name in room.mesh.label_names():
+            item = QListWidgetItem(name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if name in chosen else Qt.CheckState.Unchecked)
+            self.surfaces.addItem(item)
+        self.surfaces.setEnabled(not self.automatic.isChecked())
+        defaults = settings or self._defaults()
+        self.height.setValue(defaults.height)
+        self.spacing.setValue(defaults.spacing)
+        self.same_rays.setChecked(defaults.rays is None)
+        self.rays.setEnabled(defaults.rays is not None)
+        self.rays.setValue(defaults.rays or self.document.scene.simulation.late.rays)
+        noise = defaults.noise_db
+        self.noisy.setChecked(noise is not None)
+        self.noise.setEnabled(noise is not None)
+        values = [35.0] * len(OCTAVE_BANDS_HZ) if noise is None else noise
+        if not isinstance(values, list):
+            values = [float(values)] * len(OCTAVE_BANDS_HZ)
+        for col, value in enumerate(values):
+            self.noise.setItem(0, col, QTableWidgetItem(f"{value:g}"))
+
+    @staticmethod
+    def _defaults():
+        from acoustic_spaces.scene import Coverage
+
+        return Coverage()
+
+    def _changed(self) -> None:
+        if self._loading:
+            return
+        settings: dict = {"height": self.height.value(), "spacing": self.spacing.value()}
+        if not self.automatic.isChecked():
+            surfaces = [
+                self.surfaces.item(k).text()
+                for k in range(self.surfaces.count())
+                if self.surfaces.item(k).checkState() == Qt.CheckState.Checked
+            ]
+            if surfaces:
+                settings["surfaces"] = surfaces
+            elif self.sender() is self.automatic:
+                # Unticked just now: start from the surfaces the map would take.
+                from acoustic_spaces.engine.coverage import audience_surfaces
+
+                try:
+                    settings["surfaces"] = audience_surfaces(self.document.room)
+                except ValueError:
+                    pass
+        if not self.same_rays.isChecked():
+            settings["rays"] = self.rays.value()
+        if self.noisy.isChecked():
+            try:
+                settings["noise_db"] = [
+                    float(self.noise.item(0, c).text()) for c in range(len(OCTAVE_BANDS_HZ))
+                ]
+            except (AttributeError, ValueError):
+                self.failed.emit("noise levels are numbers in dB")
+                self.reload()
+                return
+        self.apply("change coverage map settings", lambda data: data.update(coverage=settings))
+
+
 class Inspector(QStackedWidget):
     """The form for the selected item."""
 
@@ -914,6 +1040,7 @@ class Inspector(QStackedWidget):
             "listeners": PointPage(document, "listeners"),
             "simulation": SimulationPage(document),
             "outputs": OutputsPage(document),
+            "coverage": CoveragePage(document),
         }
         for page in self.pages.values():
             self.addWidget(page)

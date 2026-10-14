@@ -1,5 +1,5 @@
 """The 3D view of the editor: the room's surfaces coloured by material, sources and
-listeners, the selection, and early reflection paths.
+listeners, the selection, early reflection paths and a coverage map.
 
 A click selects what is under the mouse (sources and listeners before the surfaces in
 front of them). In placing mode a click on a surface asks for a new source or listener
@@ -27,6 +27,7 @@ from acoustic_spaces.viz import (
     UNASSIGNED_COLOUR,
     _outline,
     balloon_polydata,
+    plot_coverage,
     plot_paths,
     room_polydata,
 )
@@ -142,8 +143,15 @@ class Viewport(QWidget):
 
     # -- drawing --------------------------------------------------------------------
 
-    def show_room(self, room: Room, selection: tuple[str, object] | None = None, paths=None):
-        """Draw ``room`` with ``selection`` highlighted and, if given, early ``paths``."""
+    def show_room(
+        self,
+        room: Room,
+        selection: tuple[str, object] | None = None,
+        paths=None,
+        coverage=None,
+    ):
+        """Draw ``room`` with ``selection`` highlighted and, if given, early ``paths``
+        and a coverage map: ``coverage`` is (CoverageMap, parameter, band)."""
         self._room = room
         if self.plotter is None:
             return
@@ -237,6 +245,9 @@ class Viewport(QWidget):
             )
         if paths is not None:
             plot_paths(paths, plotter)
+        if coverage is not None:
+            shown, parameter, band = coverage
+            plot_coverage(shown, plotter, parameter=parameter, band=band, render=False)
         if camera is None:
             plotter.view_isometric()
             plotter.reset_camera()

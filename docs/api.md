@@ -40,6 +40,16 @@ The names most scripts need are also importable from the package itself:
    :imported-members:
 ```
 
+## Coverage maps
+
+{func}`acoustic_spaces.engine.coverage_map` and the classes it returns are listed under
+Simulation above; the module also has the parameters a map shows and the A-weighting.
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.engine.coverage
+   :exclude-members: CoverageMap, CoverageResult, MapGrid, coverage_map, map_grid
+```
+
 ## Parameters, air and impulse responses
 
 ```{eval-rst}

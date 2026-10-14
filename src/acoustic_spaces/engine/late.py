@@ -5,6 +5,8 @@
   listeners is set by ``reception`` (see :data:`RECEPTION`). Specular paths the early
   stage computes exactly are left out, so the two parts add up without double counting
   or a crossfade.
+- ``stochastic_map_energy``: the same tracer counting energy over a coverage map
+  instead of at listeners.
 - ``statistical_energy``: an exponential decay from the Eyring reverberation time,
   scaled by Barron's revised theory (reflected energy density c / V for a unit source),
   starting at the transition time.
@@ -115,6 +117,39 @@ def _split_target(ray_energy: np.ndarray, reflections: np.ndarray) -> np.ndarray
     return np.where(target > 0, np.exp2(quarter_octaves / 4.0), 0.0)
 
 
+def _in_batches(trace, rays: int, splitting: bool):
+    """Runs ``trace(count, first, target)``, which returns (arrays, escaped rays,
+    ray_energy, reflections, traced rays), for all ``rays``: at once, or with
+    ``splitting`` in two batches where the second uses the weight window measured by
+    the first. Returns (arrays, escaped rays, traced rays), each array the mean of the
+    batches weighted by their share of rays."""
+    first = max(min(rays // 2, MIN_FIRST_RAYS), rays // 10) if splitting else rays
+    arrays, escaped, ray_energy, reflections, traced = trace(first, 0, np.zeros(0))
+    if first < rays:
+        # Each batch carries the whole source energy; weight them by their share of rays.
+        target = _split_target(ray_energy, reflections) * first / (rays - first)
+        more, more_escaped, _, _, more_traced = trace(rays - first, first, target)
+        arrays = [
+            (first * a + (rays - first) * b) / rays for a, b in zip(arrays, more, strict=True)
+        ]
+        escaped += more_escaped
+        traced += more_traced
+    return arrays, escaped, traced
+
+
+def _directivity_arrays(directivity: Directivity | None, orientation, bands: int):
+    if directivity is None:
+        directivity_a, table = np.zeros(0), np.zeros((0, 0, bands))
+    else:
+        directivity_a, table = directivity.native()
+    orientation = np.eye(3) if orientation is None else np.asarray(orientation, float)
+    return (
+        np.ascontiguousarray(directivity_a, dtype=np.float64),
+        np.ascontiguousarray(orientation, dtype=np.float64),
+        np.ascontiguousarray(table, dtype=np.float64),
+    )
+
+
 def stochastic_energy(
     model: TraceModel,
     source: np.ndarray,
@@ -163,19 +198,17 @@ def stochastic_energy(
         radius = receiver_radius(model.room.volume_m3, rays, max_time, speed_of_sound)
     radius = np.broadcast_to(np.asarray(radius, dtype=np.float64), (len(listeners),))
     directions = np.zeros((0, 3)) if directions is None else np.asarray(directions, float)
-    if directivity is None:
-        directivity_a, table = np.zeros(0), np.zeros((0, 0, model.absorption.shape[1]))
-    else:
-        directivity_a, table = directivity.native()
-    orientation = np.eye(3) if orientation is None else np.asarray(orientation, float)
+    directivity_a, orientation, table = _directivity_arrays(
+        directivity, orientation, model.absorption.shape[1]
+    )
 
     def trace(count: int, first: int, target: np.ndarray):
-        return _native.trace_stochastic(
+        energy, directional, *rest = _native.trace_stochastic(
             model.bvh,
             np.asarray(source, dtype=np.float64),
-            np.ascontiguousarray(directivity_a, dtype=np.float64),
-            np.ascontiguousarray(orientation, dtype=np.float64),
-            np.ascontiguousarray(table, dtype=np.float64),
+            directivity_a,
+            orientation,
+            table,
             model.absorption,
             model.scattering,
             np.ascontiguousarray(air, dtype=np.float64),
@@ -200,17 +233,9 @@ def stochastic_energy(
             MAX_SPLIT,
             MAX_FAMILY,
         )
+        return [energy, directional], *rest
 
-    first = max(min(rays // 2, MIN_FIRST_RAYS), rays // 10) if splitting else rays
-    energy, directional, escaped, ray_energy, reflections, traced = trace(first, 0, np.zeros(0))
-    if first < rays:
-        # Each batch carries the whole source energy; weight them by their share of rays.
-        target = _split_target(ray_energy, reflections) * first / (rays - first)
-        more, more_directional, more_escaped, _, _, more_traced = trace(rays - first, first, target)
-        energy = (first * energy + (rays - first) * more) / rays
-        directional = (first * directional + (rays - first) * more_directional) / rays
-        escaped += more_escaped
-        traced += more_traced
+    (energy, directional), escaped, traced = _in_batches(trace, rays, splitting)
     return LateEnergy(
         energy=energy,
         time_step=time_step,
@@ -219,6 +244,110 @@ def stochastic_energy(
         traced_rays=int(traced),
         directions=directions,
         directional=directional,
+    )
+
+
+#: Time bins of coverage maps, counted from each point's direct sound: 1 ms for the
+#: first 100 ms, then 10 ms.
+MAP_FINE_STEP = 1e-3
+MAP_FINE_BINS = 100
+MAP_COARSE_STEP = 1e-2
+
+
+@dataclass
+class MapEnergy:
+    """Energy per map point, band and time bin (time-integrated intensity), with bins
+    counted from each point's ``onset``: ``fine_bins`` of ``fine_step``, then
+    ``coarse_step``."""
+
+    energy: np.ndarray  # (points, bands, bins)
+    onset: np.ndarray  # (points,) s from emission
+    fine_step: float = MAP_FINE_STEP
+    fine_bins: int = MAP_FINE_BINS
+    coarse_step: float = MAP_COARSE_STEP
+    rays: int = 0
+    escaped_rays: int = 0
+    traced_rays: int = 0
+
+
+def stochastic_map_energy(
+    model: TraceModel,
+    source: np.ndarray,
+    grid,
+    onset: np.ndarray,
+    *,
+    rays: int,
+    max_time: float,
+    speed_of_sound: float,
+    air: np.ndarray,
+    covered_order: int = -1,
+    covered_time: np.ndarray | None = None,
+    splitting: bool = True,
+    seed: int = 0,
+    directivity: Directivity | None = None,
+    orientation: np.ndarray | None = None,
+    threads: int = 0,
+) -> MapEnergy:
+    """Energy over a coverage map (a :class:`~acoustic_spaces.engine.coverage.MapGrid`)
+    by stochastic ray tracing: every leg of every ray counts its track length through
+    each point's slab of air. ``onset`` is the arrival of the direct sound at each point
+    (s); ``covered_order``, ``covered_time`` (per point), ``splitting`` and the rest are
+    as for :func:`stochastic_energy`."""
+    from acoustic_spaces import _native
+
+    n = len(grid.points)
+    onset = np.ascontiguousarray(np.broadcast_to(np.asarray(onset, float), (n,)))
+    if covered_time is None:
+        covered = np.full(n, math.inf)
+    else:
+        covered = np.ascontiguousarray(np.broadcast_to(np.asarray(covered_time, float), (n,)))
+    directivity_a, orientation, table = _directivity_arrays(
+        directivity, orientation, model.absorption.shape[1]
+    )
+
+    def trace(count: int, first: int, target: np.ndarray):
+        energy, *rest = _native.trace_map(
+            model.bvh,
+            np.asarray(source, dtype=np.float64),
+            directivity_a,
+            orientation,
+            table,
+            model.absorption,
+            model.scattering,
+            np.ascontiguousarray(air, dtype=np.float64),
+            np.asarray(grid.origin, dtype=np.float64),
+            float(grid.cell),
+            np.ascontiguousarray(grid.index, dtype=np.int64),
+            np.ascontiguousarray(grid.low, dtype=np.float64),
+            np.ascontiguousarray(grid.high, dtype=np.float64),
+            np.ascontiguousarray(grid.volume, dtype=np.float64),
+            onset,
+            covered,
+            MAP_FINE_STEP,
+            MAP_FINE_BINS,
+            MAP_COARSE_STEP,
+            int(count),
+            float(max_time),
+            float(speed_of_sound),
+            int(covered_order),
+            int(seed) & 0xFFFFFFFFFFFFFFFF,
+            int(threads),
+            SPLIT_WINDOW_S,
+            int(first),
+            np.ascontiguousarray(target, dtype=np.float64),
+            SPLIT_RATIO,
+            MAX_SPLIT,
+            MAX_FAMILY,
+        )
+        return [energy], *rest
+
+    (energy,), escaped, traced = _in_batches(trace, rays, splitting)
+    return MapEnergy(
+        energy=energy,
+        onset=onset,
+        rays=rays,
+        escaped_rays=int(escaped),
+        traced_rays=int(traced),
     )
 
 

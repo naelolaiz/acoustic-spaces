@@ -446,6 +446,34 @@ class Simulation(_Model):
     seed: int | None = Field(default=None, description="random seed, for reproducible runs")
 
 
+class Coverage(_Model):
+    """A coverage map: room parameters on a grid over the audience area (see
+    :mod:`acoustic_spaces.engine.coverage`)."""
+
+    surfaces: list[str] | None = Field(
+        default=None,
+        description=(
+            "surfaces the map lies over; None takes those named with 'audience', else 'floor'"
+        ),
+    )
+    height: float = Field(default=1.2, gt=0.0, description="listening height above them (m)")
+    spacing: float = Field(default=1.0, gt=0.0, description="distance between map points (m)")
+    rays: int | None = Field(
+        default=None, ge=1, description="rays per source; None uses simulation.late.rays"
+    )
+    noise_db: list[float] | float | None = Field(
+        default=None,
+        description="background noise for the STI (dB SPL, one value or one per octave band)",
+    )
+
+    @field_validator("noise_db")
+    @classmethod
+    def _noise_per_band(cls, value):
+        if isinstance(value, list):
+            return _per_band("noise_db", value)
+        return value
+
+
 class Scene(_Model):
     name: str = "untitled"
     geometry: Geometry
@@ -463,6 +491,9 @@ class Scene(_Model):
     outputs: list[Output] = Field(
         default_factory=lambda: [Output(format="mono")],
         description="formats to write every response in (simulate command)",
+    )
+    coverage: Coverage | None = Field(
+        default=None, description="coverage map settings (map command); None uses the defaults"
     )
 
     @model_validator(mode="after")

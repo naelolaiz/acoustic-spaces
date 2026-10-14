@@ -1,4 +1,5 @@
-"""Simulations in the background, so the editor stays responsive while rays fly.
+"""Simulations and coverage maps in the background, so the editor stays responsive
+while rays fly.
 
 The compiled tracer releases Python's lock while it works, so the window keeps
 drawing. A cancelled run stops at the next stage (the early or late part of the next
@@ -9,7 +10,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QThread, Signal
 
-from acoustic_spaces.engine import simulate
+from acoustic_spaces.engine import coverage_map, simulate
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene.model import Simulation
 
@@ -42,11 +43,12 @@ class SimulationJob(QThread):
             raise Cancelled
         self.progress.emit(message)
 
+    def compute(self):
+        return simulate(self.room, settings=self.settings, threads=self.threads, progress=self._say)
+
     def run(self) -> None:
         try:
-            result = simulate(
-                self.room, settings=self.settings, threads=self.threads, progress=self._say
-            )
+            result = self.compute()
         except Cancelled:
             self.cancelled.emit()
             return
@@ -59,4 +61,14 @@ class SimulationJob(QThread):
             self.done.emit(result)
 
 
-__all__ = ["Cancelled", "SimulationJob"]
+class MapJob(SimulationJob):
+    """Runs :func:`acoustic_spaces.engine.coverage_map`; ``done`` carries the
+    :class:`~acoustic_spaces.engine.CoverageResult`."""
+
+    def compute(self):
+        return coverage_map(
+            self.room, simulation=self.settings, threads=self.threads, progress=self._say
+        )
+
+
+__all__ = ["Cancelled", "MapJob", "SimulationJob"]

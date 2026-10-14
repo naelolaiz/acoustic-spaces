@@ -158,3 +158,84 @@ def test_scatter_kernels_places_filters_at_impulses() -> None:
     np.testing.assert_allclose(out, want[:, :20])  # past the end is dropped
     with pytest.raises(ValueError, match="out of range"):
         _native.scatter_kernels(20, positions, index + 1, amplitudes, kernels)
+
+
+def _trace_map(rays: int, **changes):
+    """Rays from near the floor of the unit cube onto one map slab higher up; walls
+    that absorb everything, so only the direct sound reaches it."""
+    from acoustic_spaces import _native
+
+    vertices, faces = _unit_cube()
+    args = dict(
+        bvh=_native.Bvh(vertices, faces),
+        source=np.array([0.5, 0.5, 0.2]),
+        directivity_a=np.zeros(0),
+        orientation=np.eye(3),
+        directivity_table=np.zeros((0, 0, 1)),
+        absorption=np.ones((12, 1)),
+        scattering=np.zeros((12, 1)),
+        air=np.zeros(1),
+        origin=np.array([0.4, 0.4]),
+        cell=0.2,
+        point=np.zeros((1, 1, 1), dtype=np.int64),
+        low=np.array([0.7]),
+        high=np.array([0.8]),
+        volume=np.array([0.2 * 0.2 * 0.1]),
+        onset=np.array([0.5 / 343.0]),
+        covered_time=np.zeros(1),
+        fine_step=1e-4,
+        fine_bins=20,
+        coarse_step=1e-3,
+        rays=rays,
+        max_time=0.01,
+        speed_of_sound=343.0,
+        covered_order=-1,
+        seed=5,
+        threads=0,
+        window_time_step=0.01,
+        first_ray=0,
+        split_target=np.zeros(0),
+        split_ratio=4.0,
+        max_split=8,
+        max_family=256,
+    )
+    return _native.trace_map(**{**args, **changes})
+
+
+def test_trace_map_counts_the_track_length_through_a_slab() -> None:
+    energy, escaped, _, _, traced = _trace_map(400_000)
+    assert energy.shape == (1, 1, 20 + 8)
+    assert traced == 400_000 and escaped == 0
+    # A track-length estimate of the direct sound: 1 / (4 pi r^2) averaged over the slab.
+    g = (np.arange(20) + 0.5) / 20
+    x, y, z = np.meshgrid(0.4 + 0.2 * g, 0.4 + 0.2 * g, 0.7 + 0.1 * g, indexing="ij")
+    r2 = (x - 0.5) ** 2 + (y - 0.5) ** 2 + (z - 0.2) ** 2
+    assert energy.sum() == pytest.approx(np.mean(1 / (4 * np.pi * r2)), rel=0.04)
+    # Each crossing counts at its middle: 0.5 m to 0.6 m away, so within 0.35 ms of the
+    # onset at 0.5 m, mostly in the second 0.1 ms bin.
+    arrived = np.flatnonzero(energy[0, 0])
+    assert arrived.min() == 0 and arrived.max() <= 3
+    assert np.argmax(energy[0, 0]) == 1
+
+
+def test_trace_map_skips_what_the_early_part_covers() -> None:
+    covered, *_ = _trace_map(20_000, covered_order=0, covered_time=np.array([1.0]))
+    assert covered.sum() == 0.0
+    after, *_ = _trace_map(20_000, covered_order=0, covered_time=np.array([0.56 / 343.0]))
+    assert 0 < after.sum() < _trace_map(20_000)[0].sum()
+
+
+@pytest.mark.parametrize(
+    "change, message",
+    [
+        ({"origin": np.zeros(3)}, "origin must be"),
+        ({"low": np.zeros(0), "high": np.zeros(0), "volume": np.zeros(0)}, "no map points"),
+        ({"volume": np.zeros(1)}, "bad map"),
+        ({"high": np.array([0.7])}, "bad map"),
+        ({"point": np.full((1, 1, 1), 3, dtype=np.int64)}, "bad map"),
+        ({"cell": 0.0}, "bad map"),
+    ],
+)
+def test_trace_map_rejects_a_bad_map(change, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        _trace_map(10, **change)

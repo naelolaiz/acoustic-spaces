@@ -17,6 +17,9 @@ from acoustic_spaces.gltf import PARTICLE_COUNT, SLOW_MOTION
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
+#: What the map command can plot (the keys of engine.coverage.MAP_PARAMETERS).
+MAP_PARAMETER_NAMES = ("spl", "spl_a", "g", "c50", "c80", "d50", "edt", "t20", "t30", "ts", "sti")
+
 
 def _band_header(label: str, width: int) -> str:
     bands = "".join(f"{f if f < 1000 else str(f // 1000) + 'k':>6}" for f in OCTAVE_BANDS_HZ)
@@ -451,6 +454,95 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "source); use --normalize to scale them for playback",
             file=sys.stderr,
         )
+    return 0
+
+
+def _cmd_map(args: argparse.Namespace) -> int:
+    import numpy as np
+
+    from acoustic_spaces.engine import coverage_map
+    from acoustic_spaces.engine.coverage import MAP_PARAMETERS
+    from acoustic_spaces.scene import Coverage
+
+    room = _load_room(args.scene)
+    if room is None:
+        return 1
+    for warning in room.warnings():
+        print(f"warning: {warning}", file=sys.stderr)
+    scene = room.scene
+    simulation = scene.simulation.model_copy(deep=True)
+    if args.seed is not None:
+        simulation.seed = args.seed
+    if args.max_order is not None:
+        simulation.early.max_order = args.max_order
+    if args.length is not None:
+        simulation.ir_length_s = args.length
+    settings = (scene.coverage or Coverage()).model_dump()
+    for key in ("surfaces", "height", "spacing", "rays"):
+        if getattr(args, key) is not None:
+            settings[key] = getattr(args, key)
+    if args.noise is not None:
+        settings["noise_db"] = args.noise[0] if len(args.noise) == 1 else args.noise
+    try:
+        settings = Coverage.model_validate(settings)
+        result = coverage_map(
+            room,
+            settings=settings,
+            simulation=simulation,
+            sources=[args.source] if args.source else None,
+            threads=args.threads,
+            progress=lambda message: print(message, file=sys.stderr),
+        )
+    except (ValidationError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    grid = result.grid
+    band = OCTAVE_BANDS_HZ.index(args.band)
+    band_text = f"{args.band} Hz" if args.band < 1000 else f"{args.band // 1000} kHz"
+    levels = grid.index.shape[2]
+    print(
+        f"\n{len(grid)} map points {grid.cell:g} m apart, {settings.height:g} m above the "
+        f"audience surfaces" + (f", on {levels} levels" if levels > 1 else "")
+    )
+    for chosen in [*result.maps.values(), *([result.combined] if result.combined else [])]:
+        print(f"\n{chosen.source} (bands: {band_text})")
+        print(f"{'':<14}{'min':>8}{'median':>8}{'max':>8}")
+        for name, info in MAP_PARAMETERS.items():
+            values = chosen.value(name, band if info.per_band else None)
+            finite = values[np.isfinite(values)]
+            if len(finite) == 0:
+                row = ["-"] * 3
+            else:
+                row = [info.text(float(v)) for v in (finite.min(), np.median(finite), finite.max())]
+            print(f"{info.label:<14}" + "".join(f"{cell:>8}" for cell in row))
+
+    shown = result.get(args.source)
+    if args.json:
+        path = Path(args.json)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(result.as_dict(), indent=1), encoding="utf-8")
+        print(f"\nwrote {path}")
+    try:
+        if args.plot:
+            from acoustic_spaces.viz import plot_map
+
+            plot_map(shown, args.plot, parameter=args.parameter, band=band, room=room)
+            print(f"saved {args.plot}")
+        if args.screenshot:
+            from acoustic_spaces.viz import show_room
+
+            show_room(
+                room,
+                screenshot=args.screenshot,
+                coverage=shown,
+                parameter=args.parameter,
+                band=band,
+            )
+            print(f"saved {args.screenshot}")
+    except ImportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -1027,6 +1119,49 @@ def build_parser() -> argparse.ArgumentParser:
         "--plot", action="store_true", help="save echogram and decay plots (needs viz extra)"
     )
     simulate.set_defaults(func=_cmd_simulate)
+
+    coverage = sub.add_parser(
+        "map", help="coverage map: parameters on a grid over the audience area"
+    )
+    coverage.add_argument("scene", help="path to a scene YAML file")
+    coverage.add_argument("--source", help="map only this source (default: all, and together)")
+    coverage.add_argument(
+        "--surfaces",
+        nargs="+",
+        metavar="NAME",
+        help="surfaces to map over (default: names with 'audience', else 'floor')",
+    )
+    coverage.add_argument("--height", type=float, help="listening height above them, m")
+    coverage.add_argument("--spacing", type=float, help="distance between map points, m")
+    coverage.add_argument("--rays", type=int, help="rays per source")
+    coverage.add_argument(
+        "--noise",
+        type=float,
+        nargs="+",
+        metavar="DB",
+        help="background noise for the STI, dB SPL: one value, or one per octave band",
+    )
+    coverage.add_argument("--seed", type=int, help="override simulation.seed")
+    coverage.add_argument("--max-order", type=int, help="override simulation.early.max_order")
+    coverage.add_argument("--length", type=float, help="override simulation.ir_length_s")
+    coverage.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    coverage.add_argument(
+        "--band",
+        type=int,
+        default=1000,
+        choices=OCTAVE_BANDS_HZ,
+        help="octave band to report and plot, Hz (default 1000)",
+    )
+    coverage.add_argument(
+        "--parameter",
+        default="g",
+        choices=MAP_PARAMETER_NAMES,
+        help="parameter to plot (default g)",
+    )
+    coverage.add_argument("--plot", metavar="PNG", help="save the map seen from above")
+    coverage.add_argument("--screenshot", metavar="PNG", help="save the map in the 3D view")
+    coverage.add_argument("--json", metavar="FILE", help="write every map as JSON")
+    coverage.set_defaults(func=_cmd_map)
 
     sweep = sub.add_parser("sweep", help="write an exponential sweep excitation (WAV and JSON)")
     sweep.add_argument("out", help="WAV file to write; its settings go next to it as .json")

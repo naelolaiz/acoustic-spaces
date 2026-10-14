@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+**Coverage maps** (`acoustic-spaces map`, the editor's Simulation > Run coverage map)
+
+- Room parameters on a grid over the audience area: SPL and G, C50, C80, D50, EDT, T20,
+  T30 and Ts per octave band, the A-weighted level and the speech transmission index
+  (IEC 60268-16, with masking, reception threshold and background noise).
+- Maps for each source and for all sources together, from the sources' sound power.
+- Several levels of seating under one another (stalls and balcony); columns along a
+  slanted wall keep the part over the seating.
+- The late part is one ray tracing run per source with a track-length estimate through
+  the slab of air at each point, so a map costs about as much as a few listeners.
+- A top view with the values (`plot_map`, `--plot`), coloured tiles in the 3D view
+  (`plot_room(coverage=...)`, `--screenshot`) and every value as JSON (`--json`).
+- The scene's `coverage:` settings (surfaces, height, spacing, rays, noise), with a form
+  in the editor; the concert hall, lecture hall and church examples set them.
+
+**Also**
+
+- `speech_transmission_index` and `modulation_transfer` in `acoustic_spaces.parameters`.
+- Parameters from energy responses are computed about twice as fast.
+
 ## 1.1.0
 
 The graphical editor, export to Blender and source directivity.

@@ -49,3 +49,6 @@ simulation:
 outputs:
   - mono
   - binaural
+# Coverage map (`acoustic-spaces map`): over the floor of the nave, every 1.5 m.
+coverage:
+  spacing: 1.5

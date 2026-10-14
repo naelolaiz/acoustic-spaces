@@ -10,6 +10,7 @@
 #include <complex>
 #include <cstdint>
 #include <stdexcept>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -150,35 +151,29 @@ nb::ndarray<nb::numpy, std::int64_t> specular_sequences(const as::Bvh &bvh, InAr
     return to_numpy(std::move(out), {rays, max_order});
 }
 
-nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivity_a,
-                           Matrix orientation, Kernels directivity_table, Matrix absorption,
-                           Matrix scattering, InArray air,
-                           Points receivers, Points directions, std::size_t rays,
-                           double max_time, double time_step, double dir_time_step,
-                           double speed_of_sound, InArray receiver_radius, bool diffuse_rain,
-                           bool specular_rain,
-                           int covered_order, InArray covered_time, std::uint64_t seed,
-                           std::size_t threads, double window_time_step,
-                           std::uint64_t first_ray, InArray split_target, double split_ratio,
-                           std::size_t max_split, std::size_t max_family) {
+// The room, source and directivity part of a stochastic scene.
+as::StochasticScene stochastic_scene(const char *name, const as::Bvh &bvh, InArray source,
+                                     InArray directivity_a, Matrix orientation,
+                                     Kernels directivity_table, Matrix absorption,
+                                     Matrix scattering, InArray air) {
+    const std::string fn = name;
     const std::size_t faces = bvh.face_count();
     const std::size_t bands = air.shape(0);
     if (absorption.shape(0) != faces || absorption.shape(1) != bands ||
         scattering.shape(0) != faces || scattering.shape(1) != bands) {
-        throw std::invalid_argument("trace_stochastic: coefficients must be faces x bands");
+        throw std::invalid_argument(fn + ": coefficients must be faces x bands");
     }
     if (directivity_a.shape(0) != 0 && directivity_a.shape(0) != bands) {
-        throw std::invalid_argument("trace_stochastic: directivity_a must have one per band");
+        throw std::invalid_argument(fn + ": directivity_a must have one per band");
     }
     if (orientation.shape(0) != 3 || orientation.shape(1) != 3) {
-        throw std::invalid_argument("trace_stochastic: orientation must be 3 x 3");
+        throw std::invalid_argument(fn + ": orientation must be 3 x 3");
     }
     const std::size_t table_size = directivity_table.size();
     if (table_size != 0 &&
         (directivity_table.shape(0) < 2 || directivity_table.shape(2) != bands)) {
         throw std::invalid_argument(
-            "trace_stochastic: directivity_table must be elevations (2 or more) x azimuths x "
-            "bands");
+            fn + ": directivity_table must be elevations (2 or more) x azimuths x bands");
     }
     as::StochasticScene scene;
     scene.bvh = &bvh;
@@ -199,31 +194,61 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
     scene.absorption = absorption.data();
     scene.scattering = scattering.data();
     scene.air = air.data();
-    scene.receivers = points(receivers);
-    scene.directions = points(directions);
+    return scene;
+}
 
+std::vector<double> to_vector(const InArray &a) { return {a.data(), a.data() + a.shape(0)}; }
+
+// Ray count, timing, seed, threads and weight window of a stochastic run.
+as::StochasticSettings stochastic_settings(std::size_t rays, double max_time,
+                                           double speed_of_sound, int covered_order,
+                                           std::uint64_t seed, std::size_t threads,
+                                           double window_time_step, std::uint64_t first_ray,
+                                           InArray split_target, double split_ratio,
+                                           std::size_t max_split, std::size_t max_family) {
     as::StochasticSettings settings;
     settings.rays = rays;
     settings.max_time = max_time;
-    settings.time_step = time_step;
-    settings.dir_time_step = dir_time_step;
     settings.window_time_step = window_time_step;
     settings.speed_of_sound = speed_of_sound;
-    settings.receiver_radius.assign(receiver_radius.data(),
-                                    receiver_radius.data() + receiver_radius.shape(0));
-    settings.diffuse_rain = diffuse_rain;
-    settings.specular_rain = specular_rain;
     settings.covered_order = covered_order;
-    settings.covered_time.assign(covered_time.data(),
-                                 covered_time.data() + covered_time.shape(0));
     settings.seed = seed;
     settings.threads = threads;
     settings.first_ray = first_ray;
-    settings.split_target.assign(split_target.data(),
-                                 split_target.data() + split_target.shape(0));
+    settings.split_target = to_vector(split_target);
     settings.split_ratio = split_ratio;
     settings.max_split = max_split;
     settings.max_family = max_family;
+    return settings;
+}
+
+nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivity_a,
+                           Matrix orientation, Kernels directivity_table, Matrix absorption,
+                           Matrix scattering, InArray air,
+                           Points receivers, Points directions, std::size_t rays,
+                           double max_time, double time_step, double dir_time_step,
+                           double speed_of_sound, InArray receiver_radius, bool diffuse_rain,
+                           bool specular_rain,
+                           int covered_order, InArray covered_time, std::uint64_t seed,
+                           std::size_t threads, double window_time_step,
+                           std::uint64_t first_ray, InArray split_target, double split_ratio,
+                           std::size_t max_split, std::size_t max_family) {
+    as::StochasticScene scene =
+        stochastic_scene("trace_stochastic", bvh, source, directivity_a, orientation,
+                         directivity_table, absorption, scattering, air);
+    const std::size_t bands = scene.bands;
+    scene.receivers = points(receivers);
+    scene.directions = points(directions);
+
+    as::StochasticSettings settings = stochastic_settings(
+        rays, max_time, speed_of_sound, covered_order, seed, threads, window_time_step,
+        first_ray, split_target, split_ratio, max_split, max_family);
+    settings.time_step = time_step;
+    settings.dir_time_step = dir_time_step;
+    settings.receiver_radius = to_vector(receiver_radius);
+    settings.diffuse_rain = diffuse_rain;
+    settings.specular_rain = specular_rain;
+    settings.covered_time = to_vector(covered_time);
 
     as::StochasticResult result;
     {
@@ -235,6 +260,60 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
     return nb::make_tuple(
         to_numpy(std::move(result.energy), {n_rec, bands, result.bins}),
         to_numpy(std::move(result.directional), {n_rec, n_dirs, bands, result.dir_bins}),
+        result.escaped_rays, to_numpy(std::move(result.ray_energy), {result.windows}),
+        to_numpy(std::move(result.reflections), {result.windows}), result.traced_rays);
+}
+
+using MapIndex = nb::ndarray<const std::int64_t, nb::ndim<3>, nb::c_contig, nb::device::cpu>;
+
+nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
+                    Matrix orientation, Kernels directivity_table, Matrix absorption,
+                    Matrix scattering, InArray air, InArray origin, double cell,
+                    MapIndex point, InArray low, InArray high, InArray volume, InArray onset,
+                    InArray covered_time, double fine_step, std::size_t fine_bins,
+                    double coarse_step, std::size_t rays, double max_time,
+                    double speed_of_sound, int covered_order, std::uint64_t seed,
+                    std::size_t threads, double window_time_step, std::uint64_t first_ray,
+                    InArray split_target, double split_ratio, std::size_t max_split,
+                    std::size_t max_family) {
+    as::StochasticScene scene =
+        stochastic_scene("trace_map", bvh, source, directivity_a, orientation,
+                         directivity_table, absorption, scattering, air);
+    const std::size_t bands = scene.bands;
+    if (origin.shape(0) != 2) throw std::invalid_argument("trace_map: origin must be (x, y)");
+    as::MapGrid &map = scene.map;
+    map.x0 = origin(0);
+    map.y0 = origin(1);
+    map.cell = cell;
+    map.ny = point.shape(0);
+    map.nx = point.shape(1);
+    map.layers = point.shape(2);
+    map.point.assign(point.data(), point.data() + point.size());
+    map.low = to_vector(low);
+    map.high = to_vector(high);
+    map.volume = to_vector(volume);
+    map.onset = to_vector(onset);
+    map.covered_time = to_vector(covered_time);
+    map.fine_step = fine_step;
+    map.fine_bins = fine_bins;
+    map.coarse_step = coarse_step;
+    if (map.points() == 0) throw std::invalid_argument("trace_map: no map points");
+
+    // No receivers: rain and detector spheres cost nothing, every leg reaches the map.
+    as::StochasticSettings settings = stochastic_settings(
+        rays, max_time, speed_of_sound, covered_order, seed, threads, window_time_step,
+        first_ray, split_target, split_ratio, max_split, max_family);
+    settings.time_step = max_time;
+    settings.dir_time_step = max_time;
+    settings.diffuse_rain = false;
+
+    as::StochasticResult result;
+    {
+        nb::gil_scoped_release release;
+        result = as::trace_stochastic(scene, settings);
+    }
+    return nb::make_tuple(
+        to_numpy(std::move(result.map_energy), {map.points(), bands, result.map_bins}),
         result.escaped_rays, to_numpy(std::move(result.ray_energy), {result.windows}),
         to_numpy(std::move(result.reflections), {result.windows}), result.traced_rays);
 }
@@ -323,4 +402,21 @@ NB_MODULE(_native, m) {
           "source radiates with a first-order pattern per band (directivity_a; empty: omni) "
           "times directivity_table (elevations x azimuths x bands; empty: none), in the "
           "frame whose forward, left and up axes are the columns of orientation.");
+
+    m.def("trace_map", &trace_map, nb::arg("bvh"), nb::arg("source"), nb::arg("directivity_a"),
+          nb::arg("orientation"), nb::arg("directivity_table"), nb::arg("absorption"),
+          nb::arg("scattering"), nb::arg("air"), nb::arg("origin"), nb::arg("cell"),
+          nb::arg("point"), nb::arg("low"), nb::arg("high"), nb::arg("volume"),
+          nb::arg("onset"), nb::arg("covered_time"), nb::arg("fine_step"),
+          nb::arg("fine_bins"), nb::arg("coarse_step"), nb::arg("rays"), nb::arg("max_time"),
+          nb::arg("speed_of_sound"), nb::arg("covered_order"), nb::arg("seed"),
+          nb::arg("threads"), nb::arg("window_time_step"), nb::arg("first_ray"),
+          nb::arg("split_target"), nb::arg("split_ratio"), nb::arg("max_split"),
+          nb::arg("max_family"),
+          "Stochastic ray tracing onto a coverage map: (energy[point, band, bin], escaped "
+          "rays, ray_energy[window], reflections[window], traced rays). point (ny x nx x "
+          "layers) holds the map point of each column of width cell from origin (x, y), "
+          "-1 for none; each point is a slab of air from low to high (z) of the given "
+          "volume. Bins count from each point's onset: fine_bins of fine_step, then "
+          "coarse_step. Other arguments as for trace_stochastic.");
 }

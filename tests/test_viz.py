@@ -127,3 +127,59 @@ def test_particle_animation(tmp_path: Path) -> None:
     args = ["animate", str(SHOEBOX), "--out", str(tmp_path / "cli.gif"), "--frames", "2"]
     assert main([*args, "--particles", "200", "--duration", "20", "--band", "500"]) == 0
     assert (tmp_path / "cli.gif").stat().st_size > 1000
+
+
+def _map():
+    from acoustic_spaces.engine import coverage_map
+    from acoustic_spaces.scene import Coverage
+
+    room = Room.from_yaml(SHOEBOX)
+    settings = room.scene.simulation.model_copy(update={"ir_length_s": 1.0, "seed": 1}, deep=True)
+    settings.late.method = "statistical"
+    result = coverage_map(room, settings=Coverage(spacing=2.0), simulation=settings)
+    return room, result.get()
+
+
+def test_map_tiles_carry_the_values() -> None:
+    from acoustic_spaces.viz import map_polydata, map_values, plot_coverage
+
+    room, coverage = _map()
+    poly = map_polydata(coverage, "ts", band=4)
+    assert poly.n_cells == len(coverage.grid) == 12
+    # Centre time shows in milliseconds; tiles sit at listening height.
+    np.testing.assert_allclose(poly.cell_data["value"], coverage.value("ts", 4) * 1e3)
+    np.testing.assert_allclose(np.asarray(poly.points)[:, 2], 1.2)
+    values, title = map_values(coverage, "sti")
+    assert title == "STI" and values.shape == (12,)
+    assert map_values(coverage, "c80", band=2)[1] == "C80 (dB), 250 Hz"
+    with pytest.raises(ValueError, match="unknown parameter"):
+        map_values(coverage, "rasti")
+    plotter = pv.Plotter(off_screen=True)
+    actor = plot_coverage(coverage, plotter, parameter="spl_a")
+    np.testing.assert_allclose(actor.bounds, (0.0, 8.0, 0.0, 6.0, 1.2, 1.2))
+    assert actor.mapper.scalar_range == pytest.approx(
+        (coverage.value("spl_a").min(), coverage.value("spl_a").max())
+    )
+    plotter.close()
+
+
+def test_map_plot(tmp_path: Path) -> None:
+    pytest.importorskip("matplotlib")
+    from acoustic_spaces.viz import plot_map
+
+    room, coverage = _map()
+    out = tmp_path / "map.png"
+    figure = plot_map(coverage, out, parameter="c50", band=3, room=room)
+    assert out.stat().st_size > 10_000
+    # Every point labelled with its value; the source drawn and named.
+    texts = [t.get_text() for t in figure.axes[0].texts]
+    assert len(texts) == 12 + 1 and "talker" in texts
+    assert "C50 (dB), 500 Hz" in figure.get_suptitle()
+
+
+@pytest.mark.render
+def test_screenshot_with_a_map(tmp_path: Path) -> None:
+    room, coverage = _map()
+    out = tmp_path / "map3d.png"
+    show_room(room, screenshot=out, window_size=(320, 200), coverage=coverage, parameter="g")
+    assert out.stat().st_size > 1000

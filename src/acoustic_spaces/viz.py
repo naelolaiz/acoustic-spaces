@@ -6,6 +6,8 @@
   the room, in a window with a time slider or saved as a GIF or MP4 video.
 - Response plots (matplotlib): echogram with the early paths, decay curves per band, and
   arrival directions as the listener faces; polar patterns of a source directivity.
+- Coverage maps: a parameter over the audience area, from above (matplotlib) or as
+  coloured tiles in the 3D view.
 
 Needs the viz extra (``pip install "acoustic-spaces[viz]"``, or ``uv sync --extra viz`` in
 a source checkout). The 3D view works in a desktop window, in Jupyter, and off screen for
@@ -26,7 +28,7 @@ if TYPE_CHECKING:
     import pyvista
 
     from acoustic_spaces.directivity import Directivity
-    from acoustic_spaces.engine import EarlyReflections, Response
+    from acoustic_spaces.engine import CoverageMap, EarlyReflections, Response
     from acoustic_spaces.engine.particles import Particles
 
 #: ColorBrewer Set3: light colours, so the saturated source and listener markers stand out.
@@ -180,11 +182,15 @@ def plot_room(
     show_labels: bool = True,
     paths: EarlyReflections | None = None,
     max_order: int | None = None,
+    coverage: CoverageMap | None = None,
+    parameter: str = "g",
+    band: int = 4,
 ) -> pyvista.Plotter:
     """Add the room to ``plotter`` (a new one if None) and return it.
 
     ``paths`` adds early reflection paths (from :func:`acoustic_spaces.engine.early_paths`
-    or a response's ``early``), coloured by order up to ``max_order``.
+    or a response's ``early``), coloured by order up to ``max_order``. ``coverage`` adds
+    a coverage map of one ``parameter`` and ``band`` (see :func:`plot_coverage`).
     """
     pv = _pyvista()
     if plotter is None:
@@ -242,6 +248,8 @@ def plot_room(
     legend.append(["listener", LISTENER_COLOUR])
     if paths is not None:
         legend.extend(plot_paths(paths, plotter, max_order=max_order))
+    if coverage is not None:
+        plot_coverage(coverage, plotter, parameter=parameter, band=band)
 
     if show_labels and points:
         plotter.add_point_labels(
@@ -395,20 +403,25 @@ def _figure(**kwargs):
     return Figure(**kwargs)
 
 
+def _dark(ax, grid: bool = True) -> None:
+    ax.set_facecolor(PANEL)
+    ax.tick_params(colors="white")
+    for spine in ax.spines.values():
+        spine.set_color("#6b6e7a")
+    if grid:
+        ax.grid(True, color="#3a3d4a", linewidth=0.6)
+    ax.xaxis.label.set_color("white")
+    ax.yaxis.label.set_color("white")
+    ax.title.set_color("white")
+
+
 def _two_panels():
     """A dark figure with two stacked panels."""
     fig = _figure(figsize=(10, 7), layout="constrained")
     axes = fig.subplots(2, 1)
     fig.patch.set_facecolor(BACKGROUND[0])
     for ax in axes:
-        ax.set_facecolor(PANEL)
-        ax.tick_params(colors="white")
-        for spine in ax.spines.values():
-            spine.set_color("#6b6e7a")
-        ax.grid(True, color="#3a3d4a", linewidth=0.6)
-        ax.xaxis.label.set_color("white")
-        ax.yaxis.label.set_color("white")
-        ax.title.set_color("white")
+        _dark(ax)
     return fig, axes
 
 
@@ -705,6 +718,229 @@ def plot_impulse_response(
     ax_d.set_title("backward-integrated decay per octave band, noise removed")
     _legend(ax_d, ncol=4)
 
+    if path is not None:
+        fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
+    return fig
+
+
+# -- coverage maps -----------------------------------------------------------------
+
+#: Colour map of coverage maps.
+MAP_COLOURS = "turbo"
+
+
+def _band_name(f: int) -> str:
+    return f"{f} Hz" if f < 1000 else f"{f // 1000} kHz"
+
+
+def map_values(coverage: CoverageMap, parameter: str = "g", band: int = 4):
+    """The values a map shows of ``parameter`` (in ``band`` when it has bands, as an
+    index into ``OCTAVE_BANDS_HZ``), in the units of its label, and its title."""
+    from acoustic_spaces.engine.coverage import MAP_PARAMETERS
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+
+    if parameter not in MAP_PARAMETERS:
+        raise ValueError(f"unknown parameter {parameter!r}; use one of {', '.join(MAP_PARAMETERS)}")
+    info = MAP_PARAMETERS[parameter]
+    values = coverage.value(parameter, band if info.per_band else None) * info.scale
+    title = f"{info.label}, {_band_name(OCTAVE_BANDS_HZ[band])}" if info.per_band else info.label
+    return values, title
+
+
+def map_polydata(coverage: CoverageMap, parameter: str = "g", band: int = 4) -> pyvista.PolyData:
+    """The map's columns as tiles at listening height, over the audience surfaces
+    (:meth:`~acoustic_spaces.engine.coverage.MapGrid.tiles`); the cell data ``value``
+    holds the parameter as :func:`map_values` gives it (NaN where undefined) and
+    ``point`` the map point of each tile."""
+    pv = _pyvista()
+    corners, owner = coverage.grid.tiles()
+    n = len(corners)
+    cells = np.column_stack([np.full(n, 4), np.arange(4 * n).reshape(n, 4)]).ravel()
+    poly = pv.PolyData(corners.reshape(-1, 3), cells)
+    poly.cell_data["value"] = map_values(coverage, parameter, band)[0][owner]
+    poly.cell_data["point"] = owner
+    return poly
+
+
+def _limits(values: np.ndarray) -> tuple[float, float]:
+    finite = values[np.isfinite(values)]
+    if len(finite) == 0:
+        return 0.0, 1.0
+    lo, hi = float(finite.min()), float(finite.max())
+    if hi - lo < 1e-9:
+        lo, hi = lo - 0.5, hi + 0.5
+    return lo, hi
+
+
+def plot_coverage(
+    coverage: CoverageMap,
+    plotter: pyvista.Plotter,
+    *,
+    parameter: str = "g",
+    band: int = 4,
+    render: bool = True,
+):
+    """Add a coverage map to a 3D view: coloured tiles at listening height over the
+    audience area, with a colour bar. Returns the actor of the tiles."""
+    pv = _pyvista()
+    poly = map_polydata(coverage, parameter, band)
+    _, title = map_values(coverage, parameter, band)
+    actor = plotter.add_mesh(
+        poly,
+        scalars="value",
+        cmap=MAP_COLOURS,
+        clim=_limits(poly.cell_data["value"]),
+        nan_color="#6b6e7a",
+        pickable=False,
+        render=render,
+        scalar_bar_args={
+            "title": f"{coverage.source}: {title}",
+            "color": "white",
+            "vertical": True,
+            "position_x": 0.86,
+            "position_y": 0.08,
+            "width": 0.06,
+            "height": 0.55,
+            "fmt": "%.3g",
+            "title_font_size": 14,
+            "label_font_size": 13,
+        },
+    )
+    # Lines between whole columns; cut columns at the edges get none.
+    grid = coverage.grid
+    whole = grid.squares()[grid.cover.all(axis=1)] + [0.0, 0.0, 0.01]  # over the tiles
+    if len(whole):
+        n = len(whole)
+        lines = np.column_stack([np.full(n, 5), np.arange(4 * n).reshape(n, 4), 4 * np.arange(n)])
+        outline = pv.PolyData(whole.reshape(-1, 3), lines=lines.ravel())
+        plotter.add_mesh(
+            outline, color=BACKGROUND[0], line_width=0.6, pickable=False, render=render
+        )
+    return actor
+
+
+def _floor_plan(ax, room: Room) -> None:
+    """The walls seen from above, as thin lines."""
+    from matplotlib.collections import LineCollection
+
+    mesh = room.mesh
+    walls = np.abs(mesh.face_normals()[:, 2]) < 0.25
+    tri = mesh.triangles[walls][:, :, :2]
+    if len(tri) == 0:
+        return
+    # Each wall seen from above is a line: the two corners farthest apart.
+    pairs = np.array([[0, 1], [1, 2], [0, 2]])
+    length = np.linalg.norm(tri[:, pairs[:, 0]] - tri[:, pairs[:, 1]], axis=2)
+    best = pairs[np.argmax(length, axis=1)]
+    rows = np.arange(len(tri))
+    segments = np.stack([tri[rows, best[:, 0]], tri[rows, best[:, 1]]], axis=1)
+    ax.add_collection(LineCollection(segments, colors=EDGE_COLOUR, linewidths=0.8, alpha=0.6))
+
+
+def plot_map(
+    coverage: CoverageMap,
+    path: str | Path | None = None,
+    *,
+    parameter: str = "g",
+    band: int = 4,
+    room: Room | None = None,
+):
+    """A coverage map seen from above: one panel per level (stalls, balcony, ...),
+    columns coloured by ``parameter`` in ``band`` (an index into ``OCTAVE_BANDS_HZ``;
+    4 is 1 kHz) and labelled with their values when there is room. With ``room`` the
+    walls and sources are drawn too. Returns the matplotlib figure; it is saved to
+    ``path`` if given."""
+    from acoustic_spaces.engine.coverage import MAP_PARAMETERS
+
+    grid = coverage.grid
+    values, title = map_values(coverage, parameter, band)
+    ny, nx, levels = grid.index.shape
+    lo, hi = _limits(values)
+    x0, y0 = grid.origin
+    extent = (x0, x0 + nx * grid.cell, y0, y0 + ny * grid.cell)
+    # Each panel shows the map, and with a room all of its walls and sources.
+    xs, ys = [extent[0], extent[1]], [extent[2], extent[3]]
+    if room is not None:
+        lo_b, hi_b = room.report.bounds_min, room.report.bounds_max
+        xs += [lo_b[0], hi_b[0]]
+        ys += [lo_b[1], hi_b[1]]
+    width, depth = max(xs) - min(xs), max(ys) - min(ys)
+    margin = 0.03 * max(width, depth)
+    fig_width = min(16.0, 2.0 + 7.0 * levels)
+    panel = (fig_width - 2.0) / levels
+    fig_height = min(10.0, max(3.5, panel * depth / max(width, 1e-9) + 1.4))
+    fig = _figure(figsize=(fig_width, fig_height), layout="constrained")
+    fig.patch.set_facecolor(BACKGROUND[0])
+    axes = fig.subplots(1, levels, squeeze=False)[0]
+    from matplotlib.patches import PathPatch
+    from matplotlib.path import Path as Outline
+
+    # All triangles counter-clockwise, so the nonzero rule fills their union.
+    tri = grid.footprint.copy()
+    a, b = tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]
+    turn = a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0] < 0
+    tri[turn] = tri[turn][:, ::-1]
+    codes = np.tile([Outline.MOVETO, Outline.LINETO, Outline.LINETO, Outline.CLOSEPOLY], len(tri))
+    corners = np.concatenate([tri, tri[:, :1]], axis=1).reshape(-1, 2)
+    outline = Outline(corners, codes)
+    info = MAP_PARAMETERS[parameter]
+    label_cells = nx * ny <= 400
+    image = None
+    for level, ax in enumerate(axes):
+        _dark(ax, grid=False)
+        index = grid.index[:, :, level]
+        shown = np.full(index.shape, np.nan)
+        has = index >= 0
+        shown[has] = values[index[has]]
+        image = ax.imshow(
+            np.ma.masked_invalid(shown),
+            origin="lower",
+            extent=extent,
+            cmap=MAP_COLOURS,
+            vmin=lo,
+            vmax=hi,
+            interpolation="nearest",
+        )
+        # Columns at the edge of the surfaces show only the part over them.
+        image.set_clip_path(PathPatch(outline, transform=ax.transData))
+        if label_cells:
+            size = max(5.0, min(9.0, 60.0 / max(nx, ny)))
+            for iy, ix in zip(*np.nonzero(has), strict=True):
+                k = index[iy, ix]
+                value = values[k]
+                text = info.format.format(value) if np.isfinite(value) else "–"
+                cx, cy = grid.points[k, :2]
+                shade = (value - lo) / (hi - lo) if np.isfinite(value) else 0.5
+                colour = "black" if 0.25 < shade < 0.85 else "white"
+                ax.text(cx, cy, text, ha="center", va="center", fontsize=size, color=colour)
+        if room is not None:
+            _floor_plan(ax, room)
+            for source in room.scene.sources:
+                x, y, _ = source.position
+                ax.plot([x], [y], "o", color=SOURCE_COLOUR, ms=7, mec="white", mew=0.8)
+                ax.annotate(
+                    source.name,
+                    (x, y),
+                    xytext=(5, 5),
+                    textcoords="offset points",
+                    color="white",
+                    fontsize=8,
+                )
+        ax.set_aspect("equal")
+        ax.set_xlim(min(xs) - margin, max(xs) + margin)
+        ax.set_ylim(min(ys) - margin, max(ys) + margin)
+        ax.set_xlabel("x (m)")
+        ax.set_ylabel("y (m)")
+        if levels > 1:
+            heights = grid.surface[index[has]]
+            ax.set_title(f"level {level + 1}, floor at about {np.median(heights):.1f} m")
+    bar = fig.colorbar(image, ax=list(axes), shrink=0.9)
+    bar.set_label(title, color="white")
+    bar.ax.tick_params(colors="white")
+    bar.outline.set_edgecolor("#6b6e7a")
+    fig.suptitle(
+        f"{coverage.source}: {title}, {len(grid)} points {grid.cell:g} m apart", color="white"
+    )
     if path is not None:
         fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
     return fig
