@@ -688,7 +688,8 @@ class PointPage(Page):
 
 
 class SimulationPage(Page):
-    """The early and late stages, the response length, sample rate and seed."""
+    """The early and late stages, the wave solver, the response length, sample rate and
+    seed."""
 
     def __init__(self, document) -> None:
         super().__init__(document)
@@ -727,6 +728,22 @@ class SimulationPage(Page):
         late_form.addRow(self.splitting)
         layout.addWidget(late)
 
+        wave = QGroupBox("Low frequencies")
+        wave_form = QFormLayout(wave)
+        self.wave = QCheckBox("Wave solver")
+        self.wave.setToolTip(
+            "Compute the lowest octave bands from the sound field itself (finite differences "
+            "on a grid) instead of rays: room modes, and sound bending round everything"
+        )
+        self.wave_band = QComboBox()
+        self.wave_band.addItems(["63", "125", "250", "500"])
+        self.wave_band.setToolTip(
+            "The highest band it computes; each costs about 16 times the one below"
+        )
+        wave_form.addRow(self.wave)
+        wave_form.addRow("Up to band (Hz)", self.wave_band)
+        layout.addWidget(wave)
+
         response = QGroupBox("Response")
         response_form = QFormLayout(response)
         self.length = spin(0.05, 60, 2, 0.5, "s")
@@ -750,6 +767,7 @@ class SimulationPage(Page):
             self.diffraction,
             self.late_method,
             self.reception,
+            self.wave_band,
             self.sample_rate,
         ):
             combo.currentTextChanged.connect(self._changed)
@@ -757,7 +775,7 @@ class SimulationPage(Page):
             box.valueChanged.connect(self._changed)
         for box in (self.length, self.transition):
             box.valueChanged.connect(self._changed)
-        for check in (self.splitting, self.auto_transition, self.random_seed):
+        for check in (self.splitting, self.wave, self.auto_transition, self.random_seed):
             check.toggled.connect(self._changed)
 
     def load(self) -> None:
@@ -771,6 +789,9 @@ class SimulationPage(Page):
         self.reception.setCurrentText(s.late.reception)
         self.directions.setValue(s.late.directions)
         self.splitting.setChecked(s.late.splitting)
+        self.wave.setChecked(s.wave.enabled)
+        self.wave_band.setCurrentText(str(s.wave.max_band_hz))
+        self.wave_band.setEnabled(s.wave.enabled)
         self.length.setValue(s.ir_length_s)
         if self.sample_rate.findText(str(s.sample_rate)) < 0:
             self.sample_rate.addItem(str(s.sample_rate))
@@ -803,6 +824,11 @@ class SimulationPage(Page):
                 "reception": self.reception.currentText(),
                 "directions": self.directions.value(),
                 "splitting": self.splitting.isChecked(),
+            },
+            "wave": {
+                **self.document.scene.simulation.wave.model_dump(mode="json"),
+                "enabled": self.wave.isChecked(),
+                "max_band_hz": int(self.wave_band.currentText()),
             },
             "ir_length_s": self.length.value(),
             "sample_rate": int(self.sample_rate.currentText()),

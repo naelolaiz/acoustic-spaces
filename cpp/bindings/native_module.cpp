@@ -18,6 +18,7 @@
 #include "acoustic_spaces/bvh.hpp"
 #include "acoustic_spaces/convolver.hpp"
 #include "acoustic_spaces/direct_convolution.hpp"
+#include "acoustic_spaces/fdtd.hpp"
 #include "acoustic_spaces/fft.hpp"
 #include "acoustic_spaces/ray_tracer.hpp"
 
@@ -318,6 +319,33 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
         to_numpy(std::move(result.reflections), {result.windows}), result.traced_rays);
 }
 
+void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, InArray admittance,
+                      InArray origin, double cell, std::size_t nx, std::size_t ny, std::size_t nz,
+                      InArray source, Points probes, double edge_admittance, std::size_t threads) {
+    if (admittance.shape(0) != bvh.face_count()) {
+        throw std::invalid_argument("WaveSolver: one admittance per face");
+    }
+    const std::vector<as::Vec3> probe_points = points(probes);
+    const as::Vec3 o = vec3(origin, "origin"), s = vec3(source, "source");
+    {
+        nb::gil_scoped_release release;
+        new (self) as::WaveSolver(bvh, admittance.data(), o, cell, nx, ny, nz, s, probe_points,
+                                  edge_admittance, threads);
+    }
+}
+
+using Signal = nb::ndarray<const float, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
+
+nb::ndarray<nb::numpy, double> wave_run(as::WaveSolver &solver, Signal signal) {
+    const std::size_t steps = signal.shape(0);
+    std::vector<double> out(solver.probes() * steps);
+    {
+        nb::gil_scoped_release release;
+        solver.run(signal.data(), steps, out.data());
+    }
+    return to_numpy(std::move(out), {solver.probes(), steps});
+}
+
 }  // namespace
 
 NB_MODULE(_native, m) {
@@ -380,6 +408,23 @@ NB_MODULE(_native, m) {
         .def("intersect", &intersect, nb::arg("origins"), nb::arg("directions"),
              nb::arg("t_max"), nb::arg("ignore"),
              "Nearest hit per ray: (distance, face), with (inf, -1) for a miss.");
+
+    nb::class_<as::WaveSolver>(
+        m, "WaveSolver",
+        "Finite-difference time-domain solver on a cubic grid over a mesh (see fdtd.hpp).")
+        .def("__init__", &make_wave_solver, nb::arg("bvh"), nb::arg("admittance"),
+             nb::arg("origin"), nb::arg("cell"), nb::arg("nx"), nb::arg("ny"), nb::arg("nz"),
+             nb::arg("source"), nb::arg("probes"), nb::arg("edge_admittance"),
+             nb::arg("threads") = 0)
+        .def_prop_ro("air_cells", &as::WaveSolver::air_cells)
+        .def_prop_ro("boundary_cells", &as::WaveSolver::boundary_cells)
+        .def_prop_ro("open", &as::WaveSolver::open)
+        .def_prop_ro("threads", &as::WaveSolver::threads)
+        .def("probe_found", &as::WaveSolver::probe_found, nb::arg("probe"))
+        .def("run", &wave_run, nb::arg("signal"),
+             "Advances one step per sample of signal (added at the source); returns the "
+             "pressure at every probe before each step, probes x steps.")
+        .def("reset", &as::WaveSolver::reset, "Silence the grid.");
 
     m.def("specular_sequences", &specular_sequences, nb::arg("bvh"), nb::arg("source"),
           nb::arg("rays"), nb::arg("max_order"), nb::arg("threads") = 0,

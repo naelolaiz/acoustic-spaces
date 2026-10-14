@@ -476,6 +476,58 @@ response's `early.diffracted` marks them, and `simulate` reports how many there 
 cost grows with the number of edges: in a hall with about 100 edges, `first_order` adds
 about 17 ms per source and listener.
 
+### Low frequencies: the wave solver
+
+Rays treat sound as rays, which holds while a room is large next to the wavelength. At
+low frequencies it is not: a small room rings at its modes, so the bass booms at one
+seat and vanishes at the next, and sound bends round everything. With
+`simulation.wave`, the lowest octave bands come from the sound field itself:
+
+```yaml
+simulation:
+  wave:
+    enabled: true
+    max_band_hz: 125           # the highest band it computes: 63, 125 (default), 250 or 500
+    points_per_wavelength: 8   # grid cells per wavelength at the top of that band
+```
+
+- The sound field is computed with finite differences in time on a cubic grid over the
+  room (the standard leapfrog scheme at its stability limit), in the compiled core, on
+  all cores. Up to the 125 Hz band the cells are 20 cm.
+- Surfaces absorb as their materials do in each band: each coefficient becomes the
+  locally reacting admittance with that random-incidence absorption. Bands whose
+  coefficients differ get runs of their own on the same grid.
+- Closed rooms, open models (the air at the edge of the grid absorbs) and thin screens
+  all work.
+- The listener records the pressure and its gradient, so the low end keeps its
+  direction in Ambisonics, binaural and loudspeaker outputs (to first order).
+- The result replaces the rays from 22 Hz up to the top of the highest wave band (177
+  Hz for 125), through the same crossovers the impulse response synthesis uses. The
+  parameters of those bands come from it too.
+
+```sh
+acoustic-spaces simulate examples/concert_hall/scene.yaml --out hall --wave
+acoustic-spaces simulate examples/studio/scene.yaml --out studio --wave --wave-band 250
+```
+
+The editor's Simulation page has the same switch. Each octave higher costs about 16
+times as much: on 4 cores, up to the 125 Hz band, the studio takes 0.1 s, the concert
+hall (9,400 m³, 3.5 s responses) 13 s, and the church (7 s responses, materials that
+absorb differently at 63 and 125 Hz, so two runs) 45 s. Grids of more than 40 million
+cells are refused.
+
+![Transfer function of a 7 x 5 x 3 m box from the sum of its modes, the wave solver and rays](docs/images/wave.png)
+
+In a 7 x 5 x 3 m box with 15 % absorption, the wave solver follows the sum of the box's
+modes from 22 Hz up; rays give the average level instead. In the 63 and 125 Hz bands,
+G is within 1 dB of the modes and T20 within 2 %; rays are up to 5.4 dB and 8 % off.
+
+What it leaves out: the absorption of a surface is real-valued and the same across a
+band; walls on the grid lie within half a cell of the model's, which can move a small
+room's modes by a few percent (more `points_per_wavelength` moves them less); sources
+radiate equally in all directions in the wave bands; and air absorption, negligible
+there, is left out.
+
 ### Validation
 
 The tests check the simulation against theory on Linux, macOS and Windows: exact image
@@ -484,7 +536,9 @@ box, ISO 3382-1 parameters of known decays, spatial encoders against closed form
 convolvers against direct convolution, and sweep measurements of synthetic rooms. A
 cross-check against pyroomacoustics in four rooms agrees within 6 % on T30 where both
 programs model the same physics, and shows where their scattering models part ways. Edge diffraction is checked against
-the exact solutions for a half-plane and for wedges, and against Maekawa's chart.
+the exact solutions for a half-plane and for wedges, and against Maekawa's chart. The
+wave solver matches the frequencies and decay rates of a box's modes within 0.5 %, the
+reflection and absorption of walls, and the free-field level within 0.35 dB.
 The [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
 has the details, the numbers and the scripts to reproduce them.
 
@@ -733,8 +787,8 @@ src/acoustic_spaces/   Python package
   materials/           material database and coefficient files
   directivity.py       source directivity: patterns per band, SOFA and CSV balloons
   room.py              a scene with its geometry loaded: materials per face, checks
-  engine/              early reflections, edge diffraction, late reverberation,
-                       responses, simulate(), coverage maps
+  engine/              early reflections, edge diffraction, late reverberation, the
+                       wave solver, responses, simulate(), coverage maps
   air.py               ISO 9613-1 air absorption and speed of sound
   synthesis.py         octave filter bank and impulse response synthesis
   spatial/             Ambisonics, VBAP loudspeaker layouts, HRTFs, spatial rendering,
@@ -750,8 +804,9 @@ src/acoustic_spaces/   Python package
   examples.py          the example scenes that ship with the package
   gui/                 the graphical editor (Qt)
   cli.py               command-line interface
-cpp/include/           header-only C++ core: BVH, ray tracer, FFT, partitioned
-                       convolver (no Python, so a plugin or player can reuse it)
+cpp/include/           header-only C++ core: BVH, ray tracer, wave solver (FDTD), FFT,
+                       partitioned convolver (no Python, so a plugin or player can
+                       reuse it)
 cpp/bindings/          nanobind module exposing the core as acoustic_spaces._native
 tests/                 pytest suite, run on Linux, macOS and Windows in CI
 examples/              example scenes, installed with the package
@@ -777,7 +832,8 @@ v2 (version 1.1.0 has the first three):
 - [ ] CLF loudspeaker files, once their specification is available.
 - [x] Head tracking: binaural playback of Ambisonics that turns with the head, from OSC
   head trackers or by hand.
-- [ ] A wave-based solver for low frequencies.
+- [x] A wave-based solver for low frequencies: room modes from finite differences in
+  time, joined to the rays.
 - [x] Coverage maps: parameters and STI over the audience area.
 - [x] Edge diffraction (UTD) of the direct sound and first-order reflections.
 - [x] Editing geometry in the editor: drawing floor plans, dragging corners, sources and

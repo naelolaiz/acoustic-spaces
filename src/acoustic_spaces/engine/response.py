@@ -10,6 +10,7 @@ import numpy as np
 from acoustic_spaces import parameters as iso3382
 from acoustic_spaces import synthesis
 from acoustic_spaces.engine.early import EarlyReflections
+from acoustic_spaces.engine.wave import WaveResponse
 
 #: The synthesized late part is smoothed over 10 ms from this long after the direct sound.
 SMOOTH_AFTER_S = 0.05
@@ -17,7 +18,8 @@ SMOOTH_AFTER_S = 0.05
 
 @dataclass
 class Response:
-    """Early specular paths plus late energy per band and time slot.
+    """Early specular paths plus late energy per band and time slot, and the lowest
+    bands from the wave solver when it ran (``wave``), which then replace the rays'.
 
     Energies are time-integrated intensity for a source of unit energy (the direct sound
     at r metres carries 1 / (4 pi r^2)); times are measured from emission.
@@ -45,6 +47,8 @@ class Response:
     late_directions: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))
     late_directional: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
     direction_step: float = 0.01
+    #: The lowest octave bands from the wave solver, or None.
+    wave: WaveResponse | None = None
 
     @property
     def bands(self) -> int:
@@ -72,6 +76,8 @@ class Response:
         keep = idx < slots
         for b in range(self.bands):
             np.add.at(out[b], idx[keep], self.early.energy[keep, b])
+        if self.wave is not None:
+            out[: self.wave.bands] = self.wave.energy(step, slots)
         return out
 
     def parameters(self) -> iso3382.RoomParameters:
@@ -87,7 +93,8 @@ class Response:
         Early paths become fractional-delay impulses filtered per band; the late energy
         drives a random-sign Dirac sequence with the density of reflections in the room.
         From 50 ms after the direct sound the late energy is smoothed over 10 ms first,
-        so a single strong ray late in the tail does not become a click.
+        so a single strong ray late in the tail does not become a click. The wave
+        solver's bands, when it ran, take the place of the lowest ones.
         """
         n = int(math.ceil(self.length_s * sample_rate))
         scale = synthesis.ENERGY_TO_IR
@@ -103,7 +110,10 @@ class Response:
                 self.late, self.time_step, self.direct_delay_s + SMOOTH_AFTER_S
             )
             band_signals += synthesis.shape_noise(scale * late, self.time_step, noise, sample_rate)
-        return synthesis.combine_bands(band_signals, sample_rate)
+        ir = synthesis.combine_bands(band_signals, sample_rate)
+        if self.wave is not None:
+            ir = self.wave.high_pass(ir, sample_rate) + self.wave.field(sample_rate, n)[:, 0]
+        return ir
 
     def spatial_impulse_response(
         self, fmt, sample_rate: int = 48_000, seed: int | None = None

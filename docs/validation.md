@@ -44,6 +44,11 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   side; and the early level across the shadow boundary of an L-shaped room, in
   millimetre steps, continuous within 0.25 dB with first-order reflections where
   specular paths alone drop by more than 5 dB;
+- the wave solver: the modes of a rigid box (within 0.6 Hz), the reflection off the end
+  of a duct for four admittances (within 0.005, and below 0.05 for a matched end), the
+  free-field level of the 63 Hz band (within 1 dB of the rays), the direction of the
+  direct sound, open models and thin screens (stable, and the sound leaves), and runs
+  shared by bands with the same absorption;
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
@@ -212,6 +217,68 @@ where the sound field is less uniform than in the room as a whole.
 - Where the theory is clear (the diffuse box), this package agrees with Eyring and with
   Barron's revised theory; pyroomacoustics counts the scattered energy twice.
 
+## Wave-based solver
+
+`validation/wave_solver.py` checks the wave solver against theory: closed forms where
+there are any, and for a whole room the sum of its modes.
+
+**Modes and their decay.** A 7 x 5 x 3 m box with every wall of specific admittance
+0.005 (10 cm cells) rings for 8 s. For each mode that stands apart from the others, the
+frequency of its peak and the decay rate of its envelope match the rigid box's
+frequency and the decay rate of perturbation theory, δ = cβ/2 Σ (4/L along each axis
+the mode varies, 2/L along the others), within 0.4 %:
+
+| mode | theory (Hz) | wave solver (Hz) | decay, theory (1/s) | wave solver (1/s) |
+|---|---:|---:|---:|---:|
+| (1, 0, 0) | 24.50 | 24.48 | 1.405 | 1.404 |
+| (0, 1, 0) | 34.30 | 34.31 | 1.503 | 1.501 |
+| (1, 1, 0) | 42.15 | 42.15 | 1.748 | 1.745 |
+| (2, 0, 0) | 49.00 | 49.00 | 1.405 | 1.403 |
+| (0, 0, 1) | 57.17 | 57.11 | 1.731 | 1.727 |
+| (0, 2, 1) | 89.30 | 89.29 | 2.074 | 2.067 |
+
+Axial modes lose energy at walls they meet head-on and at walls they graze, so this
+checks absorption at all angles.
+
+**Walls.** A plane wave down a duct (10 cm cells) reflects off its end as
+(1 − β)/(1 + β) predicts at normal incidence, and grazing its absorbing walls it decays
+as exp(−βP/(2A)) per metre (perimeter P, cross-section A), whatever the cell size:
+
+| end admittance β | 0 | 0.1 | 0.25 | 0.5 | 1 |
+|---|---:|---:|---:|---:|---:|
+| reflection, theory | 1.000 | 0.818 | 0.600 | 0.333 | 0 |
+| wave solver (60 to 150 Hz) | 0.999 | 0.818 | 0.601 | 0.336 | 0.044 |
+
+| walls β = 0.05, amplitude after 10 m | theory | wave solver, 10 cm cells | 5 cm cells |
+|---|---:|---:|---:|
+| 0.6 x 0.6 m duct | 0.1889 | 0.1900 | 0.1906 |
+
+**Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's
+energy in the 63 and 125 Hz bands at 1 to 8 m is within 0.35 dB of the free-field level
+the rays give (−0.06 to −0.13 dB at 63 Hz, −0.16 to −0.33 dB at 125 Hz).
+
+**A whole room.** A 7 x 5 x 3 m box with 15 % absorption on every surface, simulated
+with the default settings (the 63 and 125 Hz bands from the wave solver, 20 cm cells),
+against the sum of the box's modes up to 1.5 kHz, each with its decay rate, all
+analysed alike (ISO 3382-1, octave filters):
+
+| model | G 63 Hz (dB) | G 125 Hz | EDT 63 Hz (s) | EDT 125 Hz | T20 63 Hz (s) | T20 125 Hz |
+|---|---:|---:|---:|---:|---:|---:|
+| sum of the modes | 20.3 | 23.5 | 1.02 | 0.96 | 0.94 | 0.90 |
+| wave solver | 21.1 | 22.7 | 1.04 | 0.92 | 0.94 | 0.89 |
+| wave solver, 16 cells per wavelength | 20.8 | 23.6 | 1.01 | 0.81 | 0.95 | 0.94 |
+| rays only | 25.7 | 21.9 | 0.67 | 0.77 | 0.92 | 0.83 |
+
+![Transfer function of the box from the sum of its modes, the wave solver and rays](images/wave.png)
+
+The wave solver follows the modes peak for peak from 22 Hz up. What is left comes
+mostly from where the grid puts the walls: within half a cell of the model's, here
+6.93 x 4.95 x 2.97 m with 20 cm cells, which moves each mode by up to 1 %. In a room
+this sparse in modes, that moves G by up to 1 dB and EDT by up to 16 %; more cells per
+wavelength move the walls but do not make every figure converge. Rays give the average
+over the room instead: 5.4 dB more at this seat in the 63 Hz band, where the listener
+sits near the nodes of most modes.
+
 ## Real-time convolver
 
 The plan's target: a 3 s response with 16 output channels (third-order Ambisonics), fed
@@ -241,11 +308,12 @@ its peak (single precision).
 - **Measurements.** No simulated room has been compared with measurements of the real
   one yet. The BRAS database (Aspöck et al., TU Berlin) has measured rooms with acoustic
   material data, but its models are SketchUp files that need exporting to OBJ first.
-- **Wave effects.** The simulation is geometric. Edge diffraction is modelled (UTD, for
-  the direct sound and first-order reflections) and checked against exact solutions,
-  but not against measurements in rooms; room modes are not modelled. Below the
-  Schroeder frequency of a room (about 2000 √(T/V) Hz) its results are a statistical
-  average, not the response of one point.
+- **Wave effects.** Above the wave solver's bands the simulation is geometric. Edge
+  diffraction is modelled (UTD, for the direct sound and first-order reflections) and
+  room modes by the wave solver, both checked against theory but not against
+  measurements in rooms. Without the wave solver, results below the Schroeder frequency
+  of a room (about 2000 √(T/V) Hz) are a statistical average, not the response of one
+  point.
 - **Source directivity** was not part of the cross-check (both programs ran
   omnidirectional sources). The tests check that every pattern keeps the sound power,
   that SOFA and CSV data come out in the source's frame, and that the direct sound,
@@ -259,8 +327,10 @@ its peak (single precision).
 python -m pip install pyroomacoustics matplotlib
 python validation/pyroomacoustics_crosscheck.py --json results.json --plots docs/validation
 python validation/convolver_benchmark.py
+python validation/wave_solver.py --plot docs/images/wave.png
 ```
 
-The cross-check takes about 6 minutes on 4 cores, the benchmark about 2 minutes. The
+The cross-check takes about 6 minutes on 4 cores, the benchmark about 2 minutes and the
+wave solver's checks about 30 seconds. The
 numbers above come from acoustic_spaces 1.0.0 with seed 1; other seeds move them by a few
 percent.

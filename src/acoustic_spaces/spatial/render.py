@@ -191,6 +191,48 @@ def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, see
     return out[:, :n].T
 
 
+def _icosahedron() -> np.ndarray:
+    phi = (1.0 + math.sqrt(5.0)) / 2.0
+    points = []
+    for a in (-1.0, 1.0):
+        for b in (-phi, phi):
+            points += [(0.0, a, b), (a, b, 0.0), (b, 0.0, a)]
+    points = np.array(points)
+    return points / np.linalg.norm(points, axis=1, keepdims=True)
+
+
+#: Directions of the plane waves the wave solver's first-order field is split into.
+WAVE_DIRECTIONS = _icosahedron()
+
+
+def _with_wave(response: Response, fmt, out: np.ndarray, sample_rate: float) -> np.ndarray:
+    """``out`` with its lowest bands replaced by the wave solver's, in ``fmt``."""
+    from acoustic_spaces.spatial.ambisonics import Ambisonics, real_spherical_harmonics
+
+    wave = response.wave
+    n = len(out)
+    out = wave.high_pass(out, sample_rate)
+    first = wave.field(sample_rate, n)  # W, X, Y, Z in room coordinates
+    if isinstance(fmt, Ambisonics):
+        # Exact to first order; the wave solver gives nothing higher.
+        low = np.zeros((n, fmt.channels))
+        low[:, 0] = first[:, 0]
+        if fmt.order >= 1:
+            velocity = first[:, 1:] @ response.orientation  # in head coordinates
+            low[:, 1:4] = velocity @ real_spherical_harmonics(1, np.eye(3))[:, 1:4]
+        return out + low
+    # Otherwise as plane waves from the vertices of an icosahedron (first order exact).
+    planes = (first[:, :1] + 3.0 * first[:, 1:] @ WAVE_DIRECTIONS.T) / len(WAVE_DIRECTIONS)
+    head = to_head(WAVE_DIRECTIONS, response.orientation)
+    if isinstance(fmt, Binaural):
+        hrtf = fmt.at(sample_rate)
+        size = 1 << int(math.ceil(math.log2(n + hrtf.taps)))
+        ears = np.fft.rfft(hrtf.hrir[hrtf.nearest(head)], size, axis=-1)  # (planes, 2, bins)
+        spectrum = np.einsum("bk,keb->be", np.fft.rfft(planes, size, axis=0), ears)
+        return out + np.fft.irfft(spectrum, size, axis=0)[:n]
+    return out + planes @ fmt.gains(head)
+
+
 def from_output(output) -> Format:
     """The format an ``outputs`` entry of a scene file (``scene.Output``) describes."""
     from acoustic_spaces.spatial.ambisonics import Ambisonics
@@ -226,12 +268,17 @@ def spatial_impulse_response(
     if isinstance(fmt, Mono):
         return response.impulse_response(sample_rate, seed)[:, None]
     if isinstance(fmt, Binaural):
-        return _render_binaural(response, fmt, n, sample_rate, seed)
-    return _render_gains(response, fmt, n, sample_rate, seed)
+        out = _render_binaural(response, fmt, n, sample_rate, seed)
+    else:
+        out = _render_gains(response, fmt, n, sample_rate, seed)
+    if response.wave is not None:
+        out = _with_wave(response, fmt, out, sample_rate)
+    return out
 
 
 __all__ = [
     "ISOTROPIC_DIRECTIONS",
+    "WAVE_DIRECTIONS",
     "Binaural",
     "Format",
     "Mono",

@@ -12,6 +12,7 @@ import numpy as np
 
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
+from acoustic_spaces.engine import wave as wave_stage
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.response import Response
@@ -297,6 +298,26 @@ def simulate(
             info["traced_rays"] = float(late.traced_rays)
             info["receiver_radius_m"] = float(np.min(radius))
         info["late_s"] = time.perf_counter() - started
+
+        waves: list = [None] * len(chosen_listeners)
+        if settings.wave.enabled:
+            started = time.perf_counter()
+            waves, wave_info = wave_stage.wave_responses(
+                model,
+                src,
+                listener_pos,
+                [listener.name for listener in chosen_listeners],
+                max_band_hz=settings.wave.max_band_hz,
+                length_s=length,
+                sample_rate=settings.sample_rate,
+                speed_of_sound=c,
+                points_per_wavelength=settings.wave.points_per_wavelength,
+                threads=threads,
+                say=say,
+                label=source.name,
+            )
+            info.update(wave_info)
+            info["wave_s"] = time.perf_counter() - started
         details[source.name] = info
 
         for k, listener in enumerate(chosen_listeners):
@@ -318,6 +339,7 @@ def simulate(
                 if late.directional.size
                 else np.zeros((0, 0, 0)),
                 direction_step=late.direction_step,
+                wave=waves[k],
             )
     return SimulationResult(room=room, settings=settings, responses=responses, details=details)
 
