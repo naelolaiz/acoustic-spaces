@@ -712,6 +712,56 @@ out = convolver.process(next_block)  # (256, 2)
 play(binaural, 48_000, speech_48k)  # through the sound card
 ```
 
+### Dry recordings to try
+
+These anechoic recordings are free to download, and each one tests something different:
+
+- **BRAS anechoic audio** ([BRAS](https://doi.org/10.14279/depositonce-6726.3), folder
+  `4 Additional data/Audio/AnechoicAudio`; CC BY-SA 4.0; WAV, 32-bit float, 44.1 kHz):
+  noise pulses and a string quartet with one instrument per channel. Next to them,
+  `Audio/Auralization` holds the authors' renderings through the measured BRIRs of each
+  room (quartet channels 1 to 4 from LS3 to LS6, the noise pulses from LS7, all heard at
+  MP6), so a simulation of the same room, sources and seat can be heard side by side
+  with the real one. The noise pulses make the decay and its colour easy to hear.
+- **Beethoven, Symphony No. 8** ([TU Berlin](https://doi.org/10.14279/depositonce-6729.2);
+  Böhm, Ackermann and Weinzierl; CC BY 4.0; WAV, 32-bit float, 48 kHz): movements
+  1, 2 and 4 of a full orchestra, 61 mono tracks per movement (zips of 590 to 740 MB),
+  for `auralize` with one source per instrument or section on a stage, as in the
+  `concert_hall` example.
+- **Speech**: Cicero's [3rd Catiline Oration](https://doi.org/10.14279/depositonce-8536)
+  in Italian, Latin and German, and Demosthenes' [1st Olynthic
+  Oration](https://doi.org/10.14279/depositonce-8537) in German (TU Berlin; CC BY-NC-SA
+  4.0, non-commercial; mono WAV, 48 kHz), for clarity, intelligibility and echoes in
+  lecture rooms and churches.
+- **University of Iowa [Musical Instrument
+  Samples](https://theremin.music.uiowa.edu/MIS.html)** (free for any use; AIFF, 16-bit
+  44.1 kHz, or 24-bit 96 kHz for those recorded since 2011): single notes of orchestral
+  instruments, all but the piano recorded in an anechoic chamber. Short attacks
+  (xylophone, marimba, pizzicato) make discrete echoes and any click at the convolver's
+  partition boundaries easy to hear.
+- **Aalto anechoic symphonic recordings**
+  ([Aalto University](https://research.cs.aalto.fi/acoustics/virtual-acoustics/research/acoustic-measurement-and-analysis/85-anechoic-recordings.html);
+  Pätynen, Pulkki and Lokki, 2008; free for academic research; MP3, PCM on request):
+  orchestral excerpts recorded one instrument at a time.
+
+The commands read WAV files only (16, 24 or 32-bit PCM, or float), so convert AIFF, FLAC
+or MP3 first, for example with `ffmpeg -i note.aiff -c:a pcm_f32le note.wav`. A dry file
+at another rate is resampled to the response's, with a note. A file with several
+channels is averaged to mono, so split a multitrack file into one file per source
+first; channels that are present but silent also lower the level (the BRAS files have
+five channels, of which the noise pulses use one and the quartet four):
+
+```python
+from acoustic_spaces.audio import read_wav, write_wav
+
+quartet, rate = read_wav("StringQuartet_4channel.wav")
+for n in range(4):
+    write_wav(f"quartet_{n + 1}.wav", quartet[:, n], rate)
+```
+
+A unit impulse at the response's rate checks the convolution itself: `convolve` gives
+the response back to float precision.
+
 ### Head tracking
 
 With headphones and a head tracker, a binaural rendering stays put in the room while the
