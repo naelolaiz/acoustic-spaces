@@ -347,6 +347,22 @@ def test_selection_and_forms(window) -> None:
     assert window.selection == ("scene", None)
 
 
+def test_model_units_default_to_the_file(window) -> None:
+    window.open_example(example_path("shoebox"))  # its scene says units: m
+    window.select("geometry", None)
+    page = window.inspector.pages["geometry"]
+    assert page.units.currentText() == "m"
+    page.units.setCurrentText("file default")
+    assert window.document.scene.geometry.units is None
+    assert window.document.room.volume_m3 == pytest.approx(144.0)  # an OBJ is in metres
+    page.units.setCurrentText("cm")
+    assert window.document.scene.geometry.units == "cm"
+    assert window.document.room.volume_m3 == pytest.approx(144e-6)
+    window.undo()
+    page.reload()
+    assert page.units.currentText() == "file default"
+
+
 def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
     from PySide6.QtWidgets import QFileDialog
 

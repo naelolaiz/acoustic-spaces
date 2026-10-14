@@ -5,7 +5,7 @@
 - STL, PLY, OFF, glTF/GLB: read through trimesh; names come from glTF materials
   and nodes, or from the file name for formats without groups.
 - DXF: read through ezdxf; 3DFACE, MESH and polyface entities, also inside block
-  references, labelled by their layer.
+  references, labelled by their layer, in the units the file records ($INSUNITS).
 
 All importers return metres with +z up.
 """
@@ -24,11 +24,17 @@ UNIT_SCALE = {"m": 1.0, "cm": 0.01, "mm": 0.001, "in": 0.0254, "ft": 0.3048}
 SUPPORTED_SUFFIXES = (".obj", ".stl", ".ply", ".off", ".gltf", ".glb", ".dxf")
 #: Formats whose convention is +y up; everything else is taken as +z up.
 _Y_UP_SUFFIXES = (".gltf", ".glb")
+#: Metres per drawing unit for the DXF $INSUNITS codes a room may be drawn in: inches,
+#: feet, millimetres, centimetres, metres, yards and decimetres. Files without units
+#: (code 0) or in others are read as metres.
+_DXF_UNIT_SCALE = {1: 0.0254, 2: 0.3048, 4: 0.001, 5: 0.01, 6: 1.0, 10: 0.9144, 14: 0.1}
 
 
-def load_mesh(path: str | Path, units: str = "m", up_axis: str | None = None) -> RoomMesh:
+def load_mesh(path: str | Path, units: str | None = None, up_axis: str | None = None) -> RoomMesh:
     """Load a room model and convert it to metres with +z up.
 
+    ``units`` are those of the file's coordinates; None takes the units a DXF file
+    records in its header ($INSUNITS), and metres for other files.
     ``up_axis`` overrides the format's convention ("y" for glTF, "z" otherwise);
     Blender's OBJ exporter, for example, writes +y up.
     """
@@ -38,21 +44,23 @@ def load_mesh(path: str | Path, units: str = "m", up_axis: str | None = None) ->
         raise ValueError(
             f"unsupported geometry format {suffix!r}; use one of {', '.join(SUPPORTED_SUFFIXES)}"
         )
-    if units not in UNIT_SCALE:
+    if units is not None and units not in UNIT_SCALE:
         raise ValueError(f"unknown units {units!r}; use one of {', '.join(UNIT_SCALE)}")
     if not path.exists():
         raise FileNotFoundError(f"geometry file not found: {path}")
 
+    file_scale = None
     if suffix == ".obj":
         mesh = read_obj(path)
     elif suffix == ".dxf":
-        mesh = read_dxf(path)
+        mesh, file_scale = _read_dxf(path)
     else:
         mesh = read_with_trimesh(path)
 
     if up_axis is None:
         up_axis = "y" if suffix in _Y_UP_SUFFIXES else "z"
-    vertices = mesh.vertices * UNIT_SCALE[units]
+    scale = UNIT_SCALE[units] if units is not None else (file_scale or 1.0)
+    vertices = mesh.vertices * scale
     if up_axis == "y":
         # (x, y, z) with y up -> (x, -z, y) with z up; a rotation, so winding is kept.
         vertices = np.column_stack([vertices[:, 0], -vertices[:, 2], vertices[:, 1]])
@@ -156,6 +164,13 @@ def read_with_trimesh(path: Path) -> RoomMesh:
 
 
 def read_dxf(path: Path) -> RoomMesh:
+    """DXF: faces labelled by their layer, in drawing units (see :func:`load_mesh`)."""
+    return _read_dxf(path)[0]
+
+
+def _read_dxf(path: Path) -> tuple[RoomMesh, float | None]:
+    """The faces of a DXF file in drawing units, and the metres per drawing unit that
+    its header records (None when it records none of ``_DXF_UNIT_SCALE``)."""
     import ezdxf
     from ezdxf.render import MeshBuilder
 
@@ -193,4 +208,4 @@ def read_dxf(path: Path) -> RoomMesh:
 
     for entity in doc.modelspace():
         visit(entity)
-    return builder.build(path)
+    return builder.build(path), _DXF_UNIT_SCALE.get(doc.header.get("$INSUNITS", 0))

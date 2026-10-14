@@ -87,7 +87,7 @@ class Room:
         if reuse is not None and reuse.scene.geometry == geometry:
             mesh, report = reuse.mesh, reuse.report
         else:
-            scale = UNIT_SCALE[geometry.units]
+            scale = UNIT_SCALE[geometry.units or "m"]
             if geometry.file is not None:
                 raw = load_mesh(geometry.file, units=geometry.units, up_axis=geometry.up_axis)
             elif geometry.box is not None:

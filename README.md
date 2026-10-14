@@ -303,6 +303,8 @@ assignments:
 OBJ is the recommended exchange format: SketchUp, Rhino, Revit and Blender all
 export it with material names. Set `geometry.units` (`m`, `cm`, `mm`, `in`, `ft`)
 and, when the file is +y up (Blender's OBJ default, glTF always), `geometry.up_axis: y`.
+Without `units`, a DXF file is read in the units its header records (`$INSUNITS`),
+and any other file in metres.
 
 Polygons are triangulated, duplicate vertices merged and degenerate faces dropped,
 and faces that meet along an edge are turned to agree with each other (each part of

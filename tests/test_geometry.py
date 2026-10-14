@@ -210,6 +210,32 @@ def test_dxf_3dfaces_mesh_and_blocks_by_layer(tmp_path: Path) -> None:
     np.testing.assert_allclose(absorber[..., 1], 5.0)  # moved by the block insert
 
 
+def _box_dxf(path: Path, size: tuple[float, float, float], insunits: int) -> None:
+    """A closed box of 3DFACEs whose header records the drawing units ($INSUNITS)."""
+    ezdxf = pytest.importorskip("ezdxf")
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = insunits
+    box = _box(*size)
+    for corners in box.triangles:
+        doc.modelspace().add_3dface([tuple(c) for c in corners], dxfattribs={"layer": "WALLS"})
+    doc.saveas(path)
+
+
+@pytest.mark.parametrize(
+    ("insunits", "extent"), [(4, 8.0), (5, 80.0), (1, 203.2), (6, 8000.0), (0, 8000.0)]
+)
+def test_dxf_units_from_the_header(tmp_path: Path, insunits: int, extent: float) -> None:
+    # Drawn as 8000 x 6000 x 3000: millimetres, centimetres, inches, metres, no units.
+    path = tmp_path / "box.dxf"
+    _box_dxf(path, (8000.0, 6000.0, 3000.0), insunits)
+    mesh = load_mesh(path)
+    size = mesh.vertices.max(axis=0) - mesh.vertices.min(axis=0)
+    np.testing.assert_allclose(size, np.array([8.0, 6.0, 3.0]) * extent / 8.0)
+    # Units given by the caller win over the file's.
+    mesh = load_mesh(path, units="cm")
+    assert np.ptp(mesh.vertices[:, 0]) == pytest.approx(80.0)
+
+
 def test_dxf_triangle_without_a_fourth_corner(tmp_path: Path) -> None:
     ezdxf = pytest.importorskip("ezdxf")
     doc = ezdxf.new()

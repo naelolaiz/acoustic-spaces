@@ -120,7 +120,7 @@ def plan_corners(scene: Scene) -> np.ndarray | None:
     """The corners (m) of a floor plan or box room seen from above, in the order of its
     walls (``wall_1`` runs from the first corner to the second); None for a model file."""
     geometry = scene.geometry
-    scale = UNIT_SCALE[geometry.units]
+    scale = UNIT_SCALE[geometry.units or "m"]
     if geometry.floor_plan is not None:
         return scale * np.array(geometry.floor_plan, dtype=float)
     if geometry.box is not None:
@@ -132,7 +132,7 @@ def plan_corners(scene: Scene) -> np.ndarray | None:
 def room_height(scene: Scene) -> float | None:
     """The height (m) of a floor plan or box room; None for a model file."""
     geometry = scene.geometry
-    scale = UNIT_SCALE[geometry.units]
+    scale = UNIT_SCALE[geometry.units or "m"]
     if geometry.floor_plan is not None:
         return scale * geometry.height
     if geometry.box is not None:
@@ -406,7 +406,7 @@ class Document(QObject):
         geometry = self.scene.geometry
         if geometry.file is not None:
             raise EditError("the room is a model file: draw a floor plan to replace it")
-        scale = UNIT_SCALE[geometry.units]
+        scale = UNIT_SCALE[geometry.units or "m"]
         height = geometry.height if geometry.floor_plan is not None else geometry.box[2]
         plan = [_rounded(np.asarray(corner, dtype=float) / scale) for corner in corners]
 

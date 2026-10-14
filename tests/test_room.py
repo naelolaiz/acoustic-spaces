@@ -151,6 +151,30 @@ def test_flipped_faces_do_not_put_points_outside(tmp_path: Path) -> None:
     assert room.volume_m3 == pytest.approx(144.0)
 
 
+def test_dxf_in_millimetres_without_scene_units(tmp_path: Path) -> None:
+    ezdxf = pytest.importorskip("ezdxf")
+    from acoustic_spaces.geometry import box_mesh
+
+    doc = ezdxf.new()
+    doc.header["$INSUNITS"] = 4  # millimetres
+    for corners in box_mesh((8000.0, 6000.0, 3000.0)).triangles:
+        doc.modelspace().add_3dface([tuple(c) for c in corners])
+    dxf = tmp_path / "room.dxf"
+    doc.saveas(dxf)
+    path = _scene(tmp_path, geometry={"file": str(dxf)}, default_material="painted_concrete")
+    room = Room.from_yaml(path)
+    assert room.scene.geometry.units is None
+    assert room.volume_m3 == pytest.approx(144.0)  # not 8000 x 6000 x 3000 m
+    assert room.problems() == []
+    # Units in the scene win over the file's.
+    path = _scene(
+        tmp_path,
+        geometry={"file": str(dxf), "units": "cm"},
+        default_material="painted_concrete",
+    )
+    assert Room.from_yaml(path).volume_m3 == pytest.approx(144.0 * 1000.0)
+
+
 def test_open_model_skips_volume_and_inside_checks(tmp_path: Path) -> None:
     obj = tmp_path / "open.obj"
     lines = (EXAMPLES / "shoebox" / "shoebox.obj").read_text(encoding="utf-8").splitlines()
