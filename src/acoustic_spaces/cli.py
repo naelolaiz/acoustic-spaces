@@ -708,19 +708,24 @@ def _cmd_deconvolve(args: argparse.Namespace) -> int:
     return 0
 
 
-def _reference_energy(args: argparse.Namespace, sample_rate: int):
-    """Reference for G from --reference-energy or --free-field and --distance."""
+def _reference_energy(args: argparse.Namespace, sample_rate: int, side: str = ""):
+    """Reference for G from --reference-energy or --free-field and --distance; with
+    ``side``, from that response's own options, as --measured-free-field."""
     from acoustic_spaces.audio import read_wav
     from acoustic_spaces.parameters import free_field_reference
 
-    if args.free_field is None:
-        return args.reference_energy
-    if args.distance is None:
-        raise ValueError("--free-field needs --distance")
-    data, rate = read_wav(args.free_field)
+    prefix = f"{side}_" if side else ""
+    free_field, distance = (getattr(args, prefix + name) for name in ("free_field", "distance"))
+    if free_field is None:
+        return getattr(args, f"{prefix}reference_energy")
+    if distance is None:
+        option = f"--{side}-" if side else "--"
+        raise ValueError(f"{option}free-field needs {option}distance")
+    data, rate = read_wav(free_field)
     if rate != sample_rate:
-        raise ValueError(f"{args.free_field} is at {rate} Hz, the response at {sample_rate} Hz")
-    return free_field_reference(data[:, 0], rate, args.distance, filters=args.filters)
+        response = f"the {side} response" if side else "the response"
+        raise ValueError(f"{free_field} is at {rate} Hz, {response} at {sample_rate} Hz")
+    return free_field_reference(data[:, 0], rate, distance, filters=args.filters)
 
 
 def _analysis(ir, sample_rate: int, args: argparse.Namespace, reference) -> dict:
@@ -789,6 +794,101 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     if args.json:
         path = Path(args.json)
         path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print(f"\nwrote {path}")
+    return 0
+
+
+def _compared_response(args: argparse.Namespace, side: str):
+    """The response, sample rate, channel (1-based) and reference for G of one side of
+    ``compare``, or None after printing why it cannot be read."""
+    from acoustic_spaces.audio import read_wav
+
+    path, channel = getattr(args, side), getattr(args, f"{side}_channel")
+    try:
+        data, sample_rate = read_wav(path)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return None
+    column = _channel_index(1 if channel is None else channel, data.shape[1], f"{side} channel")
+    if column is None:
+        return None
+    if channel is None and data.shape[1] > 1:
+        print(
+            f"note: {path} has {data.shape[1]} channels; comparing the first "
+            f"(--{side}-channel picks another)",
+            file=sys.stderr,
+        )
+    try:
+        reference = _reference_energy(args, sample_rate, side)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return None
+    return data[:, column], sample_rate, column + 1, reference
+
+
+def _cmd_compare(args: argparse.Namespace) -> int:
+    from acoustic_spaces.compare import compare_impulse_responses
+    from acoustic_spaces.parameters import onset
+
+    sides = {}
+    for side in ("simulated", "measured"):
+        response = _compared_response(args, side)
+        if response is None:
+            return 1
+        sides[side] = response
+    (sim, sim_rate, _, sim_reference), (meas, meas_rate, _, meas_reference) = sides.values()
+    noise = not args.no_noise
+    comparison = compare_impulse_responses(
+        sim,
+        sim_rate,
+        meas,
+        meas_rate,
+        simulated_reference=sim_reference,
+        measured_reference=meas_reference,
+        filters=args.filters,
+        noise=noise,
+    )
+    report = {}
+    for side, (ir, sample_rate, channel, _) in sides.items():
+        name, start = Path(getattr(args, side)).name, onset(ir) / sample_rate
+        print(
+            f"{side + ':':<11}{name}, channel {channel}, {sample_rate} Hz, "
+            f"direct sound at {start * 1e3:.1f} ms"
+        )
+        report[side] = {
+            "file": name,
+            "channel": channel,
+            "sample_rate": sample_rate,
+            "onset_s": start,
+        }
+    print(f"\n{comparison.table()}\n\n{comparison.summary()}")
+    if args.plot:
+        # As with analyze, a plot that cannot be drawn costs a warning, not the results.
+        plot = Path(args.plot)
+        try:
+            from acoustic_spaces.viz import plot_comparison
+
+            plot.parent.mkdir(parents=True, exist_ok=True)
+            names = (report["simulated"]["file"], report["measured"]["file"])
+            plot_comparison(
+                sim,
+                sim_rate,
+                meas,
+                meas_rate,
+                plot,
+                title=f"{names[0]} (simulated) against {names[1]} (measured)",
+                filters=args.filters,
+                noise=noise,
+            )
+        except ImportError as exc:
+            print(f"warning: {exc}", file=sys.stderr)
+        else:
+            print(f"\nsaved {plot}")
+    if args.json:
+        path = Path(args.json)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        report.update(comparison.as_dict())
         path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         print(f"\nwrote {path}")
     return 0
@@ -1077,7 +1177,7 @@ def _add_sweep_arguments(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--repeats", type=int, default=1, help="sweeps to average (default 1)")
 
 
-def _add_analysis_arguments(parser: argparse.ArgumentParser) -> None:
+def _add_analysis_arguments(parser: argparse.ArgumentParser, references: bool = True) -> None:
     group = parser.add_argument_group("analysis")
     group.add_argument(
         "--filters",
@@ -1088,15 +1188,32 @@ def _add_analysis_arguments(parser: argparse.ArgumentParser) -> None:
     group.add_argument(
         "--no-noise", action="store_true", help="skip the noise floor detection and correction"
     )
+    if references:
+        _add_reference_arguments(group)
+
+
+def _add_reference_arguments(group, side: str = "") -> None:
+    """--reference-energy, or --free-field and --distance: the reference for G; with
+    ``side``, as --SIDE-reference-energy and so on, for one of two responses."""
+    option = f"--{side}-" if side else "--"
+    source = f"the {side} response's source" if side else "the source"
     ref = group.add_mutually_exclusive_group()
     ref.add_argument(
-        "--reference-energy",
+        f"{option}reference-energy",
         type=float,
-        help="energy of a broadband impulse response of the source at 10 m in free field, "
+        metavar="REFERENCE_ENERGY",
+        help=f"energy of a broadband impulse response of {source} at 10 m in free field, "
         "for G (0.01 for responses made by acoustic-spaces)",
     )
-    ref.add_argument("--free-field", metavar="WAV", help="free-field response of the source, for G")
-    group.add_argument("--distance", type=float, help="distance of the --free-field response, m")
+    ref.add_argument(
+        f"{option}free-field", metavar="WAV", help=f"free-field response of {source}, for G"
+    )
+    group.add_argument(
+        f"{option}distance",
+        type=float,
+        metavar="DISTANCE",
+        help=f"distance of the {option}free-field response, m",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1338,6 +1455,27 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--plot", metavar="PNG", help="save decay plots (needs viz extra)")
     _add_analysis_arguments(analyze)
     analyze.set_defaults(func=_cmd_analyze)
+
+    compare = sub.add_parser(
+        "compare", help="compare a simulated impulse response with a measured one, in JNDs"
+    )
+    compare.add_argument("simulated", help="simulated impulse response WAV")
+    compare.add_argument("measured", help="measured impulse response WAV")
+    compare.add_argument("--json", metavar="FILE", help="also write the comparison as JSON")
+    compare.add_argument(
+        "--plot", metavar="PNG", help="save both decays per octave band (needs viz extra)"
+    )
+    _add_analysis_arguments(compare, references=False)
+    for side in ("simulated", "measured"):
+        group = compare.add_argument_group(f"{side} response")
+        group.add_argument(
+            f"--{side}-channel",
+            type=int,
+            metavar="CHANNEL",
+            help="compare this channel (1-based, default 1)",
+        )
+        _add_reference_arguments(group, side)
+    compare.set_defaults(func=_cmd_compare)
 
     measure = sub.add_parser(
         "measure", help="play a sweep, record it and analyse it (needs the measure extra)"
