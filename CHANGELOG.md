@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased
+
+Fixes from a review of the simulation, the parameters and the wave solver. Levels and
+parameters change slightly: G with the statistical late method by up to 1.8 dB, levels
+near diffraction boundaries by up to 2 dB, and the wave bands' timing by a grid step.
+
+**Simulation and parameters**
+
+- The statistical late method keeps Barron's total energy: its tail starts at the
+  direct sound and takes off the early paths, instead of starting at the transition
+  and losing the scattered share of the early reflections. Coverage maps use the same
+  tail.
+- A response whose decay has not reached -20 dB has every parameter NaN, as T20 and
+  T30 already had, instead of values read from the estimated tail.
+- The noise floor is looked for before trailing digital silence (zero padding, the
+  zeros `remove_latency` leaves), which made T30 read up to 70 % long.
+- Mono WAV columns, as `read_wav` gives them, work in `deconvolve` and the parameter
+  analysis; an empty impulse response has NaN parameters.
+- A run with one late ray, and `simulate` with no listener, give a result or a plain
+  error instead of failing deep inside.
+- Coverage maps no longer fail on points whose response ends within 100 ms of the
+  direct sound.
+
+**Diffraction**
+
+- A specular path interferes with its own wave's diffraction terms only, which keeps
+  the level continuous across reflection boundaries (it stepped by up to 2.1 dB).
+- Paths that reflect off the floor or ceiling where an edge ends are kept once, not
+  twice or never.
+- A listener or map point on the source no longer divides by zero.
+
+**Wave solver**
+
+- The wave bands start at emission; they arrived one grid step early.
+- The listener's velocity sits on the pressure's samples (it led by half a step).
+- The rays' late noise joins the wave bands in energy, which removes a 3 dB dip at
+  the crossover.
+- The source adds no net air, which had left a static pressure and a floor about 50 dB
+  down on the wave bands' decay.
+- A wall thinner than a cell gives each side its own face.
+- The grid runs at a multiple of a low output rate instead of with coarser cells, and
+  listeners outside the grid's air are refused before the runs.
+
 ## 2.0.0
 
 Coverage maps, edge diffraction, drawing rooms in the editor, head tracking and a

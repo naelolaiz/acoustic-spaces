@@ -234,6 +234,15 @@ def test_levels_are_continuous_across_the_shadow_boundary() -> None:
     assert first.max() < 0.25
 
 
+def test_levels_are_continuous_across_a_reflection_boundary() -> None:
+    # The reflection off the wall y = 4 (x > 4) ends behind the corner on a line through
+    # (2, 3), where the direct sound carries on; the two do not interfere there either.
+    room = _l_room([[2.0, 3.0 + d, 1.5] for d in (-1e-4, 1e-4)])
+    for order, mode in ((1, "direct"), (2, "first_order")):
+        step = np.diff(_levels(room, max_order=order, diffraction=mode), axis=0)
+        assert np.abs(step).max() < 0.05
+
+
 def test_shadow_gets_a_diffracted_path_and_lit_side_barely_changes() -> None:
     room = _l_room([[2.0, 8.0, 1.5], [9.0, 1.0, 1.2]])
     shadow = early_paths(room, listener="l0", max_order=0, diffraction="direct")
@@ -278,6 +287,26 @@ def test_screen_attenuation_follows_maekawa(tmp_path: Path) -> None:
     np.testing.assert_allclose(loss, maekawa, atol=1.5)
 
 
+def test_paths_reflecting_at_the_ends_of_an_edge() -> None:
+    # At (2, 8) the listener is as far from the corner as the source and as high: the
+    # paths over the corner by the floor or the ceiling touch it at its ends, where
+    # reflecting before the edge and after it is the same path.
+    room = _l_room([[2.0, 8.0 + d, 1.5] for d in (-1e-4, 0.0, 1e-4)])
+    levels = _levels(room, max_order=1, diffraction="first_order")
+    assert np.abs(np.diff(levels, axis=0)).max() < 0.01
+
+
+def test_a_listener_on_the_source() -> None:
+    # A map point can fall on a source: next to its direct sound, nothing over an edge
+    # counts.
+    room = _l_room([[2.0, 8.0, 1.5]])
+    source = np.array(room.scene.sources[0].position)
+    diffraction = EdgeDiffraction(
+        TraceModel.from_room(room), source, speed_of_sound=room.speed_of_sound(), air=np.zeros(8)
+    )
+    assert len(diffraction.apply(source, early_stage.EarlyReflections.empty(8), 1.0)) == 0
+
+
 def test_reflections_bend_round_edges_too() -> None:
     # Behind the corner the floor and ceiling reflections arrive over the edge as well.
     room = _l_room([[2.0, 8.0, 1.5]])
@@ -319,7 +348,9 @@ def test_coverage_maps_hear_round_corners() -> None:
     assert bent.details["s"]["diffracted_paths"] > 0 and "edges" not in plain.details["s"]
     shadow = (bent.grid.points[:, 0] < 4) & (bent.grid.points[:, 1] > 6)
     assert shadow.any()
-    # Behind the corner, at 125 Hz: more sound, and more of it early.
-    for name, rise in (("g", 0.15), ("c80", 0.2)):
+    # Behind the corner, at 125 Hz: more sound, and more of it early. The statistical
+    # tail is Barron's energy less the early paths', so of what bends round the corner
+    # only the direct sound adds to the total.
+    for name, rise in (("g", 0.02), ("c80", 0.02)):
         values = bent.get().values[name][shadow, 1] - plain.get().values[name][shadow, 1]
         assert np.all(values > rise)

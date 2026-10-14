@@ -411,9 +411,15 @@ or in a corner. Sound that bends round edges is added to them (see
   the example box the late tail (0.5 to 2.5 s) misses a 1-million-ray reference by
   0.5 to 2 dB per band instead of 1 to 8 dB at the default 100k rays (1 to 4 dB
   instead of 4 to 17 dB at 10k), for about 1.5 times the run time.
-- `statistical`: an exponential decay at the Eyring reverberation time, at the
-  level of Barron's revised theory, from `transition_ms` after the direct sound
-  (by default the mixing time, the square root of the volume in milliseconds).
+- `statistical`: the reflected energy of Barron's revised theory, an exponential
+  decay at the Eyring reverberation time T from the direct sound on, less what the
+  early paths carry. Early paths end `transition_ms` after the direct sound (by
+  default the mixing time, the square root of the volume in milliseconds), so the
+  late part holds the scattered share of every early reflection, the orders above
+  `max_order` before the transition and everything after it. The total is Barron's,
+  c T / (13.8 V) for a unit source: the Sabine form 4 / A with Eyring's absorption
+  area, which reads 0.2 dB above the classical 4 (1 - α) / (α S) at a mean
+  absorption of 0.1 and 0.8 dB above at 0.3.
 
 The two parts hand over by reflection order by default. Set `transition_ms` to
 keep early paths only that long after the direct sound.
@@ -428,7 +434,8 @@ of the direct sound at 10 m (0.01) is the reference for strength G.
 and G. `Response.parameters()` computes them from the simulated energies;
 `acoustic_spaces.parameters.from_impulse_response` does the same for any mono IR (see
 [Measuring impulse responses](#measuring-impulse-responses)). A response that ends
-before it has decayed is extended by its fitted decay rate.
+before it has decayed is extended by its fitted decay rate; one that ends before it
+has decayed by 20 dB leaves too much to that estimate, and all its parameters are NaN.
 Air absorption follows ISO 9613-1 for the scene's temperature, humidity and pressure.
 
 ### Edge diffraction
@@ -451,7 +458,9 @@ path over each edge they can both see. In the shadow of the edge that path carri
 diffracted sound; on the lit side, near the boundary, it changes the energy of the
 specular path it borders. Across a boundary the level is continuous: the tests cross one
 in an L-shaped room in millimetre steps, with first-order reflections, and the level
-changes by less than 0.25 dB where specular paths alone drop by more than 5 dB. The
+changes by less than 0.25 dB where specular paths alone drop by more than 5 dB; where a
+reflection off one of the corner's walls ends and the direct sound carries on, by less
+than 0.05 dB. The
 diffraction coefficient matches the exact solutions for a half-plane and for wedges
 (within 0.25 dB), and a thin screen matches Maekawa's chart within 1.5 dB.
 
@@ -520,13 +529,16 @@ cells are refused.
 
 In a 7 x 5 x 3 m box with 15 % absorption, the wave solver follows the sum of the box's
 modes from 22 Hz up; rays give the average level instead. In the 63 and 125 Hz bands,
-G is within 1 dB of the modes and T20 within 2 %; rays are up to 5.4 dB and 8 % off.
+G is within 1 dB of the modes and T20 within 5 %; rays are up to 5.4 dB and 8 % off.
 
 What it leaves out: the absorption of a surface is real-valued and the same across a
 band; walls on the grid lie within half a cell of the model's, which can move a small
-room's modes by a few percent (more `points_per_wavelength` moves them less); sources
-radiate equally in all directions in the wave bands; and air absorption, negligible
-there, is left out.
+room's modes by a few percent (more `points_per_wavelength` moves them less); waves on
+the grid travel slower the shorter they are, by up to 1.7 % at the top of the highest
+band with 8 points per wavelength (along the grid's axes, not at all along its
+diagonals), which nothing corrects, so the modes there come out up to that much low;
+sources radiate equally in all directions in the wave bands; and air absorption,
+negligible there, is left out.
 
 ### Validation
 
@@ -565,7 +577,8 @@ from one ray tracing run per source in which every ray adds its path length thro
 slab of air around each point (a track-length estimate), so a map of hundreds of
 points costs about as much as a few listeners: the concert hall example (480 points,
 two sources) takes about 15 s. In the shoebox example, full simulations at map points
-give G within 0.3 dB of the map and T30 within 5 %.
+give G within 0.3 dB of the map and T30 within 5 %. With the statistical late method
+each point gets the late part a listener there would, and G agrees within 0.01 dB.
 
 Each source radiates its `level_db` (sound power, dB re 1 pW) spread evenly over the
 octave bands, which sets the sound pressure levels. The STI (IEC 60268-16, male
@@ -760,8 +773,10 @@ How it works:
 - `analyze` filters with IEC 61260-1 octave filters (Butterworth, order 3, zero
   phase), finds where each band sinks into the background noise (Lundeby et al.,
   1995), cuts it there, subtracts the noise and adds the missing tail (ISO 3382-1,
-  5.3.4). Decay times are left out when a band's decay does not clear the noise by
-  enough: 20 dB for EDT, 35 dB for T20, 45 dB for T30.
+  5.3.4). Digital silence at the end of a file (zero padding, or the shift that
+  removes latency) is not taken for noise: the noise floor is looked for before it.
+  Decay times are left out when a band's decay does not clear the noise by enough:
+  20 dB for EDT, 35 dB for T20, 45 dB for T30.
 - G needs the source's free-field level: `--free-field ff.wav --distance 3` uses a
   measurement of the same source in free field (or with reflections windowed out),
   and `--reference-energy 0.01` suits responses made by `simulate`.

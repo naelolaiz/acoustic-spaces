@@ -46,9 +46,11 @@ from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 COURANT = 1.0 / math.sqrt(3.0)
 #: Grids with more cells than this are refused (about 20 bytes each).
 MAX_CELLS = 40_000_000
-#: The source's high-pass: it adds no air to the room, so nothing builds up at 0 Hz.
-#: Its length in seconds; it is flat within 0.3 dB above 20 Hz.
-HIGH_PASS_S = 0.1
+#: The source's high-pass, applied twice: once so that the air the source pushes into
+#: the room stops flowing, twice so that as much flows out again and a closed room's
+#: pressure comes back to rest (but for a slow swing from rounding L^2 down, far below
+#: the wave bands). Its length in seconds; twice, it is flat within 0.2 dB above 20 Hz.
+HIGH_PASS_S = 0.12
 #: Highest random-incidence absorption a locally reacting surface with a real
 #: admittance reaches (Paris's formula), and its normalised impedance.
 MAX_ABSORPTION = 0.951
@@ -56,8 +58,8 @@ _BEST_IMPEDANCE = 1.5672
 #: The wave solver's part of a response starts here (Hz), with the synthesis's
 #: crossover shape round it: an octave below the 63 Hz band's lower edge, so that band,
 #: skirts and all, comes from the wave solver. Further down a closed room's air is
-#: squeezed as a whole (the wave solver's source adds no air, so this falls away), and
-#: the rays' response stays.
+#: squeezed as a whole (the wave solver's source leaves no air in it, so this falls
+#: away), and the rays' response stays.
 LOW_EDGE_HZ = OCTAVE_BANDS_HZ[0] / (2.0 * math.sqrt(2.0))
 #: Length of the source's low-pass (taps; odd), which keeps the grid free of the
 #: frequencies it cannot carry.
@@ -123,7 +125,7 @@ class BandGrid:
     band: int
     #: Cell size (m).
     cell: float
-    #: Sample rate of the run (Hz): the output rate over a whole number.
+    #: Sample rate of the run (Hz): the output rate over or times a whole number.
     rate: float
 
 
@@ -131,11 +133,15 @@ def band_grid(
     band: int, sample_rate: float, speed_of_sound: float, points_per_wavelength: float = 8.0
 ) -> BandGrid:
     """The coarsest grid with ``points_per_wavelength`` cells per wavelength at the top of
-    band ``band``, whose time step divides the output's sample period."""
+    band ``band`` whose time step is a whole number of the output's sample periods, or
+    one of them over a whole number where the grid needs more steps per second than the
+    output has samples."""
     cell = speed_of_sound / (points_per_wavelength * band_top(band))
     rate = speed_of_sound / (COURANT * cell)  # one step crosses COURANT cells
-    ratio = max(1, math.floor(sample_rate / rate))
-    rate = sample_rate / ratio
+    if rate <= sample_rate:
+        rate = sample_rate / math.floor(sample_rate / rate)
+    else:
+        rate = sample_rate * math.ceil(rate / sample_rate)
     return BandGrid(band, speed_of_sound / (COURANT * rate), rate)
 
 
@@ -143,7 +149,7 @@ def source_signal(rate: float, cell: float) -> tuple[np.ndarray, int]:
     """What the source adds to the grid on each step, and its delay in steps.
 
     An impulse, low-passed (so the grid carries no frequencies it cannot) and
-    high-passed (so it puts no air in the room), scaled so that in free field the
+    high-passed twice (so it leaves no air in the room), scaled so that in free field the
     pressure at r metres is that impulse over r.
     """
     half = _LOW_PASS_TAPS // 2
@@ -154,7 +160,7 @@ def source_signal(rate: float, cell: float) -> tuple[np.ndarray, int]:
     window = np.hanning(length + 2)[1:-1]
     high = -window / window.sum()
     high[0] += 1.0
-    signal = np.convolve(low, high)
+    signal = np.convolve(np.convolve(low, high), high)
     return 4.0 * math.pi * COURANT**2 / cell * signal, half
 
 
@@ -206,10 +212,14 @@ class WaveResponse:
             spectrum = spectrum + np.fft.rfft(run, n_fft, axis=0) * gain[:, None]
         return np.fft.irfft(spectrum, n_fft, axis=0)[:n]
 
-    def high_pass(self, signals: np.ndarray, sample_rate: float) -> np.ndarray:
-        """``signals`` (n, channels) without the frequencies the wave bands cover."""
+    def high_pass(self, signals: np.ndarray, sample_rate: float, late: bool = False) -> np.ndarray:
+        """``signals`` (n, channels) without the frequencies the wave bands cover, which
+        take them at a gain g: the rays' early paths at 1 - g, as they add to the wave
+        bands' sound in pressure, or with ``late`` their noise at sqrt(1 - g^2), as it
+        adds to the wave bands' tail in energy."""
         n_fft = synthesis.fft_size(len(signals), sample_rate)
-        return _filter(signals, 1.0 - wave_gains(n_fft, sample_rate, self.bands).sum(axis=0), n_fft)
+        g = wave_gains(n_fft, sample_rate, self.bands).sum(axis=0)
+        return _filter(signals, np.sqrt(1.0 - g**2) if late else 1.0 - g, n_fft)
 
     def energy(self, time_step: float, slots: int) -> np.ndarray:
         """Energy per band and time slot (bands, slots), as the ray tracer counts it: the
@@ -250,7 +260,8 @@ def _first_order(probes: np.ndarray, found: Sequence[bool], name: str) -> np.nda
     """W, X, Y, Z (samples, 4) from the pressure at the listener and round it.
 
     The velocity is the time integral of the pressure gradient (central differences,
-    or one-sided ones next to a surface); X = rho c u_x points towards the sound.
+    or one-sided ones next to a surface), by the trapezoidal rule so that it falls on
+    the pressure's samples; X = rho c u_x points towards the sound.
     """
     if not found[0]:
         raise ValueError(f"listener {name!r} is not in the air of the wave grid")
@@ -266,7 +277,7 @@ def _first_order(probes: np.ndarray, found: Sequence[bool], name: str) -> np.nda
             difference = probes[0] - probes[minus]
         else:
             continue
-        out[:, 1 + axis] = COURANT * np.cumsum(difference)
+        out[:, 1 + axis] = COURANT * (np.cumsum(difference) - 0.5 * difference)
     return out
 
 
@@ -314,7 +325,7 @@ def wave_responses(
         )
     signal, delay = source_signal(grid.rate, h)
     samples = int(math.ceil(length_s * grid.rate))
-    steps = samples + 1 + delay  # the source reaches the grid one step after it is added
+    steps = samples + delay  # the source's term on step n stands for its value at time n
     drive = np.zeros(steps, np.float32)
     drive[: min(len(signal), steps)] = signal[:steps]
     probes = np.vstack([_probe_points(p, h) for p in listeners])
@@ -343,6 +354,18 @@ def wave_responses(
             1.0,
             threads,
         )
+        # Before any step: a listener outside the source's air, or a source closed in.
+        found = [solver.probe_found(p) for p in range(len(probes))]
+        missing = [listener for i, listener in enumerate(names) if not found[7 * i]]
+        if missing:
+            air, volume = solver.air_cells * h**3, model.room.volume_m3
+            if volume and air < 0.1 * volume:
+                who = f"source {label!r}" if label else "the source"
+                raise ValueError(
+                    f"{who} is closed in: the wave grid has {air:.2g} m³ of air round it, "
+                    f"in a room of {volume:.3g} m³"
+                )
+            raise ValueError(f"listener {missing[0]!r} is not in the air of the wave grid")
         covered = [OCTAVE_BANDS_HZ[b] for b, r in enumerate(band_runs) if r == k]
         name = " and ".join(f"{f}" for f in covered) + " Hz"
         say(
@@ -357,8 +380,7 @@ def wave_responses(
             if c:
                 say(f"{label}: wave solver, {name}, {100 * c // chunks} %")
             recorded.append(solver.run(drive[bounds[c] : bounds[c + 1]]))
-        recorded_runs.append(np.concatenate(recorded, axis=1)[:, 1 + delay :][:, :samples])
-        found = [solver.probe_found(p) for p in range(len(probes))]
+        recorded_runs.append(np.concatenate(recorded, axis=1)[:, delay:][:, :samples])
         info["wave_cells"] = float(solver.air_cells)
         if solver.open:
             info["wave_open"] = 1.0

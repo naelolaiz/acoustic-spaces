@@ -139,7 +139,7 @@ def duct() -> list[dict]:
         f = np.fft.rfftfreq(n_fft, 1.0 / rate)
         gain = np.clip((f - 40) / 20, 0, 1) * np.clip((200 - f) / 50, 0, 1)
         pressure = np.fft.irfft(np.fft.rfft(pressure, n_fft) * gain, n_fft)[: len(pressure)]
-        t = (np.arange(len(pressure)) - 1 - delay) / rate
+        t = (np.arange(len(pressure)) - delay) / rate
 
         def gated(path: float, t=t, pressure=pressure) -> float:
             x = t - path / C
@@ -214,7 +214,7 @@ def grazing() -> list[dict]:
         n_fft = 1 << 15
         f = np.fft.rfftfreq(n_fft, 1.0 / rate)
         gain = np.clip((f - 40) / 20, 0, 1) * np.clip((200 - f) / 50, 0, 1)
-        t = (np.arange(recorded.shape[1]) - 1 - delay) / rate
+        t = (np.arange(recorded.shape[1]) - delay) / rate
         energies = []
         for k, (x, _, _) in enumerate(probes):
             band = np.fft.irfft(np.fft.rfft(recorded[k], n_fft) * gain, n_fft)[: len(t)]

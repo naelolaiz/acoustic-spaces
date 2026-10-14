@@ -13,7 +13,8 @@ All parameters are per octave band and measured from the arrival of the direct s
 
 A response that stops before it has decayed loses the energy of its missing tail and
 reads too short; the tail is estimated from the last part of the decay and added back
-(ISO 3382-1, 5.3.4).
+(ISO 3382-1, 5.3.4). One that stops before it has decayed by 20 dB leaves too much to
+that estimate, and all its parameters are NaN.
 """
 
 from __future__ import annotations
@@ -41,9 +42,11 @@ PARAMETERS = {
     "g": ("dB", "strength"),
 }
 #: The fit for the missing tail stays this far (dB) above the level the decay reaches
-#: at the end of the response, and spans at most ``_TAIL_SPAN_DB``.
+#: at the end of the response, and spans at most ``_TAIL_SPAN_DB``. A response must
+#: decay to ``_MIN_DECAY_DB`` for any parameter.
 _TAIL_HEADROOM_DB = 10.0
 _TAIL_SPAN_DB = 20.0
+_MIN_DECAY_DB = -20.0
 
 #: Ratio between adjacent octave mid-band frequencies, base 10 (IEC 61260-1).
 OCTAVE_RATIO = 10.0**0.3
@@ -51,16 +54,22 @@ OCTAVE_RATIO = 10.0**0.3
 FILTER_ORDER = 3
 #: Room before an impulse response for the ringing of its band filters (s).
 _FILTER_LEAD_S = 0.2
+#: Samples at the end of an impulse response below this fraction of its peak are
+#: digital silence (zero padding, a latency shift), not background noise.
+_SILENCE = 1e-12
 
 #: Noise floor search (Lundeby et al., 1995): first averaging interval (s), intervals
 #: per 10 dB of decay afterwards, margin of the late-decay fit above the noise and its
-#: span, how far past the crosspoint the noise is measured (dB), and iterations.
+#: span, how far past the crosspoint the noise is measured (dB), and iterations. A
+#: "noise" more than ``_NO_NOISE_DB`` below the loudest interval is the band filters'
+#: ringing in silence.
 _LUNDEBY_INTERVAL_S = 0.01
 _LUNDEBY_INTERVALS_PER_10DB = 5
 _LUNDEBY_MARGIN_DB = 5.0
 _LUNDEBY_SPAN_DB = 20.0
 _LUNDEBY_NOISE_AFTER_DB = 10.0
 _LUNDEBY_ITERATIONS = 5
+_NO_NOISE_DB = 120.0
 
 
 @dataclass
@@ -183,8 +192,9 @@ def _band_parameters(e: np.ndarray, dt: float, offset: float, reference: float |
     tail, rate = _tail(e, dt)
     total = float(e.sum()) + tail
     nan = math.nan
+    undefined = dict(edt=nan, t20=nan, t30=nan, c50=nan, c80=nan, d50=nan, ts=nan, g=nan)
     if total <= 0:
-        return dict(edt=nan, t20=nan, t30=nan, c50=nan, c80=nan, d50=nan, ts=nan, g=nan)
+        return undefined
 
     remaining = np.concatenate([np.cumsum(e[::-1])[::-1], [0.0]]) + tail
     with np.errstate(divide="ignore"):
@@ -192,6 +202,12 @@ def _band_parameters(e: np.ndarray, dt: float, offset: float, reference: float |
     out = {
         name: _decay_time(level, edges, top, bottom) for name, (top, bottom) in DECAY_RANGES.items()
     }
+    # A response that stops before its decay has fallen to _MIN_DECAY_DB leaves too much
+    # to the estimated tail: nothing can be read from it, as T20 and T30 already cannot.
+    # The fall counts at the end of the curve, tail included, or along the early decay's
+    # slope, as one strong ray late in a sparse tail can hold the end of the curve up.
+    if level[-1] > _MIN_DECAY_DB and not 60.0 * edges[-1] / out["edt"] >= -_MIN_DECAY_DB:
+        return undefined
     cumulative = total - remaining
     early50 = float(np.interp(0.05, edges, cumulative))
     early80 = float(np.interp(0.08, edges, cumulative))
@@ -327,7 +343,7 @@ def speech_transmission_index(
 def onset(ir: np.ndarray, threshold_db: float = -20.0) -> int:
     """Sample where the response first rises to ``threshold_db`` below its peak (ISO 3382-1)."""
     power = np.asarray(ir, dtype=float) ** 2
-    peak = power.max()
+    peak = power.max(initial=0.0)
     if peak <= 0:
         return 0
     return int(np.argmax(power >= peak * 10.0 ** (threshold_db / 10.0)))
@@ -400,9 +416,10 @@ def noise_crosspoint(energy: np.ndarray, sample_rate: float) -> tuple[int, float
 
     ``energy`` is one band's squared response from the direct sound on. Returns the
     crosspoint (samples), the mean noise power per sample and the decay range (dB, from
-    the loudest 10 ms down to the noise). A response that ends in silence, or is still
-    decaying in its last tenth, has no crosspoint (``len(energy)``), no noise and an
-    infinite range; one with no decay above its noise has a range of 0.
+    the loudest 10 ms down to the noise). A response that ends in silence (its last
+    tenth more than 120 dB below the loudest 10 ms), or is still decaying in its last
+    tenth, has no crosspoint (``len(energy)``), no noise and an infinite range; one with
+    no decay above its noise has a range of 0.
     """
     e = np.asarray(energy, dtype=float)
     n = len(e)
@@ -414,6 +431,8 @@ def noise_crosspoint(energy: np.ndarray, sample_rate: float) -> tuple[int, float
     width = max(1, int(round(_LUNDEBY_INTERVAL_S * sample_rate)))
     t, level = _levels(e, width, sample_rate)
     peak_db = float(level.max(initial=-np.inf))
+    if noise_db < peak_db - _NO_NOISE_DB:
+        return n, 0.0, math.inf
     line = None
     if len(level) >= 3:
         line = _line(level, t, float(level.max()), noise_db + 2.0 * _LUNDEBY_MARGIN_DB)
@@ -465,8 +484,16 @@ class BandDecay:
 def band_decay(
     ir: np.ndarray, sample_rate: float, *, filters: str = "iec", noise: bool = True
 ) -> BandDecay:
-    """Filter ``ir`` into octave bands and, with ``noise``, find each band's noise floor."""
+    """Filter ``ir`` into octave bands and, with ``noise``, find each band's noise floor.
+
+    ``ir`` is (samples,) or (samples, 1), as :func:`~acoustic_spaces.audio.read_wav`
+    gives a mono file.
+    """
     ir = np.asarray(ir, dtype=float)
+    if ir.ndim == 2 and ir.shape[1] == 1:
+        ir = ir[:, 0]
+    if ir.ndim != 1:
+        raise ValueError("the impulse response must have one channel: (samples,) or (samples, 1)")
     start = onset(ir)
     # Zero-phase filters ring before an impulse as much as after it. Room is made for
     # that ringing, and everything before the onset counts as arriving with it.
@@ -474,10 +501,21 @@ def band_decay(
     padded = np.concatenate([np.zeros(lead), ir])
     squared = octave_bands(padded, sample_rate, filters) ** 2
     energy = squared[:, lead + start :]
-    energy[:, 0] += squared[:, : lead + start].sum(axis=1)
-    found = [
-        noise_crosspoint(row, sample_rate) if noise else (len(row), 0.0, math.inf) for row in energy
-    ]
+    if energy.shape[1]:
+        energy[:, 0] += squared[:, : lead + start].sum(axis=1)
+    # Digital silence at the end (zero padding, the shift that removes latency) is no
+    # background noise: the noise floor is looked for before it, unless too little is
+    # left for that, as after a lone impulse, whose filtered ringing then shows no noise.
+    loud = np.flatnonzero(np.abs(ir) > _SILENCE * np.abs(ir).max(initial=0.0))
+    end = loud[-1] + 1 - start if len(loud) else 0
+    if end < 3 * _LUNDEBY_INTERVAL_S * sample_rate:
+        end = energy.shape[1]
+    found = []
+    for row in energy:
+        cross, level, range_db = (
+            noise_crosspoint(row[:end], sample_rate) if noise else (end, 0.0, math.inf)
+        )
+        found.append((len(row) if cross >= end else cross, level, range_db))
     return BandDecay(
         energy=energy,
         sample_rate=sample_rate,
@@ -498,7 +536,8 @@ def from_impulse_response(
 ) -> RoomParameters:
     """Parameters from a mono impulse response, split into octave bands.
 
-    ``reference_energy`` is the energy of the same source at 10 m in free field: per
+    ``ir`` is (samples,) or (samples, 1); an empty or silent one has every parameter
+    NaN. ``reference_energy`` is the energy of the same source at 10 m in free field: per
     band (as from :func:`free_field_reference`), or that of a broadband impulse, which
     for responses made by this package is 0.01. ``filters`` picks the band filters
     (see :func:`octave_bands`). With ``noise``, each band is cut where it sinks into the

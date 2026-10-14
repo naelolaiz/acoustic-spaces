@@ -174,7 +174,8 @@ def simulate(
 
     ``room`` may be a :class:`Room`, a :class:`Scene` or a scene file. ``sources`` and
     ``listeners`` pick names from the scene (all by default). ``threads=0`` uses every
-    core. Raises ``ValueError`` if :meth:`Room.problems` reports anything.
+    core. Raises ``ValueError`` if :meth:`Room.problems` reports anything or there is no
+    listener to simulate.
     """
     room = _as_room(room)
     problems = room.problems()
@@ -186,6 +187,8 @@ def simulate(
 
     chosen_sources = _pick(scene.sources, sources, "source")
     chosen_listeners = _pick(scene.listeners, listeners, "listener")
+    if not chosen_listeners:
+        raise ValueError("no listener to simulate")
 
     model = TraceModel.from_room(room)
     c = room.speed_of_sound()
@@ -201,8 +204,8 @@ def simulate(
         raise ValueError("the statistical late method needs a closed model")
 
     # Early paths end `transition` after the direct sound. Without a set transition the
-    # stochastic tracer hands over by order alone, and the statistical tail starts at
-    # the mixing time.
+    # stochastic tracer hands over by order alone, and the statistical method keeps
+    # early paths until the mixing time.
     if settings.transition_ms is not None:
         transition = settings.transition_ms * 1e-3
     elif statistical:
@@ -260,7 +263,8 @@ def simulate(
             late = late_stage.statistical_energy(
                 t60,
                 volume,
-                direct + transition,
+                direct,
+                paths,
                 max_time=length,
                 time_step=TIME_STEP,
                 speed_of_sound=c,

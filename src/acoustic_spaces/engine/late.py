@@ -7,19 +7,20 @@
   or a crossfade.
 - ``stochastic_map_energy``: the same tracer counting energy over a coverage map
   instead of at listeners.
-- ``statistical_energy``: an exponential decay from the Eyring reverberation time,
-  scaled by Barron's revised theory (reflected energy density c / V for a unit source),
-  starting at the transition time.
+- ``statistical_energy``: the reflected energy of Barron's revised theory, an
+  exponential decay from the direct sound on, less the energy of the early paths.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from acoustic_spaces.directivity import Directivity
+from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel
 
 _DECAY = 6.0 * math.log(10.0)  # 60 dB in nepers of energy
@@ -123,7 +124,7 @@ def _in_batches(trace, rays: int, splitting: bool):
     ``splitting`` in two batches where the second uses the weight window measured by
     the first. Returns (arrays, escaped rays, traced rays), each array the mean of the
     batches weighted by their share of rays."""
-    first = max(min(rays // 2, MIN_FIRST_RAYS), rays // 10) if splitting else rays
+    first = max(min(rays // 2, MIN_FIRST_RAYS), rays // 10, 1) if splitting else rays
     arrays, escaped, ray_energy, reflections, traced = trace(first, 0, np.zeros(0))
     if first < rays:
         # Each batch carries the whole source energy; weight them by their share of rays.
@@ -354,21 +355,56 @@ def stochastic_map_energy(
 def statistical_energy(
     reverberation_time: np.ndarray,
     volume_m3: float,
-    start_times: np.ndarray,
+    direct_times: np.ndarray,
+    early: Sequence[EarlyReflections] = (),
     *,
     max_time: float,
     time_step: float,
     speed_of_sound: float,
 ) -> LateEnergy:
-    """Exponential decay per band from each listener's start time onwards."""
+    """Energy per listener, band and time slot of a diffuse field, less the early paths.
+
+    In Barron's revised theory the reflected energy of a unit source arrives from the
+    direct sound (``direct_times``, s from emission) on at (c / V) exp(-13.8 t / T)
+    per second, t from emission and T the ``reverberation_time`` (``simulate`` passes
+    Eyring's, with air absorption). Its total, c T / (13.8 V) exp(-13.8 t_d / T), is
+    4 / A exp(-13.8 t_d / T) with A = -S ln(1 - a) the absorption area behind Eyring's
+    T: the Sabine form, as Barron has it. It leaves out that the first reflection is
+    already absorbed, as the classical 4 (1 - a) / (a S) does not, so it reads 0.2 dB
+    higher at a mean absorption of 0.1 and 0.8 dB higher at 0.3.
+
+    ``early`` holds each listener's early paths, part of that energy: the specular share
+    of reflections up to the early stage's order, until its transition. The late part is
+    everything else: the scattered share of each early reflection, the higher orders
+    before the transition and the whole field after it. It is Barron's energy less that
+    of the early paths (the direct sound aside), slot by slot. Where an early path brings
+    more than Barron's decay has delivered by its arrival, the late energy before it
+    makes up the difference: its running sum is the largest that never falls and never
+    rises above Barron's less the early paths'. No slot goes negative and the total
+    stays Barron's, unless the early paths alone carry more.
+    """
     t60 = np.asarray(reverberation_time, dtype=float)
+    rate = _DECAY / t60[:, None]  # (bands, 1)
     bins = int(math.ceil(max_time / time_step))
     edges = np.arange(bins + 1) * time_step
-    out = np.zeros((len(start_times), len(t60), bins))
-    for i, start in enumerate(np.asarray(start_times, dtype=float)):
-        lo = np.maximum(edges[:-1], start)
-        hi = np.maximum(edges[1:], start)
-        rate = _DECAY / t60[:, None]  # (bands, 1)
-        # Integral of (c / V) exp(-rate t) over each slot.
-        out[i] = speed_of_sound / volume_m3 / rate * (np.exp(-rate * lo) - np.exp(-rate * hi))
+    out = np.zeros((len(direct_times), len(t60), bins))
+    for i, start in enumerate(np.asarray(direct_times, dtype=float)):
+        # Integral of (c / V) exp(-rate t) from the direct sound to each slot edge, less
+        # the early reflections arrived by then.
+        arrived = (
+            speed_of_sound
+            / volume_m3
+            / rate
+            * (np.exp(-rate * start) - np.exp(-rate * np.maximum(edges, start)))
+        )
+        if i < len(early):
+            paths = early[i]
+            slot = (paths.delay_s / time_step).astype(np.int64)
+            keep = (paths.order > 0) & (slot < bins)
+            per_slot = np.zeros((bins, len(t60)))
+            np.add.at(per_slot, slot[keep], paths.energy[keep])
+            arrived[:, 1:] -= np.cumsum(per_slot, axis=0).T
+        # The largest non-decreasing curve from zero that stays below it.
+        late = np.maximum(np.minimum.accumulate(arrived[:, ::-1], axis=1)[:, ::-1], 0.0)
+        out[i] = np.diff(late, axis=1)
     return LateEnergy(energy=out, time_step=time_step)

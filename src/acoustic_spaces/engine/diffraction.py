@@ -16,6 +16,17 @@ the far side of its boundary, where the edge cuts the wave off, the terms make a
 At the boundary itself both sides carry a quarter of the wave's energy, so levels stay
 continuous where the direct sound or a reflection disappears behind an edge.
 
+Each specular path interferes with the terms of its own wave only, as it adds to the
+other paths in energy. In the diffracted path the terms of all the waves add up
+coherently, as they must deep in the shadow, except near each wave's boundary, where
+they stand in for the geometric wave they continue and add in energy too: a wave adds
+coherently by the magnitude of its transition function, 0 on its boundary and 1 well
+off it. Coherent all the way, levels would step by up to 4 dB where one wave's boundary
+is crossed while another's terms are there; in energy all the way, the shadow of a
+screen would be 3 dB deeper than Maekawa's chart. As it is, deep behind the corner of
+an L-shaped room the 63 Hz band is 0.7 dB below the coherent sum, the 125 Hz band 0.4
+dB, and from 500 Hz up the two agree within 0.1 dB.
+
 With ``first_order`` diffraction the same is done for the first-order reflections: sound
 that reflects off a plane and then bends over an edge, and sound that bends over an edge
 and then reflects.
@@ -541,7 +552,11 @@ class EdgeDiffraction:
         t_k = t_s + (t_r - t_s) * rho_s / (rho_s + rho_r)
         r1 = np.hypot(rho_s, t_k - t_s)
         r2 = np.hypot(rho_r, t_r - t_k)
-        ok = (t_k >= 0.0) & (t_k < edges.length[edge])
+        # At an end of the edge that lies in the plane, the path reflecting there before
+        # the edge and the one reflecting after it are the same path: only the first
+        # counts at the start of the edge, only the second at its end.
+        length = edges.length[edge]
+        ok = np.where(kind == 2, (t_k > 0.0) & (t_k <= length), (t_k >= 0.0) & (t_k < length))
         ok &= (r1 + r2) / self.speed_of_sound <= max_delay_s
         if not ok.any():
             return None
@@ -552,8 +567,11 @@ class EdgeDiffraction:
         point = edges.start[edge] + t_k[:, None] * edges.direction[edge]
 
         # Unobstructed, with the reflection on the expected plane before or after the
-        # edge. Rays start just off the edge, in the middle of its open side.
-        start = point + _OFFSET * self.size * edges.bisector()[edge]
+        # edge. Rays start just off the edge, in the middle of its open side, and just
+        # inside its ends (where a plane they may be meant to reflect off begins).
+        offset = _OFFSET * self.size
+        along = np.clip(t_k, offset, edges.length[edge] - offset) - t_k
+        start = point + along[:, None] * edges.direction[edge] + offset * edges.bisector()[edge]
         reflected = np.full(len(edge), -1, dtype=np.int64)
         bounce = np.zeros((len(edge), 3))
         ok = np.ones(len(edge), dtype=bool)
@@ -644,14 +662,27 @@ class EdgeDiffraction:
             * common[:, None]
         )  # (C, 3, B, M): incident, off face 0, off face n
 
-        field = np.sum(waves * (lit == (found >= 0))[:, :, None, None], axis=1)  # (C, B, M)
-        energy = np.mean(np.abs(field) ** 2, axis=2)  # (C, B)
+        # The waves' terms add up coherently, as one diffracted wave, except in the
+        # transition zone round each wave's boundary: there its terms stand in for the
+        # geometric wave they continue and add in energy, as the specular paths do. A
+        # wave adds coherently by |F(X)| of its boundary, 0 on it and 1 well off it.
+        counted = waves * (lit == (found >= 0))[:, :, None, None]
+        x = (
+            2.0
+            * (k * length_param[:, None, None])[:, None]
+            * np.sin(0.5 * angle)[..., None, None] ** 2
+        )
+        share = np.abs(transition(x))  # (C, 3, B, M)
+        field = np.sum(share * counted, axis=1)  # (C, B, M)
+        alone = np.sum((1.0 - share**2) * np.abs(counted) ** 2, axis=1)
+        energy = np.mean(np.abs(field) ** 2 + alone, axis=2)  # (C, B)
 
         # The diffracted wave arrives on its own, but interferes with the specular
         # paths of its lit terms, which arrive at almost the same time near the
-        # boundaries: those paths take the cross terms. On the boundary a path's energy
-        # and the diffracted wave's then add up to a quarter of the path's on its own,
-        # as the diffracted wave alone carries on the dark side.
+        # boundaries: each of those paths takes the cross term with its own wave's
+        # terms. On the boundary a path's energy and the diffracted wave's then add up
+        # to a quarter of the path's on its own, as the diffracted wave alone carries on
+        # the dark side.
         out = paths
         rows, groups = np.nonzero(lit & (found >= 0))
         if len(rows):
@@ -662,12 +693,24 @@ class EdgeDiffraction:
             # interference of two waves that arrive delta metres apart fades by sinc.
             delta = distance[rows] - paths.distance_m[targets]
             fade = np.sinc(np.outer(delta / self.speed_of_sound, self.slice_hz))
-            cross = 2.0 * fade * np.mean(np.real(specular * np.conj(field[rows])), axis=2)
+            own = waves[rows, groups]
+            cross = 2.0 * fade * np.mean(np.real(specular * np.conj(own)), axis=2)
             total = paths.energy.copy()
             np.add.at(total, targets, cross)
+            # Where the cross terms take more than a path has, the rest comes off the
+            # diffracted paths that took it, in proportion, so the sum stays the same;
+            # unless they have less still (two of them nearly cancelling each other).
+            taken = np.maximum(-cross, 0.0)
+            owed = np.zeros_like(total)
+            np.add.at(owed, targets, taken)
+            short = np.maximum(-total, 0.0)[targets]
+            np.add.at(energy, rows, -short * taken / np.maximum(owed[targets], 1e-300))
+            energy = np.maximum(energy, 0.0)
             out = _replace_energy(paths, np.maximum(total, 0.0))
 
-        reference = 1.0 / (4.0 * np.pi * float(np.sum((listener - self.source) ** 2)))
+        # The direct sound in free field; a listener on the source counts as just off it.
+        squared = max(float(np.sum((listener - self.source) ** 2)), (_TOLERANCE * self.size) ** 2)
+        reference = 1.0 / (4.0 * np.pi * squared)
         keep = energy.max(axis=1) >= MIN_RELATIVE_ENERGY * reference
         keep &= distance / self.speed_of_sound <= max_delay_s
         if not keep.any():

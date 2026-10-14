@@ -86,11 +86,11 @@ def test_exhaustive_search_has_a_limit() -> None:
         early_stage.exhaustive_candidates(model, np.array([2.0, 2.0, 1.0]), 8, limit=1000)
 
 
-def _diffuse_box(simulation: dict) -> Room:
+def _diffuse_box(simulation: dict, scattering: float = 1.0) -> Room:
     return Room.from_scene(
         _scene(
             [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.3, 0.3],
-            1.0,
+            scattering,
             source=(2.1, 2.3, 1.7),
             listeners=[(5.9, 3.7, 1.2), (6.5, 1.1, 2.1)],
             simulation={"seed": 7, "ir_length_s": 2.5, **simulation},
@@ -315,6 +315,59 @@ def test_statistical_tail_follows_eyring() -> None:
         np.testing.assert_allclose(response.parameters().t30, eyring, rtol=0.03)
 
 
+@pytest.mark.parametrize("scattering", [0.3, 1.0])
+def test_statistical_and_stochastic_methods_agree(scattering) -> None:
+    # The shoebox example's box with the same absorption on every surface, so the field
+    # is about diffuse. Over both listeners, every band and seeds 3, 5, 7 and 11, the
+    # statistical G is within 0.23 dB of the stochastic one at scattering 0.3 and within
+    # 0.42 dB at 1.0 (before its late part held the scattered share of the early
+    # reflections and the paths above the early order, it was up to 0.9 and 1.8 dB low).
+    # Its C80 is up to 1.57 and 2.21 dB higher, from 1 kHz up, where the tracer decays up
+    # to 7 % slower than Eyring; the statistical C80 is Barron's within 0.03 dB. With the
+    # example's own materials (absorbing ceiling, smooth walls) the tail at 0.3 is far
+    # from diffuse and C80 differs by up to 9 dB at 4 and 8 kHz, beyond any statistical
+    # tail.
+    results = {
+        method: simulate(_diffuse_box({"late": {"method": method, "rays": 20_000}}, scattering))
+        for method in ("stochastic_ray_tracing", "statistical")
+    }
+    for key, response in results["stochastic_ray_tracing"].responses.items():
+        statistical = results["statistical"][key]
+        a, b = response.parameters(), statistical.parameters()
+        np.testing.assert_allclose(b.g, a.g, atol=0.5)
+        np.testing.assert_allclose(b.c80, a.c80, atol=2.5)
+        assert np.all(statistical.late >= 0)
+
+
+def test_statistical_energy_keeps_barrons_total_around_early_paths() -> None:
+    # A reflection 5 ms after the direct sound brings more than Barron's decay delivers
+    # by then: the late part waits until the decay has caught up, and the total stays.
+    t60, volume, c, direct = 1.0, 100.0, 343.0, 0.0105
+    rate = 6.0 * math.log(10.0) / t60
+    total = c / volume / rate * math.exp(-rate * direct)
+    delay = np.array([direct, direct + 0.005])
+    paths = early_stage.EarlyReflections(
+        order=np.array([0, 1]),
+        delay_s=delay,
+        distance_m=c * delay,
+        direction=np.zeros((2, 3)),
+        energy=np.array([[1.0], [0.1 * total]]),  # the direct sound is not reflected
+    )
+    late = late_stage.statistical_energy(
+        np.array([t60]),
+        volume,
+        np.array([direct]),
+        [paths],
+        max_time=5.0,
+        time_step=1e-3,
+        speed_of_sound=c,
+    ).energy[0, 0]
+    caught_up = int((direct - math.log(0.9) / rate) / 1e-3)  # slot where it has 0.1 * total
+    assert np.all(late >= 0)
+    assert np.all(late[:caught_up] == 0) and late[caught_up + 1] > 0
+    assert late.sum() + 0.1 * total == pytest.approx(total, rel=1e-9)
+
+
 def test_seed_and_threads_give_identical_results() -> None:
     settings = {"late": {"rays": 3000}, "ir_length_s": 0.5}
     a = simulate(_diffuse_box(settings), threads=1)
@@ -331,6 +384,16 @@ def test_simulate_checks_the_room() -> None:
     scene = _scene([0.1] * 8, 0.1, source=(2, 2, 1), listeners=[(5, 4, 1)])
     with pytest.raises(ValueError, match="unknown listener"):
         simulate(scene, listeners=["nobody"])
+    with pytest.raises(ValueError, match="no listener"):
+        simulate(scene, listeners=[])
+
+
+def test_a_single_ray_still_traces() -> None:
+    # Splitting traces a first batch before the rest; with one ray, that is all of them.
+    result = simulate(_diffuse_box({"late": {"rays": 1}, "ir_length_s": 0.2}))
+    assert result.details["s"]["rays"] == 1
+    for response in result:
+        assert np.all(np.isfinite(response.late)) and np.all(response.late >= 0)
 
 
 def test_particles_spread_reflect_and_fade() -> None:
