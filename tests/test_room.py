@@ -111,6 +111,28 @@ def test_points_outside_and_unused_assignments(tmp_path: Path) -> None:
     assert any("balcony" in w for w in room.warnings())
 
 
+def test_listener_at_a_source_is_a_problem(tmp_path: Path) -> None:
+    # At the source the direct sound has no finite level: the response came out NaN.
+    path = _scene(
+        tmp_path,
+        listeners=[
+            {"name": "on-talker", "position": [2.0, 3.0, 1.5]},
+            {"name": "near-talker", "position": [2.005, 3.0, 1.5]},
+            {"name": "close", "position": [2.02, 3.0, 1.5]},
+        ],
+    )
+    room = Room.from_yaml(path)
+    problems = room.problems()
+    assert len(problems) == 2
+    for problem, name in zip(problems, ["on-talker", "near-talker"], strict=True):
+        assert problem.startswith(f"listener {name!r} at [")
+        assert "within 1 cm of source 'talker'" in problem
+    from acoustic_spaces.engine import simulate
+
+    with pytest.raises(ValueError, match="within 1 cm of source 'talker'"):
+        simulate(room, listeners=["close"])
+
+
 def test_flipped_faces_do_not_put_points_outside(tmp_path: Path) -> None:
     # The shoebox with its floor written the other way round.
     obj = tmp_path / "flipped.obj"

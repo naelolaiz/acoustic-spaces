@@ -30,6 +30,9 @@ from acoustic_spaces.geometry import (
 from acoustic_spaces.scene import Scene
 
 UNASSIGNED = -1
+#: A listener closer than this (metres) to a source has no response: the direct
+#: sound's level grows without bound as the distance goes to zero.
+MIN_SOURCE_DISTANCE_M = 0.01
 
 
 def _label_text(label: tuple[str, ...]) -> str:
@@ -174,6 +177,15 @@ class Room:
             for item, ok in zip(items, inside, strict=True):
                 if not ok:
                     out.append(f"{kind} {item.name!r} at {list(item.position)} is outside the room")
+        for listener in self.scene.listeners:
+            for source in self.scene.sources:
+                if math.dist(listener.position, source.position) < MIN_SOURCE_DISTANCE_M:
+                    out.append(
+                        f"listener {listener.name!r} at {list(listener.position)} is within "
+                        f"{MIN_SOURCE_DISTANCE_M * 100:g} cm of source {source.name!r}, too close "
+                        "for a response (the direct sound has no finite level there); move "
+                        "them apart"
+                    )
         return out
 
     def warnings(self) -> list[str]:

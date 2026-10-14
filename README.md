@@ -308,10 +308,10 @@ Polygons are triangulated, duplicate vertices merged and degenerate faces droppe
 and faces that meet along an edge are turned to agree with each other (each part of
 the model keeps the orientation most of its area has), so a few faces flipped by the
 exporter do not spoil the volume or the inside checks.
-`validate` then reports surfaces without a material and sources or listeners
-outside the room; it warns about models that are not closed (rays would escape)
-and assignments that match nothing. Normals may point either way: absorption is
-applied on both sides.
+`validate` then reports surfaces without a material, sources or listeners
+outside the room and listeners within 1 cm of a source; it warns about models that
+are not closed (rays would escape) and assignments that match nothing. Normals may
+point either way: absorption is applied on both sides.
 
 ### Materials
 
