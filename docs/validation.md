@@ -1,10 +1,10 @@
 # Validation
 
-This report sums up how far the results of acoustic_spaces 1.0 can be trusted: what the
+This report sums up how far the results of acoustic_spaces can be trusted: what the
 test suite checks against theory on every change, how the simulation compares with
-another program, [pyroomacoustics](https://github.com/LCAV/pyroomacoustics), and how
-much of a block's time the real-time convolver needs. It ends with what has not been
-validated yet.
+another program, [pyroomacoustics](https://github.com/LCAV/pyroomacoustics), and with
+measurements in two real rooms, and how much of a block's time the real-time convolver
+needs. It ends with what has not been validated yet.
 
 ## Checks against theory, on every change
 
@@ -224,6 +224,94 @@ where the sound field is less uniform than in the room as a whole.
 - Where the theory is clear (the diffuse box), this package agrees with Eyring and with
   Barron's revised theory; pyroomacoustics counts the scattered energy twice.
 
+## Measured rooms (BRAS)
+
+The *Benchmark for Room Acoustical Simulation* (BRAS; Aspöck, Brinkmann, Ackermann,
+Weinzierl and Vorländer, 2020,
+[DOI 10.14279/depositonce-6726.3](https://doi.org/10.14279/depositonce-6726.3), CC BY-SA
+4.0) measured real rooms and published their models, the absorption and scattering of
+their surfaces, and the impulse responses. Two of its rooms are in `validation/bras` as
+scenes (its README says how they were made):
+
+- **CR2**, a seminar room of 146 m³ with five surface materials;
+- **CR3**, a chamber music hall of 3331 m³ with upholstered seating, stage panels and
+  structured plaster, seven materials.
+
+In each, a dodecahedron loudspeaker stood at two positions and an omnidirectional
+microphone at five, giving ten measured responses. Each scene was simulated as it stands,
+with this package's defaults: ray tracing up to the 3rd order, first-order edge
+diffraction and 100,000 late rays, in the air measured on the day. Simulated and measured
+parameters were compared pair by pair in just noticeable differences
+(`acoustic_spaces.compare`, the same JNDs as `acoustic-spaces compare`) and averaged over
+the ten pairs. The measured responses were analysed by this package too. Its octave values
+are within 4 % of the third-octave averages BRAS publishes for T20 and EDT, and within
+0.5 dB for C80, from 500 Hz to 4 kHz. Below that the octave holds three third-octave bands
+whose values differ a lot, so averaging them is not the same analysis. G is left out
+because the responses have no free-field reference.
+
+BRAS gives two sets of absorption coefficients. The **fitted** set was adjusted until
+Eyring's formula gave the measured reverberation time; the scenes use it. The
+**initial** set is BRAS's estimate before that, from tables and measurements of the
+materials, which is the blind case (`--materials initial`).
+
+Mean absolute difference from 125 Hz to 4 kHz in JNDs, and how many of the 60 pair and
+band values are within one JND:
+
+| | CR2 fitted | CR3 fitted | CR2 initial | CR3 initial |
+|---|---:|---:|---:|---:|
+| EDT | 1.7 (18) | 3.8 (4) | 5.3 (8) | 6.4 (11) |
+| T20 | 1.5 (16) | 4.6 (0) | 5.3 (9) | 7.0 (15) |
+| T30 | 1.5 (22) | 4.9 (0) | 5.1 (7) | 7.2 (12) |
+| C50 | 1.0 (41) | 1.2 (34) | 1.6 (27) | 1.6 (19) |
+| C80 | 0.7 (47) | 1.0 (40) | 1.6 (28) | 1.4 (26) |
+| D50 | 1.0 (42) | 1.3 (32) | 1.6 (27) | 1.8 (17) |
+| Ts | 1.1 (30) | 1.4 (22) | 3.0 (15) | 3.0 (21) |
+
+![CR2, fitted absorption](validation/bras_CR2_fitted.png)
+
+**Seminar room, fitted absorption.** From 250 Hz to 4 kHz the reverberation time comes
+out 0 to 10 % long (T20 2.07 s against 1.94 s at 1 kHz), one to two JNDs. C50, C80 and
+D50 are within one JND in most bands, slightly low, as a slightly long decay predicts. At
+8 kHz the simulated decay is about 20 % short, and so is Eyring's formula with the same
+absorption and air (0.93 s against 1.11 s measured; from 500 Hz to 4 kHz it is within
+3 %). So the fitted coefficients assume less air absorption in that octave than
+ISO 9613-1 gives at its centre frequency. A measured decay follows the octave's slowest
+part, its lowest third (6.3 kHz), which could explain it (inferred, not tested).
+
+![CR3, fitted absorption](validation/bras_CR3_fitted.png)
+
+**Chamber music hall, fitted absorption.** The clarity measures agree within about one
+JND, but the reverberation time is 20 to 32 % long from 63 Hz to 2 kHz (T20 1.65 s
+against 1.34 s at 1 kHz), and EDT 11 to 24 % up to 4 kHz. It is the model hall as a whole, not the
+listener positions. The total sound energy traced in the room without listeners (as in
+the cross-check above, with scattering averaged over the bands) decays as slowly: T20
+1.55 to 1.73 s from 250 Hz to 2 kHz, against 1.28 to 1.46 s measured. Eyring's formula
+with the same absorption and air gives 1.28 to 1.49 s, within 5 % of the measurement
+from 63 Hz to 4 kHz, as the fitting intends. So in the model,
+sound reaches the absorbing seating less often than Eyring's diffuse field assumes, and
+less often than in the real hall, whose details the simplified BRAS model smooths away.
+
+Vector-based scattering, the alternative the cross-check left open, closes about half of
+that gap in CR3, with the room's energy decaying in 1.41 to 1.56 s. In CR2, though, it
+makes the decay 5 to 23 % shorter than measured from 250 Hz to 4 kHz (1.75 s against
+2.00 s at 500 Hz), where this package's model is within 7 %. Neither model fits both rooms. The v3 milestones
+on scattering (scattering that depends on the size of a surface and on frequency) and on
+fitting absorption to measured parameters with this tracer instead of Eyring's formula
+will be measured against these two rooms.
+
+![CR2, initial absorption](validation/bras_CR2_initial.png)
+
+![CR3, initial absorption](validation/bras_CR3_initial.png)
+
+**Initial absorption.** With the absorption estimated before fitting, the decay at 63
+and 125 Hz comes out 1.6 to 2 times as long as measured in both rooms, and at 250 Hz in
+the hall too (T20 2.66 s against 1.34 s in CR2 at 125 Hz). The initial coefficients have
+far less absorption there than the fitted ones. In real rooms much of it comes from
+structures that flex, such as panels, windows and doors, which tables of materials
+rarely capture. From 1 to 4 kHz the seminar room's decay is 7 to 23 % short; at 2 and
+4 kHz the hall's is within 5 %. This is the error to expect from tabulated coefficients
+alone, before a room has been measured.
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -312,9 +400,9 @@ its peak (single precision).
 
 ## Not validated yet
 
-- **Measurements.** No simulated room has been compared with measurements of the real
-  one yet. The BRAS database (Aspöck et al., TU Berlin) has measured rooms with acoustic
-  material data, but its models are SketchUp files that need exporting to OBJ first.
+- **More measured rooms.** Two rooms have been compared with measurements, by their
+  ISO 3382-1 parameters. G, the spatial outputs (BRAS also has binaural responses) and
+  BRAS's auditorium, CR4, whose SketchUp file no free reader opens, have not.
 - **Wave effects.** Above the wave solver's bands the simulation is geometric. Edge
   diffraction is modelled (UTD, for the direct sound and first-order reflections) and
   room modes by the wave solver, both checked against theory but not against
@@ -335,6 +423,8 @@ python -m pip install pyroomacoustics matplotlib
 python validation/pyroomacoustics_crosscheck.py --json results.json --plots docs/validation
 python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
+python validation/bras_validation.py --json bras.json --plots docs/validation
+python validation/bras_validation.py --materials initial --plots docs/validation
 ```
 
 The cross-check takes about 6 minutes on 4 cores, the benchmark about 2 minutes and the
