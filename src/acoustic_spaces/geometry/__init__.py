@@ -6,7 +6,7 @@ layer) so the scene's ``assignments`` can map them to acoustic materials. Simple
 can also be built from dimensions (:func:`box_mesh`, :func:`extruded_mesh`).
 """
 
-from acoustic_spaces.geometry.builders import box_mesh, extruded_mesh
+from acoustic_spaces.geometry.builders import box_mesh, extruded_mesh, plan_problem
 from acoustic_spaces.geometry.checks import (
     MeshReport,
     check_mesh,
@@ -28,5 +28,6 @@ __all__ = [
     "distance_to_surface",
     "extruded_mesh",
     "load_mesh",
+    "plan_problem",
     "points_inside",
 ]

@@ -247,5 +247,20 @@ def test_extruded_floor_plan_is_a_closed_room(clockwise: bool) -> None:
     assert check_mesh(box).volume_m3 == pytest.approx(144.0)
     with pytest.raises(ValueError, match="positive"):
         box_mesh((8.0, 0.0, 3.0))
-    with pytest.raises(ValueError, match="no area"):
+    with pytest.raises(ValueError, match="turns straight back"):
         extruded_mesh(np.array([[0, 0], [1, 1], [2, 2]]), 3.0)
+    with pytest.raises(ValueError, match="walls 1 and 3 of the floor plan cross"):
+        extruded_mesh(np.array([[0, 0], [1, 1], [1, 0], [0, 1]]), 3.0)
+
+
+def test_plan_problems() -> None:
+    from acoustic_spaces.geometry import plan_problem
+
+    assert plan_problem(np.array([[0, 0], [24, 0], [24, 8], [8, 8], [8, 20], [0, 20]])) is None
+    assert plan_problem(np.array([[0, 0], [2, 0], [4, 0], [4, 4], [0, 4]])) is None  # straight
+    assert "three" in plan_problem(np.array([[0, 0], [1, 0]]))
+    assert "corners 2 and 3" in plan_problem(np.array([[0, 0], [1, 0], [1, 0], [0, 1]]))
+    # A corner that touches another wall, and a spike that runs back on itself.
+    assert "walls 1 and 3" in plan_problem(np.array([[0, 0], [4, 0], [4, 4], [2, 0], [0, 4]]))
+    spike = np.array([[0, 0], [4, 0], [4, 4], [2, 4], [2, 2], [2, 4], [0, 4]])
+    assert "back at corner 5" in plan_problem(spike)

@@ -13,18 +13,25 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6.QtWidgets")
 pytest.importorskip("pyvistaqt")
 
-from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtCore import QPoint, QPointF, Qt  # noqa: E402
+from PySide6.QtGui import QWheelEvent  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from acoustic_spaces.audio import write_wav  # noqa: E402
 from acoustic_spaces.examples import example_path, list_examples  # noqa: E402
+from acoustic_spaces.geometry import RoomMesh  # noqa: E402
 from acoustic_spaces.gui.document import (  # noqa: E402
     Document,
     EditError,
     box_scene,
+    floor_height,
+    follow_floor,
     model_scene,
+    plan_corners,
     unique_name,
 )
+from acoustic_spaces.gui.plan_view import grid_step, outline_segments, snap  # noqa: E402
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
 from acoustic_spaces.gui.worker import MapJob, SimulationJob  # noqa: E402
 from acoustic_spaces.room import Room  # noqa: E402
@@ -154,6 +161,92 @@ def test_model_scene_puts_points_inside(qapp) -> None:
     assert scene.name == "concert_hall"
     assert room.problems() == []
     assert scene.sources[0].position != scene.listeners[0].position
+
+
+def test_floor_plans_in_the_document(qapp) -> None:
+    document = Document(box_scene())
+    np.testing.assert_allclose(plan_corners(document.scene), [[0, 0], [8, 0], [8, 6], [0, 6]])
+    # Moving a corner of a box makes it a floor plan with the same walls.
+    document.set_floor_plan([[0, 0], [8, 0], [8, 6], [3, 6], [3, 4], [0, 4]], "move corner")
+    geometry = document.scene.geometry
+    assert geometry.box is None and geometry.height == 3.0 and len(geometry.floor_plan) == 6
+    assert document.undo_text() == "move corner" and document.room.problems() == []
+    with pytest.raises(EditError, match="cross"):
+        document.set_floor_plan([[0, 0], [8, 0], [0, 6], [8, 6]])
+    assert len(document.scene.geometry.floor_plan) == 6
+    document.undo()
+    assert document.scene.geometry.box == (8.0, 6.0, 3.0)
+
+    # Plans in other units keep them.
+    document.edit(
+        "cm",
+        lambda d: d.update(
+            geometry={"floor_plan": [[0, 0], [800, 0], [0, 600]], "height": 300, "units": "cm"}
+        ),
+    )
+    np.testing.assert_allclose(plan_corners(document.scene), [[0, 0], [8, 0], [0, 6]])
+    document.set_floor_plan([[0, 0], [9, 0], [0, 6]])
+    assert document.scene.geometry.floor_plan[1] == (900.0, 0.0)
+
+    # A drawn room keeps the height; points that would be outside move inside, in the
+    # same arrangement.
+    document = Document(box_scene())
+    moved = document.draw_floor_plan([[10, 10], [20, 10], [20, 15], [10, 15]])
+    assert moved == ["source", "listener"] and document.room.problems() == []
+    source, listener = document.scene.sources[0], document.scene.listeners[0]
+    assert source.position[0] < listener.position[0] and source.position[2] == 1.5
+    assert document.undo_text() == "draw floor plan"
+    assert document.draw_floor_plan([[9, 9], [21, 9], [21, 16], [9, 16]], 4.0) == []
+    assert document.scene.geometry.height == 4.0
+    with pytest.raises(EditError, match="cross"):
+        document.draw_floor_plan([[0, 0], [1, 1], [1, 0], [0, 1]])
+    document.move_point("listeners", 0, (1.0000000001, 2.0, 1.2))
+    assert document.scene.listeners[0].position == (1.0, 2.0, 1.2)
+    assert document.undo_text() == "move listener"
+
+    model = Document(model_scene(EXAMPLES / "concert_hall" / "concert_hall.obj"))
+    assert plan_corners(model.scene) is None
+    with pytest.raises(EditError, match="model file"):
+        model.set_floor_plan([[0, 0], [1, 0], [0, 1]])
+    segments, labels = outline_segments(model.room)
+    assert len(segments) == len(labels) > 4
+
+
+def _ramp_mesh() -> RoomMesh:
+    """A floor from x = 0 to 10 rising 0.2 m per metre, then a platform 3 m higher."""
+    vertices = np.array(
+        [
+            [0, 0, 0],
+            [10, 0, 2],
+            [10, 4, 2],
+            [0, 4, 0],
+            [10, 0, 5],
+            [20, 0, 5],
+            [20, 4, 5],
+            [10, 4, 5],
+        ],
+        dtype=float,
+    )
+    faces = np.array([[0, 1, 2], [0, 2, 3], [4, 5, 6], [4, 6, 7]])
+    return RoomMesh(vertices, faces, np.zeros(4, dtype=np.int64), [("floor",)])
+
+
+def test_dragged_points_follow_the_floor() -> None:
+    mesh = _ramp_mesh()
+    assert floor_height(mesh, 5.0, 2.0) == pytest.approx(1.0)
+    assert floor_height(mesh, 25.0, 2.0) is None
+    x, y, z = follow_floor(mesh, (2.0, 2.0, 1.6), (7.0, 1.0))
+    assert (x, y) == (7.0, 1.0) and z == pytest.approx(2.6)  # 1.2 above the rake
+    # Onto the platform, 3 m higher: too big a step to follow.
+    assert follow_floor(mesh, (9.0, 2.0, 3.0), (15.0, 2.0))[2] == pytest.approx(3.0)
+    assert follow_floor(mesh, (5.0, 2.0, 2.2), (25.0, 2.0))[2] == pytest.approx(2.2)
+
+
+def test_plan_helpers() -> None:
+    np.testing.assert_allclose(snap([1.04, -2.96], 0.1), [1.0, -3.0])
+    np.testing.assert_allclose(snap([1.04, -2.96], 0.0), [1.04, -2.96])
+    assert grid_step(40.0) == 2.0  # 60 pixels at 40 pixels per metre
+    assert grid_step(600.0) == 0.1 and grid_step(1.0) == 100.0
 
 
 def test_placement_position(qapp) -> None:
@@ -518,6 +611,166 @@ def test_entry_points_explain_the_missing_extra(monkeypatch, capsys) -> None:
     assert "gui extra" in capsys.readouterr().err
 
 
+# -- the plan ---------------------------------------------------------------------------
+
+
+def _plan(window, qapp):
+    window.views.setCurrentWidget(window.plan)
+    qapp.processEvents()
+    window.plan.fit()
+    return window.plan.canvas
+
+
+def _at(canvas, point) -> QPoint:
+    p = canvas.to_screen(point)
+    return QPoint(round(p.x()), round(p.y()))
+
+
+def _drag(qapp, widget, start: QPoint, end: QPoint) -> None:
+    QTest.mousePress(widget, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+    for t in (0.2, 0.6, 1.0):
+        step = QPoint(
+            round(start.x() + t * (end.x() - start.x())),
+            round(start.y() + t * (end.y() - start.y())),
+        )
+        QTest.mouseMove(widget, step)
+    QTest.mouseRelease(widget, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, end)
+    qapp.processEvents()
+
+
+def test_plan_drags_corners_and_points(window, qapp) -> None:
+    canvas = _plan(window, qapp)
+    document = window.document
+    assert canvas.mode == "box" and canvas.grab().width() > 100
+    # A box corner dragged (and snapped to the 10 cm grid): now a floor plan.
+    _drag(qapp, canvas, _at(canvas, (8, 6)), _at(canvas, (9.02, 7.03)))
+    assert document.scene.geometry.floor_plan[2] == (9.0, 7.0)
+    assert document.scene.geometry.height == 3.0 and canvas.mode == "plan"
+    assert "now a floor plan" in window.messages.toPlainText()
+    # A drag that would make walls cross is refused.
+    _drag(qapp, canvas, _at(canvas, (9, 7)), _at(canvas, (4, -2)))
+    assert document.scene.geometry.floor_plan[2] == (9.0, 7.0)
+    assert "Not moved: walls" in window.messages.toPlainText()
+    # Points move by dragging, keeping their height.
+    _drag(qapp, canvas, _at(canvas, (5.6, 3.0)), _at(canvas, (6.01, 4.02)))
+    assert document.scene.listeners[0].position == (6.0, 4.0, 1.2)
+    assert window.selection == ("listeners", 0) and document.undo_text() == "move listener"
+    # A double-click on a wall adds a corner; a click selects the wall.
+    QTest.mouseDClick(
+        canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (4, 0))
+    )
+    qapp.processEvents()
+    assert document.scene.geometry.floor_plan[:3] == [(0.0, 0.0), (4.0, 0.0), (8.0, 0.0)]
+    QTest.mouseClick(
+        canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (6, 0))
+    )
+    kind, label = window.selection
+    assert kind == "surface" and document.room.mesh.labels[label][0] == "wall_2"
+    # The right-click menu removes corners and places points.
+    _menu(canvas, _at(canvas, (4, 0)), "Remove corner")
+    assert len(document.scene.geometry.floor_plan) == 4
+    _menu(canvas, _at(canvas, (2, 2)), "Place listener here")
+    assert document.scene.listeners[-1].position == (2.0, 2.0, 1.2)
+    # Empty space: the scene; the wheel zooms about the mouse.
+    QTest.mouseClick(
+        canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (4, 3))
+    )
+    assert window.selection == ("scene", None)
+    pixel = QPointF(_at(canvas, (4, 3)))
+    before = canvas.to_world(pixel)
+    wheel = QWheelEvent(
+        pixel,
+        canvas.mapToGlobal(pixel),
+        QPoint(0, 0),
+        QPoint(0, 240),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    scale = canvas._scale
+    QApplication.sendEvent(canvas, wheel)
+    assert canvas._scale > scale
+    np.testing.assert_allclose(canvas.to_world(pixel), before, atol=1e-9)
+    canvas.grab()
+
+
+def _menu(canvas, at: QPoint, choice: str) -> None:
+    """Pick ``choice`` from the right-click menu at ``at``."""
+    menu = canvas.context_menu(QPointF(at))
+    texts = [action.text() for action in menu.actions()]
+    assert choice in texts, texts
+    menu.actions()[texts.index(choice)].trigger()
+
+
+def test_plan_draws_rooms_and_places_points(window, qapp, monkeypatch) -> None:
+    canvas = _plan(window, qapp)
+    window.draw_room()
+    assert canvas.mode == "drawing" and window.plan.draw.isChecked()
+    corners = [(0, 0), (10, 0), (10, 4), (4, 4), (4, 9), (0, 9)]
+    for corner in corners:
+        QTest.mouseClick(
+            canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, corner)
+        )
+        QTest.mouseMove(canvas, _at(canvas, (5, 5)))
+    canvas.grab()  # the drawing so far, with the length of the next wall
+    QTest.mouseClick(
+        canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (0, 0))
+    )
+    qapp.processEvents()
+    geometry = window.document.scene.geometry
+    assert geometry.floor_plan == [tuple(map(float, c)) for c in corners] and geometry.height == 3.0
+    assert window.document.room.problems() == [] and window.selection == ("geometry", None)
+    assert canvas.mode == "plan" and not window.plan.draw.isChecked()
+
+    # A drawing that crosses itself is not a room; Esc stops drawing.
+    window.plan.draw.click()
+    for corner in [(0, 0), (4, 4), (4, 0), (0, 4)]:
+        QTest.mouseClick(
+            canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, corner)
+        )
+    QTest.keyClick(canvas, Qt.Key.Key_Backspace)
+    assert len(canvas.drawing) == 3
+    QTest.mouseClick(
+        canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (0, 4))
+    )
+    QTest.keyClick(canvas, Qt.Key.Key_Return)
+    assert "Not a room yet: walls" in window.messages.toPlainText() and canvas.mode == "drawing"
+    window._escape()
+    assert canvas.mode == "plan" and len(window.document.scene.geometry.floor_plan) == 6
+
+    # Placing from the plan: at the usual height over the floor.
+    window.start_placing("sources")
+    assert canvas.mode == "placing"
+    QTest.mouseClick(
+        canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (2, 7))
+    )
+    assert window.document.scene.sources[-1].position == (2.0, 7.0, 1.5)
+    assert window.selection == ("sources", 1)
+
+    # Drawing over a model file asks first.
+    window.open_example(example_path("concert_hall"))
+    canvas = _plan(window, qapp)
+    assert canvas.mode == "file"
+    canvas.grab()
+    asked = []
+    monkeypatch.setattr(window, "confirm_replace_model", lambda: asked.append(1) or False)
+    window.plan.canvas.drawn.emit([[0, 0], [30, 0], [30, 20], [0, 20]])
+    assert asked and window.document.scene.geometry.file is not None
+    monkeypatch.setattr(window, "confirm_replace_model", lambda: True)
+    window.plan.canvas.drawn.emit([[0, 0], [30, 0], [30, 20], [0, 20]])
+    assert window.document.scene.geometry.floor_plan is not None
+    assert window.document.room.problems() == []
+
+
+def test_new_room_from_a_floor_plan(window, qapp) -> None:
+    window.new_floor_plan()
+    assert window.views.currentWidget() is window.plan and window.plan.canvas.mode == "drawing"
+    window.plan.canvas.drawn.emit([[0, 0], [5, 0], [5, 5]])
+    assert len(window.document.scene.geometry.floor_plan) == 3
+    assert window.document.room.problems() == []
+
+
 # -- the 3D view (needs OpenGL: a display or Xvfb) --------------------------------------
 
 
@@ -575,3 +828,49 @@ def test_arrows_show_the_orientation(window, qapp) -> None:
     # Facing +y and rolled to the right, the top of the head points to +x.
     assert any(np.allclose(a, [0, 1, 0], atol=1e-6) for a in arrows)
     assert any(np.allclose(a, [1, 0, 0], atol=1e-6) for a in arrows)
+
+
+@pytest.mark.render
+def test_dragging_points_in_3d(window, qapp) -> None:
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    qapp.processEvents()
+    viewport.plotter.render()
+    renderer = viewport.plotter.renderer
+    widget = viewport.plotter.interactor
+
+    def widget_point(point) -> QPoint:
+        renderer.SetWorldPoint(*point, 1.0)
+        renderer.WorldToDisplay()
+        x, y, _ = renderer.GetDisplayPoint()
+        ratio = widget.devicePixelRatioF()
+        return QPoint(round(x / ratio), round(widget.height() - 1 - y / ratio))
+
+    camera = viewport.plotter.camera_position
+    start = window.document.scene.listeners[0].position
+    _drag(qapp, widget, widget_point(start), widget_point((6.0, 4.0, 1.2)))
+    x, y, z = window.document.scene.listeners[0].position
+    assert abs(x - 6.0) < 0.1 and abs(y - 4.0) < 0.1 and z == pytest.approx(1.2)
+    assert window.document.undo_text() == "move listener"
+    assert viewport.plotter.camera_position == camera  # the camera did not turn
+    # A click without a drag selects.
+    QTest.mouseClick(
+        widget,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+        widget_point(window.document.scene.sources[0].position),
+    )
+    assert window.selection == ("sources", 0)
+    # Up and down, with Shift.
+    position = window.document.scene.sources[0].position
+    target = viewport.drag_position(
+        position, *_display(viewport, widget_point((position[0], position[1], 2.5))), vertical=True
+    )
+    assert target[:2] == position[:2] and abs(target[2] - 2.5) < 0.1
+
+
+def _display(viewport, point: QPoint) -> tuple[int, int]:
+    widget = viewport.plotter.interactor
+    ratio = widget.devicePixelRatioF()
+    return round(point.x() * ratio), round((widget.height() - point.y() - 1) * ratio)

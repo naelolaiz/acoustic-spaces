@@ -1,5 +1,6 @@
-"""The graphical editor: build a room, place sources and listeners, assign materials,
-run the simulation and look at and listen to the results.
+"""The graphical editor: build a room (from a box, a model file, or a floor plan drawn
+in the plan view), place and drag sources and listeners, assign materials, run the
+simulation and look at and listen to the results.
 
 Start it with ``acoustic-spaces edit [scene.yaml]`` or ``acoustic-spaces-editor``. It
 needs the ``gui`` extra: ``pip install "acoustic-spaces[gui]"``, or

@@ -32,6 +32,21 @@
   their own colour and counted in the results.
 - A new example, `gallery`: an L-shaped room with a listener round the corner.
 
+**Drawing rooms in the editor**
+
+- A Plan tab next to the 3D view: the room from above on a grid, with every corner of a
+  floor plan or box room as a handle. Drag a corner to move it (a box becomes a floor
+  plan with the same walls), double-click a wall to add one, right-click to remove one.
+- Draw room (and File > New room from a floor plan): click the corners of a new floor
+  plan. Sources and listeners left outside move inside; over a model file the editor
+  asks first.
+- Sources and listeners move by dragging, in the plan and in the 3D view, keeping their
+  height above the floor; Shift moves them up and down in the 3D view.
+- Snapping to a grid (Shift for none), wall lengths while dragging, and refused moves
+  when walls would cross.
+- `plan_problem` in `acoustic_spaces.geometry`: floor plans whose walls cross, touch or
+  run back on themselves are refused with the reason.
+
 **Also**
 
 - `speech_transmission_index` and `modulation_transfer` in `acoustic_spaces.parameters`.
