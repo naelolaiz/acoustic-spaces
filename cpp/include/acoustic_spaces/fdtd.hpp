@@ -170,7 +170,15 @@ public:
                         open_ = true;
                         continue;
                     }
-                    const std::int32_t face = side ? blocked[a][i] : blocked[a][j];
+                    std::int32_t face = side ? blocked[a][i] : blocked[a][j];
+                    if (face >= 0 && !side) {
+                        // blocked[a][j] is the face nearest j: of a wall thinner than a
+                        // cell, the other side's. This cell meets the face nearest it.
+                        const Vec3 back{a == 0 ? -1.0 : 0.0, a == 1 ? -1.0 : 0.0,
+                                        a == 2 ? -1.0 : 0.0};
+                        const Hit hit = bvh.intersect(centre(i), back, cell, -1);
+                        if (hit.found()) face = static_cast<std::int32_t>(hit.face);
+                    }
                     if (face >= 0) {
                         beta += admittance[face];
                     } else {

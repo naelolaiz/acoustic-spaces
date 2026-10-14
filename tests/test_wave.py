@@ -30,10 +30,10 @@ C = 343.0
 FS = 48_000
 
 
-def _solver(size, admittances, source, probes, cell=0.1):
-    """A wave solver in a box from (0, 0, 0) to ``size``, laid out as wave_responses does,
-    and its sample rate."""
-    mesh = box_mesh(size)
+def _solver(size, admittances, source, probes, cell=0.1, mesh=None):
+    """A wave solver in a box from (0, 0, 0) to ``size`` (or in ``mesh``, within it), laid
+    out as wave_responses does, and its sample rate."""
+    mesh = box_mesh(size) if mesh is None else mesh
     bvh = _native.Bvh(mesh.vertices, mesh.faces)
     origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
     shape = np.ceil((np.array(size) - origin) / cell).astype(int) + 2
@@ -196,6 +196,49 @@ def test_duct_end_reflects_as_its_admittance_says(beta: float) -> None:
 
     reflection = math.sqrt(gated(120.0) / gated(20.0))
     assert reflection == pytest.approx((1 - beta) / (1 + beta), abs=0.005 if beta < 1 else 0.05)
+
+
+def test_air_meets_the_inner_face_of_a_thin_wall() -> None:
+    # The duct above the other way round, its near end a wall thinner than a cell:
+    # absorbing inside (x = 0.03), rigid outside (x = 0). The air meets the inside.
+    size, inner, beta = (80.0, 0.6, 0.6), 0.03, 0.5
+    box = box_mesh(size)
+    lid = [
+        [inner, 0.0, 0.0],
+        [inner, size[1], 0.0],
+        [inner, size[1], size[2]],
+        [inner, 0.0, size[2]],
+    ]
+    n = len(box.vertices)
+    mesh = dataclasses.replace(
+        box,
+        vertices=np.vstack([box.vertices, lid]),
+        faces=np.vstack([box.faces, [[n, n + 1, n + 2], [n, n + 2, n + 3]]]),
+        face_labels=np.append(box.face_labels, [0, 0]),
+    )
+
+    def admittances(mesh):
+        x = mesh.vertices[mesh.faces][:, :, 0]
+        far = np.all(np.isclose(x, size[0]), axis=1)
+        return np.where(far, 1.0, np.where(np.all(np.isclose(x, inner), axis=1), beta, 0.0))
+
+    solver, rate = _solver(size, admittances, (70.0, 0.3, 0.3), (50.0, 0.3, 0.3), mesh=mesh)
+    steps = int(0.45 * rate)
+    _, delay = source_signal(rate, 0.1)
+    pressure = solver.run(_drive(rate, 0.1, steps))[0]
+    n_fft = 1 << 14
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+    gain = np.clip((f - 40) / 20, 0, 1) * np.clip((200 - f) / 50, 0, 1)
+    pressure = np.fft.irfft(np.fft.rfft(pressure, n_fft) * gain, n_fft)[:steps]
+    t = (np.arange(steps) - delay) / rate
+
+    def gated(path: float) -> float:
+        x = t - path / C
+        window = np.where(np.abs(x) < 0.04, 0.5 + 0.5 * np.cos(np.pi * x / 0.04), 0.0)
+        return float(np.sum((pressure * window) ** 2))
+
+    reflection = math.sqrt(gated(120.0) / gated(20.0))
+    assert reflection == pytest.approx((1 - beta) / (1 + beta), abs=0.005)
 
 
 def test_free_field_level_matches_the_rays() -> None:
