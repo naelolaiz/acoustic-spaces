@@ -433,11 +433,12 @@ def _curve(run: _SourceRun, k: int, length: float, bands: int) -> np.ndarray:
     if late is not None:
         fine = min(late.fine_bins, slots)
         out[:, :fine] += late.energy[k, :, :fine]
-        ratio = int(round(late.coarse_step / TIME_STEP))
-        coarse = late.energy[k, :, late.fine_bins :]
-        spread = np.repeat(coarse / ratio, ratio, axis=1)
-        end = min(slots, late.fine_bins + spread.shape[1])
-        out[:, late.fine_bins : end] += spread[:, : end - late.fine_bins]
+        if slots > late.fine_bins:  # a short response may end before the coarse slots
+            ratio = int(round(late.coarse_step / TIME_STEP))
+            coarse = late.energy[k, :, late.fine_bins :]
+            spread = np.repeat(coarse / ratio, ratio, axis=1)
+            end = min(slots, late.fine_bins + spread.shape[1])
+            out[:, late.fine_bins : end] += spread[:, : end - late.fine_bins]
     if run.statistical is not None:
         t60, start, volume, c = run.statistical
         rate = 6.0 * math.log(10.0) / t60[:, None]

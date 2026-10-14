@@ -181,6 +181,19 @@ def test_statistical_tail_and_noise() -> None:
     assert np.all((0 <= quiet.value("sti")) & (quiet.value("sti") <= 1))
 
 
+def test_short_responses_end_within_the_fine_late_slots() -> None:
+    # 105 ms: the late energy has coarse slots, but the far points end before them.
+    simulation = {
+        "early": {"max_order": 1},
+        "late": {"method": "stochastic_ray_tracing", "rays": 1000},
+        "ir_length_s": 0.105,
+        "seed": 1,
+    }
+    m = coverage_map(_shoebox(simulation=simulation), settings=Coverage(spacing=2.0)).get()
+    assert m.values["g"].shape == (len(m.grid), 8)
+    assert np.all(np.isfinite(m.value("sti")))
+
+
 def test_map_values_and_json() -> None:
     room = _shoebox(simulation={"late": {"method": "statistical"}, "seed": 2})
     coverage = coverage_map(room, settings=Coverage(spacing=2.0, surfaces=["floor"]))
