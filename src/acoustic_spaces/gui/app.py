@@ -701,7 +701,19 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Save scene", str(start), SCENE_FILTER)
         if path and not Path(path).suffix:
             path += ".yaml"
+            # The dialog asked before replacing the name as typed, not this one.
+            if Path(path).exists() and not self._confirm_overwrite(Path(path)):
+                return False
         return bool(path) and self._save_to(Path(path))
+
+    def _confirm_overwrite(self, path: Path) -> bool:
+        answer = QMessageBox.question(
+            self,
+            TITLE,
+            f"{path.name} already exists. Replace it?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
 
     def _save_to(self, path: Path) -> bool:
         scene = self.document.scene

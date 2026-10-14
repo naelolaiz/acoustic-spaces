@@ -829,6 +829,22 @@ def test_save_as_adds_the_suffix(window, monkeypatch, tmp_path: Path) -> None:
         assert window.save_as()
         assert window.document.path == tmp_path / saved and (tmp_path / saved).is_file()
     assert not (tmp_path / "room").exists()
+    # The added suffix names a file the dialog did not ask about: ask before replacing it.
+    asked = []
+    for reply, saved in (
+        (QMessageBox.StandardButton.No, False),
+        (QMessageBox.StandardButton.Yes, True),
+    ):
+        (tmp_path / "room.yaml").write_text("kept\n", encoding="utf-8")
+        monkeypatch.setattr(
+            QFileDialog, "getSaveFileName", lambda *a, **k: (str(tmp_path / "room"), "")
+        )
+        monkeypatch.setattr(
+            QMessageBox, "question", lambda *a, reply=reply, **k: asked.append(a[2]) or reply
+        )
+        assert window.save_as() is saved
+        assert ((tmp_path / "room.yaml").read_text(encoding="utf-8") == "kept\n") is not saved
+    assert asked == ["room.yaml already exists. Replace it?"] * 2
 
 
 def test_entry_points_explain_the_missing_extra(monkeypatch, capsys) -> None:
