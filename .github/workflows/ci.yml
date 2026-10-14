@@ -208,9 +208,10 @@ jobs:
           name: docs
           path: docs/_build/html
 
-  # Releases: pushing a tag vX.Y.Z (matching src/acoustic_spaces/_version.py) attaches the
-  # wheels and source distribution to a GitHub release and, once PyPI trusted publishing is
-  # set up and the repository variable PYPI_PUBLISH is "true", uploads them to PyPI.
+  # Releases: a tag vX.Y.Z (matching src/acoustic_spaces/_version.py), pushed or made on the
+  # Releases page, attaches the wheels and source distribution to a GitHub release and, once
+  # PyPI trusted publishing is set up and the repository variable PYPI_PUBLISH is "true",
+  # uploads them to PyPI.
   # See "Releasing" in CONTRIBUTING.md.
   github-release:
     name: GitHub release
@@ -231,10 +232,20 @@ jobs:
         run: |
           awk -v v="## ${GITHUB_REF_NAME#v}" '$0 == v {on = 1; next} /^## / {on = 0} on' CHANGELOG.md > notes.md
           test -s notes.md
-      - name: Create the release
+      - name: Create the release, or add the files to one made on the Releases page
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md
+        shell: bash
+        run: |
+          tag="$GITHUB_REF_NAME"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+            if [ -z "$(gh release view "$tag" --json body --jq .body)" ]; then
+              gh release edit "$tag" --notes-file notes.md
+            fi
+          else
+            gh release create "$tag" dist/* --title "$tag" --notes-file notes.md
+          fi
 
   pypi:
     name: Publish to PyPI

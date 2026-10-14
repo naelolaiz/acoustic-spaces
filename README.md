@@ -579,7 +579,7 @@ v1, version 1.0.0:
 - [x] M4 Rendering: offline convolution and auralisation in Python, real-time partitioned convolver in C++, playback.
 - [x] M5 v1 release: validation report, documentation, wheels and release workflow.
 
-v2:
+v2 (the ticked items are in version 1.1.0):
 
 - [x] A graphical editor: scenes, materials, sources and listeners, runs, results and listening.
 - [x] Export to Blender: rooms, reflection paths and particle animations as glTF.
