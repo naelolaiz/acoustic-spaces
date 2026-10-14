@@ -104,6 +104,15 @@ def test_vbap_between_and_outside_speakers() -> None:
     # Straight down in a layout without low speakers: the horizon plays alike.
     down = Loudspeakers.layout("7.0.4").gains([[0.0, 0.0, -1.0]])[0]
     np.testing.assert_allclose(down[:7], 1 / math.sqrt(7))
+    # 5.x.4 has 140 degrees between its surrounds: arrivals on the horizon there stay on
+    # it, panned as in 5.0, instead of going up to the rear height speakers.
+    horizon = from_angles(np.arange(0.0, 360.0, 2.5), 0.0)
+    for name in ("5.0.4", "5.1.4"):
+        layout = Loudspeakers.layout(name)
+        flat = Loudspeakers.layout(name[:3])
+        gains = layout.gains(horizon)
+        np.testing.assert_allclose(gains[:, : flat.channels], flat.gains(horizon), atol=1e-12)
+        np.testing.assert_array_equal(gains[:, flat.channels :], 0.0)
     custom = Loudspeakers((Speaker("a", 45), Speaker("b", -45), Speaker("c", 180)))
     assert custom.channel_mask() == 0 and custom.label == "speakers"
     with pytest.raises(ValueError, match="unknown layout"):

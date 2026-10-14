@@ -5,6 +5,10 @@ height) of loudspeakers around its direction, with gains of unit total power. La
 with height but nothing below the listener get an imaginary loudspeaker straight down
 (and one straight up when nothing is high). Its share is dropped, so arrivals from below
 play from the speakers at their azimuth; straight down, all its neighbours play alike.
+A gap wider than 90 degrees between the speakers on the horizon (behind the listener in
+5.x.4) gets imaginary speakers on the horizon too, which hand their share to the two
+speakers either side, so arrivals there stay on the horizon instead of going up to the
+height layer.
 Low-frequency effects channels (LFE) take no part in panning and stay silent: a room's
 bass reaches every speaker already, and bass management belongs to the playback system.
 """
@@ -98,6 +102,10 @@ _WAV_POSITIONS = {
 _WAV_POSITIONS_5 = {**_WAV_POSITIONS, "Ls": 0x10, "Rs": 0x20}
 
 _EPS = 1e-9
+#: Speakers this close to the horizon (degrees) count as on it, and a gap between them
+#: wider than ``_MAX_GAP_DEG`` gets imaginary speakers on the horizon.
+_HORIZON_DEG = 10.0
+_MAX_GAP_DEG = 90.0
 
 
 def _hull_triangles(points: np.ndarray) -> list[tuple[int, int, int]]:
@@ -126,6 +134,7 @@ class Loudspeakers:
     speakers: tuple[Speaker, ...]
     name: str = "speakers"
     _bases: list = field(init=False, repr=False, compare=False)
+    _downmix: np.ndarray = field(init=False, repr=False, compare=False)
 
     @classmethod
     def layout(cls, name: str) -> Loudspeakers:
@@ -142,7 +151,9 @@ class Loudspeakers:
         if sum(not s.lfe for s in self.speakers) < 2:
             raise ValueError("a loudspeaker layout needs at least two speakers besides LFE")
         object.__setattr__(self, "speakers", tuple(self.speakers))
-        object.__setattr__(self, "_bases", self._make_bases())
+        bases, downmix = self._make_bases()
+        object.__setattr__(self, "_bases", bases)
+        object.__setattr__(self, "_downmix", downmix)
 
     @property
     def channels(self) -> int:
@@ -177,8 +188,11 @@ class Loudspeakers:
         return from_angles([s.azimuth for s in self.speakers], [s.elevation for s in self.speakers])
 
     def _make_bases(self):
-        """Pairs or triangles of the speakers other than LFE, by their index among them."""
+        """Pairs or triangles of the speakers other than LFE, by their index among them
+        (imaginary speakers after the real ones), and the gains (points, mains) with
+        which each of them plays through the real speakers."""
         mains = self._mains()
+        n_real = len(mains)
         real = from_angles([s.azimuth for s in mains], [s.elevation for s in mains])
         if self.horizontal:
             order = np.argsort([s.azimuth % 360.0 for s in mains])
@@ -187,20 +201,45 @@ class Loudspeakers:
                 span = (mains[b].azimuth - mains[a].azimuth) % 360.0
                 if 0.0 < span < 180.0 - 1e-6:
                     pairs.append((np.linalg.inv(real[[a, b], :2].T), (a, b)))
-            return pairs
+            return pairs, np.eye(n_real)
         elevations = np.array([s.elevation for s in mains])
-        extra = []
-        if elevations.min() > -10.0:
+        extra, downmix = [], []
+        # Wide gaps on the horizon: imaginary speakers spread evenly across each, played
+        # by the speakers either side with the pair's own VBAP gains, so that panning on
+        # the horizon is the pair's; across 180 degrees or more, with constant power.
+        horizon = sorted(
+            (i for i, s in enumerate(mains) if abs(s.elevation) < _HORIZON_DEG),
+            key=lambda i: mains[i].azimuth % 360.0,
+        )
+        if len(horizon) >= 2:
+            for a, b in zip(horizon, horizon[1:] + horizon[:1], strict=True):
+                gap = (mains[b].azimuth - mains[a].azimuth) % 360.0
+                count = math.ceil(gap / _MAX_GAP_DEG - 1e-9) - 1
+                for k in range(1, count + 1):
+                    t = k / (count + 1)
+                    point = from_angles(mains[a].azimuth + t * gap, 0.0)
+                    row = np.zeros(n_real)
+                    if gap < 180.0 - 1e-6:
+                        pair = np.column_stack([real[a, :2], real[b, :2]])
+                        row[a], row[b] = np.linalg.solve(pair, point[:2])
+                    else:
+                        row[a], row[b] = math.cos(t * math.pi / 2), math.sin(t * math.pi / 2)
+                    extra.append(point)
+                    downmix.append(row)
+        # Nothing below (or above): an imaginary speaker at the pole, whose share is dropped.
+        if elevations.min() > -_HORIZON_DEG:
             extra.append([0.0, 0.0, -1.0])
-        if elevations.max() < 10.0:
+            downmix.append(np.zeros(n_real))
+        if elevations.max() < _HORIZON_DEG:
             extra.append([0.0, 0.0, 1.0])
+            downmix.append(np.zeros(n_real))
         points = np.vstack([real, np.array(extra).reshape(-1, 3)])
         bases = []
         for face in _hull_triangles(points):
             matrix = points[list(face)].T
             if abs(np.linalg.det(matrix)) > 1e-9:
                 bases.append((np.linalg.inv(matrix), face))
-        return bases
+        return bases, np.vstack([np.eye(n_real), np.array(downmix).reshape(-1, n_real)])
 
     def gains(self, directions: np.ndarray) -> np.ndarray:
         """VBAP gains (dirs, channels) of unit power for head directions (dirs, 3)."""
@@ -226,14 +265,13 @@ class Loudspeakers:
                 out[row, int(np.argmax(main_directions[:, : len(p)] @ p))] = 1.0
             else:
                 g = np.maximum(best_g, 0.0)
-                for k, i in enumerate(best_idx):
-                    if i < n_real:
-                        out[row, i] = g[k]
-                if np.linalg.norm(out[row]) < 1e-6:  # at an imaginary speaker
-                    imaginary = [i for i in best_idx if i >= n_real][0]
+                out[row] = g @ self._downmix[list(best_idx)]
+                if np.linalg.norm(out[row]) < 1e-6:  # at an imaginary speaker at a pole
+                    pole = best_idx[int(np.argmax(g))]
                     for _, face in self._bases:
-                        if imaginary in face:
-                            out[row, [j for j in face if j < n_real]] = 1.0
+                        if pole in face:
+                            others = [j for j in face if j != pole]
+                            out[row] = np.maximum(out[row], (self._downmix[others] > 0).any(axis=0))
             out[row] /= np.linalg.norm(out[row])
         full = np.zeros((len(v), self.channels))
         full[:, [i for i, s in enumerate(self.speakers) if not s.lfe]] = out
