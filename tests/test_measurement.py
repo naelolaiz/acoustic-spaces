@@ -158,5 +158,5 @@ def test_measure_removes_the_latency_of_the_interface() -> None:
 
 def test_measure_without_sounddevice_says_how_to_install(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "sounddevice", None)
-    with pytest.raises(ImportError, match=r"acoustic-spaces\[measure\]"):
+    with pytest.raises(ImportError, match=r'pip install "sounddevice'):
         measurement.list_devices()

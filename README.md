@@ -5,15 +5,19 @@ CATT-Acoustic and ODEON: load a 3D model of a space, place sources and listeners
 compute impulse responses, and listen to the result in binaural, Ambisonics or
 loudspeaker formats.
 
-**Status: 1.0, beta.** Scenes can be built, checked, viewed and simulated: CAD import
-or rooms from dimensions, a material database, ray-traced early reflections, a
-stochastic late tail, impulse responses in mono, binaural, Ambisonics (AmbiX) and
-loudspeaker formats as WAV files, ISO 3382-1 parameters, and animations of sound
-particles. Dry recordings can be run through the responses offline or in real time on
-the sound card, and real rooms can be measured with sine sweeps and analysed the same
-way. The [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
-says how far the results can be trusted. A [graphical editor](#graphical-editor) does all
-of this in one window, starting from the bundled example rooms.
+**Status: 2.0.** Rooms come from CAD models, from their dimensions or from a floor plan
+drawn in the editor, with a material database and directional sources. Simulations
+combine ray-traced early reflections, edge diffraction, a stochastic late tail and,
+for the lowest bands, a wave solver, and give impulse responses in mono, binaural,
+Ambisonics (AmbiX) and loudspeaker formats as WAV files, ISO 3382-1 parameters, and
+coverage maps of them and of the speech transmission index over the audience. Dry
+recordings can be run through the responses offline or in real time on the sound card,
+head-tracked on headphones; real rooms can be measured with sine sweeps and compared
+with their model. Reflection paths and sound particles can be watched in 3D, animated,
+and exported to Blender. The
+[validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
+says how far the results can be trusted. A [graphical editor](#graphical-editor) does
+all of this in one window, starting from the bundled example rooms.
 
 ![The church example in 3D: the stone nave with its early reflection paths from the altar to the front of the nave, coloured by order up to the third](docs/images/church_paths.png)
 
@@ -32,8 +36,11 @@ format.
 Every release has wheels for Linux, macOS and Windows (CPython 3.10 to 3.14), with the
 compiled core inside, on its
 [GitHub release page](https://github.com/naelolaiz/acoustic_spaces_simulator/releases):
-`pip install` the wheel for your platform, with the extras below in brackets if you
-want them. Until the package is published on PyPI, everything else installs from source.
+`pip install` the wheel for your platform, with the extras below in brackets after its
+file name if you want them, such as
+`pip install "acoustic_spaces-2.0.0-cp312-cp312-win_amd64.whl[viz,gui]"`. The package is
+not on PyPI, so `pip install acoustic-spaces` does not find it; between releases, install
+from source.
 
 The documentation (this README, the validation report and an API reference generated
 from the docstrings) builds with Sphinx; see CONTRIBUTING.md.
@@ -164,7 +171,8 @@ plot_directions(response, "talker__seat-a.directions.png")
 ## Graphical editor
 
 The editor needs the `gui` extra: `uv sync --extra gui` in a source checkout, then
-`uv run acoustic-spaces edit`, or `pip install "acoustic-spaces[gui]"`.
+`uv run acoustic-spaces edit`, or a release wheel installed with `[gui]` after its file
+name.
 
 ```sh
 acoustic-spaces edit                              # a new box room
@@ -926,6 +934,8 @@ cpp/include/           header-only C++ core: BVH, ray tracer, wave solver (FDTD)
 cpp/bindings/          nanobind module exposing the core as acoustic_spaces._native
 tests/                 pytest suite, run on Linux, macOS and Windows in CI
 examples/              example scenes, installed with the package
+validation/            the longer checks behind the validation report
+docs/                  the Sphinx documentation, the validation report and the pictures
 ```
 
 ## Roadmap
@@ -954,6 +964,22 @@ v2, version 2.0.0 (version 1.1.0 had the first three):
 - [x] Edge diffraction (UTD) of the direct sound and first-order reflections.
 - [x] Editing geometry in the editor: drawing floor plans, dragging corners, sources and
   listeners.
+
+v3, version 3.0.0, in progress (scene files may change; the changelog will say how):
+
+- [x] Comparing a simulation with a measurement in just noticeable differences
+  (`acoustic-spaces compare`).
+- [ ] Validation against measured rooms: the BRAS benchmark.
+- [ ] More parameters: LF, LFC, IACC, ST1, ST early and late, U50, STIPA, echo criteria.
+- [ ] Scattering that follows surface size and frequency, and third-octave bands.
+- [ ] Sources with their own spectra, delay and EQ, line and surface sources, arrays.
+- [ ] Sound through walls and between coupled rooms.
+- [ ] Fitting absorption to measured parameters.
+- [ ] The wave solver with impedance boundaries and a GPU path through WebGPU (AMD,
+  NVIDIA, Intel and Apple GPUs alike).
+- [ ] Second-order edge diffraction.
+- [ ] Walkthroughs with moving sources and listeners; IFC, Collada and SketchUp import;
+  CATT and ODEON material libraries.
 
 ## Contributing
 

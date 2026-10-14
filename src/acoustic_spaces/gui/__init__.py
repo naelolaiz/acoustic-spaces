@@ -3,8 +3,8 @@ in the plan view), place and drag sources and listeners, assign materials, run t
 simulation and look at and listen to the results.
 
 Start it with ``acoustic-spaces edit [scene.yaml]`` or ``acoustic-spaces-editor``. It
-needs the ``gui`` extra: ``pip install "acoustic-spaces[gui]"``, or
-``uv sync --extra gui`` in a source checkout.
+needs the ``gui`` extra: a release wheel installed with ``[gui]`` after its file name,
+or ``uv sync --extra gui`` in a source checkout.
 """
 
 from __future__ import annotations

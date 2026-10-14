@@ -64,6 +64,7 @@ the test suite:
 python -m pip install pyroomacoustics matplotlib
 python validation/pyroomacoustics_crosscheck.py --json results.json --plots docs/validation
 python validation/convolver_benchmark.py
+python validation/wave_solver.py --plot docs/images/wave.png
 ```
 
 ## Releasing

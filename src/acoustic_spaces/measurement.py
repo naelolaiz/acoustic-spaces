@@ -11,8 +11,8 @@ code that analyses simulated responses.
   with silence after each one, long enough for the room to decay.
 - :func:`deconvolve` divides spectra with Kirkeby regularisation outside the swept band,
   then averages the repeats, which lowers background noise by 3 dB per doubling.
-- :func:`measure` plays and records through ``sounddevice`` (``pip install
-  "acoustic-spaces[measure]"``) and returns the deconvolved responses. A loopback
+- :func:`measure` plays and records through ``sounddevice`` (the ``measure``
+  extra) and returns the deconvolved responses. A loopback
   channel (an output wired straight back to an input) removes the latency of the
   audio interface.
 

@@ -852,7 +852,7 @@ def test_entry_points_explain_the_missing_extra(monkeypatch, capsys) -> None:
     from acoustic_spaces.gui import main as editor
 
     monkeypatch.setitem(sys.modules, "pyvistaqt", None)
-    with pytest.raises(ImportError, match=r"acoustic-spaces\[gui\]"):
+    with pytest.raises(ImportError, match=r'pip install "PySide6-Essentials'):
         editor([])
     assert main(["edit"]) == 1
     assert "gui extra" in capsys.readouterr().err
