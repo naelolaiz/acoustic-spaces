@@ -47,6 +47,14 @@ python -m sphinx -W -b html docs docs/_build/html
 The front page is the README; `docs/validation.md` is the validation report and
 `docs/api.md` the API reference, generated from the docstrings.
 
+`docs/screenshots.py` draws most of the README's pictures into `docs/images` from the
+example scenes, with fixed seeds; run it again after a change that shows in them. The 3D
+pictures and the editor need a display with OpenGL (`xvfb-run` gives one):
+
+```sh
+xvfb-run -a -s "-screen 0 1920x1080x24" python docs/screenshots.py --bras path/to/BRAS
+```
+
 ## Validation scripts
 
 `validation/` holds the longer checks behind the validation report. They are not part of
