@@ -896,7 +896,9 @@ class OutputsPage(Page):
         outputs = self.document.scene.outputs
         by_format = {}
         for output in outputs:
-            by_format.setdefault(output.format, output)
+            # Loudspeakers here means a named layout; custom ones are kept as they are.
+            if output.format != "loudspeakers" or not output.speakers:
+                by_format.setdefault(output.format, output)
         self.mono.setChecked("mono" in by_format)
         self.binaural.setChecked("binaural" in by_format)
         binaural = by_format.get("binaural")

@@ -370,6 +370,27 @@ def test_a_surface_takes_a_material_of_its_own(window) -> None:
     assert window.document.scene.assignments["walls"] == "concrete"
 
 
+def test_outputs_form_keeps_a_custom_loudspeaker_layout(window) -> None:
+    from acoustic_spaces.scene import Scene
+
+    data = box_scene().model_dump(mode="json", exclude_none=True)
+    custom = {"format": "loudspeakers", "speakers": [{"name": "L", "azimuth": 30}]}
+    custom["speakers"].append({"name": "R", "azimuth": -30})
+    data["outputs"] = [custom]
+    window._attach(Document(Scene.model_validate(data)))
+    window.select("outputs")
+    page = window.inspector.pages["outputs"]
+    assert not page.loudspeakers.isChecked()  # the box is for a named layout
+    assert "1 custom loudspeaker layout" in page.custom.text()
+    page.mono.setChecked(True)
+    outputs = window.document.scene.outputs
+    assert [(o.format, o.layout) for o in outputs] == [("mono", None), ("loudspeakers", None)]
+    assert [s.name for s in outputs[1].speakers] == ["L", "R"]
+    page.loudspeakers.setChecked(True)
+    assert [o.layout for o in window.document.scene.outputs] == [None, "5.0", None]
+    assert page.loudspeakers.isChecked() and page.layout_name.currentText() == "5.0"
+
+
 def test_model_units_default_to_the_file(window) -> None:
     window.open_example(example_path("shoebox"))  # its scene says units: m
     window.select("geometry", None)
