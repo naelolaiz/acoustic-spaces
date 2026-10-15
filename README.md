@@ -463,8 +463,18 @@ elements:
   for the beam, and with the room's speed of sound. A column of 8 takes about a second.
 - The result is the array's **far-field** pattern, a balloon like a measured one, so
   the source stays one point: right beyond about the array's length squared over the
-  wavelength (16 m for a 2 m array at 1.4 kHz). Closer to a long array, its sound
-  spreads as a line's; a `line_m` source is the better model there.
+  wavelength, L² f / c (16 m for a 2 m array at 1.4 kHz). Closer to a long array, its
+  sound spreads as a line's and its beam has not formed yet; a `line_m` source is the
+  better model there. The room's warnings name every listener nearer to an array than
+  that distance at 1 kHz: `validate`, `inspect`, `simulate` and `map` print them, and
+  the editor lists them under **Properties** when the scene itself is selected. Higher
+  up the far field starts farther still:
+
+  | array length | far field from, at 1 kHz | at 4 kHz |
+  |---|---|---|
+  | 0.5 m | 0.7 m | 2.9 m |
+  | 1 m | 2.9 m | 11.7 m |
+  | 2 m | 11.7 m | 46.6 m |
 - As for any source, `level_db` is the array's sound power in all; the pattern only
   says where it goes. A single element's array has the element's own pattern.
 - The tests check a column against the analytic sums of a line array (the

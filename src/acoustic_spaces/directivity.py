@@ -566,6 +566,36 @@ def lambert() -> Balloon:
     return Balloon.from_measurements(points, energy, "lambert")
 
 
+#: The frequency (Hz) at which :func:`far_field_distance` is given in warnings.
+FAR_FIELD_HZ = 1000.0
+
+
+def array_length(spec) -> float | None:
+    """The largest distance between two elements (m) of the coherent array a source's
+    directivity entry describes, given in the scene or in a YAML file; None for other
+    directivities."""
+    if getattr(spec, "array", None) is not None:
+        array = spec.array
+    elif getattr(spec, "file", None) is not None and Path(spec.file).suffix.lower() in (
+        ".yaml",
+        ".yml",
+    ):
+        array = read_array(spec.file)
+    else:
+        return None
+    positions = np.array([e.position for e in array.layout()], dtype=float)
+    return float(np.max(np.linalg.norm(positions[:, None] - positions[None], axis=2)))
+
+
+def far_field_distance(
+    length_m: float, frequency_hz: float = FAR_FIELD_HZ, speed_of_sound: float = SPEED_OF_SOUND
+) -> float:
+    """From how far (m) an array ``length_m`` long acts as one point with its far-field
+    pattern at ``frequency_hz``: its length squared over the wavelength. Nearer, its
+    sound spreads as a line's and its beam has not formed yet."""
+    return float(length_m) ** 2 * float(frequency_hz) / float(speed_of_sound)
+
+
 def load_directivity(spec, speed_of_sound: float = SPEED_OF_SOUND) -> Directivity:
     """The directivity a scene's source entry describes: a pattern name (or
     ``lambert``), or an object with ``pattern`` (a name or ``a`` value per band),
@@ -584,6 +614,7 @@ def load_directivity(spec, speed_of_sound: float = SPEED_OF_SOUND) -> Directivit
 
 
 __all__ = [
+    "FAR_FIELD_HZ",
     "GRID_STEP_DEG",
     "PATTERNS",
     "SPEED_OF_SOUND",
@@ -591,6 +622,8 @@ __all__ = [
     "Directivity",
     "FirstOrder",
     "array_directivity",
+    "array_length",
+    "far_field_distance",
     "lambert",
     "load_directivity",
     "read_array",
