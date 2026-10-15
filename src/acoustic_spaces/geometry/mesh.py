@@ -44,6 +44,17 @@ class RoomMesh:
         length = np.linalg.norm(n, axis=1, keepdims=True)
         return np.divide(n, length, out=np.zeros_like(n), where=length > 0)
 
+    def cells(self):
+        """The rooms and other cells the faces enclose
+        (:class:`~acoustic_spaces.geometry.cells.MeshCells`), worked out once."""
+        from acoustic_spaces.geometry.cells import mesh_cells
+
+        cached = self.__dict__.get("_cells")
+        if cached is None or cached[0] is not self.vertices or cached[1] is not self.faces:
+            cached = (self.vertices, self.faces, mesh_cells(self.vertices, self.faces))
+            self.__dict__["_cells"] = cached
+        return cached[2]
+
     def label_names(self) -> list[str]:
         """Every distinct name that appears in any label, in first-seen order."""
         seen: dict[str, None] = {}

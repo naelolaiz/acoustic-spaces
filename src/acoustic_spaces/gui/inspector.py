@@ -8,6 +8,7 @@ the scene as it still is.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 import numpy as np
@@ -206,6 +207,9 @@ class ScenePage(Page):
             f"Surface area: {room.report.surface_area_m2:.1f} m²",
             f"Volume: {room.volume_m3:.1f} m³" if room.volume_m3 else "Volume: model not closed",
         ]
+        if len(room.room_volumes) > 1:
+            each = ", ".join(f"{v:.1f}" for v in room.room_volumes)
+            lines[-1] += f" in {len(room.room_volumes)} rooms ({each} m³)"
         if room.volume_m3:
             sabine = room.reverberation_time("sabine", air_absorption=True)
             eyring = room.reverberation_time("eyring", air_absorption=True)
@@ -470,8 +474,37 @@ class SurfacePage(Page):
         self.run(lambda: self.document.assign(name, None if choice == FALLBACK else choice))
 
 
+#: The material table's rows: absorption, scattering, and the sound reduction index.
+_MATERIAL_ROWS = ["Absorption", "Scattering", "Sound reduction (dB)"]
+#: What a surface of the material lets through: nothing, part of the sound (with a
+#: sound reduction index per band), or everything (an opening).
+PASSING = ["nothing", "part of the sound", "everything (an opening)"]
+#: The sound reduction index (dB) a material starts from when it begins to let sound through.
+DEFAULT_REDUCTION_DB = 40.0
+
+
+def _reduction_text(passing: float) -> str:
+    """How the material table shows a transmission: as R in dB, blank for none."""
+    return "" if passing <= 0.0 else f"{max(0.0, -10.0 * math.log10(passing)):.1f}"
+
+
+def _nearest_filled(values: list[float | None]) -> list[float]:
+    """``values`` with each None taking the value of the nearest band that has one."""
+    have = [k for k, v in enumerate(values) if v is not None]
+    return [
+        v if v is not None else values[min(have, key=lambda j: abs(j - k))]
+        for k, v in enumerate(values)
+    ]
+
+
+def _without_transmission(fields: dict) -> dict:
+    return {k: v for k, v in fields.items() if k not in ("transmission", "transmission_loss")}
+
+
 class MaterialPage(Page):
-    """A material: its name, the database entry it comes from, and its coefficients."""
+    """A material: its name, the database entry it comes from, its coefficients, and
+    what it lets through: nothing, part of the sound (the sound reduction index R per
+    band) or everything (an opening)."""
 
     def __init__(self, document) -> None:
         super().__init__(document)
@@ -491,13 +524,23 @@ class MaterialPage(Page):
         self.preset.setCompleter(completer)
         self.preset.activated.connect(self._preset)
         form.addRow("Database entry", self.preset)
+        self.passing = QComboBox()
+        self.passing.addItems(PASSING)
+        self.passing.setToolTip(
+            "Sound that passes through a surface goes on into the room behind it, a "
+            "partition's at its sound reduction index R (30 to 60 dB for walls), an "
+            "opening's all of it. What passes counts as absorbed, so the absorption is "
+            "at least 10^(-R/10), and an opening's is 1."
+        )
+        self.passing.activated.connect(self._passing)
+        form.addRow("Lets through", self.passing)
         layout.addLayout(form)
-        self.table = QTableWidget(2, len(OCTAVE_BANDS_HZ))
+        self.table = QTableWidget(len(_MATERIAL_ROWS), len(OCTAVE_BANDS_HZ))
         self.table.setHorizontalHeaderLabels(BAND_LABELS)
-        self.table.setVerticalHeaderLabels(["Absorption", "Scattering"])
+        self.table.setVerticalHeaderLabels(_MATERIAL_ROWS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.AllEditTriggers)
-        self.table.setMaximumHeight(130)
+        self.table.setMaximumHeight(165)
         self.table.itemChanged.connect(self._coefficients)
         layout.addWidget(self.table)
         self.source = QLabel()
@@ -517,7 +560,7 @@ class MaterialPage(Page):
         material = self.document.scene.materials[self.key]
         self.name.setText(self.key)
         self.preset.setCurrentText(material.preset or "")
-        # Third-octave columns when either list has third-octave values.
+        # Third-octave columns when any list has third-octave values.
         bands = self._bands(material)
         third = bands == "third_octave"
         labels = THIRD_OCTAVE_LABELS if third else BAND_LABELS
@@ -528,9 +571,24 @@ class MaterialPage(Page):
         for row, values in enumerate(material.coefficients(bands)):
             for col, value in enumerate(values):
                 self.table.setItem(row, col, QTableWidgetItem(f"{value:.2f}"))
+        passing = material.transmission_coefficients(bands)
+        kind = self._kind(passing)
+        self.passing.setCurrentIndex(kind)
+        for col, value in enumerate(passing or [0.0] * len(labels)):
+            item = QTableWidgetItem(_reduction_text(value))
+            if kind != 1:  # set by the choice above, not typed
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(2, col, item)
         self.source.setText(f"Source: {material.source or 'values given in the scene'}")
         area = self.document.room.area_by_material().get(self.key, 0.0)
         self.usage.setText(f"Covers {area:.1f} m² of the room.")
+
+    @staticmethod
+    def _kind(passing: list[float] | None) -> int:
+        """The index in :data:`PASSING` of what a transmission lets through."""
+        if passing is None or max(passing) <= 0.0:
+            return 0
+        return 2 if min(passing) >= 1.0 else 1
 
     def _fields(self) -> dict:
         material = self.document.scene.materials[self.key]
@@ -540,11 +598,9 @@ class MaterialPage(Page):
     def _bands(material) -> str:
         """The bands the table shows ``material`` in: third octaves when it has any."""
         third = len(THIRD_OCTAVE_BANDS_HZ)
-        return (
-            "third_octave"
-            if third in (len(material.absorption), len(material.scattering))
-            else "octave"
-        )
+        passing = material.transmission_loss or material.transmission or []
+        lengths = (len(material.absorption), len(material.scattering), len(passing))
+        return "third_octave" if third in lengths else "octave"
 
     def _rename(self) -> None:
         new = self.name.text().strip()
@@ -565,29 +621,64 @@ class MaterialPage(Page):
         fields = {"preset": entry, "scattering": material.scattering}
         self.run(lambda: self.document.set_material(self.key, fields))
 
+    def _passing(self, kind: int) -> None:
+        material = self.document.scene.materials[self.key]
+        if kind == self._kind(material.transmission_coefficients()):
+            return
+        fields = _without_transmission(self._fields())
+        if kind == 1:
+            fields["transmission_loss"] = DEFAULT_REDUCTION_DB
+        elif kind == 2:  # all passes, so all counts as absorbed
+            fields = {"transmission": 1.0, "scattering": fields["scattering"]}
+        self.run(lambda: self.document.set_material(self.key, fields))
+
     def _coefficients(self) -> None:
         if self._loading:
             return
+        columns = range(self.table.columnCount())
         try:
-            rows = [
-                [float(self.table.item(r, c).text()) for c in range(self.table.columnCount())]
-                for r in range(2)
-            ]
+            rows = [[float(self.table.item(r, c).text()) for c in columns] for r in range(2)]
         except (AttributeError, ValueError):
             self.failed.emit("coefficients are numbers from 0 to 1")
             self.reload()
             return
+        material = self.document.scene.materials[self.key]
+        bands = self._bands(material)
+        passing = material.transmission_coefficients(bands)
+        reduction = None
+        if self._kind(passing) == 1:
+            texts = [self.table.item(2, c).text().strip() for c in columns]
+            try:
+                typed = [float(t) if t else None for t in texts]
+            except ValueError:
+                self.failed.emit("the sound reduction is in dB")
+                self.reload()
+                return
+            # A blank band takes its neighbour's value; all blank, nothing passes.
+            reduction = _nearest_filled(typed) if any(v is not None for v in typed) else None
         fields = self._fields()
-        bands = self._bands(self.document.scene.materials[self.key])
         shown = [convert(fields[k], bands) for k in ("absorption", "scattering")]
-        if rows == [[round(v, 2) for v in row] for row in shown]:
+        same = rows == [[round(v, 2) for v in row] for row in shown]
+        if reduction is not None:
+            now = list(map(_reduction_text, passing))
+            if same and [_reduction_text(10.0 ** (-r / 10.0)) for r in reduction] == now:
+                return
+        elif same and self._kind(passing) != 1:
             return
-        origin = fields.get("source") or "values given in the scene"
-        fields = {
-            "absorption": rows[0],
-            "scattering": rows[1],
-            "source": origin if origin.startswith("edited") else f"edited from {origin}",
-        }
+        if same:  # only what passes changed: the rest stays as it is given
+            fields = _without_transmission(fields)
+        else:
+            origin = fields.get("source") or "values given in the scene"
+            kept = {k: fields[k] for k in ("transmission", "transmission_loss") if k in fields}
+            fields = {
+                "absorption": rows[0],
+                "scattering": rows[1],
+                "source": origin if origin.startswith("edited") else f"edited from {origin}",
+                **kept,
+            }
+        if reduction is not None:
+            fields.pop("transmission", None)
+            fields["transmission_loss"] = reduction
         self.run(lambda: self.document.set_material(self.key, fields))
 
 

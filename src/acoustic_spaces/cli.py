@@ -122,6 +122,10 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     for name, material in scene.materials.items():
         absorption = material.coefficients("octave")[0]
         print(_band_row(name, absorption, width) + f"  {areas[name]:9.2f}")
+        passing = material.transmission_coefficients("octave")
+        if passing is not None:
+            reduction = [max(0.0, -10.0 * math.log10(t)) if t > 0 else math.inf for t in passing]
+            print(_band_row("  R (dB)", reduction, width, "6.1f") + "  sound reduction")
         if len(material.absorption) > len(absorption):
             print("  third-octave data, shown as octave averages")
         if material.source:

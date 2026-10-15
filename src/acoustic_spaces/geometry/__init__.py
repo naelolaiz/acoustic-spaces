@@ -7,12 +7,14 @@ can also be built from dimensions (:func:`box_mesh`, :func:`extruded_mesh`).
 """
 
 from acoustic_spaces.geometry.builders import box_mesh, extruded_mesh, plan_problem
+from acoustic_spaces.geometry.cells import MeshCells, mesh_cells
 from acoustic_spaces.geometry.checks import (
     MeshReport,
     check_mesh,
     clean_mesh,
     distance_to_surface,
     points_inside,
+    room_of,
 )
 from acoustic_spaces.geometry.io import SUPPORTED_SUFFIXES, UNIT_SCALE, load_mesh
 from acoustic_spaces.geometry.mesh import RoomMesh
@@ -20,6 +22,7 @@ from acoustic_spaces.geometry.mesh import RoomMesh
 __all__ = [
     "SUPPORTED_SUFFIXES",
     "UNIT_SCALE",
+    "MeshCells",
     "MeshReport",
     "RoomMesh",
     "box_mesh",
@@ -28,6 +31,8 @@ __all__ = [
     "distance_to_surface",
     "extruded_mesh",
     "load_mesh",
+    "mesh_cells",
     "plan_problem",
     "points_inside",
+    "room_of",
 ]

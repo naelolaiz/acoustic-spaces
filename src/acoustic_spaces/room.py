@@ -31,8 +31,8 @@ from acoustic_spaces.geometry import (
     clean_mesh,
     extruded_mesh,
     load_mesh,
-    points_inside,
 )
+from acoustic_spaces.geometry.cells import MeshCells, cell_of
 from acoustic_spaces.materials.bands import Resolution, band_centres
 from acoustic_spaces.scene import Scene
 
@@ -55,6 +55,30 @@ def _material_for(label: tuple[str, ...], scene: Scene) -> str | None:
         if name in scene.materials:
             return name
     return scene.default_material
+
+
+def _air_cells(
+    cells: MeshCells, where: np.ndarray, face_materials, scene: Scene, names: list[str]
+) -> np.ndarray:
+    """The cells that hold air (see :attr:`Room.air_cells`), given the enclosed cell
+    each source element and listener lies in (``where``, -1 for none)."""
+    occupied = np.unique(where[where >= 0])
+    if np.isin(occupied, cells.rooms).all():
+        return cells.rooms
+    # Cells joined by a surface that lets sound through.
+    passing = np.array(
+        [scene.materials[n].transmission_coefficients() is not None for n in names] + [False]
+    )[face_materials]
+    links = cells.side[passing]
+    air = set(occupied.tolist())
+    grown = True
+    while grown:
+        grown = False
+        for a, b in links.tolist():
+            if (a in air) != (b in air) and cells.enclosed[a] and cells.enclosed[b]:
+                air |= {a, b}
+                grown = True
+    return np.array(sorted(air), dtype=np.int64)
 
 
 def _directivity_key(spec, scene: Scene) -> str:
@@ -80,6 +104,12 @@ class Room:
     unused_assignments: list[str]
     #: Each source's directivity, in ``scene.sources`` order.
     directivities: list[Directivity]
+    #: (R,) the cells of ``mesh.cells()`` that hold air: the rooms. Usually the
+    #: model's rooms (see :mod:`acoustic_spaces.geometry.cells`); when a source or a
+    #: listener lies in another enclosed cell (a model with thick walls, whose rooms are
+    #: cells inside the walls' shell), the cells they lie in, with those that surfaces
+    #: letting sound through join to them. Empty when the mesh is not closed.
+    air_cells: np.ndarray
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> Room:
@@ -122,13 +152,26 @@ class Room:
         face_materials = per_label[mesh.face_labels]
 
         sources_inside = listeners_inside = None
+        air = np.zeros(0, dtype=np.int64)
         if report.closed:
-            # A line or surface source is inside when all its point sources are.
+            cells = mesh.cells()
             elements = [s.elements() for s in scene.sources]
-            inside = points_inside(mesh, np.vstack(elements)) if elements else np.zeros(0, bool)
+            points = np.vstack(
+                [*elements, *[np.reshape(lis.position, (1, 3)) for lis in scene.listeners]]
+                or [np.zeros((0, 3))]
+            )
+            enclosed = np.flatnonzero(cells.enclosed)
+            found = cell_of(mesh.vertices, mesh.faces, cells, points, enclosed)
+            where = np.where(found >= 0, enclosed[np.maximum(found, 0)], -1)
+            air = _air_cells(cells, where, face_materials, scene, material_names)
+            inside = np.isin(where, air) & (where >= 0)
+            count = sum(len(e) for e in elements)
+            # A line or surface source is inside when all its point sources are.
             ends = np.cumsum([len(e) for e in elements])[:-1]
-            sources_inside = np.array([part.all() for part in np.split(inside, ends)], bool)
-            listeners_inside = points_inside(mesh, [lis.position for lis in scene.listeners])
+            sources_inside = np.array(
+                [part.all() for part in np.split(inside[:count], ends)] if elements else [], bool
+            )
+            listeners_inside = inside[count:]
 
         names = set(mesh.label_names())
         unused = [key for key in scene.assignments if key not in names]
@@ -158,6 +201,7 @@ class Room:
             listeners_inside=listeners_inside,
             unused_assignments=unused,
             directivities=directivities,
+            air_cells=air,
         )
 
     def directivity(self, source: str, bands: Resolution = "octave") -> Directivity:
@@ -229,10 +273,11 @@ class Room:
         out = []
         if not r.closed:
             out.append(
-                f"the model is not closed ({r.boundary_edges} boundary edges, "
-                f"{r.odd_edges} edges shared by three or another odd number of faces): "
-                "rays can escape, and the volume and inside checks are skipped"
+                f"the model is not closed ({r.open_faces} faces have no room on either "
+                f"side; {r.boundary_edges} boundary edges): rays can escape, and the "
+                "volume and inside checks are skipped"
             )
+        out.extend(self._unreachable())
         if r.inconsistent_edges:
             out.append(
                 f"{r.inconsistent_edges} edges join faces with opposite orientation; "
@@ -267,11 +312,93 @@ class Room:
                     )
         return out
 
+    def _unreachable(self) -> list[str]:
+        """Listeners in a room that no sound of a source can reach: no surface between
+        their rooms lets sound through."""
+        if len(self.air_cells) < 2 or not self.scene.listeners or not self.scene.sources:
+            return []
+        through = self.face_transmission()
+        links = np.zeros((0, 2), dtype=np.int64)
+        if through is not None:
+            pair = self.face_room[np.any(through > 0.0, axis=1)]
+            links = pair[(pair >= 0).all(axis=1)]
+        # Rooms joined to each room, step by step.
+        joined = np.eye(len(self.air_cells), dtype=bool)
+        joined[links[:, 0], links[:, 1]] = joined[links[:, 1], links[:, 0]] = True
+        for _ in range(len(self.air_cells)):
+            joined = (joined.astype(int) @ joined.astype(int)) > 0
+        listener_rooms = self.room_of([lis.position for lis in self.scene.listeners])
+        out = []
+        for source in self.scene.sources:
+            rooms = np.unique(self.room_of(source.elements()))
+            rooms = rooms[rooms >= 0]
+            for listener, room in zip(self.scene.listeners, listener_rooms, strict=True):
+                if room >= 0 and len(rooms) and not joined[rooms, room].any():
+                    out.append(
+                        f"listener {listener.name!r} is in another room than source "
+                        f"{source.name!r}, and no surface between them lets sound through"
+                    )
+        return out
+
     # -- statistics ---------------------------------------------------------------
 
     @property
     def volume_m3(self) -> float | None:
-        return self.report.volume_m3
+        """The volume of air (m3): of all the rooms together; None when the model is not
+        closed."""
+        return float(self.room_volumes.sum()) if len(self.air_cells) else None
+
+    @property
+    def room_volumes(self) -> np.ndarray:
+        """(R,) volume of each room (m3)."""
+        return self.mesh.cells().volume[self.air_cells]
+
+    @property
+    def face_room(self) -> np.ndarray:
+        """(F, 2) the room (an index into :attr:`room_volumes`) on the front (the side
+        the face's normal points to) and on the back of each face, or -1 where a side
+        faces no room: the outside, or the inside of a solid."""
+        cells = self.mesh.cells()
+        index = np.full(len(cells.volume), -1, dtype=np.int64)
+        index[self.air_cells] = np.arange(len(self.air_cells))
+        return index[cells.side]
+
+    def room_of(self, points) -> np.ndarray:
+        """The room each point lies in (an index into :attr:`room_volumes`), or -1."""
+        mesh = self.mesh
+        return cell_of(mesh.vertices, mesh.faces, mesh.cells(), points, self.air_cells)
+
+    def face_transmission(self, bands: Resolution = "octave") -> np.ndarray | None:
+        """(F, bands) share of sound each face lets through, or None when none does."""
+        names = self.material_names
+        rows = [self.scene.materials[n].transmission_coefficients(bands) for n in names]
+        if all(r is None for r in rows):
+            return None
+        width = len(band_centres(bands))
+        table = np.array([np.zeros(width) if r is None else r for r in rows] + [np.zeros(width)])
+        return table[self.face_materials]
+
+    def _sides(self, bands: Resolution) -> tuple[np.ndarray, np.ndarray]:
+        """Each face's area as the rooms see it (m2), and the share of the sound meeting
+        it that it takes out of them per band, both summed over its sides that face a
+        room: a partition or a free-standing panel counts twice, an opening between two
+        rooms not at all. A face between two rooms takes what it absorbs, not what it
+        passes on. Without rooms (an open model), every face counts once."""
+        areas = self.mesh.face_areas()
+        alpha = np.array(
+            [self.scene.materials[n].coefficients(bands)[0] for n in self.material_names]
+            + [np.zeros(len(band_centres(bands)))]
+        )[self.face_materials]
+        if not len(self.air_cells):
+            return areas, alpha
+        sides = (self.face_room >= 0).sum(axis=1)
+        through = self.face_transmission(bands)
+        if through is None:
+            return areas * sides, alpha * sides[:, None]
+        between = sides == 2
+        taken = np.where(between[:, None], alpha - through, alpha) * sides[:, None]
+        opening = between & np.all(alpha >= 1.0, axis=1) & np.all(through >= 1.0, axis=1)
+        return np.where(opening, 0.0, areas * sides), taken
 
     def area_by_material(self) -> dict[str, float]:
         """Surface area (m2) per material, in ``material_names`` order."""
@@ -283,11 +410,10 @@ class Room:
 
     def absorption_area(self, bands: Resolution = "octave") -> np.ndarray:
         """Equivalent absorption area per octave band, or per third-octave band with
-        ``bands="third_octave"`` (m2): the sum of S * alpha."""
-        total = np.zeros(len(band_centres(bands)))
-        for name, area in self.area_by_material().items():
-            total += area * np.asarray(self.scene.materials[name].coefficients(bands)[0])
-        return total
+        ``bands="third_octave"`` (m2): the sum of S * alpha over the sides of the faces
+        that face a room. With partitions or openings between rooms, it is that of all
+        the rooms as one: what passes from one room to another is not lost."""
+        return self.mesh.face_areas() @ self._sides(bands)[1]
 
     def air_attenuation(self, bands: Resolution = "octave") -> np.ndarray:
         """Energy attenuation of the scene's air per octave band, or per third-octave
@@ -323,30 +449,30 @@ class Room:
         volume = self.volume_m3
         constant = 24.0 * math.log(10.0) * volume / self.speed_of_sound()
         air = 4.0 * self.air_attenuation(bands) * volume if air_absorption else 0.0
-        surface = self.report.surface_area_m2
+        counted, taken = self._sides(bands)
+        surface = float(counted.sum())
 
         def eyring(absorption: np.ndarray, area: float) -> np.ndarray:
             mean_alpha = np.clip(absorption / area, 0.0, 1.0 - 1e-12)
             with np.errstate(divide="ignore"):
                 return constant / (-surface * np.log1p(-mean_alpha) + air)
 
+        absorption = self.mesh.face_areas() @ taken
         if formula == "sabine":
             with np.errstate(divide="ignore"):
-                return constant / (self.absorption_area(bands) + air)
+                return constant / (absorption + air)
         if formula == "eyring":
-            return eyring(self.absorption_area(bands), surface)
+            return eyring(absorption, surface)
         if formula == "arau_puchades":
+            # Each face's area shared between the axes; its sides that face a room count.
             share = self.mesh.face_areas()[:, None] * self.mesh.face_normals() ** 2  # (F, 3)
-            alpha = np.array(
-                [self.scene.materials[n].coefficients(bands)[0] for n in self.material_names]
-            )
-            face_alpha = np.where(
-                (self.face_materials == UNASSIGNED)[:, None], 0.0, alpha[self.face_materials]
-            )
-            total = share.sum()
-            log_time = np.zeros(face_alpha.shape[1])
-            for area, absorption in zip(share.sum(axis=0), share.T @ face_alpha, strict=True):
+            sides = counted / np.maximum(self.mesh.face_areas(), 1e-300)
+            total = float((share * sides[:, None]).sum())
+            log_time = np.zeros(taken.shape[1])
+            for area, axis_absorption in zip(
+                (share * sides[:, None]).sum(axis=0), share.T @ taken, strict=True
+            ):
                 if area > 0:
-                    log_time += area / total * np.log(eyring(absorption, area))
+                    log_time += area / total * np.log(eyring(axis_absorption, area))
             return np.exp(log_time)
         raise ValueError(f"unknown formula {formula!r}; use 'sabine', 'eyring' or 'arau_puchades'")

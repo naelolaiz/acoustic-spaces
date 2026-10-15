@@ -79,7 +79,7 @@ RADIUS_RANGE = (0.5, 1.0)
 
 
 def receiver_radius(
-    volume_m3: float | None,
+    volume_m3: float | np.ndarray | None,
     rays: int,
     max_time: float,
     c: float,
@@ -88,17 +88,121 @@ def receiver_radius(
     """Detector sphere radius: Lehnert's log10(c * t_max) * sqrt(V / (pi * N)), kept
     within ``RADIUS_RANGE`` and inside the room.
 
-    ``clearance`` is each listener's distance to the nearest surface; a sphere reaching
-    through a wall would read too low, so the radius stays below 90 % of it.
+    ``volume_m3`` may hold one volume per listener: that of the room it is in, where
+    partitions or openings divide the model. ``clearance`` is each listener's distance
+    to the nearest surface; a sphere reaching through a wall would read too low, so the
+    radius stays below 90 % of it.
     """
     if volume_m3 is None:
-        r = RADIUS_RANGE[0]
+        r = np.asarray(RADIUS_RANGE[0])
     else:
-        r = math.log10(max(c * max_time, 10.0)) * math.sqrt(volume_m3 / (math.pi * rays))
-        r = min(max(r, RADIUS_RANGE[0]), RADIUS_RANGE[1])
+        volume = np.asarray(volume_m3, dtype=float)
+        r = math.log10(max(c * max_time, 10.0)) * np.sqrt(volume / (math.pi * rays))
+        r = np.clip(r, *RADIUS_RANGE)
     if clearance is None:
-        return float(r)
+        return float(r) if r.ndim == 0 else r
     return np.maximum(np.minimum(r, 0.9 * np.asarray(clearance, dtype=float)), 1e-3)
+
+
+def _exchange(model: TraceModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Each room's surface area (rooms,), absorption area (bands, rooms) and the area
+    that passes sound from one room to another (bands, rooms, rooms), what passes
+    counted as absorbed on its side. A face counts for the room on each of its sides,
+    and one standing in a room twice."""
+    rooms = len(model.room_volumes)
+    bands = model.absorption.shape[1]
+    area = model.room.mesh.face_areas()
+    face_room = model.face_room
+    surface = np.zeros(rooms)
+    absorbed = np.zeros((bands, rooms))
+    for side in (0, 1):
+        ok = face_room[:, side] >= 0
+        np.add.at(surface, face_room[ok, side], area[ok])
+        np.add.at(absorbed.T, face_room[ok, side], area[ok, None] * model.absorption[ok])
+    passing = np.zeros((bands, rooms, rooms))
+    if model.transmission is not None:
+        between = (face_room >= 0).all(axis=1)
+        share = (area[between, None] * model.transmission[between]).T  # (bands, faces)
+        one, two = face_room[between, 0], face_room[between, 1]
+        for b in range(bands):
+            np.add.at(passing[b], (one, two), share[b])
+            np.add.at(passing[b], (two, one), share[b])
+    return surface, absorbed, passing
+
+
+def room_levels(model: TraceModel, source_room: int, air: np.ndarray) -> np.ndarray:
+    """The weight window's level of each room relative to the source's room (see
+    :func:`stochastic_energy`): the energy each would hold in the steady state of a
+    diffuse field, the rooms exchanging energy through the faces between them in
+    proportion to their area and transmission. Empty with fewer than two rooms or no
+    transmission."""
+    rooms = len(model.room_volumes)
+    if model.transmission is None or rooms < 2 or source_room < 0:
+        return np.zeros(0)
+    area = model.room.mesh.face_areas()
+    volume = np.asarray(model.room_volumes, dtype=float)
+    _, absorbed, passing = _exchange(model)
+    energy = np.zeros((model.absorption.shape[1], rooms))
+    for b in range(len(energy)):
+        # Power balance per room: (c / 4) [A_r w_r - sum over faces of S tau w_q] = P.
+        balance = np.diag(4.0 * np.asarray(air, float)[b] * volume + 1e-12 * area.sum())
+        balance += np.diag(absorbed[b]) - passing[b]
+        power = np.zeros(rooms)
+        power[source_room] = 1.0
+        energy[b] = np.maximum(np.linalg.solve(balance, power), 0.0) * volume
+    total = energy.mean(axis=0)
+    # In powers of the window's ratio: rooms that an opening joins hold much the same,
+    # and rays that cross between them should not be split and thinned at every pass.
+    with np.errstate(divide="ignore"):
+        steps = np.round(np.log(total / total[source_room]) / math.log(SPLIT_RATIO))
+    return np.where(total > 0.0, SPLIT_RATIO**steps, 0.0)
+
+
+def diffuse_decay(
+    model: TraceModel,
+    source: np.ndarray,
+    points: np.ndarray,
+    air: np.ndarray,
+    speed_of_sound: float,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """How the diffuse field decays at ``points`` where the model holds several rooms,
+    for :func:`statistical_energy`: amplitudes (points, bands, rooms) and rates (bands,
+    rooms) such that the energy a unit source sends reaches a point at the sum of
+    amplitude exp(-rate t) per second, t from emission. None with one room.
+
+    Coupled-room theory: the energy density of each room i follows
+    V_i dw_i/dt = -(c / 4) (A_i + 4 m V_i) w_i + (c / 4) sum_j S_ij tau_ij w_j, with A_i
+    the room's absorption area after Eyring, -S_i ln(1 - a_i) with what passes counted
+    as absorbed, m the air's attenuation and S_ij tau_ij the area that passes sound from
+    room j. The source's sound starts in its own room. With one room it is Barron's
+    (c / V) exp(-13.8 t / T) with Eyring's T."""
+    volume = np.asarray(model.room_volumes, dtype=float)
+    if len(volume) < 2:
+        return None
+    source_room = int(model.room.room_of(np.asarray(source, float)[None])[0])
+    where = model.room.room_of(np.atleast_2d(np.asarray(points, float)))
+    surface, absorbed, passing = _exchange(model)
+    mean = np.minimum(absorbed / np.maximum(surface, 1e-300), 1.0 - 1e-9)
+    eyring = -surface * np.log1p(-mean) + 4.0 * np.asarray(air, float)[:, None] * volume
+    bands, rooms = eyring.shape
+    amplitude = np.zeros((len(where), bands, rooms))
+    rate = np.zeros((bands, rooms))
+    scale = 1.0 / np.sqrt(volume)
+    inside = where >= 0
+    for b in range(bands):
+        # V^-1 (S tau - A) is similar to a symmetric matrix, so its modes are real.
+        coupling = (speed_of_sound / 4.0) * scale[:, None] * (passing[b] - np.diag(eyring[b]))
+        values, modes = np.linalg.eigh(coupling * scale[None, :])
+        rate[b] = np.maximum(-values, 1e-9)
+        if source_room < 0:
+            continue
+        amplitude[inside, b] = (
+            speed_of_sound
+            * modes[where[inside]]
+            * modes[source_room]
+            * (scale[where[inside], None] * scale[source_room])
+        )
+    return amplitude, rate
 
 
 def _split_target(ray_energy: np.ndarray, reflections: np.ndarray) -> np.ndarray:
@@ -119,24 +223,47 @@ def _split_target(ray_energy: np.ndarray, reflections: np.ndarray) -> np.ndarray
     return np.where(target > 0, np.exp2(quarter_octaves / 4.0), 0.0)
 
 
-def _in_batches(trace, rays: int, splitting: bool):
+def _in_batches(trace, rays: int, splitting: bool, own: np.ndarray | None = None):
     """Runs ``trace(count, first, target)``, which returns (arrays, escaped rays,
     ray_energy, reflections, traced rays), for all ``rays``: at once, or with
     ``splitting`` in two batches where the second uses the weight window measured by
     the first. Returns (arrays, escaped rays, traced rays), each array the mean of the
-    batches weighted by their share of rays."""
+    batches weighted by their share of rays.
+
+    ``own`` says for each row of the arrays (listener or map point) whether it lies in
+    the source's room. The first batch sends few rays to the other rooms (no copies
+    pass into them), so rows elsewhere take the second batch alone."""
     first = max(min(rays // 2, MIN_FIRST_RAYS), rays // 10, 1) if splitting else rays
     arrays, escaped, ray_energy, reflections, traced = trace(first, 0, np.zeros(0))
     if first < rays:
         # Each batch carries the whole source energy; weight them by their share of rays.
         target = _split_target(ray_energy, reflections) * first / (rays - first)
         more, more_escaped, _, _, more_traced = trace(rays - first, first, target)
+        share = np.full(len(arrays[0]), first / rays)
+        if own is not None:
+            share = np.where(own, share, 0.0)
         arrays = [
-            (first * a + (rays - first) * b) / rays for a, b in zip(arrays, more, strict=True)
+            share.reshape(-1, *[1] * (a.ndim - 1)) * a
+            + (1.0 - share).reshape(-1, *[1] * (a.ndim - 1)) * b
+            for a, b in zip(arrays, more, strict=True)
         ]
         escaped += more_escaped
         traced += more_traced
     return arrays, escaped, traced
+
+
+def _rooms(model: TraceModel, source: np.ndarray, air: np.ndarray, points) -> tuple:
+    """The tracer's transmission arguments for a source: face_room, source_room and
+    room_level, and whether each of ``points`` (listeners or map points) lies in the
+    source's room (None when there is nothing to tell apart)."""
+    if model.transmission is None or len(model.room_volumes) == 0:
+        return np.zeros((0, 2), dtype=np.int64), -1, np.zeros(0), None
+    source_room = int(model.room.room_of(np.asarray(source, float)[None])[0])
+    level = room_levels(model, source_room, air)
+    own = None
+    if len(level):
+        own = model.room.room_of(points) == source_room
+    return np.ascontiguousarray(model.face_room, dtype=np.int64), source_room, level, own
 
 
 def band_groups(model: TraceModel) -> list[slice]:
@@ -149,7 +276,8 @@ def band_groups(model: TraceModel) -> list[slice]:
     ray for all bands (``by_band`` off). Either way each band has the rays asked for,
     so tracing band by band traces that many rays per band."""
     bands = model.absorption.shape[1]
-    scattering = np.asarray(model.scattering)
+    # Faces that reflect nothing (openings) scatter nothing either.
+    scattering = np.asarray(model.scattering)[np.any(model.absorption < 1.0, axis=1)]
     uniform = bool(np.all(scattering == scattering[:, :1]))
     if model.surface_size is not None:
         uniform = uniform and bool(np.all(scattering == 1.0))  # fully diffuse at any size
@@ -183,20 +311,25 @@ def _directivity_arrays(directivity: Directivity | None, orientation, bands: int
 def _band_arguments(model: TraceModel, air: np.ndarray, directivity: tuple, band: slice) -> tuple:
     """For the bands ``band``: the tracer's directivity_a and directivity_table (from
     ``directivity``, both arrays for all bands), absorption, scattering and air, and the
-    arguments surface_size, band_hz, vector_scattering and size_from_order."""
+    arguments surface_size, band_hz, vector_scattering, size_from_order and
+    transmission."""
     first_order, table = directivity
     if model.surface_size is None:
         size, hz = np.zeros((0, 2)), np.zeros(0)
     else:
         size = np.ascontiguousarray(model.surface_size, dtype=np.float64)
         hz = np.ascontiguousarray(np.asarray(model.band_hz, dtype=np.float64)[band])
+    if model.transmission is None:
+        passing = np.zeros((0, 0))
+    else:
+        passing = np.ascontiguousarray(model.transmission[:, band], dtype=np.float64)
     return (
         np.ascontiguousarray(first_order[band] if len(first_order) else first_order),
         np.ascontiguousarray(table[..., band]),
         np.ascontiguousarray(model.absorption[:, band], dtype=np.float64),
         np.ascontiguousarray(model.scattering[:, band], dtype=np.float64),
         np.ascontiguousarray(np.asarray(air, dtype=np.float64)[band]),
-        (size, hz, bool(model.vector_scattering), int(model.size_from_order)),
+        (size, hz, bool(model.vector_scattering), int(model.size_from_order), passing),
     )
 
 
@@ -251,6 +384,7 @@ def stochastic_energy(
     directivity_a, orientation, table = _directivity_arrays(
         directivity, orientation, model.absorption.shape[1]
     )
+    face_room, source_room, level, own = _rooms(model, source, air, listeners)
 
     def run(band: slice, count: int):
         first_order, band_table, absorption, scattering, band_air, sizes = _band_arguments(
@@ -268,6 +402,8 @@ def stochastic_energy(
                 scattering,
                 band_air,
                 *sizes,
+                face_room,
+                source_room,
                 listeners,
                 np.ascontiguousarray(directions.reshape(-1, 3)),
                 int(count),
@@ -288,10 +424,11 @@ def stochastic_energy(
                 SPLIT_RATIO,
                 MAX_SPLIT,
                 MAX_FAMILY,
+                level,
             )
             return [energy, directional], *rest
 
-        return _in_batches(trace, count, splitting)
+        return _in_batches(trace, count, splitting, own)
 
     (energy, directional), escaped, traced = _by_band(band_groups(model), rays, run)
     return LateEnergy(
@@ -362,6 +499,7 @@ def stochastic_map_energy(
     directivity_a, orientation, table = _directivity_arrays(
         directivity, orientation, model.absorption.shape[1]
     )
+    face_room, source_room, level, own = _rooms(model, source, air, grid.points)
 
     def run(band: slice, count: int):
         first_order, band_table, absorption, scattering, band_air, sizes = _band_arguments(
@@ -379,6 +517,8 @@ def stochastic_map_energy(
                 scattering,
                 band_air,
                 *sizes,
+                face_room,
+                source_room,
                 np.asarray(grid.origin, dtype=np.float64),
                 float(grid.cell),
                 np.ascontiguousarray(grid.index, dtype=np.int64),
@@ -402,10 +542,11 @@ def stochastic_map_energy(
                 SPLIT_RATIO,
                 MAX_SPLIT,
                 MAX_FAMILY,
+                level,
             )
             return [energy], *rest
 
-        return _in_batches(trace, count, splitting)
+        return _in_batches(trace, count, splitting, own)
 
     (energy,), escaped, traced = _by_band(band_groups(model), rays, run)
     return MapEnergy(
@@ -426,6 +567,7 @@ def statistical_energy(
     max_time: float,
     time_step: float,
     speed_of_sound: float,
+    decay: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> LateEnergy:
     """Energy per listener, band and time slot of a diffuse field, less the early paths.
 
@@ -447,21 +589,31 @@ def statistical_energy(
     makes up the difference: its running sum is the largest that never falls and never
     rises above Barron's less the early paths'. No slot goes negative and the total
     stays Barron's, unless the early paths alone carry more.
+
+    Where partitions or openings divide the model into rooms, ``decay`` (from
+    :func:`diffuse_decay`) gives each listener's field as coupled-room theory has it, in
+    place of ``reverberation_time`` and ``volume_m3``: a room joined to a livelier one
+    decays in two slopes, and one behind a partition holds less.
     """
     t60 = np.asarray(reverberation_time, dtype=float)
-    rate = _DECAY / t60[:, None]  # (bands, 1)
+    starts = np.asarray(direct_times, dtype=float)
+    if decay is None:
+        rate = _DECAY / t60[:, None]  # (bands, 1)
+        amplitude = np.broadcast_to(speed_of_sound / volume_m3, (len(starts), len(t60), 1))
+    else:
+        amplitude, rate = decay
     bins = int(math.ceil(max_time / time_step))
     edges = np.arange(bins + 1) * time_step
-    out = np.zeros((len(direct_times), len(t60), bins))
-    for i, start in enumerate(np.asarray(direct_times, dtype=float)):
-        # Integral of (c / V) exp(-rate t) from the direct sound to each slot edge, less
-        # the early reflections arrived by then.
+    out = np.zeros((len(starts), len(t60), bins))
+    for i, start in enumerate(starts):
+        # Integral of (c / V) exp(-rate t) (in each room's modes, with several) from the
+        # direct sound to each slot edge, less the early reflections arrived by then.
+        r = rate[:, :, None]
         arrived = (
-            speed_of_sound
-            / volume_m3
-            / rate
-            * (np.exp(-rate * start) - np.exp(-rate * np.maximum(edges, start)))
-        )
+            amplitude[i][:, :, None]
+            / r
+            * (np.exp(-r * start) - np.exp(-r * np.maximum(edges, start)))
+        ).sum(axis=1)
         if i < len(early):
             paths = early[i]
             slot = (paths.delay_s / time_step).astype(np.int64)

@@ -36,25 +36,42 @@ class MeshReport:
     #: (open model or inconsistent orientation).
     normals_inward: bool | None = None
 
-    #: Edges shared by three or another odd number of faces: a fin or a crack, which
-    #: leaves the model open.
+    #: Edges shared by three or another odd number of faces: where a partition or an
+    #: opening between two rooms meets the walls, or a crack.
     odd_edges: int = 0
+    #: Volume of each room (m3): the separate volumes of air the faces enclose, two or
+    #: more where partitions or openings divide the model (see
+    #: :mod:`acoustic_spaces.geometry.cells`).
+    room_volumes_m3: tuple[float, ...] = ()
+    #: Faces with no room or solid on either side: a hole joins the room behind them to
+    #: the outside, or they stand outside the model.
+    open_faces: int = 0
 
     @property
     def closed(self) -> bool:
-        """True when there are faces and every edge is shared by an even number of them:
-        two, or four where two parts of the room touch along an edge."""
-        return self.faces > 0 and self.boundary_edges == 0 and self.odd_edges == 0
+        """True when the faces enclose at least one room and every face has a room or a
+        solid (the inside of a closed pillar) on one side at least. Free-standing panels
+        inside a room leave it closed."""
+        return self.faces > 0 and len(self.room_volumes_m3) > 0 and self.open_faces == 0
+
+    @property
+    def rooms(self) -> int:
+        return len(self.room_volumes_m3)
 
     def summary(self) -> str:
         lo, hi = np.array(self.bounds_min), np.array(self.bounds_max)
         size = " x ".join(f"{d:.2f}" for d in hi - lo)
         if self.closed:
             state = "closed"
+            if self.rooms > 1:
+                volumes = ", ".join(f"{v:.2f}" for v in self.room_volumes_m3)
+                state += f", {self.rooms} rooms of {volumes} m3"
         elif self.faces:
             state = f"open: {self.boundary_edges} boundary edges"
             if self.odd_edges:
                 state += f", {self.odd_edges} edges shared by an odd number of faces"
+            if self.open_faces:
+                state += f", {self.open_faces} faces with no room on either side"
         else:
             state = "no faces"
         lines = [
@@ -120,12 +137,15 @@ def _edge_counts(faces: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]
 def _split_t_junctions(
     vertices: np.ndarray, faces: np.ndarray, labels: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """The faces split at the vertices that lie on their open edges, with their labels.
+    """The faces split at the vertices of open edges that lie on their edges, with
+    their labels.
 
-    An open edge is one no other face shares. Each vertex within
-    ``T_JUNCTION_TOLERANCE_M`` of it, between its ends, becomes a corner: the face turns
-    into a fan of faces from its opposite corner, in the same orientation. A face with
-    T-junctions on more than one edge is split one edge per pass.
+    An open edge is one no other face shares. Each end of one within
+    ``T_JUNCTION_TOLERANCE_M`` of another face's edge, between its ends, becomes a
+    corner of that face: it turns into a fan of faces from its opposite corner, in the
+    same orientation. The edge may be open too, or shared: a partition drawn between two
+    rooms ends on the edge where their floors meet. A face with T-junctions on more than
+    one edge is split one edge per pass.
     """
     for _ in range(8):
         if len(faces) == 0:
@@ -134,14 +154,20 @@ def _split_t_junctions(
         open_rows = np.flatnonzero(counts[edge] == 1)
         if len(open_rows) == 0:
             break
-        # Only the ends of open edges can lie on another open edge: sorted along x, the
-        # ones within an edge's reach are one slice.
+        # Only the ends of open edges can lie on another edge: sorted along x, the ones
+        # within an edge's reach are one slice.
         ends = np.unique(directed[open_rows])
         order = np.argsort(vertices[ends, 0], kind="stable")
         ends, xs = ends[order], vertices[ends[order], 0]
         n = len(faces)
+        # The edges with an end of an open edge within reach of their x range, besides
+        # their own two.
+        x = vertices[directed, 0]
+        reach = np.searchsorted(xs, x.max(axis=1) + T_JUNCTION_TOLERANCE_M, side="right")
+        reach -= np.searchsorted(xs, x.min(axis=1) - T_JUNCTION_TOLERANCE_M)
+        own = np.isin(directed, ends).sum(axis=1)
         replaced: dict[int, list[list[int]]] = {}
-        for row in open_rows.tolist():
+        for row in np.flatnonzero(reach > own).tolist():
             face = row % n
             if face in replaced:
                 continue
@@ -248,19 +274,27 @@ def check_mesh(mesh: RoomMesh, merged: int = 0, removed: int = 0) -> MeshReport:
     boundary = int(np.count_nonzero(counts == 1))
     non_manifold = int(np.count_nonzero(counts > 2))
     odd = int(np.count_nonzero((counts > 2) & (counts % 2 == 1)))
-    inconsistent = int(np.count_nonzero((counts > 1) & (balance != 0)))
+    # Where three faces meet (a partition and the wall it divides), they cannot all agree.
+    inconsistent = int(np.count_nonzero((counts > 1) & (counts % 2 == 0) & (balance != 0)))
 
+    cells = mesh.cells()
+    rooms = tuple(float(v) for v in cells.room_volumes)
+    open_faces = int(np.count_nonzero(cells.open_faces))
     volume = None
     inward = None
     notes: list[str] = []
-    if boundary == 0 and odd == 0 and inconsistent == 0 and len(faces):
-        tri = mesh.triangles
-        signed = float(np.sum(np.einsum("ij,ij->i", tri[:, 0], np.cross(tri[:, 1], tri[:, 2]))) / 6)
-        volume = abs(signed)
-        inward = signed < 0
-        notes.append(
-            "face normals point into the room" if signed < 0 else "face normals point outward"
-        )
+    if rooms and open_faces == 0:
+        volume = float(sum(rooms))
+        # Faces with a room on one side only: do their normals point into it?
+        face_room = cells.face_room
+        one_sided = (face_room >= 0).sum(axis=1) == 1
+        front = face_room[one_sided, 0] >= 0
+        if len(front) and front.all():
+            inward = True
+            notes.append("face normals point into the room")
+        elif len(front) and not front.any():
+            inward = False
+            notes.append("face normals point outward")
 
     lo = mesh.vertices.min(axis=0) if len(mesh.vertices) else np.zeros(3)
     hi = mesh.vertices.max(axis=0) if len(mesh.vertices) else np.zeros(3)
@@ -279,31 +313,24 @@ def check_mesh(mesh: RoomMesh, merged: int = 0, removed: int = 0) -> MeshReport:
         notes=notes,
         normals_inward=inward,
         odd_edges=odd,
+        room_volumes_m3=rooms,
+        open_faces=open_faces,
     )
 
 
 def points_inside(mesh: RoomMesh, points: np.ndarray) -> np.ndarray:
-    """Whether each point lies inside a closed mesh (generalised winding number).
+    """Whether each point lies inside a room of a closed mesh (any of its rooms, when
+    partitions or openings divide it; see :mod:`acoustic_spaces.geometry.cells`)."""
+    return room_of(mesh, points) >= 0
 
-    Sums the signed solid angle every triangle subtends at the point; the total is
-    4*pi inside and 0 outside, whatever the orientation of the faces.
-    """
-    points = np.atleast_2d(np.asarray(points, dtype=np.float64))
-    tri = mesh.triangles
-    inside = np.empty(len(points), dtype=bool)
-    for k, p in enumerate(points):
-        a, b, c = tri[:, 0] - p, tri[:, 1] - p, tri[:, 2] - p
-        la, lb, lc = (np.linalg.norm(v, axis=1) for v in (a, b, c))
-        numerator = np.einsum("ij,ij->i", a, np.cross(b, c))
-        denominator = (
-            la * lb * lc
-            + np.einsum("ij,ij->i", a, b) * lc
-            + np.einsum("ij,ij->i", b, c) * la
-            + np.einsum("ij,ij->i", c, a) * lb
-        )
-        winding = np.sum(2.0 * np.arctan2(numerator, denominator)) / (4.0 * np.pi)
-        inside[k] = abs(winding) > 0.5
-    return inside
+
+def room_of(mesh: RoomMesh, points: np.ndarray) -> np.ndarray:
+    """The room each point lies in (an index into the rooms of ``mesh.cells()``), or
+    -1 outside every room. Generalised winding numbers: the signed solid angles that a
+    room's faces subtend at the point add up to 4 pi inside it and 0 outside."""
+    from acoustic_spaces.geometry.cells import room_of as cell_room_of
+
+    return cell_room_of(mesh.vertices, mesh.faces, mesh.cells(), points)
 
 
 def distance_to_surface(mesh: RoomMesh, points: np.ndarray) -> np.ndarray:

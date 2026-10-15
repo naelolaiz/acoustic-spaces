@@ -74,7 +74,8 @@ def test_specular_sequences_stay_inside_a_closed_box() -> None:
 
     vertices, faces = _unit_cube()
     bvh = _native.Bvh(vertices, faces)
-    seq = _native.specular_sequences(bvh, np.array([0.3, 0.4, 0.6]), 500, 6, 1)
+    origin = np.array([0.3, 0.4, 0.6])
+    seq = _native.specular_sequences(bvh, origin, 500, 6, 1, np.zeros(0, np.uint8))
     assert seq.shape == (500, 6)
     assert seq.min() >= 0 and seq.max() < 12
     # Consecutive hits are never on the same face.
@@ -99,6 +100,9 @@ def _trace_stochastic(rays: int, **settings):
         band_hz=np.zeros(0),
         vector_scattering=False,
         size_from_order=1,
+        transmission=np.zeros((0, 0)),
+        face_room=np.zeros((0, 2), dtype=np.int64),
+        source_room=-1,
         receivers=np.array([[0.7, 0.6, 0.4]]),
         directions=np.zeros((0, 3)),
         rays=rays,
@@ -119,6 +123,7 @@ def _trace_stochastic(rays: int, **settings):
         split_ratio=4.0,
         max_split=8,
         max_family=256,
+        room_level=np.zeros(0),
     )
     energy, _, _, ray_energy, reflections, traced = _native.trace_stochastic(**{**args, **settings})
     return energy[0, 0], ray_energy / reflections, traced
@@ -183,6 +188,9 @@ def _trace_map(rays: int, **changes):
         band_hz=np.zeros(0),
         vector_scattering=False,
         size_from_order=1,
+        transmission=np.zeros((0, 0)),
+        face_room=np.zeros((0, 2), dtype=np.int64),
+        source_room=-1,
         origin=np.array([0.4, 0.4]),
         cell=0.2,
         point=np.zeros((1, 1, 1), dtype=np.int64),
@@ -206,6 +214,7 @@ def _trace_map(rays: int, **changes):
         split_ratio=4.0,
         max_split=8,
         max_family=256,
+        room_level=np.zeros(0),
     )
     return _native.trace_map(**{**args, **changes})
 

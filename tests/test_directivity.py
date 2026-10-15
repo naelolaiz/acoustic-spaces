@@ -309,6 +309,9 @@ def _late_direct(directivity, orientation: np.ndarray, receivers: np.ndarray) ->
         band_hz=np.zeros(0),
         vector_scattering=True,
         size_from_order=1,
+        transmission=np.zeros((0, 0)),
+        face_room=np.zeros((0, 2), dtype=np.int64),
+        source_room=-1,
         receivers=receivers,
         directions=np.zeros((0, 3)),
         rays=400_000,
@@ -329,6 +332,7 @@ def _late_direct(directivity, orientation: np.ndarray, receivers: np.ndarray) ->
         split_ratio=4.0,
         max_split=8,
         max_family=256,
+        room_level=np.zeros(0),
     )
     return energy.sum(axis=2)
 

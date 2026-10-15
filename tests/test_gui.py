@@ -383,6 +383,41 @@ def test_third_octave_materials_and_bands(window) -> None:
     assert window.document.scene.simulation.bands == "octave"
 
 
+def test_materials_let_sound_through(window) -> None:
+    window.open_example(example_path("studio"))
+    window.select("material", "wooden_floor")
+    page = window.inspector.pages["material"]
+    floor = window.document.scene.materials["wooden_floor"]
+    absorption = list(floor.absorption)
+    assert page.passing.currentText() == "nothing" and page.table.item(2, 0).text() == ""
+    assert not page.table.item(2, 0).flags() & Qt.ItemFlag.ItemIsEditable
+
+    def choose(kind: int):
+        page.passing.setCurrentIndex(kind)
+        page.passing.activated.emit(kind)
+        return window.document.scene.materials["wooden_floor"]
+
+    floor = choose(1)  # part of the sound: 40 dB to start from, the preset kept
+    assert floor.transmission_loss == [40.0] * 8 and floor.preset == "stage_floor"
+    assert page.table.item(2, 4).text() == "40.0"
+    page.table.item(2, 3).setText("25")
+    floor = window.document.scene.materials["wooden_floor"]
+    assert floor.transmission_loss == [40.0] * 3 + [25.0] + [40.0] * 4
+    page.table.item(2, 2).setText("")  # a blank band takes its neighbour's value
+    assert window.document.scene.materials["wooden_floor"].transmission_loss[2] == 40.0
+    page.table.item(2, 0).setText("-3")  # R is not negative: refused, shown as it was
+    assert page.table.item(2, 0).text() == "40.0"
+    floor = choose(2)  # an opening absorbs all, as all passes
+    assert floor.transmission == [1.0] * 8 and floor.coefficients()[0] == [1.0] * 8
+    assert page.table.item(2, 0).text() == "0.0" and page.table.item(0, 0).text() == "1.00"
+    window.undo()
+    window.undo()
+    window.undo()
+    window.undo()
+    floor = window.document.scene.materials["wooden_floor"]
+    assert floor.transmission_loss is None and floor.absorption == absorption
+
+
 def test_source_spectrum_gain_equalizer_and_delay(window) -> None:
     window.open_example(example_path("studio"))
     window.select("sources", 0)
