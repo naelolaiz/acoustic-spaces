@@ -60,7 +60,7 @@ jobs:
           acoustic-spaces auralize sim talker=sweep.wav --format ambix3 --out mix.wav --normalize
 
   uv:
-    # The setup the README gives for a source checkout: `uv sync` with its dev group.
+    # The setup docs/getting-started.md gives for a source checkout: `uv sync` with its dev group.
     name: Source checkout with uv
     runs-on: ubuntu-24.04
     steps:
