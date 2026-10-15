@@ -285,7 +285,8 @@ def test_crossfades_are_continuous() -> None:
     np.testing.assert_allclose(out, expected, atol=1e-12)
     # A raised cosine: at most pi / 2 times the mean slope of a linear crossfade.
     assert np.abs(np.diff(out)).max() <= np.pi / 2 * 1.75 / 50 + 1e-9
-    assert out[0] == 1.0 and out[-1] == 0.5
+    # (FFT convolution: equal to rounding.)
+    assert out[0] == pytest.approx(1.0) and out[-1] == pytest.approx(0.5)
 
 
 def test_render_walk_with_the_example(tmp_path: Path) -> None:
