@@ -271,8 +271,8 @@ in the wave bands of closed rooms)
   `validation/edge_diffraction.py`: over barriers 0.3, 1 and 3 m thick within 0.35 dB
   from 500 Hz up and 2 dB at 63 Hz, and over two thin screens in a row within 0.75 dB
   from 500 Hz up and 2.7 dB at 63 Hz. The validation report has the tables.
-- The early stage of a hall with 16 edges that diffract takes 200 ms per source and
-  listener with `second_order`, 120 ms with `first_order` and 100 ms without
+- The early stage of a hall with 16 edges that diffract takes 170 ms per source and
+  listener with `second_order`, 120 ms with `first_order` and 90 ms without
   diffraction. `first_order` stays the default.
 
 **Early reflections in pressure at low frequencies** (`simulation.early.coherent_max_band_hz`;
