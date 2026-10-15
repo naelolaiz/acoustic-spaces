@@ -397,6 +397,15 @@ changes results at 63 and 125 Hz)
   below by Ivanic and Ruedenberg's recursion instead of a least-squares fit on a grid of
   directions.
 
+**Faster ray tracing**
+
+- Ray queries are 7 to 8 times faster, and the late stage with them: the model's
+  bounding volume hierarchy is split by the surface area heuristic instead of at the
+  median, walked nearest box first, and its box test no longer calls the maths
+  library. One band of 50,000 rays in BRAS's chamber music hall takes 5.7 s instead of
+  41 s on four cores. Rays meet the same surfaces at the same distances; where a ray
+  meets two faces at exactly the same point (a shared edge), it may now take the other.
+
 **Fixes**
 
 - The sound diffracted by the free edge of a thin screen left out the term of the

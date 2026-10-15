@@ -37,6 +37,12 @@ or in a corner. Sound that bends round edges is added to them (see
   random scattering, the example box's late tail (0.5 to 2.5 s) misses a 1-million-ray
   reference by 0.5 to 2 dB per band instead of 1 to 8 dB at 100k rays (1 to 4 dB
   instead of 4 to 17 dB at 10k), for about 1.5 times the run time.
+
+  Nearly all of the run time goes into ray queries: which surface a ray meets next,
+  and whether each listener can see a reflection. The model's bounding volume
+  hierarchy is split by the surface area heuristic and walked nearest box first; in
+  BRAS's chamber music hall (2,309 triangles, five listeners) one band of 50,000 rays
+  takes 5.7 s on four cores, where the median-split tree before it took 41 s.
 - `statistical`: the reflected energy of Barron's revised theory, an exponential
   decay at the Eyring reverberation time T from the direct sound on, less what the
   early paths carry. Early paths end `transition_ms` after the direct sound (by

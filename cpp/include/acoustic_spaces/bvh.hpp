@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Triangle bounding volume hierarchy for ray queries against a room model.
+// Triangle bounding volume hierarchy for ray queries against a room model: split by
+// the surface area heuristic, traversed nearest child first.
 
 #pragma once
 
@@ -73,17 +74,26 @@ public:
             b.hi = b.hi + pad;
         }
         nodes_.reserve(2 * n_faces);
-        build(0, n_faces, boxes, centroids);
+        nodes_.emplace_back();
+        build(0, 0, n_faces, 0, boxes, centroids);
+        // Keep the triangles in leaf order, so a leaf's are next to each other in memory.
+        std::vector<Triangle> sorted(n_faces);
+        place_.resize(n_faces);
+        for (std::size_t i = 0; i < n_faces; ++i) {
+            sorted[i] = tri_[order_[i]];
+            place_[order_[i]] = static_cast<std::uint32_t>(i);
+        }
+        tri_ = std::move(sorted);
     }
 
     std::size_t face_count() const { return tri_.size(); }
 
     // Unit normal of a face, following the right-hand rule on its vertex order.
-    const Vec3 &normal(std::size_t face) const { return tri_[face].normal; }
+    const Vec3 &normal(std::size_t face) const { return tri_[place_[face]].normal; }
 
     // The corners of a face, in its vertex order.
     std::array<Vec3, 3> corners(std::size_t face) const {
-        const Triangle &t = tri_[face];
+        const Triangle &t = tri_[place_[face]];
         return {t.v0, t.v0 + t.e1, t.v0 + t.e2};
     }
 
@@ -134,64 +144,121 @@ private:
             lo = min(lo, b.lo);
             hi = max(hi, b.hi);
         }
+        // Half the surface area; 0 for an empty box.
+        double area() const {
+            const Vec3 d = hi - lo;
+            if (!(d.x >= 0.0)) return 0.0;
+            return d.x * d.y + d.y * d.z + d.z * d.x;
+        }
     };
     struct Node {
         Box box;
-        std::uint32_t first = 0;  // leaf: first index into order_; inner: right child
+        std::uint32_t first = 0;  // leaf: first index into tri_; inner: left child, then right
         std::uint32_t count = 0;  // leaf: number of faces; inner: 0
     };
 
+    // Most faces in a leaf, unless they cannot be told apart; bins of the split search;
+    // deepest node, which keeps the traversal stack within its size.
     static constexpr std::size_t kLeafSize = 4;
+    static constexpr std::size_t kBins = 16;
+    static constexpr std::size_t kMaxDepth = 60;
 
-    std::vector<Triangle> tri_;
-    std::vector<std::uint32_t> order_;
+    std::vector<Triangle> tri_;          // in leaf order
+    std::vector<std::uint32_t> order_;   // face at each place in tri_
+    std::vector<std::uint32_t> place_;   // place in tri_ of each face
     std::vector<Node> nodes_;
     double scale_ = 1.0;
 
-    std::size_t build(std::size_t begin, std::size_t end, const std::vector<Box> &boxes,
-                      const std::vector<Vec3> &centroids) {
-        const std::size_t index = nodes_.size();
-        nodes_.emplace_back();
+    // Splits faces order_[begin, end) at the binned surface area heuristic's best plane,
+    // or makes them a leaf when testing them all is cheaper (one box test costing about
+    // one triangle test).
+    void build(std::size_t index, std::size_t begin, std::size_t end, std::size_t depth,
+               const std::vector<Box> &boxes, const std::vector<Vec3> &centroids) {
         Box box, cbox;
         for (std::size_t i = begin; i < end; ++i) {
             box.grow(boxes[order_[i]]);
             cbox.grow(Box{centroids[order_[i]], centroids[order_[i]]});
         }
         nodes_[index].box = box;
+        nodes_[index].first = static_cast<std::uint32_t>(begin);
+        nodes_[index].count = static_cast<std::uint32_t>(end - begin);
         const std::size_t n = end - begin;
+        if (n <= 1 || depth >= kMaxDepth) return;
         const Vec3 extent = cbox.hi - cbox.lo;
-        int axis = 0;
-        if (extent.y > extent.x) axis = 1;
-        if (extent.z > (axis == 0 ? extent.x : extent.y)) axis = 2;
-        if (n <= kLeafSize || extent[axis] <= 0.0) {
-            nodes_[index].first = static_cast<std::uint32_t>(begin);
-            nodes_[index].count = static_cast<std::uint32_t>(n);
-            return index;
+        const auto bin = [&](std::uint32_t face, int axis) {
+            const double k = static_cast<double>(kBins) / extent[axis];
+            return std::min(kBins - 1,
+                            static_cast<std::size_t>((centroids[face][axis] - cbox.lo[axis]) * k));
+        };
+        double best = std::numeric_limits<double>::infinity();
+        int best_axis = -1;
+        std::size_t best_bin = 0;
+        for (int axis = 0; axis < 3; ++axis) {
+            if (!(extent[axis] > 0.0)) continue;
+            std::array<Box, kBins> bin_box{};
+            std::array<std::size_t, kBins> bin_count{};
+            for (std::size_t i = begin; i < end; ++i) {
+                const std::size_t b = bin(order_[i], axis);
+                ++bin_count[b];
+                bin_box[b].grow(boxes[order_[i]]);
+            }
+            // Area and count of everything above each plane, then below.
+            std::array<double, kBins> above_area{};
+            std::array<std::size_t, kBins> above_count{};
+            Box sweep;
+            std::size_t count = 0;
+            for (std::size_t b = kBins - 1; b > 0; --b) {
+                sweep.grow(bin_box[b]);
+                count += bin_count[b];
+                above_area[b] = sweep.area();
+                above_count[b] = count;
+            }
+            sweep = Box{};
+            count = 0;
+            for (std::size_t b = 0; b + 1 < kBins; ++b) {
+                sweep.grow(bin_box[b]);
+                count += bin_count[b];
+                if (count == 0 || above_count[b + 1] == 0) continue;
+                const double cost = sweep.area() * static_cast<double>(count) +
+                                    above_area[b + 1] * static_cast<double>(above_count[b + 1]);
+                if (cost < best) {
+                    best = cost;
+                    best_axis = axis;
+                    best_bin = b;
+                }
+            }
         }
-        const std::size_t mid = begin + n / 2;
-        std::nth_element(order_.begin() + static_cast<std::ptrdiff_t>(begin),
-                         order_.begin() + static_cast<std::ptrdiff_t>(mid),
-                         order_.begin() + static_cast<std::ptrdiff_t>(end),
-                         [&](std::uint32_t a, std::uint32_t b) {
-                             return centroids[a][axis] < centroids[b][axis];
-                         });
-        build(begin, mid, boxes, centroids);  // left child is index + 1
-        const std::size_t right = build(mid, end, boxes, centroids);
-        nodes_[index].first = static_cast<std::uint32_t>(right);
+        if (best_axis < 0) return;  // all centroids in one point
+        const double split_cost = box.area() + best;
+        if (n <= kLeafSize && split_cost >= box.area() * static_cast<double>(n)) return;
+        const auto split = std::partition(
+            order_.begin() + static_cast<std::ptrdiff_t>(begin),
+            order_.begin() + static_cast<std::ptrdiff_t>(end),
+            [&](std::uint32_t face) { return bin(face, best_axis) <= best_bin; });
+        const auto mid = static_cast<std::size_t>(split - order_.begin());
+        const std::size_t left = nodes_.size();
+        nodes_.emplace_back();
+        nodes_.emplace_back();
+        nodes_[index].first = static_cast<std::uint32_t>(left);
         nodes_[index].count = 0;
-        return index;
+        build(left, begin, mid, depth + 1, boxes, centroids);
+        build(left + 1, mid, end, depth + 1, boxes, centroids);
     }
 
-    static bool slab(const Box &b, const Vec3 &origin, const Vec3 &inv, double t_max) {
+    // Where the ray enters the box, if it does before t_max (else infinity). A ray lying
+    // in a slab's boundary gives 0 * inf = NaN there, which the comparisons drop (as
+    // fmin and fmax would, but those are library calls on most compilers).
+    static double slab(const Box &b, const Vec3 &origin, const Vec3 &inv, double t_max) {
         double t0 = 0.0, t1 = t_max;
         for (int a = 0; a < 3; ++a) {
             const double ta = (b.lo[a] - origin[a]) * inv[a];
             const double tb = (b.hi[a] - origin[a]) * inv[a];
-            // fmin/fmax drop the NaN of 0 * inf, for a ray lying in a slab boundary.
-            t0 = std::fmax(t0, std::fmin(ta, tb));
-            t1 = std::fmin(t1, std::fmax(ta, tb));
+            const double t_in = ta < tb ? ta : tb;   // tb if either is NaN
+            const double t_out = ta < tb ? tb : ta;  // ta if either is NaN
+            t0 = t_in > t0 ? t_in : t0;
+            t1 = t_out < t1 ? t_out : t1;
         }
-        return t0 <= t1;
+        return t0 <= t1 ? t0 : std::numeric_limits<double>::infinity();
     }
 
     // Moller-Trumbore, two-sided; returns t or a negative value for a miss. Edges are
@@ -199,7 +266,7 @@ private:
     // a face on one side or the other instead of slipping between them.
     static constexpr double kEdge = 1e-9;
 
-    double hit_triangle(const Triangle &tri, const Vec3 &origin, const Vec3 &dir) const {
+    static double hit_triangle(const Triangle &tri, const Vec3 &origin, const Vec3 &dir) {
         const Vec3 p = cross(dir, tri.e2);
         const double det = dot(tri.e1, p);
         if (std::abs(det) < 1e-300) return -1.0;
@@ -214,34 +281,55 @@ private:
     }
 
     // Calls visit(face, t) for faces hit with t in (t_min, limit); visit returns true to
-    // stop. `limit` shrinks as the caller records closer hits.
+    // stop. `limit` shrinks as the caller records closer hits. Of two children the ray
+    // enters, the nearer goes first; the other waits on the stack and is dropped if a
+    // hit closer than its box turns up meanwhile.
     template <typename Visit>
     void traverse(const Vec3 &origin, const Vec3 &dir, std::int64_t ignore, Visit visit,
                   double &limit) const {
         const double t_min = 1e-9 * scale_;
         const Vec3 inv{1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z};
-        std::array<std::uint32_t, 64> stack{};
+        struct Pending {
+            std::uint32_t node;
+            double entry;
+        };
+        std::array<Pending, kMaxDepth + 4> stack{};
         std::size_t top = 0;
-        stack[top++] = 0;
-        while (top > 0) {
-            const Node &node = nodes_[stack[--top]];
-            if (!slab(node.box, origin, inv, limit)) continue;
+        if (!(slab(nodes_[0].box, origin, inv, limit) <= limit)) return;
+        std::uint32_t current = 0;
+        for (;;) {
+            const Node &node = nodes_[current];
             if (node.count > 0) {
                 for (std::uint32_t i = node.first; i < node.first + node.count; ++i) {
                     const std::uint32_t face = order_[i];
                     if (static_cast<std::int64_t>(face) == ignore) continue;
-                    const double t = hit_triangle(tri_[face], origin, dir);
+                    const double t = hit_triangle(tri_[i], origin, dir);
                     if (t > t_min && t < limit && visit(face, t)) return;
                 }
             } else {
-                const std::uint32_t self =
-                    static_cast<std::uint32_t>(&node - nodes_.data());
-                if (top + 2 > stack.size()) {
-                    throw std::runtime_error("Bvh: traversal stack overflow");
+                const std::uint32_t left = node.first, right = node.first + 1;
+                const double to_left = slab(nodes_[left].box, origin, inv, limit);
+                const double to_right = slab(nodes_[right].box, origin, inv, limit);
+                const bool in_left = to_left <= limit, in_right = to_right <= limit;
+                if (in_left && in_right) {
+                    if (top == stack.size()) {
+                        throw std::runtime_error("Bvh: traversal stack overflow");
+                    }
+                    const bool left_first = to_left <= to_right;
+                    stack[top++] = left_first ? Pending{right, to_right} : Pending{left, to_left};
+                    current = left_first ? left : right;
+                    continue;
                 }
-                stack[top++] = node.first;  // right
-                stack[top++] = self + 1;    // left
+                if (in_left || in_right) {
+                    current = in_left ? left : right;
+                    continue;
+                }
             }
+            do {
+                if (top == 0) return;
+                --top;
+            } while (!(stack[top].entry <= limit));
+            current = stack[top].node;
         }
     }
 };
