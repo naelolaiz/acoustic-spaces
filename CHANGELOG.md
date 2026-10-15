@@ -36,7 +36,12 @@
 - Two rooms of the BRAS benchmark, a seminar room and a chamber music hall, as scenes in
   `validation/bras`, with their surface data and the parameters of their measured
   responses (CC BY-SA 4.0, like BRAS). `validation/bras_validation.py` compares
-  simulations with them; the validation report has the results.
+  simulations with them; the validation report has the results. It prints how far each
+  room has got on standard error.
+- The cross-check against pyroomacoustics averages five runs of pyroomacoustics per room
+  (`--pra-runs`), which draws its rays afresh on every run, and shows the spread between
+  them. One run had made its C80 in the lecture hall look up to 3.5 dB lower than this
+  package's; the mean of five is 0.3 to 1.7 dB lower.
 
 **Scattering** (changes results: see below for version 2's)
 

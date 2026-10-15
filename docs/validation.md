@@ -177,6 +177,8 @@ rooms:
 Both programs got the same absorption and scattering per octave band, the same air
 absorption (ISO 9613-1 at 20 °C and 50 %, from this package), image sources up to the
 3rd order and 100,000 rays, with one omnidirectional source and four listeners per room.
+pyroomacoustics draws its rays afresh on every run, so each room ran five times in it:
+the tables give the mean of the five and the spread between the highest and the lowest.
 Both scatter vector-based. pyroomacoustics has no scattering from the size of a surface,
 so this package left it out for the comparison (`from_size: false`) and ran each room
 once more with its default, which adds it. Both sets of impulse responses were analysed
@@ -204,12 +206,13 @@ listeners' T30 ("room energy" rows below).
 
 ### Results
 
-The figures show EDT, T30 and C80 per band for both programs, this package's default with
+The figures show EDT, T30 and C80 per band for both programs, the spread of
+pyroomacoustics' runs shaded, this package's default with
 the scattering of the surfaces' size, the decay of the room's total energy under each
 model and, where a diffuse field makes them apply, Eyring's reverberation time and
 Barron's revised theory.
 
-**Specular box.** The programs agree: T30 within 3 %, EDT within 10 % and C80 within
+**Specular box.** The programs agree: T30 within 3 %, EDT within 5 % and C80 within
 1 dB from 250 Hz up. Rays that travel parallel to the floor never meet the absorbing
 ceiling, so the decay is many times longer than Eyring's estimate in both. Even a
 smooth wall is only 3 m high, though, and scatters what reaches it from far away or at a
@@ -218,24 +221,27 @@ grazing angle: with that, T30 comes out 2.7 to 4.7 s instead of 3 to 15 s.
 | | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz |
 |---|---:|---:|---:|---:|---:|---:|
 | EDT (s), acoustic_spaces | 7.29 | 6.30 | 3.55 | 3.01 | 2.33 | 1.33 |
-| EDT (s), pyroomacoustics | 6.96 | 5.93 | 3.68 | 2.72 | 2.23 | 1.30 |
-| EDT difference | -5 % | -6 % | +4 % | -10 % | -4 % | -2 % |
+| EDT (s), pyroomacoustics | 6.89 | 6.02 | 3.52 | 2.90 | 2.23 | 1.26 |
+| EDT (s), pyroomacoustics' spread over 5 runs | 0.39 | 0.76 | 0.35 | 0.17 | 0.06 | 0.08 |
+| EDT difference | -5 % | -5 % | -1 % | -4 % | -5 % | -5 % |
 | T30 (s), acoustic_spaces | 15.08 | 14.00 | 8.32 | 6.32 | 4.98 | 3.05 |
-| T30 (s), pyroomacoustics | 14.99 | 13.64 | 8.38 | 6.22 | 5.01 | 3.14 |
-| T30 difference | -1 % | -3 % | +1 % | -2 % | +1 % | +3 % |
+| T30 (s), pyroomacoustics | 15.45 | 13.78 | 8.28 | 6.25 | 5.03 | 3.15 |
+| T30 (s), pyroomacoustics' spread over 5 runs | 0.29 | 0.28 | 0.14 | 0.15 | 0.04 | 0.04 |
+| T30 difference | +2 % | -2 % | +0 % | -1 % | +1 % | +3 % |
 | C80 (dB), acoustic_spaces | -2.7 | -1.4 | 0.1 | 1.7 | 3.1 | 5.0 |
-| C80 (dB), pyroomacoustics | -0.9 | -0.8 | 0.3 | 2.6 | 3.2 | 5.2 |
-| C80 difference | +1.8 dB | +0.6 dB | +0.3 dB | +0.8 dB | +0.1 dB | +0.2 dB |
+| C80 (dB), pyroomacoustics | -1.4 | -1.0 | 0.8 | 2.2 | 3.1 | 5.3 |
+| C80 (dB), pyroomacoustics' spread over 5 runs | 2.9 | 0.8 | 1.1 | 0.7 | 0.3 | 0.4 |
+| C80 difference | +1.2 dB | +0.4 dB | +0.7 dB | +0.5 dB | +0.0 dB | +0.2 dB |
 | T30 (s), acoustic_spaces with surface size (default) | 3.82 | 4.36 | 4.58 | 4.67 | 4.10 | 2.69 |
-| T30 (s) of the room's energy, vector-based scattering | 15.45 | 13.96 | 7.32 | 6.25 | 4.97 | 2.87 |
+| T30 (s) of the room's energy, vector-based scattering | 15.60 | 13.99 | 7.29 | 6.28 | 4.98 | 2.87 |
 | T30 (s) of the room's energy, with surface size | 4.14 | 5.28 | 4.76 | 5.15 | 4.29 | 2.64 |
 | Eyring (s) | 0.83 | 0.69 | 0.52 | 0.37 | 0.30 | 0.25 |
 
 ![Specular box](validation/crosscheck_specular.png)
 
 **Diffuse box.** T30 agrees within 5 %; both programs stay within 8 % of the room's
-energy decay and within 12 % of Eyring's estimate. From 1 kHz up, pyroomacoustics gives
-16 to 27 % longer EDT and 1.2 to 2.8 dB lower C80 than this package, as its
+energy decay and within 13 % of Eyring's estimate. From 1 kHz up, pyroomacoustics gives
+14 to 25 % longer EDT and 1.5 to 2.3 dB lower C80 than this package, as its
 double-counted scattered energy predicts. Barron's revised theory sides with this
 package: computed from the simulated energies, as `simulate` prints them, C80 is within
 0.7 dB of the theory in every band. From the impulse responses it is up to 1.9 dB lower
@@ -246,15 +252,18 @@ scatter no more for their size, so the default gives the same.
 | | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz |
 |---|---:|---:|---:|---:|---:|---:|
 | EDT (s), acoustic_spaces | 0.91 | 0.70 | 0.60 | 0.38 | 0.31 | 0.26 |
-| EDT (s), pyroomacoustics | 0.90 | 0.63 | 0.58 | 0.44 | 0.36 | 0.33 |
-| EDT difference | -2 % | -10 % | -4 % | +18 % | +16 % | +27 % |
+| EDT (s), pyroomacoustics | 0.85 | 0.71 | 0.58 | 0.43 | 0.35 | 0.32 |
+| EDT (s), pyroomacoustics' spread over 5 runs | 0.17 | 0.05 | 0.04 | 0.02 | 0.03 | 0.02 |
+| EDT difference | -7 % | +2 % | -4 % | +14 % | +15 % | +25 % |
 | T30 (s), acoustic_spaces | 0.75 | 0.67 | 0.53 | 0.40 | 0.30 | 0.26 |
-| T30 (s), pyroomacoustics | 0.73 | 0.64 | 0.54 | 0.40 | 0.31 | 0.27 |
-| T30 difference | -2 % | -5 % | +2 % | +1 % | +4 % | +4 % |
+| T30 (s), pyroomacoustics | 0.72 | 0.64 | 0.54 | 0.40 | 0.31 | 0.26 |
+| T30 (s), pyroomacoustics' spread over 5 runs | 0.08 | 0.03 | 0.04 | 0.02 | 0.02 | 0.01 |
+| T30 difference | -3 % | -5 % | +1 % | +1 % | +2 % | +0 % |
 | C80 (dB), acoustic_spaces | 4.9 | 5.6 | 7.2 | 12.8 | 15.6 | 19.0 |
-| C80 (dB), pyroomacoustics | 3.9 | 5.7 | 7.3 | 10.3 | 14.3 | 16.3 |
-| C80 difference | -0.9 dB | +0.0 dB | +0.1 dB | -2.5 dB | -1.2 dB | -2.8 dB |
-| C80 (dB), Barron's revised theory | 5.3 | 6.8 | 9.1 | 13.7 | 17.1 | 19.8 |
+| C80 (dB), pyroomacoustics | 3.6 | 5.2 | 7.3 | 10.8 | 14.1 | 16.7 |
+| C80 (dB), pyroomacoustics' spread over 5 runs | 1.9 | 1.0 | 1.0 | 0.5 | 0.9 | 0.2 |
+| C80 difference | -1.3 dB | -0.4 dB | +0.1 dB | -2.1 dB | -1.5 dB | -2.3 dB |
+| C80 (dB), Barron's revised theory | 5.3 | 6.8 | 9.1 | 13.6 | 17.0 | 19.8 |
 | T30 (s), acoustic_spaces with surface size (default) | 0.75 | 0.67 | 0.53 | 0.40 | 0.30 | 0.26 |
 | T30 (s) of the room's energy, vector-based scattering | 0.78 | 0.66 | 0.52 | 0.37 | 0.30 | 0.26 |
 | T30 (s) of the room's energy, with surface size | 0.78 | 0.66 | 0.52 | 0.37 | 0.30 | 0.26 |
@@ -262,47 +271,53 @@ scatter no more for their size, so the default gives the same.
 
 ![Diffuse box](validation/crosscheck_diffuse.png)
 
-**Example box.** With smooth walls (scattering 0.05), T30 agrees within 4 %, EDT within
-13 % and C80 within 1.4 dB. Up to version 2 this package scattered a ray with the
+**Example box.** With smooth walls (scattering 0.05), T30 agrees within 2 %, EDT within
+7 % and C80 within 1.2 dB. Up to version 2 this package scattered a ray with the
 coefficient as probability, and pyroomacoustics' T30 came out 19 to 42 % shorter. The
 walls' size halves T30 at 125 and 250 Hz (0.86 s against 1.82 s) and shortens it by
-8 to 22 % from 500 Hz up; each run matches the room-energy decay of its model within 9 %.
+8 to 22 % from 500 Hz up; each run matches the room-energy decay of its model within 11 %.
 
 | | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz |
 |---|---:|---:|---:|---:|---:|---:|
 | EDT (s), acoustic_spaces | 1.27 | 1.27 | 1.19 | 1.10 | 1.08 | 0.92 |
-| EDT (s), pyroomacoustics | 1.10 | 1.28 | 1.29 | 1.24 | 1.14 | 0.92 |
-| EDT difference | -13 % | +1 % | +8 % | +13 % | +6 % | +0 % |
+| EDT (s), pyroomacoustics | 1.23 | 1.37 | 1.16 | 1.15 | 1.13 | 0.92 |
+| EDT (s), pyroomacoustics' spread over 5 runs | 0.31 | 0.08 | 0.18 | 0.14 | 0.11 | 0.07 |
+| EDT difference | -3 % | +7 % | -2 % | +5 % | +4 % | +0 % |
 | T30 (s), acoustic_spaces | 1.82 | 1.76 | 1.57 | 1.52 | 1.44 | 1.23 |
-| T30 (s), pyroomacoustics | 1.77 | 1.68 | 1.53 | 1.51 | 1.44 | 1.27 |
-| T30 difference | -3 % | -4 % | -3 % | -1 % | +0 % | +3 % |
+| T30 (s), pyroomacoustics | 1.80 | 1.73 | 1.60 | 1.52 | 1.44 | 1.24 |
+| T30 (s), pyroomacoustics' spread over 5 runs | 0.18 | 0.15 | 0.11 | 0.07 | 0.07 | 0.08 |
+| T30 difference | -1 % | -2 % | +2 % | +0 % | +0 % | +1 % |
 | C80 (dB), acoustic_spaces | 2.8 | 2.7 | 3.3 | 5.1 | 5.1 | 6.3 |
-| C80 (dB), pyroomacoustics | 4.2 | 3.9 | 3.7 | 4.5 | 5.4 | 6.3 |
-| C80 difference | +1.4 dB | +1.2 dB | +0.4 dB | -0.5 dB | +0.3 dB | +0.0 dB |
+| C80 (dB), pyroomacoustics | 3.0 | 3.4 | 4.5 | 4.9 | 5.0 | 6.2 |
+| C80 (dB), pyroomacoustics' spread over 5 runs | 1.0 | 0.9 | 0.9 | 0.6 | 0.5 | 0.4 |
+| C80 difference | +0.2 dB | +0.7 dB | +1.2 dB | -0.1 dB | -0.1 dB | -0.1 dB |
 | T30 (s), acoustic_spaces with surface size (default) | 0.86 | 0.97 | 1.22 | 1.27 | 1.25 | 1.13 |
-| T30 (s) of the room's energy, vector-based scattering | 1.68 | 1.67 | 1.54 | 1.49 | 1.43 | 1.22 |
+| T30 (s) of the room's energy, vector-based scattering | 1.64 | 1.63 | 1.53 | 1.49 | 1.42 | 1.22 |
 | T30 (s) of the room's energy, with surface size | 0.90 | 0.93 | 1.29 | 1.28 | 1.36 | 1.18 |
 | Eyring (s) | 0.83 | 0.69 | 0.52 | 0.37 | 0.30 | 0.25 |
 
 ![Example box](validation/crosscheck_example.png)
 
-**Lecture hall.** T30 agrees within 3 % and EDT within 7 %; pyroomacoustics' C80 is 0.8 to
-3.5 dB lower, the double-counted scattered energy again. The surfaces' size shortens T30
+**Lecture hall.** T30 agrees within 4 % and EDT within 5 %; pyroomacoustics' C80 is 0.3 to
+1.7 dB lower, the double-counted scattered energy again. The surfaces' size shortens T30
 by 4 to 15 %, in line with the room-energy decay of that model within 6 %.
 
 | | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz |
 |---|---:|---:|---:|---:|---:|---:|
 | EDT (s), acoustic_spaces | 1.92 | 1.72 | 1.48 | 1.41 | 1.46 | 1.21 |
-| EDT (s), pyroomacoustics | 1.80 | 1.79 | 1.46 | 1.40 | 1.44 | 1.15 |
-| EDT difference | -7 % | +4 % | -1 % | -1 % | -2 % | -5 % |
+| EDT (s), pyroomacoustics | 1.84 | 1.69 | 1.45 | 1.43 | 1.41 | 1.15 |
+| EDT (s), pyroomacoustics' spread over 5 runs | 0.13 | 0.07 | 0.13 | 0.12 | 0.12 | 0.11 |
+| EDT difference | -5 % | -2 % | -2 % | +1 % | -4 % | -5 % |
 | T30 (s), acoustic_spaces | 1.98 | 1.93 | 1.89 | 1.90 | 1.85 | 1.59 |
-| T30 (s), pyroomacoustics | 1.91 | 1.94 | 1.87 | 1.93 | 1.88 | 1.63 |
-| T30 difference | -3 % | +0 % | -1 % | +1 % | +2 % | +3 % |
+| T30 (s), pyroomacoustics | 1.98 | 1.97 | 1.97 | 1.98 | 1.92 | 1.59 |
+| T30 (s), pyroomacoustics' spread over 5 runs | 0.17 | 0.16 | 0.14 | 0.15 | 0.11 | 0.12 |
+| T30 difference | +0 % | +2 % | +4 % | +4 % | +3 % | +0 % |
 | C80 (dB), acoustic_spaces | 0.5 | 0.1 | 1.6 | 3.0 | 3.0 | 3.9 |
-| C80 (dB), pyroomacoustics | -2.9 | -1.2 | 0.6 | 1.8 | 2.0 | 3.1 |
-| C80 difference | -3.5 dB | -1.3 dB | -1.1 dB | -1.2 dB | -1.0 dB | -0.8 dB |
+| C80 (dB), pyroomacoustics | -1.2 | -1.1 | 1.2 | 2.0 | 2.5 | 3.5 |
+| C80 (dB), pyroomacoustics' spread over 5 runs | 1.9 | 0.7 | 0.7 | 0.8 | 0.4 | 0.5 |
+| C80 difference | -1.7 dB | -1.2 dB | -0.5 dB | -1.0 dB | -0.5 dB | -0.3 dB |
 | T30 (s), acoustic_spaces with surface size (default) | 1.88 | 1.74 | 1.60 | 1.70 | 1.74 | 1.53 |
-| T30 (s) of the room's energy, vector-based scattering | 1.98 | 1.99 | 1.92 | 1.96 | 1.90 | 1.59 |
+| T30 (s) of the room's energy, vector-based scattering | 1.97 | 1.99 | 1.93 | 1.97 | 1.91 | 1.58 |
 | T30 (s) of the room's energy, with surface size | 1.84 | 1.84 | 1.55 | 1.69 | 1.77 | 1.54 |
 | Eyring (s) | 1.99 | 1.89 | 1.13 | 0.99 | 0.88 | 0.86 |
 
@@ -311,10 +326,11 @@ by 4 to 15 %, in line with the room-energy decay of that model within 6 %.
 ### Conclusions
 
 - With the same scattering model, the programs agree within 5 % on T30 in all four
-  rooms, from purely specular to fully diffusing surfaces, and within 13 % on EDT where
+  rooms, from purely specular to fully diffusing surfaces, and within 7 % on EDT where
   pyroomacoustics' double counting does not lengthen it. That is close to the 5 % and
-  1 dB the plan aimed for; T30 from 100,000 rays also varies by a few percent from one
-  random seed to the next.
+  1 dB the plan aimed for. With 100,000 rays, pyroomacoustics' own runs differ by up to
+  11 % in T30, 25 % in EDT and 2.9 dB in C80, most at 125 Hz, which is why the tables
+  average five of them; this package's numbers move by a few percent with the seed.
 - Where the theory is clear (the diffuse box), this package agrees with Eyring and with
   Barron's revised theory; pyroomacoustics counts the scattered energy twice.
 - The scattering of a surface's size, which pyroomacoustics lacks, shortens the decay of
@@ -592,8 +608,8 @@ With `first_order` the level drops from the path over one corner to nothing.
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
-sight, takes 100 ms per source and listener without diffraction, 120 ms with
-`first_order` and 200 ms with `second_order` (93 paths instead of 71).
+sight, takes 90 ms per source and listener without diffraction, 120 ms with
+`first_order` and 170 ms with `second_order` (86 paths instead of 71).
 
 ## Wave-based solver
 
@@ -838,9 +854,10 @@ python validation/bras_validation.py --bands third_octave --json bras_third.json
 python validation/bras_validation.py --materials initial --calibrate LS1 --plots docs/validation
 ```
 
-The cross-check takes about 25 minutes on 4 cores, the benchmark about 2 minutes, the
+The cross-check takes about 20 minutes on 4 cores, the benchmark about 2 minutes, the
 wave solver's checks about 3.5 minutes (both stencils) and each BRAS run about 30 minutes (85 in
-third-octave bands, or half that per room with `--scenes CR2`, 46 calibrated). The cross-check's numbers come from the development version of
-3.0.0 with seed 1. Those of pyroomacoustics, which draws its rays afresh on every run, have moved by up to 6 % in
-T30, 16 % in EDT and 2 dB in C80 from one run to the next, and the differences in the
-tables with them. Other seeds move this package's numbers by a few percent.
+third-octave bands, or half that per room with `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
+pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
+(`--pra-runs`); the means still move by a few percent from one call to the next, and the
+differences in the tables with them. Other seeds move this package's numbers by a few
+percent.

@@ -232,8 +232,8 @@ scattered rays already find their way round corners.
 response's `early.diffracted` marks them, and `simulate` reports how many there are. The
 cost grows with the number of edges: in a hall with about 100 edges, `first_order` adds
 about 17 ms per source and listener. `second_order` costs more, as it looks at pairs of
-edges: in a hall with 16 edges, the early stage takes 200 ms per source and listener
-with it, 120 ms with `first_order` and 100 ms without diffraction.
+edges: in a hall with 16 edges, the early stage takes 170 ms per source and listener
+with it, 120 ms with `first_order` and 90 ms without diffraction.
 
 ## Low frequencies: early reflections in pressure
 
