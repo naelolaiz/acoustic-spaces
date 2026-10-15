@@ -12,13 +12,18 @@ optional. ``L <...>`` and the colour may be left out, ``;`` starts a comment, an
 Scattering that CATT estimates itself (``L <estimate(...)>``) is not read.
 
 ODEON's library (``Material.Li8``) has each material on two lines: its number and
-description, then eight absorption coefficients from 63 Hz to 8 kHz. Libraries of six
-values (125 Hz to 4 kHz) are read too. ODEON gives scattering to surfaces, not to
-materials, so these entries have none.
+description, then eight absorption coefficients from 63 Hz to 8 kHz. ODEON's own
+library writes the description as ``{Product name*=...}, {Category=...}``, and the
+materials its Material calculator made carry the calculator's settings after the
+description and, after the eight values, ``/Area`` and ``/A`` with the sample area and
+third-octave values, which are not read: ODEON simulates with the octave values.
+Libraries of six values (125 Hz to 4 kHz) are read too. ODEON gives scattering to
+surfaces, not to materials, so these entries have none.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import re
 from dataclasses import dataclass
@@ -51,6 +56,8 @@ class LibraryMaterial:
     absorption: tuple[float, ...]
     #: Scattering coefficients at the same frequencies, or None.
     scattering: tuple[float, ...] | None = None
+    #: ODEON's category of the material (``{Category=...}``), or None.
+    category: str | None = None
 
     @property
     def label(self) -> str:
@@ -141,9 +148,22 @@ def _held(percent: list[float], count: int) -> tuple[float, ...]:
 
 
 def _renamed(material: LibraryMaterial, name: str) -> LibraryMaterial:
-    return LibraryMaterial(
-        name, material.number, material.frequencies, material.absorption, material.scattering
-    )
+    return dataclasses.replace(material, name=name)
+
+
+#: A field of an ODEON description, such as ``{Product name*=Carpet}``.
+_ODEON_FIELD = re.compile(r"\{([^{}=]+)=([^{}]*)\}")
+
+
+def _odeon_description(text: str) -> tuple[str, str | None]:
+    """A material's name and category from its ODEON description: the product name and
+    category fields where it has them, else the whole description."""
+    fields = {
+        key.strip().rstrip("*").lower(): value.strip() for key, value in _ODEON_FIELD.findall(text)
+    }
+    if fields.get("product name"):
+        return fields["product name"], fields.get("category") or None
+    return text, None
 
 
 def _read_odeon(path: Path, text: str) -> list[LibraryMaterial]:
@@ -153,17 +173,19 @@ def _read_odeon(path: Path, text: str) -> list[LibraryMaterial]:
     k = 0
     while k < len(lines) - 1:
         head = re.match(r"(-?\d+)\s+(.*\S)", lines[k])
-        values = _numbers(lines[k + 1])
+        # The Material calculator's /Area and /A (third octaves) follow the octave values.
+        values = _numbers(lines[k + 1].split("/", 1)[0])
         if head is None or _numbers(lines[k]) is not None or values is None:
             k += 1
             continue
+        name, category = _odeon_description(head[2])
         if len(values) not in (6, len(ODEON_BANDS_HZ)):
             raise ValueError(
-                f"{path}: material {head[1]} {head[2]!r}: expected 8 absorption values "
+                f"{path}: material {head[1]} {name!r}: expected 8 absorption values "
                 f"(63 Hz to 8 kHz) or 6 (125 Hz to 4 kHz), got {len(values)}"
             )
         bands = ODEON_BANDS_HZ if len(values) == len(ODEON_BANDS_HZ) else ODEON_BANDS_HZ[1:7]
-        out.append(LibraryMaterial(head[2], int(head[1]), bands, tuple(values)))
+        out.append(LibraryMaterial(name, int(head[1]), bands, tuple(values), category=category))
         k += 2
     return out
 

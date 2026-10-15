@@ -320,6 +320,11 @@ changes results at 63 and 125 Hz)
   (`Material.Li8`): `file` names the library and `entry` the material, by name or by
   ODEON's number. `acoustic-spaces materials --file` lists a library's materials, and
   the editor's **Edit > Add material from a library** adds one.
+- ODEON's own `Material.Li8` is read as ODEON writes it (checked against the library
+  from odeon.dk, 198 materials): the product name of `{Product name*=...}` names a
+  material and `{Category=...}` groups the listing, and materials from ODEON's Material
+  calculator, with its settings and third-octave values on their lines, are read by
+  their octave values.
 
 **IFC and Collada models**
 
