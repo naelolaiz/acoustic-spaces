@@ -126,6 +126,8 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         if passing is not None:
             reduction = [max(0.0, -10.0 * math.log10(t)) if t > 0 else math.inf for t in passing]
             print(_band_row("  R (dB)", reduction, width, "6.1f") + "  sound reduction")
+        if material.audience:
+            print("  audience seating: sound arriving low over it is attenuated (500 Hz-2 kHz)")
         if len(material.absorption) > len(absorption):
             print("  third-octave data, shown as octave averages")
         if material.source:

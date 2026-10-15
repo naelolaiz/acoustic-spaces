@@ -56,6 +56,12 @@ Simulation above; the module also has the parameters a map shows and the A-weigh
 .. automodule:: acoustic_spaces.engine.diffraction
 ```
 
+## Audience seating
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.engine.grazing
+```
+
 ## Wave-based solver
 
 ```{eval-rst}

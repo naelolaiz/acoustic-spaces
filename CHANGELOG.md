@@ -154,6 +154,14 @@
   coupled rooms within 1 dB of the two-room model; the statistical method and coverage
   maps across rooms against the same model, the rays and listeners.
 
+**Audience seating**
+
+- `audience: true` on a material: sound that reaches a listener low over it loses more
+  in the 500 Hz to 2 kHz bands, after the 2025 fit of Jurkiewicz et al. to scale-model
+  measurements (`acoustic_spaces.engine.grazing`). It applies to the last leg of the
+  early paths to listeners and map points over the seats. The editor's **Audience
+  seating** sets it, and `inspect` says so.
+
 **Examples**
 
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)

@@ -245,6 +245,13 @@ class Material(_Model):
     transmission_loss: list[float] | float | None = Field(
         default=None, description="sound reduction index R (dB): transmission 10^(-R/10)"
     )
+    audience: bool = Field(
+        default=False,
+        description=(
+            "audience seating: sound that reaches a listener low over it loses more, "
+            "as it passes heads and seats (grazing incidence)"
+        ),
+    )
     source: str | None = Field(default=None, description="where the coefficients come from")
 
     @field_validator("absorption")

@@ -448,6 +448,38 @@ opening into a live one against the two-room model (within 1 dB down to -40 dB).
 statistical method follows that model in both rooms, and maps over both rooms match
 listeners at their points.
 
+### Audience seating
+
+Sound that reaches a listener low over rows of seats loses much more than the seats'
+absorption says, as it passes heads and seat backs on the way. Mark the seating's
+material with `audience: true` (in the editor, **Audience seating**):
+
+```yaml
+materials:
+  seats: {preset: audience_wooden_chairs_1_m2, scattering: 0.7, audience: true}
+```
+
+- The attenuation is the fit of Jurkiewicz, Rummler, Green, Wulfrank and Kahle
+  (["Impact of grazing incidence attenuation on early reflection design"](https://www.ioa.org.uk/system/files/publications/Y.%20Jurkiewicz%2C%20N.%20Rummler%20%2C%20E.%20Green%20%2C%20T.%20Wulfrank%20and%20E.%20Kahle%20IMPACT%20OF%20GRAZING%20INCIDENCE%20ATTENUATION%20ON%20EARLY%20REFLECTION%20DESIGN.pdf),
+  Proc. IOA 47 Pt. 1, 2025) to scale-model measurements over a seated audience: sound
+  arriving at an elevation φ above the audience, having run d metres over it, keeps
+  min(1, (3.40 sin²φ + 2.17 sin φ + 0.02)^((d - 1)/10)) of its energy. That is 17 dB
+  less at grazing incidence after 11 m, 0.6 dB per metre at 5°, and nothing lost from
+  17.8° up.
+- It applies to the last leg of every early path (the direct sound, reflections and
+  diffracted sound) to listeners and map points up to 2 m above audience surfaces: φ
+  is the leg's elevation above the surface under the listener, and d how far the leg
+  runs over audience surfaces no more than 2 m higher than the listener's ears are
+  above theirs, so the stalls do not shade a balcony seat.
+- Only in the 500 Hz to 2 kHz octaves (third octaves from 400 Hz to 2.5 kHz), the bands
+  of the fit, where it hardly changed with frequency. The seat dip lower down depends on
+  the seats themselves, and the fit has no data higher up. The late part is left as it
+  is, and the statistical method does not make up what the seats take from the early
+  paths. Leaving out the leg from the source to the first reflection, as the fit does,
+  errs on the side of too little attenuation.
+- In a flat lecture hall with the talker at 1.6 m, it takes 10 dB off the direct sound
+  at the back row in those bands and 1.3 dB off C50 there.
+
 ### Sources and directivity
 
 A source has a position, an orientation (`yaw`, `pitch` and `roll` in degrees; all zero

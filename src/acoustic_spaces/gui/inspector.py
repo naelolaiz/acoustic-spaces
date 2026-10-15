@@ -497,6 +497,10 @@ def _nearest_filled(values: list[float | None]) -> list[float]:
     ]
 
 
+#: Fields a material keeps when its coefficients or database entry change.
+_KEPT = ("transmission", "transmission_loss", "audience")
+
+
 def _without_transmission(fields: dict) -> dict:
     return {k: v for k, v in fields.items() if k not in ("transmission", "transmission_loss")}
 
@@ -534,6 +538,14 @@ class MaterialPage(Page):
         )
         self.passing.activated.connect(self._passing)
         form.addRow("Lets through", self.passing)
+        self.audience = QCheckBox("Audience seating")
+        self.audience.setToolTip(
+            "Sound that reaches a listener low over these seats loses more in the 500 Hz "
+            "to 2 kHz bands, as it passes heads and seat backs (grazing incidence; the "
+            "fit of Jurkiewicz et al., 2025)"
+        )
+        self.audience.toggled.connect(self._audience)
+        form.addRow(self.audience)
         layout.addLayout(form)
         self.table = QTableWidget(len(_MATERIAL_ROWS), len(OCTAVE_BANDS_HZ))
         self.table.setHorizontalHeaderLabels(BAND_LABELS)
@@ -574,6 +586,7 @@ class MaterialPage(Page):
         passing = material.transmission_coefficients(bands)
         kind = self._kind(passing)
         self.passing.setCurrentIndex(kind)
+        self.audience.setChecked(material.audience)
         for col, value in enumerate(passing or [0.0] * len(labels)):
             item = QTableWidgetItem(_reduction_text(value))
             if kind != 1:  # set by the choice above, not typed
@@ -617,8 +630,14 @@ class MaterialPage(Page):
         entry = self.preset.currentText().strip()
         if not entry:
             return
-        material = self.document.scene.materials[self.key]
-        fields = {"preset": entry, "scattering": material.scattering}
+        fields = {"preset": entry, "scattering": self.document.scene.materials[self.key].scattering}
+        fields |= {k: v for k, v in self._fields().items() if k in _KEPT}
+        self.run(lambda: self.document.set_material(self.key, fields))
+
+    def _audience(self, checked: bool) -> None:
+        if self._loading:
+            return
+        fields = {**self._fields(), "audience": checked}
         self.run(lambda: self.document.set_material(self.key, fields))
 
     def _passing(self, kind: int) -> None:
@@ -669,7 +688,7 @@ class MaterialPage(Page):
             fields = _without_transmission(fields)
         else:
             origin = fields.get("source") or "values given in the scene"
-            kept = {k: fields[k] for k in ("transmission", "transmission_loss") if k in fields}
+            kept = {k: fields[k] for k in _KEPT if k in fields}
             fields = {
                 "absorption": rows[0],
                 "scattering": rows[1],
