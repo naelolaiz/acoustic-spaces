@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from test_native import cube_with_seats
+from test_tracer_reference import REFERENCE
 from test_wave import STENCILS, _courant, _drive, _solver
 
 from acoustic_spaces import Room, _native
@@ -164,6 +165,21 @@ def test_gpu_ray_search_finds_what_the_cpu_does() -> None:
     # A ray limited short of every face finds none.
     t_gpu, face_gpu = on_gpu.intersect(origins[:5], directions[:5], 1e-3, -1)
     assert np.all(face_gpu == -1) and np.all(np.isinf(t_gpu))
+
+
+@needs_gpu
+def test_gpu_ray_search_meets_the_faces_main_found() -> None:
+    with np.load(REFERENCE) as stored:
+        data = dict(stored)
+    bvh = _native.Bvh(data["hall_vertices"], data["hall_faces"])
+    on_gpu = gpu_rays.GpuBvh(bvh)
+    origins, directions = (data[f"rays_{k}"].astype(float) for k in ("origins", "directions"))
+    t, face = on_gpu.intersect(origins, directions, data["rays_t_max"], data["rays_ignore"])
+    same = face == data["rays_face"]
+    assert same.mean() > 0.99
+    hit = same & (face >= 0)
+    assert hit.sum() > 0.8 * len(face)
+    np.testing.assert_allclose(t[hit], data["rays_t"][hit], rtol=1e-4, atol=1e-5 * on_gpu.scale)
 
 
 @needs_gpu
