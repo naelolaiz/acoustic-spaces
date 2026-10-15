@@ -121,6 +121,9 @@
   steering (`steer_deg`). The energy is the exact mean over each third-octave band, with
   the room's speed of sound (`array_directivity`, `read_array`). The editor and
   `acoustic-spaces directivity` take array files.
+- The pattern is the array's far field, from about its length squared over the
+  wavelength. The room warns about every listener nearer than that at 1 kHz, naming
+  the array and the distance (`array_length`, `far_field_distance`).
 
 **Examples**
 

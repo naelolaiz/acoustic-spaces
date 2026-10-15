@@ -55,7 +55,8 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   0.15 dB of the integral over the continuous square at 1 and 2 m, and silent behind;
   in the shoebox a 3 m line as loud as a point source (within 0.6 dB at 2000 rays per
   band) and its T30 within 10 % of the point source's at 30,000 rays per band;
-- coherent arrays: a column of 8 omnidirectional elements 20 cm apart against the
+- coherent arrays (their far-field patterns only: nearer than L² f / c the room's
+  warnings say so): a column of 8 omnidirectional elements 20 cm apart against the
   analytic sums of a line array, its directivity index within 0.05 dB in all 24
   third-octave bands (n² over the band mean of the pairs' sin(kr)/kr) and its vertical
   pattern within 0.3 dB of the band-averaged |sin(Nψ/2)/sin(ψ/2)|² wherever that is

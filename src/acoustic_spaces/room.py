@@ -15,7 +15,13 @@ from typing import Literal
 import numpy as np
 
 from acoustic_spaces.air import energy_attenuation_per_m, speed_of_sound
-from acoustic_spaces.directivity import Directivity, load_directivity
+from acoustic_spaces.directivity import (
+    FAR_FIELD_HZ,
+    Directivity,
+    array_length,
+    far_field_distance,
+    load_directivity,
+)
 from acoustic_spaces.geometry import (
     UNIT_SCALE,
     MeshReport,
@@ -234,6 +240,31 @@ class Room:
             )
         for key in self.unused_assignments:
             out.append(f"assignment {key!r} matches no name in the geometry")
+        out.extend(self._near_arrays())
+        return out
+
+    def _near_arrays(self) -> list[str]:
+        """Listeners too close to a coherent array for its far-field pattern."""
+        out = []
+        c = self.speed_of_sound()
+        for source in self.scene.sources:
+            try:
+                length = array_length(source.directivity)
+            except ValueError:
+                continue  # an unreadable file: loading the directivity said so already
+            if not length:
+                continue
+            reach = far_field_distance(length, FAR_FIELD_HZ, c)
+            for listener in self.scene.listeners:
+                distance = float(np.linalg.norm(np.subtract(listener.position, source.position)))
+                if distance < reach:
+                    out.append(
+                        f"listener {listener.name!r} is {distance:.1f} m from array "
+                        f"{source.name!r} ({length:.2f} m long), whose far-field pattern "
+                        f"holds from about {reach:.1f} m at {FAR_FIELD_HZ:g} Hz and farther "
+                        "at higher frequencies; this close, a line source (line_m) models "
+                        "it better"
+                    )
         return out
 
     # -- statistics ---------------------------------------------------------------

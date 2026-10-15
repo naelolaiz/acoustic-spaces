@@ -10,10 +10,13 @@ import yaml
 from pydantic import ValidationError
 
 from acoustic_spaces import Room, Scene, simulate
+from acoustic_spaces.air import speed_of_sound
 from acoustic_spaces.directivity import (
     SPEED_OF_SOUND,
     FirstOrder,
     array_directivity,
+    array_length,
+    far_field_distance,
     read_directivity,
 )
 from acoustic_spaces.materials import THIRD_OCTAVE_BANDS_HZ
@@ -194,3 +197,37 @@ def test_an_array_aims_its_sound(tmp_path: Path) -> None:
     # A beam from 500 Hz up; above 1.7 kHz, where the 20 cm spacing is more than a
     # wavelength, grating lobes send some sound upwards too.
     assert np.all((ahead - above)[3:5] > 15) and np.all((ahead - above)[5:] > 8)
+
+
+def test_listeners_near_an_array_are_warned_about(tmp_path: Path) -> None:
+    # The far field starts about the length squared over the wavelength away: 16 m for
+    # a 2 m array at 1.4 kHz, 3.2 m for a column of 8 drivers 15 cm apart at 1 kHz.
+    assert far_field_distance(2.0, 1400.0, 343.0) == pytest.approx(16.3, abs=0.05)
+    (tmp_path / "column.yaml").write_text("count: 8\nspacing_m: 0.15\n", encoding="utf-8")
+    from_file = DirectivitySpec.model_validate(
+        {"file": "column.yaml"}, context={"base_dir": tmp_path}
+    )
+    assert array_length(from_file) == pytest.approx(1.05)
+    assert array_length(DirectivitySpec(array=ArraySpec(count=3, spacing_m=0.5))) == 1.0
+    assert array_length("omni") is None
+    assert array_length(DirectivitySpec(pattern=["cardioid"] * 8)) is None
+
+    scene = Scene.from_yaml(SHOEBOX)
+    data = scene.model_dump(mode="json")
+    data["geometry"]["file"] = str(SHOEBOX.parent / "shoebox.obj")
+    source = data["sources"][0]
+    near = {**data["listeners"][0], "name": "near", "position": [4.0, 3.0, 1.5]}
+    data["listeners"].append(near)
+
+    def warned(directivity) -> list[str]:
+        source["directivity"] = directivity
+        room = Room.from_scene(Scene.model_validate(data, context={"base_dir": tmp_path}))
+        return [w for w in room.warnings() if "far-field" in w]
+
+    reach = far_field_distance(1.05, 1000.0, speed_of_sound(scene.air.temperature_c))
+    assert 3.0 < reach < 3.4  # the shoebox's own listener, 4 m away, is beyond it
+    for directivity in ({"file": "column.yaml"}, {"array": {"count": 8, "spacing_m": 0.15}}):
+        (message,) = warned(directivity)
+        assert message.startswith(f"listener 'near' is 2.0 m from array {source['name']!r}")
+        assert "(1.05 m long)" in message and f"about {reach:.1f} m at 1000 Hz" in message
+    assert warned("omni") == [] and warned({"array": {"count": 4, "spacing_m": 0.15}}) == []
