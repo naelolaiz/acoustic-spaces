@@ -675,7 +675,9 @@ stencils. On Mesa's lavapipe, a Vulkan driver that runs on the CPU, with 4 cores
 | church | 1,228,682 | 1,016 | 3.5 | 30.1 | 1.5e-6 |
 
 The difference is relative to the largest pressure: the GPU's single-precision
-rounding, which stays at that level. The times include the grid's set-up on the CPU,
+rounding, which stays at that level. Apple's GPU, in CI, rounds further from the CPU:
+in the test's nearly closed room with resonant walls the two differ by up to 1.1e-5
+after 1,601 steps, in the slow drift such a room builds up. The times include the grid's set-up on the CPU,
 the same on both. A software driver is no faster than the CPU solver; the script is
 there to time a hardware GPU.
 

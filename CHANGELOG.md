@@ -212,7 +212,7 @@ the wave bands)
   Metal or Direct3D 12, on any vendor's GPU), with the new `gpu` extra; `auto` takes a
   hardware GPU when there is one. The C++ core still lays the grid out, and one WGSL
   compute shader steps it, one dispatch per time step; the runs agree with the CPU's to
-  within 1.5e-6 of the largest pressure. `cpu` stays the default.
+  within about 1e-5 of the largest pressure. `cpu` stays the default.
 - `simulate --wave-device`, a choice on the editor's Simulation page, the GPU's name in
   `acoustic-spaces info` and in the progress line, and `wave_gpu` and `wave_steps` in
   the details.

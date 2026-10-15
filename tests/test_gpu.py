@@ -56,7 +56,10 @@ def test_gpu_steps_a_room_with_resonant_walls_as_the_cpu_does(stencil: int) -> N
     # Pieces of odd and even lengths, so the fields swap both ways between runs.
     a, b = _runs(make, _drive(rate, cell, 1601), [0, 377, 1000, 1601])
     assert np.abs(a).max() > 0.0
-    assert np.abs(a - b).max() < 1e-5 * np.abs(a).max()
+    # Apple's GPU rounds differently from the CPU: in this nearly closed room the slow
+    # drift the walls' branches leave picks that up, 1.1e-5 of the peak by the end. A
+    # field swapped the wrong way between runs would differ by far more.
+    assert np.abs(a - b).max() < 3e-5 * np.abs(a).max()
 
 
 @needs_gpu

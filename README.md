@@ -894,8 +894,9 @@ simulation:
 - With `device: gpu` the grid is stepped on the GPU instead, through WebGPU: Vulkan,
   Metal or Direct3D 12, so AMD, NVIDIA, Intel and Apple GPUs alike, with the `gpu`
   extra (wgpu); `auto` takes a hardware GPU when wgpu finds one, and the CPU otherwise.
-  The grid is laid out on the CPU either way, and the two agree to within 1.5e-6 of the
-  largest pressure. `acoustic-spaces info` names the GPU it finds.
+  The grid is laid out on the CPU either way, and the two agree to within about 1e-5 of
+  the largest pressure (single-precision rounding). `acoustic-spaces info` names the GPU
+  it finds.
 - Surfaces absorb as their materials do in each band: each material becomes a locally
   reacting surface whose admittance changes with frequency (a constant and resonant
   mass-spring-damper branches), fitted so that its random-incidence absorption matches
