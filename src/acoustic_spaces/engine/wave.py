@@ -13,6 +13,12 @@ octave bands replace the ray-traced ones.
   Each octave higher costs about 16 times as much (cells 8 times smaller, steps twice
   as many). All bands share the grid, so a mode near a crossover is the same mode on
   both sides of it.
+- Waves on the grid travel slower the shorter they are. ``scheme`` picks the stencil:
+  the interpolated isotropic one (19 points, :data:`ISOTROPIC_COURANT`) is 0.67 % slow
+  at 8 cells per wavelength, within 0.03 % the same in every direction; the standard
+  one (7 points, :data:`COURANT`) up to 1.7 %, along the grid's axes. ``auto`` takes the
+  isotropic one but round an open model, where only the standard one has the matched
+  layer.
 - The surfaces absorb as their materials do in each band: each material becomes a
   locally reacting surface whose admittance changes with frequency, fitted so that its
   random-incidence absorption matches the material's in every wave band
@@ -43,6 +49,7 @@ import dataclasses
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from typing import Literal
 
 import numpy as np
 
@@ -57,8 +64,14 @@ from acoustic_spaces.engine.impedance import (
 )
 from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, OCTAVE_BANDS_HZ, band_centres
 
-#: Courant number of the scheme: the stable limit of the cubic grid.
+#: Courant number of the 7-point (standard rectilinear) stencil: its stable limit.
 COURANT = 1.0 / math.sqrt(3.0)
+#: Courant number of the 19-point (interpolated isotropic) stencil: its stable limit.
+ISOTROPIC_COURANT = math.sqrt(0.75)
+#: Which stencil steps the grid (see :func:`wave_responses`).
+Scheme = Literal["auto", "standard", "isotropic"]
+#: The stencils' points, and their Courant numbers, by scheme.
+STENCILS = {"standard": (7, COURANT), "isotropic": (19, ISOTROPIC_COURANT)}
 #: Grids with more cells than this are refused (about 20 bytes each).
 MAX_CELLS = 40_000_000
 #: The source's high-pass, applied twice: once so that the air the source pushes into
@@ -130,21 +143,23 @@ def band_grid(
     speed_of_sound: float,
     points_per_wavelength: float = 8.0,
     total: int = len(OCTAVE_BANDS_HZ),
+    courant: float = COURANT,
 ) -> BandGrid:
     """The coarsest grid with ``points_per_wavelength`` cells per wavelength at the top of
     band ``band`` (of ``total``, 8 octave or 24 third-octave bands) whose time step is a
     whole number of the output's sample periods, or one of them over a whole number
-    where the grid needs more steps per second than the output has samples."""
+    where the grid needs more steps per second than the output has samples. ``courant``
+    is the stencil's Courant number."""
     cell = speed_of_sound / (points_per_wavelength * band_top(band, total))
-    rate = speed_of_sound / (COURANT * cell)  # one step crosses COURANT cells
+    rate = speed_of_sound / (courant * cell)  # one step crosses `courant` cells
     if rate <= sample_rate:
         rate = sample_rate / math.floor(sample_rate / rate)
     else:
         rate = sample_rate * math.ceil(rate / sample_rate)
-    return BandGrid(band, speed_of_sound / (COURANT * rate), rate)
+    return BandGrid(band, speed_of_sound / (courant * rate), rate)
 
 
-def source_signal(rate: float, cell: float) -> tuple[np.ndarray, int]:
+def source_signal(rate: float, cell: float, courant: float = COURANT) -> tuple[np.ndarray, int]:
     """What the source adds to the grid on each step, and its delay in steps.
 
     An impulse, low-passed (so the grid carries no frequencies it cannot) and
@@ -160,7 +175,7 @@ def source_signal(rate: float, cell: float) -> tuple[np.ndarray, int]:
     high = -window / window.sum()
     high[0] += 1.0
     signal = np.convolve(np.convolve(low, high), high)
-    return 4.0 * math.pi * COURANT**2 / cell * signal, half
+    return 4.0 * math.pi * courant**2 / cell * signal, half
 
 
 @dataclass
@@ -282,7 +297,9 @@ def _probe_points(listener: np.ndarray, cell: float) -> np.ndarray:
     return listener[None, :] + cell * offsets
 
 
-def _first_order(probes: np.ndarray, found: Sequence[bool], name: str) -> np.ndarray:
+def _first_order(
+    probes: np.ndarray, found: Sequence[bool], name: str, courant: float = COURANT
+) -> np.ndarray:
     """W, X, Y, Z (samples, 4) from the pressure at the listener and round it.
 
     The velocity is the time integral of the pressure gradient (central differences,
@@ -303,7 +320,7 @@ def _first_order(probes: np.ndarray, found: Sequence[bool], name: str) -> np.nda
             difference = probes[0] - probes[minus]
         else:
             continue
-        out[:, 1 + axis] = COURANT * (np.cumsum(difference) - 0.5 * difference)
+        out[:, 1 + axis] = courant * (np.cumsum(difference) - 0.5 * difference)
     return out
 
 
@@ -320,12 +337,16 @@ def wave_responses(
     points_per_wavelength: float = 8.0,
     threads: int = 0,
     device: Device = "cpu",
+    scheme: Scheme = "auto",
     say: Callable[[str], None] | None = None,
     label: str = "",
 ) -> tuple[list[WaveResponse], dict[str, float]]:
     """The wave bands of the responses from ``source`` to each of ``listeners`` in the
     room of ``model`` (a :class:`~acoustic_spaces.engine.model.TraceModel`), and run
-    details. ``device`` says where the grid is stepped (see :mod:`.gpu`)."""
+    details. ``device`` says where the grid is stepped (see :mod:`.gpu`); ``scheme``
+    which stencil steps it: ``"isotropic"`` (19 points), ``"standard"`` (7 points) or
+    ``"auto"``, the isotropic one but round an open model, where only the standard one
+    has the matched layer."""
     from acoustic_spaces import _native
 
     say = say or (lambda _: None)
@@ -351,29 +372,24 @@ def wave_responses(
     centres = band_centres(model.bands)
     bands = (OCTAVE_BANDS_HZ.index(max_band_hz) + 1) * BANDS_PER_OCTAVE[model.bands]
     total = len(centres)
-    grid = band_grid(bands - 1, sample_rate, speed_of_sound, points_per_wavelength, total)
-    h = grid.cell
-    # The model, and two cells round the source and listeners (in an open model they may
-    # lie outside it); then two cells of margin (one for an open model's air, one that is
-    # never air) and in an open model the matched layer, shifted off the model's planes.
-    low = np.minimum(mesh.vertices.min(axis=0), points.min(axis=0) - 2.0 * h)
-    high = np.maximum(mesh.vertices.max(axis=0), points.max(axis=0) + 2.0 * h)
-    signal, delay = source_signal(grid.rate, h)
-    samples = int(math.ceil(length_s * grid.rate))
-    steps = samples + delay  # the source's term on step n stands for its value at time n
-    drive = np.zeros(steps, np.float32)
-    drive[: min(len(signal), steps)] = signal[:steps]
-    probes = np.vstack([_probe_points(p, h) for p in listeners])
     # Each material's admittance, fitted to its absorption in the wave bands.
     coefficients = np.round(model.absorption[solid, :bands], 6)
     rows, face_material = np.unique(coefficients, axis=0, return_inverse=True)
-    fits = [fit_admittance(row, total, grid.rate) for row in rows]
-    branches = [fit.branches(grid.rate) for fit in fits]
-    branch_material = np.concatenate(
-        [np.full(len(b), m, dtype=np.int64) for m, b in enumerate(branches)]
-    )
 
-    def solver_with(layer: int):
+    def prepare(stencil: str, layer: int):
+        """The solver, grid, fits and probes for the stencil, with ``layer`` cells of
+        matched layer."""
+        size, courant = STENCILS[stencil]
+        grid = band_grid(
+            bands - 1, sample_rate, speed_of_sound, points_per_wavelength, total, courant
+        )
+        h = grid.cell
+        # The model, and two cells round the source and listeners (in an open model they
+        # may lie outside it); then two cells of margin (one for an open model's air, one
+        # that is never air) and in an open model the matched layer, shifted off the
+        # model's planes.
+        low = np.minimum(mesh.vertices.min(axis=0), points.min(axis=0) - 2.0 * h)
+        high = np.maximum(mesh.vertices.max(axis=0), points.max(axis=0) + 2.0 * h)
         origin = low - h * (2.0 + layer + np.array([0.0137, 0.0219, 0.0291]))
         shape = np.ceil((high - origin) / h).astype(np.int64) + 2 + layer
         if int(np.prod(shape)) > MAX_CELLS:
@@ -383,7 +399,13 @@ def wave_responses(
                 f"{int(np.prod(shape)):,} cells{what} (at most {MAX_CELLS:,}); lower "
                 "max_band_hz or points_per_wavelength"
             )
-        return _native.WaveSolver(
+        fits = [fit_admittance(row, total, grid.rate) for row in rows]
+        branches = [fit.branches(grid.rate) for fit in fits]
+        branch_material = np.concatenate(
+            [np.full(len(b), m, dtype=np.int64) for m, b in enumerate(branches)]
+        )
+        probes = np.vstack([_probe_points(p, h) for p in listeners])
+        solver = _native.WaveSolver(
             bvh,
             np.ascontiguousarray(face_material.reshape(-1), dtype=np.int64),
             np.array([fit.beta for fit in fits]),
@@ -400,11 +422,28 @@ def wave_responses(
             layer,
             LAYER_DAMPING,
             threads,
+            size,
         )
+        return solver, grid, fits, probes, courant
 
-    solver = solver_with(0)
+    # The isotropic stencil, but round an open model the standard one with its matched
+    # layer, which the isotropic one has none of.
+    stencil = "standard" if scheme == "standard" else "isotropic"
+    solver, grid, fits, probes, courant = prepare(stencil, 0)
     if solver.open:
-        solver = solver_with(LAYER_CELLS)
+        if scheme == "isotropic":
+            raise ValueError(
+                "the isotropic stencil has no matched layer for an open model: set "
+                "simulation.wave.scheme to auto or standard"
+            )
+        stencil = "standard"
+        solver, grid, fits, probes, courant = prepare(stencil, LAYER_CELLS)
+    h = grid.cell
+    signal, delay = source_signal(grid.rate, h, courant)
+    samples = int(math.ceil(length_s * grid.rate))
+    steps = samples + delay  # the source's term on step n stands for its value at time n
+    drive = np.zeros(steps, np.float32)
+    drive[: min(len(signal), steps)] = signal[:steps]
     # Before any step: a listener outside the source's air, or a source closed in.
     found = [solver.probe_found(p) for p in range(len(probes))]
     missing = [listener for i, listener in enumerate(names) if not found[7 * i]]
@@ -437,6 +476,7 @@ def wave_responses(
         "wave_cells": float(solver.air_cells),
         "wave_cell_m": h,
         "wave_steps": float(steps),
+        "wave_stencil": float(solver.stencil),
     }
     if solver.open:
         info["wave_open"] = 1.0
@@ -451,19 +491,22 @@ def wave_responses(
     responses = []
     for i, listener in enumerate(names):
         part = slice(7 * i, 7 * i + 7)
-        signals = _first_order(run[part], found[part], listener)
+        signals = _first_order(run[part], found[part], listener, courant)
         responses.append(WaveResponse(grid.rate, signals, bands, h, total))
     return responses, info
 
 
 __all__ = [
     "COURANT",
+    "ISOTROPIC_COURANT",
     "HIGH_PASS_S",
     "LAYER_CELLS",
     "LAYER_DAMPING",
     "LOW_EDGE_HZ",
     "MAX_ABSORPTION",
     "MAX_CELLS",
+    "STENCILS",
+    "Scheme",
     "Admittance",
     "BandGrid",
     "WaveResponse",

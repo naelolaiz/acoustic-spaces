@@ -2,8 +2,11 @@
 
     python validation/wave_solver.py [--json results.json] [--plot wave.png]
 
-Eight checks, printed as Markdown tables:
+Nine checks, printed as Markdown tables, each with both of the solver's stencils (the
+7-point one and the 19-point one) where both apply:
 
+- the speed of sound along an axis and along a diagonal at about 8 cells per
+  wavelength, from the modes of a rigid box, against each stencil's dispersion relation;
 - the modes of a lightly damped 7 x 5 x 3 m box (10 cm cells) whose walls' admittance
   changes with frequency, from its ringing: frequency and decay rate of each mode that
   stands apart from the others, against perturbation theory: the decay rate
@@ -18,14 +21,15 @@ Eight checks, printed as Markdown tables:
 - the attenuation of a plane wave grazing the walls of a duct, against
   exp(-beta * perimeter / (2 * area) per metre);
 - an open model (a plate in the open): what comes back from the grid's edge, with and
-  without the matched layer, against a grid too large for anything to come back;
+  without the matched layer, against a grid too large for anything to come back (the
+  7-point stencil, the only one with a matched layer);
 - the level of the direct sound in the 63 and 125 Hz bands, in a large and very
   absorbing room, against the free-field level the rays give;
 - a 7 x 5 x 3 m box with 15 % absorption on every surface, simulated with the default
   settings (the 63 and 125 Hz bands from the wave solver), against the sum of the box's
-  modes with those decay rates: G, EDT and T20 in both bands, also with twice as many
-  cells per wavelength and from the rays alone; with ``--plot`` (needs matplotlib), the
-  transfer functions from 15 to 250 Hz;
+  modes with those decay rates: G, EDT and T20 in both bands, also with the 7-point
+  stencil, with twice as many cells per wavelength and from the rays alone; with
+  ``--plot`` (needs matplotlib), the transfer functions from 15 to 250 Hz;
 - the run count and time of a box whose absorption differs in every band up to 500 Hz.
 """
 
@@ -45,23 +49,32 @@ from acoustic_spaces.engine.impedance import (
     admittance,
     fit_admittance,
 )
-from acoustic_spaces.engine.wave import COURANT, LAYER_CELLS, LAYER_DAMPING, source_signal
+from acoustic_spaces.engine.wave import (
+    COURANT,
+    LAYER_CELLS,
+    LAYER_DAMPING,
+    STENCILS,
+    source_signal,
+)
 from acoustic_spaces.geometry import box_mesh
 from acoustic_spaces.parameters import from_impulse_response
 
 C = 343.0
 FS = 48_000
 BOX = (7.0, 5.0, 3.0)
+#: Each stencil's Courant number, by its points.
+COURANTS = dict(STENCILS.values())
 
 
-def _solver(size, admittances, source, probes, cell):
-    """A wave solver in the box from (0, 0, 0) to ``size``, and its sample rate.
-    ``admittances(mesh)`` gives each face's admittance: a number, or an Admittance."""
+def _solver(size, admittances, source, probes, cell, stencil: int = 7):
+    """A wave solver with the ``stencil``-point stencil in the box from (0, 0, 0) to
+    ``size``, and its sample rate. ``admittances(mesh)`` gives each face's admittance: a
+    number, or an Admittance."""
     mesh = box_mesh(size)
     bvh = _native.Bvh(mesh.vertices, mesh.faces)
     origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
     shape = np.ceil((np.array(size) - origin) / cell).astype(int) + 2
-    rate = C / (COURANT * cell)
+    rate = C / (COURANTS[stencil] * cell)
     walls = [w if isinstance(w, Admittance) else Admittance(float(w)) for w in admittances(mesh)]
     branches = [np.zeros((0, 3))] + [w.branches(rate) for w in walls]
     owners = [np.zeros(0, np.int64)] + [
@@ -78,12 +91,13 @@ def _solver(size, admittances, source, probes, cell):
         *map(int, shape),
         np.asarray(source, dtype=float),
         np.asarray(probes, dtype=float).reshape(-1, 3),
+        stencil=stencil,
     )
     return solver, rate
 
 
 def _run(solver, rate: float, cell: float, seconds: float) -> tuple[np.ndarray, int]:
-    signal, delay = source_signal(rate, cell)
+    signal, delay = source_signal(rate, cell, COURANTS[solver.stencil])
     steps = int(seconds * rate)
     drive = np.zeros(steps, np.float32)
     drive[: len(signal)] = signal[:steps]
@@ -115,15 +129,101 @@ def modal_shift(numbers: np.ndarray, beta, size, c: float = C) -> np.ndarray:
     return -c * np.imag(beta) / (4 * math.pi) * per_axis.sum(axis=1)
 
 
+def _peak(f: np.ndarray, magnitude: np.ndarray, centre: float, half_width: float) -> float:
+    """The frequency of the highest peak of ``magnitude`` within ``half_width`` of
+    ``centre``, between the bins (a parabola through the log magnitude round it)."""
+    near = np.flatnonzero(np.abs(f - centre) < half_width)
+    j = int(near[np.argmax(magnitude[near])])
+    a, b, c = np.log(magnitude[j - 1 : j + 2])
+    return float(f[j] + 0.5 * (a - c) / (a - 2 * b + c) * (f[1] - f[0]))
+
+
+#: Each stencil's weights: of an axial link and of an edge link (scaled by the Courant
+#: number squared, as the update uses them).
+WEIGHTS = {7: (1.0 / 3.0, 0.0), 19: (0.25, 0.125)}
+
+
+def grid_frequency(numbers: np.ndarray, size, cell: float, rate: float, stencil: int):
+    """The frequencies of a rigid box's modes on the ``stencil``-point grid with the
+    walls half a cell past the last centres, from the stencil's dispersion relation
+    2 - 2 cos(w T) = sum over the links of g_k (1 - cos(k . d_k))."""
+    axial, edge = WEIGHTS[stencil]
+    theta = np.pi * numbers * cell / np.array(size)
+    cos = np.cos(theta)
+    total = 2 * axial * (1 - cos).sum(axis=1)
+    for a, b in ((0, 1), (0, 2), (1, 2)):
+        total += 4 * edge * (1 - cos[:, a] * cos[:, b])
+    return np.arccos(1 - total / 2) * rate / (2 * math.pi)
+
+
+def relation_error(direction, points_per_wavelength: float, stencil: int) -> float:
+    """How far off the speed of sound is along ``direction`` on the ``stencil``-point
+    grid at its Courant limit, with ``points_per_wavelength`` cells per wavelength."""
+    unit = np.asarray(direction, float) / np.linalg.norm(direction)
+    cell, courant = 1.0, COURANTS[stencil]
+    rate = 1.0 / courant  # c = 1
+    # A mode of a box so large that k h along each axis is what the direction asks.
+    size = np.ones(3)
+    numbers = (2 * unit / points_per_wavelength)[None, :]  # k h / pi along each axis
+    f = grid_frequency(numbers, size, cell, rate, stencil)[0]
+    return float(f * points_per_wavelength - 1)
+
+
+def dispersion() -> dict:
+    """The speed of sound along an axis and along a diagonal at about 8 cells per
+    wavelength: modes (6, 0, 0) and (4, 4, 0) of a rigid 2.4 x 2.4 x 0.2 m box (10 cm
+    cells), from the peaks of its ringing for 8 s, against the exact frequencies and
+    against each stencil's dispersion relation."""
+    size, cell = (2.4, 2.4, 0.2), 0.1
+    source, probe = (0.13, 0.17, 0.1), (2.27, 2.21, 0.1)  # near corners: every mode rings
+    picks = {"axis": (6, 0, 0), "diagonal": (4, 4, 0)}
+    numbers, exact = box_modes(size, 700.0)
+    rows = []
+    for stencil in (7, 19):
+        solver, rate = _solver(size, lambda m: [0.0] * len(m.faces), source, probe, cell, stencil)
+        pressure = _run(solver, rate, cell, 8.0)[0][0]
+        n_fft = 1 << int(math.ceil(math.log2(8 * len(pressure))))
+        spectrum = np.abs(np.fft.rfft(pressure * np.hanning(len(pressure)), n_fft))
+        f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+        on_grid = grid_frequency(numbers, size, cell, rate, stencil)
+        for direction, mode in picks.items():
+            k = int(np.flatnonzero((numbers == mode).all(axis=1))[0])
+            apart = np.abs(on_grid - on_grid[k])
+            assert apart[apart > 1e-6].min() > 1.0, "another mode is too close to tell apart"
+            peak = _peak(f, spectrum, on_grid[k], 0.5)
+            rows.append(
+                {
+                    "stencil": stencil,
+                    "direction": direction,
+                    "mode": list(mode),
+                    "cells_per_wavelength": float(C / (exact[k] * cell)),
+                    "exact_hz": float(exact[k]),
+                    "relation_hz": float(on_grid[k]),
+                    "fdtd_hz": float(peak),
+                }
+            )
+    directions = {"axis": (1, 0, 0), "face diagonal": (1, 1, 0), "body diagonal": (1, 1, 1)}
+    at_8 = {
+        str(stencil): {name: relation_error(d, 8.0, stencil) for name, d in directions.items()}
+        for stencil in (7, 19)
+    }
+    return {"rows": rows, "at_8": at_8}
+
+
 #: The walls of the lightly damped box: a little constant absorption and a broad
 #: resonance at 60 Hz, so the modes from 24 to 90 Hz decay at rates up to five times apart.
 MODE_WALLS = Admittance(0.002, np.array([0.008]), np.array([1.5]), np.array([60.0]))
 
 
-def modes() -> list[dict]:
+def modes(stencil: int = 7) -> list[dict]:
     cell = 0.1
     solver, rate = _solver(
-        BOX, lambda m: [MODE_WALLS] * len(m.faces), (0.33, 0.27, 0.21), (6.61, 4.77, 2.83), cell
+        BOX,
+        lambda m: [MODE_WALLS] * len(m.faces),
+        (0.33, 0.27, 0.21),
+        (6.61, 4.77, 2.83),
+        cell,
+        stencil,
     )
     pressure = _run(solver, rate, cell, 8.0)[0][0]
     n_fft = 1 << int(math.ceil(math.log2(2 * len(pressure))))
@@ -138,13 +238,16 @@ def modes() -> list[dict]:
     for n, f_rigid, f0, d0, y in zip(numbers, rigid, frequencies, decay, walls, strict=True):
         if np.sort(np.abs(rigid - f_rigid))[1] < 2.5:
             continue  # too close to another mode to tell them apart
-        near = np.abs(f - f0) < 1.0
-        peak = float(f[near][np.argmax(np.abs(spectrum[near]))])
+        peak = _peak(f, np.abs(spectrum), f0, 1.0)
         # The mode alone: a narrow band round it, and the slope of its envelope.
         gain = np.exp(-0.5 * ((f - peak) / 0.4) ** 2)
         analytic = np.fft.ifft(np.concatenate([2 * spectrum * gain, np.zeros(n_fft - len(f))]))
         level = 20 * np.log10(np.abs(analytic[: len(pressure)]) + 1e-30)
-        fit = (t > 1.0) & (t < 6.0)
+        # From 1 s on, over 50 dB at most: the fastest modes reach the float noise
+        # floor before 6 s.
+        start = int(rate)
+        below = np.flatnonzero(level[start:] < level[start] - 50.0)
+        fit = (t > 1.0) & (t < min(6.0, 1.0 + (below[0] if len(below) else len(t)) / rate))
         slope = np.polyfit(t[fit], level[fit], 1)[0]
         rows.append(
             {
@@ -160,7 +263,7 @@ def modes() -> list[dict]:
     return sorted(rows, key=lambda row: row["theory_hz"])
 
 
-def duct() -> list[dict]:
+def duct(stencil: int = 7) -> list[dict]:
     size, cell = (80.0, 0.6, 0.6), 0.1
     rows = []
     for beta in (0.0, 0.1, 0.25, 0.5, 1.0):
@@ -171,7 +274,7 @@ def duct() -> list[dict]:
             near = np.all(np.isclose(x, 0.0), axis=1)
             return np.where(far, beta, np.where(near, 1.0, 0.0))
 
-        solver, rate = _solver(size, admittances, (10.0, 0.3, 0.3), (30.0, 0.3, 0.3), cell)
+        solver, rate = _solver(size, admittances, (10.0, 0.3, 0.3), (30.0, 0.3, 0.3), cell, stencil)
         recorded, delay = _run(solver, rate, cell, 0.45)
         pressure = recorded[0]
         n_fft = 1 << 14
@@ -199,7 +302,7 @@ def duct() -> list[dict]:
 POROUS = (0.05, 0.15, 0.4, 0.7)
 
 
-def _plane_wave_runs(size, end, cell, source_x, probe_x, seconds):
+def _plane_wave_runs(size, end, cell, source_x, probe_x, seconds, stencil):
     """The pressure at the probe in a duct along x with a matched near end (admittance 1)
     and, at the far end, the Admittance ``end`` (rigid for None)."""
     y = size[1] / 2
@@ -212,21 +315,24 @@ def _plane_wave_runs(size, end, cell, source_x, probe_x, seconds):
         out[far] = end if end is not None else 0.0
         return list(out)
 
-    solver, rate = _solver(size, admittances, (source_x, y, y), (probe_x, y, y), cell)
+    solver, rate = _solver(size, admittances, (source_x, y, y), (probe_x, y, y), cell, stencil)
     return _run(solver, rate, cell, seconds)[0][0], rate
 
 
-def grid_reflection(f: np.ndarray, rate: float, y: np.ndarray) -> np.ndarray:
+def grid_reflection(
+    f: np.ndarray, rate: float, y: np.ndarray, courant: float = COURANT
+) -> np.ndarray:
     """Reflection at normal incidence off a wall of admittance y (the scheme's at that
     rate, with time going as e^(-i w t): the conjugate of Y(i w)) in the grid: a plane
-    wave along an axis, the wall half a cell past the last centre."""
+    wave along an axis, the wall half a cell past the last centre. Both stencils carry
+    such a wave as the one-dimensional scheme at their Courant number does."""
     phi = 2 * np.pi * f / rate
-    shift = np.exp(2j * np.arcsin(np.minimum(np.sin(phi / 2) / COURANT, 1.0)))  # one cell
-    c = 1j * np.sin(phi) * y / COURANT
+    shift = np.exp(2j * np.arcsin(np.minimum(np.sin(phi / 2) / courant, 1.0)))  # one cell
+    c = 1j * np.sin(phi) * y / courant
     return (c - shift + 1) / (1 / shift - 1 - c)
 
 
-def impedance_duct() -> dict:
+def impedance_duct(stencil: int = 7) -> dict:
     """Normal-incidence absorption of a duct's end with the fitted admittance of POROUS,
     against that admittance's and against the grid's theory for it.
 
@@ -236,10 +342,12 @@ def impedance_duct() -> dict:
     every frequency, so what the grid does on the way cancels out.
     """
     cell, width = 0.05, 0.2
-    rate = C / (COURANT * cell)
+    courant = COURANTS[stencil]
+    rate = C / (courant * cell)
     fit = fit_admittance(POROUS, 8, rate)
     source_x, probe_x, seconds = 60.0, 110.0, 0.6
-    reference, _ = _plane_wave_runs((200.0, width, width), None, cell, source_x, probe_x, seconds)
+    run = (cell, source_x, probe_x, seconds, stencil)
+    reference, _ = _plane_wave_runs((200.0, width, width), None, *run)
     incident = np.where(np.arange(len(reference)) / rate < 0.48, reference, 0.0)
     n_fft = 1 << 15
     f = np.fft.rfftfreq(n_fft, 1.0 / rate)
@@ -247,13 +355,13 @@ def impedance_duct() -> dict:
     f = f[band]
 
     def reflection(end):
-        far, _ = _plane_wave_runs((130.0, width, width), end, cell, source_x, probe_x, seconds)
+        far, _ = _plane_wave_runs((130.0, width, width), end, *run)
         return np.fft.rfft(far - reference, n_fft)[band] / np.fft.rfft(incident, n_fft)[band]
 
     measured = 1.0 - np.abs(reflection(fit) / reflection(None)) ** 2
     y = fit(f)
     theory = 1.0 - np.abs((1.0 - y) / (1.0 + y)) ** 2
-    grid = 1.0 - np.abs(grid_reflection(f, rate, np.conj(fit(f, rate)))) ** 2
+    grid = 1.0 - np.abs(grid_reflection(f, rate, np.conj(fit(f, rate)), courant)) ** 2
     shown = [31.5, 44, 63, 88, 125, 177, 250, 354, 500, 707]
     rows = []
     for frequency in shown:
@@ -366,7 +474,7 @@ def layer_stability(seconds: float = 20.0) -> dict:
     return {"steps": len(pressure), "levels_db": [float(x) for x in levels]}
 
 
-def free_field() -> list[dict]:
+def free_field(scheme: str = "auto") -> list[dict]:
     box = (30.0, 24.0, 24.0)
     source = [box[0] / 2 - 4.03, box[1] / 2 + 0.07, box[2] / 2 + 0.02]
     distances = (1.0, 2.0, 4.0, 8.0)
@@ -386,7 +494,7 @@ def free_field() -> list[dict]:
                     "seed": 1,
                     "late": {"rays": 2000},
                     "early": {"max_order": 0},
-                    "wave": {"enabled": True, "max_band_hz": 125},
+                    "wave": {"enabled": True, "max_band_hz": 125, "scheme": scheme},
                 },
             }
         )
@@ -408,7 +516,7 @@ def free_field() -> list[dict]:
     return rows
 
 
-def grazing() -> list[dict]:
+def grazing(stencil: int = 7) -> list[dict]:
     size, beta = (40.0, 0.6, 0.6), 0.05
     rows = []
     for cell in (0.1, 0.05):
@@ -419,7 +527,7 @@ def grazing() -> list[dict]:
             return np.where(ends, 1.0, beta)
 
         probes = [(10.0, 0.3, 0.3), (20.0, 0.3, 0.3), (30.0, 0.3, 0.3)]
-        solver, rate = _solver(size, admittances, (5.0, 0.3, 0.3), probes, cell)
+        solver, rate = _solver(size, admittances, (5.0, 0.3, 0.3), probes, cell, stencil)
         recorded, delay = _run(solver, rate, cell, 0.2)
         n_fft = 1 << 15
         f = np.fft.rfftfreq(n_fft, 1.0 / rate)
@@ -450,7 +558,7 @@ BOX_ABSORPTION = 0.15
 BOX_LENGTH_S = 1.5
 
 
-def _box_response(wave: bool, points_per_wavelength: float = 8.0):
+def _box_response(wave: bool, points_per_wavelength: float = 8.0, scheme: str = "auto"):
     room = Room.from_scene(
         Scene.model_validate(
             {
@@ -465,6 +573,7 @@ def _box_response(wave: bool, points_per_wavelength: float = 8.0):
                     "wave": {
                         "enabled": wave,
                         "points_per_wavelength": points_per_wavelength,
+                        "scheme": scheme,
                     },
                 },
             }
@@ -514,6 +623,7 @@ def _band_figures(ir: np.ndarray) -> dict:
 
 def box() -> tuple[list[dict], dict]:
     wave, seconds, c = _box_response(True)
+    standard, standard_seconds, _ = _box_response(True, scheme="standard")
     fine, fine_seconds, _ = _box_response(True, 16.0)
     rays, _, _ = _box_response(False)
     n = int(BOX_LENGTH_S * FS)
@@ -526,6 +636,7 @@ def box() -> tuple[list[dict], dict]:
     spectra = {
         "modes": theory,
         "wave solver": np.fft.rfft(wave.impulse_response(FS, seed=1), n_fft),
+        "wave solver, 7-point stencil": np.fft.rfft(standard.impulse_response(FS, seed=1), n_fft),
         "wave solver, 16 per wavelength": np.fft.rfft(fine.impulse_response(FS, seed=1), n_fft),
         "rays only": np.fft.rfft(rays.impulse_response(FS, seed=1), n_fft),
     }
@@ -534,7 +645,12 @@ def box() -> tuple[list[dict], dict]:
     ]
     shown = (f >= 15) & (f <= 250)
     curves = {"f": f[shown], **{name: np.abs(x[shown]) for name, x in spectra.items()}}
-    curves.update(seconds=seconds, fine_seconds=fine_seconds, cell=wave.wave.cell)
+    curves.update(
+        seconds=seconds,
+        standard_seconds=standard_seconds,
+        fine_seconds=fine_seconds,
+        cell=wave.wave.cell,
+    )
     return rows, curves
 
 
@@ -564,10 +680,11 @@ def one_run() -> dict:
     result = simulate(room)
     details = result.details["s"]
     # The same grid with constant walls, for the cost of the branches.
-    cell = details["wave_cell_m"]
-    constant, rate = _solver(BOX, lambda m: [0.05] * len(m.faces), BOX_SOURCE, BOX_LISTENER, cell)
+    cell, stencil = details["wave_cell_m"], int(details["wave_stencil"])
+    points = (BOX_SOURCE, BOX_LISTENER, cell, stencil)
+    constant, rate = _solver(BOX, lambda m: [0.05] * len(m.faces), *points)
     fitted = fit_admittance(absorption[:4], 8, rate)
-    branched, _ = _solver(BOX, lambda m: [fitted] * len(m.faces), BOX_SOURCE, BOX_LISTENER, cell)
+    branched, _ = _solver(BOX, lambda m: [fitted] * len(m.faces), *points)
     steps = int(0.5 * rate)
     timings = []
     for solver in (constant, branched):
@@ -577,6 +694,7 @@ def one_run() -> dict:
     return {
         "bands": 4,
         "runs": 1,
+        "stencil": stencil,
         "cells": details["wave_cells"],
         "steps": steps,
         "wave_s": details["wave_s"],
@@ -629,49 +747,88 @@ def main() -> None:
     args = parser.parse_args()
 
     results: dict = {}
-    results["modes"] = modes()
+    results["dispersion"] = dispersion()
     print(
-        "| mode | rigid box (Hz) | theory (Hz) | wave solver (Hz) | Re(admittance) | "
-        "decay, theory (1/s) | wave solver |"
+        "| direction | mode | cells per wavelength | exact (Hz) | 7-point, relation (%) | "
+        "wave solver | 19-point, relation | wave solver |"
     )
-    print("|---|---:|---:|---:|---:|---:|---:|")
-    for row in results["modes"]:
+    print("|---|---|---:|---:|---:|---:|---:|---:|")
+    rows = results["dispersion"]["rows"]
+    for seven, nineteen in zip(rows[:2], rows[2:], strict=True):
+        errors = [
+            100 * (row[key] / row["exact_hz"] - 1)
+            for row in (seven, nineteen)
+            for key in ("relation_hz", "fdtd_hz")
+        ]
         print(
-            f"| {tuple(row['mode'])} | {row['rigid_hz']:.2f} | {row['theory_hz']:.2f} | "
-            f"{row['fdtd_hz']:.2f} | {row['admittance']:.4f} | {row['theory_decay']:.3f} | "
-            f"{row['fdtd_decay']:.3f} |"
+            f"| {seven['direction']} | {tuple(seven['mode'])} | "
+            f"{seven['cells_per_wavelength']:.2f} | {seven['exact_hz']:.2f} | "
+            + " | ".join(f"{e:+.3f}" for e in errors)
+            + " |"
+        )
+    for stencil, errors in results["dispersion"]["at_8"].items():
+        found = ", ".join(f"{name} {100 * e:+.3f} %" for name, e in errors.items())
+        print(f"\n{stencil}-point stencil at 8 cells per wavelength: {found}")
+
+    results["modes"] = {str(stencil): modes(stencil) for stencil in (7, 19)}
+    print(
+        "\n| mode | rigid box (Hz) | theory (Hz) | 7-point (Hz) | 19-point | Re(admittance) | "
+        "decay, theory (1/s) | 7-point | 19-point |"
+    )
+    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+    for seven, nineteen in zip(results["modes"]["7"], results["modes"]["19"], strict=True):
+        assert seven["mode"] == nineteen["mode"]
+        print(
+            f"| {tuple(seven['mode'])} | {seven['rigid_hz']:.2f} | {seven['theory_hz']:.2f} | "
+            f"{seven['fdtd_hz']:.2f} | {nineteen['fdtd_hz']:.2f} | {seven['admittance']:.4f} | "
+            f"{seven['theory_decay']:.3f} | {seven['fdtd_decay']:.3f} | "
+            f"{nineteen['fdtd_decay']:.3f} |"
+        )
+    theory_moves = max(
+        abs(b["theory_decay"] / a["theory_decay"] - 1)
+        for a, b in zip(results["modes"]["7"], results["modes"]["19"], strict=True)
+    )
+    print(f"\n(the 19-point grid's rate moves the theory's decay rates by {theory_moves:.1e})")
+
+    results["duct"] = {str(stencil): duct(stencil) for stencil in (7, 19)}
+    print("\n| end admittance | reflection, theory | 7-point | 19-point |\n|---:|---:|---:|---:|")
+    for seven, nineteen in zip(results["duct"]["7"], results["duct"]["19"], strict=True):
+        print(
+            f"| {seven['admittance']:g} | {seven['theory']:.3f} | {seven['fdtd']:.3f} | "
+            f"{nineteen['fdtd']:.3f} |"
         )
 
-    results["duct"] = duct()
-    print("\n| end admittance | reflection, theory | wave solver |\n|---:|---:|---:|")
-    for row in results["duct"]:
-        print(f"| {row['admittance']:g} | {row['theory']:.3f} | {row['fdtd']:.3f} |")
-
-    results["impedance"] = impedance_duct()
-    rows = results["impedance"]["rows"]
+    results["impedance"] = {str(stencil): impedance_duct(stencil) for stencil in (7, 19)}
+    rows = results["impedance"]["7"]["rows"]
     print("\n| frequency (Hz) | " + " | ".join(f"{row['frequency_hz']:g}" for row in rows) + " |")
     print("|---|" + "---:|" * len(rows))
-    print(
-        "| normal-incidence absorption, fitted admittance | "
-        + " | ".join(f"{row['theory']:.3f}" for row in rows)
-        + " |"
-    )
-    print("| the grid's theory | " + " | ".join(f"{row['grid']:.3f}" for row in rows) + " |")
-    print("| wave solver | " + " | ".join(f"{row['fdtd']:.3f}" for row in rows) + " |")
-    print(
-        f"\nlargest difference from 30 to 720 Hz: {results['impedance']['max_difference']:.4f} "
-        f"({results['impedance']['max_difference_below_360']:.4f} below 360 Hz, "
-        f"{results['impedance']['max_difference_grid']:.4f} from the grid's theory); "
-        f"random-incidence absorption, material {results['impedance']['material']}, fitted "
-        + ", ".join(f"{a:.3f}" for a in results["impedance"]["fitted"])
-        + f" ({results['impedance']['branches']} branches)"
-    )
+    for stencil, impedance in results["impedance"].items():
+        rows = impedance["rows"]
+        for name, key in (
+            ("normal-incidence absorption, fitted admittance", "theory"),
+            ("the grid's theory", "grid"),
+            ("wave solver", "fdtd"),
+        ):
+            values = " | ".join(f"{row[key]:.3f}" for row in rows)
+            print(f"| {stencil}-point: {name} | {values} |")
+    for stencil, impedance in results["impedance"].items():
+        print(
+            f"\n{stencil}-point: largest difference from 30 to 720 Hz: "
+            f"{impedance['max_difference']:.4f} ({impedance['max_difference_below_360']:.4f} "
+            f"below 360 Hz, {impedance['max_difference_grid']:.4f} from the grid's theory); "
+            f"random-incidence absorption, material {impedance['material']}, fitted "
+            + ", ".join(f"{a:.3f}" for a in impedance["fitted"])
+            + f" ({impedance['branches']} branches)"
+        )
 
-    results["grazing"] = grazing()
-    print("\n| cell | amplitude after 10 m, theory | wave solver |\n|---:|---:|---:|")
-    for row in results["grazing"]:
-        found = ", ".join(f"{x:.4f}" for x in row["fdtd"])
-        print(f"| {100 * row['cell_m']:g} cm | {row['theory']:.4f} | {found} |")
+    results["grazing"] = {str(stencil): grazing(stencil) for stencil in (7, 19)}
+    print("\n| stencil | cell | amplitude after 10 m, theory | wave solver |\n|---|---:|---:|---:|")
+    for stencil, rows in results["grazing"].items():
+        for row in rows:
+            found = ", ".join(f"{x:.4f}" for x in row["fdtd"])
+            print(
+                f"| {stencil}-point | {100 * row['cell_m']:g} cm | {row['theory']:.4f} | {found} |"
+            )
 
     results["open"] = open_boundary()
     print("\n| boundary of the grid | listener 1 (dB) | listener 2 | listener 3 | air cells |")
@@ -687,10 +844,18 @@ def main() -> None:
         f"{max(levels[len(levels) // 2 :]):.0f} dB in the second half"
     )
 
-    results["free_field"] = free_field()
-    print("\n| distance | 63 Hz (dB re free field) | 125 Hz |\n|---:|---:|---:|")
-    for row in results["free_field"]:
-        print(f"| {row['distance_m']:g} m | {row['db_63']:+.2f} | {row['db_125']:+.2f} |")
+    results["free_field"] = {scheme: free_field(scheme) for scheme in ("isotropic", "standard")}
+    print(
+        "\n| distance | 63 Hz, 19-point (dB re free field) | 125 Hz | 63 Hz, 7-point | 125 Hz |"
+        "\n|---:|---:|---:|---:|---:|"
+    )
+    for wide, narrow in zip(
+        results["free_field"]["isotropic"], results["free_field"]["standard"], strict=True
+    ):
+        print(
+            f"| {wide['distance_m']:g} m | {wide['db_63']:+.2f} | {wide['db_125']:+.2f} | "
+            f"{narrow['db_63']:+.2f} | {narrow['db_125']:+.2f} |"
+        )
 
     rows, curves = box()
     results["box"] = rows
@@ -703,16 +868,17 @@ def main() -> None:
         )
     print(
         f"\nwave solver in the box: {curves['seconds']:.1f} s ({100 * curves['cell']:.0f} cm "
-        f"cells), {curves['fine_seconds']:.1f} s with 16 per wavelength"
+        f"cells), {curves['standard_seconds']:.1f} s with the 7-point stencil, "
+        f"{curves['fine_seconds']:.1f} s with 16 per wavelength"
     )
     results["one_run"] = one_run()
     run = results["one_run"]
     print(
         f"\nbox up to 500 Hz, absorption 0.10 to 0.25 in its four wave bands: {run['runs']} run "
-        f"of {run['cells']:,.0f} cells and {run['steps']:,} steps, {run['wave_s']:.1f} s "
-        f"(absorption fitted within {run['absorption_miss']:.4f}); the same grid "
-        f"{run['constant_s']:.1f} s with constant walls, {run['branches_s']:.1f} s with "
-        f"{run['branches']} branches"
+        f"of {run['cells']:,.0f} cells and {run['steps']:,} steps ({run['stencil']}-point "
+        f"stencil), {run['wave_s']:.1f} s (absorption fitted within "
+        f"{run['absorption_miss']:.4f}); the same grid {run['constant_s']:.1f} s with constant "
+        f"walls, {run['branches_s']:.1f} s with {run['branches']} branches"
     )
     if args.plot:
         plot(curves, args.plot)

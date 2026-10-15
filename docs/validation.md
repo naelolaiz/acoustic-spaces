@@ -120,7 +120,11 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   millimetre steps, continuous within 0.25 dB with first-order reflections where
   specular paths alone drop by more than 5 dB, and across the boundary of a reflection
   off one of the corner's walls within 0.05 dB;
-- the wave solver: the modes of a rigid box (within 0.6 Hz), the reflection off the end
+- the wave solver, with both stencils where both apply: the modes of a rigid box
+  (within 0.6 Hz), the 19-point stencil's modes along a tube against its dispersion
+  relation (within 0.15 %, less than half the 7-point one's error), the 19-point
+  stencil stable for 30,000 steps in a rotated room with a cube and a screen in it,
+  the reflection off the end
   of a duct for four admittances (within 0.005, and below 0.05 for a matched end, and
   off the inner face of a wall thinner than a cell), and off an end whose admittance
   resonates (within 0.012 of the grid's theory from 30 to 250 Hz); admittances fitted to
@@ -501,7 +505,25 @@ took 13 to 14 minutes.
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
-there are any, and for a whole room the sum of its modes.
+there are any, and for a whole room the sum of its modes. It has two stencils, each at
+its stability limit: the standard one (7 points, the six axial neighbours) and the
+interpolated isotropic one (19 points, the twelve edge neighbours too), which closed
+rooms take. Each check runs with both where both apply.
+
+**Speed of sound on the grid.** Waves on the grid travel a little slower the shorter
+they are. From the peaks of a rigid 2.4 x 2.4 x 0.2 m box (10 cm cells) ringing for
+8 s, against the exact frequencies of its modes and against each stencil's dispersion
+relation, 2 − 2 cos ωT = Σ g_k (1 − cos k·d_k) over its links:
+
+| direction | mode | cells per wavelength | 7-point, relation | wave solver | 19-point, relation | wave solver |
+|---|---|---:|---:|---:|---:|---:|
+| along an axis | (6, 0, 0) | 8.00 | −1.740 % | −1.740 % | −0.672 % | −0.672 % |
+| along a diagonal | (4, 4, 0) | 8.49 | −0.387 % | −0.387 % | −0.573 % | −0.573 % |
+
+Both follow their relations within 2e-5. At 8 cells per wavelength the 7-point stencil
+is 1.74 % slow along the axes, 0.44 % along the face diagonals and exact along the body
+diagonals; the 19-point one is 0.65 to 0.67 % slow in every direction. It needs 5.2
+cells per wavelength to be as close as the 7-point one is at 8.
 
 **Modes and their decay.** A 7 x 5 x 3 m box rings for 8 s (10 cm cells). Its walls'
 admittance changes with frequency as a material's does on the wave solver's grid: a
@@ -510,18 +532,22 @@ so below 60 Hz they give like a spring and above it weigh like a mass. For each 
 that stands apart from the others, the frequency of its peak and the decay rate of its
 envelope match first-order perturbation theory: the decay rate δ = c Re(β)/2 Σ (4/L
 along each axis the mode varies, 2/L along the others), β the walls' admittance at the
-mode, and the rigid box's frequency moved by −c Im(β)/(4π) times the same sum. The
-frequencies come out within 0.25 % of theory (the walls move them by up to 0.6 %), the
-decay rates, which differ fivefold, within 2 %:
+mode, and the rigid box's frequency moved by −c Im(β)/(4π) times the same sum. With
+either stencil the frequencies come out within 0.25 % of theory (the walls move them by
+up to 0.6 %), the decay rates, which differ fivefold, within 1.7 %:
 
-| mode | rigid box (Hz) | theory (Hz) | wave solver (Hz) | Re(β) | decay, theory (1/s) | wave solver (1/s) |
-|---|---:|---:|---:|---:|---:|---:|
-| (1, 0, 0) | 24.50 | 24.39 | 24.39 | 0.0028 | 0.779 | 0.770 |
-| (0, 1, 0) | 34.30 | 34.14 | 34.13 | 0.0039 | 1.185 | 1.167 |
-| (1, 1, 0) | 42.15 | 41.93 | 41.93 | 0.0057 | 1.990 | 1.958 |
-| (2, 0, 0) | 49.00 | 48.84 | 48.86 | 0.0078 | 2.200 | 2.199 |
-| (0, 0, 1) | 57.17 | 57.10 | 56.97 | 0.0098 | 3.407 | 3.340 |
-| (0, 2, 1) | 89.30 | 89.56 | 89.56 | 0.0052 | 2.152 | 2.128 |
+| mode | rigid box (Hz) | theory (Hz) | 7-point (Hz) | 19-point (Hz) | Re(β) | decay, theory (1/s) | 7-point (1/s) | 19-point (1/s) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| (1, 0, 0) | 24.50 | 24.39 | 24.39 | 24.39 | 0.0028 | 0.779 | 0.770 | 0.770 |
+| (0, 1, 0) | 34.30 | 34.14 | 34.14 | 34.15 | 0.0039 | 1.185 | 1.167 | 1.168 |
+| (1, 1, 0) | 42.15 | 41.93 | 41.91 | 41.91 | 0.0057 | 1.990 | 1.956 | 1.958 |
+| (2, 0, 0) | 49.00 | 48.84 | 48.87 | 48.88 | 0.0078 | 2.200 | 2.191 | 2.195 |
+| (0, 0, 1) | 57.17 | 57.10 | 56.97 | 56.98 | 0.0098 | 3.407 | 3.442 | 3.445 |
+| (0, 2, 1) | 89.30 | 89.56 | 89.55 | 89.54 | 0.0052 | 2.152 | 2.124 | 2.117 |
+
+Each decay rate is the slope of the mode's envelope from 1 s on, over 50 dB at most:
+the fastest modes reach the noise floor of single precision before the run ends. The
+theory's rates move by up to 0.35 % on the 19-point grid, whose time step is longer.
 
 Axial modes lose energy at walls they meet head-on and at walls they graze, so this
 checks absorption at all angles.
@@ -533,11 +559,13 @@ as exp(−βP/(2A)) per metre (perimeter P, cross-section A), whatever the cell 
 | end admittance β | 0 | 0.1 | 0.25 | 0.5 | 1 |
 |---|---:|---:|---:|---:|---:|
 | reflection, theory | 1.000 | 0.818 | 0.600 | 0.333 | 0 |
-| wave solver (60 to 150 Hz) | 0.998 | 0.817 | 0.601 | 0.336 | 0.044 |
+| 7-point stencil (60 to 150 Hz) | 0.998 | 0.817 | 0.601 | 0.336 | 0.044 |
+| 19-point stencil | 0.999 | 0.818 | 0.602 | 0.337 | 0.044 |
 
-| walls β = 0.05, amplitude after 10 m | theory | wave solver, 10 cm cells | 5 cm cells |
+| walls β = 0.05, 0.6 x 0.6 m duct, amplitude after 10 m | theory | 10 cm cells | 5 cm cells |
 |---|---:|---:|---:|
-| 0.6 x 0.6 m duct | 0.1889 | 0.1900 | 0.1906 |
+| 7-point stencil | 0.1889 | 0.1900 | 0.1906 |
+| 19-point stencil | 0.1889 | 0.1906 | 0.1907 |
 
 **Walls that absorb as their materials do.** The wave solver gives each material an
 admittance that changes with frequency: a constant and resonant mass-spring-damper
@@ -561,20 +589,26 @@ reflection, which the grid returns whole at every frequency:
 
 | frequency (Hz) | 31.5 | 44 | 63 | 88 | 125 | 177 | 250 | 354 | 500 | 707 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| normal-incidence absorption, fitted admittance | 0.030 | 0.022 | 0.022 | 0.037 | 0.075 | 0.138 | 0.259 | 0.366 | 0.567 | 0.597 |
-| the grid's theory | 0.030 | 0.022 | 0.022 | 0.037 | 0.074 | 0.137 | 0.253 | 0.355 | 0.542 | 0.571 |
-| wave solver | 0.031 | 0.022 | 0.022 | 0.038 | 0.073 | 0.137 | 0.253 | 0.354 | 0.541 | 0.567 |
+| 7-point: normal-incidence absorption, fitted admittance | 0.030 | 0.022 | 0.022 | 0.037 | 0.075 | 0.138 | 0.259 | 0.366 | 0.567 | 0.597 |
+| 7-point: the grid's theory | 0.030 | 0.022 | 0.022 | 0.037 | 0.074 | 0.137 | 0.253 | 0.355 | 0.542 | 0.571 |
+| 7-point: wave solver | 0.030 | 0.021 | 0.023 | 0.037 | 0.074 | 0.137 | 0.253 | 0.352 | 0.541 | 0.565 |
+| 19-point: normal-incidence absorption, fitted admittance | 0.030 | 0.022 | 0.022 | 0.037 | 0.072 | 0.143 | 0.268 | 0.346 | 0.532 | 0.659 |
+| 19-point: the grid's theory | 0.030 | 0.022 | 0.022 | 0.036 | 0.072 | 0.142 | 0.262 | 0.338 | 0.509 | 0.651 |
+| 19-point: wave solver | 0.030 | 0.022 | 0.022 | 0.036 | 0.072 | 0.142 | 0.263 | 0.338 | 0.509 | 0.651 |
 
-The wave solver matches the grid's theory (a plane wave on the grid, the wall half a
-cell past the last cell centres) within 0.004 from 30 to 720 Hz. That half cell takes
-a little of the absorption away as the wavelength shortens: within 0.013 of the fitted
-admittance's below 360 Hz, 0.025 less at 500 Hz with 14 cells per wavelength. The fit
-does not correct for it.
+(Each stencil has its own time step, so its own fit.) The wave solver matches the
+grid's theory (a plane wave on the grid, the wall half a cell past the last cell
+centres) within 0.006 with the 7-point stencil and within 0.001 with the 19-point one,
+from 30 to 720 Hz. That half cell takes a little of the absorption away as the
+wavelength shortens: within 0.015 (7-point) and 0.009 (19-point) of the fitted
+admittance's below 360 Hz, 0.026 and 0.023 less at 500 Hz with 14 cells per
+wavelength. The fit does not correct for it.
 
 **Open models.** Round a model whose air reaches the edge of the grid, the grid grows
 by a perfectly matched layer (split-field, its damping growing as the square of the
 depth). A rigid 8 x 6 m plate in the open, the source 1.5 m above it, three listeners
-round it, 25 to 250 Hz (20 cm cells), against a grid 16 m larger all round, from whose
+round it, 25 to 250 Hz (20 cm cells, the 7-point stencil, the only one with the
+matched layer), against a grid 16 m larger all round, from whose
 edge nothing comes back in the 90 ms of the runs: what differs, relative to the sound
 itself,
 
@@ -591,25 +625,29 @@ falling over 59,409 steps (20 s): 79 dB below the first second's level after one
 
 **One run for all bands.** A 7 x 5 x 3 m box whose absorption differs in every band
 (0.10 to 0.25 from 63 to 500 Hz), the wave solver up to the 500 Hz band: one run of
-868,701 cells and 5,996 steps, 7.0 s on 4 cores with the fit and the grid's set-up,
-where 2.0.0 ran one per band. The run itself takes 6.7 s, against 5.4 s for the same
-grid with constant walls: the branches cost about 25 % more than a run with constant
-walls, and save three runs.
+868,701 cells and 3,997 steps of the 19-point stencil, 7.8 s on 4 cores with the fit and
+the grid's set-up, where 2.0.0 ran one per band. The run itself takes 7.0 s, against
+5.0 s for the same grid with constant walls: the branches cost about 40 % more than a
+run with constant walls, and save three runs.
 
 **Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's
-energy in the 63 and 125 Hz bands at 1 to 8 m is within 0.35 dB of the free-field level
-the rays give (−0.05 to −0.13 dB at 63 Hz, −0.16 to −0.33 dB at 125 Hz).
+energy in the 63 and 125 Hz bands at 1 to 8 m is within 0.2 dB of the free-field level
+the rays give with the 19-point stencil (−0.07 to +0.04 dB at 63 Hz, +0.05 to +0.20 dB
+at 125 Hz), and within 0.35 dB with the 7-point one (−0.05 to −0.13 dB at 63 Hz, −0.16
+to −0.33 dB at 125 Hz).
 
 **A whole room.** A 7 x 5 x 3 m box with 15 % absorption on every surface, simulated
-with the default settings (the 63 and 125 Hz bands from the wave solver, 20 cm cells),
+with the default settings (the 63 and 125 Hz bands from the wave solver, 20 cm cells,
+the 19-point stencil),
 against the sum of the box's modes up to 1.5 kHz, each with its decay rate, all
 analysed alike (ISO 3382-1, octave filters):
 
 | model | G 63 Hz (dB) | G 125 Hz | EDT 63 Hz (s) | EDT 125 Hz | T20 63 Hz (s) | T20 125 Hz |
 |---|---:|---:|---:|---:|---:|---:|
 | sum of the modes | 20.3 | 23.5 | 1.02 | 0.96 | 0.94 | 0.90 |
-| wave solver | 21.1 | 22.9 | 1.04 | 0.93 | 0.94 | 0.86 |
-| wave solver, 16 cells per wavelength | 20.8 | 23.7 | 1.01 | 0.85 | 0.90 | 0.92 |
+| wave solver | 21.1 | 22.9 | 1.04 | 0.95 | 0.94 | 0.87 |
+| wave solver, 7-point stencil | 21.1 | 22.9 | 1.04 | 0.93 | 0.94 | 0.86 |
+| wave solver, 16 cells per wavelength | 20.8 | 23.7 | 1.01 | 0.84 | 0.90 | 0.90 |
 | rays only | 25.6 | 21.8 | 0.71 | 0.77 | 0.91 | 0.79 |
 
 ![Transfer function of the box from the sum of its modes, the wave solver and rays](images/wave.png)
@@ -619,20 +657,22 @@ mostly from where the grid puts the walls: within half a cell of the model's, he
 6.93 x 4.95 x 2.97 m with 20 cm cells, which moves each mode by up to 1 %. In a room
 this sparse in modes, that moves G by up to 1 dB, EDT by up to 12 % and T20 by up to
 5 %; more cells per wavelength move the walls but do not make every figure converge.
-Rays give the average over the room instead: 5.3 dB more at this seat in the 63 Hz
+The two stencils agree within 0.02 s: in this band their dispersion moves the modes
+less than the walls' placement does. Rays give the average over the room instead: 5.3 dB more at this seat in the 63 Hz
 band, where the listener sits near the nodes of most modes.
 
 **On a GPU.** `validation/wave_gpu.py` computes the wave bands (up to 125 Hz, 0.5 s) of
 the first source of three example rooms to every listener on the CPU and on the GPU,
 and compares the two. The tests do the same with resonant walls and with the matched
-layer, in runs split so that the fields swap both ways between them. On Mesa's
-lavapipe, a Vulkan driver that runs on the CPU, with 4 cores:
+layer, in runs split so that the fields swap both ways between them, with both
+stencils. On Mesa's lavapipe, a Vulkan driver that runs on the CPU, with 4 cores (the
+19-point stencil):
 
 | room | cells | steps | CPU (s) | GPU (s) | largest difference |
 |---|---:|---:|---:|---:|---:|
-| studio | 10,350 | 1,516 | 0.2 | 1.2 | 4.5e-7 |
-| concert hall | 1,223,312 | 1,516 | 2.9 | 13.8 | 9.6e-7 |
-| church | 1,228,682 | 1,516 | 2.5 | 15.7 | 1.4e-6 |
+| studio | 10,350 | 1,016 | 0.2 | 1.5 | 2.8e-7 |
+| concert hall | 1,223,312 | 1,016 | 2.9 | 25.4 | 6.8e-7 |
+| church | 1,228,682 | 1,016 | 3.5 | 30.1 | 1.5e-6 |
 
 The difference is relative to the largest pressure: the GPU's single-precision
 rounding, which stays at that level. The times include the grid's set-up on the CPU,
@@ -703,7 +743,7 @@ python validation/bras_validation.py --materials initial --calibrate LS1 --plots
 ```
 
 The cross-check takes about 25 minutes on 4 cores, the benchmark about 2 minutes, the
-wave solver's checks about 2 minutes and each BRAS run about 30 minutes (85 in
+wave solver's checks about 3.5 minutes (both stencils) and each BRAS run about 30 minutes (85 in
 third-octave bands, 46 calibrated). The cross-check's numbers come from the development version of
 3.0.0 with seed 1. Those of pyroomacoustics, which draws its rays afresh on every run, have moved by up to 6 % in
 T30, 16 % in EDT and 2 dB in C80 from one run to the next, and the differences in the

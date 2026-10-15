@@ -407,6 +407,7 @@ def simulate(
                 points_per_wavelength=settings.wave.points_per_wavelength,
                 threads=threads,
                 device=settings.wave.device,
+                scheme=settings.wave.scheme,
                 say=say,
                 label=source.name,
             )

@@ -17,6 +17,7 @@ from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.wave import (
     COURANT,
+    ISOTROPIC_COURANT,
     LAYER_CELLS,
     LAYER_DAMPING,
     MAX_ABSORPTION,
@@ -38,7 +39,10 @@ C = 343.0
 FS = 48_000
 
 
-def _solver(size, admittances, source, probes, cell=0.1, mesh=None, branches=None):
+STENCILS = pytest.mark.parametrize("stencil", [7, 19])
+
+
+def _solver(size, admittances, source, probes, cell=0.1, mesh=None, branches=None, stencil=7):
     """A wave solver in a box from (0, 0, 0) to ``size`` (or in ``mesh``, within it), laid
     out as wave_responses does, and its sample rate. ``admittances(mesh)`` gives each
     face's constant admittance, each face its own material; ``branches``, a list of
@@ -47,7 +51,7 @@ def _solver(size, admittances, source, probes, cell=0.1, mesh=None, branches=Non
     bvh = _native.Bvh(mesh.vertices, mesh.faces)
     origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
     shape = np.ceil((np.array(size) - origin) / cell).astype(int) + 2
-    rate = C / (COURANT * cell)
+    rate = C / (_courant(stencil) * cell)
     beta = np.array(admittances(mesh), dtype=float)
     rows, owners = [np.zeros((0, 3))], [np.zeros(0, np.int64)]
     for face, fit in branches or []:
@@ -66,8 +70,13 @@ def _solver(size, admittances, source, probes, cell=0.1, mesh=None, branches=Non
         np.asarray(source, dtype=float),
         np.asarray(probes, dtype=float).reshape(-1, 3),
         threads=1,
+        stencil=stencil,
     )
     return solver, rate
+
+
+def _courant(stencil: int) -> float:
+    return COURANT if stencil == 7 else ISOTROPIC_COURANT
 
 
 def _drive(rate: float, cell: float, steps: int) -> np.ndarray:
@@ -166,10 +175,15 @@ def test_wave_gains_start_below_the_lowest_band() -> None:
     assert 20 * np.log10(flat.max() / flat.min()) < 0.6
 
 
-def test_rigid_box_rings_at_its_modes() -> None:
+@STENCILS
+def test_rigid_box_rings_at_its_modes(stencil: int) -> None:
     size = (2.0, 1.5, 1.0)
     solver, rate = _solver(
-        size, lambda m: np.zeros(len(m.faces)), (0.23, 0.17, 0.13), (1.77, 1.31, 0.87)
+        size,
+        lambda m: np.zeros(len(m.faces)),
+        (0.23, 0.17, 0.13),
+        (1.77, 1.31, 0.87),
+        stencil=stencil,
     )
     assert solver.air_cells == 20 * 15 * 10
     assert not solver.open
@@ -185,8 +199,85 @@ def test_rigid_box_rings_at_its_modes() -> None:
         assert peak == pytest.approx(expected, abs=0.6)
 
 
+def test_isotropic_stencil_disperses_less() -> None:
+    # The axial modes of a 3 m tube (rigid, 10 cm cells), up to 7.5 cells per wavelength:
+    # each stencil's frequencies follow its dispersion relation along an axis,
+    # sin(w T / 2) = L sin(k h / 2), and the 19-point stencil's fall short of the
+    # tube's by less than half as much as the 7-point one's.
+    size, h = (3.0, 0.3, 0.2), 0.1
+    error = {}
+    for stencil in (7, 19):
+        courant = _courant(stencil)
+        solver, rate = _solver(
+            size,
+            lambda m: np.zeros(len(m.faces)),
+            (0.13, 0.12, 0.07),
+            (2.84, 0.17, 0.12),
+            stencil=stencil,
+        )
+        pressure = solver.run(_drive(rate, h, int(3 * rate)))[0]
+        n_fft = 1 << 20
+        spectrum = np.abs(np.fft.rfft(pressure * np.hanning(len(pressure)), n_fft))
+        f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+        for m in (2, 4, 6, 8):
+            exact = C * m / (2 * size[0])
+            k = math.pi * m / size[0]
+            grid = rate / math.pi * math.asin(courant * math.sin(k * h / 2))
+            near = (f > 0.95 * exact) & (f < 1.02 * exact)
+            peak = f[near][np.argmax(spectrum[near])]
+            assert peak == pytest.approx(grid, rel=1.5e-3)
+            error[stencil, m] = peak / exact - 1
+    assert error[7, 8] < -0.015
+    assert abs(error[19, 8]) < 0.5 * abs(error[7, 8])
+
+
+def test_isotropic_stencil_stays_stable_in_a_slanted_room() -> None:
+    # A rigid room turned off the grid's axes, with a slanted screen and a cube in it,
+    # whose staircase walls fold the edge links every which way: over 30,000 steps its
+    # pressure neither grows nor dies away (it keeps its energy).
+    def turned(mesh, angles, shift):
+        (a, b) = angles
+        rz = np.array([[math.cos(a), -math.sin(a), 0], [math.sin(a), math.cos(a), 0], [0, 0, 1]])
+        rx = np.array([[1, 0, 0], [0, math.cos(b), -math.sin(b)], [0, math.sin(b), math.cos(b)]])
+        return (mesh.vertices - 0.5 * mesh.vertices.max(axis=0)) @ (rz @ rx).T + shift
+
+    room, cube = box_mesh((1.6, 1.3, 1.1)), box_mesh((0.35, 0.3, 0.3))
+    screen = np.array([[-0.4, -0.3, -0.5], [0.3, 0.2, -0.5], [0.3, 0.2, 0.3], [-0.4, -0.3, 0.3]])
+    centre = np.array([1.0, 1.0, 1.0])
+    vertices = np.vstack(
+        [
+            turned(room, (0.35, 0.44), centre),
+            turned(cube, (0.6, 0.2), centre + [0.35, -0.25, 0.1]),
+            screen + centre + [-0.1, 0.25, 0.0],
+        ]
+    )
+    n, m = len(room.vertices), len(room.vertices) + len(cube.vertices)
+    faces = np.vstack([room.faces, cube.faces + n, [[m, m + 1, m + 2], [m, m + 2, m + 3]]])
+    mesh = dataclasses.replace(
+        room,
+        vertices=vertices,
+        faces=faces,
+        face_labels=np.zeros(len(faces), dtype=room.face_labels.dtype),
+    )
+    solver, rate = _solver(
+        (2.0, 2.0, 2.0),
+        lambda m: np.zeros(len(m.faces)),
+        centre + [-0.3, -0.35, -0.2],
+        [centre + [0.25, 0.3, -0.25], centre + [-0.35, 0.1, 0.3]],
+        mesh=mesh,
+        stencil=19,
+    )
+    assert 2000 < solver.air_cells < 1.6 * 1.3 * 1.1 / 0.1**3  # the room's, not the cube's
+    pressure = solver.run(_drive(rate, 0.1, 30_000))
+    tenth = pressure.shape[1] // 10
+    levels = [np.mean(pressure[:, k * tenth : (k + 1) * tenth] ** 2) for k in range(10)]
+    assert np.all(np.isfinite(pressure))
+    assert max(levels[1:]) < 3 * min(levels[1:])
+
+
+@STENCILS
 @pytest.mark.parametrize("beta", [0.0, 0.1, 0.5, 1.0])
-def test_duct_end_reflects_as_its_admittance_says(beta: float) -> None:
+def test_duct_end_reflects_as_its_admittance_says(beta: float, stencil: int) -> None:
     # A plane wave down a duct with an absorbing near end, at the far end's admittance:
     # the reflection is (1 - beta) / (1 + beta) at normal incidence.
     size = (80.0, 0.6, 0.6)
@@ -197,7 +288,7 @@ def test_duct_end_reflects_as_its_admittance_says(beta: float) -> None:
         near = np.all(np.isclose(x, 0.0), axis=1)
         return np.where(far, beta, np.where(near, 1.0, 0.0))
 
-    solver, rate = _solver(size, admittances, (10.0, 0.3, 0.3), (30.0, 0.3, 0.3))
+    solver, rate = _solver(size, admittances, (10.0, 0.3, 0.3), (30.0, 0.3, 0.3), stencil=stencil)
     steps = int(0.45 * rate)
     signal, delay = source_signal(rate, 0.1)
     pressure = solver.run(_drive(rate, 0.1, steps))[0]
@@ -217,7 +308,8 @@ def test_duct_end_reflects_as_its_admittance_says(beta: float) -> None:
     assert reflection == pytest.approx((1 - beta) / (1 + beta), abs=0.005 if beta < 1 else 0.05)
 
 
-def test_air_meets_the_inner_face_of_a_thin_wall() -> None:
+@STENCILS
+def test_air_meets_the_inner_face_of_a_thin_wall(stencil: int) -> None:
     # The duct above the other way round, its near end a wall thinner than a cell:
     # absorbing inside (x = 0.03), rigid outside (x = 0). The air meets the inside.
     size, inner, beta = (80.0, 0.6, 0.6), 0.03, 0.5
@@ -241,7 +333,9 @@ def test_air_meets_the_inner_face_of_a_thin_wall() -> None:
         far = np.all(np.isclose(x, size[0]), axis=1)
         return np.where(far, 1.0, np.where(np.all(np.isclose(x, inner), axis=1), beta, 0.0))
 
-    solver, rate = _solver(size, admittances, (70.0, 0.3, 0.3), (50.0, 0.3, 0.3), mesh=mesh)
+    solver, rate = _solver(
+        size, admittances, (70.0, 0.3, 0.3), (50.0, 0.3, 0.3), mesh=mesh, stencil=stencil
+    )
     steps = int(0.45 * rate)
     _, delay = source_signal(rate, 0.1)
     pressure = solver.run(_drive(rate, 0.1, steps))[0]
@@ -296,10 +390,11 @@ def test_direct_sound_arrives_on_time() -> None:
     f = np.fft.rfftfreq(n_fft, 1.0 / wave.rate)
     band = np.clip((f - 25) / 10, 0, 1) * np.clip((100 - f) / 20, 0, 1)
     spectrum = np.fft.rfft(wave.signals[:, 0], n_fft) * np.conj(np.fft.rfft(signal, n_fft))
-    correlation = np.fft.irfft(spectrum * band**2, n_fft)
-    lag = int(np.argmax(correlation[: n_fft // 2]))
-    y0, y1, y2 = correlation[lag - 1 : lag + 2]
-    arrival = delay + lag + 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2)
+    # Lags either way: the arrival can come within the source's delay of emission.
+    correlation = np.roll(np.fft.irfft(spectrum * band**2, n_fft), n_fft // 2)
+    peak = int(np.argmax(correlation[: n_fft // 2 + 200]))
+    y0, y1, y2 = correlation[peak - 1 : peak + 2]
+    arrival = delay + peak - n_fft // 2 + 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2)
     assert arrival == pytest.approx(4.0 / c * wave.rate, abs=0.25)
 
 
@@ -492,6 +587,19 @@ def test_open_models_absorb_at_the_grid_edge(tmp_path: Path) -> None:
         speed_of_sound=C,
     )
     assert info["wave_open"] == 1.0
+    assert info["wave_stencil"] == 7  # the matched layer needs the standard stencil
+    with pytest.raises(ValueError, match="no matched layer"):
+        wave_responses(
+            model,
+            np.array([2.0, 2.0, 2.5]),
+            [[6.0, 3.0, 3.0]],
+            ["l"],
+            max_band_hz=63,
+            length_s=0.3,
+            sample_rate=FS,
+            speed_of_sound=C,
+            scheme="isotropic",
+        )
     pressure = responses[0].signals[:, 0]
     rate = responses[0].rate
     # The sound leaves: little is left after 150 ms.
@@ -573,17 +681,21 @@ def test_fitted_admittances_absorb_as_their_materials(total: int, bands: int) ->
     np.testing.assert_allclose(fit_admittance([0.99] * bands, total, rate).achieved, MAX_ABSORPTION)
 
 
-def _discrete_reflection(f: np.ndarray, rate: float, y: np.ndarray) -> np.ndarray:
+def _discrete_reflection(
+    f: np.ndarray, rate: float, y: np.ndarray, courant: float = COURANT
+) -> np.ndarray:
     """Reflection at normal incidence off a wall of admittance y (the scheme's, at that
     rate) in the grid: a plane wave along an axis, the wall half a cell past the last
-    centre. With time going as e^(-i w t), so y is the conjugate of Y(i w)."""
+    centre. With time going as e^(-i w t), so y is the conjugate of Y(i w). Either
+    stencil reduces to the one-dimensional scheme at its Courant number there."""
     phi = 2 * np.pi * f / rate
-    shift = np.exp(2j * np.arcsin(np.minimum(np.sin(phi / 2) / COURANT, 1.0)))  # one cell
-    c = 1j * np.sin(phi) * y / COURANT
+    shift = np.exp(2j * np.arcsin(np.minimum(np.sin(phi / 2) / courant, 1.0)))  # one cell
+    c = 1j * np.sin(phi) * y / courant
     return (c - shift + 1) / (1 / shift - 1 - c)
 
 
-def test_duct_end_reflects_as_its_frequency_dependent_admittance_says() -> None:
+@STENCILS
+def test_duct_end_reflects_as_its_frequency_dependent_admittance_says(stencil: int) -> None:
     # A plane wave down a duct to an end whose admittance resonates at 100 Hz: the
     # reflected wave over the incident one (a run in a longer duct gives that), against
     # a rigid end's, which the grid reflects whole, at every frequency.
@@ -602,7 +714,12 @@ def test_duct_end_reflects_as_its_frequency_dependent_admittance_says() -> None:
             x = mesh.vertices[mesh.faces][:, :, 0]
             far = [(f, end) for f in np.flatnonzero(np.all(np.isclose(x, length), axis=1))]
         solver, rate = _solver(
-            size, admittances, (60.0, 0.15, 0.15), (110.0, 0.15, 0.15), branches=far
+            size,
+            admittances,
+            (60.0, 0.15, 0.15),
+            (110.0, 0.15, 0.15),
+            branches=far,
+            stencil=stencil,
         )
         return solver.run(_drive(rate, 0.1, int(0.6 * rate)))[0], rate
 
@@ -619,7 +736,7 @@ def test_duct_end_reflects_as_its_frequency_dependent_admittance_says() -> None:
         return np.fft.rfft(reflected, n_fft)[band] / np.fft.rfft(incident, n_fft)[band]
 
     measured = np.abs(reflection(resonant) / reflection(Admittance(0.0)))
-    expected = np.abs(_discrete_reflection(f, rate, np.conj(resonant(f, rate))))
+    expected = np.abs(_discrete_reflection(f, rate, np.conj(resonant(f, rate)), _courant(stencil)))
     np.testing.assert_allclose(measured, expected, atol=0.012)
     # It absorbs most at resonance, as it should: little comes back at 100 Hz.
     assert measured[np.argmin(np.abs(f - 100))] < 0.25 < measured[np.argmin(np.abs(f - 40))]
