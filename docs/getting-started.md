@@ -92,16 +92,17 @@ parameters as it goes:
 ```
 talker -> seat-a: direct sound at 11.7 ms, 63 early paths
              63 Hz  125 Hz  250 Hz  500 Hz   1 kHz   2 kHz   4 kHz   8 kHz
-EDT (s)      0.720   0.722   0.710   0.746   0.907   1.010   0.964   0.585
-T30 (s)      0.715   0.895   0.984   1.224   1.267   1.260   1.130   0.774
-C80 (dB)       5.4     5.5     6.1     6.3     5.9     5.6     5.8     8.9
-G (dB)        21.8    21.7    20.8    20.0    18.7    17.9    17.1    15.7
-LF           0.307   0.307   0.298   0.309   0.334   0.350   0.352   0.335
-IACC_E       0.992   0.976   0.880   0.600   0.303   0.687   0.578   0.431
-T30_X (s)    0.713   0.799   1.017   1.195   1.243   1.210   1.122   0.756
-T30_Z (s)    0.714   0.818   0.925   1.117   1.226   1.215   1.158   0.769
+EDT (s)      0.691   0.506   0.695   0.738   0.869   0.981   0.932   0.604
+T30 (s)      0.713   0.860   0.936   1.202   1.265   1.278   1.156   0.769
+C80 (dB)       6.0     8.9     6.2     6.3     5.9     5.5     5.7     8.6
+G (dB)        22.2    24.5    20.8    20.0    18.7    17.9    17.0    15.7
+LF           0.184   0.089   0.302   0.302   0.330   0.344   0.345   0.329
+IACC_E       0.988   0.991   0.779   0.513   0.391   0.635   0.558   0.478
+T30_X (s)    0.712   0.792   0.968   1.177   1.239   1.231   1.128   0.751
+T30_Z (s)    0.711   0.816   0.874   1.077   1.195   1.204   1.134   0.755
 ...
-STI 0.65 (STIPA 0.66), echo criterion 0.67 for speech (echo above 1.0), 0.67 for music (echo above 1.8)
+SPL 79.0 dB(A); per octave band, dB: 76.2 78.5 74.8 73.9 72.7 71.8 71.0 69.6
+STI 0.66 (STIPA 0.66), echo criterion 0.73 for speech (echo above 1.0), 0.70 for music (echo above 1.8)
 ```
 
 With `--plot`, each response gets an echogram (the late energy per millisecond and the
@@ -119,7 +120,7 @@ sound running between the walls meets little absorption and dies away slowly. Sa
 Eyring assume a diffuse field, where sound meets every surface alike; `inspect` says
 when a room is far from that and adds the Arau-Puchades estimate, which allows for
 absorption that faces one way. With every surface fully diffusing, the same room decays
-in Eyring's 0.37 s at 1 kHz; with every surface scattering 0.3, in about 0.55 s. The
+in Eyring's 0.37 s at 1 kHz; with every surface scattering 0.3, in about 0.53 s. The
 [validation report](validation.md)
 checks both kinds of room.
 
