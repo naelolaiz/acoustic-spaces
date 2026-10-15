@@ -46,3 +46,13 @@ def fake_sounddevice(monkeypatch):
     module.Stream = lambda **kw: _FakeStream(module, **kw)
     monkeypatch.setitem(sys.modules, "sounddevice", module)
     return module
+
+
+def skip_without_extra(name: str) -> None:
+    """Skip a test of the example ``name`` when its model needs an extra not installed
+    (the wheel tests and the editor's run without the ifc extra)."""
+    from acoustic_spaces.examples import list_examples
+
+    missing = next(e.missing_extra for e in list_examples() if e.name == name)
+    if missing:
+        pytest.skip(f"the {name} example needs the {missing} extra")

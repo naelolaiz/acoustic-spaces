@@ -12,9 +12,11 @@ third-octave bands from 50 Hz to 10 kHz (see [Frequency bands](simulation.md#fre
 | Format | Read with | Names used for material assignment |
 | --- | --- | --- |
 | OBJ | built-in reader | `usemtl` material, `g` groups, `o` object |
-| DXF | [ezdxf](https://ezdxf.mozman.de/) (3DFACE, MESH, polyface, block references) | layer |
+| DXF | [ezdxf](https://ezdxf.mozman.de/) (3DFACE, MESH, polyface and polygon meshes, closed 3D polylines, block references) | layer |
 | glTF / GLB | [trimesh](https://trimesh.org/) | material, node and mesh names |
 | STL, PLY, OFF | trimesh | file name |
+| IFC (`.ifc`) | [IfcOpenShell](https://ifcopenshell.org/), the `ifc` extra | element name, type name, materials, IFC class |
+| Collada (`.dae`) | built-in reader (triangles, polylists, polygons, nodes and instanced nodes) | material, geometry name |
 | SketchUp (`.skp`), experimental | [openskp](https://github.com/iamahsanmehmood/openskp), the `sketchup` extra | material |
 
 Simple rooms need no CAD file: `geometry: {box: [8, 6, 3]}` builds a rectangular
@@ -35,8 +37,10 @@ assignments:
 OBJ is the recommended exchange format: SketchUp, Rhino, Revit and Blender all
 export it with material names. Set `geometry.units` (`m`, `cm`, `mm`, `in`, `ft`)
 and, when the file is +y up (Blender's OBJ default, glTF always), `geometry.up_axis: y`.
-Without `units`, a DXF file is read in the units its header records (`$INSUNITS`),
-and any other file in metres.
+Without `units`, a DXF file is read in the units its header records (`$INSUNITS`), an
+IFC or Collada file in the units it records, and any other file in metres; a Collada
+file's up axis is the one it records. SketchUp's Collada export (`.dae`) is read as it is
+(see [`examples/rehearsal_room`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/examples/rehearsal_room/scene.yaml)).
 
 SketchUp files can also be read as they are, with the `sketchup` extra: openskp reads
 them without SketchUp, in metres. That reader is young. Faces are matched to materials
@@ -56,6 +60,43 @@ it warns about models that are not closed (rays would escape) and assignments th
 match nothing. Normals may point either way: the room is the space the faces close off,
 found from the faces themselves (see [Walls, doors and openings](#walls-doors-and-openings)),
 and a panel standing in the room, with air on both sides, reflects and absorbs on both.
+
+### BIM models (IFC)
+
+IFC files from Revit, ArchiCAD, Vectorworks or any other BIM program are read with the
+`ifc` extra (IfcOpenShell). There are two ways, and
+[`examples/bim_office`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/examples/bim_office/scene.yaml)
+shows both:
+
+```yaml
+geometry:
+  file: office.ifc
+  space: Office        # one room, from its space boundaries; leave out for every element
+assignments:
+  Plaster on brick: plaster   # an IFC material
+  IfcWindow: glass            # every element of a class
+  Door: wood                  # one element, by name
+```
+
+- With `space`, only that room (an IfcSpace, by name, long name or GlobalId) is read: the
+  faces of the room that each element bounds, as BIM programs export them as space
+  boundaries (Revit: export with space boundaries, first or second level). Each face is
+  named after its element; one with no element behind it, an opening to another room, is
+  a `virtual boundary`. This gives a closed room with one face per surface, which is
+  what the simulation wants. A file without space boundaries gives the space's own
+  solid, cut into triangles of at most 50 cm, each named after the element behind its
+  middle: windows and doors then have ragged edges, so export boundaries where you can.
+- Without `space`, every building element is read as IfcOpenShell builds it: walls,
+  slabs, roofs, windows, doors, stairs and furniture, with their openings cut. Openings,
+  virtual elements and building services (ducts, pipes, lights) are left out. Walls then
+  have both sides and their thickness, and solids that only touch do not share edges, so
+  the model reads as not closed even when no ray escapes (the leak finder tells); the
+  volume and the inside checks are skipped.
+
+Each face's names, for assignments, are its element's name, its type's name, its
+materials (a layer set's name, then each layer's material) and its IFC class
+(`IfcWallStandardCase` also as `IfcWall`); the first that an assignment names gives its
+material.
 
 ### Finding leaks
 
@@ -115,7 +156,9 @@ File data with more than one value in some octave (third-octave tables) stays in
 third-octave bands; other data is averaged onto octaves. Bands with no data (63 Hz in
 most tables) take the nearest band's value and the material's `source` says which.
 Surfaces get a material through `assignments` (any geometry name to a material),
-by having the same name as a material, or through `default_material`.
+by having the same name as a material, or through `default_material`. Names match
+whatever their case (`brick_rough` names SketchUp's `Brick_Rough`), though a name
+written the same way wins over one in another case.
 
 ### Material libraries of CATT-Acoustic and ODEON
 

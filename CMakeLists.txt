@@ -40,4 +40,6 @@ install(
   PATTERN "*.sh"
   PATTERN "*.geo"
   PATTERN "*.li8"
+  PATTERN "*.ifc"
+  PATTERN "*.dae"
 )

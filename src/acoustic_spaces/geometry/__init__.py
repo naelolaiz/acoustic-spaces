@@ -16,7 +16,13 @@ from acoustic_spaces.geometry.checks import (
     points_inside,
     room_of,
 )
-from acoustic_spaces.geometry.io import SUPPORTED_SUFFIXES, UNIT_SCALE, load_mesh
+from acoustic_spaces.geometry.io import (
+    SUPPORTED_SUFFIXES,
+    UNIT_SCALE,
+    ifc_spaces,
+    load_mesh,
+    missing_extra,
+)
 from acoustic_spaces.geometry.mesh import RoomMesh
 
 __all__ = [
@@ -30,8 +36,10 @@ __all__ = [
     "clean_mesh",
     "distance_to_surface",
     "extruded_mesh",
+    "ifc_spaces",
     "load_mesh",
     "mesh_cells",
+    "missing_extra",
     "plan_problem",
     "points_inside",
     "room_of",

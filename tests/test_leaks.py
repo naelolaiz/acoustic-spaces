@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import skip_without_extra
 
 from acoustic_spaces import Room, Scene
 from acoustic_spaces.engine.leaks import RAYS, find_leaks, open_edges
@@ -125,4 +126,5 @@ def test_a_source_outside_a_closed_model(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("name", [e.name for e in list_examples() if e.name != "leaky_classroom"])
 def test_the_other_examples_do_not_leak(name: str) -> None:
+    skip_without_extra(name)
     assert find_leaks(Room.from_yaml(example_path(name)), rays=300).escaped == 0

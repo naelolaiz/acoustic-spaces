@@ -286,6 +286,10 @@ def test_window_opens_every_example(window) -> None:
     titles = [a.text() for a in window.examples_menu.actions()]
     assert titles == [e.title for e in list_examples()]
     for example in list_examples():
+        if example.missing_extra:  # greyed out in the menu
+            action = window.examples_menu.actions()[titles.index(example.title)]
+            assert not action.isEnabled() and example.missing_extra in action.statusTip()
+            continue
         assert window.open_example(example.path)
         assert window.from_example
         assert "problem" not in window.summary.text()
@@ -615,6 +619,24 @@ def test_geometry_form_shows_the_room_units(window) -> None:
     window.document.set_floor_plan([[0, 0], [8, 0], [8, 6]])  # corners in metres
     assert page.plan_group.title() == "Floor plan (mm)"
     assert page.plan.item(1, 0).text() == "8000" and page.height.value() == 3000
+
+
+def test_an_ifc_model_picks_its_room(window) -> None:
+    pytest.importorskip("ifcopenshell")
+    window.open_example(example_path("bim_office"))
+    window.select("geometry", None)
+    page = window.inspector.pages["geometry"]
+    assert page.file_form.isRowVisible(page.space)
+    rooms = [page.space.itemText(k) for k in range(page.space.count())]
+    assert rooms == ["every element", "Office"] and page.space.currentText() == "Office"
+    page.space.setCurrentIndex(0)
+    assert window.document.scene.geometry.space is None
+    assert not window.document.room.report.closed  # walls as solids
+    page.space.setCurrentIndex(1)
+    assert window.document.scene.geometry.space == "Office"
+    window.open_example(example_path("shoebox"))
+    window.select("geometry", None)
+    assert not page.file_form.isRowVisible(page.space)
 
 
 def test_model_units_default_to_the_file(window) -> None:

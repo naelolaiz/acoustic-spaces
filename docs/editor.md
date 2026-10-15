@@ -14,9 +14,11 @@ acoustic-spaces edit examples/studio/scene.yaml   # or open a scene file
 The editor works on the same scene files as the command line:
 
 - **File > Open example** opens the bundled rooms. Saving one asks where to keep your
-  copy and takes its model file along. **New box room**, **New room from a floor plan**
-  and **New from model file** (OBJ, STL, PLY, OFF, glTF, DXF or SketchUp) start from
-  scratch.
+  copy and takes its model file along; an example whose model needs an extra that is not
+  installed is greyed out, and its tip says how to install it. **New box room**, **New
+  room from a floor plan** and **New from model file** (OBJ, STL, PLY, OFF, glTF, DXF,
+  IFC, Collada or SketchUp) start from scratch. For an IFC model, the geometry's form
+  picks one room of the building (**IFC room**) or every element.
 - The **Plan** tab, next to the 3D view, shows the room from above and draws rooms (see
   below).
 - The **scene tree** lists the geometry and its surfaces, the materials, sources,

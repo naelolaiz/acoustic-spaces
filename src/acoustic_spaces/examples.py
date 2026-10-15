@@ -23,6 +23,8 @@ from pathlib import Path
 
 import yaml
 
+from acoustic_spaces.geometry.io import extra_for, missing_extra
+
 SCENE_FILE = "scene.yaml"
 
 
@@ -36,6 +38,18 @@ class Example:
     description: str
     #: The scene file.
     path: Path
+    #: Its model file, or None for a room built from dimensions.
+    model: Path | None = None
+
+    @property
+    def extra(self) -> str | None:
+        """The extra its model is read with (``ifc`` for an IFC file), or None."""
+        return None if self.model is None else extra_for(self.model)
+
+    @property
+    def missing_extra(self) -> str | None:
+        """The extra its model needs when that is not installed, or None."""
+        return None if self.model is None else missing_extra(self.model)
 
 
 def examples_dir() -> Path:
@@ -70,12 +84,14 @@ def list_examples() -> list[Example]:
         if not scene_file.is_file():
             continue
         data = yaml.safe_load(scene_file.read_text(encoding="utf-8"))
+        model = (data.get("geometry") or {}).get("file")
         out.append(
             Example(
                 name=folder.name,
                 title=str(data.get("name", folder.name)),
                 description=_description(scene_file),
                 path=scene_file,
+                model=None if model is None else folder / model,
             )
         )
     return out

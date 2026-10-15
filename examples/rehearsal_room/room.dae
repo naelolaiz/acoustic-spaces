@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+  <asset>
+    <unit name="inch" meter="0.0254"/>
+    <up_axis>Z_UP</up_axis>
+  </asset>
+  <library_effects>
+    <effect id="Brick_Rough-effect"><profile_COMMON><technique sid="common"><lambert/></technique></profile_COMMON></effect>
+    <effect id="Roof_Boards-effect"><profile_COMMON><technique sid="common"><lambert/></technique></profile_COMMON></effect>
+    <effect id="Wood_Floor_Light-effect"><profile_COMMON><technique sid="common"><lambert/></technique></profile_COMMON></effect>
+  </library_effects>
+  <library_materials>
+    <material id="Brick_RoughID" name="Brick_Rough"><instance_effect url="#Brick_Rough-effect"/></material>
+    <material id="Roof_BoardsID" name="Roof_Boards"><instance_effect url="#Roof_Boards-effect"/></material>
+    <material id="Wood_Floor_LightID" name="Wood_Floor_Light"><instance_effect url="#Wood_Floor_Light-effect"/></material>
+  </library_materials>
+  <library_geometries>
+    <geometry id="ID0" name="floor">
+      <mesh>
+        <source id="ID0-positions">
+          <float_array id="ID0-array" count="12">0 0 0 312 0 0 312 240 0 0 240 0</float_array>
+          <technique_common>
+            <accessor source="#ID0-array" count="4" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="ID0-vertices">
+          <input semantic="POSITION" source="#ID0-positions"/>
+        </vertices>
+        <polylist count="1" material="surface">
+          <input semantic="VERTEX" source="#ID0-vertices" offset="0"/>
+          <vcount>4</vcount>
+          <p>0 1 2 3</p>
+        </polylist>
+      </mesh>
+    </geometry>
+    <geometry id="ID1" name="south wall">
+      <mesh>
+        <source id="ID1-positions">
+          <float_array id="ID1-array" count="12">0 0 0 0 0 120 312 0 120 312 0 0</float_array>
+          <technique_common>
+            <accessor source="#ID1-array" count="4" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="ID1-vertices">
+          <input semantic="POSITION" source="#ID1-positions"/>
+        </vertices>
+        <polylist count="1" material="surface">
+          <input semantic="VERTEX" source="#ID1-vertices" offset="0"/>
+          <vcount>4</vcount>
+          <p>0 1 2 3</p>
+        </polylist>
+      </mesh>
+    </geometry>
+    <geometry id="ID2" name="north wall">
+      <mesh>
+        <source id="ID2-positions">
+          <float_array id="ID2-array" count="12">312 240 0 312 240 120 0 240 120 0 240 0</float_array>
+          <technique_common>
+            <accessor source="#ID2-array" count="4" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="ID2-vertices">
+          <input semantic="POSITION" source="#ID2-positions"/>
+        </vertices>
+        <polylist count="1" material="surface">
+          <input semantic="VERTEX" source="#ID2-vertices" offset="0"/>
+          <vcount>4</vcount>
+          <p>0 1 2 3</p>
+        </polylist>
+      </mesh>
+    </geometry>
+    <geometry id="ID3" name="gable walls">
+      <mesh>
+        <source id="ID3-positions">
+          <float_array id="ID3-array" count="30">0 240 120 0 120 180 0 0 120 0 0 0 0 240 0 312 0 120 312 120 180 312 240 120 312 240 0 312 0 0</float_array>
+          <technique_common>
+            <accessor source="#ID3-array" count="10" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="ID3-vertices">
+          <input semantic="POSITION" source="#ID3-positions"/>
+        </vertices>
+        <polylist count="2" material="surface">
+          <input semantic="VERTEX" source="#ID3-vertices" offset="0"/>
+          <vcount>5 5</vcount>
+          <p>0 1 2 3 4 5 6 7 8 9</p>
+        </polylist>
+      </mesh>
+    </geometry>
+    <geometry id="ID4" name="roof">
+      <mesh>
+        <source id="ID4-positions">
+          <float_array id="ID4-array" count="24">0 120 180 312 120 180 312 0 120 0 0 120 312 120 180 0 120 180 0 240 120 312 240 120</float_array>
+          <technique_common>
+            <accessor source="#ID4-array" count="8" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="ID4-vertices">
+          <input semantic="POSITION" source="#ID4-positions"/>
+        </vertices>
+        <polylist count="2" material="surface">
+          <input semantic="VERTEX" source="#ID4-vertices" offset="0"/>
+          <vcount>4 4</vcount>
+          <p>0 1 2 3 4 5 6 7</p>
+        </polylist>
+      </mesh>
+    </geometry>
+  </library_geometries>
+  <library_visual_scenes>
+    <visual_scene id="SketchUp">
+      <node id="node0" name="floor">
+        <instance_geometry url="#ID0">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="surface" target="#Wood_Floor_LightID"/>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+      <node id="node1" name="south wall">
+        <instance_geometry url="#ID1">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="surface" target="#Brick_RoughID"/>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+      <node id="node2" name="north wall">
+        <instance_geometry url="#ID2">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="surface" target="#Brick_RoughID"/>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+      <node id="node3" name="gable walls">
+        <instance_geometry url="#ID3">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="surface" target="#Brick_RoughID"/>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+      <node id="node4" name="roof">
+        <instance_geometry url="#ID4">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="surface" target="#Roof_BoardsID"/>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+    </visual_scene>
+  </library_visual_scenes>
+  <scene>
+    <instance_visual_scene url="#SketchUp"/>
+  </scene>
+</COLLADA>
