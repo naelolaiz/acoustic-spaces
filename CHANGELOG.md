@@ -321,8 +321,29 @@ changes results at 63 and 125 Hz)
   ODEON's number. `acoustic-spaces materials --file` lists a library's materials, and
   the editor's **Edit > Add material from a library** adds one.
 
+**IFC and Collada models**
+
+- IFC files (BIM models from Revit, ArchiCAD and others) with the `ifc` extra
+  (IfcOpenShell, LGPL): every building element with its openings cut, or, with
+  `geometry.space`, one room from its space boundaries, a closed room with a face per
+  surface (from the space's solid where the file has no boundaries). Faces are named by
+  their element's name, type, materials and IFC class, and the file's units are used.
+  The editor's geometry panel picks the room.
+- Collada (`.dae`, SketchUp's export among others), read directly: triangles, polylists
+  and polygons, nodes with their transformations and instanced nodes (SketchUp's
+  components), labelled by material and geometry name, in the unit and with the up axis
+  the file records.
+- DXF polygon meshes and closed 3D polylines are read too.
+- Assignments and material names match surface names whatever their case.
+- `acoustic-spaces examples` and the editor's examples menu say which extra an example
+  needs when it is not installed.
+
 **Examples**
 
+- `bim_office`: an office from an IFC model in millimetres, with a window and a door,
+  read as one room from its space boundaries; `make_model.py` writes the model.
+- `rehearsal_room`: a rehearsal room under a pitched roof from a Collada file in inches,
+  as SketchUp exports it; `make_model.py` writes the model.
 - `material_libraries`: a seminar room with materials from a CATT-Acoustic file and an
   ODEON library.
 - `leaky_classroom`: a classroom model with a missing window pane and a ceiling 3 cm

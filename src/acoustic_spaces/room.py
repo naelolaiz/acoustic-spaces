@@ -8,6 +8,7 @@ sanity-checked before any ray is traced.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -46,15 +47,28 @@ def _label_text(label: tuple[str, ...]) -> str:
     return " / ".join(label) if label else "(unnamed)"
 
 
+def matching_name(label: tuple[str, ...], names: Iterable[str]) -> str | None:
+    """The first of ``names`` that a surface's label holds: as it is written, or else in
+    any case (``brick_rough`` names SketchUp's ``Brick_Rough``); None for none."""
+    names = list(names)
+    for name in label:
+        if name in names:
+            return name
+    folded = {}
+    for name in names:
+        folded.setdefault(name.casefold(), name)
+    for name in label:
+        if name.casefold() in folded:
+            return folded[name.casefold()]
+    return None
+
+
 def _material_for(label: tuple[str, ...], scene: Scene) -> str | None:
     """Assignments win over names that match a material directly; then the default."""
-    for name in label:
-        if name in scene.assignments:
-            return scene.assignments[name]
-    for name in label:
-        if name in scene.materials:
-            return name
-    return scene.default_material
+    key = matching_name(label, scene.assignments)
+    if key is not None:
+        return scene.assignments[key]
+    return matching_name(label, scene.materials) or scene.default_material
 
 
 def _air_cells(
@@ -129,7 +143,12 @@ class Room:
         else:
             scale = UNIT_SCALE[geometry.units or "m"]
             if geometry.file is not None:
-                raw = load_mesh(geometry.file, units=geometry.units, up_axis=geometry.up_axis)
+                raw = load_mesh(
+                    geometry.file,
+                    units=geometry.units,
+                    up_axis=geometry.up_axis,
+                    space=geometry.space,
+                )
             elif geometry.box is not None:
                 raw = box_mesh(tuple(scale * v for v in geometry.box))
             else:
@@ -173,8 +192,8 @@ class Room:
             )
             listeners_inside = inside[count:]
 
-        names = set(mesh.label_names())
-        unused = [key for key in scene.assignments if key not in names]
+        names = {name.casefold() for name in mesh.label_names()}
+        unused = [key for key in scene.assignments if key.casefold() not in names]
         loaded = {}
         if reuse is not None:
             for source, directivity in zip(reuse.scene.sources, reuse.directivities, strict=True):

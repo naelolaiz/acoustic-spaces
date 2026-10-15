@@ -11,9 +11,9 @@ loudspeaker formats.
 
 ## What it does
 
-- **Rooms** from CAD models (OBJ, DXF, glTF, STL, SketchUp), from their dimensions or
-  from a floor plan, with a material database, walls and doors between rooms, audience
-  seating, and directional, line, surface and array sources:
+- **Rooms** from CAD and BIM models (OBJ, DXF, glTF, STL, IFC, Collada, SketchUp), from
+  their dimensions or from a floor plan, with a material database, walls and doors
+  between rooms, audience seating, and directional, line, surface and array sources:
   [scene files](docs/scenes.md).
 - **Simulation**: ray-traced early reflections with edge diffraction, added in pressure
   at low frequencies, a stochastic late tail and, for the lowest bands, a wave solver on

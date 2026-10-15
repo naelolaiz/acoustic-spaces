@@ -52,4 +52,5 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
   reflection and of the sound over edges.
 - [x] A leak finder: where rays escape from a model that is not closed.
 - [x] Materials from CATT-Acoustic and ODEON material libraries.
-- [ ] Walkthroughs with moving sources and listeners; IFC and Collada import.
+- [x] IFC (BIM) and Collada import.
+- [ ] Walkthroughs with moving sources and listeners.

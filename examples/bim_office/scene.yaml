@@ -1,0 +1,43 @@
+# An office of 6 x 4.5 x 2.8 m from a BIM model in IFC (office.ifc, written by
+# make_model.py with IfcOpenShell), read with the ifc extra. `space: Office` takes the
+# room's faces from the space boundaries the model has for that IfcSpace, each named by
+# the element it lies on: its name, its materials and its IFC class, which assignments
+# can use. Without `space`, every building element is read as a solid (walls with both
+# sides and their thickness, the window set into its opening).
+name: Office from a BIM model (IFC)
+geometry:
+  file: office.ifc
+  space: Office
+materials:
+  carpet:
+    preset: carpet_tufted_9m
+  ceiling_tiles:
+    preset: ceiling_fissured_tile
+  plaster:
+    preset: brick_wall_rough
+  glass:
+    preset: glass_window
+  wood:
+    preset: wooden_lining
+assignments:
+  Carpet on concrete: carpet        # an IFC material
+  Suspended ceiling: ceiling_tiles
+  Plaster on brick: plaster
+  IfcWindow: glass                  # every element of a class
+  Door: wood                        # one element, by name
+sources:
+  - name: talker
+    position: [1.5, 2.25, 1.2]
+    orientation: {yaw: 0}
+    directivity: cardioid
+listeners:
+  - name: desk by the window
+    position: [4.6, 1.6, 1.2]
+    orientation: {yaw: 180}
+  - name: desk by the wall
+    position: [4.6, 3.4, 1.2]
+    orientation: {yaw: 180}
+simulation:
+  ir_length_s: 1.0
+outputs:
+  - mono

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import skip_without_extra
 
 from acoustic_spaces.cli import main
 from acoustic_spaces.engine import simulate
@@ -23,12 +24,13 @@ def test_every_example_folder_is_listed() -> None:
 
 def test_example_path() -> None:
     assert example_path("studio").parent.name == "studio"
-    with pytest.raises(ValueError, match="examples: archway, church"):
+    with pytest.raises(ValueError, match="examples: archway, bim_office, church"):
         example_path("cathedral")
 
 
 @pytest.mark.parametrize("name", NAMES)
 def test_examples_simulate(name: str) -> None:
+    skip_without_extra(name)
     room = Room.from_yaml(example_path(name))
     sim = room.scene.simulation
     quick = sim.model_copy(

@@ -249,6 +249,23 @@ def test_dxf_3dfaces_mesh_and_blocks_by_layer(tmp_path: Path) -> None:
     np.testing.assert_allclose(absorber[..., 1], 5.0)  # moved by the block insert
 
 
+def test_dxf_polygon_meshes_and_closed_3d_polylines(tmp_path: Path) -> None:
+    ezdxf = pytest.importorskip("ezdxf")
+    doc = ezdxf.new()
+    msp = doc.modelspace()
+    grid = msp.add_polymesh((3, 2), dxfattribs={"layer": "FLOOR"})  # 2 x 1 quads of 2 x 3 m
+    for i in range(3):
+        for j in range(2):
+            grid.set_mesh_vertex((i, j), (2 * i, 3 * j, 0))
+    outline = [(0, 0, 3), (4, 0, 3), (4, 3, 3), (2, 4, 3), (0, 3, 3)]
+    msp.add_polyline3d(outline, close=True, dxfattribs={"layer": "CEILING"})
+    msp.add_polyline3d([(0, 0, 1), (4, 0, 1)], dxfattribs={"layer": "EDGE"})  # bounds nothing
+    path = tmp_path / "room.dxf"
+    doc.saveas(path)
+    areas = _area_by_name(load_mesh(path))
+    assert areas == pytest.approx({"FLOOR": 12.0, "CEILING": 14.0})
+
+
 def _box_dxf(path: Path, size: tuple[float, float, float], insunits: int) -> None:
     """A closed box of 3DFACEs whose header records the drawing units ($INSUNITS)."""
     ezdxf = pytest.importorskip("ezdxf")

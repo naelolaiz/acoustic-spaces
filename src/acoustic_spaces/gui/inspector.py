@@ -37,10 +37,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from acoustic_spaces.geometry.io import SUPPORTED_SUFFIXES, ifc_spaces
 from acoustic_spaces.gui.document import Document, EditError
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.materials.bands import convert
-from acoustic_spaces.room import UNASSIGNED
+from acoustic_spaces.room import UNASSIGNED, matching_name
 from acoustic_spaces.scene.model import LAYOUT_NAMES
 
 BAND_LABELS = [f"{f} Hz" if f < 1000 else f"{f // 1000} kHz" for f in OCTAVE_BANDS_HZ]
@@ -295,15 +296,25 @@ class GeometryPage(Page):
         choose.clicked.connect(self._choose)
         self.units = QComboBox()
         self.units.addItems(["file default", "m", "cm", "mm", "in", "ft"])
-        self.units.setToolTip("file default: the units a DXF file records, else metres")
+        self.units.setToolTip(
+            "file default: the units a DXF, IFC or Collada file records, else metres"
+        )
         self.units.currentTextChanged.connect(self._units)
         self.up_axis = QComboBox()
         self.up_axis.addItems(["format default", "y", "z"])
         self.up_axis.currentTextChanged.connect(self._up_axis)
+        self.space = QComboBox()
+        self.space.setToolTip(
+            "The room of an IFC model to take on its own, from its space boundaries; "
+            "every element reads walls as solids, with both sides"
+        )
+        self.space.currentIndexChanged.connect(self._space)
         file_form.addRow(self.file)
         file_form.addRow(choose)
         file_form.addRow("Units", self.units)
         file_form.addRow("Up axis", self.up_axis)
+        file_form.addRow("IFC room", self.space)
+        self.file_form = file_form
         layout.addWidget(self.file_group)
 
         self.report = QLabel()
@@ -335,6 +346,20 @@ class GeometryPage(Page):
             self.file.setText(str(geometry.file))
             self.units.setCurrentText(geometry.units or "file default")
             self.up_axis.setCurrentText(geometry.up_axis or "format default")
+            is_ifc = geometry.file.suffix.lower() == ".ifc"
+            self.file_form.setRowVisible(self.space, is_ifc)
+            self.space.clear()
+            if is_ifc:
+                self.space.addItem("every element", None)
+                try:
+                    rooms = ifc_spaces(geometry.file)
+                except (ImportError, ValueError, OSError):
+                    rooms = []
+                for key, shown in rooms:
+                    self.space.addItem(shown, key)
+                if geometry.space is not None and self.space.findData(geometry.space) < 0:
+                    self.space.addItem(geometry.space, geometry.space)  # as the scene names it
+                self.space.setCurrentIndex(max(self.space.findData(geometry.space), 0))
         r = room.report
         closed = "closed" if r.closed else "not closed"
         self.report.setText(
@@ -394,10 +419,28 @@ class GeometryPage(Page):
             self,
             "Room model",
             str(self.document.base_dir),
-            "Room models (*.obj *.stl *.ply *.off *.gltf *.glb *.dxf *.skp);;All files (*)",
+            f"Room models ({' '.join('*' + s for s in SUPPORTED_SUFFIXES)});;All files (*)",
         )
         if path:
-            self.apply("replace model", lambda data: data["geometry"].update(file=path))
+
+            def change(data: dict) -> None:
+                data["geometry"]["file"] = path
+                data["geometry"].pop("space", None)  # a room of the file it replaces
+
+            self.apply("replace model", change)
+
+    def _space(self, index: int) -> None:
+        if self._loading or index < 0:
+            return
+        key = self.space.itemData(index)
+
+        def change(data: dict) -> None:
+            if key is None:
+                data["geometry"].pop("space", None)
+            else:
+                data["geometry"]["space"] = key
+
+        self.apply("choose IFC room", change)
 
     def _units(self, units: str) -> None:
         def change(data: dict) -> None:
@@ -447,7 +490,8 @@ class SurfacePage(Page):
         self.area.setText(f"{float(room.mesh.face_areas()[faces].sum()):.1f} m²")
         self.material.clear()
         self.material.addItems([FALLBACK, *scene.materials])
-        own = next((scene.assignments[n] for n in label if n in scene.assignments), None)
+        key = matching_name(label, scene.assignments)
+        own = scene.assignments[key] if key is not None else None
         self.material.setCurrentText(own or FALLBACK)
         self.material.setEnabled(bool(label))
         index = int(room.face_materials[np.flatnonzero(faces)[0]]) if faces.any() else UNASSIGNED

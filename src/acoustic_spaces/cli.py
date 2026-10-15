@@ -307,6 +307,7 @@ def _cmd_materials(args: argparse.Namespace) -> int:
 def _cmd_examples(args: argparse.Namespace) -> int:
     import textwrap
 
+    from acoustic_spaces._extras import install_hint
     from acoustic_spaces.examples import copy_examples, list_examples
 
     try:
@@ -327,6 +328,9 @@ def _cmd_examples(args: argparse.Namespace) -> int:
         print(f"{example.name}: {example.title}")
         print(textwrap.fill(example.description, 88, initial_indent="  ", subsequent_indent="  "))
         print(f"  {example.path}")
+        extra = example.missing_extra
+        if extra:
+            print(f"  needs the {extra} extra: {install_hint(extra)}")
     return 0
 
 

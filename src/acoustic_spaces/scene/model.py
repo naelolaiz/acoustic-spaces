@@ -167,7 +167,10 @@ class Geometry(_Model):
 
     file: Path | None = Field(
         default=None,
-        description="mesh file: OBJ, STL, PLY, OFF, glTF/GLB, DXF or SketchUp (sketchup extra)",
+        description=(
+            "mesh file: OBJ, STL, PLY, OFF, glTF/GLB, DXF, Collada, IFC (ifc extra) or "
+            "SketchUp (sketchup extra)"
+        ),
     )
     box: tuple[PositiveFloat, PositiveFloat, PositiveFloat] | None = Field(
         default=None, description="length (x), width (y) and height (z) of a rectangular room"
@@ -186,6 +189,13 @@ class Geometry(_Model):
     up_axis: Literal["y", "z"] | None = Field(
         default=None, description="vertical axis of the file; None uses the format's convention"
     )
+    space: str | None = Field(
+        default=None,
+        description=(
+            "IFC file: the room (IfcSpace, by name, long name or GlobalId) to take on its "
+            "own, from its space boundaries; None reads every building element"
+        ),
+    )
 
     @field_validator("file")
     @classmethod
@@ -199,11 +209,13 @@ class Geometry(_Model):
             raise ValueError("geometry needs exactly one of file, box or floor_plan")
         if (self.floor_plan is None) != (self.height is None):
             raise ValueError("height goes with floor_plan, and floor_plan needs it")
+        if self.space is not None and (self.file is None or self.file.suffix.lower() != ".ifc"):
+            raise ValueError("space names a room of an IFC file: give one as file")
         return self
 
     def describe(self) -> str:
         if self.file is not None:
-            return self.file.name
+            return self.file.name + (f" (space {self.space})" if self.space else "")
         units = self.units or "m"
         if self.box is not None:
             return "box " + " x ".join(f"{v:g}" for v in self.box) + f" {units}"

@@ -1,0 +1,33 @@
+# A band's rehearsal room of 26 x 20 ft under a pitched roof, from a Collada file
+# (room.dae, written by make_model.py as SketchUp exports one: in inches with +z up).
+# The file records its unit and its up axis, so the scene gives neither. Surfaces are named by their material and their geometry's name, and
+# assignments match names whatever their case: SketchUp's Brick_Rough is brick_rough.
+name: Rehearsal room from SketchUp (Collada)
+geometry:
+  file: room.dae
+materials:
+  wood_floor:
+    preset: stage_floor
+  brick:
+    preset: brick_wall_rough
+  boards:
+    preset: wooden_lining
+assignments:
+  wood_floor_light: wood_floor
+  brick_rough: brick
+  roof_boards: boards
+sources:
+  - name: guitar amp
+    position: [1.2, 1.5, 0.5]
+    orientation: {yaw: 30}
+    directivity: cardioid
+  - name: drums
+    position: [1.5, 4.4, 0.8]
+listeners:
+  - name: singer
+    position: [5.5, 3.0, 1.6]
+    orientation: {yaw: 180}
+simulation:
+  ir_length_s: 1.5
+outputs:
+  - mono

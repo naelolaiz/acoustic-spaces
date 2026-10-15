@@ -12,6 +12,8 @@
 | `listening_room` | A living room with a loudspeaker against the front wall or a metre out: the wall's reflection adds to the bass in pressure, or takes from it ([early reflections in pressure](simulation.md#low-frequencies-early-reflections-in-pressure)); `bass.py` prints how much. |
 | `leaky_classroom` | A classroom model with two mistakes that leave it open, a missing window pane and a ceiling 3 cm short of a wall, for the [leak finder](scenes.md#finding-leaks) to find. |
 | `material_libraries` | A seminar room whose materials come from a CATT-Acoustic file and an ODEON library ([material libraries](scenes.md#material-libraries-of-catt-acoustic-and-odeon)). |
+| `bim_office` | An office from a BIM model in IFC, read as one room from its space boundaries, its surfaces named by element, material and IFC class ([BIM models](scenes.md#bim-models-ifc); the `ifc` extra). |
+| `rehearsal_room` | A band's rehearsal room under a pitched roof from a Collada file in inches, as SketchUp exports it. |
 | `orchestra` | The concert hall with a full orchestra on its stage, one source for each of the 61 tracks of an anechoic recording, and the scripts that [mix them and make a video](spatial-audio.md#an-orchestra-in-the-concert-hall). |
 
 `acoustic-spaces examples` lists them with where they are installed, and

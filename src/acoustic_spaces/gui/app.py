@@ -37,9 +37,10 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces import __version__
+from acoustic_spaces._extras import install_hint
 from acoustic_spaces.engine import reweight
 from acoustic_spaces.examples import list_examples
-from acoustic_spaces.geometry import points_inside
+from acoustic_spaces.geometry import SUPPORTED_SUFFIXES, points_inside
 from acoustic_spaces.gui.document import (
     LISTENER_HEIGHT,
     SOURCE_HEIGHT,
@@ -59,7 +60,7 @@ from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 
 TITLE = "Acoustic Spaces editor"
 SCENE_FILTER = "Scenes (*.yaml *.yml)"
-MODEL_FILTER = "Models (*.obj *.stl *.ply *.off *.gltf *.glb *.dxf *.skp)"
+MODEL_FILTER = f"Models ({' '.join('*' + s for s in SUPPORTED_SUFFIXES)})"
 GLB_FILTER = "glTF binary (*.glb)"
 MAP_FILTERS = "PNG picture (*.png);;JSON, every map (*.json)"
 #: Kinds of item Edit > Remove works on.
@@ -314,6 +315,13 @@ class MainWindow(QMainWindow):
         for example in examples:
             action = self.examples_menu.addAction(example.title)
             action.setStatusTip(example.description.split(". ")[0])
+            if example.missing_extra:
+                # Opening it would only say how to install what reading its model needs.
+                action.setEnabled(False)
+                action.setStatusTip(
+                    f"Needs the {example.missing_extra} extra: "
+                    + install_hint(example.missing_extra)
+                )
             action.triggered.connect(lambda *_, path=example.path: self.open_example(path))
         self.examples_menu.setEnabled(bool(examples))
         file.addSeparator()

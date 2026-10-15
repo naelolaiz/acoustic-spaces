@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import yaml
+from conftest import skip_without_extra
 
 from acoustic_spaces.room import UNASSIGNED, Room, speed_of_sound
 from acoustic_spaces.scene import OCTAVE_BANDS_HZ, Scene
@@ -95,6 +96,22 @@ def test_names_matching_materials_and_default_material(tmp_path: Path) -> None:
     assert room.problems() == []
     assert room.area_by_material()["walls"] == pytest.approx(84.0)
     assert room.area_by_material()["acoustic_ceiling"] == pytest.approx(48.0)
+
+
+def test_names_match_whatever_their_case(tmp_path: Path) -> None:
+    data = yaml.safe_load(SHOEBOX.read_text(encoding="utf-8"))
+    upper = {name.upper(): material for name, material in data["assignments"].items()}
+    room = Room.from_yaml(_scene(tmp_path, assignments=upper))
+    assert room.problems() == [] and room.unused_assignments == []
+    # The name as written wins over one in another case.
+    exact = {**upper, "floor": "acoustic_ceiling"}
+    room = Room.from_yaml(_scene(tmp_path, assignments=exact))
+    assert room.area_by_material()["acoustic_ceiling"] == pytest.approx(48.0 + 48.0)
+    # A material named like a surface, in another case, still takes it.
+    scene = Scene.from_yaml(_scene(tmp_path, assignments={"FLOOR": "carpet_on_concrete"}))
+    scene.materials["Walls"] = scene.materials["painted_concrete"]
+    scene.default_material = "acoustic_ceiling"
+    assert Room.from_scene(scene).area_by_material()["Walls"] == pytest.approx(84.0)
 
 
 def test_points_outside_and_unused_assignments(tmp_path: Path) -> None:
@@ -200,6 +217,7 @@ def test_open_model_skips_volume_and_inside_checks(tmp_path: Path) -> None:
     "scene", sorted(EXAMPLES.glob("*/scene.yaml")), ids=lambda p: p.parent.name
 )
 def test_example_scenes_are_ready_to_simulate(scene: Path) -> None:
+    skip_without_extra(scene.parent.name)
     room = Room.from_yaml(scene)
     assert room.problems() == []
     if scene.parent.name == "leaky_classroom":  # open on purpose, for the leak finder

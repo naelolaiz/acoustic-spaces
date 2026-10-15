@@ -33,6 +33,7 @@ uv sync --extra viz                    # viz: the 3D view (PyVista) and plots (m
 uv sync --extra viz --extra measure    # measure: sounddevice, for sweeps and playback
 uv sync --extra gui                    # gui: the graphical editor (Qt, PySide6)
 uv sync --extra gpu                    # gpu: the wave solver on a GPU (wgpu, WebGPU)
+uv sync --extra ifc                    # ifc: BIM models (IFC files, IfcOpenShell)
 uv sync --all-extras                   # everything, with sofa (h5py), sketchup and docs
 ```
 
@@ -46,6 +47,7 @@ python -m pip install -e ".[dev,viz]"     # viz adds the 3D view (PyVista)
 python -m pip install -e ".[measure]"     # sounddevice: sweeps, real-time playback
 python -m pip install -e ".[sofa]"        # h5py, to read HRTFs from SOFA files
 python -m pip install -e ".[sketchup]"    # openskp, to read SketchUp files (experimental)
+python -m pip install -e ".[ifc]"         # IfcOpenShell, to read IFC files (BIM models)
 python -m pip install -e ".[gui]"         # the graphical editor (Qt, PySide6)
 python -m pip install -e ".[gpu]"         # wgpu: the wave solver on a GPU (WebGPU)
 ```

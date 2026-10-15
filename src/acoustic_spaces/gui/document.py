@@ -20,7 +20,7 @@ from pydantic import ValidationError
 from PySide6.QtCore import QObject, Signal
 
 from acoustic_spaces.geometry import UNIT_SCALE, RoomMesh, extruded_mesh, points_inside
-from acoustic_spaces.room import Room
+from acoustic_spaces.room import Room, matching_name
 from acoustic_spaces.scene import Scene
 
 #: Heights above a floor for new sources and listeners (m): a talker, a seated ear.
@@ -460,7 +460,7 @@ class Document(QObject):
         default = None
         names = set(self.scene.assignments) | set(self.scene.materials)
         if self.scene.default_material is None and any(
-            not set(label) & names for label in mesh.labels
+            matching_name(label, names) is None for label in mesh.labels
         ):
             areas = self.room.area_by_material()
             default = max(areas, key=areas.get) if areas else next(iter(self.scene.materials))
