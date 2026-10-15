@@ -114,8 +114,8 @@ class _Edges:
             self.model,
             source,
             speed_of_sound=room.speed_of_sound(),
-            air=room.air_attenuation(),
-            directivity=room.directivity(name),
+            air=room.air_attenuation(self.model.bands),
+            directivity=room.directivity(name, self.model.bands),
             orientation=orientation,
             mode=mode,
             edges=self._edges,
@@ -155,9 +155,9 @@ def early_paths(
         target,
         candidates,
         speed_of_sound=room.speed_of_sound(),
-        air=room.air_attenuation(),
+        air=room.air_attenuation(model.bands),
         max_delay_s=scene.simulation.ir_length_s,
-        directivity=room.directivity(src.name),
+        directivity=room.directivity(src.name, model.bands),
         orientation=orientation,
     )
     edges = _Edges(model).diffraction(
@@ -197,9 +197,9 @@ def simulate(
     if not chosen_listeners:
         raise ValueError("no listener to simulate")
 
-    model = TraceModel.from_room(room)
+    model = TraceModel.from_room(room, settings)
     c = room.speed_of_sound()
-    air = room.air_attenuation()
+    air = room.air_attenuation(model.bands)
     volume = room.volume_m3
     length = settings.ir_length_s
     seed = settings.seed
@@ -226,7 +226,7 @@ def simulate(
     details: dict[str, dict[str, float]] = {}
     for s_index, source in enumerate(chosen_sources):
         src = np.array(source.position, dtype=float)
-        directivity = room.directivity(source.name)
+        directivity = room.directivity(source.name, model.bands)
         orientation = np.array(source.orientation.rotation())
         direct = np.linalg.norm(listener_pos - src, axis=1) / c
         cutoff = np.minimum(direct + transition, length)
@@ -266,7 +266,7 @@ def simulate(
         started = time.perf_counter()
         if statistical:
             say(f"{source.name}: statistical late reverberation")
-            t60 = room.reverberation_time("eyring", air_absorption=True)
+            t60 = room.reverberation_time("eyring", air_absorption=True, bands=model.bands)
             late = late_stage.statistical_energy(
                 t60,
                 volume,

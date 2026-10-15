@@ -8,7 +8,8 @@ geometry:
   units: m
 materials:
   # Built-in database entries; `acoustic-spaces materials` lists them all.
-  # Explicit lists (one value per octave band, 63 Hz to 8 kHz) override a preset.
+  # Explicit lists (one value per octave band, 63 Hz to 8 kHz, or per third-octave
+  # band, 50 Hz to 10 kHz) override a preset.
   painted_concrete:
     preset: smooth_brickwork_flush_pointing
     scattering: 0.05

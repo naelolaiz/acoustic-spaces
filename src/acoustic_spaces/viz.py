@@ -480,20 +480,23 @@ def plot_response(response: Response, path: str | Path | None = None, *, band: i
     The echogram shows the energy per millisecond in one octave band (``band`` indexes
     ``OCTAVE_BANDS_HZ``; 4 is 1 kHz) with the early specular paths as stems coloured
     by order. The decay panel shows the backward-integrated curve of every band.
+    A response in third-octave bands shows them averaged into octave bands.
     Returns the matplotlib figure.
     """
-    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, to_octaves
     from acoustic_spaces.parameters import decay_curve
 
-    energy = response.energy()
+    energy = response.octave_energy()
     t_ms = np.arange(energy.shape[1]) * response.time_step * 1e3
     reference = 1.0 / (4.0 * np.pi * 100.0)  # free field at 10 m, as for G
 
     fig, (ax_e, ax_d) = _two_panels()
 
     with np.errstate(divide="ignore"):
-        late_db = 10.0 * np.log10(np.maximum(response.late[band], 1e-30) / reference)
-        early_db = 10.0 * np.log10(np.maximum(response.early.energy[:, band], 1e-30) / reference)
+        late = to_octaves(response.late)[band]
+        early = to_octaves(response.early.energy, axis=1)[:, band]
+        late_db = 10.0 * np.log10(np.maximum(late, 1e-30) / reference)
+        early_db = 10.0 * np.log10(np.maximum(early, 1e-30) / reference)
     late_t = np.arange(len(late_db)) * response.time_step * 1e3
     ax_e.fill_between(late_t, late_db, -100, step="post", color="#4da3ff", alpha=0.35, lw=0)
     ax_e.step(late_t, late_db, where="post", color="#4da3ff", lw=0.8, label="late (per ms)")
@@ -545,9 +548,10 @@ def plot_directions(response: Response, path: str | Path | None = None, *, band:
     """Where the sound comes from, as the listener faces: early reflections (dots sized
     by level and coloured by delay) and the late energy per arrival direction, in one
     octave band (``band`` indexes ``OCTAVE_BANDS_HZ``; 4 is 1 kHz). Azimuth runs from
-    the left to the right of the listener. Returns the matplotlib figure.
+    the left to the right of the listener. A response in third-octave bands shows them
+    averaged into octave bands. Returns the matplotlib figure.
     """
-    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, to_octaves
     from acoustic_spaces.spatial.directions import from_angles, to_angles, to_head
 
     fig, (ax_e, ax_l) = _two_panels()
@@ -556,7 +560,8 @@ def plot_directions(response: Response, path: str | Path | None = None, *, band:
     if len(early):
         az, el = to_angles(to_head(early.direction, response.orientation))
         with np.errstate(divide="ignore"):
-            level = 10.0 * np.log10(np.maximum(early.energy[:, band], 1e-30) / reference)
+            in_band = to_octaves(early.energy, axis=1)[:, band]
+            level = 10.0 * np.log10(np.maximum(in_band, 1e-30) / reference)
         floor = level.max() - 40.0
         keep = level > floor
         delay_ms = (early.delay_s - response.direct_delay_s) * 1e3
@@ -580,7 +585,7 @@ def plot_directions(response: Response, path: str | Path | None = None, *, band:
     )
 
     if len(response.late_directions) and response.late_directional.size:
-        energy = response.late_directional[:, band].sum(axis=1)
+        energy = to_octaves(response.late_directional, axis=1)[:, band].sum(axis=1)
         heads = to_head(response.late_directions, response.orientation)
         grid_az, grid_el = np.meshgrid(np.arange(179, -180, -2.0), np.arange(-89, 90, 2.0))
         cells = from_angles(grid_az, grid_el)

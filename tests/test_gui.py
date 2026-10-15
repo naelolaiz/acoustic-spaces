@@ -357,6 +357,32 @@ def test_selection_and_forms(window) -> None:
     assert window.selection == ("scene", None)
 
 
+def test_third_octave_materials_and_bands(window) -> None:
+    window.open_example(example_path("studio"))
+    third = [round(0.01 + 0.03 * k, 2) for k in range(24)]
+    window.document.set_material("side_panels", {"absorption": third, "scattering": 0.3})
+    window.select("material", "side_panels")
+    page = window.inspector.pages["material"]
+    assert page.table.columnCount() == 24
+    header = [page.table.horizontalHeaderItem(k).text() for k in (0, 13, 23)]
+    assert header == ["50", "1k", "10k"]
+    assert page.table.item(0, 23).text() == "0.70" and page.table.item(1, 5).text() == "0.30"
+    page.table.item(0, 0).setText("0.50")
+    material = window.document.scene.materials["side_panels"]
+    assert material.absorption == [0.5, *third[1:]] and material.source.startswith("edited")
+    window.select("material", "wooden_floor")  # octave data: 8 columns again
+    assert page.table.columnCount() == 8
+    assert page.table.horizontalHeaderItem(4).text() == "1 kHz"
+
+    window.select("simulation")
+    simulation = window.inspector.pages["simulation"]
+    assert simulation.bands.currentText() == "octave"
+    simulation.bands.setCurrentText("third_octave")
+    assert window.document.scene.simulation.bands == "third_octave"
+    window.undo()
+    assert window.document.scene.simulation.bands == "octave"
+
+
 def test_a_surface_takes_a_material_of_its_own(window) -> None:
     from acoustic_spaces.gui.viewport import surface_materials
 

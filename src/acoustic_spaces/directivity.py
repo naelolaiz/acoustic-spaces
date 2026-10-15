@@ -1,5 +1,5 @@
 """Source directivity: how a source shares its sound power between directions, per
-octave band.
+octave band (or third-octave band).
 
 A directivity gives energy weights that average 1 over the sphere in every band, so a
 source radiates its sound power (``level_db``) whatever its pattern; the pattern only
@@ -25,6 +25,9 @@ The CSV table has a header row ``azimuth, elevation`` followed by band centre
 frequencies in Hz (octaves, thirds or any other layout), then one row per direction
 with the level in dB in each band (any reference; only differences matter). Lines
 starting with ``#`` are comments.
+
+Measured data is averaged into octave bands. A simulation in third-octave bands takes
+each octave band's directivity for its three third octaves (:meth:`Directivity.in_bands`).
 """
 
 from __future__ import annotations
@@ -37,7 +40,8 @@ from pathlib import Path
 import numpy as np
 
 from acoustic_spaces._extras import install_hint
-from acoustic_spaces.materials import OCTAVE_BANDS_HZ
+from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ
+from acoustic_spaces.materials.bands import Resolution, convert, resolution_of
 
 #: The first-order patterns by name: the pressure is a + (1 - a) cos(theta).
 PATTERNS: dict[str, float] = {
@@ -54,6 +58,7 @@ GRID_STEP_DEG = 5.0
 NEIGHBOURS = 4
 
 _BANDS = len(OCTAVE_BANDS_HZ)
+_BAND_COUNTS = (len(OCTAVE_BANDS_HZ), len(THIRD_OCTAVE_BANDS_HZ))
 _SEPARATOR = re.compile(r"[,;\t]")
 _SPACES = re.compile(r"\s+")
 
@@ -105,6 +110,12 @@ class Directivity:
         first-order patterns)."""
         raise NotImplementedError
 
+    def in_bands(self, bands: Resolution) -> Directivity:
+        """This directivity in octave or third-octave ``bands``: an octave band's
+        weights for each of its three third octaves, or the mean of three third
+        octaves' for their octave."""
+        raise NotImplementedError
+
     @property
     def omni(self) -> bool:
         return False
@@ -119,8 +130,11 @@ class FirstOrder(Directivity):
     extrapolated: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
-        if len(self.a) != _BANDS or not all(0.0 <= a <= 1.0 for a in self.a):
-            raise ValueError(f"expected {_BANDS} values of a between 0 and 1, got {self.a}")
+        if len(self.a) not in _BAND_COUNTS or not all(0.0 <= a <= 1.0 for a in self.a):
+            raise ValueError(
+                f"expected {_BANDS} values of a between 0 and 1 (or "
+                f"{len(THIRD_OCTAVE_BANDS_HZ)} for third-octave bands), got {self.a}"
+            )
 
     @classmethod
     def pattern(cls, name: str) -> FirstOrder:
@@ -133,7 +147,12 @@ class FirstOrder(Directivity):
         return p**2 / (a**2 + (1.0 - a) ** 2 / 3.0)
 
     def native(self) -> tuple[np.ndarray, np.ndarray]:
-        return np.asarray(self.a, dtype=float), np.zeros((0, 0, _BANDS))
+        return np.asarray(self.a, dtype=float), np.zeros((0, 0, len(self.a)))
+
+    def in_bands(self, bands: Resolution) -> FirstOrder:
+        if resolution_of(len(self.a)) == bands:
+            return self
+        return FirstOrder(tuple(convert(self.a, bands)), self.name, self.extrapolated)
 
     @property
     def omni(self) -> bool:
@@ -173,7 +192,7 @@ class Balloon(Directivity):
         """Interpolate energies (n, bands) measured at unit vectors (n, 3)."""
         measured = _unit(directions)
         energy = np.asarray(energy, dtype=float).reshape(len(measured), -1)
-        if energy.shape[1] != _BANDS:
+        if energy.shape[1] not in _BAND_COUNTS:
             raise ValueError(f"expected {_BANDS} bands, got {energy.shape[1]}")
         if len(measured) == 0 or not np.all(np.isfinite(energy)) or (energy < 0).any():
             raise ValueError("directivity data must be finite, non-negative energies")
@@ -186,12 +205,13 @@ class Balloon(Directivity):
         weight = 1.0 / np.maximum(near_angle, 1e-9) ** 2
         weight /= weight.sum(axis=1, keepdims=True)
         values = np.einsum("gk,gkb->gb", weight, energy[nearest])
-        table = values.reshape(len(elevation), len(azimuth), _BANDS)
+        table = values.reshape(len(elevation), len(azimuth), energy.shape[1])
         balloon = cls(table, name, tuple(extrapolated))
         mean = balloon._interpolate(_sphere(8192)).mean(axis=0)
         silent = mean <= 0.0
         table = np.where(silent, 1.0, table / np.where(silent, 1.0, mean))
-        missing = tuple(f for f, s in zip(OCTAVE_BANDS_HZ, silent, strict=True) if s)
+        centres = OCTAVE_BANDS_HZ if energy.shape[1] == _BANDS else THIRD_OCTAVE_BANDS_HZ
+        missing = tuple(f for f, s in zip(centres, silent, strict=True) if s)
         return cls(table, name, tuple(sorted(set(extrapolated) | set(missing))))
 
     def _interpolate(self, directions) -> np.ndarray:
@@ -214,7 +234,17 @@ class Balloon(Directivity):
         return self._interpolate(directions)
 
     def native(self) -> tuple[np.ndarray, np.ndarray]:
-        return np.ones(_BANDS), np.ascontiguousarray(self.table, dtype=float)
+        return np.ones(self.table.shape[-1]), np.ascontiguousarray(self.table, dtype=float)
+
+    def in_bands(self, bands: Resolution) -> Balloon:
+        have = resolution_of(self.table.shape[-1])
+        if have == bands:
+            return self
+        if bands == "third_octave":
+            table = np.repeat(self.table, 3, axis=-1)
+        else:
+            table = self.table.reshape(*self.table.shape[:-1], -1, 3).mean(axis=-1)
+        return Balloon(table, self.name, self.extrapolated)
 
 
 # -- reading ----------------------------------------------------------------------------

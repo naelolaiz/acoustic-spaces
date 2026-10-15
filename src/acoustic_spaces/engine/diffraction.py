@@ -42,13 +42,14 @@ import numpy as np
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel, source_weights
-from acoustic_spaces.materials import OCTAVE_BANDS_HZ
+from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, Resolution, band_centres
 
 #: Faces that bend away from each other by less than this (degrees) make no
 #: diffracting edge: the facets of a curved surface, for example.
 MIN_BEND_DEG = 15.0
 #: Frequencies per octave band at which the diffracted waves are evaluated, one in the
-#: middle of each equal slice of the band; energies are averaged over the band.
+#: middle of each equal slice of the band; energies are averaged over the band. A
+#: third-octave band has a third as many, rounded up.
 FREQUENCIES_PER_BAND = 8
 #: A diffracted path is dropped when its energy is this far below that of the direct
 #: sound in free field, in every band.
@@ -226,12 +227,20 @@ def wedge_prefactor(n: np.ndarray, k: np.ndarray, sin_beta: np.ndarray) -> np.nd
     return -np.exp(-0.25j * np.pi) / (2.0 * n * np.sqrt(2.0 * np.pi * k) * sin_beta)
 
 
-def band_frequencies(per_band: int = FREQUENCIES_PER_BAND) -> tuple[np.ndarray, np.ndarray]:
+def band_frequencies(
+    per_band: int | None = None, bands: Resolution = "octave"
+) -> tuple[np.ndarray, np.ndarray]:
     """(bands, per_band) frequencies at the middle of equal slices of each octave band
-    (from its centre over the square root of 2 to its centre times it), and the width
-    of the slices per band (bands,)."""
-    centre = np.asarray(OCTAVE_BANDS_HZ, dtype=float)
-    low, width = centre / math.sqrt(2.0), centre / math.sqrt(2.0) / per_band
+    (from its centre over the square root of 2 to its centre times it) or third-octave
+    band (over and times the sixth root of 2), and the width of the slices per band
+    (bands,). ``per_band`` defaults to :data:`FREQUENCIES_PER_BAND` per octave."""
+    per_octave = BANDS_PER_OCTAVE[bands]
+    if per_band is None:
+        per_band = math.ceil(FREQUENCIES_PER_BAND / per_octave)
+    half = 2.0 ** (0.5 / per_octave)
+    centre = np.asarray(band_centres(bands), dtype=float)
+    low = centre / half
+    width = low * (1.0 if per_octave == 1 else half**2 - 1.0) / per_band
     return low[:, None] + width[:, None] * (np.arange(per_band) + 0.5), width
 
 
@@ -446,7 +455,7 @@ class EdgeDiffraction:
         self.directivity, self.orientation = directivity, orientation
         self.mode = mode
         self.size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
-        frequencies, self.slice_hz = band_frequencies()
+        frequencies, self.slice_hz = band_frequencies(bands=model.bands)
         self.wavenumber = 2.0 * np.pi * frequencies / self.speed_of_sound  # (B, M)
 
         # The source and its images in the planes it faces; the source side of a
@@ -635,7 +644,9 @@ class EdgeDiffraction:
         first = np.where((kind == 1)[:, None], c["bounce"], c["point"])
         departure = first - self.source
         departure /= np.maximum(np.linalg.norm(departure, axis=1), 1e-300)[:, None]
-        weight = source_weights(self.directivity, self.orientation, departure)  # (C, B)
+        weight = source_weights(
+            self.directivity, self.orientation, departure, len(self.air)
+        )  # (C, B)
         amplitude = np.sqrt(weight * np.exp(-np.outer(distance, self.air)) / (4.0 * np.pi))
         amplitude /= np.sqrt(r1 * r2 * distance)[:, None]
         on_plane = c["face"] >= 0

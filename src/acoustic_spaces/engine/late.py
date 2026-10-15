@@ -23,7 +23,6 @@ import numpy as np
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel
-from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 
 _DECAY = 6.0 * math.log(10.0)  # 60 dB in nepers of energy
 
@@ -190,7 +189,7 @@ def _band_arguments(model: TraceModel, air: np.ndarray, directivity: tuple, band
         size, hz = np.zeros((0, 2)), np.zeros(0)
     else:
         size = np.ascontiguousarray(model.surface_size, dtype=np.float64)
-        hz = np.ascontiguousarray(np.asarray(OCTAVE_BANDS_HZ, dtype=np.float64)[band])
+        hz = np.ascontiguousarray(np.asarray(model.band_hz, dtype=np.float64)[band])
     return (
         np.ascontiguousarray(first_order[band] if len(first_order) else first_order),
         np.ascontiguousarray(table[..., band]),

@@ -36,9 +36,11 @@ A scene file is YAML with this shape::
       - {format: ambisonics, order: 3}
       - {format: loudspeakers, layout: "5.0"}
 
-Coordinates are in metres after unit conversion, with +z up. Coefficient lists
-always have one value per octave band in ``OCTAVE_BANDS_HZ``. Relative paths are
-resolved against the scene file's folder.
+Coordinates are in metres after unit conversion, with +z up. Coefficient lists have
+one value per octave band in ``OCTAVE_BANDS_HZ`` or per third-octave band in
+``THIRD_OCTAVE_BANDS_HZ``; ``simulation.bands`` sets which bands a simulation runs in,
+and each list converts to them. Relative paths are resolved against the scene file's
+folder.
 """
 
 from __future__ import annotations
@@ -60,10 +62,11 @@ from pydantic import (
 
 from acoustic_spaces.materials import (
     OCTAVE_BANDS_HZ,
+    THIRD_OCTAVE_BANDS_HZ,
     builtin_database,
     read_coefficients_csv,
-    to_octave_bands,
 )
+from acoustic_spaces.materials.bands import Resolution, convert, finer_than_octaves, to_bands
 
 Vector3 = tuple[float, float, float]
 Coefficient = Annotated[float, Field(ge=0.0, le=1.0)]
@@ -81,6 +84,22 @@ def _per_band(name: str, value: list[float]) -> list[float]:
     return value
 
 
+def _per_band_or_third(name: str, value: list) -> list:
+    if len(value) not in (len(OCTAVE_BANDS_HZ), len(THIRD_OCTAVE_BANDS_HZ)):
+        raise ValueError(
+            f"expected {len(OCTAVE_BANDS_HZ)} {name} values (octave bands) or "
+            f"{len(THIRD_OCTAVE_BANDS_HZ)} (third-octave bands), got {len(value)}"
+        )
+    return value
+
+
+def _from_data(frequencies, values) -> tuple[list[float], list[int]]:
+    """Coefficients at arbitrary frequencies on third-octave bands when the data has
+    that detail, else on octave bands, and the bands copied from the nearest one."""
+    resolution = "third_octave" if finer_than_octaves(frequencies) else "octave"
+    return to_bands(frequencies, values, resolution)
+
+
 def _resolve_path(value: Path, info: ValidationInfo) -> Path:
     base_dir = (info.context or {}).get("base_dir")
     if base_dir is not None and not value.is_absolute():
@@ -92,7 +111,7 @@ def _describe(origin: str, extrapolated: list[int]) -> str:
     if not extrapolated:
         return origin
     bands = ", ".join(str(f) for f in extrapolated)
-    return f"{origin} ({bands} Hz copied from the nearest octave)"
+    return f"{origin} ({bands} Hz copied from the nearest band)"
 
 
 class Orientation(_Model):
@@ -185,13 +204,15 @@ DEFAULT_SCATTERING = 0.1
 
 
 class Material(_Model):
-    """Random-incidence absorption and scattering per octave band.
+    """Random-incidence absorption and scattering per octave or third-octave band.
 
-    Coefficients come from, in order of precedence: values given here, a
-    coefficient file (``file``), or a built-in database entry (``preset``).
-    ``scattering`` may also name a scattering entry of the built-in database.
-    Data in other bands is mapped onto the octaves; octaves without data take the
-    nearest octave's value, and ``source`` says which ones.
+    Coefficients come from, in order of precedence: values given here (8 per octave
+    band or 24 per third-octave band), a coefficient file (``file``), or a built-in
+    database entry (``preset``). ``scattering`` may also name a scattering entry of the
+    built-in database. Data at other frequencies is mapped onto third-octave bands when
+    it has more than one value in some octave band, else onto octave bands; bands
+    without data take the nearest band's value, and ``source`` says which ones.
+    :meth:`coefficients` gives both lists in the bands a simulation runs in.
     """
 
     preset: str | None = Field(default=None, description="built-in database entry")
@@ -203,7 +224,7 @@ class Material(_Model):
     @field_validator("absorption")
     @classmethod
     def _absorption_per_band(cls, value: list[float] | None) -> list[float] | None:
-        return None if value is None else _per_band("absorption", value)
+        return None if value is None else _per_band_or_third("absorption", value)
 
     @field_validator("scattering")
     @classmethod
@@ -211,7 +232,7 @@ class Material(_Model):
         if isinstance(value, float | int):
             return [float(value)] * len(OCTAVE_BANDS_HZ)
         if isinstance(value, list):
-            return _per_band("scattering", value)
+            return _per_band_or_third("scattering", value)
         return value
 
     @field_validator("file")
@@ -228,20 +249,20 @@ class Material(_Model):
 
         if self.preset is not None:
             entry = _database_entry(self.preset, "absorption")
-            absorption, extrapolated = entry.octave_bands()
+            absorption, extrapolated = _from_data(entry.frequencies, entry.coefficients)
             origin = _describe(entry.source, extrapolated)
         elif self.file is not None:
             if not self.file.exists():
                 raise ValueError(f"coefficient file not found: {self.file}")
             freqs, alpha, scatter = read_coefficients_csv(self.file)
-            absorption, extrapolated = to_octave_bands(freqs, alpha)
+            absorption, extrapolated = _from_data(freqs, alpha)
             origin = _describe(f"file {self.file.name}", extrapolated)
             if scatter is not None:
-                scattering, _ = to_octave_bands(freqs, scatter)
+                scattering, _ = _from_data(freqs, scatter)
 
         if isinstance(self.scattering, str):
             entry = _database_entry(self.scattering, "scattering")
-            scattering, extrapolated = entry.octave_bands()
+            scattering, extrapolated = _from_data(entry.frequencies, entry.coefficients)
             scattering_origin = "scattering: " + _describe(entry.source, extrapolated)
         elif self.scattering is not None:
             scattering = self.scattering
@@ -257,6 +278,12 @@ class Material(_Model):
             origins = [o for o in (origin, scattering_origin) if o]
             self.source = "; ".join(origins) or None
         return self
+
+    def coefficients(self, bands: Resolution = "octave") -> tuple[list[float], list[float]]:
+        """Absorption and scattering in octave or third-octave ``bands``: an octave
+        value holds for its three third octaves, and an octave takes the mean of its
+        three."""
+        return convert(self.absorption, bands), convert(self.scattering, bands)
 
 
 def _database_entry(name: str, kind: Literal["absorption", "scattering"]):
@@ -281,7 +308,8 @@ class DirectivitySpec(_Model):
     SOFA file or a CSV table (see :mod:`acoustic_spaces.directivity`)."""
 
     pattern: list[PatternName | Coefficient] | None = Field(
-        default=None, description="one pattern name or value of a per octave band"
+        default=None,
+        description="one pattern name or value of a per octave band (or third-octave band)",
     )
     file: Path | None = Field(
         default=None, description="measured data: a SOFA file (FreeFieldDirectivityTF) or CSV"
@@ -295,7 +323,7 @@ class DirectivitySpec(_Model):
     @field_validator("pattern")
     @classmethod
     def _check_pattern(cls, value: list | None) -> list | None:
-        return None if value is None else _per_band("pattern", value)
+        return None if value is None else _per_band_or_third("pattern", value)
 
     @field_validator("file")
     @classmethod
@@ -360,7 +388,7 @@ class LateStage(_Model):
         default=50_000,
         ge=1,
         description=(
-            "stochastic ray tracing only: rays per octave band (vector-based scattering "
+            "stochastic ray tracing only: rays per band (vector-based scattering "
             "traces each band with rays of its own where the bands scatter differently)"
         ),
     )
@@ -507,6 +535,14 @@ class Output(_Model):
 
 
 class Simulation(_Model):
+    bands: Resolution = Field(
+        default="octave",
+        description=(
+            "the bands it runs in: octave (8, 63 Hz to 8 kHz) or third_octave (24, 50 Hz "
+            "to 10 kHz; with rays per band, about three times the work). Room parameters "
+            "are given in octave bands either way"
+        ),
+    )
     early: EarlyStage = Field(default_factory=EarlyStage)
     late: LateStage = Field(default_factory=LateStage)
     scattering: Scattering = Field(default_factory=Scattering)

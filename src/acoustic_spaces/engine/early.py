@@ -272,7 +272,7 @@ def find_paths(
         first = points[0][idx] if k else np.broadcast_to(listener, (len(idx), 3))
         departure = first - source
         departure /= np.maximum(np.linalg.norm(departure, axis=1), 1e-300)[:, None]
-        energy *= source_weights(directivity, orientation, departure)
+        energy *= source_weights(directivity, orientation, departure, energy.shape[1])
         last = points[k - 1][idx] if k else np.broadcast_to(source, (len(idx), 3))
         arrival = last - listener
         arrival /= np.maximum(np.linalg.norm(arrival, axis=1), 1e-300)[:, None]

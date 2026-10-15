@@ -37,11 +37,14 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces.gui.document import Document, EditError
-from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
+from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, builtin_database
+from acoustic_spaces.materials.bands import convert
 from acoustic_spaces.room import UNASSIGNED
 from acoustic_spaces.scene.model import LAYOUT_NAMES
 
 BAND_LABELS = [f"{f} Hz" if f < 1000 else f"{f // 1000} kHz" for f in OCTAVE_BANDS_HZ]
+#: Column labels of the third-octave bands, short to fit 24 columns.
+THIRD_OCTAVE_LABELS = [f"{f}" if f < 1000 else f"{f / 1000:g}k" for f in THIRD_OCTAVE_BANDS_HZ]
 DIRECTIVITIES = ["omni", "subcardioid", "cardioid", "supercardioid", "hypercardioid", "figure8"]
 #: The directivity list entry that asks for a SOFA or CSV file.
 MEASURED = "Measured data from a file…"
@@ -482,7 +485,7 @@ class MaterialPage(Page):
         self.table.setVerticalHeaderLabels(["Absorption", "Scattering"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.AllEditTriggers)
-        self.table.setMaximumHeight(110)
+        self.table.setMaximumHeight(130)
         self.table.itemChanged.connect(self._coefficients)
         layout.addWidget(self.table)
         self.source = QLabel()
@@ -502,7 +505,15 @@ class MaterialPage(Page):
         material = self.document.scene.materials[self.key]
         self.name.setText(self.key)
         self.preset.setCurrentText(material.preset or "")
-        for row, values in enumerate((material.absorption, material.scattering)):
+        # Third-octave columns when either list has third-octave values.
+        bands = self._bands(material)
+        third = bands == "third_octave"
+        labels = THIRD_OCTAVE_LABELS if third else BAND_LABELS
+        self.table.setColumnCount(len(labels))
+        self.table.setHorizontalHeaderLabels(labels)
+        mode = QHeaderView.ResizeMode.ResizeToContents if third else QHeaderView.ResizeMode.Stretch
+        self.table.horizontalHeader().setSectionResizeMode(mode)
+        for row, values in enumerate(material.coefficients(bands)):
             for col, value in enumerate(values):
                 self.table.setItem(row, col, QTableWidgetItem(f"{value:.2f}"))
         self.source.setText(f"Source: {material.source or 'values given in the scene'}")
@@ -512,6 +523,16 @@ class MaterialPage(Page):
     def _fields(self) -> dict:
         material = self.document.scene.materials[self.key]
         return material.model_dump(mode="json", exclude_none=True)
+
+    @staticmethod
+    def _bands(material) -> str:
+        """The bands the table shows ``material`` in: third octaves when it has any."""
+        third = len(THIRD_OCTAVE_BANDS_HZ)
+        return (
+            "third_octave"
+            if third in (len(material.absorption), len(material.scattering))
+            else "octave"
+        )
 
     def _rename(self) -> None:
         new = self.name.text().strip()
@@ -537,7 +558,7 @@ class MaterialPage(Page):
             return
         try:
             rows = [
-                [float(self.table.item(r, c).text()) for c in range(len(OCTAVE_BANDS_HZ))]
+                [float(self.table.item(r, c).text()) for c in range(self.table.columnCount())]
                 for r in range(2)
             ]
         except (AttributeError, ValueError):
@@ -545,7 +566,9 @@ class MaterialPage(Page):
             self.reload()
             return
         fields = self._fields()
-        if rows == [fields["absorption"], fields["scattering"]]:
+        bands = self._bands(self.document.scene.materials[self.key])
+        shown = [convert(fields[k], bands) for k in ("absorption", "scattering")]
+        if rows == [[round(v, 2) for v in row] for row in shown]:
             return
         origin = fields.get("source") or "values given in the scene"
         fields = {
@@ -717,7 +740,7 @@ class PointPage(Page):
 
 class SimulationPage(Page):
     """The early and late stages, scattering, the wave solver, the response length,
-    sample rate and seed."""
+    sample rate, bands and seed."""
 
     def __init__(self, document) -> None:
         super().__init__(document)
@@ -802,12 +825,20 @@ class SimulationPage(Page):
         self.length = spin(0.05, 60, 2, 0.5, "s")
         self.sample_rate = QComboBox()
         self.sample_rate.addItems([str(r) for r in SAMPLE_RATES])
+        self.bands = QComboBox()
+        self.bands.addItems(["octave", "third_octave"])
+        self.bands.setToolTip(
+            "The bands it runs in: 8 octave bands, or 24 third-octave bands for finer "
+            "detail in the response (about three times the work). Room parameters are "
+            "given in octave bands either way"
+        )
         self.auto_transition = QCheckBox("Automatic")
         self.transition = spin(1, 10_000, 0, 10, "ms")
         self.random_seed = QCheckBox("New random seed every run")
         self.seed = int_spin(0, 2**31 - 1)
         response_form.addRow("Length", self.length)
         response_form.addRow("Sample rate (Hz)", self.sample_rate)
+        response_form.addRow("Bands", self.bands)
         response_form.addRow("Early to late", self.auto_transition)
         response_form.addRow("", self.transition)
         response_form.addRow("Seed", self.random_seed)
@@ -823,6 +854,7 @@ class SimulationPage(Page):
             self.scattering_method,
             self.wave_band,
             self.sample_rate,
+            self.bands,
         ):
             combo.currentTextChanged.connect(self._changed)
         for box in (self.max_order, self.early_rays, self.late_rays, self.directions, self.seed):
@@ -861,6 +893,7 @@ class SimulationPage(Page):
         if self.sample_rate.findText(str(s.sample_rate)) < 0:
             self.sample_rate.addItem(str(s.sample_rate))
         self.sample_rate.setCurrentText(str(s.sample_rate))
+        self.bands.setCurrentText(s.bands)
         self.auto_transition.setChecked(s.transition_ms is None)
         self.transition.setEnabled(s.transition_ms is not None)
         self.transition.setValue(s.transition_ms or 80.0)
@@ -902,6 +935,7 @@ class SimulationPage(Page):
             },
             "ir_length_s": self.length.value(),
             "sample_rate": int(self.sample_rate.currentText()),
+            "bands": self.bands.currentText(),
         }
         if not self.auto_transition.isChecked():
             settings["transition_ms"] = self.transition.value()

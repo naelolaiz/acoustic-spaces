@@ -72,6 +72,22 @@ def test_inspect(capsys: pytest.CaptureFixture[str]) -> None:
     assert "seat-a" in out and "inside" in out
 
 
+def test_inspect_shows_third_octave_data_in_octaves(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    text = SHOEBOX.read_text(encoding="utf-8")
+    text = text.replace("file: shoebox.obj", f"file: {(SHOEBOX.parent / 'shoebox.obj').as_posix()}")
+    third = ", ".join(["0.1", "0.4", "0.1"] * 8)
+    text = text.replace("preset: ceiling_fissured_tile", f"absorption: [{third}]")
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(text, encoding="utf-8")
+    assert main(["inspect", str(scene)]) == 0
+    out = capsys.readouterr().out
+    row = next(line for line in out.splitlines() if line.startswith("acoustic_ceiling"))
+    assert row.split()[1:9] == ["0.20"] * 8
+    assert "third-octave data, shown as octave averages" in out
+
+
 def test_materials_search(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["materials", "fissured"]) == 0
     assert "ceiling_fissured_tile" in capsys.readouterr().out
@@ -151,6 +167,22 @@ def test_simulate_checks_the_options_that_override_the_scene(
     report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
     assert report["sample_rate"] == 16000
     assert report["settings"]["sample_rate"] == 16000
+
+
+def test_simulate_in_third_octave_bands(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    import json
+
+    out = tmp_path / "out"
+    args = ["simulate", str(SHOEBOX), "--out", str(out), "--rays", "500", "--length", "0.3"]
+    assert main([*args, "--max-order", "1", "--bands", "third_octave"]) == 0
+    assert "T30 (s)" in capsys.readouterr().out
+    report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
+    assert report["settings"]["bands"] == "third_octave"
+    (response,) = report["responses"]
+    assert len(response["parameters"]["c80"]) == 8  # parameters stay in octave bands
+    with pytest.raises(SystemExit):
+        main([*args, "--bands", "sixth_octave"])
+    capsys.readouterr()
 
 
 def test_simulate_with_the_wave_solver(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

@@ -1,8 +1,10 @@
-"""Impulse response synthesis from octave-band energies.
+"""Impulse response synthesis from octave-band (or third-octave-band) energies.
 
 The filter bank splits the spectrum into the eight octave bands with zero-phase,
-half-octave raised-cosine crossovers. The band gains sum to exactly one, so a signal
-split into bands and summed again comes back unchanged (perfect reconstruction).
+half-octave raised-cosine crossovers, or into the 24 third-octave bands with crossovers
+a sixth of an octave wide. The band gains sum to exactly one, so a signal split into
+bands and summed again comes back unchanged (perfect reconstruction). Each function
+takes the bands from the number of band signals or energies it is given (8 or 24).
 
 Energy convention: the simulation gives time-integrated intensity for a source of unit
 energy, so the direct sound at r metres carries 1 / (4 pi r^2). Impulse responses are
@@ -21,38 +23,46 @@ import math
 
 import numpy as np
 
+from acoustic_spaces.materials import bands as _bands
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 
 #: Impulse response energy per unit of simulated energy (time-integrated intensity).
 ENERGY_TO_IR = 4.0 * math.pi
 #: Energy of the impulse response of the direct sound at 10 m, the reference for G.
 REFERENCE_ENERGY_10M = 0.01
-#: Width of each crossover, in octaves.
+#: Width of each crossover between octave bands, in octaves: half a band.
 CROSSOVER_WIDTH = 0.5
 #: Zero padding around FFT filtering, seconds; longer than the crossovers ring.
 _PAD_S = 0.2
 
 
-def crossover_frequencies() -> np.ndarray:
-    """Edges between adjacent octave bands (Hz)."""
-    return np.array(OCTAVE_BANDS_HZ[:-1], dtype=float) * math.sqrt(2.0)
+def crossover_frequencies(bands: int = len(OCTAVE_BANDS_HZ)) -> np.ndarray:
+    """Edges between adjacent bands (Hz) of the 8 octave bands or 24 third-octave bands."""
+    return _bands.crossover_frequencies(_bands.resolution_of(bands))
 
 
-def band_gains(n_fft: int, sample_rate: float) -> np.ndarray:
-    """Zero-phase gains (bands, n_fft // 2 + 1) on the rFFT grid; they sum to one."""
-    return _band_gains(int(n_fft), float(sample_rate)).copy()
+def crossover_width(bands: int = len(OCTAVE_BANDS_HZ)) -> float:
+    """Width of each crossover (octaves): half a band."""
+    return CROSSOVER_WIDTH / _bands.BANDS_PER_OCTAVE[_bands.resolution_of(bands)]
+
+
+def band_gains(n_fft: int, sample_rate: float, bands: int = len(OCTAVE_BANDS_HZ)) -> np.ndarray:
+    """Zero-phase gains (bands, n_fft // 2 + 1) on the rFFT grid of the 8 octave bands
+    or 24 third-octave bands; they sum to one."""
+    return _band_gains(int(n_fft), float(sample_rate), int(bands)).copy()
 
 
 @functools.lru_cache(maxsize=8)
-def _band_gains(n_fft: int, sample_rate: float) -> np.ndarray:
+def _band_gains(n_fft: int, sample_rate: float, bands: int = len(OCTAVE_BANDS_HZ)) -> np.ndarray:
     f = np.fft.rfftfreq(n_fft, 1.0 / sample_rate)
     log_f = np.log2(np.maximum(f, 1e-6))
+    width = crossover_width(bands)
     steps = []
-    for edge in np.log2(crossover_frequencies()):
-        x = np.clip((log_f - (edge - CROSSOVER_WIDTH / 2)) / CROSSOVER_WIDTH, 0.0, 1.0)
+    for edge in np.log2(crossover_frequencies(bands)):
+        x = np.clip((log_f - (edge - width / 2)) / width, 0.0, 1.0)
         steps.append(np.sin(0.5 * np.pi * x) ** 2)  # 0 below the edge, 1 above
     steps = np.array(steps)
-    gains = np.empty((len(OCTAVE_BANDS_HZ), len(f)))
+    gains = np.empty((bands, len(f)))
     gains[0] = 1.0 - steps[0]
     gains[1:-1] = steps[:-1] - steps[1:]
     gains[-1] = steps[-1]
@@ -71,24 +81,29 @@ def combine_bands(band_signals: np.ndarray, sample_rate: float) -> np.ndarray:
     n = band_signals.shape[1]
     n_fft = fft_size(n, sample_rate)
     spectrum = np.fft.rfft(band_signals, n_fft, axis=1)
-    out = np.fft.irfft((spectrum * _band_gains(n_fft, float(sample_rate))).sum(axis=0), n_fft)
+    gains = _band_gains(n_fft, float(sample_rate), len(band_signals))
+    out = np.fft.irfft((spectrum * gains).sum(axis=0), n_fft)
     return out[:n]
 
 
-def split_bands(signal: np.ndarray, sample_rate: float) -> np.ndarray:
-    """Split a signal into octave bands: (n,) -> (bands, n); the rows sum to the input."""
+def split_bands(
+    signal: np.ndarray, sample_rate: float, bands: int = len(OCTAVE_BANDS_HZ)
+) -> np.ndarray:
+    """Split a signal into the 8 octave bands or 24 third-octave bands: (n,) ->
+    (bands, n); the rows sum to the input."""
     signal = np.asarray(signal, dtype=float)
     n = len(signal)
     n_fft = fft_size(n, sample_rate)
     spectrum = np.fft.rfft(signal, n_fft)
-    return np.fft.irfft(spectrum[None, :] * _band_gains(n_fft, float(sample_rate)), n_fft, axis=1)[
-        :, :n
-    ]
+    gains = _band_gains(n_fft, float(sample_rate), int(bands))
+    return np.fft.irfft(spectrum[None, :] * gains, n_fft, axis=1)[:, :n]
 
 
-def band_energy_share(sample_rate: float, n_fft: int = 1 << 16) -> np.ndarray:
+def band_energy_share(
+    sample_rate: float, n_fft: int = 1 << 16, bands: int = len(OCTAVE_BANDS_HZ)
+) -> np.ndarray:
     """Energy of a unit impulse inside each band: its share of the spectrum."""
-    g = band_gains(n_fft, sample_rate) ** 2
+    g = band_gains(n_fft, sample_rate, bands) ** 2
     weights = np.full(g.shape[1], 2.0)
     weights[0] = 1.0
     if n_fft % 2 == 0:

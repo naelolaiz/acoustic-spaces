@@ -130,9 +130,12 @@ def test_material_from_file_relative_to_scene(tmp_path: Path) -> None:
     _bras_csv(tmp_path / "wall.csv")
     material = Material.model_validate({"file": "wall.csv"}, context={"base_dir": tmp_path})
     assert material.file == (tmp_path / "wall.csv").resolve()
+    # Third-octave data stays in third-octave bands, 50 Hz (index 4 of the file) to 10 kHz.
+    assert material.absorption == pytest.approx([0.01 * k for k in range(4, 28)])
+    absorption, scattering = material.coefficients("octave")
     # 1 kHz octave: third octaves 800, 1000, 1250 Hz -> indices 16, 17, 18.
-    assert material.absorption[OCTAVE_BANDS_HZ.index(1000)] == pytest.approx(0.17)
-    assert material.scattering == pytest.approx([0.3] * len(OCTAVE_BANDS_HZ))
+    assert absorption[OCTAVE_BANDS_HZ.index(1000)] == pytest.approx(0.17)
+    assert scattering == pytest.approx([0.3] * len(OCTAVE_BANDS_HZ))
     assert material.source == "file wall.csv"
 
 

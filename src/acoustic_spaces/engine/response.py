@@ -12,6 +12,7 @@ from acoustic_spaces import parameters as iso3382
 from acoustic_spaces import synthesis
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.wave import WaveResponse
+from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, band_centres, resolution_of, to_octaves
 
 #: The synthesized late part is smoothed over 10 ms from this long after the direct sound.
 SMOOTH_AFTER_S = 0.05
@@ -24,6 +25,8 @@ STAGE_DISTANCE_M = 1.5
 class Response:
     """Early specular paths plus late energy per band and time slot, and the lowest
     bands from the wave solver when it ran (``wave``), which then replace the rays'.
+    The bands are the 8 octave bands or the 24 third-octave bands the simulation ran in;
+    room parameters are given in octave bands either way.
 
     Energies are time-integrated intensity for a source of unit energy (the direct sound
     at r metres carries 1 / (4 pi r^2)); times are measured from emission.
@@ -61,9 +64,19 @@ class Response:
     def bands(self) -> int:
         return self.late.shape[0]
 
+    @property
+    def band_hz(self) -> tuple[int, ...]:
+        """Centre frequencies (Hz) of the bands: octave or third-octave bands."""
+        return band_centres(resolution_of(self.bands))
+
     def energy(self, time_step: float | None = None) -> np.ndarray:
         """Echogram: energy per band and time slot (bands, slots), early paths included."""
         return self._echogram(time_step)
+
+    def octave_energy(self, time_step: float | None = None) -> np.ndarray:
+        """Echogram in octave bands (8, slots): each octave the mean of its three
+        third-octave bands, when the simulation ran in those."""
+        return to_octaves(self._echogram(time_step))
 
     def weighted_energy(
         self, axis: np.ndarray, exponent: int = 2, time_step: float | None = None
@@ -146,14 +159,18 @@ class Response:
         """
         reference = 1.0 / (4.0 * math.pi * 100.0)  # free field at 10 m
         side = self.lateral_axis()
+
+        def weighted(axis, exponent=2):
+            return to_octaves(self.weighted_energy(axis, exponent))
+
         return iso3382.from_energy(
-            self.energy(),
+            self.octave_energy(),
             self.time_step,
             self.direct_delay_s,
             reference_energy=reference,
             stage=self.direct_delay_s * self.speed_of_sound <= STAGE_DISTANCE_M,
-            lateral=(self.weighted_energy(side), self.weighted_energy(side, 1)),
-            directional=[self.weighted_energy(self.orientation[:, k]) for k in range(3)],
+            lateral=(weighted(side), weighted(side, 1)),
+            directional=[weighted(self.orientation[:, k]) for k in range(3)],
         )
 
     def speech(
@@ -168,10 +185,10 @@ class Response:
         them. ``parameters`` are this response's, when already at hand."""
         params = self.parameters() if parameters is None else parameters
         reference = 1.0 / (4.0 * math.pi * 100.0)
-        power = level_db - 10.0 * math.log10(self.bands)
+        power = level_db - 10.0 * math.log10(len(OCTAVE_BANDS_HZ))
         level = power + params.g + 10.0 * math.log10(reference)
         signal = np.where(np.isfinite(level), level, -100.0)
-        energy = self.energy()
+        energy = self.octave_energy()
         sti, stipa = (
             iso3382.speech_transmission_index(
                 energy, self.time_step, signal_db=signal, noise_db=noise_db, stipa=short

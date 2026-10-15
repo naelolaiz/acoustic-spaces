@@ -297,7 +297,8 @@ against 1.72 s measured at 250 Hz, 0.93 s against 1.11 s at 8 kHz), so there the
 coefficients, averaged onto octaves, do not give the measured decay even in a diffuse
 field. At 8 kHz they assume less air absorption than ISO 9613-1 gives at the octave's
 centre frequency; a measured decay follows the octave's slowest part, its lowest third
-(6.3 kHz), which could explain it (inferred, not tested).
+(6.3 kHz). Simulated in third-octave bands, which keep both apart, the two bands come
+within 4 % of the measurement (see the third-octave results below).
 
 ![CR3, fitted absorption](validation/bras_CR3_fitted.png)
 
@@ -338,6 +339,30 @@ either did. The simulated responses decay like these room-energy curves, within 
 every band. The rest of the hall's gap is the model hall itself, as the paragraph above
 says. The v3 milestone on fitting absorption to measured parameters with this tracer
 instead of Eyring's formula will be measured against these two rooms.
+
+**Third-octave bands.** BRAS gives its coefficients in third octaves. Averaged onto
+octaves, an octave's three thirds decay as one, at their mean absorption, while three
+decays at different rates decay together more slowly than that, as the measured octave
+does. Simulated with `simulation.bands: third_octave`, which keeps the thirds apart
+(`bras_validation.py --bands third_octave`), T20 in each octave band:
+
+| T20 (s) | 63 Hz | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz | 8 kHz |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| CR2 measured | 1.56 | 1.34 | 1.72 | 2.00 | 1.94 | 1.75 | 1.54 | 1.11 |
+| CR2 octave bands (default) | 1.69 | 1.49 | 1.50 | 1.97 | 1.92 | 1.76 | 1.53 | 0.91 |
+| CR2 third-octave bands | 1.77 | 1.52 | 1.65 | 1.98 | 1.92 | 1.78 | 1.51 | 1.07 |
+| CR3 measured | 1.77 | 1.57 | 1.46 | 1.28 | 1.34 | 1.30 | 1.03 | 0.78 |
+| CR3 octave bands (default) | 2.00 | 1.88 | 1.57 | 1.40 | 1.47 | 1.40 | 1.10 | 0.72 |
+| CR3 third-octave bands | 2.07 | 1.92 | 1.59 | 1.40 | 1.46 | 1.40 | 1.14 | 0.80 |
+
+The seminar room's decay at 250 Hz and 8 kHz, 13 and 17 % short in octave bands, comes
+within 4 % of the measurement: there its thirds' absorption, and at 8 kHz the air's,
+differ most. The hall's 8 kHz goes from 8 % short to 2 % long. From 500 Hz to 2 kHz
+nothing changes. At 63 and 125 Hz both rooms come out 2 to 5 % longer than in octave
+bands, and the hall at 4 kHz 11 % long instead of 7 %. Over 125 Hz to 4 kHz the seminar
+room's mean T30 difference goes from 1.0 to 0.9 JNDs; the hall's goes from 1.8 to 2.1,
+since its decay was long already and third octaves lengthen it. A third-octave run takes
+three times as long: 43 minutes for the seminar room instead of 15.
 
 ![CR2, initial absorption](validation/bras_CR2_initial.png)
 
@@ -468,11 +493,12 @@ python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
 python validation/bras_validation.py --json bras.json --plots docs/validation
 python validation/bras_validation.py --materials initial --plots docs/validation
+python validation/bras_validation.py --bands third_octave --json bras_third.json
 ```
 
 The cross-check takes about 25 minutes on 4 cores, the benchmark about 2 minutes, the
-wave solver's checks about 30 seconds and each BRAS run about 30 minutes. The
-cross-check's numbers come from the development version of 3.0.0 with seed 1. Those of
-pyroomacoustics, which draws its rays afresh on every run, have moved by up to 6 % in
+wave solver's checks about 30 seconds and each BRAS run about 30 minutes (85 in
+third-octave bands). The cross-check's numbers come from the development version of
+3.0.0 with seed 1. Those of pyroomacoustics, which draws its rays afresh on every run, have moved by up to 6 % in
 T30, 16 % in EDT and 2 dB in C80 from one run to the next, and the differences in the
 tables with them. Other seeds move this package's numbers by a few percent.
