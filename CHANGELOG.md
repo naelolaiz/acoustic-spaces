@@ -115,6 +115,12 @@
   surface. The editor sets the shape and size, and draws them in the 3D view and the
   plan; the Blender export and `inspect` show them; `directivity lambert` prints the
   pattern's index.
+- Coherent arrays: `directivity: {array: ...}`, or a YAML file with the same fields,
+  gives a source the far-field pattern of elements fed alike, with their positions,
+  aims, gains, delays and polarities, a column's count and spacing, and electronic
+  steering (`steer_deg`). The energy is the exact mean over each third-octave band, with
+  the room's speed of sound (`array_directivity`, `read_array`). The editor and
+  `acoustic-spaces directivity` take array files.
 
 **Examples**
 

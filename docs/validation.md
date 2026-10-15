@@ -55,6 +55,14 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   0.15 dB of the integral over the continuous square at 1 and 2 m, and silent behind;
   in the shoebox a 3 m line as loud as a point source (within 0.6 dB at 2000 rays per
   band) and its T30 within 10 % of the point source's at 30,000 rays per band;
+- coherent arrays: a column of 8 omnidirectional elements 20 cm apart against the
+  analytic sums of a line array, its directivity index within 0.05 dB in all 24
+  third-octave bands (n² over the band mean of the pairs' sin(kr)/kr) and its vertical
+  pattern within 0.3 dB of the band-averaged |sin(Nψ/2)/sin(ψ/2)|² wherever that is
+  above -15 dB; a steered column's beam within 1 degree of its aim, and the same as
+  delays given element by element; two close elements in opposite polarity a dipole
+  (4.77 dB); two cardioids splayed ±30 degrees their exact first-order sum; and in a
+  simulation, levels ahead of and above a column that differ by its pattern exactly;
 - every ISO 3382-1 parameter on synthetic exponential decays, and the air
   absorption against the ISO 9613-1 table;
 - the further parameters against responses whose values are known: LF and LFC of one

@@ -218,8 +218,8 @@ def test_scene_directivity_entries(tmp_path: Path) -> None:
 
     for bad, message in (
         ({"pattern": ["cardioid"] * 7}, "expected 8 pattern values"),
-        ({}, "not both"),
-        ({"pattern": per_band, "file": "x.csv"}, "not both"),
+        ({}, "give one of"),
+        ({"pattern": per_band, "file": "x.csv"}, "give one of"),
         ({"file": "x.csv", "measurement": 1}, "measurement is for SOFA"),
         ("wide", "omni"),
     ):

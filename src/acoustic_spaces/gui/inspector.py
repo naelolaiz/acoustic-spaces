@@ -59,7 +59,7 @@ DIRECTIVITIES = [
 #: A source is a point, a line or a surface.
 SHAPES = ["point", "line", "surface"]
 #: The directivity list entry that asks for a SOFA or CSV file.
-MEASURED = "Measured data from a file…"
+MEASURED = "Measured data or an array from a file…"
 SAMPLE_RATES = [16_000, 22_050, 32_000, 44_100, 48_000, 88_200, 96_000]
 #: Shown in the material list of a surface for "no assignment of its own".
 FALLBACK = "(default material)"
@@ -595,6 +595,8 @@ def _directivity_label(spec) -> str:
     """How the directivity list shows a source's setting that is not a pattern name."""
     if spec.file is not None:
         return f"file: {spec.file.name}"
+    if spec.array is not None:
+        return f"array of {len(spec.array.layout())} elements"
     return "per band: " + ", ".join(str(v) for v in spec.pattern)
 
 
@@ -796,7 +798,7 @@ class PointPage(Page):
                 self,
                 "Source directivity",
                 str(self.document.base_dir),
-                "Directivity data (*.sofa *.csv);;All files (*)",
+                "Directivity data or arrays (*.sofa *.csv *.yaml *.yml);;All files (*)",
             )
             if path:
                 self._update(directivity={"file": path})

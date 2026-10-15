@@ -583,6 +583,22 @@ def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
     assert window.document.scene.sources[0].directivity.file == table
     assert box.currentText() == "file: speaker.csv"
 
+    # An array, from its YAML description, and given in the scene.
+    column = tmp_path / "column.yaml"
+    column.write_text("element: cardioid\ncount: 4\nspacing_m: 0.15\n", encoding="utf-8")
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(column), ""))
+    box.activated.emit(box.findText(MEASURED))
+    assert box.currentText() == "file: column.yaml"
+    assert window.document.room.directivities[0].name == "array of 4 elements"
+    window.document.update_point(
+        "sources", 0, directivity={"array": {"count": 3, "spacing_m": 0.2}}
+    )
+    window.select("sources", 0)
+    assert box.currentText() == "array of 3 elements"
+    window.undo()
+    window.undo()
+    assert window.document.scene.sources[0].directivity.file == table
+
     page.show_pattern()
     assert page.pattern_window.isVisible()
     assert page.pattern_window.windowTitle() == "Directivity of left-speaker"

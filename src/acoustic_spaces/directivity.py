@@ -12,7 +12,8 @@ front towards the left and elevation is positive upwards, in degrees.
   in the treble.
 - :class:`Balloon`: measured levels at any set of directions, read from a SOFA file
   (AES69, the ``FreeFieldDirectivityTF`` convention) or a CSV table, interpolated over
-  the sphere.
+  the sphere; or the far-field pattern of a coherent array
+  (:func:`array_directivity`).
 
 ``load_directivity`` turns a source's ``directivity`` entry of a scene file into one::
 
@@ -20,6 +21,8 @@ front towards the left and elevation is positive upwards, in degrees.
     directivity: {pattern: [omni, omni, subcardioid, cardioid, cardioid, supercardioid,
                             hypercardioid, hypercardioid]}
     directivity: {file: speaker.sofa}           # or speaker.csv
+    directivity: {array: {count: 8, spacing_m: 0.15, steer_deg: -8}}
+    directivity: {file: line_array.yaml}        # an array's fields in a YAML file
 
 The CSV table has a header row ``azimuth, elevation`` followed by band centre
 frequencies in Hz (octaves, thirds or any other layout), then one row per direction
@@ -40,8 +43,14 @@ from pathlib import Path
 import numpy as np
 
 from acoustic_spaces._extras import install_hint
+from acoustic_spaces.air import speed_of_sound
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ
-from acoustic_spaces.materials.bands import Resolution, convert, resolution_of
+from acoustic_spaces.materials.bands import (
+    Resolution,
+    convert,
+    crossover_frequencies,
+    resolution_of,
+)
 
 #: The first-order patterns by name: the pressure is a + (1 - a) cos(theta).
 PATTERNS: dict[str, float] = {
@@ -54,6 +63,10 @@ PATTERNS: dict[str, float] = {
 }
 #: Angular step of the grid measured data is interpolated on (degrees).
 GRID_STEP_DEG = 5.0
+#: Speed of sound (m/s) an array's phases take when no room gives one: air at 20 C.
+SPEED_OF_SOUND = speed_of_sound(20.0)
+#: Directions times pairs of elements an array's pattern is worked out for at a time.
+_ARRAY_CHUNK = 1 << 18
 #: Measured directions each grid point is interpolated from.
 NEIGHBOURS = 4
 
@@ -206,11 +219,19 @@ class Balloon(Directivity):
         weight /= weight.sum(axis=1, keepdims=True)
         values = np.einsum("gk,gkb->gb", weight, energy[nearest])
         table = values.reshape(len(elevation), len(azimuth), energy.shape[1])
+        return cls.from_table(table, name, extrapolated)
+
+    @classmethod
+    def from_table(cls, table, name: str = "", extrapolated: tuple[int, ...] = ()) -> Balloon:
+        """Energies on the grid of elevations (-90 to 90 degrees) and azimuths (0 up to
+        360) that ``table`` (elevations, azimuths, bands) spans, each band scaled to
+        average 1 over the sphere; silent bands become omnidirectional."""
+        table = np.asarray(table, dtype=float)
         balloon = cls(table, name, tuple(extrapolated))
         mean = balloon._interpolate(_sphere(8192)).mean(axis=0)
         silent = mean <= 0.0
         table = np.where(silent, 1.0, table / np.where(silent, 1.0, mean))
-        centres = OCTAVE_BANDS_HZ if energy.shape[1] == _BANDS else THIRD_OCTAVE_BANDS_HZ
+        centres = OCTAVE_BANDS_HZ if table.shape[-1] == _BANDS else THIRD_OCTAVE_BANDS_HZ
         missing = tuple(f for f, s in zip(centres, silent, strict=True) if s)
         return cls(table, name, tuple(sorted(set(extrapolated) | set(missing))))
 
@@ -421,14 +442,119 @@ def _positions_array(values: np.ndarray, dataset) -> np.ndarray:
     return _from_angles(az, el) * r[:, None]
 
 
-def read_directivity(path: str | Path, measurement: int | None = None) -> Balloon:
-    """Measured directivity from a ``.sofa`` file or a CSV table (any other suffix)."""
+def read_directivity(
+    path: str | Path, measurement: int | None = None, speed_of_sound: float = SPEED_OF_SOUND
+) -> Balloon:
+    """Measured directivity from a ``.sofa`` file or a CSV table, or an array's from a
+    YAML file (``.yaml`` or ``.yml``; see :func:`read_array`)."""
     path = Path(path)
     if not path.exists():
         raise ValueError(f"directivity file not found: {path}")
     if path.suffix.lower() == ".sofa":
         return read_directivity_sofa(path, measurement)
+    if path.suffix.lower() in (".yaml", ".yml"):
+        return array_directivity(read_array(path), speed_of_sound)
     return read_directivity_csv(path)
+
+
+def read_array(path: str | Path):
+    """A coherent array (:class:`~acoustic_spaces.scene.ArraySpec`) from a YAML file
+    holding its fields; files named in it are found next to it."""
+    import yaml
+    from pydantic import ValidationError
+
+    from acoustic_spaces.scene.model import ArraySpec
+
+    path = Path(path)
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        return ArraySpec.model_validate(data, context={"base_dir": path.parent})
+    except (yaml.YAMLError, ValidationError) as exc:
+        raise ValueError(f"{path.name}: not an array description: {exc}") from None
+
+
+def _amplitudes(element: Directivity, local: np.ndarray) -> np.ndarray:
+    """Pressure amplitudes (elements, directions, bands) of an element pattern towards
+    directions in each element's own frame (elements, directions, 3): first-order
+    patterns with their sign, others by magnitude."""
+    if isinstance(element, FirstOrder):
+        a = np.asarray(element.a)
+        return a + (1.0 - a) * local[..., :1]
+    flat = element.energy(local.reshape(-1, 3))
+    return np.sqrt(flat).reshape(*local.shape[:2], -1)
+
+
+def array_directivity(spec, speed_of_sound: float = SPEED_OF_SOUND) -> Balloon:
+    """The far-field pattern of a coherent array (an
+    :class:`~acoustic_spaces.scene.ArraySpec`), per third-octave band.
+
+    The elements' pressures add up with their phases: the path difference towards each
+    direction, the feed's delays and the steering, the gains and polarities, and each
+    element's own pattern along its aim (first-order patterns with their sign, measured
+    ones by magnitude). Energies are exact averages over each band (of a flat spectrum),
+    on a grid fine enough for the beam (1 to 5 degrees). The pattern holds in the far
+    field, beyond about the array's length squared over the wavelength.
+    """
+    elements = spec.layout()
+    c = float(speed_of_sound)
+    positions = np.array([e.position for e in elements], dtype=float)
+    gains = np.array([10.0 ** (e.gain_db / 20.0) * (-1 if e.invert else 1) for e in elements])
+    delays = np.array([e.delay_ms * 1e-3 for e in elements])
+    if spec.steer_deg:
+        aim = _from_angles(0.0, spec.steer_deg).reshape(3)
+        lead = positions @ aim
+        delays = delays + (lead - lead.min()) / c
+    turns = np.array([e.orientation.rotation() for e in elements], dtype=float)
+    element = load_directivity(spec.element).in_bands("third_octave")
+    length = float(np.max(np.linalg.norm(positions[:, None] - positions[None], axis=2)))
+    # A grid fine enough for the beam at the top band (a quarter of its width), 1 to 5 deg.
+    top = THIRD_OCTAVE_BANDS_HZ[-1] * 2 ** (1 / 6)
+    width = math.degrees(c / top / max(length, 1e-9))
+    step = next((s for s in (5.0, 2.5, 2.0, 1.0) if s <= width / 4), 1.0)
+    elevation, azimuth = _grid(step)
+    directions = _from_angles(azimuth[None, :], elevation[:, None]).reshape(-1, 3)
+    # Band edges, as the filter banks split the spectrum.
+    inner = crossover_frequencies("third_octave")
+    edges = np.concatenate([[inner[0] / 2 ** (1 / 3)], inner, [inner[-1] * 2 ** (1 / 3)]])
+    first_of, second_of = np.triu_indices(len(elements))
+    twice = np.where(first_of == second_of, 1.0, 2.0)  # each pair of elements counts twice
+    offsets = positions[first_of] - positions[second_of]
+    shifts = delays[first_of] - delays[second_of]
+    alike = bool(np.allclose(turns, turns[0]))
+    if alike:
+        # Elements aimed alike share a pattern: pairs the same distance and delay apart
+        # (a straight column's, say) add up into one term.
+        key = np.round(np.column_stack([offsets, shifts * c]) * 1e9)
+        _, first_seen, group = np.unique(key, axis=0, return_index=True, return_inverse=True)
+        pair_gains = np.bincount(group.ravel(), weights=gains[first_of] * gains[second_of] * twice)
+        offsets, shifts = offsets[first_seen], shifts[first_seen]
+    energy = np.zeros((len(directions), len(edges) - 1))
+    chunk_size = max(64, _ARRAY_CHUNK // len(offsets))
+    for first in range(0, len(directions), chunk_size):
+        chunk = directions[first : first + chunk_size]
+        # Each element's amplitude towards these directions, along its own aim.
+        amplitude = _amplitudes(
+            element, np.einsum("dk,nkj->ndj", chunk, turns[:1] if alike else turns)
+        )
+        # How much sooner one element of each pair is heard than the other (s).
+        lag = chunk @ offsets.T / c - shifts[None, :]  # (directions, pairs)
+        still = np.abs(lag) < 1e-15
+        # The energy is the sum over pairs of w_i w_k cos(2 pi f lag); its mean over a
+        # band, exactly: (sin(2 pi f2 lag) - sin(2 pi f1 lag)) / (2 pi (f2 - f1) lag).
+        below = np.sin(2.0 * math.pi * edges[0] * lag)
+        for b in range(len(edges) - 1):
+            above = np.sin(2.0 * math.pi * edges[b + 1] * lag)
+            span = 2.0 * math.pi * (edges[b + 1] - edges[b]) * np.where(still, 1.0, lag)
+            mean_cos = np.where(still, 1.0, (above - below) / span)
+            if alike:
+                weights = amplitude[0, :, b, None] ** 2 * pair_gains[None, :]
+            else:
+                pair = amplitude[first_of, :, b] * amplitude[second_of, :, b]
+                weights = (pair * (gains[first_of] * gains[second_of] * twice)[:, None]).T
+            energy[first : first + len(chunk), b] = np.sum(weights * mean_cos, axis=1)
+            below = above
+    table = energy.reshape(len(elevation), len(azimuth), -1)
+    return Balloon.from_table(table, f"array of {len(elements)} elements")
 
 
 def lambert() -> Balloon:
@@ -440,16 +566,18 @@ def lambert() -> Balloon:
     return Balloon.from_measurements(points, energy, "lambert")
 
 
-def load_directivity(spec) -> Directivity:
+def load_directivity(spec, speed_of_sound: float = SPEED_OF_SOUND) -> Directivity:
     """The directivity a scene's source entry describes: a pattern name (or
-    ``lambert``), or an object with ``pattern`` (a name or ``a`` value per band) or
-    ``file``."""
+    ``lambert``), or an object with ``pattern`` (a name or ``a`` value per band),
+    ``file`` or ``array``; an array's phases take ``speed_of_sound`` (m/s)."""
     if spec == "lambert":
         return lambert()
     if isinstance(spec, str):
         return FirstOrder.pattern(spec)
+    if getattr(spec, "array", None) is not None:
+        return array_directivity(spec.array, speed_of_sound)
     if getattr(spec, "file", None) is not None:
-        return read_directivity(spec.file, spec.measurement)
+        return read_directivity(spec.file, spec.measurement, speed_of_sound)
     values = [PATTERNS[v] if isinstance(v, str) else float(v) for v in spec.pattern]
     names = [v if isinstance(v, str) else f"a={float(v):g}" for v in spec.pattern]
     return FirstOrder(tuple(values), "per band: " + ", ".join(names))
@@ -458,11 +586,14 @@ def load_directivity(spec) -> Directivity:
 __all__ = [
     "GRID_STEP_DEG",
     "PATTERNS",
+    "SPEED_OF_SOUND",
     "Balloon",
     "Directivity",
     "FirstOrder",
+    "array_directivity",
     "lambert",
     "load_directivity",
+    "read_array",
     "read_directivity",
     "read_directivity_csv",
     "read_directivity_sofa",
