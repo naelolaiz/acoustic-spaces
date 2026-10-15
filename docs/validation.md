@@ -458,7 +458,7 @@ in the seminar room), so the error is in the coefficients. This is the error to 
 room has been measured.
 
 **Calibrated absorption.** `--calibrate LS1` first fits the absorption of every surface
-(`acoustic-spaces calibrate`, see the README). It fits to the T30, EDT and C80 of the
+(`acoustic-spaces calibrate`, see [Measurements](measurements.md#fitting-materials-to-measurements)). It fits to the T30, EDT and C80 of the
 five responses of the first loudspeaker position, starting from the initial set, with
 10,000 rays per band while fitting. Then it simulates the room with what the fit found,
 as above, and compares the five responses of the second position, which the fit did
@@ -560,7 +560,7 @@ The levels themselves run from -9 dB at 63 Hz to -41 dB at 8 kHz. Adding its wav
 energy, the engine is low at low frequencies where the edges are close together, as over
 a thin screen: the waves of an edge add in energy near their boundaries, where the exact
 solution adds them with their phases. In the 63 and 125 Hz bands the engine adds them in
-pressure by default (`simulation.early.coherent_max_band_hz`, see the README), the four
+pressure by default (`simulation.early.coherent_max_band_hz`, see [Simulation](simulation.md#low-frequencies-early-reflections-in-pressure)), the four
 terms of each coefficient and the paths' waves with their phases, and there it is within
 0.05 dB of BTM over the thin screen and within 0.25 dB over two edges, but for the 0.3 m
 block in line (0.6 dB):

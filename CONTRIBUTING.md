@@ -44,10 +44,13 @@ python -m pip install -e ".[docs]"     # or: uv sync --extra docs
 python -m sphinx -W -b html docs docs/_build/html
 ```
 
-The front page is the README; `docs/validation.md` is the validation report and
+The front page is the README, a short summary that links to the user guide's pages in
+`docs/` (getting started, the editor, scene files, simulation and so on); new features
+get their details there and a line on the front page if they deserve one.
+`docs/validation.md` is the validation report and
 `docs/api.md` the API reference, generated from the docstrings.
 
-`docs/screenshots.py` draws most of the README's pictures into `docs/images` from the
+`docs/screenshots.py` draws most of the documentation's pictures into `docs/images` from the
 example scenes, with fixed seeds; run it again after a change that shows in them. The 3D
 pictures and the editor need a display with OpenGL (`xvfb-run` gives one):
 

@@ -1,4 +1,4 @@
-"""Make the pictures the README shows.
+"""Make the pictures the documentation shows.
 
     xvfb-run -a -s "-screen 0 1920x1080x24" python docs/screenshots.py [--only NAME ...]
                                                                         [--bras DIR]
@@ -64,7 +64,7 @@ def response(out: Path) -> None:
 
 
 def directivity(out: Path) -> None:
-    """Polar patterns of a source that narrows with frequency, as in the README."""
+    """Polar patterns of a source that narrows with frequency, as in the documentation."""
     from acoustic_spaces.directivity import load_directivity
     from acoustic_spaces.viz import plot_directivity
 

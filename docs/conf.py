@@ -1,5 +1,5 @@
-"""Sphinx configuration: the user guide (the README), the validation report and the API
-reference. Build with ``python -m sphinx -W -b html docs docs/_build/html``."""
+"""Sphinx configuration: the front page (the README), the user guide, the validation
+report and the API reference. Build with ``python -m sphinx -W -b html docs docs/_build/html``."""
 
 from acoustic_spaces import __version__
 
