@@ -795,7 +795,12 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                     order);
                     }
                     if (!hit.found()) {
-                        if (travelled + segment < max_length) ++out.escaped_rays;
+                        // Out of time, or out of the model: then no face lies anywhere
+                        // ahead. (The search above only looks as far as the ray can go.)
+                        if (!bvh.occluded(pos, dir, std::numeric_limits<double>::infinity(),
+                                          last)) {
+                            ++out.escaped_rays;
+                        }
                         break;
                     }
 

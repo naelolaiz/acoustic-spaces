@@ -453,6 +453,11 @@ fn advance(n_in: u32) -> bool {
         detectors(segment);
     }
     if (!found) {
+        // Out of time, or out of the model: then no face lies anywhere ahead.
+        let beyond = search_ray(ray.pos, ray.dir, run.t_min, 1e30, ray.last, true);
+        if (beyond.face == NONE) {
+            atomicAdd(&tallies[2], 1u);
+        }
         return false;
     }
     ray.travelled += hit.t;

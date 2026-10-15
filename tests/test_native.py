@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pytest
 
@@ -337,6 +339,25 @@ def _trace_map(rays: int, **changes):
         room_level=np.zeros(0),
     )
     return _native.trace_map(**{**args, **changes})
+
+
+def test_rays_out_of_an_open_model_escape() -> None:
+    from acoustic_spaces import _native
+
+    vertices, faces = _unit_cube()
+    top = np.all(vertices[faces][:, :, 2] == 1.0, axis=1)
+    walls = len(faces) - int(top.sum())
+    changes = {
+        "bvh": _native.Bvh(vertices, faces[~top]),
+        "absorption": np.ones((walls, 1)),
+        "scattering": np.zeros((walls, 1)),
+    }
+    _, escaped, _, _, traced = _trace_map(200_000, **changes)
+    # The share of directions through the open top: its solid angle from the source,
+    # 0.8 m below the middle of the 1 m square, over 4 pi.
+    share = math.asin(0.25 / (0.25 + 0.64)) / math.pi
+    assert traced == 200_000
+    assert escaped / traced == pytest.approx(share, rel=0.03)
 
 
 def test_trace_map_counts_the_track_length_through_a_slab() -> None:

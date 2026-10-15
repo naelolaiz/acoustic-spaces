@@ -243,6 +243,28 @@ def test_gpu_tracer_meets_the_direct_sound_as_the_cpu_does() -> None:
     np.testing.assert_allclose(on_gpu[0], energy, rtol=1e-4, atol=1e-6 * energy.max())
     np.testing.assert_allclose(on_gpu[1], on_cpu[1], rtol=1e-4, atol=1e-6 * on_cpu[1].max())
     assert on_gpu[6] == on_cpu[6] == values["rays"]
+    assert on_gpu[3] == on_cpu[3] == 0  # out of time, not out of the room
+
+
+@needs_gpu
+def test_gpu_tracer_counts_the_rays_that_escape_as_the_cpu_does() -> None:
+    """A 20 m box without a ceiling: as many rays get out on both, within the noise."""
+    values = reference_arguments(_native, _reference(), "random_detector")
+    vertices, faces = _unit_cube()
+    top = np.all(vertices[faces][:, :, 2] == 1.0, axis=1)
+    walls = len(faces) - int(top.sum())
+    values |= {
+        "bvh": _native.Bvh(vertices * 20.0 - (4.0, 5.0, 0.0), faces[~top]),
+        "absorption": np.full((walls, 3), 0.1),
+        "scattering": np.full((walls, 3), 0.5),
+        "rays": 20_000,
+    }
+    rays = values["rays"]
+    on_cpu = _native.trace_stochastic(**values)[3] / rays
+    on_gpu = gpu_tracer.trace_stochastic(**values)[3] / rays
+    assert 0.2 < on_cpu < 0.95
+    # Four times the spread of the difference between two runs.
+    assert abs(on_gpu - on_cpu) < 4 * np.sqrt(2 * on_cpu * (1 - on_cpu) / rays)
 
 
 @needs_gpu

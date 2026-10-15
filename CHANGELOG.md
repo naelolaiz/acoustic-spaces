@@ -459,6 +459,10 @@ changes results at 63 and 125 Hz)
 
 **Fixes**
 
+- The late stage's count of rays that left an open model (`escaped_rays` in the run
+  details) was always 0: a ray whose search found no face within the distance left to
+  it was taken for one that had run out of time. A ray that finds none is now checked
+  for a face anywhere ahead, on the CPU and on the GPU.
 - Runs that split rays (the late stage's weight window, sound passing both ways
   through a partition) came out differently when the core was built with Clang, as on
   macOS, than with GCC or MSVC: the two numbers that seed a copy's random stream were
