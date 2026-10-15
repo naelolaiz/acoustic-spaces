@@ -162,6 +162,23 @@
   early paths to listeners and map points over the seats. The editor's **Audience
   seating** sets it, and `inspect` says so.
 
+**Fitting materials to measurements** (`acoustic-spaces calibrate`, `acoustic_spaces.calibration`)
+
+- The absorption of a scene's materials fitted, octave band by octave band, to the T30,
+  EDT and C80 (or other parameters) measured at its source and listener pairs, in JNDs:
+  from impulse response WAVs, `analyze --json` reports or a JSON of parameters. It
+  prints the fitted absorption, what it started from and how far the measurements leave
+  each value open, with the errors before and after, and writes the fitted scene.
+- The materials keep their proportions unless the measurements tell them apart: a
+  material moving by a factor of 2 more than the others costs one JND.
+- Each round traces the room once, and the fit re-weights the rays traced for other
+  absorption (`acoustic_spaces.engine.reweight`): the tracer counts each ray's
+  reflections off each of up to 16 groups of faces (`simulate(..., groups=...)`,
+  `Response.late_moments`, `Response.reweighted`).
+- Checked on the simulator's own responses (absorption recovered within 0.05, the walls
+  of a shoebox within 0.015 from 500 Hz up) and on the two BRAS rooms, starting from
+  their initial absorption estimates.
+
 **Examples**
 
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)

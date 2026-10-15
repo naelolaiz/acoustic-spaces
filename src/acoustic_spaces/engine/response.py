@@ -64,6 +64,11 @@ class Response:
     #: energies include, or None for none. G is taken against the same source in free
     #: field, so the feed does not change it.
     feed: np.ndarray | None = None
+    #: With face groups (``simulate(groups=...)``): the moments of the late energy's
+    #: reflection counts off each group (terms, bands, slots of ``moment_step``), for
+    #: :meth:`reweighted`; else empty.
+    late_moments: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
+    moment_step: float = 0.0
 
     @property
     def bands(self) -> int:
@@ -168,9 +173,13 @@ class Response:
         if directional.size:
             directional = _delayed(directional * gain[None, :, None], delay_s / self.direction_step)
         wave = None if self.wave is None else self.wave.fed(gain[: self.wave.bands], delay_s)
+        moments = self.late_moments
+        if moments.size:
+            moments = _delayed(moments * gain[None, :, None], delay_s / self.moment_step)
         return dataclasses.replace(
             self,
             early=early,
+            late_moments=moments,
             late=_delayed(self.late * gain[:, None], delay_s / self.time_step),
             length_s=self.length_s + delay_s,
             direct_delay_s=self.direct_delay_s + delay_s,
@@ -184,6 +193,41 @@ class Response:
         """Energy per octave band of the same source, fed alike, at 10 m in free field."""
         feed = np.ones(self.bands) if self.feed is None else self.feed
         return to_octaves(feed) / (4.0 * math.pi * 100.0)
+
+    def reweighted(self, face_group: np.ndarray, ratio: np.ndarray) -> Response:
+        """This response for other absorption, without tracing again
+        (:mod:`acoustic_spaces.engine.reweight`): ``face_group`` the group of each face
+        (-1 for none) as traced, ``ratio`` the change per reflection off each group,
+        ln((1 - new) / (1 - old)) per group and band (:func:`~acoustic_spaces.engine.
+        reweight.log_ratio`). The early paths re-weight exactly, the late part from its
+        moments, which the response needs (``simulate(groups=...)``)."""
+        from acoustic_spaces.engine import reweight
+
+        ratio = np.asarray(ratio, dtype=float)
+        if ratio.shape[1] != self.bands:
+            raise ValueError(f"expected a ratio per group and each of {self.bands} bands")
+        groups = ratio.shape[0]
+        if self.late_moments.shape[0] != 1 + groups + groups * (groups + 1) // 2:
+            raise ValueError(
+                f"the response has no late moments of {groups} groups; "
+                "simulate it with the same groups"
+            )
+        if self.wave is not None:
+            raise ValueError("the wave solver's bands do not re-weight; trace without it")
+        early = reweight.reweighted_paths(
+            self.early, reweight.path_counts(self.early, face_group, groups), ratio
+        )
+        exponent = reweight.moment_exponent(self.late_moments, ratio)
+        late = self.late * reweight.slot_factor(
+            exponent, self.late.shape[1], self.time_step, self.moment_step
+        )
+        directional = self.late_directional
+        if directional.size:
+            factor = reweight.slot_factor(
+                exponent, directional.shape[2], self.direction_step, self.moment_step
+            )
+            directional = directional * factor[None]
+        return dataclasses.replace(self, early=early, late=late, late_directional=directional)
 
     def parameters(self) -> iso3382.RoomParameters:
         """ISO 3382-1 parameters per octave band, straight from the energies.

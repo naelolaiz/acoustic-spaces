@@ -61,6 +61,12 @@ class LateEnergy:
     directions: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))
     directional: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0, 0)))
     direction_step: float = DIRECTION_STEP
+    #: With face groups (``stochastic_energy(groups=...)``): per listener, the energy in
+    #: slots of ``moment_step`` times 1, the reflections the rays had off each group n_i,
+    #: and n_i n_j (i <= j) (listeners, terms, bands, slots), for re-weighting the
+    #: response for new absorption (:mod:`acoustic_spaces.engine.reweight`); else empty.
+    moments: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0, 0)))
+    moment_step: float = 0.0
 
 
 #: Weight window of the stochastic tracer (see :func:`stochastic_energy`): resolution of
@@ -72,6 +78,10 @@ SPLIT_RATIO = 4.0
 MAX_SPLIT = 8
 MAX_FAMILY = 256
 MIN_FIRST_RAYS = 1000
+#: Most groups of faces whose reflections the tracer counts, and the time resolution of
+#: the moments of those counts (s).
+MAX_GROUPS = 16
+MOMENT_STEP = 0.01
 
 #: Smallest and largest automatic detector radius (m). Below about 0.5 m the specular
 #: part of the tail in rooms with reflective, smooth walls gets noisy at usual ray counts.
@@ -353,6 +363,8 @@ def stochastic_energy(
     directivity: Directivity | None = None,
     orientation: np.ndarray | None = None,
     threads: int = 0,
+    groups: np.ndarray | None = None,
+    moment_step: float = MOMENT_STEP,
 ) -> LateEnergy:
     """Energy per listener, band and time slot by stochastic ray tracing.
 
@@ -367,6 +379,10 @@ def stochastic_energy(
     unbiased either way, but late tails in rooms where a few rays escape the absorption
     for a long time (smooth walls, absorption on the ceiling) no longer break up when
     those rays run out.
+
+    ``groups`` (one per face: a group index, or -1) has the tracer count the reflections
+    off each group and sum the moments of those counts in the result's ``moments``, at
+    most ``MAX_GROUPS`` groups.
     """
     from acoustic_spaces import _native
 
@@ -385,6 +401,13 @@ def stochastic_energy(
         directivity, orientation, model.absorption.shape[1]
     )
     face_room, source_room, level, own = _rooms(model, source, air, listeners)
+    if groups is None:
+        face_group, n_groups = np.zeros(0, dtype=np.int64), 0
+    else:
+        face_group = np.ascontiguousarray(groups, dtype=np.int64)
+        n_groups = int(face_group.max(initial=-1)) + 1
+        if n_groups > MAX_GROUPS:
+            raise ValueError(f"at most {MAX_GROUPS} groups of faces, not {n_groups}")
 
     def run(band: slice, count: int):
         first_order, band_table, absorption, scattering, band_air, sizes = _band_arguments(
@@ -392,7 +415,7 @@ def stochastic_energy(
         )
 
         def trace(count: int, first: int, target: np.ndarray):
-            energy, directional, *rest = _native.trace_stochastic(
+            energy, directional, moments, *rest = _native.trace_stochastic(
                 model.bvh,
                 np.asarray(source, dtype=np.float64),
                 first_order,
@@ -425,12 +448,15 @@ def stochastic_energy(
                 MAX_SPLIT,
                 MAX_FAMILY,
                 level,
+                face_group,
+                n_groups,
+                float(moment_step),
             )
-            return [energy, directional], *rest
+            return [energy, directional, moments], *rest
 
         return _in_batches(trace, count, splitting, own)
 
-    (energy, directional), escaped, traced = _by_band(band_groups(model), rays, run)
+    (energy, directional, moments), escaped, traced = _by_band(band_groups(model), rays, run)
     return LateEnergy(
         energy=energy,
         time_step=time_step,
@@ -439,6 +465,8 @@ def stochastic_energy(
         traced_rays=int(traced),
         directions=directions,
         directional=directional,
+        moments=moments,
+        moment_step=float(moment_step) if n_groups else 0.0,
     )
 
 

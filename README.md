@@ -13,7 +13,7 @@ Ambisonics (AmbiX) and loudspeaker formats as WAV files, ISO 3382-1 parameters, 
 coverage maps of them and of the speech transmission index over the audience. Dry
 recordings can be run through the responses offline or in real time on the sound card,
 head-tracked on headphones; real rooms can be measured with sine sweeps and compared
-with their model. Reflection paths and sound particles can be watched in 3D, animated,
+with their model, whose absorption can then be fitted to the measurements. Reflection paths and sound particles can be watched in 3D, animated,
 and exported to Blender. The
 [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
 says how far the results can be trusted. A [graphical editor](#graphical-editor) does
@@ -1340,6 +1340,71 @@ t30 = comparison["t30"]
 print(t30.difference_jnd, t30.within_jnd, t30.mean_abs_jnd, t30.missing)
 ```
 
+## Fitting materials to measurements
+
+Absorption from tables seldom matches a room as built. `calibrate` adjusts the
+absorption of the scene's materials, octave band by octave band, until the simulated
+T30, EDT and C80 at each measured source and listener pair come as close as they can to
+those measured, in JNDs:
+
+```sh
+acoustic-spaces calibrate hall.yaml \
+    --measured talker seat-a hall/ir_a.wav --measured talker seat-b hall/ir_b.wav \
+    -o hall_fitted.yaml --json calibration.json
+```
+
+```
+absorption     63 Hz  125 Hz  250 Hz  500 Hz   1 kHz   2 kHz   4 kHz   8 kHz
+floor           0.09    0.14    0.23    0.33    0.40    0.46    0.47    0.46
+  was           0.13    0.20    0.33    0.46    0.52    0.59    0.59    0.59
+  +-            0.36    0.20    0.23    0.08    0.08    0.04    0.08    0.02
+...
+mean |error|   63 Hz  125 Hz  250 Hz  500 Hz   1 kHz   2 kHz   4 kHz   8 kHz   (JND)
+T30 before      5.86    5.84    5.36    5.78    5.32    5.14    5.77    5.06
+T30 after       0.04    0.07    0.07    0.11    0.08    0.08    0.06    0.09
+...
+```
+
+- Each `--measured SOURCE LISTENER FILE` is an impulse response measured where the
+  scene has that source and listener: a WAV (its first channel, or `--channel`), or a
+  report written by `analyze --json`. `--measured-json` takes parameters already
+  measured, as `{"pairs": {"SOURCE LISTENER": {"t30": [...], "edt": [...]}}}` with eight
+  octave values each (null where missing), the format of `validation/bras/*/measured.json`.
+- Every material on a surface is fitted (at most 16), or those `--materials` names;
+  `--parameters` picks others to match (T20, C50, D50, Ts, G).
+- The table gives each material's fitted absorption, what it started from (`was`), and
+  `+-`: how far it could move, the other materials following it, before the fit worsens
+  by one JND. Where that is a tenth or more, the measurements hardly decide it. `-o`
+  writes the scene with the fitted absorption (a material given in third octaves keeps
+  its shape within each octave), and `--json` every number.
+- The materials keep their proportions unless the measurements ask otherwise.
+  Measurements fix the total absorption best. Telling two materials apart needs
+  responses that hear them differently, and surfaces that the sound meets alike (the
+  floor and ceiling of a flat room) trade absorption freely. So the fit may scale every
+  material by a common factor, but moving one by a factor of 2 more than the others
+  costs as much as missing a parameter by one JND. With measurements that cannot tell
+  the materials apart, it is the fit of one factor per band, like fitting the
+  reverberation time with Eyring's formula, but with the rays of the model itself.
+- It does not trace the room for every trial. Each round traces it once, counting each
+  ray's reflections off each material, and the responses for other absorption come from
+  re-weighting those rays (`acoustic_spaces.engine.reweight`); the next round traces
+  again at the absorption found, until it moves by less than 0.01 or `--rounds` (4) run
+  out. A round costs about one simulation of the measured sources at the scene's rays
+  (`--rays` overrides them).
+- It needs stochastic ray tracing in octave bands, without the wave solver.
+
+From Python:
+
+```python
+from acoustic_spaces.calibration import calibrate
+from acoustic_spaces.parameters import from_impulse_response
+
+measured = {("talker", "seat-a"): from_impulse_response(ir_a, 48000)}
+found = calibrate("hall.yaml", measured)
+print(found.table())
+found.fitted_scene().to_yaml("hall_fitted.yaml")
+```
+
 ## Repository layout
 
 ```
@@ -1419,7 +1484,7 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] Line and surface sources.
 - [x] Loudspeaker arrays with phase (their far-field patterns).
 - [x] Sound through walls and between coupled rooms.
-- [ ] Fitting absorption to measured parameters.
+- [x] Fitting absorption to measured parameters (`acoustic-spaces calibrate`).
 - [ ] The wave solver with impedance boundaries and a GPU path through WebGPU (AMD,
   NVIDIA, Intel and Apple GPUs alike).
 - [ ] Second-order edge diffraction.

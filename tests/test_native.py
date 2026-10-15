@@ -82,12 +82,12 @@ def test_specular_sequences_stay_inside_a_closed_box() -> None:
     assert np.all(seq[:, 1:] != seq[:, :-1])
 
 
-def _trace_stochastic(rays: int, **settings):
-    """Stochastic ray tracing in the unit cube, one band, one listener."""
+def _stochastic_args(rays: int = 2000) -> dict:
+    """The tracer's arguments for the unit cube, one band, one listener."""
     from acoustic_spaces import _native
 
     vertices, faces = _unit_cube()
-    args = dict(
+    return dict(
         bvh=_native.Bvh(vertices, faces),
         source=np.array([0.3, 0.4, 0.6]),
         directivity_a=np.zeros(0),
@@ -124,8 +124,19 @@ def _trace_stochastic(rays: int, **settings):
         max_split=8,
         max_family=256,
         room_level=np.zeros(0),
+        face_group=np.zeros(0, dtype=np.int64),
+        groups=0,
+        moment_time_step=0.01,
     )
-    energy, _, _, ray_energy, reflections, traced = _native.trace_stochastic(**{**args, **settings})
+
+
+def _trace_stochastic(rays: int, **settings):
+    """Stochastic ray tracing in the unit cube, one band, one listener."""
+    from acoustic_spaces import _native
+
+    energy, _, _, _, ray_energy, reflections, traced = _native.trace_stochastic(
+        **{**_stochastic_args(rays), **settings}
+    )
     return energy[0, 0], ray_energy / reflections, traced
 
 
@@ -142,6 +153,32 @@ def test_weight_window_keeps_the_expected_energy() -> None:
             assert traced == rays * families
         else:
             assert traced < 1.1 * rays
+
+
+def test_the_tracer_counts_reflections_off_face_groups() -> None:
+    # Two groups: the cube's floor and ceiling, and its walls. Each arrival is summed
+    # times each group's reflection count and their products, per bin of 10 ms.
+    from acoustic_spaces import _native
+
+    groups = np.array([1] * 8 + [0] * 4, dtype=np.int64)
+    args = {"face_group": groups, "groups": 2, "max_time": 0.05}
+    energy, _, moments, *_ = _native.trace_stochastic(**{**_stochastic_args(), **args})
+    assert moments.shape == (1, 1 + 2 + 3, 1, 5)
+    plain = _native.trace_stochastic(**{**_stochastic_args(), "max_time": 0.05})[0]
+    np.testing.assert_array_equal(energy, plain)  # counting changes nothing
+    total, n0, n1, n00, n01, n11 = moments[0, :, 0]
+    np.testing.assert_allclose(total, energy[0, 0].reshape(5, 10).sum(axis=1), rtol=1e-12)
+    # Means grow with time (a reflection every 0.67 m in a unit cube); variances >= 0.
+    mean = (n0 + n1) / total
+    assert np.all(np.diff(mean) > 0) and mean[-1] > 15
+    assert np.all(n00 * total >= n0**2 * (1 - 1e-12)) and np.all(n11 * total >= n1**2 * (1 - 1e-12))
+    # The walls are twice the floor and ceiling: twice the reflections.
+    assert n1.sum() / n0.sum() == pytest.approx(2.0, rel=0.05)
+    assert n01.sum() > 0
+    with pytest.raises(ValueError, match="face_group"):
+        _native.trace_stochastic(**{**_stochastic_args(), "face_group": groups[:5], "groups": 2})
+    with pytest.raises(ValueError, match="face_group"):
+        _native.trace_stochastic(**{**_stochastic_args(), "face_group": groups + 1, "groups": 2})
 
 
 @pytest.mark.parametrize(

@@ -3,7 +3,8 @@
     python validation/bras_validation.py [--scenes CR2 CR3] [--materials fitted]
                                          [--rays 50000] [--diffraction first_order]
                                          [--bands octave] [--json results.json]
-                                         [--plots DIR]
+                                         [--plots DIR] [--calibrate [SOURCE ...]]
+                                         [--calibration-rays 10000]
     python validation/bras_validation.py --from-json results.json [--plots DIR]
 
 The BRAS benchmark (Aspöck et al., 2020, DOI 10.14279/depositonce-6726.3) measured
@@ -17,6 +18,12 @@ the absorption it fitted to the measured reverberation time, which is the blind 
 ``--bands third_octave`` simulates in third-octave bands, with BRAS's third-octave
 surface data as published, instead of its octave averages; the parameters are compared
 in octave bands either way.
+
+``--calibrate`` first fits the absorption of every surface to the measured T30, EDT and
+C80 (:func:`acoustic_spaces.calibration.calibrate`, with ``--calibration-rays`` rays),
+starting from the ``--materials`` set, then simulates the room with what it found. With
+sources named, only their responses are fitted, and the averages are over the other
+source's: responses the fit did not see.
 
 The script prints a Markdown table per room: the measured and simulated parameters
 averaged over the ten pairs, and the mean difference in JNDs; then how many of the
@@ -35,6 +42,7 @@ from pathlib import Path
 import numpy as np
 
 from acoustic_spaces import Room, Scene, simulate
+from acoustic_spaces.calibration import calibrate
 from acoustic_spaces.compare import JND, SUMMARY_BANDS_HZ, compare_parameters
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import RoomParameters
@@ -96,15 +104,70 @@ def measured_parameters(entry: dict) -> RoomParameters:
     return RoomParameters(**{k: _values(v) for k, v in entry.items()})
 
 
+def _averages(pairs: dict) -> dict:
+    """Per parameter, the pairs' mean measured and simulated values and differences, and
+    how many differences from 125 Hz to 4 kHz are within one JND."""
+    out = {}
+    for p in PARAMETERS:
+        stack = {
+            side: np.array([_values(pair["parameters"][p][side]) for pair in pairs.values()])
+            for side in ("simulated", "measured", "difference_jnd")
+        }
+        middle = stack["difference_jnd"][:, SUMMARY]
+        compared = np.isfinite(middle)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)  # a band no pair has: NaN
+            mean = {side: np.nanmean(values, axis=0) for side, values in stack.items()}
+            out[p] = {
+                **{side: _plain(values) for side, values in mean.items()},
+                "within_jnd": int(np.count_nonzero(np.abs(middle[compared]) <= 1.0)),
+                "compared": int(np.count_nonzero(compared)),
+                "mean_abs_jnd": float(np.abs(middle[compared]).mean()) if compared.any() else None,
+            }
+    return out
+
+
+def calibrated_scene(
+    name: str, scene: Scene, measured: dict, sources: list[str], rays: int
+) -> tuple[Scene, dict]:
+    """``scene`` with the absorption fitted to the measured responses of ``sources`` (all
+    when empty), traced with ``rays`` rays; and what the fit found."""
+    pairs = {
+        tuple(key.split()): measured_parameters(entry)
+        for key, entry in measured["pairs"].items()
+        if not sources or key.split()[0] in sources
+    }
+    traced = scene.model_copy(deep=True)
+    traced.simulation.late.rays = rays
+    start = time.perf_counter()
+    found = calibrate(traced, pairs, progress=lambda message: print(message, flush=True))
+    seconds = time.perf_counter() - start
+    fitted = found.fitted_scene()
+    fitted.simulation = scene.simulation
+    bras = load_scene(name, "fitted", None, None)
+    report = found.as_dict()
+    report["seconds"] = round(seconds, 1)
+    report["calibration_rays"] = rays
+    report["sources"] = sorted({s for s, _ in pairs})
+    for material, entry in report["materials"].items():
+        entry["bras_fitted"] = _plain(np.array(bras.materials[material].coefficients()[0]))
+    return fitted, report
+
+
 def validate(
     name: str,
     materials: str,
     rays: int | None,
     diffraction: str | None,
     bands: str | None = None,
+    calibrate_on: list[str] | None = None,
+    calibration_rays: int = 10_000,
 ) -> dict:
     measured = json.loads((HERE / name / "measured.json").read_text(encoding="utf-8"))
     scene = load_scene(name, materials, rays, diffraction, bands)
+    calibration = None
+    if calibrate_on is not None:
+        scene, calibration = calibrated_scene(name, scene, measured, calibrate_on, calibration_rays)
     room = Room.from_scene(scene)
     start = time.perf_counter()
     result = simulate(room)
@@ -125,31 +188,63 @@ def validate(
         "volume_m3": room.volume_m3,
         "bands_hz": list(OCTAVE_BANDS_HZ),
         "pairs": pairs,
-        "average": {},
     }
-    for p in PARAMETERS:
-        stack = {
-            side: np.array([_values(pair["parameters"][p][side]) for pair in pairs.values()])
-            for side in ("simulated", "measured", "difference_jnd")
-        }
-        middle = stack["difference_jnd"][:, SUMMARY]
-        compared = np.isfinite(middle)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)  # a band no pair has: NaN
-            mean = {side: np.nanmean(values, axis=0) for side, values in stack.items()}
-            out["average"][p] = {
-                **{side: _plain(values) for side, values in mean.items()},
-                "within_jnd": int(np.count_nonzero(np.abs(middle[compared]) <= 1.0)),
-                "compared": int(np.count_nonzero(compared)),
-                "mean_abs_jnd": float(np.abs(middle[compared]).mean()) if compared.any() else None,
-            }
+    if calibration is not None:
+        out["calibration"] = calibration
+        fitted = set(calibration["sources"])
+        held_out = {k: v for k, v in pairs.items() if k.split()[0] not in fitted}
+        if held_out:
+            pairs = held_out
+            out["averaged_over"] = sorted({k.split()[0] for k in held_out})
+    out["average"] = _averages(pairs)
     return out
+
+
+def calibration_table(result: dict) -> str:
+    """The fitted absorption beside BRAS's, and the fit's errors before and after."""
+    found = result["calibration"]
+    bands = found["bands_hz"]
+    lines = [
+        f"Calibrated on {', '.join(found['sources'])} from the {result['materials']} "
+        f"absorption: {found['rounds']} rounds of {found['calibration_rays']} rays, "
+        f"{found['seconds']:.0f} s",
+        "",
+        "| absorption | " + " | ".join(_band(f) for f in bands) + " |",
+        "|---|" + "---:|" * len(bands),
+    ]
+    for material, entry in found["materials"].items():
+        short = material.removeprefix(f"mat_{result['scene']}_")
+        for key, label in (
+            ("initial", "start"),
+            ("absorption", "calibrated"),
+            ("uncertainty", "+-"),
+            ("bras_fitted", "BRAS fitted"),
+        ):
+            cells = ["-" if v is None or v > 9 else f"{v:.2f}" for v in entry[key]]
+            lines.append(f"| {short} {label} | " + " | ".join(cells) + " |")
+    lines += [
+        "",
+        "| mean abs. error (JNDs) | " + " | ".join(_band(f) for f in bands) + " |",
+        "|---|" + "---:|" * len(bands),
+    ]
+    for p in found["parameters"]:
+        for which in ("before", "after"):
+            cells = ["-" if v is None else f"{v:.1f}" for v in found["errors_jnd"][which][p]]
+            lines.append(f"| {LABELS[p]} {which} | " + " | ".join(cells) + " |")
+    return "\n".join(lines)
 
 
 def table(result: dict) -> str:
     bands = result["bands_hz"]
+    absorption = result["materials"]
+    if "calibration" in result:
+        absorption += " absorption, calibrated"
+        if "averaged_over" in result:
+            absorption += f"; averages over {', '.join(result['averaged_over'])}, not fitted"
+    else:
+        absorption += " absorption"
     lines = [
-        f"{result['name']}: {result['materials']} absorption, {result['rays']} rays per "
+        f"{result['name']}: {absorption}, {result['rays']} rays per "
         f"band, {result.get('simulated_bands', 'octave').replace('_', '-')} bands, "
         f"diffraction {result['diffraction']}, simulated in {result['seconds']:.0f} s",
         "",
@@ -201,6 +296,14 @@ def plot(result: dict, path: Path) -> None:
         ax.grid(alpha=0.3)
         ax.legend(fontsize=7)
     title = f"{result['name']}, {result['materials']} absorption: averages of ten responses"
+    if "calibration" in result:
+        count = sum(
+            k.split()[0] in result.get("averaged_over", [k.split()[0]]) for k in result["pairs"]
+        )
+        title = (
+            f"{result['name']}, calibrated from the {result['materials']} absorption: "
+            f"averages of {count} responses" + (", not fitted" if "averaged_over" in result else "")
+        )
     fig.suptitle(title, fontsize=9)
     fig.savefig(path, dpi=110)
     plt.close(fig)
@@ -215,6 +318,15 @@ def main() -> None:
     parser.add_argument(
         "--bands", choices=["octave", "third_octave"], help="the bands to simulate in"
     )
+    parser.add_argument(
+        "--calibrate",
+        nargs="*",
+        metavar="SOURCE",
+        help="fit the absorption to the measured responses first (of these sources only)",
+    )
+    parser.add_argument(
+        "--calibration-rays", type=int, default=10_000, help="late rays while fitting"
+    )
     parser.add_argument("--json", type=Path, help="write every number to this file")
     parser.add_argument("--plots", type=Path, help="draw a PNG per room into this folder")
     parser.add_argument(
@@ -225,15 +337,27 @@ def main() -> None:
         results = json.loads(args.from_json.read_text(encoding="utf-8"))
     else:
         results = [
-            validate(name, args.materials, args.rays, args.diffraction, args.bands)
+            validate(
+                name,
+                args.materials,
+                args.rays,
+                args.diffraction,
+                args.bands,
+                args.calibrate,
+                args.calibration_rays,
+            )
             for name in args.scenes
         ]
     for result in results:
+        if "calibration" in result:
+            print(calibration_table(result) + "\n", flush=True)
         print(table(result) + "\n", flush=True)
         if args.plots:
             args.plots.mkdir(parents=True, exist_ok=True)
             bands = result.get("simulated_bands", "octave")
             suffix = "" if bands == "octave" else f"_{bands}"
+            if "calibration" in result:
+                suffix += "_calibrated"
             name = f"bras_{result['scene']}_{result['materials']}{suffix}.png"
             plot(result, args.plots / name)
     if args.json:

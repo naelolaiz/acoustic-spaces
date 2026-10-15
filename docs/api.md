@@ -116,6 +116,13 @@ Rotating sound fields, and decoding them to the ears:
 .. automodule:: acoustic_spaces.compare
 ```
 
+## Fitting materials to measurements
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.calibration
+.. automodule:: acoustic_spaces.engine.reweight
+```
+
 ## Audio files and results
 
 ```{eval-rst}
