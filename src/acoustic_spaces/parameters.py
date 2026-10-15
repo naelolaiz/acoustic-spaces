@@ -41,6 +41,7 @@ import functools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
+from typing import Literal
 
 import numpy as np
 
@@ -397,7 +398,7 @@ def from_energy(
     energy: np.ndarray,
     time_step: float,
     onset_s: float,
-    reference_energy: float | None = None,
+    reference_energy: float | Sequence[float] | np.ndarray | None = None,
     *,
     stage: bool = False,
     lateral: tuple[np.ndarray, np.ndarray] | None = None,
@@ -406,18 +407,24 @@ def from_energy(
     """Parameters from energy per band and time slot (bands, slots), slot 0 at emission.
 
     ``onset_s`` is the arrival time of the direct sound. ``reference_energy`` is the
-    energy of the same source at 10 m in free field; without it ``g`` and ``lj`` are
-    NaN. With ``stage``, ``st_early`` and ``st_late`` (for a listener 1 m from the
-    source). ``lateral`` is the energy a figure of eight with its null on the source
-    picks up and its product with the pressure, each on the slots of ``energy``, for
-    ``lf``, ``lfc`` and ``lj``; ``directional`` the energies of figure-of-eight pickups
-    facing forward, left and up, for ``t30_x``, ``t30_y`` and ``t30_z``.
+    energy of the same source at 10 m in free field, one value or one per band; without
+    it ``g`` and ``lj`` are NaN. With ``stage``, ``st_early`` and ``st_late`` (for a
+    listener 1 m from the source). ``lateral`` is the energy a figure of eight with its
+    null on the source picks up and its product with the pressure, each on the slots of
+    ``energy``, for ``lf``, ``lfc`` and ``lj``; ``directional`` the energies of
+    figure-of-eight pickups facing forward, left and up, for ``t30_x``, ``t30_y`` and
+    ``t30_z``.
     """
     energy = np.atleast_2d(np.asarray(energy, dtype=float))
     first = min(int(onset_s / time_step), energy.shape[1] - 1)
     offset = onset_s - first * time_step
+    if reference_energy is None:
+        references = [None] * len(energy)
+    else:
+        references = [float(r) for r in np.broadcast_to(reference_energy, (len(energy),))]
     per_band = [
-        _band_parameters(row[first:], time_step, offset, reference_energy, stage) for row in energy
+        _band_parameters(row[first:], time_step, offset, ref, stage)
+        for row, ref in zip(energy, references, strict=True)
     ]
     if lateral is not None:
         figure8, cosine = (np.atleast_2d(np.asarray(x, dtype=float)) for x in lateral)
@@ -425,7 +432,7 @@ def from_energy(
             defined = any(np.isfinite(p[name]) for name in PARAMETERS)
             if defined:
                 args = (figure8[b, first:], cosine[b, first:], time_step, offset)
-                p.update(_lateral(energy[b, first:], *args, reference_energy))
+                p.update(_lateral(energy[b, first:], *args, references[b]))
             else:
                 p.update(lf=math.nan, lfc=math.nan, lj=math.nan)
     more = {}
@@ -439,14 +446,44 @@ def from_energy(
 
 
 #: Speech transmission index (IEC 60268-16:2020, annex A): its octave bands, the
-#: modulation frequencies (Hz), the male weighting factors alpha and beta, and the
-#: absolute speech reception threshold of each band (dB).
+#: modulation frequencies (Hz), the weighting factors alpha and beta of male and female
+#: speech (the female ones from the 2011 edition, which leave out the 125 Hz band), and
+#: the absolute speech reception threshold of each band (dB).
 STI_BANDS_HZ: tuple[int, ...] = (125, 250, 500, 1000, 2000, 4000, 8000)
 STI_MODULATION_HZ: tuple[float, ...] = (
     0.63, 0.8, 1.0, 1.25, 1.6, 2.0, 2.5, 3.15, 4.0, 5.0, 6.3, 8.0, 10.0, 12.5
 )  # fmt: skip
-_STI_ALPHA = np.array([0.085, 0.127, 0.230, 0.233, 0.309, 0.224, 0.173])
-_STI_BETA = np.array([0.085, 0.078, 0.065, 0.011, 0.047, 0.095])
+_STI_WEIGHTS = {
+    "male": (
+        np.array([0.085, 0.127, 0.230, 0.233, 0.309, 0.224, 0.173]),
+        np.array([0.085, 0.078, 0.065, 0.011, 0.047, 0.095]),
+    ),
+    "female": (
+        np.array([0.0, 0.117, 0.223, 0.216, 0.328, 0.250, 0.194]),
+        np.array([0.0, 0.099, 0.066, 0.062, 0.025, 0.076]),
+    ),
+}
+#: A-weighting of the octave bands (dB, IEC 61672-1, rounded).
+A_WEIGHTING_DB: tuple[float, ...] = (-26.2, -16.1, -8.6, -3.2, 0.0, 1.2, 1.0, -1.1)
+
+
+def a_weighted(levels_db: Sequence[float] | np.ndarray) -> float:
+    """The A-weighted level (dB) of levels per octave band (``OCTAVE_BANDS_HZ``)."""
+    levels = np.asarray(levels_db, dtype=float) + np.array(A_WEIGHTING_DB)
+    with np.errstate(divide="ignore"):
+        return float(10.0 * np.log10(np.sum(10.0 ** (levels / 10.0))))
+
+
+#: Speech that talks: male or female.
+Talker = Literal["male", "female"]
+#: The long-term spectrum of speech (IEC 60268-16:2011, table A.2): octave-band levels
+#: (dB) relative to the A-weighted level, ``OCTAVE_BANDS_HZ``. The standard gives none
+#: at 63 Hz, nor at 125 Hz for female speech; those are taken 12 dB below the next band
+#: up (an assumption; neither counts in the STI).
+SPEECH_SPECTRUM_DB: dict[str, tuple[float, ...]] = {
+    "male": (-9.1, 2.9, 2.9, -0.8, -6.8, -12.8, -18.8, -24.8),
+    "female": (-18.7, -6.7, 5.3, -1.9, -9.1, -15.8, -16.7, -18.0),
+}
 _STI_THRESHOLD_DB = np.array([46.0, 27.0, 12.0, 6.5, 7.5, 8.0, 12.0])
 
 
@@ -497,11 +534,12 @@ def speech_transmission_index(
     signal_db: Sequence[float] | np.ndarray | None = None,
     noise_db: Sequence[float] | np.ndarray | float | None = None,
     stipa: bool = False,
+    talker: Talker = "male",
 ) -> float:
     """STI (0 to 1) of an energy response per octave band (bands, slots), from the
-    modulation transfer function (IEC 60268-16:2020, indirect method, male weighting).
-    With ``stipa``, STIPA instead: two modulation frequencies per band, not fourteen
-    (``STIPA_MODULATION_HZ``).
+    modulation transfer function (IEC 60268-16:2020, indirect method), weighted for
+    male speech or, with ``talker="female"``, female speech. With ``stipa``, STIPA
+    instead: two modulation frequencies per band, not fourteen (``STIPA_MODULATION_HZ``).
 
     ``energy`` has the bands of ``OCTAVE_BANDS_HZ`` (the 63 Hz band is not used) or of
     ``STI_BANDS_HZ``. ``signal_db`` is the speech level per band at the listener (dB
@@ -547,7 +585,10 @@ def speech_transmission_index(
         snr = 10.0 * np.log10(m / np.maximum(1.0 - m, 0.0))
     transmission = (np.clip(np.nan_to_num(snr, nan=-15.0), -15.0, 15.0) + 15.0) / 30.0
     mti = transmission.mean(axis=1)
-    sti = float(_STI_ALPHA @ mti - _STI_BETA @ np.sqrt(mti[:-1] * mti[1:]))
+    if talker not in _STI_WEIGHTS:
+        raise ValueError(f"unknown talker {talker!r}; use 'male' or 'female'")
+    alpha, beta = _STI_WEIGHTS[talker]
+    sti = float(alpha @ mti - beta @ np.sqrt(mti[:-1] * mti[1:]))
     return min(max(sti, 0.0), 1.0)
 
 
@@ -1027,15 +1068,18 @@ def free_field_reference(
 
 __all__ = [
     "ALL_PARAMETERS",
+    "A_WEIGHTING_DB",
     "DECAY_RANGES",
     "ECHO_CRITERIA",
     "MORE_PARAMETERS",
     "PARAMETERS",
     "STIPA_MODULATION_HZ",
     "STI_BANDS_HZ",
+    "SPEECH_SPECTRUM_DB",
     "STI_MODULATION_HZ",
     "RoomParameters",
     "SpeechParameters",
+    "Talker",
     "decay_curve",
     "echo_criterion",
     "from_energy",
@@ -1047,6 +1091,7 @@ __all__ = [
     "BandDecay",
     "FILTER_ORDER",
     "OCTAVE_RATIO",
+    "a_weighted",
     "band_decay",
     "band_energy_share",
     "band_filter_gains",

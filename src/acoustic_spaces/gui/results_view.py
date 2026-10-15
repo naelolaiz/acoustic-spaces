@@ -32,8 +32,9 @@ from acoustic_spaces.parameters import MORE_PARAMETERS, PARAMETERS
 
 #: Smallest size of a plot (pixels); a smaller panel scrolls instead of squashing it.
 PLOT_SIZE = (720, 480)
-#: Rows of the parameter table: name, label, number format. Those after the first eight
-#: show only where the response gives them (IACC needs a binaural response).
+#: Rows of the parameter table: name, label, number format. After the first eight comes
+#: the sound pressure level at the source's sound power; the rest show only where the
+#: response gives them (stage support needs a listener near the source).
 ROWS = [
     ("edt", "EDT (s)", "{:.2f}"),
     ("t20", "T20 (s)", "{:.2f}"),
@@ -43,6 +44,7 @@ ROWS = [
     ("d50", "D50", "{:.2f}"),
     ("ts", "Ts (ms)", "{:.0f}"),
     ("g", "G (dB)", "{:.1f}"),
+    ("spl", "SPL (dB)", "{:.1f}"),
     ("lf", "LF", "{:.2f}"),
     ("lfc", "LFC", "{:.2f}"),
     ("lj", "LJ (dB)", "{:.1f}"),
@@ -53,7 +55,7 @@ ROWS = [
     ("t30_z", "T30 Z (s)", "{:.2f}"),
 ]
 assert {name for name, _, _ in ROWS[:8]} == set(PARAMETERS)
-assert {name for name, _, _ in ROWS[8:]} <= set(MORE_PARAMETERS)
+assert {name for name, _, _ in ROWS[9:]} <= set(MORE_PARAMETERS)
 #: How often the head controls show the latest orientation (ms).
 HEAD_REFRESH_MS = 100
 
@@ -311,12 +313,19 @@ class ResultsPanel(QWidget):
         if response is None:
             return
         parameters = response.parameters()
+        sources = {s.name: s for s in self.result.room.scene.sources}
+        source = sources.get(response.source)
+        power = 94.0 if source is None else source.power_db("octave")
+        spl = response.levels(power, parameters)
         for row, (name, _, fmt) in enumerate(ROWS):
-            values = getattr(parameters, name) * (1e3 if name == "ts" else 1.0)
+            if name == "spl":
+                values = spl
+            else:
+                values = getattr(parameters, name) * (1e3 if name == "ts" else 1.0)
             for col, value in enumerate(values):
                 text = fmt.format(value) if np.isfinite(value) else "–"
                 self.table.setItem(row, col, QTableWidgetItem(text))
-            self.table.setRowHidden(row, row >= 8 and not np.isfinite(values).any())
+            self.table.setRowHidden(row, row > 8 and not np.isfinite(values).any())
 
     def _details(self) -> None:
         if self.result is None:

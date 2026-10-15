@@ -35,6 +35,7 @@ metres is an impulse of height 1 / r.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -190,6 +191,10 @@ class WaveResponse:
     cell: float
     #: How many bands the whole response has: 8 octave or 24 third-octave bands.
     total_bands: int = len(OCTAVE_BANDS_HZ)
+    #: The energy gain of each wave band from the source's feed, or None for none.
+    band_gain: np.ndarray | None = None
+    #: How long after emission the source starts playing (s).
+    delay_s: float = 0.0
     _cache: dict = field(default_factory=dict, init=False, repr=False, compare=False)
 
     @property
@@ -197,18 +202,29 @@ class WaveResponse:
         """The bands 0 to bands - 1 come from the wave solver."""
         return len(self.band_runs)
 
+    def fed(self, gain: np.ndarray, delay_s: float) -> WaveResponse:
+        """These bands with the energy ``gain`` of each and ``delay_s`` later."""
+        gain = np.asarray(gain, dtype=float)
+        total = gain if self.band_gain is None else self.band_gain * gain
+        return dataclasses.replace(self, band_gain=total, delay_s=self.delay_s + delay_s)
+
+    def _amplitudes(self) -> np.ndarray:
+        return np.ones(self.bands) if self.band_gain is None else np.sqrt(self.band_gain)
+
     def _resampled(self, sample_rate: float, n: int) -> np.ndarray:
-        """The runs at ``sample_rate``, n samples long (runs, n, 4); still broadband."""
+        """The runs at ``sample_rate``, n samples long (runs, n, 4), from emission;
+        still broadband."""
         from acoustic_spaces.render import resample
 
         key = (float(sample_rate), int(n))
         if key not in self._cache:
             out = np.zeros((len(self.signals), n, 4))
+            start = min(int(round(self.delay_s * sample_rate)), n)
             for k, run in enumerate(self.signals):
                 # Impulse responses scale with the sample period: an impulse of height a
                 # at one rate is a * rate / sample_rate at another.
-                x = resample(run, self.rate, sample_rate)[:n] * (self.rate / sample_rate)
-                out[k, : len(x)] = x
+                x = resample(run, self.rate, sample_rate)[: n - start]
+                out[k, start : start + len(x)] = x * (self.rate / sample_rate)
             self._cache = {key: out}
         return self._cache[key]
 
@@ -217,9 +233,10 @@ class WaveResponse:
         runs = self._resampled(sample_rate, n)
         n_fft = synthesis.fft_size(n, sample_rate)
         gains = wave_gains(n_fft, sample_rate, self.bands, self.total_bands)
+        amplitude = self._amplitudes()
         spectrum = 0.0
         for k, run in enumerate(runs):
-            gain = sum(gains[b] for b, r in enumerate(self.band_runs) if r == k)
+            gain = sum(gains[b] * amplitude[b] for b, r in enumerate(self.band_runs) if r == k)
             spectrum = spectrum + np.fft.rfft(run, n_fft, axis=0) * gain[:, None]
         return np.fft.irfft(spectrum, n_fft, axis=0)[:n]
 
@@ -257,8 +274,9 @@ class WaveResponse:
         gains = band_filter_gains(n_fft, self.rate, self.total_bands)[: self.bands]
         weights = np.full(gains.shape[1], 2.0)
         weights[0] = weights[-1] = 1.0
-        time = (np.arange(self.signals.shape[1] + lead) - lead) / self.rate
+        time = (np.arange(self.signals.shape[1] + lead) - lead) / self.rate + self.delay_s
         slot = np.maximum(time / time_step, 0).astype(np.int64)
+        amplitude = self._amplitudes()
         keep = slot < slots
         for b, (gain, k) in enumerate(zip(gains, self.band_runs, strict=True)):
             padded = np.concatenate([np.zeros(lead), self.signals[k, :, 0]])
@@ -269,7 +287,7 @@ class WaveResponse:
                 figure8 = np.concatenate([np.zeros(lead), self.signals[k, :, 1:] @ axis])
                 side = _filter(figure8, gain, n_fft)[keep]
                 power = side**2 if exponent == 2 else np.abs(side * pressure[keep])
-            energy = power / (synthesis.ENERGY_TO_IR * share)
+            energy = power * amplitude[b] ** 2 / (synthesis.ENERGY_TO_IR * share)
             out[b] = np.bincount(slot[keep], energy, minlength=slots)[:slots]
         return out
 

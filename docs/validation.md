@@ -38,6 +38,17 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   its smooth walls alone decay far slower; and a box that diffuses the bass and
   reflects the treble decaying at Eyring's rate in the bass only, each band traced with
   rays of its own;
+- third-octave bands: statistical runs in third octaves give the octave runs'
+  parameters within 1 % or 0.1 dB, and stochastic ones within the tracer's noise; a
+  100 Hz third-octave absorber decays at its own Eyring rate (within 3 %) between bands
+  that do not; the filter banks sum to their input and sit at -3 dB on the band edges;
+- sources: the free-field level 4 m from a source with a sound power per band, a gain
+  and an equalizer, against 10 log10(4 π r²) and the air absorption of ISO 9613-1 (to
+  rounding), with G unchanged by the feed; a delayed source's response 12.5 ms later
+  (600 samples at 48 kHz) with the same parameters, its wave bands too; two alike
+  sources together 3 dB louder and as clear as one, and less clear with one of them
+  150 ms late; the speech spectra of IEC 60268-16 summing to 0 dB(A); and the STI of
+  female speech, weighted to the treble, higher where the bass is blurred;
 - every ISO 3382-1 parameter on synthetic exponential decays, and the air
   absorption against the ISO 9613-1 table;
 - the further parameters against responses whose values are known: LF and LFC of one

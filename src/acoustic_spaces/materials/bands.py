@@ -93,6 +93,32 @@ def convert(values: Sequence[float], resolution: Resolution) -> list[float]:
     return [float(v) for v in values.reshape(-1, 3).mean(axis=1)]
 
 
+def power_levels(levels_db: Sequence[float], resolution: Resolution) -> np.ndarray:
+    """Power levels per band (dB, octave or third-octave) at ``resolution``: an octave's
+    power split evenly between its three third octaves, or three third octaves' summed
+    into their octave."""
+    levels = np.asarray(levels_db, dtype=float)
+    if resolution_of(len(levels)) == resolution:
+        return levels
+    if resolution == "third_octave":
+        return np.repeat(levels, 3) - 10.0 * math.log10(3.0)
+    with np.errstate(divide="ignore"):
+        return 10.0 * np.log10((10.0 ** (levels / 10.0)).reshape(-1, 3).sum(axis=1))
+
+
+def gain_levels(gains_db: Sequence[float], resolution: Resolution) -> np.ndarray:
+    """Gains per band (dB, octave or third-octave) at ``resolution``: an octave's gain
+    for each of its three third octaves, or the gain of three third octaves together in
+    their octave, the mean of their power gains."""
+    gains = np.asarray(gains_db, dtype=float)
+    if resolution_of(len(gains)) == resolution:
+        return gains
+    if resolution == "third_octave":
+        return np.repeat(gains, 3)
+    with np.errstate(divide="ignore"):
+        return 10.0 * np.log10((10.0 ** (gains / 10.0)).reshape(-1, 3).mean(axis=1))
+
+
 def to_octaves(energy: np.ndarray, axis: int = 0) -> np.ndarray:
     """Energies with octave or third-octave bands along ``axis``, in octave bands: the
     mean of each octave's three third octaves.
@@ -175,7 +201,9 @@ __all__ = [
     "crossover_frequencies",
     "exact_centres",
     "finer_than_octaves",
+    "gain_levels",
     "octave_of",
+    "power_levels",
     "resolution_of",
     "to_bands",
     "to_octave_bands",

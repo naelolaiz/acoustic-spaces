@@ -70,6 +70,9 @@ def test_inspect(capsys: pytest.CaptureFixture[str]) -> None:
     # The example's absorption sits on the floor and ceiling: its decay is no diffuse one.
     assert "note: the absorption is spread unevenly" in out
     assert "seat-a" in out and "inside" in out
+    assert "sound power (dB re 1 pW per octave band" in out
+    row = next(line for line in out.splitlines() if line.startswith("talker ") and "85.0" in line)
+    assert row.split()[1:9] == ["85.0"] * 8
 
 
 def test_inspect_shows_third_octave_data_in_octaves(
@@ -139,6 +142,8 @@ def test_simulate_writes_responses_and_parameters(
     assert 0.0 < response["speech"]["sti"] < 1.0 and 0.0 < response["speech"]["stipa"] < 1.0
     assert set(response["echo"]) == {"speech", "music"}
     assert "LF " in stdout and "STI 0." in stdout and "echo criterion" in stdout
+    assert "SPL " in stdout and "dB(A)" in stdout
+    assert len(response["spl_db"]) == 8 and 40.0 < response["spl_a_db"] < 100.0
 
 
 def test_simulate_checks_the_options_that_override_the_scene(

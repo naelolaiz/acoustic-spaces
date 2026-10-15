@@ -428,6 +428,42 @@ sources:
 index and front-to-back ratio per octave band and draws the polar patterns;
 `acoustic-spaces inspect` lists every source's directivity index.
 
+How loud a source is, and how it is fed:
+
+```yaml
+sources:
+  - name: talker
+    position: [2.0, 3.0, 1.5]
+    level_db: 78            # sound power in all, dB re 1 pW
+    spectrum: speech_male   # or flat (default) or speech_female
+  - name: delay-speaker
+    position: [12.0, 3.0, 2.5]
+    level_db: [95, 98, 100, 100, 100, 99, 97, 92]   # or per band (8 or 24 values)
+    gain_db: -6                        # gain of the feed
+    eq_db: [0, 0, -3, 0, 0, 0, 2, 4]   # equalizer per band, dB
+    delay_ms: 18.5                     # plays this long after emission starts
+```
+
+- `level_db` is the sound power level, in all or per band. A level in all is spread
+  by `spectrum`: evenly over the octave bands (`flat`), or as the long-term spectrum of
+  male or female speech (IEC 60268-16), for which the STI then takes the male or female
+  weighting. The standard's normal voice, 60 dB(A) at 1 m, is about 78 dB of sound
+  power with either speech spectrum and an omnidirectional source. It gives no level
+  at 63 Hz, nor at 125 Hz for female speech; those bands are taken 12 dB below the next
+  one up, an assumption that does not reach the STI.
+- `gain_db` and `eq_db` are the gain and equalizer of the source's feed. Both act on
+  the sound power and on the impulse responses, so a mix made with `auralize` hears
+  them. G stays the room's: it is measured against the same source, fed the same way,
+  in free field.
+- `delay_ms` delays everything the source sends. Its impulse responses start that much
+  later, and in the coverage map of all sources together its sound arrives that much
+  later, as when delay loudspeakers are aligned with a stage.
+- `simulate` reports the sound pressure level per octave band and A-weighted
+  (`spl_db` and `spl_a_db` in `parameters.json`), the editor's results show it per
+  band, and `inspect` lists each source's sound power. In free field, the level 4 m from
+  a source comes out as its sound power less 10 log10(4 π r²) = 23 dB and the air's
+  absorption over the 4 m, to within 0.01 dB.
+
 ![Polar patterns of the per-band directivity above, from omni in the bass to a narrow pattern at 8 kHz](docs/images/directivity.png)
 
 ## Simulation
@@ -740,10 +776,12 @@ two sources) takes about 15 s. In the shoebox example, full simulations at map p
 give G within 0.3 dB of the map and T30 within 5 %. With the statistical late method
 each point gets the late part a listener there would, and G agrees within 0.01 dB.
 
-Each source radiates its `level_db` (sound power, dB re 1 pW) spread evenly over the
-octave bands, which sets the sound pressure levels. The STI (IEC 60268-16, male
-weighting) takes that as the speech level, with auditory masking and the reception
-threshold, and `noise_db` as the background noise. `map` prints the range of every
+Each source radiates its sound power per band (its `level_db`, `spectrum`, `gain_db`
+and `eq_db`; see [Sources and directivity](#sources-and-directivity)), which sets the
+sound pressure levels. The STI (IEC 60268-16, with the male weighting, or the female
+one for a `speech_female` source) takes that as the speech level, with auditory masking
+and the reception threshold, and `noise_db` as the background noise. In the map of all
+sources together, each source's sound arrives its `delay_ms` later. `map` prints the range of every
 parameter, `--plot` saves the top view, `--screenshot` the 3D view and `--json` every
 value of every point. Settings live in the scene:
 
@@ -1192,7 +1230,8 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
   directional decay.
 - [x] Vector-based scattering, and scattering that follows surface size and frequency.
 - [x] Third-octave bands.
-- [ ] Sources with their own spectra, delay and EQ, line and surface sources, arrays.
+- [x] Sources with their own spectra, gain, EQ and delay; speech spectra for the STI.
+- [ ] Line and surface sources, and arrays.
 - [ ] Sound through walls and between coupled rooms.
 - [ ] Fitting absorption to measured parameters.
 - [ ] The wave solver with impedance boundaries and a GPU path through WebGPU (AMD,

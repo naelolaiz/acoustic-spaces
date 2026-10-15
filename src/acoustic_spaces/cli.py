@@ -136,6 +136,17 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         print(_band_row(source.name, directivity.index(), width, "6.1f"))
         print(f"  {_directivity_text(directivity)}")
 
+    print("\nsound power (dB re 1 pW per octave band, the feed included)")
+    print(_band_header("", width) + "  dB(A)")
+    from acoustic_spaces.parameters import a_weighted
+
+    for source in scene.sources:
+        power = source.power_db("octave")
+        print(_band_row(source.name, power, width, "6.1f") + f"  {a_weighted(power):5.1f}")
+        feed = _feed_text(source)
+        if feed:
+            print(f"  {feed}")
+
     if room.volume_m3 is not None:
         print("\nstatistical reverberation time (s), without air absorption")
         print(_band_header("", width))
@@ -501,6 +512,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             f"{_early_text(response.early)}{wave}"
         )
         print(RoomParameters.from_dict(entry["parameters"]).table())
+        print(_level_text(entry))
         print(_speech_text(entry["speech"], entry["echo"]))
     files = sum(len(entry["outputs"]) for entry in report["responses"])
     print(f"\nwrote {files} impulse response files and {REPORT_FILE} to {out}")
@@ -511,6 +523,27 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     return 0
+
+
+def _feed_text(source) -> str:
+    """What shapes a source's level beyond its sound power: 'speech_male spectrum,
+    gain +3.0 dB, equalizer, 12.0 ms delay', or nothing."""
+    parts = []
+    if source.spectrum != "flat":
+        parts.append(f"{source.spectrum} spectrum")
+    if source.gain_db:
+        parts.append(f"gain {source.gain_db:+.1f} dB")
+    if source.eq_db is not None:
+        parts.append("equalizer")
+    if source.delay_ms:
+        parts.append(f"{source.delay_ms:g} ms delay")
+    return ", ".join(parts)
+
+
+def _level_text(entry: dict) -> str:
+    """One line: the A-weighted sound pressure level and that of each octave band."""
+    bands = " ".join(_number(v, ".1f") for v in entry["spl_db"])
+    return f"SPL {_number(entry['spl_a_db'], '.1f')} dB(A); per octave band, dB: {bands}"
 
 
 def _number(value, fmt: str = ".2f") -> str:
