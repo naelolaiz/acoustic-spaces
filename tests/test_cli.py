@@ -91,6 +91,26 @@ def test_inspect_shows_third_octave_data_in_octaves(
     assert "third-octave data, shown as octave averages" in out
 
 
+def test_inspect_shows_line_and_surface_sources(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    text = SHOEBOX.read_text(encoding="utf-8")
+    text = text.replace("file: shoebox.obj", f"file: {(SHOEBOX.parent / 'shoebox.obj').as_posix()}")
+    text = text.replace("    directivity: omni\n", "    directivity: lambert\n    line_m: 3\n")
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(text, encoding="utf-8")
+    assert main(["inspect", str(scene)]) == 0
+    out = capsys.readouterr().out
+    assert "inside  line 3 m, 6 points" in out and "lambert" in out
+    scene.write_text(text.replace("line_m: 3", "surface_m: [3, 9]"), encoding="utf-8")
+    assert main(["inspect", str(scene)]) == 1  # higher than the room
+    captured = capsys.readouterr()
+    assert "OUTSIDE  surface 3 x 9 m, 108 points" in captured.out
+    assert "source 'talker' at [2.0, 3.0, 1.5] reaches outside the room" in captured.err
+    assert main(["directivity", "lambert"]) == 0
+    assert "directivity index dB     6.0   6.0" in capsys.readouterr().out
+
+
 def test_materials_search(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["materials", "fissured"]) == 0
     assert "ceiling_fissured_tile" in capsys.readouterr().out

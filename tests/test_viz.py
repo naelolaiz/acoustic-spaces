@@ -32,6 +32,26 @@ def test_plot_room_adds_surfaces_and_markers() -> None:
     plotter.close()
 
 
+def test_line_and_surface_sources_are_drawn() -> None:
+    from acoustic_spaces.scene import Scene
+    from acoustic_spaces.viz import extent_polydata
+
+    scene = Scene.from_yaml(SHOEBOX)
+    line = scene.sources[0].model_copy(update={"line_m": 2.0})
+    surface = scene.sources[0].model_copy(update={"name": "wall", "surface_m": (2.0, 1.0)})
+    assert extent_polydata(scene.sources[0], 0.05) is None
+    tube = extent_polydata(line, 0.05)
+    np.testing.assert_allclose(np.ptp(tube.points, axis=0), [0.1, 2.0, 0.1], atol=0.01)
+    rectangle = extent_polydata(surface, 0.05)
+    assert rectangle.n_cells == 1 and rectangle.area == pytest.approx(2.0)
+    scene.sources = [line, surface]
+    plotter = pv.Plotter(off_screen=True)
+    before = len(plot_room(Room.from_yaml(SHOEBOX), pv.Plotter(off_screen=True)).renderer.actors)
+    plot_room(Room.from_scene(scene), plotter)
+    assert len(plotter.renderer.actors) == before + 3  # another sphere, a tube, a rectangle
+    plotter.close()
+
+
 def test_directivity_balloon_points_where_the_source_faces() -> None:
     from acoustic_spaces.directivity import FirstOrder
     from acoustic_spaces.scene.model import Orientation

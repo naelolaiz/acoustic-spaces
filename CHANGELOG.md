@@ -109,6 +109,12 @@
   each response, `Response.levels` gives them for any sound power, the editor's results
   have an SPL row, and `inspect` lists each source's sound power per band. The editor's
   source page sets the spectrum, gain, equalizer and delay.
+- Line and surface sources: `line_m` or `surface_m` (and `spacing_m`) make a source of
+  uncorrelated point sources that share its power and rays, in responses, coverage
+  maps, early paths and particles. A `lambert` directivity radiates as a vibrating
+  surface. The editor sets the shape and size, and draws them in the 3D view and the
+  plan; the Blender export and `inspect` show them; `directivity lambert` prints the
+  pattern's index.
 
 **Examples**
 

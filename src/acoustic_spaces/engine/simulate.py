@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import time
 from collections.abc import Callable, Sequence
@@ -144,28 +145,42 @@ def early_paths(
     src = _pick(scene.sources, None if source is None else [source], "source")[0]
     lis = _pick(scene.listeners, None if listener is None else [listener], "listener")[0]
     model = TraceModel.from_room(room)
-    position = np.array(src.position, dtype=float)
     target = np.array(lis.position, dtype=float)
     order = cfg.max_order if max_order is None else max_order
     orientation = np.array(src.orientation.rotation())
-    candidates = _candidates(model, position, method or cfg.method, order, cfg.rays, threads)
-    paths = early_stage.find_paths(
-        model,
-        position,
-        target,
-        candidates,
-        speed_of_sound=room.speed_of_sound(),
-        air=room.air_attenuation(model.bands),
-        max_delay_s=scene.simulation.ir_length_s,
-        directivity=room.directivity(src.name, model.bands),
-        orientation=orientation,
+    edges = _Edges(model)
+    elements = src.elements()
+    parts = []
+    for position in elements:
+        candidates = _candidates(model, position, method or cfg.method, order, cfg.rays, threads)
+        paths = early_stage.find_paths(
+            model,
+            position,
+            target,
+            candidates,
+            speed_of_sound=room.speed_of_sound(),
+            air=room.air_attenuation(model.bands),
+            max_delay_s=scene.simulation.ir_length_s,
+            directivity=room.directivity(src.name, model.bands),
+            orientation=orientation,
+        )
+        found = edges.diffraction(
+            diffraction or cfg.diffraction, position, room, src.name, orientation
+        )
+        if found is not None:
+            paths = found.apply(target, paths, scene.simulation.ir_length_s)
+        parts.append(paths)
+    return _shared(parts, model.absorption.shape[1])
+
+
+def _shared(parts: list[early_stage.EarlyReflections], bands: int) -> early_stage.EarlyReflections:
+    """The paths of a line or surface source's points, each with its share of the power."""
+    if len(parts) == 1:
+        return parts[0]
+    share = 1.0 / len(parts)
+    return early_stage.EarlyReflections.concatenate(
+        [dataclasses.replace(p, energy=share * p.energy) for p in parts], bands
     )
-    edges = _Edges(model).diffraction(
-        diffraction or cfg.diffraction, position, room, src.name, orientation
-    )
-    if edges is not None:
-        paths = edges.apply(target, paths, scene.simulation.ir_length_s)
-    return paths
 
 
 def simulate(
@@ -224,23 +239,30 @@ def simulate(
     edges = _Edges(model)
     responses: dict[tuple[str, str], Response] = {}
     details: dict[str, dict[str, float]] = {}
-    for s_index, source in enumerate(chosen_sources):
-        src = np.array(source.position, dtype=float)
-        directivity = room.directivity(source.name, model.bands)
-        orientation = np.array(source.orientation.rotation())
-        direct = np.linalg.norm(listener_pos - src, axis=1) / c
-        cutoff = np.minimum(direct + transition, length)
-        info: dict[str, float] = {"seed": _seed(seed, s_index)}
+    for source in chosen_sources:
+        if settings.wave.enabled and source.extended:
+            raise ValueError(
+                f"source {source.name!r} is a line or surface; the wave solver takes point "
+                "sources only"
+            )
 
+    def add(info: dict[str, float], key: str, value: float) -> None:
+        info[key] = info.get(key, 0.0) + value
+
+    def trace_point(label, position, directivity, orientation, point_seed, rays, info):
+        """Direct sound times, early paths and late energy at every listener of one point
+        source, which radiates all the power; timings and counts go into ``info``."""
+        direct = np.linalg.norm(listener_pos - position, axis=1) / c
+        cutoff = np.minimum(direct + transition, length)
         started = time.perf_counter()
-        say(f"{source.name}: early reflections ({early_cfg.method}, order {early_cfg.max_order})")
+        say(f"{label}: early reflections ({early_cfg.method}, order {early_cfg.max_order})")
         candidates = _candidates(
-            model, src, early_cfg.method, early_cfg.max_order, early_cfg.rays, threads
+            model, position, early_cfg.method, early_cfg.max_order, early_cfg.rays, threads
         )
         paths = [
             early_stage.find_paths(
                 model,
-                src,
+                position,
                 listener_pos[k],
                 candidates,
                 speed_of_sound=c,
@@ -251,21 +273,23 @@ def simulate(
             )
             for k in range(len(chosen_listeners))
         ]
-        info["candidates"] = float(sum(len(x) for x in candidates))
-        diffraction = edges.diffraction(early_cfg.diffraction, src, room, source.name, orientation)
+        add(info, "candidates", float(sum(len(x) for x in candidates)))
+        diffraction = edges.diffraction(
+            early_cfg.diffraction, position, room, source.name, orientation
+        )
         if diffraction is not None:
-            say(f"{source.name}: edge diffraction ({early_cfg.diffraction})")
+            say(f"{label}: edge diffraction ({early_cfg.diffraction})")
             paths = [
                 diffraction.apply(listener_pos[k], paths[k], float(cutoff[k]))
                 for k in range(len(chosen_listeners))
             ]
             info["edges"] = float(len(diffraction.edges))
-            info["diffracted_paths"] = float(sum(int(p.diffracted.sum()) for p in paths))
-        info["early_s"] = time.perf_counter() - started
+            add(info, "diffracted_paths", float(sum(int(p.diffracted.sum()) for p in paths)))
+        add(info, "early_s", time.perf_counter() - started)
 
         started = time.perf_counter()
         if statistical:
-            say(f"{source.name}: statistical late reverberation")
+            say(f"{label}: statistical late reverberation")
             t60 = room.reverberation_time("eyring", air_absorption=True, bands=model.bands)
             late = late_stage.statistical_energy(
                 t60,
@@ -277,18 +301,19 @@ def simulate(
                 speed_of_sound=c,
             )
         else:
-            say(f"{source.name}: stochastic ray tracing ({late_cfg.rays} rays per band)")
+            say(f"{label}: stochastic ray tracing ({rays} rays per band)")
             radius = late_cfg.receiver_radius
             if radius is None:
+                # As for a point source with all the rays: the parts' rays add up.
                 clearance = distance_to_surface(room.mesh, listener_pos)
                 radius = late_stage.receiver_radius(
                     volume, late_cfg.rays, length, c, clearance=clearance
                 )
             late = late_stage.stochastic_energy(
                 model,
-                src,
+                position,
                 listener_pos,
-                rays=late_cfg.rays,
+                rays=rays,
                 max_time=length,
                 time_step=TIME_STEP,
                 speed_of_sound=c,
@@ -299,16 +324,56 @@ def simulate(
                 radius=radius,
                 directions=fibonacci_sphere(late_cfg.directions),
                 splitting=late_cfg.splitting,
-                seed=info["seed"],
+                seed=point_seed,
                 directivity=directivity,
                 orientation=orientation,
                 threads=threads,
             )
-            info["rays"] = float(late.rays)
-            info["escaped_rays"] = float(late.escaped_rays)
-            info["traced_rays"] = float(late.traced_rays)
+            add(info, "rays", float(late.rays))
+            add(info, "escaped_rays", float(late.escaped_rays))
+            add(info, "traced_rays", float(late.traced_rays))
             info["receiver_radius_m"] = float(np.min(radius))
-        info["late_s"] = time.perf_counter() - started
+        add(info, "late_s", time.perf_counter() - started)
+        return direct, paths, late
+
+    for s_index, source in enumerate(chosen_sources):
+        src = np.array(source.position, dtype=float)
+        elements = source.elements()
+        directivity = room.directivity(source.name, model.bands)
+        orientation = np.array(source.orientation.rotation())
+        info: dict[str, float] = {"seed": _seed(seed, s_index)}
+        if len(elements) > 1:
+            info["elements"] = float(len(elements))
+        traced = []
+        for e_index, position in enumerate(elements):
+            # One point source of a line or surface: its share of the rays, a seed of its own.
+            single = len(elements) == 1
+            traced.append(
+                trace_point(
+                    source.name if single else f"{source.name} ({e_index + 1})",
+                    position,
+                    directivity,
+                    orientation,
+                    info["seed"] if single else _seed(info["seed"], e_index + 1),
+                    math.ceil(late_cfg.rays / len(elements)),
+                    info,
+                )
+            )
+        direct = np.min([t[0] for t in traced], axis=0)
+        cutoff = np.minimum(direct + transition, length)
+        if len(traced) == 1:
+            _, paths, late = traced[0]
+        else:
+            share = 1.0 / len(traced)
+            bands = model.absorption.shape[1]
+            paths = [
+                _shared([t[1][k] for t in traced], bands) for k in range(len(chosen_listeners))
+            ]
+            late = dataclasses.replace(
+                traced[0][2],
+                energy=share * np.sum([t[2].energy for t in traced], axis=0),
+                directional=share * np.sum([t[2].directional for t in traced], axis=0),
+            )
 
         waves: list = [None] * len(chosen_listeners)
         if settings.wave.enabled:

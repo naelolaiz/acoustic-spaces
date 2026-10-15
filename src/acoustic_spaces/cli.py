@@ -166,9 +166,23 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         for k, item in enumerate(items):
             where = "" if inside is None else ("  inside" if inside[k] else "  OUTSIDE")
             x, y, z = item.position
-            print(f"  {kind:<9}{item.name:<{width}}({x:.2f}, {y:.2f}, {z:.2f}){where}")
+            print(
+                f"  {kind:<9}{item.name:<{width}}({x:.2f}, {y:.2f}, {z:.2f}){where}"
+                + _extent_text(item)
+            )
     print()
     return 0 if _print_checks(room) else 1
+
+
+def _extent_text(item) -> str:
+    """'  line 3 m, 6 points' or '  surface 3 x 2 m, 24 points' for an extended source."""
+    if not getattr(item, "extended", False):
+        return ""
+    count = len(item.elements())
+    if item.line_m is not None:
+        return f"  line {item.line_m:g} m, {count} points"
+    width, height = item.surface_m
+    return f"  surface {width:g} x {height:g} m, {count} points"
 
 
 def _directivity_text(directivity) -> str:
@@ -182,10 +196,12 @@ def _directivity_text(directivity) -> str:
 def _cmd_directivity(args: argparse.Namespace) -> int:
     import numpy as np
 
-    from acoustic_spaces.directivity import PATTERNS, FirstOrder, read_directivity
+    from acoustic_spaces.directivity import PATTERNS, FirstOrder, lambert, read_directivity
 
     try:
-        if args.source in PATTERNS:
+        if args.source == "lambert":
+            directivity = lambert()
+        elif args.source in PATTERNS:
             directivity = FirstOrder.pattern(args.source)
         else:
             directivity = read_directivity(args.source, args.measurement)
@@ -1387,7 +1403,9 @@ def build_parser() -> argparse.ArgumentParser:
     directivity = sub.add_parser(
         "directivity", help="directivity index of a SOFA or CSV directivity file, or a pattern"
     )
-    directivity.add_argument("source", help="a .sofa or .csv file, or a pattern such as cardioid")
+    directivity.add_argument(
+        "source", help="a .sofa or .csv file, or a pattern such as cardioid or lambert"
+    )
     directivity.add_argument(
         "--measurement", type=int, help="SOFA: the measurement to use (default: all averaged)"
     )

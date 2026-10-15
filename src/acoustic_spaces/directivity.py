@@ -431,9 +431,21 @@ def read_directivity(path: str | Path, measurement: int | None = None) -> Balloo
     return read_directivity_csv(path)
 
 
+def lambert() -> Balloon:
+    """A vibrating surface's radiation: energy in proportion to the cosine of the angle
+    to the forward axis, nothing behind (Lambert's law), in every band."""
+    elevation, azimuth = _grid(GRID_STEP_DEG)
+    points = _from_angles(azimuth[None, :], elevation[:, None]).reshape(-1, 3)
+    energy = np.repeat(np.maximum(points[:, :1], 0.0), _BANDS, axis=1)
+    return Balloon.from_measurements(points, energy, "lambert")
+
+
 def load_directivity(spec) -> Directivity:
-    """The directivity a scene's source entry describes: a pattern name, or an object
-    with ``pattern`` (a name or ``a`` value per band) or ``file``."""
+    """The directivity a scene's source entry describes: a pattern name (or
+    ``lambert``), or an object with ``pattern`` (a name or ``a`` value per band) or
+    ``file``."""
+    if spec == "lambert":
+        return lambert()
     if isinstance(spec, str):
         return FirstOrder.pattern(spec)
     if getattr(spec, "file", None) is not None:
@@ -449,6 +461,7 @@ __all__ = [
     "Balloon",
     "Directivity",
     "FirstOrder",
+    "lambert",
     "load_directivity",
     "read_directivity",
     "read_directivity_csv",
