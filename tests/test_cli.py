@@ -224,7 +224,7 @@ def test_simulate_with_the_wave_solver(tmp_path: Path, capsys: pytest.CaptureFix
     captured = capsys.readouterr()
     assert "talker -> seat-a: direct sound at" in captured.out
     assert "63-125 Hz from the wave solver" in captured.out
-    assert "talker: wave solver, 63 and 125 Hz (" in captured.err
+    assert "talker: wave solver, 63-125 Hz (" in captured.err
     report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
     assert report["settings"]["wave"] == {
         "enabled": True,

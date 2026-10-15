@@ -390,18 +390,26 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
         to_numpy(std::move(result.reflections), {result.windows}), result.traced_rays);
 }
 
-void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, InArray admittance,
-                      InArray origin, double cell, std::size_t nx, std::size_t ny, std::size_t nz,
-                      InArray source, Points probes, double edge_admittance, std::size_t threads) {
-    if (admittance.shape(0) != bvh.face_count()) {
-        throw std::invalid_argument("WaveSolver: one admittance per face");
+void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_material,
+                      InArray beta, Matrix branches, Indices branch_material, InArray origin,
+                      double cell, std::size_t nx, std::size_t ny, std::size_t nz,
+                      InArray source, Points probes, double edge_admittance, std::size_t layer,
+                      double layer_damping, std::size_t threads) {
+    if (face_material.shape(0) != bvh.face_count()) {
+        throw std::invalid_argument("WaveSolver: one material per face");
+    }
+    const std::size_t count = branch_material.shape(0);
+    if (branches.shape(0) != count || (count > 0 && branches.shape(1) != 3)) {
+        throw std::invalid_argument("WaveSolver: m, r and q of each branch, and its material");
     }
     const std::vector<as::Vec3> probe_points = points(probes);
     const as::Vec3 o = vec3(origin, "origin"), s = vec3(source, "source");
     {
         nb::gil_scoped_release release;
-        new (self) as::WaveSolver(bvh, admittance.data(), o, cell, nx, ny, nz, s, probe_points,
-                                  edge_admittance, threads);
+        new (self) as::WaveSolver(bvh, face_material.data(), beta.data(), beta.shape(0),
+                                  branches.data(), branch_material.data(), count, o, cell, nx, ny,
+                                  nz, s, probe_points, edge_admittance, layer, layer_damping,
+                                  threads);
     }
 }
 
@@ -483,12 +491,18 @@ NB_MODULE(_native, m) {
     nb::class_<as::WaveSolver>(
         m, "WaveSolver",
         "Finite-difference time-domain solver on a cubic grid over a mesh (see fdtd.hpp).")
-        .def("__init__", &make_wave_solver, nb::arg("bvh"), nb::arg("admittance"),
-             nb::arg("origin"), nb::arg("cell"), nb::arg("nx"), nb::arg("ny"), nb::arg("nz"),
-             nb::arg("source"), nb::arg("probes"), nb::arg("edge_admittance"),
-             nb::arg("threads") = 0)
+        .def("__init__", &make_wave_solver, nb::arg("bvh"), nb::arg("face_material"),
+             nb::arg("beta"), nb::arg("branches"), nb::arg("branch_material"), nb::arg("origin"),
+             nb::arg("cell"), nb::arg("nx"), nb::arg("ny"), nb::arg("nz"), nb::arg("source"),
+             nb::arg("probes"), nb::arg("edge_admittance") = 1.0, nb::arg("layer") = 0,
+             nb::arg("layer_damping") = 0.0, nb::arg("threads") = 0,
+             "face_material: each face's material; beta: each material's constant admittance; "
+             "branches (n, 3): m, r and q of each mass-resistance-stiffness branch, of "
+             "branch_material; layer: cells of matched layer inside the grid's edge.")
         .def_prop_ro("air_cells", &as::WaveSolver::air_cells)
         .def_prop_ro("boundary_cells", &as::WaveSolver::boundary_cells)
+        .def_prop_ro("branch_states", &as::WaveSolver::branch_states)
+        .def_prop_ro("layer_cells", &as::WaveSolver::layer_cells)
         .def_prop_ro("open", &as::WaveSolver::open)
         .def_prop_ro("threads", &as::WaveSolver::threads)
         .def("probe_found", &as::WaveSolver::probe_found, nb::arg("probe"))

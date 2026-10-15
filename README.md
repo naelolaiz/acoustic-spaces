@@ -882,11 +882,13 @@ simulation:
 - The sound field is computed with finite differences in time on a cubic grid over the
   room (the standard leapfrog scheme at its stability limit), in the compiled core, on
   all cores. Up to the 125 Hz band the cells are 20 cm.
-- Surfaces absorb as their materials do in each band: each coefficient becomes the
-  locally reacting admittance with that random-incidence absorption. Bands whose
-  coefficients differ get runs of their own on the same grid.
-- Closed rooms, open models (the air at the edge of the grid absorbs) and thin screens
-  all work.
+- Surfaces absorb as their materials do in each band: each material becomes a locally
+  reacting surface whose admittance changes with frequency (a constant and resonant
+  mass-spring-damper branches), fitted so that its random-incidence absorption matches
+  the material's in every wave band. One run covers all the bands.
+- Closed rooms, open models and thin screens all work. Round an open model the grid
+  grows by a perfectly matched layer of 8 cells, which takes in the sound leaving it:
+  what comes back is 57 to 74 dB down, against 7 to 14 dB from the grid's edge alone.
 - The listener records the pressure and its gradient, so the low end keeps its
   direction in Ambisonics, binaural and loudspeaker outputs (to first order).
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177
@@ -899,19 +901,22 @@ acoustic-spaces simulate examples/studio/scene.yaml --out studio --wave --wave-b
 ```
 
 The editor's Simulation page has the same switch. Each octave higher costs about 16
-times as much: on 4 cores, up to the 125 Hz band, the studio takes 0.1 s, the concert
-hall (9,400 m³, 3.5 s responses) 13 s, and the church (7 s responses, materials that
-absorb differently at 63 and 125 Hz, so two runs) 45 s. Grids of more than 40 million
-cells are refused.
+times as much: on 4 cores, up to the 125 Hz band, the studio takes 0.3 s, the concert
+hall (9,400 m³, 3.5 s responses) 13 s, and the church (7 s responses) 28 s per source.
+Grids of more than 40 million cells are refused.
 
 ![Transfer function of a 7 x 5 x 3 m box from the sum of its modes, the wave solver and rays](docs/images/wave.png)
 
 In a 7 x 5 x 3 m box with 15 % absorption, the wave solver follows the sum of the box's
 modes from 22 Hz up; rays give the average level instead. In the 63 and 125 Hz bands,
-G is within 1 dB of the modes and T20 within 5 %; rays are up to 5.4 dB and 8 % off.
+G is within 1 dB of the modes and T20 within 5 %; rays are up to 5.3 dB and 12 % off.
 
-What it leaves out: the absorption of a surface is real-valued and the same across a
-band; walls on the grid lie within half a cell of the model's, which can move a small
+What it leaves out: surfaces react locally, so their absorption changes with the angle
+only as an impedance's does, and absorb at most 95 % at random incidence; next to a
+much more absorbing band, a band absorbs somewhat more than its material says (the
+fit reports how much, as `wave_absorption_miss`); near the top of the highest band the
+grid's walls absorb a little less than their admittance (0.025 less at 500 Hz with 14
+cells per wavelength); walls on the grid lie within half a cell of the model's, which can move a small
 room's modes by a few percent (more `points_per_wavelength` moves them less); waves on
 the grid travel slower the shorter they are, by up to 1.7 % at the top of the highest
 band with 8 points per wavelength (along the grid's axes, not at all along its
@@ -933,8 +938,10 @@ a chamber music hall within about one JND on clarity and 7 to 20 % long on rever
 time. Edge diffraction
 is checked against the exact solutions for a half-plane and for wedges, and against
 Maekawa's chart. The
-wave solver matches the frequencies and decay rates of a box's modes within 0.5 %, the
-reflection and absorption of walls, and the free-field level within 0.35 dB. Sound
+wave solver matches the frequencies of a box's modes within 0.25 % and their decay rates
+within 2 % with walls whose admittance changes with frequency, the reflection and
+absorption of walls, and the free-field level within 0.35 dB, and round an open model
+what comes back from the grid's edge is 57 dB down or more. Sound
 through a partition reaches the level behind it that diffuse-field theory gives within
 0.3 dB, and coupled rooms decay in the two slopes of the two-room model.
 The [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
@@ -1494,8 +1501,10 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] Loudspeaker arrays with phase (their far-field patterns).
 - [x] Sound through walls and between coupled rooms.
 - [x] Fitting absorption to measured parameters (`acoustic-spaces calibrate`).
-- [ ] The wave solver with impedance boundaries and a GPU path through WebGPU (AMD,
-  NVIDIA, Intel and Apple GPUs alike).
+- [x] Wave solver walls that absorb as their materials do in every band, in one run, and
+  a matched layer round open models.
+- [ ] A GPU path for the wave solver through WebGPU (AMD, NVIDIA, Intel and Apple GPUs
+  alike).
 - [ ] Second-order edge diffraction.
 - [ ] Walkthroughs with moving sources and listeners; IFC and Collada import; CATT and
   ODEON material libraries.

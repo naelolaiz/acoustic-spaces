@@ -185,6 +185,27 @@
   about one JND. That is as close as BRAS's own fitted absorption gets in the seminar
   room, and closer in the hall: T30 within 0.5 JNDs against 1.8.
 
+**Wave solver: walls that follow their materials, and open models** (changes results in
+the wave bands)
+
+- Each material becomes a locally reacting surface whose admittance changes with
+  frequency: a constant and resonant mass-spring-damper branches, fitted so that its
+  random-incidence absorption, counted through the analysis's band filters, matches the
+  material's in every wave band (`acoustic_spaces.engine.impedance`). One run covers
+  all the wave bands, where version 2 ran one for each set of coefficients, and the
+  absorption changes smoothly from band to band instead of stepping. The largest miss of
+  the fit is in the details as `wave_absorption_miss`; `wave_runs` is gone.
+- Round an open model the grid grows by a perfectly matched layer of 8 cells, which
+  takes in the sound leaving it: what comes back is 57 to 74 dB below the sound, where
+  the grid's edge alone sent back 7 to 14 dB below it.
+- `WaveResponse.signals` holds the one run (samples, 4), and `WaveResponse.bands` is a
+  field; `band_runs` is gone. `_native.WaveSolver` takes each face's material, the
+  materials' constant admittances and their branches, and the matched layer.
+- Checked in `validation/wave_solver.py`: modes of a box with frequency-dependent walls
+  (frequencies within 0.25 % of perturbation theory, decay rates within 2 %), the
+  normal-incidence absorption of a duct's end (within 0.004 of the grid's theory), the
+  matched layer against a grid too large for anything to come back, and the run count.
+
 **Examples**
 
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)

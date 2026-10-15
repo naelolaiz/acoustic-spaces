@@ -7,10 +7,18 @@ import pytest
 
 from acoustic_spaces import Room, Scene, _native, simulate, synthesis
 from acoustic_spaces.engine.early import EarlyReflections
+from acoustic_spaces.engine.impedance import (
+    Admittance,
+    band_absorption,
+    fit_admittance,
+    random_incidence_absorption,
+)
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.wave import (
     COURANT,
+    LAYER_CELLS,
+    LAYER_DAMPING,
     MAX_ABSORPTION,
     WaveResponse,
     _first_order,
@@ -30,25 +38,36 @@ C = 343.0
 FS = 48_000
 
 
-def _solver(size, admittances, source, probes, cell=0.1, mesh=None):
+def _solver(size, admittances, source, probes, cell=0.1, mesh=None, branches=None):
     """A wave solver in a box from (0, 0, 0) to ``size`` (or in ``mesh``, within it), laid
-    out as wave_responses does, and its sample rate."""
+    out as wave_responses does, and its sample rate. ``admittances(mesh)`` gives each
+    face's constant admittance, each face its own material; ``branches``, a list of
+    (face, Admittance), adds the branches of those admittances."""
     mesh = box_mesh(size) if mesh is None else mesh
     bvh = _native.Bvh(mesh.vertices, mesh.faces)
     origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
     shape = np.ceil((np.array(size) - origin) / cell).astype(int) + 2
+    rate = C / (COURANT * cell)
+    beta = np.array(admittances(mesh), dtype=float)
+    rows, owners = [np.zeros((0, 3))], [np.zeros(0, np.int64)]
+    for face, fit in branches or []:
+        beta[face] += fit.beta
+        rows.append(fit.branches(rate))
+        owners.append(np.full(len(fit.conductance), face, np.int64))
     solver = _native.WaveSolver(
         bvh,
-        np.ascontiguousarray(admittances(mesh), dtype=float),
+        np.arange(len(mesh.faces), dtype=np.int64),
+        beta,
+        np.ascontiguousarray(np.vstack(rows)),
+        np.concatenate(owners),
         origin,
         cell,
         *map(int, shape),
         np.asarray(source, dtype=float),
         np.asarray(probes, dtype=float).reshape(-1, 3),
-        1.0,
-        1,
+        threads=1,
     )
-    return solver, C / (COURANT * cell)
+    return solver, rate
 
 
 def _drive(rate: float, cell: float, steps: int) -> np.ndarray:
@@ -276,7 +295,7 @@ def test_direct_sound_arrives_on_time() -> None:
     n_fft = 1 << 14
     f = np.fft.rfftfreq(n_fft, 1.0 / wave.rate)
     band = np.clip((f - 25) / 10, 0, 1) * np.clip((100 - f) / 20, 0, 1)
-    spectrum = np.fft.rfft(wave.signals[0, :, 0], n_fft) * np.conj(np.fft.rfft(signal, n_fft))
+    spectrum = np.fft.rfft(wave.signals[:, 0], n_fft) * np.conj(np.fft.rfft(signal, n_fft))
     correlation = np.fft.irfft(spectrum * band**2, n_fft)
     lag = int(np.argmax(correlation[: n_fft // 2]))
     y0, y1, y2 = correlation[lag - 1 : lag + 2]
@@ -325,8 +344,8 @@ def test_hybrid_tail_is_flat_across_the_crossover() -> None:
     n, slots = int(length * FS), int(length / step)
     spectrum = np.exp(2j * np.pi * np.random.default_rng(0).random(n // 2 + 1))
     spectrum[0] = spectrum[-1] = 1.0
-    signals = np.zeros((1, n, 4))
-    signals[0, :, 0] = np.fft.irfft(spectrum, n)
+    signals = np.zeros((n, 4))
+    signals[:, 0] = np.fft.irfft(spectrum, n)
     signals *= math.sqrt(synthesis.ENERGY_TO_IR * energy * slots / np.sum(signals**2))
     response = Response(
         source="s",
@@ -339,7 +358,7 @@ def test_hybrid_tail_is_flat_across_the_crossover() -> None:
         transition_s=0.0,
         volume_m3=200.0,
         speed_of_sound=C,
-        wave=WaveResponse(FS, signals, (0, 0), 0.2),
+        wave=WaveResponse(FS, signals, 2, 0.2),
     )
     f = np.fft.rfftfreq(n, 1.0 / FS)
     centres = 177.0 * 2.0 ** (np.arange(-6, 7) / 6)
@@ -473,39 +492,247 @@ def test_open_models_absorb_at_the_grid_edge(tmp_path: Path) -> None:
         speed_of_sound=C,
     )
     assert info["wave_open"] == 1.0
-    pressure = responses[0].signals[0, :, 0]
+    pressure = responses[0].signals[:, 0]
     rate = responses[0].rate
     # The sound leaves: little is left after 150 ms.
     late = pressure[int(0.15 * rate) :]
     assert np.sum(late**2) < 1e-2 * np.sum(pressure**2)
 
 
-@pytest.mark.parametrize(("low", "runs"), [(0.3, 1), (0.1, 2)])
-def test_bands_with_their_own_absorption_get_their_own_run(low: float, runs: int) -> None:
-    room = Room.from_scene(
-        Scene.model_validate(
-            {
-                "geometry": {"box": [3.0, 2.5, 2.0]},
-                "materials": {"m": {"absorption": [low] + [0.3] * 7, "scattering": 0.1}},
-                "default_material": "m",
-                "sources": [{"name": "s", "position": [0.7, 0.6, 1.1]}],
-                "listeners": [{"name": "l", "position": [2.3, 1.8, 1.3]}],
-                "simulation": {
-                    "ir_length_s": 1.0,
-                    "seed": 1,
-                    "late": {"rays": 500},
-                    "wave": {"enabled": True, "max_band_hz": 125},
-                },
-            }
+def test_bands_with_their_own_absorption_share_one_run() -> None:
+    def room(low: float) -> Room:
+        return Room.from_scene(
+            Scene.model_validate(
+                {
+                    "geometry": {"box": [3.0, 2.5, 2.0]},
+                    "materials": {"m": {"absorption": [low] + [0.3] * 7, "scattering": 0.1}},
+                    "default_material": "m",
+                    "sources": [{"name": "s", "position": [0.7, 0.6, 1.1]}],
+                    "listeners": [{"name": "l", "position": [2.3, 1.8, 1.3]}],
+                    "simulation": {
+                        "ir_length_s": 1.0,
+                        "seed": 1,
+                        "late": {"rays": 500},
+                        "wave": {"enabled": True, "max_band_hz": 125},
+                    },
+                }
+            )
         )
+
+    for low in (0.3, 0.1):
+        result = simulate(room(low))
+        assert result.details["s"]["wave_absorption_miss"] < 0.01
+        wave = result.responses[("s", "l")].wave
+        assert wave.bands == 2 and wave.signals.shape[1] == 4
+        # The less absorbing 63 Hz band decays more slowly: more of its sound is left
+        # after 300 ms for what it has between 100 and 300 ms. (Its share of all the sound
+        # is no measure: with the same absorption it has twice the other band's after
+        # 100 ms.)
+        energy = wave.energy(0.01, 100)
+        late = energy[:, 30:].sum(axis=1) / energy[:, 10:30].sum(axis=1)
+        assert (late[0] > 1.5 * late[1]) == (low < 0.3)
+
+
+def test_random_incidence_absorption_of_a_complex_admittance() -> None:
+    mu = np.linspace(0.0, 1.0, 20001)
+    for y in (0.3 + 0.2j, 0.05 - 0.4j, 1.2 + 0.9j, 0.01 + 0.0j, 0.0 + 0.5j):
+        # 1 - |R|^2 at incidence cos(theta) = mu, weighted by sin(2 theta).
+        absorbed = 4 * y.real * mu / np.abs(mu + y) ** 2
+        expected = np.trapezoid(absorbed * 2 * mu, mu)
+        assert random_incidence_absorption(np.array([y]))[0] == pytest.approx(expected, abs=1e-8)
+    beta = np.array([0.01, 0.2, 0.638, 3.0])
+    np.testing.assert_allclose(random_incidence_absorption(beta), absorption_of_impedance(1 / beta))
+
+
+@pytest.mark.parametrize(("total", "bands"), [(8, 4), (8, 2), (24, 12)])
+def test_fitted_admittances_absorb_as_their_materials(total: int, bands: int) -> None:
+    rate = band_grid(bands - 1, FS, C, total=total).rate
+    shapes = {
+        "porous": [0.05, 0.15, 0.4, 0.7],
+        "panel": [0.35, 0.3, 0.15, 0.08],
+        "hard": [0.01, 0.01, 0.015, 0.02],
+        "seats": [0.5, 0.6, 0.75, 0.85],
+    }
+    f = np.geomspace(5.0, 0.4 * rate, 2000)
+    for name, values in shapes.items():
+        target = np.interp(np.linspace(0, 3, bands), np.arange(4), values)
+        fit = fit_admittance(target, total, rate)
+        # Steep changes between neighbouring octaves (porous, two bands) are met roughly.
+        tolerance = 0.1 if (name == "porous" and bands == 2) else 0.01
+        np.testing.assert_allclose(fit.achieved, target, atol=tolerance)
+        np.testing.assert_allclose(band_absorption(fit, bands, total, rate), fit.achieved)
+        # Passive: every branch resistive, the admittance's real part never negative.
+        assert fit.beta >= 0 and np.all(fit.conductance > 0) and np.all(fit.quality > 0)
+        assert np.all(fit(f).real >= 0) and np.all(fit(f, rate).real >= 0)
+        np.testing.assert_allclose(fit.branches(rate)[:, 1], 1 / fit.conductance)
+    # A constant needs no branches; nothing absorbs past what a surface can.
+    flat = fit_admittance([0.3] * bands, total, rate)
+    assert len(flat.conductance) == 0
+    assert flat.beta == pytest.approx(admittance(np.array([0.3]))[0])
+    assert fit_admittance([0.0] * bands, total, rate).beta == 0.0
+    np.testing.assert_allclose(fit_admittance([0.99] * bands, total, rate).achieved, MAX_ABSORPTION)
+
+
+def _discrete_reflection(f: np.ndarray, rate: float, y: np.ndarray) -> np.ndarray:
+    """Reflection at normal incidence off a wall of admittance y (the scheme's, at that
+    rate) in the grid: a plane wave along an axis, the wall half a cell past the last
+    centre. With time going as e^(-i w t), so y is the conjugate of Y(i w)."""
+    phi = 2 * np.pi * f / rate
+    shift = np.exp(2j * np.arcsin(np.minimum(np.sin(phi / 2) / COURANT, 1.0)))  # one cell
+    c = 1j * np.sin(phi) * y / COURANT
+    return (c - shift + 1) / (1 / shift - 1 - c)
+
+
+def test_duct_end_reflects_as_its_frequency_dependent_admittance_says() -> None:
+    # A plane wave down a duct to an end whose admittance resonates at 100 Hz: the
+    # reflected wave over the incident one (a run in a longer duct gives that), against
+    # a rigid end's, which the grid reflects whole, at every frequency.
+    resonant = Admittance(0.05, np.array([0.6]), np.array([2.0]), np.array([100.0]))
+
+    def run(length: float, end: Admittance | None) -> tuple[np.ndarray, float]:
+        size = (length, 0.3, 0.3)
+
+        def admittances(mesh):
+            x = mesh.vertices[mesh.faces][:, :, 0]
+            return np.where(np.all(np.isclose(x, 0.0), axis=1), 1.0, 0.0)
+
+        far = []
+        if end is not None:
+            mesh = box_mesh(size)
+            x = mesh.vertices[mesh.faces][:, :, 0]
+            far = [(f, end) for f in np.flatnonzero(np.all(np.isclose(x, length), axis=1))]
+        solver, rate = _solver(
+            size, admittances, (60.0, 0.15, 0.15), (110.0, 0.15, 0.15), branches=far
+        )
+        return solver.run(_drive(rate, 0.1, int(0.6 * rate)))[0], rate
+
+    reference, rate = run(200.0, None)
+    incident = np.where(np.arange(len(reference)) / rate < 0.48, reference, 0.0)
+    # (before the sound off the near end comes by)
+    n_fft = 1 << 14
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+    band = (f > 30) & (f < 250)
+    f = f[band]
+
+    def reflection(end: Admittance) -> np.ndarray:
+        reflected = run(130.0, end)[0] - reference
+        return np.fft.rfft(reflected, n_fft)[band] / np.fft.rfft(incident, n_fft)[band]
+
+    measured = np.abs(reflection(resonant) / reflection(Admittance(0.0)))
+    expected = np.abs(_discrete_reflection(f, rate, np.conj(resonant(f, rate))))
+    np.testing.assert_allclose(measured, expected, atol=0.012)
+    # It absorbs most at resonance, as it should: little comes back at 100 Hz.
+    assert measured[np.argmin(np.abs(f - 100))] < 0.25 < measured[np.argmin(np.abs(f - 40))]
+
+
+def _plate(h: float, pad: int, layer: int, seconds: float, damping: float = LAYER_DAMPING):
+    """The pressure at three points round a rigid 8 x 6 m plate in the open, with
+    ``pad`` more cells round the grid than wave_responses gives it and ``layer`` cells
+    of matched layer."""
+    vertices = np.array([[0, 0, 0], [8, 0, 0], [8, 6, 0], [0, 6, 0]], float)
+    bvh = _native.Bvh(vertices, np.array([[0, 1, 2], [0, 2, 3]], np.int64))
+    source = np.array([2.0, 2.0, 1.5])
+    listeners = np.array([[6.0, 4.0, 1.2], [4.0, 3.0, 3.0], [7.5, 1.0, 0.5]])
+    points = np.vstack([source, listeners])
+    low = np.minimum(vertices.min(0), points.min(0) - 2 * h)
+    high = np.maximum(vertices.max(0), points.max(0) + 2 * h)
+    origin = low - h * (2.0 + pad + np.array([0.0137, 0.0219, 0.0291]))
+    shape = np.ceil((high - origin) / h).astype(int) + 2 + pad
+    solver = _native.WaveSolver(
+        bvh,
+        np.zeros(2, np.int64),
+        np.zeros(1),
+        np.zeros((0, 3)),
+        np.zeros(0, np.int64),
+        origin,
+        h,
+        *map(int, shape),
+        source,
+        listeners,
+        layer=layer,
+        layer_damping=damping,
     )
-    result = simulate(room)
-    assert result.details["s"]["wave_runs"] == runs
-    wave = result.responses[("s", "l")].wave
-    assert wave.band_runs == ((0, 0) if runs == 1 else (0, 1))
-    # The less absorbing 63 Hz band decays more slowly: more of its sound is left after
-    # 300 ms for what it has between 100 and 300 ms. (Its share of all the sound is no
-    # measure: with the same absorption it has twice the other band's after 100 ms.)
-    energy = wave.energy(0.01, 100)
-    late = energy[:, 30:].sum(axis=1) / energy[:, 10:30].sum(axis=1)
-    assert (late[0] > 1.5 * late[1]) == (runs == 2)
+    rate = C / (COURANT * h)
+    return solver.run(_drive(rate, h, int(seconds * rate))), solver, rate
+
+
+def test_matched_layer_takes_in_the_sound_leaving_an_open_model() -> None:
+    # Against a grid so large that nothing comes back from its edge in time: the edge
+    # alone sends back 7 to 14 dB below the sound, the matched layer 40 dB and more.
+    h, seconds = 0.3, 0.07
+    reference, _, rate = _plate(h, 45, 0, seconds)
+    n_fft = 1 << 12
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+    gain = np.clip((f - 25) / 10, 0, 1) * np.clip((150 - f) / 30, 0, 1)
+
+    def band(x):
+        return np.fft.irfft(np.fft.rfft(x, n_fft, axis=1) * gain, n_fft, axis=1)[:, : x.shape[1]]
+
+    def error_db(pressure):
+        miss = band(pressure) - band(reference)
+        return 10 * np.log10(np.sum(miss**2, axis=1) / np.sum(band(reference) ** 2, axis=1))
+
+    edge, solver, _ = _plate(h, 0, 0, seconds)
+    assert solver.open and solver.layer_cells == 0
+    assert np.all(error_db(edge) > -20)
+    layered, solver, _ = _plate(h, LAYER_CELLS, LAYER_CELLS, seconds)
+    assert solver.layer_cells > 0
+    assert np.all(error_db(layered) < -40)
+
+
+def test_matched_layer_stays_stable() -> None:
+    pressure, _, rate = _plate(0.5, LAYER_CELLS, LAYER_CELLS, 8.0)
+    tenth = pressure.shape[1] // 10
+    levels = [np.mean(pressure[:, k * tenth : (k + 1) * tenth] ** 2) for k in range(10)]
+    # Down to the rounding of single precision, and no growth over 9,500 steps.
+    assert max(levels[6:]) < 1e-11 * levels[0]
+
+
+def test_wave_solver_checks_its_boundaries() -> None:
+    mesh = box_mesh((2.0, 2.0, 2.0))
+    bvh = _native.Bvh(mesh.vertices, mesh.faces)
+    faces = len(mesh.faces)
+    common = (np.array([-0.2, -0.2, -0.2]), 0.1, 26, 26, 26, np.array([1.0, 1.0, 1.0]))
+    probes = np.array([[1.2, 1.1, 0.9]])
+
+    def make(face_material=None, beta=(0.0,), branches=(), owners=(), **options):
+        material = np.zeros(faces, np.int64) if face_material is None else face_material
+        return _native.WaveSolver(
+            bvh,
+            material,
+            np.array(beta, float),
+            np.array(branches, float).reshape(-1, 3),
+            np.array(owners, np.int64),
+            *common,
+            probes,
+            **options,
+        )
+
+    assert make(branches=[[1.0, 2.0, 0.5]], owners=[0]).branch_states > 0
+    with pytest.raises(ValueError, match="no material"):
+        make(face_material=np.full(faces, 1, np.int64))
+    with pytest.raises(ValueError, match="negative admittance"):
+        make(beta=(-0.1,))
+    with pytest.raises(ValueError, match="stiffness >= 0"):
+        make(branches=[[1.0, -2.0, 0.5]], owners=[0])
+    with pytest.raises(ValueError, match="branch has no material"):
+        make(branches=[[1.0, 2.0, 0.5]], owners=[3])
+    # A closed room's grid has room for a layer, which the air never reaches...
+    assert make(layer=1).layer_cells == 0
+    # ...but a model through the layer is refused.
+    with pytest.raises(ValueError, match="reaches into the matched layer"):
+        _native.WaveSolver(
+            bvh,
+            np.zeros(faces, np.int64),
+            np.zeros(1),
+            np.zeros((0, 3)),
+            np.zeros(0, np.int64),
+            np.array([0.05, 0.05, 0.05]),
+            0.1,
+            24,
+            24,
+            30,
+            np.array([1.0, 1.0, 1.0]),
+            probes,
+            layer=3,
+        )

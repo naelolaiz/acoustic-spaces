@@ -68,6 +68,10 @@ Simulation above; the module also has the parameters a map shows and the A-weigh
 .. automodule:: acoustic_spaces.engine.wave
 ```
 
+```{eval-rst}
+.. automodule:: acoustic_spaces.engine.impedance
+```
+
 ## Parameters, air and impulse responses
 
 ```{eval-rst}

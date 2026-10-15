@@ -13,16 +13,16 @@ octave bands replace the ray-traced ones.
   Each octave higher costs about 16 times as much (cells 8 times smaller, steps twice
   as many). All bands share the grid, so a mode near a crossover is the same mode on
   both sides of it.
-- The surfaces absorb as their materials do in each band: each absorption coefficient
-  becomes the locally reacting admittance with that random-incidence absorption
-  (Paris's formula). Bands whose coefficients differ get runs of their own on the same
-  grid; bands with the same coefficients (63 and 125 Hz in most material tables) share
-  one.
+- The surfaces absorb as their materials do in each band: each material becomes a
+  locally reacting surface whose admittance changes with frequency, fitted so that its
+  random-incidence absorption matches the material's in every wave band
+  (:mod:`acoustic_spaces.engine.impedance`). One run covers all the wave bands.
 - Cells are air when the source reaches them without crossing a surface, so closed
-  rooms, open models and thin screens all work; where an open model's air reaches the
-  edge of the grid, the edge absorbs. Openings are not surfaces here: the air flows
-  through them. Surfaces that let only part of the sound through are not modelled, so
-  a model with any stops the wave solver with an error.
+  rooms, open models and thin screens all work. Round an open model, whose air reaches
+  the edge of the grid, the grid grows by a perfectly matched layer of
+  :data:`LAYER_CELLS` cells that takes in the sound leaving it. Openings are not
+  surfaces here: the air flows through them. Surfaces that let only part of the sound
+  through are not modelled, so a model with any stops the wave solver with an error.
 - At these frequencies the source radiates the same way in all directions. The
   listener records the pressure and, from its gradient, the direction the sound comes
   from (first-order Ambisonics), so spatial outputs keep the low end's direction.
@@ -45,6 +45,13 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from acoustic_spaces import synthesis
+from acoustic_spaces.engine.impedance import (
+    MAX_ABSORPTION,
+    Admittance,
+    absorption_of_impedance,
+    admittance,
+    fit_admittance,
+)
 from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, OCTAVE_BANDS_HZ, band_centres
 
 #: Courant number of the scheme: the stable limit of the cubic grid.
@@ -56,10 +63,11 @@ MAX_CELLS = 40_000_000
 #: pressure comes back to rest (but for a slow swing from rounding L^2 down, far below
 #: the wave bands). Its length in seconds; twice, it is flat within 0.2 dB above 20 Hz.
 HIGH_PASS_S = 0.12
-#: Highest random-incidence absorption a locally reacting surface with a real
-#: admittance reaches (Paris's formula), and its normalised impedance.
-MAX_ABSORPTION = 0.951
-_BEST_IMPEDANCE = 1.5672
+#: Cells of the matched layer round an open model, and its damping at the grid's edge
+#: (the damping rate times half a time step). Sound leaving the model comes back from
+#: it some 60 dB down; from the grid's edge alone, 7 to 14 dB down.
+LAYER_CELLS = 8
+LAYER_DAMPING = 0.5
 #: The wave solver's part of a response starts here (Hz), with the synthesis's
 #: crossover shape round it: an octave below the 63 Hz band's lower edge, so that band,
 #: skirts and all, comes from the wave solver. Further down a closed room's air is
@@ -72,30 +80,6 @@ _LOW_PASS_TAPS = 33
 _LOW_PASS_CUTOFF = 0.2  # of the grid's sample rate
 #: Runs of more cell updates than this (a few seconds' work) report their progress.
 _LONG_RUN = 2e9
-
-
-def absorption_of_impedance(impedance: np.ndarray) -> np.ndarray:
-    """Random-incidence absorption of a locally reacting surface with a real normalised
-    impedance (Paris's formula, for a diffuse field)."""
-    z = np.asarray(impedance, dtype=float)
-    return 8.0 / z * (1.0 + 1.0 / (1.0 + z) - 2.0 / z * np.log1p(z))
-
-
-def admittance(absorption: np.ndarray) -> np.ndarray:
-    """Specific (normalised) admittance of a locally reacting surface whose
-    random-incidence absorption is ``absorption``: the inverse of Paris's formula, on
-    the side of hard surfaces. Coefficients from :data:`MAX_ABSORPTION` up get the most
-    absorbing admittance."""
-    alpha = np.clip(np.asarray(absorption, dtype=float), 0.0, 1.0)
-    low = np.full(alpha.shape, math.log(_BEST_IMPEDANCE))
-    high = np.full(alpha.shape, math.log(1e9))
-    for _ in range(60):  # bisection in log(impedance); absorption falls as it grows
-        mid = 0.5 * (low + high)
-        above = absorption_of_impedance(np.exp(mid)) > alpha
-        low = np.where(above, mid, low)
-        high = np.where(above, high, mid)
-    beta = np.exp(-0.5 * (low + high))
-    return np.where(alpha <= 0.0, 0.0, beta)
 
 
 def band_top(band: int, total: int = len(OCTAVE_BANDS_HZ)) -> float:
@@ -181,14 +165,15 @@ class WaveResponse:
     """The lowest octave bands (or third-octave bands) of one response, from the wave
     solver.
 
-    ``signals[k]`` holds run k at ``rate``: the pressure and the first-order directional
-    parts (samples, 4), AmbiX W, X, Y and Z in room coordinates, from emission on.
-    Band b comes from run ``band_runs[b]``; only the frequencies of its bands count.
+    ``signals`` holds the run at ``rate``: the pressure and the first-order directional
+    parts (samples, 4), AmbiX W, X, Y and Z in room coordinates, from emission on. Only
+    the frequencies of the wave bands count.
     """
 
     rate: float
     signals: np.ndarray
-    band_runs: tuple[int, ...]
+    #: The bands 0 to bands - 1 come from the wave solver.
+    bands: int
     #: Cell size of the grid (m).
     cell: float
     #: How many bands the whole response has: 8 octave or 24 third-octave bands.
@@ -198,11 +183,6 @@ class WaveResponse:
     #: How long after emission the source starts playing (s).
     delay_s: float = 0.0
     _cache: dict = field(default_factory=dict, init=False, repr=False, compare=False)
-
-    @property
-    def bands(self) -> int:
-        """The bands 0 to bands - 1 come from the wave solver."""
-        return len(self.band_runs)
 
     def fed(self, gain: np.ndarray, delay_s: float) -> WaveResponse:
         """These bands with the energy ``gain`` of each and ``delay_s`` later."""
@@ -214,32 +194,28 @@ class WaveResponse:
         return np.ones(self.bands) if self.band_gain is None else np.sqrt(self.band_gain)
 
     def _resampled(self, sample_rate: float, n: int) -> np.ndarray:
-        """The runs at ``sample_rate``, n samples long (runs, n, 4), from emission;
-        still broadband."""
+        """The run at ``sample_rate``, n samples long (n, 4), from emission; still
+        broadband."""
         from acoustic_spaces.render import resample
 
         key = (float(sample_rate), int(n))
         if key not in self._cache:
-            out = np.zeros((len(self.signals), n, 4))
+            out = np.zeros((n, 4))
             start = min(int(round(self.delay_s * sample_rate)), n)
-            for k, run in enumerate(self.signals):
-                # Impulse responses scale with the sample period: an impulse of height a
-                # at one rate is a * rate / sample_rate at another.
-                x = resample(run, self.rate, sample_rate)[: n - start]
-                out[k, start : start + len(x)] = x * (self.rate / sample_rate)
+            # Impulse responses scale with the sample period: an impulse of height a at
+            # one rate is a * rate / sample_rate at another.
+            x = resample(self.signals, self.rate, sample_rate)[: n - start]
+            out[start : start + len(x)] = x * (self.rate / sample_rate)
             self._cache = {key: out}
         return self._cache[key]
 
     def field(self, sample_rate: float, n: int) -> np.ndarray:
         """The first-order sound field (n, 4) of the wave bands together: W, X, Y, Z."""
-        runs = self._resampled(sample_rate, n)
+        run = self._resampled(sample_rate, n)
         n_fft = synthesis.fft_size(n, sample_rate)
         gains = wave_gains(n_fft, sample_rate, self.bands, self.total_bands)
-        amplitude = self._amplitudes()
-        spectrum = 0.0
-        for k, run in enumerate(runs):
-            gain = sum(gains[b] * amplitude[b] for b, r in enumerate(self.band_runs) if r == k)
-            spectrum = spectrum + np.fft.rfft(run, n_fft, axis=0) * gain[:, None]
+        gain = (gains * self._amplitudes()[:, None]).sum(axis=0)
+        spectrum = np.fft.rfft(run, n_fft, axis=0) * gain[:, None]
         return np.fft.irfft(spectrum, n_fft, axis=0)[:n]
 
     def high_pass(self, signals: np.ndarray, sample_rate: float, late: bool = False) -> np.ndarray:
@@ -272,21 +248,22 @@ class WaveResponse:
 
         out = np.zeros((self.bands, slots))
         lead = int(round(synthesis._PAD_S * self.rate))
-        n_fft = synthesis.fft_size(self.signals.shape[1] + lead, self.rate)
+        n_fft = synthesis.fft_size(len(self.signals) + lead, self.rate)
         gains = band_filter_gains(n_fft, self.rate, self.total_bands)[: self.bands]
         weights = np.full(gains.shape[1], 2.0)
         weights[0] = weights[-1] = 1.0
-        time = (np.arange(self.signals.shape[1] + lead) - lead) / self.rate + self.delay_s
+        time = (np.arange(len(self.signals) + lead) - lead) / self.rate + self.delay_s
         slot = np.maximum(time / time_step, 0).astype(np.int64)
         amplitude = self._amplitudes()
         keep = slot < slots
-        for b, (gain, k) in enumerate(zip(gains, self.band_runs, strict=True)):
-            padded = np.concatenate([np.zeros(lead), self.signals[k, :, 0]])
+        padded = np.concatenate([np.zeros(lead), self.signals[:, 0]])
+        if axis is not None:
+            figure8 = np.concatenate([np.zeros(lead), self.signals[:, 1:] @ axis])
+        for b, gain in enumerate(gains):
             pressure = _filter(padded, gain, n_fft)
             share = float((gain**2 * weights).sum() / n_fft)
             power = pressure[keep] ** 2
             if axis is not None:
-                figure8 = np.concatenate([np.zeros(lead), self.signals[k, :, 1:] @ axis])
                 side = _filter(figure8, gain, n_fft)[keep]
                 power = side**2 if exponent == 2 else np.abs(side * pressure[keep])
             energy = power * amplitude[b] ** 2 / (synthesis.ENERGY_TO_IR * share)
@@ -373,38 +350,40 @@ def wave_responses(
     h = grid.cell
     # The model, and two cells round the source and listeners (in an open model they may
     # lie outside it); then two cells of margin (one for an open model's air, one that is
-    # never air), shifted off the model's planes.
+    # never air) and in an open model the matched layer, shifted off the model's planes.
     low = np.minimum(mesh.vertices.min(axis=0), points.min(axis=0) - 2.0 * h)
     high = np.maximum(mesh.vertices.max(axis=0), points.max(axis=0) + 2.0 * h)
-    origin = low - h * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
-    shape = np.ceil((high - origin) / h).astype(np.int64) + 2
-    if int(np.prod(shape)) > MAX_CELLS:
-        raise ValueError(
-            f"the wave grid up to the {max_band_hz} Hz band would have "
-            f"{int(np.prod(shape)):,} cells (at most {MAX_CELLS:,}); lower max_band_hz or "
-            "points_per_wavelength"
-        )
     signal, delay = source_signal(grid.rate, h)
     samples = int(math.ceil(length_s * grid.rate))
     steps = samples + delay  # the source's term on step n stands for its value at time n
     drive = np.zeros(steps, np.float32)
     drive[: min(len(signal), steps)] = signal[:steps]
     probes = np.vstack([_probe_points(p, h) for p in listeners])
-    # One run per set of absorption coefficients: bands with the same ones share it.
+    # Each material's admittance, fitted to its absorption in the wave bands.
     coefficients = np.round(model.absorption[solid, :bands], 6)
-    sets: list[np.ndarray] = []
-    band_runs = []
-    for b in range(bands):
-        same = [k for k, c in enumerate(sets) if np.array_equal(c, coefficients[:, b])]
-        if not same:
-            sets.append(coefficients[:, b])
-        band_runs.append(same[0] if same else len(sets) - 1)
-    recorded_runs = []
-    info: dict[str, float] = {}
-    for k, absorption in enumerate(sets):
-        solver = _native.WaveSolver(
+    rows, face_material = np.unique(coefficients, axis=0, return_inverse=True)
+    fits = [fit_admittance(row, total, grid.rate) for row in rows]
+    branches = [fit.branches(grid.rate) for fit in fits]
+    branch_material = np.concatenate(
+        [np.full(len(b), m, dtype=np.int64) for m, b in enumerate(branches)]
+    )
+
+    def solver_with(layer: int):
+        origin = low - h * (2.0 + layer + np.array([0.0137, 0.0219, 0.0291]))
+        shape = np.ceil((high - origin) / h).astype(np.int64) + 2 + layer
+        if int(np.prod(shape)) > MAX_CELLS:
+            what = " with the matched layer round this open model" if layer else ""
+            raise ValueError(
+                f"the wave grid up to the {max_band_hz} Hz band would have "
+                f"{int(np.prod(shape)):,} cells{what} (at most {MAX_CELLS:,}); lower "
+                "max_band_hz or points_per_wavelength"
+            )
+        return _native.WaveSolver(
             bvh,
-            np.ascontiguousarray(admittance(absorption)),
+            np.ascontiguousarray(face_material.reshape(-1), dtype=np.int64),
+            np.array([fit.beta for fit in fits]),
+            np.ascontiguousarray(np.vstack(branches)),
+            branch_material,
             origin,
             h,
             int(shape[0]),
@@ -413,60 +392,71 @@ def wave_responses(
             np.asarray(source, dtype=float),
             np.ascontiguousarray(probes),
             1.0,
+            layer,
+            LAYER_DAMPING,
             threads,
         )
-        # Before any step: a listener outside the source's air, or a source closed in.
-        found = [solver.probe_found(p) for p in range(len(probes))]
-        missing = [listener for i, listener in enumerate(names) if not found[7 * i]]
-        if missing:
-            air, volume = solver.air_cells * h**3, model.room.volume_m3
-            if volume and air < 0.1 * volume:
-                who = f"source {label!r}" if label else "the source"
-                raise ValueError(
-                    f"{who} is closed in: the wave grid has {air:.2g} m³ of air round it, "
-                    f"in a room of {volume:.3g} m³"
-                )
-            raise ValueError(f"listener {missing[0]!r} is not in the air of the wave grid")
-        covered = [centres[b] for b, r in enumerate(band_runs) if r == k]
-        name = " and ".join(f"{f}" for f in covered) + " Hz"
-        say(
-            f"{label}: wave solver, {name} ({solver.air_cells:,} cells of {100 * h:.0f} cm, "
-            f"{steps:,} steps)"
-        )
-        # Long runs report every tenth (which is also where a cancelled run stops).
-        chunks = 10 if solver.air_cells * steps > _LONG_RUN else 1
-        recorded = []
-        bounds = np.linspace(0, steps, chunks + 1).astype(np.int64)
-        for c in range(chunks):
-            if c:
-                say(f"{label}: wave solver, {name}, {100 * c // chunks} %")
-            recorded.append(solver.run(drive[bounds[c] : bounds[c + 1]]))
-        recorded_runs.append(np.concatenate(recorded, axis=1)[:, delay:][:, :samples])
-        info["wave_cells"] = float(solver.air_cells)
-        if solver.open:
-            info["wave_open"] = 1.0
-    info["wave_cell_m"] = h
-    info["wave_runs"] = float(len(sets))
+
+    solver = solver_with(0)
+    if solver.open:
+        solver = solver_with(LAYER_CELLS)
+    # Before any step: a listener outside the source's air, or a source closed in.
+    found = [solver.probe_found(p) for p in range(len(probes))]
+    missing = [listener for i, listener in enumerate(names) if not found[7 * i]]
+    if missing:
+        air, volume = solver.air_cells * h**3, model.room.volume_m3
+        if volume and air < 0.1 * volume:
+            who = f"source {label!r}" if label else "the source"
+            raise ValueError(
+                f"{who} is closed in: the wave grid has {air:.2g} m³ of air round it, "
+                f"in a room of {volume:.3g} m³"
+            )
+        raise ValueError(f"listener {missing[0]!r} is not in the air of the wave grid")
+    name = f"{centres[0]} Hz" if bands == 1 else f"{centres[0]}-{centres[bands - 1]} Hz"
+    say(
+        f"{label}: wave solver, {name} ({solver.air_cells:,} cells of {100 * h:.0f} cm, "
+        f"{steps:,} steps)"
+    )
+    # Long runs report every tenth (which is also where a cancelled run stops).
+    chunks = 10 if solver.air_cells * steps > _LONG_RUN else 1
+    recorded = []
+    bounds = np.linspace(0, steps, chunks + 1).astype(np.int64)
+    for c in range(chunks):
+        if c:
+            say(f"{label}: wave solver, {name}, {100 * c // chunks} %")
+        recorded.append(solver.run(drive[bounds[c] : bounds[c + 1]]))
+    run = np.concatenate(recorded, axis=1)[:, delay:][:, :samples]
+    info: dict[str, float] = {"wave_cells": float(solver.air_cells), "wave_cell_m": h}
+    if solver.open:
+        info["wave_open"] = 1.0
+    # How far the fitted surfaces' absorption is from the materials', at worst.
+    used = np.unique(face_material)
+    wanted = np.minimum(rows[used], MAX_ABSORPTION)
+    info["wave_absorption_miss"] = float(
+        np.max(np.abs(np.array([fits[m].achieved for m in used]) - wanted))
+    )
     responses = []
     for i, listener in enumerate(names):
         part = slice(7 * i, 7 * i + 7)
-        signals = np.stack(
-            [_first_order(run[part], found[part], listener) for run in recorded_runs]
-        )
-        responses.append(WaveResponse(grid.rate, signals, tuple(band_runs), h, total))
+        signals = _first_order(run[part], found[part], listener)
+        responses.append(WaveResponse(grid.rate, signals, bands, h, total))
     return responses, info
 
 
 __all__ = [
     "COURANT",
     "HIGH_PASS_S",
+    "LAYER_CELLS",
+    "LAYER_DAMPING",
     "LOW_EDGE_HZ",
     "MAX_ABSORPTION",
     "MAX_CELLS",
+    "Admittance",
     "BandGrid",
     "WaveResponse",
     "absorption_of_impedance",
     "admittance",
+    "fit_admittance",
     "band_grid",
     "band_top",
     "source_signal",
