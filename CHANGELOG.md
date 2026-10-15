@@ -410,6 +410,9 @@ changes results at 63 and 125 Hz)
   Simulation page, and as `--threads` and `--ray-tree` for `simulate`, `map` and
   `calibrate` (`--threads` for `view` and `export`). Without `--threads` they take the
   scene's setting; `info` prints the number of CPU cores.
+- `validation/wave_gpu.py` times the grid's set-up and the time steps apart (the
+  speed-up is that of the steps), starts the GPU before timing, and lines up its
+  table in a terminal.
 
 **Fixes**
 
