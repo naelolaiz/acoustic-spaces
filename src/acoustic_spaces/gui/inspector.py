@@ -45,6 +45,8 @@ from acoustic_spaces.scene.model import LAYOUT_NAMES
 BAND_LABELS = [f"{f} Hz" if f < 1000 else f"{f // 1000} kHz" for f in OCTAVE_BANDS_HZ]
 #: Column labels of the third-octave bands, short to fit 24 columns.
 THIRD_OCTAVE_LABELS = [f"{f}" if f < 1000 else f"{f / 1000:g}k" for f in THIRD_OCTAVE_BANDS_HZ]
+#: The spectra a source's sound power can have.
+SPECTRA = ["flat", "speech_male", "speech_female"]
 DIRECTIVITIES = ["omni", "subcardioid", "cardioid", "supercardioid", "hypercardioid", "figure8"]
 #: The directivity list entry that asks for a SOFA or CSV file.
 MEASURED = "Measured data from a file…"
@@ -618,11 +620,38 @@ class PointPage(Page):
         self.pattern_window = None
         self.level = spin(0, 200, 1, 1, "dB")
         self.level.valueChanged.connect(self._level)
+        self.spectrum = QComboBox()
+        self.spectrum.addItems(SPECTRA)
+        self.spectrum.setToolTip(
+            "How the sound power spreads over the bands: evenly over the octave bands, or "
+            "as male or female speech (IEC 60268-16), which the STI then weights for"
+        )
+        self.spectrum.activated.connect(self._spectrum)
+        self.gain = spin(-100, 60, 1, 1, "dB")
+        self.gain.setToolTip("Gain of the source's feed: on its level and its responses")
+        self.gain.valueChanged.connect(lambda value: self._update(gain_db=value))
+        self.eq = QLineEdit()
+        self.eq.setPlaceholderText("none")
+        self.eq.setToolTip(
+            "Equalizer gain per band (dB): 8 octave values from 63 Hz to 8 kHz, or 24 "
+            "third-octave values from 50 Hz to 10 kHz, separated by commas"
+        )
+        self.eq.editingFinished.connect(self._eq)
+        self.delay = spin(0, 10_000, 2, 1, "ms")
+        self.delay.setToolTip(
+            "The source starts this long after the others: its arrivals and responses "
+            "come that much later"
+        )
+        self.delay.valueChanged.connect(lambda value: self._update(delay_ms=value))
         if kind == "sources":
             form.addRow("Directivity", self.directivity)
             form.addRow(self.directivity_index)
             form.addRow(self.pattern)
             form.addRow("Sound power", self.level)
+            form.addRow("Spectrum", self.spectrum)
+            form.addRow("Gain", self.gain)
+            form.addRow("Equalizer", self.eq)
+            form.addRow("Delay", self.delay)
         remove = QPushButton("Remove " + ("source" if kind == "sources" else "listener"))
         remove.clicked.connect(self._remove)
         form.addRow(remove)
@@ -668,7 +697,18 @@ class PointPage(Page):
                 bands = ", ".join(str(f) for f in directivity.extrapolated)
                 text += f"; {bands} Hz copied from the nearest octave"
             self.directivity_index.setText(text)
-            self.level.setValue(item.level_db)
+            per_band = isinstance(item.level_db, list)
+            total = 10.0 * np.log10(np.sum(10.0 ** (np.array(item.level_db) / 10.0)))
+            self.level.setValue(float(total))
+            self.level.setEnabled(not per_band)
+            self.level.setToolTip(
+                "Given per band in the scene file; this is their sum" if per_band else ""
+            )
+            self.spectrum.setCurrentText(item.spectrum)
+            self.spectrum.setEnabled(not per_band)
+            self.gain.setValue(item.gain_db)
+            self.eq.setText("" if item.eq_db is None else ", ".join(f"{v:g}" for v in item.eq_db))
+            self.delay.setValue(item.delay_ms)
             if self.pattern_window is not None and self.pattern_window.isVisible():
                 self.show_pattern()
 
@@ -736,6 +776,20 @@ class PointPage(Page):
 
     def _level(self, value: float) -> None:
         self._update(level_db=value)
+
+    def _spectrum(self, index: int) -> None:
+        self._update(spectrum=self.spectrum.itemText(index))
+
+    def _eq(self) -> None:
+        text = self.eq.text().replace(",", " ").split()
+        try:
+            values = [float(v) for v in text] or None
+        except ValueError:
+            self.failed.emit("the equalizer takes numbers (dB), one per band")
+            self.reload()
+            return
+        if values != self._item().eq_db:
+            self._update(eq_db=values)
 
 
 class SimulationPage(Page):

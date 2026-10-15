@@ -44,6 +44,7 @@ from acoustic_spaces.engine.simulate import (
 from acoustic_spaces.geometry import points_inside
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.materials.bands import to_octaves
+from acoustic_spaces.parameters import A_WEIGHTING_DB, Talker, a_weighted
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene import Coverage, Scene
 from acoustic_spaces.scene.model import Simulation
@@ -60,8 +61,6 @@ _LAYER_GAP = 1.5
 _MAX_THICKNESS = 1.0
 #: Lowest slab bottom above the surface (m).
 _ABOVE_SURFACE = 0.05
-#: A-weighting of the octave bands (dB, IEC 61672-1, rounded).
-A_WEIGHTING_DB = (-26.2, -16.1, -8.6, -3.2, 0.0, 1.2, 1.0, -1.1)
 
 
 class MapParameter(NamedTuple):
@@ -413,7 +412,11 @@ class CoverageResult:
 class _SourceRun:
     """Everything one source contributes at each point."""
 
-    level_db: float
+    #: Sound power per octave band (dB re 1 pW), the feed's gain included.
+    power_db: np.ndarray
+    #: How long after emission the source plays (s), and the speech it carries.
+    delay_s: float
+    talker: Talker
     onset: np.ndarray  # (n,) arrival of the direct sound
     early: list[early_stage.EarlyReflections]  # per point
     late: late_stage.MapEnergy | None
@@ -464,7 +467,7 @@ def _curve(run: _SourceRun, k: int, length: float, bands: int) -> np.ndarray:
 
 
 def _point_values(
-    energy: np.ndarray, power_db: np.ndarray, reference: float, noise_db
+    energy: np.ndarray, power_db: np.ndarray, reference: float, noise_db, talker: Talker
 ) -> dict[str, np.ndarray]:
     """All map parameters of one point's energy response (slot 0 at its direct sound);
     ``power_db`` is the source's sound power per band, ``reference`` the free-field
@@ -473,19 +476,15 @@ def _point_values(
     out = {name: getattr(p, name) for name in ("g", "c50", "c80", "d50", "edt", "t20", "t30", "ts")}
     spl = power_db + p.g + 10.0 * math.log10(reference)
     out["spl"] = spl
-    weighted = spl + np.array(A_WEIGHTING_DB)
-    out["spl_a"] = np.array(10.0 * np.log10(np.sum(10.0 ** (weighted / 10.0))))
+    out["spl_a"] = np.array(a_weighted(spl))
     finite = np.isfinite(spl)
     signal = np.where(finite, spl, -100.0)
     out["sti"] = np.array(
-        iso3382.speech_transmission_index(energy, TIME_STEP, signal_db=signal, noise_db=noise_db)
+        iso3382.speech_transmission_index(
+            energy, TIME_STEP, signal_db=signal, noise_db=noise_db, talker=talker
+        )
     )
     return out
-
-
-def _band_power_db(level_db: float, bands: int) -> np.ndarray:
-    """A source's sound power level spread evenly over the octave bands."""
-    return np.full(bands, level_db - 10.0 * math.log10(bands))
 
 
 def coverage_map(
@@ -502,9 +501,11 @@ def coverage_map(
     ``settings`` default to ``scene.coverage`` (surfaces, height, spacing, rays and
     background noise); ``simulation`` (default: ``scene.simulation``) gives the early
     order, late method, response length and seed as for
-    :func:`~acoustic_spaces.engine.simulate`. Each
-    source radiates its ``level_db`` of sound power spread evenly over the octave
-    bands; the speech transmission index takes that as the speech level.
+    :func:`~acoustic_spaces.engine.simulate`. Each source radiates its sound power per
+    band (:meth:`~acoustic_spaces.scene.Source.power_db`: its level, spectrum, gain and
+    equalizer), which the speech transmission index takes as the speech level, weighted
+    for female speech when the source's spectrum is ``speech_female``. In the map of
+    all sources together, each source's sound arrives ``delay_ms`` later.
     """
     room = _as_room(room)
     # Listeners play no part in a map.
@@ -613,35 +614,45 @@ def coverage_map(
             info["traced_rays"] = float(late.traced_rays)
         info["late_s"] = time.perf_counter() - t
         details[source.name] = info
-        runs[source.name] = _SourceRun(source.level_db, onset, early, late, stat)
+        runs[source.name] = _SourceRun(
+            source.power_db("octave"),
+            source.delay_ms * 1e-3,
+            source.talker,
+            onset,
+            early,
+            late,
+            stat,
+        )
 
     say("Map: parameters at every point")
     noise = settings.noise_db
     octaves = len(OCTAVE_BANDS_HZ)  # parameters in octave bands, whatever was traced
     per_source: dict[str, list[dict[str, np.ndarray]]] = {name: [] for name in runs}
     combined: list[dict[str, np.ndarray]] = []
-    loudest = max(run.level_db for run in runs.values())
+    # In each band, the sources together at their levels relative to the loudest.
+    loudest = np.max([run.power_db for run in runs.values()], axis=0)
+    talkers = {run.talker for run in runs.values()}
+    talker = talkers.pop() if len(talkers) == 1 else "male"
     for k in range(len(grid)):
         curves = {}
         for name, run in runs.items():
             curve = to_octaves(_curve(run, k, length, bands))
             curves[name] = curve
-            power = _band_power_db(run.level_db, octaves)
-            per_source[name].append(_point_values(curve, power, reference, noise))
+            values = _point_values(curve, run.power_db, reference, noise, run.talker)
+            per_source[name].append(values)
         if len(runs) > 1:
-            # All sources together, each at its level relative to the loudest, on the
-            # time axis of the earliest direct sound.
-            first = min(run.onset[k] for run in runs.values())
-            slots = int(math.ceil((length - first) / TIME_STEP - 1e-9))
+            # All sources together, on the time axis of the earliest direct sound; each
+            # source's comes its delay later.
+            first = min(run.onset[k] + run.delay_s for run in runs.values())
+            last = max(run.delay_s for run in runs.values())
+            slots = int(math.ceil((length + last - first) / TIME_STEP - 1e-9))
             total = np.zeros((octaves, slots))
             for name, run in runs.items():
-                shift = int(round((run.onset[k] - first) / TIME_STEP))
+                shift = int(round((run.onset[k] + run.delay_s - first) / TIME_STEP))
                 curve = curves[name][:, : max(0, slots - shift)]
-                weight = 10.0 ** ((run.level_db - loudest) / 10.0)
-                total[:, shift : shift + curve.shape[1]] += weight * curve
-            combined.append(
-                _point_values(total, _band_power_db(loudest, octaves), reference, noise)
-            )
+                weight = 10.0 ** ((run.power_db - loudest) / 10.0)
+                total[:, shift : shift + curve.shape[1]] += weight[:, None] * curve
+            combined.append(_point_values(total, loudest, reference, noise, talker))
 
     def stack(rows: list[dict[str, np.ndarray]]) -> dict[str, np.ndarray]:
         return {name: np.array([r[name] for r in rows]) for name in MAP_PARAMETERS}

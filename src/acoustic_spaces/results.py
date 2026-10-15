@@ -77,7 +77,7 @@ def write_results(
     gain = 10.0 ** (-1.0 / 20.0) / peak if normalize and peak > 0 else 1.0
 
     scene = result.room.scene
-    levels = {s.name: s.level_db for s in scene.sources}
+    sources = {s.name: s for s in scene.sources}
     noise_db = scene.coverage.noise_db if scene.coverage is not None else None
     report = {
         "scene": result.room.scene.name,
@@ -109,6 +109,9 @@ def write_results(
             mono = irs[(source, listener), "mono"][:, 0]
         else:
             mono = response.impulse_response(sample_rate)
+        power = sources[source].power_db("octave") if source in sources else 94.0
+        talker = sources[source].talker if source in sources else "male"
+        spl = response.levels(power, params)
         entry = {
             "source": source,
             "listener": listener,
@@ -117,9 +120,9 @@ def write_results(
             "early_paths": len(response.early),
             "diffracted_paths": int(response.early.diffracted.sum()),
             "parameters": params.as_dict(),
-            "speech": response.speech(
-                levels.get(source, 94.0), noise_db, parameters=params
-            ).as_dict(),
+            "spl_db": [_plain(v) for v in spl],
+            "spl_a_db": _plain(iso3382.a_weighted(spl)),
+            "speech": response.speech(power, noise_db, parameters=params, talker=talker).as_dict(),
             "echo": _echo(mono, sample_rate),
         }
         if plots:
@@ -136,6 +139,12 @@ def write_results(
         report["responses"].append(entry)
     (out / REPORT_FILE).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
+
+
+def _plain(value: float) -> float | None:
+    """A level for JSON: None where it is not finite."""
+    value = float(value)
+    return round(value, 2) if math.isfinite(value) else None
 
 
 def _echo(ir, sample_rate: int) -> dict:

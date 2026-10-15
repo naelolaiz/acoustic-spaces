@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -59,6 +60,10 @@ class Response:
     #: Unit vector from the listener towards the source (room coordinates); None takes
     #: the direct path's, or the listener's forward axis without one.
     source_direction: np.ndarray | None = None
+    #: The energy gain per band of the source's feed (its gain and equalizer), which the
+    #: energies include, or None for none. G is taken against the same source in free
+    #: field, so the feed does not change it.
+    feed: np.ndarray | None = None
 
     @property
     def bands(self) -> int:
@@ -148,6 +153,38 @@ class Response:
             side = self.orientation[:, 1]
         return side / np.linalg.norm(side)
 
+    def fed(self, gain_db: Sequence[float] | np.ndarray, delay_s: float = 0.0) -> Response:
+        """This response with the source's feed: ``gain_db`` per band (dB, the bands of
+        the response) on every energy, and every arrival ``delay_s`` later."""
+        gain = 10.0 ** (np.asarray(gain_db, dtype=float) / 10.0)
+        if gain.shape != (self.bands,):
+            raise ValueError(f"expected {self.bands} gains, one per band")
+        if not math.isfinite(delay_s) or delay_s < 0:
+            raise ValueError("the delay must be a finite time, 0 or more")
+        early = dataclasses.replace(
+            self.early, delay_s=self.early.delay_s + delay_s, energy=self.early.energy * gain
+        )
+        directional = self.late_directional
+        if directional.size:
+            directional = _delayed(directional * gain[None, :, None], delay_s / self.direction_step)
+        wave = None if self.wave is None else self.wave.fed(gain[: self.wave.bands], delay_s)
+        return dataclasses.replace(
+            self,
+            early=early,
+            late=_delayed(self.late * gain[:, None], delay_s / self.time_step),
+            length_s=self.length_s + delay_s,
+            direct_delay_s=self.direct_delay_s + delay_s,
+            transition_s=self.transition_s + delay_s,
+            late_directional=directional,
+            wave=wave,
+            feed=gain if self.feed is None else self.feed * gain,
+        )
+
+    def _reference(self) -> np.ndarray:
+        """Energy per octave band of the same source, fed alike, at 10 m in free field."""
+        feed = np.ones(self.bands) if self.feed is None else self.feed
+        return to_octaves(feed) / (4.0 * math.pi * 100.0)
+
     def parameters(self) -> iso3382.RoomParameters:
         """ISO 3382-1 parameters per octave band, straight from the energies.
 
@@ -157,7 +194,7 @@ class Response:
         ``STAGE_DISTANCE_M`` of the source. IACC needs a binaural response:
         :func:`~acoustic_spaces.parameters.interaural_cross_correlation`.
         """
-        reference = 1.0 / (4.0 * math.pi * 100.0)  # free field at 10 m
+        reference = self._reference()  # free field at 10 m
         side = self.lateral_axis()
 
         def weighted(axis, exponent=2):
@@ -173,25 +210,50 @@ class Response:
             directional=[weighted(self.orientation[:, k]) for k in range(3)],
         )
 
+    def levels(
+        self,
+        level_db: float | Sequence[float] = 94.0,
+        parameters: iso3382.RoomParameters | None = None,
+    ) -> np.ndarray:
+        """Sound pressure level per octave band (dB SPL) of a source of sound power
+        ``level_db`` (dB re 1 pW, the feed's gain included): one value spread evenly over
+        the octave bands, or one per octave band
+        (:meth:`~acoustic_spaces.scene.Source.power_db`). It is the band's sound power
+        plus its G, less 31 dB, the level of a source of 0 dB at 10 m in free field."""
+        params = self.parameters() if parameters is None else parameters
+        power = np.asarray(level_db, dtype=float)
+        if power.ndim == 0:
+            power = np.full(
+                len(OCTAVE_BANDS_HZ), float(power) - 10.0 * math.log10(len(OCTAVE_BANDS_HZ))
+            )
+        elif power.shape != (len(OCTAVE_BANDS_HZ),):
+            raise ValueError("give the sound power in all or per octave band")
+        return power + params.g + 10.0 * math.log10(1.0 / (4.0 * math.pi * 100.0))
+
     def speech(
         self,
-        level_db: float = 94.0,
+        level_db: float | Sequence[float] = 94.0,
         noise_db: float | Sequence[float] | None = None,
         parameters: iso3382.RoomParameters | None = None,
+        talker: iso3382.Talker = "male",
     ) -> iso3382.SpeechParameters:
         """STI, STIPA and U50 for speech from a source of sound power ``level_db`` (dB
-        re 1 pW, spread evenly over the octave bands), with background noise
-        ``noise_db`` (dB SPL, one value or one per band), as the coverage maps take
-        them. ``parameters`` are this response's, when already at hand."""
+        re 1 pW: in all, spread evenly over the octave bands, or per octave band), with
+        background noise ``noise_db`` (dB SPL, one value or one per band), as the
+        coverage maps take them, weighted for a male or female ``talker``.
+        ``parameters`` are this response's, when already at hand."""
         params = self.parameters() if parameters is None else parameters
-        reference = 1.0 / (4.0 * math.pi * 100.0)
-        power = level_db - 10.0 * math.log10(len(OCTAVE_BANDS_HZ))
-        level = power + params.g + 10.0 * math.log10(reference)
+        level = self.levels(level_db, params)
         signal = np.where(np.isfinite(level), level, -100.0)
         energy = self.octave_energy()
         sti, stipa = (
             iso3382.speech_transmission_index(
-                energy, self.time_step, signal_db=signal, noise_db=noise_db, stipa=short
+                energy,
+                self.time_step,
+                signal_db=signal,
+                noise_db=noise_db,
+                stipa=short,
+                talker=talker,
             )
             for short in (False, True)
         )
@@ -241,6 +303,19 @@ class Response:
         from acoustic_spaces.spatial.render import spatial_impulse_response
 
         return spatial_impulse_response(self, fmt, sample_rate, seed)
+
+
+def _delayed(x: np.ndarray, slots: float) -> np.ndarray:
+    """``x`` with its last axis (time slots) ``slots`` later, a fraction of a slot
+    shared between the two slots it falls between; as long as it needs to be."""
+    if slots <= 0:
+        return x
+    whole = int(math.floor(slots))
+    part = slots - whole
+    pad = [(0, 0)] * (x.ndim - 1)
+    out = np.pad(x, [*pad, (whole, 1)]) * (1.0 - part)
+    out[..., 1:] += np.pad(x, [*pad, (whole, 0)]) * part
+    return out
 
 
 __all__ = ["Response"]

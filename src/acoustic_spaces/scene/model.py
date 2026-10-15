@@ -49,6 +49,7 @@ import math
 from pathlib import Path
 from typing import Annotated, Literal
 
+import numpy as np
 import yaml
 from pydantic import (
     BaseModel,
@@ -59,6 +60,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pydantic_core import PydanticCustomError
 
 from acoustic_spaces.materials import (
     OCTAVE_BANDS_HZ,
@@ -66,7 +68,15 @@ from acoustic_spaces.materials import (
     builtin_database,
     read_coefficients_csv,
 )
-from acoustic_spaces.materials.bands import Resolution, convert, finer_than_octaves, to_bands
+from acoustic_spaces.materials.bands import (
+    Resolution,
+    convert,
+    finer_than_octaves,
+    gain_levels,
+    power_levels,
+    to_bands,
+)
+from acoustic_spaces.parameters import SPEECH_SPECTRUM_DB
 
 Vector3 = tuple[float, float, float]
 Coefficient = Annotated[float, Field(ge=0.0, le=1.0)]
@@ -349,7 +359,91 @@ class Source(_Model):
         default="omni",
         description="a pattern for every band, or per-band patterns or measured data",
     )
-    level_db: float = Field(default=94.0, description="sound power level in dB re 1 pW")
+    level_db: float | list[float] = Field(
+        default=94.0,
+        description=(
+            "sound power level in dB re 1 pW: in all, spread over the bands as "
+            "spectrum says, or per band (8 octave or 24 third-octave values)"
+        ),
+    )
+    spectrum: Literal["flat", "speech_male", "speech_female"] = Field(
+        default="flat",
+        description=(
+            "how a level given in all spreads over the bands: evenly over the octave "
+            "bands, or as male or female speech (IEC 60268-16), which the STI then "
+            "weights for"
+        ),
+    )
+    gain_db: float = Field(
+        default=0.0,
+        ge=-100.0,
+        le=60.0,
+        description="gain of the source's feed (dB): on its level and its impulse responses",
+    )
+    eq_db: list[Annotated[float, Field(ge=-100.0, le=60.0)]] | None = Field(
+        default=None,
+        description=(
+            "equalizer gain per band (dB, 8 octave or 24 third-octave values), on the "
+            "level and the impulse responses"
+        ),
+    )
+    delay_ms: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=10_000.0,
+        description=(
+            "how long after emission starts the source plays (ms): its arrivals, impulse "
+            "responses and its part in combined coverage maps come that much later"
+        ),
+    )
+
+    @field_validator("level_db", mode="before")
+    @classmethod
+    def _finite_level(cls, value):
+        # One error for a NaN level, not one for each kind of value it could have been.
+        if isinstance(value, float) and not math.isfinite(value):
+            raise PydanticCustomError("finite_number", "Input should be a finite number")
+        return value
+
+    @field_validator("level_db")
+    @classmethod
+    def _level_per_band(cls, value: float | list[float]) -> float | list[float]:
+        return _per_band_or_third("level_db", value) if isinstance(value, list) else value
+
+    @field_validator("eq_db")
+    @classmethod
+    def _eq_per_band(cls, value: list[float] | None) -> list[float] | None:
+        return None if value is None else _per_band_or_third("eq_db", value)
+
+    @model_validator(mode="after")
+    def _spectrum_of_a_total(self) -> Source:
+        if isinstance(self.level_db, list) and self.spectrum != "flat":
+            raise ValueError("spectrum shapes a level given in all; a level per band has its own")
+        return self
+
+    @property
+    def talker(self) -> Literal["male", "female"]:
+        """The speech the STI weights for: female for ``speech_female``, else male."""
+        return "female" if self.spectrum == "speech_female" else "male"
+
+    def feed_db(self, bands: Resolution = "octave") -> np.ndarray:
+        """The gain of the feed per band (dB): ``gain_db`` and ``eq_db`` together."""
+        eq = np.zeros(len(OCTAVE_BANDS_HZ)) if self.eq_db is None else self.eq_db
+        return self.gain_db + gain_levels(eq, bands)
+
+    def power_db(self, bands: Resolution = "octave") -> np.ndarray:
+        """Sound power level per band (dB re 1 pW), the feed's gain included: an octave's
+        power is split evenly between its third octaves."""
+        if isinstance(self.level_db, list):
+            levels = np.asarray(self.level_db, dtype=float)
+        else:
+            if self.spectrum == "flat":
+                shape = np.zeros(len(OCTAVE_BANDS_HZ))
+            else:
+                shape = np.array(SPEECH_SPECTRUM_DB[self.talker])
+            total = 10.0 * math.log10(float(np.sum(10.0 ** (shape / 10.0))))
+            levels = self.level_db + shape - total
+        return power_levels(levels, bands) + self.feed_db(bands)
 
 
 class Listener(_Model):

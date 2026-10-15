@@ -331,8 +331,9 @@ def simulate(
             info["wave_s"] = time.perf_counter() - started
         details[source.name] = info
 
+        fed = source.gain_db != 0 or source.eq_db is not None or source.delay_ms > 0
         for k, listener in enumerate(chosen_listeners):
-            responses[(source.name, listener.name)] = Response(
+            response = Response(
                 source=source.name,
                 listener=listener.name,
                 early=paths[k],
@@ -353,6 +354,9 @@ def simulate(
                 wave=waves[k],
                 source_direction=_towards(src, listener_pos[k]),
             )
+            if fed:
+                response = response.fed(source.feed_db(model.bands), source.delay_ms * 1e-3)
+            responses[(source.name, listener.name)] = response
     return SimulationResult(room=room, settings=settings, responses=responses, details=details)
 
 

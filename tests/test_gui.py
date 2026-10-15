@@ -383,6 +383,36 @@ def test_third_octave_materials_and_bands(window) -> None:
     assert window.document.scene.simulation.bands == "octave"
 
 
+def test_source_spectrum_gain_equalizer_and_delay(window) -> None:
+    window.open_example(example_path("studio"))
+    window.select("sources", 0)
+    page = window.inspector.pages["sources"]
+    assert page.spectrum.currentText() == "flat" and page.eq.text() == ""
+    page.spectrum.setCurrentText("speech_female")
+    page.spectrum.activated.emit(page.spectrum.currentIndex())
+    page.gain.setValue(-3.0)
+    page.delay.setValue(12.5)
+    page.eq.setText("0, 0, 0, -3, 0, 0, 0, 0")
+    page.eq.editingFinished.emit()
+    source = window.document.scene.sources[0]
+    assert source.spectrum == "speech_female" and source.talker == "female"
+    assert source.gain_db == -3.0 and source.delay_ms == 12.5
+    assert source.eq_db == [0, 0, 0, -3, 0, 0, 0, 0]
+    page.eq.setText("loud")
+    page.eq.editingFinished.emit()
+    assert "numbers" in window.messages.toPlainText()
+    assert window.document.scene.sources[0].eq_db == [0, 0, 0, -3, 0, 0, 0, 0]
+    assert page.eq.text() == "0, 0, 0, -3, 0, 0, 0, 0"
+    page.eq.setText("")
+    page.eq.editingFinished.emit()
+    assert window.document.scene.sources[0].eq_db is None
+    # A level per band shows as its total and is edited in the scene file.
+    window.document.update_point("sources", 0, level_db=[80.0] * 8, spectrum="flat")
+    window.select("sources", 0)
+    assert not page.level.isEnabled() and not page.spectrum.isEnabled()
+    assert page.level.value() == pytest.approx(80.0 + 10 * np.log10(8), abs=0.05)
+
+
 def test_a_surface_takes_a_material_of_its_own(window) -> None:
     from acoustic_spaces.gui.viewport import surface_materials
 
@@ -575,6 +605,7 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, m
 
     shown = [name for row, (name, _, _) in enumerate(ROWS) if not results.table.isRowHidden(row)]
     assert "lf" in shown and "st_early" not in shown  # the speakers are 2 m away
+    assert "spl" in shown and results.table.item(ROWS.index(("spl", "SPL (dB)", "{:.1f}")), 4)
     for tab in range(results.tabs.count()):
         results.tabs.setCurrentIndex(tab)
     results.paths.setChecked(True)

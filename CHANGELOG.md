@@ -95,6 +95,21 @@
   and 8 kHz from 13 and 17 % short to within 4 % of the measurement; the validation
   report has both rooms (`bras_validation.py --bands third_octave`).
 
+**Sources**
+
+- `level_db` takes the sound power per band (8 or 24 values) as well as in all, and
+  `spectrum` spreads a level in all evenly (`flat`, as before) or as male or female
+  speech (IEC 60268-16). The STI takes the female weighting for `speech_female`
+  sources, in responses and coverage maps; `speech_transmission_index` has a `talker`.
+- `gain_db`, `eq_db` (per band) and `delay_ms` feed a source: the gain and equalizer act
+  on its sound power and its impulse responses, the delay on every arrival, and the
+  coverage map of all sources together takes each source's delay. G does not change
+  with the feed (`Response.fed` applies one to a response).
+- Sound pressure levels: `simulate` prints them and writes `spl_db` and `spl_a_db` for
+  each response, `Response.levels` gives them for any sound power, the editor's results
+  have an SPL row, and `inspect` lists each source's sound power per band. The editor's
+  source page sets the spectrum, gain, equalizer and delay.
+
 **Examples**
 
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)
