@@ -6,11 +6,12 @@
 Needs the ``gpu`` extra (wgpu) and a GPU driver: Vulkan, Metal or Direct3D 12. Mesa's
 lavapipe, a Vulkan driver that runs on the CPU, works too, only slowly. For each example
 room, the wave bands of the first source to every listener are computed on the CPU (all
-its cores) and on the GPU, and printed as a Markdown table with aligned columns: the
-grid, the time its set-up took (on the CPU either way), the time the time steps took on
-each (on the GPU, its buffers and shader included), how many times faster the GPU
-stepped, and the largest difference between the two runs, relative to the largest
-pressure. The GPU is started before the first room, so that one-off cost is left out.
+its cores) and on the GPU. The settings come first, then a Markdown table with aligned
+columns: the grid (its cells, their size and the stencil), the time its set-up took (on
+the CPU either way), the time the time steps took on each (on the GPU, its buffers and
+shader included), how many times faster the GPU stepped, and the largest difference
+between the two runs, relative to the largest pressure. The GPU is started before the
+first room, so that one-off cost is left out.
 """
 
 from __future__ import annotations
@@ -29,9 +30,14 @@ from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.wave import wave_responses
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+#: Grid cells per wavelength of the highest band, and the stencil (see wave_responses).
+POINTS = 8.0
+SCHEME = "auto"
 COLUMNS = (
     "Room",
     "Cells",
+    "Cell (cm)",
+    "Stencil",
     "Steps",
     "Set-up (s)",
     "CPU steps (s)",
@@ -57,6 +63,8 @@ def _time(model, room: Room, band: int, length: float, device: str):
         length_s=length,
         sample_rate=room.scene.simulation.sample_rate,
         speed_of_sound=room.speed_of_sound(),
+        points_per_wavelength=POINTS,
+        scheme=SCHEME,
         device=device,
         say=lambda _: marks.append(time.perf_counter()),
     )
@@ -93,6 +101,11 @@ def main() -> None:
         raise SystemExit('wgpu finds no GPU: pip install "acoustic-spaces[gpu]" and a driver')
     print(f"{platform.machine()}, {platform.system()}, {os.cpu_count()} CPU threads")
     print(f"GPU: {name}")
+    print(
+        f"Wave bands up to {args.band} Hz, {args.length:g} s responses, {POINTS:g} points "
+        f"per wavelength, scheme {SCHEME} (19-point stencil, 7-point round an open model), "
+        "first source to every listener; the CPU on all its threads"
+    )
     print()
     gpu._device()  # start the GPU once, outside the timings
     rows = []
@@ -106,6 +119,8 @@ def main() -> None:
             (
                 room_name,
                 f"{info['wave_cells']:,.0f}",
+                f"{100 * info['wave_cell_m']:.1f}",
+                f"{int(info['wave_stencil'])}-point",
                 f"{int(info['wave_steps']):,}",
                 f"{setup_s:.2f}",
                 f"{cpu_s:.2f}",
