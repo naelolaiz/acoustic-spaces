@@ -904,9 +904,9 @@ def test_stop_playback(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
     assert window.play_file(tmp_path / "dry.wav")
     window.views.setCurrentWidget(window.plan)
     window.start_placing("sources")
-    assert window.plan.placing is not None
+    assert window.plan.canvas.placing is not None
     window._escape()
-    assert window.plan.placing is None and stop.isEnabled() and len(stops) == 1
+    assert window.plan.canvas.placing is None and stop.isEnabled() and len(stops) == 1
     window._escape()
     assert len(stops) == 2 and not stop.isEnabled() and not results.stop.isEnabled()
 
