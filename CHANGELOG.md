@@ -243,8 +243,38 @@ in the wave bands of closed rooms)
   diagonal from the modes of a rigid box, within 2e-5 of each stencil's dispersion
   relation, and every other check with both stencils.
 
+**Edge diffraction over two edges** (`simulation.early.diffraction: second_order`)
+
+- `second_order` adds to `first_order` the direct sound over two edges in turn: over a
+  thick wall or barrier, whose two corners share its top, round both corners of a
+  doorway's jamb, or over two screens in a row, where `first_order` finds nothing or
+  only the way round one corner. Each source and listener get the shortest path over
+  each pair of edges that see each other (`acoustic-spaces view --paths` draws it with
+  its two corners).
+- The wave of the first edge reaches the second as the UTD has it, with the second
+  edge's distance parameter from the curvature of that wave where it gets there: near
+  the first edge's boundaries it is still curved like the source's, which the textbook
+  formula for parallel edges misses by up to 6 dB at low frequencies. Along a face the
+  two edges share, the incident wave and its reflection off the face are one wave, and
+  the second edge's coefficient is halved.
+- Where the first edge's wave is lit at the second edge (or the second's at the
+  listener), the path continues a path over one edge and takes its cross term with
+  that path, as a path over one edge does with the specular path it borders: across the
+  plane of a barrier's top the level changes by at most 0.8 dB at 63 Hz and 0.1 dB from
+  1 kHz up, where `first_order` drops from the path over one corner to nothing.
+- Checked against the exact Biot-Tolstoy-Medwin solution in
+  `validation/edge_diffraction.py`: over barriers 0.3, 1 and 3 m thick within 0.35 dB
+  from 500 Hz up and 2 dB at 63 Hz, and over two thin screens in a row within 0.75 dB
+  from 500 Hz up and 2.7 dB at 63 Hz. The validation report has the tables.
+- The early stage of a hall with 16 edges that diffract takes 200 ms per source and
+  listener with `second_order`, 120 ms with `first_order` and 100 ms without
+  diffraction. `first_order` stays the default.
+
 **Examples**
 
+- `archway`: a bar and a dining room joined by an archway in a wall 40 cm thick,
+  with `second_order` diffraction: a diner behind the wall hears the singer over both
+  corners of the arch's jamb.
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)
   on the stage of the concert hall, one source for each of its 61 tracks, with scripts
   that mix a movement at a seat, draw pictures of the hall and the seating, and make a
@@ -289,6 +319,9 @@ in the wave bands of closed rooms)
 
 **Fixes**
 
+- The sound diffracted by the free edge of a thin screen left out the term of the
+  reflection off the screen's back wherever the reflection off its front reached the
+  listener: up to 0.9 dB too little there, at high frequencies.
 - The hint for a missing extra names the packages to install. It said
   `pip install "acoustic-spaces[extra]"`, which looks for the package on PyPI, where it
   is not.

@@ -17,7 +17,7 @@ PLANE_TOLERANCE = 1e-5
 
 #: The lowest reflection order that adds the scattering of a surface's size, for each
 #: edge diffraction setting (see :attr:`TraceModel.size_from_order`).
-_SIZE_FROM_ORDER = {"none": 1, "direct": 2, "first_order": 3}
+_SIZE_FROM_ORDER = {"none": 1, "direct": 2, "first_order": 3, "second_order": 3}
 
 #: Pressure pattern a + (1 - a) cos(theta) for each named source directivity (the same
 #: as :data:`acoustic_spaces.directivity.PATTERNS`).

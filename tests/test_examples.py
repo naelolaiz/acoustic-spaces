@@ -22,7 +22,7 @@ def test_every_example_folder_is_listed() -> None:
 
 def test_example_path() -> None:
     assert example_path("studio").parent.name == "studio"
-    with pytest.raises(ValueError, match="examples: church"):
+    with pytest.raises(ValueError, match="examples: archway, church"):
         example_path("cathedral")
 
 

@@ -305,6 +305,7 @@ the scene's (+z up, metres).
 | `studio` | A 6 × 4.5 × 3 m control room with side panels, a diffuser and stereo loudspeakers at ±30°. |
 | `church` | A stone nave with an apse, 18 m high, with about six seconds of reverberation. |
 | `gallery` | An L-shaped gallery: one listener sees the guide, the other stands round the corner and hears the guide by [edge diffraction](#edge-diffraction). |
+| `archway` | A bar and a dining room joined by an archway in a wall 40 cm thick: a diner behind the wall hears the singer over both corners of the arch's jamb (`second_order` diffraction). |
 | `orchestra` | The concert hall with a full orchestra on its stage, one source for each of the 61 tracks of an anechoic recording, and the scripts that [mix them and make a video](#an-orchestra-in-the-concert-hall). |
 
 `acoustic-spaces examples` lists them with where they are installed, and
@@ -780,8 +781,8 @@ simulation:
   edges, of any material) counts as the rectangle with its area and perimeter. Early
   reflections lose that share too and the late part picks it up. Reflections that
   [edge diffraction](#edge-diffraction) already completes keep their own coefficient:
-  the first two orders with `first_order` diffraction (the default), the first with
-  `direct`.
+  the first two orders with `first_order` diffraction (the default) or `second_order`,
+  the first with `direct`.
 
 In the two measured rooms of the [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md),
 the default model brings the reverberation time of a chamber music hall from 20 to 32 %
@@ -829,6 +830,9 @@ each octave band:
 
 - `first_order` (default): the direct sound and the first-order reflections bend round
   edges, with the reflection before or after the edge.
+- `second_order`: as `first_order`, and the direct sound bends round two edges in turn:
+  over a thick wall or barrier, round both corners of a doorway's jamb, over two screens
+  in a row.
 - `direct`: only the direct sound.
 - `none`: specular paths only.
 
@@ -845,10 +849,26 @@ than 0.05 dB. The
 diffraction coefficient matches the exact solutions for a half-plane and for wedges
 (within 0.25 dB), and a thin screen matches Maekawa's chart within 1.5 dB.
 
+Behind a thick wall or barrier, whose two corners share its top, no edge sees both the
+source and the listener: `first_order` finds nothing there, or only a way round one
+corner of a doorway. `second_order` follows the shortest path over each pair of edges
+that see each other. The first edge's wave reaches the second as the UTD has it, with
+the second edge's distance parameter from the curvature of that wave where it gets
+there, since near the first edge's boundaries it is still curved like the source's.
+Where one of the two edges' waves is lit, the path continues a path over the other edge
+alone and shares its energy with it, so the level is continuous where a path over one
+edge appears: as the listener rises past the top of a barrier, it changes by at most
+0.8 dB at 63 Hz and 0.1 dB from 1 kHz up. Against the exact solution (BTM, in the
+[validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md#edge-diffraction-against-the-exact-solution)),
+the level over barriers 0.3 to 3 m thick is within 0.35 dB from 500 Hz up and 2 dB at
+63 Hz, and over two screens in a row within 0.75 dB and 2.7 dB.
+
 ```sh
 acoustic-spaces simulate examples/gallery/scene.yaml --out gallery
 acoustic-spaces view examples/gallery/scene.yaml --paths --listener "round the corner"
 acoustic-spaces simulate examples/gallery/scene.yaml --out plain --diffraction none
+acoustic-spaces view examples/archway/scene.yaml --paths --listener "behind the wall"
+acoustic-spaces simulate examples/archway/scene.yaml --out archway --diffraction first_order
 ```
 
 ![Early level along a walk round the corner of the gallery example, with and without diffraction](docs/images/diffraction.png)
@@ -864,7 +884,9 @@ scattered rays already find their way round corners.
 `view --paths` and the Blender export draw diffracted paths in their own colour, the
 response's `early.diffracted` marks them, and `simulate` reports how many there are. The
 cost grows with the number of edges: in a hall with about 100 edges, `first_order` adds
-about 17 ms per source and listener.
+about 17 ms per source and listener. `second_order` costs more, as it looks at pairs of
+edges: in a hall with 16 edges, the early stage takes 200 ms per source and listener
+with it, 120 ms with `first_order` and 100 ms without diffraction.
 
 ### Low frequencies: the wave solver
 
@@ -957,8 +979,8 @@ Against measurements in two rooms of the BRAS benchmark, a seminar room comes ou
 within 2 % on reverberation time from 500 Hz to 4 kHz and within one JND on clarity, and
 a chamber music hall within about one JND on clarity and 7 to 20 % long on reverberation
 time. Edge diffraction
-is checked against the exact solutions for a half-plane and for wedges, and against
-Maekawa's chart. The
+is checked against the exact solutions for a half-plane and for wedges, against
+Maekawa's chart, and over two edges against the exact BTM solution. The
 wave solver matches the frequencies of a box's modes within 0.25 % and their decay rates
 within 2 % with walls whose admittance changes with frequency, the reflection and
 absorption of walls, and the free-field level within 0.35 dB, and round an open model
@@ -1528,7 +1550,8 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
   alike).
 - [x] A wave solver stencil with less than half the dispersion, the same in every
   direction.
-- [ ] Second-order edge diffraction.
+- [x] Second-order edge diffraction: the direct sound over two edges, checked against
+  the exact solution.
 - [ ] Walkthroughs with moving sources and listeners; IFC and Collada import; CATT and
   ODEON material libraries.
 

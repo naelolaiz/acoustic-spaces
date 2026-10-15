@@ -980,10 +980,11 @@ class SimulationPage(Page):
         self.max_order = int_spin(0, 20)
         self.early_rays = int_spin(1, 10_000_000, 1000)
         self.diffraction = QComboBox()
-        self.diffraction.addItems(["none", "direct", "first_order"])
+        self.diffraction.addItems(["none", "direct", "first_order", "second_order"])
         self.diffraction.setToolTip(
             "Sound bending round edges (pillars, balcony fronts, screens): none, of the "
-            "direct sound only, or of the direct sound and first-order reflections"
+            "direct sound only, of the direct sound and first-order reflections, or also "
+            "of the direct sound over two edges in turn"
         )
         early_form.addRow("Method", self.early_method)
         early_form.addRow("Highest order", self.max_order)
