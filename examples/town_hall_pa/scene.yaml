@@ -1,0 +1,95 @@
+# A town hall with a sound system for speech: a stone hall of 4000 m3 with about two
+# seconds of reverberation and a flat floor of seats, over which the sound of the stage
+# fades (`audience: true`). Two column loudspeakers beside the stage tilt their beams
+# down onto the seats (coherent arrays of 8 cardioid elements, steered 8 degrees down).
+# Two delay loudspeakers on the side walls, 17 m down the hall, aim shorter arrays at the
+# back rows. They play 60 ms after the columns, so their sound arrives just after the
+# columns' and the voice still seems to come from the stage, 3 dB quieter and with the
+# bass taken out, where the columns give enough. The program is speech
+# (`spectrum: speech_male`).
+#
+#   acoustic-spaces map scene.yaml --parameter sti --plot sti.png
+#   python delays.py
+#   acoustic-spaces simulate scene.yaml --out results
+#
+# delays.py maps the STI with and without the delay loudspeakers (two minutes on 4
+# cores). They lift the back rows' median from 0.52 to 0.59, but cost the front and the
+# middle 0.04: in a hall this reverberant every loudspeaker adds to the reverberation
+# everywhere, so delays pay off only where the columns' direct sound has faded.
+# `inspect` lists each source's sound power with its feed.
+name: Town hall with a sound system (4000 m3)
+geometry:
+  floor_plan: [[0, -8], [28, -8], [28, 8], [0, 8]]
+  height: 9
+materials:
+  stone:
+    preset: limestone_wall
+    scattering: 0.2
+  ceiling:
+    preset: plasterboard
+    scattering: 0.1
+  seats:
+    preset: audience_wooden_chairs_1_m2
+    scattering: 0.7
+    audience: true
+  stage_wall:
+    preset: wooden_lining
+    scattering: 0.15
+assignments:
+  floor: seats
+  ceiling: ceiling
+  wall_4: stage_wall   # x = 0, behind the stage
+  walls: stone
+sources:
+  - name: column_left
+    position: [1.0, -5.0, 3.0]
+    level_db: 98
+    spectrum: speech_male
+    directivity:
+      array: {element: cardioid, count: 8, spacing_m: 0.15, steer_deg: -8}
+  - name: column_right
+    position: [1.0, 5.0, 3.0]
+    level_db: 98
+    spectrum: speech_male
+    directivity:
+      array: {element: cardioid, count: 8, spacing_m: 0.15, steer_deg: -8}
+  - name: delay_left
+    position: [17.0, -7.6, 3.5]
+    orientation: {yaw: 20}
+    level_db: 98
+    spectrum: speech_male
+    directivity:
+      array: {element: cardioid, count: 4, spacing_m: 0.15, steer_deg: -15}
+    gain_db: -3
+    eq_db: [-12, -9, -6, -3, 0, 0, 0, 0]
+    delay_ms: 60
+  - name: delay_right
+    position: [17.0, 7.6, 3.5]
+    orientation: {yaw: -20}
+    level_db: 98
+    spectrum: speech_male
+    directivity:
+      array: {element: cardioid, count: 4, spacing_m: 0.15, steer_deg: -15}
+    gain_db: -3
+    eq_db: [-12, -9, -6, -3, 0, 0, 0, 0]
+    delay_ms: 60
+listeners:
+  - name: front
+    position: [6.0, 1.0, 1.2]
+    orientation: {yaw: 180}
+  - name: middle
+    position: [15.0, -2.0, 1.2]
+    orientation: {yaw: 180}
+  - name: back
+    position: [25.0, 3.0, 1.2]
+    orientation: {yaw: 180}
+simulation:
+  early: {method: ray_tracing, max_order: 3}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 2.5
+outputs:
+  - mono
+  - binaural
+coverage:
+  spacing: 1.0
+  noise_db: [45, 40, 35, 30, 25, 20, 15, 10]

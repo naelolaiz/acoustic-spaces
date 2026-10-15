@@ -1,0 +1,43 @@
+# The bass in a small, bare room: 4.2 x 3.4 x 2.5 m of plaster and a wooden floor, with a
+# subwoofer in a corner and a seat in the middle. Below a few hundred hertz the room's
+# modes decide what is heard, which rays cannot follow; the wave solver steps the
+# sound field on a grid of air up to the 250 Hz octave, its walls absorbing as their
+# materials do, and the rays take over above. It runs in third-octave bands (the
+# parameters are still given in octaves).
+#
+#   acoustic-spaces simulate scene.yaml --out results --plot
+#   acoustic-spaces simulate scene.yaml --out rays --no-wave   # rays only, to compare
+#   acoustic-spaces simulate scene.yaml --out gpu --wave-device gpu   # with the gpu extra
+#
+# At the seat the modes ring for 2.3 to 2.8 s from 63 to 250 Hz, where the rays give 1.5
+# to 1.9 s, and make the 125 Hz band 2.3 dB louder. `device: auto` uses a hardware GPU
+# when the gpu extra finds one (any vendor's, through WebGPU), else the CPU.
+name: Room modes in a small room (36 m3)
+geometry:
+  box: [4.2, 3.4, 2.5]
+materials:
+  plaster:
+    preset: hard_surface
+    scattering: 0.05
+  floor:
+    preset: wood_16mm
+    scattering: 0.05
+assignments:
+  floor: floor
+  ceiling: plaster
+  walls: plaster
+sources:
+  - name: subwoofer
+    position: [0.3, 0.3, 0.3]
+    level_db: 90
+listeners:
+  - name: seat
+    position: [2.1, 1.9, 1.1]
+simulation:
+  bands: third_octave
+  early: {method: image_sources, max_order: 3}
+  late: {method: stochastic_ray_tracing}
+  wave: {enabled: true, max_band_hz: 250, device: auto}
+  ir_length_s: 1.5
+outputs:
+  - mono
