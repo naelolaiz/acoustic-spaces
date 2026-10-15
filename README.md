@@ -585,7 +585,10 @@ simulation:
   than an octave (a Helmholtz resonator, a slot absorber), and the 8 kHz octave, across
   which the air absorbs about twice as much at 10 kHz as at 6.3 kHz. Its decay is then
   no single slope, and in the shoebox example its T30 comes out 8 % longer in third
-  octaves. They trace three times the rays and take about three times as long.
+  octaves. In the measured seminar room of the
+  [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
+  they bring the reverberation time at 250 Hz and 8 kHz from 13 and 17 % short to
+  within 4 %. They trace three times the rays and take about three times as long.
 - `acoustic-spaces simulate --bands third_octave` sets them for one run, and the
   editor's simulation page has them. A material with third-octave data shows its 24
   values in the editor, and `inspect` lists its octave averages.

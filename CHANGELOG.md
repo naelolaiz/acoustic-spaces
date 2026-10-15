@@ -91,6 +91,9 @@
   `Response.octave_energy()` the octaves; `Response.band_hz` names them.
 - The editor shows a material with third-octave data in 24 columns, and `inspect` its
   octave averages.
+- In the BRAS seminar room, third-octave bands bring the reverberation time at 250 Hz
+  and 8 kHz from 13 and 17 % short to within 4 % of the measurement; the validation
+  report has both rooms (`bras_validation.py --bands third_octave`).
 
 **Examples**
 
