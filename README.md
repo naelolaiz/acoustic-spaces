@@ -23,7 +23,7 @@ loudspeaker formats.
   audience: [coverage maps](docs/coverage-maps.md).
 - **Listening**: impulse responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker
   formats as WAV files; dry recordings run through them offline or in real time on the
-  sound card, head-tracked on headphones:
+  sound card, head-tracked on headphones, or heard along a walk through the room:
   [spatial audio and listening](docs/spatial-audio.md). One example is
   [Beethoven's 8th symphony](https://www.youtube.com/watch?v=c0-5F-iNhIE) from 61
   anechoic tracks on the stage of the concert hall example, binaural for headphones

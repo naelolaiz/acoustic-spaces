@@ -545,6 +545,22 @@ class DirectivitySpec(_Model):
 ArraySpec.model_rebuild()
 
 
+class Walk(_Model):
+    """A path a listener or a point source walks along, for a walkthrough
+    (:mod:`acoustic_spaces.walkthrough`): from its position through ``to``."""
+
+    to: list[Vector3] = Field(min_length=1, description="the points it walks through, in order")
+    speed_m_s: PositiveFloat = Field(default=1.2, description="walking speed (m/s)")
+    face_forward: bool = Field(
+        default=True,
+        description="turn to face the way it walks (yaw); false keeps its orientation",
+    )
+    turn_deg_s: PositiveFloat = Field(
+        default=90.0,
+        description="how fast it turns through a corner facing forward (degrees per second)",
+    )
+
+
 class Source(_Model):
     name: str
     position: Vector3
@@ -611,6 +627,9 @@ class Source(_Model):
             "responses and its part in combined coverage maps come that much later"
         ),
     )
+    walk: Walk | None = Field(
+        default=None, description="a path to walk, for a walkthrough (point sources only)"
+    )
 
     @field_validator("level_db", mode="before")
     @classmethod
@@ -636,6 +655,8 @@ class Source(_Model):
             raise ValueError("spectrum shapes a level given in all; a level per band has its own")
         if self.line_m is not None and self.surface_m is not None:
             raise ValueError("a source is a line or a surface, not both")
+        if self.walk is not None and self.extended:
+            raise ValueError("only a point source walks, not a line or a surface")
         if len(self._grid()[0]) * len(self._grid()[1]) > MAX_ELEMENTS:
             raise ValueError(f"more than {MAX_ELEMENTS} point sources; make spacing_m larger")
         return self
@@ -709,6 +730,7 @@ class Listener(_Model):
     name: str
     position: Vector3
     orientation: Orientation = Field(default_factory=Orientation)
+    walk: Walk | None = Field(default=None, description="a path to walk, for a walkthrough")
 
 
 class Air(_Model):

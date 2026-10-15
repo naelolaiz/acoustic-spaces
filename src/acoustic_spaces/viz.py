@@ -6,7 +6,8 @@
 - Leaks (PyVista): the open edges of a model that is not closed, and the rays of the
   leak finder that escape through its gaps.
 - Animation (PyVista): sound particles spreading from a source and reflecting around
-  the room, in a window with a time slider or saved as a GIF or MP4 video.
+  the room, in a window with a time slider or saved as a GIF or MP4 video; a walker
+  going along its walk, as a video to go with its sound.
 - Response plots (matplotlib): echogram with the early paths, decay curves per band, and
   arrival directions as the listener faces; the decays of a simulated and a measured
   response band by band; polar patterns of a source directivity.
@@ -20,6 +21,7 @@ Jupyter, and off screen for screenshots.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -36,6 +38,7 @@ if TYPE_CHECKING:
     from acoustic_spaces.engine.leaks import Leaks
     from acoustic_spaces.engine.particles import Particles
     from acoustic_spaces.parameters import BandDecay
+    from acoustic_spaces.walkthrough import WalkResponses
 
 #: ColorBrewer Set3: light colours, so the saturated source and listener markers stand out.
 MATERIAL_COLOURS = (
@@ -55,6 +58,7 @@ MATERIAL_COLOURS = (
 UNASSIGNED_COLOUR = "#ff00ff"
 SOURCE_COLOUR = "#ff5a5f"
 LISTENER_COLOUR = "#4da3ff"
+FACING_COLOUR = "#ffd23f"
 BACKGROUND = ("#16171d", "#3a3d4a")  # bottom, top
 PANEL = "#26272f"
 EDGE_COLOUR = "#d0d0d0"
@@ -434,7 +438,7 @@ def animate_particles(
 ) -> None:
     """Show sound particles (from :func:`acoustic_spaces.engine.trace_particles`) moving
     through the room: in a window with a time slider, or saved to ``path`` as an animated
-    GIF or, with imageio and ffmpeg installed, an MP4 video.
+    GIF or an MP4 video.
 
     ``color`` is ``"energy"`` (level in dB relative to a particle's share at emission,
     down to ``-db_range``) or ``"order"`` (reflections so far).
@@ -487,24 +491,38 @@ def animate_particles(
         )
         plotter.show()
         return
-    if suffix == ".mp4":
+    _record(plotter, path, fps, len(particles.times), show)
+
+
+# The viz extra installs both; named here for an install from before it did.
+_MP4_NEEDS = (
+    'MP4 videos need imageio and imageio-ffmpeg: pip install "imageio>=2.31" '
+    '"imageio-ffmpeg>=0.5", or uv sync --extra viz in a source checkout'
+)
+
+
+def _record(plotter, path: str | Path, fps: int, frames: int, show, sound=None) -> None:
+    """Save ``frames`` frames of ``plotter``, each set up by ``show(frame)``, to ``path``:
+    an animated GIF or an MP4 video, with the WAV file ``sound`` as an MP4's sound track.
+    Closes the plotter."""
+    mp4 = Path(path).suffix.lower() == ".mp4"
+    if mp4:
+        audio = {} if sound is None else {"audio_path": str(sound), "audio_codec": "aac"}
         try:
-            plotter.open_movie(str(path), framerate=fps)
+            plotter.open_movie(str(path), framerate=fps, **audio)
         except ImportError as exc:
             plotter.close()
-            raise ImportError(
-                'MP4 needs imageio and ffmpeg: pip install "imageio[ffmpeg]"'
-            ) from exc
+            raise ImportError(_MP4_NEEDS) from exc
     images = []
-    for frame in range(len(particles.times)):
+    for frame in range(frames):
         show(frame)
-        if suffix == ".mp4":
+        if mp4:
             plotter.write_frame()
         else:
             plotter.render()
             images.append(plotter.screenshot(return_img=True))
     plotter.close()
-    if suffix == ".gif":
+    if not mp4:
         from PIL import Image
 
         # One palette for every frame, so colours that stay put do not flicker.
@@ -514,6 +532,99 @@ def animate_particles(
         frames[0].save(
             str(path), save_all=True, append_images=frames[1:], duration=1000 / fps, loop=0
         )
+
+
+def check_video(path: str | Path) -> None:
+    """Raise what saving an animation to ``path`` would, before the work of making it:
+    ValueError unless it is a .gif or .mp4, ImportError without PyVista or, for an MP4,
+    without imageio and imageio-ffmpeg."""
+    suffix = Path(path).suffix.lower()
+    if suffix not in (".gif", ".mp4"):
+        raise ValueError("animations are saved as .gif or .mp4")
+    _pyvista()
+    if suffix == ".mp4":
+        import importlib.util
+
+        if not all(importlib.util.find_spec(name) for name in ("imageio", "imageio_ffmpeg")):
+            raise ImportError(_MP4_NEEDS)
+
+
+def animate_walk(
+    room: Room,
+    walk: WalkResponses,
+    path: str | Path,
+    *,
+    fps: int = 25,
+    window_size: tuple[int, int] = (1024, 640),
+    sound: str | Path | None = None,
+) -> None:
+    """Save a walk (from :func:`acoustic_spaces.walkthrough.simulate_walk`) as an
+    animated GIF or an MP4 video: the room, the path and the walker going along it, in
+    time with the sound of :func:`~acoustic_spaces.walkthrough.render_walk`. ``room`` is
+    the scene's room. ``sound``, a WAV file of that sound in one or two channels, becomes
+    an MP4's sound track, and the video then lasts as long as the sound (a GIF has none)."""
+    check_video(path)
+    duration = walk.duration_s
+    mp4 = Path(path).suffix.lower() == ".mp4"
+    if sound is not None and mp4:
+        from acoustic_spaces.audio import read_wav
+
+        data, rate = read_wav(sound)
+        if data.shape[1] > 2:
+            raise ValueError(f"a video's sound has one or two channels, not {data.shape[1]}")
+        duration = max(duration, len(data) / rate)
+    pv = _pyvista()
+    plotter = pv.Plotter(off_screen=True, window_size=list(window_size))
+    plot_room(room, plotter, opacity=0.12)
+    points = walk.points
+    plotter.add_mesh(pv.lines_from_points(points.positions), color="white", line_width=3)
+    size = max(0.2, 0.02 * float(np.ptp(room.mesh.vertices, axis=0).max()))
+    marker = pv.Sphere(radius=size, center=(0.0, 0.0, 0.0))
+    shape = marker.points.copy()
+    marker.points = shape + points.positions[0]
+    colour = SOURCE_COLOUR if walk.kind == "sources" else LISTENER_COLOUR
+    plotter.add_mesh(marker, color=colour)
+    yaws = points.yaws
+    if yaws is None and walk.result is not None:
+        # It keeps the orientation it has in the scene.
+        scene = walk.result.room.scene
+        walkers = scene.listeners if walk.kind == "listeners" else scene.sources
+        first = next(w for w in walkers if w.name == walk.names[0])
+        yaws = np.full(len(points.times), first.orientation.yaw)
+    arrow = None
+    if yaws is not None:
+        # An arrow the way the walker faces, just above it so that the path does not
+        # hide it, and its yaw in the text.
+        arrow = pv.Arrow(
+            start=(0.0, 0.0, 0.0),
+            direction=(1.0, 0.0, 0.0),
+            tip_length=0.3,
+            tip_radius=0.1,
+            shaft_radius=0.04,
+            scale=8.0 * size,
+        )
+        arrow.points += (0.0, 0.0, 1.5 * size)
+        arrow_shape = arrow.points.copy()
+        yaws = np.unwrap(np.radians(yaws))
+        plotter.add_mesh(arrow, color=FACING_COLOUR, lighting=False)
+    clock = plotter.add_text("", position="lower_left", font_size=12, color="white")
+    plotter.view_isometric()
+    frames = int(math.floor(duration * fps)) + 1
+
+    def show(frame: int) -> None:
+        t = frame / fps
+        where = [np.interp(t, points.times, points.positions[:, k]) for k in range(3)]
+        marker.points = shape + where
+        text = f"{walk.name}: {t:.1f} s"
+        if arrow is not None:
+            yaw = float(np.interp(t, points.times, yaws))
+            c, s = math.cos(yaw), math.sin(yaw)
+            turn = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+            arrow.points = arrow_shape @ turn.T + where
+            text += f", facing yaw {180.0 - (180.0 - math.degrees(yaw)) % 360.0:.0f}°"
+        clock.SetText(0, text)
+
+    _record(plotter, path, fps, frames, show, sound if mp4 else None)
 
 
 # -- response plots ----------------------------------------------------------------

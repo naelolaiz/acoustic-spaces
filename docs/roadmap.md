@@ -53,4 +53,4 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] A leak finder: where rays escape from a model that is not closed.
 - [x] Materials from CATT-Acoustic and ODEON material libraries.
 - [x] IFC (BIM) and Collada import.
-- [ ] Walkthroughs with moving sources and listeners.
+- [x] Walkthroughs with moving sources and listeners.

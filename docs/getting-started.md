@@ -29,7 +29,7 @@ With [uv](https://docs.astral.sh/uv/), `uv sync` builds the package into `.venv`
 with the test tools (pytest, ruff), and `--extra` adds the optional parts:
 
 ```sh
-uv sync --extra viz                    # viz: the 3D view (PyVista) and plots (matplotlib)
+uv sync --extra viz                    # viz: the 3D view (PyVista), plots, MP4 videos
 uv sync --extra viz --extra measure    # measure: sounddevice, for sweeps and playback
 uv sync --extra gui                    # gui: the graphical editor (Qt, PySide6)
 uv sync --extra gpu                    # gpu: the wave solver on a GPU (wgpu, WebGPU)
@@ -43,7 +43,7 @@ rebuilds the compiled core when the C++ sources change.
 With pip, in a virtual environment:
 
 ```sh
-python -m pip install -e ".[dev,viz]"     # viz adds the 3D view (PyVista)
+python -m pip install -e ".[dev,viz]"     # viz adds the 3D view (PyVista) and videos
 python -m pip install -e ".[measure]"     # sounddevice: sweeps, real-time playback
 python -m pip install -e ".[sofa]"        # h5py, to read HRTFs from SOFA files
 python -m pip install -e ".[sketchup]"    # openskp, to read SketchUp files (experimental)
@@ -77,8 +77,7 @@ python -m pytest                                       # the test suite
 reflecting off the walls (turned from the specular direction by as much as the surface
 scatters; see [Scattering](simulation.md#scattering)) and losing the absorbed share of its energy at
 every hit, coloured by level or by reflection order. It opens a window with a time
-slider, or saves a GIF (`--out particles.gif`) or, with `imageio[ffmpeg]` installed, an
-MP4 video.
+slider, or saves a GIF (`--out particles.gif`) or an MP4 video (`--out particles.mp4`).
 
 ![Sound particles leaving the soloist of the concert hall example, coloured by level at 1 kHz, over the first 90 ms](images/particles.gif)
 

@@ -1,0 +1,42 @@
+# A walkthrough of the L-shaped gallery: a visitor walks from in front of the guide, down
+# the long arm and round the corner, at 1.2 m/s, while the guide talks. `acoustic-spaces
+# walkthrough` simulates a response every 25 cm along the way (the late part every 2 m)
+# and plays a recording through them, crossfading from each to the next, and can save
+# the walk as a video: the guide's voice goes from direct and clear to the sound that
+# bends round the corner.
+name: Gallery walkthrough (L-shaped, 1150 m3)
+geometry:
+  floor_plan: [[0, 0], [24, 0], [24, 8], [8, 8], [8, 20], [0, 20]]
+  height: 4
+materials:
+  marble:
+    preset: marble_floor
+    scattering: 0.05
+  brick:
+    preset: brick_wall_rough
+    scattering: 0.2
+  ceiling:
+    preset: acoustical_plaster_25mm
+    scattering: 0.1
+assignments:
+  floor: marble
+  ceiling: ceiling
+  walls: brick
+sources:
+  - name: guide
+    position: [20.0, 4.0, 1.6]
+    orientation: {yaw: 180}
+    directivity: cardioid
+    spectrum: speech_male
+listeners:
+  - name: visitor
+    position: [17.0, 4.0, 1.6]
+    walk:
+      to: [[4.0, 4.0, 1.6], [4.0, 16.0, 1.6]]
+      speed_m_s: 1.2
+simulation:
+  early: {method: ray_tracing, max_order: 3, diffraction: first_order}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 2.0
+outputs:
+  - binaural
