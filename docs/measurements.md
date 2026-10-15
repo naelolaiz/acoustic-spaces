@@ -198,6 +198,9 @@ T30 after       0.04    0.07    0.07    0.11    0.08    0.08    0.06    0.09
   about one JND: as close as with the absorption BRAS fitted with Eyring's formula, or
   closer.
 
+The `fitting` example goes through it with made-up measurements of a seminar room whose
+back wall was built without the absorbing panels of its design.
+
 From Python:
 
 ```python

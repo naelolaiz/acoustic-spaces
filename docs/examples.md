@@ -16,6 +16,12 @@
 | `bim_office` | An office from a BIM model in IFC, read as one room from its space boundaries, its surfaces named by element, material and IFC class ([BIM models](scenes.md#bim-models-ifc); the `ifc` extra). |
 | `rehearsal_room` | A band's rehearsal room under a pitched roof from a Collada file in inches, as SketchUp exports it. |
 | `orchestra` | The concert hall with a full orchestra on its stage, one source for each of the 61 tracks of an anechoic recording, and the scripts that [mix them and make a video](spatial-audio.md#an-orchestra-in-the-concert-hall). |
+| `town_hall_pa` | A stone town hall of 4000 m³ with a sound system for speech: two columns (coherent [arrays](scenes.md#sources-and-directivity) steered down onto the seats) beside the stage, and two delay loudspeakers further down the hall that play later, quieter and with less bass. `delays.py` maps the STI with and without the delays: they help the back rows and cost the front a little. |
+| `workshop` | Noise in a workshop hall: a conveyor 20 m long (a line source), a vibrating machine casing (a surface source) and a compressor, each with its own sound power spectrum. Map the A-weighted level over the floor, then with another ceiling. |
+| `apartment` | Two rooms of a flat, a television in one and a bed in the other: how loud the television is through the [wall and the door](scenes.md#walls-doors-and-openings), closed or open. |
+| `room_modes` | The bass in a small bare room from the [wave solver](simulation.md#low-frequencies-the-wave-solver), in third-octave bands, on the CPU or a GPU, against rays alone. |
+| `fitting` | A seminar room that measured longer than it was designed, as the panels on its back wall were left out: `make_measurements.py` makes up the measurements, then [compare](measurements.md#comparing-with-measurements) the model with them and [fit](measurements.md#fitting-materials-to-measurements) the back wall to them. |
+| `measurement` | No scene, a script: it records a sweep in a simulated room, as a microphone would, to try the [measurement](measurements.md#measuring-impulse-responses) commands without a sound card. |
 
 `acoustic-spaces examples` lists them with where they are installed, and
 `acoustic-spaces examples --copy my-rooms` copies them to a folder you can edit. From

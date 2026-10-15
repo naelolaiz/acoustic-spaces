@@ -1,0 +1,66 @@
+# Fitting a model to measurements. A seminar room was designed with a carpet, an
+# absorbing ceiling and absorbing panels on the back wall, and measured once built: the
+# reverberation came out longer than the model said (T30 0.9 s against 0.7 s at 1 kHz).
+# There is no real room behind this example, so make_measurements.py makes up its
+# measurements by simulating the room as built, where the panels were left out, with
+# noise and latency as a measurement would have. Then compare the model with them, in
+# just noticeable differences, and fit the back wall's absorption to them:
+#
+#   python make_measurements.py
+#   acoustic-spaces simulate scene.yaml --out designed
+#   acoustic-spaces compare designed/dodecahedron__seat_a.wav measured/dodecahedron__seat_a.wav
+#   acoustic-spaces calibrate scene.yaml -o fitted.yaml --materials panels \
+#       --measured dodecahedron seat_a measured/dodecahedron__seat_a.wav \
+#       --measured dodecahedron seat_b measured/dodecahedron__seat_b.wav \
+#       --measured dodecahedron seat_c measured/dodecahedron__seat_c.wav
+#
+# `calibrate` adjusts the panels' absorption band by band until T30, EDT and C80 at the
+# three seats come as close as they can to those measured, and writes the fitted scene.
+# From 500 Hz up it finds the plain wall that was built, 0.03 to 0.08 where plasterboard
+# has 0.04 to 0.06, and T30 and C80 come within one JND on average, EDT within two.
+# Below 500 Hz it is less sure (0.46 at 250 Hz): there the panels change the decay little
+# next to the randomness of the made-up measurements. Without `--materials` it fits every
+# material, which three seats and one source cannot tell apart. The source is
+# omnidirectional, as the dodecahedron loudspeaker of a measurement to ISO 3382 is.
+name: Seminar room as designed (10 x 7 x 3 m)
+geometry:
+  floor_plan: [[0, 0], [10, 0], [10, 7], [0, 7]]
+  height: 3
+materials:
+  carpet:
+    preset: carpet_tufted_9.5mm
+    scattering: 0.5   # the tables and chairs on it
+  tiles:
+    preset: ceiling_fissured_tile
+    scattering: 0.1
+  plaster:
+    preset: plasterboard
+    scattering: 0.1
+  glass:
+    preset: glass_window
+    scattering: 0.05
+  panels:
+    preset: panel_fabric_covered_8pcf
+    scattering: 0.1
+assignments:
+  floor: carpet
+  ceiling: tiles
+  wall_2: panels  # x = 10, the back wall
+  wall_3: glass   # y = 7, the windows
+  walls: plaster
+sources:
+  - name: dodecahedron
+    position: [1.5, 3.5, 1.5]
+listeners:
+  - name: seat_a
+    position: [4.0, 2.0, 1.2]
+  - name: seat_b
+    position: [6.5, 5.0, 1.2]
+  - name: seat_c
+    position: [8.5, 3.0, 1.2]
+simulation:
+  early: {method: ray_tracing, max_order: 3}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 1.5
+outputs:
+  - mono

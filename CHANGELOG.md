@@ -380,6 +380,23 @@ changes results at 63 and 125 Hz)
 - `archway`: a bar and a dining room joined by an archway in a wall 40 cm thick,
   with `second_order` diffraction: a diner behind the wall hears the singer over both
   corners of the arch's jamb.
+- `town_hall_pa`: a sound system for speech in a reverberant town hall, two columns
+  (coherent arrays) beside the stage and two delay loudspeakers with their own gain,
+  equalizer and delay, over seats marked as audience. `delays.py` maps the STI with and
+  without the delays: the back rows' median goes from 0.52 to 0.59, the front's and the
+  middle's down by 0.04.
+- `workshop`: noise from a conveyor (a line source), a machine's casing (a surface
+  source) and a compressor, each with its own sound power spectrum, mapped as the
+  A-weighted level over the floor.
+- `apartment`: a living room and a bedroom with a wall and a door between them; the
+  television on the sofa at 73 dB(A) is 45 dB(A) in bed with the door closed, 63 dB(A)
+  with it open.
+- `room_modes`: the bass of a small bare room from the wave solver, in third-octave
+  bands, on the CPU or a GPU, against rays alone.
+- `fitting`: a seminar room that measured longer than designed, as the absorbing panels
+  of its back wall were left out. `make_measurements.py` makes up the measurements by
+  simulating the room as built; `compare` shows the gap, and `calibrate --materials
+  panels` finds the plain wall from 500 Hz up.
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)
   on the stage of the concert hall, one source for each of its 61 tracks, with scripts
   that mix a movement at a seat, draw pictures of the hall and the seating, and make a
