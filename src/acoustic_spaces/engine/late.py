@@ -1,8 +1,9 @@
 """Late reverberation: energy per octave band and time slot at each listener.
 
-- ``stochastic_energy``: stochastic ray tracing in the compiled core. Rays reflect
-  specularly or diffusely by the scattering coefficient; how their energy reaches the
-  listeners is set by ``reception`` (see :data:`RECEPTION`). Specular paths the early
+- ``stochastic_energy``: stochastic ray tracing in the compiled core. Rays reflect as
+  the scene's ``simulation.scattering`` says (vector-based scattering by default, with
+  the scattering of each surface's size added); how their energy reaches the listeners
+  is set by ``reception`` (see :data:`RECEPTION`). Specular paths the early
   stage computes exactly are left out, so the two parts add up without double counting
   or a crossfade.
 - ``stochastic_map_energy``: the same tracer counting energy over a coverage map
@@ -22,6 +23,7 @@ import numpy as np
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 
 _DECAY = 6.0 * math.log(10.0)  # 60 dB in nepers of energy
 
@@ -138,6 +140,34 @@ def _in_batches(trace, rays: int, splitting: bool):
     return arrays, escaped, traced
 
 
+def band_groups(model: TraceModel) -> list[slice]:
+    """The bands each ray carries. Vector-based scattering turns a ray by its surface's
+    scattering coefficient, so where the bands' coefficients differ (the scattering of a
+    surface's size always makes them differ), every band is traced with rays of its own:
+    one direction for all would scatter the treble as much as the bass. With random
+    scattering, which weights each band by its own coefficient, or the same coefficient
+    in every band, one ray carries them all; so it does when the model asks for one
+    ray for all bands (``by_band`` off). Either way each band has the rays asked for,
+    so tracing band by band traces that many rays per band."""
+    bands = model.absorption.shape[1]
+    scattering = np.asarray(model.scattering)
+    uniform = bool(np.all(scattering == scattering[:, :1]))
+    if model.surface_size is not None:
+        uniform = uniform and bool(np.all(scattering == 1.0))  # fully diffuse at any size
+    if not model.vector_scattering or not model.by_band or uniform:
+        return [slice(0, bands)]
+    return [slice(b, b + 1) for b in range(bands)]
+
+
+def _by_band(groups: list[slice], rays: int, run) -> tuple[list[np.ndarray], int, int]:
+    """Runs ``run(group, rays)`` (returning arrays with bands on their second last axis,
+    escaped rays and traced rays) for each group of bands, so every band has ``rays``
+    rays, and joins the arrays along the band axis."""
+    parts = [run(group, rays) for group in groups]
+    arrays = [np.concatenate(found, axis=-2) for found in zip(*(p[0] for p in parts), strict=True)]
+    return arrays, sum(p[1] for p in parts), sum(p[2] for p in parts)
+
+
 def _directivity_arrays(directivity: Directivity | None, orientation, bands: int):
     if directivity is None:
         directivity_a, table = np.zeros(0), np.zeros((0, 0, bands))
@@ -148,6 +178,26 @@ def _directivity_arrays(directivity: Directivity | None, orientation, bands: int
         np.ascontiguousarray(directivity_a, dtype=np.float64),
         np.ascontiguousarray(orientation, dtype=np.float64),
         np.ascontiguousarray(table, dtype=np.float64),
+    )
+
+
+def _band_arguments(model: TraceModel, air: np.ndarray, directivity: tuple, band: slice) -> tuple:
+    """For the bands ``band``: the tracer's directivity_a and directivity_table (from
+    ``directivity``, both arrays for all bands), absorption, scattering and air, and the
+    arguments surface_size, band_hz, vector_scattering and size_from_order."""
+    first_order, table = directivity
+    if model.surface_size is None:
+        size, hz = np.zeros((0, 2)), np.zeros(0)
+    else:
+        size = np.ascontiguousarray(model.surface_size, dtype=np.float64)
+        hz = np.ascontiguousarray(np.asarray(OCTAVE_BANDS_HZ, dtype=np.float64)[band])
+    return (
+        np.ascontiguousarray(first_order[band] if len(first_order) else first_order),
+        np.ascontiguousarray(table[..., band]),
+        np.ascontiguousarray(model.absorption[:, band], dtype=np.float64),
+        np.ascontiguousarray(model.scattering[:, band], dtype=np.float64),
+        np.ascontiguousarray(np.asarray(air, dtype=np.float64)[band]),
+        (size, hz, bool(model.vector_scattering), int(model.size_from_order)),
     )
 
 
@@ -203,40 +253,48 @@ def stochastic_energy(
         directivity, orientation, model.absorption.shape[1]
     )
 
-    def trace(count: int, first: int, target: np.ndarray):
-        energy, directional, *rest = _native.trace_stochastic(
-            model.bvh,
-            np.asarray(source, dtype=np.float64),
-            directivity_a,
-            orientation,
-            table,
-            model.absorption,
-            model.scattering,
-            np.ascontiguousarray(air, dtype=np.float64),
-            listeners,
-            np.ascontiguousarray(directions.reshape(-1, 3)),
-            int(count),
-            float(max_time),
-            float(time_step),
-            DIRECTION_STEP,
-            float(speed_of_sound),
-            np.ascontiguousarray(radius),
-            bool(diffuse_rain),
-            bool(specular_rain),
-            int(covered_order),
-            np.ascontiguousarray(covered, dtype=np.float64),
-            int(seed) & 0xFFFFFFFFFFFFFFFF,
-            int(threads),
-            SPLIT_WINDOW_S,
-            int(first),
-            np.ascontiguousarray(target, dtype=np.float64),
-            SPLIT_RATIO,
-            MAX_SPLIT,
-            MAX_FAMILY,
+    def run(band: slice, count: int):
+        first_order, band_table, absorption, scattering, band_air, sizes = _band_arguments(
+            model, air, (directivity_a, table), band
         )
-        return [energy, directional], *rest
 
-    (energy, directional), escaped, traced = _in_batches(trace, rays, splitting)
+        def trace(count: int, first: int, target: np.ndarray):
+            energy, directional, *rest = _native.trace_stochastic(
+                model.bvh,
+                np.asarray(source, dtype=np.float64),
+                first_order,
+                orientation,
+                band_table,
+                absorption,
+                scattering,
+                band_air,
+                *sizes,
+                listeners,
+                np.ascontiguousarray(directions.reshape(-1, 3)),
+                int(count),
+                float(max_time),
+                float(time_step),
+                DIRECTION_STEP,
+                float(speed_of_sound),
+                np.ascontiguousarray(radius),
+                bool(diffuse_rain),
+                bool(specular_rain),
+                int(covered_order),
+                np.ascontiguousarray(covered, dtype=np.float64),
+                int(seed) & 0xFFFFFFFFFFFFFFFF,
+                int(threads),
+                SPLIT_WINDOW_S,
+                int(first),
+                np.ascontiguousarray(target, dtype=np.float64),
+                SPLIT_RATIO,
+                MAX_SPLIT,
+                MAX_FAMILY,
+            )
+            return [energy, directional], *rest
+
+        return _in_batches(trace, count, splitting)
+
+    (energy, directional), escaped, traced = _by_band(band_groups(model), rays, run)
     return LateEnergy(
         energy=energy,
         time_step=time_step,
@@ -306,43 +364,51 @@ def stochastic_map_energy(
         directivity, orientation, model.absorption.shape[1]
     )
 
-    def trace(count: int, first: int, target: np.ndarray):
-        energy, *rest = _native.trace_map(
-            model.bvh,
-            np.asarray(source, dtype=np.float64),
-            directivity_a,
-            orientation,
-            table,
-            model.absorption,
-            model.scattering,
-            np.ascontiguousarray(air, dtype=np.float64),
-            np.asarray(grid.origin, dtype=np.float64),
-            float(grid.cell),
-            np.ascontiguousarray(grid.index, dtype=np.int64),
-            np.ascontiguousarray(grid.low, dtype=np.float64),
-            np.ascontiguousarray(grid.high, dtype=np.float64),
-            np.ascontiguousarray(grid.volume, dtype=np.float64),
-            onset,
-            covered,
-            MAP_FINE_STEP,
-            MAP_FINE_BINS,
-            MAP_COARSE_STEP,
-            int(count),
-            float(max_time),
-            float(speed_of_sound),
-            int(covered_order),
-            int(seed) & 0xFFFFFFFFFFFFFFFF,
-            int(threads),
-            SPLIT_WINDOW_S,
-            int(first),
-            np.ascontiguousarray(target, dtype=np.float64),
-            SPLIT_RATIO,
-            MAX_SPLIT,
-            MAX_FAMILY,
+    def run(band: slice, count: int):
+        first_order, band_table, absorption, scattering, band_air, sizes = _band_arguments(
+            model, air, (directivity_a, table), band
         )
-        return [energy], *rest
 
-    (energy,), escaped, traced = _in_batches(trace, rays, splitting)
+        def trace(count: int, first: int, target: np.ndarray):
+            energy, *rest = _native.trace_map(
+                model.bvh,
+                np.asarray(source, dtype=np.float64),
+                first_order,
+                orientation,
+                band_table,
+                absorption,
+                scattering,
+                band_air,
+                *sizes,
+                np.asarray(grid.origin, dtype=np.float64),
+                float(grid.cell),
+                np.ascontiguousarray(grid.index, dtype=np.int64),
+                np.ascontiguousarray(grid.low, dtype=np.float64),
+                np.ascontiguousarray(grid.high, dtype=np.float64),
+                np.ascontiguousarray(grid.volume, dtype=np.float64),
+                onset,
+                covered,
+                MAP_FINE_STEP,
+                MAP_FINE_BINS,
+                MAP_COARSE_STEP,
+                int(count),
+                float(max_time),
+                float(speed_of_sound),
+                int(covered_order),
+                int(seed) & 0xFFFFFFFFFFFFFFFF,
+                int(threads),
+                SPLIT_WINDOW_S,
+                int(first),
+                np.ascontiguousarray(target, dtype=np.float64),
+                SPLIT_RATIO,
+                MAX_SPLIT,
+                MAX_FAMILY,
+            )
+            return [energy], *rest
+
+        return _in_batches(trace, count, splitting)
+
+    (energy,), escaped, traced = _by_band(band_groups(model), rays, run)
     return MapEnergy(
         energy=energy,
         onset=onset,

@@ -44,7 +44,7 @@ listeners:
     position: [5.0, 2.0, 1.2]
 simulation:
   early: {method: ray_tracing, max_order: 3}
-  late: {method: stochastic_ray_tracing, rays: 50000}
+  late: {method: stochastic_ray_tracing, rays: 25000}
   ir_length_s: 7.0
 outputs:
   - mono

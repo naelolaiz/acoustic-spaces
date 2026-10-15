@@ -1501,7 +1501,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     coverage.add_argument("--height", type=float, help="listening height above them, m")
     coverage.add_argument("--spacing", type=float, help="distance between map points, m")
-    coverage.add_argument("--rays", type=int, help="rays per source")
+    coverage.add_argument("--rays", type=int, help="rays per source and band")
     coverage.add_argument(
         "--noise",
         type=float,

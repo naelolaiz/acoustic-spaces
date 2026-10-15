@@ -38,6 +38,38 @@
   responses (CC BY-SA 4.0, like BRAS). `validation/bras_validation.py` compares
   simulations with them; the validation report has the results.
 
+**Scattering** (changes results: see below for version 2's)
+
+- Vector-based scattering, as in ODEON: every reflection sends a ray in the direction of
+  the sum of its specular direction and a random Lambert direction, weighted by the
+  surface's scattering coefficient, instead of specularly or, with the coefficient as
+  probability, diffusely. The diffuse rain sends the scattered share of each reflection
+  to the listeners and the detector spheres count only the rest, so nothing is counted
+  twice. Where the bands' coefficients differ, each band is traced with rays of its own,
+  so a wall can scatter the bass and reflect the treble. Particles in `animate` and the
+  editor move the same way.
+- Scattering from the size of a surface (Christensen and Rindel, 2005, as in ODEON): a
+  surface that is small for the wavelength, far from where the sound came from or met at
+  a grazing angle scatters more than its coefficient says. Each flat surface (the faces
+  of one plane joined at their edges, of any material) counts as the rectangle with its
+  area and perimeter. Early reflections lose that share too, and the late part takes it
+  up. Reflections that edge diffraction already completes keep their own coefficient:
+  the first two orders with `first_order` diffraction (the default), the first with
+  `direct`.
+- `simulation.scattering` picks the model: `method: vector` (default) or `random`,
+  `from_size: true` (default) or `false`, and `by_band` (below); the editor's simulation
+  page has all three.
+- `simulation.late.rays` (and `coverage.rays`) now count the rays per octave band, 50,000
+  by default instead of 100,000 shared by all bands. The church, concert hall and
+  orchestra examples trace 25,000 per band. A simulation takes about 1.5 to 4 times as
+  long as before; `simulation.scattering.by_band: false` turns one ray for all bands by
+  their mean scattering instead, which is faster but scatters the treble like the bass.
+- Rooms with smooth walls decay faster than with version 2: in the measured chamber
+  music hall of BRAS the reverberation time came out 20 to 32 % long and now 7 to 20 %.
+  The shoebox example's T30 at 1 kHz drops from 2.4 s to 1.3 s. Scene files need no
+  change; to get version 2's results, set
+  `simulation: {scattering: {method: random, from_size: false}, late: {rays: 100000}}`.
+
 **Examples**
 
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)

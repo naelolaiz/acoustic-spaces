@@ -6,7 +6,9 @@
 Needs ``pip install pyroomacoustics`` (and matplotlib for ``--plots``). Both programs
 get the same geometry, absorption and scattering per octave band, the same air
 absorption (ISO 9613-1, from this package) and an image-source order of 3 before ray
-tracing takes over. The impulse responses of both are analysed alike, with
+tracing takes over. Both scatter vector-based; pyroomacoustics has no scattering from the
+size of a surface, so this package leaves it out for the comparison and adds a run with
+its default, which has it. The impulse responses of both are analysed alike, with
 :func:`acoustic_spaces.parameters.from_impulse_response`, and EDT, T30 and C80 are
 averaged over the listeners of each room. The script prints a Markdown table per room.
 """
@@ -109,7 +111,7 @@ CASES = [
 ]
 
 
-def _scene(case: Case, rays: int, seed: int) -> Scene:
+def _scene(case: Case, rays: int, seed: int, from_size: bool = True) -> Scene:
     geometry = (
         {"box": list(case.box)} if case.box else {"floor_plan": case.plan, "height": case.height}
     )
@@ -127,6 +129,7 @@ def _scene(case: Case, rays: int, seed: int) -> Scene:
             "simulation": {
                 "early": {"max_order": 3},
                 "late": {"rays": rays},
+                "scattering": {"from_size": from_size},
                 "ir_length_s": case.ir_length_s,
                 "seed": seed,
             },
@@ -134,8 +137,10 @@ def _scene(case: Case, rays: int, seed: int) -> Scene:
     )
 
 
-def run_ours(case: Case, rays: int, seed: int) -> tuple[list[np.ndarray], Room, float]:
-    room = Room.from_scene(_scene(case, rays, seed))
+def run_ours(
+    case: Case, rays: int, seed: int, from_size: bool = True
+) -> tuple[list[np.ndarray], Room, float]:
+    room = Room.from_scene(_scene(case, rays, seed, from_size))
     start = time.perf_counter()
     result = simulate(room)
     irs = [
@@ -220,19 +225,40 @@ def global_decay(
     and levels (dB re the start), in 1 ms steps, backward-integrated like the Schroeder
     curve of an impulse response, so its T30 compares with a listener's.
 
-    Rays reflect with either scattering model, independent of any receiver:
+    Rays reflect with one of three scattering models, independent of any receiver:
 
-    - ``random``: specularly or, with the scattering coefficient as probability, in a
-      Lambert direction, so the scattered share of the energy leaves diffusely (this
-      package's tracer, and the definition of the coefficient in ISO 17497-1);
+    - ``random``: specularly or, with the mean of the bands' scattering coefficients as
+      probability, in a Lambert direction, each band weighted by its own coefficient, so
+      its scattered share leaves diffusely (this package's tracer up to version 2);
     - ``vector``: always in the direction of the scattering-weighted sum of the
       specular and a Lambert direction (vector-based scattering, as in pyroomacoustics
-      0.10 and ODEON).
+      0.10 and ODEON), each band with rays of its own where the bands' coefficients
+      differ (pyroomacoustics takes their mean);
+    - ``size``: vector-based, with the scattering a surface's limited size adds
+      (:func:`~acoustic_spaces.engine.model.size_scattering`), from the order the
+      room's diffraction setting leaves it to, each band with rays of its own: this
+      package's default since version 3.
     """
     from acoustic_spaces.engine.model import TraceModel
-    from acoustic_spaces.spatial.directions import fibonacci_sphere
 
     model = TraceModel.from_room(room)
+    sizes = scattering == "size" and model.surface_size is not None
+    uniform = np.all(model.scattering == model.scattering[:, :1])
+    if scattering == "random" or (uniform and not sizes):
+        return _decay(room, model, scattering, None, rays, duration, seed)
+    levels = []
+    for band in range(model.absorption.shape[1]):
+        t, level = _decay(room, model, scattering, band, rays, duration, seed)
+        levels.append(level[:, band])
+    return t, np.stack(levels, axis=1)
+
+
+def _decay(room: Room, model, scattering: str, band: int | None, rays, duration, seed):
+    """:func:`global_decay` with rays turned by the scattering of ``band``, or by the
+    bands' mean (None)."""
+    from acoustic_spaces.engine.model import size_scattering
+    from acoustic_spaces.spatial.directions import fibonacci_sphere
+
     rng = np.random.default_rng(seed)
     c, air = room.speed_of_sound(), room.air_attenuation()
     step = 0.001
@@ -245,6 +271,8 @@ def global_decay(
     energy = np.full((rays, bands), 1.0 / rays)
     time_s = np.zeros(rays)
     face = np.full(rays, -1, dtype=np.int64)
+    order = np.zeros(rays, dtype=np.int64)
+    sizes = scattering == "size" and model.surface_size is not None
     while len(time_s):
         distance, hit = model.intersect(position, direction, np.full(len(time_s), np.inf), face)
         escaped = hit < 0  # through a gap in the model: lost at once
@@ -253,6 +281,7 @@ def global_decay(
         keep = ~escaped
         position, direction, energy = position[keep], direction[keep], energy[keep]
         time_s, distance, face = time_s[keep], distance[keep], hit[keep]
+        order = order[keep] + 1
         time_s = time_s + distance / c
         position = position + distance[:, None] * direction
         kept = energy * (1.0 - model.absorption[face])
@@ -262,15 +291,33 @@ def global_decay(
         normal = np.where((np.einsum("ij,ij->i", normal, direction) > 0)[:, None], -normal, normal)
         specular = direction - 2.0 * np.einsum("ij,ij->i", direction, normal)[:, None] * normal
         diffuse = _lambert(normal, rng)
-        s = model.scattering[face].mean(axis=1)
+        s = model.scattering[face]
+        if sizes:
+            width, length = model.surface_size[face].T
+            cosine = np.abs(np.einsum("ij,ij->i", normal, direction))
+            sized = size_scattering(width, length, distance, cosine, c, s)
+            s = np.where((order >= model.size_from_order)[:, None], sized, s)
         if scattering == "random":
-            direction = np.where((rng.random(len(s)) < s)[:, None], diffuse, specular)
+            # Each band keeps its own expected diffuse share: weighted by s / p or
+            # (1 - s) / (1 - p), as the tracer does.
+            p = s.mean(axis=1, keepdims=True)
+            scattered = rng.random(len(p)) < p[:, 0]
+            weight = np.where(
+                scattered[:, None],
+                np.divide(s, p, out=np.ones_like(s), where=p > 0),
+                np.divide(1.0 - s, 1.0 - p, out=np.ones_like(s), where=p < 1),
+            )
+            slot = np.minimum((time_s / step).astype(int), slots)
+            np.add.at(change, slot, energy * (weight - 1.0))
+            energy = energy * weight
+            direction = np.where(scattered[:, None], diffuse, specular)
         else:
+            s = s.mean(axis=1) if band is None else s[:, band]
             mixed = s[:, None] * diffuse + (1.0 - s[:, None]) * specular
             direction = mixed / np.linalg.norm(mixed, axis=1, keepdims=True)
         live = time_s < duration
         position, direction, energy = position[live], direction[live], energy[live]
-        time_s, face = time_s[live], face[live]
+        time_s, face, order = time_s[live], face[live], order[live]
     t = np.arange(slots) * step
     total = np.cumsum(change, axis=0)[:slots] * np.exp(-np.outer(c * t, air))
     remaining = np.cumsum(total[::-1], axis=0)[::-1]
@@ -337,13 +384,16 @@ def barron_c80(case: Case, volume: float, t: np.ndarray) -> np.ndarray:
 
 
 def compare(case: Case, rays: int, seed: int) -> dict:
-    ours, room, ours_s = run_ours(case, rays, seed)
+    # pyroomacoustics has no scattering from the size of a surface: the comparison
+    # leaves it out here too, and this package's default adds it.
+    ours, room, ours_s = run_ours(case, rays, seed, from_size=False)
+    default, default_room, _ = run_ours(case, rays, seed)
     theirs, theirs_s = run_pyroomacoustics(case, rays, room.air_attenuation())
-    a, b = _mean_parameters(ours), _mean_parameters(theirs)
+    a, b, d = _mean_parameters(ours), _mean_parameters(theirs), _mean_parameters(default)
     duration = 1.5 * case.ir_length_s
     global_t30 = {
-        "random": _global_t30(room, "random", _t30_windows(ours), duration),
         "vector": _global_t30(room, "vector", _t30_windows(theirs), duration),
+        "size": _global_t30(default_room, "size", _t30_windows(default), duration),
     }
     result = {
         "name": case.name,
@@ -355,13 +405,14 @@ def compare(case: Case, rays: int, seed: int) -> dict:
             p: {
                 "acoustic_spaces": [float(v) for v in a[p][COMPARED]],
                 "pyroomacoustics": [float(v) for v in b[p][COMPARED]],
+                "default": [float(v) for v in d[p][COMPARED]],
             }
             for p in PARAMETERS
         },
         "t30_room_energy": {m: [float(v) for v in t[COMPARED]] for m, t in global_t30.items()},
     }
     if case.diffuse:
-        c80 = barron_c80(case, room.volume_m3, global_t30["random"][COMPARED])
+        c80 = barron_c80(case, room.volume_m3, global_t30["vector"][COMPARED])
         result["c80_barron"] = [float(v) for v in c80]
     return result
 
@@ -394,9 +445,11 @@ def table(result: dict) -> str:
         if p == "c80" and "c80_barron" in result:
             values = " | ".join(f"{v:.1f}" for v in result["c80_barron"])
             lines.append(f"| C80 (dB), Barron's revised theory | {values} |")
+    values = " | ".join(f"{v:.2f}" for v in result["t30"]["default"])
+    lines.append(f"| T30 (s), acoustic_spaces with surface size (default) | {values} |")
     rows = {
-        "random": "T30 (s) of the room's energy, random scattering",
         "vector": "T30 (s) of the room's energy, vector-based scattering",
+        "size": "T30 (s) of the room's energy, with surface size",
     }
     for model, label in rows.items():
         values = result["t30_room_energy"][model]
@@ -421,8 +474,9 @@ def plot(result: dict, path: str) -> None:
         ax.plot(x, result[p]["pyroomacoustics"], "s-", color="C1", label="pyroomacoustics")
         if p == "t30":
             energy = result["t30_room_energy"]
-            ax.plot(x, energy["random"], ":", color="C0", label="room energy, random")
-            ax.plot(x, energy["vector"], ":", color="C1", label="room energy, vector-based")
+            ax.plot(x, result[p]["default"], "^-", color="C2", label="acoustic_spaces, size")
+            ax.plot(x, energy["vector"], ":", color="C1", label="room energy")
+            ax.plot(x, energy["size"], ":", color="C2", label="room energy, size")
             ax.plot(x, result["eyring_s"], "--", color="gray", label="Eyring")
         if p == "c80" and "c80_barron" in result:
             ax.plot(x, result["c80_barron"], "--", color="gray", label="Barron")

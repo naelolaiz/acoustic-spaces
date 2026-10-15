@@ -10,6 +10,7 @@ from acoustic_spaces.engine import TraceModel, early_paths
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.parameters import from_impulse_response
+from acoustic_spaces.scene.model import Scattering
 from acoustic_spaces.synthesis import REFERENCE_ENERGY_10M
 
 SHOEBOX_OBJ = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "shoebox.obj"
@@ -55,7 +56,10 @@ def _analytic_images(source: np.ndarray, max_order: int) -> dict[tuple, int]:
 )
 def test_early_paths_match_analytic_image_sources(method, source, listener) -> None:
     alpha, scattering = 0.1, 0.2
-    room = Room.from_scene(_scene([alpha] * 8, scattering, source=source, listeners=[listener]))
+    # Without the scattering of the walls' size, every reflection keeps the same share.
+    plain = {"scattering": {"from_size": False}}
+    scene = _scene([alpha] * 8, scattering, source=source, listeners=[listener], simulation=plain)
+    room = Room.from_scene(scene)
     paths = early_paths(room, max_order=4, method=method)
 
     src, lis = np.array(source), np.array(listener)
@@ -190,8 +194,10 @@ SHOEBOX_TAIL_DB = np.array(
 
 def test_splitting_keeps_a_sparse_tail_together() -> None:
     # Absorbing ceiling, smooth walls: late energy rides on the few rays that keep away
-    # from the ceiling. Without splitting, 10k rays miss the tail by 5 to 17 dB.
+    # from the ceiling. Without splitting, 10k rays miss the tail by 5 to 17 dB. (The
+    # reference levels are of random scattering without the walls' size, as before 3.0.)
     room = Room.from_yaml(SHOEBOX_YAML)
+    room.scene.simulation.scattering = Scattering(method="random", from_size=False)
     late = late_stage.stochastic_energy(
         TraceModel.from_room(room),
         np.array([2.0, 3.0, 1.5]),
@@ -219,14 +225,15 @@ EXAMPLE_ABSORPTION = {
 }
 
 
-def _box(absorption: dict[str, list[float]], scattering: float, **simulation) -> Room:
-    """The example's 8 x 6 x 3 m box with the given absorption per surface."""
+def _box(absorption: dict[str, list[float]], scatter: float, **simulation) -> Room:
+    """The example's 8 x 6 x 3 m box with the given absorption per surface and
+    scattering coefficient ``scatter``."""
     return Room.from_scene(
         Scene.model_validate(
             {
                 "geometry": {"box": SIZE.tolist()},
                 "materials": {
-                    name: {"absorption": alpha, "scattering": scattering}
+                    name: {"absorption": alpha, "scattering": scatter}
                     for name, alpha in absorption.items()
                 },
                 "assignments": {name: name for name in absorption},
@@ -284,7 +291,10 @@ def test_specular_box_decays_as_its_directions_predict(absorption) -> None:
     else:
         alpha = EXAMPLE_ABSORPTION
         length, window, bands = 2.0, (0.3, 1.8), slice(0, 8)
-    room = _box(alpha, 0.0, late={"rays": 20_000}, ir_length_s=length)
+    # Specular walls: no scattering from their size either.
+    room = _box(
+        alpha, 0.0, late={"rays": 20_000}, scattering={"from_size": False}, ir_length_s=length
+    )
     step = 0.05
     # Every listener sees the same decay; their sum is steadier than each one.
     simulated = sum(response.energy(step) for response in simulate(room)).T[:, bands]
@@ -319,11 +329,12 @@ def test_statistical_tail_follows_eyring() -> None:
 def test_statistical_and_stochastic_methods_agree(scattering) -> None:
     # The shoebox example's box with the same absorption on every surface, so the field
     # is about diffuse. Over both listeners, every band and seeds 3, 5, 7 and 11, the
-    # statistical G is within 0.23 dB of the stochastic one at scattering 0.3 and within
-    # 0.42 dB at 1.0 (before its late part held the scattered share of the early
-    # reflections and the paths above the early order, it was up to 0.9 and 1.8 dB low).
-    # Its C80 is up to 1.57 and 2.21 dB higher, from 1 kHz up, where the tracer decays up
-    # to 7 % slower than Eyring; the statistical C80 is Barron's within 0.03 dB. With the
+    # statistical G is within 0.62 dB of the stochastic one at scattering 0.3 (vector-based
+    # scattering, with the walls' size; 0.23 dB with random scattering) and within 0.43
+    # dB at 1.0 (before its late part held the scattered share of the early reflections
+    # and the paths above the early order, it was up to 0.9 and 1.8 dB low). Its C80 is
+    # up to 1.3 and 2.2 dB higher, from 1 kHz up, where the tracer decays up to 7 %
+    # slower than Eyring; the statistical C80 is Barron's within 0.03 dB. With the
     # example's own materials (absorbing ceiling, smooth walls) the tail at 0.3 is far
     # from diffuse and C80 differs by up to 9 dB at 4 and 8 kHz, beyond any statistical
     # tail.
@@ -334,7 +345,7 @@ def test_statistical_and_stochastic_methods_agree(scattering) -> None:
     for key, response in results["stochastic_ray_tracing"].responses.items():
         statistical = results["statistical"][key]
         a, b = response.parameters(), statistical.parameters()
-        np.testing.assert_allclose(b.g, a.g, atol=0.5)
+        np.testing.assert_allclose(b.g, a.g, atol=0.7)
         np.testing.assert_allclose(b.c80, a.c80, atol=2.5)
         assert np.all(statistical.late >= 0)
 

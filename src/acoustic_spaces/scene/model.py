@@ -356,7 +356,14 @@ class LateStage(_Model):
     """Late reverberation: stochastic energy decay per band, time slot and direction."""
 
     method: Literal["stochastic_ray_tracing", "statistical"] = "stochastic_ray_tracing"
-    rays: int = Field(default=100_000, ge=1, description="stochastic ray tracing only")
+    rays: int = Field(
+        default=50_000,
+        ge=1,
+        description=(
+            "stochastic ray tracing only: rays per octave band (vector-based scattering "
+            "traces each band with rays of its own where the bands scatter differently)"
+        ),
+    )
     reception: Literal["diffuse_rain", "secondary_sources", "detector"] = Field(
         default="diffuse_rain",
         description=(
@@ -385,6 +392,36 @@ class LateStage(_Model):
         description=(
             "split rays that carry much more energy than usual and thin out those that "
             "carry much less (unbiased); keeps late tails smooth where few rays survive"
+        ),
+    )
+
+
+class Scattering(_Model):
+    """How reflections scatter, in the early and the late stage alike."""
+
+    method: Literal["vector", "random"] = Field(
+        default="vector",
+        description=(
+            "where a reflected ray goes: vector (the specular direction and a random "
+            "Lambert direction added, weighted by the scattering coefficient, as in "
+            "ODEON) or random (specularly, or with the scattering coefficient as "
+            "probability in a Lambert direction; before 3.0)"
+        ),
+    )
+    from_size: bool = Field(
+        default=True,
+        description=(
+            "add the scattering of a surface's limited size: below a frequency set by its "
+            "width and length, the angle of incidence and the distance the sound came "
+            "from, less of a reflection is specular (Christensen and Rindel, 2005)"
+        ),
+    )
+    by_band: bool = Field(
+        default=True,
+        description=(
+            "vector only: where the bands scatter differently, trace each band with rays "
+            "of its own (exact; slower), or turn one ray for all bands by their mean "
+            "scattering (faster; scatters the treble like the bass)"
         ),
     )
 
@@ -472,6 +509,7 @@ class Output(_Model):
 class Simulation(_Model):
     early: EarlyStage = Field(default_factory=EarlyStage)
     late: LateStage = Field(default_factory=LateStage)
+    scattering: Scattering = Field(default_factory=Scattering)
     wave: WaveStage = Field(default_factory=WaveStage)
     transition_ms: float | None = Field(
         default=None,
@@ -499,7 +537,7 @@ class Coverage(_Model):
     height: float = Field(default=1.2, gt=0.0, description="listening height above them (m)")
     spacing: float = Field(default=1.0, gt=0.0, description="distance between map points (m)")
     rays: int | None = Field(
-        default=None, ge=1, description="rays per source; None uses simulation.late.rays"
+        default=None, ge=1, description="rays per source and band; None uses simulation.late.rays"
     )
     noise_db: list[float] | float | None = Field(
         default=None,

@@ -590,7 +590,7 @@ def coverage_map(
             t60 = room.reverberation_time("eyring", air_absorption=True)
             stat = (np.asarray(t60, dtype=float), float(volume), c)
         else:
-            say(f"{source.name}: stochastic ray tracing over the map ({rays} rays)")
+            say(f"{source.name}: stochastic ray tracing over the map ({rays} rays per band)")
             late = late_stage.stochastic_map_energy(
                 model,
                 src,

@@ -201,7 +201,6 @@ def find_paths(
     source = np.asarray(source, dtype=np.float64)
     listener = np.asarray(listener, dtype=np.float64)
     bands = model.absorption.shape[1]
-    reflection = (1.0 - model.absorption) * (1.0 - model.scattering)  # specular energy
 
     tolerance = _EDGE_TOLERANCE * float(np.ptp(model.room.mesh.vertices, axis=0).max())
     parts = []
@@ -266,8 +265,10 @@ def find_paths(
         idx = idx[np.sort(unique)]
         dist = distance[idx]
         energy = np.exp(-np.outer(dist, air)) / (4.0 * np.pi * dist[:, None] ** 2)
+        before = np.broadcast_to(source, (len(idx), 3))
         for j in range(k):
-            energy *= reflection[faces[idx, j]]
+            energy *= model.reflection(faces[idx, j], points[j][idx] - before, j + 1)
+            before = points[j][idx]
         first = points[0][idx] if k else np.broadcast_to(listener, (len(idx), 3))
         departure = first - source
         departure /= np.maximum(np.linalg.norm(departure, axis=1), 1e-300)[:, None]

@@ -277,7 +277,7 @@ def simulate(
                 speed_of_sound=c,
             )
         else:
-            say(f"{source.name}: stochastic ray tracing ({late_cfg.rays} rays)")
+            say(f"{source.name}: stochastic ray tracing ({late_cfg.rays} rays per band)")
             radius = late_cfg.receiver_radius
             if radius is None:
                 clearance = distance_to_surface(room.mesh, listener_pos)

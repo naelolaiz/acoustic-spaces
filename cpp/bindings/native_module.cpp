@@ -156,13 +156,20 @@ nb::ndarray<nb::numpy, std::int64_t> specular_sequences(const as::Bvh &bvh, InAr
 as::StochasticScene stochastic_scene(const char *name, const as::Bvh &bvh, InArray source,
                                      InArray directivity_a, Matrix orientation,
                                      Kernels directivity_table, Matrix absorption,
-                                     Matrix scattering, InArray air) {
+                                     Matrix scattering, InArray air, Matrix surface_size,
+                                     InArray band_hz) {
     const std::string fn = name;
     const std::size_t faces = bvh.face_count();
     const std::size_t bands = air.shape(0);
     if (absorption.shape(0) != faces || absorption.shape(1) != bands ||
         scattering.shape(0) != faces || scattering.shape(1) != bands) {
         throw std::invalid_argument(fn + ": coefficients must be faces x bands");
+    }
+    if (surface_size.shape(1) != 2 ||
+        (surface_size.shape(0) != 0 &&
+         (surface_size.shape(0) != faces || band_hz.shape(0) != bands))) {
+        throw std::invalid_argument(
+            fn + ": surface_size must be faces x 2 (or 0 x 2), with band_hz one per band");
     }
     if (directivity_a.shape(0) != 0 && directivity_a.shape(0) != bands) {
         throw std::invalid_argument(fn + ": directivity_a must have one per band");
@@ -195,6 +202,10 @@ as::StochasticScene stochastic_scene(const char *name, const as::Bvh &bvh, InArr
     scene.absorption = absorption.data();
     scene.scattering = scattering.data();
     scene.air = air.data();
+    if (surface_size.shape(0) != 0) {
+        scene.surface_size = surface_size.data();
+        scene.band_hz = band_hz.data();
+    }
     return scene;
 }
 
@@ -206,7 +217,8 @@ as::StochasticSettings stochastic_settings(std::size_t rays, double max_time,
                                            std::uint64_t seed, std::size_t threads,
                                            double window_time_step, std::uint64_t first_ray,
                                            InArray split_target, double split_ratio,
-                                           std::size_t max_split, std::size_t max_family) {
+                                           std::size_t max_split, std::size_t max_family,
+                                           bool vector_scattering, int size_from_order) {
     as::StochasticSettings settings;
     settings.rays = rays;
     settings.max_time = max_time;
@@ -220,12 +232,15 @@ as::StochasticSettings stochastic_settings(std::size_t rays, double max_time,
     settings.split_ratio = split_ratio;
     settings.max_split = max_split;
     settings.max_family = max_family;
+    settings.vector_scattering = vector_scattering;
+    settings.size_from_order = size_from_order;
     return settings;
 }
 
 nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivity_a,
                            Matrix orientation, Kernels directivity_table, Matrix absorption,
-                           Matrix scattering, InArray air,
+                           Matrix scattering, InArray air, Matrix surface_size,
+                           InArray band_hz, bool vector_scattering, int size_from_order,
                            Points receivers, Points directions, std::size_t rays,
                            double max_time, double time_step, double dir_time_step,
                            double speed_of_sound, InArray receiver_radius, bool diffuse_rain,
@@ -236,14 +251,15 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
                            std::size_t max_split, std::size_t max_family) {
     as::StochasticScene scene =
         stochastic_scene("trace_stochastic", bvh, source, directivity_a, orientation,
-                         directivity_table, absorption, scattering, air);
+                         directivity_table, absorption, scattering, air, surface_size, band_hz);
     const std::size_t bands = scene.bands;
     scene.receivers = points(receivers);
     scene.directions = points(directions);
 
     as::StochasticSettings settings = stochastic_settings(
         rays, max_time, speed_of_sound, covered_order, seed, threads, window_time_step,
-        first_ray, split_target, split_ratio, max_split, max_family);
+        first_ray, split_target, split_ratio, max_split, max_family, vector_scattering,
+        size_from_order);
     settings.time_step = time_step;
     settings.dir_time_step = dir_time_step;
     settings.receiver_radius = to_vector(receiver_radius);
@@ -269,7 +285,8 @@ using MapIndex = nb::ndarray<const std::int64_t, nb::ndim<3>, nb::c_contig, nb::
 
 nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
                     Matrix orientation, Kernels directivity_table, Matrix absorption,
-                    Matrix scattering, InArray air, InArray origin, double cell,
+                    Matrix scattering, InArray air, Matrix surface_size, InArray band_hz,
+                    bool vector_scattering, int size_from_order, InArray origin, double cell,
                     MapIndex point, InArray low, InArray high, InArray volume, InArray onset,
                     InArray covered_time, double fine_step, std::size_t fine_bins,
                     double coarse_step, std::size_t rays, double max_time,
@@ -279,7 +296,7 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
                     std::size_t max_family) {
     as::StochasticScene scene =
         stochastic_scene("trace_map", bvh, source, directivity_a, orientation,
-                         directivity_table, absorption, scattering, air);
+                         directivity_table, absorption, scattering, air, surface_size, band_hz);
     const std::size_t bands = scene.bands;
     if (origin.shape(0) != 2) throw std::invalid_argument("trace_map: origin must be (x, y)");
     as::MapGrid &map = scene.map;
@@ -303,7 +320,8 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
     // No receivers: rain and detector spheres cost nothing, every leg reaches the map.
     as::StochasticSettings settings = stochastic_settings(
         rays, max_time, speed_of_sound, covered_order, seed, threads, window_time_step,
-        first_ray, split_target, split_ratio, max_split, max_family);
+        first_ray, split_target, split_ratio, max_split, max_family, vector_scattering,
+        size_from_order);
     settings.time_step = max_time;
     settings.dir_time_step = max_time;
     settings.diffuse_rain = false;
@@ -433,7 +451,9 @@ NB_MODULE(_native, m) {
     m.def("trace_stochastic", &trace_stochastic, nb::arg("bvh"), nb::arg("source"),
           nb::arg("directivity_a"), nb::arg("orientation"), nb::arg("directivity_table"),
           nb::arg("absorption"),
-          nb::arg("scattering"), nb::arg("air"), nb::arg("receivers"), nb::arg("directions"),
+          nb::arg("scattering"), nb::arg("air"), nb::arg("surface_size"), nb::arg("band_hz"),
+          nb::arg("vector_scattering"), nb::arg("size_from_order"), nb::arg("receivers"),
+          nb::arg("directions"),
           nb::arg("rays"), nb::arg("max_time"), nb::arg("time_step"), nb::arg("dir_time_step"),
           nb::arg("speed_of_sound"), nb::arg("receiver_radius"), nb::arg("diffuse_rain"),
           nb::arg("specular_rain"),
@@ -446,11 +466,17 @@ NB_MODULE(_native, m) {
           "ray_energy / reflections is the mean band-mean energy of a ray per window. The "
           "source radiates with a first-order pattern per band (directivity_a; empty: omni) "
           "times directivity_table (elevations x azimuths x bands; empty: none), in the "
-          "frame whose forward, left and up axes are the columns of orientation.");
+          "frame whose forward, left and up axes are the columns of orientation. Rays "
+          "reflect with vector-based scattering or, without vector_scattering, specularly or "
+          "diffusely at random; surface_size (faces x 2: width and length of each face's "
+          "surface, m; 0 x 2: none) with band_hz (centre frequency per band) adds the "
+          "scattering of a surface's limited size from reflection order size_from_order on.");
 
     m.def("trace_map", &trace_map, nb::arg("bvh"), nb::arg("source"), nb::arg("directivity_a"),
           nb::arg("orientation"), nb::arg("directivity_table"), nb::arg("absorption"),
-          nb::arg("scattering"), nb::arg("air"), nb::arg("origin"), nb::arg("cell"),
+          nb::arg("scattering"), nb::arg("air"), nb::arg("surface_size"), nb::arg("band_hz"),
+          nb::arg("vector_scattering"), nb::arg("size_from_order"), nb::arg("origin"),
+          nb::arg("cell"),
           nb::arg("point"), nb::arg("low"), nb::arg("high"), nb::arg("volume"),
           nb::arg("onset"), nb::arg("covered_time"), nb::arg("fine_step"),
           nb::arg("fine_bins"), nb::arg("coarse_step"), nb::arg("rays"), nb::arg("max_time"),
