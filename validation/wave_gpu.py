@@ -73,6 +73,13 @@ def _time(model, room: Room, band: int, length: float, device: str):
     return stepping - started, done - stepping, np.stack([r.signals for r in responses]), info
 
 
+def _settings(pairs: list[tuple[str, str]]) -> None:
+    """Prints one setting per line, the values lined up."""
+    width = max(len(label) for label, _ in pairs) + 1
+    for label, value in pairs:
+        print(f"{label + ':':<{width}} {value}")
+
+
 def _table(rows: list[tuple[str, ...]]) -> str:
     """A Markdown table whose columns line up in a terminal too: text on the left,
     numbers on the right."""
@@ -99,12 +106,16 @@ def main() -> None:
     name = gpu.gpu_name()
     if name is None:
         raise SystemExit('wgpu finds no GPU: pip install "acoustic-spaces[gpu]" and a driver')
-    print(f"{platform.machine()}, {platform.system()}, {os.cpu_count()} CPU threads")
-    print(f"GPU: {name}")
-    print(
-        f"Wave bands up to {args.band} Hz, {args.length:g} s responses, {POINTS:g} points "
-        f"per wavelength, scheme {SCHEME} (19-point stencil, 7-point round an open model), "
-        "first source to every listener; the CPU on all its threads"
+    _settings(
+        [
+            ("Machine", f"{platform.machine()}, {platform.system()}"),
+            ("CPU", f"{os.cpu_count()} threads, all used"),
+            ("GPU", name),
+            ("Wave bands", f"up to {args.band} Hz"),
+            ("Responses", f"{args.length:g} s, first source to every listener"),
+            ("Grid", f"{POINTS:g} points per wavelength"),
+            ("Scheme", f"{SCHEME} (19-point stencil, 7-point round an open model)"),
+        ]
     )
     print()
     gpu._device()  # start the GPU once, outside the timings
