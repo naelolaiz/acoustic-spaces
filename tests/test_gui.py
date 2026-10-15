@@ -889,6 +889,12 @@ def test_stop_playback(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
     window.docks["map"].raise_()
     assert window.now_playing.isVisible() and window.stop_button.isVisible()
     assert window.now_playing.text().startswith("Playing dry.wav from ")
+    # What plays does not follow edits, and the status bar says so until they are undone.
+    window.document.update_point("sources", 0, level_db=90.0)
+    assert window.now_playing.text().endswith("(before the latest changes)")
+    assert "does not follow them" in window.messages.toPlainText()
+    window.undo()
+    assert "before" not in window.now_playing.text()
     window.stop_button.click()
     assert stops and not stop.isEnabled() and not results.stop.isEnabled()
     assert not window.now_playing.isVisible() and not window.stop_button.isVisible()

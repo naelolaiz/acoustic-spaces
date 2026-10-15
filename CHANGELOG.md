@@ -457,7 +457,9 @@ changes results at 63 and 125 Hz)
   Cancel, which only cancels a run, had the same stop icon. While a recording plays, the
   status bar now says so, with **Stop playback**, which is also in the toolbar and the
   Simulation menu; Cancel has an icon of its own, and Esc stops playback when nothing is
-  being placed or drawn.
+  being placed or drawn. Moving a source or listener while the sound played looked as if
+  it changed what plays, which it does not: the status bar marks the sound as from
+  before the latest changes, and the log says how to hear them.
 
 ## 2.0.0
 

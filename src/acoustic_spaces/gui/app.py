@@ -157,6 +157,9 @@ class MainWindow(QMainWindow):
         self._player_timer = QTimer(self)
         self._player_timer.setInterval(100)
         self._player_timer.timeout.connect(self._player_poll)
+        #: What plays: the scene it was simulated for, the status bar's text, and whether
+        #: the log said the scene has changed since. None while nothing plays.
+        self._played: dict | None = None
 
         self._actions()
         self._menus()
@@ -421,6 +424,7 @@ class MainWindow(QMainWindow):
         self.map_panel.mark_stale(self._map_stale())
         self._draw()
         self._summary()
+        self._show_playing()
 
     def _state(self) -> None:
         document = self.document
@@ -1161,10 +1165,11 @@ class MainWindow(QMainWindow):
             self._error("Cannot play", str(exc))
             return False
         text = f"Playing {Path(path).name} from {pair[0]} at {pair[1]}"
-        self.now_playing.setText(text)
+        self._played = {"scene": self._result_scene, "text": text, "told": False}
         self.results.set_playing(True)
         self._play_timer.start(int(1000 * len(mix) / sample_rate) + 250)
         self.log(f"{text} ({fmt.label})")
+        self._show_playing()
         return True
 
     def _tracking_order(self) -> int:
@@ -1224,9 +1229,10 @@ class MainWindow(QMainWindow):
         thread.start()
         self._player_timer.start()
         text = f"Playing {Path(path).name} from {pair[0]} at {pair[1]}, head-tracked"
-        self.now_playing.setText(text)
+        self._played = {"scene": self._result_scene, "text": text, "told": False}
         self.results.set_playing(True)
         self.log(f"{text} (order {order} Ambisonics to binaural)")
+        self._show_playing()
         return True
 
     def _player_poll(self) -> None:
@@ -1245,6 +1251,26 @@ class MainWindow(QMainWindow):
         self.stop_action.setEnabled(playing)
         self.now_playing.setVisible(playing)
         self.stop_button.setVisible(playing)
+        if not playing:
+            self._played = None
+
+    def _show_playing(self) -> None:
+        """Say in the status bar what plays, and whether it is from before the latest
+        changes to the scene: what plays does not follow them."""
+        played = self._played
+        if played is None:
+            return
+        changed = played["scene"] is not self.document.scene
+        self.now_playing.setText(
+            played["text"] + (" (before the latest changes)" if changed else "")
+        )
+        if changed and not played["told"]:
+            played["told"] = True
+            self.log(
+                "The sound playing is from before the latest changes to the scene and does "
+                "not follow them: to hear them, Listen again (after running again, F5, if "
+                "the results are out of date)."
+            )
 
     def stop_playing(self) -> None:
         from acoustic_spaces.measurement import _sounddevice

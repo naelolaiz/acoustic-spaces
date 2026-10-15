@@ -50,6 +50,8 @@ The editor works on the same scene files as the command line:
   `measure` extra), or head-tracked with **Head tracking** ticked (see
   [Head tracking](spatial-audio.md#head-tracking)). While it plays, the status bar says
   so, with **Stop playback** (also in the toolbar and the Simulation menu, or Esc).
+  What plays does not follow later changes to the scene (moving a source, say): the
+  status bar marks it as from before them, and Listen again plays them.
 - Change a material's absorption after a run and the results follow at once: the run
   counted each ray's reflections off each material, and is re-weighted for the new
   values instead of traced again (as `calibrate` does). The panel says so; **Run**
