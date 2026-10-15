@@ -11,6 +11,7 @@ import numpy as np
 
 from acoustic_spaces import parameters as iso3382
 from acoustic_spaces import synthesis
+from acoustic_spaces.engine import coherent
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.wave import WaveResponse
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, band_centres, resolution_of, to_octaves
@@ -69,10 +70,28 @@ class Response:
     #: :meth:`reweighted`; else empty.
     late_moments: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
     moment_step: float = 0.0
+    #: The early part as the echogram reads its coherent bands, with what it came from.
+    _pressure: tuple | None = field(default=None, init=False, repr=False, compare=False)
 
     @property
     def bands(self) -> int:
         return self.late.shape[0]
+
+    @property
+    def coherent_bands(self) -> int:
+        """How many of the lowest bands the early paths add in pressure in
+        (:mod:`~acoustic_spaces.engine.coherent`); the wave solver's take the place of
+        those it covers."""
+        return self.early.coherent_bands
+
+    def _early_pressure(self) -> coherent.EarlyPressure:
+        early = self.early
+        key = (early, early.energy, early.delay_s, early.direction, early.spectrum)
+        if self._pressure is None or any(
+            a is not b for a, b in zip(self._pressure[0], key, strict=True)
+        ):
+            self._pressure = (key, coherent.EarlyPressure(early))
+        return self._pressure[1]
 
     @property
     def band_hz(self) -> tuple[int, ...]:
@@ -124,8 +143,14 @@ class Response:
             early = early * (np.abs(self.early.direction @ axis) ** exponent)[:, None]
         idx = (self.early.delay_s / step).astype(np.int64)
         keep = idx < slots
-        for b in range(self.bands):
+        count = self.coherent_bands
+        for b in range(count, self.bands):
             np.add.at(out[b], idx[keep], early[keep, b])
+        if count and len(self.early):
+            # The lowest bands read from the early part's pressure, as from a measured
+            # response (or the wave solver's).
+            pressure = self._early_pressure()
+            out[:count] += pressure.energy(step, slots, axis, exponent, start=self.direct_delay_s)
         if self.wave is not None:
             out[: self.wave.bands] = self.wave.energy(step, slots, axis, exponent)
         return out
@@ -307,8 +332,10 @@ class Response:
     def impulse_response(self, sample_rate: int = 48_000, seed: int | None = None) -> np.ndarray:
         """Mono impulse response; the direct sound at r metres is an impulse of height 1 / r.
 
-        Early paths become fractional-delay impulses filtered per band; the late energy
-        drives a random-sign Dirac sequence with the density of reflections in the room.
+        Early paths become fractional-delay impulses filtered per band, in the lowest
+        bands with the phase of their reflections
+        (:mod:`~acoustic_spaces.engine.coherent`); the late energy drives a random-sign
+        Dirac sequence with the density of reflections in the room.
         From 50 ms after the direct sound the late energy is smoothed over 10 ms first,
         so a single strong ray late in the tail does not become a click. The wave
         solver's bands, when it ran, take the place of the lowest ones: through the
@@ -317,9 +344,8 @@ class Response:
         """
         n = int(math.ceil(self.length_s * sample_rate))
         scale = synthesis.ENERGY_TO_IR
-        band_signals = synthesis.place_impulses(
-            self.early.delay_s, np.sqrt(scale * self.early.energy), n, sample_rate
-        )
+        band_signals, quadrature = coherent.band_impulses(self.early, n, sample_rate)
+        low = coherent.signal(self.early, n, sample_rate)[:, 0]
         noise_signals = np.zeros_like(band_signals)
         if np.any(self.late > 0):
             rng = np.random.default_rng(self.seed if seed is None else seed)
@@ -331,9 +357,12 @@ class Response:
             )
             noise_signals = synthesis.shape_noise(scale * late, self.time_step, noise, sample_rate)
         if self.wave is None:
-            return synthesis.combine_bands(band_signals + noise_signals, sample_rate)
+            return (
+                synthesis.combine_bands(band_signals + noise_signals, sample_rate, quadrature) + low
+            )
         # The wave bands take the early paths' place in pressure, the noise's in energy.
-        early = self.wave.high_pass(synthesis.combine_bands(band_signals, sample_rate), sample_rate)
+        early = synthesis.combine_bands(band_signals, sample_rate, quadrature) + low
+        early = self.wave.high_pass(early, sample_rate)
         noise = synthesis.combine_bands(noise_signals, sample_rate)
         late = self.wave.high_pass(noise, sample_rate, late=True)
         return early + late + self.wave.field(sample_rate, n)[:, 0]

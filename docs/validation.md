@@ -39,7 +39,10 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   reflects the treble decaying at Eyring's rate in the bass only, each band traced with
   rays of its own;
 - third-octave bands: statistical runs in third octaves give the octave runs'
-  parameters within 1 % or 0.1 dB, and stochastic ones within the tracer's noise; a
+  parameters within 1 % or 0.1 dB from 250 Hz up (within 5 % or 0.4 dB at 63 and
+  125 Hz, where the early paths add in pressure and three filters weigh their
+  interference across an octave a little differently from one), and stochastic ones
+  within the tracer's noise; a
   100 Hz third-octave absorber decays at its own Eyring rate (within 3 %) between bands
   that do not; the filter banks sum to their input and sit at -3 dB on the band edges;
 - sources: the free-field level 4 m from a source with a sound power per band, a gain
@@ -53,7 +56,8 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   of its 80 points with their air absorption (to 1e-9 dB), falling 3.31 dB per
   doubling of distance as the continuous line does; an 8 x 8 m Lambert surface within
   0.15 dB of the integral over the continuous square at 1 and 2 m, and silent behind;
-  in the shoebox a 3 m line as loud as a point source (within 0.6 dB at 2000 rays per
+  in the shoebox a 3 m line as loud as a point source whose paths add in energy, as
+  the line's uncorrelated points' do (within 0.6 dB at 2000 rays per
   band) and its T30 within 10 % of the point source's at 30,000 rays per band;
 - coherent arrays (their far-field patterns only: nearer than L² f / c the room's
   warnings say so): a column of 8 omnidirectional elements 20 cm apart against the
@@ -124,6 +128,16 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   500 Hz up, the same both ways round), and the level as the source and the listener
   rise through the plane of its top, continuous within 1 dB (0.1 dB from 1 kHz up); a
   thin screen's diffracted wave in its lit zone, all four terms of the UTD within 0.2 %;
+- early reflections in pressure at low frequencies: an impulse response and the
+  echogram it came from in a 7.3 x 5.1 x 3 m box, early part alone, G within 0.02 dB,
+  C50 within 0.05 dB and Ts within 0.3 ms at 63 and 125 Hz (G 2.1 dB and C50 1.6 dB
+  apart when the paths add in energy); a source and a listener 0.3 m above a floor 10 m apart, the direct
+  sound and the floor reflection 5.5 dB above the free-field level over a hard floor
+  and 4 dB below it over an absorbing one at 63 and 125 Hz, the echogram within 0.3 dB
+  of the paths' pressures added; the phase of the reflection factor, none off a hard
+  surface and half a turn off an absorbing one at grazing incidence; and a thin
+  screen's diffracted wave, with all four terms of the UTD added in pressure, to
+  1e-9;
 - the wave solver, with both stencils where both apply: the modes of a rigid box
   (within 0.6 Hz), the 19-point stencil's modes along a tube against its dispersion
   relation (within 0.15 %, less than half the 7-point one's error), the 19-point

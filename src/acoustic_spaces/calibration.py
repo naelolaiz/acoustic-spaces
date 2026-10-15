@@ -40,6 +40,7 @@ import numpy as np
 from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.compare import JND
 from acoustic_spaces.engine import reweight
+from acoustic_spaces.engine.coherent import EarlyPressure
 from acoustic_spaces.engine.late import MAX_GROUPS
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.simulate import _as_room, simulate
@@ -214,6 +215,11 @@ class _Band:
     mean: np.ndarray  # (groups, moment slots)
     second: np.ndarray  # (groups, groups, moment slots): E[n_i n_j]
     moment_slot: np.ndarray  # (slots,) the moment slot of each slot
+    #: Where the early paths add in pressure (:mod:`~acoustic_spaces.engine.coherent`):
+    #: the reflection counts (U, groups) the paths come in, the pressure of each set
+    #: of paths alike through the band's filter (U, samples), the slot of each sample
+    #: and the factor from squared pressure to energy; else None.
+    pressure: tuple[np.ndarray, np.ndarray, np.ndarray, float] | None = None
 
     @classmethod
     def of(cls, response: Response, band: int, groups: int, face_group: np.ndarray) -> _Band:
@@ -222,7 +228,18 @@ class _Band:
         early = response.early
         index = (early.delay_s / step).astype(np.int64)
         keep = index < slots
-        counts = reweight.path_counts(early, face_group, groups)[keep]
+        every = reweight.path_counts(early, face_group, groups)
+        counts = every[keep]
+        pressure = None
+        if band < response.coherent_bands and len(early):
+            # Paths that reflect alike re-weight alike: their pressure is summed once.
+            alike, label = np.unique(every, axis=0, return_inverse=True)
+            weights = np.zeros((len(early), len(alike)))
+            weights[np.arange(len(early)), label.reshape(-1)] = 1.0
+            signals = EarlyPressure(early, weights).band(
+                band, step, slots, start=response.direct_delay_s
+            )
+            pressure = (alike, *signals)
         moments = response.late_moments[:, band]  # (terms, moment slots)
         total = moments[0]
         safe = np.where(total > 0.0, total, 1.0)
@@ -249,6 +266,7 @@ class _Band:
             mean=mean,
             second=second,
             moment_slot=np.minimum(moment_slot, moments.shape[1] - 1),
+            pressure=pressure,
         )
 
     def energy(self, ratio: np.ndarray) -> np.ndarray:
@@ -256,6 +274,10 @@ class _Band:
         covariance = self.second - self.mean[:, None] * self.mean[None, :]
         exponent = ratio @ self.mean + 0.5 * np.einsum("i,ijs,j->s", ratio, covariance, ratio)
         out = self.late * np.exp(np.minimum(exponent, 50.0))[self.moment_slot]
+        if self.pressure is not None:
+            alike, pressure, slot, scale = self.pressure
+            p = np.exp(0.5 * (alike @ ratio)) @ pressure
+            return out + np.bincount(slot, weights=scale * p**2, minlength=self.slots)[: self.slots]
         early = self.early_energy * np.exp(self.counts @ ratio)
         return out + np.bincount(self.early_slot, weights=early, minlength=self.slots)
 

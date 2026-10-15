@@ -986,10 +986,18 @@ class SimulationPage(Page):
             "direct sound only, of the direct sound and first-order reflections, or also "
             "of the direct sound over two edges in turn"
         )
+        self.coherent = QComboBox()
+        self.coherent.addItems(["none", "63", "125", "250", "500"])
+        self.coherent.setToolTip(
+            "The highest octave band (Hz) in which the early paths add in pressure, with "
+            "the phase of every reflection, rather than in energy; the wave solver's bands "
+            "take their place when it runs up to this band or higher"
+        )
         early_form.addRow("Method", self.early_method)
         early_form.addRow("Highest order", self.max_order)
         early_form.addRow("Rays", self.early_rays)
         early_form.addRow("Diffraction", self.diffraction)
+        early_form.addRow("In pressure up to", self.coherent)
         layout.addWidget(early)
 
         late = QGroupBox("Late reverberation")
@@ -1085,6 +1093,7 @@ class SimulationPage(Page):
         for combo in (
             self.early_method,
             self.diffraction,
+            self.coherent,
             self.late_method,
             self.reception,
             self.scattering_method,
@@ -1114,6 +1123,8 @@ class SimulationPage(Page):
         self.max_order.setValue(s.early.max_order)
         self.early_rays.setValue(s.early.rays)
         self.diffraction.setCurrentText(s.early.diffraction)
+        coherent = s.early.coherent_max_band_hz
+        self.coherent.setCurrentText("none" if coherent is None else str(coherent))
         self.late_method.setCurrentText(s.late.method)
         self.late_rays.setValue(s.late.rays)
         self.reception.setCurrentText(s.late.reception)
@@ -1153,6 +1164,9 @@ class SimulationPage(Page):
                 "max_order": self.max_order.value(),
                 "rays": self.early_rays.value(),
                 "diffraction": self.diffraction.currentText(),
+                "coherent_max_band_hz": None
+                if self.coherent.currentText() == "none"
+                else int(self.coherent.currentText()),
             },
             "late": {
                 **self.document.scene.simulation.late.model_dump(mode="json", exclude_none=True),

@@ -24,6 +24,9 @@ MAP_PARAMETER_NAMES = ("spl", "spl_a", "g", "c50", "c80", "d50", "edt", "t20", "
 DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
 #: Highest octave bands the wave solver can compute (scene.model.WaveStage.max_band_hz).
 WAVE_BANDS_HZ = (63, 125, 250, 500)
+#: Choices for the highest band the early paths add in pressure in
+#: (scene.model.EarlyStage.coherent_max_band_hz).
+COHERENT_BANDS = ("none", "63", "125", "250", "500")
 
 
 def _band_header(label: str, width: int) -> str:
@@ -413,6 +416,16 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def _with_coherent(settings, choice: str | None):
+    """``settings`` (``scene.simulation``) with the highest band the early paths add in
+    pressure in, as ``--coherent-band`` gives it (None: as they are)."""
+    if settings is None or choice is None:
+        return settings
+    band = None if choice == "none" else int(choice)
+    early = settings.early.model_copy(update={"coherent_max_band_hz": band})
+    return settings.model_copy(update={"early": early})
+
+
 def _override(model, options: dict[str, tuple[str, object]]):
     """A copy of ``model`` with the fields the command line sets, checked as in a scene.
 
@@ -494,6 +507,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "--sample-rate": ("sample_rate", args.sample_rate),
         },
     )
+    settings = _with_coherent(settings, args.coherent_band)
     if settings is None:
         return 1
     try:
@@ -630,6 +644,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
             "--length": ("ir_length_s", args.length),
         },
     )
+    simulation = _with_coherent(simulation, args.coherent_band)
     noise = args.noise[0] if args.noise is not None and len(args.noise) == 1 else args.noise
     settings = _override(
         scene.coverage or Coverage(),
@@ -1625,6 +1640,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--diffraction", choices=DIFFRACTION_MODES, help="override simulation.early.diffraction"
     )
     simulate.add_argument(
+        "--coherent-band",
+        choices=COHERENT_BANDS,
+        metavar="HZ",
+        help="override simulation.early.coherent_max_band_hz: the highest octave band in "
+        "which the early paths add in pressure (63, 125, 250, 500 or none)",
+    )
+    simulate.add_argument(
         "--wave",
         action=argparse.BooleanOptionalAction,
         help="override simulation.wave.enabled: the lowest octave bands from the wave solver",
@@ -1688,6 +1710,12 @@ def build_parser() -> argparse.ArgumentParser:
     coverage.add_argument("--max-order", type=int, help="override simulation.early.max_order")
     coverage.add_argument(
         "--diffraction", choices=DIFFRACTION_MODES, help="override simulation.early.diffraction"
+    )
+    coverage.add_argument(
+        "--coherent-band",
+        choices=COHERENT_BANDS,
+        metavar="HZ",
+        help="override simulation.early.coherent_max_band_hz (63, 125, 250, 500 or none)",
     )
     coverage.add_argument("--length", type=float, help="override simulation.ir_length_s")
     coverage.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")

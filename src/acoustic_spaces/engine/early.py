@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from acoustic_spaces.directivity import Directivity
+from acoustic_spaces.engine.coherent import reflection_phases, sample_frequencies
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 
 #: Distance (metres) below which a point counts as lying on a plane.
@@ -51,6 +52,13 @@ class EarlyReflections:
     edge: np.ndarray | None = None
     #: (n,) how many surfaces that let sound through a path passes, openings aside.
     crossings: np.ndarray | None = None
+    #: (n, C, M) in the lowest C bands, where the paths add in pressure (see
+    #: :mod:`~acoustic_spaces.engine.coherent`): each path's pressure at M frequencies
+    #: in each band (:func:`~acoustic_spaces.engine.coherent.sample_frequencies`),
+    #: relative to its delay and to its level in the band, which its energy gives (the
+    #: mean of its squared magnitude over a band's frequencies is 1). None when the
+    #: paths add in energy in every band.
+    spectrum: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         if self.edge is None:
@@ -60,6 +68,27 @@ class EarlyReflections:
 
     def __len__(self) -> int:
         return len(self.order)
+
+    def __getitem__(self, index) -> EarlyReflections:
+        """The paths ``index`` picks (a slice, indices or a boolean mask)."""
+        rows = np.arange(len(self))[index]
+        return EarlyReflections(
+            order=self.order[rows],
+            delay_s=self.delay_s[rows],
+            distance_m=self.distance_m[rows],
+            direction=self.direction[rows],
+            energy=self.energy[rows],
+            points=[self.points[i] for i in rows] if self.points else [],
+            faces=[self.faces[i] for i in rows] if self.faces else [],
+            edge=self.edge[rows],
+            crossings=self.crossings[rows],
+            spectrum=None if self.spectrum is None else self.spectrum[rows],
+        )
+
+    @property
+    def coherent_bands(self) -> int:
+        """How many of the lowest bands the paths add in pressure in."""
+        return 0 if self.spectrum is None else self.spectrum.shape[1]
 
     @property
     def diffracted(self) -> np.ndarray:
@@ -81,6 +110,18 @@ class EarlyReflections:
         parts = [p for p in parts if len(p)]
         if not parts:
             return cls.empty(bands)
+        shaped = [p.spectrum for p in parts if p.spectrum is not None]
+        spectrum = None
+        if shaped:
+            # Paths without a spectrum have no phase of their own.
+            spectrum = np.concatenate(
+                [
+                    np.ones((len(p), *shaped[0].shape[1:]), dtype=complex)
+                    if p.spectrum is None
+                    else p.spectrum
+                    for p in parts
+                ]
+            )
         out = cls(
             order=np.concatenate([p.order for p in parts]),
             delay_s=np.concatenate([p.delay_s for p in parts]),
@@ -91,23 +132,13 @@ class EarlyReflections:
             faces=[x for p in parts for x in p.faces],
             edge=np.concatenate([p.edge for p in parts]),
             crossings=np.concatenate([p.crossings for p in parts]),
+            spectrum=spectrum,
         )
         return out.sorted()
 
     def sorted(self) -> EarlyReflections:
         """The same paths in order of arrival."""
-        idx = np.argsort(self.delay_s, kind="stable")
-        return EarlyReflections(
-            order=self.order[idx],
-            delay_s=self.delay_s[idx],
-            distance_m=self.distance_m[idx],
-            direction=self.direction[idx],
-            energy=self.energy[idx],
-            points=[self.points[i] for i in idx],
-            faces=[self.faces[i] for i in idx],
-            edge=self.edge[idx],
-            crossings=self.crossings[idx],
-        )
+        return self[np.argsort(self.delay_s, kind="stable")]
 
 
 def ray_traced_candidates(
@@ -211,12 +242,14 @@ def find_paths(
     max_delay_s: float,
     directivity: Directivity | None = None,
     orientation: np.ndarray | None = None,
+    coherent: int = 0,
 ) -> EarlyReflections:
     """Validate candidate plane sequences for one listener; add the direct sound.
 
     Each path's energy is weighted by the source's ``directivity`` (default: omni) in
     the direction it leaves the source; ``orientation`` has the source's forward, left
-    and up axes as columns.
+    and up axes as columns. In the lowest ``coherent`` bands each path also carries the
+    phase of its reflections (:mod:`~acoustic_spaces.engine.coherent`).
     """
     source = np.asarray(source, dtype=np.float64)
     listener = np.asarray(listener, dtype=np.float64)
@@ -290,9 +323,24 @@ def find_paths(
         dist = distance[idx]
         energy = np.exp(-np.outer(dist, air)) / (4.0 * np.pi * dist[:, None] ** 2)
         energy *= through[idx]
+        spectrum = None
+        if coherent:
+            spectrum = np.ones((len(idx), *sample_frequencies(bands, coherent).shape), complex)
         before = np.broadcast_to(source, (len(idx), 3))
         for j in range(k):
-            energy *= model.reflection(faces[idx, j], points[j][idx] - before, j + 1)
+            incoming = points[j][idx] - before
+            energy *= model.reflection(faces[idx, j], incoming, j + 1)
+            if coherent:
+                # At a corner the path reflects where it reflected last: it meets the
+                # second plane at the angle it leaves it.
+                after = points[j + 1][idx] - points[j][idx]
+                corner = np.linalg.norm(incoming, axis=1) <= tolerance
+                incoming = np.where(corner[:, None], after, incoming)
+                normal = model.plane_normal[model.face_plane[faces[idx, j]]]
+                cosine = np.abs(np.einsum("ij,ij->i", normal, incoming)) / np.maximum(
+                    np.linalg.norm(incoming, axis=1), 1e-300
+                )
+                spectrum *= reflection_phases(model, faces[idx, j], cosine, coherent)
             before = points[j][idx]
         first = points[0][idx] if k else np.broadcast_to(listener, (len(idx), 3))
         departure = first - source
@@ -314,6 +362,7 @@ def find_paths(
                 points=path_points,
                 faces=[faces[i].copy() for i in idx],
                 crossings=crossings[idx],
+                spectrum=spectrum,
             )
         )
     return EarlyReflections.concatenate(parts, bands)

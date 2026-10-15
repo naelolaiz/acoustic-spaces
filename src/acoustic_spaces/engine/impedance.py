@@ -170,16 +170,18 @@ def band_absorption(
     return band_weights(f, bands, total) @ random_incidence_absorption(admittance(f, rate))
 
 
-def fit_admittance(absorption: Sequence[float], total: int, rate: float) -> Admittance:
-    """The admittance whose random-incidence absorption, at ``rate`` steps a second,
-    matches ``absorption`` in each of the lowest len(absorption) of the ``total`` (8
-    octave or 24 third-octave) bands."""
+def fit_admittance(
+    absorption: Sequence[float], total: int, rate: float | None = None
+) -> Admittance:
+    """The admittance whose random-incidence absorption, at ``rate`` steps a second
+    (None: exactly), matches ``absorption`` in each of the lowest len(absorption) of the
+    ``total`` (8 octave or 24 third-octave) bands."""
     target = tuple(float(a) for a in np.clip(np.asarray(absorption, float), 0.0, MAX_ABSORPTION))
-    return _fit(target, int(total), float(rate))
+    return _fit(target, int(total), None if rate is None else float(rate))
 
 
 @functools.lru_cache(maxsize=256)
-def _fit(target: tuple[float, ...], total: int, rate: float) -> Admittance:
+def _fit(target: tuple[float, ...], total: int, rate: float | None) -> Admittance:
     from scipy.optimize import least_squares
 
     from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, exact_centres, resolution_of

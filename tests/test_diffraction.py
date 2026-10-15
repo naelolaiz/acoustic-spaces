@@ -7,6 +7,7 @@ import pytest
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import early_paths
+from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.diffraction import (
     EdgeDiffraction,
     band_frequencies,
@@ -218,7 +219,7 @@ def _levels(room: Room, **kwargs) -> np.ndarray:
     for listener in room.scene.listeners:
         paths = early_paths(room, listener=listener.name, **kwargs)
         free = 1 / (4 * math.pi * np.sum((np.array(listener.position) - source) ** 2))
-        out.append(10 * np.log10(paths.energy.sum(axis=0) / free))
+        out.append(10 * np.log10(total_energy(paths) / free))
     return np.array(out)
 
 
@@ -255,6 +256,8 @@ def test_shadow_gets_a_diffracted_path_and_lit_side_barely_changes() -> None:
     direction = shadow.points[0][1] - np.array([2.0, 8.0, 1.5])
     np.testing.assert_allclose(shadow.direction[0], direction / np.linalg.norm(direction))
 
+    # In energy: in pressure the low bands add or cancel by where the listener is.
+    room = _l_room([[2.0, 8.0, 1.5], [9.0, 1.0, 1.2]], early={"coherent_max_band_hz": None})
     plain = _levels(room, diffraction="none")
     with_edges = _levels(room)
     assert np.all(np.abs(with_edges[1] - plain[1]) < 0.5)  # far from the corner
@@ -357,7 +360,9 @@ def test_simulate_and_settings() -> None:
     off = _l_room([[2.0, 8.0, 1.5]], late={"method": "statistical"}, early={"diffraction": "none"})
     plain = simulate(off)["s", "l0"]
     assert not plain.early.diffracted.any() and "edges" not in simulate(off).details["s"]
-    assert np.all(response.parameters().g > plain.parameters().g)
+    # Where the paths add in energy (in pressure they may cancel).
+    count = response.coherent_bands
+    assert count == 2 and np.all(response.parameters().g[count:] > plain.parameters().g[count:])
     assert np.all(np.isfinite(response.impulse_response(16_000)))
 
 
@@ -455,7 +460,7 @@ def _over_barrier(room: Room, mode: str) -> np.ndarray:
         paths = diffraction.apply(at, paths, 1.0)
         free = 1 / (4 * math.pi * np.sum((at - source) ** 2))
         with np.errstate(divide="ignore"):
-            out.append(10 * np.log10(paths.energy.sum(axis=0) / free))
+            out.append(10 * np.log10(total_energy(paths) / free))
     return np.array(out)
 
 

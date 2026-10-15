@@ -14,6 +14,7 @@ import numpy as np
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine import wave as wave_stage
+from acoustic_spaces.engine.coherent import band_count
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel
@@ -103,9 +104,16 @@ class _Edges:
         self._edges: Edges | None = None
 
     def diffraction(
-        self, mode: str, source: np.ndarray, room: Room, name: str, orientation: np.ndarray
+        self,
+        mode: str,
+        source: np.ndarray,
+        room: Room,
+        name: str,
+        orientation: np.ndarray,
+        coherent: int = 0,
     ) -> EdgeDiffraction | None:
-        """Diffraction of the sound of source ``name`` at ``source``; None when off."""
+        """Diffraction of the sound of source ``name`` at ``source``, coherent in the
+        lowest ``coherent`` bands; None when off."""
         if mode == "none":
             return None
         if self._edges is None:
@@ -121,6 +129,7 @@ class _Edges:
             orientation=orientation,
             mode=mode,
             edges=self._edges,
+            coherent=coherent,
         )
 
 
@@ -151,6 +160,9 @@ def early_paths(
     orientation = np.array(src.orientation.rotation())
     edges = _Edges(model)
     elements = src.elements()
+    # A line's or a surface's points are uncorrelated: their paths add in energy.
+    coherent = coherent_bands(scene.simulation, model.absorption.shape[1])
+    coherent = coherent if len(elements) == 1 else 0
     parts = []
     for position in elements:
         candidates = _candidates(model, position, method or cfg.method, order, cfg.rays, threads)
@@ -164,14 +176,22 @@ def early_paths(
             max_delay_s=scene.simulation.ir_length_s,
             directivity=room.directivity(src.name, model.bands),
             orientation=orientation,
+            coherent=coherent,
         )
         found = edges.diffraction(
-            diffraction or cfg.diffraction, position, room, src.name, orientation
+            diffraction or cfg.diffraction, position, room, src.name, orientation, coherent
         )
         if found is not None:
             paths = found.apply(target, paths, scene.simulation.ir_length_s)
         parts.append(apply_grazing(model, target, paths))
     return _shared(parts, model.absorption.shape[1])
+
+
+def coherent_bands(settings, bands: int) -> int:
+    """How many of the lowest ``bands`` the early paths add in pressure in, with the
+    simulation ``settings`` (``scene.simulation``)."""
+    wave = settings.wave.max_band_hz if settings.wave.enabled else None
+    return band_count(settings.early.coherent_max_band_hz, bands, wave)
 
 
 def _shared(parts: list[early_stage.EarlyReflections], bands: int) -> early_stage.EarlyReflections:
@@ -247,6 +267,7 @@ def simulate(
 
     listener_pos = np.array([lis.position for lis in chosen_listeners], dtype=float)
     edges = _Edges(model)
+    low_bands = coherent_bands(settings, model.absorption.shape[1])
     responses: dict[tuple[str, str], Response] = {}
     details: dict[str, dict[str, float]] = {}
     for source in chosen_sources:
@@ -259,9 +280,12 @@ def simulate(
     def add(info: dict[str, float], key: str, value: float) -> None:
         info[key] = info.get(key, 0.0) + value
 
-    def trace_point(label, position, directivity, orientation, point_seed, rays, info):
+    def trace_point(label, position, directivity, orientation, point_seed, rays, info, single):
         """Direct sound times, early paths and late energy at every listener of one point
-        source, which radiates all the power; timings and counts go into ``info``."""
+        source, which radiates all the power; timings and counts go into ``info``.
+        Unless ``single``, one of the uncorrelated points of a line or surface, whose
+        paths add in energy."""
+        coherent = low_bands if single else 0
         direct = np.linalg.norm(listener_pos - position, axis=1) / c
         cutoff = np.minimum(direct + transition, length)
         started = time.perf_counter()
@@ -280,12 +304,13 @@ def simulate(
                 max_delay_s=float(cutoff[k]),
                 directivity=directivity,
                 orientation=orientation,
+                coherent=coherent,
             )
             for k in range(len(chosen_listeners))
         ]
         add(info, "candidates", float(sum(len(x) for x in candidates)))
         diffraction = edges.diffraction(
-            early_cfg.diffraction, position, room, source.name, orientation
+            early_cfg.diffraction, position, room, source.name, orientation, coherent
         )
         if diffraction is not None:
             say(f"{label}: edge diffraction ({early_cfg.diffraction})")
@@ -373,6 +398,7 @@ def simulate(
                     info["seed"] if single else _seed(info["seed"], e_index + 1),
                     math.ceil(late_cfg.rays / len(elements)),
                     info,
+                    single,
                 )
             )
         direct = np.min([t[0] for t in traced], axis=0)
