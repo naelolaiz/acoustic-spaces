@@ -18,6 +18,10 @@
 
 namespace acoustic_spaces {
 
+// How the tree splits its faces: by the surface area heuristic (fastest to trace), or
+// at the middle face along the longest side of their centres (the split before it).
+enum class BvhSplit : std::uint8_t { kSah = 0, kMedian = 1 };
+
 struct Hit {
     double t = std::numeric_limits<double>::infinity();
     std::int64_t face = -1;
@@ -28,7 +32,8 @@ class Bvh {
 public:
     // vertices: n_vertices x 3, faces: n_faces x 3 indices into vertices (row-major).
     Bvh(const double *vertices, std::size_t n_vertices, const std::int64_t *faces,
-        std::size_t n_faces) {
+        std::size_t n_faces, BvhSplit split = BvhSplit::kSah)
+        : split_(split) {
         if (n_faces == 0) {
             throw std::invalid_argument("Bvh: the mesh has no faces");
         }
@@ -168,10 +173,12 @@ private:
     std::vector<std::uint32_t> place_;   // place in tri_ of each face
     std::vector<Node> nodes_;
     double scale_ = 1.0;
+    BvhSplit split_ = BvhSplit::kSah;
 
     // Splits faces order_[begin, end) at the binned surface area heuristic's best plane,
     // or makes them a leaf when testing them all is cheaper (one box test costing about
-    // one triangle test).
+    // one triangle test); or, with BvhSplit::kMedian, at the middle face along the
+    // longest side of their centres, leaves of up to kLeafSize.
     void build(std::size_t index, std::size_t begin, std::size_t end, std::size_t depth,
                const std::vector<Box> &boxes, const std::vector<Vec3> &centroids) {
         Box box, cbox;
@@ -185,6 +192,20 @@ private:
         const std::size_t n = end - begin;
         if (n <= 1 || depth >= kMaxDepth) return;
         const Vec3 extent = cbox.hi - cbox.lo;
+        if (split_ == BvhSplit::kMedian) {
+            int axis = 0;
+            if (extent.y > extent.x) axis = 1;
+            if (extent.z > (axis == 0 ? extent.x : extent.y)) axis = 2;
+            if (n <= kLeafSize || extent[axis] <= 0.0) return;
+            const std::size_t mid = begin + n / 2;
+            std::nth_element(order_.begin() + static_cast<std::ptrdiff_t>(begin),
+                             order_.begin() + static_cast<std::ptrdiff_t>(mid),
+                             order_.begin() + static_cast<std::ptrdiff_t>(end),
+                             [&](std::uint32_t a, std::uint32_t b) {
+                                 return centroids[a][axis] < centroids[b][axis];
+                             });
+            return split_at(index, begin, mid, end, depth, boxes, centroids);
+        }
         const auto bin = [&](std::uint32_t face, int axis) {
             const double k = static_cast<double>(kBins) / extent[axis];
             return std::min(kBins - 1,
@@ -235,7 +256,14 @@ private:
             order_.begin() + static_cast<std::ptrdiff_t>(begin),
             order_.begin() + static_cast<std::ptrdiff_t>(end),
             [&](std::uint32_t face) { return bin(face, best_axis) <= best_bin; });
-        const auto mid = static_cast<std::size_t>(split - order_.begin());
+        split_at(index, begin, static_cast<std::size_t>(split - order_.begin()), end, depth,
+                 boxes, centroids);
+    }
+
+    // Makes node `index` an inner node over faces order_[begin, mid) and [mid, end).
+    void split_at(std::size_t index, std::size_t begin, std::size_t mid, std::size_t end,
+                  std::size_t depth, const std::vector<Box> &boxes,
+                  const std::vector<Vec3> &centroids) {
         const std::size_t left = nodes_.size();
         nodes_.emplace_back();
         nodes_.emplace_back();

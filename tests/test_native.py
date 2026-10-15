@@ -69,6 +69,32 @@ def test_bvh_ray_through_an_edge_hits() -> None:
     np.testing.assert_allclose(t, [np.sqrt(0.5), np.sqrt(0.75)])
 
 
+def test_bvh_splits_find_the_same_hits() -> None:
+    from acoustic_spaces import _native
+
+    rng = np.random.default_rng(3)
+    vertices, faces = _unit_cube()
+    # Small triangles scattered inside the box, like seats in a hall.
+    corners = rng.uniform(0.1, 0.9, (500, 1, 3)) + rng.uniform(-0.02, 0.02, (500, 3, 3))
+    vertices = np.vstack([vertices, corners.reshape(-1, 3)])
+    faces = np.vstack([faces, 8 + np.arange(1500, dtype=np.int64).reshape(-1, 3)])
+    sah, median = (_native.Bvh(vertices, faces, split=s) for s in ("sah", "median"))
+    assert sah.face_count == median.face_count == 512
+    n = 5000
+    origins = rng.uniform(0.0, 1.0, (n, 3))
+    directions = rng.standard_normal((n, 3))
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    args = (origins, directions, np.full(n, 10.0), np.full(n, -1, dtype=np.int64))
+    t_sah, face_sah = sah.intersect(*args)
+    t_median, face_median = median.intersect(*args)
+    assert np.all(face_sah >= 0)  # inside a closed box
+    # The same distances; a face may differ only where two meet at that point.
+    np.testing.assert_array_equal(t_sah, t_median)
+    assert np.mean(face_sah == face_median) > 0.999
+    with pytest.raises(ValueError, match="split"):
+        _native.Bvh(vertices, faces, split="octree")
+
+
 def test_specular_sequences_stay_inside_a_closed_box() -> None:
     from acoustic_spaces import _native
 

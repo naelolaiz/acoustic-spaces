@@ -39,10 +39,7 @@ or in a corner. Sound that bends round edges is added to them (see
   instead of 4 to 17 dB at 10k), for about 1.5 times the run time.
 
   Nearly all of the run time goes into ray queries: which surface a ray meets next,
-  and whether each listener can see a reflection. The model's bounding volume
-  hierarchy is split by the surface area heuristic and walked nearest box first; in
-  BRAS's chamber music hall (2,309 triangles, five listeners) one band of 50,000 rays
-  takes 5.7 s on four cores, where the median-split tree before it took 41 s.
+  and whether each listener can see a reflection (see [Performance](#performance)).
 - `statistical`: the reflected energy of Barron's revised theory, an exponential
   decay at the Eyring reverberation time T from the direct sound on, less what the
   early paths carry. Early paths end `transition_ms` after the direct sound (by
@@ -365,6 +362,40 @@ points per wavelength by 0.67 % in closed rooms and up to 1.7 % round open model
 modes there come out up to that much low;
 sources radiate equally in all directions in the wave bands; and air absorption,
 negligible there, is left out.
+
+## Performance
+
+`simulation.performance` says how a run uses the computer; neither setting changes the
+results.
+
+```yaml
+simulation:
+  performance:
+    threads: 0        # CPU worker threads; 0 (default) uses every core
+    ray_tree: sah     # sah (default) or median
+```
+
+- `threads`: the worker threads of the ray tracer (early candidates, the late part,
+  coverage maps, calibration) and of the wave solver on the CPU. Fewer leave the
+  computer free for other work while a long run goes on. Results do not depend on it.
+- `ray_tree`: the bounding volume hierarchy that finds the surface a ray meets, and
+  whether a listener can see a reflection, which is nearly all of the run time. `sah`
+  splits it by the surface area heuristic and walks the nearer box first; `median`
+  splits it at the middle face along the longest side, as before, for comparison. Both
+  find the same surfaces at the same distances; where a ray meets two faces at exactly
+  the same point (a shared edge) the other tree may take the other one. In BRAS's
+  chamber music hall (2,309 triangles, five listeners) one band of 50,000 rays takes
+  5.7 s on four cores with `sah` and 17 s with `median` (41 s in earlier versions, whose
+  walk through the tree was slower too).
+
+`simulate`, `map` and `calibrate` take `--threads N` and `--ray-tree sah|median` to
+override them, `view` and `export` `--threads`; the editor's Simulation page has them
+under Performance. `acoustic-spaces info` prints how many cores there are. Where the
+wave solver steps its grid (CPU or GPU) is `simulation.wave.device`, above.
+
+```sh
+acoustic-spaces simulate validation/bras/CR3/scene.yaml --out cr3 --threads 3
+```
 
 ## Validation
 

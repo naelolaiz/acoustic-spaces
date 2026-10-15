@@ -16,6 +16,7 @@ def test_info(capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out
     assert "acoustic_spaces" in out
     assert "compiled core: available" in out
+    assert "CPU cores for ray tracing: " in out
 
 
 def test_validate_example(capsys: pytest.CaptureFixture[str]) -> None:
@@ -202,6 +203,17 @@ def test_simulate_checks_the_options_that_override_the_scene(
     capsys.readouterr()
     report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
     assert report["settings"]["early"]["coherent_max_band_hz"] is None
+    assert report["settings"]["performance"] == {"threads": 0, "ray_tree": "sah"}
+
+    performance = ["--threads", "1", "--ray-tree", "median"]
+    assert main([*args, "--rays", "500", "--max-order", "1", *performance]) == 0
+    capsys.readouterr()
+    report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
+    assert report["settings"]["performance"] == {"threads": 1, "ray_tree": "median"}
+    for option, value in [("--threads", "-1"), ("--ray-tree", "octree")]:
+        with pytest.raises(SystemExit):
+            main([*args, option, value])
+        assert option in capsys.readouterr().err
 
 
 def test_simulate_in_third_octave_bands(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

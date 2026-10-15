@@ -397,7 +397,7 @@ changes results at 63 and 125 Hz)
   below by Ivanic and Ruedenberg's recursion instead of a least-squares fit on a grid of
   directions.
 
-**Faster ray tracing**
+**Faster ray tracing, and performance settings** (`simulation.performance`)
 
 - Ray queries are 7 to 8 times faster, and the late stage with them: the model's
   bounding volume hierarchy is split by the surface area heuristic instead of at the
@@ -405,6 +405,11 @@ changes results at 63 and 125 Hz)
   library. One band of 50,000 rays in BRAS's chamber music hall takes 5.7 s instead of
   41 s on four cores. Rays meet the same surfaces at the same distances; where a ray
   meets two faces at exactly the same point (a shared edge), it may now take the other.
+- `simulation.performance.threads` (default 0: every core) and `ray_tree` (`sah`, the
+  default, or `median` for comparison) in scenes, under Performance on the editor's
+  Simulation page, and as `--threads` and `--ray-tree` for `simulate`, `map` and
+  `calibrate` (`--threads` for `view` and `export`). Without `--threads` they take the
+  scene's setting; `info` prints the number of CPU cores.
 
 **Fixes**
 

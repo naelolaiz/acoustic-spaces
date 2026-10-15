@@ -371,6 +371,13 @@ def test_selection_and_forms(window) -> None:
     page.wave_device.setCurrentText("auto")
     wave = window.document.scene.simulation.wave
     assert wave.enabled and wave.max_band_hz == 63 and wave.device == "auto"
+    assert page.threads.value() == 0 and page.threads.specialValueText().startswith("All cores")
+    assert page.ray_tree.currentText() == "sah"
+    page.threads.setValue(2)
+    page.ray_tree.setCurrentText("median")
+    performance = window.document.scene.simulation.performance
+    assert performance.threads == 2 and performance.ray_tree == "median"
+    assert window.document.scene.simulation.wave.device == "auto"
     assert window.document.scene.simulation.early.diffraction == "direct"
     assert page.scattering_method.currentText() == "vector" and page.from_size.isChecked()
     assert page.by_band.isChecked() and page.by_band.isEnabled()

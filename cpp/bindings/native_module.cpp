@@ -4,6 +4,7 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
+#include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
@@ -488,11 +489,16 @@ NB_MODULE(_native, m) {
     nb::class_<as::Bvh>(m, "Bvh", "Bounding volume hierarchy over a triangle mesh.")
         .def(
             "__init__",
-            [](as::Bvh *self, Points vertices, Faces faces) {
+            [](as::Bvh *self, Points vertices, Faces faces, const std::string &split) {
+                if (split != "sah" && split != "median") {
+                    throw std::invalid_argument("Bvh: split must be 'sah' or 'median'");
+                }
                 new (self) as::Bvh(vertices.data(), vertices.shape(0), faces.data(),
-                                   faces.shape(0));
+                                   faces.shape(0),
+                                   split == "sah" ? as::BvhSplit::kSah : as::BvhSplit::kMedian);
             },
-            nb::arg("vertices"), nb::arg("faces"))
+            nb::arg("vertices"), nb::arg("faces"), nb::arg("split") = "sah",
+            "Builds the tree: split \"sah\" (by the surface area heuristic) or \"median\".")
         .def_prop_ro("face_count", &as::Bvh::face_count)
         .def("intersect", &intersect, nb::arg("origins"), nb::arg("directions"),
              nb::arg("t_max"), nb::arg("ignore"),

@@ -647,15 +647,15 @@ def coverage_map(
     settings: Coverage | None = None,
     simulation: Simulation | None = None,
     sources: Sequence[str] | None = None,
-    threads: int = 0,
+    threads: int | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> CoverageResult:
     """Coverage maps of the scene's sources (all by default) over its audience area.
 
     ``settings`` default to ``scene.coverage`` (surfaces, height, spacing, rays and
     background noise); ``simulation`` (default: ``scene.simulation``) gives the early
-    order, late method, response length and seed as for
-    :func:`~acoustic_spaces.engine.simulate`. Each source radiates its sound power per
+    order, late method, response length, seed and threads (``threads`` overrides
+    them) as for :func:`~acoustic_spaces.engine.simulate`. Each source radiates its sound power per
     band (:meth:`~acoustic_spaces.scene.Source.power_db`: its level, spectrum, gain and
     equalizer), which the speech transmission index takes as the speech level, weighted
     for female speech when the source's spectrum is ``speech_female``. In the map of
@@ -669,6 +669,8 @@ def coverage_map(
     scene = room.scene
     settings = settings or scene.coverage or Coverage()
     sim = simulation or scene.simulation
+    if threads is None:
+        threads = sim.performance.threads
     say = progress or (lambda _: None)
     chosen = _pick(scene.sources, sources, "source")
 
