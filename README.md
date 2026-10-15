@@ -310,7 +310,8 @@ A scene is a YAML file that names the geometry, the materials, which surface get
 which material, and where the sources and listeners are. See
 [`examples/shoebox/scene.yaml`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/examples/shoebox/scene.yaml) and the schema in
 [`src/acoustic_spaces/scene/model.py`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/src/acoustic_spaces/scene/model.py).
-Frequency-dependent data uses eight octave bands from 63 Hz to 8 kHz.
+Frequency-dependent data uses eight octave bands from 63 Hz to 8 kHz, or 24
+third-octave bands from 50 Hz to 10 kHz (see [Frequency bands](#frequency-bands)).
 
 ### Geometry
 
@@ -369,11 +370,13 @@ Each entry in `materials` takes coefficients from one of:
 - `file: <csv>`: a table of centre frequencies, absorption and optionally
   scattering, one row each, at any band resolution (the layout the
   [BRAS](https://doi.org/10.14279/depositonce-6726.3) benchmark uses);
-- `absorption: [...]` with eight octave values, which also overrides a preset or file.
+- `absorption: [...]` with eight octave values or 24 third-octave values, which also
+  overrides a preset or file.
 
-`scattering` is a number, eight values, or the id of a built-in scattering entry.
-Data in other bands is averaged onto octaves; octaves with no data (63 Hz in most
-tables) take the nearest octave's value and the material's `source` says which.
+`scattering` is a number, eight or 24 values, or the id of a built-in scattering entry.
+File data with more than one value in some octave (third-octave tables) stays in
+third-octave bands; other data is averaged onto octaves. Bands with no data (63 Hz in
+most tables) take the nearest band's value and the material's `source` says which.
 Surfaces get a material through `assignments` (any geometry name to a material),
 by having the same name as a material, or through `default_material`.
 
@@ -417,7 +420,7 @@ sources:
   matter). Azimuth turns from the front towards the source's left and elevation is
   positive upwards, in degrees. Any set of directions works: they are interpolated
   onto a 5 degree grid. Bands are averaged into octaves, and octaves with no data copy
-  the nearest one.
+  the nearest one; in third-octave runs each octave's pattern holds for its thirds.
 - CLF (Common Loudspeaker Format) files are not read: their specification is not
   public. Convert them to SOFA or CSV.
 
@@ -444,7 +447,7 @@ or in a corner. Sound that bends round edges is added to them (see
 
 **Late reverberation** (`simulation.late`) is either:
 
-- `stochastic_ray_tracing` (default): `rays` rays per octave band (50,000 by default)
+- `stochastic_ray_tracing` (default): `rays` rays per band (50,000 by default)
   leave the source and reflect off the surfaces as [Scattering](#scattering) says,
   losing energy to absorption and air.
   Specular paths the early part already computed are left out. How energy reaches the
@@ -479,7 +482,7 @@ or in a corner. Sound that bends round edges is added to them (see
 The two parts hand over by reflection order by default. Set `transition_ms` to
 keep early paths only that long after the direct sound.
 
-**Impulse responses** are built per octave band: early paths become fractional-delay
+**Impulse responses** are built per band: early paths become fractional-delay
 impulses, the late energy shapes a Dirac sequence with the density of reflections in
 the room, and a zero-phase crossover bank sums the bands. The direct sound at r
 metres is an impulse of height 1/r, so levels compare between files and the energy
@@ -558,6 +561,34 @@ In the two measured rooms of the [validation report](https://github.com/naelolai
 the default model brings the reverberation time of a chamber music hall from 20 to 32 %
 long down to 7 to 20 %, and keeps a seminar room within 2 % from 500 Hz to 4 kHz.
 Without the surfaces' sizes, neither model fits both rooms.
+
+### Frequency bands
+
+Simulations run in the eight octave bands from 63 Hz to 8 kHz by default, or in the 24
+third-octave bands from 50 Hz to 10 kHz:
+
+```yaml
+simulation:
+  bands: third_octave   # or octave (default)
+```
+
+- Everything that depends on frequency follows the bands: materials, air absorption,
+  source directivity, the scattering of a surface's size, the rays (`rays` per band)
+  and the filter bank the impulse response is built with. With the wave solver on, it
+  computes the third octaves of the octaves up to `max_band_hz`.
+- Materials hold 8 or 24 values. An octave value holds for each of its three third
+  octaves, and an octave simulation takes the mean of a third-octave material's three.
+- Room parameters, the STI, coverage maps, plots and the editor's results stay in
+  octave bands: each octave's energy is the mean of its three thirds'. A response's
+  `energy()` has all 24 bands and `octave_energy()` the octaves.
+- Third octaves pay where coefficients change within an octave: absorbers narrower
+  than an octave (a Helmholtz resonator, a slot absorber), and the 8 kHz octave, across
+  which the air absorbs about twice as much at 10 kHz as at 6.3 kHz. Its decay is then
+  no single slope, and in the shoebox example its T30 comes out 8 % longer in third
+  octaves. They trace three times the rays and take about three times as long.
+- `acoustic-spaces simulate --bands third_octave` sets them for one run, and the
+  editor's simulation page has them. A material with third-octave data shows its 24
+  values in the editor, and `inspect` lists its octave averages.
 
 ### Edge diffraction
 
@@ -1157,7 +1188,7 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] More parameters: LF, LFC, LJ, IACC, ST early and late, U50, STIPA, echo criteria,
   directional decay.
 - [x] Vector-based scattering, and scattering that follows surface size and frequency.
-- [ ] Third-octave bands.
+- [x] Third-octave bands.
 - [ ] Sources with their own spectra, delay and EQ, line and surface sources, arrays.
 - [ ] Sound through walls and between coupled rooms.
 - [ ] Fitting absorption to measured parameters.

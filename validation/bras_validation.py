@@ -1,8 +1,9 @@
 """Validation against measured rooms: the seminar room and the chamber music hall of BRAS.
 
     python validation/bras_validation.py [--scenes CR2 CR3] [--materials fitted]
-                                         [--rays 100000] [--diffraction first_order]
-                                         [--json results.json] [--plots DIR]
+                                         [--rays 50000] [--diffraction first_order]
+                                         [--bands octave] [--json results.json]
+                                         [--plots DIR]
     python validation/bras_validation.py --from-json results.json [--plots DIR]
 
 The BRAS benchmark (Aspöck et al., 2020, DOI 10.14279/depositonce-6726.3) measured
@@ -13,6 +14,9 @@ response measured there, band by band in just noticeable differences
 (:func:`acoustic_spaces.compare.compare_parameters`). Both sides are analysed by this
 package. ``--materials initial`` takes BRAS's first estimates of the surfaces instead of
 the absorption it fitted to the measured reverberation time, which is the blind case.
+``--bands third_octave`` simulates in third-octave bands, with BRAS's third-octave
+surface data as published, instead of its octave averages; the parameters are compared
+in octave bands either way.
 
 The script prints a Markdown table per room: the measured and simulated parameters
 averaged over the ten pairs, and the mean difference in JNDs; then how many of the
@@ -56,7 +60,13 @@ def _band(f: int) -> str:
     return f"{f} Hz" if f < 1000 else f"{f // 1000} kHz"
 
 
-def load_scene(name: str, materials: str, rays: int | None, diffraction: str | None) -> Scene:
+def load_scene(
+    name: str,
+    materials: str,
+    rays: int | None,
+    diffraction: str | None,
+    bands: str | None = None,
+) -> Scene:
     scene = Scene.from_yaml(HERE / name / "scene.yaml")
     if materials != "fitted":
         scene.materials = {
@@ -67,6 +77,8 @@ def load_scene(name: str, materials: str, rays: int | None, diffraction: str | N
         scene.simulation.late.rays = rays
     if diffraction is not None:
         scene.simulation.early.diffraction = diffraction
+    if bands is not None:
+        scene.simulation.bands = bands
     return scene
 
 
@@ -84,9 +96,15 @@ def measured_parameters(entry: dict) -> RoomParameters:
     return RoomParameters(**{k: _values(v) for k, v in entry.items()})
 
 
-def validate(name: str, materials: str, rays: int | None, diffraction: str | None) -> dict:
+def validate(
+    name: str,
+    materials: str,
+    rays: int | None,
+    diffraction: str | None,
+    bands: str | None = None,
+) -> dict:
     measured = json.loads((HERE / name / "measured.json").read_text(encoding="utf-8"))
-    scene = load_scene(name, materials, rays, diffraction)
+    scene = load_scene(name, materials, rays, diffraction, bands)
     room = Room.from_scene(scene)
     start = time.perf_counter()
     result = simulate(room)
@@ -102,6 +120,7 @@ def validate(name: str, materials: str, rays: int | None, diffraction: str | Non
         "materials": materials,
         "rays": scene.simulation.late.rays,
         "diffraction": scene.simulation.early.diffraction,
+        "simulated_bands": scene.simulation.bands,
         "seconds": round(seconds, 1),
         "volume_m3": room.volume_m3,
         "bands_hz": list(OCTAVE_BANDS_HZ),
@@ -130,7 +149,8 @@ def validate(name: str, materials: str, rays: int | None, diffraction: str | Non
 def table(result: dict) -> str:
     bands = result["bands_hz"]
     lines = [
-        f"{result['name']}: {result['materials']} absorption, {result['rays']} rays, "
+        f"{result['name']}: {result['materials']} absorption, {result['rays']} rays per "
+        f"band, {result.get('simulated_bands', 'octave').replace('_', '-')} bands, "
         f"diffraction {result['diffraction']}, simulated in {result['seconds']:.0f} s",
         "",
         "| | " + " | ".join(_band(f) for f in bands) + " |",
@@ -192,6 +212,9 @@ def main() -> None:
     parser.add_argument("--materials", choices=["fitted", "initial"], default="fitted")
     parser.add_argument("--rays", type=int, help="late rays (default: the scene's)")
     parser.add_argument("--diffraction", choices=["none", "direct", "first_order"])
+    parser.add_argument(
+        "--bands", choices=["octave", "third_octave"], help="the bands to simulate in"
+    )
     parser.add_argument("--json", type=Path, help="write every number to this file")
     parser.add_argument("--plots", type=Path, help="draw a PNG per room into this folder")
     parser.add_argument(
@@ -202,13 +225,17 @@ def main() -> None:
         results = json.loads(args.from_json.read_text(encoding="utf-8"))
     else:
         results = [
-            validate(name, args.materials, args.rays, args.diffraction) for name in args.scenes
+            validate(name, args.materials, args.rays, args.diffraction, args.bands)
+            for name in args.scenes
         ]
     for result in results:
         print(table(result) + "\n", flush=True)
         if args.plots:
             args.plots.mkdir(parents=True, exist_ok=True)
-            plot(result, args.plots / f"bras_{result['scene']}_{result['materials']}.png")
+            bands = result.get("simulated_bands", "octave")
+            suffix = "" if bands == "octave" else f"_{bands}"
+            name = f"bras_{result['scene']}_{result['materials']}{suffix}.png"
+            plot(result, args.plots / name)
     if args.json:
         args.json.write_text(json.dumps(results, indent=1) + "\n", encoding="utf-8")
 

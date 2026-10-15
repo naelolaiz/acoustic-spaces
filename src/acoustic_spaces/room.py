@@ -27,6 +27,7 @@ from acoustic_spaces.geometry import (
     load_mesh,
     points_inside,
 )
+from acoustic_spaces.materials.bands import Resolution, band_centres
 from acoustic_spaces.scene import Scene
 
 UNASSIGNED = -1
@@ -145,12 +146,23 @@ class Room:
             directivities=directivities,
         )
 
-    def directivity(self, source: str) -> Directivity:
-        """The directivity of the source with this name."""
+    def directivity(self, source: str, bands: Resolution = "octave") -> Directivity:
+        """The directivity of the source with this name, in octave or third-octave
+        ``bands``."""
         for item, directivity in zip(self.scene.sources, self.directivities, strict=True):
             if item.name == source:
-                return directivity
+                return directivity.in_bands(bands)
         raise KeyError(f"no source named {source!r}")
+
+    @property
+    def bands(self) -> Resolution:
+        """The bands the scene's simulation runs in: ``octave`` or ``third_octave``."""
+        return self.scene.simulation.bands
+
+    @property
+    def band_centres(self) -> tuple[int, ...]:
+        """Centre frequencies (Hz) of the bands the scene's simulation runs in."""
+        return band_centres(self.bands)
 
     # -- checks -------------------------------------------------------------------
 
@@ -226,17 +238,21 @@ class Room:
             for k, name in enumerate(self.material_names)
         }
 
-    def absorption_area(self) -> np.ndarray:
-        """Equivalent absorption area per octave band (m2): the sum of S * alpha."""
-        total = np.zeros(len(self.scene.materials[self.material_names[0]].absorption))
+    def absorption_area(self, bands: Resolution = "octave") -> np.ndarray:
+        """Equivalent absorption area per octave band, or per third-octave band with
+        ``bands="third_octave"`` (m2): the sum of S * alpha."""
+        total = np.zeros(len(band_centres(bands)))
         for name, area in self.area_by_material().items():
-            total += area * np.asarray(self.scene.materials[name].absorption)
+            total += area * np.asarray(self.scene.materials[name].coefficients(bands)[0])
         return total
 
-    def air_attenuation(self) -> np.ndarray:
-        """Energy attenuation of the scene's air per octave band (1/m), ISO 9613-1."""
+    def air_attenuation(self, bands: Resolution = "octave") -> np.ndarray:
+        """Energy attenuation of the scene's air per octave band, or per third-octave
+        band with ``bands="third_octave"`` (1/m), ISO 9613-1."""
         air = self.scene.air
-        return energy_attenuation_per_m(air.temperature_c, air.humidity_percent, air.pressure_kpa)
+        return energy_attenuation_per_m(
+            air.temperature_c, air.humidity_percent, air.pressure_kpa, bands
+        )
 
     def speed_of_sound(self) -> float:
         return speed_of_sound(self.scene.air.temperature_c)
@@ -245,8 +261,10 @@ class Room:
         self,
         formula: Literal["sabine", "eyring", "arau_puchades"] = "sabine",
         air_absorption: bool = False,
+        bands: Resolution = "octave",
     ) -> np.ndarray:
-        """Statistical reverberation time per octave band (s).
+        """Statistical reverberation time per octave band, or per third-octave band with
+        ``bands="third_octave"`` (s).
 
         Sabine and Eyring assume a diffuse field; they are a sanity check, not a
         prediction. ``arau_puchades`` (Arau-Puchades, Acustica 65, 1988) allows for
@@ -261,7 +279,7 @@ class Room:
             raise ValueError("reverberation time needs a closed model")
         volume = self.volume_m3
         constant = 24.0 * math.log(10.0) * volume / self.speed_of_sound()
-        air = 4.0 * self.air_attenuation() * volume if air_absorption else 0.0
+        air = 4.0 * self.air_attenuation(bands) * volume if air_absorption else 0.0
         surface = self.report.surface_area_m2
 
         def eyring(absorption: np.ndarray, area: float) -> np.ndarray:
@@ -271,12 +289,14 @@ class Room:
 
         if formula == "sabine":
             with np.errstate(divide="ignore"):
-                return constant / (self.absorption_area() + air)
+                return constant / (self.absorption_area(bands) + air)
         if formula == "eyring":
-            return eyring(self.absorption_area(), surface)
+            return eyring(self.absorption_area(bands), surface)
         if formula == "arau_puchades":
             share = self.mesh.face_areas()[:, None] * self.mesh.face_normals() ** 2  # (F, 3)
-            alpha = np.array([self.scene.materials[n].absorption for n in self.material_names])
+            alpha = np.array(
+                [self.scene.materials[n].coefficients(bands)[0] for n in self.material_names]
+            )
             face_alpha = np.where(
                 (self.face_materials == UNASSIGNED)[:, None], 0.0, alpha[self.face_materials]
             )

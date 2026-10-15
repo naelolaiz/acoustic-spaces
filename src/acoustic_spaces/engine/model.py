@@ -8,6 +8,7 @@ import numpy as np
 
 from acoustic_spaces.directivity import PATTERNS, Directivity
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
+from acoustic_spaces.materials.bands import Resolution, band_centres
 from acoustic_spaces.room import UNASSIGNED, Room
 
 #: Faces whose normals and offsets agree to this (unit normal components, metres) share
@@ -24,14 +25,17 @@ DIRECTIVITY_A = PATTERNS
 
 
 def source_weights(
-    directivity: Directivity | None, orientation: np.ndarray | None, directions: np.ndarray
+    directivity: Directivity | None,
+    orientation: np.ndarray | None,
+    directions: np.ndarray,
+    bands: int = len(OCTAVE_BANDS_HZ),
 ) -> np.ndarray:
     """Energy weights (n, bands) of a source's directivity for unit vectors (n, 3) in
     room coordinates; ``orientation`` has the source's forward, left and up axes as
-    columns (default: the room's)."""
+    columns (default: the room's). Without a directivity, ``bands`` ones."""
     directions = np.asarray(directions, dtype=float).reshape(-1, 3)
     if directivity is None:
-        return np.ones((len(directions), len(OCTAVE_BANDS_HZ)))
+        return np.ones((len(directions), bands))
     local = directions if orientation is None else directions @ np.asarray(orientation)
     return directivity.energy(local)
 
@@ -60,6 +64,8 @@ class TraceModel:
     #: With vector-based scattering, each band traced with rays of its own where the
     #: bands scatter differently (``simulation.scattering.by_band``).
     by_band: bool = True
+    #: The bands the coefficients (and so every energy traced) are in.
+    bands: Resolution = "octave"
     #: Reflections of this order and higher add the scattering of the surface's size.
     #: Below it, the early stage's edge diffraction accounts for the size of surfaces:
     #: its terms add coherently to the direct sound and the reflections off the faces of
@@ -69,7 +75,8 @@ class TraceModel:
     size_from_order: int = 1
 
     @classmethod
-    def from_room(cls, room: Room) -> TraceModel:
+    def from_room(cls, room: Room, settings=None) -> TraceModel:
+        """The model of ``room`` with the simulation ``settings`` (default: the scene's)."""
         from acoustic_spaces import _native
 
         mesh = room.mesh
@@ -92,9 +99,10 @@ class TraceModel:
         face_plane = face_plane.reshape(-1)
 
         materials = room.scene.materials
-        absorption = np.array([materials[n].absorption for n in room.material_names])
-        scattering = np.array([materials[n].scattering for n in room.material_names])
-        simulation = room.scene.simulation
+        simulation = room.scene.simulation if settings is None else settings
+        coefficients = [materials[n].coefficients(simulation.bands) for n in room.material_names]
+        absorption = np.array([a for a, _ in coefficients])
+        scattering = np.array([s for _, s in coefficients])
         size = None
         if simulation.scattering.from_size:
             size = np.ascontiguousarray(surface_sizes(mesh.vertices, mesh.faces, face_plane))
@@ -110,8 +118,14 @@ class TraceModel:
             surface_size=size,
             vector_scattering=simulation.scattering.method == "vector",
             by_band=simulation.scattering.by_band,
+            bands=simulation.bands,
             size_from_order=_SIZE_FROM_ORDER[simulation.early.diffraction],
         )
+
+    @property
+    def band_hz(self) -> tuple[int, ...]:
+        """Centre frequencies (Hz) of the model's bands."""
+        return band_centres(self.bands)
 
     @property
     def plane_count(self) -> int:
@@ -144,6 +158,7 @@ class TraceModel:
                 cosine,
                 self.room.speed_of_sound(),
                 scattering,
+                self.band_hz,
             )
         return (1.0 - self.absorption[faces]) * (1.0 - scattering)
 
@@ -165,10 +180,12 @@ def size_scattering(
     cosine: np.ndarray,
     speed_of_sound: float,
     scattering: np.ndarray,
+    frequencies=OCTAVE_BANDS_HZ,
 ) -> np.ndarray:
     """Scattering coefficients (n, bands) of reflections off surfaces ``width`` by
     ``length`` metres (n,), with what their limited size scatters added to their own
-    ``scattering`` (n, bands), after Christensen and Rindel (2005), as in ODEON.
+    ``scattering`` (n, bands) at the bands' centre ``frequencies`` (Hz), after
+    Christensen and Rindel (2005), as in ODEON.
 
     Below f_w = c d / (2 (w cos)^2) the specular share falls as f / f_w, and below
     f_l = c d / (2 l^2) as f / f_l as well, d being the distance the sound travelled to
@@ -179,7 +196,7 @@ def size_scattering(
     across = np.asarray(width, float) * np.maximum(np.asarray(cosine, float), 1e-3)
     # c d, never 0: a reflection right where the last one was (a corner) is specular.
     reach = np.maximum(speed_of_sound * np.asarray(distance, float), 1e-300)[:, None]
-    f = np.asarray(OCTAVE_BANDS_HZ, float)
+    f = np.asarray(frequencies, float)
     specular = np.minimum(1.0, f * 2.0 * across[:, None] ** 2 / reach) * np.minimum(
         1.0, f * 2.0 * np.asarray(length, float)[:, None] ** 2 / reach
     )

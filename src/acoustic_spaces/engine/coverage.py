@@ -43,6 +43,7 @@ from acoustic_spaces.engine.simulate import (
 )
 from acoustic_spaces.geometry import points_inside
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
+from acoustic_spaces.materials.bands import to_octaves
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene import Coverage, Scene
 from acoustic_spaces.scene.model import Simulation
@@ -519,10 +520,10 @@ def coverage_map(
     started = time.perf_counter()
     grid = map_grid(room, settings.surfaces, height=settings.height, spacing=settings.spacing)
     say(f"Map: {len(grid)} points, {grid.cell:g} m apart")
-    model = TraceModel.from_room(room)
+    model = TraceModel.from_room(room, sim)
     edges = _Edges(model)
     c = room.speed_of_sound()
-    air = room.air_attenuation()
+    air = room.air_attenuation(model.bands)
     volume = room.volume_m3
     length = sim.ir_length_s
     bands = model.absorption.shape[1]
@@ -549,7 +550,7 @@ def coverage_map(
             continue
         info: dict[str, float] = {"seed": _seed(seed, s_index)}
         src = np.array(source.position, dtype=float)
-        directivity = room.directivity(source.name)
+        directivity = room.directivity(source.name, model.bands)
         orientation = np.array(source.orientation.rotation())
         onset = np.linalg.norm(grid.points - src, axis=1) / c
         cutoff = np.minimum(onset + transition, length)
@@ -587,7 +588,7 @@ def coverage_map(
         late = None
         stat = None
         if statistical:
-            t60 = room.reverberation_time("eyring", air_absorption=True)
+            t60 = room.reverberation_time("eyring", air_absorption=True, bands=model.bands)
             stat = (np.asarray(t60, dtype=float), float(volume), c)
         else:
             say(f"{source.name}: stochastic ray tracing over the map ({rays} rays per band)")
@@ -616,28 +617,31 @@ def coverage_map(
 
     say("Map: parameters at every point")
     noise = settings.noise_db
+    octaves = len(OCTAVE_BANDS_HZ)  # parameters in octave bands, whatever was traced
     per_source: dict[str, list[dict[str, np.ndarray]]] = {name: [] for name in runs}
     combined: list[dict[str, np.ndarray]] = []
     loudest = max(run.level_db for run in runs.values())
     for k in range(len(grid)):
         curves = {}
         for name, run in runs.items():
-            curve = _curve(run, k, length, bands)
+            curve = to_octaves(_curve(run, k, length, bands))
             curves[name] = curve
-            power = _band_power_db(run.level_db, bands)
+            power = _band_power_db(run.level_db, octaves)
             per_source[name].append(_point_values(curve, power, reference, noise))
         if len(runs) > 1:
             # All sources together, each at its level relative to the loudest, on the
             # time axis of the earliest direct sound.
             first = min(run.onset[k] for run in runs.values())
             slots = int(math.ceil((length - first) / TIME_STEP - 1e-9))
-            total = np.zeros((bands, slots))
+            total = np.zeros((octaves, slots))
             for name, run in runs.items():
                 shift = int(round((run.onset[k] - first) / TIME_STEP))
                 curve = curves[name][:, : max(0, slots - shift)]
                 weight = 10.0 ** ((run.level_db - loudest) / 10.0)
                 total[:, shift : shift + curve.shape[1]] += weight * curve
-            combined.append(_point_values(total, _band_power_db(loudest, bands), reference, noise))
+            combined.append(
+                _point_values(total, _band_power_db(loudest, octaves), reference, noise)
+            )
 
     def stack(rows: list[dict[str, np.ndarray]]) -> dict[str, np.ndarray]:
         return {name: np.array([r[name] for r in rows]) for name in MAP_PARAMETERS}

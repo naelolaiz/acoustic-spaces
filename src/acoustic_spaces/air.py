@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, Resolution, exact_centres
 
 #: Exact octave midband frequencies (base-10 series) for the nominal ``OCTAVE_BANDS_HZ``.
 EXACT_OCTAVE_HZ = tuple(1000.0 * 10.0 ** (0.3 * k) for k in range(-4, 4))
@@ -50,13 +50,19 @@ def absorption_db_per_m(
 
 
 def energy_attenuation_per_m(
-    temperature_c: float = 20.0, humidity_percent: float = 50.0, pressure_kpa: float = 101.325
+    temperature_c: float = 20.0,
+    humidity_percent: float = 50.0,
+    pressure_kpa: float = 101.325,
+    bands: Resolution = "octave",
 ) -> np.ndarray:
-    """Energy attenuation ``m`` (1/m) per octave band: intensity falls as exp(-m * distance).
+    """Energy attenuation ``m`` (1/m) per octave band, or per third-octave band with
+    ``bands="third_octave"``, at the exact mid-band frequencies: intensity falls as
+    exp(-m * distance).
 
     This is the ``m`` of the ``4 m V`` air term in Sabine's and Eyring's formulas.
     """
-    alpha = absorption_db_per_m(EXACT_OCTAVE_HZ, temperature_c, humidity_percent, pressure_kpa)
+    frequencies = EXACT_OCTAVE_HZ if bands == "octave" else exact_centres(bands)
+    alpha = absorption_db_per_m(frequencies, temperature_c, humidity_percent, pressure_kpa)
     return alpha / (10.0 / math.log(10.0))
 
 

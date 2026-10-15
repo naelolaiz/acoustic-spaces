@@ -1,4 +1,4 @@
-"""Wave-based simulation of the lowest octave bands.
+"""Wave-based simulation of the lowest octave bands (or their third-octave bands).
 
 Rays and image sources treat sound as rays, which holds while the room is large next
 to the wavelength. At low frequencies it is not: small rooms ring at their modes, and
@@ -8,6 +8,8 @@ octave bands replace the ray-traced ones.
 
 - One grid covers every octave band up to ``max_band_hz``, with
   ``points_per_wavelength`` cells per wavelength at the top of that band's crossover.
+  In a simulation in third-octave bands, those are the third octaves of these octave
+  bands, and the grid is set by the top of the highest of them.
   Each octave higher costs about 16 times as much (cells 8 times smaller, steps twice
   as many). All bands share the grid, so a mode near a crossover is the same mode on
   both sides of it.
@@ -40,7 +42,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from acoustic_spaces import synthesis
-from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, OCTAVE_BANDS_HZ, band_centres
 
 #: Courant number of the scheme: the stable limit of the cubic grid.
 COURANT = 1.0 / math.sqrt(3.0)
@@ -93,17 +95,20 @@ def admittance(absorption: np.ndarray) -> np.ndarray:
     return np.where(alpha <= 0.0, 0.0, beta)
 
 
-def band_top(band: int) -> float:
-    """Highest frequency band ``band`` has (Hz): the top of its upper crossover."""
-    edge = OCTAVE_BANDS_HZ[band] * math.sqrt(2.0)
-    return edge * 2.0 ** (synthesis.CROSSOVER_WIDTH / 2)
+def band_top(band: int, total: int = len(OCTAVE_BANDS_HZ)) -> float:
+    """Highest frequency band ``band`` of the ``total`` (8 octave or 24 third-octave)
+    bands has (Hz): the top of its upper crossover."""
+    edge = synthesis.crossover_frequencies(total)[band]
+    return edge * 2.0 ** (synthesis.crossover_width(total) / 2)
 
 
-def wave_gains(n_fft: int, sample_rate: float, bands: int) -> np.ndarray:
-    """Zero-phase gains (bands, n_fft // 2 + 1) of the lowest ``bands`` octave bands as
-    the wave solver covers them: the synthesis's band gains, the lowest one starting at
-    :data:`LOW_EDGE_HZ`."""
-    gains = synthesis.band_gains(n_fft, sample_rate)[:bands]
+def wave_gains(
+    n_fft: int, sample_rate: float, bands: int, total: int = len(OCTAVE_BANDS_HZ)
+) -> np.ndarray:
+    """Zero-phase gains (bands, n_fft // 2 + 1) of the lowest ``bands`` of the ``total``
+    (8 octave or 24 third-octave) bands as the wave solver covers them: the synthesis's
+    band gains, the lowest one starting at :data:`LOW_EDGE_HZ`."""
+    gains = synthesis.band_gains(n_fft, sample_rate, total)[:bands]
     f = np.fft.rfftfreq(n_fft, 1.0 / sample_rate)
     width = synthesis.CROSSOVER_WIDTH
     x = (np.log2(np.maximum(f, 1e-6)) - math.log2(LOW_EDGE_HZ) + width / 2) / width
@@ -130,13 +135,17 @@ class BandGrid:
 
 
 def band_grid(
-    band: int, sample_rate: float, speed_of_sound: float, points_per_wavelength: float = 8.0
+    band: int,
+    sample_rate: float,
+    speed_of_sound: float,
+    points_per_wavelength: float = 8.0,
+    total: int = len(OCTAVE_BANDS_HZ),
 ) -> BandGrid:
     """The coarsest grid with ``points_per_wavelength`` cells per wavelength at the top of
-    band ``band`` whose time step is a whole number of the output's sample periods, or
-    one of them over a whole number where the grid needs more steps per second than the
-    output has samples."""
-    cell = speed_of_sound / (points_per_wavelength * band_top(band))
+    band ``band`` (of ``total``, 8 octave or 24 third-octave bands) whose time step is a
+    whole number of the output's sample periods, or one of them over a whole number
+    where the grid needs more steps per second than the output has samples."""
+    cell = speed_of_sound / (points_per_wavelength * band_top(band, total))
     rate = speed_of_sound / (COURANT * cell)  # one step crosses COURANT cells
     if rate <= sample_rate:
         rate = sample_rate / math.floor(sample_rate / rate)
@@ -166,12 +175,12 @@ def source_signal(rate: float, cell: float) -> tuple[np.ndarray, int]:
 
 @dataclass
 class WaveResponse:
-    """The lowest octave bands of one response, from the wave solver.
+    """The lowest octave bands (or third-octave bands) of one response, from the wave
+    solver.
 
     ``signals[k]`` holds run k at ``rate``: the pressure and the first-order directional
     parts (samples, 4), AmbiX W, X, Y and Z in room coordinates, from emission on.
-    Octave band b comes from run ``band_runs[b]``; only the frequencies of its bands
-    count.
+    Band b comes from run ``band_runs[b]``; only the frequencies of its bands count.
     """
 
     rate: float
@@ -179,11 +188,13 @@ class WaveResponse:
     band_runs: tuple[int, ...]
     #: Cell size of the grid (m).
     cell: float
+    #: How many bands the whole response has: 8 octave or 24 third-octave bands.
+    total_bands: int = len(OCTAVE_BANDS_HZ)
     _cache: dict = field(default_factory=dict, init=False, repr=False, compare=False)
 
     @property
     def bands(self) -> int:
-        """The octave bands 0 to bands - 1 come from the wave solver."""
+        """The bands 0 to bands - 1 come from the wave solver."""
         return len(self.band_runs)
 
     def _resampled(self, sample_rate: float, n: int) -> np.ndarray:
@@ -205,7 +216,7 @@ class WaveResponse:
         """The first-order sound field (n, 4) of the wave bands together: W, X, Y, Z."""
         runs = self._resampled(sample_rate, n)
         n_fft = synthesis.fft_size(n, sample_rate)
-        gains = wave_gains(n_fft, sample_rate, self.bands)
+        gains = wave_gains(n_fft, sample_rate, self.bands, self.total_bands)
         spectrum = 0.0
         for k, run in enumerate(runs):
             gain = sum(gains[b] for b, r in enumerate(self.band_runs) if r == k)
@@ -218,7 +229,7 @@ class WaveResponse:
         bands' sound in pressure, or with ``late`` their noise at sqrt(1 - g^2), as it
         adds to the wave bands' tail in energy."""
         n_fft = synthesis.fft_size(len(signals), sample_rate)
-        g = wave_gains(n_fft, sample_rate, self.bands).sum(axis=0)
+        g = wave_gains(n_fft, sample_rate, self.bands, self.total_bands).sum(axis=0)
         return _filter(signals, np.sqrt(1.0 - g**2) if late else 1.0 - g, n_fft)
 
     def energy(
@@ -229,21 +240,21 @@ class WaveResponse:
         exponent: int = 2,
     ) -> np.ndarray:
         """Energy per band and time slot (bands, slots), as the ray tracer counts it: the
-        energy of the pressure through each octave band's filter (those of the analysis
-        of measured responses, :func:`acoustic_spaces.parameters.octave_filter_gains`)
-        over that filter's share of the spectrum. The filters spread each arrival a
+        energy of the pressure through each band's filter (those of the analysis of
+        measured responses, :func:`acoustic_spaces.parameters.band_filter_gains`) over
+        that filter's share of the spectrum. The filters spread each arrival a
         little both ways in time; what they spread to before emission counts in the
         first slot.
 
         With ``axis`` (a unit vector in room coordinates), that of a figure of eight
         facing it instead, from X, Y and Z: with ``exponent`` 1, the magnitude of its
         product with the pressure."""
-        from acoustic_spaces.parameters import octave_filter_gains
+        from acoustic_spaces.parameters import band_filter_gains
 
         out = np.zeros((self.bands, slots))
         lead = int(round(synthesis._PAD_S * self.rate))
         n_fft = synthesis.fft_size(self.signals.shape[1] + lead, self.rate)
-        gains = octave_filter_gains(n_fft, self.rate)[: self.bands]
+        gains = band_filter_gains(n_fft, self.rate, self.total_bands)[: self.bands]
         weights = np.full(gains.shape[1], 2.0)
         weights[0] = weights[-1] = 1.0
         time = (np.arange(self.signals.shape[1] + lead) - lead) / self.rate
@@ -322,8 +333,10 @@ def wave_responses(
     mesh = model.room.mesh
     listeners = np.asarray(listeners, dtype=float).reshape(-1, 3)
     points = np.vstack([np.asarray(source, dtype=float).reshape(1, 3), listeners])
-    bands = OCTAVE_BANDS_HZ.index(max_band_hz) + 1
-    grid = band_grid(bands - 1, sample_rate, speed_of_sound, points_per_wavelength)
+    centres = band_centres(model.bands)
+    bands = (OCTAVE_BANDS_HZ.index(max_band_hz) + 1) * BANDS_PER_OCTAVE[model.bands]
+    total = len(centres)
+    grid = band_grid(bands - 1, sample_rate, speed_of_sound, points_per_wavelength, total)
     h = grid.cell
     # The model, and two cells round the source and listeners (in an open model they may
     # lie outside it); then two cells of margin (one for an open model's air, one that is
@@ -381,7 +394,7 @@ def wave_responses(
                     f"in a room of {volume:.3g} m³"
                 )
             raise ValueError(f"listener {missing[0]!r} is not in the air of the wave grid")
-        covered = [OCTAVE_BANDS_HZ[b] for b, r in enumerate(band_runs) if r == k]
+        covered = [centres[b] for b, r in enumerate(band_runs) if r == k]
         name = " and ".join(f"{f}" for f in covered) + " Hz"
         say(
             f"{label}: wave solver, {name} ({solver.air_cells:,} cells of {100 * h:.0f} cm, "
@@ -407,7 +420,7 @@ def wave_responses(
         signals = np.stack(
             [_first_order(run[part], found[part], listener) for run in recorded_runs]
         )
-        responses.append(WaveResponse(grid.rate, signals, tuple(band_runs), h))
+        responses.append(WaveResponse(grid.rate, signals, tuple(band_runs), h, total))
     return responses, info
 
 

@@ -240,11 +240,8 @@ def _room_material(doc: _Document, room: Room, k: int) -> int:
         return doc.material("no material", UNASSIGNED_GREY, SURFACE_ALPHA)
     name = room.material_names[k]
     material = room.scene.materials[name]
-    extras = {
-        "absorption": list(material.absorption),
-        "scattering": list(material.scattering),
-        "bands_hz": list(OCTAVE_BANDS_HZ),
-    }
+    absorption, scattering = material.coefficients("octave")
+    extras = {"absorption": absorption, "scattering": scattering, "bands_hz": list(OCTAVE_BANDS_HZ)}
     if material.source:
         extras["source"] = material.source
     colour = MATERIAL_COLOURS[k % len(MATERIAL_COLOURS)]

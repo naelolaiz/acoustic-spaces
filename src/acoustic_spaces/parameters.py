@@ -671,9 +671,22 @@ def octave_filter_gains(n_fft: int, sample_rate: float, order: int = FILTER_ORDE
     class 1) has 1 at mid-band, -3 dB at the band edges fm G^(+-1/2) and about -20 dB
     at the neighbouring mid-bands.
     """
+    return band_filter_gains(n_fft, sample_rate, len(OCTAVE_BANDS_HZ), order)
+
+
+def band_filter_gains(
+    n_fft: int, sample_rate: float, bands: int = 8, order: int = FILTER_ORDER
+) -> np.ndarray:
+    """Magnitudes (bands, n_fft // 2 + 1) of Butterworth band-pass filters of the 8
+    octave bands (as :func:`octave_filter_gains`) or the 24 third-octave bands, whose
+    edges are fm G^(+-1/6)."""
+    from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, exact_centres, resolution_of
+
+    resolution = resolution_of(bands)
     f = np.maximum(np.fft.rfftfreq(n_fft, 1.0 / sample_rate), 1e-9)
-    fm = octave_midbands()[:, None]
-    width = math.sqrt(OCTAVE_RATIO) - 1.0 / math.sqrt(OCTAVE_RATIO)
+    fm = (octave_midbands() if resolution == "octave" else exact_centres(resolution))[:, None]
+    half = OCTAVE_RATIO ** (0.5 / BANDS_PER_OCTAVE[resolution])
+    width = half - 1.0 / half
     return 1.0 / np.sqrt(1.0 + ((f / fm - fm / f) / width) ** (2 * order))
 
 
@@ -1036,6 +1049,7 @@ __all__ = [
     "OCTAVE_RATIO",
     "band_decay",
     "band_energy_share",
+    "band_filter_gains",
     "free_field_reference",
     "from_impulse_response",
     "noise_crosspoint",

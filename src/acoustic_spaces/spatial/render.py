@@ -160,7 +160,7 @@ def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, see
     if len(early):
         n_k = 1 << int(math.ceil(math.log2(_KERNEL_S * sample_rate)))
         half = n_k // 2
-        gains = synthesis.band_gains(n_k, sample_rate)
+        gains = synthesis.band_gains(n_k, sample_rate, response.bands)
         amplitudes = np.sqrt(synthesis.ENERGY_TO_IR * early.energy)
         heads = to_head(early.direction, response.orientation)
         position = early.delay_s * sample_rate

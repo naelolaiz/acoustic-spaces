@@ -120,7 +120,10 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     print(_band_header("", width) + "    area m2")
     areas = room.area_by_material()
     for name, material in scene.materials.items():
-        print(_band_row(name, material.absorption, width) + f"  {areas[name]:9.2f}")
+        absorption = material.coefficients("octave")[0]
+        print(_band_row(name, absorption, width) + f"  {areas[name]:9.2f}")
+        if len(material.absorption) > len(absorption):
+            print("  third-octave data, shown as octave averages")
         if material.source:
             print(f"  {material.source}")
     unassigned = room.unassigned_labels()
@@ -444,6 +447,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         room.scene.simulation,
         {
             "--seed": ("seed", args.seed),
+            "--bands": ("bands", args.bands),
             "--rays": ("late.rays", args.rays),
             "--max-order": ("early.max_order", args.max_order),
             "--diffraction": ("early.diffraction", args.diffraction),
@@ -490,8 +494,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
     ):
         wave = ""
         if response.wave is not None:
-            top = OCTAVE_BANDS_HZ[response.wave.bands - 1]
-            wave = f", {OCTAVE_BANDS_HZ[0]}-{top} Hz from the wave solver"
+            centres = response.band_hz
+            wave = f", {centres[0]}-{centres[response.wave.bands - 1]} Hz from the wave solver"
         print(
             f"\n{source} -> {listener}: direct sound at {response.direct_delay_s * 1e3:.1f} ms, "
             f"{_early_text(response.early)}{wave}"
@@ -1450,6 +1454,11 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--sample-rate", type=int, help="override simulation.sample_rate")
     simulate.add_argument("--length", type=float, help="override simulation.ir_length_s")
     simulate.add_argument("--seed", type=int, help="override simulation.seed")
+    simulate.add_argument(
+        "--bands",
+        choices=("octave", "third_octave"),
+        help="override simulation.bands: octave or third-octave bands (parameters stay in octaves)",
+    )
     simulate.add_argument("--rays", type=int, help="override simulation.late.rays")
     simulate.add_argument("--max-order", type=int, help="override simulation.early.max_order")
     simulate.add_argument(

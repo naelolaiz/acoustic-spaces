@@ -79,7 +79,8 @@ def trace_particles(
     if not 0 <= band < len(OCTAVE_BANDS_HZ):
         raise ValueError(f"band must be 0 to {len(OCTAVE_BANDS_HZ) - 1}")
     spec = sources[source]
-    model = TraceModel.from_room(room)
+    # In octave bands, whatever bands the scene simulates in.
+    model = TraceModel.from_room(room, scene.simulation.model_copy(update={"bands": "octave"}))
     rng = np.random.default_rng(seed)
     c = room.speed_of_sound()
     air = float(room.air_attenuation()[band])  # energy, per metre

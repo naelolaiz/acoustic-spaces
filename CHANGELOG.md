@@ -70,6 +70,28 @@
   change; to get version 2's results, set
   `simulation: {scattering: {method: random, from_size: false}, late: {rays: 100000}}`.
 
+**Third-octave bands**
+
+- `simulation.bands: third_octave` runs a simulation in the 24 third-octave bands from
+  50 Hz to 10 kHz instead of the eight octave bands: materials, air absorption, source
+  directivity, the scattering of surface size, the rays (`rays` per band), the wave
+  solver's bands and the impulse response's filter bank all follow them. It traces
+  three times the rays and takes about three times as long. `simulate --bands` and the
+  editor's simulation page set it.
+- Materials take 8 or 24 absorption and scattering values. An octave value holds for
+  its three third octaves; an octave run takes the mean of a material's three.
+- Coefficient files with more than one value in some octave (third-octave tables, as in
+  BRAS) keep their third octaves instead of being averaged onto octaves, so such a
+  material's `absorption` now has 24 values; `Material.coefficients(bands)` gives them
+  in either bands. Octave runs average them as before. A band with no data now copies
+  the nearest third octave rather than the nearest octave: a table that starts at
+  100 Hz gives the 63 Hz octave its 100 Hz value instead of the 125 Hz octave's mean.
+- Room parameters, the STI, coverage maps and plots stay in octave bands, each octave
+  the mean of its three thirds' energies. `Response.energy()` has the 24 bands and
+  `Response.octave_energy()` the octaves; `Response.band_hz` names them.
+- The editor shows a material with third-octave data in 24 columns, and `inspect` its
+  octave averages.
+
 **Examples**
 
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)
