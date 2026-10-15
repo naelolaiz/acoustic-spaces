@@ -162,14 +162,15 @@ struct Ray {
     order: i32,
     root: u32,
     cutoff: f32,
-    energy: array<f32, BANDS>,
-    // The share of the energy the detector spheres count on this leg, and the share
-    // that has only ever reflected specularly.
-    seen: array<f32, BANDS>,
-    alone: array<f32, BANDS>,
 }
 
 var<private> ray: Ray;
+// The ray's energy per band, the share of it the detector spheres count on this leg and
+// the share that has only ever reflected specularly. (Not in Ray: Direct3D's shader
+// compiler cannot write to an array in a struct at a varying index, and gives up.)
+var<private> energy: array<f32, BANDS>;
+var<private> seen: array<f32, BANDS>;
+var<private> alone: array<f32, BANDS>;
 var<private> counted: array<f32, BANDS>;
 var<private> reflected: array<f32, BANDS>;
 var<private> scattered: array<f32, BANDS>;
@@ -331,7 +332,7 @@ fn detectors(segment: f32) {
         let covered = ray.order <= run.covered_order && travel / run.c <= num(at + 5u);
         var any = 0.0;
         for (var b = 0u; b < BANDS; b++) {
-            counted[b] = ray.energy[b] * max(ray.seen[b] - select(0.0, ray.alone[b], covered), 0.0);
+            counted[b] = energy[b] * max(seen[b] - select(0.0, alone[b], covered), 0.0);
             any += counted[b];
         }
         if (any > 0.0) {
@@ -362,7 +363,7 @@ fn rain(n: vec3<f32>) {
                       (ray.travelled + dist) / run.c <= num(at + 5u);
         for (var b = 0u; b < BANDS; b++) {
             if (specular) {
-                counted[b] = reflected[b] * select(1.0, 1.0 - ray.alone[b], covered);
+                counted[b] = reflected[b] * select(1.0, 1.0 - alone[b], covered);
             } else {
                 counted[b] = scattered[b];
             }
@@ -381,9 +382,9 @@ fn load(at: u32) {
     ray.root = states[at + 13u];
     ray.cutoff = bitcast<f32>(states[at + 14u]);
     for (var b = 0u; b < BANDS; b++) {
-        ray.energy[b] = bitcast<f32>(states[at + 16u + b]);
-        ray.seen[b] = bitcast<f32>(states[at + 16u + BANDS + b]);
-        ray.alone[b] = bitcast<f32>(states[at + 16u + 2u * BANDS + b]);
+        energy[b] = bitcast<f32>(states[at + 16u + b]);
+        seen[b] = bitcast<f32>(states[at + 16u + BANDS + b]);
+        alone[b] = bitcast<f32>(states[at + 16u + 2u * BANDS + b]);
     }
 }
 
@@ -407,9 +408,9 @@ fn store(at: u32) {
     states[at + 14u] = bitcast<u32>(ray.cutoff);
     states[at + 15u] = 0u;
     for (var b = 0u; b < BANDS; b++) {
-        states[at + 16u + b] = bitcast<u32>(ray.energy[b]);
-        states[at + 16u + BANDS + b] = bitcast<u32>(ray.seen[b]);
-        states[at + 16u + 2u * BANDS + b] = bitcast<u32>(ray.alone[b]);
+        states[at + 16u + b] = bitcast<u32>(energy[b]);
+        states[at + 16u + BANDS + b] = bitcast<u32>(seen[b]);
+        states[at + 16u + 2u * BANDS + b] = bitcast<u32>(alone[b]);
     }
 }
 
@@ -419,9 +420,9 @@ fn start(k: u32) -> bool {
     var loudest = 0.0;
     for (var b = 0u; b < BANDS; b++) {
         let e = bitcast<f32>(starts[at + 3u + b]);
-        ray.energy[b] = e;
-        ray.seen[b] = 1.0;
-        ray.alone[b] = 1.0;
+        energy[b] = e;
+        seen[b] = 1.0;
+        alone[b] = 1.0;
         loudest = max(loudest, e);
     }
     if (!(loudest > 0.0)) {
@@ -491,12 +492,12 @@ fn advance(n_in: u32) -> bool {
         } else {
             scatter[b] = surface;
         }
-        mean += ray.energy[b];
-        reflected[b] = ray.energy[b] * (1.0 - num(face + 5u + b));
+        mean += energy[b];
+        reflected[b] = energy[b] * (1.0 - num(face + 5u + b));
         scattered[b] = reflected[b] * scatter[b];
         peak = max(peak, reflected[b]);
         p += scatter[b];
-        ray.alone[b] *= 1.0 - scatter[b];
+        alone[b] *= 1.0 - scatter[b];
     }
     p /= f32(BANDS);
     let window = min(run.windows - 1u, u32(ray.travelled / run.c / run.window_step));
@@ -516,21 +517,21 @@ fn advance(n_in: u32) -> bool {
         let size = length(mixed);
         ray.dir = select(n, mixed / size, size > 1e-12);
         for (var b = 0u; b < BANDS; b++) {
-            ray.energy[b] = reflected[b];
-            ray.seen[b] = select(1.0, 1.0 - scatter[b], diffuse_rain);
+            energy[b] = reflected[b];
+            seen[b] = select(1.0, 1.0 - scatter[b], diffuse_rain);
         }
     } else if (random() < p) {
         for (var b = 0u; b < BANDS; b++) {
-            ray.energy[b] = scattered[b] / p;
-            ray.seen[b] = select(1.0, 0.0, diffuse_rain);
-            ray.alone[b] = 0.0;
+            energy[b] = scattered[b] / p;
+            seen[b] = select(1.0, 0.0, diffuse_rain);
+            alone[b] = 0.0;
         }
         ray.dir = lambert(n);
     } else {
         for (var b = 0u; b < BANDS; b++) {
-            ray.energy[b] = (reflected[b] - scattered[b]) / (1.0 - p);
-            ray.seen[b] = 1.0;
-            ray.alone[b] = select(0.0, 1.0, ray.alone[b] > 0.0);
+            energy[b] = (reflected[b] - scattered[b]) / (1.0 - p);
+            seen[b] = 1.0;
+            alone[b] = select(0.0, 1.0, alone[b] > 0.0);
         }
         ray.dir = reflect(ray.dir, n);
     }
@@ -545,7 +546,7 @@ fn advance(n_in: u32) -> bool {
     }
     var now = 0.0;
     for (var b = 0u; b < BANDS; b++) {
-        now += ray.energy[b];
+        now += energy[b];
     }
     now /= f32(BANDS);
     if (now > run.split_ratio * expected) {
@@ -568,7 +569,7 @@ fn advance(n_in: u32) -> bool {
         }
         extra = min(extra, run.spawn_room - slot);
         for (var b = 0u; b < BANDS; b++) {
-            ray.energy[b] /= f32(extra + 1u);
+            energy[b] /= f32(extra + 1u);
         }
         for (var i = 0u; i < extra; i++) {
             let child = split_rng();
@@ -584,7 +585,7 @@ fn advance(n_in: u32) -> bool {
             return false;
         }
         for (var b = 0u; b < BANDS; b++) {
-            ray.energy[b] /= survive;
+            energy[b] /= survive;
         }
     }
     return true;
