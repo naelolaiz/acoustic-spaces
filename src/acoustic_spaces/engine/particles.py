@@ -85,14 +85,16 @@ def trace_particles(
     c = room.speed_of_sound()
     air = float(room.air_attenuation()[band])  # energy, per metre
 
-    origin = np.asarray(spec.position, dtype=float)
+    # A line or surface source's points take turns: each sends every n-th particle.
+    elements = spec.elements()
+    origins = elements[np.arange(count) % len(elements)]
     directions = fibonacci_sphere(count)
     rotation = np.asarray(spec.orientation.rotation(), dtype=float)
     energy = source_weights(room.directivity(source), rotation, directions)[:, band]
 
     # Segments: particle k leaves start[s, k] at time t0[s, k] along direction[s, k].
     t0 = [np.zeros(count)]
-    start = [np.repeat(origin[None], count, axis=0)]
+    start = [origins]
     direction = [directions]
     energies = [energy]
     alive = np.ones(count, dtype=bool)

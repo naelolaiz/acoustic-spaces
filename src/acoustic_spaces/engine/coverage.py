@@ -409,6 +409,16 @@ class CoverageResult:
 
 
 @dataclass
+class _Part:
+    """What one point source (all a source has, or one of a line's or surface's) brings
+    to each point, as if it radiated all the source's power."""
+
+    onset: np.ndarray  # (n,) arrival of its direct sound
+    early: list[early_stage.EarlyReflections]  # per point
+    late: late_stage.MapEnergy | None
+
+
+@dataclass
 class _SourceRun:
     """Everything one source contributes at each point."""
 
@@ -417,42 +427,70 @@ class _SourceRun:
     #: How long after emission the source plays (s), and the speech it carries.
     delay_s: float
     talker: Talker
-    onset: np.ndarray  # (n,) arrival of the direct sound
-    early: list[early_stage.EarlyReflections]  # per point
-    late: late_stage.MapEnergy | None
+    #: Its point sources, which share its power equally.
+    parts: list[_Part]
     #: Statistical tail: (T60 per band, volume, speed of sound).
     statistical: tuple[np.ndarray, float, float] | None
+
+    @property
+    def onset(self) -> np.ndarray:
+        """(n,) arrival of the first direct sound at each point."""
+        if len(self.parts) == 1:
+            return self.parts[0].onset
+        return np.min([part.onset for part in self.parts], axis=0)
 
 
 def _curve(run: _SourceRun, k: int, length: float, bands: int) -> np.ndarray:
     """Energy (bands, slots of ``TIME_STEP``) at point k, slot 0 at its direct sound."""
-    onset = run.onset[k]
-    slots = max(1, int(math.ceil((length - onset) / TIME_STEP - 1e-9)))
+    start = run.onset[k]
+    slots = max(1, int(math.ceil((length - start) / TIME_STEP - 1e-9)))
     out = np.zeros((bands, slots))
-    delays, energy = run.early[k].delay_s, run.early[k].energy
-    idx = np.floor((delays - onset) / TIME_STEP + 1e-9).astype(np.int64)
+    share = 1.0 / len(run.parts)
+    for part in run.parts:
+        curve = _part_curve(part, run.statistical, k, start, slots, length, bands)
+        out += curve if len(run.parts) == 1 else share * curve
+    return out
+
+
+def _part_curve(
+    part: _Part,
+    statistical: tuple[np.ndarray, float, float] | None,
+    k: int,
+    start: float,
+    slots: int,
+    length: float,
+    bands: int,
+) -> np.ndarray:
+    """One point source's energy at point k on slots from ``start`` (s, from emission)."""
+    onset = part.onset[k]
+    out = np.zeros((bands, slots))
+    delays, energy = part.early[k].delay_s, part.early[k].energy
+    idx = np.floor((delays - start) / TIME_STEP + 1e-9).astype(np.int64)
     keep = (idx >= 0) & (idx < slots)
     for b in range(bands):
         np.add.at(out[b], idx[keep], energy[keep, b])
-    late = run.late
+    late = part.late
     if late is not None:
-        fine = min(late.fine_bins, slots)
-        out[:, :fine] += late.energy[k, :, :fine]
-        if slots > late.fine_bins:  # a short response may end before the coarse slots
+        # The traced energy's slots start at this source's own direct sound.
+        offset = int(round((onset - start) / TIME_STEP))
+        target = out[:, offset:]
+        fine = min(late.fine_bins, target.shape[1])
+        target[:, :fine] += late.energy[k, :, :fine]
+        if target.shape[1] > late.fine_bins:  # a short response may end before the coarse slots
             ratio = int(round(late.coarse_step / TIME_STEP))
             coarse = late.energy[k, :, late.fine_bins :]
             spread = np.repeat(coarse / ratio, ratio, axis=1)
-            end = min(slots, late.fine_bins + spread.shape[1])
-            out[:, late.fine_bins : end] += spread[:, : end - late.fine_bins]
-    if run.statistical is not None:
-        t60, volume, c = run.statistical
+            end = min(target.shape[1], late.fine_bins + spread.shape[1])
+            target[:, late.fine_bins : end] += spread[:, : end - late.fine_bins]
+    if statistical is not None:
+        t60, volume, c = statistical
         # As at a listener, on its slots from emission; their running sum carried over
         # to this point's slots.
         tail = late_stage.statistical_energy(
             t60,
             volume,
             [onset],
-            [run.early[k]],
+            [part.early[k]],
             max_time=length,
             time_step=TIME_STEP,
             speed_of_sound=c,
@@ -461,7 +499,7 @@ def _curve(run: _SourceRun, k: int, length: float, bands: int) -> np.ndarray:
         times = np.arange(running.shape[1]) * TIME_STEP
         # Nothing arrives before the direct sound, in the slot that holds it either.
         times[min(int(onset / TIME_STEP), len(times) - 1)] = onset
-        at = onset + np.arange(slots + 1) * TIME_STEP
+        at = start + np.arange(slots + 1) * TIME_STEP
         out += np.diff([np.interp(at, times, row) for row in running], axis=1)
     return out
 
@@ -485,6 +523,94 @@ def _point_values(
         )
     )
     return out
+
+
+def _trace_part(
+    label: str,
+    position: np.ndarray,
+    *,
+    room: Room,
+    model: TraceModel,
+    edges: _Edges,
+    grid: MapGrid,
+    sim: Simulation,
+    name: str,
+    directivity,
+    orientation: np.ndarray,
+    transition: float,
+    rays: int,
+    seed: int,
+    statistical: bool,
+    threads: int,
+    say: Callable[[str], None],
+    info: dict[str, float],
+) -> _Part:
+    """Early paths and traced late energy at every point of one point source, which
+    radiates all the power; timings and counts add up in ``info``."""
+
+    def add(key: str, value: float) -> None:
+        info[key] = info.get(key, 0.0) + value
+
+    c = room.speed_of_sound()
+    air = room.air_attenuation(model.bands)
+    length = sim.ir_length_s
+    onset = np.linalg.norm(grid.points - position, axis=1) / c
+    cutoff = np.minimum(onset + transition, length)
+
+    t = time.perf_counter()
+    say(f"{label}: early reflections at {len(grid)} points")
+    candidates = _candidates(
+        model, position, sim.early.method, sim.early.max_order, sim.early.rays, threads
+    )
+    diffraction = edges.diffraction(sim.early.diffraction, position, room, name, orientation)
+    early = []
+    diffracted = 0
+    for k in range(len(grid)):
+        paths = early_stage.find_paths(
+            model,
+            position,
+            grid.points[k],
+            candidates,
+            speed_of_sound=c,
+            air=air,
+            max_delay_s=float(cutoff[k]),
+            directivity=directivity,
+            orientation=orientation,
+        )
+        if diffraction is not None:
+            paths = diffraction.apply(grid.points[k], paths, float(cutoff[k]))
+            diffracted += int(paths.diffracted.sum())
+        early.append(paths)
+    if diffraction is not None:
+        info["edges"] = float(len(diffraction.edges))
+        add("diffracted_paths", float(diffracted))
+    add("early_s", time.perf_counter() - t)
+
+    t = time.perf_counter()
+    late = None
+    if not statistical:
+        say(f"{label}: stochastic ray tracing over the map ({rays} rays per band)")
+        late = late_stage.stochastic_map_energy(
+            model,
+            position,
+            grid,
+            onset,
+            rays=rays,
+            max_time=length,
+            speed_of_sound=c,
+            air=air,
+            covered_order=sim.early.max_order,
+            covered_time=cutoff,
+            splitting=sim.late.splitting,
+            seed=seed,
+            directivity=directivity,
+            orientation=orientation,
+            threads=threads,
+        )
+        add("rays", float(late.rays))
+        add("traced_rays", float(late.traced_rays))
+    add("late_s", time.perf_counter() - t)
+    return _Part(onset, early, late)
 
 
 def coverage_map(
@@ -524,7 +650,6 @@ def coverage_map(
     model = TraceModel.from_room(room, sim)
     edges = _Edges(model)
     c = room.speed_of_sound()
-    air = room.air_attenuation(model.bands)
     volume = room.volume_m3
     length = sim.ir_length_s
     bands = model.absorption.shape[1]
@@ -550,77 +675,46 @@ def coverage_map(
         if source.name not in names:
             continue
         info: dict[str, float] = {"seed": _seed(seed, s_index)}
-        src = np.array(source.position, dtype=float)
         directivity = room.directivity(source.name, model.bands)
         orientation = np.array(source.orientation.rotation())
-        onset = np.linalg.norm(grid.points - src, axis=1) / c
-        cutoff = np.minimum(onset + transition, length)
-
-        t = time.perf_counter()
-        say(f"{source.name}: early reflections at {len(grid)} points")
-        candidates = _candidates(
-            model, src, sim.early.method, sim.early.max_order, sim.early.rays, threads
-        )
-        diffraction = edges.diffraction(sim.early.diffraction, src, room, source.name, orientation)
-        early = []
-        diffracted = 0
-        for k in range(len(grid)):
-            paths = early_stage.find_paths(
-                model,
-                src,
-                grid.points[k],
-                candidates,
-                speed_of_sound=c,
-                air=air,
-                max_delay_s=float(cutoff[k]),
-                directivity=directivity,
-                orientation=orientation,
+        elements = source.elements()
+        if len(elements) > 1:
+            info["elements"] = float(len(elements))
+        parts = []
+        for e_index, position in enumerate(elements):
+            # One point source of a line or surface: its share of the rays, a seed of its own.
+            single = len(elements) == 1
+            parts.append(
+                _trace_part(
+                    source.name if single else f"{source.name} ({e_index + 1})",
+                    position,
+                    room=room,
+                    model=model,
+                    edges=edges,
+                    grid=grid,
+                    sim=sim,
+                    name=source.name,
+                    directivity=directivity,
+                    orientation=orientation,
+                    transition=transition,
+                    rays=math.ceil(rays / len(elements)),
+                    seed=info["seed"] if single else _seed(info["seed"], e_index + 1),
+                    statistical=statistical,
+                    threads=threads,
+                    say=say,
+                    info=info,
+                )
             )
-            if diffraction is not None:
-                paths = diffraction.apply(grid.points[k], paths, float(cutoff[k]))
-                diffracted += int(paths.diffracted.sum())
-            early.append(paths)
-        if diffraction is not None:
-            info["edges"] = float(len(diffraction.edges))
-            info["diffracted_paths"] = float(diffracted)
-        info["early_s"] = time.perf_counter() - t
-
-        t = time.perf_counter()
-        late = None
         stat = None
         if statistical:
             t60 = room.reverberation_time("eyring", air_absorption=True, bands=model.bands)
             stat = (np.asarray(t60, dtype=float), float(volume), c)
-        else:
-            say(f"{source.name}: stochastic ray tracing over the map ({rays} rays per band)")
-            late = late_stage.stochastic_map_energy(
-                model,
-                src,
-                grid,
-                onset,
-                rays=rays,
-                max_time=length,
-                speed_of_sound=c,
-                air=air,
-                covered_order=sim.early.max_order,
-                covered_time=cutoff,
-                splitting=sim.late.splitting,
-                seed=info["seed"],
-                directivity=directivity,
-                orientation=orientation,
-                threads=threads,
-            )
-            info["rays"] = float(late.rays)
-            info["traced_rays"] = float(late.traced_rays)
-        info["late_s"] = time.perf_counter() - t
         details[source.name] = info
         runs[source.name] = _SourceRun(
             source.power_db("octave"),
             source.delay_ms * 1e-3,
             source.talker,
-            onset,
-            early,
-            late,
+            parts,
             stat,
         )
 

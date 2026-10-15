@@ -413,6 +413,43 @@ def test_source_spectrum_gain_equalizer_and_delay(window) -> None:
     assert page.level.value() == pytest.approx(80.0 + 10 * np.log10(8), abs=0.05)
 
 
+def test_line_and_surface_sources(window, qapp) -> None:
+    window.open_example(example_path("studio"))
+    window.select("sources", 0)
+    page = window.inspector.pages["sources"]
+    form = page._form
+    assert page.shape.currentText() == "point" and not form.isRowVisible(page.extent[0])
+    page.extent[0].setValue(3.0)  # no line yet: nothing changes
+    assert not window.document.scene.sources[0].extended
+    page.shape.setCurrentText("line")
+    page.shape.activated.emit(page.shape.currentIndex())
+    source = window.document.scene.sources[0]
+    assert source.line_m == 3.0 and len(source.elements()) == 6
+    assert form.isRowVisible(page.extent[0]) and not form.isRowVisible(page.extent[1])
+    assert page.elements.text() == "6 uncorrelated point sources"
+    page.spacing.setValue(1.0)
+    assert len(window.document.scene.sources[0].elements()) == 3
+    page.extent[1].setValue(2.0)
+    page.shape.setCurrentText("surface")
+    page.shape.activated.emit(page.shape.currentIndex())
+    source = window.document.scene.sources[0]
+    assert source.surface_m == (3.0, 2.0) and source.line_m is None
+    assert form.labelForField(page.extent[0]).text() == "Width"
+    assert form.isRowVisible(page.extent[1])
+    page.directivity.setCurrentText("lambert")
+    page.directivity.activated.emit(page.directivity.currentIndex())
+    assert window.document.scene.sources[0].directivity == "lambert"
+    assert "6.0" in page.directivity_index.text()
+    # Too many points: refused, and the form shows the source as it was.
+    page.spacing.setValue(0.05)
+    assert "more than 400 point sources" in window.messages.toPlainText()
+    assert window.document.scene.sources[0].spacing_m == 1.0 and page.spacing.value() == 1.0
+    _plan(window, qapp).grab()  # drawn from above as a rectangle
+    page.shape.setCurrentText("point")
+    page.shape.activated.emit(page.shape.currentIndex())
+    assert not window.document.scene.sources[0].extended
+
+
 def test_a_surface_takes_a_material_of_its_own(window) -> None:
     from acoustic_spaces.gui.viewport import surface_materials
 
@@ -1120,6 +1157,24 @@ def test_clicks_select_and_place(window, qapp) -> None:
     assert placed and placed[0][0] == "sources"
     assert Room.from_scene(window.document.scene).problems() == []
     assert len(window.document.scene.sources) == 2 and viewport.placing is None
+
+
+@pytest.mark.render
+def test_a_line_source_is_drawn_and_picked_in_the_3d_view(window, qapp) -> None:
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    window.document.update_point("sources", 0, line_m=3.0)
+    window.select("scene", None)
+    qapp.processEvents()
+    viewport.plotter.render()
+    renderer = viewport.plotter.renderer
+    assert len(viewport._point_actors["sources", 0]) == 2  # the sphere and the line
+    end = window.document.scene.sources[0].outline()[1]
+    renderer.SetWorldPoint(*end, 1.0)
+    renderer.WorldToDisplay()
+    x, y, _ = renderer.GetDisplayPoint()
+    assert viewport.marker_at(round(x), round(y)) == ("sources", 0)
 
 
 @pytest.mark.render

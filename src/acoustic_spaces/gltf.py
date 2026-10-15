@@ -294,6 +294,10 @@ def _add_points(doc: _Document, room: Room, radius: float) -> None:
                     ],
                     level_db=item.level_db,
                 )
+                if item.line_m is not None:
+                    extras["line_m"] = item.line_m
+                if item.surface_m is not None:
+                    extras["surface_m"] = list(item.surface_m)
             rotation = _TO_GLTF @ np.array(item.orientation.rotation()) @ _TO_GLTF.T
             node = doc.node(
                 item.name,
@@ -306,6 +310,21 @@ def _add_points(doc: _Document, room: Room, radius: float) -> None:
                 if aim is None:
                     aim = doc.mesh(f"{kind} aim", *arrow, material)
                 doc.node(f"{item.name} aim", node, mesh=aim)
+            if kind == "source" and item.extended:
+                doc.node(f"{item.name} extent", node, mesh=_extent(doc, item, material))
+
+
+def _extent(doc: _Document, source, material: int) -> int:
+    """A line source as a line along its left axis, a surface source as its rectangle
+    across the left and up axes, in the source's own axes."""
+    if source.line_m is not None:
+        half = 0.5 * source.line_m
+        ends = np.array([[0.0, -half, 0.0], [0.0, half, 0.0]])
+        return doc.mesh(f"{source.name} line", ends, np.array([[0, 1]]), material, mode=_LINES)
+    w, h = 0.5 * source.surface_m[0], 0.5 * source.surface_m[1]
+    corners = np.array([[0.0, -w, -h], [0.0, w, -h], [0.0, w, h], [0.0, -w, h]])
+    triangles = np.array([[0, 1, 2], [0, 2, 3]])
+    return doc.mesh(f"{source.name} surface", corners, triangles, material)
 
 
 def _add_paths(doc: _Document, paths: EarlyReflections) -> None:

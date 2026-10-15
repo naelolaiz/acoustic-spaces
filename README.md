@@ -464,6 +464,37 @@ sources:
   a source comes out as its sound power less 10 log10(4 π r²) = 23 dB and the air's
   absorption over the 4 m, to within 0.01 dB.
 
+Line and surface sources, such as a road, a row of loudspeakers fed alike, a choir
+or a vibrating wall:
+
+```yaml
+sources:
+  - name: traffic
+    position: [0.0, 20.0, 0.5]
+    orientation: {yaw: 90}   # the line runs along the source's left axis: here -x
+    line_m: 40
+  - name: panel
+    position: [6.0, 0.05, 1.5]
+    orientation: {yaw: 90}   # facing +y, into the room
+    surface_m: [2.0, 1.2]    # width along the left axis, height along the up axis
+    spacing_m: 0.25          # at most this far apart (default 0.5 m)
+    directivity: lambert     # a vibrating surface's: in proportion to the cosine
+```
+
+- A line or surface is made of uncorrelated point sources, at most `spacing_m` apart,
+  each in the middle of an equal share of it. They share the source's sound power and
+  its rays equally, each with a seed of its own, and keep its directivity, orientation
+  and feed. A source is made of at most 400 of them; their sound adds up in energy, as
+  for incoherent sources such as traffic or a crowd. Close to a long line, the level
+  falls about 3 dB per doubling of distance rather than a point source's 6 dB (3.3 dB
+  between 2 and 4 m from a 40 m line in the tests).
+- `lambert` radiates as a vibrating surface, in proportion to the cosine of the angle
+  to the forward axis and nothing behind (a directivity index of 6 dB).
+- All of a line or surface must be inside the room; `inspect` lists its length or size
+  and its number of points. The wave solver takes point sources only. The editor
+  draws lines and surfaces in the 3D view and the plan, and the Blender export has
+  them too.
+
 ![Polar patterns of the per-band directivity above, from omni in the bass to a narrow pattern at 8 kHz](docs/images/directivity.png)
 
 ## Simulation
@@ -1231,7 +1262,8 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] Vector-based scattering, and scattering that follows surface size and frequency.
 - [x] Third-octave bands.
 - [x] Sources with their own spectra, gain, EQ and delay; speech spectra for the STI.
-- [ ] Line and surface sources, and arrays.
+- [x] Line and surface sources.
+- [ ] Loudspeaker arrays with phase.
 - [ ] Sound through walls and between coupled rooms.
 - [ ] Fitting absorption to measured parameters.
 - [ ] The wave solver with impedance boundaries and a GPU path through WebGPU (AMD,

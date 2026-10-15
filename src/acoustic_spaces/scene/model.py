@@ -307,6 +307,9 @@ def _clip(values: list[float]) -> list[float]:
     return [min(max(float(v), 0.0), 1.0) for v in values]
 
 
+#: The most point sources a line or surface source may be made of.
+MAX_ELEMENTS = 400
+
 PatternName = Literal[
     "omni", "subcardioid", "cardioid", "supercardioid", "hypercardioid", "figure8"
 ]
@@ -355,9 +358,30 @@ class Source(_Model):
     name: str
     position: Vector3
     orientation: Orientation = Field(default_factory=Orientation)
-    directivity: PatternName | DirectivitySpec = Field(
+    directivity: PatternName | Literal["lambert"] | DirectivitySpec = Field(
         default="omni",
-        description="a pattern for every band, or per-band patterns or measured data",
+        description=(
+            "a pattern for every band (lambert: a vibrating surface's, nothing behind), "
+            "or per-band patterns or measured data"
+        ),
+    )
+    line_m: PositiveFloat | None = Field(
+        default=None,
+        description=(
+            "a line source this long (m), along the source's left axis and centred on its "
+            "position: uncorrelated point sources at most spacing_m apart share its power"
+        ),
+    )
+    surface_m: tuple[PositiveFloat, PositiveFloat] | None = Field(
+        default=None,
+        description=(
+            "a surface source this wide and high (m), across the source's left and up axes "
+            "and centred on its position, facing forward: uncorrelated point sources at "
+            "most spacing_m apart share its power"
+        ),
+    )
+    spacing_m: PositiveFloat = Field(
+        default=0.5, description="the most the point sources of a line or surface are apart (m)"
     )
     level_db: float | list[float] = Field(
         default=94.0,
@@ -419,7 +443,51 @@ class Source(_Model):
     def _spectrum_of_a_total(self) -> Source:
         if isinstance(self.level_db, list) and self.spectrum != "flat":
             raise ValueError("spectrum shapes a level given in all; a level per band has its own")
+        if self.line_m is not None and self.surface_m is not None:
+            raise ValueError("a source is a line or a surface, not both")
+        if len(self._grid()[0]) * len(self._grid()[1]) > MAX_ELEMENTS:
+            raise ValueError(f"more than {MAX_ELEMENTS} point sources; make spacing_m larger")
         return self
+
+    def _grid(self) -> tuple[np.ndarray, np.ndarray]:
+        """Offsets (m) of the point sources along the left and the up axis."""
+
+        def offsets(size: float | None) -> np.ndarray:
+            if size is None:
+                return np.zeros(1)
+            n = max(1, math.ceil(size / self.spacing_m - 1e-9))
+            return ((np.arange(n) + 0.5) / n - 0.5) * size
+
+        if self.surface_m is not None:
+            return offsets(self.surface_m[0]), offsets(self.surface_m[1])
+        return offsets(self.line_m), np.zeros(1)
+
+    @property
+    def extended(self) -> bool:
+        """Whether the source is a line or a surface rather than a point."""
+        return self.line_m is not None or self.surface_m is not None
+
+    def elements(self) -> np.ndarray:
+        """Positions (n, 3) of the point sources that make up the source: its position
+        alone for a point source; along a line or over a surface evenly spaced, each
+        in the middle of an equal share of it."""
+        left, up = self._grid()
+        axes = np.array(self.orientation.rotation())
+        offsets = left[:, None, None] * axes[:, 1] + up[None, :, None] * axes[:, 2]
+        return np.asarray(self.position, dtype=float) + offsets.reshape(-1, 3)
+
+    def outline(self) -> np.ndarray:
+        """Corners (n, 3) of the source's extent: a line's two ends, a surface's four
+        corners in turn, or a point source's position alone."""
+        axes = np.array(self.orientation.rotation())
+        centre = np.asarray(self.position, dtype=float)
+        if self.line_m is not None:
+            half = 0.5 * self.line_m * axes[:, 1]
+            return np.array([centre - half, centre + half])
+        if self.surface_m is not None:
+            left, up = 0.5 * self.surface_m[0] * axes[:, 1], 0.5 * self.surface_m[1] * axes[:, 2]
+            return centre + np.array([-left - up, left - up, left + up, -left + up])
+        return centre[None, :]
 
     @property
     def talker(self) -> Literal["male", "female"]:

@@ -11,6 +11,7 @@ from acoustic_spaces import Room, Scene
 from acoustic_spaces.engine import early_paths, trace_particles
 from acoustic_spaces.gltf import export_gltf
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
+from acoustic_spaces.scene.model import Orientation
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
 
@@ -185,6 +186,29 @@ def test_markers_face_their_way_and_unassigned_surfaces_are_grey(tmp_path: Path)
         arrow = array(doc, binary, primitive["attributes"]["POSITION"])
         assert arrow[:, 0].max() > 5 * np.abs(arrow[:, 1:]).max()  # it points along +x
     assert nodes_named(doc)["horn"]["extras"]["directivity"] == "cardioid"
+
+
+def test_line_and_surface_sources_show_their_extent(tmp_path: Path) -> None:
+    scene = Scene.from_yaml(SHOEBOX)
+    turned = Orientation(yaw=90.0, pitch=10.0)
+    first = scene.sources[0].model_copy(update={"line_m": 2.0, "orientation": turned})
+    wall = first.model_copy(update={"name": "wall", "line_m": None, "surface_m": (2.0, 1.0)})
+    scene.sources = [first, wall]
+    out = tmp_path / "extent.glb"
+    export_gltf(Room.from_scene(scene), out)
+    doc, binary = read_glb(out)
+    check_layout(doc, binary)
+    nodes = nodes_named(doc)
+    assert nodes["talker"]["extras"]["line_m"] == 2.0
+    assert nodes["wall"]["extras"]["surface_m"] == [2.0, 1.0]
+    for item in scene.sources:
+        extent = next(n for n in children_of(doc, item.name) if n["name"].endswith("extent"))
+        primitive = doc["meshes"][extent["mesh"]]["primitives"][0]
+        local = array(doc, binary, primitive["attributes"]["POSITION"])
+        # Turned and placed as the source: its corners where the scene puts them.
+        placed = [rotate(nodes[item.name]["rotation"], v) for v in local]
+        placed = np.array(placed) + nodes[item.name]["translation"]
+        np.testing.assert_allclose(placed, gltf(item.outline()), atol=1e-6)
 
 
 def test_reflection_paths_are_lines_by_order(tmp_path: Path) -> None:

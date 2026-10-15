@@ -424,6 +424,15 @@ def test_particles_spread_reflect_and_fade() -> None:
     assert np.all(np.diff(particles.order, axis=0) >= 0)
     assert np.all(np.diff(particles.energy, axis=0) <= 1e-15)
     assert particles.order[-1].mean() > 5 and particles.energy[-1].mean() < 0.5
+    # A line source's points each send their share, on spheres round each of them.
+    scene = room.scene.model_copy(deep=True)
+    scene.sources[0] = scene.sources[0].model_copy(update={"line_m": 2.0, "spacing_m": 0.5})
+    line = trace_particles(Room.from_scene(scene), count=400, duration=0.1, frames=21)
+    points = scene.sources[0].elements()
+    first = line.order[1] == 0
+    owner = np.arange(400)[first] % len(points)
+    radius = np.linalg.norm(line.positions[1, first] - points[owner], axis=1)
+    np.testing.assert_allclose(radius, room.speed_of_sound() * line.times[1])
     with pytest.raises(ValueError, match="no source 'piano'"):
         trace_particles(room, "piano")
     with pytest.raises(ValueError, match="band"):

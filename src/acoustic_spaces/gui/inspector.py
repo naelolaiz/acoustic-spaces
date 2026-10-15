@@ -47,7 +47,17 @@ BAND_LABELS = [f"{f} Hz" if f < 1000 else f"{f // 1000} kHz" for f in OCTAVE_BAN
 THIRD_OCTAVE_LABELS = [f"{f}" if f < 1000 else f"{f / 1000:g}k" for f in THIRD_OCTAVE_BANDS_HZ]
 #: The spectra a source's sound power can have.
 SPECTRA = ["flat", "speech_male", "speech_female"]
-DIRECTIVITIES = ["omni", "subcardioid", "cardioid", "supercardioid", "hypercardioid", "figure8"]
+DIRECTIVITIES = [
+    "omni",
+    "subcardioid",
+    "cardioid",
+    "supercardioid",
+    "hypercardioid",
+    "figure8",
+    "lambert",
+]
+#: A source is a point, a line or a surface.
+SHAPES = ["point", "line", "surface"]
 #: The directivity list entry that asks for a SOFA or CSV file.
 MEASURED = "Measured data from a file…"
 SAMPLE_RATES = [16_000, 22_050, 32_000, 44_100, 48_000, 88_200, 96_000]
@@ -643,7 +653,28 @@ class PointPage(Page):
             "come that much later"
         )
         self.delay.valueChanged.connect(lambda value: self._update(delay_ms=value))
+        self.shape = QComboBox()
+        self.shape.addItems(SHAPES)
+        self.shape.setToolTip(
+            "A line runs along the source's left axis and a surface spans its left and up "
+            "axes, both centred on its position: uncorrelated point sources share the power"
+        )
+        self.shape.activated.connect(self._shape)
+        self.extent = [spin(0.01, 1000, 2, 0.5, "m") for _ in range(2)]
+        for box in self.extent:
+            box.valueChanged.connect(lambda _: self._extent())
+        self.spacing = spin(0.05, 100, 2, 0.1, "m")
+        self.spacing.setToolTip("The most the point sources of a line or surface are apart")
+        self.spacing.valueChanged.connect(lambda value: self._update(spacing_m=value))
+        self.elements = QLabel()
+        self.elements.setWordWrap(True)
+        self._form = form
         if kind == "sources":
+            form.addRow("Shape", self.shape)
+            form.addRow("Length", self.extent[0])
+            form.addRow("Height", self.extent[1])
+            form.addRow("Spacing", self.spacing)
+            form.addRow(self.elements)
             form.addRow("Directivity", self.directivity)
             form.addRow(self.directivity_index)
             form.addRow(self.pattern)
@@ -709,6 +740,23 @@ class PointPage(Page):
             self.gain.setValue(item.gain_db)
             self.eq.setText("" if item.eq_db is None else ", ".join(f"{v:g}" for v in item.eq_db))
             self.delay.setValue(item.delay_ms)
+            shape = "line" if item.line_m else "surface" if item.surface_m else "point"
+            self.shape.setCurrentText(shape)
+            if item.line_m is not None:
+                self.extent[0].setValue(item.line_m)
+            elif item.surface_m is not None:
+                for box, value in zip(self.extent, item.surface_m, strict=True):
+                    box.setValue(value)
+            self.spacing.setValue(item.spacing_m)
+            self._form.labelForField(self.extent[0]).setText(
+                "Width" if shape == "surface" else "Length"
+            )
+            self._form.setRowVisible(self.extent[0], shape != "point")
+            self._form.setRowVisible(self.extent[1], shape == "surface")
+            self._form.setRowVisible(self.spacing, shape != "point")
+            count = len(item.elements())
+            self.elements.setText(f"{count} uncorrelated point sources" if count > 1 else "")
+            self._form.setRowVisible(self.elements, count > 1)
             if self.pattern_window is not None and self.pattern_window.isVisible():
                 self.show_pattern()
 
@@ -773,6 +821,20 @@ class PointPage(Page):
         self.pattern_window.setWindowTitle(f"Directivity of {self._item().name}")
         self.pattern_window.show()
         self.pattern_window.raise_()
+
+    def _shape(self, index: int) -> None:
+        shape = SHAPES[index]
+        width, height = (box.value() for box in self.extent)
+        if shape == "line":
+            self._update(line_m=width, surface_m=None)
+        elif shape == "surface":
+            self._update(line_m=None, surface_m=[width, height])
+        else:
+            self._update(line_m=None, surface_m=None)
+
+    def _extent(self) -> None:
+        if not self._loading:
+            self._shape(self.shape.currentIndex())
 
     def _level(self, value: float) -> None:
         self._update(level_db=value)

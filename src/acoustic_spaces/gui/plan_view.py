@@ -726,6 +726,15 @@ class PlanCanvas(QWidget):
                 else (SOURCE_COLOUR if group == "sources" else LISTENER_COLOUR)
             )
             p = self.to_screen(position)
+            if group == "sources" and item.extended:  # a line or surface, seen from above
+                corners = item.outline()[:, :2] + (position - np.asarray(item.position[:2]))
+                outline = QPolygonF([self.to_screen(c) for c in corners])
+                painter.setPen(QPen(_qcolor(colour, 200), 3))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                if len(corners) > 2:
+                    painter.drawPolygon(outline)
+                else:
+                    painter.drawPolyline(outline)
             forward = np.asarray(item.orientation.forward()[:2], dtype=float)
             if np.linalg.norm(forward) > 0.2:
                 forward = forward / np.linalg.norm(forward) * 18

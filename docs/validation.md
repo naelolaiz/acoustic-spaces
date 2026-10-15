@@ -49,6 +49,12 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   sources together 3 dB louder and as clear as one, and less clear with one of them
   150 ms late; the speech spectra of IEC 60268-16 summing to 0 dB(A); and the STI of
   female speech, weighted to the treble, higher where the bass is blurred;
+- line and surface sources: a 40 m line's free-field G at 2 and 4 m equal to the sum
+  of its 80 points with their air absorption (to 1e-9 dB), falling 3.31 dB per
+  doubling of distance as the continuous line does; an 8 x 8 m Lambert surface within
+  0.15 dB of the integral over the continuous square at 1 and 2 m, and silent behind;
+  in the shoebox a 3 m line as loud as a point source (within 0.6 dB at 2000 rays per
+  band) and its T30 within 10 % of the point source's at 30,000 rays per band;
 - every ISO 3382-1 parameter on synthetic exponential decays, and the air
   absorption against the ISO 9613-1 table;
 - the further parameters against responses whose values are known: LF and LFC of one

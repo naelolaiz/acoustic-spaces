@@ -28,6 +28,7 @@ from acoustic_spaces.viz import (
     UNASSIGNED_COLOUR,
     _outline,
     balloon_polydata,
+    extent_polydata,
     plot_coverage,
     plot_paths,
     room_polydata,
@@ -212,6 +213,17 @@ class Viewport(QWidget):
                 self._actors[_key(actor)] = (group, index)
                 self._markers.append(actor)
                 parts = self._point_actors[group, index] = [actor]
+                extent = extent_polydata(item, 0.5 * radius) if group == "sources" else None
+                if extent is not None:  # a line or surface source
+                    shape = plotter.add_mesh(
+                        extent,
+                        color=SELECTED_COLOUR if chosen else colour,
+                        opacity=0.6,
+                        render=False,
+                    )
+                    self._actors[_key(shape)] = (group, index)
+                    self._markers.append(shape)
+                    parts.append(shape)
                 directivity = room.directivities[index] if group == "sources" else None
                 if directivity is None or not directivity.omni:
                     arrow = pv.Arrow(

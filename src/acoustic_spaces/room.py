@@ -114,7 +114,11 @@ class Room:
 
         sources_inside = listeners_inside = None
         if report.closed:
-            sources_inside = points_inside(mesh, [s.position for s in scene.sources])
+            # A line or surface source is inside when all its point sources are.
+            elements = [s.elements() for s in scene.sources]
+            inside = points_inside(mesh, np.vstack(elements)) if elements else np.zeros(0, bool)
+            ends = np.cumsum([len(e) for e in elements])[:-1]
+            sources_inside = np.array([part.all() for part in np.split(inside, ends)], bool)
             listeners_inside = points_inside(mesh, [lis.position for lis in scene.listeners])
 
         names = set(mesh.label_names())
@@ -193,10 +197,14 @@ class Room:
                 continue
             for item, ok in zip(items, inside, strict=True):
                 if not ok:
-                    out.append(f"{kind} {item.name!r} at {list(item.position)} is outside the room")
+                    where = "reaches" if getattr(item, "extended", False) else "is"
+                    out.append(
+                        f"{kind} {item.name!r} at {list(item.position)} {where} outside the room"
+                    )
         for listener in self.scene.listeners:
             for source in self.scene.sources:
-                if math.dist(listener.position, source.position) < MIN_SOURCE_DISTANCE_M:
+                gap = np.linalg.norm(source.elements() - np.asarray(listener.position), axis=1)
+                if gap.min() < MIN_SOURCE_DISTANCE_M:
                     out.append(
                         f"listener {listener.name!r} at {list(listener.position)} is within "
                         f"{MIN_SOURCE_DISTANCE_M * 100:g} cm of source {source.name!r}, too close "

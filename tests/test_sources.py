@@ -1,5 +1,6 @@
 """Sources: sound power per band, speech spectra, the feed's gain, equalizer and delay,
-and what they do to levels, impulse responses, the STI and coverage maps."""
+line and surface sources, and what they do to levels, impulse responses, the STI and
+coverage maps."""
 
 import math
 from pathlib import Path
@@ -10,7 +11,8 @@ from pydantic import ValidationError
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.air import energy_attenuation_per_m
-from acoustic_spaces.engine import coverage_map
+from acoustic_spaces.directivity import lambert
+from acoustic_spaces.engine import coverage_map, early_paths
 from acoustic_spaces.materials.bands import gain_levels, power_levels
 from acoustic_spaces.parameters import (
     A_WEIGHTING_DB,
@@ -19,6 +21,7 @@ from acoustic_spaces.parameters import (
     speech_transmission_index,
 )
 from acoustic_spaces.scene import Coverage, Source
+from acoustic_spaces.scene.model import MAX_ELEMENTS
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
 FS = 48_000
@@ -85,7 +88,7 @@ def test_sti_weighted_for_female_speech() -> None:
         speech_transmission_index(energy, 1e-3, talker="child")
 
 
-def _free_field(tmp_path: Path, **source) -> Scene:
+def _free_field(tmp_path: Path, listeners=((4.0, 0.0, 0.0),), **source) -> Scene:
     # One absorbing triangle 100 m away: free field for a listener 4 m from the source.
     (tmp_path / "far.obj").write_text("v 100 0 0\nv 100 0.1 0\nv 100 0 0.1\nf 1 2 3\n")
     return Scene.model_validate(
@@ -94,7 +97,7 @@ def _free_field(tmp_path: Path, **source) -> Scene:
             "materials": {"absorber": {"absorption": [1.0] * 8, "scattering": 0.0}},
             "default_material": "absorber",
             "sources": [{"name": "s", "position": [0, 0, 0], **source}],
-            "listeners": [{"name": "l", "position": [4, 0, 0]}],
+            "listeners": [{"name": f"l{i}", "position": p} for i, p in enumerate(listeners)],
             "simulation": {
                 "ir_length_s": 0.2,
                 "late": {"rays": 500},
@@ -218,3 +221,94 @@ def test_coverage_takes_the_speech_spectrum() -> None:
     reference = 10 * math.log10(1 / (4 * math.pi * 100))
     expected = np.broadcast_to(power + reference, values["spl"].shape)
     np.testing.assert_allclose(values["spl"] - values["g"], expected, atol=0.01)
+
+
+def test_line_and_surface_sources_are_made_of_points() -> None:
+    line = _source(line_m=2.0, spacing_m=0.5)
+    np.testing.assert_allclose(line.elements()[:, 1], [-0.75, -0.25, 0.25, 0.75])
+    np.testing.assert_allclose(line.elements()[:, [0, 2]], 0.0)
+    # Along the source's left and up axes: turned 90 degrees, the line runs along -x.
+    turned = _source(line_m=2.0, spacing_m=0.5, orientation={"yaw": 90.0})
+    np.testing.assert_allclose(turned.elements()[:, 0], [0.75, 0.25, -0.25, -0.75], atol=1e-12)
+    surface = _source(surface_m=(1.0, 0.6), spacing_m=0.5)
+    assert surface.extended and not _source().extended
+    assert surface.elements().shape == (4, 3)  # 2 across, 2 up
+    np.testing.assert_allclose(np.unique(surface.elements()[:, 2]), [-0.15, 0.15])
+    np.testing.assert_allclose(_source().elements(), [[0.0, 0.0, 0.0]])
+    with pytest.raises(ValidationError, match="not both"):
+        _source(line_m=1.0, surface_m=(1.0, 1.0))
+    with pytest.raises(ValidationError, match=f"more than {MAX_ELEMENTS} point sources"):
+        _source(surface_m=(20.0, 20.0), spacing_m=0.5)
+
+
+def test_lambert_radiation() -> None:
+    balloon = lambert()
+    forward, sideways = np.array([[1.0, 0, 0]]), np.array([[0.0, 1, 0]])
+    np.testing.assert_allclose(balloon.energy(forward), 4.0, rtol=0.01)
+    np.testing.assert_allclose(balloon.energy(sideways), 0.0, atol=0.05)
+    np.testing.assert_allclose(balloon.energy(-forward), 0.0, atol=1e-12)
+    np.testing.assert_allclose(balloon.energy(np.array([[0.5, 0.0, 0.75**0.5]])), 2.0, rtol=0.02)
+    np.testing.assert_allclose(balloon.index(), 10 * np.log10(4), atol=0.05)
+
+
+def test_line_source_falls_3_db_per_doubling(tmp_path: Path) -> None:
+    scene = _free_field(tmp_path, listeners=[(2.0, 0, 0), (4.0, 0, 0)], line_m=40.0)
+    result = simulate(Room.from_scene(scene))
+    assert result.details["s"]["elements"] == 80
+    near, far = (response.parameters().g for response in result)
+    # Close to a long line its sound spreads as a cylinder, not a sphere: about 3 dB per
+    # doubling of distance (3.3 dB for 40 m at 2 and 4 m), not a point source's 6 dB;
+    # more in the treble, which the air takes from the farther points.
+    np.testing.assert_allclose((near - far)[:5], 3.31, atol=0.02)
+    # The sum of its uncorrelated points, each with an equal share of the power.
+    points = scene.sources[0].elements()
+    m = energy_attenuation_per_m(20.0, 50.0)
+    for g, x in ((near, 2.0), (far, 4.0)):
+        d = np.linalg.norm(points - [x, 0, 0], axis=1)[:, None]
+        expected = 10 * np.log10(100 / len(points) * np.sum(np.exp(-d * m) / d**2, axis=0))
+        np.testing.assert_allclose(g, expected, atol=1e-9)
+    paths = early_paths(Room.from_scene(scene), "s", "l0")
+    assert len(paths) == 80 and np.all(paths.order == 0)
+    np.testing.assert_allclose(paths.energy.sum(axis=0), result[("s", "l0")].early.energy.sum(0))
+
+
+def test_surface_source_radiates_forward(tmp_path: Path) -> None:
+    listeners = [(1.0, 0, 0), (2.0, 0, 0), (-2.0, 0, 0)]
+    scene = _free_field(tmp_path, listeners, surface_m=(8.0, 8.0), directivity="lambert")
+    result = simulate(Room.from_scene(scene))
+    near, far, behind = (response.parameters().g[3] for response in result)
+    # A surface's points radiate by Lambert's law: the continuous square's integral,
+    # which falls slowly with distance near it, and nothing behind.
+    side = (np.arange(800) + 0.5) / 100 - 4.0
+    y, z = np.meshgrid(side, side)
+    for g, x in ((near, 1.0), (far, 2.0)):
+        d2 = x**2 + y**2 + z**2
+        energy = np.sum(4 * x / np.sqrt(d2) / (4 * math.pi * d2)) / side.size**2
+        assert g == pytest.approx(10 * np.log10(energy * 4 * math.pi * 100), abs=0.15)
+    assert near - far < 1.5
+    assert np.isnan(behind) or behind < -60
+
+
+def test_extended_sources_in_the_room() -> None:
+    scene = _shoebox(line_m=3.0, spacing_m=1.0)
+    scene.simulation.late.rays = 3000
+    room = Room.from_scene(scene)
+    assert room.problems() == []
+    result = simulate(room)
+    info = result.details[scene.sources[0].name]
+    assert info["elements"] == 3 and info["rays"] == 3000  # 1000 rays per band each
+    # The same room, as loud as a point source of the same power: a few rays' decays are
+    # too noisy to compare (at 30,000 rays per band their T30 agree within 10 %).
+    point = next(iter(simulate(Room.from_scene(_shoebox()))))
+    np.testing.assert_allclose(next(iter(result)).parameters().g, point.parameters().g, atol=0.6)
+    # Coverage maps take the line's points as well.
+    scene.simulation.late.method = "statistical"
+    scene.simulation.early.max_order = 1
+    values = coverage_map(Room.from_scene(scene), settings=Coverage(spacing=2.0)).get().values
+    assert np.all(np.isfinite(values["spl"]))
+    long = _shoebox(line_m=40.0)
+    assert any("reaches outside the room" in p for p in Room.from_scene(long).problems())
+    with pytest.raises(ValueError, match="the wave solver takes point sources only"):
+        wave = _shoebox(line_m=1.0)
+        wave.simulation.wave.enabled = True
+        simulate(Room.from_scene(wave))

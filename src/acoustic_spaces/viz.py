@@ -210,6 +210,18 @@ def balloon_polydata(
     return sphere
 
 
+def extent_polydata(source, radius: float) -> pyvista.PolyData | None:
+    """A line source as a tube of ``radius`` (m), a surface source as its rectangle, or
+    None for a point source."""
+    if not source.extended:
+        return None
+    pv = _pyvista()
+    corners = source.outline()
+    if len(corners) == 2:
+        return pv.Line(corners[0], corners[1]).tube(radius=radius)
+    return pv.PolyData(corners, faces=[4, 0, 1, 2, 3])
+
+
 def plot_room(
     room: Room,
     plotter: pyvista.Plotter | None = None,
@@ -256,6 +268,9 @@ def plot_room(
     points, names = [], []
     for source, directivity in zip(room.scene.sources, room.directivities, strict=True):
         plotter.add_mesh(pv.Sphere(radius=radius, center=source.position), color=SOURCE_COLOUR)
+        extent = extent_polydata(source, radius)
+        if extent is not None:
+            plotter.add_mesh(extent, color=SOURCE_COLOUR, opacity=0.6)
         if not directivity.omni:
             direction = source.orientation.forward()
             shape = pv.Arrow(start=source.position, direction=direction, scale=arrow)
@@ -1038,6 +1053,11 @@ def plot_map(
             _floor_plan(ax, room)
             for source in room.scene.sources:
                 x, y, _ = source.position
+                if source.extended:
+                    corners = source.outline()
+                    if len(corners) > 2:
+                        corners = np.vstack([corners, corners[:1]])
+                    ax.plot(corners[:, 0], corners[:, 1], "-", color=SOURCE_COLOUR, lw=2.5)
                 ax.plot([x], [y], "o", color=SOURCE_COLOUR, ms=7, mec="white", mew=0.8)
                 ax.annotate(
                     source.name,
