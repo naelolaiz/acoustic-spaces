@@ -12,6 +12,9 @@ Two ways to find the candidate image sources, then one exact check:
 expected planes in order and reach the source unobstructed. Paths found are exact
 whichever way they were proposed. A path through the edge where two planes meet (a
 corner of a box, with the listener and source placed symmetrically) is kept once.
+
+A path may pass straight through surfaces that let sound through (partitions, doors,
+openings): its energy is then multiplied by their transmission, band by band.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from acoustic_spaces.directivity import Directivity
-from acoustic_spaces.engine.model import TraceModel, source_weights
+from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 
 #: Distance (metres) below which a point counts as lying on a plane.
 _ON_PLANE = 1e-9
@@ -46,10 +49,14 @@ class EarlyReflections:
     #: (n,) the edge a path bends over (an index of the model's diffracting edges, see
     #: :func:`~acoustic_spaces.engine.diffraction.find_edges`), or -1 for specular paths.
     edge: np.ndarray | None = None
+    #: (n,) how many surfaces that let sound through a path passes, openings aside.
+    crossings: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         if self.edge is None:
             self.edge = np.full(len(self.order), -1, dtype=np.int64)
+        if self.crossings is None:
+            self.crossings = np.zeros(len(self.order), dtype=np.int64)
 
     def __len__(self) -> int:
         return len(self.order)
@@ -83,6 +90,7 @@ class EarlyReflections:
             points=[x for p in parts for x in p.points],
             faces=[x for p in parts for x in p.faces],
             edge=np.concatenate([p.edge for p in parts]),
+            crossings=np.concatenate([p.crossings for p in parts]),
         )
         return out.sorted()
 
@@ -98,19 +106,32 @@ class EarlyReflections:
             points=[self.points[i] for i in idx],
             faces=[self.faces[i] for i in idx],
             edge=self.edge[idx],
+            crossings=self.crossings[idx],
         )
 
 
 def ray_traced_candidates(
     model: TraceModel, source: np.ndarray, max_order: int, rays: int, threads: int = 0
 ) -> list[np.ndarray]:
-    """Plane sequences hit by ``rays`` specular rays; entry k-1 has shape (n, k)."""
+    """Plane sequences hit by ``rays`` specular rays, which pass through surfaces that
+    let sound through (forking where those also reflect); entry k-1 has shape (n, k)."""
     from acoustic_spaces import _native
 
     if max_order <= 0:
         return []
+    passing = np.zeros(0, dtype=np.uint8)
+    if model.transmission is not None:
+        # 0: reflects, 1: reflects and lets sound through, 2: lets it through only.
+        through = np.any(model.transmission > 0.0, axis=1)
+        reflects = np.any(model.absorption < 1.0, axis=1)
+        passing = np.where(through, np.where(reflects, 1, 2), 0).astype(np.uint8)
     faces = _native.specular_sequences(
-        model.bvh, np.asarray(source, dtype=np.float64), int(rays), int(max_order), int(threads)
+        model.bvh,
+        np.asarray(source, dtype=np.float64),
+        int(rays),
+        int(max_order),
+        int(threads),
+        passing,
     )
     planes = np.where(faces >= 0, model.face_plane[np.maximum(faces, 0)], -1)
     out = []
@@ -135,8 +156,7 @@ def exhaustive_candidates(
         chunk = max(1, 4_000_000 // max(1, model.plane_count))
         for start in range(0, len(seqs), chunk):
             s, img = seqs[start : start + chunk], images[start : start + chunk]
-            dist = img @ normals.T - offsets  # (n, planes)
-            ok = dist > _ON_PLANE if model.oriented else np.abs(dist) > _ON_PLANE
+            ok = model.in_front(img @ normals.T - offsets, _ON_PLANE)  # (n, planes)
             if s.shape[1]:
                 ok[np.arange(len(s)), s[:, -1]] = False
             rows, cols = np.nonzero(ok)
@@ -227,6 +247,8 @@ def find_paths(
         points = [None] * (k + 1)
         points[k] = current.copy()
         ignore = np.full(n, -1, dtype=np.int64)
+        through = np.ones((n, bands))
+        crossings = np.zeros(n, dtype=np.int64)
         for j in range(k - 1, -1, -1):
             plane = seqs[:, j]
             # A reflection point on an edge already lies on the next plane too: the path
@@ -238,14 +260,14 @@ def find_paths(
             delta = chain[j + 1] - current
             length = np.linalg.norm(delta, axis=1)
             direction = delta / np.maximum(length, 1e-300)[:, None]
-            t, face = model.intersect(current, direction, length, ignore)
-            face = np.where(trace, face, -1)
+            face, current, share, crossed = _towards_plane(
+                model, current, direction, length, ignore, plane, trace, tolerance
+            )
+            through *= share
+            crossings += crossed
             hit = face >= 0
-            current = current + direction * np.where(hit, t, 0.0)[:, None]
             valid &= hit | corner
-            # A hit on another face exactly where it meets the expected plane also counts.
-            wrong = hit & (model.face_plane[np.maximum(face, 0)] != plane)
-            for i in np.flatnonzero(wrong | corner):
+            for i in np.flatnonzero(corner):
                 face[i] = _face_at(model, plane[i], current[i], tolerance)
             valid &= face >= 0
             faces[:, j] = face
@@ -254,8 +276,10 @@ def find_paths(
         delta = source - current
         length = np.linalg.norm(delta, axis=1)
         direction = delta / np.maximum(length, 1e-300)[:, None]
-        _, face = model.intersect(current, direction, length * (1.0 - 1e-9), ignore)
-        valid &= face < 0
+        share, crossed = model.passes(current, direction, length * (1.0 - 1e-9), ignore)
+        through *= share
+        crossings += crossed
+        valid &= np.any(through > 0.0, axis=1)
         if not valid.any():
             continue
 
@@ -265,6 +289,7 @@ def find_paths(
         idx = idx[np.sort(unique)]
         dist = distance[idx]
         energy = np.exp(-np.outer(dist, air)) / (4.0 * np.pi * dist[:, None] ** 2)
+        energy *= through[idx]
         before = np.broadcast_to(source, (len(idx), 3))
         for j in range(k):
             energy *= model.reflection(faces[idx, j], points[j][idx] - before, j + 1)
@@ -288,6 +313,51 @@ def find_paths(
                 energy=energy,
                 points=path_points,
                 faces=[faces[i].copy() for i in idx],
+                crossings=crossings[idx],
             )
         )
     return EarlyReflections.concatenate(parts, bands)
+
+
+def _towards_plane(model, start, direction, length, ignore, plane, trace, tolerance):
+    """For the rays from ``start`` (n, 3) along ``direction`` up to ``length`` where
+    ``trace`` holds: the face of ``plane`` (n,) each meets first, passing straight
+    through faces of other planes that let sound through, or -1; where it meets it (the
+    start where it does not); the share of sound that passes the faces on the way (n,
+    bands); and how many of them it crossed that are not openings. A hit on another face
+    exactly where it meets the expected plane counts as on the plane."""
+    n = len(start)
+    bands = model.absorption.shape[1]
+    face = np.full(n, -1, dtype=np.int64)
+    end = start.copy()
+    share = np.ones((n, bands))
+    crossed = np.zeros(n, dtype=np.int64)
+    position = start.copy()
+    remaining = np.asarray(length, dtype=float).copy()
+    skip = np.asarray(ignore, dtype=np.int64).copy()
+    alive = np.flatnonzero(trace)
+    transparent = model.transparent
+    for _ in range(MAX_CROSSINGS + 1):
+        if len(alive) == 0:
+            break
+        t, hit = model.intersect(position[alive], direction[alive], remaining[alive], skip[alive])
+        found = hit >= 0
+        rows, hit, t = alive[found], hit[found], t[found]
+        position[rows] += direction[rows] * t[:, None]
+        remaining[rows] -= t
+        on_plane = model.face_plane[hit] == plane[rows]
+        for i in np.flatnonzero(~on_plane):
+            other = _face_at(model, plane[rows[i]], position[rows[i]], tolerance)
+            if other >= 0:
+                hit[i], on_plane[i] = other, True
+        face[rows[on_plane]] = hit[on_plane]
+        end[rows[on_plane]] = position[rows[on_plane]]
+        rows, hit = rows[~on_plane], hit[~on_plane]
+        if model.transmission is None:
+            break
+        through = model.transmission[hit]
+        share[rows] *= through
+        crossed[rows] += ~transparent[hit]
+        skip[rows] = hit
+        alive = rows[np.any(through > 0.0, axis=1)]
+    return face, end, share, crossed

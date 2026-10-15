@@ -23,6 +23,10 @@ _SIZE_FROM_ORDER = {"none": 1, "direct": 2, "first_order": 3}
 #: as :data:`acoustic_spaces.directivity.PATTERNS`).
 DIRECTIVITY_A = PATTERNS
 
+#: A straight line through more surfaces that let sound through than this counts as
+#: blocked.
+MAX_CROSSINGS = 64
+
 
 def source_weights(
     directivity: Directivity | None,
@@ -46,15 +50,28 @@ class TraceModel:
     bvh: object  # acoustic_spaces._native.Bvh
     #: (F,) plane index of every face.
     face_plane: np.ndarray
-    #: (P, 3) unit plane normals, pointing into the room when ``oriented``.
+    #: (P, 3) unit plane normals, pointing into the room when ``oriented`` (and the plane
+    #: is not two-sided).
     plane_normal: np.ndarray
     #: (P,) plane offsets: points x on plane p satisfy normal[p] . x == offset[p].
     plane_offset: np.ndarray
-    #: True when the inside of the room is known for every face (closed, consistent model).
+    #: True when the rooms are known (a closed model): each face's normal then points
+    #: into the room on its side.
     oriented: bool
     #: (F, bands) random-incidence absorption and scattering coefficients.
     absorption: np.ndarray
     scattering: np.ndarray
+    #: (P,) planes with a room on both sides of some face: a partition between two
+    #: rooms or a free-standing panel; every plane when the model is not ``oriented``.
+    plane_two_sided: np.ndarray | None = None
+    #: (F, bands) share of sound each face lets through (see
+    #: :meth:`acoustic_spaces.scene.Material.transmission_coefficients`), or None.
+    transmission: np.ndarray | None = None
+    #: (F, 2) the room on the front (the side the mesh's face normal points to) and the
+    #: back of each face (an index into ``room_volumes``), or -1.
+    face_room: np.ndarray | None = None
+    #: (R,) volume of each room (m3).
+    room_volumes: np.ndarray | None = None
     #: (F, 2) width and length (m) of the surface each face belongs to (see
     #: :func:`surface_sizes`), when the scattering of a surface's size is added; else
     #: None.
@@ -85,18 +102,21 @@ class TraceModel:
         bvh = _native.Bvh(mesh.vertices, mesh.faces)
 
         normals = mesh.face_normals()
-        inward = room.report.normals_inward
-        oriented = inward is not None
-        if oriented:
-            normals = normals if inward else -normals
-        else:
-            # Unknown inside: give each geometric plane one canonical normal direction.
-            flip = np.take_along_axis(normals, np.abs(normals).argmax(axis=1)[:, None], 1) < 0
-            normals = np.where(flip, -normals, normals)
+        oriented = len(room.air_cells) > 0
+        face_room = room.face_room if oriented else np.full((len(mesh.faces), 2), -1, np.int64)
+        air = face_room >= 0
+        back = air[:, 1] & ~air[:, 0]
+        # A room on both sides, or the inside unknown: one canonical normal direction for
+        # the face's geometric plane.
+        both = air[:, 0] == air[:, 1]
+        flip = np.take_along_axis(normals, np.abs(normals).argmax(axis=1)[:, None], 1) < 0
+        normals = np.where((back | (both & flip[:, 0]))[:, None], -normals, normals)
         offsets = np.einsum("ij,ij->i", normals, mesh.triangles[:, 0])
         keys = np.round(np.column_stack([normals, offsets]) / PLANE_TOLERANCE).astype(np.int64)
         _, first, face_plane = np.unique(keys, axis=0, return_index=True, return_inverse=True)
         face_plane = face_plane.reshape(-1)
+        two_sided = np.zeros(len(first), dtype=bool)
+        np.logical_or.at(two_sided, face_plane, both)
 
         materials = room.scene.materials
         simulation = room.scene.simulation if settings is None else settings
@@ -120,7 +140,80 @@ class TraceModel:
             by_band=simulation.scattering.by_band,
             bands=simulation.bands,
             size_from_order=_SIZE_FROM_ORDER[simulation.early.diffraction],
+            plane_two_sided=two_sided,
+            transmission=room.face_transmission(simulation.bands),
+            face_room=face_room,
+            room_volumes=room.room_volumes if oriented else np.zeros(0),
         )
+
+    def __post_init__(self) -> None:
+        if self.plane_two_sided is None:
+            self.plane_two_sided = np.full(self.plane_count, not self.oriented)
+        if self.face_room is None:
+            self.face_room = np.full((len(self.face_plane), 2), -1, dtype=np.int64)
+        if self.room_volumes is None:
+            self.room_volumes = np.zeros(0)
+        if self.transmission is not None:
+            self.transmission = np.ascontiguousarray(self.transmission, dtype=np.float64)
+
+    @property
+    def transparent(self) -> np.ndarray:
+        """(F,) faces that let all sound through in every band: openings."""
+        if self.transmission is None:
+            return np.zeros(len(self.face_plane), dtype=bool)
+        return np.all(self.transmission >= 1.0, axis=1)
+
+    def in_front(self, distance: np.ndarray, tolerance: float) -> np.ndarray:
+        """Whether points at signed ``distance`` (..., P) from every plane, farther than
+        ``tolerance``, can see it: in front of it, or on either side of a two-sided
+        plane."""
+        return np.where(self.plane_two_sided, np.abs(distance) > tolerance, distance > tolerance)
+
+    def passes(
+        self,
+        origins: np.ndarray,
+        directions: np.ndarray,
+        lengths: np.ndarray,
+        ignore: np.ndarray,
+        transparent_only: bool = False,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """(n, bands) share of sound that travels from each origin ``lengths`` along its
+        direction (unit): the product of the transmission of the faces it crosses, 0
+        where a face lets nothing through; and (n,) how many of those faces it crosses
+        that are not openings. With ``transparent_only``, only openings let sound
+        through."""
+        origins = np.ascontiguousarray(origins, dtype=np.float64).reshape(-1, 3)
+        directions = np.ascontiguousarray(directions, dtype=np.float64).reshape(-1, 3)
+        n = len(origins)
+        bands = self.absorption.shape[1]
+        factor = np.ones((n, bands))
+        crossings = np.zeros(n, dtype=np.int64)
+        lengths = np.broadcast_to(np.asarray(lengths, dtype=np.float64), (n,)).copy()
+        skip = np.broadcast_to(np.asarray(ignore, dtype=np.int64), (n,)).copy()
+        start = origins.copy()
+        alive = np.arange(n)
+        transparent = self.transparent
+        for _ in range(MAX_CROSSINGS + 1):
+            if len(alive) == 0:
+                break
+            t, face = self.intersect(start[alive], directions[alive], lengths[alive], skip[alive])
+            hit = face >= 0
+            rows, face, t = alive[hit], face[hit], t[hit]
+            if self.transmission is None:
+                factor[rows] = 0.0
+                break
+            through = self.transmission[face]
+            if transparent_only:
+                through = np.where(transparent[face][:, None], through, 0.0)
+            factor[rows] *= through
+            crossings[rows] += ~transparent[face]
+            start[rows] += directions[rows] * t[:, None]
+            lengths[rows] -= t
+            skip[rows] = face
+            alive = rows[np.any(through > 0.0, axis=1)]
+        else:
+            factor[alive] = 0.0
+        return factor, crossings
 
     @property
     def band_hz(self) -> tuple[int, ...]:

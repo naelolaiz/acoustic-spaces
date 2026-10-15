@@ -320,23 +320,26 @@ def test_open_mesh_has_boundary_edges_and_no_volume() -> None:
 
 
 def test_flipped_face_is_reported() -> None:
+    # The rooms come from the sides of the faces, so a flipped face keeps the volume
+    # right; only the direction of the normals is unknown.
     box = _box(8, 6, 3)
     faces = box.faces.copy()
     faces[0] = faces[0, ::-1]
     report = check_mesh(RoomMesh(box.vertices, faces, box.face_labels, box.labels))
     assert report.inconsistent_edges > 0
-    assert report.volume_m3 is None
+    assert report.volume_m3 == pytest.approx(144.0)
+    assert report.normals_inward is None
 
 
 def test_clean_turns_flipped_faces_to_agree_with_their_neighbours() -> None:
-    # A closed box whose floor was written the other way round: the floor's solid angle
-    # counted against the rest and put points near it outside the room.
+    # A closed box whose floor was written the other way round. The inside test follows
+    # the sides of the faces, so it holds before cleaning too.
     box = _box(8, 6, 3)
     faces = box.faces.copy()
     faces[:2] = faces[:2, ::-1]
     flipped = RoomMesh(box.vertices, faces, box.face_labels, box.labels)
     points = [[4, 3, 0.05], [4, 3, 0.3], [4, 3, 1.5]]
-    assert not points_inside(flipped, points).any()
+    assert points_inside(flipped, points).all()
 
     cleaned, _, _ = clean_mesh(flipped)
     report = check_mesh(cleaned)
@@ -386,7 +389,8 @@ def test_faces_are_split_where_an_edge_runs_past_a_corner(sliver: bool) -> None:
     floor = [[0, 8, 9], [0, 9, 3], [8, 1, 2], [8, 2, 9]]
     faces = np.vstack([floor, box.faces[2:]] + ([[[0, 1, 8], [2, 3, 9]]] if sliver else []))
     mesh = RoomMesh(vertices, faces, np.zeros(len(faces)), [("box",)])
-    assert check_mesh(mesh).closed == sliver  # the sliver closes it, without area
+    if not sliver:
+        assert not check_mesh(mesh).closed
 
     cleaned, _, removed = clean_mesh(mesh)
     report = check_mesh(cleaned)

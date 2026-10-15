@@ -30,6 +30,11 @@ dB, and from 500 Hz up the two agree within 0.1 dB.
 With ``first_order`` diffraction the same is done for the first-order reflections: sound
 that reflects off a plane and then bends over an edge, and sound that bends over an edge
 and then reflects.
+
+Openings are not there for diffraction: the edges of a doorway are the free edges of the
+wall round it, and diffracted paths pass through openings as through air. Any other
+surface stops them, even one that lets some sound through: the sound diffracted
+through a wall is left out, as it is far weaker than the sound that passes it straight.
 """
 
 from __future__ import annotations
@@ -41,7 +46,7 @@ import numpy as np
 
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.early import EarlyReflections
-from acoustic_spaces.engine.model import TraceModel, source_weights
+from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, Resolution, band_centres
 
 #: Faces that bend away from each other by less than this (degrees) make no
@@ -300,11 +305,12 @@ def find_edges(model: TraceModel, min_bend_deg: float = MIN_BEND_DEG) -> Edges:
     one edge between the same two planes are joined."""
     mesh = model.room.mesh
     vertices = np.asarray(mesh.vertices, dtype=float)
-    faces = mesh.faces
+    solid = np.flatnonzero(~model.transparent)  # openings are holes here
+    faces = mesh.faces[solid]
     first = faces.reshape(-1)
     second = faces[:, [1, 2, 0]].reshape(-1)
     opposite = faces[:, [2, 0, 1]].reshape(-1)
-    owner = np.repeat(np.arange(len(faces)), 3)
+    owner = np.repeat(solid, 3)
     lo, hi = np.minimum(first, second), np.maximum(first, second)
     order = np.argsort(lo * len(vertices) + hi, kind="stable")
     _, starts, uses = np.unique(
@@ -334,7 +340,9 @@ def find_edges(model: TraceModel, min_bend_deg: float = MIN_BEND_DEG) -> Edges:
     side = np.einsum("ij,ij->i", normals[face0], a1)
     keep = theta <= np.pi - math.radians(min_bend_deg)
     if model.oriented:
-        keep &= side < 0.0  # face n lies behind face 0: the solid is inside the angle
+        # Face n lies behind face 0: the solid is inside the angle. Between faces with a
+        # room on both sides (a bent panel), the side that opens wider diffracts.
+        keep &= (side < 0.0) | model.plane_two_sided[model.face_plane[face0]]
     normal = np.where((side > 0.0)[:, None], -normals[face0], normals[face0])
     parts.append((p0, p1, e, a0, normal, (2.0 * np.pi - theta) / np.pi, face0, face1, keep))
     # One face: the free edge of a surface, a wedge open all round.
@@ -473,11 +481,9 @@ class EdgeDiffraction:
         self._source_side = (edge[keep], side[keep], t[keep], rho[keep], phi[keep])
 
     def _facing(self, point: np.ndarray) -> np.ndarray:
-        """Planes that ``point`` lies in front of (on either side when not oriented)."""
+        """Planes that ``point`` lies in front of (on either side of two-sided ones)."""
         distance = self.model.plane_normal @ point - self.model.plane_offset
-        tolerance = _TOLERANCE * self.size
-        front = distance > tolerance if self.model.oriented else np.abs(distance) > tolerance
-        return np.flatnonzero(front)
+        return np.flatnonzero(self.model.in_front(distance, _TOLERANCE * self.size))
 
     def _pairs(self, sides: int) -> tuple[np.ndarray, np.ndarray]:
         edge = np.repeat(np.arange(len(self.edges)), sides)
@@ -757,7 +763,8 @@ class EdgeDiffraction:
         model, edges = self.model, self.edges
         count = len(c["edge"])
         out = np.full((count, 3), -1, dtype=np.int64)
-        specular = np.flatnonzero(paths.edge < 0)
+        # A path through a wall is not the geometric wave a term continues.
+        specular = np.flatnonzero((paths.edge < 0) & (paths.crossings == 0))
         if len(specular) == 0:
             return out
         images = listener + paths.direction[specular] * paths.distance_m[specular, None]
@@ -802,12 +809,42 @@ def _match(queries, query_order, images, orders, index, tolerance, chunk: int = 
     return out
 
 
+def _first_solid(model: TraceModel, start, direction, length, ignore):
+    """How far along each ray from ``start`` the first face within ``length`` that is not
+    an opening lies, and that face, or -1."""
+    n = len(start)
+    face = np.full(n, -1, dtype=np.int64)
+    at = np.zeros(n)
+    travelled = np.zeros(n)
+    skip = np.broadcast_to(np.asarray(ignore, dtype=np.int64), (n,)).copy()
+    transparent = model.transparent
+    alive = np.arange(n)
+    for _ in range(MAX_CROSSINGS + 1):
+        if len(alive) == 0:
+            break
+        t, hit = model.intersect(
+            start[alive] + direction[alive] * travelled[alive, None],
+            direction[alive],
+            length[alive] - travelled[alive],
+            skip[alive],
+        )
+        found = hit >= 0
+        rows, hit = alive[found], hit[found]
+        travelled[rows] += t[found]
+        solid = ~transparent[hit]
+        face[rows[solid]] = hit[solid]
+        at[rows[solid]] = travelled[rows[solid]]
+        alive = rows[~solid]
+        skip[alive] = hit[~solid]
+    return at, face
+
+
 def _clear(model: TraceModel, start: np.ndarray, end: np.ndarray) -> np.ndarray:
-    """Whether nothing lies between each start and end point."""
+    """Whether nothing but openings lies between each start and end point."""
     delta = end - start
     length = np.linalg.norm(delta, axis=1)
     direction = delta / np.maximum(length, 1e-300)[:, None]
-    _, face = model.intersect(start, direction, length * (1.0 - 1e-9), np.full(len(start), -1))
+    _, face = _first_solid(model, start, direction, length * (1.0 - 1e-9), -1)
     return face < 0
 
 
@@ -818,13 +855,15 @@ def _reflect(model: TraceModel, start, image, plane, end):
     delta = image - start
     length = np.linalg.norm(delta, axis=1)
     direction = delta / np.maximum(length, 1e-300)[:, None]
-    t, face = model.intersect(start, direction, length, np.full(len(start), -1))
+    t, face = _first_solid(model, start, direction, length, -1)
     hit = (face >= 0) & (model.face_plane[np.maximum(face, 0)] == plane)
     where = start + direction * np.where(hit, t, 0.0)[:, None]
     delta = end - where
     length = np.linalg.norm(delta, axis=1)
     direction = delta / np.maximum(length, 1e-300)[:, None]
-    _, blocked = model.intersect(where, direction, length * (1.0 - 1e-9), np.where(hit, face, -1))
+    _, blocked = _first_solid(
+        model, where, direction, length * (1.0 - 1e-9), np.where(hit, face, -1)
+    )
     return hit & (blocked < 0), where, np.where(hit, face, -1)
 
 
@@ -838,6 +877,7 @@ def _replace_energy(paths: EarlyReflections, energy: np.ndarray) -> EarlyReflect
         points=paths.points,
         faces=paths.faces,
         edge=paths.edge,
+        crossings=paths.crossings,
     )
 
 

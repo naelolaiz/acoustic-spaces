@@ -20,7 +20,9 @@ octave bands replace the ray-traced ones.
   one.
 - Cells are air when the source reaches them without crossing a surface, so closed
   rooms, open models and thin screens all work; where an open model's air reaches the
-  edge of the grid, the edge absorbs.
+  edge of the grid, the edge absorbs. Openings are not surfaces here: the air flows
+  through them. Surfaces that let only part of the sound through are not modelled, so
+  a model with any stops the wave solver with an error.
 - At these frequencies the source radiates the same way in all directions. The
   listener records the pressure and, from its gradient, the direction the sound comes
   from (first-order Ambisonics), so spatial outputs keep the low end's direction.
@@ -349,6 +351,19 @@ def wave_responses(
     if max_band_hz not in OCTAVE_BANDS_HZ:
         raise ValueError(f"max_band_hz must be one of {OCTAVE_BANDS_HZ}, got {max_band_hz}")
     mesh = model.room.mesh
+    solid = ~model.transparent
+    if model.transmission is not None:
+        partial = np.unique(model.room.face_materials[solid & np.any(model.transmission > 0, 1)])
+        if len(partial):
+            materials = ", ".join(repr(model.room.material_names[m]) for m in partial)
+            raise ValueError(
+                f"the wave solver cannot pass sound through a surface; {materials} let "
+                "some through (openings, with transmission 1, are fine): set "
+                "simulation.wave.enabled to false or give them no transmission"
+            )
+    bvh = model.bvh
+    if not solid.all():  # openings: holes in the grid's walls
+        bvh = _native.Bvh(mesh.vertices, np.ascontiguousarray(mesh.faces[solid]))
     listeners = np.asarray(listeners, dtype=float).reshape(-1, 3)
     points = np.vstack([np.asarray(source, dtype=float).reshape(1, 3), listeners])
     centres = band_centres(model.bands)
@@ -376,7 +391,7 @@ def wave_responses(
     drive[: min(len(signal), steps)] = signal[:steps]
     probes = np.vstack([_probe_points(p, h) for p in listeners])
     # One run per set of absorption coefficients: bands with the same ones share it.
-    coefficients = np.round(model.absorption[:, :bands], 6)
+    coefficients = np.round(model.absorption[solid, :bands], 6)
     sets: list[np.ndarray] = []
     band_runs = []
     for b in range(bands):
@@ -388,7 +403,7 @@ def wave_responses(
     info: dict[str, float] = {}
     for k, absorption in enumerate(sets):
         solver = _native.WaveSolver(
-            model.bvh,
+            bvh,
             np.ascontiguousarray(admittance(absorption)),
             origin,
             h,

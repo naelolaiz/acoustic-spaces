@@ -7,7 +7,10 @@ the stochastic tracer: by default between the specular direction and a random La
 direction, weighted by the wall's scattering coefficient in that band (with the
 scattering of the wall's size added), or, with the scene's random scattering,
 specularly or with the scattering coefficient as probability in a Lambert direction.
-Particles that find a gap in an open model fly on out of it.
+At a surface that lets sound through, a particle passes straight on with the share of
+the surviving energy that passes and reflects otherwise, keeping all that survives, so
+openings let every particle through. Particles that find a gap in an open model fly on
+out of it.
 """
 
 from __future__ import annotations
@@ -97,6 +100,7 @@ def trace_particles(
     start = [origins]
     direction = [directions]
     energies = [energy]
+    reflections = [np.zeros(count, dtype=np.int64)]
     alive = np.ones(count, dtype=bool)
     face = np.full(count, -1, dtype=np.int64)
     for order in range(1, MAX_REFLECTIONS + 1):
@@ -122,18 +126,29 @@ def trace_particles(
             new_d = mixed / np.linalg.norm(mixed, axis=1, keepdims=True)
         else:
             new_d = np.where((rng.random(count) < s)[:, None], _lambert(normal, rng), specular)
-        kept = (1.0 - model.absorption[np.maximum(face, 0), band]) * np.exp(-air * dist)
+        kept = 1.0 - model.absorption[np.maximum(face, 0), band]
+        passed = np.zeros(count, dtype=bool)
+        if model.transmission is not None:
+            through = model.transmission[np.maximum(face, 0), band]
+            survives = kept + through
+            share = through / np.where(survives > 0.0, survives, 1.0)
+            passed = alive & (rng.random(count) < share)
+            new_d = np.where(passed[:, None], d, new_d)
+            kept = survives
+        kept = kept * np.exp(-air * dist)
         # A particle that escaped keeps flying along its last segment (no next one).
         t_next = np.where(alive, t + dist / c, np.inf)
         t0.append(t_next)
         start.append(np.where(alive[:, None], p + dist[:, None] * d, p))
         direction.append(np.where(alive[:, None], new_d, d))
         energies.append(np.where(alive, energies[-1] * kept, energies[-1]))
+        reflections.append(reflections[-1] + (alive & ~passed))
         if not np.any(alive & (t_next <= duration)):
             break
         alive &= t_next <= duration
     t0_all, start_all = np.array(t0), np.array(start)
     direction_all, energy_all = np.array(direction), np.array(energies)
+    reflections_all = np.array(reflections)
 
     times = np.linspace(0.0, duration, frames)
     positions = np.zeros((frames, count, 3))
@@ -145,7 +160,7 @@ def trace_particles(
         elapsed = time - t0_all[s, columns]
         positions[f] = start_all[s, columns] + c * elapsed[:, None] * direction_all[s, columns]
         energy_out[f] = energy_all[s, columns] * np.exp(-air * c * elapsed)
-        order_out[f] = s
+        order_out[f] = reflections_all[s, columns]
     return Particles(times, positions, energy_out, order_out, OCTAVE_BANDS_HZ[band], source)
 
 

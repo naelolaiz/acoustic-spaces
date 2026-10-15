@@ -181,28 +181,69 @@ void parallel_for(std::size_t n, std::size_t threads, Body body) {
     for (auto &t : pool) t.join();
 }
 
+// How a face treats a specular ray in specular_sequences: it reflects it, it reflects
+// it and lets it through (a partition), or it only lets it through (an opening).
+enum class Passing : std::uint8_t { kReflects = 0, kBoth = 1, kThrough = 2 };
+
+// Faces that let sound through, crossed on one path of specular_sequences: only that
+// many of those that also reflect (each one forks the path), and only that many in all.
+constexpr std::size_t kMaxForks = 2;
+constexpr std::size_t kMaxCrossings = 64;
+// Rows one ray of specular_sequences may give, its forks included.
+constexpr std::size_t kMaxRows = 64;
+
 // Face indices hit by `rays` specular rays from `source` (Fibonacci directions), up to
-// `max_order` reflections each; rays x max_order, -1 once a ray leaves the model.
+// `max_order` reflections each; one row of max_order per ray, -1 once a ray leaves the
+// model. With `passing` (one Passing per face), a ray passes straight through faces
+// that let sound through: past an opening, and both through and off a partition, each
+// branch giving its own row (the reflections only, not the crossings).
 inline std::vector<std::int64_t> specular_sequences(const Bvh &bvh, const Vec3 &source,
                                                     std::size_t rays, std::size_t max_order,
-                                                    std::size_t threads) {
-    std::vector<std::int64_t> out(rays * max_order, -1);
+                                                    std::size_t threads,
+                                                    const std::vector<std::uint8_t> &passing = {}) {
+    std::vector<std::vector<std::int64_t>> rows(rays);
     const double far = 1e6 * bvh.scale();
+    struct Branch {
+        Vec3 pos, dir;
+        std::int64_t last;
+        std::size_t forks, crossings;
+        std::vector<std::int64_t> faces;
+    };
     parallel_for(rays, threads, [&](std::size_t begin, std::size_t end, std::size_t) {
+        std::vector<Branch> stack;
         for (std::size_t i = begin; i < end; ++i) {
-            Vec3 pos = source;
-            Vec3 dir = fibonacci_sphere(i, rays);
-            std::int64_t last = -1;
-            for (std::size_t k = 0; k < max_order; ++k) {
-                const Hit hit = bvh.intersect(pos, dir, far, last);
-                if (!hit.found()) break;
-                out[i * max_order + k] = hit.face;
-                pos = pos + dir * hit.t;
-                dir = reflect(dir, bvh.normal(static_cast<std::size_t>(hit.face)));
-                last = hit.face;
+            auto &out = rows[i];
+            stack.clear();
+            stack.push_back(Branch{source, fibonacci_sphere(i, rays), -1, 0, 0, {}});
+            while (!stack.empty() && out.size() < kMaxRows * max_order) {
+                Branch branch = std::move(stack.back());
+                stack.pop_back();
+                while (branch.faces.size() < max_order) {
+                    const Hit hit = bvh.intersect(branch.pos, branch.dir, far, branch.last);
+                    if (!hit.found()) break;
+                    const auto face = static_cast<std::size_t>(hit.face);
+                    const auto kind = passing.empty() ? Passing::kReflects
+                                                      : static_cast<Passing>(passing[face]);
+                    branch.pos = branch.pos + branch.dir * hit.t;
+                    branch.last = hit.face;
+                    if (kind != Passing::kReflects) {
+                        if (++branch.crossings > kMaxCrossings) break;
+                        if (kind == Passing::kThrough) continue;
+                        if (branch.forks < kMaxForks) {
+                            stack.push_back(branch);
+                            ++stack.back().forks;
+                        }
+                    }
+                    branch.faces.push_back(hit.face);
+                    branch.dir = reflect(branch.dir, bvh.normal(face));
+                }
+                branch.faces.resize(max_order, -1);
+                out.insert(out.end(), branch.faces.begin(), branch.faces.end());
             }
         }
     });
+    std::vector<std::int64_t> out;
+    for (const auto &r : rows) out.insert(out.end(), r.begin(), r.end());
     return out;
 }
 
@@ -252,6 +293,14 @@ struct StochasticSettings {
     double split_ratio = 4.0;
     std::size_t max_split = 8;
     std::size_t max_family = 256;
+    // With StochasticScene::face_room: the weight window's expected energy in each room
+    // relative to the source's room (split_target is the source room's). A ray that
+    // meets a surface letting sound through into a room with a level then always goes
+    // on both ways: a copy carries the share that passes through, the ray the share
+    // that reflects; the window keeps the copies in each room near that room's level.
+    // Without one, or in the first batch (no split_target), the ray goes one way or
+    // the other, at random in proportion to the two shares.
+    std::vector<double> room_level;
     std::uint64_t seed = 0;
     std::size_t threads = 0;
 };
@@ -317,6 +366,14 @@ struct StochasticScene {
     // centre frequency of each band (Hz), for the scattering of a surface's limited size.
     const double *surface_size = nullptr;
     const double *band_hz = nullptr;
+    // Optional: the share of sound each face lets through (faces x bands), and the room
+    // on the front (the side its normal points to) and on the back of each face (faces
+    // x 2, -1 for none). A ray passes into the room on the far side; with no room
+    // there (the outside), what passes counts as absorbed. Without face_room, every
+    // face lets its share through. source_room is the room the source is in.
+    const double *transmission = nullptr;
+    const std::int64_t *face_room = nullptr;
+    std::int64_t source_room = -1;
     std::vector<Vec3> receivers;
     std::vector<Vec3> directions;  // unit vectors for directional bins; may be empty
     MapGrid map;                   // no points: no map
@@ -346,10 +403,38 @@ struct RayState {
     // exactly for the paths it covers).
     std::array<double, kMaxBands> seen, alone;
     double travelled;
-    int order;
+    int order;           // reflections so far (passing through a face is none)
     std::int64_t last;   // face of the last reflection, ignored by the next intersection
     Rng rng;
+    std::int64_t room;   // the room the ray is in (StochasticScene::face_room), or -1
 };
+
+// The share of sound per band that travels from `origin` along `dir` (unit) for
+// `length` metres: 1 in the open, the product of the transmission of the faces it
+// crosses; false (and no share) where a face lets nothing through.
+inline bool passing_share(const StochasticScene &scene, const Vec3 &origin, const Vec3 &dir,
+                          double length, std::int64_t ignore, double *share) {
+    const Bvh &bvh = *scene.bvh;
+    const std::size_t bands = scene.bands;
+    std::fill(share, share + bands, 1.0);
+    if (scene.transmission == nullptr) return !bvh.occluded(origin, dir, length, ignore);
+    Vec3 pos = origin;
+    for (std::size_t k = 0; k <= kMaxCrossings; ++k) {
+        const Hit hit = bvh.intersect(pos, dir, length, ignore);
+        if (!hit.found()) return true;
+        const double *tau = scene.transmission + static_cast<std::size_t>(hit.face) * bands;
+        bool any = false;
+        for (std::size_t b = 0; b < bands; ++b) {
+            share[b] *= tau[b];
+            any = any || share[b] > 0.0;
+        }
+        if (!any) return false;
+        pos = pos + dir * hit.t;
+        length -= hit.t;
+        ignore = hit.face;
+    }
+    return false;
+}
 
 struct Accumulator {
     const StochasticScene &scene;
@@ -503,6 +588,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     [](double r) { return !(r > 0.0); }) ||
         settings.dir_time_step <= 0.0 || settings.window_time_step <= 0.0 ||
         !(settings.split_ratio > 1.0) || settings.max_split < 2 || settings.max_family < 1 ||
+        std::any_of(settings.room_level.begin(), settings.room_level.end(),
+                    [](double v) { return !(v >= 0.0); }) ||
         (!settings.covered_time.empty() &&
          settings.covered_time.size() != scene.receivers.size())) {
         throw std::invalid_argument("trace_stochastic: bad settings");
@@ -565,7 +652,15 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         detail::Accumulator acc{scene, settings, out};
         acc.map_bottom = map_bottom;
         acc.map_top = map_top;
-        std::array<double, kMaxBands> reflected{}, rain{}, scatter{}, counted{};
+        std::array<double, kMaxBands> reflected{}, rain{}, scatter{}, counted{}, through{},
+            share{}, seen_before{}, alone_before{};
+        // The weight window's level of a room relative to the source's.
+        const auto level = [&](std::int64_t room) {
+            if (room < 0 || static_cast<std::size_t>(room) >= settings.room_level.size()) {
+                return settings.room_level.empty() ? 1.0 : 0.0;
+            }
+            return settings.room_level[static_cast<std::size_t>(room)];
+        };
 
         std::vector<detail::RayState> stack;
 
@@ -584,15 +679,16 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
             stack.clear();
             std::array<double, kMaxBands> whole{};
             whole.fill(1.0);
-            stack.push_back(
-                detail::RayState{scene.source, first_dir, start, whole, whole, 0.0, 0, -1, first_rng});
+            stack.push_back(detail::RayState{scene.source, first_dir, start, whole, whole, 0.0, 0,
+                                             -1, first_rng, scene.source_room});
             std::size_t family = 1;
 
             while (!stack.empty()) {
                 detail::RayState ray_state = stack.back();
                 stack.pop_back();
                 ++out.traced_rays;
-                auto &[pos, dir, energy, seen, alone, travelled, order, last, rng] = ray_state;
+                auto &[pos, dir, energy, seen, alone, travelled, order, last, rng, room] =
+                    ray_state;
 
                 while (travelled < max_length) {
                     const Hit hit = bvh.intersect(pos, dir, max_length - travelled, last);
@@ -640,11 +736,36 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     pos = pos + dir * hit.t;
                     const auto face = static_cast<std::size_t>(hit.face);
                     Vec3 n = bvh.normal(face);
-                    if (dot(n, dir) > 0.0) n = -n;  // face the side the ray came from
-                    ++order;
+                    const bool from_back = dot(n, dir) > 0.0;
+                    if (from_back) n = -n;  // face the side the ray came from
                     last = hit.face;
 
                     const double *alpha = scene.absorption + face * bands;
+                    // What passes through into the room beyond, and what reflects.
+                    const double *tau =
+                        scene.transmission ? scene.transmission + face * bands : nullptr;
+                    std::int64_t beyond = room;
+                    if (tau != nullptr && scene.face_room != nullptr) {
+                        beyond = scene.face_room[2 * face + (from_back ? 0 : 1)];
+                    }
+                    const bool passes =
+                        tau != nullptr && (scene.face_room == nullptr || beyond >= 0);
+                    double passed = 0.0, kept = 0.0;
+                    for (std::size_t b = 0; b < bands; ++b) {
+                        through[b] = passes ? energy[b] * tau[b] : 0.0;
+                        passed += through[b];
+                        kept += energy[b] * (1.0 - alpha[b]);
+                    }
+                    if (passed > 0.0 && !(kept > 0.0)) {
+                        // An opening: the ray goes on into the next room, as it was.
+                        std::copy(through.begin(), through.begin() + bands, energy.begin());
+                        room = beyond;
+                        continue;
+                    }
+                    std::copy(seen.begin(), seen.begin() + bands, seen_before.begin());
+                    std::copy(alone.begin(), alone.begin() + bands, alone_before.begin());
+                    ++order;
+
                     const double *surface = scene.scattering + face * bands;
                     if (scene.surface_size != nullptr && order >= settings.size_from_order) {
                         size_scattering(scene.surface_size[2 * face], scene.surface_size[2 * face + 1],
@@ -666,8 +787,11 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     const std::size_t window =
                         std::min(out.windows - 1,
                                  static_cast<std::size_t>(travelled / c / settings.window_time_step));
-                    out.ray_energy[window] += mean / static_cast<double>(bands);
-                    out.reflections[window] += 1.0;
+                    // The weight window's expectation is that of rays in the source's room.
+                    if (room == scene.source_room) {
+                        out.ray_energy[window] += mean / static_cast<double>(bands);
+                        out.reflections[window] += 1.0;
+                    }
 
                     if (settings.diffuse_rain || settings.specular_rain) {
                         const Vec3 origin = pos + n * offset;
@@ -677,22 +801,54 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             const double cos_theta = dot(n, v) / dist;
                             if (cos_theta <= 0.0) continue;
                             const Vec3 toward = v / norm(v);
-                            if (bvh.occluded(origin, toward, norm(v), last)) continue;
-                            const double factor = cos_theta / (kPi * dist * dist);
-                            if (!settings.specular_rain) {
-                                acc.add(k, rain.data(), factor, travelled + dist, -toward);
+                            // Through the surfaces on the way that let sound through.
+                            if (!detail::passing_share(scene, origin, toward, norm(v), last,
+                                                       share.data())) {
                                 continue;
                             }
-                            // All reflected energy radiates, but the specular-only share of
-                            // a path the early stage computes exactly stays out.
+                            const double factor = cos_theta / (kPi * dist * dist);
+                            // All reflected energy radiates with secondary sources, but the
+                            // specular-only share of a path the early stage computes
+                            // exactly stays out.
                             const bool covered =
-                                order <= settings.covered_order &&
+                                settings.specular_rain && order <= settings.covered_order &&
                                 (settings.covered_time.empty() ||
                                  (travelled + dist) / c <= settings.covered_time[k]);
                             for (std::size_t b = 0; b < bands; ++b) {
-                                counted[b] = reflected[b] * (covered ? 1.0 - alone[b] : 1.0);
+                                const double radiated =
+                                    settings.specular_rain
+                                        ? reflected[b] * (covered ? 1.0 - alone[b] : 1.0)
+                                        : rain[b];
+                                counted[b] = radiated * share[b];
                             }
                             acc.add(k, counted.data(), factor, travelled + dist, -toward);
+                        }
+                    }
+                    if (passed > 0.0) {
+                        if (!settings.split_target.empty() && level(beyond) > 0.0 &&
+                            family < settings.max_family) {
+                            // Both ways: a copy goes on through, on the leg it was on.
+                            stack.push_back(detail::RayState{pos, dir, through, seen_before,
+                                                             alone_before, travelled, order - 1,
+                                                             last, rng.split(), beyond});
+                            ++family;
+                        } else {
+                            const double q = passed / (passed + kept);
+                            if (rng.uniform() < q) {
+                                for (std::size_t b = 0; b < bands; ++b) energy[b] = through[b] / q;
+                                std::copy(seen_before.begin(), seen_before.begin() + bands,
+                                          seen.begin());
+                                std::copy(alone_before.begin(), alone_before.begin() + bands,
+                                          alone.begin());
+                                --order;
+                                room = beyond;
+                                continue;
+                            }
+                            for (std::size_t b = 0; b < bands; ++b) {
+                                reflected[b] /= 1.0 - q;
+                                rain[b] /= 1.0 - q;
+                            }
+                            peak /= 1.0 - q;
                         }
                     }
                     if (peak < cutoff) break;
@@ -728,7 +884,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
 
                     if (settings.split_target.empty()) continue;
                     const double expected =
-                        settings.split_target[std::min(window, settings.split_target.size() - 1)];
+                        settings.split_target[std::min(window, settings.split_target.size() - 1)] *
+                        level(room);
                     if (!(expected > 0.0)) continue;
                     double now = 0.0;
                     for (std::size_t b = 0; b < bands; ++b) now += energy[b];

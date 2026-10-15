@@ -356,11 +356,12 @@ the model keeps the orientation most of its area has), so a few faces flipped by
 exporter do not spoil the volume or the inside checks. Where a face's edge runs past
 the corners of faces on its other side (a T-junction, which SketchUp stitches with
 faces of zero area), the edge is split at those corners, so the model stays closed.
-Two rooms touching along an edge, with four faces on it, also count as closed. A model
-with no faces left is refused. `validate` then reports surfaces without a material, sources or listeners
-outside the room and listeners within 1 cm of a source; it warns about models that
-are not closed (rays would escape) and assignments that match nothing. Normals may
-point either way: absorption is applied on both sides.
+A model with no faces left is refused. `validate` then reports surfaces without a
+material, sources or listeners outside the room and listeners within 1 cm of a source;
+it warns about models that are not closed (rays would escape) and assignments that
+match nothing. Normals may point either way: the room is the space the faces close off,
+found from the faces themselves (see [Walls, doors and openings](#walls-doors-and-openings)),
+and a panel standing in the room, with air on both sides, reflects and absorbs on both.
 
 ### Materials
 
@@ -383,6 +384,62 @@ by having the same name as a material, or through `default_material`.
 Two rooms of the BRAS benchmark, converted from its SketchUp models, are in
 [`validation/bras`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/validation/bras)
 as scenes with their surface data and measurements.
+
+### Walls, doors and openings
+
+A model can hold several rooms. Sound passes between them through surfaces whose
+material lets some through: `transmission`, the share that passes (1 for an opening),
+or `transmission_loss`, the sound reduction index R in dB (the share is 10^(-R/10)),
+one value or one per band.
+
+```yaml
+materials:
+  partition:                 # 12 cm of brick
+    absorption: [0.02, 0.02, 0.03, 0.04, 0.05, 0.07, 0.07, 0.07]
+    transmission_loss: [30, 35, 40, 46, 52, 57, 60, 60]
+  door:
+    absorption: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    transmission_loss: 25
+  doorway: {transmission: 1}  # an opening: all of it passes
+assignments:
+  wall_between: partition
+  door_leaf: door
+  door_hole: doorway
+```
+
+- What passes through counts as absorbed on the side it comes from, so the absorption
+  must be at least the transmission in every band. A material without absorption
+  values, preset or file absorbs what it lets through: an opening absorbs 1.
+- The rooms are found from the faces: every space the faces close off on all sides is
+  one, whichever way the normals point. The space inside a thick wall or a column, with
+  rooms all round it, is solid; it is air when a source or listener stands in it, and
+  so is any space it opens into through surfaces that let sound through. The faces
+  between two rooms have a room on both sides and reflect and absorb in both.
+  `inspect` lists the rooms ("closed, 2 rooms of 48.00, 72.00 m3"), the editor too,
+  and the volume is theirs together.
+- Early reflections pass through those surfaces, keeping the share that passes at each;
+  through openings they pass unchanged. The rays of the late part that hit a partition
+  go on as two: the reflection, and a copy behind it with the share that passes, so even
+  a 60 dB wall has rays behind it. Each room's rays are thinned and split for the level
+  that room is expected to reach (from the rooms' power balance in a diffuse field),
+  so a quiet room behind a wall is traced as finely as the loud one. Sound goes straight
+  through, in the direction it came.
+- Coverage maps cover the audience areas of every room; the statistical reverberation
+  times count each face between two rooms on both its sides.
+- For diffraction an opening is a hole: the edges of a doorway are the free edges of
+  the wall round it, and sound bends round them into the next room. Diffraction through
+  a wall is left out, as it is far weaker than what passes straight through.
+- The wave solver lets its air flow through openings; it does not model walls that let
+  part of the sound through, and says so. Particles in animations pass through
+  openings, and through partitions as often as the sound does.
+- A listener in a room that no surface joins to the source's room is warned about.
+- In the editor, a material's **Lets through** chooses nothing, part of the sound (the
+  sound reduction index per band in the table) or everything (an opening).
+
+The tests check the level behind a 30 and a 50 dB partition between two rooms against
+diffuse-field theory (within 0.3 dB), two rooms joined by an opening the size of the
+wall against one room of both their sizes, and the double-sloped decay of a dry room
+opening into a live one against the two-room model (within 1 dB down to -40 dB).
 
 ### Sources and directivity
 
@@ -833,7 +890,9 @@ time. Edge diffraction
 is checked against the exact solutions for a half-plane and for wedges, and against
 Maekawa's chart. The
 wave solver matches the frequencies and decay rates of a box's modes within 0.5 %, the
-reflection and absorption of walls, and the free-field level within 0.35 dB.
+reflection and absorption of walls, and the free-field level within 0.35 dB. Sound
+through a partition reaches the level behind it that diffuse-field theory gives within
+0.3 dB, and coupled rooms decay in the two slopes of the two-room model.
 The [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
 has the details, the numbers and the scripts to reproduce them.
 
@@ -1320,7 +1379,7 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] Sources with their own spectra, gain, EQ and delay; speech spectra for the STI.
 - [x] Line and surface sources.
 - [x] Loudspeaker arrays with phase (their far-field patterns).
-- [ ] Sound through walls and between coupled rooms.
+- [x] Sound through walls and between coupled rooms.
 - [ ] Fitting absorption to measured parameters.
 - [ ] The wave solver with impedance boundaries and a GPU path through WebGPU (AMD,
   NVIDIA, Intel and Apple GPUs alike).

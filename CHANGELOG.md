@@ -125,6 +125,33 @@
   wavelength. The room warns about every listener nearer than that at 1 kHz, naming
   the array and the distance (`array_length`, `far_field_distance`).
 
+**Walls, doors and openings**
+
+- Materials take `transmission` (the share that passes, 1 for an opening) or
+  `transmission_loss` (the sound reduction index R in dB), one value or one per band.
+  What passes counts as absorbed on its side, so the absorption must be at least the
+  transmission; without absorption values it is the transmission.
+- A model can hold several rooms, found from the faces themselves: every space they
+  close off, whichever way the normals point. Faces between two rooms, and panels
+  standing in a room, reflect and absorb on both sides. The inside of a thick wall or a
+  column is solid unless a source or listener stands in it. `inspect`, `validate` and
+  the editor list the rooms; `Room.room_volumes`, `Room.room_of` and `Room.face_room`
+  give them to scripts.
+- Early reflections pass through partitions with the share that passes, and through
+  openings unchanged; late rays go on behind a partition as a copy carrying that share,
+  with a weight window per room from the rooms' diffuse power balance. Coverage maps
+  cover every room; the statistical reverberation times count both sides of the faces
+  between rooms.
+- Openings are holes for diffraction (the edges of a doorway diffract), for the wave
+  solver's air and for particles; particles pass partitions as often as the sound does.
+  The wave solver refuses walls that let part of the sound through.
+- A warning for listeners in a room no surface joins to the source's.
+- In the editor, a material's **Lets through** (nothing, part of the sound with R per
+  band in the table, or everything) and the rooms under the scene's Properties.
+- Checked against diffuse-field theory: the level behind 30 and 50 dB partitions within
+  0.3 dB, an opening the size of the wall the same as one room, and the double slope of
+  coupled rooms within 1 dB of the two-room model.
+
 **Examples**
 
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)
@@ -158,6 +185,9 @@
 - Rooms touching along an edge, with four faces on it, count as closed when the faces
   pair up. Edges shared by an odd number of faces still leave a model open, and the
   report and the warning count them.
+- The volume and the inside checks no longer depend on which way the normals point: a
+  model with flipped faces has its volume, and points near a flipped face count as
+  inside. A model counts as closed when every face has a room on at least one side.
 
 **Head tracking**
 

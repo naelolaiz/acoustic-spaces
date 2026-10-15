@@ -64,6 +64,18 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   delays given element by element; two close elements in opposite polarity a dipole
   (4.77 dB); two cardioids splayed ±30 degrees their exact first-order sum; and in a
   simulation, levels ahead of and above a column that differ by its pattern exactly;
+- walls and openings: two 5 x 4 x 3 m rooms, 20 % absorbing, with a 12 m² partition
+  between them reach the level behind it that diffuse-field theory gives,
+  G = 10 log10(1600 π S τ / A²) with Eyring's absorption area A, within 0.4 dB at R =
+  30 and 50 dB (0.1 to 0.2 dB at 3000 rays per band), and their level difference
+  R + 10 log10(A / S) within 0.5 dB; two such rooms joined by an opening the size of the
+  wall give the T30 (within 4 %), G (0.3 dB) and C80 (0.5 dB) of one 10 x 4 x 3 m room;
+  and a dry room of 96 m³ opening through a 2 m² doorway into a live one of 192 m³
+  decays in the two slopes of the two-room diffuse model, within 1.5 dB of its decay
+  curve down to -30 dB and its late reverberation time within 12 % of the model's slow
+  mode (within 1 dB to -40 dB and 5 % at 10,000 rays). Particles reach the next room
+  straight through an opening and not through a closed door, and the wave solver's air
+  flows through the opening;
 - every ISO 3382-1 parameter on synthetic exponential decays, and the air
   absorption against the ISO 9613-1 table;
 - the further parameters against responses whose values are known: LF and LFC of one
@@ -507,6 +519,10 @@ its peak (single precision).
   omnidirectional sources). The tests check that every pattern keeps the sound power,
   that SOFA and CSV data come out in the source's frame, and that the direct sound,
   early paths, late rays and particles all follow the same weights.
+- **Sound through walls** is checked against diffuse-field theory, not against
+  measurements. A wall is one sound reduction index per band for sound from all
+  directions: sound passes straight on in its direction, with no flanking paths and no
+  dependence on the angle it arrives at, and the wave solver leaves such walls out.
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
 

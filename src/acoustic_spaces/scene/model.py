@@ -214,7 +214,8 @@ DEFAULT_SCATTERING = 0.1
 
 
 class Material(_Model):
-    """Random-incidence absorption and scattering per octave or third-octave band.
+    """Random-incidence absorption and scattering per octave or third-octave band, and
+    the share of sound that passes through.
 
     Coefficients come from, in order of precedence: values given here (8 per octave
     band or 24 per third-octave band), a coefficient file (``file``), or a built-in
@@ -223,12 +224,27 @@ class Material(_Model):
     it has more than one value in some octave band, else onto octave bands; bands
     without data take the nearest band's value, and ``source`` says which ones.
     :meth:`coefficients` gives both lists in the bands a simulation runs in.
+
+    ``transmission`` (a share from 0 to 1) or ``transmission_loss`` (the sound reduction
+    index R in dB, the transmission being 10^(-R/10)) makes a surface let sound through:
+    a partition between two rooms, a door, or with a transmission of 1 an opening. What
+    passes through counts as absorbed on the side it comes from, so the absorption must
+    be at least the transmission in every band; without absorption values, a preset or a
+    file, the absorption is the transmission (an opening absorbs 1, a heavy wall no more
+    than it lets through). :meth:`transmission_coefficients` gives it in the bands a
+    simulation runs in.
     """
 
     preset: str | None = Field(default=None, description="built-in database entry")
     file: Path | None = Field(default=None, description="CSV: frequencies, absorption, scattering")
     absorption: list[Coefficient] | None = None
     scattering: list[Coefficient] | Coefficient | str | None = None
+    transmission: list[Coefficient] | Coefficient | None = Field(
+        default=None, description="share of the sound that passes through (1: an opening)"
+    )
+    transmission_loss: list[float] | float | None = Field(
+        default=None, description="sound reduction index R (dB): transmission 10^(-R/10)"
+    )
     source: str | None = Field(default=None, description="where the coefficients come from")
 
     @field_validator("absorption")
@@ -244,6 +260,24 @@ class Material(_Model):
         if isinstance(value, list):
             return _per_band_or_third("scattering", value)
         return value
+
+    @field_validator("transmission")
+    @classmethod
+    def _transmission_per_band(cls, value: list[float] | float | None):
+        if isinstance(value, float | int):
+            return [float(value)] * len(OCTAVE_BANDS_HZ)
+        return None if value is None else _per_band_or_third("transmission", value)
+
+    @field_validator("transmission_loss")
+    @classmethod
+    def _loss_per_band(cls, value: list[float] | float | None):
+        if value is None:
+            return None
+        values = [float(value)] * len(OCTAVE_BANDS_HZ) if isinstance(value, float | int) else value
+        values = _per_band_or_third("transmission_loss", values)
+        if min(values) < 0.0:
+            raise ValueError("transmission_loss is in dB and cannot be negative")
+        return values
 
     @field_validator("file")
     @classmethod
@@ -277,23 +311,53 @@ class Material(_Model):
         elif self.scattering is not None:
             scattering = self.scattering
 
+        if self.transmission is not None and self.transmission_loss is not None:
+            raise ValueError("give either transmission or transmission_loss, not both")
+        passing = self._transmission()
         if self.absorption is None:
+            if absorption is None and passing is not None:
+                absorption = passing
             if absorption is None:
                 raise ValueError("give absorption values, a preset or a file")
             self.absorption = _clip(absorption)
         else:
             origin = None
         self.scattering = _clip(scattering or [DEFAULT_SCATTERING] * len(OCTAVE_BANDS_HZ))
+        if passing is not None:
+            thirds = len(THIRD_OCTAVE_BANDS_HZ) in (len(passing), len(self.absorption))
+            fine = "third_octave" if thirds else "octave"
+            centres = THIRD_OCTAVE_BANDS_HZ if thirds else OCTAVE_BANDS_HZ
+            through, alpha = convert(passing, fine), convert(self.absorption, fine)
+            for f, t, a in zip(centres, through, alpha, strict=True):
+                if t > a + 1e-9:
+                    raise ValueError(
+                        f"the transmission at {f:g} Hz ({t:.3g}) is more than the absorption "
+                        f"({a:.3g}): the sound a surface lets through counts as absorbed on "
+                        "the side it comes from, so the absorption must be at least the "
+                        "transmission"
+                    )
         if self.source is None:
             origins = [o for o in (origin, scattering_origin) if o]
             self.source = "; ".join(origins) or None
         return self
+
+    def _transmission(self) -> list[float] | None:
+        if self.transmission_loss is not None:
+            return [10.0 ** (-r / 10.0) for r in self.transmission_loss]
+        return None if self.transmission is None else list(self.transmission)
 
     def coefficients(self, bands: Resolution = "octave") -> tuple[list[float], list[float]]:
         """Absorption and scattering in octave or third-octave ``bands``: an octave
         value holds for its three third octaves, and an octave takes the mean of its
         three."""
         return convert(self.absorption, bands), convert(self.scattering, bands)
+
+    def transmission_coefficients(self, bands: Resolution = "octave") -> list[float] | None:
+        """The share of sound that passes through, in octave or third-octave ``bands``
+        (converted as :meth:`coefficients` does), or None for a surface that lets
+        nothing through."""
+        passing = self._transmission()
+        return None if passing is None else convert(passing, bands)
 
 
 def _database_entry(name: str, kind: Literal["absorption", "scattering"]):
