@@ -453,9 +453,11 @@ changes results at 63 and 125 Hz)
   labelled as octaves, and the 3D view's balloon showed 125 Hz for 1 kHz. They show
   octaves now. Simulations were not affected.
 - The editor's Stop button for playback was easy to miss: it sat at the end of the
-  Results panel's bar, and the toolbar's Cancel, which only cancels a run, had the same
-  stop icon. **Stop playback** is now in the toolbar and the Simulation menu too, Cancel
-  has an icon of its own, and Esc stops playback when nothing is being placed or drawn.
+  Results panel's bar, out of sight once another panel was on show, and the toolbar's
+  Cancel, which only cancels a run, had the same stop icon. While a recording plays, the
+  status bar now says so, with **Stop playback**, which is also in the toolbar and the
+  Simulation menu; Cancel has an icon of its own, and Esc stops playback when nothing is
+  being placed or drawn.
 
 ## 2.0.0
 

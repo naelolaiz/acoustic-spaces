@@ -48,8 +48,8 @@ The editor works on the same scene files as the command line:
   writes the same files as `simulate`; **Listen** plays a dry WAV file through the
   response on the sound card (binaural when the scene has a binaural output; needs the
   `measure` extra), or head-tracked with **Head tracking** ticked (see
-  [Head tracking](spatial-audio.md#head-tracking)). **Stop playback** (in the toolbar
-  and the Simulation menu, or Esc) stops it.
+  [Head tracking](spatial-audio.md#head-tracking)). While it plays, the status bar says
+  so, with **Stop playback** (also in the toolbar and the Simulation menu, or Esc).
 - Change a material's absorption after a run and the results follow at once: the run
   counted each ray's reflections off each material, and is re-weighted for the new
   values instead of traced again (as `calibrate` does). The panel says so; **Run**

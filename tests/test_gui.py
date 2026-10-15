@@ -882,10 +882,16 @@ def test_stop_playback(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
     menus = {menu.title(): menu for menu in window.findChildren(QMenu)}
     assert stop in menus["&Simulation"].actions()
     assert stop is not window.cancel_action and not stop.isEnabled()
+    assert not window.now_playing.isVisible() and not window.stop_button.isVisible()
     assert window.play_file(tmp_path / "dry.wav")
     assert stop.isEnabled() and results.stop.isEnabled()
-    stop.trigger()
+    # The status bar says what plays, whichever panel is on show.
+    window.docks["map"].raise_()
+    assert window.now_playing.isVisible() and window.stop_button.isVisible()
+    assert window.now_playing.text().startswith("Playing dry.wav from ")
+    window.stop_button.click()
     assert stops and not stop.isEnabled() and not results.stop.isEnabled()
+    assert not window.now_playing.isVisible() and not window.stop_button.isVisible()
     assert results.listen.isEnabled() and not window._play_timer.isActive()
 
     # Esc first stops placing a source, then the playback.

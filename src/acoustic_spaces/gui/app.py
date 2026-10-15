@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QStyle,
     QTabWidget,
+    QToolButton,
 )
 
 from acoustic_spaces import __version__
@@ -159,6 +160,14 @@ class MainWindow(QMainWindow):
 
         self._actions()
         self._menus()
+        # While a recording plays, the status bar says so, whichever panel is on show.
+        self.now_playing = QLabel()
+        self.stop_button = QToolButton()
+        self.stop_button.setDefaultAction(self.stop_action)
+        self.stop_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        for index, widget in enumerate((self.now_playing, self.stop_button)):
+            widget.hide()
+            self.statusBar().insertPermanentWidget(index, widget)
         self.tree.selected.connect(lambda kind, key: self.select(kind, key, from_tree=True))
         self.viewport.picked.connect(self._picked)
         self.viewport.place.connect(self._place)
@@ -176,7 +185,7 @@ class MainWindow(QMainWindow):
         self.results.export_requested.connect(self.export_results)
         self.results.listen_requested.connect(self.listen)
         self.results.stop_requested.connect(self.stop_playing)
-        self.results.playing_changed.connect(self.stop_action.setEnabled)
+        self.results.playing_changed.connect(self._playing)
         self.results.head.message.connect(self.log)
         self.map_panel.changed.connect(self._draw)
         self.map_panel.run_requested.connect(self.run_map)
@@ -1151,9 +1160,11 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # PortAudio errors are not one type
             self._error("Cannot play", str(exc))
             return False
+        text = f"Playing {Path(path).name} from {pair[0]} at {pair[1]}"
+        self.now_playing.setText(text)
         self.results.set_playing(True)
         self._play_timer.start(int(1000 * len(mix) / sample_rate) + 250)
-        self.log(f"Playing {Path(path).name} from {pair[0]} at {pair[1]} ({fmt.label})")
+        self.log(f"{text} ({fmt.label})")
         return True
 
     def _tracking_order(self) -> int:
@@ -1212,11 +1223,10 @@ class MainWindow(QMainWindow):
         self._player = (thread, stop, outcome)
         thread.start()
         self._player_timer.start()
+        text = f"Playing {Path(path).name} from {pair[0]} at {pair[1]}, head-tracked"
+        self.now_playing.setText(text)
         self.results.set_playing(True)
-        self.log(
-            f"Playing {Path(path).name} from {pair[0]} at {pair[1]}, head-tracked "
-            f"(order {order} Ambisonics to binaural)"
-        )
+        self.log(f"{text} (order {order} Ambisonics to binaural)")
         return True
 
     def _player_poll(self) -> None:
@@ -1230,6 +1240,11 @@ class MainWindow(QMainWindow):
             self._error("Cannot play", str(outcome["error"]))
         elif outcome["report"].xruns:
             self.log(f"{outcome['report'].xruns} block(s) dropped out while playing.")
+
+    def _playing(self, playing: bool) -> None:
+        self.stop_action.setEnabled(playing)
+        self.now_playing.setVisible(playing)
+        self.stop_button.setVisible(playing)
 
     def stop_playing(self) -> None:
         from acoustic_spaces.measurement import _sounddevice
