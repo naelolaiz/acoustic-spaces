@@ -57,6 +57,9 @@ class TraceModel:
     surface_size: np.ndarray | None = None
     #: Vector-based scattering (the scene's ``simulation.scattering.method``).
     vector_scattering: bool = True
+    #: With vector-based scattering, each band traced with rays of its own where the
+    #: bands scatter differently (``simulation.scattering.by_band``).
+    by_band: bool = True
     #: Reflections of this order and higher add the scattering of the surface's size.
     #: Below it, the early stage's edge diffraction accounts for the size of surfaces:
     #: its terms add coherently to the direct sound and the reflections off the faces of
@@ -106,6 +109,7 @@ class TraceModel:
             scattering=np.ascontiguousarray(scattering[room.face_materials]),
             surface_size=size,
             vector_scattering=simulation.scattering.method == "vector",
+            by_band=simulation.scattering.by_band,
             size_from_order=_SIZE_FROM_ORDER[simulation.early.diffraction],
         )
 

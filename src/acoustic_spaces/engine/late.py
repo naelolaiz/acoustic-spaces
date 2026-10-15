@@ -146,14 +146,15 @@ def band_groups(model: TraceModel) -> list[slice]:
     surface's size always makes them differ), every band is traced with rays of its own:
     one direction for all would scatter the treble as much as the bass. With random
     scattering, which weights each band by its own coefficient, or the same coefficient
-    in every band, one ray carries them all. Either way each band has the rays asked
-    for, so tracing band by band traces that many rays per band."""
+    in every band, one ray carries them all; so it does when the model asks for one
+    ray for all bands (``by_band`` off). Either way each band has the rays asked for,
+    so tracing band by band traces that many rays per band."""
     bands = model.absorption.shape[1]
     scattering = np.asarray(model.scattering)
     uniform = bool(np.all(scattering == scattering[:, :1]))
     if model.surface_size is not None:
         uniform = uniform and bool(np.all(scattering == 1.0))  # fully diffuse at any size
-    if not model.vector_scattering or uniform:
+    if not model.vector_scattering or not model.by_band or uniform:
         return [slice(0, bands)]
     return [slice(b, b + 1) for b in range(bands)]
 

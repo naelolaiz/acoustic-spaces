@@ -416,6 +416,14 @@ class Scattering(_Model):
             "from, less of a reflection is specular (Christensen and Rindel, 2005)"
         ),
     )
+    by_band: bool = Field(
+        default=True,
+        description=(
+            "vector only: where the bands scatter differently, trace each band with rays "
+            "of its own (exact; slower), or turn one ray for all bands by their mean "
+            "scattering (faster; scatters the treble like the bass)"
+        ),
+    )
 
 
 class WaveStage(_Model):

@@ -120,16 +120,16 @@ parameters as it goes:
 ```
 talker -> seat-a: direct sound at 11.7 ms, 63 early paths
              63 Hz  125 Hz  250 Hz  500 Hz   1 kHz   2 kHz   4 kHz   8 kHz
-EDT (s)      1.823   1.811   1.720   1.429   1.330   1.231   0.963   0.529
-T30 (s)      3.093   3.070   3.004   2.494   2.424   2.206   1.591   0.860
-C80 (dB)       1.3     1.3     1.8     2.9     3.9     4.6     5.9     9.3
-G (dB)        22.9    22.9    22.2    21.0    19.3    18.1    16.9    15.5
-LF           0.332   0.332   0.335   0.337   0.344   0.346   0.343   0.327
-IACC_E       0.973   0.970   0.843   0.473   0.496   0.629   0.521   0.571
-T30_X (s)    3.336   3.315   3.297   2.662   2.609   2.390   1.656   0.859
-T30_Z (s)    2.657   2.638   2.566   2.106   2.034   1.886   1.447   0.809
+EDT (s)      0.720   0.722   0.710   0.746   0.907   1.010   0.964   0.585
+T30 (s)      0.715   0.895   0.984   1.224   1.267   1.260   1.130   0.774
+C80 (dB)       5.4     5.5     6.1     6.3     5.9     5.6     5.8     8.9
+G (dB)        21.8    21.7    20.8    20.0    18.7    17.9    17.1    15.7
+LF           0.307   0.307   0.298   0.309   0.334   0.350   0.352   0.335
+IACC_E       0.992   0.976   0.880   0.600   0.303   0.687   0.578   0.431
+T30_X (s)    0.713   0.799   1.017   1.195   1.243   1.210   1.122   0.756
+T30_Z (s)    0.714   0.818   0.925   1.117   1.226   1.215   1.158   0.769
 ...
-STI 0.60 (STIPA 0.61), echo criterion 0.68 for speech (echo above 1.0), 0.69 for music (echo above 1.8)
+STI 0.65 (STIPA 0.66), echo criterion 0.67 for speech (echo above 1.0), 0.67 for music (echo above 1.8)
 ```
 
 With `--plot`, each response gets an echogram (the late energy per millisecond and the
@@ -140,14 +140,14 @@ comes from:
 
 ![Arrival directions at the same seat: early reflections by delay and level, and the late energy per direction](docs/images/directions.png)
 
-T30 comes out several times the Sabine and Eyring estimates that `inspect` prints, and
-that is the room, not a fault. Its absorption sits on the ceiling and the carpet while
-the walls are hard and smooth (scattering 0.05), so sound running between the walls meets
-little absorption and dies away slowly. Sabine and Eyring assume a diffuse field, where
-sound meets every surface alike; `inspect` says when a room is far from that and adds the
-Arau-Puchades estimate, which allows for absorption that faces one way. With every surface
-fully diffusing, the same room decays in Eyring's 0.37 s at 1 kHz; with every surface
-scattering 0.3, in about 0.6 s. The
+From 500 Hz up, T30 comes out two to four and a half times the Sabine and Eyring
+estimates that `inspect` prints, and that is the room, not a fault. Its absorption sits
+on the ceiling and the carpet while the walls are hard and smooth (scattering 0.05), so
+sound running between the walls meets little absorption and dies away slowly. Sabine and
+Eyring assume a diffuse field, where sound meets every surface alike; `inspect` says
+when a room is far from that and adds the Arau-Puchades estimate, which allows for
+absorption that faces one way. With every surface fully diffusing, the same room decays
+in Eyring's 0.37 s at 1 kHz; with every surface scattering 0.3, in about 0.55 s. The
 [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md)
 checks both kinds of room.
 
@@ -444,8 +444,9 @@ or in a corner. Sound that bends round edges is added to them (see
 
 **Late reverberation** (`simulation.late`) is either:
 
-- `stochastic_ray_tracing` (default): `rays` rays leave the source and reflect off the
-  surfaces as [Scattering](#scattering) says, losing energy to absorption and air.
+- `stochastic_ray_tracing` (default): `rays` rays per octave band (50,000 by default)
+  leave the source and reflect off the surfaces as [Scattering](#scattering) says,
+  losing energy to absorption and air.
   Specular paths the early part already computed are left out. How energy reaches the
   listener is set by `reception`:
   - `diffuse_rain` (default): the scattered part of every reflection radiates to
@@ -461,9 +462,9 @@ or in a corner. Sound that bends round edges is added to them (see
   run out. With `splitting` (on by default), a first tenth of the rays measures how
   much energy a ray usually carries over time; the rest are split into copies when
   they carry more than 4 times that and thinned out by Russian roulette when they
-  carry less than a quarter (a weight window). The expected result is unchanged; in
-  the example box the late tail (0.5 to 2.5 s) misses a 1-million-ray reference by
-  0.5 to 2 dB per band instead of 1 to 8 dB at the default 100k rays (1 to 4 dB
+  carry less than a quarter (a weight window). The expected result is unchanged; with
+  random scattering, the example box's late tail (0.5 to 2.5 s) misses a 1-million-ray
+  reference by 0.5 to 2 dB per band instead of 1 to 8 dB at 100k rays (1 to 4 dB
   instead of 4 to 17 dB at 10k), for about 1.5 times the run time.
 - `statistical`: the reflected energy of Barron's revised theory, an exponential
   decay at the Eyring reverberation time T from the direct sound on, less what the
@@ -501,8 +502,7 @@ The directions the sound arrives from give more of them:
 - Stage support ST early (Gade's ST1) and ST late (annex C) for listeners within 1.5 m
   of a source, where musicians hear themselves and each other.
 - T30 of figures of eight facing forward, left and up from the listener: where sound
-  keeps running between two hard walls, the decay along that axis is longer. In the
-  example above, front to back is the room's 8 m length.
+  keeps running between two hard walls, the decay along that axis is longer.
 - STI and STIPA (IEC 60268-16) and U50, at the level the source's `level_db` gives and
   the background noise of `coverage.noise_db`, as the coverage maps take them; and the
   echo criteria of Dietsch and Kraak for speech and music.
@@ -525,13 +525,20 @@ simulation:
   scattering:
     method: vector     # or random
     from_size: true    # small, distant and grazed surfaces scatter more
+    by_band: true      # each band follows its own scattering (vector only)
 ```
 
 - `vector` (default): every reflection sends the ray in the direction of the sum of its
   specular direction and a random Lambert direction, weighted by the scattering
-  coefficient averaged over the bands, as ODEON and pyroomacoustics do. The ray keeps
-  all the reflected energy: the diffuse rain sends the scattered share to the listeners,
-  and the detector spheres count only the rest.
+  coefficient, as ODEON and pyroomacoustics do. The ray keeps all the reflected energy:
+  the diffuse rain sends the scattered share to the listeners, and the detector spheres
+  count only the rest. Where the bands' coefficients differ, each band is traced with
+  rays of its own, so a wall that scatters the bass and reflects the treble does both;
+  one direction for all bands (pyroomacoustics takes their mean) made the example box's
+  treble decay twice as fast as it should. For the same rays per band, tracing band by
+  band takes 3 to 5 times as long as one ray for all bands; at the default 50,000 per
+  band a simulation takes 1.5 to 4 times as long as version 2's 100,000 shared rays.
+  `by_band: false` goes back to one ray for all bands, turned by their mean scattering.
 - `random`: the ray reflects specularly or, with the coefficient as probability, in a
   Lambert direction. This was the only model up to version 2. With smooth walls a few
   rays then keep running between them, and the decay comes out longer.
@@ -549,7 +556,7 @@ simulation:
 
 In the two measured rooms of the [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md),
 the default model brings the reverberation time of a chamber music hall from 20 to 32 %
-long down to 5 to 17 %, and keeps a seminar room within 4 % from 500 Hz to 4 kHz.
+long down to 7 to 20 %, and keeps a seminar room within 2 % from 500 Hz to 4 kHz.
 Without the surfaces' sizes, neither model fits both rooms.
 
 ### Edge diffraction
@@ -660,11 +667,11 @@ The tests check the simulation against theory on Linux, macOS and Windows: exact
 sources in a box, Eyring's reverberation time and Barron's revised theory in a diffusing
 box, ISO 3382-1 parameters of known decays, spatial encoders against closed forms, the
 convolvers against direct convolution, and sweep measurements of synthetic rooms. A
-cross-check against pyroomacoustics in four rooms agrees within 6 % on T30 where both
-programs model the same physics, and shows where their scattering models part ways.
+cross-check against pyroomacoustics in four rooms agrees within 5 % on T30 with the same
+scattering model, from purely specular to fully diffusing surfaces.
 Against measurements in two rooms of the BRAS benchmark, a seminar room comes out
-within 4 % on reverberation time from 500 Hz to 4 kHz and within one JND on clarity, and
-a chamber music hall within about one JND on clarity and 5 to 17 % long on reverberation
+within 2 % on reverberation time from 500 Hz to 4 kHz and within one JND on clarity, and
+a chamber music hall within about one JND on clarity and 7 to 20 % long on reverberation
 time. Edge diffraction
 is checked against the exact solutions for a half-plane and for wedges, and against
 Maekawa's chart. The
@@ -711,7 +718,7 @@ coverage:
   surfaces: [audience_floor]   # default: names with "audience", else "floor"
   height: 1.2                  # listening height above the surface, m
   spacing: 1.0                 # distance between points, m
-  rays: 200000                 # rays per source (default: simulation.late.rays)
+  rays: 50000                  # rays per source and band (default: simulation.late.rays)
   noise_db: 35                 # background noise for the STI, dB SPL (or one per band)
 ```
 

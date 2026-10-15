@@ -770,8 +770,15 @@ class SimulationPage(Page):
             "Small surfaces, distant ones and grazing reflections reflect less "
             "specularly at low frequencies (Christensen and Rindel, 2005)"
         )
+        self.by_band = QCheckBox("Trace each band with rays of its own")
+        self.by_band.setToolTip(
+            "Vector-based scattering: where the bands scatter differently, each band "
+            "follows its own scattering (exact). Off: one ray for all bands, turned by "
+            "their mean scattering (faster)"
+        )
         scattering_form.addRow("Direction", self.scattering_method)
         scattering_form.addRow(self.from_size)
+        scattering_form.addRow(self.by_band)
         layout.addWidget(scattering)
 
         wave = QGroupBox("Low frequencies")
@@ -825,6 +832,7 @@ class SimulationPage(Page):
         for check in (
             self.splitting,
             self.from_size,
+            self.by_band,
             self.wave,
             self.auto_transition,
             self.random_seed,
@@ -844,6 +852,8 @@ class SimulationPage(Page):
         self.splitting.setChecked(s.late.splitting)
         self.scattering_method.setCurrentText(s.scattering.method)
         self.from_size.setChecked(s.scattering.from_size)
+        self.by_band.setChecked(s.scattering.by_band)
+        self.by_band.setEnabled(s.scattering.method == "vector")
         self.wave.setChecked(s.wave.enabled)
         self.wave_band.setCurrentText(str(s.wave.max_band_hz))
         self.wave_band.setEnabled(s.wave.enabled)
@@ -883,6 +893,7 @@ class SimulationPage(Page):
             "scattering": {
                 "method": self.scattering_method.currentText(),
                 "from_size": self.from_size.isChecked(),
+                "by_band": self.by_band.isChecked(),
             },
             "wave": {
                 **self.document.scene.simulation.wave.model_dump(mode="json"),

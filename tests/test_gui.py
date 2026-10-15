@@ -338,10 +338,14 @@ def test_selection_and_forms(window) -> None:
     assert wave.enabled and wave.max_band_hz == 63
     assert window.document.scene.simulation.early.diffraction == "direct"
     assert page.scattering_method.currentText() == "vector" and page.from_size.isChecked()
+    assert page.by_band.isChecked() and page.by_band.isEnabled()
+    page.by_band.setChecked(False)
+    assert not window.document.scene.simulation.scattering.by_band
     page.scattering_method.setCurrentText("random")
     page.from_size.setChecked(False)
     scattering = window.document.scene.simulation.scattering
     assert scattering.method == "random" and not scattering.from_size
+    assert not page.by_band.isEnabled()  # random scattering weights every band anyway
     assert window.document.scene.simulation.wave.enabled
     window.select("outputs")
     window.inspector.pages["outputs"].binaural.setChecked(False)

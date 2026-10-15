@@ -36,7 +36,7 @@ def _box(coefficient: float, absorption=0.2, **settings) -> Room:
 
 
 def test_defaults_and_settings() -> None:
-    assert Scattering() == Scattering(method="vector", from_size=True)
+    assert Scattering() == Scattering(method="vector", from_size=True, by_band=True)
     model = TraceModel.from_room(_box(0.1))
     assert model.vector_scattering and model.surface_size is not None
     assert model.size_from_order == 3  # first-order diffraction covers orders 1 and 2
@@ -215,3 +215,4 @@ def test_one_ray_carries_all_bands_where_they_scatter_alike() -> None:
     assert groups(coefficient=1.0) == 1  # fully diffuse at any size
     assert groups(coefficient=0.1, scattering={"from_size": False}) == 1
     assert groups(coefficient=0.1, scattering={"method": "random"}) == 1
+    assert groups(coefficient=0.1, scattering={"by_band": False}) == 1
