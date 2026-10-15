@@ -192,11 +192,16 @@ def test_level_difference_across_a_partition(tmp_path: Path, loss_db: float) -> 
     one, two = result["s", "one"].parameters().g, result["s", "two"].parameters().g
     np.testing.assert_allclose(two[:5], behind, atol=0.4)  # little air absorption here
     np.testing.assert_allclose((one - two)[:5], loss_db + 10 * math.log10(area / 12), atol=0.5)
-    # A map over the second room finds the same level behind the partition, and so does
+    # A map over the second room finds what the listener there finds, away from the
+    # partition (the rows 1.5 m and more from it are 0.2 to 0.3 dB lower, being farther;
+    # the rows nearer it are higher, as the partition radiates into the room). So does
     # the statistical method. Its field reaches each point from the direct sound on, as
     # Barron has it: here 0.2 dB below what the rays find, 0.3 dB below the steady state.
     late = coverage_map(room, settings=Coverage(surfaces=["room2"], spacing=1.0)).get()
-    np.testing.assert_allclose(late.values["g"][:, :5].mean(axis=0), behind, atol=0.4)
+    away = late.grid.points[:, 0] > 6.5
+    np.testing.assert_allclose(late.values["g"][away, :5].mean(axis=0), two[:5], atol=0.5)
+    near = late.values["g"][~away, :5].mean(axis=0)
+    assert np.all(near > late.values["g"][away, :5].mean(axis=0) + 0.5)
     room.scene.simulation.late.method = "statistical"
     statistical = simulate(room)["s", "two"].parameters().g
     np.testing.assert_allclose(statistical, two, atol=0.4)
