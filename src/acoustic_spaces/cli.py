@@ -1479,12 +1479,20 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
     if args.video:
         from acoustic_spaces.viz import animate_walk
 
+        # An MP4 takes the sound along when players can play it: in one or two channels.
+        with_sound = Path(args.video).suffix.lower() == ".mp4" and wet.shape[1] <= 2
         try:
-            animate_walk(room, walk, args.video, fps=args.fps)
+            animate_walk(
+                room, walk, args.video, fps=args.fps, sound=Path(args.out) if with_sound else None
+            )
         except (ImportError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        print(f"saved {args.video}: {walk.duration_s:.1f} s at {args.fps} frames per second")
+        seconds = max(walk.duration_s, len(wet) / rate) if with_sound else walk.duration_s
+        print(
+            f"saved {args.video}: {seconds:.1f} s at {args.fps} frames per second"
+            + (", with the sound" if with_sound else "")
+        )
     return 0
 
 
@@ -2103,7 +2111,7 @@ def build_parser() -> argparse.ArgumentParser:
     walkthrough.add_argument(
         "--video",
         metavar="FILE",
-        help="also save the walk as a .gif or .mp4 to go with the sound (needs the viz extra)",
+        help="also save the walk as a .gif, or an .mp4 with the sound in it (viz extra)",
     )
     walkthrough.add_argument("--fps", type=int, default=25, help="video frames per second")
     walkthrough.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")

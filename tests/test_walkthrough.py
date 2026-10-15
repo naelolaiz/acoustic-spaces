@@ -58,9 +58,11 @@ def test_walk_points_follow_the_path_facing_forward() -> None:
     np.testing.assert_allclose(np.diff(points.times), 0.25 / 1.5)
     np.testing.assert_allclose(points.positions[8], [3.0, 1.0, 1.5])
     np.testing.assert_allclose(points.positions[-1], [3.0, 2.0, 1.5])
-    # Along +x, then (from the corner on) along +y.
-    np.testing.assert_allclose(points.yaws[:8], 0.0)
-    np.testing.assert_allclose(points.yaws[8:], 90.0)
+    # Along +x, then along +y, turning through the corner at 90 degrees per second: over
+    # one second, 1.5 m, but no further than half-way along the second leg, 0.5 m.
+    np.testing.assert_allclose(points.yaws[:7], 0.0)
+    np.testing.assert_allclose(points.yaws[6:11], [0.0, 22.5, 45.0, 67.5, 90.0])
+    np.testing.assert_allclose(points.yaws[10:], 90.0)
     still = scene.listeners[0].model_copy(
         update={"walk": scene.listeners[0].walk.model_copy(update={"face_forward": False})}
     )
@@ -69,6 +71,20 @@ def test_walk_points_follow_the_path_facing_forward() -> None:
     uneven = walk_points(scene.listeners[0], 0.7)
     assert len(uneven.times) == 6
     np.testing.assert_allclose(np.diff(uneven.times), 3.0 / 5 / 1.5)
+
+
+def test_a_walker_turns_the_shorter_way_round_at_its_pace() -> None:
+    # From 135 degrees to -135: through 180, a quarter turn, not three quarters.
+    walk = {"to": [[2.0, 2.0, 1.5], [1.0, 1.0, 1.5]], "speed_m_s": 1.0, "turn_deg_s": 180}
+    sources = [{"name": "s", "position": [6, 4, 1.5]}]
+    scene = _scene(sources=sources, listeners=[_walker(walk, position=(3.0, 1.0, 1.5))])
+    points = walk_points(scene.listeners[0], 0.25)
+    assert len(points.times) == 13  # the corner is place 6
+    np.testing.assert_allclose(points.yaws[[0, 6, 12]], [135.0, 180.0, -135.0])
+    assert np.all(np.abs(np.diff(np.unwrap(np.radians(points.yaws)))) <= np.radians(45.0))
+    # The turn takes half a second, a quarter of the way along each leg either side.
+    turning = np.flatnonzero(~np.isclose(np.abs(points.yaws), 135.0))
+    assert points.times[turning[-1]] - points.times[turning[0]] < 0.5
 
 
 def test_a_walk_needs_somewhere_to_go_and_a_point_source() -> None:

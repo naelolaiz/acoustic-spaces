@@ -555,6 +555,10 @@ class Walk(_Model):
         default=True,
         description="turn to face the way it walks (yaw); false keeps its orientation",
     )
+    turn_deg_s: PositiveFloat = Field(
+        default=90.0,
+        description="how fast it turns through a corner facing forward (degrees per second)",
+    )
 
 
 class Source(_Model):

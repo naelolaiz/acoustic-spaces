@@ -341,14 +341,18 @@ changes results at 63 and 125 Hz)
 **Walkthroughs** (`acoustic-spaces walkthrough`, `acoustic_spaces.walkthrough`)
 
 - A listener or a point source walks through the room along the corners of its `walk`
-  in the scene, at a walking pace, facing the way it goes. Responses are simulated
+  in the scene, at a walking pace, facing the way it goes and turning through corners
+  at 90 degrees per second (`turn_deg_s`). Responses are simulated
   every 25 cm along the way; the late part, which changes slowly, is traced every 2 m
   and mixed in between, so the gallery's walk of 101 places costs six times one
   response.
 - Dry signals play through the response of the place the walker is nearest to, with
   50 ms crossfades from each place to the next, in any of the output formats.
-  `--video` saves the room and the walker going along its path as a GIF or MP4, in
-  time with the sound (`animate_walk` in `acoustic_spaces.viz`).
+  `--video` saves the room and the walker going along its path (with an arrow and
+  its yaw for the way it faces) as a GIF or MP4, in time with the sound (`animate_walk` in `acoustic_spaces.viz`); an MP4 carries the
+  sound itself when it has one or two channels (mono, stereo, binaural).
+- The viz extra installs imageio and imageio-ffmpeg, which MP4 videos need (for
+  `animate` too); before, they had to be installed by hand.
 - `simulate(..., late_from=...)` gives listeners or sources the late part of others,
   mixed, which is how walks trace fewer late parts.
 

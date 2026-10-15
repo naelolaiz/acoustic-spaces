@@ -199,9 +199,17 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
 - A walking listener hears every source; a walking source is heard at `--listener`,
   with the other sources where they stand. `--format` takes the formats of `simulate
   --output` (by default the scene's first output) and `--video` saves the room, the
-  path and the walker going along it as a GIF, or an MP4 with `imageio[ffmpeg]`
-  installed, at `--fps`, to put together with the sound (with ffmpeg:
-  `ffmpeg -i walk.mp4 -i walk.wav -c:v copy -c:a aac walk_with_sound.mp4`).
+  path and the walker going along it, with an arrow and its yaw for the way it faces,
+  as a GIF or an MP4 (both with the viz extra) at `--fps`. An MP4 carries the sound
+  when the format has one or two channels (mono, stereo, binaural) and then lasts as
+  long as the sound; with more channels, play the WAV alongside it.
+- A walker faces the way it goes (unless its walk says `face_forward: false`) and
+  turns through each corner at 90 degrees per second. The gallery's visitor has the
+  guide behind it all down the long arm, and at the corner turns over a second towards
+  the short arm, which brings the guide round to its right. The default binaural head
+  is a sphere, which tells left from right but hardly front from behind (it has no
+  outer ears), so the guide behind sounds much as one ahead would; a measured HRTF
+  (`--hrtf`) tells them apart.
 - There is no Doppler shift: at walking speed it is under half a percent.
 
 From Python:

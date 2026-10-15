@@ -250,7 +250,9 @@ def test_walk_animation(tmp_path: Path) -> None:
 
     room = Room.from_yaml(SHOEBOX)
     points = WalkPoints(
-        np.array([0.0, 0.5, 1.0]), np.array([[1.0, 1, 1.6], [2, 1, 1.6], [3, 1, 1.6]]), None
+        np.array([0.0, 0.5, 1.0]),
+        np.array([[1.0, 1, 1.6], [2, 1, 1.6], [3, 1, 1.6]]),
+        np.array([0.0, 90.0, 180.0]),  # an arrow shows the way it faces
     )
     walk = WalkResponses("visitor", "listeners", points, ("a", "b", "c"), None)
     out = tmp_path / "walk.gif"
@@ -273,6 +275,47 @@ def test_walk_animation(tmp_path: Path) -> None:
     assert main([*args, "--step", "0.5", "--video", str(tmp_path / "cli.gif"), "--fps", "4"]) == 0
     with Image.open(tmp_path / "cli.gif") as gif:
         assert gif.n_frames == 5
+
+
+def test_walk_video_carries_the_sound(tmp_path: Path, capsys, monkeypatch) -> None:
+    import importlib.util
+    import subprocess
+
+    from acoustic_spaces.audio import write_wav
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.scene import Walk
+    from acoustic_spaces.viz import animate_walk, check_video
+    from acoustic_spaces.walkthrough import WalkPoints, WalkResponses
+
+    real = importlib.util.find_spec
+    gone = {"imageio_ffmpeg"}
+    monkeypatch.setattr(importlib.util, "find_spec", lambda n, *a: None if n in gone else real(n))
+    with pytest.raises(ImportError, match="uv sync --extra viz"):
+        check_video(tmp_path / "walk.mp4")
+    gone.clear()
+    ffmpeg = pytest.importorskip("imageio_ffmpeg").get_ffmpeg_exe()
+
+    room = Room.from_yaml(SHOEBOX)
+    seat = room.scene.listeners[0]
+    walking = seat.model_copy(update={"walk": Walk(to=[(6.0, 4.0, 1.2)], speed_m_s=1.0)})
+    room.scene.model_copy(update={"listeners": [walking]}).to_yaml(tmp_path / "scene.yaml")
+    write_wav(tmp_path / "dry.wav", np.zeros((16000, 1)), 8000)
+    args = ["walkthrough", str(tmp_path / "scene.yaml"), f"talker={tmp_path / 'dry.wav'}"]
+    args += ["--out", str(tmp_path / "walk.wav"), "--rays", "200", "--length", "0.2"]
+    args += ["--step", "0.5", "--video", str(tmp_path / "walk.mp4"), "--fps", "4"]
+    assert main(args) == 0
+    # As long as the sound (2.2 s), not only the walk.
+    assert "walk.mp4: 2.2 s at 4 frames per second, with the sound" in capsys.readouterr().out
+    probe = subprocess.run(
+        [ffmpeg, "-hide_banner", "-i", str(tmp_path / "walk.mp4")], capture_output=True, text=True
+    )
+    assert "Video: h264" in probe.stderr and "Audio: aac" in probe.stderr
+
+    points = WalkPoints(np.array([0.0, 1.0]), np.array([[1.0, 1, 1.6], [2, 1, 1.6]]), None)
+    walk = WalkResponses("visitor", "listeners", points, ("a", "b"), None)
+    write_wav(tmp_path / "three.wav", np.zeros((800, 3)), 8000)
+    with pytest.raises(ValueError, match="one or two channels, not 3"):
+        animate_walk(room, walk, tmp_path / "three.mp4", sound=tmp_path / "three.wav")
 
 
 def _map():

@@ -474,11 +474,15 @@ listeners:
       to: [[4.0, 4.0, 1.6], [4.0, 16.0, 1.6]]   # the corners it goes through
       speed_m_s: 1.2       # walking pace (default 1.2 m/s)
       face_forward: true   # turn to face the way it goes (default); false keeps its yaw
+      turn_deg_s: 90       # how fast it turns through a corner (default 90 degrees/s)
 ```
 
 - A walk goes in straight lines from the position through each point of `to`, at an
   even pace, and stops at the last one. Facing forward sets the yaw along each leg and
-  keeps the pitch and roll; on a leg straight up or down the yaw stays as it was.
+  keeps the pitch and roll; on a leg straight up or down the yaw stays as it was. At a
+  corner the walker turns the shorter way round at `turn_deg_s`, half of the turn
+  before the corner and half after it (no further than half-way along either leg), so
+  a sound to one side moves round the head instead of jumping.
 - Everything else (`simulate`, `map`, the editor) sees the walker standing where its
   walk starts; `inspect` lists how far each walk goes and for how long. Lines, surfaces
   and arrays do not walk.

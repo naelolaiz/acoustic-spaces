@@ -113,8 +113,6 @@ def walk_points(item, step_m: float = STEP_M) -> WalkPoints:
     positions = np.column_stack([np.interp(s, along, corners[:, k]) for k in range(3)])
     yaws = None
     if item.walk.face_forward:
-        # The way along the leg each place is on (at a corner, the leg it starts).
-        leg = np.clip(np.searchsorted(along, s, side="right") - 1, 0, len(legs) - 1)
         heading = np.diff(corners, axis=0)[:, :2]
         flat = np.hypot(heading[:, 0], heading[:, 1]) < 1e-9
         angles = np.degrees(np.arctan2(heading[:, 1], heading[:, 0]))
@@ -124,7 +122,22 @@ def walk_points(item, step_m: float = STEP_M) -> WalkPoints:
             if flat[k]:
                 angles[k] = last
             last = angles[k]
-        yaws = angles[leg]
+        # From each leg's heading to the next's the shorter way round, ...
+        turns = (np.diff(angles) + 180.0) % 360.0 - 180.0
+        angles = angles[0] + np.concatenate([[0.0], np.cumsum(turns)])
+        # ... at turn_deg_s through each corner: half of the turn before it, half after
+        # it, and no further than half-way along either leg.
+        along_turn, yaw_turn = [0.0], [angles[0]]
+        for j, turn in enumerate(turns, start=1):
+            if turn == 0.0:
+                continue
+            half = 0.5 * item.walk.speed_m_s * abs(turn) / item.walk.turn_deg_s
+            half = min(half, 0.5 * legs[j - 1], 0.5 * legs[j])
+            along_turn += [along[j] - half, along[j] + half]
+            yaw_turn += [angles[j - 1], angles[j]]
+        along_turn.append(along[-1])
+        yaw_turn.append(angles[-1])
+        yaws = 180.0 - (180.0 - np.interp(s, along_turn, yaw_turn)) % 360.0  # (-180, 180]
     return WalkPoints(s / item.walk.speed_m_s, positions, yaws)
 
 
