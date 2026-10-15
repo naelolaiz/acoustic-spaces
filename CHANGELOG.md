@@ -302,8 +302,21 @@ changes results at 63 and 125 Hz)
   diffraction is evaluated at, relative to its level and delay;
   `acoustic_spaces.engine.coherent` has the rest.
 
+**Leak finder** (`validate --leaks`, `view --leaks`, `acoustic_spaces.engine.leaks`)
+
+- Rays traced from the sources with diffuse reflections show where a model that is not
+  closed lets them escape. Each gap is reported with the rays that escaped through it,
+  its area and size from the open edges round it, where the rays crossed it and the
+  surfaces next to it. Openings to the outside (surfaces that let sound through) are
+  told apart from leaks, and a source outside a closed model is named.
+- `view --leaks` and the editor's **View > Show leaks** draw the open edges, the
+  escaping rays and a marker on each gap (`plot_leaks` in `acoustic_spaces.viz`); the
+  warning about a model that is not closed says how to find its holes.
+
 **Examples**
 
+- `leaky_classroom`: a classroom model with a missing window pane and a ceiling 3 cm
+  short of a wall, for the leak finder.
 - `listening_room`: a living room with a loudspeaker against the front wall or a metre
   out from it. `bass.py` prints G at the sofa in the lowest bands from both, with the
   early paths in pressure and in energy: 5.7 dB apart at 63 Hz in the early part in

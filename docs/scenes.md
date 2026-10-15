@@ -57,6 +57,46 @@ match nothing. Normals may point either way: the room is the space the faces clo
 found from the faces themselves (see [Walls, doors and openings](#walls-doors-and-openings)),
 and a panel standing in the room, with air on both sides, reflects and absorbs on both.
 
+### Finding leaks
+
+A model that is not closed lets rays escape, and its reverberation comes out too short.
+The warning counts its open edges; the leak finder shows where the holes are:
+
+```sh
+acoustic-spaces validate examples/leaky_classroom/scene.yaml --leaks
+acoustic-spaces view examples/leaky_classroom/scene.yaml --leaks
+```
+
+```text
+leaks: 5000 rays, up to 100 reflections each: 4084 escaped (81.7 %)
+  1. 3813 rays (76.3 %) through a gap of about 3.6 m2 (3.00 x 1.20 m) by east_wall
+     at (9.00, 3.51, 1.59) m
+  2. 271 rays (5.4 %) through a gap of about 0.27 m2 (9.00 x 0.03 m) by ceiling,
+     north_wall, west_wall
+     at (4.08, 6.99, 3.00) m
+```
+
+It traces rays from the sources (5,000 by default, `--rays` sets how many), reflecting
+them diffusely off every surface whatever its material, so that they reach every corner,
+for up to 100 reflections each. Each ray that finds no surface ahead has escaped, and is
+put down to the gap it went through: the open edges round a hole, with open edges that
+come within 2 % of the model's size of each other counted as one gap (a ceiling that
+stops short of a wall leaves open edges on both). For each gap the report gives the rays
+that escaped through it, its area and size (from its open edges, which run round it),
+where the rays crossed it and the surfaces next to it, those with the longest open edges
+first. In the example the window glass is missing from the east wall and the ceiling
+stops 3 cm short of the north wall. `view --leaks` draws the open edges in red, the
+escaping rays from their last reflection to past the hole, and a numbered marker on each
+gap; in the editor, **View > Show leaks** does the same and writes the report to the
+messages.
+
+Rays that leave through a surface letting sound through (an opening to the outside, see
+[Walls, doors and openings](#walls-doors-and-openings)) are listed as such, not as a
+leak. A closed model keeps every ray; one that loses some all the same has faces that
+meet without closing, and the report names them. From Python,
+`acoustic_spaces.engine.leaks.find_leaks(room)` gives the same as a `Leaks` object, and
+`acoustic_spaces.viz.plot_leaks` draws it.
+
 ## Materials
 
 Each entry in `materials` takes coefficients from one of:

@@ -3,6 +3,8 @@
 - 3D view (PyVista): surfaces coloured by material, sources with their directivity
   balloons, listeners, and early reflection paths coloured by order (paths diffracted
   at an edge in a colour of their own).
+- Leaks (PyVista): the open edges of a model that is not closed, and the rays of the
+  leak finder that escape through its gaps.
 - Animation (PyVista): sound particles spreading from a source and reflecting around
   the room, in a window with a time slider or saved as a GIF or MP4 video.
 - Response plots (matplotlib): echogram with the early paths, decay curves per band, and
@@ -31,6 +33,7 @@ if TYPE_CHECKING:
 
     from acoustic_spaces.directivity import Directivity
     from acoustic_spaces.engine import CoverageMap, EarlyReflections, Response
+    from acoustic_spaces.engine.leaks import Leaks
     from acoustic_spaces.engine.particles import Particles
     from acoustic_spaces.parameters import BandDecay
 
@@ -70,6 +73,11 @@ BAND_COLOURS = (
     "#f46d43",
     "#d53e4f",
 )
+#: Open edges and the rays that escape through them.
+LEAK_COLOUR = "#ff4d4d"
+ESCAPE_COLOUR = "#ffd166"
+#: Escaping rays drawn at most, so a big hole does not hide the room.
+MAX_ESCAPES_DRAWN = 400
 #: A simulated and a measured response drawn together.
 COMPARISON_COLOURS = ("#4da3ff", "#ffd166")
 
@@ -181,6 +189,59 @@ def plot_paths(
     return legend
 
 
+def plot_leaks(
+    leaks: Leaks, room: Room, plotter: pyvista.Plotter, *, render: bool = True
+) -> list[list[str]]:
+    """Draw the open edges of ``room``, the rays of ``leaks`` (from
+    :func:`acoustic_spaces.engine.leaks.find_leaks`) that escape, from their last
+    reflection to a little past where they leave, and a numbered marker on each gap;
+    returns their legend entries."""
+    from acoustic_spaces.engine.leaks import open_edges
+
+    pv = _pyvista()
+    legend = []
+    corners, _ = open_edges(room)
+    if len(corners):
+        lines = np.column_stack([np.full(len(corners), 2), corners]).reshape(-1)
+        edges = pv.PolyData(room.mesh.vertices, lines=lines)
+        plotter.add_mesh(edges, color=LEAK_COLOUR, line_width=5.0, render=False)
+        legend.append([f"open edges ({len(corners)})", LEAK_COLOUR])
+    if leaks.escaped:
+        lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
+        size = float(np.linalg.norm(hi - lo)) or 1.0
+        step = max(1, -(-leaks.escaped // MAX_ESCAPES_DRAWN))
+        start = leaks.starts[::step]
+        end = leaks.points[::step] + 0.1 * size * leaks.directions[::step]
+        points = np.stack([start, end], axis=1).reshape(-1, 3)
+        lines = np.column_stack([np.full(len(start), 2), np.arange(2 * len(start)).reshape(-1, 2)])
+        rays = pv.PolyData(points, lines=lines.reshape(-1))
+        plotter.add_mesh(rays, color=ESCAPE_COLOUR, line_width=1.5, opacity=0.6, render=False)
+        legend.append([f"escaping rays ({leaks.escaped})", ESCAPE_COLOUR])
+        radius = max(0.012 * size, 0.05)
+        centres = np.array([gap.centre for gap in leaks.gaps])
+        for centre in centres:
+            plotter.add_mesh(
+                pv.Sphere(radius=radius, center=centre), color=LEAK_COLOUR, render=False
+            )
+        plotter.add_point_labels(
+            centres + [0.0, 0.0, 1.5 * radius],
+            [
+                f"gap {k}: {100.0 * gap.rays / leaks.rays:.1f} %"
+                for k, gap in enumerate(leaks.gaps, 1)
+            ],
+            font_size=12,
+            text_color="white",
+            shape_color=PANEL,
+            shape_opacity=0.8,
+            show_points=False,
+            always_visible=True,
+            render=False,
+        )
+    if render:
+        plotter.render()
+    return legend
+
+
 def balloon_polydata(
     directivity: Directivity,
     center,
@@ -233,12 +294,15 @@ def plot_room(
     coverage: CoverageMap | None = None,
     parameter: str = "g",
     band: int = 4,
+    leaks: Leaks | None = None,
 ) -> pyvista.Plotter:
     """Add the room to ``plotter`` (a new one if None) and return it.
 
     ``paths`` adds early reflection paths (from :func:`acoustic_spaces.engine.early_paths`
     or a response's ``early``), coloured by order up to ``max_order``. ``coverage`` adds
     a coverage map of one ``parameter`` and ``band`` (see :func:`plot_coverage`).
+    ``leaks`` adds the open edges and the rays that escape through them (see
+    :func:`plot_leaks`).
     """
     pv = _pyvista()
     if plotter is None:
@@ -301,6 +365,8 @@ def plot_room(
         legend.extend(plot_paths(paths, plotter, max_order=max_order))
     if coverage is not None:
         plot_coverage(coverage, plotter, parameter=parameter, band=band)
+    if leaks is not None:
+        legend.extend(plot_leaks(leaks, room, plotter, render=False))
 
     if show_labels and points:
         plotter.add_point_labels(

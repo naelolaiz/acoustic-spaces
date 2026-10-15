@@ -145,6 +145,39 @@ def test_screenshot_with_paths(tmp_path: Path) -> None:
     assert out.stat().st_size > 1000
 
 
+def test_leaks_are_drawn() -> None:
+    from acoustic_spaces.engine.leaks import find_leaks
+    from acoustic_spaces.examples import example_path
+    from acoustic_spaces.viz import MAX_ESCAPES_DRAWN, plot_leaks
+
+    room = Room.from_yaml(example_path("leaky_classroom"))
+    leaks = find_leaks(room, rays=2000)
+    plotter = pv.Plotter(off_screen=True)
+    legend = plot_leaks(leaks, room, plotter, render=False)
+    assert [label for label, _ in legend] == ["open edges (8)", f"escaping rays ({leaks.escaped})"]
+    edges, rays, *markers = plotter.renderer.actors.values()
+    assert edges.mapper.dataset.n_lines == 8  # round the window, and round the slit
+    assert rays.mapper.dataset.n_lines <= MAX_ESCAPES_DRAWN < leaks.escaped
+    assert len(markers) == 2 + 1  # a sphere on each gap, and their labels
+    plotter.close()
+    # A closed room has nothing to draw.
+    plotter = pv.Plotter(off_screen=True)
+    shoebox = Room.from_yaml(SHOEBOX)
+    assert plot_leaks(find_leaks(shoebox, rays=100), shoebox, plotter, render=False) == []
+    assert len(plotter.renderer.actors) == 0
+    plotter.close()
+
+
+@pytest.mark.render
+def test_screenshot_with_leaks(tmp_path: Path) -> None:
+    from acoustic_spaces.cli import main
+
+    out = tmp_path / "leaks.png"
+    scene = SHOEBOX.parent.parent / "leaky_classroom" / "scene.yaml"
+    assert main(["view", str(scene), "--leaks", "--rays", "500", "--screenshot", str(out)]) == 0
+    assert out.stat().st_size > 1000
+
+
 def test_impulse_response_plot(tmp_path: Path) -> None:
     pytest.importorskip("matplotlib")
     import numpy as np

@@ -89,6 +89,8 @@ class MainWindow(QMainWindow):
         #: result, scene, face groups and their materials; None when it cannot be.
         self._traced = None
         self._job_groups = None
+        #: The room the leaks on show were found in, and the leaks; None before any.
+        self._found_leaks = None
         self.coverage = None
         self._coverage_scene = None
         self.job: SimulationJob | None = None
@@ -258,6 +260,14 @@ class MainWindow(QMainWindow):
         self.paths_action = a("Show reflection &paths", lambda: None)
         self.paths_action.setCheckable(True)
         self.paths_action.toggled.connect(self.results.paths.setChecked)
+        self.leaks_action = a(
+            "Show &leaks",
+            lambda: None,
+            tip="Trace rays from the sources and show where they escape from a model that is "
+            "not closed",
+        )
+        self.leaks_action.setCheckable(True)
+        self.leaks_action.toggled.connect(lambda *_: self._draw())
         self.screenshot_action = a("Save &screenshot…", self.save_screenshot)
         self.run_action = a("&Run", self.run_simulation, "F5", "Simulate every source and listener")
         self.map_action = a(
@@ -319,7 +329,8 @@ class MainWindow(QMainWindow):
         view = bar.addMenu("&View")
         view.addActions([self.show_3d_action, self.show_plan_action])
         view.addSeparator()
-        view.addActions([self.reset_camera_action, self.paths_action, self.screenshot_action])
+        view.addActions([self.reset_camera_action, self.paths_action, self.leaks_action])
+        view.addAction(self.screenshot_action)
         view.addSeparator()
         for dock in self.docks.values():
             view.addAction(dock.toggleViewAction())
@@ -462,8 +473,27 @@ class MainWindow(QMainWindow):
         response = self._shown_response()
         paths = None if response is None else response.early
         coverage = None if self._map_stale() else self.map_panel.shown_in_3d()
-        self.viewport.show_room(self.document.room, self.selection, paths, coverage)
+        leaks = self._leaks() if self.leaks_action.isChecked() else None
+        self.viewport.show_room(self.document.room, self.selection, paths, coverage, leaks)
         self.plan.show_room(self.document.room, self.selection)
+
+    def _leaks(self):
+        """Where rays escape from the room, found again when its geometry, materials or
+        sources change."""
+        room = self.document.room
+        if self._found_leaks is not None:
+            before, leaks = self._found_leaks
+            if before.mesh is room.mesh and all(
+                getattr(before.scene, part) == getattr(room.scene, part)
+                for part in ("sources", "materials", "assignments", "default_material")
+            ):
+                return leaks
+        from acoustic_spaces.engine.leaks import find_leaks
+
+        leaks = find_leaks(room)
+        self._found_leaks = (room, leaks)
+        self.log(f"Leaks: {leaks.summary()}")
+        return leaks
 
     def _paths_toggled(self, on: bool) -> None:
         self.paths_action.blockSignals(True)

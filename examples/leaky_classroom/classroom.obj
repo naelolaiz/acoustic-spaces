@@ -1,0 +1,39 @@
+# A 9 x 7 x 3 m classroom, as exported from a CAD model with two mistakes: the
+# window glass in the east wall was left out, and the ceiling stops 3 cm short of
+# the north wall. Units: metres, z up.
+v 0 0 0
+v 0 7 0
+v 9 7 0
+v 9 0 0
+v 0 0 3
+v 9 0 3
+v 9 6.97 3
+v 0 6.97 3
+v 0 7 3
+v 9 7 3
+v 9 7 1
+v 9 0 1
+v 9 0 2.2
+v 9 7 2.2
+v 9 2 1
+v 9 2 2.2
+v 9 5 1
+v 9 5 2.2
+g floor
+f 1 2 3 4
+g ceiling
+f 5 6 7 8
+g south_wall
+f 1 4 6 5
+g north_wall
+f 3 2 9 10
+g west_wall
+f 2 1 5 9
+g east_wall
+f 4 3 11 12
+g east_wall
+f 13 14 10 6
+g east_wall
+f 12 15 16 13
+g east_wall
+f 17 11 14 18

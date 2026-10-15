@@ -292,6 +292,30 @@ def test_window_opens_every_example(window) -> None:
         assert example.path.name in window.windowTitle()
 
 
+def test_leaks_are_found_and_shown(window, monkeypatch) -> None:
+    import acoustic_spaces.engine.leaks as leaks_module
+
+    found = []
+    find = leaks_module.find_leaks
+    monkeypatch.setattr(
+        leaks_module, "find_leaks", lambda room: found.append(room) or find(room, rays=300)
+    )
+    window.open_example(example_path("leaky_classroom"))
+    window.leaks_action.trigger()
+    log = window.messages.toPlainText()
+    assert "Leaks: 300 rays" in log and "by east_wall" in log
+    assert len(found) == 1
+    # Found again only when the room changes where it matters.
+    window.select("listeners", 0)
+    window.document.update_point("listeners", 0, position=[3.0, 2.0, 1.2])
+    assert len(found) == 1
+    window.document.update_point("sources", 0, position=[1.5, 3.0, 1.6])
+    assert len(found) == 2
+    window.leaks_action.trigger()  # hidden
+    window.document.update_point("sources", 0, position=[1.4, 3.0, 1.6])
+    assert len(found) == 2
+
+
 def test_selection_and_forms(window) -> None:
     window.open_example(example_path("studio"))
     window.select("sources", 1)

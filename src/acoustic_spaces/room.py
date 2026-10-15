@@ -274,8 +274,9 @@ class Room:
         if not r.closed:
             out.append(
                 f"the model is not closed ({r.open_faces} faces have no room on either "
-                f"side; {r.boundary_edges} boundary edges): rays can escape, and the "
-                "volume and inside checks are skipped"
+                f"side; {r.boundary_edges} boundary edges): rays can escape (the leak "
+                "finder shows where: validate --leaks, or Show leaks in the editor's View "
+                "menu), and the volume and inside checks are skipped"
             )
         out.extend(self._unreachable())
         if r.inconsistent_edges:
