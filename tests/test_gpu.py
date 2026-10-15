@@ -1,17 +1,19 @@
-"""The wave solver stepped on a GPU through WebGPU, against the CPU.
+"""The wave solver stepped, and rays searched, on a GPU through WebGPU, against the CPU.
 
 The comparisons run wherever wgpu finds a GPU, software ones included (CI uses Mesa's
 lavapipe on Linux), and are skipped elsewhere.
 """
 
+import runpy
 from pathlib import Path
 
 import numpy as np
 import pytest
+from test_native import cube_with_seats
 from test_wave import STENCILS, _courant, _drive, _solver
 
 from acoustic_spaces import Room, _native
-from acoustic_spaces.engine import gpu
+from acoustic_spaces.engine import gpu, gpu_rays
 from acoustic_spaces.engine.impedance import fit_admittance
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.wave import COURANT, LAYER_CELLS, LAYER_DAMPING, wave_responses
@@ -124,3 +126,56 @@ def test_the_device_setting_picks_the_cpu_or_the_gpu(monkeypatch) -> None:
     assert gpu.gpu_name() is None
     with pytest.raises(ValueError, match="simulation.wave.device is gpu"):
         gpu.use_gpu("gpu")
+
+
+@needs_gpu
+def test_gpu_ray_search_finds_what_the_cpu_does() -> None:
+    rng = np.random.default_rng(6)
+    vertices, faces = cube_with_seats(rng)
+    # Off the origin, where single precision has fewer digits to spare.
+    vertices = vertices * 20.0 + np.array([100.0, -40.0, 3.0])
+    bvh = _native.Bvh(vertices, faces)
+    on_gpu = gpu_rays.GpuBvh(bvh)
+    n = 4000
+    origins = vertices[:8].min(axis=0) + rng.uniform(0.02, 0.98, (n, 3)) * 20.0
+    directions = rng.standard_normal((n, 3))
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    none = np.full(n, -1)
+    t, face = bvh.intersect(origins, directions, np.full(n, np.inf), none)
+    t_gpu, face_gpu = on_gpu.intersect(origins, directions, np.inf, none)
+    assert np.all(face_gpu >= 0)  # inside a closed box
+    same = face_gpu == face
+    assert same.mean() > 0.995
+    np.testing.assert_allclose(t_gpu[same], t[same], rtol=1e-4, atol=1e-5 * on_gpu.scale)
+    # From where those rays hit, skipping that face, on to the next one and towards a
+    # point: the queries of a tracer's reflections and of its diffuse rain.
+    starts = origins + directions * t[:, None]
+    bounce = -directions
+    t, face_next = bvh.intersect(starts, bounce, np.full(n, np.inf), face)
+    t_gpu, face_gpu = on_gpu.intersect(starts, bounce, np.inf, face)
+    assert np.mean(face_gpu == face_next) > 0.995
+    targets = origins[::-1]
+    distance = np.linalg.norm(targets - starts, axis=1)
+    towards = (targets - starts) / distance[:, None]
+    blocked = bvh.occluded(starts, towards, distance, face)
+    blocked_gpu = on_gpu.occluded(starts, towards, distance, face)
+    assert 0 < blocked.sum() < n
+    assert np.mean(blocked_gpu == blocked) > 0.995
+    # A ray limited short of every face finds none.
+    t_gpu, face_gpu = on_gpu.intersect(origins[:5], directions[:5], 1e-3, -1)
+    assert np.all(face_gpu == -1) and np.all(np.isinf(t_gpu))
+
+
+@needs_gpu
+def test_the_ray_search_timing_script_runs(monkeypatch, capsys) -> None:
+    script = Path(__file__).resolve().parent.parent / "validation" / "rays_gpu.py"
+    argv = ["rays_gpu.py", "--scenes", str(SHOEBOX), "--rays", "3000"]
+    monkeypatch.setattr("sys.argv", argv)
+    runpy.run_path(str(script), run_name="__main__")
+    out = capsys.readouterr().out
+    assert "3,000 reflections and 3,000 shadow tests per scene" in out
+    row = next(line for line in out.splitlines() if line.startswith("| shoebox"))
+    cells = [cell.strip() for cell in row.strip("|").split("|")]
+    assert len(cells) == 9 and cells[6].endswith("x")
+    # The same face and the same shadow for nearly every ray.
+    assert float(cells[7].rstrip("%")) > 99.0 and float(cells[8].rstrip("%")) > 99.0

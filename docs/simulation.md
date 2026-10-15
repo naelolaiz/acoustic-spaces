@@ -397,6 +397,14 @@ wave solver steps its grid (CPU or GPU) is `simulation.wave.device`, above.
 acoustic-spaces simulate validation/bras/CR3/scene.yaml --out cr3 --threads 3
 ```
 
+The ray tracer runs on the CPU. Its searches, the face a ray meets next and whether a
+listener can see a reflection, run on a GPU too (with the `gpu` extra), as the first
+part of tracing there: `python validation/rays_gpu.py` times them on your GPU against
+your CPU, on rays like the tracer's in BRAS's two rooms and two example halls, and
+checks that the two agree. The GPU works in single precision, so its boxes and
+triangles are widened slightly to keep rays from slipping between faces that meet;
+it finds the CPU's face for all but rays that meet two faces at nearly the same point.
+
 ## Validation
 
 The tests check the simulation against theory on Linux, macOS and Windows: exact image

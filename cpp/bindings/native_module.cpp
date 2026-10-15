@@ -142,6 +142,40 @@ nb::tuple intersect(const as::Bvh &bvh, Points origins, Points directions, InArr
     return nb::make_tuple(to_numpy(std::move(t), {n}), to_numpy(std::move(face), {n}));
 }
 
+nb::ndarray<nb::numpy, bool> occluded(const as::Bvh &bvh, Points origins, Points directions,
+                                      InArray t_max, Indices ignore) {
+    const std::size_t n = origins.shape(0);
+    if (directions.shape(0) != n || t_max.shape(0) != n || ignore.shape(0) != n) {
+        throw std::invalid_argument("occluded: inputs must have the same length");
+    }
+    std::vector<std::uint8_t> blocked(n);
+    {
+        nb::gil_scoped_release release;
+        as::parallel_for(n, 0, [&](std::size_t begin, std::size_t end, std::size_t) {
+            for (std::size_t i = begin; i < end; ++i) {
+                const as::Vec3 o{origins(i, 0), origins(i, 1), origins(i, 2)};
+                const as::Vec3 d{directions(i, 0), directions(i, 1), directions(i, 2)};
+                blocked[i] = bvh.occluded(o, d, t_max(i), ignore(i)) ? 1 : 0;
+            }
+        });
+    }
+    auto *owned = new std::vector<std::uint8_t>(std::move(blocked));
+    nb::capsule owner(owned,
+                      [](void *p) noexcept { delete static_cast<std::vector<std::uint8_t> *>(p); });
+    // NumPy reads the 0 and 1 bytes as its bools.
+    const std::size_t shape[1] = {n};
+    return nb::ndarray<nb::numpy, bool>(reinterpret_cast<bool *>(owned->data()), 1, shape, owner);
+}
+
+nb::dict bvh_layout(const as::Bvh &bvh) {
+    nb::dict out;
+    bvh.layout([&](const char *name, const auto &values) {
+        using T = typename std::decay_t<decltype(values)>::value_type;
+        out[name] = to_numpy(std::vector<T>(values), {values.size()});
+    });
+    return out;
+}
+
 using Flags = nb::ndarray<const std::uint8_t, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
 
 nb::ndarray<nb::numpy, std::int64_t> specular_sequences(const as::Bvh &bvh, InArray source,
@@ -502,7 +536,15 @@ NB_MODULE(_native, m) {
         .def_prop_ro("face_count", &as::Bvh::face_count)
         .def("intersect", &intersect, nb::arg("origins"), nb::arg("directions"),
              nb::arg("t_max"), nb::arg("ignore"),
-             "Nearest hit per ray: (distance, face), with (inf, -1) for a miss.");
+             "Nearest hit per ray: (distance, face), with (inf, -1) for a miss.")
+        .def("occluded", &occluded, nb::arg("origins"), nb::arg("directions"),
+             nb::arg("t_max"), nb::arg("ignore"),
+             "Per ray, whether any face lies within t_max of its origin (ignoring face "
+             "ignore[i]).")
+        .def_prop_ro("scale", &as::Bvh::scale)
+        .def("layout", &bvh_layout,
+             "The tree as flat arrays (see Bvh::layout in bvh.hpp), for tracing elsewhere: "
+             "boxes (nodes x 6), first, count, faces and triangles (faces x 9).");
 
     nb::class_<as::WaveSolver>(
         m, "WaveSolver",

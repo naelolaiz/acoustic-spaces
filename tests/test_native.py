@@ -69,15 +69,20 @@ def test_bvh_ray_through_an_edge_hits() -> None:
     np.testing.assert_allclose(t, [np.sqrt(0.5), np.sqrt(0.75)])
 
 
+def cube_with_seats(rng: np.random.Generator):
+    """The unit cube with 500 small triangles scattered inside, like seats in a hall."""
+    vertices, faces = _unit_cube()
+    corners = rng.uniform(0.1, 0.9, (500, 1, 3)) + rng.uniform(-0.02, 0.02, (500, 3, 3))
+    vertices = np.vstack([vertices, corners.reshape(-1, 3)])
+    faces = np.vstack([faces, 8 + np.arange(1500, dtype=np.int64).reshape(-1, 3)])
+    return vertices, faces
+
+
 def test_bvh_splits_find_the_same_hits() -> None:
     from acoustic_spaces import _native
 
     rng = np.random.default_rng(3)
-    vertices, faces = _unit_cube()
-    # Small triangles scattered inside the box, like seats in a hall.
-    corners = rng.uniform(0.1, 0.9, (500, 1, 3)) + rng.uniform(-0.02, 0.02, (500, 3, 3))
-    vertices = np.vstack([vertices, corners.reshape(-1, 3)])
-    faces = np.vstack([faces, 8 + np.arange(1500, dtype=np.int64).reshape(-1, 3)])
+    vertices, faces = cube_with_seats(rng)
     sah, median = (_native.Bvh(vertices, faces, split=s) for s in ("sah", "median"))
     assert sah.face_count == median.face_count == 512
     n = 5000
@@ -97,6 +102,54 @@ def test_bvh_splits_find_the_same_hits() -> None:
     np.testing.assert_array_equal(face_open, face_sah)
     with pytest.raises(ValueError, match="split"):
         _native.Bvh(vertices, faces, split="octree")
+
+
+def test_bvh_layout_holds_the_tree_and_every_face_once() -> None:
+    from acoustic_spaces import _native
+
+    vertices, faces = cube_with_seats(np.random.default_rng(4))
+    bvh = _native.Bvh(vertices, faces)
+    assert bvh.scale == pytest.approx(np.sqrt(3.0))
+    layout = bvh.layout()
+    boxes = layout["boxes"].reshape(-1, 6)
+    first, count = layout["first"], layout["count"]
+    assert len(boxes) == len(first) == len(count)
+    # Every face sits in one leaf, and the triangles are the mesh's, in leaf order.
+    np.testing.assert_array_equal(np.sort(layout["faces"]), np.arange(len(faces)))
+    assert count.sum() == len(faces)
+    edges = layout["triangles"].reshape(-1, 3, 3)
+    corners = vertices[faces[layout["faces"]]]
+    np.testing.assert_allclose(edges[:, 0], corners[:, 0])
+    np.testing.assert_allclose(edges[:, 1], corners[:, 1] - corners[:, 0], atol=1e-12)
+    np.testing.assert_allclose(edges[:, 2], corners[:, 2] - corners[:, 0], atol=1e-12)
+    # A leaf's triangles lie in its box; an inner node's children lie in its box.
+    lo, hi = boxes[:, :3], boxes[:, 3:]
+    for node in np.flatnonzero(count > 0):
+        inside = corners[first[node] : first[node] + count[node]].reshape(-1, 3)
+        assert np.all(inside >= lo[node]) and np.all(inside <= hi[node])
+    for node in np.flatnonzero(count == 0):
+        children = [first[node], first[node] + 1]
+        assert np.all(lo[children] >= lo[node]) and np.all(hi[children] <= hi[node])
+
+
+def test_bvh_occluded_agrees_with_the_nearest_hit() -> None:
+    from acoustic_spaces import _native
+
+    rng = np.random.default_rng(5)
+    vertices, faces = cube_with_seats(rng)
+    bvh = _native.Bvh(vertices, faces)
+    n = 3000
+    origins = rng.uniform(0.0, 1.0, (n, 3))
+    targets = rng.uniform(0.0, 1.0, (n, 3))
+    distance = np.linalg.norm(targets - origins, axis=1)
+    directions = (targets - origins) / distance[:, None]
+    ignore = rng.integers(-1, len(faces), n)
+    t, _ = bvh.intersect(origins, directions, distance, ignore)
+    blocked = bvh.occluded(origins, directions, distance, ignore)
+    assert blocked.dtype == bool and 0 < blocked.sum() < n
+    np.testing.assert_array_equal(blocked, np.isfinite(t))
+    with pytest.raises(ValueError, match="same length"):
+        bvh.occluded(origins, directions, distance[:-1], ignore)
 
 
 def test_specular_sequences_stay_inside_a_closed_box() -> None:

@@ -136,6 +136,40 @@ public:
         return any;
     }
 
+    // The tree as flat arrays, for tracing elsewhere (on a GPU), through
+    // emit(name, std::vector): per node its box ("boxes": lo then hi), "first" and
+    // "count" as in Node; per place in leaf order the face there ("faces") and its first
+    // corner and two edges ("triangles": v0, e1, e2).
+    template <typename Emit>
+    void layout(Emit emit) const {
+        std::vector<double> boxes(6 * nodes_.size());
+        std::vector<std::uint32_t> first(nodes_.size()), count(nodes_.size());
+        for (std::size_t i = 0; i < nodes_.size(); ++i) {
+            const Node &node = nodes_[i];
+            for (int a = 0; a < 3; ++a) {
+                boxes[6 * i + static_cast<std::size_t>(a)] = node.box.lo[a];
+                boxes[6 * i + 3 + static_cast<std::size_t>(a)] = node.box.hi[a];
+            }
+            first[i] = node.first;
+            count[i] = node.count;
+        }
+        std::vector<double> triangles(9 * tri_.size());
+        for (std::size_t i = 0; i < tri_.size(); ++i) {
+            const Triangle &t = tri_[i];
+            const Vec3 corner_and_edges[3] = {t.v0, t.e1, t.e2};
+            for (std::size_t k = 0; k < 3; ++k) {
+                for (int a = 0; a < 3; ++a) {
+                    triangles[9 * i + 3 * k + static_cast<std::size_t>(a)] = corner_and_edges[k][a];
+                }
+            }
+        }
+        emit("boxes", boxes);
+        emit("first", first);
+        emit("count", count);
+        emit("faces", order_);
+        emit("triangles", triangles);
+    }
+
 private:
     struct Triangle {
         Vec3 v0, e1, e2, normal;

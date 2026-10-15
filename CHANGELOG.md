@@ -435,6 +435,10 @@ changes results at 63 and 125 Hz)
   Simulation page, and as `--threads` and `--ray-tree` for `simulate`, `map` and
   `calibrate` (`--threads` for `view` and `export`). Without `--threads` they take the
   scene's setting; `info` prints the number of CPU cores.
+- The ray searches run on a GPU too, through WebGPU (`gpu` extra): the first part of
+  tracing rays there. `validation/rays_gpu.py` times them against the CPU on rays like
+  the late tracer's and checks that both find the same faces. `Bvh.layout()` hands the
+  tree to it, and `Bvh.occluded` tests many rays at once on the CPU.
 - `validation/wave_gpu.py` times the grid's set-up and the time steps apart (the
   speed-up is that of the steps), starts the GPU before timing, prints its settings
   and each grid's cell size and stencil, and lines up its table in a terminal.
