@@ -91,6 +91,10 @@ def test_bvh_splits_find_the_same_hits() -> None:
     # The same distances; a face may differ only where two meet at that point.
     np.testing.assert_array_equal(t_sah, t_median)
     assert np.mean(face_sah == face_median) > 0.999
+    # No limit at all finds the same (a missed box must not pass for one entered then).
+    t_open, face_open = sah.intersect(origins, directions, np.full(n, np.inf), args[3])
+    np.testing.assert_array_equal(t_open, t_sah)
+    np.testing.assert_array_equal(face_open, face_sah)
     with pytest.raises(ValueError, match="split"):
         _native.Bvh(vertices, faces, split="octree")
 

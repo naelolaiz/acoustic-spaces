@@ -273,9 +273,10 @@ private:
         build(left + 1, mid, end, depth + 1, boxes, centroids);
     }
 
-    // Where the ray enters the box, if it does before t_max (else infinity). A ray lying
-    // in a slab's boundary gives 0 * inf = NaN there, which the comparisons drop (as
-    // fmin and fmax would, but those are library calls on most compilers).
+    // Where the ray enters the box, if it does before t_max; else -1 (not infinity, which
+    // would pass for an entry when t_max is infinite too). A ray lying in a slab's
+    // boundary gives 0 * inf = NaN there, which the comparisons drop (as fmin and fmax
+    // would, but those are library calls on most compilers).
     static double slab(const Box &b, const Vec3 &origin, const Vec3 &inv, double t_max) {
         double t0 = 0.0, t1 = t_max;
         for (int a = 0; a < 3; ++a) {
@@ -286,7 +287,7 @@ private:
             t0 = t_in > t0 ? t_in : t0;
             t1 = t_out < t1 ? t_out : t1;
         }
-        return t0 <= t1 ? t0 : std::numeric_limits<double>::infinity();
+        return t0 <= t1 ? t0 : -1.0;
     }
 
     // Moller-Trumbore, two-sided; returns t or a negative value for a miss. Edges are
@@ -323,7 +324,7 @@ private:
         };
         std::array<Pending, kMaxDepth + 4> stack{};
         std::size_t top = 0;
-        if (!(slab(nodes_[0].box, origin, inv, limit) <= limit)) return;
+        if (!(slab(nodes_[0].box, origin, inv, limit) >= 0.0)) return;
         std::uint32_t current = 0;
         for (;;) {
             const Node &node = nodes_[current];
@@ -338,7 +339,7 @@ private:
                 const std::uint32_t left = node.first, right = node.first + 1;
                 const double to_left = slab(nodes_[left].box, origin, inv, limit);
                 const double to_right = slab(nodes_[right].box, origin, inv, limit);
-                const bool in_left = to_left <= limit, in_right = to_right <= limit;
+                const bool in_left = to_left >= 0.0, in_right = to_right >= 0.0;
                 if (in_left && in_right) {
                     if (top == stack.size()) {
                         throw std::runtime_error("Bvh: traversal stack overflow");
