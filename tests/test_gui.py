@@ -715,6 +715,25 @@ def test_place_remove_and_add_material(window, monkeypatch) -> None:
     window.add_material()
     assert window.selection == ("material", "carpet_cotton")
 
+    # From a CATT-Acoustic or ODEON library: the entry's name, without its number.
+    libraries = example_path("material_libraries").parent
+    shown = []
+    monkeypatch.setattr(
+        QInputDialog,
+        "getItem",
+        lambda *a, **k: shown.extend(a[3]) or ("1002 Wooden door, solid", True),
+    )
+    window.add_library_material(str(libraries / "odeon_materials.li8"))
+    assert shown[0].startswith("1001 Acoustic ceiling tiles")
+    assert window.selection == ("material", "wooden_door_solid")
+    door = window.document.scene.materials["wooden_door_solid"]
+    assert door.entry == 1002 and door.source.startswith("'1002 Wooden door, solid' of")
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("walls", True))
+    window.add_library_material(str(libraries / "catt_materials.geo"))
+    assert window.document.scene.materials["walls"].scattering[5] == 0.1
+    window.add_library_material(str(libraries / "scene.yaml"))
+    assert "no materials found" in window.messages.toPlainText()
+
 
 def test_another_scene_cancels_placing(window) -> None:
     window.viewport.start_placing("sources")  # waiting for a click in the 3D view

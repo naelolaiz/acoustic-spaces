@@ -249,7 +249,40 @@ def _cmd_directivity(args: argparse.Namespace) -> int:
     return 0
 
 
+def _library_materials(args: argparse.Namespace) -> int:
+    """The materials of a CATT-Acoustic or ODEON library, with the words searched for."""
+    from acoustic_spaces.materials import read_library, to_octave_bands
+
+    try:
+        materials = read_library(args.file)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    words = [w.lower() for w in args.query]
+    materials = [m for m in materials if all(w in m.label.lower() for w in words)]
+    if not materials:
+        print("no matching materials", file=sys.stderr)
+        return 1
+    width = max(len("  scattering"), *(len(m.label) for m in materials)) + 2
+    print(_band_header("", width))
+    for material in materials:
+        values, _ = to_octave_bands(material.frequencies, material.absorption)
+        print(_band_row(material.label, values, width))
+        if material.scattering is not None:
+            values, _ = to_octave_bands(material.frequencies, material.scattering)
+            print(_band_row("  scattering", values, width))
+    text = (
+        f"In a scene, a material takes one with file: {Path(args.file).name} and entry: its "
+        "name (or ODEON's number). Bands the library has no values for take the nearest "
+        "band's."
+    )
+    print("\n" + textwrap.fill(text, width=88))
+    return 0
+
+
 def _cmd_materials(args: argparse.Namespace) -> int:
+    if args.file is not None:
+        return _library_materials(args)
     db = builtin_database()
     entries = db.search(" ".join(args.query), kind=args.kind)
     if not entries:
@@ -1547,6 +1580,9 @@ def build_parser() -> argparse.ArgumentParser:
     materials = sub.add_parser("materials", help="list or search the built-in materials")
     materials.add_argument("query", nargs="*", help="words to look for, e.g. carpet concrete")
     materials.add_argument("--kind", choices=["absorption", "scattering"], default=None)
+    materials.add_argument(
+        "--file", metavar="LIBRARY", help="list a CATT-Acoustic or ODEON material library instead"
+    )
     materials.set_defaults(func=_cmd_materials)
 
     directivity = sub.add_parser(

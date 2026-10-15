@@ -10,6 +10,7 @@ reason. Undo and redo step through whole scenes, which are small.
 from __future__ import annotations
 
 import filecmp
+import re
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -494,6 +495,24 @@ class Document(QObject):
         name = unique_name(preset or "material", set(self.scene.materials))
         fields = {"preset": preset} if preset else {"absorption": [0.1] * 8}
         fields["scattering"] = 0.1
+        self.edit(f"add material {name}", lambda data: data["materials"].update({name: fields}))
+        return name
+
+    def add_library_material(self, path: str | Path, entry: str) -> str:
+        """Add a material from an entry of a CATT-Acoustic or ODEON library file and
+        return its name: the entry's, without its number."""
+        from acoustic_spaces.materials import find_material
+
+        try:
+            found = find_material(path, entry)
+        except (OSError, ValueError) as exc:
+            raise EditError(str(exc)) from None
+        base = re.sub(r"\W+", "_", found.name.lower()).strip("_") or "material"
+        name = unique_name(base, set(self.scene.materials))
+        entry_key = found.name if found.number is None else found.number
+        fields: dict = {"file": str(path), "entry": entry_key}
+        if found.scattering is None:
+            fields["scattering"] = 0.1
         self.edit(f"add material {name}", lambda data: data["materials"].update({name: fields}))
         return name
 

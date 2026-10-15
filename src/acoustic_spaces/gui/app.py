@@ -251,6 +251,11 @@ class MainWindow(QMainWindow):
             "Draw a new floor plan in the plan view; it replaces the room",
         )
         self.add_material_action = a("Add &material from the database…", self.add_material)
+        self.add_library_material_action = a(
+            "Add material from a &library…",
+            self.add_library_material,
+            tip="A material of a CATT-Acoustic (ABS lines) or ODEON (.Li8) material library",
+        )
         self.remove_action = a("Re&move selected", self.remove_selected)
         self.reset_camera_action = a("&Reset camera", self.viewport.reset_camera, "Ctrl+0")
         self.show_3d_action = a(
@@ -322,7 +327,7 @@ class MainWindow(QMainWindow):
         edit.addSeparator()
         edit.addActions([self.place_source_action, self.place_listener_action])
         edit.addAction(self.draw_action)
-        edit.addAction(self.add_material_action)
+        edit.addActions([self.add_material_action, self.add_library_material_action])
         edit.addSeparator()
         edit.addAction(self.remove_action)
 
@@ -629,6 +634,38 @@ class MainWindow(QMainWindow):
             return
         try:
             name = self.document.add_material(preset)
+        except EditError as exc:
+            self._refused(str(exc))
+            return
+        self.select("material", name)
+
+    def add_library_material(self, path: str | None = None) -> None:
+        """Pick a CATT-Acoustic or ODEON library file, then one of its materials."""
+        from acoustic_spaces.materials import read_library
+
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Material library",
+                str(self.document.base_dir()),
+                "Material libraries (*.geo *.txt *.li8 *.Li8 *.lib);;All files (*)",
+            )
+            if not path:
+                return
+        try:
+            materials = read_library(path)
+        except (OSError, ValueError) as exc:
+            self._refused(str(exc))
+            return
+        labels = [m.label for m in materials]
+        label, ok = QInputDialog.getItem(self, "Add material", "Material:", labels, 0, False)
+        if not ok:
+            return
+        found = materials[labels.index(label)]
+        try:
+            name = self.document.add_library_material(
+                path, found.name if found.number is None else str(found.number)
+            )
         except EditError as exc:
             self._refused(str(exc))
             return

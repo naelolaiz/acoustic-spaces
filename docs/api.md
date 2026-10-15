@@ -31,6 +31,9 @@ The names most scripts need are also importable from the package itself:
 ```{eval-rst}
 .. automodule:: acoustic_spaces.materials
    :imported-members:
+
+.. automodule:: acoustic_spaces.materials.libraries
+   :no-members:
 ```
 
 ## Simulation
