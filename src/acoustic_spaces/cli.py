@@ -15,6 +15,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from acoustic_spaces import __version__, native_available
+from acoustic_spaces.engine.ray_device import DEVICES, TRIAL_FLAG
 from acoustic_spaces.gltf import PARTICLE_COUNT, SLOW_MOTION
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
@@ -364,7 +365,10 @@ def _cmd_edit(args: argparse.Namespace) -> int:
     try:
         from acoustic_spaces.gui import main as editor
 
-        return editor([args.scene] if args.scene else [])
+        argv = [args.scene] if args.scene else []
+        if args.no_device_trial:
+            argv.append(TRIAL_FLAG)
+        return editor(argv)
     except ImportError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -595,6 +599,17 @@ def _performance_options(args: argparse.Namespace) -> dict[str, tuple[str, objec
     }
 
 
+TRIAL_HELP = (
+    "with simulation.late.device auto, skip the short trial that times the CPU and the GPU "
+    "on the scene, and take the choice saved from the last trial on this computer (the "
+    "CPU without one)"
+)
+
+
+def _add_trial_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(TRIAL_FLAG, action="store_true", help=TRIAL_HELP)
+
+
 def _cmd_simulate(args: argparse.Namespace) -> int:
     from acoustic_spaces.engine import simulate
     from acoustic_spaces.results import REPORT_FILE, write_results
@@ -614,6 +629,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "--wave": ("wave.enabled", args.wave),
             "--wave-band": ("wave.max_band_hz", args.wave_band),
             "--wave-device": ("wave.device", args.wave_device),
+            "--late-device": ("late.device", args.late_device),
             "--length": ("ir_length_s", args.length),
             "--sample-rate": ("sample_rate", args.sample_rate),
             **_performance_options(args),
@@ -629,6 +645,10 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    if args.no_device_trial:
+        from acoustic_spaces.engine import ray_device
+
+        ray_device.set_trial(False)
     try:
         result = simulate(
             room,
@@ -1741,6 +1761,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     edit = sub.add_parser("edit", help="open the graphical editor (needs the gui extra)")
     edit.add_argument("scene", nargs="?", help="scene YAML file to open")
+    _add_trial_argument(edit)
     edit.set_defaults(func=_cmd_edit)
 
     view = sub.add_parser("view", help="show the room in 3D (needs the viz extra)")
@@ -1869,6 +1890,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="override simulation.wave.device: step the wave solver's grid on the CPU, on "
         "a GPU (with the gpu extra) or on a hardware GPU when there is one",
     )
+    simulate.add_argument(
+        "--late-device",
+        choices=DEVICES,
+        help="override simulation.late.device: trace the late rays on the CPU, on a GPU "
+        "(with the gpu extra), on both sharing the rays, or on the fastest of those here",
+    )
+    _add_trial_argument(simulate)
     _add_performance_arguments(simulate)
     simulate.add_argument(
         "--output",

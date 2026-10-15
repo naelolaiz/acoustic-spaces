@@ -377,6 +377,9 @@ def test_selection_and_forms(window) -> None:
     page.ray_tree.setCurrentText("median")
     performance = window.document.scene.simulation.performance
     assert performance.threads == 2 and performance.ray_tree == "median"
+    assert page.late_device.currentText() == "cpu" and page.late_device.isEnabled()
+    page.late_device.setCurrentText("both")
+    assert window.document.scene.simulation.late.device == "both"
     assert window.document.scene.simulation.wave.device == "auto"
     assert window.document.scene.simulation.early.diffraction == "direct"
     assert page.scattering_method.currentText() == "vector" and page.from_size.isChecked()

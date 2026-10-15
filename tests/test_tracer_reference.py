@@ -276,12 +276,12 @@ def _coefficients(data, room: str) -> tuple[np.ndarray, ...]:
     return absorption, scattering, transmission
 
 
-def _late(native, data, name: str, run: dict, split: str | None, out: dict) -> dict:
+def late_arguments(native, data, run: dict, split: str | None, out: dict) -> dict:
+    """The arguments of ``native.trace_stochastic`` for ``run`` (one of _late_runs()),
+    by name; ``out`` holds the results of the run whose split target it takes."""
     room = run["room"]
-    bvh = _bvh(native, data, room, split)
     absorption, scattering, transmission = _coefficients(data, room)
     bands = len(BAND_HZ)
-    listeners = np.array(run["listeners"], float)
     if run.get("table"):
         first_order, table = np.ones(bands), np.ascontiguousarray(data["table"])
     else:
@@ -307,49 +307,63 @@ def _late(native, data, name: str, run: dict, split: str | None, out: dict) -> d
     else:
         face_group, groups = np.zeros(0, np.int64), 0
     directions = data["directions"] if run.get("directions") else np.zeros((0, 3))
-    energy, directional, moments, escaped, ray_energy, reflections, traced = (
-        native.trace_stochastic(
-            bvh,
-            np.array(run["source"], float),
-            np.ascontiguousarray(first_order),
-            np.ascontiguousarray(data["orientation"]),
-            table,
-            absorption,
-            scattering,
-            np.array(AIR),
-            sizes,
-            band_hz,
-            bool(run.get("vector")),
-            int(run.get("size_from_order", 1)),
-            passing,
-            face_room,
-            source_room,
-            listeners,
-            np.ascontiguousarray(directions),
-            int(run["rays"]),
-            0.4,
-            1e-3,
-            1e-2,
-            343.0,
-            np.array(run["radius"], float),
-            bool(run["diffuse_rain"]),
-            bool(run["specular_rain"]),
-            int(run.get("covered_order", -1)),
-            np.array(run.get("covered_time", ()), float),
-            int(run["seed"]),
-            THREADS,
-            0.05,
-            int(run.get("first_ray", 0)),
-            np.ascontiguousarray(target),
-            4.0,
-            8,
-            256,
-            np.array(run.get("room_level", ()), float),
-            np.ascontiguousarray(face_group, dtype=np.int64),
-            groups,
-            0.02,
-        )
-    )
+    return {
+        "bvh": _bvh(native, data, room, split),
+        "source": np.array(run["source"], float),
+        "directivity_a": np.ascontiguousarray(first_order),
+        "orientation": np.ascontiguousarray(data["orientation"]),
+        "directivity_table": table,
+        "absorption": absorption,
+        "scattering": scattering,
+        "air": np.array(AIR),
+        "surface_size": sizes,
+        "band_hz": band_hz,
+        "vector_scattering": bool(run.get("vector")),
+        "size_from_order": int(run.get("size_from_order", 1)),
+        "transmission": passing,
+        "face_room": face_room,
+        "source_room": source_room,
+        "receivers": np.array(run["listeners"], float),
+        "directions": np.ascontiguousarray(directions),
+        "rays": int(run["rays"]),
+        "max_time": 0.4,
+        "time_step": 1e-3,
+        "dir_time_step": 1e-2,
+        "speed_of_sound": 343.0,
+        "receiver_radius": np.array(run["radius"], float),
+        "diffuse_rain": bool(run["diffuse_rain"]),
+        "specular_rain": bool(run["specular_rain"]),
+        "covered_order": int(run.get("covered_order", -1)),
+        "covered_time": np.array(run.get("covered_time", ()), float),
+        "seed": int(run["seed"]),
+        "threads": THREADS,
+        "window_time_step": 0.05,
+        "first_ray": int(run.get("first_ray", 0)),
+        "split_target": np.ascontiguousarray(target),
+        "split_ratio": 4.0,
+        "max_split": 8,
+        "max_family": 256,
+        "room_level": np.array(run.get("room_level", ()), float),
+        "face_group": np.ascontiguousarray(face_group, dtype=np.int64),
+        "groups": groups,
+        "moment_time_step": 0.02,
+    }
+
+
+def reference_arguments(native, data, name: str) -> dict:
+    """The arguments of the late run ``name``, its split target from the stored results
+    of the run it follows."""
+    run = _late_runs()[name]
+    out = {}
+    if "target" in run:
+        first = run["target"]
+        out[first] = {k: data[f"late_{first}_{k}"] for k in ("ray_energy", "reflections")}
+    return late_arguments(native, data, run, None, out)
+
+
+def late_results(found: tuple) -> dict:
+    """The results of ``trace_stochastic`` by name."""
+    energy, directional, moments, escaped, ray_energy, reflections, traced = found
     return {
         "energy": energy,
         "directional": directional,
@@ -358,6 +372,10 @@ def _late(native, data, name: str, run: dict, split: str | None, out: dict) -> d
         "reflections": reflections,
         "counts": np.array([escaped, traced]),
     }
+
+
+def _late(native, data, run: dict, split: str | None, out: dict) -> dict:
+    return late_results(native.trace_stochastic(**late_arguments(native, data, run, split, out)))
 
 
 def _map(native, data, split: str | None) -> dict:
@@ -446,7 +464,7 @@ def compute(native, data: dict[str, np.ndarray], split: str | None = None) -> di
     late: dict[str, dict] = {}
     # Runs whose split target another one gives come after it.
     for name, run in sorted(_late_runs().items(), key=lambda item: "target" in item[1]):
-        late[name] = _late(native, data, name, run, split, late)
+        late[name] = _late(native, data, run, split, late)
     late["map"] = _map(native, data, split)
     for name, values in late.items():
         out |= {f"late_{name}_{key}": value for key, value in values.items()}

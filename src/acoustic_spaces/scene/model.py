@@ -807,6 +807,16 @@ class LateStage(_Model):
             "carry much less (unbiased); keeps late tails smooth where few rays survive"
         ),
     )
+    device: Literal["cpu", "gpu", "both", "auto"] = Field(
+        default="cpu",
+        description=(
+            "stochastic ray tracing only: where it traces the rays: cpu, gpu (through "
+            "WebGPU: Vulkan, Metal or Direct3D 12, with the gpu extra), both (the two share "
+            "the rays; results then vary slightly from run to run) or auto (the fastest "
+            "of those on this computer, by a short trial; the CPU when unsure). Sound "
+            "through partitions and material calibration always run on the CPU"
+        ),
+    )
 
 
 class Scattering(_Model):

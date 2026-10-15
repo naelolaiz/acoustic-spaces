@@ -1,4 +1,5 @@
-"""The wave solver stepped, and rays searched, on a GPU through WebGPU, against the CPU.
+"""The wave solver stepped, and rays searched and traced, on a GPU through WebGPU, against
+the CPU.
 
 The comparisons run wherever wgpu finds a GPU, software ones included (CI uses Mesa's
 lavapipe on Linux), and are skipped elsewhere.
@@ -9,12 +10,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from test_native import cube_with_seats
-from test_tracer_reference import REFERENCE
+from test_native import _unit_cube, cube_with_seats
+from test_tracer_reference import REFERENCE, reference_arguments
 from test_wave import STENCILS, _courant, _drive, _solver
 
 from acoustic_spaces import Room, _native
-from acoustic_spaces.engine import gpu, gpu_rays
+from acoustic_spaces.engine import gpu, gpu_rays, gpu_tracer, late, ray_device
 from acoustic_spaces.engine.impedance import fit_admittance
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.wave import COURANT, LAYER_CELLS, LAYER_DAMPING, wave_responses
@@ -195,3 +196,117 @@ def test_the_ray_search_timing_script_runs(monkeypatch, capsys) -> None:
     assert len(cells) == 9 and cells[6].endswith("x")
     # The same face and the same shadow for nearly every ray.
     assert float(cells[7].rstrip("%")) > 99.0 and float(cells[8].rstrip("%")) > 99.0
+
+
+# -- the late stage's tracer ------------------------------------------------------------
+
+#: Stretches of the response (ms) the late energy is compared over.
+STRETCHES = ((0, 20), (20, 50), (50, 100), (100, 200), (200, 400))
+#: Bounds on the differences from main in units of the CPU's spread: the CPU itself, on
+#: other seeds, reaches 6.6 at most and 0.4 on average over a run (the spread, from
+#: eight seeds, is rough and the few rays through a small listener are far from normal).
+Z_MAX = 10.0
+Z_MEAN = 1.0
+
+
+def _reference() -> dict[str, np.ndarray]:
+    with np.load(REFERENCE) as stored:
+        return dict(stored)
+
+
+def _stretches(energy: np.ndarray) -> np.ndarray:
+    """Energy per listener, band and stretch of the response."""
+    return np.stack([energy[..., lo:hi].sum(-1) for lo, hi in STRETCHES], -1)
+
+
+@needs_gpu
+def test_gpu_tracer_meets_the_direct_sound_as_the_cpu_does() -> None:
+    """In a room too large for any ray to reach a wall within the response, all either
+    counts is the rays from the source through the listeners: the same rays, with the
+    same directivity weights, on both."""
+    data = _reference()
+    values = reference_arguments(_native, data, "random_detector")
+    vertices, faces = _unit_cube()
+    values |= {
+        "directions": data["directions"],
+        "bvh": _native.Bvh(vertices * 120.0 - 55.0, faces),
+        "absorption": np.full((len(faces), 3), 0.2),
+        "scattering": np.full((len(faces), 3), 0.3),
+        "receiver_radius": np.full(3, 1.0),
+        "rays": 100_000,
+        "max_time": 0.12,
+    }
+    on_cpu = _native.trace_stochastic(**values)
+    on_gpu = gpu_tracer.trace_stochastic(**values)
+    energy = on_cpu[0]
+    assert np.all(energy.sum((1, 2)) > 0)  # through each listener's sphere
+    np.testing.assert_allclose(on_gpu[0], energy, rtol=1e-4, atol=1e-6 * energy.max())
+    np.testing.assert_allclose(on_gpu[1], on_cpu[1], rtol=1e-4, atol=1e-6 * on_cpu[1].max())
+    assert on_gpu[6] == on_cpu[6] == values["rays"]
+
+
+@needs_gpu
+@pytest.mark.parametrize("name", ["vector", "vector_split", "random_detector", "secondary"])
+def test_gpu_tracer_agrees_with_main_within_the_noise(name: str) -> None:
+    """The late energy traced on the GPU, with four times the rays, against main's
+    stored result of the same run: the difference per listener, band and stretch of the
+    response in units of the spread of the CPU's result over seeds."""
+    data = _reference()
+    values = reference_arguments(_native, data, name)
+    expected = _stretches(data[f"late_{name}_energy"])
+    spread = np.std(
+        [_stretches(_native.trace_stochastic(**values | {"seed": 1000 + s})[0]) for s in range(8)],
+        axis=0,
+        ddof=1,
+    )
+    more = 4
+    values |= {"rays": more * values["rays"], "split_target": values["split_target"] / more}
+    found = _stretches(gpu_tracer.trace_stochastic(**values)[0])
+    noise = np.maximum(spread * np.sqrt(1 + 1 / more), 1e-4 * np.abs(expected))
+    z = (found - expected) / np.maximum(noise, 1e-300)
+    assert np.abs(z).max() < Z_MAX, np.round(z, 2)
+    assert abs(z.mean()) < Z_MEAN, np.round(z, 2)
+
+
+@needs_gpu
+def test_the_late_stage_traces_where_its_device_says() -> None:
+    room = Room.from_yaml(SHOEBOX)
+    model = TraceModel.from_room(room, room.scene.simulation)
+    source = np.array(room.scene.sources[0].position, float)
+    listeners = np.array([listener.position for listener in room.scene.listeners], float)
+    common = {
+        "rays": 6000,
+        "max_time": 0.5,
+        "time_step": 1e-3,
+        "speed_of_sound": C,
+        "air": room.air_attenuation(model.bands),
+        "covered_order": 2,
+        "radius": 0.5,
+        "seed": 5,
+    }
+    on_cpu = late.stochastic_energy(model, source, listeners, **common)
+    assert on_cpu.plan == ray_device.Plan("cpu")
+    for device in ("gpu", "both"):
+        found = late.stochastic_energy(model, source, listeners, **common, device=device)
+        assert found.plan.device == device and found.traced_rays > 0
+        # Within three times the spread of the difference over seeds (5 %).
+        assert found.energy.sum() == pytest.approx(on_cpu.energy.sum(), rel=0.15)
+
+
+@needs_gpu
+def test_the_late_stage_timing_script_runs(monkeypatch, capsys) -> None:
+    script = Path(__file__).resolve().parent.parent / "validation" / "late_gpu.py"
+    argv = ["late_gpu.py", "--scenes", str(SHOEBOX), "--rays", "1500", "--devices", "gpu"]
+    monkeypatch.setattr("sys.argv", argv)
+    runpy.run_path(str(script), run_name="__main__")
+    out = capsys.readouterr().out
+    assert "1,500 per band" in out
+    rows = [line for line in out.splitlines() if line.startswith("| shoebox")]
+    cells = [[cell.strip() for cell in row.strip("|").split("|")] for row in rows]
+    assert [row[3] for row in cells] == ["cpu", "cpu (next seed)", "gpu"]
+    assert [row[4] for row in cells] == ["the CPU", "the CPU", "the GPU"]
+    assert all(len(row) == 10 and row[6].endswith("x") for row in cells)
+    # Within the noise of 1,500 rays: as far from the CPU's as another seed is, or not
+    # much further.
+    t30 = [float(row[7].rstrip("%")) for row in cells[1:]]
+    assert t30[1] < max(3 * t30[0], 5.0)

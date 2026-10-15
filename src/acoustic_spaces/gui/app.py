@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
 
 from acoustic_spaces import __version__
 from acoustic_spaces._extras import install_hint
-from acoustic_spaces.engine import reweight
+from acoustic_spaces.engine import ray_device, reweight
 from acoustic_spaces.examples import list_examples
 from acoustic_spaces.geometry import SUPPORTED_SUFFIXES, points_inside
 from acoustic_spaces.gui.document import (
@@ -1270,8 +1270,13 @@ class MainWindow(QMainWindow):
 
 
 def run(argv: list[str] | None = None) -> int:
-    """Open the editor (with the scene file in ``argv``, if any) and run until it closes."""
+    """Open the editor (with the scene file in ``argv``, if any) and run until it closes.
+    ``--no-device-trial`` in ``argv`` switches off the late stage's device trial (see
+    :mod:`acoustic_spaces.engine.ray_device`)."""
     argv = list(sys.argv[1:] if argv is None else argv)
+    if ray_device.TRIAL_FLAG in argv:
+        argv.remove(ray_device.TRIAL_FLAG)
+        ray_device.set_trial(False)
     app = QApplication.instance() or QApplication([sys.argv[0] if sys.argv else TITLE])
     app.setApplicationName(TITLE)
     window = MainWindow()

@@ -442,6 +442,20 @@ changes results at 63 and 125 Hz)
 - `validation/wave_gpu.py` times the grid's set-up and the time steps apart (the
   speed-up is that of the steps), starts the GPU before timing, prints its settings
   and each grid's cell size and stencil, and lines up its table in a terminal.
+- The late stage's rays can be traced on a GPU (`simulation.late.device`: `cpu`, the
+  default, `gpu`, `both` or `auto`; `acoustic_spaces.engine.gpu_tracer` and
+  `ray_device`). One WGSL compute shader traces what the CPU does, in single precision
+  and with random numbers of its own, so the two agree statistically. `both` shares the
+  rays between the CPU and the GPU as each is free; `auto` times a short trial on both
+  and keeps the fastest, or the CPU when wgpu finds no hardware GPU or nothing is
+  clearly faster, and saves its choice for the computer. Sound through partitions and
+  calibration's face groups stay on the CPU. `simulate --late-device`, "Run on" on the
+  editor's Simulation page, and `--no-device-trial` (`simulate`, `edit`) to take the
+  saved choice without a trial. `validation/late_gpu.py` times the late stage on each
+  device and compares the parameters it gives.
+- Tests hold the ray tracer to results stored from main before these changes
+  (`tests/reference/tracer.npz`): the trees' faces and distances, specular paths, and
+  every kind of late run on the CPU (to single precision), and statistically on a GPU.
 
 **Fixes**
 

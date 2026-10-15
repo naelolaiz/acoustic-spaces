@@ -269,6 +269,12 @@ def _shared(parts: list[early_stage.EarlyReflections], bands: int) -> early_stag
     )
 
 
+def _where(plan) -> str:
+    """Where a late stage's plan traced the rays, and why, for progress messages."""
+    where = {"cpu": "the CPU", "gpu": "the GPU", "both": "the CPU and the GPU"}[plan.device]
+    return f"{where} ({plan.reason})" if plan.reason else where
+
+
 def simulate(
     room: Room | Scene | str | Path,
     *,
@@ -457,7 +463,10 @@ def simulate(
                 orientation=orientation,
                 threads=threads,
                 groups=groups,
+                device=late_cfg.device,
             )
+            if late.plan is not None and late_cfg.device != "cpu":
+                say(f"{label}: late rays traced on {_where(late.plan)}")
             add(info, "rays", float(late.rays))
             add(info, "escaped_rays", float(late.escaped_rays))
             add(info, "traced_rays", float(late.traced_rays))
