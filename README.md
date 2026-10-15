@@ -7,7 +7,7 @@ loudspeaker formats.
 
 ![The church example in 3D: the stone nave with its early reflection paths from the altar to the front of the nave, coloured by order up to the third](docs/images/church_paths.png)
 
-**Status: 2.0**, with 3.0 on the way (see the [roadmap](docs/roadmap.md)).
+**Status: 3.0** (see the [roadmap](docs/roadmap.md)).
 
 ## What it does
 

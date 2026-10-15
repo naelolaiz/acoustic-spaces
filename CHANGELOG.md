@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 3.0.0
+
+Validation against two measured rooms, third-octave bands, vector-based scattering,
+sources with their own spectra and line, surface and array sources, sound through walls
+and between coupled rooms, fitting materials to measurements, a GPU path for the wave
+solver, edge diffraction over two edges, early reflections in pressure at low
+frequencies, IFC and Collada models, material libraries, a leak finder and walkthroughs.
+
+Simulations scatter by vector and by the size of each surface, and trace rays of their
+own for each band, so rooms with smooth walls decay faster than in 2.0.0 and closer to
+measurements (see **Scattering** for version 2's settings). Early reflections add in
+pressure at 63 and 125 Hz, and the wave solver's walls absorb as their materials do in
+every band, which changes results in those bands. Scene files of 2.0.0 load unchanged.
 
 **Comparing with measurements** (`acoustic-spaces compare`, `acoustic_spaces.compare`)
 

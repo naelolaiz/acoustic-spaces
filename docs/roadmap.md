@@ -25,7 +25,7 @@ v2, version 2.0.0 (version 1.1.0 had the first three):
 - [x] Editing geometry in the editor: drawing floor plans, dragging corners, sources and
   listeners.
 
-v3, version 3.0.0, in progress (scene files may change; the changelog will say how):
+v3, version 3.0.0:
 
 - [x] Comparing a simulation with a measurement in just noticeable differences
   (`acoustic-spaces compare`).
