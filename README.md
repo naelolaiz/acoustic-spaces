@@ -3,10 +3,7 @@
 Open-source room acoustics simulator and auralisation toolkit, in the spirit of
 CATT-Acoustic and ODEON: load a 3D model of a space, place sources and listeners,
 compute impulse responses, and listen to the result in binaural, Ambisonics or
-loudspeaker formats. To hear it,
-[listen to Beethoven's 8th symphony](https://www.youtube.com/watch?v=c0-5F-iNhIE) played
-by 61 anechoic tracks on the stage of the concert hall example, on headphones
-([how it was made](docs/spatial-audio.md#an-orchestra-in-the-concert-hall)).
+loudspeaker formats.
 
 ![The church example in 3D: the stone nave with its early reflection paths from the altar to the front of the nave, coloured by order up to the third](docs/images/church_paths.png)
 
@@ -27,7 +24,10 @@ by 61 anechoic tracks on the stage of the concert hall example, on headphones
 - **Listening**: impulse responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker
   formats as WAV files; dry recordings run through them offline or in real time on the
   sound card, head-tracked on headphones:
-  [spatial audio and listening](docs/spatial-audio.md).
+  [spatial audio and listening](docs/spatial-audio.md). One example is
+  [Beethoven's 8th symphony](https://www.youtube.com/watch?v=c0-5F-iNhIE) from 61
+  anechoic tracks on the stage of the concert hall example, binaural for headphones
+  ([how it was made](docs/spatial-audio.md#an-orchestra-in-the-concert-hall)).
 - **Measuring real rooms** with sine sweeps, comparing them with their model in just
   noticeable differences, and fitting the model's absorption to them:
   [measurements](docs/measurements.md).
