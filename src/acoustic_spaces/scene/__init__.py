@@ -15,6 +15,7 @@ from acoustic_spaces.scene.model import (
     Scene,
     Source,
     Speaker,
+    Walk,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "Scene",
     "Source",
     "Speaker",
+    "Walk",
 ]

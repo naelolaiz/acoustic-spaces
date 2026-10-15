@@ -242,6 +242,39 @@ def test_particle_animation(tmp_path: Path) -> None:
     assert (tmp_path / "cli.gif").stat().st_size > 1000
 
 
+def test_walk_animation(tmp_path: Path) -> None:
+    from PIL import Image
+
+    from acoustic_spaces.viz import animate_walk
+    from acoustic_spaces.walkthrough import WalkPoints, WalkResponses
+
+    room = Room.from_yaml(SHOEBOX)
+    points = WalkPoints(
+        np.array([0.0, 0.5, 1.0]), np.array([[1.0, 1, 1.6], [2, 1, 1.6], [3, 1, 1.6]]), None
+    )
+    walk = WalkResponses("visitor", "listeners", points, ("a", "b", "c"), None)
+    out = tmp_path / "walk.gif"
+    animate_walk(room, walk, out, fps=2, window_size=(320, 200))
+    with Image.open(out) as gif:
+        assert gif.n_frames == 3 and gif.size == (320, 200)
+    with pytest.raises(ValueError, match="gif or .mp4"):
+        animate_walk(room, walk, tmp_path / "walk.avi")
+
+    from acoustic_spaces.audio import write_wav
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.scene import Walk
+
+    seat = room.scene.listeners[0]
+    walking = seat.model_copy(update={"walk": Walk(to=[(6.0, 4.0, 1.2)], speed_m_s=1.0)})
+    room.scene.model_copy(update={"listeners": [walking]}).to_yaml(tmp_path / "scene.yaml")
+    write_wav(tmp_path / "dry.wav", np.zeros((800, 1)), 8000)
+    args = ["walkthrough", str(tmp_path / "scene.yaml"), f"talker={tmp_path / 'dry.wav'}"]
+    args += ["--out", str(tmp_path / "walk.wav"), "--rays", "200", "--length", "0.2"]
+    assert main([*args, "--step", "0.5", "--video", str(tmp_path / "cli.gif"), "--fps", "4"]) == 0
+    with Image.open(tmp_path / "cli.gif") as gif:
+        assert gif.n_frames == 5
+
+
 def _map():
     from acoustic_spaces.engine import coverage_map
     from acoustic_spaces.scene import Coverage

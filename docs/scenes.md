@@ -460,3 +460,25 @@ sources:
   them too.
 
 ![Polar patterns of the per-band directivity above, from omni in the bass to a narrow pattern at 8 kHz](images/directivity.png)
+
+## Walks
+
+A listener or a point source can walk through the room, for
+[walkthroughs](spatial-audio.md#walkthroughs):
+
+```yaml
+listeners:
+  - name: visitor
+    position: [17.0, 4.0, 1.6]   # where the walk starts
+    walk:
+      to: [[4.0, 4.0, 1.6], [4.0, 16.0, 1.6]]   # the corners it goes through
+      speed_m_s: 1.2       # walking pace (default 1.2 m/s)
+      face_forward: true   # turn to face the way it goes (default); false keeps its yaw
+```
+
+- A walk goes in straight lines from the position through each point of `to`, at an
+  even pace, and stops at the last one. Facing forward sets the yaw along each leg and
+  keeps the pitch and roll; on a leg straight up or down the yaw stays as it was.
+- Everything else (`simulate`, `map`, the editor) sees the walker standing where its
+  walk starts; `inspect` lists how far each walk goes and for how long. Lines, surfaces
+  and arrays do not walk.

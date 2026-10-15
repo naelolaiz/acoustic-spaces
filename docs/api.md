@@ -121,6 +121,12 @@ Rotating sound fields, and decoding them to the ears:
 .. automodule:: acoustic_spaces.render
 ```
 
+## Walkthroughs
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.walkthrough
+```
+
 ## Head tracking
 
 ```{eval-rst}

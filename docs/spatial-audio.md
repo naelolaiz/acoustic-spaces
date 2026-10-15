@@ -163,6 +163,61 @@ instruments is the recording's own. `make_images.py` draws the pictures with Pil
 (`viz` extra) and `make_video.sh` puts a scrolling spectrogram of the mix under the
 cover. Movements 2 and 4 work the same way.
 
+### Walkthroughs
+
+A listener or a source with a [walk](scenes.md#walks) can be heard as it goes. The
+`gallery_walk` example has a visitor walk away from a guide, down the long arm of the
+L-shaped gallery and round the corner, while the guide talks (any dry speech recording
+does as `speech.wav`; see [dry recordings to try](#dry-recordings-to-try)):
+
+```sh
+acoustic-spaces examples --copy . gallery_walk && cd gallery_walk
+acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video walk.mp4
+```
+
+- Responses are simulated every `--step` along the path (25 cm by default, 101 places
+  for the gallery's 25 m). The early sound, which changes quickly from place to place,
+  is simulated at every one of them; the late field changes slowly, so the late part,
+  by far the costliest to trace, is traced only every `--late-step` (2 m by default,
+  14 places), and the places in between mix the late parts of the two on either side
+  in proportion to how near they are. Along the gallery, late parts mixed from places
+  4 m apart, twice the default, came within 0.3 dB on average of those traced at the
+  places themselves, band by band, and within 1.3 dB next to the corner, where the
+  field changes fastest (with 10,000 rays per band, whose own noise is part of that).
+  The gallery's walk takes about five minutes on 4 cores, six times as long as one
+  response.
+- The dry signals play through the response of the place the walker is nearest to,
+  with a `--crossfade` (a raised cosine, 50 ms by default) half-way between two places,
+  so the sound changes smoothly as it walks: the crossfades' weights always add up to
+  one, and one response at every place gives exactly the convolution with it. Through
+  the gallery's walk, a 440 Hz tone has at least 75 dB less energy above 2 kHz than in
+  the tone in every 10 ms, much as through a single response; linear crossfades left
+  only 60 dB at their corners. Every place's late part is drawn from the same random
+  sequence, so the tails that cross fade differ only in their level and decay, not in
+  their noise. Once the walk is over, the walker stays where it ends for as long as the
+  signals last.
+- A walking listener hears every source; a walking source is heard at `--listener`,
+  with the other sources where they stand. `--format` takes the formats of `simulate
+  --output` (by default the scene's first output) and `--video` saves the room, the
+  path and the walker going along it as a GIF, or an MP4 with `imageio[ffmpeg]`
+  installed, at `--fps`, to put together with the sound (with ffmpeg:
+  `ffmpeg -i walk.mp4 -i walk.wav -c:v copy -c:a aac walk_with_sound.mp4`).
+- There is no Doppler shift: at walking speed it is under half a percent.
+
+From Python:
+
+```python
+from acoustic_spaces import Room
+from acoustic_spaces.spatial import Binaural
+from acoustic_spaces.viz import animate_walk
+from acoustic_spaces.walkthrough import render_walk, simulate_walk
+
+room = Room.from_yaml("scene.yaml")
+walk = simulate_walk(room)  # the only listener or source with a walk
+sound = render_walk(walk, {"guide": (speech, 44_100)}, Binaural())  # (samples, 2)
+animate_walk(room, walk, "walk.gif")
+```
+
 ### Head tracking
 
 With headphones and a head tracker, a binaural rendering stays put in the room while the
