@@ -28,13 +28,15 @@ source's: responses the fit did not see.
 The script prints a Markdown table per room: the measured and simulated parameters
 averaged over the ten pairs, and the mean difference in JNDs; then how many of the
 pair-and-band differences from 125 Hz to 4 kHz are within one JND. ``--plots`` draws the
-averages with the JND around the measured ones.
+averages with the JND around the measured ones. Progress goes to standard error: each
+stage of each room's simulation as it starts, with the seconds since the room started.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 import warnings
 from pathlib import Path
@@ -170,8 +172,15 @@ def validate(
         scene, calibration = calibrated_scene(name, scene, measured, calibrate_on, calibration_rays)
     room = Room.from_scene(scene)
     start = time.perf_counter()
-    result = simulate(room)
+
+    def progress(message: str) -> None:
+        print(
+            f"{name} at {time.perf_counter() - start:.0f} s: {message}", file=sys.stderr, flush=True
+        )
+
+    result = simulate(room, progress=progress)
     seconds = time.perf_counter() - start
+    progress("done")
     pairs = {}
     for key, entry in measured["pairs"].items():
         source, listener = key.split()

@@ -428,10 +428,10 @@ does. Simulated with `simulation.bands: third_octave`, which keeps the thirds ap
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | CR2 measured | 1.56 | 1.34 | 1.72 | 2.00 | 1.94 | 1.75 | 1.54 | 1.11 |
 | CR2 octave bands (default) | 1.69 | 1.49 | 1.50 | 1.97 | 1.92 | 1.76 | 1.53 | 0.91 |
-| CR2 third-octave bands | 1.77 | 1.52 | 1.65 | 1.98 | 1.92 | 1.78 | 1.51 | 1.07 |
+| CR2 third-octave bands | 1.78 | 1.52 | 1.65 | 1.98 | 1.92 | 1.78 | 1.51 | 1.07 |
 | CR3 measured | 1.77 | 1.57 | 1.46 | 1.28 | 1.34 | 1.30 | 1.03 | 0.78 |
 | CR3 octave bands (default) | 2.00 | 1.88 | 1.57 | 1.40 | 1.47 | 1.40 | 1.10 | 0.72 |
-| CR3 third-octave bands | 2.07 | 1.92 | 1.59 | 1.40 | 1.46 | 1.40 | 1.14 | 0.80 |
+| CR3 third-octave bands | 2.05 | 1.92 | 1.59 | 1.40 | 1.46 | 1.40 | 1.14 | 0.80 |
 
 The seminar room's decay at 250 Hz and 8 kHz, 13 and 17 % short in octave bands, comes
 within 4 % of the measurement: there its thirds' absorption, and at 8 kHz the air's,
@@ -840,7 +840,7 @@ python validation/bras_validation.py --materials initial --calibrate LS1 --plots
 
 The cross-check takes about 25 minutes on 4 cores, the benchmark about 2 minutes, the
 wave solver's checks about 3.5 minutes (both stencils) and each BRAS run about 30 minutes (85 in
-third-octave bands, 46 calibrated). The cross-check's numbers come from the development version of
+third-octave bands, or half that per room with `--scenes CR2`, 46 calibrated). The cross-check's numbers come from the development version of
 3.0.0 with seed 1. Those of pyroomacoustics, which draws its rays afresh on every run, have moved by up to 6 % in
 T30, 16 % in EDT and 2 dB in C80 from one run to the next, and the differences in the
 tables with them. Other seeds move this package's numbers by a few percent.
