@@ -184,8 +184,12 @@ materials:
   that CATT estimates itself (`L <estimate(...)>`) is not read, so give `scattering`.
 - ODEON's library has each material on two lines, its number and description, then
   eight absorption coefficients from 63 Hz to 8 kHz (six, from 125 Hz to 4 kHz, in
-  older libraries). ODEON gives scattering to surfaces, so give it with `scattering`
-  (0.1 otherwise).
+  older libraries). Where the description has ODEON's `{Product name*=...}` and
+  `{Category=...}` fields, as in its own `Material.Li8`, the product name is the
+  material's name, and `materials --file` lists the materials by category. Materials
+  made with ODEON's Material calculator are read by their octave values, which ODEON
+  simulates with; their third-octave values are not read. ODEON gives scattering to
+  surfaces, so give it with `scattering` (0.1 otherwise).
 
 The 63 Hz band takes the 125 Hz value where a library has none, 8 kHz the 4 kHz value,
 and 16 kHz is left out. `acoustic-spaces materials --file <library>` lists a library's

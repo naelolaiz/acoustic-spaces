@@ -277,13 +277,19 @@ def _library_materials(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     words = [w.lower() for w in args.query]
-    materials = [m for m in materials if all(w in m.label.lower() for w in words)]
+    materials = [
+        m for m in materials if all(w in f"{m.label} {m.category or ''}".lower() for w in words)
+    ]
     if not materials:
         print("no matching materials", file=sys.stderr)
         return 1
     width = max(len("  scattering"), *(len(m.label) for m in materials)) + 2
     print(_band_header("", width))
+    category = None
     for material in materials:
+        if material.category is not None and material.category != category:
+            category = material.category
+            print(f"\n{category}")
         values, _ = to_octave_bands(material.frequencies, material.absorption)
         print(_band_row(material.label, values, width))
         if material.scattering is not None:
