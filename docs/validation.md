@@ -82,6 +82,14 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   their points what listeners there find (G, T30 and C80 within 0.01 with the
   statistical method), and the rays' maps the level behind the partitions within
   0.4 dB;
+- audience seating: the grazing attenuation against its fit's own figures (17 dB at
+  grazing incidence after 11 m, 6.3 dB at 5° and 4.8 dB at 7°, none from 17.8°,
+  linear in dB with distance); the direct sound 18 m over seats at 0.95° 21.1 dB down in
+  the 500 Hz to 2 kHz bands only, the ceiling reflection untouched; a balcony seat
+  shaded only by its own seats and the front stalls the sound skims, not by the stalls
+  far below; with the statistical method, a response that loses exactly what its early
+  paths lose (the tail does not make it up); and a coverage map less clear and weaker
+  over the middle of the seats;
 - every ISO 3382-1 parameter on synthetic exponential decays, and the air
   absorption against the ISO 9613-1 table;
 - the further parameters against responses whose values are known: LF and LFC of one

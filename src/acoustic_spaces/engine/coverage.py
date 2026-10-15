@@ -32,6 +32,7 @@ import numpy as np
 from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
+from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.simulate import (
     _as_room,
@@ -418,6 +419,9 @@ class _Part:
     late: late_stage.MapEnergy | None
     #: The statistical tail's decay at each point where the model holds several rooms.
     decay: tuple[np.ndarray, np.ndarray] | None = None
+    #: For the statistical tail: the early paths without the audience's grazing
+    #: attenuation, where it changed them (else None).
+    plain: list[early_stage.EarlyReflections] | None = None
 
 
 @dataclass
@@ -492,7 +496,7 @@ def _part_curve(
             t60,
             volume,
             [onset],
-            [part.early[k]],
+            [part.early[k] if part.plain is None else part.plain[k]],
             max_time=length,
             time_step=TIME_STEP,
             speed_of_sound=c,
@@ -566,7 +570,7 @@ def _trace_part(
         model, position, sim.early.method, sim.early.max_order, sim.early.rays, threads
     )
     diffraction = edges.diffraction(sim.early.diffraction, position, room, name, orientation)
-    early = []
+    early, plain = [], []
     diffracted = 0
     for k in range(len(grid)):
         paths = early_stage.find_paths(
@@ -583,7 +587,8 @@ def _trace_part(
         if diffraction is not None:
             paths = diffraction.apply(grid.points[k], paths, float(cutoff[k]))
             diffracted += int(paths.diffracted.sum())
-        early.append(paths)
+        early.append(apply_grazing(model, grid.points[k], paths))
+        plain.append(paths)
     if diffraction is not None:
         info["edges"] = float(len(diffraction.edges))
         add("diffracted_paths", float(diffracted))
@@ -616,7 +621,10 @@ def _trace_part(
     if statistical:
         decay = late_stage.diffuse_decay(model, position, grid.points, air, c)
     add("late_s", time.perf_counter() - t)
-    return _Part(onset, early, late, decay)
+    # As at a listener, the statistical tail is reckoned less the paths without the
+    # audience's attenuation, so what the seats take is lost.
+    changed = statistical and any(a is not b for a, b in zip(early, plain, strict=True))
+    return _Part(onset, early, late, decay, plain if changed else None)
 
 
 def coverage_map(

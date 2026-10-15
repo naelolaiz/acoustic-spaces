@@ -15,6 +15,7 @@ from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine import wave as wave_stage
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
+from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.geometry import distance_to_surface
@@ -169,7 +170,7 @@ def early_paths(
         )
         if found is not None:
             paths = found.apply(target, paths, scene.simulation.ir_length_s)
-        parts.append(paths)
+        parts.append(apply_grazing(model, target, paths))
     return _shared(parts, model.absorption.shape[1])
 
 
@@ -285,6 +286,10 @@ def simulate(
             ]
             info["edges"] = float(len(diffraction.edges))
             add(info, "diffracted_paths", float(sum(int(p.diffracted.sum()) for p in paths)))
+        # The diffuse field is reckoned less the paths as they would come without the
+        # audience, so what the seats take from them is lost, not made up by the tail.
+        plain = paths
+        paths = [apply_grazing(model, listener_pos[k], p) for k, p in enumerate(paths)]
         add(info, "early_s", time.perf_counter() - started)
 
         started = time.perf_counter()
@@ -295,7 +300,7 @@ def simulate(
                 t60,
                 volume,
                 direct,
-                paths,
+                plain,
                 max_time=length,
                 time_step=TIME_STEP,
                 speed_of_sound=c,

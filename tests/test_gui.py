@@ -417,6 +417,20 @@ def test_materials_let_sound_through(window) -> None:
     floor = window.document.scene.materials["wooden_floor"]
     assert floor.transmission_loss is None and floor.absorption == absorption
 
+    # Audience seating, kept when the coefficients or the database entry change.
+    window.select("material", "side_panels")
+    page.audience.setChecked(True)
+    assert window.document.scene.materials["side_panels"].audience
+    page.table.item(0, 0).setText("0.55")
+    panels = window.document.scene.materials["side_panels"]
+    assert panels.audience and panels.absorption[0] == 0.55
+    page.preset.setCurrentText("stage_floor")
+    page.preset.activated.emit(0)
+    panels = window.document.scene.materials["side_panels"]
+    assert panels.audience and panels.preset == "stage_floor"
+    window.select("material", "wooden_floor")
+    assert not page.audience.isChecked()
+
 
 def test_source_spectrum_gain_equalizer_and_delay(window) -> None:
     window.open_example(example_path("studio"))
