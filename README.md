@@ -12,9 +12,10 @@ loudspeaker formats.
 ## What it does
 
 - **Rooms** from CAD and BIM models (OBJ, DXF, glTF, STL, IFC, Collada, SketchUp), from
-  their dimensions or from a floor plan, with a material database, walls and doors
-  between rooms, audience seating, and directional, line, surface and array sources:
-  [scene files](docs/scenes.md).
+  their dimensions or from a floor plan, with a material database and the material
+  libraries of CATT-Acoustic and ODEON, walls and doors between rooms, audience seating,
+  and directional, line, surface and array sources; a leak finder shows where a model
+  is open: [scene files](docs/scenes.md).
 - **Simulation**: ray-traced early reflections with edge diffraction, added in pressure
   at low frequencies, a stochastic late tail and, for the lowest bands, a wave solver on
   the CPU or a GPU; ISO 3382-1 parameters, the STI and echo criteria for every source
@@ -100,13 +101,15 @@ website with Sphinx (see
 
 ## Design in one paragraph
 
-Python is the main language; a small C++ core (bound with nanobind) carries the
-parts that have hard real-time deadlines. Every simulation runs in two stages with
-selectable methods: deterministic ray tracing (or image sources) for the early
-reflections and stochastic processing for the late reverberation. Both write a
-format-independent *directional reflectogram*, from which binaural, Ambisonics and
-loudspeaker impulse responses are encoded, so one simulation serves every output
-format.
+Python is the main language; a C++ core (bound with nanobind) carries the parts that
+must be fast: the ray tracer, the wave solver and the real-time convolver. Every
+simulation runs in two stages with selectable methods: deterministic ray tracing (or
+image sources) for the early reflections and stochastic processing for the late
+reverberation. Both write a format-independent *directional reflectogram*, from which
+binaural, Ambisonics and loudspeaker impulse responses are encoded, so one simulation
+serves every output format. For the lowest bands a wave solver can take over; it
+records the pressure and its gradient, so the bass keeps its direction (to first order)
+in every format.
 
 ## Contributing
 

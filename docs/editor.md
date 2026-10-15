@@ -34,6 +34,8 @@ The editor works on the same scene files as the command line:
   Surfaces take materials from their form, or from a new material picked from the
   database (**Edit > Add material**) or from a CATT-Acoustic or ODEON library
   (**Edit > Add material from a library**).
+- The editor does not draw or edit walks (`walk` in a listener's or source's entry,
+  see [Walkthroughs](spatial-audio.md#walkthroughs)), but keeps them when it saves.
 - **Simulation > Run coverage map** (F6) maps every source over the audience area (see
   [Coverage maps](coverage-maps.md#coverage-maps)). The **Coverage map** panel shows any parameter
   and band from above, for one source or all of them together, and **Map in 3D** lays
