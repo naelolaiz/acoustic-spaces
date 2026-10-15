@@ -278,13 +278,20 @@ class ResultsPanel(QWidget):
             self._table()
             self._draw()
 
-    def mark_stale(self, stale: bool) -> None:
-        """Say whether the scene changed since the results were computed."""
+    def mark_stale(self, stale: bool, reweighted: bool = False) -> None:
+        """Say whether the scene changed since the results were computed, or whether
+        they re-weight the run for other absorption."""
         if self.result is None:
             return
-        self._note(
-            "The scene changed since this run; run again to update the results." if stale else ""
-        )
+        if stale:
+            self._note("The scene changed since this run; run again to update the results.")
+        elif reweighted:
+            self._note(
+                "The absorption changed since this run: these results re-weight its rays. "
+                "Run again to trace them afresh."
+            )
+        else:
+            self._note("")
 
     def _note(self, text: str) -> None:
         self.stale.setText(text)

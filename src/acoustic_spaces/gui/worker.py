@@ -8,6 +8,7 @@ source); its result is dropped.
 
 from __future__ import annotations
 
+import numpy as np
 from PySide6.QtCore import QThread, Signal
 
 from acoustic_spaces.engine import coverage_map, simulate
@@ -28,11 +29,19 @@ class SimulationJob(QThread):
     failed = Signal(str)
     cancelled = Signal()
 
-    def __init__(self, room: Room, settings: Simulation | None = None, threads: int = 0):
+    def __init__(
+        self,
+        room: Room,
+        settings: Simulation | None = None,
+        threads: int = 0,
+        groups: np.ndarray | None = None,
+    ):
         super().__init__()
         self.room = room
         self.settings = settings
         self.threads = threads
+        #: Face groups to count reflections off (``simulate(groups=...)``).
+        self.groups = groups
         self._stop = False
 
     def cancel(self) -> None:
@@ -44,7 +53,13 @@ class SimulationJob(QThread):
         self.progress.emit(message)
 
     def compute(self):
-        return simulate(self.room, settings=self.settings, threads=self.threads, progress=self._say)
+        return simulate(
+            self.room,
+            settings=self.settings,
+            threads=self.threads,
+            progress=self._say,
+            groups=self.groups,
+        )
 
     def run(self) -> None:
         try:

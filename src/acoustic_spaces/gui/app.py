@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces import __version__
+from acoustic_spaces.engine import reweight
 from acoustic_spaces.examples import list_examples
 from acoustic_spaces.geometry import points_inside
 from acoustic_spaces.gui.document import (
@@ -84,6 +85,10 @@ class MainWindow(QMainWindow):
         self.selection: tuple[str, object] = ("scene", None)
         self.result = None
         self._result_scene = None
+        #: The run as traced, for re-weighting it when only absorption changes: its
+        #: result, scene, face groups and their materials; None when it cannot be.
+        self._traced = None
+        self._job_groups = None
         self.coverage = None
         self._coverage_scene = None
         self.job: SimulationJob | None = None
@@ -347,7 +352,7 @@ class MainWindow(QMainWindow):
         self.document = document
         document.changed.connect(self._changed)
         document.state_changed.connect(self._state)
-        self.result = self._result_scene = None
+        self.result = self._result_scene = self._traced = None
         self.results.set_result(None)
         self.coverage = self._coverage_scene = None
         self.map_panel.set_result(None)
@@ -364,7 +369,8 @@ class MainWindow(QMainWindow):
             self.selection = ("scene", None)
         self.tree.rebuild(self.document.room, self.selection)
         self.inspector.show_item(*self.selection)
-        self.results.mark_stale(self._stale())
+        self._reweight()
+        self.results.mark_stale(self._stale(), reweighted=self._reweighted())
         self.map_panel.mark_stale(self._map_stale())
         self._draw()
         self._summary()
@@ -799,6 +805,27 @@ class MainWindow(QMainWindow):
     def _stale(self) -> bool:
         return self.result is not None and self._result_scene is not self.document.scene
 
+    def _reweighted(self) -> bool:
+        """True when the results on show re-weight the run for other absorption."""
+        return self._traced is not None and self.result is not self._traced[0]
+
+    def _reweight(self) -> None:
+        """When the scene differs from the run's in absorption alone, show the run
+        re-weighted for it, at once (:func:`~acoustic_spaces.engine.reweight.
+        reweighted_result`); otherwise leave the results to be marked out of date."""
+        if self._traced is None or self._result_scene is self.document.scene:
+            return
+        result, scene, face_group, materials = self._traced
+        try:
+            found = reweight.reweighted_result(
+                result, scene, face_group, materials, self.document.scene
+            )
+        except ValueError:
+            found = None
+        if found is not None:
+            self.result, self._result_scene = found, self.document.scene
+            self.results.set_result(found)
+
     def _map_stale(self) -> bool:
         return self.coverage is not None and self._coverage_scene is not self.document.scene
 
@@ -810,7 +837,11 @@ class MainWindow(QMainWindow):
             self.log("Cannot run: " + "; ".join(problems))
             self.docks["messages"].raise_()
             return
-        job = SimulationJob(self.document.room)
+        # Count reflections off each material, so that changing absorption afterwards
+        # re-weights the run instead of making it out of date.
+        self._job_groups = reweight.groups_of(self.document.room)
+        groups = self._job_groups[0] if self._job_groups is not None else None
+        job = SimulationJob(self.document.room, groups=groups)
         job.done.connect(self._done)
         self._start(job, f"Simulating {self.document.scene.name}…")
 
@@ -867,10 +898,13 @@ class MainWindow(QMainWindow):
             return
         first = self.result is None
         self.result, self._result_scene = result, self._job_scene
+        groups = self._job_groups
+        self._traced = None if groups is None else (result, self._job_scene, *groups)
         self.results.set_result(result)  # keeps the source and listener on show
         if first:
             self._follow(self.selection)
-        self.results.mark_stale(self._stale())
+        self._reweight()  # absorption changed while it ran
+        self.results.mark_stale(self._stale(), reweighted=self._reweighted())
         self.docks["results"].raise_()
         elapsed = time.perf_counter() - self._started
         count = len(result.responses)

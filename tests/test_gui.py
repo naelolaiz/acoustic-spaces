@@ -829,6 +829,27 @@ def _quick_map(document: Document) -> None:
     document.edit("coarse map", lambda data: data.update(coverage={"spacing": 2.0, "rays": 500}))
 
 
+def test_changing_absorption_re_weights_the_run(window, qapp) -> None:
+    _quick(window.document)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    traced = window.result
+    assert traced is not None and window._traced is not None
+    before = traced[("source", "listener")].energy().sum(axis=-1)
+    fields = window.document.scene.materials["plaster"].model_dump(mode="json", exclude_none=True)
+    fields.pop("preset", None)
+    fields["absorption"] = [0.3] * 8
+    window.document.set_material("plaster", fields)
+    assert window.result is not traced and not window._stale()
+    after = window.result[("source", "listener")].energy().sum(axis=-1)
+    assert np.all(after < 0.8 * before)
+    assert "re-weight" in window.results.stale.text()
+    window.document.undo()
+    assert window.result is traced and not window.results.stale.isVisible()
+    window.document.edit("move", lambda data: data["sources"][0].update(position=[3.0, 3.0, 1.5]))
+    assert window._stale() and "run again" in window.results.stale.text()
+
+
 def test_map_job(qapp) -> None:
     document = Document(box_scene())
     _quick_map(document)

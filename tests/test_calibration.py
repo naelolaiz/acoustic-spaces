@@ -11,7 +11,7 @@ import yaml
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.calibration import calibrate, with_absorption
 from acoustic_spaces.cli import main
-from acoustic_spaces.engine.reweight import face_groups, log_ratio
+from acoustic_spaces.engine.reweight import face_groups, groups_of, log_ratio, reweighted_result
 
 MATERIALS = ["floor", "ceiling", "walls"]
 #: The absorption the recovery test measures with, floor and walls rising with frequency.
@@ -81,6 +81,38 @@ def test_reweighted_responses_match_tracing_again():
         np.testing.assert_allclose(found.edt[bands], expected.edt[bands], rtol=0.05)
         np.testing.assert_allclose(found.c80[bands], expected.c80[bands], atol=0.3)
         np.testing.assert_allclose(found.g[bands], expected.g[bands], atol=0.1)
+
+
+def test_a_run_re_weights_when_only_absorption_changes():
+    scene = _box(TRUTH, rays=500, length=0.8)
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    assert materials == MATERIALS
+    result = simulate(room, sources=["s"], groups=face_group)
+    harder = np.multiply(TRUTH["walls"], 0.5)
+    changed = with_absorption(scene, ["walls"], [harder])
+    found = reweighted_result(result, scene, face_group, materials, changed)
+    ratio = log_ratio(
+        np.array([TRUTH[m] for m in MATERIALS]), [TRUTH["floor"], TRUTH["ceiling"], harder]
+    )
+    expected = result["s", "a"].reweighted(face_group, ratio)
+    np.testing.assert_allclose(found["s", "a"].energy(), expected.energy())
+    assert np.all(found["s", "a"].parameters().t30[2:] > result["s", "a"].parameters().t30[2:])
+    assert reweighted_result(result, scene, face_group, materials, scene) is result
+
+    # Anything else changed asks for a new run.
+    moved = scene.model_copy(deep=True)
+    moved.listeners[0] = moved.listeners[0].model_copy(update={"position": (5.0, 3.9, 1.2)})
+    rougher = scene.model_copy(deep=True)
+    rougher.materials["walls"] = rougher.materials["walls"].model_copy(
+        update={"scattering": [0.5] * 8}
+    )
+    opened = with_absorption(scene, ["walls"], [np.ones(8)])
+    for other in (moved, rougher, opened):
+        assert reweighted_result(result, scene, face_group, materials, other) is None
+    # So does a run whose settings keep no counts.
+    for change in ({"late": {"method": "statistical"}}, {"bands": "third_octave"}):
+        assert groups_of(Room.from_scene(_box(TRUTH, **change))) is None
 
 
 def test_calibration_recovers_the_absorption_it_measured():

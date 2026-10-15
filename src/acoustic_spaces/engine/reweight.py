@@ -33,7 +33,7 @@ from collections.abc import Sequence
 import numpy as np
 
 from acoustic_spaces.engine.early import EarlyReflections
-from acoustic_spaces.engine.late import MOMENT_STEP
+from acoustic_spaces.engine.late import MAX_GROUPS, MOMENT_STEP
 
 
 def face_groups(room, materials: Sequence[str]) -> np.ndarray:
@@ -51,6 +51,52 @@ def face_groups(room, materials: Sequence[str]) -> np.ndarray:
     index = {name: k for k, name in enumerate(materials)}
     lookup = np.array([index.get(name, -1) for name in names] + [-1], dtype=np.int64)
     return lookup[np.asarray(room.face_materials)]
+
+
+def groups_of(room) -> tuple[np.ndarray, list[str]] | None:
+    """Face groups to trace ``room`` with so that its absorption can change afterwards
+    (:func:`reweighted_result`): the group of each face and the materials, those on
+    surfaces that absorb less than everything in every band. None when its simulation
+    settings do not keep what re-weighting needs (another late method, third-octave
+    bands, the wave solver) or more than ``MAX_GROUPS`` materials are on its surfaces."""
+    sim = room.scene.simulation
+    if sim.late.method != "stochastic_ray_tracing" or sim.bands != "octave" or sim.wave.enabled:
+        return None
+    used = np.unique(np.asarray(room.face_materials))
+    names = [room.material_names[k] for k in used if k >= 0]
+    materials = [n for n in names if max(room.scene.materials[n].coefficients("octave")[0]) < 1]
+    if not materials or len(materials) > MAX_GROUPS:
+        return None
+    return face_groups(room, materials), materials
+
+
+def _without_absorption(scene) -> dict:
+    data = scene.model_dump()
+    for material in data["materials"].values():
+        for key in ("absorption", "source", "preset", "file"):
+            material.pop(key, None)
+    return data
+
+
+def reweighted_result(result, traced, face_group: np.ndarray, materials: Sequence[str], scene):
+    """``result``, simulated from the scene ``traced`` with ``face_group`` for
+    ``materials`` (:func:`groups_of`), for the absorption of ``scene``: re-weighted,
+    without tracing again. None when ``scene`` differs from ``traced`` in more than the
+    absorption of its materials, or a material re-weighting covers changed."""
+    if scene is traced:
+        return result
+    if _without_absorption(scene) != _without_absorption(traced):
+        return None
+    old = {n: m.coefficients("octave")[0] for n, m in traced.materials.items()}
+    new = {n: m.coefficients("octave")[0] for n, m in scene.materials.items()}
+    if any(old[n] != new[n] for n in old if n not in materials):
+        return None
+    fresh = np.array([new[n] for n in materials])
+    if np.any(fresh >= 1.0):
+        return None
+    ratio = log_ratio(np.array([old[n] for n in materials]), fresh)
+    responses = {key: r.reweighted(face_group, ratio) for key, r in result.responses.items()}
+    return dataclasses.replace(result, responses=responses)
 
 
 def log_ratio(old: np.ndarray, new: np.ndarray) -> np.ndarray:
@@ -107,9 +153,11 @@ def reweighted_paths(paths: EarlyReflections, counts: np.ndarray, ratio: np.ndar
 __all__ = [
     "MOMENT_STEP",
     "face_groups",
+    "groups_of",
     "log_ratio",
     "moment_exponent",
     "path_counts",
     "reweighted_paths",
+    "reweighted_result",
     "slot_factor",
 ]

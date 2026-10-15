@@ -175,6 +175,9 @@
   absorption (`acoustic_spaces.engine.reweight`): the tracer counts each ray's
   reflections off each of up to 16 groups of faces (`simulate(..., groups=...)`,
   `Response.late_moments`, `Response.reweighted`).
+- In the editor, changing a material's absorption after a run updates the results at
+  once by re-weighting that run's rays (`reweight.reweighted_result`); the results
+  panel says so, and **Run** traces afresh.
 - Checked on the simulator's own responses: absorption is recovered within 0.05, and a
   shoebox's walls within 0.015 from 500 Hz up. Also checked on the two BRAS rooms
   (`bras_validation.py --calibrate`), fitted to one loudspeaker position from BRAS's
