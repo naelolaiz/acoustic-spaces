@@ -51,8 +51,14 @@ public:
     // Uniform in [0, 1).
     double uniform() { return static_cast<double>(next() >> 11) * (1.0 / 9007199254740992.0); }
 
-    // A generator for a new, independent stream (for a ray split off this one).
-    Rng split() { return Rng(next(), next()); }
+    // A generator for a new, independent stream (for a ray split off this one). The two
+    // draws are sequenced: as arguments of one call, compilers took them in different
+    // orders (GCC and MSVC as here, Clang the other way round).
+    Rng split() {
+        const std::uint64_t stream = next();
+        const std::uint64_t seed = next();
+        return Rng(seed, stream);
+    }
 
 private:
     std::array<std::uint64_t, 4> state_{};

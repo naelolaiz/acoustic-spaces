@@ -459,6 +459,11 @@ changes results at 63 and 125 Hz)
 
 **Fixes**
 
+- Runs that split rays (the late stage's weight window, sound passing both ways
+  through a partition) came out differently when the core was built with Clang, as on
+  macOS, than with GCC or MSVC: the two numbers that seed a copy's random stream were
+  drawn in an order the compiler chose. They are now drawn in the order GCC and MSVC
+  used, so Linux and Windows give the same results as before and macOS gives those too.
 - The sound diffracted by the free edge of a thin screen left out the term of the
   reflection off the screen's back wherever the reflection off its front reached the
   listener: up to 0.9 dB too little there, at high frequencies.
