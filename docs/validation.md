@@ -556,10 +556,29 @@ edges and obliquely (the second from (-6, -2, -0.3) to (w + 2, 3, -4)):
 | two screens 1 m apart | -2.74 | -1.96 | -1.30 | -0.75 | -0.34 | -0.11 | -0.03 | +0.00 |
 | two screens 2 m apart, the second 0.4 m higher | -2.05 | -1.43 | -0.95 | -0.60 | -0.36 | -0.21 | -0.12 | -0.05 |
 
-The levels themselves run from -9 dB at 63 Hz to -41 dB at 8 kHz. The engine is low at
-low frequencies where the edges are close together, as over a thin screen: the waves of
-an edge add in energy near their boundaries, where the exact solution adds them with
-their phases. The textbook UTD for two edges, with the second edge's distance parameter
+The levels themselves run from -9 dB at 63 Hz to -41 dB at 8 kHz. Adding its waves in
+energy, the engine is low at low frequencies where the edges are close together, as over
+a thin screen: the waves of an edge add in energy near their boundaries, where the exact
+solution adds them with their phases. In the 63 and 125 Hz bands the engine adds them in
+pressure by default (`simulation.early.coherent_max_band_hz`, see the README), the four
+terms of each coefficient and the paths' waves with their phases, and there it is within
+0.05 dB of BTM over the thin screen and within 0.25 dB over two edges, but for the 0.3 m
+block in line (0.6 dB):
+
+| engine in pressure - BTM (dB) | 63 | 125 |
+|---|---:|---:|
+| thin screen, (-5, 0, -2) to (5, 0, -1) | +0.02 | +0.01 |
+| thin screen, (-2, 0, -0.2) to (6, 0, -3) | +0.03 | +0.01 |
+| thin screen, (-3, -1, -1) to (3, 2, -0.5) | +0.04 | +0.02 |
+| block 0.3 m, in line | -0.61 | -0.50 |
+| block 0.3 m, oblique | +0.12 | +0.24 |
+| block 1 m, in line | +0.11 | +0.12 |
+| block 1 m, oblique | +0.14 | +0.06 |
+| block 3 m, in line | +0.23 | +0.16 |
+| block 3 m, oblique | +0.08 | +0.04 |
+| two screens 1 m apart | -0.11 | -0.12 |
+| two screens 2 m apart, the second 0.4 m higher | +0.03 | -0.00 |
+ The textbook UTD for two edges, with the second edge's distance parameter
 for a wave from a line, was up to 6 dB low there; the engine takes it from the curvature
 of the first edge's wave where it reaches the second.
 
@@ -567,7 +586,8 @@ As the source rises through the plane of the 1 m block's top, 3 m in front of it
 comes into sight of the far corner, and the path over that corner alone takes over
 from the path over both; likewise as the listener rises behind the block. The largest
 step between positions 1 mm apart, over ±1 cm and exactly in the plane, is 0.67 dB for
-the source and 0.76 dB for the listener at 63 Hz, and at most 0.07 dB from 1 kHz up.
+the source and 0.76 dB for the listener at 63 Hz with the waves added in energy, 0.01 dB
+with them in pressure (the default in that band), and at most 0.07 dB from 1 kHz up.
 With `first_order` the level drops from the path over one corner to nothing.
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall

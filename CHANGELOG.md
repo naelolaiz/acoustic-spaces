@@ -288,6 +288,10 @@ changes results at 63 and 125 Hz)
 - Next to a hard floor the direct sound's pressure doubles at low frequencies (+6 dB
   where energy gave +3 dB), and an absorbing floor at grazing incidence takes from it;
   a loudspeaker a metre out from a wall loses bass at 63 Hz.
+- Over edges, against the exact solution (`validation/edge_diffraction.py`), the levels
+  at 63 and 125 Hz come within 0.05 dB over a thin screen (0.9 dB in energy) and within
+  0.6 dB over two edges (2.7 dB), and step by at most 0.01 dB across a barrier's top
+  (0.8 dB).
 - The late part still adds in energy, and so do the uncorrelated points of a line or
   surface source. With the wave solver up to that band or higher, its bands take their
   place.

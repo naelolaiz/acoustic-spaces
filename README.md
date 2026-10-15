@@ -863,10 +863,12 @@ there, since near the first edge's boundaries it is still curved like the source
 Where one of the two edges' waves is lit, the path continues a path over the other edge
 alone and shares its energy with it, so the level is continuous where a path over one
 edge appears: as the listener rises past the top of a barrier, it changes by at most
-0.8 dB at 63 Hz and 0.1 dB from 1 kHz up. Against the exact solution (BTM, in the
+0.1 dB from 1 kHz up, and 0.01 dB at 63 Hz, where the waves add in pressure (0.8 dB in
+energy). Against the exact solution (BTM, in the
 [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md#edge-diffraction-against-the-exact-solution)),
-the level over barriers 0.3 to 3 m thick is within 0.35 dB from 500 Hz up and 2 dB at
-63 Hz, and over two screens in a row within 0.75 dB and 2.7 dB.
+the level over barriers 0.3 to 3 m thick is within 0.35 dB from 500 Hz up, and over two
+screens in a row within 0.75 dB; at 63 and 125 Hz, in pressure, within 0.6 and 0.12 dB
+(2 and 2.7 dB with the waves in energy).
 
 ```sh
 acoustic-spaces simulate examples/gallery/scene.yaml --out gallery
