@@ -460,6 +460,10 @@ changes results at 63 and 125 Hz)
   being placed or drawn. Moving a source or listener while the sound played looked as if
   it changed what plays, which it does not: the status bar marks the sound as from
   before the latest changes, and the log says how to hear them.
+- Picking another source or listener, or ticking Head tracking, while a recording played
+  in the editor left the sound as it was. The playback now goes on from the same point
+  with the response picked (the run has them all), at the same level, so the
+  difference between listeners stays audible (lowered only if it would clip).
 
 ## 2.0.0
 

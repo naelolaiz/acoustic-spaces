@@ -911,6 +911,35 @@ def test_stop_playback(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
     assert len(stops) == 2 and not stop.isEnabled() and not results.stop.isEnabled()
 
 
+def test_playback_follows_the_pair_on_show(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
+    window.open_example(example_path("church"))
+    _quick(window.document)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    fake_sounddevice.play = lambda data, rate: fake_sounddevice.played.append((data, rate))
+    fake_sounddevice.stop = lambda: None
+    write_wav(tmp_path / "dry.wav", np.r_[1.0, np.zeros(5 * 16_000)], 16_000)  # 5 s
+    results = window.results
+    assert window.play_file(tmp_path / "dry.wav")
+    played = window._played
+    # Another listener, picked in the scene: the sound goes on from where it was, no
+    # louder than before (the difference between listeners stays audible).
+    window.select("listeners", 2)
+    assert window._played["pair"] == results.pair() == (played["pair"][0], "nave-back")
+    assert window._played["start"] > 0 and window._played["gain"] <= played["gain"]
+    assert len(fake_sounddevice.played) == 2 and "at nave-back" in window.now_playing.text()
+    # Or picked in the results panel.
+    results.listener.setCurrentIndex(0)
+    assert window._played["pair"] == results.pair() == played["pair"]
+    # Ticking head tracking turns the playback into head-tracked playback.
+    results.head.port.setValue(0)  # no head tracker
+    results.tracking.setChecked(True)
+    assert window._played["tracked"] and window._player is not None
+    window.stop_playing()
+    results.tracking.setChecked(False)
+    assert window._played is None and not results.stop.isEnabled()
+
+
 def test_results_follow_the_selected_listener(window, qapp) -> None:
     window.open_example(example_path("church"))
     _quick(window.document)

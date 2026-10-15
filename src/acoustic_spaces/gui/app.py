@@ -157,8 +157,10 @@ class MainWindow(QMainWindow):
         self._player_timer = QTimer(self)
         self._player_timer.setInterval(100)
         self._player_timer.timeout.connect(self._player_poll)
-        #: What plays: the scene it was simulated for, the status bar's text, and whether
-        #: the log said the scene has changed since. None while nothing plays.
+        #: What plays: the file, source and listener, whether head-tracked, where in the
+        #: file it started and when, the file's length (s), the gain, the scene it was
+        #: simulated for, the status bar's text, and whether the log said the scene has
+        #: changed since. None while nothing plays.
         self._played: dict | None = None
 
         self._actions()
@@ -188,6 +190,8 @@ class MainWindow(QMainWindow):
         self.results.export_requested.connect(self.export_results)
         self.results.listen_requested.connect(self.listen)
         self.results.stop_requested.connect(self.stop_playing)
+        self.results.pair_changed.connect(lambda *_: self._follow_playback())
+        self.results.tracking.toggled.connect(lambda *_: self._follow_playback())
         self.results.playing_changed.connect(self._playing)
         self.results.head.message.connect(self.log)
         self.map_panel.changed.connect(self._draw)
@@ -495,6 +499,7 @@ class MainWindow(QMainWindow):
                 self.results.show_pair(source=name)
             else:
                 self.results.show_pair(listener=name)
+            self._follow_playback()
 
     def _picked(self, kind: str, key) -> None:
         """A click in the 3D view; empty space selects the scene."""
@@ -1133,8 +1138,11 @@ class MainWindow(QMainWindow):
         if path:
             self.play_file(path)
 
-    def play_file(self, path: str | Path) -> bool:
-        """Play a WAV file from the shown source to the shown listener."""
+    def play_file(self, path: str | Path, *, start: float = 0.0, gain: float | None = None) -> bool:
+        """Play a WAV file from the shown source to the shown listener, from ``start``
+        seconds into it. The loudest sample plays at -1 dB full scale, unless ``gain`` (of
+        a playback that moves to another source or listener) keeps the level, so the
+        difference between them stays audible, as far as that does not clip."""
         from acoustic_spaces.audio import read_wav
         from acoustic_spaces.measurement import _sounddevice
         from acoustic_spaces.render import auralize
@@ -1145,19 +1153,21 @@ class MainWindow(QMainWindow):
         if self.results.stop.isEnabled():  # one playback at a time
             self.stop_playing()
         if self.results.tracking.isChecked():
-            return self.play_tracked(path)
+            return self.play_tracked(path, start=start, gain=gain)
         try:
             sd = _sounddevice()
             signal, rate = read_wav(path)
             fmt = self._listening_format()
             with busy():
-                mix = auralize(self.result, {pair[0]: (signal, rate)}, pair[1], fmt)
+                rest = signal[int(round(start * rate)) :]
+                mix = auralize(self.result, {pair[0]: (rest, rate)}, pair[1], fmt)
         except (ImportError, OSError, ValueError) as exc:
             self._error("Cannot play", str(exc))
             return False
         peak = float(np.abs(mix).max(initial=0.0))
-        if peak > 0:
-            mix = mix * (10.0 ** (-1.0 / 20.0) / peak)
+        full = 10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0
+        gain = full if gain is None else min(gain, full)
+        mix = mix * gain
         sample_rate = int(self.result.settings.sample_rate)
         try:
             sd.play(mix.astype(np.float32), sample_rate)
@@ -1165,7 +1175,7 @@ class MainWindow(QMainWindow):
             self._error("Cannot play", str(exc))
             return False
         text = f"Playing {Path(path).name} from {pair[0]} at {pair[1]}"
-        self._played = {"scene": self._result_scene, "text": text, "told": False}
+        self._played = self._playback(path, pair, False, start, len(signal) / rate, gain, text)
         self.results.set_playing(True)
         self._play_timer.start(int(1000 * len(mix) / sample_rate) + 250)
         self.log(f"{text} ({fmt.label})")
@@ -1177,9 +1187,13 @@ class MainWindow(QMainWindow):
         orders = [o.order for o in self.result.room.scene.outputs if o.format == "ambisonics"]
         return max([*orders, 1]) if orders else 3
 
-    def play_tracked(self, path: str | Path) -> bool:
+    def play_tracked(
+        self, path: str | Path, *, start: float = 0.0, gain: float | None = None
+    ) -> bool:
         """Play a WAV file from the shown source to the shown listener binaurally, turned
-        by the head of the head controls, in real time."""
+        by the head of the head controls, in real time, from ``start`` seconds into it.
+        ``gain`` keeps the level of a playback that moves to another source or listener
+        (up to 6 dB over the level used by default)."""
         from acoustic_spaces.audio import read_wav
         from acoustic_spaces.headtracking import HeadTrackedBinaural
         from acoustic_spaces.measurement import _sounddevice
@@ -1199,6 +1213,7 @@ class MainWindow(QMainWindow):
             signal, rate = read_wav(path)
             with busy():
                 dry = resample(signal.mean(axis=1), rate, sample_rate)
+                dry = dry[int(round(start * sample_rate)) :]
                 response = self.result[pair]
                 ir = response.spatial_impulse_response(Ambisonics(order), sample_rate)
                 renderer = HeadTrackedBinaural(
@@ -1213,7 +1228,8 @@ class MainWindow(QMainWindow):
             return False
         # Half the dry signal's level, so the room's reverberation does not clip.
         energy = float((ir[:, 0] ** 2).sum())
-        gain = 0.5 / np.sqrt(energy) if energy > 0 else 1.0
+        safe = 0.5 / np.sqrt(energy) if energy > 0 else 1.0
+        gain = safe if gain is None else min(gain, 2.0 * safe)
         stop, outcome = threading.Event(), {}
 
         def run() -> None:
@@ -1229,11 +1245,40 @@ class MainWindow(QMainWindow):
         thread.start()
         self._player_timer.start()
         text = f"Playing {Path(path).name} from {pair[0]} at {pair[1]}, head-tracked"
-        self._played = {"scene": self._result_scene, "text": text, "told": False}
+        self._played = self._playback(path, pair, True, start, len(signal) / rate, gain, text)
         self.results.set_playing(True)
         self.log(f"{text} (order {order} Ambisonics to binaural)")
         self._show_playing()
         return True
+
+    def _playback(self, path, pair, tracked, start, length, gain, text) -> dict:
+        """What plays, for ``_played``."""
+        return {
+            "path": path,
+            "pair": pair,
+            "tracked": tracked,
+            "start": start,
+            "since": time.perf_counter(),
+            "length": length,
+            "gain": gain,
+            "scene": self._result_scene,
+            "text": text,
+            "told": False,
+        }
+
+    def _follow_playback(self) -> None:
+        """Play on, from where it is, for the source and listener on show and with head
+        tracking as ticked: the run has the responses of every source and listener."""
+        played, pair = self._played, self.results.pair()
+        tracked = self.results.tracking.isChecked()
+        if played is None or pair is None or (pair, tracked) == (played["pair"], played["tracked"]):
+            return
+        position = played["start"] + time.perf_counter() - played["since"]
+        if position >= played["length"]:
+            return  # only the reverberation is left
+        # The two ways of playing set their level differently.
+        gain = played["gain"] if tracked == played["tracked"] else None
+        self.play_file(played["path"], start=position, gain=gain)
 
     def _player_poll(self) -> None:
         if self._player is None or self._player[0].is_alive():
