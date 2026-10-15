@@ -452,6 +452,25 @@ changes results at 63 and 125 Hz)
   indices under the 8 octave bands, the polar plots drew the lowest eight third octaves
   labelled as octaves, and the 3D view's balloon showed 125 Hz for 1 kHz. They show
   octaves now. Simulations were not affected.
+- The editor's Stop button for playback was easy to miss: it sat at the end of the
+  Results panel's bar, out of sight once another panel was on show, and the toolbar's
+  Cancel, which only cancels a run, had the same stop icon. While a recording plays, the
+  status bar now says so, with **Stop playback**, which is also in the toolbar and the
+  Simulation menu; Cancel has an icon of its own, and Esc stops playback when nothing is
+  being placed or drawn. Moving a source or listener while the sound played looked as if
+  it changed what plays, which it does not: the status bar marks the sound as from
+  before the latest changes, and the log says how to hear them.
+- Picking another source or listener, or ticking Head tracking, while a recording played
+  in the editor left the sound as it was. The playback now goes on from the same point
+  with the response picked (the run has them all), at the same level, so the
+  difference between listeners stays audible (lowered only if it would clip).
+- The editor's Listen played mono when the scene wrote no binaural output, while
+  head-tracked listening is always binaural, so the two sounded nothing alike (the
+  reverberation above all), and each set its own level. Listen plays binaurally now,
+  through the spherical head unless the scene names an HRTF, and both play the dry
+  signal at half its level through the response's omnidirectional energy (Listen
+  lowered only where it would clip), so ticking Head tracking changes only how the
+  head turns the sound.
 
 ## 2.0.0
 
