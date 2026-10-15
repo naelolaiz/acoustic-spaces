@@ -157,10 +157,17 @@ def test_third_octave_responses_fold_into_octaves() -> None:
     assert octave.band_hz == OCTAVE_BANDS_HZ
     np.testing.assert_array_equal(octave.octave_energy(), octave.energy())
     a, b = octave.parameters(), third.parameters()
+    # Where the early paths add in pressure (63 and 125 Hz), three third-octave filters
+    # weigh their interference across an octave a little differently from one.
+    low, high = slice(0, octave.coherent_bands), slice(octave.coherent_bands, None)
+    assert octave.coherent_bands == 2 and third.coherent_bands == 6
     for name in ("t30", "edt", "ts"):
-        np.testing.assert_allclose(getattr(b, name), getattr(a, name), rtol=0.01)
-    for name in ("g", "c80", "d50"):
-        np.testing.assert_allclose(getattr(b, name), getattr(a, name), rtol=0.01, atol=0.1)
+        np.testing.assert_allclose(getattr(b, name)[high], getattr(a, name)[high], rtol=0.01)
+        np.testing.assert_allclose(getattr(b, name)[low], getattr(a, name)[low], rtol=0.05)
+    for name, near in (("g", 0.4), ("c80", 0.4), ("d50", 0.03)):
+        b_, a_ = getattr(b, name), getattr(a, name)
+        np.testing.assert_allclose(b_[high], a_[high], rtol=0.01, atol=0.1)
+        np.testing.assert_allclose(b_[low], a_[low], atol=near)
     # Across the 8 kHz octave the air absorbs about twice as much at 10 kHz as at
     # 6.3 kHz: three decays decay together slower than their middle one alone.
     assert b.t30[-1] >= a.t30[-1] * 0.99
@@ -251,6 +258,7 @@ def test_coverage_maps_in_third_octave_bands() -> None:
         values[bands] = coverage_map(Room.from_scene(scene), settings=Coverage(spacing=2.0))
     a, b = (values[k].get().values for k in ("octave", "third_octave"))
     assert b["g"].shape == a["g"].shape and a["g"].shape[1] == 8
-    np.testing.assert_allclose(b["g"], a["g"], atol=0.1)
+    np.testing.assert_allclose(b["g"][:, 2:], a["g"][:, 2:], atol=0.1)
+    np.testing.assert_allclose(b["g"][:, :2], a["g"][:, :2], atol=0.4)  # in pressure
     np.testing.assert_allclose(b["sti"], a["sti"], atol=0.01)
     assert math.isfinite(float(np.nanmean(b["t30"])))

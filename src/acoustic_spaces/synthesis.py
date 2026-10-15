@@ -75,12 +75,18 @@ def fft_size(n: int, sample_rate: float) -> int:
     return 1 << int(math.ceil(math.log2(n + 2 * int(_PAD_S * sample_rate) + 1)))
 
 
-def combine_bands(band_signals: np.ndarray, sample_rate: float) -> np.ndarray:
-    """Filter each band signal with its band and sum: (bands, n) -> (n,)."""
+def combine_bands(
+    band_signals: np.ndarray, sample_rate: float, quadrature: np.ndarray | None = None
+) -> np.ndarray:
+    """Filter each band signal with its band and sum: (bands, n) -> (n,). With
+    ``quadrature`` (bands, n), signals to add a quarter turn ahead in phase (their
+    spectra times j)."""
     band_signals = np.asarray(band_signals, dtype=float)
     n = band_signals.shape[1]
     n_fft = fft_size(n, sample_rate)
     spectrum = np.fft.rfft(band_signals, n_fft, axis=1)
+    if quadrature is not None:
+        spectrum = spectrum + 1j * np.fft.rfft(np.asarray(quadrature, dtype=float), n_fft, axis=1)
     gains = _band_gains(n_fft, float(sample_rate), len(band_signals))
     out = np.fft.irfft((spectrum * gains).sum(axis=0), n_fft)
     return out[:n]

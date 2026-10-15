@@ -1,7 +1,8 @@
 """Rendering a simulated response in a spatial format.
 
-Early paths are placed like in the mono response and given the gains (or, binaurally,
-the HRTF) of their arrival direction. The late part is the mono response's noise, the
+Early paths are placed like in the mono response (in the lowest bands with the phase
+of their reflections) and given the gains (or, binaurally, the HRTF) of their arrival
+direction. The late part is the mono response's noise, the
 same sample for sample: in each octave band, each of its impulses comes from one of the
 recorded arrival directions, drawn in proportion to the energy arriving from there at
 that time (with the same random number in every band, so an impulse keeps one direction
@@ -19,6 +20,7 @@ from typing import TYPE_CHECKING, Protocol
 import numpy as np
 
 from acoustic_spaces import synthesis
+from acoustic_spaces.engine import coherent
 from acoustic_spaces.spatial.directions import fibonacci_sphere, to_head
 from acoustic_spaces.spatial.hrtf import HRTF, spherical_head
 
@@ -130,8 +132,8 @@ def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed):
     """``response`` in ``fmt`` (n, channels), and its early paths alone when the wave
     solver's bands are to take their place (else None)."""
     early = response.early
-    amplitudes = np.sqrt(synthesis.ENERGY_TO_IR * early.energy)
     early_gains = fmt.gains(to_head(early.direction, response.orientation))
+    low = coherent.signal(early, n, sample_rate, early_gains)
     has_late = bool(np.any(response.late > 0))
     if has_late:
         signals, at, chosen, directions = _late_impulses(response, n, sample_rate, seed)
@@ -139,14 +141,12 @@ def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed):
     out = np.empty((n, fmt.channels))
     alone = np.empty((n, fmt.channels)) if response.wave is not None else None
     for c in range(fmt.channels):
-        bands = synthesis.place_impulses(
-            early.delay_s, amplitudes * early_gains[:, c : c + 1], n, sample_rate
-        )
+        bands, quadrature = coherent.band_impulses(early, n, sample_rate, early_gains[:, c])
         if alone is not None:
-            alone[:, c] = synthesis.combine_bands(bands, sample_rate)
+            alone[:, c] = synthesis.combine_bands(bands, sample_rate, quadrature) + low[:, c]
         if has_late:
             bands[:, at] += signals[:, at] * late_gains[chosen, c].T
-        out[:, c] = synthesis.combine_bands(bands, sample_rate)
+        out[:, c] = synthesis.combine_bands(bands, sample_rate, quadrature) + low[:, c]
     return out, alone
 
 
@@ -161,7 +161,7 @@ def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, see
         n_k = 1 << int(math.ceil(math.log2(_KERNEL_S * sample_rate)))
         half = n_k // 2
         gains = synthesis.band_gains(n_k, sample_rate, response.bands)
-        amplitudes = np.sqrt(synthesis.ENERGY_TO_IR * early.energy)
+        f = np.fft.rfftfreq(n_k, 1.0 / sample_rate)
         heads = to_head(early.direction, response.orientation)
         position = early.delay_s * sample_rate
         base = np.floor(position).astype(np.int64)
@@ -172,7 +172,10 @@ def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, see
             x = taps[None, :] - (position[part] - base[part])[:, None]
             sinc = np.zeros((len(x), n_k))
             sinc[:, taps % n_k] = np.sinc(x) * np.cos(np.pi * x / _SINC_TAPS) ** 2
-            spectrum = (amplitudes[part] @ gains) * np.fft.rfft(sinc, axis=1)
+            # The band shaping, with the phase of the paths' reflections in the bands
+            # where they add in pressure.
+            shaping = coherent.amplitude_spectra(early[part], f, gains)
+            spectrum = shaping * np.fft.rfft(sinc, axis=1)
             ears = np.fft.rfft(hrtf.interpolate(heads[part]), n_k, axis=-1)
             kernels = np.roll(np.fft.irfft(spectrum[:, None, :] * ears, n_k, axis=-1), half, -1)
             for k, offset in enumerate(base[part] - half):

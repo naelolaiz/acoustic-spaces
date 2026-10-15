@@ -298,8 +298,11 @@ def test_extended_sources_in_the_room() -> None:
     info = result.details[scene.sources[0].name]
     assert info["elements"] == 3 and info["rays"] == 3000  # 1000 rays per band each
     # The same room, as loud as a point source of the same power: a few rays' decays are
-    # too noisy to compare (at 30,000 rays per band their T30 agree within 10 %).
-    point = next(iter(simulate(Room.from_scene(_shoebox()))))
+    # too noisy to compare (at 30,000 rays per band their T30 agree within 10 %). The
+    # line's points are uncorrelated, their paths add in energy even at low frequencies.
+    plain = _shoebox()
+    plain.simulation.early.coherent_max_band_hz = None
+    point = next(iter(simulate(Room.from_scene(plain))))
     np.testing.assert_allclose(next(iter(result)).parameters().g, point.parameters().g, atol=0.6)
     # Coverage maps take the line's points as well.
     scene.simulation.late.method = "statistical"

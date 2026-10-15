@@ -1,3 +1,4 @@
+import importlib.util
 from pathlib import Path
 
 import numpy as np
@@ -72,3 +73,19 @@ def test_examples_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     assert capsys.readouterr().out.strip() == str(tmp_path / "studio" / "scene.yaml")
     assert main(["examples", "cathedral"]) == 1
     assert "no example named cathedral" in capsys.readouterr().err
+
+
+def test_listening_room_bass(capsys: pytest.CaptureFixture[str]) -> None:
+    spec = importlib.util.spec_from_file_location("bass", EXAMPLES / "listening_room" / "bass.py")
+    bass = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bass)
+    room = Room.from_yaml(example_path("listening_room"))
+    # The early part at 63 Hz: the wall's reflection in phase against the wall, half a
+    # period late a metre out; in energy the wall makes no difference.
+    pressure, energy = (bass.levels(room, coherent, 300) for coherent in (125, None))
+    wall, out = (pressure[name][1][0] for name in ("against the wall", "a metre out"))
+    assert wall - out > 4.0
+    wall, out = (energy[name][1][0] for name in ("against the wall", "a metre out"))
+    assert abs(wall - out) < 1.0
+    assert bass.main(["--rays", "300"]) == 0
+    assert "in pressure up to 125 Hz" in capsys.readouterr().out

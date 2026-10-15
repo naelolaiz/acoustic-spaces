@@ -270,8 +270,44 @@ in the wave bands of closed rooms)
   listener with `second_order`, 120 ms with `first_order` and 100 ms without
   diffraction. `first_order` stays the default.
 
+**Early reflections in pressure at low frequencies** (`simulation.early.coherent_max_band_hz`;
+changes results at 63 and 125 Hz)
+
+- Up to the 125 Hz band by default (the 63 and 125 Hz octaves, or the six third octaves
+  up to 160 Hz), the early paths add in pressure, not in energy. Each carries the phase
+  of every reflection on its way, that of a locally reacting surface with the
+  material's absorption (R = (cos θ - Y) / (cos θ + Y), with the admittance fitted as
+  for the wave solver), and a path over an edge the whole complex UTD coefficient, whose
+  terms then add to the specular paths as the theory has them. Above those bands each
+  path keeps the phase it has at their top, so the bands join without a step.
+- The echogram reads those bands' early energy from the paths' pressure, through the
+  band filters of the analysis of measured responses; coverage maps and the material
+  fit do the same. The parameters of a simulated impulse response and of its echogram
+  now agree there: in a 7.3 x 5.1 x 3 m box, G within 0.01 dB and C50 within 0.05 dB,
+  where adding the paths in energy left them up to 2.1 and 1.6 dB apart.
+- Next to a hard floor the direct sound's pressure doubles at low frequencies (+6 dB
+  where energy gave +3 dB), and an absorbing floor at grazing incidence takes from it;
+  a loudspeaker a metre out from a wall loses bass at 63 Hz.
+- Over edges, against the exact solution (`validation/edge_diffraction.py`), the levels
+  at 63 and 125 Hz come within 0.05 dB over a thin screen (0.9 dB in energy) and within
+  0.6 dB over two edges (2.7 dB), and step by at most 0.01 dB across a barrier's top
+  (0.8 dB).
+- The late part still adds in energy, and so do the uncorrelated points of a line or
+  surface source. With the wave solver up to that band or higher, its bands take their
+  place.
+- `null` adds the paths in energy in every band, as before. `--coherent-band` sets it
+  for one run of `simulate` or `map`, and the editor's simulation page has it ("In
+  pressure up to").
+- `EarlyReflections.spectrum` holds each path's pressure at the frequencies the edge
+  diffraction is evaluated at, relative to its level and delay;
+  `acoustic_spaces.engine.coherent` has the rest.
+
 **Examples**
 
+- `listening_room`: a living room with a loudspeaker against the front wall or a metre
+  out from it. `bass.py` prints G at the sofa in the lowest bands from both, with the
+  early paths in pressure and in energy: 5.7 dB apart at 63 Hz in the early part in
+  pressure, within 0.7 dB in energy.
 - `archway`: a bar and a dining room joined by an archway in a wall 40 cm thick,
   with `second_order` diffraction: a diner behind the wall hears the singer over both
   corners of the arch's jamb.

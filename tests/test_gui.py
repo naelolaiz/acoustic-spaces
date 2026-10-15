@@ -330,6 +330,11 @@ def test_selection_and_forms(window) -> None:
     assert window.document.scene.simulation.early.diffraction == "direct"
     assert window.document.scene.simulation.late.rays == 1234
     page = window.inspector.pages["simulation"]
+    assert page.coherent.currentText() == "125"
+    page.coherent.setCurrentText("none")
+    assert window.document.scene.simulation.early.coherent_max_band_hz is None
+    page.coherent.setCurrentText("250")
+    assert window.document.scene.simulation.early.coherent_max_band_hz == 250
     assert not page.wave.isChecked() and not page.wave_band.isEnabled()
     assert not page.wave_device.isEnabled()
     page.wave.setChecked(True)

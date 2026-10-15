@@ -39,7 +39,10 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   reflects the treble decaying at Eyring's rate in the bass only, each band traced with
   rays of its own;
 - third-octave bands: statistical runs in third octaves give the octave runs'
-  parameters within 1 % or 0.1 dB, and stochastic ones within the tracer's noise; a
+  parameters within 1 % or 0.1 dB from 250 Hz up (within 5 % or 0.4 dB at 63 and
+  125 Hz, where the early paths add in pressure and three filters weigh their
+  interference across an octave a little differently from one), and stochastic ones
+  within the tracer's noise; a
   100 Hz third-octave absorber decays at its own Eyring rate (within 3 %) between bands
   that do not; the filter banks sum to their input and sit at -3 dB on the band edges;
 - sources: the free-field level 4 m from a source with a sound power per band, a gain
@@ -53,7 +56,8 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   of its 80 points with their air absorption (to 1e-9 dB), falling 3.31 dB per
   doubling of distance as the continuous line does; an 8 x 8 m Lambert surface within
   0.15 dB of the integral over the continuous square at 1 and 2 m, and silent behind;
-  in the shoebox a 3 m line as loud as a point source (within 0.6 dB at 2000 rays per
+  in the shoebox a 3 m line as loud as a point source whose paths add in energy, as
+  the line's uncorrelated points' do (within 0.6 dB at 2000 rays per
   band) and its T30 within 10 % of the point source's at 30,000 rays per band;
 - coherent arrays (their far-field patterns only: nearer than L² f / c the room's
   warnings say so): a column of 8 omnidirectional elements 20 cm apart against the
@@ -124,6 +128,16 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   500 Hz up, the same both ways round), and the level as the source and the listener
   rise through the plane of its top, continuous within 1 dB (0.1 dB from 1 kHz up); a
   thin screen's diffracted wave in its lit zone, all four terms of the UTD within 0.2 %;
+- early reflections in pressure at low frequencies: an impulse response and the
+  echogram it came from in a 7.3 x 5.1 x 3 m box, early part alone, G within 0.02 dB,
+  C50 within 0.05 dB and Ts within 0.3 ms at 63 and 125 Hz (G 2.1 dB and C50 1.6 dB
+  apart when the paths add in energy); a source and a listener 0.3 m above a floor 10 m apart, the direct
+  sound and the floor reflection 5.5 dB above the free-field level over a hard floor
+  and 4 dB below it over an absorbing one at 63 and 125 Hz, the echogram within 0.3 dB
+  of the paths' pressures added; the phase of the reflection factor, none off a hard
+  surface and half a turn off an absorbing one at grazing incidence; and a thin
+  screen's diffracted wave, with all four terms of the UTD added in pressure, to
+  1e-9;
 - the wave solver, with both stencils where both apply: the modes of a rigid box
   (within 0.6 Hz), the 19-point stencil's modes along a tube against its dispersion
   relation (within 0.15 %, less than half the 7-point one's error), the 19-point
@@ -542,10 +556,29 @@ edges and obliquely (the second from (-6, -2, -0.3) to (w + 2, 3, -4)):
 | two screens 1 m apart | -2.74 | -1.96 | -1.30 | -0.75 | -0.34 | -0.11 | -0.03 | +0.00 |
 | two screens 2 m apart, the second 0.4 m higher | -2.05 | -1.43 | -0.95 | -0.60 | -0.36 | -0.21 | -0.12 | -0.05 |
 
-The levels themselves run from -9 dB at 63 Hz to -41 dB at 8 kHz. The engine is low at
-low frequencies where the edges are close together, as over a thin screen: the waves of
-an edge add in energy near their boundaries, where the exact solution adds them with
-their phases. The textbook UTD for two edges, with the second edge's distance parameter
+The levels themselves run from -9 dB at 63 Hz to -41 dB at 8 kHz. Adding its waves in
+energy, the engine is low at low frequencies where the edges are close together, as over
+a thin screen: the waves of an edge add in energy near their boundaries, where the exact
+solution adds them with their phases. In the 63 and 125 Hz bands the engine adds them in
+pressure by default (`simulation.early.coherent_max_band_hz`, see the README), the four
+terms of each coefficient and the paths' waves with their phases, and there it is within
+0.05 dB of BTM over the thin screen and within 0.25 dB over two edges, but for the 0.3 m
+block in line (0.6 dB):
+
+| engine in pressure - BTM (dB) | 63 | 125 |
+|---|---:|---:|
+| thin screen, (-5, 0, -2) to (5, 0, -1) | +0.02 | +0.01 |
+| thin screen, (-2, 0, -0.2) to (6, 0, -3) | +0.03 | +0.01 |
+| thin screen, (-3, -1, -1) to (3, 2, -0.5) | +0.04 | +0.02 |
+| block 0.3 m, in line | -0.61 | -0.50 |
+| block 0.3 m, oblique | +0.12 | +0.24 |
+| block 1 m, in line | +0.11 | +0.12 |
+| block 1 m, oblique | +0.14 | +0.06 |
+| block 3 m, in line | +0.23 | +0.16 |
+| block 3 m, oblique | +0.08 | +0.04 |
+| two screens 1 m apart | -0.11 | -0.12 |
+| two screens 2 m apart, the second 0.4 m higher | +0.03 | -0.00 |
+ The textbook UTD for two edges, with the second edge's distance parameter
 for a wave from a line, was up to 6 dB low there; the engine takes it from the curvature
 of the first edge's wave where it reaches the second.
 
@@ -553,7 +586,8 @@ As the source rises through the plane of the 1 m block's top, 3 m in front of it
 comes into sight of the far corner, and the path over that corner alone takes over
 from the path over both; likewise as the listener rises behind the block. The largest
 step between positions 1 mm apart, over ±1 cm and exactly in the plane, is 0.67 dB for
-the source and 0.76 dB for the listener at 63 Hz, and at most 0.07 dB from 1 kHz up.
+the source and 0.76 dB for the listener at 63 Hz with the waves added in energy, 0.01 dB
+with them in pressure (the default in that band), and at most 0.07 dB from 1 kHz up.
 With `first_order` the level drops from the path over one corner to nothing.
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall

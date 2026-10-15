@@ -56,12 +56,14 @@ through a wall is left out, as it is far weaker than the sound that passes it st
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from dataclasses import dataclass
 
 import numpy as np
 
 from acoustic_spaces.directivity import Directivity
+from acoustic_spaces.engine.coherent import reflection_phases
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, Resolution, band_centres
@@ -456,7 +458,12 @@ class EdgeDiffraction:
     first-order reflections, before or after the edge) or ``"second_order"`` (also the
     direct sound over two edges in turn). ``air`` is the energy
     attenuation per metre per band; ``directivity`` and ``orientation`` are the source's,
-    as for :func:`~acoustic_spaces.engine.early.find_paths`.
+    as for :func:`~acoustic_spaces.engine.early.find_paths`. In the lowest ``coherent``
+    bands the terms of every wave add coherently, the faces of the edges and the planes
+    on the way reflect with the phase of their reflection factors, and the diffracted
+    paths carry their pressure (``EarlyReflections.spectrum``) to add to the specular
+    paths in pressure (:mod:`~acoustic_spaces.engine.coherent`) instead of through cross
+    terms.
     """
 
     def __init__(
@@ -470,6 +477,7 @@ class EdgeDiffraction:
         orientation: np.ndarray | None = None,
         mode: str = "first_order",
         edges: Edges | None = None,
+        coherent: int = 0,
     ) -> None:
         if mode not in DIFFRACTION_MODES[1:]:
             raise ValueError(f"unknown diffraction mode {mode!r}")
@@ -480,6 +488,7 @@ class EdgeDiffraction:
         self.air = np.asarray(air, dtype=float)
         self.directivity, self.orientation = directivity, orientation
         self.mode = mode
+        self.coherent = int(coherent)
         self.reflections = mode != "direct"
         self.two_edges = mode == "second_order"
         self._edge_pair_cache: np.ndarray | None = None
@@ -500,6 +509,41 @@ class EdgeDiffraction:
         keep &= self.source_planes[side] != self.edges.plane[edge, 0]
         keep &= self.source_planes[side] != self.edges.plane[edge, 1]
         self._source_side = (edge[keep], side[keep], t[keep], rho[keep], phi[keep])
+
+    def _face_factors(
+        self, edge: np.ndarray, sin_beta: np.ndarray, phi_source: np.ndarray
+    ) -> np.ndarray:
+        """(C, 2, B, M) what the reflections off face 0 and face n of ``edge`` take: their
+        specular share and, in the coherent bands, the phase of their reflection factor
+        at the angle the wave from ``phi_source`` (at ``sin_beta`` to the edge) meets
+        them at the edge, which a reflection on its boundary has."""
+        reflection = self.edges.reflection[edge][..., None]
+        out = np.broadcast_to(reflection, (*reflection.shape[:3], self.wavenumber.shape[1]))
+        out = out.astype(complex)
+        if self.coherent:
+            n = self.edges.wedge[edge]
+            sines = np.column_stack([np.sin(phi_source), np.sin(n * np.pi - phi_source)])
+            cosines = np.asarray(sin_beta)[:, None] * np.abs(sines)
+            for side in (0, 1):
+                out[:, side, : self.coherent] *= reflection_phases(
+                    self.model, self.edges.face[edge, side], cosines[:, side], self.coherent
+                )
+        return out
+
+    def _coherent_share(self, share: np.ndarray) -> np.ndarray:
+        """``share`` (C, W, B, M) with the waves fully coherent in the coherent bands."""
+        share[:, :, : self.coherent] = 1.0
+        return share
+
+    def _spectrum(self, pressure: np.ndarray, distance: np.ndarray) -> np.ndarray | None:
+        """(C, coherent, M) the paths' pressure (C, B, M) in the coherent bands relative
+        to their delay, over its level in each band; None without coherent bands."""
+        if not self.coherent:
+            return None
+        k = self.wavenumber[: self.coherent]
+        out = pressure[:, : self.coherent] * np.exp(1j * k[None] * distance[:, None, None])
+        level = np.sqrt(np.mean(np.abs(out) ** 2, axis=2, keepdims=True))
+        return np.where(level > 0.0, out / np.where(level > 0.0, level, 1.0), 1.0)
 
     def _facing(self, point: np.ndarray) -> np.ndarray:
         """Planes that ``point`` lies in front of (on either side of two-sided ones)."""
@@ -691,7 +735,23 @@ class EdgeDiffraction:
             * wedge_prefactor(n[:, None, None], k, sin_beta[:, None, None])
             * np.exp(-1j * k * distance[:, None, None])
         )  # (C, B, M)
-        waves = _waves(n, c["phi_r"], c["phi_s"], kl, lit, edges.reflection[edge])
+        if self.coherent and on_plane.any():
+            # The phase of the reflection off the plane before or after the edge.
+            rows = np.flatnonzero(on_plane)
+            face = c["face"][rows]
+            # The leg between the plane and the source or the listener: the one between
+            # it and the edge vanishes where the path reflects at an end of the edge.
+            bounce = c["bounce"][rows]
+            incoming = np.where(
+                (kind[rows] == 1)[:, None], bounce - self.source[None], listener[None] - bounce
+            )
+            normal = model.plane_normal[model.face_plane[face]]
+            cosine = np.abs(np.einsum("ij,ij->i", normal, incoming)) / np.maximum(
+                np.linalg.norm(incoming, axis=1), 1e-300
+            )
+            common[rows, : self.coherent] *= reflection_phases(model, face, cosine, self.coherent)
+        factors = self._face_factors(edge, sin_beta, c["phi_s"])
+        waves = _waves(n, c["phi_r"], c["phi_s"], kl, lit, factors)
         waves *= common[:, None]  # (C, 3, B, M): incident, off face 0, off face n
 
         # The waves' terms add up coherently, as one diffracted wave, except in the
@@ -699,7 +759,7 @@ class EdgeDiffraction:
         # geometric wave they continue and add in energy, as the specular paths do. A
         # wave adds coherently by |F(X)| of its boundary, 0 on it and 1 well off it.
         counted = lit == (found >= 0)
-        coherence = _coherence(_share(kl, angle))
+        coherence = _coherence(self._coherent_share(_share(kl, angle)))
         energy = _energy(waves * counted[:, :, None, None], coherence)
 
         # The diffracted wave arrives on its own, but interferes with the specular
@@ -717,6 +777,8 @@ class EdgeDiffraction:
             fade = self._fade(distance[rows] - paths.distance_m[targets])
             own = waves[rows, groups]
             cross = 2.0 * fade * np.mean(np.real(specular * np.conj(own)), axis=2)
+            # In the coherent bands the two add in pressure instead.
+            cross[:, : self.coherent] = 0.0
             total, energy = _take(paths.energy, targets, cross, energy, rows)
             out = _replace_energy(paths, total)
 
@@ -733,6 +795,7 @@ class EdgeDiffraction:
             "counted": counted,
             "coherence": coherence,
             "energy": energy,
+            "spectrum": self._spectrum((waves * counted[:, :, None, None]).sum(axis=1), distance),
             "distance": distance,
             "paths": out,
             "order": np.where(kind > 0, 1, 0).astype(np.int64),
@@ -842,10 +905,12 @@ class EdgeDiffraction:
         # takes the first curvature and the first edge's the second, each by its share of
         # the two, so that the path is the same both ways round.
         kl1, kl2 = k * length1[:, None, None], k * length2[:, None, None]
-        forward = _phase_curvature(n1, phi_21, phi_s1, kl1, edges.reflection[e1], angle1)
+        factors1 = self._face_factors(e1, sin1, phi_s1)
+        factors2 = self._face_factors(e2, sin2, phi_12)
+        forward = _phase_curvature(n1, phi_21, phi_s1, kl1, factors1, angle1)
         back_angle = boundary_angles(n2, phi_12, phi_r2)
         back_kl = k * (r2 * r1 / (r2 + r1) * sin2**2)[:, None, None]
-        backward = _phase_curvature(n2, phi_12, phi_r2, back_kl, edges.reflection[e2], back_angle)
+        backward = _phase_curvature(n2, phi_12, phi_r2, back_kl, factors2, back_angle)
         flat = 1.0 / r1[:, None, None]
         bend1 = flat - np.clip(
             flat - forward / (k * ((r1 * sin1) ** 2)[:, None, None]),
@@ -881,10 +946,10 @@ class EdgeDiffraction:
             * (r1 + r0)[:, None, None]
             / (r1[:, None, None] * (radius1 + r0[:, None, None]))
         )
-        first = _waves(n1, phi_21, phi_s1, kl1, lit1, edges.reflection[e1])
+        first = _waves(n1, phi_21, phi_s1, kl1, lit1, factors1)
         # Along a face, the incident wave and its reflection off the face are one wave.
         _merge(first, leave)
-        second = _waves(n2, phi_r2, phi_12, kl2, lit2, edges.reflection[e2])
+        second = _waves(n2, phi_r2, phi_12, kl2, lit2, factors2)
         # At grazing incidence they are one wave too, which already holds the face's
         # reflection: half the coefficient.
         _merge(second, graze)
@@ -907,8 +972,8 @@ class EdgeDiffraction:
         # magnitudes, the rest in energy: between the waves of the first edge, A (C, 3,
         # 3, B, M), between those of the second, B, and between two pairs of waves the
         # product of the two.
-        coherence1 = _coherence(_share(kl1, angle1))
-        coherence2 = _coherence(_share(kl2, angle2))
+        coherence1 = _coherence(self._coherent_share(_share(kl1, angle1)))
+        coherence2 = _coherence(self._coherent_share(_share(kl2, angle2)))
         dark = ~lit1[:, :, None] & ~lit2[:, None, :] & counted
         alone = waves * dark[..., None, None]
         energy = np.einsum(
@@ -948,10 +1013,17 @@ class EdgeDiffraction:
             fade = self._fade(distance[rows] - single["distance"][targets])
             product = np.einsum("rjlbm,rjbm,rlbm->rbm", between, partner, np.conj(own)).real
             cross = 2.0 * fade * np.mean(product, axis=2)
+            cross[:, : self.coherent] = 0.0
             single["energy"], energy = _take(single["energy"], targets, cross, energy, rows)
 
+        # In the coherent bands all the waves the path carries add in pressure, and add
+        # to the paths over one edge in the impulse response.
+        carried = counted & ~(lit1[:, :, None] & lit2[:, None, :])
+        pressure = (waves * carried[..., None, None]).sum(axis=(1, 2))
+        energy[:, : self.coherent] = np.mean(np.abs(pressure[:, : self.coherent]) ** 2, axis=2)
         return {
             "energy": energy,
+            "spectrum": self._spectrum(pressure, distance),
             "distance": distance,
             "order": np.zeros(len(e1), dtype=np.int64),
             "edge": e1,
@@ -1038,6 +1110,7 @@ class EdgeDiffraction:
             return EarlyReflections.empty(bands)
         arrival = found["last"][idx] - listener
         arrival /= np.maximum(np.linalg.norm(arrival, axis=1), 1e-300)[:, None]
+        spectrum = found["spectrum"]
         return EarlyReflections(
             order=found["order"][idx],
             delay_s=distance[idx] / self.speed_of_sound,
@@ -1047,6 +1120,7 @@ class EdgeDiffraction:
             points=[np.vstack([self.source, *found["corners"](i), listener]) for i in idx],
             faces=[found["faces"](i) for i in idx],
             edge=found["edge"][idx].astype(np.int64),
+            spectrum=None if spectrum is None else spectrum[idx],
         )
 
     def _specular(self, listener: np.ndarray, paths: EarlyReflections, c: dict) -> np.ndarray:
@@ -1095,15 +1169,15 @@ class EdgeDiffraction:
 def _waves(n, phi, phi_source, kl, lit, reflection) -> np.ndarray:
     """(C, 3, B, M) the terms of the incident wave and of the reflections off face 0 and
     face n of C edges, for wave numbers times distance parameters ``kl`` (C, B, M); their
-    faces reflect by ``reflection`` (C, 2, B)."""
+    faces reflect by ``reflection`` (C, 2, B, M)."""
     terms = wedge_terms(
         n[:, None, None], phi[:, None, None], phi_source[:, None, None], kl, lit[:, None, None, :]
     )
     return np.stack(
         [
             terms[..., 0] + terms[..., 1],
-            terms[..., 3] * reflection[:, 0, :, None],
-            terms[..., 2] * reflection[:, 1, :, None],
+            terms[..., 3] * reflection[:, 0],
+            terms[..., 2] * reflection[:, 1],
         ],
         axis=1,
     )
@@ -1187,8 +1261,8 @@ def _phase_curvature(n, phi, phi_source, kl, reflection, angle) -> np.ndarray:
         values.append(
             terms[..., 0]
             + terms[..., 1]
-            + terms[..., 3] * reflection[:, 0, :, None]
-            + terms[..., 2] * reflection[:, 1, :, None]
+            + terms[..., 3] * reflection[:, 0]
+            + terms[..., 2] * reflection[:, 1]
         )
     with np.errstate(divide="ignore", invalid="ignore"):
         bend = (np.angle(values[2] / values[1]) - np.angle(values[1] / values[0])) / step**2
@@ -1317,17 +1391,7 @@ def _reflect(model: TraceModel, start, image, plane, end):
 
 
 def _replace_energy(paths: EarlyReflections, energy: np.ndarray) -> EarlyReflections:
-    return EarlyReflections(
-        order=paths.order,
-        delay_s=paths.delay_s,
-        distance_m=paths.distance_m,
-        direction=paths.direction,
-        energy=energy,
-        points=paths.points,
-        faces=paths.faces,
-        edge=paths.edge,
-        crossings=paths.crossings,
-    )
+    return dataclasses.replace(paths, energy=energy)
 
 
 def diffract(
@@ -1343,6 +1407,7 @@ def diffract(
     orientation: np.ndarray | None = None,
     mode: str = "first_order",
     edges: Edges | None = None,
+    coherent: int = 0,
 ) -> EarlyReflections:
     """``paths`` from one source to one listener with the sound diffracted at the
     model's edges added; see :class:`EdgeDiffraction`."""
@@ -1355,6 +1420,7 @@ def diffract(
         orientation=orientation,
         mode=mode,
         edges=edges,
+        coherent=coherent,
     ).apply(listener, paths, max_delay_s)
 
 

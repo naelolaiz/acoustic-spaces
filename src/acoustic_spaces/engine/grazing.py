@@ -29,6 +29,7 @@ the seats take from them is lost and not made up by the tail.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 
 import numpy as np
@@ -134,17 +135,7 @@ def apply_grazing(model: TraceModel, listener: np.ndarray, paths: EarlyReflectio
     factors = grazing_factors(model, listener, paths, audience)
     if factors is None:
         return paths
-    return EarlyReflections(
-        order=paths.order,
-        delay_s=paths.delay_s,
-        distance_m=paths.distance_m,
-        direction=paths.direction,
-        energy=paths.energy * factors,
-        points=paths.points,
-        faces=paths.faces,
-        edge=paths.edge,
-        crossings=paths.crossings,
-    )
+    return dataclasses.replace(paths, energy=paths.energy * factors)
 
 
 __all__ = [

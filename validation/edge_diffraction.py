@@ -32,7 +32,9 @@ half-plane, which is exact far from the edge, and the engine against it:
 
 Every comparison is of the energy in each octave band, averaged over the engine's eight
 frequencies in the band, relative to the direct sound in free field over the same
-distance.
+distance. The engine's levels are given twice: with its paths and the terms of their
+coefficients added in energy, and in the 63 and 125 Hz bands in pressure, as the
+engine adds them there by default (``simulation.early.coherent_max_band_hz``).
 """
 
 from __future__ import annotations
@@ -49,6 +51,7 @@ import numpy as np
 from acoustic_spaces import Room, Scene
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import early_paths
+from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, band_frequencies, find_edges
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
@@ -60,6 +63,8 @@ HALF_LENGTH = 40.0
 #: arrive after everything compared here.
 EXTENT = 300.0
 FREQUENCIES, _ = band_frequencies()
+#: The bands in which the engine adds paths in pressure by default: 63 and 125 Hz.
+COHERENT = 2
 K = 2.0 * np.pi * FREQUENCIES.ravel() / C
 
 
@@ -214,24 +219,25 @@ def barrier_quads(width: float) -> list:
     ]
 
 
-def engine(room: Room, mode: str, model: TraceModel | None = None, edges=None):
+def engine(room: Room, mode: str, model: TraceModel | None = None, edges=None, coherent: int = 0):
     """The engine's paths from the room's source to its listener, with their total
-    level per band in dB re the direct sound in free field."""
+    level per band in dB re the direct sound in free field; in the lowest ``coherent``
+    bands the paths and the terms of their coefficients add in pressure."""
     model = TraceModel.from_room(room) if model is None else model
     source = np.array(room.scene.sources[0].position)
     receiver = np.array(room.scene.listeners[0].position)
     air = np.zeros(len(OCTAVE_BANDS_HZ))
     c = room.speed_of_sound()
     paths = early_stage.find_paths(
-        model, source, receiver, [], speed_of_sound=c, air=air, max_delay_s=0.5
+        model, source, receiver, [], speed_of_sound=c, air=air, max_delay_s=0.5, coherent=coherent
     )
     if mode != "none":
         paths = EdgeDiffraction(
-            model, source, speed_of_sound=c, air=air, mode=mode, edges=edges
+            model, source, speed_of_sound=c, air=air, mode=mode, edges=edges, coherent=coherent
         ).apply(receiver, paths, 0.5)
     squared = float(np.sum((receiver - source) ** 2))
     with np.errstate(divide="ignore"):
-        level = 10.0 * np.log10(paths.energy.sum(axis=0) * 4.0 * np.pi * squared)
+        level = 10.0 * np.log10(total_energy(paths) * 4.0 * np.pi * squared)
     return paths, level
 
 
@@ -282,7 +288,9 @@ def thin_screen(folder: Path) -> list[dict]:
         source, receiver = np.array(source), np.array(receiver)
         distance = float(np.linalg.norm(receiver - source))
         btm = band_level(btm_first(edge, source, receiver), distance)
-        _, level = engine(_room(folder, "screen", screen_quads(), source, receiver), "direct")
+        room = _room(folder, "screen", screen_quads(), source, receiver)
+        _, level = engine(room, "direct")
+        _, pressure = engine(room, "direct", coherent=COHERENT)
         point = np.array([0.0, _cross_y(source, receiver), 0.0])
         detour = float(np.linalg.norm(source - point) + np.linalg.norm(receiver - point))
         detour -= distance
@@ -294,6 +302,7 @@ def thin_screen(folder: Path) -> list[dict]:
                 "receiver": receiver.tolist(),
                 "btm_db": btm.tolist(),
                 "engine_minus_btm_db": (level - btm).tolist(),
+                "in_pressure_minus_btm_db": (pressure - btm).tolist(),
                 "maekawa_minus_btm_db": (maekawa - btm).tolist(),
             }
         )
@@ -343,7 +352,9 @@ def second_order(folder: Path) -> list[dict]:
     rows = []
     for name, quads, e1, e2, half, source, receiver in cases:
         source, receiver = np.array(source), np.array(receiver)
-        paths, level = engine(_room(folder, "second", quads, source, receiver), "second_order")
+        room = _room(folder, "second", quads, source, receiver)
+        paths, level = engine(room, "second_order")
+        _, pressure = engine(room, "second_order", coherent=COHERENT)
         p1, p2 = _double_path(paths)
         centres = (float((p1 - e1.origin) @ e1.direction), float((p2 - e2.origin) @ e2.direction))
         began = time.perf_counter()
@@ -358,6 +369,7 @@ def second_order(folder: Path) -> list[dict]:
                 "receiver": receiver.tolist(),
                 "btm_db": reference.tolist(),
                 "engine_minus_btm_db": (level - reference).tolist(),
+                "in_pressure_minus_btm_db": (pressure - reference).tolist(),
                 "btm_seconds": seconds,
             }
         )
@@ -373,12 +385,17 @@ def crossing(folder: Path) -> dict:
     quads = barrier_quads(1.0)
     for who in ("source", "listener"):
         found = {}
-        for mode in ("first_order", "second_order"):
+        for mode, coherent in (
+            ("first_order", 0),
+            ("second_order", 0),
+            ("second_order, in pressure", COHERENT),
+        ):
             levels = []
             for dz in steps:
                 source = np.array([-3.0, 0.0, -1.0 if who == "listener" else dz])
                 receiver = np.array([4.0, 0.0, dz if who == "listener" else -1.5])
-                _, level = engine(_room(folder, "crossing", quads, source, receiver), mode)
+                room = _room(folder, "crossing", quads, source, receiver)
+                _, level = engine(room, mode.split(",")[0], coherent=coherent)
                 levels.append(level)
             levels = np.array(levels)
             with np.errstate(invalid="ignore"):
@@ -458,6 +475,7 @@ def main() -> None:
             where = f"{row['source']} to {row['receiver']}"
             print(f"| {where}: BTM | {_row(row['btm_db'])} |")
             print(f"| engine - BTM | {_row(row['engine_minus_btm_db'])} |")
+            print(f"| engine in pressure - BTM | {_row(row['in_pressure_minus_btm_db'])} |")
             print(f"| Maekawa - BTM | {_row(row['maekawa_minus_btm_db'])} |")
 
         results["second_order"] = second_order(folder)
@@ -466,6 +484,7 @@ def main() -> None:
             where = f"{row['case']}, {row['source']} to {row['receiver']}"
             print(f"| {where}: BTM | {_row(row['btm_db'])} |")
             print(f"| engine - BTM | {_row(row['engine_minus_btm_db'])} |")
+            print(f"| engine in pressure - BTM | {_row(row['in_pressure_minus_btm_db'])} |")
         seconds = max(row["btm_seconds"] for row in results["second_order"])
         print(f"\n(BTM takes up to {seconds:.0f} s per case)")
 

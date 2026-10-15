@@ -306,6 +306,7 @@ the scene's (+z up, metres).
 | `church` | A stone nave with an apse, 18 m high, with about six seconds of reverberation. |
 | `gallery` | An L-shaped gallery: one listener sees the guide, the other stands round the corner and hears the guide by [edge diffraction](#edge-diffraction). |
 | `archway` | A bar and a dining room joined by an archway in a wall 40 cm thick: a diner behind the wall hears the singer over both corners of the arch's jamb (`second_order` diffraction). |
+| `listening_room` | A living room with a loudspeaker against the front wall or a metre out: the wall's reflection adds to the bass in pressure, or takes from it ([early reflections in pressure](#low-frequencies-early-reflections-in-pressure)); `bass.py` prints how much. |
 | `orchestra` | The concert hall with a full orchestra on its stage, one source for each of the 61 tracks of an anechoic recording, and the scripts that [mix them and make a video](#an-orchestra-in-the-concert-hall). |
 
 `acoustic-spaces examples` lists them with where they are installed, and
@@ -710,7 +711,9 @@ The two parts hand over by reflection order by default. Set `transition_ms` to
 keep early paths only that long after the direct sound.
 
 **Impulse responses** are built per band: early paths become fractional-delay
-impulses, the late energy shapes a Dirac sequence with the density of reflections in
+impulses (in the lowest bands with the phase of their reflections, see
+[Low frequencies: early reflections in pressure](#low-frequencies-early-reflections-in-pressure)),
+the late energy shapes a Dirac sequence with the density of reflections in
 the room, and a zero-phase crossover bank sums the bands. The direct sound at r
 metres is an impulse of height 1/r, so levels compare between files and the energy
 of the direct sound at 10 m (0.01) is the reference for strength G.
@@ -737,7 +740,9 @@ The directions the sound arrives from give more of them:
   the background noise of `coverage.noise_db`, as the coverage maps take them; and the
   echo criteria of Dietsch and Kraak for speech and music.
 
-The echogram adds the arrivals in energy, as ODEON and CATT do. A figure of eight on
+The echogram adds the arrivals in energy, as ODEON and CATT do, except the early
+reflections in the lowest bands, which add in pressure (see
+[below](#low-frequencies-early-reflections-in-pressure)). A figure of eight on
 the centre line of a symmetric room hears the two side walls' reflections arrive
 together with opposite signs, and they cancel in the rendered Ambisonics response.
 LF read from that response with `analyze --ambisonic` is then lower than the
@@ -858,10 +863,12 @@ there, since near the first edge's boundaries it is still curved like the source
 Where one of the two edges' waves is lit, the path continues a path over the other edge
 alone and shares its energy with it, so the level is continuous where a path over one
 edge appears: as the listener rises past the top of a barrier, it changes by at most
-0.8 dB at 63 Hz and 0.1 dB from 1 kHz up. Against the exact solution (BTM, in the
+0.1 dB from 1 kHz up, and 0.01 dB at 63 Hz, where the waves add in pressure (0.8 dB in
+energy). Against the exact solution (BTM, in the
 [validation report](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/docs/validation.md#edge-diffraction-against-the-exact-solution)),
-the level over barriers 0.3 to 3 m thick is within 0.35 dB from 500 Hz up and 2 dB at
-63 Hz, and over two screens in a row within 0.75 dB and 2.7 dB.
+the level over barriers 0.3 to 3 m thick is within 0.35 dB from 500 Hz up, and over two
+screens in a row within 0.75 dB; at 63 and 125 Hz, in pressure, within 0.6 and 0.12 dB
+(2 and 2.7 dB with the waves in energy).
 
 ```sh
 acoustic-spaces simulate examples/gallery/scene.yaml --out gallery
@@ -887,6 +894,52 @@ cost grows with the number of edges: in a hall with about 100 edges, `first_orde
 about 17 ms per source and listener. `second_order` costs more, as it looks at pairs of
 edges: in a hall with 16 edges, the early stage takes 200 ms per source and listener
 with it, 120 ms with `first_order` and 100 ms without diffraction.
+
+### Low frequencies: early reflections in pressure
+
+At low frequencies reflections that arrive a few milliseconds apart do not add in
+energy, as an echogram adds them, but in pressure. Next to a hard floor the reflection
+arrives in phase and doubles the pressure of the direct sound (+6 dB, where energy
+gives +3 dB); a loudspeaker a metre in front of a wall loses bass where the wall's
+reflection arrives half a period late. A band's filter rings for longer than such
+reflections lie apart, so the impulse response shows that interference, and an
+echogram that adds the paths in energy misses it. Up to
+`simulation.early.coherent_max_band_hz` the early paths add in pressure:
+
+```yaml
+simulation:
+  early:
+    coherent_max_band_hz: 125   # 63, 125 (default), 250, 500, or null for energy throughout
+```
+
+- Each reflection turns the phase as a locally reacting surface with the material's
+  absorption does: R = (cos θ - Y) / (cos θ + Y) at the angle of incidence θ, with the
+  admittance Y fitted as for the wave solver. A hard surface reflects in phase at every
+  angle; an absorbing one turns the phase of sound that grazes it, by half a turn at
+  grazing incidence, as a lawn does outdoors. Above those bands each path keeps the
+  phase it has at their top, so the bands join without a step.
+- Sound bent round an edge carries the whole complex UTD coefficient, whose terms add to
+  the specular paths in pressure, as the theory has them, rather than through the cross
+  terms that stand for that interference in the higher bands.
+- The echogram reads those bands' early energy from the paths' pressure, through the
+  band filters the analysis of measured responses uses, and so do coverage maps and the
+  material fit. An impulse response and the echogram it came from now give the same
+  parameters in those bands: in a 7.3 x 5.1 x 3 m box, G within 0.01 dB and C50 within
+  0.05 dB, where adding the paths in energy leaves them up to 2.1 and 1.6 dB apart.
+- The late part still adds in energy: its rays stand for many paths with random phases.
+  So do the points of a line or surface source, which are uncorrelated.
+- With the wave solver up to the same band or higher, its bands take their place.
+
+```sh
+python examples/listening_room/bass.py
+acoustic-spaces simulate examples/listening_room/scene.yaml --out energy --coherent-band none
+```
+
+In the `listening_room` example, the early part at the sofa is 5.7 dB louder at 63 Hz
+from a loudspeaker against the front wall than from one a metre out, and the whole
+response 2 dB louder; added in energy, the two are within 0.7 dB. `--coherent-band` sets
+it for one run of `simulate` or `map`, and the editor's simulation page has it as
+"In pressure up to".
 
 ### Low frequencies: the wave solver
 

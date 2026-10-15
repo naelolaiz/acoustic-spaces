@@ -1,0 +1,39 @@
+# A living room used for listening, 5.7 x 4.3 x 2.6 m, with plasterboard walls and an
+# absorbing ceiling. The same loudspeaker stands against the front wall or a metre out
+# from it, 2.2 m from the sofa: at low frequencies its reflection off the wall adds to
+# the direct sound in pressure, and raises the bass from against the wall but takes
+# from it a metre out (bass.py prints how much).
+name: Listening room (loudspeaker and front wall)
+geometry:
+  box: [5.7, 4.3, 2.6]   # wall_4 is the front wall, behind the loudspeakers
+materials:
+  wooden_floor:
+    preset: stage_floor
+    scattering: 0.05
+  ceiling_absorber:
+    preset: ceiling_fibre_absorber
+    scattering: 0.1
+  plasterboard:
+    preset: plasterboard
+    scattering: 0.05
+assignments:
+  floor: wooden_floor
+  ceiling: ceiling_absorber
+  walls: plasterboard
+sources:
+  - name: against the wall
+    position: [0.27, 1.63, 1.0]
+    orientation: {yaw: 0}
+  - name: a metre out
+    position: [1.07, 1.63, 1.0]
+    orientation: {yaw: 0}
+listeners:
+  - name: sofa
+    position: [3.31, 1.71, 1.05]
+    orientation: {yaw: 180}
+simulation:
+  early: {method: ray_tracing, max_order: 3, coherent_max_band_hz: 125}
+  late: {method: stochastic_ray_tracing, rays: 20000}
+  ir_length_s: 1.0
+outputs:
+  - mono
