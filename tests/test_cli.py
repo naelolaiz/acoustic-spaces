@@ -220,7 +220,8 @@ def test_simulate_with_the_wave_solver(tmp_path: Path, capsys: pytest.CaptureFix
 
     out = tmp_path / "out"
     args = ["simulate", str(SHOEBOX), "--out", str(out), "--rays", "1000", "--length", "0.4"]
-    assert main([*args, "--wave", "--wave-band", "125", "--output", "ambisonics:1"]) == 0
+    wave = ["--wave", "--wave-band", "125", "--wave-device", "auto"]
+    assert main([*args, *wave, "--output", "ambisonics:1"]) == 0
     captured = capsys.readouterr()
     assert "talker -> seat-a: direct sound at" in captured.out
     assert "63-125 Hz from the wave solver" in captured.out
@@ -230,6 +231,7 @@ def test_simulate_with_the_wave_solver(tmp_path: Path, capsys: pytest.CaptureFix
         "enabled": True,
         "max_band_hz": 125,
         "points_per_wavelength": 8.0,
+        "device": "auto",
     }
     assert report["details"]["talker"]["wave_cells"] > 0
     assert main([*args, "--no-wave"]) == 0

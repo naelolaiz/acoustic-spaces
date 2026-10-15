@@ -331,11 +331,13 @@ def test_selection_and_forms(window) -> None:
     assert window.document.scene.simulation.late.rays == 1234
     page = window.inspector.pages["simulation"]
     assert not page.wave.isChecked() and not page.wave_band.isEnabled()
+    assert not page.wave_device.isEnabled()
     page.wave.setChecked(True)
-    assert page.wave_band.isEnabled()
+    assert page.wave_band.isEnabled() and page.wave_device.isEnabled()
     page.wave_band.setCurrentText("63")
+    page.wave_device.setCurrentText("auto")
     wave = window.document.scene.simulation.wave
-    assert wave.enabled and wave.max_band_hz == 63
+    assert wave.enabled and wave.max_band_hz == 63 and wave.device == "auto"
     assert window.document.scene.simulation.early.diffraction == "direct"
     assert page.scattering_method.currentText() == "vector" and page.from_size.isChecked()
     assert page.by_band.isChecked() and page.by_band.isEnabled()

@@ -1044,8 +1044,15 @@ class SimulationPage(Page):
         self.wave_band.setToolTip(
             "The highest band it computes; each costs about 16 times the one below"
         )
+        self.wave_device = QComboBox()
+        self.wave_device.addItems(["cpu", "gpu", "auto"])
+        self.wave_device.setToolTip(
+            "Where it steps its grid: the CPU, a GPU through WebGPU (needs the gpu extra), "
+            "or a hardware GPU when there is one"
+        )
         wave_form.addRow(self.wave)
         wave_form.addRow("Up to band (Hz)", self.wave_band)
+        wave_form.addRow("Run on", self.wave_device)
         layout.addWidget(wave)
 
         response = QGroupBox("Response")
@@ -1081,6 +1088,7 @@ class SimulationPage(Page):
             self.reception,
             self.scattering_method,
             self.wave_band,
+            self.wave_device,
             self.sample_rate,
             self.bands,
         ):
@@ -1117,6 +1125,8 @@ class SimulationPage(Page):
         self.wave.setChecked(s.wave.enabled)
         self.wave_band.setCurrentText(str(s.wave.max_band_hz))
         self.wave_band.setEnabled(s.wave.enabled)
+        self.wave_device.setCurrentText(s.wave.device)
+        self.wave_device.setEnabled(s.wave.enabled)
         self.length.setValue(s.ir_length_s)
         if self.sample_rate.findText(str(s.sample_rate)) < 0:
             self.sample_rate.addItem(str(s.sample_rate))
@@ -1160,6 +1170,7 @@ class SimulationPage(Page):
                 **self.document.scene.simulation.wave.model_dump(mode="json"),
                 "enabled": self.wave.isChecked(),
                 "max_band_hz": int(self.wave_band.currentText()),
+                "device": self.wave_device.currentText(),
             },
             "ir_length_s": self.length.value(),
             "sample_rate": int(self.sample_rate.currentText()),

@@ -406,6 +406,7 @@ def simulate(
                 speed_of_sound=c,
                 points_per_wavelength=settings.wave.points_per_wavelength,
                 threads=threads,
+                device=settings.wave.device,
                 say=say,
                 label=source.name,
             )

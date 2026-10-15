@@ -777,6 +777,13 @@ class WaveStage(_Model):
         le=20.0,
         description="grid cells per wavelength at the top of each band's crossover",
     )
+    device: Literal["cpu", "gpu", "auto"] = Field(
+        default="cpu",
+        description=(
+            "where it steps the grid: cpu, gpu (through WebGPU: Vulkan, Metal or Direct3D 12, "
+            "with the gpu extra) or auto (a hardware GPU when wgpu finds one, else the CPU)"
+        ),
+    )
 
 
 LAYOUT_NAMES = ("stereo", "5.0", "7.0", "5.0.4", "7.0.4", "5.1", "7.1", "5.1.4", "7.1.4")

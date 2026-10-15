@@ -65,6 +65,9 @@ def _print_checks(room: Room) -> bool:
 def _cmd_info(_: argparse.Namespace) -> int:
     print(f"acoustic_spaces {__version__}")
     print(f"compiled core: {'available' if native_available() else 'missing'}")
+    from acoustic_spaces.engine.gpu import gpu_name
+
+    print(f"GPU for the wave solver: {gpu_name() or 'none (needs the gpu extra and a driver)'}")
     return 0
 
 
@@ -486,6 +489,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "--diffraction": ("early.diffraction", args.diffraction),
             "--wave": ("wave.enabled", args.wave),
             "--wave-band": ("wave.max_band_hz", args.wave_band),
+            "--wave-device": ("wave.device", args.wave_device),
             "--length": ("ir_length_s", args.length),
             "--sample-rate": ("sample_rate", args.sample_rate),
         },
@@ -1632,6 +1636,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="HZ",
         help="override simulation.wave.max_band_hz: the highest band it computes (63, 125, "
         "250 or 500; each costs about 16 times the one below)",
+    )
+    simulate.add_argument(
+        "--wave-device",
+        choices=("cpu", "gpu", "auto"),
+        help="override simulation.wave.device: step the wave solver's grid on the CPU, on "
+        "a GPU (with the gpu extra) or on a hardware GPU when there is one",
     )
     simulate.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
     simulate.add_argument(
