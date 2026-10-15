@@ -389,8 +389,8 @@ each surface's size brings the seminar room within 2 % of the measurement (and w
 4 % of Eyring's diffuse field), and the hall to 8 to 10 % long: one model now fits both rooms better than
 either did. The simulated responses decay like these room-energy curves, within 4 % in
 every band. The rest of the hall's gap is the model hall itself, as the paragraph above
-says. The v3 milestone on fitting absorption to measured parameters with this tracer
-instead of Eyring's formula will be measured against these two rooms.
+says. Fitting the absorption with this tracer instead of Eyring's formula takes up that
+gap (see "Calibrated absorption" below).
 
 **Third-octave bands.** BRAS gives its coefficients in third octaves. Averaged onto
 octaves, an octave's three thirds decay as one, at their mean absorption, while three
@@ -430,6 +430,69 @@ rarely capture. From 500 Hz to 4 kHz the seminar room's decay is 13 to 29 % shor
 the same coefficients within 15 % in every band of both rooms (within 3 % from 250 Hz up
 in the seminar room), so the error is in the coefficients. This is the error to expect from tabulated coefficients alone, before a
 room has been measured.
+
+**Calibrated absorption.** `--calibrate LS1` first fits the absorption of every surface
+(`acoustic-spaces calibrate`, see the README). It fits to the T30, EDT and C80 of the
+five responses of the first loudspeaker position, starting from the initial set, with
+10,000 rays per band while fitting. Then it simulates the room with what the fit found,
+as above, and compares the five responses of the second position, which the fit did
+not see. The table gives the mean absolute difference from 125 Hz to 4 kHz in JNDs over
+those five responses, with how many of their 30 pair and band values are within one
+JND. The fitted and initial columns repeat the table above, which averages all ten
+responses:
+
+| | CR2 calibrated | CR2 fitted | CR2 initial | CR3 calibrated | CR3 fitted | CR3 initial |
+|---|---:|---:|---:|---:|---:|---:|
+| EDT | 1.2 (18) | 1.1 | 6.0 | 1.1 (16) | 2.6 | 5.9 |
+| T20 | 0.9 (23) | 1.0 | 6.5 | 0.8 (20) | 2.1 | 5.8 |
+| T30 | 1.0 (21) | 1.0 | 6.5 | 0.5 (28) | 1.8 | 5.7 |
+| C50 | 1.0 (20) | 1.0 | 1.7 | 1.2 (15) | 1.3 | 1.7 |
+| C80 | 0.7 (25) | 0.8 | 1.8 | 0.8 (21) | 1.0 | 1.6 |
+| D50 | 1.1 (20) | 1.1 | 1.8 | 1.3 (14) | 1.4 | 1.8 |
+| Ts | 0.8 (24) | 1.0 | 3.5 | 0.7 (23) | 1.3 | 3.0 |
+
+![CR2, calibrated from the initial absorption](validation/bras_CR2_initial_calibrated.png)
+
+![CR3, calibrated from the initial absorption](validation/bras_CR3_initial_calibrated.png)
+
+The initial estimates made the decay up to twice as long. From them, calibration brings
+both rooms to about one JND on responses it did not fit. In the seminar room it does as
+well as BRAS's fitted set. In the hall it does better: T30 is within 0.5 JNDs on
+average, with 28 of the 30 values within one JND, against 1.8 with the fitted set, and
+T20 and EDT gain as much. The fit uses the model's own rays rather than Eyring's
+formula, so it takes up what the model hall's sound misses of the seating.
+
+In the seminar room the fit found nearly BRAS's fitted set, though it started from the
+initial one. The windows absorb 0.25 and 0.19 at 63 and 125 Hz (BRAS fitted 0.25 and
+0.19, initial 0.13 and 0.10), and the other values are within 0.03 of BRAS's but for
+the plaster at 63 Hz (0.15 against 0.08). In
+the hall it found more absorption than BRAS in the seating at 500 Hz (0.50 against
+0.38) and in the plaster at 125 and 250 Hz (0.22 and 0.28 against 0.11 and 0.15), and
+less in the structured plaster at 2 kHz (0.08 against 0.14).
+
+These are what a model needs to match the room, not what each surface absorbs. With one
+loudspeaker position and five microphones, the uncertainty the fit reports is above 0.2
+for most materials and bands in the hall, and above 0.4 for all of them in the seminar
+room. The
+measurements fix each band's total absorption, and the proportions between materials
+come from the initial estimates. Telling surfaces apart takes responses that hear them
+differently, such as sources and microphones near different surfaces.
+
+Some differences remain:
+
+- **250 Hz in the seminar room.** T30 is 3.2 JNDs short on the second loudspeaker's
+  responses, though within 1.4 on the first's. The two positions measured 1.70 and
+  1.90 s on average. This is near the room's Schroeder frequency, about 230 Hz, where a
+  decay depends on where it is measured.
+- **8 kHz in the seminar room.** The decay stays 2 JNDs short even with surfaces that
+  absorb next to nothing, because in octave bands the air absorbs at the octave's centre
+  frequency (see "Third-octave bands" above).
+- **63 Hz.** EDT stays 2 to 6 JNDs off in both rooms. Below the Schroeder frequency a
+  geometric model gives an average, not the room's modes.
+
+Fitting took 11 minutes for the seminar room and 8 for the hall: four rounds of tracing
+at the first position's 10,000 rays per band. Simulating each room again at 50,000 rays
+took 13 to 14 minutes.
 
 ## Wave-based solver
 
@@ -550,11 +613,12 @@ python validation/wave_solver.py --plot docs/images/wave.png
 python validation/bras_validation.py --json bras.json --plots docs/validation
 python validation/bras_validation.py --materials initial --plots docs/validation
 python validation/bras_validation.py --bands third_octave --json bras_third.json
+python validation/bras_validation.py --materials initial --calibrate LS1 --plots docs/validation
 ```
 
 The cross-check takes about 25 minutes on 4 cores, the benchmark about 2 minutes, the
 wave solver's checks about 30 seconds and each BRAS run about 30 minutes (85 in
-third-octave bands). The cross-check's numbers come from the development version of
+third-octave bands, 46 calibrated). The cross-check's numbers come from the development version of
 3.0.0 with seed 1. Those of pyroomacoustics, which draws its rays afresh on every run, have moved by up to 6 % in
 T30, 16 % in EDT and 2 dB in C80 from one run to the next, and the differences in the
 tables with them. Other seeds move this package's numbers by a few percent.

@@ -333,6 +333,9 @@ def _late_direct(directivity, orientation: np.ndarray, receivers: np.ndarray) ->
         max_split=8,
         max_family=256,
         room_level=np.zeros(0),
+        face_group=np.zeros(0, dtype=np.int64),
+        groups=0,
+        moment_time_step=0.01,
     )
     return energy.sum(axis=2)
 

@@ -1050,6 +1050,105 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+def _measured_parameters(entry: dict):
+    """RoomParameters from a JSON entry that may give only some parameters."""
+    from acoustic_spaces.parameters import PARAMETERS, RoomParameters
+
+    missing = [None] * len(OCTAVE_BANDS_HZ)
+    return RoomParameters.from_dict({**{name: missing for name in PARAMETERS}, **entry})
+
+
+def _measured_pair(path: str, args: argparse.Namespace):
+    """The parameters of a measured impulse response WAV, or those of the first channel
+    in a report written by ``analyze --json``."""
+    from acoustic_spaces.audio import read_wav
+    from acoustic_spaces.parameters import from_impulse_response
+
+    if Path(path).suffix.lower() == ".json":
+        report = json.loads(Path(path).read_text(encoding="utf-8"))
+        try:
+            return _measured_parameters(report["channels"][0]["parameters"])
+        except (KeyError, IndexError, TypeError):
+            raise ValueError(f"{path} is not a report written by analyze --json") from None
+    data, sample_rate = read_wav(path)
+    channel = args.channel or 1
+    if not 1 <= channel <= data.shape[1]:
+        raise ValueError(f"{path} has no channel {channel} (it has {data.shape[1]})")
+    return from_impulse_response(
+        data[:, channel - 1], sample_rate, filters=args.filters, noise=not args.no_noise
+    )
+
+
+def _measured_pairs(args: argparse.Namespace) -> dict:
+    """The measured parameters per (source, listener), from --measured and
+    --measured-json."""
+    pairs = {}
+    for source, listener, path in args.measured or []:
+        pairs[source, listener] = _measured_pair(path, args)
+    for path in args.measured_json or []:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        entries = data.get("pairs") if isinstance(data, dict) else None
+        if not isinstance(entries, dict):
+            raise ValueError(f'{path} has no "pairs": {{"SOURCE LISTENER": {{...}}}}')
+        for key, entry in entries.items():
+            names = key.replace("/", " ").split()
+            if len(names) != 2:
+                raise ValueError(f'{path}: "{key}" is not "SOURCE LISTENER"')
+            pairs[names[0], names[1]] = _measured_parameters(entry)
+    return pairs
+
+
+def _cmd_calibrate(args: argparse.Namespace) -> int:
+    from acoustic_spaces.calibration import calibrate
+
+    room = _load_room(args.scene)
+    if room is None or not _print_checks(room):
+        return 1
+    settings = _override(
+        room.scene.simulation,
+        {
+            "--rays": ("late.rays", args.rays),
+            "--seed": ("seed", args.seed),
+            "--length": ("ir_length_s", args.length),
+        },
+    )
+    if settings is None:
+        return 1
+    own = room.scene.simulation
+    room.scene.simulation = settings
+    try:
+        measured = _measured_pairs(args)
+        if not measured:
+            print("error: give --measured or --measured-json", file=sys.stderr)
+            return 1
+        found = calibrate(
+            room,
+            measured,
+            args.materials,
+            parameters=args.parameters,
+            rounds=args.rounds,
+            threads=args.threads,
+            progress=lambda message: print(message, file=sys.stderr),
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"{len(measured)} measured pairs, {found.rounds} rounds\n")
+    print(found.table())
+    if args.out:
+        path = Path(args.out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # The scene's own settings, not those of the command line.
+        found.fitted_scene().model_copy(update={"simulation": own}).to_yaml(path)
+        print(f"\nwrote {path}")
+    if args.json:
+        path = Path(args.json)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(found.as_dict(), indent=2) + "\n", encoding="utf-8")
+        print(f"wrote {path}")
+    return 0
+
+
 def _cmd_devices(_: argparse.Namespace) -> int:
     from acoustic_spaces.measurement import list_devices
 
@@ -1665,6 +1764,54 @@ def build_parser() -> argparse.ArgumentParser:
         )
         _add_reference_arguments(group, side)
     compare.set_defaults(func=_cmd_compare)
+
+    calibrate = sub.add_parser(
+        "calibrate",
+        help="fit the materials' absorption to parameters measured in the room",
+        description="Fit the absorption of the scene's materials, octave band by octave "
+        "band, so that the simulated parameters (T30, EDT and C80 unless --parameters "
+        "says otherwise) match those measured at each source and listener pair, in JNDs. "
+        "Each round traces the room once and fits by re-weighting the rays traced.",
+    )
+    calibrate.add_argument("scene", help="scene YAML file")
+    calibrate.add_argument(
+        "--measured",
+        nargs=3,
+        action="append",
+        metavar=("SOURCE", "LISTENER", "FILE"),
+        help="a measured impulse response WAV (or a report of analyze --json) for the "
+        "scene's SOURCE and LISTENER; repeat for each pair",
+    )
+    calibrate.add_argument(
+        "--measured-json",
+        action="append",
+        metavar="FILE",
+        help='measured parameters per pair: {"pairs": {"SOURCE LISTENER": {"t30": [...], '
+        "...}}}, eight octave values each (null where missing)",
+    )
+    calibrate.add_argument(
+        "--materials", nargs="+", metavar="NAME", help="the materials to fit (default: all)"
+    )
+    calibrate.add_argument(
+        "--parameters",
+        nargs="+",
+        default=["t30", "edt", "c80"],
+        choices=["edt", "t20", "t30", "c50", "c80", "d50", "ts", "g"],
+        metavar="NAME",
+        help="parameters to match: edt, t20, t30, c50, c80, d50, ts, g (default t30 edt c80)",
+    )
+    calibrate.add_argument(
+        "--rounds", type=int, default=4, help="traces at new absorption, at most (default 4)"
+    )
+    calibrate.add_argument("--channel", type=int, help="channel of the WAV files (default 1)")
+    calibrate.add_argument("--rays", type=int, help="override simulation.late.rays")
+    calibrate.add_argument("--seed", type=int, help="override simulation.seed")
+    calibrate.add_argument("--length", type=float, help="override simulation.ir_length_s")
+    calibrate.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    calibrate.add_argument("-o", "--out", metavar="YAML", help="write the fitted scene here")
+    calibrate.add_argument("--json", metavar="FILE", help="also write the results as JSON")
+    _add_analysis_arguments(calibrate, references=False, stage=False)
+    calibrate.set_defaults(func=_cmd_calibrate)
 
     measure = sub.add_parser(
         "measure", help="play a sweep, record it and analyse it (needs the measure extra)"

@@ -280,7 +280,8 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
                            int covered_order, InArray covered_time, std::uint64_t seed,
                            std::size_t threads, double window_time_step,
                            std::uint64_t first_ray, InArray split_target, double split_ratio,
-                           std::size_t max_split, std::size_t max_family, InArray room_level) {
+                           std::size_t max_split, std::size_t max_family, InArray room_level,
+                           Indices face_group, std::size_t groups, double moment_time_step) {
     as::StochasticScene scene =
         stochastic_scene("trace_stochastic", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
@@ -288,6 +289,20 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
     const std::size_t bands = scene.bands;
     scene.receivers = points(receivers);
     scene.directions = points(directions);
+    if (groups > 0) {
+        if (groups > as::kMaxGroups || face_group.shape(0) != absorption.shape(0)) {
+            throw std::invalid_argument(
+                "trace_stochastic: face_group must have one per face, with at most 16 groups");
+        }
+        const auto n = static_cast<std::int64_t>(groups);
+        for (std::size_t i = 0; i < face_group.shape(0); ++i) {
+            if (face_group.data()[i] < -1 || face_group.data()[i] >= n) {
+                throw std::invalid_argument("trace_stochastic: bad face_group");
+            }
+        }
+        scene.face_group = face_group.data();
+        scene.groups = groups;
+    }
 
     as::StochasticSettings settings = stochastic_settings(
         rays, max_time, speed_of_sound, covered_order, seed, threads, window_time_step,
@@ -299,6 +314,7 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
     settings.diffuse_rain = diffuse_rain;
     settings.specular_rain = specular_rain;
     settings.covered_time = to_vector(covered_time);
+    settings.moment_time_step = moment_time_step;
 
     as::StochasticResult result;
     {
@@ -310,6 +326,8 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
     return nb::make_tuple(
         to_numpy(std::move(result.energy), {n_rec, bands, result.bins}),
         to_numpy(std::move(result.directional), {n_rec, n_dirs, bands, result.dir_bins}),
+        to_numpy(std::move(result.moments),
+                 {n_rec, result.moment_terms, bands, result.moment_bins}),
         result.escaped_rays, to_numpy(std::move(result.ray_energy), {result.windows}),
         to_numpy(std::move(result.reflections), {result.windows}), result.traced_rays);
 }
@@ -498,9 +516,11 @@ NB_MODULE(_native, m) {
           nb::arg("covered_order"), nb::arg("covered_time"), nb::arg("seed"),
           nb::arg("threads"), nb::arg("window_time_step"), nb::arg("first_ray"),
           nb::arg("split_target"), nb::arg("split_ratio"), nb::arg("max_split"),
-          nb::arg("max_family"), nb::arg("room_level"),
+          nb::arg("max_family"), nb::arg("room_level"), nb::arg("face_group"),
+          nb::arg("groups"), nb::arg("moment_time_step"),
           "Stochastic ray tracing: (energy[r, band, bin], directional[r, dir, band, bin], "
-          "escaped rays, ray_energy[window], reflections[window], traced rays); "
+          "moments[r, term, band, moment bin], escaped rays, ray_energy[window], "
+          "reflections[window], traced rays); "
           "ray_energy / reflections is the mean band-mean energy of a ray per window. The "
           "source radiates with a first-order pattern per band (directivity_a; empty: omni) "
           "times directivity_table (elevations x azimuths x bands; empty: none), in the "
@@ -513,7 +533,10 @@ NB_MODULE(_native, m) {
           "through into the room on its far side, face_room (faces x 2, or 0 x 2) the room "
           "on the front and back of each face (-1: none), source_room the source's, and "
           "room_level (one per room, or empty) each room's weight window level relative to "
-          "the source's room.");
+          "the source's room. With groups > 0, face_group (one per face, -1 for none) "
+          "puts faces in groups, and moments sums per receiver and bin of moment_time_step "
+          "the energy times 1, the reflections a ray has had off each group, n_i, and their "
+          "products n_i n_j (i <= j); else it is empty.");
 
     m.def("trace_map", &trace_map, nb::arg("bvh"), nb::arg("source"), nb::arg("directivity_a"),
           nb::arg("orientation"), nb::arg("directivity_table"), nb::arg("absorption"),

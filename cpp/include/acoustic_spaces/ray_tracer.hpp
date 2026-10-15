@@ -30,6 +30,8 @@ namespace acoustic_spaces {
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr std::size_t kMaxBands = 32;
+// Most groups of faces whose reflections the tracer counts (StochasticScene::face_group).
+constexpr std::size_t kMaxGroups = 16;
 
 // xoshiro256** seeded through splitmix64: one independent stream per ray, so results
 // do not depend on how rays are split between threads.
@@ -301,6 +303,8 @@ struct StochasticSettings {
     // Without one, or in the first batch (no split_target), the ray goes one way or
     // the other, at random in proportion to the two shares.
     std::vector<double> room_level;
+    // With StochasticScene::face_group: resolution of StochasticResult::moments (s).
+    double moment_time_step = 1e-2;
     std::uint64_t seed = 0;
     std::size_t threads = 0;
 };
@@ -374,6 +378,12 @@ struct StochasticScene {
     const double *transmission = nullptr;
     const std::int64_t *face_room = nullptr;
     std::int64_t source_room = -1;
+    // Optional: the group of each face (faces, -1 for none) out of `groups` (at most
+    // kMaxGroups). The tracer counts the reflections each ray has had off each group and
+    // sums, per receiver, the energy times those counts and their products in
+    // StochasticResult::moments: enough to re-weight the response for new absorption.
+    const std::int64_t *face_group = nullptr;
+    std::size_t groups = 0;
     std::vector<Vec3> receivers;
     std::vector<Vec3> directions;  // unit vectors for directional bins; may be empty
     MapGrid map;                   // no points: no map
@@ -388,6 +398,11 @@ struct StochasticResult {
     std::vector<double> ray_energy, reflections;
     std::size_t map_bins = 0;
     std::vector<double> map_energy;  // map points x bands x map_bins
+    // With face groups: per receiver, the energy arriving in each moment bin times 1,
+    // each group's reflection count n_i, and each product n_i n_j (i <= j), in that
+    // order (moment_terms of them): receivers x moment_terms x bands x moment_bins.
+    std::size_t moment_bins = 0, moment_terms = 0;
+    std::vector<double> moments;
     std::size_t escaped_rays = 0;
     std::size_t traced_rays = 0;  // rays including the copies split off
 };
@@ -407,6 +422,8 @@ struct RayState {
     std::int64_t last;   // face of the last reflection, ignored by the next intersection
     Rng rng;
     std::int64_t room;   // the room the ray is in (StochasticScene::face_room), or -1
+    // Reflections so far off each face group (StochasticScene::face_group).
+    std::array<std::uint16_t, kMaxGroups> hits{};
 };
 
 // The share of sound per band that travels from `origin` along `dir` (unit) for
@@ -454,13 +471,31 @@ struct Accumulator {
         return best;
     }
 
-    // Adds energy[b] * factor * air(distance) arriving from `arrival` at `distance`.
+    // Adds energy[b] * factor * air(distance) arriving from `arrival` at `distance`, from
+    // a ray with `hits` reflections off each face group.
     void add(std::size_t receiver, const double *energy, double factor, double distance,
-             const Vec3 &arrival) {
+             const Vec3 &arrival, const std::uint16_t *hits) {
         const double time = distance / settings.speed_of_sound;
         const auto bin = static_cast<std::size_t>(time / settings.time_step);
         if (bin >= out.bins) return;
         const std::size_t bands = scene.bands;
+        double *moments = nullptr;
+        std::array<double, 1 + kMaxGroups + kMaxGroups * (kMaxGroups + 1) / 2> terms{};
+        if (out.moment_terms > 0) {
+            const std::size_t mbin = std::min(
+                out.moment_bins - 1, static_cast<std::size_t>(time / settings.moment_time_step));
+            moments = out.moments.data() +
+                      receiver * out.moment_terms * bands * out.moment_bins + mbin;
+            const std::size_t groups = scene.groups;
+            terms[0] = 1.0;
+            std::size_t t = 1 + groups;
+            for (std::size_t i = 0; i < groups; ++i) {
+                terms[1 + i] = static_cast<double>(hits[i]);
+                for (std::size_t j = i; j < groups; ++j) {
+                    terms[t++] = static_cast<double>(hits[i]) * static_cast<double>(hits[j]);
+                }
+            }
+        }
         double *row = out.energy.data() + receiver * bands * out.bins;
         double *drow = nullptr;
         std::size_t dbin = 0;
@@ -475,6 +510,11 @@ struct Accumulator {
             const double e = energy[b] * factor * std::exp(-scene.air[b] * distance);
             row[b * out.bins + bin] += e;
             if (drow) drow[b * out.dir_bins + dbin] += e;
+            if (moments != nullptr && e != 0.0) {
+                for (std::size_t t = 0; t < out.moment_terms; ++t) {
+                    moments[(t * bands + b) * out.moment_bins] += e * terms[t];
+                }
+            }
         }
     }
 
@@ -591,8 +631,12 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         std::any_of(settings.room_level.begin(), settings.room_level.end(),
                     [](double v) { return !(v >= 0.0); }) ||
         (!settings.covered_time.empty() &&
-         settings.covered_time.size() != scene.receivers.size())) {
+         settings.covered_time.size() != scene.receivers.size()) ||
+        (scene.groups > 0 && !(settings.moment_time_step > 0.0))) {
         throw std::invalid_argument("trace_stochastic: bad settings");
+    }
+    if (scene.groups > kMaxGroups || (scene.groups > 0 && scene.face_group == nullptr)) {
+        throw std::invalid_argument("trace_stochastic: bad face groups");
     }
     const MapGrid &map = scene.map;
     const bool has_map = map.points() > 0;
@@ -625,6 +669,20 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         threads = std::min(threads, std::max<std::size_t>(
                                         1, static_cast<std::size_t>(kMapMemory / copy)));
     }
+    const std::size_t moment_terms =
+        scene.groups > 0 ? 1 + scene.groups + scene.groups * (scene.groups + 1) / 2 : 0;
+    const std::size_t moment_bins =
+        moment_terms > 0
+            ? static_cast<std::size_t>(std::ceil(settings.max_time / settings.moment_time_step))
+            : 0;
+    if (moment_terms > 0) {
+        // Every thread sums its own copy of the moments, too.
+        constexpr double kMomentMemory = 256.0 * 1024.0 * 1024.0;
+        const double copy = 8.0 * static_cast<double>(n_rec * moment_terms * bands) *
+                            static_cast<double>(moment_bins);
+        threads = std::min(threads, std::max<std::size_t>(
+                                        1, static_cast<std::size_t>(kMomentMemory / copy)));
+    }
 
     auto make_result = [&] {
         StochasticResult res;
@@ -641,6 +699,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
             res.map_bins = map.bins(settings.max_time);
             res.map_energy.assign(map.points() * bands * res.map_bins, 0.0);
         }
+        res.moment_terms = moment_terms;
+        res.moment_bins = moment_bins;
+        res.moments.assign(n_rec * moment_terms * bands * moment_bins, 0.0);
         return res;
     };
     std::vector<StochasticResult> partial(threads);
@@ -680,14 +741,14 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
             std::array<double, kMaxBands> whole{};
             whole.fill(1.0);
             stack.push_back(detail::RayState{scene.source, first_dir, start, whole, whole, 0.0, 0,
-                                             -1, first_rng, scene.source_room});
+                                             -1, first_rng, scene.source_room, {}});
             std::size_t family = 1;
 
             while (!stack.empty()) {
                 detail::RayState ray_state = stack.back();
                 stack.pop_back();
                 ++out.traced_rays;
-                auto &[pos, dir, energy, seen, alone, travelled, order, last, rng, room] =
+                auto &[pos, dir, energy, seen, alone, travelled, order, last, rng, room, hits] =
                     ray_state;
 
                 while (travelled < max_length) {
@@ -720,7 +781,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             }
                             if (any <= 0.0) continue;
                             acc.add(k, counted.data(), (t1 - t0) / sphere_volume[k], distance,
-                                    -dir);
+                                    -dir, hits.data());
                         }
                     }
                     if (has_map) {
@@ -765,6 +826,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     std::copy(seen.begin(), seen.begin() + bands, seen_before.begin());
                     std::copy(alone.begin(), alone.begin() + bands, alone_before.begin());
                     ++order;
+                    const std::int64_t group =
+                        scene.groups > 0 ? scene.face_group[face] : std::int64_t{-1};
+                    if (group >= 0) ++hits[static_cast<std::size_t>(group)];
 
                     const double *surface = scene.scattering + face * bands;
                     if (scene.surface_size != nullptr && order >= settings.size_from_order) {
@@ -821,7 +885,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                         : rain[b];
                                 counted[b] = radiated * share[b];
                             }
-                            acc.add(k, counted.data(), factor, travelled + dist, -toward);
+                            acc.add(k, counted.data(), factor, travelled + dist, -toward,
+                                    hits.data());
                         }
                     }
                     if (passed > 0.0) {
@@ -830,7 +895,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             // Both ways: a copy goes on through, on the leg it was on.
                             stack.push_back(detail::RayState{pos, dir, through, seen_before,
                                                              alone_before, travelled, order - 1,
-                                                             last, rng.split(), beyond});
+                                                             last, rng.split(), beyond, hits});
+                            if (group >= 0) --stack.back().hits[static_cast<std::size_t>(group)];
                             ++family;
                         } else {
                             const double q = passed / (passed + kept);
@@ -841,6 +907,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                 std::copy(alone_before.begin(), alone_before.begin() + bands,
                                           alone.begin());
                                 --order;
+                                if (group >= 0) --hits[static_cast<std::size_t>(group)];
                                 room = beyond;
                                 continue;
                             }
@@ -927,6 +994,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         for (std::size_t i = 0; i < total.map_energy.size(); ++i) {
             total.map_energy[i] += p.map_energy[i];
         }
+        for (std::size_t i = 0; i < total.moments.size(); ++i) total.moments[i] += p.moments[i];
         total.escaped_rays += p.escaped_rays;
         total.traced_rays += p.traced_rays;
     }

@@ -192,6 +192,7 @@ def simulate(
     listeners: Sequence[str] | None = None,
     threads: int = 0,
     progress: Callable[[str], None] | None = None,
+    groups: np.ndarray | None = None,
 ) -> SimulationResult:
     """Simulate the room's impulse responses as set in ``scene.simulation``.
 
@@ -199,6 +200,12 @@ def simulate(
     ``listeners`` pick names from the scene (all by default). ``threads=0`` uses every
     core. Raises ``ValueError`` if :meth:`Room.problems` reports anything or there is no
     listener to simulate.
+
+    ``groups`` (the group of each face, or -1;
+    :func:`~acoustic_spaces.engine.reweight.face_groups`) keeps in each response the
+    moments of the late part's reflections off each group, so that
+    :meth:`Response.reweighted` gives it for other absorption (stochastic ray tracing
+    only).
     """
     room = _as_room(room)
     problems = room.problems()
@@ -225,6 +232,8 @@ def simulate(
     statistical = late_cfg.method == "statistical"
     if statistical and volume is None:
         raise ValueError("the statistical late method needs a closed model")
+    if groups is not None and statistical:
+        raise ValueError("face groups need the stochastic ray tracer, not the statistical method")
 
     # Early paths end `transition` after the direct sound. Without a set transition the
     # stochastic tracer hands over by order alone, and the statistical method keeps
@@ -334,6 +343,7 @@ def simulate(
                 directivity=directivity,
                 orientation=orientation,
                 threads=threads,
+                groups=groups,
             )
             add(info, "rays", float(late.rays))
             add(info, "escaped_rays", float(late.escaped_rays))
@@ -379,6 +389,7 @@ def simulate(
                 traced[0][2],
                 energy=share * np.sum([t[2].energy for t in traced], axis=0),
                 directional=share * np.sum([t[2].directional for t in traced], axis=0),
+                moments=share * np.sum([t[2].moments for t in traced], axis=0),
             )
 
         waves: list = [None] * len(chosen_listeners)
@@ -424,6 +435,8 @@ def simulate(
                 direction_step=late.direction_step,
                 wave=waves[k],
                 source_direction=_towards(src, listener_pos[k]),
+                late_moments=late.moments[k] if late.moments.size else np.zeros((0, 0, 0)),
+                moment_step=late.moment_step,
             )
             if fed:
                 response = response.fed(source.feed_db(model.bands), source.delay_ms * 1e-3)

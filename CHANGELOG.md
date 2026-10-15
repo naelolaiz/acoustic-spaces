@@ -162,6 +162,26 @@
   early paths to listeners and map points over the seats. The editor's **Audience
   seating** sets it, and `inspect` says so.
 
+**Fitting materials to measurements** (`acoustic-spaces calibrate`, `acoustic_spaces.calibration`)
+
+- The absorption of a scene's materials fitted, octave band by octave band, to the T30,
+  EDT and C80 (or other parameters) measured at its source and listener pairs, in JNDs:
+  from impulse response WAVs, `analyze --json` reports or a JSON of parameters. It
+  prints the fitted absorption, what it started from and how far the measurements leave
+  each value open, with the errors before and after, and writes the fitted scene.
+- The materials keep their proportions unless the measurements tell them apart: a
+  material moving by a factor of 2 more than the others costs one JND.
+- Each round traces the room once, and the fit re-weights the rays traced for other
+  absorption (`acoustic_spaces.engine.reweight`): the tracer counts each ray's
+  reflections off each of up to 16 groups of faces (`simulate(..., groups=...)`,
+  `Response.late_moments`, `Response.reweighted`).
+- Checked on the simulator's own responses: absorption is recovered within 0.05, and a
+  shoebox's walls within 0.015 from 500 Hz up. Also checked on the two BRAS rooms
+  (`bras_validation.py --calibrate`), fitted to one loudspeaker position from BRAS's
+  initial absorption estimates. On the other position's responses, both rooms come to
+  about one JND. That is as close as BRAS's own fitted absorption gets in the seminar
+  room, and closer in the hall: T30 within 0.5 JNDs against 1.8.
+
 **Examples**
 
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)
