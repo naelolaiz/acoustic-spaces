@@ -109,6 +109,11 @@ def test_inspect_shows_line_and_surface_sources(
     assert "source 'talker' at [2.0, 3.0, 1.5] reaches outside the room" in captured.err
     assert main(["directivity", "lambert"]) == 0
     assert "directivity index dB     6.0   6.0" in capsys.readouterr().out
+    column = tmp_path / "column.yaml"
+    column.write_text("count: 8\nspacing_m: 0.2\n", encoding="utf-8")
+    assert main(["directivity", str(column)]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("array of 8 elements") and "   9.0" in out  # 10 log10(8) at 8 kHz
 
 
 def test_materials_search(capsys: pytest.CaptureFixture[str]) -> None:

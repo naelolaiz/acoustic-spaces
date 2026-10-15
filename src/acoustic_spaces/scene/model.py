@@ -315,18 +315,86 @@ PatternName = Literal[
 ]
 
 
+#: The most elements a coherent array may have.
+MAX_ARRAY_ELEMENTS = 256
+
+
+class ArrayElement(_Model):
+    """One loudspeaker or driver of a coherent array, in the array's (the source's)
+    frame: x forward, y left, z up."""
+
+    position: Vector3 = Field(description="where it sits (m), from the source's position")
+    orientation: Orientation = Field(
+        default_factory=Orientation, description="its aim, turned from the source's"
+    )
+    gain_db: float = Field(default=0.0, ge=-100.0, le=60.0, description="gain of its feed")
+    delay_ms: float = Field(default=0.0, ge=0.0, le=1000.0, description="delay of its feed")
+    invert: bool = Field(default=False, description="its polarity inverted")
+
+
+class ArraySpec(_Model):
+    """A coherent array: elements fed the same signal, each with its own gain, delay
+    and polarity, whose sound adds up with its phase. Either ``elements`` one by one, or
+    a straight column of ``count`` elements ``spacing_m`` apart along the up axis,
+    centred on the source's position."""
+
+    element: PatternName | Literal["lambert"] | DirectivitySpec = Field(
+        default="omni", description="each element's own directivity, along its aim"
+    )
+    elements: list[ArrayElement] | None = Field(default=None, description="the elements")
+    count: int | None = Field(
+        default=None, ge=2, le=MAX_ARRAY_ELEMENTS, description="a column of this many"
+    )
+    spacing_m: PositiveFloat | None = Field(default=None, description="the column's spacing")
+    steer_deg: float = Field(
+        default=0.0,
+        ge=-90.0,
+        le=90.0,
+        description=(
+            "delays that tilt the beam up (positive) or down from the forward axis, "
+            "on top of the elements' own"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _layout(self) -> ArraySpec:
+        column = self.count is not None or self.spacing_m is not None
+        if column == (self.elements is not None):
+            raise ValueError("give an array's elements, or a count and spacing_m, not both")
+        if column and (self.count is None or self.spacing_m is None):
+            raise ValueError("a column of elements needs both count and spacing_m")
+        if self.elements is not None and not 1 <= len(self.elements) <= MAX_ARRAY_ELEMENTS:
+            raise ValueError(f"an array has 1 to {MAX_ARRAY_ELEMENTS} elements")
+        if isinstance(self.element, DirectivitySpec) and self.element.array is not None:
+            raise ValueError("an array's elements cannot be arrays themselves")
+        return self
+
+    def layout(self) -> list[ArrayElement]:
+        """The elements, a column's laid out."""
+        if self.elements is not None:
+            return list(self.elements)
+        offsets = (np.arange(self.count) - 0.5 * (self.count - 1)) * self.spacing_m
+        return [ArrayElement(position=(0.0, 0.0, float(-z))) for z in offsets]
+
+
 class DirectivitySpec(_Model):
     """A source's directivity per octave band: first-order patterns (a name, or the
-    ``a`` of ``a + (1 - a) cos(theta)``, for each band) or a measured balloon from a
-    SOFA file or a CSV table (see :mod:`acoustic_spaces.directivity`)."""
+    ``a`` of ``a + (1 - a) cos(theta)``, for each band), a measured balloon from a
+    SOFA file or a CSV table, or the far-field pattern of a coherent array, given here
+    or in a YAML file (see :mod:`acoustic_spaces.directivity`)."""
 
     pattern: list[PatternName | Coefficient] | None = Field(
         default=None,
         description="one pattern name or value of a per octave band (or third-octave band)",
     )
     file: Path | None = Field(
-        default=None, description="measured data: a SOFA file (FreeFieldDirectivityTF) or CSV"
+        default=None,
+        description=(
+            "measured data: a SOFA file (FreeFieldDirectivityTF) or CSV; or an array "
+            "described in a YAML file (.yaml or .yml)"
+        ),
     )
+    array: ArraySpec | None = Field(default=None, description="a coherent array")
     measurement: int | None = Field(
         default=None,
         ge=0,
@@ -345,13 +413,16 @@ class DirectivitySpec(_Model):
 
     @model_validator(mode="after")
     def _one_kind(self) -> DirectivitySpec:
-        if (self.pattern is None) == (self.file is None):
-            raise ValueError("give a directivity pattern per band or a file, not both")
+        if sum(x is not None for x in (self.pattern, self.file, self.array)) != 1:
+            raise ValueError("give one of a directivity pattern per band, a file or an array")
         if self.measurement is not None and (
             self.file is None or self.file.suffix.lower() != ".sofa"
         ):
             raise ValueError("measurement is for SOFA directivity files")
         return self
+
+
+ArraySpec.model_rebuild()
 
 
 class Source(_Model):

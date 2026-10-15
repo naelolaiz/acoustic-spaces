@@ -51,8 +51,11 @@ def _material_for(label: tuple[str, ...], scene: Scene) -> str | None:
     return scene.default_material
 
 
-def _directivity_key(spec) -> str:
-    return spec if isinstance(spec, str) else spec.model_dump_json()
+def _directivity_key(spec, scene: Scene) -> str:
+    if isinstance(spec, str):
+        return spec
+    # An array's phases depend on the speed of sound.
+    return f"{spec.model_dump_json()} at {scene.air.temperature_c} C"
 
 
 @dataclass
@@ -126,13 +129,14 @@ class Room:
         loaded = {}
         if reuse is not None:
             for source, directivity in zip(reuse.scene.sources, reuse.directivities, strict=True):
-                loaded[_directivity_key(source.directivity)] = directivity
+                loaded[_directivity_key(source.directivity, reuse.scene)] = directivity
         directivities = []
+        c = speed_of_sound(scene.air.temperature_c)
         for source in scene.sources:
-            key = _directivity_key(source.directivity)
+            key = _directivity_key(source.directivity, scene)
             if key not in loaded:
                 try:
-                    loaded[key] = load_directivity(source.directivity)
+                    loaded[key] = load_directivity(source.directivity, c)
                 except ImportError as exc:
                     raise ValueError(f"source {source.name!r}: {exc}") from exc
                 except ValueError as exc:

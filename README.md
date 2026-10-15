@@ -428,6 +428,52 @@ sources:
 index and front-to-back ratio per octave band and draws the polar patterns;
 `acoustic-spaces inspect` lists every source's directivity index.
 
+A coherent array, such as a column loudspeaker or a line array, is a source whose
+directivity is the sum of its elements' sound with its phase:
+
+```yaml
+sources:
+  - name: column
+    position: [0.5, 3.0, 2.0]
+    directivity:
+      array:
+        element: cardioid    # each element's pattern, along its aim (default omni)
+        count: 8             # a straight column along the up axis, centred...
+        spacing_m: 0.15      # ...and this far apart
+        steer_deg: -8        # delays that tilt the beam 8 degrees down
+  - name: flown
+    position: [6.0, 3.0, 6.0]
+    directivity: {file: line_array.yaml}   # the same fields in a YAML file
+```
+
+```yaml
+# line_array.yaml: elements one by one, in the source's frame (x forward, y left, z up)
+element: {file: cabinet.sofa}   # or a pattern, as for a source
+elements:
+  - {position: [0, 0, 0.0], orientation: {pitch: 0}}
+  - {position: [0, 0, -0.35], orientation: {pitch: -3}, gain_db: -1, delay_ms: 0.05}
+  - {position: [-0.02, 0, -0.70], orientation: {pitch: -7}, gain_db: -2}
+  - {position: [0, 0, -1.05], invert: true}   # polarity inverted
+```
+
+- The elements' pressures add up with their path differences, their feeds' gains,
+  delays and polarities, the steering, and each element's pattern along its aim
+  (first-order patterns with their sign, measured ones by magnitude). The energy is
+  the exact mean over each third-octave band, on a grid of 1 to 5 degrees fine enough
+  for the beam, and with the room's speed of sound. A column of 8 takes about a second.
+- The result is the array's **far-field** pattern, a balloon like a measured one, so
+  the source stays one point: right beyond about the array's length squared over the
+  wavelength (16 m for a 2 m array at 1.4 kHz). Closer to a long array, its sound
+  spreads as a line's; a `line_m` source is the better model there.
+- As for any source, `level_db` is the array's sound power in all; the pattern only
+  says where it goes. A single element's array has the element's own pattern.
+- The tests check a column against the analytic sums of a line array (the
+  directivity index within 0.05 dB in every band, the vertical pattern within 0.3
+  dB), steering against delays given element by element, a dipole made of two
+  elements in opposite polarity, and splayed cardioids against their exact sum.
+- In the editor, pick the YAML file with "Measured data or an array from a file…";
+  `acoustic-spaces directivity line_array.yaml --plot polar.png` shows its pattern.
+
 How loud a source is, and how it is fed:
 
 ```yaml
@@ -1263,7 +1309,7 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] Third-octave bands.
 - [x] Sources with their own spectra, gain, EQ and delay; speech spectra for the STI.
 - [x] Line and surface sources.
-- [ ] Loudspeaker arrays with phase.
+- [x] Loudspeaker arrays with phase (their far-field patterns).
 - [ ] Sound through walls and between coupled rooms.
 - [ ] Fitting absorption to measured parameters.
 - [ ] The wave solver with impedance boundaries and a GPU path through WebGPU (AMD,
