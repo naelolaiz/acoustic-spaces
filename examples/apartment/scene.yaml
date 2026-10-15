@@ -1,0 +1,68 @@
+# Two rooms of an empty flat: a living room with a television and, through a door in the
+# wall between, a bedroom. The wall lets through 30 to 58 dB less than reaches it, band
+# by band (plastered light concrete blocks), the closed door 15 to 24 dB less. How loud
+# is the television in bed?
+#
+#   acoustic-spaces simulate scene.yaml --out results
+#   acoustic-spaces map scene.yaml --parameter spl_a --plot levels.png
+#
+# With the door closed, the television that gives 73 dB(A) on the sofa gives 45 dB(A) in
+# bed. Open the door (`door: open` below) and run them again: 63 dB(A) in bed. `inspect`
+# lists the two rooms the model closes off. make_model.py writes apartment.obj.
+name: Flat with a door between two rooms (living room 52 m3, bedroom 42 m3)
+geometry:
+  file: apartment.obj
+materials:
+  parquet:
+    preset: wood_16mm
+    scattering: 0.1
+  carpet:
+    preset: carpet_tufted_9.5mm
+    scattering: 0.1
+  plaster:
+    preset: hard_surface
+    scattering: 0.1
+  glass:
+    preset: glass_window
+    scattering: 0.05
+  wall:   # between the rooms
+    absorption: [0.05, 0.05, 0.05, 0.04, 0.04, 0.05, 0.05, 0.05]
+    transmission_loss: [30, 33, 38, 44, 50, 55, 58, 58]
+    scattering: 0.1
+  closed:   # a light interior door
+    preset: wooden_door
+    transmission_loss: [15, 17, 19, 21, 22, 23, 24, 24]
+    scattering: 0.1
+  open: {transmission: 1}
+assignments:
+  living_floor: parquet
+  bedroom_floor: carpet
+  ceiling: plaster
+  walls: plaster
+  window: glass
+  partition: wall
+  door: closed
+sources:
+  - name: television
+    position: [2.5, 0.3, 1.0]
+    orientation: {yaw: 90}   # facing the sofa, +y
+    directivity: subcardioid
+    level_db: 80
+    spectrum: speech_female
+listeners:
+  - name: sofa
+    position: [2.5, 3.2, 1.1]
+    orientation: {yaw: -90}
+  - name: bed
+    position: [7.5, 1.5, 0.7]
+    orientation: {yaw: 180}
+simulation:
+  early: {method: ray_tracing, max_order: 3, diffraction: first_order}
+  late: {method: stochastic_ray_tracing, rays: 20000}
+  ir_length_s: 1.5
+outputs:
+  - mono
+  - binaural
+coverage:
+  surfaces: [living_floor, bedroom_floor]
+  spacing: 0.5

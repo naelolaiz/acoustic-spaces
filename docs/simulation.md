@@ -332,6 +332,8 @@ simulation:
 acoustic-spaces simulate examples/concert_hall/scene.yaml --out hall --wave
 acoustic-spaces simulate examples/studio/scene.yaml --out studio --wave --wave-band 250
 acoustic-spaces simulate examples/church/scene.yaml --out church --wave --wave-device gpu
+acoustic-spaces simulate examples/room_modes/scene.yaml --out modes   # wave solver on
+acoustic-spaces simulate examples/room_modes/scene.yaml --out rays --no-wave
 ```
 
 The editor's Simulation page has the same switch, and where to run it. Each octave
