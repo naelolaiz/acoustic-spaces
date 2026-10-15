@@ -66,6 +66,19 @@ def test_directivity_balloon_points_where_the_source_faces() -> None:
     assert balloon.point_data["level"].max() == 0.0
 
 
+def test_an_array_balloon_is_drawn_per_octave() -> None:
+    # An array's pattern is in third octaves; band 4 is still the 1 kHz octave.
+    from acoustic_spaces.directivity import array_directivity
+    from acoustic_spaces.scene import ArraySpec
+
+    column = array_directivity(ArraySpec(count=8, spacing_m=0.2))
+    balloon = balloon_polydata(column, [0, 0, 0], band=4)
+    octave = balloon_polydata(column.in_bands("octave"), [0, 0, 0], band=4)
+    np.testing.assert_allclose(balloon.points, octave.points)
+    bass = balloon_polydata(column.in_bands("octave"), [0, 0, 0], band=1)
+    assert not np.allclose(balloon.points, bass.points, atol=1e-3)
+
+
 @pytest.mark.render
 def test_screenshot(tmp_path: Path) -> None:
     out = tmp_path / "room.png"

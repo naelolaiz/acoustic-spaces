@@ -405,6 +405,11 @@ changes results at 63 and 125 Hz)
 - The hint for a missing extra names the packages to install. It said
   `pip install "acoustic-spaces[extra]"`, which looks for the package on PyPI, where it
   is not.
+- Arrays, whose patterns are worked out in third octaves, were shown band by band as if
+  those were octaves: `inspect`, `directivity` and the editor listed 24 directivity
+  indices under the 8 octave bands, the polar plots drew the lowest eight third octaves
+  labelled as octaves, and the 3D view's balloon showed 125 Hz for 1 kHz. They show
+  octaves now. Simulations were not affected.
 
 ## 2.0.0
 

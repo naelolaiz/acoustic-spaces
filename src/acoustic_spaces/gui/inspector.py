@@ -874,7 +874,7 @@ class PointPage(Page):
             self.directivity.addItem(MEASURED)
             self.directivity.setToolTip(self.directivity.currentText())
             directivity = self.document.room.directivities[self.key]
-            index = directivity.index()
+            index = directivity.in_bands("octave").index()
             text = (
                 "Directivity index: "
                 + ", ".join(f"{v:.1f}" for v in index)

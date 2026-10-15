@@ -290,7 +290,8 @@ def _add_points(doc: _Document, room: Room, radius: float) -> None:
                 extras.update(
                     directivity=directivity.name or "omni",
                     directivity_index_db=[
-                        round(float(v), 2) if np.isfinite(v) else None for v in directivity.index()
+                        round(float(v), 2) if np.isfinite(v) else None
+                        for v in directivity.in_bands("octave").index()
                     ],
                     level_db=item.level_db,
                 )

@@ -231,3 +231,31 @@ def test_listeners_near_an_array_are_warned_about(tmp_path: Path) -> None:
         assert message.startswith(f"listener 'near' is 2.0 m from array {source['name']!r}")
         assert "(1.05 m long)" in message and f"about {reach:.1f} m at 1000 Hz" in message
     assert warned("omni") == [] and warned({"array": {"count": 4, "spacing_m": 0.15}}) == []
+
+
+def test_arrays_are_shown_in_octave_bands(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # An array's pattern is computed in third octaves; what is shown is per octave, the
+    # mean of its three thirds' weights, under the octave bands' headers.
+    from acoustic_spaces.cli import main
+
+    column = tmp_path / "column.yaml"
+    column.write_text("element: cardioid\ncount: 8\nspacing_m: 0.15\nsteer_deg: -8\n")
+    balloon = read_directivity(column)
+    on_axis = balloon.energy([[1.0, 0.0, 0.0]])[0].reshape(8, 3).mean(axis=1)
+    np.testing.assert_allclose(balloon.in_bands("octave").index(), 10 * np.log10(on_axis))
+    assert main(["directivity", str(column)]) == 0
+    row = next(line for line in capsys.readouterr().out.splitlines() if "index" in line)
+    shown = [float(v) for v in row.split()[3:]]
+    np.testing.assert_allclose(shown, 10 * np.log10(on_axis), atol=0.051)
+
+    scene = Scene.from_yaml(SHOEBOX)
+    data = scene.model_dump(mode="json")
+    data["geometry"]["file"] = str(SHOEBOX.parent / "shoebox.obj")
+    data["sources"][0]["directivity"] = {"file": str(column)}
+    (tmp_path / "scene.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
+    assert main(["inspect", str(tmp_path / "scene.yaml")]) == 0
+    out = capsys.readouterr().out.splitlines()
+    row = out[out.index(next(line for line in out if line.startswith("sources"))) + 2]
+    assert len(row.split()) == 1 + 8
