@@ -464,6 +464,13 @@ changes results at 63 and 125 Hz)
   in the editor left the sound as it was. The playback now goes on from the same point
   with the response picked (the run has them all), at the same level, so the
   difference between listeners stays audible (lowered only if it would clip).
+- The editor's Listen played mono when the scene wrote no binaural output, while
+  head-tracked listening is always binaural, so the two sounded nothing alike (the
+  reverberation above all), and each set its own level. Listen plays binaurally now,
+  through the spherical head unless the scene names an HRTF, and both play the dry
+  signal at half its level through the response's omnidirectional energy (Listen
+  lowered only where it would clip), so ticking Head tracking changes only how the
+  head turns the sound.
 
 ## 2.0.0
 

@@ -801,7 +801,7 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, m
     assert window.play_file(tmp_path / "dry.wav")
     data, rate = fake_sounddevice.played[-1]
     assert data.shape[1] == 2 and rate == window.result.settings.sample_rate  # binaural
-    assert np.abs(data).max() == pytest.approx(10 ** (-1 / 20), rel=1e-5)
+    assert 0 < np.abs(data).max() <= 10 ** (-1 / 20) * (1 + 1e-6)
     window.stop_playing()
     assert not results.stop.isEnabled()
 
@@ -885,6 +885,7 @@ def test_stop_playback(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
     assert not window.now_playing.isVisible() and not window.stop_button.isVisible()
     assert window.play_file(tmp_path / "dry.wav")
     assert stop.isEnabled() and results.stop.isEnabled()
+    assert fake_sounddevice.played[-1][0].shape[1] == 2  # binaural, though the scene is mono
     # The status bar says what plays, whichever panel is on show.
     window.docks["map"].raise_()
     assert window.now_playing.isVisible() and window.stop_button.isVisible()
@@ -931,10 +932,12 @@ def test_playback_follows_the_pair_on_show(window, qapp, tmp_path: Path, fake_so
     # Or picked in the results panel.
     results.listener.setCurrentIndex(0)
     assert window._played["pair"] == results.pair() == played["pair"]
-    # Ticking head tracking turns the playback into head-tracked playback.
+    # Ticking head tracking turns the playback into head-tracked playback, as loud.
+    gain = window._played["gain"]
     results.head.port.setValue(0)  # no head tracker
     results.tracking.setChecked(True)
     assert window._played["tracked"] and window._player is not None
+    assert window._played["gain"] == gain
     window.stop_playing()
     results.tracking.setChecked(False)
     assert window._played is None and not results.stop.isEnabled()

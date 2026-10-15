@@ -1120,14 +1120,24 @@ class MainWindow(QMainWindow):
         return True
 
     def _listening_format(self):
-        """Binaural (with the scene's HRTF, if it sets one) when the scene has a binaural
-        output, otherwise mono."""
-        from acoustic_spaces.spatial import Mono, from_output
+        """Binaural, with the HRTF of the scene's binaural output if it has one, else the
+        spherical head: as head-tracked listening hears it, whatever the scene writes."""
+        from acoustic_spaces.spatial import Binaural, from_output
 
         for output in self.result.room.scene.outputs:
             if output.format == "binaural":
                 return from_output(output)
-        return Mono()
+        return Binaural()
+
+    @staticmethod
+    def _level(energy: float, gain: float | None) -> float:
+        """The gain to play at, the same with head tracking or without: the dry signal at
+        half its level through a response of omnidirectional ``energy``, so the
+        reverberation seldom clips. ``gain``, of a playback that moves to another source,
+        listener or way of playing, stays as it is up to 6 dB over that, so the
+        difference between listeners stays audible."""
+        safe = 0.5 / np.sqrt(energy) if energy > 0 else 1.0
+        return safe if gain is None else min(gain, 2.0 * safe)
 
     def listen(self) -> None:
         if self.results.pair() is None:
@@ -1140,9 +1150,7 @@ class MainWindow(QMainWindow):
 
     def play_file(self, path: str | Path, *, start: float = 0.0, gain: float | None = None) -> bool:
         """Play a WAV file from the shown source to the shown listener, from ``start``
-        seconds into it. The loudest sample plays at -1 dB full scale, unless ``gain`` (of
-        a playback that moves to another source or listener) keeps the level, so the
-        difference between them stays audible, as far as that does not clip."""
+        seconds into it, at the level of :meth:`_level`, lowered where it would clip."""
         from acoustic_spaces.audio import read_wav
         from acoustic_spaces.measurement import _sounddevice
         from acoustic_spaces.render import auralize
@@ -1158,17 +1166,19 @@ class MainWindow(QMainWindow):
             sd = _sounddevice()
             signal, rate = read_wav(path)
             fmt = self._listening_format()
+            sample_rate = int(self.result.settings.sample_rate)
             with busy():
                 rest = signal[int(round(start * rate)) :]
                 mix = auralize(self.result, {pair[0]: (rest, rate)}, pair[1], fmt)
+                omni = self.result[pair].impulse_response(sample_rate)
         except (ImportError, OSError, ValueError) as exc:
             self._error("Cannot play", str(exc))
             return False
-        peak = float(np.abs(mix).max(initial=0.0))
-        full = 10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0
-        gain = full if gain is None else min(gain, full)
+        gain = self._level(float((omni**2).sum()), gain)
+        peak = float(np.abs(mix).max(initial=0.0)) * gain
+        if peak > 10.0 ** (-1.0 / 20.0):  # no louder than -1 dB full scale
+            gain *= 10.0 ** (-1.0 / 20.0) / peak
         mix = mix * gain
-        sample_rate = int(self.result.settings.sample_rate)
         try:
             sd.play(mix.astype(np.float32), sample_rate)
         except Exception as exc:  # PortAudio errors are not one type
@@ -1191,14 +1201,13 @@ class MainWindow(QMainWindow):
         self, path: str | Path, *, start: float = 0.0, gain: float | None = None
     ) -> bool:
         """Play a WAV file from the shown source to the shown listener binaurally, turned
-        by the head of the head controls, in real time, from ``start`` seconds into it.
-        ``gain`` keeps the level of a playback that moves to another source or listener
-        (up to 6 dB over the level used by default)."""
+        by the head of the head controls, in real time, from ``start`` seconds into it,
+        at the level of :meth:`_level`."""
         from acoustic_spaces.audio import read_wav
         from acoustic_spaces.headtracking import HeadTrackedBinaural
         from acoustic_spaces.measurement import _sounddevice
         from acoustic_spaces.render import resample
-        from acoustic_spaces.spatial import Ambisonics, Binaural
+        from acoustic_spaces.spatial import Ambisonics
 
         pair = self.results.pair()
         if pair is None:
@@ -1219,17 +1228,14 @@ class MainWindow(QMainWindow):
                 renderer = HeadTrackedBinaural(
                     ir,
                     sample_rate,
-                    hrtf=fmt.at(sample_rate) if isinstance(fmt, Binaural) else None,
+                    hrtf=fmt.at(sample_rate),
                     orientation=self.results.head.head,
                     block=512,
                 )
         except (ImportError, OSError, ValueError) as exc:
             self._error("Cannot play", str(exc))
             return False
-        # Half the dry signal's level, so the room's reverberation does not clip.
-        energy = float((ir[:, 0] ** 2).sum())
-        safe = 0.5 / np.sqrt(energy) if energy > 0 else 1.0
-        gain = safe if gain is None else min(gain, 2.0 * safe)
+        gain = self._level(float((ir[:, 0] ** 2).sum()), gain)  # W: omnidirectional
         stop, outcome = threading.Event(), {}
 
         def run() -> None:
@@ -1276,9 +1282,7 @@ class MainWindow(QMainWindow):
         position = played["start"] + time.perf_counter() - played["since"]
         if position >= played["length"]:
             return  # only the reverberation is left
-        # The two ways of playing set their level differently.
-        gain = played["gain"] if tracked == played["tracked"] else None
-        self.play_file(played["path"], start=position, gain=gain)
+        self.play_file(played["path"], start=position, gain=played["gain"])
 
     def _player_poll(self) -> None:
         if self._player is None or self._player[0].is_alive():

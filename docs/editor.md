@@ -46,8 +46,9 @@ The editor works on the same scene files as the command line:
   ISO 3382-1 parameters, the echogram and decay curves and the arrival directions of
   any source and listener, and draws their reflection paths in the room. **Export**
   writes the same files as `simulate`; **Listen** plays a dry WAV file through the
-  response on the sound card (binaural when the scene has a binaural output; needs the
-  `measure` extra), or head-tracked with **Head tracking** ticked (see
+  response on the sound card, binaurally (through the HRTF of the scene's binaural
+  output if it has one, else a spherical head; needs the `measure` extra), or
+  head-tracked with **Head tracking** ticked (see
   [Head tracking](spatial-audio.md#head-tracking)). While it plays, the status bar says
   so, with **Stop playback** (also in the toolbar and the Simulation menu, or Esc).
   Picking another source or listener (in the scene or the panel), or ticking **Head
