@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -190,6 +190,68 @@ def early_paths(
     return _shared(parts, model.absorption.shape[1])
 
 
+def _mixing(
+    late_from: Mapping[str, Mapping[str, float]], names: list[str], kind: str
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Which of ``names`` are traced for their late part (indices), and the weights of
+    each name's late part on theirs (names, traced); None when all are traced."""
+    if not any(name in late_from for name in names):
+        return None
+    index = {name: k for k, name in enumerate(names)}
+    traced = [k for k, name in enumerate(names) if name not in late_from]
+    column = {k: j for j, k in enumerate(traced)}
+    weights = np.zeros((len(names), len(traced)))
+    for k, name in enumerate(names):
+        if name not in late_from:
+            weights[k, column[k]] = 1.0
+            continue
+        if not late_from[name]:
+            raise ValueError(f"the late part of {name!r} comes from no {kind}")
+        for other, weight in late_from[name].items():
+            if weight <= 0:
+                raise ValueError(f"the late part of {name!r} takes positive weights")
+            if other not in index or other in late_from:
+                raise ValueError(
+                    f"the late part of {name!r} comes from {other!r}, which is no {kind} "
+                    "traced for its own"
+                )
+            weights[k, column[index[other]]] += weight
+    return np.array(traced, dtype=np.int64), weights
+
+
+def _mix_listeners(late: late_stage.LateEnergy, weights: np.ndarray) -> late_stage.LateEnergy:
+    """``late``, traced at some listeners, for every listener: a row of ``weights`` each."""
+
+    def mix(a: np.ndarray) -> np.ndarray:
+        return np.einsum("lt,t...->l...", weights, a) if a.size else a
+
+    return dataclasses.replace(
+        late, energy=mix(late.energy), directional=mix(late.directional), moments=mix(late.moments)
+    )
+
+
+def _mix_sources(
+    lates: Sequence[late_stage.LateEnergy], weights: Sequence[float]
+) -> late_stage.LateEnergy:
+    """The late energy of several sources, summed with ``weights``."""
+
+    def mix(name: str) -> np.ndarray:
+        parts = [getattr(late, name) for late in lates]
+        if not parts[0].size:
+            return parts[0]
+        return np.einsum("t,t...->...", np.asarray(weights, dtype=float), np.array(parts))
+
+    return dataclasses.replace(
+        lates[0],
+        energy=mix("energy"),
+        directional=mix("directional"),
+        moments=mix("moments"),
+        rays=0,
+        escaped_rays=0,
+        traced_rays=0,
+    )
+
+
 def coherent_bands(settings, bands: int) -> int:
     """How many of the lowest ``bands`` the early paths add in pressure in, with the
     simulation ``settings`` (``scene.simulation``)."""
@@ -216,6 +278,7 @@ def simulate(
     threads: int | None = None,
     progress: Callable[[str], None] | None = None,
     groups: np.ndarray | None = None,
+    late_from: Mapping[str, Mapping[str, float]] | None = None,
 ) -> SimulationResult:
     """Simulate the room's impulse responses as set in ``scene.simulation``.
 
@@ -229,6 +292,13 @@ def simulate(
     moments of the late part's reflections off each group, so that
     :meth:`Response.reweighted` gives it for other absorption (stochastic ray tracing
     only).
+
+    ``late_from`` gives listeners or sources the late part of others, mixed:
+    ``{name: {other: weight}}``, the others being listeners (for a listener) or sources
+    (for a source) that keep their own. Only those are traced by the stochastic ray
+    tracer, by far the costliest stage; the statistical method gives everyone their own.
+    Walks use it (:func:`acoustic_spaces.walkthrough.simulate_walk`): the late field
+    changes slowly from place to place, the early sound does not.
     """
     room = _as_room(room)
     problems = room.problems()
@@ -271,6 +341,14 @@ def simulate(
         transition = math.inf
 
     listener_pos = np.array([lis.position for lis in chosen_listeners], dtype=float)
+    late_from = {} if late_from is None or statistical else late_from
+    unknown = sorted(set(late_from) - {item.name for item in [*chosen_listeners, *chosen_sources]})
+    if unknown:
+        raise ValueError(f"late_from names {unknown[0]!r}, which is no listener or source here")
+    listener_mix = _mixing(late_from, [lis.name for lis in chosen_listeners], "listener")
+    source_mix = _mixing(late_from, [source.name for source in chosen_sources], "source")
+    # The listeners the late part is traced at.
+    traced_at = slice(None) if listener_mix is None else listener_mix[0]
     edges = _Edges(model)
     low_bands = coherent_bands(settings, model.absorption.shape[1])
     responses: dict[tuple[str, str], Response] = {}
@@ -285,11 +363,14 @@ def simulate(
     def add(info: dict[str, float], key: str, value: float) -> None:
         info[key] = info.get(key, 0.0) + value
 
-    def trace_point(label, position, directivity, orientation, point_seed, rays, info, single):
+    def trace_point(
+        label, position, directivity, orientation, point_seed, rays, info, single, own_late
+    ):
         """Direct sound times, early paths and late energy at every listener of one point
         source, which radiates all the power; timings and counts go into ``info``.
         Unless ``single``, one of the uncorrelated points of a line or surface, whose
-        paths add in energy."""
+        paths add in energy. Unless ``own_late``, no late energy (None): it comes from
+        other sources."""
         coherent = low_bands if single else 0
         direct = np.linalg.norm(listener_pos - position, axis=1) / c
         cutoff = np.minimum(direct + transition, length)
@@ -345,19 +426,21 @@ def simulate(
                 speed_of_sound=c,
                 decay=late_stage.diffuse_decay(model, position, listener_pos, air, c),
             )
+        elif not own_late:
+            late = None
         else:
             say(f"{label}: stochastic ray tracing ({rays} rays per band)")
             radius = late_cfg.receiver_radius
             if radius is None:
                 # As for a point source with all the rays: the parts' rays add up.
-                clearance = distance_to_surface(room.mesh, listener_pos)
+                clearance = distance_to_surface(room.mesh, listener_pos[traced_at])
                 radius = late_stage.receiver_radius(
                     volume, late_cfg.rays, length, c, clearance=clearance
                 )
             late = late_stage.stochastic_energy(
                 model,
                 position,
-                listener_pos,
+                listener_pos[traced_at],
                 rays=rays,
                 max_time=length,
                 time_step=TIME_STEP,
@@ -365,7 +448,7 @@ def simulate(
                 air=air,
                 reception=late_cfg.reception,
                 covered_order=early_cfg.max_order,
-                covered_time=cutoff,
+                covered_time=cutoff[traced_at],
                 radius=radius,
                 directions=fibonacci_sphere(late_cfg.directions),
                 splitting=late_cfg.splitting,
@@ -379,9 +462,12 @@ def simulate(
             add(info, "escaped_rays", float(late.escaped_rays))
             add(info, "traced_rays", float(late.traced_rays))
             info["receiver_radius_m"] = float(np.min(radius))
+            if listener_mix is not None:
+                late = _mix_listeners(late, listener_mix[1])
         add(info, "late_s", time.perf_counter() - started)
         return direct, paths, late
 
+    done = {}
     for s_index, source in enumerate(chosen_sources):
         src = np.array(source.position, dtype=float)
         elements = source.elements()
@@ -390,6 +476,7 @@ def simulate(
         info: dict[str, float] = {"seed": _seed(seed, s_index)}
         if len(elements) > 1:
             info["elements"] = float(len(elements))
+        own_late = source.name not in late_from
         traced = []
         for e_index, position in enumerate(elements):
             # One point source of a line or surface: its share of the rays, a seed of its own.
@@ -404,6 +491,7 @@ def simulate(
                     math.ceil(late_cfg.rays / len(elements)),
                     info,
                     single,
+                    own_late,
                 )
             )
         direct = np.min([t[0] for t in traced], axis=0)
@@ -411,17 +499,19 @@ def simulate(
         if len(traced) == 1:
             _, paths, late = traced[0]
         else:
-            share = 1.0 / len(traced)
             bands = model.absorption.shape[1]
             paths = [
                 _shared([t[1][k] for t in traced], bands) for k in range(len(chosen_listeners))
             ]
-            late = dataclasses.replace(
-                traced[0][2],
-                energy=share * np.sum([t[2].energy for t in traced], axis=0),
-                directional=share * np.sum([t[2].directional for t in traced], axis=0),
-                moments=share * np.sum([t[2].moments for t in traced], axis=0),
-            )
+            late = None
+            if own_late:
+                share = 1.0 / len(traced)
+                late = dataclasses.replace(
+                    traced[0][2],
+                    energy=share * np.sum([t[2].energy for t in traced], axis=0),
+                    directional=share * np.sum([t[2].directional for t in traced], axis=0),
+                    moments=share * np.sum([t[2].moments for t in traced], axis=0),
+                )
 
         waves: list = [None] * len(chosen_listeners)
         if settings.wave.enabled:
@@ -445,7 +535,17 @@ def simulate(
             info.update(wave_info)
             info["wave_s"] = time.perf_counter() - started
         details[source.name] = info
+        done[source.name] = (src, direct, cutoff, paths, late, waves)
 
+    for s_index, source in enumerate(chosen_sources):
+        src, direct, cutoff, paths, late, waves = done[source.name]
+        if late is None:
+            row = source_mix[1][s_index]
+            used = np.flatnonzero(row)
+            late = _mix_sources(
+                [done[chosen_sources[source_mix[0][j]].name][4] for j in used], row[used]
+            )
+        info = details[source.name]
         fed = source.gain_db != 0 or source.eq_db is not None or source.delay_ms > 0
         for k, listener in enumerate(chosen_listeners):
             response = Response(

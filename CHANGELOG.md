@@ -320,6 +320,11 @@ changes results at 63 and 125 Hz)
   (`Material.Li8`): `file` names the library and `entry` the material, by name or by
   ODEON's number. `acoustic-spaces materials --file` lists a library's materials, and
   the editor's **Edit > Add material from a library** adds one.
+- ODEON's own `Material.Li8` is read as ODEON writes it (checked against the library
+  from odeon.dk, 198 materials): the product name of `{Product name*=...}` names a
+  material and `{Category=...}` groups the listing, and materials from ODEON's Material
+  calculator, with its settings and third-octave values on their lines, are read by
+  their octave values.
 
 **IFC and Collada models**
 
@@ -338,8 +343,28 @@ changes results at 63 and 125 Hz)
 - `acoustic-spaces examples` and the editor's examples menu say which extra an example
   needs when it is not installed.
 
+**Walkthroughs** (`acoustic-spaces walkthrough`, `acoustic_spaces.walkthrough`)
+
+- A listener or a point source walks through the room along the corners of its `walk`
+  in the scene, at a walking pace, facing the way it goes and turning through corners
+  at 90 degrees per second (`turn_deg_s`). Responses are simulated
+  every 25 cm along the way; the late part, which changes slowly, is traced every 2 m
+  and mixed in between, so the gallery's walk of 101 places costs six times one
+  response.
+- Dry signals play through the response of the place the walker is nearest to, with
+  50 ms crossfades from each place to the next, in any of the output formats.
+  `--video` saves the room and the walker going along its path (with an arrow and
+  its yaw for the way it faces) as a GIF or MP4, in time with the sound (`animate_walk` in `acoustic_spaces.viz`); an MP4 carries the
+  sound itself when it has one or two channels (mono, stereo, binaural).
+- The viz extra installs imageio and imageio-ffmpeg, which MP4 videos need (for
+  `animate` too); before, they had to be installed by hand.
+- `simulate(..., late_from=...)` gives listeners or sources the late part of others,
+  mixed, which is how walks trace fewer late parts.
+
 **Examples**
 
+- `gallery_walk`: a visitor walks away from the guide in the L-shaped gallery and round
+  the corner while the guide talks.
 - `bim_office`: an office from an IFC model in millimetres, with a window and a door,
   read as one room from its space boundaries; `make_model.py` writes the model.
 - `rehearsal_room`: a rehearsal room under a pitched roof from a Collada file in inches,

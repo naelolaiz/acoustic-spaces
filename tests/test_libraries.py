@@ -60,6 +60,34 @@ def test_odeon_library_by_number_or_description() -> None:
     assert material.source == f"'1001 {tiles.name}' of odeon_materials.li8"
 
 
+def test_odeon_library_as_odeon_writes_it(tmp_path: Path) -> None:
+    # ODEON's own Material.Li8: a byte order mark, CRLF, tabs, product name and category
+    # fields, and Material calculator entries with their settings after the description
+    # and the sample area and third octaves after the octave values.
+    third_octaves = "\t".join(["0.50000"] * 24)
+    lib = tmp_path / "Material.Li8"
+    lib.write_bytes(
+        (
+            "0\t{Product name*=Transparent}, {Category=Special}\r\n"
+            "\t0.00000\t0.00000\t0.00000\t0.00000\t0.00000\t0.00000\t0.00000\t0.00000\r\n\r\n"
+            "15001\t{Product name*=Slotted plate, 50 mm cavity}, {Category=Acoustic material}"
+            "\t{Material Calculator. Do not edit manually!};(IsInfinite,0)(PanelLength,3.9)\r\n"
+            "\t0.07000\t0.65000\t0.52000\t0.08000\t0.02000\t0.01000\t0.01000\t0.01000"
+            f"\t/Area\t10.14000\t/A\t{third_octaves}\r\n\r\n"
+        ).encode("utf-8-sig")
+    )
+    transparent, plate = read_library(lib)
+    assert (transparent.number, transparent.name, transparent.category) == (
+        0,
+        "Transparent",
+        "Special",
+    )
+    assert plate.name == "Slotted plate, 50 mm cavity" and plate.category == "Acoustic material"
+    assert plate.absorption == pytest.approx((0.07, 0.65, 0.52, 0.08, 0.02, 0.01, 0.01, 0.01))
+    assert find_material(lib, "slotted plate, 50 mm cavity") == plate
+    assert Material(file=lib, entry=15001).source.startswith("'15001 Slotted plate")
+
+
 def test_odeon_library_of_six_bands_in_a_windows_encoding(tmp_path: Path) -> None:
     lib = tmp_path / "old.lib"
     lib.write_bytes("  12  Træ på strøer\n 0.2 0.15 0.1 0.08 0.07 0.06\n".encode("cp1252"))
@@ -114,6 +142,9 @@ def test_materials_command_lists_a_library(capsys: pytest.CaptureFixture[str]) -
     assert main(["materials", "--file", str(ODEON), "door"]) == 0
     out = capsys.readouterr().out
     assert "1002 Wooden door, solid" in out and "1001" not in out
+    assert "\nDoors\n" in out  # ODEON's category
+    assert main(["materials", "--file", str(ODEON), "ceilings"]) == 0  # found by category
+    assert "1001 Acoustic ceiling tiles" in capsys.readouterr().out
     assert main(["materials", "--file", str(CATT)]) == 0
     out = capsys.readouterr().out
     assert "  scattering" in out and "walls" in out

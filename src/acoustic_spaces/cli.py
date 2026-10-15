@@ -30,6 +30,10 @@ WAVE_BANDS_HZ = (63, 125, 250, 500)
 COHERENT_BANDS = ("none", "63", "125", "250", "500")
 #: Rays the leak finder traces by default (engine.leaks.RAYS).
 LEAK_RAYS = 5000
+#: Walkthrough defaults (walkthrough.STEP_M, LATE_STEP_M and CROSSFADE_S).
+STEP_M = 0.25
+LATE_STEP_M = 2.0
+CROSSFADE_S = 0.05
 
 
 def _band_header(label: str, width: int) -> str:
@@ -193,6 +197,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
             print(
                 f"  {kind:<9}{item.name:<{width}}({x:.2f}, {y:.2f}, {z:.2f}){where}"
                 + _extent_text(item)
+                + _walk_text(item)
             )
     print()
     return 0 if _print_checks(room) else 1
@@ -207,6 +212,18 @@ def _extent_text(item) -> str:
         return f"  line {item.line_m:g} m, {count} points"
     width, height = item.surface_m
     return f"  surface {width:g} x {height:g} m, {count} points"
+
+
+def _walk_text(item) -> str:
+    """'  walks 25.0 m to (4.00, 16.00, 1.60) in 20.8 s' for a listener or source with a
+    walk."""
+    if getattr(item, "walk", None) is None:
+        return ""
+    corners = [item.position, *item.walk.to]
+    length = sum(math.dist(a, b) for a, b in zip(corners, corners[1:], strict=False))
+    x, y, z = item.walk.to[-1]
+    seconds = length / item.walk.speed_m_s
+    return f"  walks {length:.1f} m to ({x:.2f}, {y:.2f}, {z:.2f}) in {seconds:.1f} s"
 
 
 def _directivity_text(directivity) -> str:
@@ -262,13 +279,19 @@ def _library_materials(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     words = [w.lower() for w in args.query]
-    materials = [m for m in materials if all(w in m.label.lower() for w in words)]
+    materials = [
+        m for m in materials if all(w in f"{m.label} {m.category or ''}".lower() for w in words)
+    ]
     if not materials:
         print("no matching materials", file=sys.stderr)
         return 1
     width = max(len("  scattering"), *(len(m.label) for m in materials)) + 2
     print(_band_header("", width))
+    category = None
     for material in materials:
+        if material.category is not None and material.category != category:
+            category = material.category
+            print(f"\n{category}")
         values, _ = to_octave_bands(material.frequencies, material.absorption)
         print(_band_row(material.label, values, width))
         if material.scattering is not None:
@@ -1433,6 +1456,84 @@ def _cmd_auralize(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_walkthrough(args: argparse.Namespace) -> int:
+    from acoustic_spaces.spatial import from_output
+    from acoustic_spaces.walkthrough import render_walk, simulate_walk
+
+    room = _load_room(args.scene)
+    if room is None or not _print_checks(room):
+        return 1
+    settings = _override(
+        room.scene.simulation,
+        {
+            "--seed": ("seed", args.seed),
+            "--rays": ("late.rays", args.rays),
+            "--length": ("ir_length_s", args.length),
+        },
+    )
+    if settings is None:
+        return 1
+    rate = settings.sample_rate
+    try:
+        if args.format:
+            output = _output_spec(args.format)
+        else:
+            output = room.scene.outputs[0] if room.scene.outputs else _output_spec("mono")
+        if args.hrtf and output.format == "binaural":
+            output = output.model_copy(update={"hrtf": Path(args.hrtf)})
+        fmt = from_output(output)
+        bad = [text for text in args.signals if not text.partition("=")[2]]
+        if bad:
+            raise ValueError(f"expected SOURCE=WAV, got {bad[0]!r}")
+        if args.video:
+            from acoustic_spaces.viz import check_video
+
+            check_video(args.video)  # before the simulation, not after it
+        signals = {
+            name: _read_dry(wav, rate)
+            for name, _, wav in (text.partition("=") for text in args.signals)
+        }
+        walk = simulate_walk(
+            room,
+            args.walker,
+            listener=args.listener,
+            step_m=args.step,
+            late_step_m=args.late_step or None,
+            settings=settings,
+            threads=args.threads,
+            progress=lambda message: print(message, file=sys.stderr),
+        )
+        wet = render_walk(walk, signals, fmt, crossfade_s=args.crossfade * 1e-3)
+    except (OSError, ValueError, ImportError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(
+        f"{walk.name} walks for {walk.duration_s:.1f} s: responses at {len(walk.names)} places, "
+        f"the late part traced at {len(walk.late_places)} of them",
+        file=sys.stderr,
+    )
+    mask = fmt.channel_mask() if hasattr(fmt, "channel_mask") else None
+    _write_wet(Path(args.out), wet, rate, mask, args.normalize)
+    if args.video:
+        from acoustic_spaces.viz import animate_walk
+
+        # An MP4 takes the sound along when players can play it: in one or two channels.
+        with_sound = Path(args.video).suffix.lower() == ".mp4" and wet.shape[1] <= 2
+        try:
+            animate_walk(
+                room, walk, args.video, fps=args.fps, sound=Path(args.out) if with_sound else None
+            )
+        except (ImportError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        seconds = max(walk.duration_s, len(wet) / rate) if with_sound else walk.duration_s
+        print(
+            f"saved {args.video}: {seconds:.1f} s at {args.fps} frames per second"
+            + (", with the sound" if with_sound else "")
+        )
+    return 0
+
+
 def _cmd_play(args: argparse.Namespace) -> int:
     import numpy as np
 
@@ -1993,6 +2094,66 @@ def build_parser() -> argparse.ArgumentParser:
     auralize.add_argument("--out", required=True, help="WAV file for the result")
     auralize.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")
     auralize.set_defaults(func=_cmd_auralize)
+
+    walkthrough = sub.add_parser(
+        "walkthrough",
+        help="hear dry signals as a listener or a source walks through the room",
+        description="Simulate responses along the walk of a listener or source (its "
+        "'walk' in the scene) and play dry signals through them, crossfading from each "
+        "place to the next.",
+    )
+    walkthrough.add_argument("scene", help="path to a scene YAML file")
+    walkthrough.add_argument(
+        "signals", nargs="+", metavar="SOURCE=WAV", help="dry signal of each source to play"
+    )
+    walkthrough.add_argument("--out", required=True, help="WAV file for the result")
+    walkthrough.add_argument(
+        "--walker", help="listener or source that walks (default: the only one with a walk)"
+    )
+    walkthrough.add_argument(
+        "--listener", help="listener that hears a walking source (default: the only one)"
+    )
+    walkthrough.add_argument(
+        "--format",
+        metavar="FORMAT",
+        help="mono, binaural, ambisonics[:ORDER] or loudspeakers:LAYOUT (default: the "
+        "scene's first output, else mono)",
+    )
+    walkthrough.add_argument("--hrtf", metavar="SOFA", help="HRTF file for binaural output")
+    walkthrough.add_argument(
+        "--step",
+        type=float,
+        default=STEP_M,
+        metavar="M",
+        help=f"distance between the places responses are simulated at (default {STEP_M:g} m)",
+    )
+    walkthrough.add_argument(
+        "--late-step",
+        type=float,
+        default=LATE_STEP_M,
+        metavar="M",
+        help="distance between the places the late part is traced at, the others mixing "
+        f"theirs (default {LATE_STEP_M:g} m; 0: at every place)",
+    )
+    walkthrough.add_argument(
+        "--crossfade",
+        type=float,
+        default=1e3 * CROSSFADE_S,
+        metavar="MS",
+        help=f"crossfade from one place to the next (default {1e3 * CROSSFADE_S:g} ms)",
+    )
+    walkthrough.add_argument("--rays", type=int, help="override simulation.late.rays")
+    walkthrough.add_argument("--length", type=float, help="override simulation.ir_length_s")
+    walkthrough.add_argument("--seed", type=int, help="override simulation.seed")
+    walkthrough.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    walkthrough.add_argument(
+        "--video",
+        metavar="FILE",
+        help="also save the walk as a .gif, or an .mp4 with the sound in it (viz extra)",
+    )
+    walkthrough.add_argument("--fps", type=int, default=25, help="video frames per second")
+    walkthrough.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")
+    walkthrough.set_defaults(func=_cmd_walkthrough)
 
     play = sub.add_parser(
         "play", help="real-time convolution on the sound card (needs the measure extra)"

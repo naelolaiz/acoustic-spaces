@@ -184,8 +184,12 @@ materials:
   that CATT estimates itself (`L <estimate(...)>`) is not read, so give `scattering`.
 - ODEON's library has each material on two lines, its number and description, then
   eight absorption coefficients from 63 Hz to 8 kHz (six, from 125 Hz to 4 kHz, in
-  older libraries). ODEON gives scattering to surfaces, so give it with `scattering`
-  (0.1 otherwise).
+  older libraries). Where the description has ODEON's `{Product name*=...}` and
+  `{Category=...}` fields, as in its own `Material.Li8`, the product name is the
+  material's name, and `materials --file` lists the materials by category. Materials
+  made with ODEON's Material calculator are read by their octave values, which ODEON
+  simulates with; their third-octave values are not read. ODEON gives scattering to
+  surfaces, so give it with `scattering` (0.1 otherwise).
 
 The 63 Hz band takes the 125 Hz value where a library has none, 8 kHz the 4 kHz value,
 and 16 kHz is left out. `acoustic-spaces materials --file <library>` lists a library's
@@ -460,3 +464,29 @@ sources:
   them too.
 
 ![Polar patterns of the per-band directivity above, from omni in the bass to a narrow pattern at 8 kHz](images/directivity.png)
+
+## Walks
+
+A listener or a point source can walk through the room, for
+[walkthroughs](spatial-audio.md#walkthroughs):
+
+```yaml
+listeners:
+  - name: visitor
+    position: [17.0, 4.0, 1.6]   # where the walk starts
+    walk:
+      to: [[4.0, 4.0, 1.6], [4.0, 16.0, 1.6]]   # the corners it goes through
+      speed_m_s: 1.2       # walking pace (default 1.2 m/s)
+      face_forward: true   # turn to face the way it goes (default); false keeps its yaw
+      turn_deg_s: 90       # how fast it turns through a corner (default 90 degrees/s)
+```
+
+- A walk goes in straight lines from the position through each point of `to`, at an
+  even pace, and stops at the last one. Facing forward sets the yaw along each leg and
+  keeps the pitch and roll; on a leg straight up or down the yaw stays as it was. At a
+  corner the walker turns the shorter way round at `turn_deg_s`, half of the turn
+  before the corner and half after it (no further than half-way along either leg), so
+  a sound to one side moves round the head instead of jumping.
+- Everything else (`simulate`, `map`, the editor) sees the walker standing where its
+  walk starts; `inspect` lists how far each walk goes and for how long. Lines, surfaces
+  and arrays do not walk.
