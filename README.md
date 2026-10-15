@@ -227,6 +227,11 @@ The editor works on the same scene files as the command line:
   response on the sound card (binaural when the scene has a binaural output; needs the
   `measure` extra), or head-tracked with **Head tracking** ticked (see
   [Head tracking](#head-tracking)).
+- Change a material's absorption after a run and the results follow at once: the run
+  counted each ray's reflections off each material, and is re-weighted for the new
+  values instead of traced again (as `calibrate` does). The panel says so; **Run**
+  traces afresh. Other changes, and runs with the statistical method, third-octave
+  bands or the wave solver, leave the results marked out of date until the next run.
 - A source's form sets its directivity: a pattern, or a SOFA or CSV file of measured
   data. It shows the directivity index per band, opens the polar patterns, and the
   selected source shows its balloon in the 3D view.
