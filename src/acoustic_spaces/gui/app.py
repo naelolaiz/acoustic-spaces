@@ -176,6 +176,7 @@ class MainWindow(QMainWindow):
         self.results.export_requested.connect(self.export_results)
         self.results.listen_requested.connect(self.listen)
         self.results.stop_requested.connect(self.stop_playing)
+        self.results.playing_changed.connect(self.stop_action.setEnabled)
         self.results.head.message.connect(self.log)
         self.map_panel.changed.connect(self._draw)
         self.map_panel.run_requested.connect(self.run_map)
@@ -285,6 +286,13 @@ class MainWindow(QMainWindow):
         self.map_action.setIconText("Map")
         self.cancel_action = a("&Cancel", self.cancel_simulation, "Shift+F5")
         self.cancel_action.setEnabled(False)
+        self.stop_action = a(
+            "S&top playback",
+            self.stop_playing,
+            tip="Stop the recording playing through the room (Esc)",
+        )
+        self.stop_action.setToolTip("Stop playback (Esc)")
+        self.stop_action.setEnabled(False)
         self.about_action = a("&About", self.about)
         self.undo_action.setIconText("Undo")
         self.redo_action.setIconText("Redo")
@@ -297,7 +305,9 @@ class MainWindow(QMainWindow):
             (self.redo_action, pixmaps.SP_ArrowForward),
             (self.run_action, pixmaps.SP_MediaPlay),
             (self.map_action, pixmaps.SP_FileDialogDetailedView),
-            (self.cancel_action, pixmaps.SP_MediaStop),
+            # Cancel's icon differs from Stop playback's, so neither passes for the other.
+            (self.cancel_action, pixmaps.SP_BrowserStop),
+            (self.stop_action, pixmaps.SP_MediaStop),
         ):
             action.setIcon(icon(pixmap))
 
@@ -350,6 +360,8 @@ class MainWindow(QMainWindow):
 
         simulation = bar.addMenu("&Simulation")
         simulation.addActions([self.run_action, self.map_action, self.cancel_action])
+        simulation.addSeparator()
+        simulation.addAction(self.stop_action)
         bar.addMenu("&Help").addAction(self.about_action)
 
         tools = self.addToolBar("Main")
@@ -362,6 +374,8 @@ class MainWindow(QMainWindow):
         tools.addActions([self.place_source_action, self.place_listener_action])
         tools.addSeparator()
         tools.addActions([self.run_action, self.map_action, self.cancel_action])
+        tools.addSeparator()
+        tools.addAction(self.stop_action)
 
     # -- the document ---------------------------------------------------------------
 
@@ -532,9 +546,12 @@ class MainWindow(QMainWindow):
             self._place(kind, self._default_position(kind))
 
     def _escape(self) -> None:
-        if self.viewport.placing is not None:
+        """Esc stops placing or drawing, or else the playback."""
+        placing = self.viewport.placing is not None
+        if placing:
             self.viewport.start_placing(None)
-        self.plan.cancel()
+        if not self.plan.cancel() and not placing and self.results.stop.isEnabled():
+            self.stop_playing()
         self.statusBar().clearMessage()
 
     def _default_position(self, kind: str) -> tuple[float, float, float]:

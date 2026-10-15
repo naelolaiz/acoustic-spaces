@@ -18,7 +18,7 @@ pytest.importorskip("pyvistaqt")
 from PySide6.QtCore import QPoint, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QWheelEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QToolBar  # noqa: E402
 
 from acoustic_spaces.audio import write_wav  # noqa: E402
 from acoustic_spaces.examples import example_path, list_examples  # noqa: E402
@@ -866,6 +866,37 @@ def test_one_playback_at_a_time(window, qapp, tmp_path: Path, fake_sounddevice) 
     _wait(qapp, lambda: window._player is None, timeout=30)
     assert not results.stop.isEnabled() and results.listen.isEnabled()
     results.tracking.setChecked(False)
+
+
+def test_stop_playback(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
+    _quick(window.document)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    stops = []
+    fake_sounddevice.play = lambda data, rate: fake_sounddevice.played.append((data, rate))
+    fake_sounddevice.stop = lambda: stops.append(1)
+    write_wav(tmp_path / "dry.wav", np.r_[1.0, np.zeros(5 * 16_000)], 16_000)  # 5 s
+    results, stop = window.results, window.stop_action
+    # Stop playback sits in the toolbar and the Simulation menu, apart from Cancel.
+    assert stop in window.findChild(QToolBar, "main-toolbar").actions()
+    menus = {menu.title(): menu for menu in window.findChildren(QMenu)}
+    assert stop in menus["&Simulation"].actions()
+    assert stop is not window.cancel_action and not stop.isEnabled()
+    assert window.play_file(tmp_path / "dry.wav")
+    assert stop.isEnabled() and results.stop.isEnabled()
+    stop.trigger()
+    assert stops and not stop.isEnabled() and not results.stop.isEnabled()
+    assert results.listen.isEnabled() and not window._play_timer.isActive()
+
+    # Esc first stops placing a source, then the playback.
+    assert window.play_file(tmp_path / "dry.wav")
+    window.views.setCurrentWidget(window.plan)
+    window.start_placing("sources")
+    assert window.plan.placing is not None
+    window._escape()
+    assert window.plan.placing is None and stop.isEnabled() and len(stops) == 1
+    window._escape()
+    assert len(stops) == 2 and not stop.isEnabled() and not results.stop.isEnabled()
 
 
 def test_results_follow_the_selected_listener(window, qapp) -> None:

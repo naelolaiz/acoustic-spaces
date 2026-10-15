@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSlider,
     QSpinBox,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -169,6 +170,8 @@ class ResultsPanel(QWidget):
     export_requested = Signal()
     listen_requested = Signal()
     stop_requested = Signal()
+    #: Playback started (True) or stopped (False).
+    playing_changed = Signal(bool)
 
     def __init__(self) -> None:
         super().__init__()
@@ -189,6 +192,8 @@ class ResultsPanel(QWidget):
         self.export = QPushButton("Export…")
         self.listen = QPushButton("Listen…")
         self.stop = QPushButton("Stop")
+        self.stop.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop))
+        self.stop.setToolTip("Stop playing (Esc)")
         self.stop.setEnabled(False)
         for label, widget in (("Source", self.source), ("Listener", self.listener)):
             bar.addWidget(QLabel(label))
@@ -384,6 +389,7 @@ class ResultsPanel(QWidget):
     def set_playing(self, playing: bool) -> None:
         self.stop.setEnabled(playing)
         self.listen.setEnabled(not playing and self.result is not None)
+        self.playing_changed.emit(playing)
 
 
 __all__ = ["HEAD_REFRESH_MS", "PLOT_SIZE", "ROWS", "HeadControls", "ResultsPanel"]
