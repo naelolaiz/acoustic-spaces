@@ -27,6 +27,8 @@ WAVE_BANDS_HZ = (63, 125, 250, 500)
 #: Choices for the highest band the early paths add in pressure in
 #: (scene.model.EarlyStage.coherent_max_band_hz).
 COHERENT_BANDS = ("none", "63", "125", "250", "500")
+#: Rays the leak finder traces by default (engine.leaks.RAYS).
+LEAK_RAYS = 5000
 
 
 def _band_header(label: str, width: int) -> str:
@@ -85,6 +87,14 @@ def _cmd_validate(args: argparse.Namespace) -> int:
         f"{len(scene.sources)} sources, {len(scene.listeners)} listeners, "
         f"{room.report.faces} triangles"
     )
+    if args.leaks:
+        from acoustic_spaces.engine.leaks import find_leaks
+
+        try:
+            print(f"leaks: {find_leaks(room, rays=args.rays).summary()}")
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
     return 0 if ok else 1
 
 
@@ -302,7 +312,16 @@ def _cmd_view(args: argparse.Namespace) -> int:
     if room is None:
         return 1
     ok = _print_checks(room)
-    paths = None
+    paths = leaks = None
+    if args.leaks:
+        from acoustic_spaces.engine.leaks import find_leaks
+
+        try:
+            leaks = find_leaks(room, rays=args.rays)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(f"leaks: {leaks.summary()}")
     if args.paths:
         if not ok:
             return 1
@@ -324,7 +343,7 @@ def _cmd_view(args: argparse.Namespace) -> int:
     try:
         from acoustic_spaces.viz import show_room
 
-        show_room(room, screenshot=args.screenshot, paths=paths)
+        show_room(room, screenshot=args.screenshot, paths=paths, leaks=leaks)
     except ImportError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -1511,6 +1530,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate = sub.add_parser("validate", help="check a scene file and its geometry")
     validate.add_argument("scene", help="path to a scene YAML file")
+    validate.add_argument(
+        "--leaks", action="store_true", help="trace rays and report where they escape"
+    )
+    validate.add_argument(
+        "--rays", type=int, default=LEAK_RAYS, help=f"rays for --leaks (default {LEAK_RAYS})"
+    )
     validate.set_defaults(func=_cmd_validate)
 
     inspect = sub.add_parser(
@@ -1556,6 +1581,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--diffraction", choices=DIFFRACTION_MODES, help="edge diffraction for --paths"
     )
     view.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    view.add_argument(
+        "--leaks", action="store_true", help="draw the rays that escape and the open edges"
+    )
+    view.add_argument(
+        "--rays", type=int, default=LEAK_RAYS, help=f"rays for --leaks (default {LEAK_RAYS})"
+    )
     view.set_defaults(func=_cmd_view)
 
     animate = sub.add_parser(

@@ -56,6 +56,10 @@ The editor works on the same scene files as the command line:
   selected source shows its balloon in the 3D view.
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
   as you edit.
+- **View > Show leaks** traces rays from the sources and shows where they escape from a
+  model that is not closed: its open edges, the escaping rays and a marker on each gap,
+  with the report in the messages (see [Finding leaks](scenes.md#finding-leaks)). It
+  traces again when the geometry, the materials or the sources change.
 - **File > Export to Blender** writes the room with the reflection paths on show, and
   **File > Export particle animation to Blender** the sound particles leaving the
   selected source (see below).

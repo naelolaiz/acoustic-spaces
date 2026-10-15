@@ -202,6 +202,10 @@ def test_open_model_skips_volume_and_inside_checks(tmp_path: Path) -> None:
 def test_example_scenes_are_ready_to_simulate(scene: Path) -> None:
     room = Room.from_yaml(scene)
     assert room.problems() == []
+    if scene.parent.name == "leaky_classroom":  # open on purpose, for the leak finder
+        (warning,) = room.warnings()
+        assert "not closed" in warning and "validate --leaks" in warning
+        return
     assert room.warnings() == []
     assert room.report.closed and room.report.normals_inward
 

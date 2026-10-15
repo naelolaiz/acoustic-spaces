@@ -30,6 +30,7 @@ from acoustic_spaces.viz import (
     balloon_polydata,
     extent_polydata,
     plot_coverage,
+    plot_leaks,
     plot_paths,
     room_polydata,
 )
@@ -157,9 +158,11 @@ class Viewport(QWidget):
         selection: tuple[str, object] | None = None,
         paths=None,
         coverage=None,
+        leaks=None,
     ):
-        """Draw ``room`` with ``selection`` highlighted and, if given, early ``paths``
-        and a coverage map: ``coverage`` is (CoverageMap, parameter, band).
+        """Draw ``room`` with ``selection`` highlighted and, if given, early ``paths``,
+        a coverage map (``coverage`` is (CoverageMap, parameter, band)) and the
+        ``leaks`` from :func:`acoustic_spaces.engine.leaks.find_leaks`.
 
         The camera stays where it is, also when the room changes shape; only the first
         room gets the usual view (:meth:`reset_camera` gives it again)."""
@@ -277,6 +280,8 @@ class Viewport(QWidget):
         if coverage is not None:
             shown, parameter, band = coverage
             plot_coverage(shown, plotter, parameter=parameter, band=band, render=False)
+        if leaks is not None:
+            plot_leaks(leaks, room, plotter, render=False)
         if camera is None:
             plotter.view_isometric()
             plotter.reset_camera()
