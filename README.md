@@ -424,8 +424,13 @@ assignments:
   that room is expected to reach (from the rooms' power balance in a diffuse field),
   so a quiet room behind a wall is traced as finely as the loud one. Sound goes straight
   through, in the direction it came.
-- Coverage maps cover the audience areas of every room; the statistical reverberation
-  times count each face between two rooms on both its sides.
+- Coverage maps cover the audience areas of every room and find at each point what a
+  listener there would. The statistical late method follows coupled-room theory: each
+  room's diffuse field decays as the energy the rooms exchange through the faces
+  between them has it, with Eyring's absorption in each, so a room behind a partition
+  holds less and a dry room opening into a live one decays in two slopes. The
+  statistical reverberation times of `inspect` count each face between two rooms on
+  both its sides, as for one room.
 - For diffraction an opening is a hole: the edges of a doorway are the free edges of
   the wall round it, and sound bends round them into the next room. Diffraction through
   a wall is left out, as it is far weaker than what passes straight through.
@@ -439,7 +444,9 @@ assignments:
 The tests check the level behind a 30 and a 50 dB partition between two rooms against
 diffuse-field theory (within 0.3 dB), two rooms joined by an opening the size of the
 wall against one room of both their sizes, and the double-sloped decay of a dry room
-opening into a live one against the two-room model (within 1 dB down to -40 dB).
+opening into a live one against the two-room model (within 1 dB down to -40 dB). The
+statistical method follows that model in both rooms, and maps over both rooms match
+listeners at their points.
 
 ### Sources and directivity
 

@@ -12,12 +12,12 @@ from scipy.linalg import expm
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.cli import main
-from acoustic_spaces.engine import TraceModel
+from acoustic_spaces.engine import TraceModel, coverage_map
 from acoustic_spaces.engine.diffraction import find_edges
 from acoustic_spaces.engine.particles import trace_particles
 from acoustic_spaces.engine.simulate import early_paths
 from acoustic_spaces.parameters import decay_curve
-from acoustic_spaces.scene import Material
+from acoustic_spaces.scene import Coverage, Material
 
 SOURCE = [1.3, 2.2, 1.6]
 
@@ -192,27 +192,33 @@ def test_level_difference_across_a_partition(tmp_path: Path, loss_db: float) -> 
     one, two = result["s", "one"].parameters().g, result["s", "two"].parameters().g
     np.testing.assert_allclose(two[:5], behind, atol=0.4)  # little air absorption here
     np.testing.assert_allclose((one - two)[:5], loss_db + 10 * math.log10(area / 12), atol=0.5)
+    # A map over the second room finds the same level behind the partition, and so does
+    # the statistical method. Its field reaches each point from the direct sound on, as
+    # Barron has it: here 0.2 dB below what the rays find, 0.3 dB below the steady state.
+    late = coverage_map(room, settings=Coverage(surfaces=["room2"], spacing=1.0)).get()
+    np.testing.assert_allclose(late.values["g"][:, :5].mean(axis=0), behind, atol=0.4)
+    room.scene.simulation.late.method = "statistical"
+    statistical = simulate(room)["s", "two"].parameters().g
+    np.testing.assert_allclose(statistical, two, atol=0.4)
 
 
-def test_coupled_rooms_decay_in_two_slopes(tmp_path: Path) -> None:
-    # A dry room (96 m3) opening through a 2 m2 doorway into a live one (192 m3): the
-    # dry room's decay falls fast, then follows the live room's, as the two-room
-    # diffuse-field model has it.
+def _double(path: Path, listeners, **simulation) -> tuple[Room, np.ndarray]:
+    """A dry room (96 m3) opening through a 2 m2 doorway into a live one (192 m3), and
+    the two-room diffuse-field model's decay rates (1/s) at 1 kHz: d(w1, w2)/dt =
+    rates @ (w1, w2)."""
     first, second, width, height = 4, 8, 6, 4
     dry, live = 0.25, 0.03
     room = Room.from_scene(
         _scene(
-            _coupled(tmp_path / "double.obj", first, second, width, height, (2.5, 3.5, 0, 2)),
+            _coupled(path, first, second, width, height, (2.5, 3.5, 0, 2)),
             {"dry": _flat(dry), "live": _flat(live), "opening": {"transmission": 1}},
             {"room1": "dry", "room2": "live", "partition": "live", "opening": "opening"},
-            {"one": [2.9, 1.1, 1.2], "two": [9.0, 4.5, 1.5]},
+            listeners,
             ir_length_s=2.5,
-            late={"rays": 4000},
+            **simulation,
         )
     )
-    result = simulate(room)
-    band = 4  # 1 kHz
-    c, m = room.speed_of_sound(), room.air_attenuation()[band]
+    c, m = room.speed_of_sound(), room.air_attenuation()[4]
     v1, v2, door = first * width * height, second * width * height, 2.0
     s1 = 2 * (first * width + first * height + width * height)
     s2 = 2 * (second * width + second * height + width * height)
@@ -220,7 +226,16 @@ def test_coupled_rooms_decay_in_two_slopes(tmp_path: Path) -> None:
     a1 = -s1 * math.log(1 - ((s1 - wall) * dry + (wall - door) * live + door) / s1)
     a2 = -s2 * math.log(1 - ((s2 - door) * live + door) / s2)
     a1, a2 = a1 + 4 * m * v1, a2 + 4 * m * v2
-    rates = (c / 4) * np.array([[-a1 / v1, door / v1], [door / v2, -a2 / v2]])
+    return room, (c / 4) * np.array([[-a1 / v1, door / v1], [door / v2, -a2 / v2]])
+
+
+def test_coupled_rooms_decay_in_two_slopes(tmp_path: Path) -> None:
+    # The dry room's decay falls fast, then follows the live room's, as the two-room
+    # diffuse-field model has it.
+    listeners = {"one": [2.9, 1.1, 1.2], "two": [9.0, 4.5, 1.5]}
+    room, rates = _double(tmp_path / "double.obj", listeners, late={"rays": 4000})
+    result = simulate(room)
+    band = 4  # 1 kHz
     slow = 6 * math.log(10) / -np.linalg.eigvals(rates).real.max()
 
     response = result["s", "one"]
@@ -237,6 +252,36 @@ def test_coupled_rooms_decay_in_two_slopes(tmp_path: Path) -> None:
     early_t = -60 / np.polyfit(times[: np.argmax(edc < -10)], edc[: np.argmax(edc < -10)], 1)[0]
     assert late_t == pytest.approx(slow, rel=0.12)
     assert early_t < 0.5 * late_t
+
+
+def test_the_statistical_method_and_maps_cross_rooms(tmp_path: Path) -> None:
+    # The statistical method follows the two-room model in each room, and a map over
+    # both rooms finds at its points what listeners there find (listeners where the map
+    # has points: 1 m apart from the rooms' corner, 1.2 m up).
+    listeners = {"one": [2.5, 1.5, 1.2], "two": [9.5, 4.5, 1.2]}
+    room, rates = _double(tmp_path / "double.obj", listeners, late={"method": "statistical"})
+    result = simulate(room)
+    band = 4
+    for k, name in enumerate(listeners):
+        response = result["s", name]
+        step = response.time_step
+        edc = decay_curve(response.energy()[band], step)
+        times = np.arange(len(edc)) * step
+        model = decay_curve(np.array([expm(rates * t)[k, 0] for t in times]) * step, step)
+        start = np.argmax(edc < -10)  # past the early paths
+        for level in (20, 30, 40):
+            at = np.argmax(edc < -level)
+            assert edc[at] == pytest.approx(model[at] - model[start] + edc[start], abs=0.3)
+    found = coverage_map(room, settings=Coverage(surfaces=["room1", "room2"], spacing=1.0))
+    late = found.get()
+    points = late.grid.points
+    assert np.any(points[:, 0] < 4.0) and np.any(points[:, 0] > 4.0)
+    for name, position in listeners.items():
+        k = int(np.argmin(np.linalg.norm(points - position, axis=1)))
+        np.testing.assert_allclose(points[k], position)
+        values = result["s", name].parameters()
+        for key in ("g", "t30", "c80"):
+            np.testing.assert_allclose(late.values[key][k], getattr(values, key), atol=0.01)
 
 
 def test_diffraction_bends_round_a_doorway(tmp_path: Path) -> None:

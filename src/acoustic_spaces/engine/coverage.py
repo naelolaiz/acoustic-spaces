@@ -416,6 +416,8 @@ class _Part:
     onset: np.ndarray  # (n,) arrival of its direct sound
     early: list[early_stage.EarlyReflections]  # per point
     late: late_stage.MapEnergy | None
+    #: The statistical tail's decay at each point where the model holds several rooms.
+    decay: tuple[np.ndarray, np.ndarray] | None = None
 
 
 @dataclass
@@ -494,6 +496,7 @@ def _part_curve(
             max_time=length,
             time_step=TIME_STEP,
             speed_of_sound=c,
+            decay=None if part.decay is None else (part.decay[0][k : k + 1], part.decay[1]),
         ).energy[0]
         running = np.concatenate([np.zeros((bands, 1)), np.cumsum(tail, axis=1)], axis=1)
         times = np.arange(running.shape[1]) * TIME_STEP
@@ -609,8 +612,11 @@ def _trace_part(
         )
         add("rays", float(late.rays))
         add("traced_rays", float(late.traced_rays))
+    decay = None
+    if statistical:
+        decay = late_stage.diffuse_decay(model, position, grid.points, air, c)
     add("late_s", time.perf_counter() - t)
-    return _Part(onset, early, late)
+    return _Part(onset, early, late, decay)
 
 
 def coverage_map(

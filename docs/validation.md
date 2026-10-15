@@ -75,7 +75,13 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   curve down to -30 dB and its late reverberation time within 12 % of the model's slow
   mode (within 1 dB to -40 dB and 5 % at 10,000 rays). Particles reach the next room
   straight through an opening and not through a closed door, and the wave solver's air
-  flows through the opening;
+  flows through the opening. The statistical method follows the two-room model within
+  0.3 dB of its decay curve from -20 to -40 dB in both rooms, and comes within 0.4 dB
+  of the rays behind the partitions (0.2 dB below them: its field reaches each point
+  from the direct sound on, as Barron has it). Coverage maps over both rooms find at
+  their points what listeners there find (G, T30 and C80 within 0.01 with the
+  statistical method), and the rays' maps the level behind the partitions within
+  0.4 dB;
 - every ISO 3382-1 parameter on synthetic exponential decays, and the air
   absorption against the ISO 9613-1 table;
 - the further parameters against responses whose values are known: LF and LFC of one

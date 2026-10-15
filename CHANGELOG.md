@@ -140,8 +140,9 @@
 - Early reflections pass through partitions with the share that passes, and through
   openings unchanged; late rays go on behind a partition as a copy carrying that share,
   with a weight window per room from the rooms' diffuse power balance. Coverage maps
-  cover every room; the statistical reverberation times count both sides of the faces
-  between rooms.
+  cover every room. The statistical late method follows coupled-room theory room by
+  room; the statistical reverberation times count both sides of the faces between
+  rooms.
 - Openings are holes for diffraction (the edges of a doorway diffract), for the wave
   solver's air and for particles; particles pass partitions as often as the sound does.
   The wave solver refuses walls that let part of the sound through.
@@ -150,7 +151,8 @@
   band in the table, or everything) and the rooms under the scene's Properties.
 - Checked against diffuse-field theory: the level behind 30 and 50 dB partitions within
   0.3 dB, an opening the size of the wall the same as one room, and the double slope of
-  coupled rooms within 1 dB of the two-room model.
+  coupled rooms within 1 dB of the two-room model; the statistical method and coverage
+  maps across rooms against the same model, the rays and listeners.
 
 **Examples**
 

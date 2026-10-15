@@ -299,6 +299,7 @@ def simulate(
                 max_time=length,
                 time_step=TIME_STEP,
                 speed_of_sound=c,
+                decay=late_stage.diffuse_decay(model, position, listener_pos, air, c),
             )
         else:
             say(f"{label}: stochastic ray tracing ({rays} rays per band)")
