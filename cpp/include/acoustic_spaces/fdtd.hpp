@@ -2,22 +2,46 @@
 //
 // Wave-based room acoustics: the standard rectilinear finite-difference time-domain
 // scheme (the second-order leapfrog on a cubic grid, at the Courant limit 1/sqrt(3)),
-// with frequency-independent locally reacting boundaries on the voxelised room.
+// with frequency-dependent locally reacting boundaries on the voxelised room and, round
+// an open model, a perfectly matched layer.
 //
 // The grid's cells are air when they can be reached from the source without crossing
 // a face of the model, so closed rooms, open models and thin screens all work. Between
-// two cell centres, a crossed face is a boundary of that face's specific admittance
-// beta (normal velocity = beta * p / (rho c)). The update of a cell with K neighbours
-// it connects to (no face between them) and boundary faces of admittances beta_f is
-// the finite-volume one:
+// two cell centres, a crossed face is a boundary of that face's material, whose specific
+// admittance (normal velocity times rho c over pressure) is a constant and parallel
+// mass-resistance-stiffness branches,
 //
-//   p+ = ((2 - K L^2) p + L^2 sum(connected neighbours) - (1 - g) p-) / (1 + g),
-//   g = L / 2 * sum(beta_f),  L = 1 / sqrt(3),
+//   Y(s) = beta + sum_j 1 / (M_j s + R_j + S_j / s),
+//
+// passive for beta, M, R, S >= 0. A branch's normalised velocity w (rho c times the
+// velocity) follows M w'' + R w' + S w = p', centred in time:
+//
+//   m (w+ - 2 w + w-) + r (w+ - w-) / 2 + q (w+ + w-) / 2 = (p+ - p-) / 2,
+//
+// with m = M / T, r = R and q = S T for the time step T. A cell with n neighbours it
+// connects to (no face between them) and boundary faces f is updated finite-volume
+// style, L = 1 / sqrt(3):
+//
+//   p+ - 2 p + p- = L^2 (sum(connected neighbours) - n p)
+//                   - L / 2 sum_f (beta_f (p+ - p-) + sum_j (w_j+ - w_j-)),
+//
+// which, solved together with the branches, is
+//
+//   p+ = ((2 - n L^2) p + L^2 sum(connected neighbours) - (1 - g) p- - L / 2 sum c_j)
+//        / (1 + g),
+//   g = L / 2 sum_f (beta_f + sum_j 1 / (2 a_j)),  a_j = m_j + r_j / 2 + q_j / 2,
+//   c_j = (2 m_j w_j - (2 m_j + q_j) w_j-) / a_j,  then w_j+ = w_j- + (p+ - p-) / (2 a_j) + c_j
 //
 // (across a thin screen, the air on the other side is a neighbour it does not connect
-// to)
+// to). Its energy only falls, and it is the plain scheme for n = 6 and no faces.
 //
-// which is passive (stable) for beta >= 0 and is the plain scheme for K = 6, beta = 0.
+// The matched layer: the `layer` cells inside the grid's edge, where an open model's air
+// reaches them, are updated in the pressure-velocity form the leapfrog is equivalent to,
+// with the pressure split by axis and each part damped along its axis (Berenger's split
+// field), the damping growing as the square of the depth into the layer. Each layer cell
+// keeps its own copy of the velocity on its six faces; both cells of a face update it
+// alike. At the layer's inner side the damping is zero, where the two forms agree, and
+// behind it the grid's edge holds no pressure.
 
 #pragma once
 
@@ -94,16 +118,53 @@ private:
 class WaveSolver {
 public:
     // The grid has nx x ny x nz cells of `cell` metres, cell 0 starting at `origin`, with
-    // x fastest; the outermost layer is never air. `admittance` holds the specific
-    // admittance of every face of `bvh`; the grid's edge, which only an open model's air
-    // reaches, has `edge_admittance`. The source and every probe take the air cells
-    // round them that they can see, weighted trilinearly.
-    WaveSolver(const Bvh &bvh, const double *admittance, const Vec3 &origin, double cell,
-               std::size_t nx, std::size_t ny, std::size_t nz, const Vec3 &source,
-               const std::vector<Vec3> &probes, double edge_admittance, std::size_t threads)
-        : origin_(origin), cell_(cell), nx_(nx), ny_(ny), nz_(nz), sy_(nx), sz_(nx * ny) {
+    // x fastest; the outermost layer is never air. Face f of `bvh` is of material
+    // face_material[f], of `materials`: beta[material], and the branches whose
+    // branch_material is that material, branches holding m, r and q of each (see above).
+    // The grid's edge, which only an open model's air reaches, has `edge_admittance`, or
+    // with `layer` > 0 a matched layer of that many cells inside it, damped up to
+    // `layer_damping` (s T / 2, s the damping rate) at the edge. The source and every
+    // probe take the air cells round them that they can see, weighted trilinearly.
+    WaveSolver(const Bvh &bvh, const std::int64_t *face_material, const double *beta,
+               std::size_t materials, const double *branches, const std::int64_t *branch_material,
+               std::size_t branch_count, const Vec3 &origin, double cell, std::size_t nx,
+               std::size_t ny, std::size_t nz, const Vec3 &source,
+               const std::vector<Vec3> &probes, double edge_admittance, std::size_t layer,
+               double layer_damping, std::size_t threads)
+        : origin_(origin), cell_(cell), nx_(nx), ny_(ny), nz_(nz), sy_(nx), sz_(nx * ny),
+          layer_(layer) {
         if (nx < 3 || ny < 3 || nz < 3) throw std::invalid_argument("the grid is too small");
         if (!(cell > 0.0)) throw std::invalid_argument("cell must be positive");
+        if (2 * layer + 3 > std::min({nx, ny, nz})) {
+            throw std::invalid_argument("the matched layer leaves no grid inside it");
+        }
+        if (!(layer_damping >= 0.0)) throw std::invalid_argument("negative layer damping");
+        for (std::size_t f = 0; f < bvh.face_count(); ++f) {
+            if (face_material[f] < 0 || static_cast<std::size_t>(face_material[f]) >= materials) {
+                throw std::invalid_argument("a face has no material");
+            }
+        }
+        // Each material's branches, as a_j and the coefficients of c_j.
+        std::vector<std::vector<std::int32_t>> material_branches(materials);
+        for (std::size_t m = 0; m < materials; ++m) {
+            if (!(beta[m] >= 0.0)) throw std::invalid_argument("negative admittance");
+        }
+        for (std::size_t j = 0; j < branch_count; ++j) {
+            const double m = branches[3 * j], r = branches[3 * j + 1], q = branches[3 * j + 2];
+            const double a = m + 0.5 * r + 0.5 * q;
+            if (!(m >= 0.0 && r >= 0.0 && q >= 0.0 && a > 0.0)) {
+                throw std::invalid_argument("a branch needs mass, resistance and stiffness >= 0");
+            }
+            if (branch_material[j] < 0 || static_cast<std::size_t>(branch_material[j]) >= materials) {
+                throw std::invalid_argument("a branch has no material");
+            }
+            material_branches[static_cast<std::size_t>(branch_material[j])].push_back(
+                static_cast<std::int32_t>(j));
+            branch_now_.push_back(static_cast<float>(2.0 * m / a));
+            branch_before_.push_back(static_cast<float>((2.0 * m + q) / a));
+            branch_gain_.push_back(static_cast<float>(0.5 / a));
+            branch_a_.push_back(a);
+        }
         threads_ = threads ? threads : std::max<std::size_t>(1, std::thread::hardware_concurrency());
         const std::size_t n = nx * ny * nz;
 
@@ -153,20 +214,47 @@ public:
             }
         }
 
+        // The matched layer's air, which must meet no face.
+        for (std::size_t i = 0; i < n && layer_ > 0; ++i) {
+            if (type_[i] == kSolid || depth(i) > layer_) continue;
+            for (int a = 0; a < 3; ++a) {
+                const std::size_t stride = a == 0 ? 1 : (a == 1 ? sy_ : sz_);
+                for (int side = 0; side < 2; ++side) {
+                    const std::size_t j = side ? i + stride : i - stride;
+                    if (!edge(j) && !open_link(blocked, i, a, side)) {
+                        throw std::invalid_argument("the model reaches into the matched layer");
+                    }
+                }
+            }
+            type_[i] = kLayer;
+            layer_cells_.push_back(static_cast<std::int64_t>(i));
+            ++air_;
+            open_ = true;
+        }
+        if (!layer_cells_.empty()) {
+            layer_damping_ = layer_damping;
+            for (int a = 0; a < 3; ++a) layer_coefficients(a);
+            layer_state_.assign(9 * layer_cells_.size(), 0.0f);
+        }
+
         // Boundary cells: fewer than six air neighbours, or a face between them.
         const double half_courant = 0.5 / std::sqrt(3.0);
+        state_start_.push_back(0);
         for (std::size_t i = 0; i < n; ++i) {
-            if (type_[i] == kSolid) continue;
+            if (type_[i] != kInterior) continue;
             ++air_;
             int k = 0;
             std::uint8_t links = 0;  // bit 2a + side: connected to that neighbour
-            double beta = 0.0;
+            double beta_sum = 0.0;
+            std::array<std::int32_t, 6> crossed{};  // materials of the faces crossed,
+            std::array<int, 6> count{};             // and how many faces of each
+            std::size_t kinds = 0;
             for (int a = 0; a < 3; ++a) {
                 const std::size_t stride = a == 0 ? 1 : (a == 1 ? sy_ : sz_);
                 for (int side = 0; side < 2; ++side) {
                     const std::size_t j = side ? i + stride : i - stride;
                     if (edge(j)) {
-                        beta += edge_admittance;
+                        beta_sum += edge_admittance;
                         open_ = true;
                         continue;
                     }
@@ -180,19 +268,43 @@ public:
                         if (hit.found()) face = static_cast<std::int32_t>(hit.face);
                     }
                     if (face >= 0) {
-                        beta += admittance[face];
+                        const auto m = static_cast<std::int32_t>(face_material[face]);
+                        beta_sum += beta[m];
+                        std::size_t kind = 0;
+                        while (kind < kinds && crossed[kind] != m) ++kind;
+                        if (kind == kinds) crossed[kinds++] = m;
+                        ++count[kind];
                     } else {
                         ++k;
                         links = static_cast<std::uint8_t>(links | (1u << (2 * a + side)));
                     }
                 }
             }
-            if (k < 6 || beta > 0.0) add_special(i, k, links, half_courant * beta);
+            // One set of branch velocities per material the cell meets, standing for
+            // each of its faces of that material.
+            double g = beta_sum;
+            for (std::size_t kind = 0; kind < kinds; ++kind) {
+                const auto &own = material_branches[static_cast<std::size_t>(crossed[kind])];
+                for (const std::int32_t j : own) {
+                    g += count[kind] * (0.5 / branch_a_[static_cast<std::size_t>(j)]);
+                    state_branch_.push_back(j);
+                    state_faces_.push_back(static_cast<float>(count[kind]));
+                }
+            }
+            if (k < 6 || g > 0.0) {
+                add_special(i, k, links, half_courant * g);
+            } else {
+                state_branch_.resize(state_start_.back());
+                state_faces_.resize(state_start_.back());
+            }
         }
         boundary_ = special_.size();
 
         // The source's cells (made special, so one update adds the source).
         for (const auto &[i, w] : visible_cells(bvh, source, &type_)) {
+            if (type_[i] == kLayer) {
+                throw std::invalid_argument("the source is in the matched layer");
+            }
             std::size_t k = special_index(i);
             if (k == npos) k = add_special(i, 6, kAllLinks, 0.0);
             source_[k] += static_cast<float>(w);
@@ -208,11 +320,15 @@ public:
         }
         u0_.assign(n, 0.0f);
         u1_.assign(n, 0.0f);
+        w0_.assign(state_branch_.size(), 0.0f);
+        w1_.assign(state_branch_.size(), 0.0f);
         threads_ = std::max<std::size_t>(1, std::min(threads_, air_ / 20000 + 1));
     }
 
     std::size_t air_cells() const { return air_; }
     std::size_t boundary_cells() const { return boundary_; }
+    std::size_t branch_states() const { return state_branch_.size(); }
+    std::size_t layer_cells() const { return layer_cells_.size(); }
     bool open() const { return open_; }
     std::size_t probes() const { return probe_cells_.size(); }
     bool probe_found(std::size_t p) const { return !probe_cells_.at(p).empty(); }
@@ -223,22 +339,32 @@ public:
     void run(const float *signal, std::size_t steps, double *out) {
         const std::size_t t_count = threads_;
         const std::size_t n = u0_.size(), specials = special_.size();
+        const std::size_t layers = layer_cells_.size();
         StepBarrier barrier(t_count);
         float *u0 = u0_.data(), *u1 = u1_.data();
+        float *w0 = w0_.data(), *w1 = w1_.data();
         auto work = [&](std::size_t t) {
             FlushDenormals flush;
             const std::size_t ib = n * t / t_count, ie = n * (t + 1) / t_count;
             const std::size_t sb = specials * t / t_count, se = specials * (t + 1) / t_count;
+            const std::size_t lb = layers * t / t_count, le = layers * (t + 1) / t_count;
             const std::uint8_t *type = type_.data();
             const std::int64_t *index = special_.data();
             const float *ca = coef_a_.data(), *cb = coef_b_.data(), *ci = coef_inv_.data();
             const std::uint8_t *links = links_.data();
             const float *src = source_.data();
+            const std::size_t *start = state_start_.data();
+            const std::int32_t *branch = state_branch_.data();
+            const float *faces = state_faces_.data();
+            const float *now = branch_now_.data(), *before = branch_before_.data();
+            const float *gain = branch_gain_.data();
             const std::size_t sy = sy_, sz = sz_;
             // L^2 = 1 / 3, rounded down: rounded up, six of it make more than 2 and the
             // highest mode of a very large grid could grow.
             const float third = std::nextafter(1.0f / 3.0f, 0.0f);
+            const float half_courant = 0.5f * std::sqrt(third);
             float *a = u0, *b = u1;  // a: the previous step, then the next; b: the current
+            float *wa = w0, *wb = w1;  // branch velocities, the same way
             for (std::size_t step = 0; step < steps; ++step) {
                 if (t == 0) record(b, step, steps, out);
                 for (std::size_t i = std::max<std::size_t>(ib, sz); i < std::min(ie, n - sz);
@@ -257,10 +383,25 @@ public:
                                       ((m & 8u) ? b[i + sy] : 0.0f) +
                                       ((m & 16u) ? b[i - sz] : 0.0f) +
                                       ((m & 32u) ? b[i + sz] : 0.0f);
-                    a[i] = (ca[k] * b[i] + third * sum - cb[k] * a[i] + src[k] * s) * ci[k];
+                    float flow = 0.0f;
+                    for (std::size_t j = start[k]; j < start[k + 1]; ++j) {
+                        const std::size_t br = static_cast<std::size_t>(branch[j]);
+                        flow += faces[j] * (now[br] * wb[j] - before[br] * wa[j]);
+                    }
+                    const float previous = a[i];
+                    const float next = (ca[k] * b[i] + third * sum - cb[k] * previous -
+                                        half_courant * flow + src[k] * s) *
+                                       ci[k];
+                    a[i] = next;
+                    for (std::size_t j = start[k]; j < start[k + 1]; ++j) {
+                        const std::size_t br = static_cast<std::size_t>(branch[j]);
+                        wa[j] += (next - previous) * gain[br] + (now[br] * wb[j] - before[br] * wa[j]);
+                    }
                 }
+                for (std::size_t c = lb; c < le; ++c) update_layer(c, a, b);
                 barrier.wait();
                 std::swap(a, b);
+                std::swap(wa, wb);
             }
         };
         {
@@ -269,16 +410,22 @@ public:
             work(0);
             for (auto &thread : pool) thread.join();
         }
-        if (steps % 2 == 1) std::swap(u0_, u1_);
+        if (steps % 2 == 1) {
+            std::swap(u0_, u1_);
+            std::swap(w0_, w1_);
+        }
     }
 
     void reset() {
         std::fill(u0_.begin(), u0_.end(), 0.0f);
         std::fill(u1_.begin(), u1_.end(), 0.0f);
+        std::fill(w0_.begin(), w0_.end(), 0.0f);
+        std::fill(w1_.begin(), w1_.end(), 0.0f);
+        std::fill(layer_state_.begin(), layer_state_.end(), 0.0f);
     }
 
 private:
-    static constexpr std::uint8_t kSolid = 0, kInterior = 1, kSpecial = 2;
+    static constexpr std::uint8_t kSolid = 0, kInterior = 1, kSpecial = 2, kLayer = 3;
     static constexpr std::uint8_t kAllLinks = 63;
     static constexpr std::size_t npos = static_cast<std::size_t>(-1);
 
@@ -294,6 +441,12 @@ private:
         return x == 0 || y == 0 || z == 0 || x + 1 == nx_ || y + 1 == ny_ || z + 1 == nz_;
     }
 
+    // Cells from cell i to the grid's edge, the nearest way (0: on the edge).
+    std::size_t depth(std::size_t i) const {
+        const std::size_t x = i % nx_, y = (i / nx_) % ny_, z = i / sz_;
+        return std::min({x, y, z, nx_ - 1 - x, ny_ - 1 - y, nz_ - 1 - z});
+    }
+
     // Whether cell i connects to its neighbour along axis a (side 1: +, 0: -) through
     // no face; the edge layer never connects.
     bool open_link(const std::array<std::vector<std::int32_t>, 3> &blocked, std::size_t i,
@@ -302,6 +455,50 @@ private:
         const std::size_t j = side ? i + stride : i - stride;
         if (edge(j)) return false;
         return (side ? blocked[a][i] : blocked[a][j]) < 0;
+    }
+
+    // The matched layer's coefficients along axis a: (1 - d) / (1 + d) and L / (1 + d)
+    // for the damping d of each cell's centre and of the face below it.
+    void layer_coefficients(int a) {
+        const std::size_t size = a == 0 ? nx_ : (a == 1 ? ny_ : nz_);
+        const double layer = static_cast<double>(layer_);
+        const double courant = std::sqrt(static_cast<double>(std::nextafter(1.0f / 3.0f, 0.0f)));
+        auto damping = [&](double from_edge) {
+            const double into = std::max(0.0, layer + 0.5 - from_edge) / layer;
+            return layer_damping_ * into * into;
+        };
+        auto &centre_keep = layer_keep_[2 * a], &face_keep = layer_keep_[2 * a + 1];
+        auto &centre_push = layer_push_[2 * a], &face_push = layer_push_[2 * a + 1];
+        for (std::size_t x = 0; x <= size; ++x) {
+            const double c = static_cast<double>(x), last = static_cast<double>(size - 1);
+            const double dc = damping(std::min(c, last - c));
+            const double df = damping(std::min(c - 0.5, last - c + 0.5));
+            centre_keep.push_back(static_cast<float>((1.0 - dc) / (1.0 + dc)));
+            centre_push.push_back(static_cast<float>(courant / (1.0 + dc)));
+            face_keep.push_back(static_cast<float>((1.0 - df) / (1.0 + df)));
+            face_push.push_back(static_cast<float>(courant / (1.0 + df)));
+        }
+    }
+
+    // One step of matched-layer cell c: its six face velocities, then the parts of its
+    // pressure, from the current pressures b, into a.
+    void update_layer(std::size_t c, float *a, const float *b) {
+        const std::size_t i = static_cast<std::size_t>(layer_cells_[c]);
+        const std::size_t at[3] = {i % nx_, (i / nx_) % ny_, i / sz_};
+        float *state = layer_state_.data() + 9 * c;  // p_x, p_y, p_z, then u- and u+ per axis
+        float total = 0.0f;
+        for (int axis = 0; axis < 3; ++axis) {
+            const std::size_t stride = axis == 0 ? 1 : (axis == 1 ? sy_ : sz_);
+            const std::size_t x = at[axis];
+            const float *fk = layer_keep_[2 * axis + 1].data(), *fp = layer_push_[2 * axis + 1].data();
+            float &below = state[3 + 2 * axis], &above = state[4 + 2 * axis];
+            below = fk[x] * below - fp[x] * (b[i] - b[i - stride]);
+            above = fk[x + 1] * above - fp[x + 1] * (b[i + stride] - b[i]);
+            float &part = state[axis];
+            part = layer_keep_[2 * axis][x] * part - layer_push_[2 * axis][x] * (above - below);
+            total += part;
+        }
+        a[i] = total;
     }
 
     // The cells round point p (up to eight) whose centres p sees, with trilinear weights
@@ -346,6 +543,7 @@ private:
         return out;
     }
 
+    // Makes cell i special, with the branch velocities added since the last one.
     std::size_t add_special(std::size_t i, int k, std::uint8_t links, double g) {
         type_[i] = kSpecial;
         special_.push_back(static_cast<std::int64_t>(i));
@@ -354,6 +552,7 @@ private:
         coef_b_.push_back(static_cast<float>(1.0 - g));
         coef_inv_.push_back(static_cast<float>(1.0 / (1.0 + g)));
         source_.push_back(0.0f);
+        state_start_.push_back(state_branch_.size());
         return special_.size() - 1;
     }
 
@@ -376,6 +575,8 @@ private:
     Vec3 origin_;
     double cell_;
     std::size_t nx_, ny_, nz_, sy_, sz_;
+    std::size_t layer_ = 0;
+    double layer_damping_ = 0.0;
     std::size_t threads_ = 1;
     std::size_t air_ = 0, boundary_ = 0;
     bool open_ = false;
@@ -383,6 +584,19 @@ private:
     std::vector<std::int64_t> special_;
     std::vector<std::uint8_t> links_;
     std::vector<float> coef_a_, coef_b_, coef_inv_, source_;
+    // Branch velocities: special cell k has states state_start_[k] to state_start_[k + 1],
+    // each a branch of a material and the number of the cell's faces it stands for.
+    std::vector<std::size_t> state_start_;
+    std::vector<std::int32_t> state_branch_;
+    std::vector<float> state_faces_;
+    std::vector<float> branch_now_, branch_before_, branch_gain_;  // 2m/a, (2m + q)/a, 1/(2a)
+    std::vector<double> branch_a_;
+    std::vector<float> w0_, w1_;
+    // The matched layer: its cells, their state (see update_layer) and, per axis and
+    // grid coordinate, the coefficients of the centres and of the faces below them.
+    std::vector<std::int64_t> layer_cells_;
+    std::vector<float> layer_state_;
+    std::array<std::vector<float>, 6> layer_keep_, layer_push_;
     std::vector<std::vector<std::size_t>> probe_cells_;
     std::vector<std::vector<double>> probe_weights_;
     std::vector<float> u0_, u1_;

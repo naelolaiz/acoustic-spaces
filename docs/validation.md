@@ -122,11 +122,15 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   off one of the corner's walls within 0.05 dB;
 - the wave solver: the modes of a rigid box (within 0.6 Hz), the reflection off the end
   of a duct for four admittances (within 0.005, and below 0.05 for a matched end, and
-  off the inner face of a wall thinner than a cell), the free-field level of the 63 Hz
-  band (within 1 dB of the rays), the arrival time and direction of the direct sound,
-  open models and thin screens (stable, and the sound leaves), runs shared by bands with
-  the same absorption, and the level of the late part across the crossover to the rays
-  (flat within 1 dB in sixth octaves);
+  off the inner face of a wall thinner than a cell), and off an end whose admittance
+  resonates (within 0.012 of the grid's theory from 30 to 250 Hz); admittances fitted to
+  four kinds of material (within 0.01 of their absorption in every band, passive); the
+  free-field level of the 63 Hz band (within 1 dB of the rays), the arrival time and
+  direction of the direct sound, open models and thin screens (stable, and the sound
+  leaves), the matched layer round an open model (what comes back 40 dB down or more,
+  against a grid too large for anything to come back; stable for 9,500 steps), one run
+  for bands with their own absorption, and the level of the late part across the
+  crossover to the rays (flat within 1 dB in sixth octaves);
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
@@ -499,20 +503,25 @@ took 13 to 14 minutes.
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
 there are any, and for a whole room the sum of its modes.
 
-**Modes and their decay.** A 7 x 5 x 3 m box with every wall of specific admittance
-0.005 (10 cm cells) rings for 8 s. For each mode that stands apart from the others, the
-frequency of its peak and the decay rate of its envelope match the rigid box's
-frequency and the decay rate of perturbation theory, δ = cβ/2 Σ (4/L along each axis
-the mode varies, 2/L along the others), within 0.4 %:
+**Modes and their decay.** A 7 x 5 x 3 m box rings for 8 s (10 cm cells). Its walls'
+admittance changes with frequency as a material's does on the wave solver's grid: a
+constant 0.002 and a branch resonating at 60 Hz (Q 1.5, admittance 0.008 at resonance),
+so below 60 Hz they give like a spring and above it weigh like a mass. For each mode
+that stands apart from the others, the frequency of its peak and the decay rate of its
+envelope match first-order perturbation theory: the decay rate δ = c Re(β)/2 Σ (4/L
+along each axis the mode varies, 2/L along the others), β the walls' admittance at the
+mode, and the rigid box's frequency moved by −c Im(β)/(4π) times the same sum. The
+frequencies come out within 0.25 % of theory (the walls move them by up to 0.6 %), the
+decay rates, which differ fivefold, within 2 %:
 
-| mode | theory (Hz) | wave solver (Hz) | decay, theory (1/s) | wave solver (1/s) |
-|---|---:|---:|---:|---:|
-| (1, 0, 0) | 24.50 | 24.48 | 1.405 | 1.404 |
-| (0, 1, 0) | 34.30 | 34.31 | 1.503 | 1.501 |
-| (1, 1, 0) | 42.15 | 42.15 | 1.748 | 1.746 |
-| (2, 0, 0) | 49.00 | 49.00 | 1.405 | 1.403 |
-| (0, 0, 1) | 57.17 | 57.11 | 1.731 | 1.727 |
-| (0, 2, 1) | 89.30 | 89.29 | 2.074 | 2.067 |
+| mode | rigid box (Hz) | theory (Hz) | wave solver (Hz) | Re(β) | decay, theory (1/s) | wave solver (1/s) |
+|---|---:|---:|---:|---:|---:|---:|
+| (1, 0, 0) | 24.50 | 24.39 | 24.39 | 0.0028 | 0.779 | 0.770 |
+| (0, 1, 0) | 34.30 | 34.14 | 34.13 | 0.0039 | 1.185 | 1.167 |
+| (1, 1, 0) | 42.15 | 41.93 | 41.93 | 0.0057 | 1.990 | 1.958 |
+| (2, 0, 0) | 49.00 | 48.84 | 48.86 | 0.0078 | 2.200 | 2.199 |
+| (0, 0, 1) | 57.17 | 57.10 | 56.97 | 0.0098 | 3.407 | 3.340 |
+| (0, 2, 1) | 89.30 | 89.56 | 89.56 | 0.0052 | 2.152 | 2.128 |
 
 Axial modes lose energy at walls they meet head-on and at walls they graze, so this
 checks absorption at all angles.
@@ -530,6 +539,63 @@ as exp(−βP/(2A)) per metre (perimeter P, cross-section A), whatever the cell 
 |---|---:|---:|---:|
 | 0.6 x 0.6 m duct | 0.1889 | 0.1900 | 0.1906 |
 
+**Walls that absorb as their materials do.** The wave solver gives each material an
+admittance that changes with frequency: a constant and resonant mass-spring-damper
+branches, one at each wave band's centre and one beyond each end, fitted so that the
+random-incidence absorption, counted through the analysis's band filters, matches the
+material's in every band. At the grid of the 500 Hz band:
+
+| material, 63 to 500 Hz | absorption | fitted | branches |
+|---|---|---|---:|
+| porous absorber | 0.05, 0.15, 0.40, 0.70 | 0.050, 0.150, 0.400, 0.700 | 6 |
+| panel absorber | 0.35, 0.30, 0.15, 0.08 | 0.350, 0.300, 0.150, 0.080 | 5 |
+| audience | 0.50, 0.60, 0.75, 0.85 | 0.500, 0.600, 0.750, 0.850 | 6 |
+| plaster on concrete | 0.01, 0.01, 0.015, 0.02 | 0.010, 0.010, 0.015, 0.020 | 6 |
+| a steep resonance | 0.10, 0.60, 0.25, 0.10 | 0.136, 0.579, 0.253, 0.100 | 4 |
+
+The octave filters overlap, so a band next to a much more absorbing one cannot absorb
+much less than it lets through: the steep resonance is met within 0.04. Simulations
+report the largest miss as `wave_absorption_miss`. With the porous absorber's fitted
+admittance at the end of a duct (5 cm cells, 0.2 m across), against a rigid end's
+reflection, which the grid returns whole at every frequency:
+
+| frequency (Hz) | 31.5 | 44 | 63 | 88 | 125 | 177 | 250 | 354 | 500 | 707 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| normal-incidence absorption, fitted admittance | 0.030 | 0.022 | 0.022 | 0.037 | 0.075 | 0.138 | 0.259 | 0.366 | 0.567 | 0.597 |
+| the grid's theory | 0.030 | 0.022 | 0.022 | 0.037 | 0.074 | 0.137 | 0.253 | 0.355 | 0.542 | 0.571 |
+| wave solver | 0.031 | 0.022 | 0.022 | 0.038 | 0.073 | 0.137 | 0.253 | 0.354 | 0.541 | 0.567 |
+
+The wave solver matches the grid's theory (a plane wave on the grid, the wall half a
+cell past the last cell centres) within 0.004 from 30 to 720 Hz. That half cell takes
+a little of the absorption away as the wavelength shortens: within 0.013 of the fitted
+admittance's below 360 Hz, 0.025 less at 500 Hz with 14 cells per wavelength. The fit
+does not correct for it.
+
+**Open models.** Round a model whose air reaches the edge of the grid, the grid grows
+by a perfectly matched layer (split-field, its damping growing as the square of the
+depth). A rigid 8 x 6 m plate in the open, the source 1.5 m above it, three listeners
+round it, 25 to 250 Hz (20 cm cells), against a grid 16 m larger all round, from whose
+edge nothing comes back in the 90 ms of the runs: what differs, relative to the sound
+itself,
+
+| boundary of the grid | listener 1 (dB) | listener 2 | listener 3 | air cells |
+|---|---:|---:|---:|---:|
+| the grid's edge alone (admittance 1, as in 2.0.0) | −6.5 | −13.5 | −11.0 | 28,380 |
+| matched layer, 6 cells | −60.2 | −64.8 | −56.6 | 79,200 |
+| matched layer, 8 cells (the default) | −66.6 | −74.0 | −69.7 | 104,076 |
+| matched layer, 12 cells | −73.6 | −77.0 | −62.4 | 168,036 |
+
+The edge alone absorbs only sound that meets it head-on. In the layer the sound keeps
+falling over 59,409 steps (20 s): 79 dB below the first second's level after one second,
+175 dB below after 18.
+
+**One run for all bands.** A 7 x 5 x 3 m box whose absorption differs in every band
+(0.10 to 0.25 from 63 to 500 Hz), the wave solver up to the 500 Hz band: one run of
+868,701 cells and 5,996 steps, 7.0 s on 4 cores with the fit and the grid's set-up,
+where 2.0.0 ran one per band. The run itself takes 6.7 s, against 5.4 s for the same
+grid with constant walls: the branches cost about 25 % more than a run with constant
+walls, and save three runs.
+
 **Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's
 energy in the 63 and 125 Hz bands at 1 to 8 m is within 0.35 dB of the free-field level
 the rays give (−0.05 to −0.13 dB at 63 Hz, −0.16 to −0.33 dB at 125 Hz).
@@ -542,18 +608,18 @@ analysed alike (ISO 3382-1, octave filters):
 | model | G 63 Hz (dB) | G 125 Hz | EDT 63 Hz (s) | EDT 125 Hz | T20 63 Hz (s) | T20 125 Hz |
 |---|---:|---:|---:|---:|---:|---:|
 | sum of the modes | 20.3 | 23.5 | 1.02 | 0.96 | 0.94 | 0.90 |
-| wave solver | 21.1 | 22.9 | 1.04 | 0.95 | 0.94 | 0.86 |
-| wave solver, 16 cells per wavelength | 20.8 | 23.7 | 1.01 | 0.86 | 0.90 | 0.93 |
-| rays only | 25.7 | 21.9 | 0.67 | 0.77 | 0.92 | 0.83 |
+| wave solver | 21.1 | 22.9 | 1.04 | 0.93 | 0.94 | 0.86 |
+| wave solver, 16 cells per wavelength | 20.8 | 23.7 | 1.01 | 0.85 | 0.90 | 0.92 |
+| rays only | 25.6 | 21.8 | 0.71 | 0.77 | 0.91 | 0.79 |
 
 ![Transfer function of the box from the sum of its modes, the wave solver and rays](images/wave.png)
 
 The wave solver follows the modes peak for peak from 22 Hz up. What is left comes
 mostly from where the grid puts the walls: within half a cell of the model's, here
 6.93 x 4.95 x 2.97 m with 20 cm cells, which moves each mode by up to 1 %. In a room
-this sparse in modes, that moves G by up to 1 dB, EDT by up to 11 % and T20 by up to
-4 %; more cells per wavelength move the walls but do not make every figure converge.
-Rays give the average over the room instead: 5.4 dB more at this seat in the 63 Hz
+this sparse in modes, that moves G by up to 1 dB, EDT by up to 12 % and T20 by up to
+5 %; more cells per wavelength move the walls but do not make every figure converge.
+Rays give the average over the room instead: 5.3 dB more at this seat in the 63 Hz
 band, where the listener sits near the nodes of most modes.
 
 ## Real-time convolver
@@ -617,7 +683,7 @@ python validation/bras_validation.py --materials initial --calibrate LS1 --plots
 ```
 
 The cross-check takes about 25 minutes on 4 cores, the benchmark about 2 minutes, the
-wave solver's checks about 30 seconds and each BRAS run about 30 minutes (85 in
+wave solver's checks about 2 minutes and each BRAS run about 30 minutes (85 in
 third-octave bands, 46 calibrated). The cross-check's numbers come from the development version of
 3.0.0 with seed 1. Those of pyroomacoustics, which draws its rays afresh on every run, have moved by up to 6 % in
 T30, 16 % in EDT and 2 dB in C80 from one run to the next, and the differences in the
