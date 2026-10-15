@@ -1392,6 +1392,9 @@ T30 after       0.04    0.07    0.07    0.11    0.08    0.08    0.06    0.09
   out. A round costs about one simulation of the measured sources at the scene's rays
   (`--rays` overrides them).
 - It needs stochastic ray tracing in octave bands, without the wave solver.
+- On the two measured rooms of the validation report, fitted to one loudspeaker
+  position from tabulated absorption, the responses at the other position come within
+  about one JND, as close as or closer than the absorption BRAS fitted by hand.
 
 From Python:
 

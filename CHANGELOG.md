@@ -175,9 +175,12 @@
   absorption (`acoustic_spaces.engine.reweight`): the tracer counts each ray's
   reflections off each of up to 16 groups of faces (`simulate(..., groups=...)`,
   `Response.late_moments`, `Response.reweighted`).
-- Checked on the simulator's own responses (absorption recovered within 0.05, the walls
-  of a shoebox within 0.015 from 500 Hz up) and on the two BRAS rooms, starting from
-  their initial absorption estimates.
+- Checked on the simulator's own responses: absorption is recovered within 0.05, and a
+  shoebox's walls within 0.015 from 500 Hz up. Also checked on the two BRAS rooms
+  (`bras_validation.py --calibrate`), fitted to one loudspeaker position from BRAS's
+  initial absorption estimates. On the other position's responses, both rooms come to
+  about one JND. That is as close as BRAS's own fitted absorption gets in the seminar
+  room, and closer in the hall: T30 within 0.5 JNDs against 1.8.
 
 **Examples**
 
