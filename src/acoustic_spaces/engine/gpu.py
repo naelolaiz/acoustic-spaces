@@ -48,8 +48,12 @@ struct Grid {
     probe_cells_at: u32,
     branches: u32,
     layer_state_at: u32,
-    third: f32,
-    half_courant: f32,
+    link_at: u32,
+    offset_at: u32,
+    wide: u32,
+    axial: f32,
+    diagonal: f32,
+    centre: f32,
 }
 
 struct Step {
@@ -82,24 +86,30 @@ fn interior(i: u32) {
     }
     let sy = grid.sy;
     let sz = grid.sz;
-    next[i] = grid.third * (current[i - 1u] + current[i + 1u] + current[i - sy] +
-                            current[i + sy] + current[i - sz] + current[i + sz]) - next[i];
+    let sum = current[i - 1u] + current[i + 1u] + current[i - sy] + current[i + sy] +
+              current[i - sz] + current[i + sz];
+    if (grid.wide == 0u) {
+        next[i] = grid.axial * sum - next[i];
+        return;
+    }
+    let edges = current[i - 1u - sy] + current[i + 1u - sy] + current[i - 1u + sy] +
+                current[i + 1u + sy] + current[i - 1u - sz] + current[i + 1u - sz] +
+                current[i - 1u + sz] + current[i + 1u + sz] + current[i - sy - sz] +
+                current[i + sy - sz] + current[i - sy + sz] + current[i + sy + sz];
+    next[i] = grid.centre * current[i] + grid.axial * sum + grid.diagonal * edges - next[i];
 }
 
 fn special(k: u32) {
-    let at = grid.special_at + 8u * k;
+    let at = grid.special_at + 9u * k;
     let i = table[at];
-    let links = table[at + 1u];
-    let first = table[at + 2u];
-    let last = table[at + 3u];
-    let sy = grid.sy;
-    let sz = grid.sz;
-    let sum = select(0.0, current[i - 1u], (links & 1u) != 0u) +
-              select(0.0, current[i + 1u], (links & 2u) != 0u) +
-              select(0.0, current[i - sy], (links & 4u) != 0u) +
-              select(0.0, current[i + sy], (links & 8u) != 0u) +
-              select(0.0, current[i - sz], (links & 16u) != 0u) +
-              select(0.0, current[i + sz], (links & 32u) != 0u);
+    let first = table[at + 3u];
+    let last = table[at + 4u];
+    // Its links: a direction (whose offset wraps round as a u32) and a weight each.
+    var sum = 0.0;
+    for (var l = table[at + 1u]; l < table[at + 2u]; l++) {
+        let e = grid.link_at + 2u * l;
+        sum += number(e + 1u) * current[i + table[grid.offset_at + table[e]]];
+    }
     // The branch velocities a step before (then the next) and now.
     let before_at = select(0u, grid.branches, now.odd != 0u);
     let now_at = grid.branches - before_at;
@@ -110,9 +120,8 @@ fn special(k: u32) {
                              number(c + 2u) * state[before_at + j]);
     }
     let previous = next[i];
-    let value = (number(at + 4u) * current[i] + grid.third * sum -
-                 number(at + 5u) * previous - grid.half_courant * flow +
-                 number(at + 7u) * now.source) * number(at + 6u);
+    let value = (number(at + 5u) * current[i] + sum - number(at + 6u) * previous - flow +
+                 number(at + 8u) * now.source) * number(at + 7u);
     next[i] = value;
     for (var j = first; j < last; j++) {
         let c = grid.state_at + 4u * j;
@@ -257,6 +266,14 @@ def use_gpu(device: Device) -> bool:
     raise ValueError(f"the wave solver's device must be cpu, gpu or auto, not {device!r}")
 
 
+#: The directions of the C++ solver's neighbours (fdtd.hpp): six axial, twelve edge.
+_STEPS = (
+    (-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0), (0, 0, -1), (0, 0, 1),
+    (-1, -1, 0), (1, -1, 0), (-1, 1, 0), (1, 1, 0), (-1, 0, -1), (1, 0, -1),
+    (-1, 0, 1), (1, 0, 1), (0, -1, -1), (0, 1, -1), (0, -1, 1), (0, 1, 1),
+)  # fmt: skip
+
+
 def _words(values: np.ndarray) -> np.ndarray:
     return np.ascontiguousarray(values, dtype=np.float32).view(np.uint32)
 
@@ -268,10 +285,12 @@ def _tables(layout: dict[str, np.ndarray]) -> tuple[np.ndarray, dict[str, int]]:
     types[:n] = layout["types"]
     special = layout["special"]
     start = layout["state_start"]
+    links = layout["link_start"]
     specials = np.column_stack(
         [
             special.astype(np.uint32),
-            layout["links"].astype(np.uint32),
+            links[:-1].astype(np.uint32),
+            links[1:].astype(np.uint32),
             start[:-1].astype(np.uint32),
             start[1:].astype(np.uint32),
             _words(layout["coef_a"]),
@@ -283,7 +302,7 @@ def _tables(layout: dict[str, np.ndarray]) -> tuple[np.ndarray, dict[str, int]]:
     branch = layout["state_branch"]
     states = np.column_stack(
         [
-            layout["state_faces"],
+            layout["state_weight"],
             layout["branch_now"][branch],
             layout["branch_before"][branch],
             layout["branch_gain"][branch],
@@ -301,6 +320,12 @@ def _tables(layout: dict[str, np.ndarray]) -> tuple[np.ndarray, dict[str, int]]:
         for axis in "xyz"
         if len(layout[f"keep_{axis}"])
     ]
+    nx, ny, _ = (int(v) for v in layout["shape"])
+    steps = np.array(_STEPS[: len(layout["weights"])], np.int64)
+    offsets = (steps @ np.array([1, nx, nx * ny])).astype(np.int32).view(np.uint32)
+    link_table = np.column_stack(
+        [layout["link_direction"].astype(np.uint32), _words(layout["link_weight"])]
+    )
     probes = np.column_stack(
         [layout["probe_cells"].astype(np.uint32), _words(layout["probe_weights"])]
     )
@@ -314,6 +339,8 @@ def _tables(layout: dict[str, np.ndarray]) -> tuple[np.ndarray, dict[str, int]]:
         else np.zeros(0, np.uint32),
         "probe_at": layout["probe_start"].astype(np.uint32),
         "probe_cells_at": probes.reshape(-1),
+        "link_at": link_table.reshape(-1),
+        "offset_at": offsets,
     }
     offsets, at = {}, 0
     for name, words in parts.items():
@@ -339,9 +366,9 @@ class GpuWaveSolver:
         self._probes = len(layout["probe_start"]) - 1
         branches = len(layout["state_branch"])
         layers = len(layout["layer_cells"])
-        third = np.nextafter(np.float32(1.0 / 3.0), np.float32(0.0))
-        grid = np.zeros(20, np.uint32)
-        grid[:16] = [
+        weights = layout["weights"]
+        grid = np.zeros(24, np.uint32)
+        grid[:19] = [
             n,
             nx,
             nx * ny,
@@ -358,8 +385,12 @@ class GpuWaveSolver:
             offsets["probe_cells_at"],
             branches,
             2 * branches,
+            offsets["link_at"],
+            offsets["offset_at"],
+            int(layout["stencil"][0]) == 19,
         ]
-        grid[16:18] = _words(np.array([third, np.float32(0.5) * np.sqrt(third)]))
+        diagonal = weights[6] if len(weights) > 6 else 0.0
+        grid[19:22] = _words(np.array([weights[0], diagonal, layout["centre"][0]]))
         threads = n + len(layout["special"]) + layers + self._probes
         groups = -(-threads // _GROUP)
         self._groups = (min(groups, _MAX_GROUPS), -(-groups // _MAX_GROUPS))

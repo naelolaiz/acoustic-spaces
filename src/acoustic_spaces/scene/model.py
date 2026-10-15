@@ -777,6 +777,15 @@ class WaveStage(_Model):
         le=20.0,
         description="grid cells per wavelength at the top of each band's crossover",
     )
+    scheme: Literal["auto", "isotropic", "standard"] = Field(
+        default="auto",
+        description=(
+            "the grid's stencil: isotropic (19 points; waves 0.67 % slow at 8 points per "
+            "wavelength, alike in every direction) or standard (7 points; up to 1.7 % slow, "
+            "along the axes); auto takes the isotropic one but round an open model, where "
+            "only the standard one has the matched layer"
+        ),
+    )
     device: Literal["cpu", "gpu", "auto"] = Field(
         default="cpu",
         description=(

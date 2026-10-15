@@ -212,12 +212,36 @@ the wave bands)
   Metal or Direct3D 12, on any vendor's GPU), with the new `gpu` extra; `auto` takes a
   hardware GPU when there is one. The C++ core still lays the grid out, and one WGSL
   compute shader steps it, one dispatch per time step; the runs agree with the CPU's to
-  within 1.4e-6 of the largest pressure. `cpu` stays the default.
+  within about 1e-5 of the largest pressure. `cpu` stays the default.
 - `simulate --wave-device`, a choice on the editor's Simulation page, the GPU's name in
   `acoustic-spaces info` and in the progress line, and `wave_gpu` and `wave_steps` in
   the details.
 - `validation/wave_gpu.py` times a GPU against the CPU on the example rooms. CI runs
   the comparisons on Mesa's software Vulkan driver on Linux.
+
+**Wave solver: less dispersion, and faster** (`simulation.wave.scheme`; changes results
+in the wave bands of closed rooms)
+
+- A second stencil, the interpolated isotropic one: 19 points (the six axial neighbours
+  and the twelve edge neighbours) at its Courant limit, √(3/4). Waves on it are 0.67 %
+  slow at 8 cells per wavelength, within 0.03 % the same in every direction, where the
+  standard 7-point stencil is up to 1.74 % slow along the grid's axes. `auto`, the
+  default, takes it in closed rooms and the standard one round open models, since only
+  that one has the matched layer; `isotropic` with an open model is an error.
+- Edge links that reach behind a wall are folded onto the axial link to the far end's
+  image in the wall, so a plane wall reflects as it does with the 7-point stencil and
+  the cells along it are as stiff across it as along it. A cut link's losses go to the
+  wall it crosses.
+- The CPU update streams through runs of interior cells, which the compiler
+  vectorises: 1.7 times as fast with the 7-point stencil, 2.4 times with the 19-point
+  one, with the same results to the bit. The grid's set-up casts rays along the links
+  only from cells near a face, about 3 times as fast. The concert hall's wave bands
+  take about as long with the 19-point stencil as they did with the 7-point one.
+- `_native.WaveSolver` takes `stencil` (7 or 19) and reports it, the details have
+  `wave_stencil`, and the GPU kernel steps both stencils.
+- Checked in `validation/wave_solver.py`: the speed of sound along an axis and along a
+  diagonal from the modes of a rigid box, within 2e-5 of each stencil's dispersion
+  relation, and every other check with both stencils.
 
 **Examples**
 

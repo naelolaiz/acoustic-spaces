@@ -81,6 +81,12 @@ public:
     // Unit normal of a face, following the right-hand rule on its vertex order.
     const Vec3 &normal(std::size_t face) const { return tri_[face].normal; }
 
+    // The corners of a face, in its vertex order.
+    std::array<Vec3, 3> corners(std::size_t face) const {
+        const Triangle &t = tri_[face];
+        return {t.v0, t.v0 + t.e1, t.v0 + t.e2};
+    }
+
     // Length of the model's bounding box diagonal; used to scale tolerances.
     double scale() const { return scale_; }
 

@@ -879,17 +879,24 @@ simulation:
     enabled: true
     max_band_hz: 125           # the highest band it computes: 63, 125 (default), 250 or 500
     points_per_wavelength: 8   # grid cells per wavelength at the top of that band
+    scheme: auto               # the grid's stencil: auto (default), isotropic or standard
     device: cpu                # where it steps the grid: cpu (default), gpu or auto
 ```
 
 - The sound field is computed with finite differences in time on a cubic grid over the
-  room (the standard leapfrog scheme at its stability limit), in the compiled core, on
+  room (an explicit leapfrog scheme at its stability limit), in the compiled core, on
   all cores. Up to the 125 Hz band the cells are 20 cm.
+- Waves on the grid travel a little slower the shorter they are. In closed rooms the
+  grid takes the interpolated isotropic stencil (19 points): 0.67 % slow at 8 cells per
+  wavelength, the same in every direction within 0.03 %. Round open models it takes
+  the standard one (7 points), the only one with the matched layer below: up to 1.7 %
+  slow, along the grid's axes. `scheme` picks one or the other.
 - With `device: gpu` the grid is stepped on the GPU instead, through WebGPU: Vulkan,
   Metal or Direct3D 12, so AMD, NVIDIA, Intel and Apple GPUs alike, with the `gpu`
   extra (wgpu); `auto` takes a hardware GPU when wgpu finds one, and the CPU otherwise.
-  The grid is laid out on the CPU either way, and the two agree to within 1.4e-6 of the
-  largest pressure. `acoustic-spaces info` names the GPU it finds.
+  The grid is laid out on the CPU either way, and the two agree to within about 1e-5 of
+  the largest pressure (single-precision rounding). `acoustic-spaces info` names the GPU
+  it finds.
 - Surfaces absorb as their materials do in each band: each material becomes a locally
   reacting surface whose admittance changes with frequency (a constant and resonant
   mass-spring-damper branches), fitted so that its random-incidence absorption matches
@@ -909,12 +916,14 @@ acoustic-spaces simulate examples/studio/scene.yaml --out studio --wave --wave-b
 acoustic-spaces simulate examples/church/scene.yaml --out church --wave --wave-device gpu
 ```
 
-The editor's Simulation page has the same switch, and where to run it. Each octave higher costs about 16
-times as much: on 4 cores, up to the 125 Hz band, the studio takes 0.3 s, the concert
-hall (9,400 m³, 3.5 s responses) 13 s, and the church (7 s responses) 28 s per source.
-Grids of more than 40 million cells are refused. `python validation/wave_gpu.py` times
-your GPU against your CPU; Mesa's lavapipe, a Vulkan driver that runs on the CPU (and
-what CI tests with), takes about 5 times as long as the CPU solver.
+The editor's Simulation page has the same switch, and where to run it. Each octave
+higher costs about 16 times as much: on 4 cores, up to the 125 Hz band, the studio takes
+0.4 s, the concert hall (9,400 m³, 3.5 s responses) 15 s, and the church (7 s
+responses) 28 s per source; 8 s and 19 s with `scheme: standard`, at the cost of its
+dispersion. Grids of more than 40 million cells are refused. `python
+validation/wave_gpu.py` times your GPU against your CPU; Mesa's lavapipe, a Vulkan
+driver that runs on the CPU (and what CI tests with), takes about 9 times as long as
+the CPU solver.
 
 ![Transfer function of a 7 x 5 x 3 m box from the sum of its modes, the wave solver and rays](docs/images/wave.png)
 
@@ -929,9 +938,10 @@ fit reports how much, as `wave_absorption_miss`); near the top of the highest ba
 grid's walls absorb a little less than their admittance (0.025 less at 500 Hz with 14
 cells per wavelength); walls on the grid lie within half a cell of the model's, which can move a small
 room's modes by a few percent (more `points_per_wavelength` moves them less); waves on
-the grid travel slower the shorter they are, by up to 1.7 % at the top of the highest
-band with 8 points per wavelength (along the grid's axes, not at all along its
-diagonals), which nothing corrects, so the modes there come out up to that much low;
+the grid travel slower the shorter they are, at the top of the highest band with 8
+points per wavelength by 0.67 % in closed rooms and up to 1.7 % round open models
+(along the grid's axes, not at all along its diagonals), which nothing corrects, so the
+modes there come out up to that much low;
 sources radiate equally in all directions in the wave bands; and air absorption,
 negligible there, is left out.
 
@@ -1516,6 +1526,8 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
   a matched layer round open models.
 - [x] A GPU path for the wave solver through WebGPU (AMD, NVIDIA, Intel and Apple GPUs
   alike).
+- [x] A wave solver stencil with less than half the dispersion, the same in every
+  direction.
 - [ ] Second-order edge diffraction.
 - [ ] Walkthroughs with moving sources and listeners; IFC and Collada import; CATT and
   ODEON material libraries.

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from test_wave import _drive, _solver
+from test_wave import STENCILS, _courant, _drive, _solver
 
 from acoustic_spaces import Room, _native
 from acoustic_spaces.engine import gpu
@@ -33,9 +33,10 @@ def _runs(make, signal, parts):
 
 
 @needs_gpu
-def test_gpu_steps_a_room_with_resonant_walls_as_the_cpu_does() -> None:
+@STENCILS
+def test_gpu_steps_a_room_with_resonant_walls_as_the_cpu_does(stencil: int) -> None:
     cell = 0.1
-    rate = C / (COURANT * cell)
+    rate = C / (_courant(stencil) * cell)
     fit = fit_admittance([0.1, 0.3, 0.6], 8, rate)
     assert len(fit.conductance) > 0
 
@@ -47,6 +48,7 @@ def test_gpu_steps_a_room_with_resonant_walls_as_the_cpu_does() -> None:
             [[2.1, 1.3, 1.1], [1.0, 1.6, 0.4]],
             cell=cell,
             branches=[(0, fit), (3, fit), (5, fit)],
+            stencil=stencil,
         )
         return solver
 
@@ -54,7 +56,10 @@ def test_gpu_steps_a_room_with_resonant_walls_as_the_cpu_does() -> None:
     # Pieces of odd and even lengths, so the fields swap both ways between runs.
     a, b = _runs(make, _drive(rate, cell, 1601), [0, 377, 1000, 1601])
     assert np.abs(a).max() > 0.0
-    assert np.abs(a - b).max() < 1e-5 * np.abs(a).max()
+    # Apple's GPU rounds differently from the CPU: in this nearly closed room the slow
+    # drift the walls' branches leave picks that up, 1.1e-5 of the peak by the end. A
+    # field swapped the wrong way between runs would differ by far more.
+    assert np.abs(a - b).max() < 3e-5 * np.abs(a).max()
 
 
 @needs_gpu

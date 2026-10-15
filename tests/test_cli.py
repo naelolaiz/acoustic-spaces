@@ -231,8 +231,10 @@ def test_simulate_with_the_wave_solver(tmp_path: Path, capsys: pytest.CaptureFix
         "enabled": True,
         "max_band_hz": 125,
         "points_per_wavelength": 8.0,
+        "scheme": "auto",
         "device": "auto",
     }
+    assert report["details"]["talker"]["wave_stencil"] == 19
     assert report["details"]["talker"]["wave_cells"] > 0
     assert main([*args, "--no-wave"]) == 0
     assert "wave solver" not in capsys.readouterr().out
