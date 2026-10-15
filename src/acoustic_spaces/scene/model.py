@@ -76,6 +76,7 @@ from acoustic_spaces.materials.bands import (
     power_levels,
     to_bands,
 )
+from acoustic_spaces.materials.libraries import find_material, read_library
 from acoustic_spaces.parameters import SPEECH_SPECTRUM_DB
 
 Vector3 = tuple[float, float, float]
@@ -219,10 +220,13 @@ class Material(_Model):
 
     Coefficients come from, in order of precedence: values given here (8 per octave
     band or 24 per third-octave band), a coefficient file (``file``), or a built-in
-    database entry (``preset``). ``scattering`` may also name a scattering entry of the
-    built-in database. Data at other frequencies is mapped onto third-octave bands when
-    it has more than one value in some octave band, else onto octave bands; bands
-    without data take the nearest band's value, and ``source`` says which ones.
+    database entry (``preset``). The file may also be a material library of
+    CATT-Acoustic or ODEON, with ``entry`` naming the material in it (see
+    :mod:`acoustic_spaces.materials.libraries`). ``scattering`` may also name a
+    scattering entry of the built-in database. Data at other frequencies is mapped onto
+    third-octave bands when it has more than one value in some octave band, else onto
+    octave bands; bands without data take the nearest band's value, and ``source`` says
+    which ones.
     :meth:`coefficients` gives both lists in the bands a simulation runs in.
 
     ``transmission`` (a share from 0 to 1) or ``transmission_loss`` (the sound reduction
@@ -236,7 +240,13 @@ class Material(_Model):
     """
 
     preset: str | None = Field(default=None, description="built-in database entry")
-    file: Path | None = Field(default=None, description="CSV: frequencies, absorption, scattering")
+    file: Path | None = Field(
+        default=None,
+        description="CSV of frequencies, absorption and scattering, or a CATT or ODEON library",
+    )
+    entry: str | int | None = Field(
+        default=None, description="the material in a CATT or ODEON library file: name or number"
+    )
     absorption: list[Coefficient] | None = None
     scattering: list[Coefficient] | Coefficient | str | None = None
     transmission: list[Coefficient] | Coefficient | None = Field(
@@ -305,11 +315,19 @@ class Material(_Model):
         elif self.file is not None:
             if not self.file.exists():
                 raise ValueError(f"coefficient file not found: {self.file}")
-            freqs, alpha, scatter = read_coefficients_csv(self.file)
+            if self.entry is not None:
+                found = find_material(self.file, self.entry)
+                freqs, alpha, scatter = found.frequencies, found.absorption, found.scattering
+                where = f"{found.label!r} of {self.file.name}"
+            else:
+                freqs, alpha, scatter = _read_coefficients(self.file)
+                where = f"file {self.file.name}"
             absorption, extrapolated = _from_data(freqs, alpha)
-            origin = _describe(f"file {self.file.name}", extrapolated)
+            origin = _describe(where, extrapolated)
             if scatter is not None:
                 scattering, _ = _from_data(freqs, scatter)
+        if self.entry is not None and self.file is None:
+            raise ValueError("entry names a material in a library file: give the file too")
 
         if isinstance(self.scattering, str):
             entry = _database_entry(self.scattering, "scattering")
@@ -365,6 +383,25 @@ class Material(_Model):
         nothing through."""
         passing = self._transmission()
         return None if passing is None else convert(passing, bands)
+
+
+def _read_coefficients(path: Path):
+    """A coefficient CSV file, or the one material of a library that has just one."""
+    try:
+        return read_coefficients_csv(path)
+    except ValueError as exc:
+        try:
+            materials = read_library(path)
+        except ValueError:
+            raise exc from None
+    if len(materials) != 1:
+        names = ", ".join(m.label for m in materials[:12])
+        more = f" and {len(materials) - 12} more" if len(materials) > 12 else ""
+        raise ValueError(
+            f"{path.name} is a library of {len(materials)} materials: name one with entry "
+            f"({names}{more})"
+        )
+    return materials[0].frequencies, materials[0].absorption, materials[0].scattering
 
 
 def _database_entry(name: str, kind: Literal["absorption", "scattering"]):

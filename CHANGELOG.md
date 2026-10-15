@@ -313,8 +313,18 @@ changes results at 63 and 125 Hz)
   escaping rays and a marker on each gap (`plot_leaks` in `acoustic_spaces.viz`); the
   warning about a model that is not closed says how to find its holes.
 
+**Material libraries of CATT-Acoustic and ODEON**
+
+- A material takes its coefficients from an entry of a CATT-Acoustic file (`ABS`
+  lines, in a geometry or library file, with scattering) or an ODEON library
+  (`Material.Li8`): `file` names the library and `entry` the material, by name or by
+  ODEON's number. `acoustic-spaces materials --file` lists a library's materials, and
+  the editor's **Edit > Add material from a library** adds one.
+
 **Examples**
 
+- `material_libraries`: a seminar room with materials from a CATT-Acoustic file and an
+  ODEON library.
 - `leaky_classroom`: a classroom model with a missing window pane and a ceiling 3 cm
   short of a wall, for the leak finder.
 - `listening_room`: a living room with a loudspeaker against the front wall or a metre

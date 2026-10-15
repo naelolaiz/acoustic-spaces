@@ -1,0 +1,40 @@
+# A seminar room, 7.2 x 5.4 x 3 m, whose materials come from material libraries of other
+# room acoustics programs: the carpet and the walls from a CATT-Acoustic file
+# (catt_materials.geo, ABS lines in percent from 125 Hz to 4 kHz, with scattering), the
+# ceiling from an ODEON library (odeon_materials.li8, eight values from 63 Hz to
+# 8 kHz). `acoustic-spaces materials --file examples/material_libraries/odeon_materials.li8`
+# lists a library. The values are this example's own, not those of either program.
+name: Seminar room (materials from CATT and ODEON libraries)
+geometry:
+  box: [7.2, 5.4, 3.0]
+materials:
+  carpet:
+    file: catt_materials.geo
+    entry: carpet
+  plasterboard:
+    file: catt_materials.geo
+    entry: walls
+  ceiling_tiles:
+    file: odeon_materials.li8
+    entry: 1001   # ODEON's material number; the description works too
+    scattering: 0.1
+assignments:
+  floor: carpet
+  ceiling: ceiling_tiles
+  walls: plasterboard
+sources:
+  - name: lecturer
+    position: [1.1, 2.6, 1.6]
+    orientation: {yaw: 0}
+    directivity: cardioid
+listeners:
+  - name: front seat
+    position: [3.2, 1.9, 1.2]
+    orientation: {yaw: 180}
+  - name: back seat
+    position: [6.1, 3.7, 1.2]
+    orientation: {yaw: 180}
+simulation:
+  ir_length_s: 1.0
+outputs:
+  - mono

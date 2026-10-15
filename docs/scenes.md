@@ -105,6 +105,8 @@ Each entry in `materials` takes coefficients from one of:
 - `file: <csv>`: a table of centre frequencies, absorption and optionally
   scattering, one row each, at any band resolution (the layout the
   [BRAS](https://doi.org/10.14279/depositonce-6726.3) benchmark uses);
+- `file: <library>` with `entry: <name>`: a material of a CATT-Acoustic or ODEON
+  material library (see below);
 - `absorption: [...]` with eight octave values or 24 third-octave values, which also
   overrides a preset or file.
 
@@ -114,6 +116,39 @@ third-octave bands; other data is averaged onto octaves. Bands with no data (63 
 most tables) take the nearest band's value and the material's `source` says which.
 Surfaces get a material through `assignments` (any geometry name to a material),
 by having the same name as a material, or through `default_material`.
+
+### Material libraries of CATT-Acoustic and ODEON
+
+Materials kept for CATT-Acoustic or ODEON can be used as they are. `file` names the
+library and `entry` the material in it: its name (in any case), or for ODEON its
+number or description.
+
+```yaml
+materials:
+  carpet:
+    file: catt_materials.geo   # CATT-Acoustic: ABS lines, in a geometry or library file
+    entry: carpet
+  ceiling_tiles:
+    file: odeon_materials.li8  # ODEON: Material.Li8 or a library of the same layout
+    entry: 1001
+    scattering: 0.1
+```
+
+- CATT-Acoustic writes `ABS name = <a125 a250 a500 a1k a2k a4k> L <s125 ... s4k> {r g b}`:
+  absorption and scattering in percent from 125 Hz to 4 kHz, 8 and 16 kHz optional,
+  `;` before a comment. `ABS name = other` gives a material another's values. Any file
+  with such lines will do (a `.geo` file with its geometry, or a library). Scattering
+  that CATT estimates itself (`L <estimate(...)>`) is not read, so give `scattering`.
+- ODEON's library has each material on two lines, its number and description, then
+  eight absorption coefficients from 63 Hz to 8 kHz (six, from 125 Hz to 4 kHz, in
+  older libraries). ODEON gives scattering to surfaces, so give it with `scattering`
+  (0.1 otherwise).
+
+The 63 Hz band takes the 125 Hz value where a library has none, 8 kHz the 4 kHz value,
+and 16 kHz is left out. `acoustic-spaces materials --file <library>` lists a library's
+materials, with words to search for as in the built-in database, and in the editor
+**Edit > Add material from a library** picks one. The `material_libraries` example
+takes its carpet and walls from a CATT file and its ceiling from an ODEON one.
 
 Two rooms of the BRAS benchmark, converted from its SketchUp models, are in
 [`validation/bras`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/validation/bras)

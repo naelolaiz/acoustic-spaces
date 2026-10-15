@@ -38,4 +38,6 @@ install(
   PATTERN "*.sofa"
   PATTERN "*.py"
   PATTERN "*.sh"
+  PATTERN "*.geo"
+  PATTERN "*.li8"
 )

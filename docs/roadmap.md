@@ -51,5 +51,5 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] Early reflections that add in pressure at low frequencies, with the phase of every
   reflection and of the sound over edges.
 - [x] A leak finder: where rays escape from a model that is not closed.
-- [ ] Walkthroughs with moving sources and listeners; IFC and Collada import; CATT and
-  ODEON material libraries.
+- [x] Materials from CATT-Acoustic and ODEON material libraries.
+- [ ] Walkthroughs with moving sources and listeners; IFC and Collada import.

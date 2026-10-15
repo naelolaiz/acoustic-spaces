@@ -30,7 +30,8 @@ The editor works on the same scene files as the command line:
   listeners move by dragging, in the 3D view or the plan, and keep their height above
   the floor (up a raked floor too); with Shift in the 3D view they move up and down.
   Surfaces take materials from their form, or from a new material picked from the
-  database (**Edit > Add material**).
+  database (**Edit > Add material**) or from a CATT-Acoustic or ODEON library
+  (**Edit > Add material from a library**).
 - **Simulation > Run coverage map** (F6) maps every source over the audience area (see
   [Coverage maps](coverage-maps.md#coverage-maps)). The **Coverage map** panel shows any parameter
   and band from above, for one source or all of them together, and **Map in 3D** lays
