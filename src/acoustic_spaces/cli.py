@@ -21,7 +21,7 @@ from acoustic_spaces.room import Room
 #: What the map command can plot (the keys of engine.coverage.MAP_PARAMETERS).
 MAP_PARAMETER_NAMES = ("spl", "spl_a", "g", "c50", "c80", "d50", "edt", "t20", "t30", "ts", "sti")
 #: Edge diffraction settings (engine.diffraction.DIFFRACTION_MODES).
-DIFFRACTION_MODES = ("none", "direct", "first_order")
+DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
 #: Highest octave bands the wave solver can compute (scene.model.WaveStage.max_band_hz).
 WAVE_BANDS_HZ = (63, 125, 250, 500)
 

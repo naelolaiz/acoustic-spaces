@@ -1,0 +1,54 @@
+# A bar and a dining room, 3.2 m high (450 m3), joined by a 2 m wide archway in a wall
+# 40 cm thick, the full height of the rooms. A singer stands by the wall in the bar; one
+# diner sees them through the arch, the other sits behind the wall, where the shortest
+# way round is over both corners of the arch's jamb in turn: `second_order` diffraction
+# follows it, `first_order` only bends round one corner at a time.
+name: Bar and dining room (archway in a thick wall)
+geometry:
+  floor_plan:
+    - [0, 0]
+    - [10, 0]
+    - [10, 3]
+    - [10.4, 3]
+    - [10.4, 0]
+    - [18, 0]
+    - [18, 8]
+    - [10.4, 8]
+    - [10.4, 5]
+    - [10, 5]
+    - [10, 8]
+    - [0, 8]
+  height: 3.2
+materials:
+  wooden_floor:
+    preset: stage_floor
+    scattering: 0.05
+  ceiling:
+    preset: ceiling_fibre_absorber
+    scattering: 0.1
+  plaster:
+    preset: rough_lime_wash
+    scattering: 0.1
+assignments:
+  floor: wooden_floor
+  ceiling: ceiling
+  walls: plaster
+sources:
+  - name: singer
+    position: [12.6, 6.4, 1.6]
+    orientation: {yaw: 200}
+    directivity: cardioid
+listeners:
+  - name: through the arch
+    position: [7.4, 1.2, 1.2]
+    orientation: {yaw: 0}
+  - name: behind the wall
+    position: [7.6, 6.8, 1.2]
+    orientation: {yaw: -30}
+simulation:
+  early: {method: ray_tracing, max_order: 3, diffraction: second_order}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 2.0
+outputs:
+  - mono
+  - binaural

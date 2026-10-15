@@ -675,11 +675,12 @@ class EarlyStage(_Model):
     method: Literal["ray_tracing", "image_sources"] = "ray_tracing"
     max_order: int = Field(default=3, ge=0, le=20)
     rays: int = Field(default=20_000, ge=1, description="ray tracing only")
-    diffraction: Literal["none", "direct", "first_order"] = Field(
+    diffraction: Literal["none", "direct", "first_order", "second_order"] = Field(
         default="first_order",
         description=(
             "sound bending round edges (pillars, balcony fronts, screens): none, of the "
-            "direct sound only, or of the direct sound and first-order reflections"
+            "direct sound only, of the direct sound and first-order reflections, or also "
+            "of the direct sound over two edges in turn"
         ),
     )
 

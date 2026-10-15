@@ -3,8 +3,8 @@
 This report sums up how far the results of acoustic_spaces can be trusted: what the
 test suite checks against theory on every change, how the simulation compares with
 another program, [pyroomacoustics](https://github.com/LCAV/pyroomacoustics), and with
-measurements in two real rooms, and how much of a block's time the real-time convolver
-needs. It ends with what has not been validated yet.
+measurements in two real rooms, how edge diffraction compares with the exact solution,
+and how much of a block's time the real-time convolver needs. It ends with what has not been validated yet.
 
 ## Checks against theory, on every change
 
@@ -119,7 +119,11 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   side; and the early level across the shadow boundary of an L-shaped room, in
   millimetre steps, continuous within 0.25 dB with first-order reflections where
   specular paths alone drop by more than 5 dB, and across the boundary of a reflection
-  off one of the corner's walls within 0.05 dB;
+  off one of the corner's walls within 0.05 dB; over a 1 m thick barrier, the path
+  over both corners against the exact BTM solution (within 1 dB, and 0.2 dB from
+  500 Hz up, the same both ways round), and the level as the source and the listener
+  rise through the plane of its top, continuous within 1 dB (0.1 dB from 1 kHz up); a
+  thin screen's diffracted wave in its lit zone, all four terms of the UTD within 0.2 %;
 - the wave solver, with both stencils where both apply: the modes of a rigid box
   (within 0.6 Hz), the 19-point stencil's modes along a tube against its dispersion
   relation (within 0.15 %, less than half the 7-point one's error), the 19-point
@@ -502,6 +506,61 @@ Fitting took 11 minutes for the seminar room and 8 for the hall: four rounds of 
 at the first position's 10,000 rays per band. Simulating each room again at 50,000 rays
 took 13 to 14 minutes.
 
+## Edge diffraction against the exact solution
+
+`validation/edge_diffraction.py` compares the engine's edge diffraction with the
+Biot-Tolstoy-Medwin (BTM) solution for rigid wedges (Svensson, Fred and Vanderkooy,
+1999), which writes the diffracted sound as an integral along the edge: first order
+over one edge, second order over two in turn, with half the integral when the two edges
+share a face. The script integrates both along edges 80 m long, densest where the
+shortest path touches them, and checks itself against the UTD for a half-plane, which
+is exact far from the edge (within 0.03 dB). Levels are in dB re the direct sound in
+free field over the same distance, the energy averaged over the engine's eight
+frequencies in each octave band; sources and listeners are in metres from the edge.
+
+Over a thin screen (first order), the engine's UTD is within 0.9 dB of BTM at 63 Hz
+and 0.06 dB from 1 kHz up; Maekawa's chart reads up to 1.2 dB high:
+
+| thin screen, engine - BTM (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| (-5, 0, -2) to (5, 0, -1), BTM -8.4 to -27.2 dB | -0.50 | -0.27 | -0.12 | -0.05 | -0.01 | -0.00 | +0.00 | +0.00 |
+| (-2, 0, -0.2) to (6, 0, -3), BTM -6.9 to -24.6 dB | -0.77 | -0.46 | -0.24 | -0.11 | -0.04 | -0.01 | -0.00 | +0.00 |
+| (-3, -1, -1) to (3, 2, -0.5), BTM -6.3 to -23.2 dB | -0.89 | -0.56 | -0.32 | -0.15 | -0.06 | -0.02 | -0.00 | +0.00 |
+
+Over two edges (`second_order`): a block of width w with its top at z = 0, from
+x = 0 to w, and two thin screens in a row. Each pair of positions is in line across the
+edges and obliquely (the second from (-6, -2, -0.3) to (w + 2, 3, -4)):
+
+| over two edges, engine - BTM (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| block 0.3 m, (-3, 0, -1) to (3.3, 0, -1.5) | -1.96 | -1.50 | -0.89 | -0.33 | +0.05 | +0.21 | +0.19 | +0.11 |
+| block 0.3 m, oblique | -0.90 | -0.49 | -0.30 | -0.22 | -0.16 | -0.10 | -0.07 | -0.07 |
+| block 1 m, (-3, 0, -1) to (4, 0, -1.5) | -0.79 | -0.49 | -0.21 | -0.00 | +0.09 | +0.09 | +0.05 | +0.03 |
+| block 1 m, oblique | -0.56 | -0.39 | -0.24 | -0.15 | -0.09 | -0.06 | -0.05 | -0.03 |
+| block 3 m, (-3, 0, -1) to (6, 0, -1.5) | -0.42 | -0.25 | -0.11 | -0.02 | +0.01 | +0.01 | +0.01 | +0.01 |
+| block 3 m, oblique | -0.40 | -0.25 | -0.15 | -0.10 | -0.06 | -0.04 | -0.02 | -0.03 |
+| two screens 1 m apart | -2.74 | -1.96 | -1.30 | -0.75 | -0.34 | -0.11 | -0.03 | +0.00 |
+| two screens 2 m apart, the second 0.4 m higher | -2.05 | -1.43 | -0.95 | -0.60 | -0.36 | -0.21 | -0.12 | -0.05 |
+
+The levels themselves run from -9 dB at 63 Hz to -41 dB at 8 kHz. The engine is low at
+low frequencies where the edges are close together, as over a thin screen: the waves of
+an edge add in energy near their boundaries, where the exact solution adds them with
+their phases. The textbook UTD for two edges, with the second edge's distance parameter
+for a wave from a line, was up to 6 dB low there; the engine takes it from the curvature
+of the first edge's wave where it reaches the second.
+
+As the source rises through the plane of the 1 m block's top, 3 m in front of it, it
+comes into sight of the far corner, and the path over that corner alone takes over
+from the path over both; likewise as the listener rises behind the block. The largest
+step between positions 1 mm apart, over ±1 cm and exactly in the plane, is 0.67 dB for
+the source and 0.76 dB for the listener at 63 Hz, and at most 0.07 dB from 1 kHz up.
+With `first_order` the level drops from the path over one corner to nothing.
+
+The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
+(16 vertical edges), with the source and the listener in alcoves out of each other's
+sight, takes 100 ms per source and listener without diffraction, 120 ms with
+`first_order` and 200 ms with `second_order` (93 paths instead of 71).
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -712,9 +771,9 @@ its peak (single precision).
   (LF, IACC, stage support, directional decay; BRAS also has binaural responses) and
   BRAS's auditorium, CR4, whose SketchUp file no free reader opens, have not.
 - **Wave effects.** Above the wave solver's bands the simulation is geometric. Edge
-  diffraction is modelled (UTD, for the direct sound and first-order reflections) and
-  room modes by the wave solver, both checked against theory but not against
-  measurements in rooms. Without the wave solver, results below the Schroeder frequency
+  diffraction is modelled (UTD, for the direct sound and first-order reflections, and
+  the direct sound over two edges) and room modes by the wave solver, both checked
+  against theory but not against measurements in rooms. Without the wave solver, results below the Schroeder frequency
   of a room (about 2000 √(T/V) Hz) are a statistical average, not the response of one
   point.
 - **Source directivity** was not part of the cross-check (both programs ran
@@ -737,6 +796,7 @@ python -m pip install pyroomacoustics matplotlib
 python validation/pyroomacoustics_crosscheck.py --json results.json --plots docs/validation
 python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
+python validation/edge_diffraction.py --json diffraction.json
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/bras_validation.py --json bras.json --plots docs/validation
 python validation/bras_validation.py --materials initial --plots docs/validation
