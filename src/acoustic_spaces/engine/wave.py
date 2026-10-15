@@ -30,6 +30,8 @@ octave bands replace the ray-traced ones.
   response synthesis uses, which sum to one; the lowest starts at :data:`LOW_EDGE_HZ`
   (22 Hz) instead of 0 Hz. Their energies, for the room parameters, are counted
   through the octave filters of the analysis of measured responses.
+- The grid is laid out on the CPU and stepped there, or with ``device`` on a GPU,
+  through WebGPU (:mod:`acoustic_spaces.engine.gpu`); the two agree to rounding.
 
 The levels follow the ray tracer's convention: in free field, the direct sound at r
 metres is an impulse of height 1 / r.
@@ -45,6 +47,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from acoustic_spaces import synthesis
+from acoustic_spaces.engine.gpu import Device, GpuWaveSolver, gpu_name, use_gpu
 from acoustic_spaces.engine.impedance import (
     MAX_ABSORPTION,
     Admittance,
@@ -316,15 +319,17 @@ def wave_responses(
     speed_of_sound: float,
     points_per_wavelength: float = 8.0,
     threads: int = 0,
+    device: Device = "cpu",
     say: Callable[[str], None] | None = None,
     label: str = "",
 ) -> tuple[list[WaveResponse], dict[str, float]]:
     """The wave bands of the responses from ``source`` to each of ``listeners`` in the
     room of ``model`` (a :class:`~acoustic_spaces.engine.model.TraceModel`), and run
-    details."""
+    details. ``device`` says where the grid is stepped (see :mod:`.gpu`)."""
     from acoustic_spaces import _native
 
     say = say or (lambda _: None)
+    on_gpu = use_gpu(device)
     if max_band_hz not in OCTAVE_BANDS_HZ:
         raise ValueError(f"max_band_hz must be one of {OCTAVE_BANDS_HZ}, got {max_band_hz}")
     mesh = model.room.mesh
@@ -413,10 +418,12 @@ def wave_responses(
             )
         raise ValueError(f"listener {missing[0]!r} is not in the air of the wave grid")
     name = f"{centres[0]} Hz" if bands == 1 else f"{centres[0]}-{centres[bands - 1]} Hz"
+    where = f" on {gpu_name()}" if on_gpu else ""
     say(
         f"{label}: wave solver, {name} ({solver.air_cells:,} cells of {100 * h:.0f} cm, "
-        f"{steps:,} steps)"
+        f"{steps:,} steps{where})"
     )
+    stepper = GpuWaveSolver(solver) if on_gpu else solver
     # Long runs report every tenth (which is also where a cancelled run stops).
     chunks = 10 if solver.air_cells * steps > _LONG_RUN else 1
     recorded = []
@@ -424,11 +431,17 @@ def wave_responses(
     for c in range(chunks):
         if c:
             say(f"{label}: wave solver, {name}, {100 * c // chunks} %")
-        recorded.append(solver.run(drive[bounds[c] : bounds[c + 1]]))
+        recorded.append(stepper.run(drive[bounds[c] : bounds[c + 1]]))
     run = np.concatenate(recorded, axis=1)[:, delay:][:, :samples]
-    info: dict[str, float] = {"wave_cells": float(solver.air_cells), "wave_cell_m": h}
+    info: dict[str, float] = {
+        "wave_cells": float(solver.air_cells),
+        "wave_cell_m": h,
+        "wave_steps": float(steps),
+    }
     if solver.open:
         info["wave_open"] = 1.0
+    if on_gpu:
+        info["wave_gpu"] = 1.0
     # How far the fitted surfaces' absorption is from the materials', at worst.
     used = np.unique(face_material)
     wanted = np.minimum(rows[used], MAX_ABSORPTION)

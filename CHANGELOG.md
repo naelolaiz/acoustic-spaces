@@ -206,6 +206,19 @@ the wave bands)
   normal-incidence absorption of a duct's end (within 0.004 of the grid's theory), the
   matched layer against a grid too large for anything to come back, and the run count.
 
+**Wave solver on a GPU** (`simulation.wave.device`, `acoustic_spaces.engine.gpu`)
+
+- `device: gpu` steps the wave solver's grid on a GPU through WebGPU (wgpu: Vulkan,
+  Metal or Direct3D 12, on any vendor's GPU), with the new `gpu` extra; `auto` takes a
+  hardware GPU when there is one. The C++ core still lays the grid out, and one WGSL
+  compute shader steps it, one dispatch per time step; the runs agree with the CPU's to
+  within 1.4e-6 of the largest pressure. `cpu` stays the default.
+- `simulate --wave-device`, a choice on the editor's Simulation page, the GPU's name in
+  `acoustic-spaces info` and in the progress line, and `wave_gpu` and `wave_steps` in
+  the details.
+- `validation/wave_gpu.py` times a GPU against the CPU on the example rooms. CI runs
+  the comparisons on Mesa's software Vulkan driver on Linux.
+
 **Examples**
 
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)

@@ -64,6 +64,7 @@ with the test tools (pytest, ruff), and `--extra` adds the optional parts:
 uv sync --extra viz                    # viz: the 3D view (PyVista) and plots (matplotlib)
 uv sync --extra viz --extra measure    # measure: sounddevice, for sweeps and playback
 uv sync --extra gui                    # gui: the graphical editor (Qt, PySide6)
+uv sync --extra gpu                    # gpu: the wave solver on a GPU (wgpu, WebGPU)
 uv sync --all-extras                   # everything, with sofa (h5py), sketchup and docs
 ```
 
@@ -78,6 +79,7 @@ python -m pip install -e ".[measure]"     # sounddevice: sweeps, real-time playb
 python -m pip install -e ".[sofa]"        # h5py, to read HRTFs from SOFA files
 python -m pip install -e ".[sketchup]"    # openskp, to read SketchUp files (experimental)
 python -m pip install -e ".[gui]"         # the graphical editor (Qt, PySide6)
+python -m pip install -e ".[gpu]"         # wgpu: the wave solver on a GPU (WebGPU)
 ```
 
 Check the installation and look at the example scene. The commands run in the environment
@@ -877,11 +879,17 @@ simulation:
     enabled: true
     max_band_hz: 125           # the highest band it computes: 63, 125 (default), 250 or 500
     points_per_wavelength: 8   # grid cells per wavelength at the top of that band
+    device: cpu                # where it steps the grid: cpu (default), gpu or auto
 ```
 
 - The sound field is computed with finite differences in time on a cubic grid over the
   room (the standard leapfrog scheme at its stability limit), in the compiled core, on
   all cores. Up to the 125 Hz band the cells are 20 cm.
+- With `device: gpu` the grid is stepped on the GPU instead, through WebGPU: Vulkan,
+  Metal or Direct3D 12, so AMD, NVIDIA, Intel and Apple GPUs alike, with the `gpu`
+  extra (wgpu); `auto` takes a hardware GPU when wgpu finds one, and the CPU otherwise.
+  The grid is laid out on the CPU either way, and the two agree to within 1.4e-6 of the
+  largest pressure. `acoustic-spaces info` names the GPU it finds.
 - Surfaces absorb as their materials do in each band: each material becomes a locally
   reacting surface whose admittance changes with frequency (a constant and resonant
   mass-spring-damper branches), fitted so that its random-incidence absorption matches
@@ -898,12 +906,15 @@ simulation:
 ```sh
 acoustic-spaces simulate examples/concert_hall/scene.yaml --out hall --wave
 acoustic-spaces simulate examples/studio/scene.yaml --out studio --wave --wave-band 250
+acoustic-spaces simulate examples/church/scene.yaml --out church --wave --wave-device gpu
 ```
 
-The editor's Simulation page has the same switch. Each octave higher costs about 16
+The editor's Simulation page has the same switch, and where to run it. Each octave higher costs about 16
 times as much: on 4 cores, up to the 125 Hz band, the studio takes 0.3 s, the concert
 hall (9,400 m³, 3.5 s responses) 13 s, and the church (7 s responses) 28 s per source.
-Grids of more than 40 million cells are refused.
+Grids of more than 40 million cells are refused. `python validation/wave_gpu.py` times
+your GPU against your CPU; Mesa's lavapipe, a Vulkan driver that runs on the CPU (and
+what CI tests with), takes about 5 times as long as the CPU solver.
 
 ![Transfer function of a 7 x 5 x 3 m box from the sum of its modes, the wave solver and rays](docs/images/wave.png)
 
@@ -1503,7 +1514,7 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] Fitting absorption to measured parameters (`acoustic-spaces calibrate`).
 - [x] Wave solver walls that absorb as their materials do in every band, in one run, and
   a matched layer round open models.
-- [ ] A GPU path for the wave solver through WebGPU (AMD, NVIDIA, Intel and Apple GPUs
+- [x] A GPU path for the wave solver through WebGPU (AMD, NVIDIA, Intel and Apple GPUs
   alike).
 - [ ] Second-order edge diffraction.
 - [ ] Walkthroughs with moving sources and listeners; IFC and Collada import; CATT and

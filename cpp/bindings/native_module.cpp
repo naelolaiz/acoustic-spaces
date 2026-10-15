@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -425,6 +426,15 @@ nb::ndarray<nb::numpy, double> wave_run(as::WaveSolver &solver, Signal signal) {
     return to_numpy(std::move(out), {solver.probes(), steps});
 }
 
+nb::dict wave_layout(const as::WaveSolver &solver) {
+    nb::dict out;
+    solver.layout([&](const char *name, const auto &values) {
+        using T = typename std::decay_t<decltype(values)>::value_type;
+        out[name] = to_numpy(std::vector<T>(values), {values.size()});
+    });
+    return out;
+}
+
 }  // namespace
 
 NB_MODULE(_native, m) {
@@ -509,7 +519,10 @@ NB_MODULE(_native, m) {
         .def("run", &wave_run, nb::arg("signal"),
              "Advances one step per sample of signal (added at the source); returns the "
              "pressure at every probe before each step, probes x steps.")
-        .def("reset", &as::WaveSolver::reset, "Silence the grid.");
+        .def("reset", &as::WaveSolver::reset, "Silence the grid.")
+        .def("layout", &wave_layout,
+             "The grid's layout as arrays (see WaveSolver::layout in fdtd.hpp), for "
+             "stepping it elsewhere.");
 
     m.def("specular_sequences", &specular_sequences, nb::arg("bvh"), nb::arg("source"),
           nb::arg("rays"), nb::arg("max_order"), nb::arg("threads"), nb::arg("passing"),

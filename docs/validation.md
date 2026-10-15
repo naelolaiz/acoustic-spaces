@@ -622,6 +622,23 @@ this sparse in modes, that moves G by up to 1 dB, EDT by up to 12 % and T20 by u
 Rays give the average over the room instead: 5.3 dB more at this seat in the 63 Hz
 band, where the listener sits near the nodes of most modes.
 
+**On a GPU.** `validation/wave_gpu.py` computes the wave bands (up to 125 Hz, 0.5 s) of
+the first source of three example rooms to every listener on the CPU and on the GPU,
+and compares the two. The tests do the same with resonant walls and with the matched
+layer, in runs split so that the fields swap both ways between them. On Mesa's
+lavapipe, a Vulkan driver that runs on the CPU, with 4 cores:
+
+| room | cells | steps | CPU (s) | GPU (s) | largest difference |
+|---|---:|---:|---:|---:|---:|
+| studio | 10,350 | 1,516 | 0.2 | 1.2 | 4.5e-7 |
+| concert hall | 1,223,312 | 1,516 | 2.9 | 13.8 | 9.6e-7 |
+| church | 1,228,682 | 1,516 | 2.5 | 15.7 | 1.4e-6 |
+
+The difference is relative to the largest pressure: the GPU's single-precision
+rounding, which stays at that level. The times include the grid's set-up on the CPU,
+the same on both. A software driver is no faster than the CPU solver; the script is
+there to time a hardware GPU.
+
 ## Real-time convolver
 
 The plan's target: a 3 s response with 16 output channels (third-order Ambisonics), fed
@@ -668,6 +685,8 @@ its peak (single precision).
   dependence on the angle it arrives at, and the wave solver leaves such walls out.
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
+- **The wave solver's speed on a hardware GPU.** CI checks the GPU path on Mesa's
+  software Vulkan driver, which shows that it agrees with the CPU, not how fast it is.
 
 ## Reproducing
 
@@ -676,6 +695,7 @@ python -m pip install pyroomacoustics matplotlib
 python validation/pyroomacoustics_crosscheck.py --json results.json --plots docs/validation
 python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
+python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/bras_validation.py --json bras.json --plots docs/validation
 python validation/bras_validation.py --materials initial --plots docs/validation
 python validation/bras_validation.py --bands third_octave --json bras_third.json

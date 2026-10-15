@@ -334,6 +334,47 @@ public:
     bool probe_found(std::size_t p) const { return !probe_cells_.at(p).empty(); }
     std::size_t threads() const { return threads_; }
 
+    // Hands each array of the grid's layout to put(name, vector), for stepping the grid
+    // elsewhere (on a GPU: engine/gpu.py); the grid's state is not among them.
+    template <typename Put>
+    void layout(Put &&put) const {
+        put("shape", std::vector<std::size_t>{nx_, ny_, nz_});
+        put("types", type_);
+        put("special", special_);
+        put("links", links_);
+        put("coef_a", coef_a_);
+        put("coef_b", coef_b_);
+        put("coef_inv", coef_inv_);
+        put("source", source_);
+        put("state_start", state_start_);
+        put("state_branch", state_branch_);
+        put("state_faces", state_faces_);
+        put("branch_now", branch_now_);
+        put("branch_before", branch_before_);
+        put("branch_gain", branch_gain_);
+        put("layer_cells", layer_cells_);
+        // Per axis, the centres' then the faces' coefficients (see layer_coefficients).
+        static const char *const keep[6] = {"keep_x", "keep_face_x", "keep_y",
+                                            "keep_face_y", "keep_z", "keep_face_z"};
+        static const char *const push[6] = {"push_x", "push_face_x", "push_y",
+                                            "push_face_y", "push_z", "push_face_z"};
+        for (int k = 0; k < 6; ++k) {
+            put(keep[k], layer_keep_[k]);
+            put(push[k], layer_push_[k]);
+        }
+        std::vector<std::size_t> probe_start{0}, probe_cells;
+        std::vector<double> probe_weights;
+        for (std::size_t p = 0; p < probe_cells_.size(); ++p) {
+            probe_cells.insert(probe_cells.end(), probe_cells_[p].begin(), probe_cells_[p].end());
+            probe_weights.insert(probe_weights.end(), probe_weights_[p].begin(),
+                                 probe_weights_[p].end());
+            probe_start.push_back(probe_cells.size());
+        }
+        put("probe_start", probe_start);
+        put("probe_cells", probe_cells);
+        put("probe_weights", probe_weights);
+    }
+
     // Advances `steps` steps, adding signal[k] at the source on step k, and writes every
     // probe's pressure before each step to out (probes x steps).
     void run(const float *signal, std::size_t steps, double *out) {
