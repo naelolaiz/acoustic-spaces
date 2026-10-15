@@ -155,7 +155,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     print("\nsources (directivity index per octave band, dB)")
     print(_band_header("", width))
     for source, directivity in zip(scene.sources, room.directivities, strict=True):
-        print(_band_row(source.name, directivity.index(), width, "6.1f"))
+        print(_band_row(source.name, directivity.in_bands("octave").index(), width, "6.1f"))
         print(f"  {_directivity_text(directivity)}")
 
     print("\nsound power (dB re 1 pW per octave band, the feed included)")
@@ -232,6 +232,7 @@ def _cmd_directivity(args: argparse.Namespace) -> int:
         return 1
     width = 22
     print(_directivity_text(directivity))
+    directivity = directivity.in_bands("octave")  # an array's is in third octaves
     print(_band_header("", width))
     print(_band_row("directivity index dB", directivity.index(), width, "6.1f"))
     front, back = directivity.energy([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]])

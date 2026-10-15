@@ -262,7 +262,8 @@ def balloon_polydata(
     local = np.asarray(sphere.points, dtype=float)
     local /= np.linalg.norm(local, axis=1, keepdims=True)
     with np.errstate(divide="ignore"):
-        level = 10.0 * np.log10(np.maximum(directivity.energy(local)[:, band], 1e-30))
+        energy = directivity.in_bands("octave").energy(local)  # arrays: third octaves
+        level = 10.0 * np.log10(np.maximum(energy[:, band], 1e-30))
     level -= level.max()
     radius = size * np.clip(1.0 + level / db_range, 0.0, 1.0)
     turn = np.eye(3) if rotation is None else np.asarray(rotation, dtype=float)
@@ -729,6 +730,7 @@ def plot_directivity(
     """
     from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 
+    directivity = directivity.in_bands("octave")  # an array's is in third octaves
     angle = np.radians(np.arange(0.0, 360.5, 1.0))
     planes = {
         "horizontal": np.column_stack([np.cos(angle), np.sin(angle), np.zeros_like(angle)]),
