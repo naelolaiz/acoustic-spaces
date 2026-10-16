@@ -61,6 +61,8 @@ from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
 TITLE = "Acoustic Spaces editor"
+#: The tune dialog's button that sets the open scene's devices to auto.
+USE_AUTO = "Use auto for this scene"
 SCENE_FILTER = "Scenes (*.yaml *.yml)"
 MODEL_FILTER = f"Models ({' '.join('*' + s for s in SUPPORTED_SUFFIXES)})"
 GLB_FILTER = "glTF binary (*.glb)"
@@ -1074,7 +1076,29 @@ class MainWindow(QMainWindow):
         box.setText(
             f"<p>Device <i>auto</i> now takes the fastest on this computer:</p><pre>{summary}</pre>"
         )
+        # The scene's devices default to the CPU, which tune leaves as they are.
+        settings = self.document.scene.simulation
+        if settings.late.device != "auto" or settings.wave.device != "auto":
+            use = box.addButton(USE_AUTO, QMessageBox.ButtonRole.AcceptRole)
+            use.setToolTip("Set Run on (late reverberation) and the wave solver's device to auto")
+            use.clicked.connect(self.use_auto_devices)
         box.open()
+
+    def use_auto_devices(self) -> None:
+        """Set the scene's late reverberation and wave solver to run on device auto: the
+        fastest on this computer, as tune found."""
+
+        def change(data: dict) -> None:
+            simulation = data.setdefault("simulation", {})
+            simulation.setdefault("late", {})["device"] = "auto"
+            simulation.setdefault("wave", {})["device"] = "auto"
+
+        try:
+            self.document.edit("run on auto", change)
+        except EditError as exc:
+            self._refused(str(exc))
+            return
+        self.log("Late reverberation and the wave solver now run on auto.")
 
     def _job_kind(self) -> str:
         return self.job.kind if self.job is not None else "simulation"

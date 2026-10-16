@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QToolBar  # noqa
 from acoustic_spaces.audio import write_wav  # noqa: E402
 from acoustic_spaces.examples import example_path, list_examples  # noqa: E402
 from acoustic_spaces.geometry import RoomMesh  # noqa: E402
+from acoustic_spaces.gui.app import USE_AUTO  # noqa: E402
 from acoustic_spaces.gui.document import (  # noqa: E402
     Document,
     EditError,
@@ -1074,7 +1075,7 @@ def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
 
     monkeypatch.setattr(tuning, "tune", tune)
     shown = []
-    monkeypatch.setattr(QMessageBox, "open", lambda box: shown.append(box.text()))
+    monkeypatch.setattr(QMessageBox, "open", lambda box: shown.append(box))
     # Once in the Simulation menu, not in the toolbar.
     tune_action = window.tune_action
     menus = {menu.title(): menu for menu in window.findChildren(QMenu)}
@@ -1086,7 +1087,18 @@ def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
     assert timed == [window.document.scene.name] and tune_action.isEnabled()
     assert "Tuned in" in window.messages.toPlainText()
     assert "late stage 1 s both." in window.messages.toPlainText()
-    assert "<pre>" in shown[0] and "a GPU | 4 CPU threads" in shown[0]
+    assert "<pre>" in shown[0].text() and "a GPU | 4 CPU threads" in shown[0].text()
+    # It offers to set the scene's devices, which default to the CPU, to auto.
+    settings = window.document.scene.simulation
+    assert (settings.late.device, settings.wave.device) == ("cpu", "cpu")
+    (use,) = [button for button in shown[0].buttons() if button.text() == USE_AUTO]
+    use.click()
+    settings = window.document.scene.simulation
+    assert (settings.late.device, settings.wave.device) == ("auto", "auto")
+    assert window.document.undo_text() == "run on auto"
+    window.run_tune()
+    _wait(qapp, lambda: window.job is None)
+    assert USE_AUTO not in [button.text() for button in shown[1].buttons()]
 
     # A scene that cannot run times the concert hall example; failures are said.
     def refuse(room, **_):

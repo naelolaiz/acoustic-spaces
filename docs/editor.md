@@ -56,7 +56,9 @@ The editor works on the same scene files as the command line:
   *auto*, as `acoustic-spaces tune` does (see
   [Tuning the devices for a computer](simulation.md#tuning-the-devices-for-a-computer);
   needs the `gpu` extra). It runs in the background and shows the table of times when
-  done; you need it once per computer.
+  done; you need it once per computer. Both settings default to the CPU, so that a
+  scene gives the same result everywhere: **Use auto for this scene** in that window
+  sets them to *auto* for the open scene (an edit like any other, undone with Undo).
 - **Simulation > Run coverage map** (F6) maps every source over the audience area (see
   [Coverage maps](coverage-maps.md#coverage-maps)). The **Coverage map** panel shows any parameter
   and band from above, for one source or all of them together, and **Map in 3D** lays

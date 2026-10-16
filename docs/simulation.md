@@ -465,7 +465,10 @@ acoustic-spaces info                            # what auto takes now
 - The choices are kept per computer (the GPU's name and the CPU's thread count) in
   `acoustic-spaces/devices.json` in the user cache folder (`~/.cache`,
   `~/Library/Caches` or `%LOCALAPPDATA%`), with the times. Deleting the file forgets
-  them. In the editor, Simulation > Tune CPU and GPU… runs it on the open scene.
+  them. In the editor, Simulation > Tune CPU and GPU… runs it on the open scene, and
+  offers to set that scene's devices to `auto`.
+- Tune changes only what `auto` picks: a scene whose devices are `cpu` (the default,
+  which gives the same result on every computer) stays on the CPU.
 
 Sound through partitions and openings, the face groups of material calibration and
 coverage maps are traced on the CPU whatever the setting. `simulate --late-device`
