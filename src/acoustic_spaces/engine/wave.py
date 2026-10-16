@@ -366,7 +366,9 @@ def wave_responses(
             )
     bvh = model.bvh
     if not solid.all():  # openings: holes in the grid's walls
-        bvh = _native.Bvh(mesh.vertices, np.ascontiguousarray(mesh.faces[solid]))
+        bvh = _native.Bvh(
+            mesh.vertices, np.ascontiguousarray(mesh.faces[solid]), split=model.ray_tree
+        )
     listeners = np.asarray(listeners, dtype=float).reshape(-1, 3)
     points = np.vstack([np.asarray(source, dtype=float).reshape(1, 3), listeners])
     centres = band_centres(model.bands)

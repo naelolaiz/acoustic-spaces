@@ -37,6 +37,9 @@ or in a corner. Sound that bends round edges is added to them (see
   random scattering, the example box's late tail (0.5 to 2.5 s) misses a 1-million-ray
   reference by 0.5 to 2 dB per band instead of 1 to 8 dB at 100k rays (1 to 4 dB
   instead of 4 to 17 dB at 10k), for about 1.5 times the run time.
+
+  Nearly all of the run time goes into ray queries: which surface a ray meets next,
+  and whether each listener can see a reflection (see [Performance](#performance)).
 - `statistical`: the reflected energy of Barron's revised theory, an exponential
   decay at the Eyring reverberation time T from the direct sound on, less what the
   early paths carry. Early paths end `transition_ms` after the direct sound (by
@@ -361,6 +364,94 @@ points per wavelength by 0.67 % in closed rooms and up to 1.7 % round open model
 modes there come out up to that much low;
 sources radiate equally in all directions in the wave bands; and air absorption,
 negligible there, is left out.
+
+## Performance
+
+`simulation.performance` says how a run uses the computer; neither setting changes the
+results.
+
+```yaml
+simulation:
+  performance:
+    threads: 0        # CPU worker threads; 0 (default) uses every core
+    ray_tree: sah     # sah (default) or median
+```
+
+- `threads`: the worker threads of the ray tracer (early candidates, the late part,
+  coverage maps, calibration) and of the wave solver on the CPU. Fewer leave the
+  computer free for other work while a long run goes on. Results do not depend on it.
+- `ray_tree`: the bounding volume hierarchy that finds the surface a ray meets, and
+  whether a listener can see a reflection, which is nearly all of the run time. `sah`
+  splits it by the surface area heuristic and walks the nearer box first; `median`
+  splits it at the middle face along the longest side, as before, for comparison. Both
+  find the same surfaces at the same distances; where a ray meets two faces at exactly
+  the same point (a shared edge) the other tree may take the other one. In BRAS's
+  chamber music hall (2,309 triangles, five listeners) one band of 50,000 rays takes
+  5.7 s on four cores with `sah` and 17 s with `median` (41 s in earlier versions, whose
+  walk through the tree was slower too).
+
+`simulate`, `map` and `calibrate` take `--threads N` and `--ray-tree sah|median` to
+override them, `view` and `export` `--threads`; the editor's Simulation page has them
+under Performance. `acoustic-spaces info` prints how many cores there are. Where the
+wave solver steps its grid (CPU or GPU) is `simulation.wave.device`, above.
+
+```sh
+acoustic-spaces simulate validation/bras/CR3/scene.yaml --out cr3 --threads 3
+```
+
+### The late stage on a GPU
+
+The late stage's rays can be traced on a GPU, with the `gpu` extra, through WebGPU like
+the wave solver: Vulkan, Metal or Direct3D 12, so AMD, NVIDIA, Intel and Apple GPUs
+alike.
+
+```yaml
+simulation:
+  late:
+    device: cpu       # cpu (default), gpu, both or auto
+```
+
+- `cpu`: the compiled core, on `performance.threads`, as before.
+- `gpu`: one compute shader traces what the CPU does (detector spheres and rain, both
+  kinds of scattering, the scattering of a surface's size, air absorption, the early
+  stage's paths left out, arrival directions and the weight window). Rays start where
+  the CPU's do, then draw random numbers of their own, in single precision, so the two
+  agree statistically, not ray for ray. The tests trace main's stored runs on the GPU
+  and check that they land within the spread of the CPU's own results over seeds.
+- `both`: the CPU (on all its threads but one, which keeps the GPU busy) and the GPU
+  share the rays, each taking the next part as soon as it is done with the last, so the
+  faster one traces more. Which rays each traces depends on how fast each goes, so two
+  runs differ within the noise of the ray count; `cpu` and `gpu` give the same result
+  every time.
+- `auto`: a short trial on the scene's own model (8,192 rays, the first 0.25 s of the
+  response) on the CPU and on the GPU, and the fastest of `cpu`, `gpu` and `both`. It
+  keeps the CPU, the safe choice, when wgpu finds no GPU or only a software one, or when
+  neither the GPU nor both together would be at least 20 % faster. The choice is saved
+  for the computer (`acoustic-spaces/late-device.json` in the user cache folder:
+  `~/.cache`, `~/Library/Caches` or `%LOCALAPPDATA%`). `--no-device-trial` (`simulate`
+  and `edit`) skips the trial: `auto` then takes the saved choice, or the CPU when there
+  is none.
+
+Sound through partitions and openings, the face groups of material calibration and
+coverage maps are traced on the CPU whatever the setting. `simulate --late-device`
+overrides the setting; the editor's Simulation page has it as "Run on" under Late
+reverberation. When it is not `cpu`, the progress messages say where the rays went and
+why (`talker: late rays traced on the CPU (no hardware GPU)`).
+
+With splitting, a ray's copies on the GPU advance together, where the CPU follows each
+to its end before it takes the next. Where the weight window asks for more copies than
+a family may have (`max_family`), the GPU so makes them earlier and traces more
+reflections in the late tail (up to twice as many in the example box): the same
+expected energies, with a tail that varies less.
+
+`python validation/late_gpu.py` times the late stage on each device in BRAS's two rooms
+and two example halls, and shows how far T30, EDT and C80 come out from the CPU's next
+to how far a second CPU run with the next seed does. `python validation/rays_gpu.py`
+times the ray searches alone, the face a ray meets next and whether a listener can see
+a reflection, and checks that the GPU finds the CPU's faces. The GPU works in single
+precision, so its boxes and triangles are widened slightly to keep rays from slipping
+between faces that meet; it finds the CPU's face for all but rays that meet two faces
+at nearly the same point.
 
 ## Validation
 

@@ -90,6 +90,9 @@ class TraceModel:
     #: reflections off them too (``first_order``), so those waves keep their full
     #: specular share.
     size_from_order: int = 1
+    #: How ``bvh`` was split (``simulation.performance.ray_tree``); trees built from
+    #: this model's mesh later take the same.
+    ray_tree: str = "sah"
 
     @classmethod
     def from_room(cls, room: Room, settings=None) -> TraceModel:
@@ -99,7 +102,9 @@ class TraceModel:
         mesh = room.mesh
         if np.any(room.face_materials == UNASSIGNED):
             raise ValueError("every surface needs a material; see Room.problems()")
-        bvh = _native.Bvh(mesh.vertices, mesh.faces)
+        simulation = room.scene.simulation if settings is None else settings
+        ray_tree = simulation.performance.ray_tree
+        bvh = _native.Bvh(mesh.vertices, mesh.faces, split=ray_tree)
 
         normals = mesh.face_normals()
         oriented = len(room.air_cells) > 0
@@ -119,7 +124,6 @@ class TraceModel:
         np.logical_or.at(two_sided, face_plane, both)
 
         materials = room.scene.materials
-        simulation = room.scene.simulation if settings is None else settings
         coefficients = [materials[n].coefficients(simulation.bands) for n in room.material_names]
         absorption = np.array([a for a, _ in coefficients])
         scattering = np.array([s for _, s in coefficients])
@@ -144,6 +148,7 @@ class TraceModel:
             transmission=room.face_transmission(simulation.bands),
             face_room=face_room,
             room_volumes=room.room_volumes if oriented else np.zeros(0),
+            ray_tree=ray_tree,
         )
 
     def __post_init__(self) -> None:

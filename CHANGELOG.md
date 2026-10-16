@@ -444,8 +444,52 @@ changes results at 63 and 125 Hz)
   below by Ivanic and Ruedenberg's recursion instead of a least-squares fit on a grid of
   directions.
 
+**Faster ray tracing, and performance settings** (`simulation.performance`)
+
+- Ray queries are 7 to 8 times faster, and the late stage with them: the model's
+  bounding volume hierarchy is split by the surface area heuristic instead of at the
+  median, walked nearest box first, and its box test no longer calls the maths
+  library. One band of 50,000 rays in BRAS's chamber music hall takes 5.7 s instead of
+  41 s on four cores. Rays meet the same surfaces at the same distances; where a ray
+  meets two faces at exactly the same point (a shared edge), it may now take the other.
+- `simulation.performance.threads` (default 0: every core) and `ray_tree` (`sah`, the
+  default, or `median` for comparison) in scenes, under Performance on the editor's
+  Simulation page, and as `--threads` and `--ray-tree` for `simulate`, `map` and
+  `calibrate` (`--threads` for `view` and `export`). Without `--threads` they take the
+  scene's setting; `info` prints the number of CPU cores.
+- The ray searches run on a GPU too, through WebGPU (`gpu` extra): the first part of
+  tracing rays there. `validation/rays_gpu.py` times them against the CPU on rays like
+  the late tracer's and checks that both find the same faces. `Bvh.layout()` hands the
+  tree to it, and `Bvh.occluded` tests many rays at once on the CPU.
+- `validation/wave_gpu.py` times the grid's set-up and the time steps apart (the
+  speed-up is that of the steps), starts the GPU before timing, prints its settings
+  and each grid's cell size and stencil, and lines up its table in a terminal.
+- The late stage's rays can be traced on a GPU (`simulation.late.device`: `cpu`, the
+  default, `gpu`, `both` or `auto`; `acoustic_spaces.engine.gpu_tracer` and
+  `ray_device`). One WGSL compute shader traces what the CPU does, in single precision
+  and with random numbers of its own, so the two agree statistically. `both` shares the
+  rays between the CPU and the GPU as each is free; `auto` times a short trial on both
+  and keeps the fastest, or the CPU when wgpu finds no hardware GPU or nothing is
+  clearly faster, and saves its choice for the computer. Sound through partitions and
+  calibration's face groups stay on the CPU. `simulate --late-device`, "Run on" on the
+  editor's Simulation page, and `--no-device-trial` (`simulate`, `edit`) to take the
+  saved choice without a trial. `validation/late_gpu.py` times the late stage on each
+  device and compares the parameters it gives.
+- Tests hold the ray tracer to results stored from main before these changes
+  (`tests/reference/tracer.npz`): the trees' faces and distances, specular paths, and
+  every kind of late run on the CPU (to single precision), and statistically on a GPU.
+
 **Fixes**
 
+- The late stage's count of rays that left an open model (`escaped_rays` in the run
+  details) was always 0: a ray whose search found no face within the distance left to
+  it was taken for one that had run out of time. A ray that finds none is now checked
+  for a face anywhere ahead, on the CPU and on the GPU.
+- Runs that split rays (the late stage's weight window, sound passing both ways
+  through a partition) came out differently when the core was built with Clang, as on
+  macOS, than with GCC or MSVC: the two numbers that seed a copy's random stream were
+  drawn in an order the compiler chose. They are now drawn in the order GCC and MSVC
+  used, so Linux and Windows give the same results as before and macOS gives those too.
 - The sound diffracted by the free edge of a thin screen left out the term of the
   reflection off the screen's back wherever the reflection off its front reached the
   listener: up to 0.9 dB too little there, at high frequencies.

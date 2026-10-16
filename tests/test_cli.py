@@ -16,6 +16,7 @@ def test_info(capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out
     assert "acoustic_spaces" in out
     assert "compiled core: available" in out
+    assert "CPU cores for ray tracing: " in out
 
 
 def test_validate_example(capsys: pytest.CaptureFixture[str]) -> None:
@@ -172,7 +173,7 @@ def test_simulate_writes_responses_and_parameters(
 
 
 def test_simulate_checks_the_options_that_override_the_scene(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import json
 
@@ -202,6 +203,39 @@ def test_simulate_checks_the_options_that_override_the_scene(
     capsys.readouterr()
     report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
     assert report["settings"]["early"]["coherent_max_band_hz"] is None
+    assert report["settings"]["performance"] == {"threads": 0, "ray_tree": "sah"}
+
+    performance = ["--threads", "1", "--ray-tree", "median"]
+    assert main([*args, "--rays", "500", "--max-order", "1", *performance]) == 0
+    capsys.readouterr()
+    report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
+    assert report["settings"]["performance"] == {"threads": 1, "ray_tree": "median"}
+
+    from acoustic_spaces.engine import ray_device
+
+    monkeypatch.setattr(ray_device, "_trial", True)
+    device = ["--late-device", "cpu", "--no-device-trial"]
+    assert main([*args, "--rays", "500", "--max-order", "1", *device]) == 0
+    capsys.readouterr()
+    report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
+    assert report["settings"]["late"]["device"] == "cpu"
+    assert not ray_device.trial_enabled()
+    for option, value in [("--threads", "-1"), ("--ray-tree", "octree"), ("--late-device", "tpu")]:
+        with pytest.raises(SystemExit):
+            main([*args, option, value])
+        assert option in capsys.readouterr().err
+
+
+def test_edit_hands_the_device_trial_switch_to_the_editor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import acoustic_spaces.gui
+
+    opened = []
+    monkeypatch.setattr(acoustic_spaces.gui, "main", lambda argv: opened.append(argv) or 0)
+    assert main(["edit", str(SHOEBOX), "--no-device-trial"]) == 0
+    assert main(["edit"]) == 0
+    assert opened == [[str(SHOEBOX), "--no-device-trial"], []]
 
 
 def test_simulate_in_third_octave_bands(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

@@ -807,6 +807,16 @@ class LateStage(_Model):
             "carry much less (unbiased); keeps late tails smooth where few rays survive"
         ),
     )
+    device: Literal["cpu", "gpu", "both", "auto"] = Field(
+        default="cpu",
+        description=(
+            "stochastic ray tracing only: where it traces the rays: cpu, gpu (through "
+            "WebGPU: Vulkan, Metal or Direct3D 12, with the gpu extra), both (the two share "
+            "the rays; results then vary slightly from run to run) or auto (the fastest "
+            "of those on this computer, by a short trial; the CPU when unsure). Sound "
+            "through partitions and material calibration always run on the CPU"
+        ),
+    )
 
 
 class Scattering(_Model):
@@ -872,6 +882,29 @@ class WaveStage(_Model):
         description=(
             "where it steps the grid: cpu, gpu (through WebGPU: Vulkan, Metal or Direct3D 12, "
             "with the gpu extra) or auto (a hardware GPU when wgpu finds one, else the CPU)"
+        ),
+    )
+
+
+class Performance(_Model):
+    """How a run uses the computer. Neither setting changes the results, beyond a ray
+    that meets two faces at exactly the same point (a shared edge) taking the other one
+    with the other tree."""
+
+    threads: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "worker threads for ray tracing and the wave solver on the CPU; 0 uses every "
+            "core. Fewer leave the computer free for other work"
+        ),
+    )
+    ray_tree: Literal["sah", "median"] = Field(
+        default="sah",
+        description=(
+            "how the tree that finds the surface a ray meets is split: sah (by the surface "
+            "area heuristic; several times faster in detailed models) or median (at the "
+            "middle face, as before; for comparison)"
         ),
     )
 
@@ -948,6 +981,7 @@ class Simulation(_Model):
     late: LateStage = Field(default_factory=LateStage)
     scattering: Scattering = Field(default_factory=Scattering)
     wave: WaveStage = Field(default_factory=WaveStage)
+    performance: Performance = Field(default_factory=Performance)
     transition_ms: float | None = Field(
         default=None,
         gt=0.0,

@@ -33,7 +33,7 @@ class SimulationJob(QThread):
         self,
         room: Room,
         settings: Simulation | None = None,
-        threads: int = 0,
+        threads: int | None = None,
         groups: np.ndarray | None = None,
     ):
         super().__init__()

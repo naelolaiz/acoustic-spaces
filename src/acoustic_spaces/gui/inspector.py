@@ -9,6 +9,7 @@ the scene as it still is.
 from __future__ import annotations
 
 import math
+import os
 from collections.abc import Callable
 
 import numpy as np
@@ -1053,11 +1054,20 @@ class SimulationPage(Page):
         self.reception.addItems(["diffuse_rain", "secondary_sources", "detector"])
         self.directions = int_spin(0, 1024, 16)
         self.splitting = QCheckBox("Split strong rays, thin out weak ones")
+        self.late_device = QComboBox()
+        self.late_device.addItems(["cpu", "gpu", "both", "auto"])
+        self.late_device.setToolTip(
+            "Where it traces the rays: the CPU, a GPU through WebGPU (needs the gpu extra), "
+            "both sharing the rays (results then vary slightly from run to run), or the "
+            "fastest of those on this computer, found by a short trial (the editor's "
+            "--no-device-trial takes the last trial's choice instead)"
+        )
         late_form.addRow("Method", self.late_method)
         late_form.addRow("Rays per band", self.late_rays)
         late_form.addRow("Reception", self.reception)
         late_form.addRow("Arrival directions", self.directions)
         late_form.addRow(self.splitting)
+        late_form.addRow("Run on", self.late_device)
         layout.addWidget(late)
 
         scattering = QGroupBox("Scattering")
@@ -1108,6 +1118,26 @@ class SimulationPage(Page):
         wave_form.addRow("Run on", self.wave_device)
         layout.addWidget(wave)
 
+        performance = QGroupBox("Performance")
+        performance_form = QFormLayout(performance)
+        cores = os.cpu_count() or 1
+        self.threads = int_spin(0, 1024)
+        self.threads.setSpecialValueText(f"All cores ({cores})")
+        self.threads.setToolTip(
+            "Worker threads for ray tracing and the wave solver on the CPU. Fewer leave the "
+            "computer free for other work; the results stay the same"
+        )
+        self.ray_tree = QComboBox()
+        self.ray_tree.addItems(["sah", "median"])
+        self.ray_tree.setToolTip(
+            "How the tree that finds the surface a ray meets is split: by the surface area "
+            "heuristic (sah, several times faster in detailed models) or at the middle face "
+            "(median, as before; for comparison). The results stay the same"
+        )
+        performance_form.addRow("CPU threads", self.threads)
+        performance_form.addRow("Ray search tree", self.ray_tree)
+        layout.addWidget(performance)
+
         response = QGroupBox("Response")
         response_form = QFormLayout(response)
         self.length = spin(0.05, 60, 2, 0.5, "s")
@@ -1143,11 +1173,20 @@ class SimulationPage(Page):
             self.scattering_method,
             self.wave_band,
             self.wave_device,
+            self.late_device,
+            self.ray_tree,
             self.sample_rate,
             self.bands,
         ):
             combo.currentTextChanged.connect(self._changed)
-        for box in (self.max_order, self.early_rays, self.late_rays, self.directions, self.seed):
+        for box in (
+            self.max_order,
+            self.early_rays,
+            self.late_rays,
+            self.directions,
+            self.threads,
+            self.seed,
+        ):
             box.valueChanged.connect(self._changed)
         for box in (self.length, self.transition):
             box.valueChanged.connect(self._changed)
@@ -1174,6 +1213,7 @@ class SimulationPage(Page):
         self.reception.setCurrentText(s.late.reception)
         self.directions.setValue(s.late.directions)
         self.splitting.setChecked(s.late.splitting)
+        self.late_device.setCurrentText(s.late.device)
         self.scattering_method.setCurrentText(s.scattering.method)
         self.from_size.setChecked(s.scattering.from_size)
         self.by_band.setChecked(s.scattering.by_band)
@@ -1183,6 +1223,8 @@ class SimulationPage(Page):
         self.wave_band.setEnabled(s.wave.enabled)
         self.wave_device.setCurrentText(s.wave.device)
         self.wave_device.setEnabled(s.wave.enabled)
+        self.threads.setValue(s.performance.threads)
+        self.ray_tree.setCurrentText(s.performance.ray_tree)
         self.length.setValue(s.ir_length_s)
         if self.sample_rate.findText(str(s.sample_rate)) < 0:
             self.sample_rate.addItem(str(s.sample_rate))
@@ -1195,7 +1237,13 @@ class SimulationPage(Page):
         self.seed.setEnabled(s.seed is not None)
         self.seed.setValue(s.seed or 0)
         stochastic = s.late.method == "stochastic_ray_tracing"
-        for box in (self.late_rays, self.reception, self.directions, self.splitting):
+        for box in (
+            self.late_rays,
+            self.reception,
+            self.directions,
+            self.splitting,
+            self.late_device,
+        ):
             box.setEnabled(stochastic)
         self.early_rays.setEnabled(s.early.method == "ray_tracing")
 
@@ -1219,6 +1267,7 @@ class SimulationPage(Page):
                 "reception": self.reception.currentText(),
                 "directions": self.directions.value(),
                 "splitting": self.splitting.isChecked(),
+                "device": self.late_device.currentText(),
             },
             "scattering": {
                 "method": self.scattering_method.currentText(),
@@ -1230,6 +1279,10 @@ class SimulationPage(Page):
                 "enabled": self.wave.isChecked(),
                 "max_band_hz": int(self.wave_band.currentText()),
                 "device": self.wave_device.currentText(),
+            },
+            "performance": {
+                "threads": self.threads.value(),
+                "ray_tree": self.ray_tree.currentText(),
             },
             "ir_length_s": self.length.value(),
             "sample_rate": int(self.sample_rate.currentText()),

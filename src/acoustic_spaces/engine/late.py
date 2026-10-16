@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from acoustic_spaces.directivity import Directivity
+from acoustic_spaces.engine import ray_device
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel
 
@@ -67,6 +68,8 @@ class LateEnergy:
     #: response for new absorption (:mod:`acoustic_spaces.engine.reweight`); else empty.
     moments: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0, 0)))
     moment_step: float = 0.0
+    #: Where the rays were traced (stochastic ray tracing only).
+    plan: ray_device.Plan | None = None
 
 
 #: Weight window of the stochastic tracer (see :func:`stochastic_energy`): resolution of
@@ -318,6 +321,16 @@ def _directivity_arrays(directivity: Directivity | None, orientation, bands: int
     )
 
 
+#: The tracer's arguments that _band_arguments gives last, in order.
+_SIZE_ARGUMENTS = (
+    "surface_size",
+    "band_hz",
+    "vector_scattering",
+    "size_from_order",
+    "transmission",
+)
+
+
 def _band_arguments(model: TraceModel, air: np.ndarray, directivity: tuple, band: slice) -> tuple:
     """For the bands ``band``: the tracer's directivity_a and directivity_table (from
     ``directivity``, both arrays for all bands), absorption, scattering and air, and the
@@ -365,6 +378,7 @@ def stochastic_energy(
     threads: int = 0,
     groups: np.ndarray | None = None,
     moment_step: float = MOMENT_STEP,
+    device: str = "cpu",
 ) -> LateEnergy:
     """Energy per listener, band and time slot by stochastic ray tracing.
 
@@ -383,9 +397,10 @@ def stochastic_energy(
     ``groups`` (one per face: a group index, or -1) has the tracer count the reflections
     off each group and sum the moments of those counts in the result's ``moments``, at
     most ``MAX_GROUPS`` groups.
-    """
-    from acoustic_spaces import _native
 
+    ``device`` says where the rays are traced: cpu, gpu, both or auto (see
+    :mod:`acoustic_spaces.engine.ray_device`); the result's ``plan`` says where they went.
+    """
     if reception not in RECEPTION:
         raise ValueError(f"unknown reception {reception!r}; use one of {', '.join(RECEPTION)}")
     if reception == "secondary_sources" and covered_order < 0:
@@ -409,49 +424,55 @@ def stochastic_energy(
         if n_groups > MAX_GROUPS:
             raise ValueError(f"at most {MAX_GROUPS} groups of faces, not {n_groups}")
 
+    # Where the rays go, chosen at the first batch.
+    plans: list[ray_device.Plan] = []
+
     def run(band: slice, count: int):
         first_order, band_table, absorption, scattering, band_air, sizes = _band_arguments(
             model, air, (directivity_a, table), band
         )
 
         def trace(count: int, first: int, target: np.ndarray):
-            energy, directional, moments, *rest = _native.trace_stochastic(
-                model.bvh,
-                np.asarray(source, dtype=np.float64),
-                first_order,
-                orientation,
-                band_table,
-                absorption,
-                scattering,
-                band_air,
-                *sizes,
-                face_room,
-                source_room,
-                listeners,
-                np.ascontiguousarray(directions.reshape(-1, 3)),
-                int(count),
-                float(max_time),
-                float(time_step),
-                DIRECTION_STEP,
-                float(speed_of_sound),
-                np.ascontiguousarray(radius),
-                bool(diffuse_rain),
-                bool(specular_rain),
-                int(covered_order),
-                np.ascontiguousarray(covered, dtype=np.float64),
-                int(seed) & 0xFFFFFFFFFFFFFFFF,
-                int(threads),
-                SPLIT_WINDOW_S,
-                int(first),
-                np.ascontiguousarray(target, dtype=np.float64),
-                SPLIT_RATIO,
-                MAX_SPLIT,
-                MAX_FAMILY,
-                level,
-                face_group,
-                n_groups,
-                float(moment_step),
-            )
+            values = {
+                "bvh": model.bvh,
+                "source": np.asarray(source, dtype=np.float64),
+                "directivity_a": first_order,
+                "orientation": orientation,
+                "directivity_table": band_table,
+                "absorption": absorption,
+                "scattering": scattering,
+                "air": band_air,
+                **dict(zip(_SIZE_ARGUMENTS, sizes, strict=True)),
+                "face_room": face_room,
+                "source_room": source_room,
+                "receivers": listeners,
+                "directions": np.ascontiguousarray(directions.reshape(-1, 3)),
+                "rays": int(count),
+                "max_time": float(max_time),
+                "time_step": float(time_step),
+                "dir_time_step": DIRECTION_STEP,
+                "speed_of_sound": float(speed_of_sound),
+                "receiver_radius": np.ascontiguousarray(radius),
+                "diffuse_rain": bool(diffuse_rain),
+                "specular_rain": bool(specular_rain),
+                "covered_order": int(covered_order),
+                "covered_time": np.ascontiguousarray(covered, dtype=np.float64),
+                "seed": int(seed) & 0xFFFFFFFFFFFFFFFF,
+                "threads": int(threads),
+                "window_time_step": SPLIT_WINDOW_S,
+                "first_ray": int(first),
+                "split_target": np.ascontiguousarray(target, dtype=np.float64),
+                "split_ratio": SPLIT_RATIO,
+                "max_split": MAX_SPLIT,
+                "max_family": MAX_FAMILY,
+                "room_level": level,
+                "face_group": face_group,
+                "groups": n_groups,
+                "moment_time_step": float(moment_step),
+            }
+            if not plans:
+                plans.append(ray_device.choose(device, values))
+            energy, directional, moments, *rest = ray_device.trace(plans[0], values)
             return [energy, directional, moments], *rest
 
         return _in_batches(trace, count, splitting, own)
@@ -467,6 +488,7 @@ def stochastic_energy(
         directional=directional,
         moments=moments,
         moment_step=float(moment_step) if n_groups else 0.0,
+        plan=plans[0] if plans else None,
     )
 
 
