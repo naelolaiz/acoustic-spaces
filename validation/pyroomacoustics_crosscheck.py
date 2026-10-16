@@ -2,6 +2,7 @@
 
     python validation/pyroomacoustics_crosscheck.py [--rays 100000] [--json results.json]
                                                     [--plots DIR] [--cases specular,diffuse]
+                                                    [--pra-runs 5]
 
 Needs ``pip install pyroomacoustics`` (and matplotlib for ``--plots``). Both programs
 get the same geometry, absorption and scattering per octave band, the same air
@@ -10,7 +11,10 @@ tracing takes over. Both scatter vector-based; pyroomacoustics has no scattering
 size of a surface, so this package leaves it out for the comparison and adds a run with
 its default, which has it. The impulse responses of both are analysed alike, with
 :func:`acoustic_spaces.parameters.from_impulse_response`, and EDT, T30 and C80 are
-averaged over the listeners of each room. The script prints a Markdown table per room.
+averaged over the listeners of each room. pyroomacoustics draws its rays afresh on every
+run, so it simulates each room several times (``--pra-runs``) and its parameters are
+averaged over the runs too, with the spread between them in the tables. The script
+prints a Markdown table per room.
 """
 
 from __future__ import annotations
@@ -383,13 +387,21 @@ def barron_c80(case: Case, volume: float, t: np.ndarray) -> np.ndarray:
     return np.mean(10.0 * np.log10(early / late), axis=0)
 
 
-def compare(case: Case, rays: int, seed: int) -> dict:
+def compare(case: Case, rays: int, seed: int, pra_runs: int = 5) -> dict:
     # pyroomacoustics has no scattering from the size of a surface: the comparison
     # leaves it out here too, and this package's default adds it.
     ours, room, ours_s = run_ours(case, rays, seed, from_size=False)
     default, default_room, _ = run_ours(case, rays, seed)
-    theirs, theirs_s = run_pyroomacoustics(case, rays, room.air_attenuation())
-    a, b, d = _mean_parameters(ours), _mean_parameters(theirs), _mean_parameters(default)
+    theirs, theirs_s, runs = [], 0.0, []
+    for _ in range(pra_runs):
+        irs, seconds = run_pyroomacoustics(case, rays, room.air_attenuation())
+        theirs += irs
+        theirs_s += seconds / pra_runs
+        runs.append(_mean_parameters(irs))
+    a, d = _mean_parameters(ours), _mean_parameters(default)
+    b = {p: np.mean([r[p] for r in runs], axis=0) for p in PARAMETERS}
+    lowest = {p: np.min([r[p] for r in runs], axis=0) for p in PARAMETERS}
+    highest = {p: np.max([r[p] for r in runs], axis=0) for p in PARAMETERS}
     duration = 1.5 * case.ir_length_s
     global_t30 = {
         "vector": _global_t30(room, "vector", _t30_windows(theirs), duration),
@@ -406,9 +418,12 @@ def compare(case: Case, rays: int, seed: int) -> dict:
                 "acoustic_spaces": [float(v) for v in a[p][COMPARED]],
                 "pyroomacoustics": [float(v) for v in b[p][COMPARED]],
                 "default": [float(v) for v in d[p][COMPARED]],
+                "pyroomacoustics_lowest": [float(v) for v in lowest[p][COMPARED]],
+                "pyroomacoustics_highest": [float(v) for v in highest[p][COMPARED]],
             }
             for p in PARAMETERS
         },
+        "pyroomacoustics_runs": pra_runs,
         "t30_room_energy": {m: [float(v) for v in t[COMPARED]] for m, t in global_t30.items()},
     }
     if case.diffuse:
@@ -437,6 +452,13 @@ def table(result: dict) -> str:
         label = f"{p.upper()} ({units[p]})"
         lines.append(f"| {label}, acoustic_spaces | " + " | ".join(map(fmt.format, ours)) + " |")
         lines.append(f"| {label}, pyroomacoustics | " + " | ".join(map(fmt.format, theirs)) + " |")
+        if "pyroomacoustics_lowest" in result[p]:
+            values = np.subtract(
+                result[p]["pyroomacoustics_highest"], result[p]["pyroomacoustics_lowest"]
+            )
+            spread = " | ".join(map(fmt.format, values))
+            runs = result["pyroomacoustics_runs"]
+            lines.append(f"| {label}, pyroomacoustics' spread over {runs} runs | {spread} |")
         if p == "c80":
             diff = [f"{round(d, 1) + 0.0:+.1f} dB" for d in theirs - ours]
         else:
@@ -472,6 +494,9 @@ def plot(result: dict, path: str) -> None:
     for ax, p in zip(axes, PARAMETERS, strict=True):
         ax.plot(x, result[p]["acoustic_spaces"], "o-", color="C0", label="acoustic_spaces")
         ax.plot(x, result[p]["pyroomacoustics"], "s-", color="C1", label="pyroomacoustics")
+        if "pyroomacoustics_lowest" in result[p]:
+            low, high = result[p]["pyroomacoustics_lowest"], result[p]["pyroomacoustics_highest"]
+            ax.fill_between(x, low, high, color="C1", alpha=0.2, linewidth=0)
         if p == "t30":
             energy = result["t30_room_energy"]
             ax.plot(x, result[p]["default"], "^-", color="C2", label="acoustic_spaces, size")
@@ -497,6 +522,9 @@ def main() -> None:
     parser.add_argument("--json", help="write every number to this file")
     parser.add_argument("--plots", help="draw a PNG per room into this folder")
     parser.add_argument("--tables", help="only print the tables of a file from --json")
+    parser.add_argument(
+        "--pra-runs", type=int, default=5, help="runs of pyroomacoustics to average per room"
+    )
     args = parser.parse_args()
 
     if args.tables:
@@ -512,7 +540,7 @@ def main() -> None:
         chosen = set(args.cases.split(","))
         for case in CASES:
             if case.name in chosen:
-                results.append(compare(case, args.rays, args.seed))
+                results.append(compare(case, args.rays, args.seed, args.pra_runs))
                 print(table(results[-1]) + "\n", flush=True)
     else:
         for result in results:

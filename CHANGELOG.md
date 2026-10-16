@@ -36,7 +36,12 @@
 - Two rooms of the BRAS benchmark, a seminar room and a chamber music hall, as scenes in
   `validation/bras`, with their surface data and the parameters of their measured
   responses (CC BY-SA 4.0, like BRAS). `validation/bras_validation.py` compares
-  simulations with them; the validation report has the results.
+  simulations with them; the validation report has the results. It prints how far each
+  room has got on standard error.
+- The cross-check against pyroomacoustics averages five runs of pyroomacoustics per room
+  (`--pra-runs`), which draws its rays afresh on every run, and shows the spread between
+  them. One run had made its C80 in the lecture hall look up to 3.5 dB lower than this
+  package's; the mean of five is 0.3 to 1.7 dB lower.
 
 **Scattering** (changes results: see below for version 2's)
 
@@ -266,8 +271,8 @@ in the wave bands of closed rooms)
   `validation/edge_diffraction.py`: over barriers 0.3, 1 and 3 m thick within 0.35 dB
   from 500 Hz up and 2 dB at 63 Hz, and over two thin screens in a row within 0.75 dB
   from 500 Hz up and 2.7 dB at 63 Hz. The validation report has the tables.
-- The early stage of a hall with 16 edges that diffract takes 200 ms per source and
-  listener with `second_order`, 120 ms with `first_order` and 100 ms without
+- The early stage of a hall with 16 edges that diffract takes 170 ms per source and
+  listener with `second_order`, 120 ms with `first_order` and 90 ms without
   diffraction. `first_order` stays the default.
 
 **Early reflections in pressure at low frequencies** (`simulation.early.coherent_max_band_hz`;
