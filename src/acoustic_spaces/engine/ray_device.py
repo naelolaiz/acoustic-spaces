@@ -17,12 +17,16 @@
   nearest length, or the CPU when there is none.
 
 What only the CPU traces (sound through partitions and openings, the face groups of
-material calibration) runs there, whatever the setting.
+material calibration) runs there, whatever the setting, and so does a run the GPU
+declines once it has it (one whose results its buffers cannot hold): the plan
+:func:`trace` returns says so.
 
 The two agree statistically, not ray for ray (the GPU works in single precision and
-draws its own random numbers). With ``cpu`` or ``gpu`` a run gives the same result
-every time; with ``both`` which rays each one traces depends on how fast each goes,
-so results vary from run to run within the noise of the ray count.
+draws its own random numbers). With ``cpu`` a run gives the same result every time,
+and with ``gpu`` too until the weight window fills a family of copies
+(``max_family``): which copies split then depends on the order the GPU's threads come
+in. With ``both`` which rays each one traces depends on how fast each goes. Results
+then vary from run to run within the noise of the ray count.
 """
 
 from __future__ import annotations
@@ -185,10 +189,15 @@ def choose(setting: str | Plan, values: dict) -> Plan:
         if kept is None:
             return Plan("cpu", reason="no trial or tune on this computer yet")
         return _kept(kept)
+    from acoustic_spaces.engine import gpu_tracer
+
     key = _key(values)
     with _lock:
         if key not in _rates:
-            _rates[key] = trial(values)
+            try:
+                _rates[key] = trial(values)
+            except gpu_tracer.Unsupported as declined:
+                return Plan("cpu", reason=str(declined))
     cpu_rate, gpu_rate = _rates[key]
     device = _decide(cpu_rate, gpu_rate, _cpu_threads(values))
     tuning.keep_late(
@@ -216,26 +225,28 @@ def _key(values: dict) -> tuple:
     )
 
 
-def trace(plan: Plan, values: dict) -> tuple:
-    """``_native.trace_stochastic(**values)`` where ``plan`` says."""
+def trace(plan: Plan, values: dict) -> tuple[tuple, Plan]:
+    """``_native.trace_stochastic(**values)`` where ``plan`` says, and the plan it
+    followed: the CPU, with the GPU's reason, where the GPU declined the rays."""
     from acoustic_spaces import _native
     from acoustic_spaces.engine import gpu_tracer
 
     if plan.device == "gpu":
         try:
-            return gpu_tracer.trace_stochastic(**values)
-        except gpu_tracer.Unsupported:
-            return _native.trace_stochastic(**values)
+            return gpu_tracer.trace_stochastic(**values), plan
+        except gpu_tracer.Unsupported as declined:
+            return _native.trace_stochastic(**values), Plan("cpu", reason=str(declined))
     if plan.device == "both":
         return _shared(plan, values)
-    return _native.trace_stochastic(**values)
+    return _native.trace_stochastic(**values), plan
 
 
-def _shared(plan: Plan, values: dict) -> tuple:
+def _shared(plan: Plan, values: dict) -> tuple[tuple, Plan]:
     """The rays of ``values`` shared between the CPU and the GPU: each takes the next
     part as it finishes the one before. A part traced on the CPU carries its own share
     of the energy, so its results (and its expected ray energies) are scaled to the
-    whole run's."""
+    whole run's. Where the GPU declines a part, it hands that part to the CPU and stops,
+    so the CPU traces it and the rest, one tracer at a time."""
     from acoustic_spaces import _native
     from acoustic_spaces.engine import gpu_tracer
 
@@ -251,14 +262,20 @@ def _shared(plan: Plan, values: dict) -> tuple:
     lock = threading.Lock()
     parts: list[tuple[float, tuple]] = []
     errors: list[BaseException] = []
+    on_gpu = threading.Event()
+    declined: list[str] = []
+    # Parts the GPU declined, for the CPU to trace.
+    left: list[tuple[int, int]] = []
 
     def take(device: str) -> tuple[int, int]:
         with lock:
+            if device == "cpu" and left:
+                return left.pop()
             lo = cursor[0]
             cursor[0] = hi = min(count, lo + sizes[device])
         return lo, hi
 
-    def on_cpu(lo: int, hi: int) -> None:
+    def on_cpu(lo: int, hi: int, workers: int) -> None:
         m = hi - lo
         part = _native.trace_stochastic(
             **values
@@ -266,7 +283,7 @@ def _shared(plan: Plan, values: dict) -> tuple:
                 "rays": m,
                 "first_ray": first + lo,
                 "split_target": target * (count / m),
-                "threads": max(1, threads - 1),
+                "threads": workers,
             }
         )
         parts.append((m / count, part))
@@ -278,16 +295,20 @@ def _shared(plan: Plan, values: dict) -> tuple:
                 if lo >= hi:
                     return
                 if device == "cpu":
-                    on_cpu(lo, hi)
+                    # One thread keeps the GPU busy, until it declines.
+                    on_cpu(lo, hi, threads if declined else max(1, threads - 1))
                     continue
                 try:
                     part = gpu_tracer.trace_stochastic(
                         **values | {"rays": hi - lo, "first_ray": first + lo}, total=count
                     )
-                except gpu_tracer.Unsupported:
-                    on_cpu(lo, hi)
-                    continue
+                except gpu_tracer.Unsupported as reason:
+                    declined.append(str(reason))
+                    with lock:
+                        left.append((lo, hi))
+                    return
                 parts.append((1.0, part))
+                on_gpu.set()
         except BaseException as error:  # noqa: BLE001 - handed to the caller below
             errors.append(error)
 
@@ -297,12 +318,16 @@ def _shared(plan: Plan, values: dict) -> tuple:
     helper.join()
     if errors:
         raise errors[0]
+    # What the GPU declined after the CPU had run out of parts.
+    for lo, hi in left:
+        on_cpu(lo, hi, threads)
     scales = [scale for scale, _ in parts]
     results = [part for _, part in parts]
 
     def total_of(i: int, scaled: bool = True):
         return sum((s if scaled else 1.0) * r[i] for s, r in zip(scales, results, strict=True))
 
+    followed = Plan("cpu", reason=declined[0]) if declined and not on_gpu.is_set() else plan
     return (
         total_of(0),
         total_of(1),
@@ -311,7 +336,7 @@ def _shared(plan: Plan, values: dict) -> tuple:
         total_of(4),
         total_of(5, scaled=False),
         int(total_of(6, scaled=False)),
-    )
+    ), followed
 
 
 __all__ = [

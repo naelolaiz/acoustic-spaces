@@ -7,7 +7,8 @@ traces what the CPU does: detector spheres and diffuse or specular rain, vector-
 or random scattering, the scattering of a surface's size, air absorption, the early
 stage's paths left out, arrival directions and the weight window that splits rays and
 thins them out. It leaves to the CPU (raising :class:`Unsupported`) sound through
-surfaces into other rooms and the face groups of material calibration.
+surfaces into other rooms, the face groups of material calibration and runs whose
+results its buffers cannot hold.
 
 Rays start where the CPU's do (``_native.ray_starts``: the same directions and energies
 for the same seed), then go their own way: the GPU draws its random numbers from
@@ -15,7 +16,9 @@ streams of its own (xoshiro128**) and works in single precision, so the two agre
 statistically, not ray for ray. Each ray adds its energy to the listeners' time slots
 with atomic additions of 64-bit fixed-point numbers (two 32-bit words with a carry,
 rounded at random to the nearest step, so that sums are exact and unbiased; WGSL has no
-atomic floating-point addition), scaled so that no sum can come near overflowing.
+atomic floating-point addition), scaled so that a window's sums stay under 2**40 times
+the reflections per ray, where the listeners' sums grow with the ray count (and the GPU
+gives up a run whose sums overflow).
 
 The rays advance in rounds of a few reflections each, so that no dispatch runs long
 enough for the operating system to reset the GPU. Rays still going at the end of a
@@ -28,6 +31,8 @@ follows each to its end before it takes the next: a family that reaches its limi
 leaves the expected energies as they were too, but where the weight window asks for
 more copies than a family may have, the GPU traces more reflections in the late tail
 than the CPU (in the shoebox example, up to twice as many), and its tail varies less.
+Which of a family's copies split before it is full depends on the order the threads
+come in, so such runs differ from one another within the noise of the ray count.
 """
 
 from __future__ import annotations
@@ -868,7 +873,9 @@ class GpuTracer:
             "offset": _OFFSET * self.scale,
             # The most one addition can bring (a ray at a listener's sphere) is 2**40.
             "scale": 2.0**_FRACTION * math.pi * r_min**2 / (1.5 * loudest),
-            "window_scale": 2.0**_FRACTION / loudest,
+            # A window takes an addition at every reflection of every ray: 2**40 all
+            # together for each reflection per ray.
+            "window_scale": 2.0**_FRACTION / (loudest * rays),
         }
         halves = (0, most * record)
         kept = spawned = spawn_from = fresh_from = rounds = 0

@@ -513,7 +513,7 @@ air:
 simulation:
   ir_length_s: 2.0          # length of the impulse responses (s), default 2
   sample_rate: 48000        # of the impulse responses (Hz), default 48000
-  seed: 1                   # random seed; unset, every run draws its own
+  seed: 1                   # random seed, 0 or more; unset, every run draws its own
 ```
 
 - `air` sets the speed of sound and the air absorption per band (ISO 9613-1), for the
@@ -524,7 +524,7 @@ simulation:
   `--sample-rate` on the command line overrides `sample_rate` for one run.
 - With a `seed`, the late rays, the scattering and the coverage maps draw the same
   random numbers every run, so a scene's results repeat from run to run (`--seed` sets
-  it for one run). A GPU draws random numbers of its own, and when the CPU and a GPU
-  share the rays the results vary slightly from run to run (see
+  it for one run). A GPU draws random numbers of its own, and its results can vary
+  slightly from run to run, as do those of the CPU and a GPU sharing the rays (see
   [The late stage on a GPU](simulation.md#the-late-stage-on-a-gpu)). The editor's
   **Simulation** entry has these under **Response**, and the scene's own entry the air.

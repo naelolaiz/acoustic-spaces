@@ -812,8 +812,8 @@ class LateStage(_Model):
         description=(
             "stochastic ray tracing only: where it traces the rays: cpu, gpu (through "
             "WebGPU: Vulkan, Metal or Direct3D 12, with the gpu extra), both (the two share "
-            "the rays; results then vary slightly from run to run) or auto (the fastest "
-            "of those on this computer for the response length, as acoustic-spaces tune "
+            "the rays; with a GPU, results can vary slightly from run to run) or auto (the "
+            "fastest of those on this computer for the response length, as acoustic-spaces tune "
             "or a short trial found; the CPU when unsure). Not set: this computer's "
             "default, cpu unless acoustic-spaces tune made it auto. Sound through "
             "partitions and material calibration always run on the CPU"
@@ -997,7 +997,7 @@ class Simulation(_Model):
     )
     ir_length_s: float = Field(default=2.0, gt=0.0)
     sample_rate: int = Field(default=48_000, ge=8_000, le=192_000)
-    seed: int | None = Field(default=None, description="random seed, for reproducible runs")
+    seed: int | None = Field(default=None, ge=0, description="random seed, for reproducible runs")
 
 
 class Coverage(_Model):

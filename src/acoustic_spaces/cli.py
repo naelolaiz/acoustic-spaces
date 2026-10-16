@@ -26,7 +26,7 @@ from acoustic_spaces.room import Room
 MAP_PARAMETER_NAMES = ("spl", "spl_a", "g", "c50", "c80", "d50", "edt", "t20", "t30", "ts", "sti")
 #: Edge diffraction settings (engine.diffraction.DIFFRACTION_MODES).
 DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
-#: Highest octave bands the wave solver can compute (scene.model.WaveStage.max_band_hz).
+#: Highest octave bands the wave solver can compute (engine.wave.WAVE_BANDS_HZ).
 WAVE_BANDS_HZ = (63, 125, 250, 500)
 #: Choices for the highest band the early paths add in pressure in
 #: (scene.model.EarlyStage.coherent_max_band_hz).
@@ -630,6 +630,14 @@ def _threads(value: str) -> int:
     if count < 0:
         raise argparse.ArgumentTypeError("give 0 (every core) or more threads")
     return count
+
+
+def _seed(value: str) -> int:
+    """--seed: a random seed, 0 or more."""
+    seed = int(value)
+    if seed < 0:
+        raise argparse.ArgumentTypeError("give a seed of 0 or more")
+    return seed
 
 
 def _add_performance_arguments(parser: argparse.ArgumentParser) -> None:
@@ -1901,7 +1909,7 @@ def build_parser() -> argparse.ArgumentParser:
     animate.add_argument(
         "--color", choices=["energy", "order"], default="energy", help="colour particles by"
     )
-    animate.add_argument("--seed", type=int, default=0, help="seed for diffuse reflections")
+    animate.add_argument("--seed", type=_seed, default=0, help="seed for diffuse reflections")
     animate.set_defaults(func=_cmd_animate)
 
     export = sub.add_parser(
@@ -1940,7 +1948,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=SLOW_MOTION,
         help=f"seconds of animation per second of sound (default {SLOW_MOTION:g})",
     )
-    export.add_argument("--seed", type=int, default=0, help="seed for diffuse reflections")
+    export.add_argument("--seed", type=_seed, default=0, help="seed for diffuse reflections")
     export.add_argument("--threads", type=_threads, help=THREADS_HELP)
     export.set_defaults(func=_cmd_export)
 
@@ -1949,7 +1957,7 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--out", required=True, metavar="DIR", help="folder for the results")
     simulate.add_argument("--sample-rate", type=int, help="override simulation.sample_rate")
     simulate.add_argument("--length", type=float, help="override simulation.ir_length_s")
-    simulate.add_argument("--seed", type=int, help="override simulation.seed")
+    simulate.add_argument("--seed", type=_seed, help="override simulation.seed")
     simulate.add_argument(
         "--bands",
         choices=("octave", "third_octave"),
@@ -2034,7 +2042,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DB",
         help="background noise for the STI, dB SPL: one value, or one per octave band",
     )
-    coverage.add_argument("--seed", type=int, help="override simulation.seed")
+    coverage.add_argument("--seed", type=_seed, help="override simulation.seed")
     coverage.add_argument("--max-order", type=int, help="override simulation.early.max_order")
     coverage.add_argument(
         "--diffraction", choices=DIFFRACTION_MODES, help="override simulation.early.diffraction"
@@ -2171,7 +2179,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     calibrate.add_argument("--channel", type=int, help="channel of the WAV files (default 1)")
     calibrate.add_argument("--rays", type=int, help="override simulation.late.rays")
-    calibrate.add_argument("--seed", type=int, help="override simulation.seed")
+    calibrate.add_argument("--seed", type=_seed, help="override simulation.seed")
     calibrate.add_argument("--length", type=float, help="override simulation.ir_length_s")
     _add_performance_arguments(calibrate)
     calibrate.add_argument("-o", "--out", metavar="YAML", help="write the fitted scene here")
@@ -2269,7 +2277,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     walkthrough.add_argument("--rays", type=int, help="override simulation.late.rays")
     walkthrough.add_argument("--length", type=float, help="override simulation.ir_length_s")
-    walkthrough.add_argument("--seed", type=int, help="override simulation.seed")
+    walkthrough.add_argument("--seed", type=_seed, help="override simulation.seed")
     walkthrough.add_argument("--threads", type=_threads, help=THREADS_HELP)
     walkthrough.add_argument(
         "--video",

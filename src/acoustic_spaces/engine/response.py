@@ -65,6 +65,8 @@ class Response:
     #: energies include, or None for none. G is taken against the same source in free
     #: field, so the feed does not change it.
     feed: np.ndarray | None = None
+    #: How much later the feed makes every arrival (s), which the times include.
+    feed_delay_s: float = 0.0
     #: With face groups (``simulate(groups=...)``): the moments of the late energy's
     #: reflection counts off each group (terms, bands, slots of ``moment_step``), for
     #: :meth:`reweighted`; else empty.
@@ -212,6 +214,7 @@ class Response:
             late_directional=directional,
             wave=wave,
             feed=gain if self.feed is None else self.feed * gain,
+            feed_delay_s=self.feed_delay_s + delay_s,
         )
 
     def _reference(self) -> np.ndarray:
@@ -274,7 +277,8 @@ class Response:
             self.time_step,
             self.direct_delay_s,
             reference_energy=reference,
-            stage=self.direct_delay_s * self.speed_of_sound <= STAGE_DISTANCE_M,
+            stage=(self.direct_delay_s - self.feed_delay_s) * self.speed_of_sound
+            <= STAGE_DISTANCE_M,
             lateral=(weighted(side), weighted(side, 1)),
             directional=[weighted(self.orientation[:, k]) for k in range(3)],
         )

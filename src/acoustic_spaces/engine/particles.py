@@ -23,7 +23,7 @@ from acoustic_spaces.engine.model import TraceModel, size_scattering, source_wei
 from acoustic_spaces.room import Room
 from acoustic_spaces.spatial.directions import fibonacci_sphere
 
-#: Particles stop after this many reflections even if time remains.
+#: Particles stop at this many reflections even if time remains.
 MAX_REFLECTIONS = 200
 
 
@@ -146,6 +146,12 @@ def trace_particles(
         if not np.any(alive & (t_next <= duration)):
             break
         alive &= t_next <= duration
+    # Particles still in flight after MAX_REFLECTIONS stop where the last one left them.
+    t0.append(np.where(alive, t0[-1], np.inf))
+    start.append(start[-1])
+    direction.append(np.where(alive[:, None], 0.0, direction[-1]))
+    energies.append(energies[-1])
+    reflections.append(reflections[-1])
     t0_all, start_all = np.array(t0), np.array(start)
     direction_all, energy_all = np.array(direction), np.array(energies)
     reflections_all = np.array(reflections)

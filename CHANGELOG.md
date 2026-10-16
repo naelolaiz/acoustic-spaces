@@ -78,6 +78,38 @@
   `simulate_walk`.
 - The editor's Edit > Add material from a library… failed before showing its file
   dialog. It opens in the scene's folder now.
+- A source with a `delay_ms` gave no stage support (ST early and ST late) at listeners
+  within 1.5 m of it when the delay was more than about 1.5 ms at 1 m (4.4 ms
+  anywhere): the delay counted as distance. Only the distance counts now.
+- `simulate()` with some of a scene's sources or listeners (`sources=`, `listeners=`,
+  and so `calibrate`) drew other random numbers for them than a run of the whole scene
+  with the same seed, and others again when the names came in another order. Seeds go
+  by the scene's order now, as in coverage maps; runs of the whole scene are unchanged.
+- A negative `simulation.seed` or `--seed` passed every check, then stopped the run with
+  `error: expected non-negative integer`. It is refused at once, naming the seed.
+- `view --paths` and `export --paths` drew and counted every path up to the highest
+  order within `ir_length_s`, where a simulation with `transition_ms` set, or with the
+  statistical late method, keeps fewer as early paths (13 of the shoebox's 63 with the
+  statistical method). They show those the simulation keeps now.
+- Particles that reached their 200th reflection (in `animate` and `export --particles`
+  longer than about 1 to 1.8 s) flew on through the walls. They stop there now.
+- On a GPU, a late stage of more than about 1 to 3 million rays per band in a small
+  room overflowed its sums, and was then traced all over again on the CPU. The GPU
+  traces it now.
+- When the GPU declined a run it had been given (its buffers too small for the
+  results), the CPU traced it while the progress message said the GPU had. The message
+  says the CPU now, and why; `auto` takes the CPU for such a run, where its trial
+  stopped the run before. With `both`, a second CPU tracer took the GPU's parts beside
+  the first, on the same threads; the one CPU tracer takes them over now. `tune` refuses
+  such a scene, naming the reason, where it timed the CPU as the GPU, and
+  `engine.ray_device.trace` returns the plan it followed with the results.
+- The leak finder's area for a gap whose open edges do not close up into loops, or for
+  rays slipping between faces, came out too small wherever rays escaped elsewhere too
+  (by 23 % for two gaps of 30 m2 in a model of 100 m2). It is the gap's share of the
+  reflections times the area of the surfaces now.
+- `engine.wave.wave_responses` took `max_band_hz` up to 8000 Hz, as its error message
+  said, and failed with an `IndexError` at 8000. Like the scene, it takes 63, 125, 250
+  or 500 Hz now (`WAVE_BANDS_HZ`).
 
 ## 3.0.0
 

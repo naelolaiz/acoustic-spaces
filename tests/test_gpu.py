@@ -268,6 +268,33 @@ def test_gpu_tracer_counts_the_rays_that_escape_as_the_cpu_does() -> None:
 
 
 @needs_gpu
+def test_gpu_tracer_sums_the_reflections_of_many_rays() -> None:
+    """A 10 cm box with hard walls: each ray meets them some 250 times in the weight
+    window's first 50 ms, 12 million additions to that window's sums in all, more than
+    its fixed point held when each could bring as much as one ray's whole energy."""
+    values = reference_arguments(_native, _reference(), "random_detector")
+    vertices, faces = _unit_cube()
+    values |= {
+        "bvh": _native.Bvh(vertices * 0.1, faces),
+        "source": np.array([0.05, 0.05, 0.05]),
+        "directivity_a": np.zeros(0),
+        "directivity_table": np.zeros((0, 0, 3)),
+        "absorption": np.zeros((len(faces), 3)),
+        "scattering": np.full((len(faces), 3), 0.5),
+        "receivers": np.array([[0.03, 0.065, 0.04]]),
+        "receiver_radius": np.full(1, 0.01),
+        "covered_time": np.zeros(0),
+        "rays": 50_000,
+        "max_time": 0.05,
+    }
+    on_cpu = _native.trace_stochastic(**values)
+    on_gpu = gpu_tracer.trace_stochastic(**values)
+    assert on_cpu[5][0] > 200 * values["rays"]
+    np.testing.assert_allclose(on_gpu[4], on_cpu[4], rtol=0.01)  # the rays' energy
+    np.testing.assert_allclose(on_gpu[5], on_cpu[5], rtol=0.01)  # and reflections
+
+
+@needs_gpu
 @pytest.mark.parametrize("name", ["vector", "vector_split", "random_detector", "secondary"])
 def test_gpu_tracer_agrees_with_main_within_the_noise(name: str) -> None:
     """The late energy traced on the GPU, with four times the rays, against main's
