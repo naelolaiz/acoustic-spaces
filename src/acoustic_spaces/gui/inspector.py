@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 from acoustic_spaces.engine import tuning
 from acoustic_spaces.geometry.io import SUPPORTED_SUFFIXES, ifc_spaces
 from acoustic_spaces.gui.document import Document, EditError
+from acoustic_spaces.gui.levels import rich_lines
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.materials.bands import convert
 from acoustic_spaces.room import UNASSIGNED, matching_name
@@ -193,6 +194,7 @@ class ScenePage(Page):
         form.addRow("Relative humidity", self.humidity)
         form.addRow("Air pressure", self.pressure)
         self.stats = QLabel()
+        self.stats.setTextFormat(Qt.TextFormat.RichText)
         self.stats.setWordWrap(True)
         self.stats.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         form.addRow(self.stats)
@@ -222,11 +224,10 @@ class ScenePage(Page):
                     f"Reverberation time at {BAND_LABELS[k]}: {eyring[k]:.2f} s (Eyring), "
                     f"{sabine[k]:.2f} s (Sabine)"
                 )
-        for problem in room.problems():
-            lines.append(f"Problem: {problem}")
-        for warning in room.warnings():
-            lines.append(f"Warning: {warning}")
-        self.stats.setText("\n".join(lines))
+        shown = [(line, "info") for line in lines]
+        shown += [(f"Problem: {problem}", "error") for problem in room.problems()]
+        shown += [(f"Warning: {warning}", "warning") for warning in room.warnings()]
+        self.stats.setText(rich_lines(self.stats, shown))
 
     def _name(self) -> None:
         name = self.name.text().strip() or "untitled"

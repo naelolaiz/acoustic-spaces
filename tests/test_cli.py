@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import math
 import sys
 from pathlib import Path
@@ -28,6 +29,41 @@ def test_tune_needs_a_gpu(capsys, monkeypatch) -> None:
     monkeypatch.setattr(gpu, "_adapter", lambda: None)
     assert main(["tune", str(SHOEBOX), "--rays", "10"]) == 1
     assert "error: tune compares the CPU with a GPU" in capsys.readouterr().err
+
+
+class _Terminal(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+def test_errors_and_warnings_in_colour_on_a_terminal(monkeypatch, tmp_path) -> None:
+    from acoustic_spaces import cli
+
+    terminal = _Terminal()
+    monkeypatch.setattr(sys, "stderr", terminal)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm")
+    monkeypatch.setattr(cli, "_windows_escape_codes", lambda: True)
+    missing = str(tmp_path / "missing.yaml")
+    red, yellow, plain = "\033[1;31m", "\033[1;33m", "\033[0m"
+    assert main(["validate", missing]) == 1
+    assert terminal.getvalue().startswith(f"{red}error:{plain} ")
+    assert sys.stderr is terminal  # put back
+    main(["validate", str(EXAMPLES / "leaky_classroom" / "scene.yaml")])
+    assert f"{yellow}warning:{plain} the model is not closed" in terminal.getvalue()
+    with pytest.raises(SystemExit):
+        main(["tune", "--default", "gpu"])
+    assert f"tune: {red}error:{plain} argument --default" in terminal.getvalue()
+    # Plain with NO_COLOR, or written anywhere but a terminal.
+    monkeypatch.setenv("NO_COLOR", "1")
+    terminal.seek(0)
+    terminal.truncate()
+    assert main(["validate", missing]) == 1
+    assert terminal.getvalue().startswith("error: ")
+    monkeypatch.delenv("NO_COLOR")
+    monkeypatch.setattr(sys, "stderr", io.StringIO())
+    assert main(["validate", missing]) == 1
+    assert sys.stderr.getvalue().startswith("error: ")
 
 
 def test_tune_switches_the_default_back_to_the_cpu(capsys, monkeypatch) -> None:

@@ -76,6 +76,9 @@ acoustic-spaces tune --default auto                    # with the gpu extra: run
 python -m pytest                                       # the test suite
 ```
 
+Errors start with `error:` and warnings with `warning:`, in red and yellow in a
+terminal (`NO_COLOR=1` turns colours off).
+
 `animate` shows sound particles leaving a source and spreading through the room, each
 reflecting off the walls (turned from the specular direction by as much as the surface
 scatters; see [Scattering](simulation.md#scattering)) and losing the absorbed share of its energy at

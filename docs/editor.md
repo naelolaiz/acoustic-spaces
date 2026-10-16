@@ -100,7 +100,14 @@ The editor works on the same scene files as the command line:
   directivity index per band, opens the polar patterns, and the selected source shows
   its balloon in the 3D view.
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
-  as you edit.
+  as you edit, with the number of problems in red.
+- **Messages** shows warnings (leaks, results from before the latest changes, dropouts
+  while playing) in amber and errors (a refused change, a run that cannot start or
+  failed, a file that cannot be read or written) in red; so does the scene's own form
+  for its problems and warnings.
+- When a run, a coverage map or a tuning ends while another window is in front, the
+  editor's entry in the taskbar flashes (on macOS, its Dock icon bounces). Nothing pops
+  up: the results come to the front and **Messages** says how it went.
 - **View > Show leaks** traces rays from the sources and shows where they escape from a
   model that is not closed: its open edges, the escaping rays and a marker on each gap,
   with the report in the messages (see [Finding leaks](scenes.md#finding-leaks)). It

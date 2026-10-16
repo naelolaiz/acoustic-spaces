@@ -7,6 +7,7 @@ import dataclasses
 import json
 import math
 import os
+import re
 import sys
 import textwrap
 from collections.abc import Sequence
@@ -2339,11 +2340,77 @@ def _no_editor() -> str:
     return ""
 
 
+#: How the terminal shows a line's ``error:`` (red) and ``warning:`` (yellow), also
+#: after a command's name, as argparse writes its errors.
+HIGHLIGHTS = {"error": "\033[1;31m", "warning": "\033[1;33m"}
+_LEVEL = re.compile(r"^((?:[\w.-]+ )*[\w.-]+: )?(error|warning):")
+
+
+class _Highlighted:
+    """A terminal stream that shows the ``error:`` and ``warning:`` starting a line in
+    red and yellow."""
+
+    def __init__(self, stream) -> None:
+        self._stream = stream
+        self._line_start = True
+
+    def write(self, text: str) -> int:
+        shown = []
+        for piece in text.splitlines(keepends=True):
+            found = _LEVEL.match(piece) if self._line_start else None
+            if found:
+                command, level = found.group(1) or "", found.group(2)
+                rest = piece[found.end() :]
+                piece = f"{command}{HIGHLIGHTS[level]}{level}:\033[0m{rest}"
+            shown.append(piece)
+            self._line_start = piece.endswith("\n")
+        self._stream.write("".join(shown))
+        return len(text)
+
+    def __getattr__(self, name: str):
+        return getattr(self._stream, name)
+
+
+def _colours(stream) -> bool:
+    """Whether ``stream`` shows colours: a terminal, unless NO_COLOR is set or TERM is
+    dumb; on Windows, one that takes ANSI escape codes."""
+    if os.environ.get("NO_COLOR") or os.environ.get("TERM") == "dumb":
+        return False
+    try:
+        if not stream.isatty():
+            return False
+    except (AttributeError, ValueError):  # closed, or not a real stream
+        return False
+    return os.name != "nt" or _windows_escape_codes()
+
+
+def _windows_escape_codes() -> bool:  # pragma: no cover - Windows consoles only
+    """Turn on the escape codes in the Windows console that shows the errors."""
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.GetStdHandle(-12)  # the standard error
+    mode = ctypes.c_uint32()
+    if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+        return False
+    return bool(kernel32.SetConsoleMode(handle, mode.value | 0x0004))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         # Material descriptions contain characters a Windows console code page may lack.
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
+    stderr = sys.stderr
+    if _colours(stderr):
+        sys.stderr = _Highlighted(stderr)
+    try:
+        return _main(argv)
+    finally:
+        sys.stderr = stderr
+
+
+def _main(argv: Sequence[str] | None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     parser = build_parser()
     if not argv:

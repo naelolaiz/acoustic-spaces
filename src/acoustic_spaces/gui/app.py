@@ -19,6 +19,8 @@ from PySide6.QtGui import (
     QKeySequence,
     QShortcut,
     QShowEvent,
+    QTextCharFormat,
+    QTextCursor,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -52,6 +54,7 @@ from acoustic_spaces.gui.document import (
     model_scene,
 )
 from acoustic_spaces.gui.inspector import BAND_LABELS, Inspector, label_text
+from acoustic_spaces.gui.levels import level_colour, rich_lines
 from acoustic_spaces.gui.map_view import MapPanel
 from acoustic_spaces.gui.plan_view import PlanView
 from acoustic_spaces.gui.results_view import ResultsPanel
@@ -150,6 +153,7 @@ class MainWindow(QMainWindow):
         self.progress.setMaximumWidth(160)
         self.progress.hide()
         self.summary = QLabel()
+        self.summary.setTextFormat(Qt.TextFormat.RichText)
         self.statusBar().addPermanentWidget(self.progress)
         self.statusBar().addPermanentWidget(self.summary)
         self._play_timer = QTimer(self)
@@ -212,7 +216,7 @@ class MainWindow(QMainWindow):
         self._sized = False
         self._attach(self.document)
         if not self.viewport.available:
-            self.log(self.viewport.note)
+            self.log(self.viewport.note, "warning")
 
     # -- menus ----------------------------------------------------------------------
 
@@ -477,18 +481,33 @@ class MainWindow(QMainWindow):
             parts += [f"{room.volume_m3:,.0f} m³", f"RT {rt:.2f} s at {BAND_LABELS[k]} (Eyring)"]
         else:
             parts.append("model not closed")
+        lines = [(", ".join(parts), "info")]
         problems = room.problems()
         if problems:
-            parts.append(f"{len(problems)} problem{'s' if len(problems) > 1 else ''}")
-        self.summary.setText(", ".join(parts))
+            lines.append((f", {len(problems)} problem{'s' if len(problems) > 1 else ''}", "error"))
+        self.summary.setText(rich_lines(self.summary, lines).replace("<br>", ""))
         self.summary.setToolTip("\n".join(problems))
 
-    def log(self, text: str) -> None:
-        self.messages.appendPlainText(text)
+    def log(self, text: str, level: str = "info") -> None:
+        """Add ``text`` to the messages, a warning in amber and an error in red, and show
+        it in the status bar."""
+        style = QTextCharFormat()
+        colour = level_colour(self.messages, level)
+        if colour is not None:
+            style.setForeground(colour)
+        bar = self.messages.verticalScrollBar()
+        following = bar.value() == bar.maximum()
+        cursor = QTextCursor(self.messages.document())
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        if not self.messages.document().isEmpty():
+            cursor.insertBlock()
+        cursor.insertText(text, style)
+        if following:  # as appending does: stay at the end unless scrolled back
+            bar.setValue(bar.maximum())
         self.statusBar().showMessage(text, 8000)
 
     def _refused(self, message: str) -> None:
-        self.log(f"Not changed: {message}")
+        self.log(f"Not changed: {message}", "error")
 
     # -- selection and the 3D view ------------------------------------------------
 
@@ -551,7 +570,7 @@ class MainWindow(QMainWindow):
 
         leaks = find_leaks(room)
         self._found_leaks = (room, leaks)
-        self.log(f"Leaks: {leaks.summary()}")
+        self.log(f"Leaks: {leaks.summary()}", "warning" if leaks.leaked else "info")
         return leaks
 
     def _paths_toggled(self, on: bool) -> None:
@@ -872,7 +891,7 @@ class MainWindow(QMainWindow):
 
     def save_screenshot(self) -> None:
         if not self.viewport.available:
-            self.log(self.viewport.note)
+            self.log(self.viewport.note, "warning")
             return
         path, _ = QFileDialog.getSaveFileName(self, "Save screenshot", "room.png", "PNG (*.png)")
         if path:
@@ -921,7 +940,7 @@ class MainWindow(QMainWindow):
         return True
 
     def _error(self, title: str, text: str) -> None:
-        self.log(f"{title}: {text}")
+        self.log(f"{title}: {text}", "error")
         QMessageBox.warning(self, title, text)
 
     # -- simulation -----------------------------------------------------------------
@@ -958,7 +977,7 @@ class MainWindow(QMainWindow):
             return
         problems = self.document.room.problems()
         if problems:
-            self.log("Cannot run: " + "; ".join(problems))
+            self.log("Cannot run: " + "; ".join(problems), "error")
             self.docks["messages"].raise_()
             return
         # Count reflections off each material, so that changing absorption afterwards
@@ -976,7 +995,7 @@ class MainWindow(QMainWindow):
         # Listeners play no part in a map.
         problems = [p for p in self.document.room.problems() if not p.startswith("listener ")]
         if problems:
-            self.log("Cannot map: " + "; ".join(problems))
+            self.log("Cannot map: " + "; ".join(problems), "error")
             self.docks["messages"].raise_()
             return
         job = MapJob(self.document.room)
@@ -1027,7 +1046,7 @@ class MainWindow(QMainWindow):
         open: another was opened or started while the job ran."""
         if self._job_document is self.document:
             return False
-        self.log("Dropped the results of the run: its scene is no longer open.")
+        self.log("Dropped the results of the run: its scene is no longer open.", "warning")
         return True
 
     def _done(self, result) -> None:
@@ -1105,7 +1124,7 @@ class MainWindow(QMainWindow):
         return self.job.kind if self.job is not None else "simulation"
 
     def _failed(self, message: str) -> None:
-        self.log(f"The {self._job_kind()} failed: {message}")
+        self.log(f"The {self._job_kind()} failed: {message}", "error")
         self.docks["messages"].raise_()
 
     def _cancelled(self) -> None:
@@ -1115,6 +1134,10 @@ class MainWindow(QMainWindow):
         job, self.job = self.job, None
         if job is not None:
             job.wait()
+        # Done (or failed) while another window was in front: flash the editor's entry in
+        # the taskbar (the Dock icon bounces on macOS), as desktop programs do. Nothing
+        # pops up: the results and the messages already show what happened.
+        QApplication.alert(self)
         self.run_action.setEnabled(True)
         self.map_action.setEnabled(True)
         self.tune_action.setEnabled(True)
@@ -1149,7 +1172,7 @@ class MainWindow(QMainWindow):
                 "to a source); scale them before playing them back."
             )
         if self._stale():
-            self.log("These results are from before the latest changes to the scene.")
+            self.log("These results are from before the latest changes to the scene.", "warning")
         return report
 
     def save_map(self) -> None:
@@ -1189,7 +1212,7 @@ class MainWindow(QMainWindow):
             return False
         self.log(f"Wrote {path}")
         if self._map_stale():
-            self.log("This map is from before the latest changes to the scene.")
+            self.log("This map is from before the latest changes to the scene.", "warning")
         return True
 
     def _listening_format(self):
@@ -1367,7 +1390,7 @@ class MainWindow(QMainWindow):
         if "error" in outcome:
             self._error("Cannot play", str(outcome["error"]))
         elif outcome["report"].xruns:
-            self.log(f"{outcome['report'].xruns} block(s) dropped out while playing.")
+            self.log(f"{outcome['report'].xruns} block(s) dropped out while playing.", "warning")
 
     def _playing(self, playing: bool) -> None:
         self.stop_action.setEnabled(playing)

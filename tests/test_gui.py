@@ -33,6 +33,7 @@ from acoustic_spaces.gui.document import (  # noqa: E402
     plan_corners,
     unique_name,
 )
+from acoustic_spaces.gui.levels import level_colour  # noqa: E402
 from acoustic_spaces.gui.plan_view import grid_step, outline_segments, snap  # noqa: E402
 from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # noqa: E402
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
@@ -297,6 +298,33 @@ def test_window_opens_every_example(window) -> None:
         assert example.path.name in window.windowTitle()
 
 
+def test_warnings_and_errors_stand_out(window) -> None:
+    window.log("all fine")
+    window.log("careful", "warning")
+    window.log("broken\nreally", "error")
+    brushes = {}
+    block = window.messages.document().begin()
+    while block.isValid():
+        brushes[block.text()] = block.begin().fragment().charFormat().foreground()
+        block = block.next()
+    assert brushes["all fine"].style() == Qt.BrushStyle.NoBrush  # the theme's own
+    assert brushes["careful"].color() == level_colour(window.messages, "warning")
+    error = level_colour(window.messages, "error")
+    assert brushes["broken"].color() == brushes["really"].color() == error
+    assert window.messages.toPlainText().endswith("all fine\ncareful\nbroken\nreally")
+    with pytest.raises(ValueError, match="info, warning, error"):
+        window.log("loud", "shout")
+    # Problems in the status bar, and the scene's warnings in its form.
+    window.document.edit("move", lambda data: data["sources"][0].update(position=[50, 0, 0]))
+    summary = window.summary.text()
+    assert f'<span style="color:{error.name()}">, ' in summary and "problem" in summary
+    window.open_example(example_path("leaky_classroom"))
+    window.select("scene")
+    stats = window.inspector.pages["scene"].stats.text()
+    warning = level_colour(window.messages, "warning").name()
+    assert f'<span style="color:{warning}">Warning: the model is not closed' in stats
+
+
 def test_leaks_are_found_and_shown(window, monkeypatch) -> None:
     import acoustic_spaces.engine.leaks as leaks_module
 
@@ -309,6 +337,8 @@ def test_leaks_are_found_and_shown(window, monkeypatch) -> None:
     window.leaks_action.trigger()
     log = window.messages.toPlainText()
     assert "Leaks: 300 rays" in log and "by east_wall" in log
+    last = window.messages.document().lastBlock().begin().fragment().charFormat()
+    assert last.foreground().color() == level_colour(window.messages, "warning")
     assert len(found) == 1
     # Found again only when the room changes where it matters.
     window.select("listeners", 0)
@@ -1081,6 +1111,8 @@ def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
     monkeypatch.setattr(tuning, "tune", tune)
     shown = []
     monkeypatch.setattr(TuneDialog, "open", lambda dialog: shown.append(dialog))
+    alerts = []
+    monkeypatch.setattr(QApplication, "alert", lambda widget, msec=0: alerts.append(widget))
 
     def run_tune() -> TuneDialog:
         window.tune_action.trigger()
@@ -1096,6 +1128,7 @@ def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
     assert not tune_action.isEnabled() and not window.run_action.isEnabled()
     _wait(qapp, lambda: window.job is None)
     assert timed == [window.document.scene.name] and tune_action.isEnabled()
+    assert alerts == [window]  # flashes in the taskbar if another window is in front
     assert "Tuned in" in window.messages.toPlainText()
     assert "late stage 1 s both." in window.messages.toPlainText()
     # The table, auto as this computer's default (ticked); a scene naming no device

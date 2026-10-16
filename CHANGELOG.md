@@ -22,6 +22,14 @@
 - The wave solver's `auto` compares the timed costs for the run's step count, where it
   took any hardware GPU; without `tune` it still does.
 
+**Warnings, errors and finished runs**
+
+- The editor shows warnings in amber and errors in red, in **Messages**, in the scene's
+  form and (the number of problems) in the status bar. On the command line, `error:`
+  and `warning:` are red and yellow in a terminal (`NO_COLOR` turns that off).
+- When a run, a coverage map or a tuning ends while another window is in front, the
+  editor's taskbar entry flashes (the Dock icon bounces on macOS).
+
 **Starting the editor**
 
 - `acoustic-spaces` with no command opens the editor (`acoustic-spaces edit`), with the
