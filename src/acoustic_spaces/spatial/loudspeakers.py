@@ -289,7 +289,10 @@ class Loudspeakers:
                 # Outside every pair (behind a stereo pair): the nearest speaker.
                 out[row, int(np.argmax(main_directions[:, : len(p)] @ p))] = 1.0
             else:
-                g = np.maximum(best_g, 0.0)
+                # On an edge or a corner of the triangle, rounding leaves the speakers away
+                # from it gains of about 1e-17, positive with some processors' arithmetic and
+                # not with others'; they play nothing, so all give the same gains.
+                g = np.where(best_g > 1e-12, best_g, 0.0)
                 out[row] = g @ self._downmix[list(best_idx)]
                 if np.linalg.norm(out[row]) < 1e-6:  # at an imaginary speaker at a pole
                     pole = best_idx[int(np.argmax(g))]
