@@ -24,8 +24,8 @@ much as missing a parameter, one JND for each factor of ``PRIOR_FACTOR``. Withou
 measurements that tell the materials apart this is the fit of a single factor per band,
 as fitting a diffuse-field formula to the reverberation time does.
 :attr:`Calibration.uncertainty` says, per material and band, how far its absorption
-could move, the other materials following it, before the fit to the measurements
-worsens by one JND: what the measurements leave open.
+could move, the other materials following it, before the sum of the squared misses
+grows by one JND squared (its standard error): what the measurements leave open.
 """
 
 from __future__ import annotations
@@ -71,9 +71,10 @@ class Calibration:
     parameters: tuple[str, ...]
     initial: np.ndarray  # (materials, bands)
     absorption: np.ndarray  # (materials, bands), fitted
-    #: (materials, bands) how far each material's absorption can move, the others
-    #: following it, before the misses grow by one JND (in their root sum of squares):
-    #: what the measurements leave open. Above 0.1 or so they hardly constrain it.
+    #: (materials, bands) the standard error of each material's absorption, for misses
+    #: of one JND: how far it can move, the others following it, before the sum of the
+    #: squared misses grows by one JND squared. It is what the measurements leave open.
+    #: Above 0.1 or so they hardly constrain it.
     uncertainty: np.ndarray
     measured: dict[Pair, RoomParameters]
     before: dict[Pair, RoomParameters]
@@ -370,8 +371,8 @@ def _fit_band(
         jac=lambda x: jacobian_of(residuals, x, lowest, upper),
         bounds=(lowest, upper),
     )
-    # How far each material can move, the others following, before the misses grow
-    # by one JND in their root sum of squares.
+    # The standard error of each material, for misses of one JND: how far it can move,
+    # the others following, before the sum of the squared misses grows by one JND squared.
     data = jacobian_of(misses, solution.x, lowest, upper)
     try:
         spread = np.sqrt(np.maximum(np.diag(np.linalg.inv(data.T @ data)), 0.0))
@@ -400,8 +401,9 @@ def calibrate(
     The scene's simulation settings (rays, response length, seed, and threads unless
     ``threads`` is given) are used, with stochastic ray tracing in octave bands and no
     wave solver. At most ``rounds`` traces at new absorption are made; it stops sooner
-    once no value moves by more than ``tolerance``. Absorption stays within ``bounds``,
-    and above what a material lets through.
+    once no value moves by more than ``tolerance``. Absorption stays within ``bounds``
+    (the lower one above 0, as the prior takes the logarithm of the absorption), and
+    above what a material lets through.
     """
     room = _as_room(room)
     scene = room.scene
@@ -413,7 +415,7 @@ def calibrate(
         raise ValueError("calibration works in octave bands: set simulation bands to octave")
     if sim.wave.enabled:
         raise ValueError("calibration re-weights rays; switch the wave solver off for it")
-    # The re-weighted echogram has no directions: no LF, LFC or directional decay times.
+    # The re-weighted echogram has no directions: no LF, LFC, IACC or directional decay times.
     fitted = [n for n in JND if n in iso3382.PARAMETERS]
     unknown = [n for n in parameters if n not in fitted]
     if unknown:
@@ -452,8 +454,8 @@ def calibrate(
     if rounds < 1:
         raise ValueError("calibration needs at least one round")
     low, high = bounds
-    if not 0.0 <= low < high < 1.0:
-        raise ValueError("bounds must be 0 <= low < high < 1")
+    if not 0.0 < low < high < 1.0:
+        raise ValueError("bounds must be 0 < low < high < 1")
     groups = len(materials)
     initial = _initial_absorption(room, materials)
     lowest = _lowest(room, materials, low)

@@ -140,6 +140,10 @@ t30 = comparison["t30"]
 print(t30.difference_jnd, t30.within_jnd, t30.mean_abs_jnd, t30.missing)
 ```
 
+`compare_parameters` also compares LF and LFC (0.05) and IACC_E and IACC_L (0.075,
+annex B) where both sets have them, and the directional decay times with the JND of T30.
+LJ and stage support have no JND in the standard and are not compared.
+
 
 ## Fitting materials to measurements
 
@@ -174,10 +178,11 @@ T30 after       0.04    0.07    0.07    0.11    0.08    0.08    0.06    0.09
 - Every material on a surface is fitted (at most 16), or those `--materials` names;
   `--parameters` picks others to match (T20, C50, D50, Ts, G).
 - The table gives each material's fitted absorption, what it started from (`was`), and
-  `+-`: how far it could move, the other materials following it, before the fit worsens
-  by one JND. Where that is a tenth or more, the measurements hardly decide it. `-o`
-  writes the scene with the fitted absorption (a material given in third octaves keeps
-  its shape within each octave), and `--json` every number.
+  `+-`: its standard error, how far it could move, the other materials following it,
+  before the sum of the squared misses (in JNDs) grows by 1. Where that is a tenth or
+  more, the measurements hardly decide it. `-o` writes the scene with the fitted
+  absorption (a material given in third octaves keeps its shape within each octave), and
+  `--json` every number.
 - The materials keep their proportions unless the measurements ask otherwise.
   Measurements fix the total absorption best. Telling two materials apart needs
   responses that hear them differently, and surfaces that the sound meets alike (the

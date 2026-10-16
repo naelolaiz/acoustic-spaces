@@ -110,6 +110,28 @@
 - `engine.wave.wave_responses` took `max_band_hz` up to 8000 Hz, as its error message
   said, and failed with an `IndexError` at 8000. Like the scene, it takes 63, 125, 250
   or 500 Hz now (`WAVE_BANDS_HZ`).
+- `compare_parameters` compares IACC_E and IACC_L when both sets have them, with the
+  just noticeable difference of 0.075 that ISO 3382-1 gives in annex B (the module's
+  comment said the standard gave none).
+- A Collada file with `<up_axis>X_UP</up_axis>` was read as if it were +z up, lying on
+  its side, and `up_axis` could not correct it. It is turned upright now, and an
+  `<up_axis>` that is none of X_UP, Y_UP and Z_UP is refused, where it was read as
+  +z up.
+- `calibrate(bounds=(0.0, high))` stopped with an error from scipy about infs or NaNs
+  whenever a fitted material absorbed 0.01 or less in a band, as the built-in brickwork
+  and concrete do at low frequencies. It refuses a lower bound of 0 at once, saying that
+  the bounds must be 0 < low < high < 1.
+- `acoustic-spaces inspect` of a model whose walls are drawn as a closed shell inside
+  another gave the volume of the cavity between them, while the reverberation times
+  below it used the air inside. It also gives the "air volume" now.
+- The warning for edges that join faces of opposite orientation said that it only
+  mattered for the volume. The volume and the inside checks do not depend on the
+  normals; only their reported direction is unknown, and the warning says so.
+- The documentation of `Calibration.uncertainty` and the `calibrate` table's `+-`
+  column now says what it is, the standard error of the absorption for misses of one
+  JND (how far it can move before the sum of the squared misses grows by one JND
+  squared), and the module summary of `render` says the real-time convolver's
+  partitions grow along the response, from the block size up to 8192 frames.
 
 ## 3.0.0
 

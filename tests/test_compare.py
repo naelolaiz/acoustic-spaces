@@ -45,12 +45,13 @@ def _tones(t60: float, sample_rate: int, length: float = 2.0) -> np.ndarray:
     return np.concatenate([np.zeros(sample_rate // 100), decay])
 
 
-def test_jnds_of_iso_3382_annex_a() -> None:
+def test_jnds_of_iso_3382() -> None:
     assert set(PARAMETERS) <= set(JND) <= set(ALL_PARAMETERS)
     assert JND["t30"] == JND["t20"] == JND["edt"] == (0.05, True)  # 5 % of the value
     assert JND["t30_x"] == JND["t30_y"] == JND["t30_z"] == JND["t30"]
     assert JND["lf"] == JND["lfc"] == (0.05, False)
-    assert not {"lj", "iacc_e", "iacc_l", "st_early", "st_late"} & set(JND)  # none known
+    assert JND["iacc_e"] == JND["iacc_l"] == (0.075, False)  # annex B
+    assert not {"lj", "st_early", "st_late"} & set(JND)  # none known
     assert JND["c80"] == JND["c50"] == JND["g"] == (1.0, False)  # 1 dB
     assert JND["d50"] == (0.05, False) and JND["ts"] == (0.010, False)  # 10 ms
     assert SUMMARY_BANDS_HZ[0] == 125 and SUMMARY_BANDS_HZ[-1] == 4000
@@ -107,6 +108,18 @@ def test_bands_within_one_jnd_and_the_mean_from_125_hz_to_4_khz() -> None:
     row = c.table().splitlines()[9]  # under the header, EDT and T20: T30's JNDs
     cells = ["+0.0", "+0.4", "+0.8", "+1.2*", "+1.6*", "+2.0*", "+4.0*", "+6.0*"]
     assert row.split() == ["JNDs", *cells]
+
+
+def test_iacc_is_compared_where_both_sides_give_it() -> None:
+    simulated, measured = _parameters(1.0), _parameters(1.0)
+    simulated.iacc_e = np.full(8, 0.6)
+    measured.iacc_e = np.full(8, 0.5)
+    c = compare_parameters(simulated, measured)
+    p = c["iacc_e"]
+    np.testing.assert_allclose(p.jnd, 0.075)
+    np.testing.assert_allclose(p.difference_jnd, 0.1 / 0.075)
+    assert (p.compared, p.within_jnd) == (8, 0)
+    assert "iacc_l" not in c.parameters  # neither side has it
 
 
 def test_g_needs_a_reference_on_both_sides() -> None:

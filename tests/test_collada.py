@@ -36,13 +36,17 @@ def test_the_rehearsal_room_in_inches(tmp_path: Path) -> None:
     assert model.collada(model._surfaces()) == ROOM.read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize(("unit", "up"), [(("metre", 1.0), "Z_UP"), (("cm", 0.01), "Y_UP")])
+@pytest.mark.parametrize(
+    ("unit", "up"), [(("metre", 1.0), "Z_UP"), (("cm", 0.01), "Y_UP"), (("metre", 1.0), "X_UP")]
+)
 def test_unit_and_up_axis_from_the_file(tmp_path: Path, unit, up: str) -> None:
     s = 1.0 / unit[1]
     if up == "Z_UP":
         floor = [(0, 0, 0), (2 * s, 0, 0), (2 * s, 3 * s, 0), (0, 3 * s, 0)]
-    else:  # y up: the floor in x and -z, so that it faces up
+    elif up == "Y_UP":  # the floor in x and -z, so that it faces up
         floor = [(0, 0, 0), (2 * s, 0, 0), (2 * s, 0, -3 * s), (0, 0, -3 * s)]
+    else:  # x up: the floor in -y and -z, so that it faces up
+        floor = [(0, 0, 0), (0, -2 * s, 0), (0, -2 * s, -3 * s), (0, 0, -3 * s)]
     path = tmp_path / "floor.dae"
     path.write_text(_make_model().collada([("floor", "Oak", [floor])], unit=unit, up=up))
     mesh = load_mesh(path)
@@ -52,7 +56,15 @@ def test_unit_and_up_axis_from_the_file(tmp_path: Path, unit, up: str) -> None:
     assert normal[2] > 0
     # The scene's units and up axis win: read as written, in metres with z up.
     raw = load_mesh(path, units="m", up_axis="z")
-    assert np.ptp(raw.vertices, axis=0).max() == pytest.approx(3.0 * s)
+    np.testing.assert_allclose(np.ptp(raw.vertices, axis=0), np.ptp(floor, axis=0), atol=1e-9)
+
+
+def test_an_unknown_up_axis_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "floor.dae"
+    floor = [(0, 0, 0), (2, 0, 0), (2, 3, 0), (0, 3, 0)]
+    path.write_text(_make_model().collada([("floor", "Oak", [floor])], up="y_up"))
+    with pytest.raises(ValueError, match="floor.dae: unknown up axis 'y_up'; use X_UP, Y_UP"):
+        load_mesh(path)
 
 
 NODES = """<?xml version="1.0"?>
