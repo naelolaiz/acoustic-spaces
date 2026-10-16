@@ -2,18 +2,24 @@
 
 ## Install
 
-Every release has wheels for Linux, macOS and Windows (CPython 3.10 to 3.14), with the
-compiled core inside, on its
-[GitHub release page](https://github.com/naelolaiz/acoustic_spaces_simulator/releases):
-`pip install` the wheel for your platform, with the extras below in brackets after its
-file name if you want them, such as
-`pip install "acoustic_spaces-3.1.0-cp312-cp312-win_amd64.whl[viz,gui]"`. The package is
-not on PyPI, so `pip install acoustic-spaces` does not find it; between releases, install
-from source.
+```sh
+pip install acoustic-spaces                # simulation, rendering and the command line
+pip install "acoustic-spaces[viz,gui]"     # with the 3D view and the graphical editor
+```
+
+The extras in brackets add the optional parts: `viz`, `gui`, `measure`, `sofa`, `gpu`,
+`ifc` and `sketchup` (what each brings is listed under *Install from source* below).
+PyPI has wheels with the compiled core inside for Linux (x86-64), macOS (Apple silicon)
+and Windows (x86-64), CPython 3.10 to 3.14; elsewhere pip builds the package from source,
+which needs a C++17 compiler. Every
+[GitHub release](https://github.com/naelolaiz/acoustic-spaces/releases) has the same
+wheels, to `pip install` with the extras after the file name, such as
+`pip install "acoustic_spaces-3.2.0-cp312-cp312-win_amd64.whl[viz,gui]"`. Between
+releases, install from source.
 
 The documentation (these pages, the validation report and an API reference generated
 from the docstrings) builds with Sphinx; see
-[CONTRIBUTING.md](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/CONTRIBUTING.md).
+[CONTRIBUTING.md](https://github.com/naelolaiz/acoustic-spaces/blob/main/CONTRIBUTING.md).
 
 
 ## Install from source
@@ -21,8 +27,8 @@ from the docstrings) builds with Sphinx; see
 Requirements: Python 3.10+, a C++17 compiler and CMake 3.18+.
 
 ```sh
-git clone https://github.com/naelolaiz/acoustic_spaces_simulator
-cd acoustic_spaces_simulator
+git clone https://github.com/naelolaiz/acoustic-spaces
+cd acoustic-spaces
 ```
 
 With [uv](https://docs.astral.sh/uv/), `uv sync` builds the package into `.venv` together

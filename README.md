@@ -7,7 +7,7 @@ loudspeaker formats.
 
 ![The church example in 3D: the stone nave with its early reflection paths from the altar to the front of the nave, coloured by order up to the third](docs/images/church_paths.png)
 
-**Status: 3.0** (see the [roadmap](docs/roadmap.md)).
+**Status: 3.2** (see the [roadmap](docs/roadmap.md)).
 
 ## What it does
 
@@ -42,15 +42,20 @@ loudspeaker formats.
 
 ## Install
 
-Every release has wheels for Linux, macOS and Windows (CPython 3.10 to 3.14) on its
-[GitHub release page](https://github.com/naelolaiz/acoustic_spaces_simulator/releases):
-`pip install` the wheel for your platform, with the extras you want in brackets after
-its file name, such as `[viz,gui]`. The package is not on PyPI. From source, with
-[uv](https://docs.astral.sh/uv/), a C++17 compiler and CMake:
+```sh
+pip install acoustic-spaces                # simulation, rendering and the command line
+pip install "acoustic-spaces[viz,gui]"     # with the 3D view and the graphical editor
+```
+
+PyPI and every [GitHub release](https://github.com/naelolaiz/acoustic-spaces/releases)
+have wheels for Linux (x86-64), macOS (Apple silicon) and Windows (x86-64), CPython 3.10
+to 3.14; elsewhere pip builds the package from source, which needs a C++17 compiler.
+From a source checkout, with [uv](https://docs.astral.sh/uv/), a C++17 compiler and
+CMake:
 
 ```sh
-git clone https://github.com/naelolaiz/acoustic_spaces_simulator
-cd acoustic_spaces_simulator
+git clone https://github.com/naelolaiz/acoustic-spaces
+cd acoustic-spaces
 uv sync --extra viz --extra gui
 ```
 
@@ -93,12 +98,12 @@ print(response.parameters().table())
 - [Validation report](docs/validation.md): how the results compare with theory, another
   simulator and measured rooms.
 - [Roadmap](docs/roadmap.md),
-  [changelog](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/CHANGELOG.md)
+  [changelog](https://github.com/naelolaiz/acoustic-spaces/blob/main/CHANGELOG.md)
   and [repository layout](docs/development.md).
 
 The same pages, with an API reference generated from the docstrings, build into a
 website with Sphinx (see
-[CONTRIBUTING.md](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/CONTRIBUTING.md)).
+[CONTRIBUTING.md](https://github.com/naelolaiz/acoustic-spaces/blob/main/CONTRIBUTING.md)).
 
 ## Design in one paragraph
 
@@ -116,15 +121,15 @@ in every format.
 
 Pull requests are welcome. Run `ruff check . && ruff format --check . && pytest -W error`
 before opening one; CI runs the tests on all three platforms and ruff on Linux.
-[CONTRIBUTING.md](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/CONTRIBUTING.md)
+[CONTRIBUTING.md](https://github.com/naelolaiz/acoustic-spaces/blob/main/CONTRIBUTING.md)
 covers the development setup, the documentation, the validation scripts and releases.
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/LICENSE).
+GPL-3.0-or-later. See [LICENSE](https://github.com/naelolaiz/acoustic-spaces/blob/main/LICENSE).
 
 The built-in material table comes from
 [pyroomacoustics](https://github.com/LCAV/pyroomacoustics) (MIT, see
-[`materials/data/LICENSE-pyroomacoustics.txt`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/src/acoustic_spaces/materials/data/LICENSE-pyroomacoustics.txt)).
+[`materials/data/LICENSE-pyroomacoustics.txt`](https://github.com/naelolaiz/acoustic-spaces/blob/main/src/acoustic_spaces/materials/data/LICENSE-pyroomacoustics.txt)).
 That table does not cite a source for most entries; check values that matter
 against manufacturer data or a measured database.

@@ -1522,7 +1522,7 @@ class MainWindow(QMainWindow):
             "sources, the late tail by stochastic ray tracing, and binaural, Ambisonics "
             "and loudspeaker impulse responses.</p>"
             "<p>GPL-3.0-or-later. "
-            '<a href="https://github.com/naelolaiz/acoustic_spaces_simulator">Source</a></p>',
+            '<a href="https://github.com/naelolaiz/acoustic-spaces">Source</a></p>',
         )
 
     def showEvent(self, event: QShowEvent) -> None:

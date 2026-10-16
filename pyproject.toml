@@ -1,12 +1,11 @@
 [build-system]
-requires = ["scikit-build-core>=0.11", "nanobind>=2.4"]
+requires = ["scikit-build-core>=0.11", "nanobind>=2.4", "hatch-fancy-pypi-readme>=22.3"]
 build-backend = "scikit_build_core.build"
 
 [project]
 name = "acoustic-spaces"
-dynamic = ["version"]
+dynamic = ["version", "readme"]
 description = "Open-source room acoustics simulator: geometric acoustics, spatial impulse responses and auralisation"
-readme = "README.md"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
@@ -57,8 +56,8 @@ acoustic-spaces = "acoustic_spaces.cli:main"
 acoustic-spaces-editor = "acoustic_spaces.gui:main"
 
 [project.urls]
-Repository = "https://github.com/naelolaiz/acoustic_spaces_simulator"
-Changelog = "https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/CHANGELOG.md"
+Repository = "https://github.com/naelolaiz/acoustic-spaces"
+Changelog = "https://github.com/naelolaiz/acoustic-spaces/blob/main/CHANGELOG.md"
 
 # What `uv sync` installs along with the package in a source checkout; for pip, the
 # `dev` extra holds the same.
@@ -76,6 +75,25 @@ sdist.exclude = ["docs/_build", "validation/results"]
 # The version lives in one place, src/acoustic_spaces/_version.py.
 provider = "scikit_build_core.metadata.regex"
 input = "src/acoustic_spaces/_version.py"
+
+# The description on PyPI is the README, with its links to the documentation and its
+# picture pointing at GitHub, as PyPI cannot follow the README's relative links.
+[tool.scikit-build.metadata.readme]
+provider = "scikit_build_core.metadata.fancy_pypi_readme"
+
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\(docs/images/'
+replacement = '](https://raw.githubusercontent.com/naelolaiz/acoustic-spaces/main/docs/images/'
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\(docs/'
+replacement = '](https://github.com/naelolaiz/acoustic-spaces/blob/main/docs/'
 
 [tool.uv]
 # Rebuild the compiled core on `uv sync` when the C++ sources or the build files change,

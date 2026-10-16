@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.2.0
+
+**On PyPI**
+
+- `pip install acoustic-spaces` installs the package from PyPI, with the extras in
+  brackets (`pip install "acoustic-spaces[viz,gui]"`). The GitHub release pages keep the
+  same wheels. The description on PyPI is the README, with its links to the
+  documentation and its picture pointing at GitHub.
+- The repository is now github.com/naelolaiz/acoustic-spaces, the name of the package and
+  of its command; the old address redirects. The documentation, the package's links and
+  the editor's About window point at the new one.
+- A message about a missing optional part says to `pip install "acoustic-spaces[gui]"`
+  (with the extra it needs), where it listed the extra's packages for pip.
+
 ## 3.1.0
 
 **Tuning the devices for a computer** (`acoustic-spaces tune`, `acoustic_spaces.engine.tuning`)

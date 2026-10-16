@@ -312,7 +312,7 @@ def test_read_sofa_with_a_turning_head_and_spherical_ears(tmp_path: Path) -> Non
 
 def test_read_sofa_without_h5py_says_how_to_install(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "h5py", None)
-    with pytest.raises(ImportError, match=r'pip install "h5py'):
+    with pytest.raises(ImportError, match=r'pip install "acoustic-spaces\[sofa\]"'):
         read_sofa(tmp_path / "missing.sofa")
 
 

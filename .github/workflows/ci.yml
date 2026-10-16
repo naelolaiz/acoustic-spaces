@@ -192,6 +192,12 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: test -f "dist/acoustic_spaces-${GITHUB_REF_NAME#v}.tar.gz"
+      - name: Check that the description for PyPI links to GitHub, not to relative paths
+        shell: bash
+        run: |
+          tar -xzf dist/*.tar.gz --wildcards --to-stdout '*/PKG-INFO' > "$RUNNER_TEMP/PKG-INFO"
+          grep -q '](https://raw.githubusercontent.com/naelolaiz/acoustic-spaces/main/docs/images/' "$RUNNER_TEMP/PKG-INFO"
+          if grep -n '](docs/' "$RUNNER_TEMP/PKG-INFO"; then exit 1; fi
       - uses: actions/upload-artifact@v6
         with:
           name: sdist

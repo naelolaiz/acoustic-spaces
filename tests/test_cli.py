@@ -739,7 +739,7 @@ def test_devices_without_sounddevice(
 
     monkeypatch.setitem(sys.modules, "sounddevice", None)
     assert main(["devices"]) == 1
-    assert 'pip install "sounddevice' in capsys.readouterr().err
+    assert 'pip install "acoustic-spaces[measure]"' in capsys.readouterr().err
 
 
 def _decay_wav(path: Path, t60: float, sample_rate: int, length: float = 2.0, channels: int = 1):
