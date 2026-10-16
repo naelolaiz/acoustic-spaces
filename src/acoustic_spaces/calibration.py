@@ -393,8 +393,9 @@ def calibrate(
     progress: Callable[[str], None] | None = None,
 ) -> Calibration:
     """Fit the absorption of ``materials`` (default: every material on a surface but
-    openings, at most 16) so that the simulated ``parameters`` match those ``measured``
-    at each (source, listener) pair of the scene, band by band, in JNDs.
+    openings, at most 16) so that the simulated ``parameters`` (edt, t20, t30, c50, c80,
+    d50, ts and g) match those ``measured`` at each (source, listener) pair of the scene,
+    band by band, in JNDs.
 
     The scene's simulation settings (rays, response length, seed, and threads unless
     ``threads`` is given) are used, with stochastic ray tracing in octave bands and no
@@ -412,9 +413,11 @@ def calibrate(
         raise ValueError("calibration works in octave bands: set simulation bands to octave")
     if sim.wave.enabled:
         raise ValueError("calibration re-weights rays; switch the wave solver off for it")
-    unknown = [n for n in parameters if n not in JND]
+    # The re-weighted echogram has no directions: no LF, LFC or directional decay times.
+    fitted = [n for n in JND if n in iso3382.PARAMETERS]
+    unknown = [n for n in parameters if n not in fitted]
     if unknown:
-        raise ValueError(f"cannot fit {', '.join(unknown)}; choose from {', '.join(JND)}")
+        raise ValueError(f"cannot fit {', '.join(unknown)}; choose from {', '.join(fitted)}")
     parameters = tuple(parameters)
     pairs = list(measured)
     if not pairs:

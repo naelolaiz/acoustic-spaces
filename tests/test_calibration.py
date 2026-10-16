@@ -187,6 +187,11 @@ def test_calibration_checks_its_measurements():
         calibrate(scene, {("s", "z"): parameters})
     with pytest.raises(ValueError, match="cannot fit spl"):
         calibrate(scene, {("s", "a"): parameters}, parameters=["spl"])
+    # The re-weighted echogram has no directions to give LF from.
+    with pytest.raises(
+        ValueError, match="cannot fit lf; choose from edt, t20, t30, c50, c80, d50, ts, g$"
+    ):
+        calibrate(scene, {("s", "a"): parameters}, parameters=["t30", "lf"])
     with pytest.raises(ValueError, match="no measurements"):
         calibrate(scene, {})
     with pytest.raises(ValueError, match="at least one round"):

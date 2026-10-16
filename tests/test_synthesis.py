@@ -66,6 +66,20 @@ def test_shape_noise_sets_slot_energy() -> None:
     np.testing.assert_allclose(got, energy, rtol=1e-12)
 
 
+@pytest.mark.parametrize("rate", [22_050, 44_100, 88_200])
+def test_no_slot_is_silent_where_slots_are_not_whole_samples(rate: int) -> None:
+    # 1 ms is 44.1 samples at 44.1 kHz. In a hall the impulses are sparse for 200 ms,
+    # and every slot of shape_noise still holds one.
+    rng = np.random.default_rng(0)
+    noise = dirac_sequence(rate, rate, 20_000.0, 343.0, rng, 1e-3)
+    slot = np.floor(np.arange(rate) / (rate * 1e-3) + 1e-9).astype(np.int64)
+    assert np.bincount(slot, weights=np.abs(noise)).min() >= 1
+    energy = np.outer(np.linspace(1, 2, 8), np.exp(-np.arange(1000) / 200))
+    shaped = shape_noise(energy, 1e-3, noise, rate)
+    got = np.array([np.bincount(slot, weights=band**2) for band in shaped])
+    np.testing.assert_allclose(got, energy, rtol=1e-12)
+
+
 def test_smooth_energy_keeps_the_total() -> None:
     energy = np.zeros((2, 500))
     energy[:, 300] = 1.0

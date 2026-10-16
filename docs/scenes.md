@@ -178,10 +178,11 @@ materials:
 ```
 
 - CATT-Acoustic writes `ABS name = <a125 a250 a500 a1k a2k a4k> L <s125 ... s4k> {r g b}`:
-  absorption and scattering in percent from 125 Hz to 4 kHz, 8 and 16 kHz optional,
-  `;` before a comment. `ABS name = other` gives a material another's values. Any file
-  with such lines will do (a `.geo` file with its geometry, or a library). Scattering
-  that CATT estimates itself (`L <estimate(...)>`) is not read, so give `scattering`.
+  absorption and scattering in percent from 125 Hz to 4 kHz, 8 and 16 kHz optional
+  (`<a125 ... a4k : a8k a16k>`), `;` before a comment; `ABS1` gives them as fractions
+  from 0 to 1. `ABS name = other` gives a material another's values. Any file with
+  such lines will do (a `.geo` file with its geometry, or a library). Scattering that
+  CATT estimates itself (`L <estimate(...)>`) is not read, so give `scattering`.
 - ODEON's library has each material on two lines, its number and description, then
   eight absorption coefficients from 63 Hz to 8 kHz (six, from 125 Hz to 4 kHz, in
   older libraries). Where the description has ODEON's `{Product name*=...}` and

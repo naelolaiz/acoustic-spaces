@@ -146,6 +146,11 @@ def place_impulses(
     return out
 
 
+def _slots(n: int, sample_rate: float, time_step: float) -> np.ndarray:
+    """The time slot of ``time_step`` each of ``n`` samples falls in."""
+    return np.floor(np.arange(n) / (sample_rate * time_step) + 1e-9).astype(np.int64)
+
+
 def dirac_sequence(
     length: int,
     sample_rate: float,
@@ -156,7 +161,8 @@ def dirac_sequence(
 ) -> np.ndarray:
     """Random-sign impulses whose density grows like reflections in a room: 4 pi c^3 t^2 / V.
 
-    Every time slot gets at least one impulse, so no slot's energy is lost.
+    Every time slot of :func:`shape_noise` (``time_step`` long, a whole number of samples
+    or not) gets at least one impulse, so no slot's energy is lost.
     """
     t = np.arange(length) / sample_rate
     if volume_m3 is None:
@@ -167,13 +173,10 @@ def dirac_sequence(
     pulses = rng.random(length) < density / sample_rate
     signs = np.where(rng.random(length) < 0.5, -1.0, 1.0)
     seq = np.where(pulses, signs, 0.0)
-    per_slot = max(1, int(round(time_step * sample_rate)))
-    slots = int(math.ceil(length / per_slot))
-    for s in np.flatnonzero(np.add.reduceat(np.abs(seq), np.arange(0, length, per_slot)) == 0):
-        start = s * per_slot
-        stop = min(length, start + per_slot)
-        if s < slots and start < stop:
-            seq[rng.integers(start, stop)] = signs[start]
+    slot = _slots(length, sample_rate, time_step)
+    for s in np.flatnonzero(np.bincount(slot, weights=np.abs(seq)) == 0):
+        start, stop = np.searchsorted(slot, [s, s + 1])
+        seq[rng.integers(start, stop)] = signs[start]
     return seq
 
 
@@ -210,10 +213,7 @@ def shape_noise(
     sample_rate: float,
 ) -> np.ndarray:
     """Band signals (bands, n): ``noise`` scaled so each slot carries ``energy[band, slot]``."""
-    n = len(noise)
-    per_slot = sample_rate * time_step
-    slot = np.floor(np.arange(n) / per_slot + 1e-9).astype(np.int64)
-    slot = np.minimum(slot, energy.shape[1] - 1)
+    slot = np.minimum(_slots(len(noise), sample_rate, time_step), energy.shape[1] - 1)
     noise_energy = np.bincount(slot, weights=noise**2, minlength=energy.shape[1])
     with np.errstate(divide="ignore", invalid="ignore"):
         gain = np.where(noise_energy > 0, np.sqrt(energy / noise_energy), 0.0)

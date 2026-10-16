@@ -1490,6 +1490,11 @@ def _simulated_irs(folder: Path, listener: str | None, label: str) -> tuple[str,
         for output in outputs:
             if output["format"] == label:
                 files[entry["source"]] = folder / output["wav"]
+    # binaural also finds the binaural output through a SOFA file (binaural-<its name>)
+    # when it is the only one.
+    named = [other for other in labels if other.startswith(f"{label}-")]
+    if not files and len(named) == 1:
+        return _simulated_irs(folder, listener, named[0])
     if not files:
         raise ValueError(f"no {label} responses; the results have {', '.join(sorted(labels))}")
     return listener, files
@@ -2208,7 +2213,8 @@ def build_parser() -> argparse.ArgumentParser:
     auralize.add_argument(
         "--format",
         default="mono",
-        help="output as written by simulate: mono, binaural, ambix3, 5.0, ... (default mono)",
+        help="output as written by simulate: mono, binaural, ambix3, 5.0, ... (default mono); "
+        "binaural also finds the only one through a SOFA file, binaural-<file name>",
     )
     auralize.add_argument("--out", required=True, help="WAV file for the result")
     auralize.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")
@@ -2264,7 +2270,7 @@ def build_parser() -> argparse.ArgumentParser:
     walkthrough.add_argument("--rays", type=int, help="override simulation.late.rays")
     walkthrough.add_argument("--length", type=float, help="override simulation.ir_length_s")
     walkthrough.add_argument("--seed", type=int, help="override simulation.seed")
-    walkthrough.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    walkthrough.add_argument("--threads", type=_threads, help=THREADS_HELP)
     walkthrough.add_argument(
         "--video",
         metavar="FILE",

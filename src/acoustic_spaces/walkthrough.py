@@ -170,7 +170,7 @@ def simulate_walk(
     step_m: float = STEP_M,
     late_step_m: float | None = LATE_STEP_M,
     settings: SimulationSettings | None = None,
-    threads: int = 0,
+    threads: int | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> WalkResponses:
     """Simulate the responses along a walk: ``name`` walks (by default the only
@@ -180,7 +180,9 @@ def simulate_walk(
     (by default the scene's only listener), with the other sources standing still.
 
     The late part is traced every ``late_step_m`` (see the module's description), or at
-    every place with ``late_step_m=None``.
+    every place with ``late_step_m=None``. ``settings`` (default: the scene's) and
+    ``threads`` (default: their ``performance.threads``) go to
+    :func:`~acoustic_spaces.engine.simulate`.
     """
     kind, item = _walker(room, name)
     points = walk_points(item, step_m)
