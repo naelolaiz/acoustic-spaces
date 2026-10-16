@@ -437,7 +437,7 @@ simulation:
   (`simulate` and `edit`) skips the trial: `auto` then takes the choice kept for the
   nearest length, or the CPU when there is none.
 
-#### Tuning the devices for a computer
+### Tuning the devices for a computer
 
 `acoustic-spaces tune` times every option and keeps the fastest for `auto`, once per
 computer (again after changing the GPU or its driver):
