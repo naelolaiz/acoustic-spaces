@@ -94,6 +94,13 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   far below; with the statistical method, a response that loses exactly what its early
   paths lose (the tail does not make it up); and a coverage map less clear and weaker
   over the middle of the seats;
+- fitting materials to measurements: a run re-weighted for other absorption against
+  the room traced again with it (the same early paths; T30 within 4 %, EDT within 5 %,
+  C80 within 0.3 dB and G within 0.1 dB); the absorption a simulated room was given
+  recovered from its own responses within 0.05 in every band, and a shoebox's walls
+  within 0.015 from 500 Hz up, where the fit's own uncertainty is below 0.05 and above
+  0.1 in the bands the measurements leave open; a third-octave material that keeps its
+  shape; and the two BRAS rooms (see [Measured rooms](#measured-rooms-bras));
 - every ISO 3382-1 parameter on synthetic exponential decays, and the air
   absorption against the ISO 9613-1 table;
 - the further parameters against responses whose values are known: LF and LFC of one
@@ -112,6 +119,12 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   direction in first-order Ambisonics, the mono energy kept by panned layouts (direct
   sound within 1 %, late part within 5 %), a binaural render through flat HRTFs equal
   to the mono response, and the spherical head's interaural delay (0.6 ms at the side);
+  HRTFs interpolated between measured directions give the measured responses at those
+  directions and, round the horizon a degree at a time, an interaural delay that moves
+  by less than 50 µs per degree where the nearest measured response jumps by more than
+  150 µs, and a ring of directions or half a sphere interpolates within itself and
+  takes the nearest response outside; the rotation of a sound field of any order turns
+  encoded plane waves exactly (to 1e-9), is orthogonal and composes;
 - rendering: the compiled FFT against NumPy, the real-time convolver and the offline
   convolution against direct convolution (float32 and float64 precision), resampling
   of tones within 1e-3 of the exact signal up to 15 kHz with nothing above the new
@@ -159,6 +172,27 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   moves a result is seen; the same runs traced on a GPU (in CI, Mesa's software Vulkan
   driver) land within the spread of the CPU's own results over seeds, and the GPU's ray
   searches find the CPU's faces;
+- the leak finder: a closed model keeps every ray; a box without its ceiling reports
+  one gap of 30 m² (6 x 5 m) with every ray through it, at the ceiling's height; the
+  example classroom's two holes, the missing window pane in the east wall (3.6 m², 3.0 x
+  1.2 m) and the 3 cm slit along the ceiling's edge (0.27 m²), each with the rays that
+  crossed it inside it; a ceiling that lets sound through counted as an opening, not a
+  leak; a source outside a closed model named; and no leak in the other examples;
+- walkthroughs: the places along a walk every 25 cm, facing forward and turning the
+  shorter way round at the set pace; crossfade weights that add up to one and are
+  continuous; the late parts of the places between those traced mixed in proportion to
+  the distance; one response everywhere equal to the plain convolution (to 1e-12); a
+  walking listener, and a walking source heard at a listener; and the gallery walk
+  rendered through its places;
+- models read from files: a room whose walls' edges run past the floor's corners
+  (T-junctions, with or without the zero-area slivers SketchUp exports) cleaned into a
+  closed room of the right volume and area; two rooms touching along an edge closed; a
+  face given twice leaving the model open, with its odd edges counted; points inside a
+  model whichever way its faces point; an IFC office read as one room from its space
+  boundaries (closed, 75.6 m³) or as every element, in the file's units; a Collada room
+  in inches with its up axis as written, and instanced components placed by their
+  nodes; and materials from CATT-Acoustic files and ODEON libraries, the latter as
+  ODEON writes it (Windows encodings and six-band tables too);
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays

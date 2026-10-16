@@ -501,3 +501,29 @@ listeners:
 - Everything else (`simulate`, `map`, the editor) sees the walker standing where its
   walk starts; `inspect` lists how far each walk goes and for how long. Lines, surfaces
   and arrays do not walk.
+
+## Air, response length and seed
+
+```yaml
+air:
+  temperature_c: 20         # default 20 °C
+  humidity_percent: 50      # default 50 %
+  pressure_kpa: 101.325     # default 101.325 kPa
+simulation:
+  ir_length_s: 2.0          # length of the impulse responses (s), default 2
+  sample_rate: 48000        # of the impulse responses (Hz), default 48000
+  seed: 1                   # random seed; unset, every run draws its own
+```
+
+- `air` sets the speed of sound and the air absorption per band (ISO 9613-1), for the
+  rays, the wave solver and the statistical reverberation times alike.
+- A response that ends before the room has decayed is extended by its fitted decay
+  rate when the parameters are computed (see [Simulation](simulation.md)); a longer
+  `ir_length_s` makes longer files, and more time steps for the wave solver.
+  `--sample-rate` on the command line overrides `sample_rate` for one run.
+- With a `seed`, the late rays, the scattering and the coverage maps draw the same
+  random numbers every run, so a scene's results repeat from run to run (`--seed` sets
+  it for one run). A GPU draws random numbers of its own, and when the CPU and a GPU
+  share the rays the results vary slightly from run to run (see
+  [The late stage on a GPU](simulation.md#the-late-stage-on-a-gpu)). The editor's
+  **Simulation** entry has these under **Response**, and the scene's own entry the air.

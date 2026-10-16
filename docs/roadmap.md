@@ -25,7 +25,7 @@ v2, version 2.0.0 (version 1.1.0 had the first three):
 - [x] Editing geometry in the editor: drawing floor plans, dragging corners, sources and
   listeners.
 
-v3, version 3.0.0, in progress (scene files may change; the changelog will say how):
+v3, version 3.0.0:
 
 - [x] Comparing a simulation with a measurement in just noticeable differences
   (`acoustic-spaces compare`).
@@ -39,11 +39,15 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] Line and surface sources.
 - [x] Loudspeaker arrays with phase (their far-field patterns).
 - [x] Sound through walls and between coupled rooms.
-- [x] Fitting absorption to measured parameters (`acoustic-spaces calibrate`).
+- [x] Audience seating: the attenuation of sound that skims the seats.
+- [x] Fitting absorption to measured parameters (`acoustic-spaces calibrate`); in the
+  editor, results follow a change of absorption at once.
 - [x] Wave solver walls that absorb as their materials do in every band, in one run, and
   a matched layer round open models.
 - [x] A GPU path for the wave solver through WebGPU (AMD, NVIDIA, Intel and Apple GPUs
   alike).
+- [x] Ray tracing 7 to 8 times faster, and the late stage's rays on a GPU too, alone or
+  sharing them with the CPU.
 - [x] A wave solver stencil with less than half the dispersion, the same in every
   direction.
 - [x] Second-order edge diffraction: the direct sound over two edges, checked against
@@ -54,3 +58,4 @@ v3, version 3.0.0, in progress (scene files may change; the changelog will say h
 - [x] Materials from CATT-Acoustic and ODEON material libraries.
 - [x] IFC (BIM) and Collada import.
 - [x] Walkthroughs with moving sources and listeners.
+- [x] Binaural rendering with HRTFs interpolated between the measured directions.

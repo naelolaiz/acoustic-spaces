@@ -7,7 +7,7 @@ loudspeaker formats.
 
 ![The church example in 3D: the stone nave with its early reflection paths from the altar to the front of the nave, coloured by order up to the third](docs/images/church_paths.png)
 
-**Status: 2.0**, with 3.0 on the way (see the [roadmap](docs/roadmap.md)).
+**Status: 3.0** (see the [roadmap](docs/roadmap.md)).
 
 ## What it does
 
@@ -16,10 +16,11 @@ loudspeaker formats.
   libraries of CATT-Acoustic and ODEON, walls and doors between rooms, audience seating,
   and directional, line, surface and array sources; a leak finder shows where a model
   is open: [scene files](docs/scenes.md).
-- **Simulation**: ray-traced early reflections with edge diffraction, added in pressure
-  at low frequencies, a stochastic late tail and, for the lowest bands, a wave solver,
-  both on the CPU or a GPU; ISO 3382-1 parameters, the STI and echo criteria for every
-  source and listener: [simulation](docs/simulation.md).
+- **Simulation**, in octave or third-octave bands: ray-traced early reflections with
+  edge diffraction, added in pressure at low frequencies, a stochastic late tail and,
+  for the lowest bands, a wave solver, both on the CPU or a GPU; ISO 3382-1 parameters,
+  the STI and echo criteria for every source and listener:
+  [simulation](docs/simulation.md).
 - **Coverage maps** of the parameters and of the speech transmission index over the
   audience: [coverage maps](docs/coverage-maps.md).
 - **Listening**: impulse responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker

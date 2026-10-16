@@ -7,7 +7,7 @@ compiled core inside, on its
 [GitHub release page](https://github.com/naelolaiz/acoustic_spaces_simulator/releases):
 `pip install` the wheel for your platform, with the extras below in brackets after its
 file name if you want them, such as
-`pip install "acoustic_spaces-2.0.0-cp312-cp312-win_amd64.whl[viz,gui]"`. The package is
+`pip install "acoustic_spaces-3.0.0-cp312-cp312-win_amd64.whl[viz,gui]"`. The package is
 not on PyPI, so `pip install acoustic-spaces` does not find it; between releases, install
 from source.
 
@@ -70,6 +70,8 @@ acoustic-spaces materials carpet                       # search the material dat
 acoustic-spaces directivity hypercardioid --plot polar.png  # a source directivity
 acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
 acoustic-spaces map examples/lecture_hall/scene.yaml --plot sti.png --parameter sti
+acoustic-spaces walkthrough examples/gallery_walk/scene.yaml guide=speech.wav --out walk.wav  # a visitor walks
+acoustic-spaces examples                               # the bundled rooms, and where they are
 python -m pytest                                       # the test suite
 ```
 

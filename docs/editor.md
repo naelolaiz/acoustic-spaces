@@ -34,8 +34,22 @@ The editor works on the same scene files as the command line:
   Surfaces take materials from their form, or from a new material picked from the
   database (**Edit > Add material**) or from a CATT-Acoustic or ODEON library
   (**Edit > Add material from a library**).
+- A material's form sets its absorption and scattering per band (24 columns when it
+  has third-octave data), whether it **Lets through** nothing, part of the sound (with
+  its sound reduction index per band in the table) or everything (an opening), and
+  **Audience seating** for the seats (see
+  [Walls, doors and openings](scenes.md#walls-doors-and-openings)).
 - The editor does not draw or edit walks (`walk` in a listener's or source's entry,
   see [Walkthroughs](spatial-audio.md#walkthroughs)), but keeps them when it saves.
+- The scene tree's **Simulation** entry has the settings of
+  [Simulation](simulation.md): the early part's method, highest order, rays,
+  diffraction and **In pressure up to**; the late part's method, rays per band,
+  reception, ray splitting and **Run on** (the CPU, a GPU, or both); the scattering
+  model; the wave solver, its highest band and where it runs; **Performance** (CPU
+  threads and the ray search tree); and, under **Response**, the length, the sample
+  rate, octave or third-octave **Bands**, the early-to-late transition and the seed.
+  The scene's own entry sets the air's temperature, humidity and pressure, and shows
+  the volume and the rooms the model holds.
 - **Simulation > Run coverage map** (F6) maps every source over the audience area (see
   [Coverage maps](coverage-maps.md#coverage-maps)). The **Coverage map** panel shows any parameter
   and band from above, for one source or all of them together, and **Map in 3D** lays
@@ -63,9 +77,12 @@ The editor works on the same scene files as the command line:
   values instead of traced again (as `calibrate` does). The panel says so; **Run**
   traces afresh. Other changes, and runs with the statistical method, third-octave
   bands or the wave solver, leave the results marked out of date until the next run.
-- A source's form sets its directivity: a pattern, or a SOFA or CSV file of measured
-  data. It shows the directivity index per band, opens the polar patterns, and the
-  selected source shows its balloon in the 3D view.
+- A source's form sets its **Shape** (a point, a line or a surface, with its length,
+  height and spacing), its directivity (a pattern, a SOFA or CSV file of measured data,
+  or an array file), its sound power per band, its **Spectrum** (flat, or male or female
+  speech) and the **Gain**, **Equalizer** and **Delay** of its feed. It shows the
+  directivity index per band, opens the polar patterns, and the selected source shows
+  its balloon in the 3D view.
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
   as you edit.
 - **View > Show leaks** traces rays from the sources and shows where they escape from a
