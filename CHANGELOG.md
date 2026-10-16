@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 3.1.0
 
 **Tuning the devices for a computer** (`acoustic-spaces tune`, `acoustic_spaces.engine.tuning`)
 
