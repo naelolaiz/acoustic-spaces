@@ -59,3 +59,12 @@ v3, version 3.0.0:
 - [x] IFC (BIM) and Collada import.
 - [x] Walkthroughs with moving sources and listeners.
 - [x] Binaural rendering with HRTFs interpolated between the measured directions.
+
+Version 3.1.0:
+
+- [x] Timing the CPU and the GPU on each computer and running on the faster one
+  (`acoustic-spaces tune`).
+
+Version 3.2.0:
+
+- [x] On PyPI: `pip install acoustic-spaces`.

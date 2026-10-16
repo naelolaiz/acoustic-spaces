@@ -2,8 +2,8 @@
 
 A scene is a YAML file that names the geometry, the materials, which surface gets
 which material, and where the sources and listeners are. See
-[`examples/shoebox/scene.yaml`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/examples/shoebox/scene.yaml) and the schema in
-[`src/acoustic_spaces/scene/model.py`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/src/acoustic_spaces/scene/model.py).
+[`examples/shoebox/scene.yaml`](https://github.com/naelolaiz/acoustic-spaces/blob/main/examples/shoebox/scene.yaml) and the schema in
+[`src/acoustic_spaces/scene/model.py`](https://github.com/naelolaiz/acoustic-spaces/blob/main/src/acoustic_spaces/scene/model.py).
 Frequency-dependent data uses eight octave bands from 63 Hz to 8 kHz, or 24
 third-octave bands from 50 Hz to 10 kHz (see [Frequency bands](simulation.md#frequency-bands)).
 
@@ -21,7 +21,7 @@ third-octave bands from 50 Hz to 10 kHz (see [Frequency bands](simulation.md#fre
 
 Simple rooms need no CAD file: `geometry: {box: [8, 6, 3]}` builds a rectangular
 room from the origin, and a floor plan is raised to a height (see
-[`examples/lecture_hall/scene.yaml`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/examples/lecture_hall/scene.yaml)):
+[`examples/lecture_hall/scene.yaml`](https://github.com/naelolaiz/acoustic-spaces/blob/main/examples/lecture_hall/scene.yaml)):
 
 ```yaml
 geometry:
@@ -40,7 +40,7 @@ and, when the file is +y up (Blender's OBJ default, glTF always), `geometry.up_a
 Without `units`, a DXF file is read in the units its header records (`$INSUNITS`), an
 IFC or Collada file in the units it records, and any other file in metres; a Collada
 file's up axis is the one it records (X_UP, Y_UP or Z_UP). SketchUp's Collada export
-(`.dae`) is read as it is (see [`examples/rehearsal_room`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/examples/rehearsal_room/scene.yaml)).
+(`.dae`) is read as it is (see [`examples/rehearsal_room`](https://github.com/naelolaiz/acoustic-spaces/blob/main/examples/rehearsal_room/scene.yaml)).
 
 SketchUp files can also be read as they are, with the `sketchup` extra: openskp reads
 them without SketchUp, in metres. That reader is young. Faces are matched to materials
@@ -65,7 +65,7 @@ and a panel standing in the room, with air on both sides, reflects and absorbs o
 
 IFC files from Revit, ArchiCAD, Vectorworks or any other BIM program are read with the
 `ifc` extra (IfcOpenShell). There are two ways, and
-[`examples/bim_office`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/examples/bim_office/scene.yaml)
+[`examples/bim_office`](https://github.com/naelolaiz/acoustic-spaces/blob/main/examples/bim_office/scene.yaml)
 shows both:
 
 ```yaml
@@ -199,7 +199,7 @@ materials, with words to search for as in the built-in database, and in the edit
 takes its carpet and walls from a CATT file and its ceiling from an ODEON one.
 
 Two rooms of the BRAS benchmark, converted from its SketchUp models, are in
-[`validation/bras`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/validation/bras)
+[`validation/bras`](https://github.com/naelolaiz/acoustic-spaces/blob/main/validation/bras)
 as scenes with their surface data and measurements.
 
 ## Walls, doors and openings

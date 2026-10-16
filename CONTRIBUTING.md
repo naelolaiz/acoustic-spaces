@@ -88,11 +88,21 @@ The version is written in one place, `src/acoustic_spaces/_version.py`.
    notes; one made on the Releases page keeps its own notes, or gets the changelog's
    when it has none.
 
-Publishing to PyPI is off. It needs a one-time setup by a maintainer:
+A release tag also uploads the wheels and the source distribution to PyPI, through PyPI's
+trusted publishing, with no token stored anywhere. That needs, set up once by a
+maintainer:
 
-1. On PyPI, add a trusted publisher for the project `acoustic-spaces`: this repository,
-   workflow `ci.yml`, environment `pypi`.
-2. In the repository settings, create the environment `pypi` (optionally requiring an
-   approval) and set the repository variable `PYPI_PUBLISH` to `true`.
+1. On PyPI, a trusted publisher for the project `acoustic-spaces`: owner `naelolaiz`,
+   repository `acoustic-spaces`, workflow `ci.yml`, environment `pypi`. PyPI checks the
+   repository's name, so a renamed repository needs the publisher changed too.
+2. In the repository settings, the environment `pypi` (optionally requiring an approval)
+   and the repository variable `PYPI_PUBLISH` set to `true`. Without it, a tag makes the
+   GitHub release only.
 
-From then on every release tag also uploads to PyPI, with no token stored anywhere.
+PyPI takes each version once: a release that went wrong there gets a new version number.
+
+The description on PyPI is the README with its relative links made absolute (see
+`[tool.hatch.metadata.hooks.fancy-pypi-readme]` in `pyproject.toml`); CI checks the
+source distribution's copy. Link from the README to the documentation as `docs/....md`, as
+for the Sphinx front page, and to other files in the repository with their full GitHub
+address.
