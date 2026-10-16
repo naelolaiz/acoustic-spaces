@@ -39,7 +39,9 @@ v3, version 3.0.0:
 - [x] Line and surface sources.
 - [x] Loudspeaker arrays with phase (their far-field patterns).
 - [x] Sound through walls and between coupled rooms.
-- [x] Fitting absorption to measured parameters (`acoustic-spaces calibrate`).
+- [x] Audience seating: the attenuation of sound that skims the seats.
+- [x] Fitting absorption to measured parameters (`acoustic-spaces calibrate`); in the
+  editor, results follow a change of absorption at once.
 - [x] Wave solver walls that absorb as their materials do in every band, in one run, and
   a matched layer round open models.
 - [x] A GPU path for the wave solver through WebGPU (AMD, NVIDIA, Intel and Apple GPUs
@@ -56,3 +58,4 @@ v3, version 3.0.0:
 - [x] Materials from CATT-Acoustic and ODEON material libraries.
 - [x] IFC (BIM) and Collada import.
 - [x] Walkthroughs with moving sources and listeners.
+- [x] Binaural rendering with HRTFs interpolated between the measured directions.

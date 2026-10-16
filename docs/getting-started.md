@@ -70,6 +70,8 @@ acoustic-spaces materials carpet                       # search the material dat
 acoustic-spaces directivity hypercardioid --plot polar.png  # a source directivity
 acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
 acoustic-spaces map examples/lecture_hall/scene.yaml --plot sti.png --parameter sti
+acoustic-spaces walkthrough examples/gallery_walk/scene.yaml guide=speech.wav --out walk.wav  # a visitor walks
+acoustic-spaces examples                               # the bundled rooms, and where they are
 python -m pytest                                       # the test suite
 ```
 
