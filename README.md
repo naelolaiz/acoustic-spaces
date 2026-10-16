@@ -63,7 +63,7 @@ tour of the command line and the Python API.
 acoustic-spaces examples                                   # the example rooms
 acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
 acoustic-spaces view examples/gallery/scene.yaml --paths --listener "round the corner"
-acoustic-spaces edit                                       # the graphical editor
+acoustic-spaces                                            # alone: the graphical editor
 ```
 
 ```python
