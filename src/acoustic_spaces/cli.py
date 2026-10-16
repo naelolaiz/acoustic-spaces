@@ -1763,7 +1763,11 @@ def build_parser() -> argparse.ArgumentParser:
     from acoustic_spaces.headtracking import AXES, DEFAULT_OSC_PORT
     from acoustic_spaces.spatial.decoder import DECODERS
 
-    parser = argparse.ArgumentParser(prog="acoustic-spaces", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="acoustic-spaces",
+        description=__doc__,
+        epilog="Without a command it opens the graphical editor (with the gui extra).",
+    )
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -2320,12 +2324,41 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _no_editor() -> str:
+    """Why ``acoustic-spaces`` alone cannot open the editor, or '' when it can."""
+    import importlib.util
+
+    if any(importlib.util.find_spec(name) is None for name in ("PySide6", "pyvistaqt")):
+        from acoustic_spaces.gui import INSTALL_HINT
+
+        return INSTALL_HINT
+    on_x11 = sys.platform not in ("win32", "darwin")
+    shown = ("DISPLAY", "WAYLAND_DISPLAY", "QT_QPA_PLATFORM")
+    if on_x11 and not any(os.environ.get(name) for name in shown):
+        return "there is no display to show it on"
+    return ""
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         # Material descriptions contain characters a Windows console code page may lack.
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
-    args = build_parser().parse_args(argv)
+    argv = sys.argv[1:] if argv is None else list(argv)
+    parser = build_parser()
+    if not argv:
+        # Alone, it opens the editor; without the gui extra or a display, it says how
+        # to use it, as with a wrong argument.
+        why = _no_editor()
+        if why:
+            parser.error(
+                "the following arguments are required: command (alone, acoustic-spaces "
+                f"opens the editor, but {why})"
+            )
+        from acoustic_spaces.gui import main as editor
+
+        return int(editor([]))
+    args = parser.parse_args(argv)
     return int(args.func(args))
 
 

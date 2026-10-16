@@ -22,6 +22,12 @@
 - The wave solver's `auto` compares the timed costs for the run's step count, where it
   took any hardware GPU; without `tune` it still does.
 
+**Starting the editor**
+
+- `acoustic-spaces` with no command opens the editor (`acoustic-spaces edit`), with the
+  `gui` extra and a display; without them it prints the short usage and why, as
+  before. `-h` still lists the commands.
+
 ## 3.0.0
 
 Validation against two measured rooms, third-octave bands, vector-based scattering,

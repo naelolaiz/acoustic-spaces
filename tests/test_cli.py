@@ -1,5 +1,6 @@
 import importlib.util
 import math
+import sys
 from pathlib import Path
 
 import pytest
@@ -258,6 +259,41 @@ def test_edit_hands_the_device_trial_switch_to_the_editor(
     assert main(["edit", str(SHOEBOX), "--no-device-trial"]) == 0
     assert main(["edit"]) == 0
     assert opened == [[str(SHOEBOX), "--no-device-trial"], []]
+
+
+def test_alone_it_opens_the_editor(monkeypatch, capsys) -> None:
+    import acoustic_spaces.gui
+    from acoustic_spaces import cli
+
+    opened = []
+    monkeypatch.setattr(acoustic_spaces.gui, "main", lambda argv: opened.append(argv) or 0)
+    monkeypatch.setattr(cli, "_no_editor", lambda: "")
+    assert main([]) == 0 and opened == [[]]
+    # Without the gui extra or a display: the usage, as for a wrong argument.
+    monkeypatch.setattr(cli, "_no_editor", lambda: "there is no display to show it on")
+    with pytest.raises(SystemExit) as stopped:
+        main([])
+    err = capsys.readouterr().err
+    assert stopped.value.code == 2 and err.startswith("usage: acoustic-spaces")
+    assert "required: command (alone, acoustic-spaces opens the editor, but there is no" in err
+    with pytest.raises(SystemExit) as stopped:
+        main(["--frobnicate"])
+    assert stopped.value.code == 2 and capsys.readouterr().err.startswith("usage:")
+    assert opened == [[]]
+
+    monkeypatch.undo()
+    monkeypatch.setitem(sys.modules, "PySide6", None)  # not installed
+    assert cli._no_editor() == acoustic_spaces.gui.INSTALL_HINT
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(sys, "platform", "linux")
+    for name in ("DISPLAY", "WAYLAND_DISPLAY", "QT_QPA_PLATFORM"):
+        monkeypatch.delenv(name, raising=False)
+    assert cli._no_editor() == "there is no display to show it on"
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    assert cli._no_editor() == ""
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.delenv("WAYLAND_DISPLAY")
+    assert cli._no_editor() == ""
 
 
 def test_simulate_in_third_octave_bands(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
