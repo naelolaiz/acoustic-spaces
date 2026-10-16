@@ -79,7 +79,42 @@ def _cmd_info(_: argparse.Namespace) -> int:
     print(f"CPU cores for ray tracing: {os.cpu_count() or 1}")
     from acoustic_spaces.engine.gpu import gpu_name
 
-    print(f"GPU for the wave solver: {gpu_name() or 'none (needs the gpu extra and a driver)'}")
+    print(f"GPU: {gpu_name() or 'none (needs the gpu extra and a driver)'}")
+    from acoustic_spaces.engine import tuning
+
+    late = tuning.late_choices()
+    if late or tuning.wave_costs():
+        print(f"device choices for auto ({tuning.cache_file()}):")
+        for length, entry in sorted(late.items()):
+            print(f"  late stage up to {length:g} s: {entry['device']} ({entry.get('from')})")
+        costs = tuning.wave_costs()
+        if costs:
+            print(f"  wave solver: {tuning.wave_pick(costs)} (tune)")
+    else:
+        print("device choices for auto: none yet (acoustic-spaces tune times them)")
+    return 0
+
+
+def _cmd_tune(args: argparse.Namespace) -> int:
+    from acoustic_spaces.engine import tuning
+    from acoustic_spaces.examples import example_path
+
+    room = _load_room(args.scene or str(example_path(tuning.SCENE)))
+    if room is None or not _print_checks(room):
+        return 1
+    try:
+        result = tuning.tune(
+            room,
+            rays=args.rays,
+            lengths=args.lengths or tuning.LENGTHS,
+            wave_lengths=None if args.no_wave else tuning.WAVE_LENGTHS,
+            threads=args.threads,
+            say=lambda message: print(message, file=sys.stderr),
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(result.summary())
     return 0
 
 
@@ -600,9 +635,9 @@ def _performance_options(args: argparse.Namespace) -> dict[str, tuple[str, objec
 
 
 TRIAL_HELP = (
-    "with simulation.late.device auto, skip the short trial that times the CPU and the GPU "
-    "on the scene, and take the choice saved from the last trial on this computer (the "
-    "CPU without one)"
+    "with simulation.late.device auto and no choice from acoustic-spaces tune for the "
+    "response length, skip the short trial that times the CPU and the GPU on the scene, "
+    "and take the choice kept for the nearest length on this computer (the CPU without one)"
 )
 
 
@@ -1758,6 +1793,31 @@ def build_parser() -> argparse.ArgumentParser:
     examples.add_argument("names", nargs="*", help="examples to show or copy (default: all)")
     examples.add_argument("--copy", metavar="DIR", help="copy the examples into this folder")
     examples.set_defaults(func=_cmd_examples)
+
+    tune = sub.add_parser(
+        "tune",
+        help="time the CPU and the GPU on a scene and keep the fastest for device auto",
+        description=(
+            "Time the late stage on the CPU, the GPU and both, at several response lengths, "
+            "and the wave solver on the CPU and the GPU, and keep the fastest for this "
+            "computer: simulation.late.device and simulation.wave.device auto then take "
+            "them. Needs the gpu extra."
+        ),
+    )
+    tune.add_argument(
+        "scene", nargs="?", help="scene YAML file to time (default: the concert_hall example)"
+    )
+    tune.add_argument("--rays", type=int, help="rays per band (default: the scene's)")
+    tune.add_argument(
+        "--lengths",
+        type=float,
+        nargs="+",
+        metavar="SECONDS",
+        help="response lengths to time the late stage at (default: 0.5 1 2 4)",
+    )
+    tune.add_argument("--no-wave", action="store_true", help="leave the wave solver out")
+    tune.add_argument("--threads", type=int, help="CPU threads (default: the scene's)")
+    tune.set_defaults(func=_cmd_tune)
 
     edit = sub.add_parser("edit", help="open the graphical editor (needs the gui extra)")
     edit.add_argument("scene", nargs="?", help="scene YAML file to open")

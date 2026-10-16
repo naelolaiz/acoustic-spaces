@@ -21,7 +21,8 @@ from typing import Literal
 
 import numpy as np
 
-#: Where the wave solver runs: ``"auto"`` takes a GPU when wgpu finds a hardware one.
+#: Where the wave solver runs: ``"auto"`` takes a GPU when wgpu finds a hardware one
+#: (and ``acoustic-spaces tune`` did not find the CPU faster for the run's length).
 Device = Literal["cpu", "gpu", "auto"]
 
 #: Threads per workgroup, and time steps per command buffer.
@@ -243,8 +244,11 @@ def hardware_gpu() -> bool:
     return adapter is not None and adapter.info["adapter_type"] != "CPU"
 
 
-def use_gpu(device: Device) -> bool:
-    """Whether the wave solver runs on the GPU for the setting ``device``."""
+def use_gpu(device: Device, steps: int | None = None) -> bool:
+    """Whether the wave solver runs on the GPU for the setting ``device``, for a run of
+    ``steps`` steps. ``auto`` takes a hardware GPU: when ``acoustic-spaces tune`` timed
+    both on this computer, only if it steps that many times clearly faster (see
+    :mod:`acoustic_spaces.engine.tuning`)."""
     if device == "cpu":
         return False
     if device == "gpu":
@@ -262,7 +266,12 @@ def use_gpu(device: Device) -> bool:
             )
         return True
     if device == "auto":
-        return hardware_gpu()
+        if not hardware_gpu():
+            return False
+        from acoustic_spaces.engine import tuning
+
+        faster = None if steps is None else tuning.wave_prefers_gpu(steps)
+        return True if faster is None else faster
     raise ValueError(f"the wave solver's device must be cpu, gpu or auto, not {device!r}")
 
 

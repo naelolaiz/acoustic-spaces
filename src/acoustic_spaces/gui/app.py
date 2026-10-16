@@ -39,8 +39,8 @@ from PySide6.QtWidgets import (
 
 from acoustic_spaces import __version__
 from acoustic_spaces._extras import install_hint
-from acoustic_spaces.engine import ray_device, reweight
-from acoustic_spaces.examples import list_examples
+from acoustic_spaces.engine import ray_device, reweight, tuning
+from acoustic_spaces.examples import example_path, list_examples
 from acoustic_spaces.geometry import SUPPORTED_SUFFIXES, points_inside
 from acoustic_spaces.gui.document import (
     LISTENER_HEIGHT,
@@ -56,8 +56,9 @@ from acoustic_spaces.gui.plan_view import PlanView
 from acoustic_spaces.gui.results_view import ResultsPanel
 from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.viewport import Viewport
-from acoustic_spaces.gui.worker import MapJob, SimulationJob
+from acoustic_spaces.gui.worker import MapJob, SimulationJob, TuneJob
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
+from acoustic_spaces.room import Room
 
 TITLE = "Acoustic Spaces editor"
 SCENE_FILTER = "Scenes (*.yaml *.yml)"
@@ -303,6 +304,12 @@ class MainWindow(QMainWindow):
             "Room parameters on a grid over the audience area, for every source",
         )
         self.map_action.setIconText("Map")
+        self.tune_action = a(
+            "&Tune CPU and GPU…",
+            self.run_tune,
+            tip="Time the CPU and the GPU on this scene and keep the fastest on this computer "
+            "for the device setting auto (acoustic-spaces tune; needs the gpu extra)",
+        )
         self.cancel_action = a("&Cancel", self.cancel_simulation, "Shift+F5")
         self.cancel_action.setEnabled(False)
         self.stop_action = a(
@@ -379,6 +386,8 @@ class MainWindow(QMainWindow):
 
         simulation = bar.addMenu("&Simulation")
         simulation.addActions([self.run_action, self.map_action, self.cancel_action])
+        simulation.addSeparator()
+        simulation.addAction(self.tune_action)
         simulation.addSeparator()
         simulation.addAction(self.stop_action)
         bar.addMenu("&Help").addAction(self.about_action)
@@ -972,6 +981,19 @@ class MainWindow(QMainWindow):
         job.done.connect(self._map_done)
         self._start(job, f"Mapping {self.document.scene.name}…")
 
+    def run_tune(self) -> None:
+        """Time the CPU and the GPU in the background (``acoustic-spaces tune``) on this
+        scene, or on the concert hall example when this one has nothing to trace."""
+        if self.job is not None:
+            return
+        room = self.document.room
+        scene = room.scene
+        if room.problems() or not scene.sources or not scene.listeners:
+            room = Room.from_yaml(example_path(tuning.SCENE))
+        job = TuneJob(room)
+        job.done.connect(self._tune_done)
+        self._start(job, f"Timing the CPU and the GPU on {room.scene.name}…")
+
     def _start(self, job: SimulationJob, message: str) -> None:
         self.job = job
         self._job_scene = self.document.scene
@@ -984,6 +1006,7 @@ class MainWindow(QMainWindow):
         self._started = time.perf_counter()
         self.run_action.setEnabled(False)
         self.map_action.setEnabled(False)
+        self.tune_action.setEnabled(False)
         self.map_panel.set_running(True)
         self.cancel_action.setEnabled(True)
         self.progress.show()
@@ -1035,12 +1058,34 @@ class MainWindow(QMainWindow):
         self.log(f"Map done in {elapsed:.1f} s: {len(result.grid)} points.")
         self._draw()
 
+    def _tune_done(self, result) -> None:
+        elapsed = time.perf_counter() - self._started
+        late = ", ".join(f"{t.length:g} s {t.device}" for t in result.late)
+        wave = f"; wave solver {tuning.wave_pick(result.wave.costs)}" if result.wave else ""
+        self.log(f"Tuned in {elapsed:.1f} s: late stage {late}{wave}.")
+        box = QMessageBox(
+            QMessageBox.Icon.Information,
+            "Tune CPU and GPU",
+            "",
+            QMessageBox.StandardButton.Ok,
+            self,
+        )
+        box.setTextFormat(Qt.TextFormat.RichText)
+        summary = result.summary().replace("&", "&amp;").replace("<", "&lt;")
+        box.setText(
+            f"<p>Device <i>auto</i> now takes the fastest on this computer:</p><pre>{summary}</pre>"
+        )
+        box.open()
+
+    def _job_kind(self) -> str:
+        return self.job.kind if self.job is not None else "simulation"
+
     def _failed(self, message: str) -> None:
-        self.log(f"The simulation failed: {message}")
+        self.log(f"The {self._job_kind()} failed: {message}")
         self.docks["messages"].raise_()
 
     def _cancelled(self) -> None:
-        self.log("Simulation cancelled.")
+        self.log(f"{self._job_kind().capitalize()} cancelled.")
 
     def _job_ended(self) -> None:
         job, self.job = self.job, None
@@ -1048,6 +1093,7 @@ class MainWindow(QMainWindow):
             job.wait()
         self.run_action.setEnabled(True)
         self.map_action.setEnabled(True)
+        self.tune_action.setEnabled(True)
         self.map_panel.set_running(False)
         self.cancel_action.setEnabled(False)
         self.progress.hide()

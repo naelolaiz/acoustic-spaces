@@ -378,7 +378,7 @@ def stochastic_energy(
     threads: int = 0,
     groups: np.ndarray | None = None,
     moment_step: float = MOMENT_STEP,
-    device: str = "cpu",
+    device: str | ray_device.Plan = "cpu",
 ) -> LateEnergy:
     """Energy per listener, band and time slot by stochastic ray tracing.
 
@@ -399,7 +399,8 @@ def stochastic_energy(
     most ``MAX_GROUPS`` groups.
 
     ``device`` says where the rays are traced: cpu, gpu, both or auto (see
-    :mod:`acoustic_spaces.engine.ray_device`); the result's ``plan`` says where they went.
+    :mod:`acoustic_spaces.engine.ray_device`), or a ``ray_device.Plan`` to follow; the
+    result's ``plan`` says where they went.
     """
     if reception not in RECEPTION:
         raise ValueError(f"unknown reception {reception!r}; use one of {', '.join(RECEPTION)}")

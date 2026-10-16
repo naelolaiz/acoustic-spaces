@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+**Tuning the devices for a computer** (`acoustic-spaces tune`, `acoustic_spaces.engine.tuning`)
+
+- `acoustic-spaces tune [scene]` (the concert_hall example by default) times the late
+  stage on the CPU, the GPU and both, for responses of 0.5, 1, 2 and 4 s (`--lengths`)
+  at the scene's ray count (`--rays`), and the wave solver on the CPU and the GPU. It
+  prints the times and keeps the fastest for each in the user cache folder
+  (`acoustic-spaces/devices.json`); `acoustic-spaces info` shows them. In the editor:
+  Simulation > Tune CPU and GPU….
+- The late stage's `auto` takes the choice for the run's response length. Without one,
+  its trial traces the run's own length (it traced at most 0.25 s), and its choice is
+  kept for that range of lengths. The 3.0.0 file `late-device.json` is no longer read.
+- The wave solver's `auto` compares the timed costs for the run's step count, where it
+  took any hardware GPU; without `tune` it still does.
+
 ## 3.0.0
 
 Validation against two measured rooms, third-octave bands, vector-based scattering,

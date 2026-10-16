@@ -1061,6 +1061,46 @@ def test_coverage_map_in_the_editor(window, qapp, tmp_path: Path) -> None:
     assert not panel.note.isVisible()
 
 
+def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
+    from acoustic_spaces.engine import tuning
+
+    timed = []
+
+    def tune(room, *, threads=None, say=None):
+        say("late stage: starting the GPU")
+        timed.append(room.scene.name)
+        late = [tuning.LateTiming(1.0, {"cpu": 2.0, "gpu": 1.0, "both": 0.8}, "both")]
+        return tuning.Tuning(room.scene.name, "a GPU | 4 CPU threads", 500, late=late)
+
+    monkeypatch.setattr(tuning, "tune", tune)
+    shown = []
+    monkeypatch.setattr(QMessageBox, "open", lambda box: shown.append(box.text()))
+    # Once in the Simulation menu, not in the toolbar.
+    tune_action = window.tune_action
+    menus = {menu.title(): menu for menu in window.findChildren(QMenu)}
+    assert tune_action in menus["&Simulation"].actions()
+    assert tune_action not in window.findChild(QToolBar, "main-toolbar").actions()
+    tune_action.trigger()
+    assert not tune_action.isEnabled() and not window.run_action.isEnabled()
+    _wait(qapp, lambda: window.job is None)
+    assert timed == [window.document.scene.name] and tune_action.isEnabled()
+    assert "Tuned in" in window.messages.toPlainText()
+    assert "late stage 1 s both." in window.messages.toPlainText()
+    assert "<pre>" in shown[0] and "a GPU | 4 CPU threads" in shown[0]
+
+    # A scene with nothing to trace times the concert hall example; failures are said.
+    def refuse(room, **_):
+        timed.append(room.scene.name)
+        raise ValueError("no GPU here")
+
+    monkeypatch.setattr(tuning, "tune", refuse)
+    window.document.edit("empty", lambda data: data.update(sources=[]))
+    window.run_tune()
+    _wait(qapp, lambda: window.job is None)
+    assert timed[-1].startswith("Concert hall")
+    assert "The tuning failed: no GPU here" in window.messages.toPlainText()
+
+
 def test_coverage_settings_form(window) -> None:
     window.open_example(example_path("church"))
     window.select("coverage")

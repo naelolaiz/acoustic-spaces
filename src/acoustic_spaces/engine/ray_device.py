@@ -6,13 +6,15 @@
 - ``gpu``: :mod:`acoustic_spaces.engine.gpu_tracer`, through WebGPU (the ``gpu`` extra).
 - ``both``: the two share the rays. Each takes the next share of them as soon as it is
   done with the last, so the faster one traces more.
-- ``auto``: whichever of the three is fastest on this computer. A short trial traces a
-  few thousand rays on the scene's own model on the CPU and on the GPU and keeps the
-  fastest; it takes the CPU, the safe choice, when wgpu finds no GPU or only a
-  software one, or when neither the GPU nor both together would be clearly faster.
-  The choice is saved for the computer. With the trial switched off
-  (:func:`set_trial`, ``--no-device-trial``), ``auto`` takes the saved choice, or the
-  CPU when there is none.
+- ``auto``: whichever of the three is fastest on this computer for the run's response
+  length. It takes the choice ``acoustic-spaces tune`` kept for that length (see
+  :mod:`acoustic_spaces.engine.tuning`); without one, a short trial traces a few
+  thousand rays on the scene's own model, for the run's own length, on the CPU and on
+  the GPU and keeps the fastest for that range of lengths. It takes the CPU, the safe
+  choice, when wgpu finds no GPU or only a software one, or when neither the GPU nor
+  both together would be clearly faster. With the trial switched off
+  (:func:`set_trial`, ``--no-device-trial``), ``auto`` takes the choice kept for the
+  nearest length, or the CPU when there is none.
 
 What only the CPU traces (sound through partitions and openings, the face groups of
 material calibration) runs there, whatever the setting.
@@ -25,28 +27,24 @@ so results vary from run to run within the noise of the ray count.
 
 from __future__ import annotations
 
-import json
 import math
 import os
-import sys
 import threading
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
 
 import numpy as np
 
-from acoustic_spaces.engine import gpu
+from acoustic_spaces.engine import gpu, tuning
 
 #: The settings of ``simulation.late.device``.
 Device = Literal["cpu", "gpu", "both", "auto"]
 DEVICES = ("cpu", "gpu", "both", "auto")
 #: The command-line switch (``acoustic-spaces simulate`` and the editor) for set_trial.
 TRIAL_FLAG = "--no-device-trial"
-#: The trial: rays, and the response length they are traced for (s), at most.
+#: The trial's rays (traced for the run's own response length).
 TRIAL_RAYS = 8192
-TRIAL_TIME = 0.25
 #: How much faster the GPU, or both together, must be in the trial for auto to leave
 #: the CPU; and how much the CPU must add to the GPU for auto to share the rays.
 MARGIN = 1.2
@@ -58,8 +56,8 @@ GPU_PARTS = 4
 
 _trial = True
 _lock = threading.Lock()
-#: Trial results of this session: per model and band count, the CPU's and the GPU's rays
-#: per second.
+#: Trial results of this session: per model, band count and range of response lengths,
+#: the CPU's and the GPU's rays per second.
 _rates: dict[tuple, tuple[float, float]] = {}
 
 
@@ -83,43 +81,6 @@ class Plan:
     cpu_rate: float = 1.0
     gpu_rate: float = 1.0
     reason: str = ""
-
-
-def _cache_file() -> Path:
-    """Where the trial's choice is kept for the computer."""
-    if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Caches"
-    else:
-        base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return base / "acoustic-spaces" / "late-device.json"
-
-
-def _machine() -> str:
-    return f"{gpu.gpu_name()} | {os.cpu_count()} CPU threads"
-
-
-def saved_choice() -> dict | None:
-    """The last trial's choice and speeds on this computer, or None."""
-    try:
-        return json.loads(_cache_file().read_text()).get(_machine())
-    except (OSError, ValueError, AttributeError):
-        return None
-
-
-def _save(choice: dict) -> None:
-    path = _cache_file()
-    try:
-        try:
-            saved = json.loads(path.read_text())
-        except (OSError, ValueError):
-            saved = {}
-        saved[_machine()] = choice
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(saved, indent=1))
-    except OSError:
-        pass  # a read-only home: the choice is simply not kept
 
 
 def _unsupported(values: dict) -> str:
@@ -154,15 +115,14 @@ def _cpu_threads(values: dict) -> int:
 
 def trial(values: dict) -> tuple[float, float]:
     """Rays per second on the CPU and on the GPU for a run like ``values`` (the
-    arguments of ``_native.trace_stochastic``): a few thousand rays traced on each, for
-    a short response, past the run's own random streams."""
+    arguments of ``_native.trace_stochastic``): a few thousand rays traced on each, past
+    the run's own random streams."""
     from acoustic_spaces import _native
     from acoustic_spaces.engine import gpu_tracer
 
     short = values | {
         "rays": TRIAL_RAYS,
         "first_ray": 1 << 40,
-        "max_time": min(float(values["max_time"]), TRIAL_TIME),
         "split_target": np.zeros(0),
     }
     # Compile the shader and start the GPU outside the timing.
@@ -187,9 +147,15 @@ def _decide(cpu_rate: float, gpu_rate: float, threads: int) -> str:
     return "cpu"
 
 
-def choose(setting: str, values: dict) -> Plan:
+def choose(setting: str | Plan, values: dict) -> Plan:
     """Where to trace a run with the arguments ``values`` of
-    ``_native.trace_stochastic`` for the device ``setting``."""
+    ``_native.trace_stochastic`` for the device ``setting``, or as the ``Plan`` given
+    (as ``acoustic-spaces tune`` times each)."""
+    if isinstance(setting, Plan):
+        if setting.device != "cpu":
+            _check_gpu(setting.device)
+        reason = _unsupported(values)
+        return Plan("cpu", reason=reason) if reason else setting
     if setting not in DEVICES:
         choices = ", ".join(DEVICES)
         raise ValueError(f"the late stage's device must be one of {choices}, not {setting!r}")
@@ -202,35 +168,52 @@ def choose(setting: str, values: dict) -> Plan:
         return Plan("cpu", reason=reason)
     if setting == "gpu":
         return Plan("gpu")
+    length = float(values["max_time"])
     if setting == "both":
-        # Shares by the speeds of a trial, if there was one; else even ones.
-        saved = saved_choice() or {"cpu_rate": 1.0, "gpu_rate": 1.0}
-        rates = _rates.get(_key(values), (saved["cpu_rate"], saved["gpu_rate"]))
+        # Shares by the speeds of a trial or of tune, if there was one; else even ones.
+        kept = tuning.late_choice(length) or {"cpu_rate": 1.0, "gpu_rate": 1.0}
+        rates = _rates.get(_key(values), (kept["cpu_rate"], kept["gpu_rate"]))
         return Plan("both", *rates)
     # auto
     if not gpu.hardware_gpu():
         return Plan("cpu", reason="no hardware GPU")
-    threads = _cpu_threads(values)
+    tuned = tuning.late_entry(length)
+    if tuned is not None and tuned.get("from") == "tune":
+        return _kept(tuned)
     if not _trial:
-        saved = saved_choice()
-        if not saved:
-            return Plan("cpu", reason="no trial on this computer yet")
-        return Plan(saved["device"], saved["cpu_rate"], saved["gpu_rate"], "the saved choice")
+        kept = tuning.late_choice(length)
+        if kept is None:
+            return Plan("cpu", reason="no trial or tune on this computer yet")
+        return _kept(kept)
     key = _key(values)
     with _lock:
         if key not in _rates:
             _rates[key] = trial(values)
     cpu_rate, gpu_rate = _rates[key]
-    device = _decide(cpu_rate, gpu_rate, threads)
-    _save({"device": device, "cpu_rate": cpu_rate, "gpu_rate": gpu_rate})
+    device = _decide(cpu_rate, gpu_rate, _cpu_threads(values))
+    tuning.keep_late(
+        length,
+        {"device": device, "cpu_rate": cpu_rate, "gpu_rate": gpu_rate, "from": "trial"},
+    )
     return Plan(device, cpu_rate, gpu_rate, "the trial")
 
 
+def _kept(choice: dict) -> Plan:
+    """The plan of a kept choice."""
+    reason = "acoustic-spaces tune" if choice.get("from") == "tune" else "the saved choice"
+    return Plan(choice["device"], choice["cpu_rate"], choice["gpu_rate"], reason)
+
+
 def _key(values: dict) -> tuple:
-    """The model and band count of a run: one trial for each in a session (so not again
-    for every run of the same room in the editor)."""
+    """The model, band count and range of response lengths of a run: one trial for each
+    in a session (so not again for every run of the same room in the editor)."""
     bvh = values["bvh"]
-    return (int(bvh.face_count), float(bvh.scale), len(np.asarray(values["air"])))
+    return (
+        int(bvh.face_count),
+        float(bvh.scale),
+        len(np.asarray(values["air"])),
+        tuning.length_key(values["max_time"]),
+    )
 
 
 def trace(plan: Plan, values: dict) -> tuple:
@@ -337,7 +320,6 @@ __all__ = [
     "Device",
     "Plan",
     "choose",
-    "saved_choice",
     "set_trial",
     "trace",
     "trial",

@@ -813,8 +813,9 @@ class LateStage(_Model):
             "stochastic ray tracing only: where it traces the rays: cpu, gpu (through "
             "WebGPU: Vulkan, Metal or Direct3D 12, with the gpu extra), both (the two share "
             "the rays; results then vary slightly from run to run) or auto (the fastest "
-            "of those on this computer, by a short trial; the CPU when unsure). Sound "
-            "through partitions and material calibration always run on the CPU"
+            "of those on this computer for the response length, as acoustic-spaces tune "
+            "or a short trial found; the CPU when unsure). Sound through partitions and "
+            "material calibration always run on the CPU"
         ),
     )
 
@@ -881,7 +882,8 @@ class WaveStage(_Model):
         default="cpu",
         description=(
             "where it steps the grid: cpu, gpu (through WebGPU: Vulkan, Metal or Direct3D 12, "
-            "with the gpu extra) or auto (a hardware GPU when wgpu finds one, else the CPU)"
+            "with the gpu extra) or auto (a hardware GPU when wgpu finds one, else the CPU; "
+            "once acoustic-spaces tune timed both, whichever is faster for the run's length)"
         ),
     )
 

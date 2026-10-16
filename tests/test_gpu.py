@@ -332,3 +332,24 @@ def test_the_late_stage_timing_script_runs(monkeypatch, capsys) -> None:
     # much further.
     t30 = [float(row[7].rstrip("%")) for row in cells[1:]]
     assert t30[1] < max(3 * t30[0], 5.0)
+
+
+@needs_gpu
+def test_tune_times_each_device_and_auto_takes_its_choices(capsys, device_choices) -> None:
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.engine import tuning
+
+    assert main(["tune", str(SHOEBOX), "--rays", "200", "--lengths", "0.1", "0.3"]) == 0
+    out = capsys.readouterr().out
+    assert "late stage, 200 rays per band (Shoebox" in out and str(device_choices) in out
+    assert "wave solver, " in out and "auto: the " in out
+    # A software GPU (lavapipe, SwiftShader) is timed, but auto keeps the CPU.
+    assert ("software renderer" in out) == (not gpu.hardware_gpu())
+    late = tuning.late_choices()
+    assert list(late) == [0.125, 0.5]
+    assert all(entry["from"] == "tune" and entry["rays"] == 200 for entry in late.values())
+    assert set(late[0.5]["seconds"]) == {"cpu", "gpu", "both"}
+    assert tuning.wave_costs() is not None
+    assert main(["info"]) == 0
+    out = capsys.readouterr().out
+    assert "late stage up to 0.125 s:" in out and "(tune)" in out and "wave solver: the " in out

@@ -8,7 +8,7 @@ import pytest
 from test_tracer_reference import REFERENCE, late_results, reference_arguments
 
 from acoustic_spaces import Room, _native
-from acoustic_spaces.engine import gpu, gpu_tracer, ray_device
+from acoustic_spaces.engine import gpu, gpu_tracer, ray_device, tuning
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
 
@@ -26,11 +26,10 @@ def _arguments(reference, name: str) -> dict:
 @pytest.fixture
 def machine(monkeypatch, tmp_path):
     """A computer with a hardware GPU (as far as ray_device can tell), a cache of its
-    own and no trial run yet."""
+    own (conftest's device_choices) and no trial run yet."""
     monkeypatch.setattr(gpu, "_adapter", lambda: object())
     monkeypatch.setattr(gpu, "hardware_gpu", lambda: True)
     monkeypatch.setattr(gpu, "gpu_name", lambda: "Test GPU (Vulkan, DiscreteGPU)")
-    monkeypatch.setattr(ray_device, "_cache_file", lambda: tmp_path / "late-device.json")
     monkeypatch.setattr(ray_device, "_rates", {})
     monkeypatch.setattr(ray_device, "_trial", True)
     return tmp_path
@@ -96,10 +95,11 @@ def test_auto_runs_a_trial_once_and_saves_its_choice(reference, machine, monkeyp
     plan = ray_device.choose("auto", values)
     assert plan == ray_device.Plan("both", 100.0, 80.0, "the trial")
     assert ray_device.choose("auto", values) == plan
-    assert len(trials) == 1  # once per model in a session
-    saved = ray_device.saved_choice()
-    assert saved == {"device": "both", "cpu_rate": 100.0, "gpu_rate": 80.0}
-    assert "Test GPU" in (machine / "late-device.json").read_text()
+    assert len(trials) == 1  # once per model and range of lengths in a session
+    saved = tuning.late_choice(values["max_time"])
+    assert saved == {"device": "both", "cpu_rate": 100.0, "gpu_rate": 80.0, "from": "trial"}
+    assert "Test GPU" in (machine / "devices.json").read_text()
+    assert list(tuning.late_choices()) == [0.5]  # the run is 0.4 s long
     # Without the trial, auto takes the saved choice; "both" shares by its speeds.
     ray_device.set_trial(False)
     assert not ray_device.trial_enabled()
@@ -108,10 +108,85 @@ def test_auto_runs_a_trial_once_and_saves_its_choice(reference, machine, monkeyp
     )
     monkeypatch.setattr(ray_device, "_rates", {})
     assert ray_device.choose("both", values) == ray_device.Plan("both", 100.0, 80.0)
-    (machine / "late-device.json").unlink()
+    (machine / "devices.json").unlink()
     plan = ray_device.choose("auto", values)
-    assert plan == ray_device.Plan("cpu", reason="no trial on this computer yet")
+    assert plan == ray_device.Plan("cpu", reason="no trial or tune on this computer yet")
     assert len(trials) == 1
+
+
+def test_choices_are_kept_by_range_of_response_lengths(machine) -> None:
+    keys = [tuning.length_key(t) for t in (0.1, 0.3, 0.5, 0.51, 1.0, 3.5, 7.0)]
+    assert keys == ["0.125", "0.5", "0.5", "1", "1", "4", "8"]
+    assert tuning.late_choice(1.0) is None and tuning.late_choices() == {}
+    for length, device in [(0.5, "cpu"), (2.0, "gpu")]:
+        tuning.keep_late(length, {"device": device, "cpu_rate": 1, "gpu_rate": 2, "from": "tune"})
+    # The shortest range at least as long, else the longest.
+    picked = [tuning.late_choice(t)["device"] for t in (0.2, 0.5, 1.0, 2.0, 6.0)]
+    assert picked == ["cpu", "cpu", "gpu", "gpu", "gpu"]
+    assert tuning.late_entry(1.0) is None and tuning.late_entry(1.5)["device"] == "gpu"
+
+
+def test_auto_takes_what_tune_kept_without_a_trial(reference, machine, monkeypatch) -> None:
+    trials = []
+
+    def trial(values):
+        trials.append(values["max_time"])
+        return 100.0, 10.0
+
+    monkeypatch.setattr(ray_device, "trial", trial)
+    values = _arguments(reference, "vector")  # 0.4 s
+    tuning.keep_late(0.5, {"device": "gpu", "cpu_rate": 1.0, "gpu_rate": 3.0, "from": "tune"})
+    tuned = ray_device.Plan("gpu", 1.0, 3.0, "acoustic-spaces tune")
+    assert ray_device.choose("auto", values) == tuned and not trials
+    assert ray_device.choose("both", values) == ray_device.Plan("both", 1.0, 3.0)
+    # A length tune did not time: the trial, for the run's own length, kept for its range.
+    longer = values | {"max_time": 1.5}
+    assert ray_device.choose("auto", longer) == ray_device.Plan("cpu", 100.0, 10.0, "the trial")
+    assert trials == [1.5] and tuning.late_entry(1.5)["from"] == "trial"
+    # Without the trial, the nearest kept choice.
+    ray_device.set_trial(False)
+    kept = ray_device.choose("auto", values | {"max_time": 3.0})
+    assert kept == ray_device.Plan("cpu", 100.0, 10.0, "the saved choice")
+    assert ray_device.choose("auto", values) == tuned and trials == [1.5]
+
+
+def test_a_plan_given_is_followed(reference, machine, monkeypatch) -> None:
+    values = _arguments(reference, "vector")
+    plan = ray_device.Plan("both", 2.0, 1.0)
+    assert ray_device.choose(plan, values) == plan
+    rooms = ray_device.choose(ray_device.Plan("gpu"), _arguments(reference, "rooms_first"))
+    assert rooms.device == "cpu" and "partitions" in rooms.reason
+    monkeypatch.setattr(gpu, "_adapter", lambda: None)
+    with pytest.raises(ValueError, match="device is gpu"):
+        ray_device.choose(ray_device.Plan("gpu"), values)
+    assert ray_device.choose(ray_device.Plan("cpu"), values) == ray_device.Plan("cpu")
+
+
+def test_the_wave_solver_takes_the_faster_for_its_step_count(machine, monkeypatch) -> None:
+    assert tuning.wave_costs() is None and tuning.wave_prefers_gpu(100) is None
+    assert gpu.use_gpu("auto", 100)  # a hardware GPU, nothing timed
+    # The GPU costs more to set up and less per step: the GPU from 124 steps on.
+    tuning.keep_wave({"cpu": [0.0, 1e-8], "gpu": [1e-6, 1e-9], "from": "tune"})
+    assert tuning.wave_pick(tuning.wave_costs()) == "the GPU from 124 steps on, else the CPU"
+    assert not gpu.use_gpu("auto", 100) and gpu.use_gpu("auto", 200)
+    assert gpu.use_gpu("gpu", 100) and not gpu.use_gpu("cpu", 200)
+    monkeypatch.setattr(gpu, "hardware_gpu", lambda: False)
+    assert not gpu.use_gpu("auto", 200)  # never a software GPU
+    for cpu, gpu_costs, pick in [
+        ([0.0, 1e-8], [0.0, 1e-9], "the GPU"),
+        ([0.0, 1e-9], [1e-6, 1e-8], "the CPU"),
+        ([1e-6, 1e-9], [0.0, 3e-9], "the GPU up to 434 steps, else the CPU"),
+    ]:
+        assert tuning.wave_pick({"cpu": cpu, "gpu": gpu_costs}) == pick
+
+
+def test_a_damaged_file_keeps_nothing(machine) -> None:
+    (machine / "devices.json").write_text("not json")
+    assert tuning.saved() == {} and tuning.late_choice(1.0) is None
+    tuning.keep_late(1.0, {"device": "tpu", "cpu_rate": 1, "gpu_rate": 1})
+    tuning.keep_late(2.0, {"device": "gpu", "cpu_rate": "fast"})
+    tuning.keep_wave({"cpu": [1.0]})
+    assert tuning.late_choices() == {} and tuning.wave_costs() is None
 
 
 def test_the_trial_times_both_devices(reference, monkeypatch) -> None:
@@ -127,9 +202,10 @@ def test_the_trial_times_both_devices(reference, monkeypatch) -> None:
     monkeypatch.setattr(gpu_tracer, "trace_stochastic", fake("gpu"))
     cpu_rate, gpu_rate = ray_device.trial(_arguments(reference, "vector_split"))
     assert cpu_rate > 0 and gpu_rate > 0
-    # A warm-up on the GPU, then the same short run on each, past the run's own rays.
+    # A warm-up on the GPU, then the same run on each: a few rays, past the run's own,
+    # for the run's own length.
     assert [c[0] for c in calls] == ["gpu", "gpu", "cpu"]
-    assert calls[1][1:] == calls[2][1:] == (ray_device.TRIAL_RAYS, 0.25, 1 << 40)
+    assert calls[1][1:] == calls[2][1:] == (ray_device.TRIAL_RAYS, 0.4, 1 << 40)
 
 
 @pytest.mark.parametrize("name", ["vector", "vector_split", "secondary"])

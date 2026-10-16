@@ -50,6 +50,13 @@ The editor works on the same scene files as the command line:
   rate, octave or third-octave **Bands**, the early-to-late transition and the seed.
   The scene's own entry sets the air's temperature, humidity and pressure, and shows
   the volume and the rooms the model holds.
+- **Simulation > Tune CPU and GPU…** times the CPU and the GPU on the open scene (or
+  on the concert hall example when the scene has no source or listener yet) and keeps
+  the fastest on this computer for **Run on** and the wave solver's device set to
+  *auto*, as `acoustic-spaces tune` does (see
+  [Tuning the devices for a computer](simulation.md#tuning-the-devices-for-a-computer);
+  needs the `gpu` extra). It runs in the background and shows the table of times when
+  done; you need it once per computer.
 - **Simulation > Run coverage map** (F6) maps every source over the audience area (see
   [Coverage maps](coverage-maps.md#coverage-maps)). The **Coverage map** panel shows any parameter
   and band from above, for one source or all of them together, and **Map in 3D** lays
