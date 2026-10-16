@@ -983,12 +983,11 @@ class MainWindow(QMainWindow):
 
     def run_tune(self) -> None:
         """Time the CPU and the GPU in the background (``acoustic-spaces tune``) on this
-        scene, or on the concert hall example when this one has nothing to trace."""
+        scene, or on the concert hall example when this one cannot run as it is."""
         if self.job is not None:
             return
         room = self.document.room
-        scene = room.scene
-        if room.problems() or not scene.sources or not scene.listeners:
+        if room.problems():
             room = Room.from_yaml(example_path(tuning.SCENE))
         job = TuneJob(room)
         job.done.connect(self._tune_done)

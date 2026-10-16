@@ -1088,13 +1088,13 @@ def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
     assert "late stage 1 s both." in window.messages.toPlainText()
     assert "<pre>" in shown[0] and "a GPU | 4 CPU threads" in shown[0]
 
-    # A scene with nothing to trace times the concert hall example; failures are said.
+    # A scene that cannot run times the concert hall example; failures are said.
     def refuse(room, **_):
         timed.append(room.scene.name)
         raise ValueError("no GPU here")
 
     monkeypatch.setattr(tuning, "tune", refuse)
-    window.document.edit("empty", lambda data: data.update(sources=[]))
+    window.document.edit("move", lambda data: data["sources"][0].update(position=[50, 0, 0]))
     window.run_tune()
     _wait(qapp, lambda: window.job is None)
     assert timed[-1].startswith("Concert hall")

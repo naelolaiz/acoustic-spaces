@@ -51,7 +51,7 @@ The editor works on the same scene files as the command line:
   The scene's own entry sets the air's temperature, humidity and pressure, and shows
   the volume and the rooms the model holds.
 - **Simulation > Tune CPU and GPU…** times the CPU and the GPU on the open scene (or
-  on the concert hall example when the scene has no source or listener yet) and keeps
+  on the concert hall example when the scene cannot run as it is) and keeps
   the fastest on this computer for **Run on** and the wave solver's device set to
   *auto*, as `acoustic-spaces tune` does (see
   [Tuning the devices for a computer](simulation.md#tuning-the-devices-for-a-computer);
