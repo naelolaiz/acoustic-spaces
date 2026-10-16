@@ -16,8 +16,9 @@ it on every `pip install -e .`.
 
 ## Checks
 
-CI runs the tests on Linux, macOS and Windows and ruff on Linux, and its logs are kept
-free of warnings, not only of errors (with uv, put `uv run` in front of each):
+CI runs the tests on Linux, macOS (Apple silicon and Intel) and Windows and ruff on
+Linux, and its logs are kept free of warnings, not only of errors (with uv, put
+`uv run` in front of each):
 
 ```sh
 ruff check .
@@ -87,6 +88,11 @@ The version is written in one place, `src/acoustic_spaces/_version.py`.
    GitHub release. A release made by CI takes that version's changelog section as its
    notes; one made on the Releases page keeps its own notes, or gets the changelog's
    when it has none.
+
+The Intel Mac wheels come from GitHub's `macos-26-intel` runner, the last Intel macOS
+image GitHub offers; GitHub has not announced when it goes. Once it does, build them on
+`macos-latest` (Apple silicon) by setting `CIBW_ARCHS_MACOS: x86_64` for that job, which
+cross-compiles them; cibuildwheel tests them under Rosetta 2 where the runner has it.
 
 A release tag also uploads the wheels and the source distribution to PyPI, through PyPI's
 trusted publishing, with no token stored anywhere. That needs, set up once by a

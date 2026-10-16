@@ -68,3 +68,7 @@ Version 3.1.0:
 Version 3.2.0:
 
 - [x] On PyPI: `pip install acoustic-spaces`.
+
+Unreleased:
+
+- [x] Wheels for Intel Macs.

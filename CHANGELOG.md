@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Wheels for Intel Macs (macOS x86-64), on PyPI and the GitHub releases, so pip no
+  longer builds the package from source there. CI builds them on GitHub's Intel macOS
+  runner and runs the tests and the editor's tests there too.
+
 ## 3.2.0
 
 **On PyPI**

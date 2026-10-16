@@ -9,9 +9,9 @@ pip install "acoustic-spaces[viz,gui]"     # with the 3D view and the graphical 
 
 The extras in brackets add the optional parts: `viz`, `gui`, `measure`, `sofa`, `gpu`,
 `ifc` and `sketchup` (what each brings is listed under *Install from source* below).
-PyPI has wheels with the compiled core inside for Linux (x86-64), macOS (Apple silicon)
-and Windows (x86-64), CPython 3.10 to 3.14; elsewhere pip builds the package from source,
-which needs a C++17 compiler. Every
+PyPI has wheels with the compiled core inside for Linux (x86-64), macOS (Apple silicon
+and Intel) and Windows (x86-64), CPython 3.10 to 3.14; elsewhere pip builds the package
+from source, which needs a C++17 compiler. Every
 [GitHub release](https://github.com/naelolaiz/acoustic-spaces/releases) has the same
 wheels, to `pip install` with the extras after the file name, such as
 `pip install "acoustic_spaces-3.2.0-cp312-cp312-win_amd64.whl[viz,gui]"`. Between
