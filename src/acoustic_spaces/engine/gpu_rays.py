@@ -96,7 +96,8 @@ fn hit_triangle(place: u32, o: vec3<f32>, d: vec3<f32>) -> f32 {
 // face `skip`, or (t_max, NONE); with `any_hit`, the first face found, which is enough
 // to know the way is blocked. Of two children the ray enters, the nearer goes first;
 // the other waits and is dropped if a hit nearer than its box turns up meanwhile.
-// (No early exits from the loops: Direct3D's shader compiler got them wrong.)
+// (No early exits from the loops: with them, the late tracer's searches on Direct3D 12
+// missed faces and could run forever.)
 fn search_ray(o: vec3<f32>, d: vec3<f32>, t_min: f32, t_max: f32, skip: u32,
               any_hit: bool) -> Hit {
     var best = Hit(t_max, NONE);
