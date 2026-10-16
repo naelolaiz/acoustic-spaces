@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `acoustic-spaces` with no command opens the editor (`acoustic-spaces edit`), with the
+  `gui` extra and a display; without them it prints the short usage and why, as
+  before. `-h` still lists the commands.
+
 ## 3.0.0
 
 Validation against two measured rooms, third-octave bands, vector-based scattering,

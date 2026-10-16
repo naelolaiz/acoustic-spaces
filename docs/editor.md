@@ -1,13 +1,17 @@
 # Graphical editor
 
 The editor needs the `gui` extra: `uv sync --extra gui` in a source checkout, then
-`uv run acoustic-spaces edit`, or a release wheel installed with `[gui]` after its file
+`uv run acoustic-spaces`, or a release wheel installed with `[gui]` after its file
 name.
 
 ```sh
-acoustic-spaces edit                              # a new box room
+acoustic-spaces                                   # alone, it opens the editor on a new box room
 acoustic-spaces edit examples/studio/scene.yaml   # or open a scene file
 ```
+
+`acoustic-spaces` with no command opens the editor; `acoustic-spaces -h` lists the
+commands. Without the `gui` extra, or with no display to show the editor on (over SSH,
+say), it prints the short usage instead, with the reason.
 
 ![The editor with the concert hall example: the scene tree, the room with its early reflection paths, the source's properties and the echogram of a run](images/editor.png)
 
