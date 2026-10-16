@@ -19,9 +19,12 @@ from PySide6.QtGui import (
     QKeySequence,
     QShortcut,
     QShowEvent,
+    QTextCharFormat,
+    QTextCursor,
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QDockWidget,
     QFileDialog,
     QFrame,
@@ -39,8 +42,8 @@ from PySide6.QtWidgets import (
 
 from acoustic_spaces import __version__
 from acoustic_spaces._extras import install_hint
-from acoustic_spaces.engine import ray_device, reweight
-from acoustic_spaces.examples import list_examples
+from acoustic_spaces.engine import ray_device, reweight, tuning
+from acoustic_spaces.examples import example_path, list_examples
 from acoustic_spaces.geometry import SUPPORTED_SUFFIXES, points_inside
 from acoustic_spaces.gui.document import (
     LISTENER_HEIGHT,
@@ -51,13 +54,16 @@ from acoustic_spaces.gui.document import (
     model_scene,
 )
 from acoustic_spaces.gui.inspector import BAND_LABELS, Inspector, label_text
+from acoustic_spaces.gui.levels import level_colour, rich_lines
 from acoustic_spaces.gui.map_view import MapPanel
 from acoustic_spaces.gui.plan_view import PlanView
 from acoustic_spaces.gui.results_view import ResultsPanel
 from acoustic_spaces.gui.tree import SceneTree
+from acoustic_spaces.gui.tune_dialog import TuneDialog
 from acoustic_spaces.gui.viewport import Viewport
-from acoustic_spaces.gui.worker import MapJob, SimulationJob
+from acoustic_spaces.gui.worker import MapJob, SimulationJob, TuneJob
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
+from acoustic_spaces.room import Room
 
 TITLE = "Acoustic Spaces editor"
 SCENE_FILTER = "Scenes (*.yaml *.yml)"
@@ -147,6 +153,7 @@ class MainWindow(QMainWindow):
         self.progress.setMaximumWidth(160)
         self.progress.hide()
         self.summary = QLabel()
+        self.summary.setTextFormat(Qt.TextFormat.RichText)
         self.statusBar().addPermanentWidget(self.progress)
         self.statusBar().addPermanentWidget(self.summary)
         self._play_timer = QTimer(self)
@@ -209,7 +216,7 @@ class MainWindow(QMainWindow):
         self._sized = False
         self._attach(self.document)
         if not self.viewport.available:
-            self.log(self.viewport.note)
+            self.log(self.viewport.note, "warning")
 
     # -- menus ----------------------------------------------------------------------
 
@@ -303,6 +310,12 @@ class MainWindow(QMainWindow):
             "Room parameters on a grid over the audience area, for every source",
         )
         self.map_action.setIconText("Map")
+        self.tune_action = a(
+            "&Tune CPU and GPU…",
+            self.run_tune,
+            tip="Time the CPU and the GPU on this scene and keep the fastest on this computer "
+            "for the device setting auto (acoustic-spaces tune; needs the gpu extra)",
+        )
         self.cancel_action = a("&Cancel", self.cancel_simulation, "Shift+F5")
         self.cancel_action.setEnabled(False)
         self.stop_action = a(
@@ -379,6 +392,8 @@ class MainWindow(QMainWindow):
 
         simulation = bar.addMenu("&Simulation")
         simulation.addActions([self.run_action, self.map_action, self.cancel_action])
+        simulation.addSeparator()
+        simulation.addAction(self.tune_action)
         simulation.addSeparator()
         simulation.addAction(self.stop_action)
         bar.addMenu("&Help").addAction(self.about_action)
@@ -466,18 +481,33 @@ class MainWindow(QMainWindow):
             parts += [f"{room.volume_m3:,.0f} m³", f"RT {rt:.2f} s at {BAND_LABELS[k]} (Eyring)"]
         else:
             parts.append("model not closed")
+        lines = [(", ".join(parts), "info")]
         problems = room.problems()
         if problems:
-            parts.append(f"{len(problems)} problem{'s' if len(problems) > 1 else ''}")
-        self.summary.setText(", ".join(parts))
+            lines.append((f", {len(problems)} problem{'s' if len(problems) > 1 else ''}", "error"))
+        self.summary.setText(rich_lines(self.summary, lines).replace("<br>", ""))
         self.summary.setToolTip("\n".join(problems))
 
-    def log(self, text: str) -> None:
-        self.messages.appendPlainText(text)
+    def log(self, text: str, level: str = "info") -> None:
+        """Add ``text`` to the messages, a warning in amber and an error in red, and show
+        it in the status bar."""
+        style = QTextCharFormat()
+        colour = level_colour(self.messages, level)
+        if colour is not None:
+            style.setForeground(colour)
+        bar = self.messages.verticalScrollBar()
+        following = bar.value() == bar.maximum()
+        cursor = QTextCursor(self.messages.document())
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        if not self.messages.document().isEmpty():
+            cursor.insertBlock()
+        cursor.insertText(text, style)
+        if following:  # as appending does: stay at the end unless scrolled back
+            bar.setValue(bar.maximum())
         self.statusBar().showMessage(text, 8000)
 
     def _refused(self, message: str) -> None:
-        self.log(f"Not changed: {message}")
+        self.log(f"Not changed: {message}", "error")
 
     # -- selection and the 3D view ------------------------------------------------
 
@@ -540,7 +570,7 @@ class MainWindow(QMainWindow):
 
         leaks = find_leaks(room)
         self._found_leaks = (room, leaks)
-        self.log(f"Leaks: {leaks.summary()}")
+        self.log(f"Leaks: {leaks.summary()}", "warning" if leaks.leaked else "info")
         return leaks
 
     def _paths_toggled(self, on: bool) -> None:
@@ -861,7 +891,7 @@ class MainWindow(QMainWindow):
 
     def save_screenshot(self) -> None:
         if not self.viewport.available:
-            self.log(self.viewport.note)
+            self.log(self.viewport.note, "warning")
             return
         path, _ = QFileDialog.getSaveFileName(self, "Save screenshot", "room.png", "PNG (*.png)")
         if path:
@@ -910,7 +940,7 @@ class MainWindow(QMainWindow):
         return True
 
     def _error(self, title: str, text: str) -> None:
-        self.log(f"{title}: {text}")
+        self.log(f"{title}: {text}", "error")
         QMessageBox.warning(self, title, text)
 
     # -- simulation -----------------------------------------------------------------
@@ -947,7 +977,7 @@ class MainWindow(QMainWindow):
             return
         problems = self.document.room.problems()
         if problems:
-            self.log("Cannot run: " + "; ".join(problems))
+            self.log("Cannot run: " + "; ".join(problems), "error")
             self.docks["messages"].raise_()
             return
         # Count reflections off each material, so that changing absorption afterwards
@@ -965,12 +995,24 @@ class MainWindow(QMainWindow):
         # Listeners play no part in a map.
         problems = [p for p in self.document.room.problems() if not p.startswith("listener ")]
         if problems:
-            self.log("Cannot map: " + "; ".join(problems))
+            self.log("Cannot map: " + "; ".join(problems), "error")
             self.docks["messages"].raise_()
             return
         job = MapJob(self.document.room)
         job.done.connect(self._map_done)
         self._start(job, f"Mapping {self.document.scene.name}…")
+
+    def run_tune(self) -> None:
+        """Time the CPU and the GPU in the background (``acoustic-spaces tune``) on this
+        scene, or on the concert hall example when this one cannot run as it is."""
+        if self.job is not None:
+            return
+        room = self.document.room
+        if room.problems():
+            room = Room.from_yaml(example_path(tuning.SCENE))
+        job = TuneJob(room)
+        job.done.connect(self._tune_done)
+        self._start(job, f"Timing the CPU and the GPU on {room.scene.name}…")
 
     def _start(self, job: SimulationJob, message: str) -> None:
         self.job = job
@@ -984,6 +1026,7 @@ class MainWindow(QMainWindow):
         self._started = time.perf_counter()
         self.run_action.setEnabled(False)
         self.map_action.setEnabled(False)
+        self.tune_action.setEnabled(False)
         self.map_panel.set_running(True)
         self.cancel_action.setEnabled(True)
         self.progress.show()
@@ -1003,7 +1046,7 @@ class MainWindow(QMainWindow):
         open: another was opened or started while the job ran."""
         if self._job_document is self.document:
             return False
-        self.log("Dropped the results of the run: its scene is no longer open.")
+        self.log("Dropped the results of the run: its scene is no longer open.", "warning")
         return True
 
     def _done(self, result) -> None:
@@ -1035,19 +1078,69 @@ class MainWindow(QMainWindow):
         self.log(f"Map done in {elapsed:.1f} s: {len(result.grid)} points.")
         self._draw()
 
+    def _tune_done(self, result) -> None:
+        elapsed = time.perf_counter() - self._started
+        late = ", ".join(f"{t.length:g} s {t.device}" for t in result.late)
+        wave = f"; wave solver {tuning.wave_pick(result.wave.costs)}" if result.wave else ""
+        self.log(f"Tuned in {elapsed:.1f} s: late stage {late}{wave}.")
+        settings = self.document.scene.simulation
+        dialog = TuneDialog(result, settings.late.device, settings.wave.device, self)
+        dialog.finished.connect(lambda code: self._tune_answered(dialog, code))
+        dialog.open()
+
+    def _tune_answered(self, dialog: TuneDialog, code: int) -> None:
+        """Save what the tune window asked for on OK; nothing on Cancel."""
+        dialog.deleteLater()
+        if code != QDialog.DialogCode.Accepted.value:
+            self.log("Tuning not saved: device auto and the default are as they were.")
+            return
+        dialog.timings.keep()
+        tuning.set_default(dialog.default())
+        self.log(
+            f"Timings saved in {dialog.timings.file}. This computer's default device: "
+            f"{dialog.default()}."
+        )
+        if dialog.follows():
+            self.follow_default_device()
+        self.inspector.refresh()
+
+    def follow_default_device(self) -> None:
+        """Let the scene's late reverberation and wave solver run on this computer's
+        default device (Run on: default) instead of devices of their own."""
+
+        def change(data: dict) -> None:
+            simulation = data.get("simulation", {})
+            simulation.get("late", {}).pop("device", None)
+            simulation.get("wave", {}).pop("device", None)
+
+        try:
+            self.document.edit("run on the default device", change)
+        except EditError as exc:
+            self._refused(str(exc))
+            return
+        self.log("Late reverberation and the wave solver now run on this computer's default.")
+
+    def _job_kind(self) -> str:
+        return self.job.kind if self.job is not None else "simulation"
+
     def _failed(self, message: str) -> None:
-        self.log(f"The simulation failed: {message}")
+        self.log(f"The {self._job_kind()} failed: {message}", "error")
         self.docks["messages"].raise_()
 
     def _cancelled(self) -> None:
-        self.log("Simulation cancelled.")
+        self.log(f"{self._job_kind().capitalize()} cancelled.")
 
     def _job_ended(self) -> None:
         job, self.job = self.job, None
         if job is not None:
             job.wait()
+        # Done (or failed) while another window was in front: flash the editor's entry in
+        # the taskbar (the Dock icon bounces on macOS), as desktop programs do. Nothing
+        # pops up: the results and the messages already show what happened.
+        QApplication.alert(self)
         self.run_action.setEnabled(True)
         self.map_action.setEnabled(True)
+        self.tune_action.setEnabled(True)
         self.map_panel.set_running(False)
         self.cancel_action.setEnabled(False)
         self.progress.hide()
@@ -1079,7 +1172,7 @@ class MainWindow(QMainWindow):
                 "to a source); scale them before playing them back."
             )
         if self._stale():
-            self.log("These results are from before the latest changes to the scene.")
+            self.log("These results are from before the latest changes to the scene.", "warning")
         return report
 
     def save_map(self) -> None:
@@ -1119,7 +1212,7 @@ class MainWindow(QMainWindow):
             return False
         self.log(f"Wrote {path}")
         if self._map_stale():
-            self.log("This map is from before the latest changes to the scene.")
+            self.log("This map is from before the latest changes to the scene.", "warning")
         return True
 
     def _listening_format(self):
@@ -1297,7 +1390,7 @@ class MainWindow(QMainWindow):
         if "error" in outcome:
             self._error("Cannot play", str(outcome["error"]))
         elif outcome["report"].xruns:
-            self.log(f"{outcome['report'].xruns} block(s) dropped out while playing.")
+            self.log(f"{outcome['report'].xruns} block(s) dropped out while playing.", "warning")
 
     def _playing(self, playing: bool) -> None:
         self.stop_action.setEnabled(playing)

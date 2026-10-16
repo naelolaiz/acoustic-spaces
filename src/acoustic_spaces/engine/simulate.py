@@ -13,6 +13,7 @@ import numpy as np
 
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
+from acoustic_spaces.engine import tuning
 from acoustic_spaces.engine import wave as wave_stage
 from acoustic_spaces.engine.coherent import band_count
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
@@ -330,6 +331,8 @@ def simulate(
     if seed is None:
         seed = int(np.random.SeedSequence().generate_state(1, np.uint32)[0])
     early_cfg, late_cfg = settings.early, settings.late
+    # Not set in the scene: this computer's default.
+    late_device = tuning.resolve_device(late_cfg.device)
     statistical = late_cfg.method == "statistical"
     if statistical and volume is None:
         raise ValueError("the statistical late method needs a closed model")
@@ -463,9 +466,9 @@ def simulate(
                 orientation=orientation,
                 threads=threads,
                 groups=groups,
-                device=late_cfg.device,
+                device=late_device,
             )
-            if late.plan is not None and late_cfg.device != "cpu":
+            if late.plan is not None and late_device != "cpu":
                 say(f"{label}: late rays traced on {_where(late.plan)}")
             add(info, "rays", float(late.rays))
             add(info, "escaped_rays", float(late.escaped_rays))
@@ -536,7 +539,7 @@ def simulate(
                 speed_of_sound=c,
                 points_per_wavelength=settings.wave.points_per_wavelength,
                 threads=threads,
-                device=settings.wave.device,
+                device=tuning.resolve_device(settings.wave.device),
                 scheme=settings.wave.scheme,
                 say=say,
                 label=source.name,

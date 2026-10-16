@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+**Tuning the devices for a computer** (`acoustic-spaces tune`, `acoustic_spaces.engine.tuning`)
+
+- `acoustic-spaces tune [scene]` (the concert_hall example by default) times the late
+  stage on the CPU, the GPU and both, for responses of 0.5, 1, 2 and 4 s (`--lengths`)
+  at the scene's ray count (`--rays`), and the wave solver on the CPU and the GPU. It
+  prints the times and keeps the fastest for each in the user cache folder
+  (`acoustic-spaces/devices.json`); `acoustic-spaces info` shows them. In the editor:
+  Simulation > Tune CPU and GPU…, whose window saves on OK only (Cancel saves nothing).
+- A per-computer default device: `simulation.late.device` and `simulation.wave.device`
+  may be left out (the editor's **Run on**: *default*), and then follow this computer's
+  default, `cpu` unless `tune --default auto` or the editor's tune window (a ticked
+  check box) made it `auto`; `tune --default cpu` switches back. Scenes that name a
+  device keep it. Scenes the editor saved before name `cpu`; the tune window offers to
+  let the open one follow the default.
+- The late stage's `auto` takes the choice for the run's response length. Without one,
+  its trial traces the run's own length (it traced at most 0.25 s), and its choice is
+  kept for that range of lengths. The 3.0.0 file `late-device.json` is no longer read.
+- The wave solver's `auto` compares the timed costs for the run's step count, where it
+  took any hardware GPU; without `tune` it still does.
+
+**Warnings, errors and finished runs**
+
+- The editor shows warnings in amber and errors in red, in **Messages**, in the scene's
+  form and (the number of problems) in the status bar. On the command line, `error:`
+  and `warning:` are red and yellow in a terminal (`NO_COLOR` turns that off).
+- When a run, a coverage map or a tuning ends while another window is in front, the
+  editor's taskbar entry flashes (the Dock icon bounces on macOS).
+
+**Starting the editor**
+
 - `acoustic-spaces` with no command opens the editor (`acoustic-spaces edit`), with the
   `gui` extra and a display; without them it prints the short usage and why, as
   before. `-h` still lists the commands.

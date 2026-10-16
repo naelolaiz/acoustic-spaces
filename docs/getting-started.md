@@ -72,8 +72,12 @@ acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
 acoustic-spaces map examples/lecture_hall/scene.yaml --plot sti.png --parameter sti
 acoustic-spaces walkthrough examples/gallery_walk/scene.yaml guide=speech.wav --out walk.wav  # a visitor walks
 acoustic-spaces examples                               # the bundled rooms, and where they are
+acoustic-spaces tune --default auto                    # with the gpu extra: run on the fastest device here
 python -m pytest                                       # the test suite
 ```
+
+Errors start with `error:` and warnings with `warning:`, in red and yellow in a
+terminal (`NO_COLOR=1` turns colours off).
 
 `animate` shows sound particles leaving a source and spreading through the room, each
 reflecting off the walls (turned from the specular direction by as much as the surface

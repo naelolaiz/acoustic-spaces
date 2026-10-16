@@ -7,6 +7,7 @@ import dataclasses
 import json
 import math
 import os
+import re
 import sys
 import textwrap
 from collections.abc import Sequence
@@ -16,6 +17,7 @@ from pydantic import ValidationError
 
 from acoustic_spaces import __version__, native_available
 from acoustic_spaces.engine.ray_device import DEVICES, TRIAL_FLAG
+from acoustic_spaces.engine.tuning import DEFAULTS
 from acoustic_spaces.gltf import PARTICLE_COUNT, SLOW_MOTION
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
@@ -79,7 +81,56 @@ def _cmd_info(_: argparse.Namespace) -> int:
     print(f"CPU cores for ray tracing: {os.cpu_count() or 1}")
     from acoustic_spaces.engine.gpu import gpu_name
 
-    print(f"GPU for the wave solver: {gpu_name() or 'none (needs the gpu extra and a driver)'}")
+    print(f"GPU: {gpu_name() or 'none (needs the gpu extra and a driver)'}")
+    from acoustic_spaces.engine import tuning
+
+    print(f"device for scenes that name none: {tuning.default_device()} ({DEFAULT_HELP})")
+    late = tuning.late_choices()
+    if late or tuning.wave_costs():
+        print(f"device choices for auto ({tuning.cache_file()}):")
+        for length, entry in sorted(late.items()):
+            print(f"  late stage up to {length:g} s: {entry['device']} ({entry.get('from')})")
+        costs = tuning.wave_costs()
+        if costs:
+            print(f"  wave solver: {tuning.wave_pick(costs)} (tune)")
+    else:
+        print("device choices for auto: none yet (acoustic-spaces tune times them)")
+    return 0
+
+
+def _cmd_tune(args: argparse.Namespace) -> int:
+    from acoustic_spaces.engine import tuning
+    from acoustic_spaces.examples import example_path
+
+    if args.default == "cpu":
+        tuning.set_default("cpu")
+        print(f"this computer's default device is now cpu (kept in {tuning.cache_file()})")
+        return 0
+    room = _load_room(args.scene or str(example_path(tuning.SCENE)))
+    if room is None or not _print_checks(room):
+        return 1
+    try:
+        result = tuning.tune(
+            room,
+            rays=args.rays,
+            lengths=args.lengths or tuning.LENGTHS,
+            wave_lengths=None if args.no_wave else tuning.WAVE_LENGTHS,
+            threads=args.threads,
+            say=lambda message: print(message, file=sys.stderr),
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(result.summary())
+    print(f"timings kept in {result.file}")
+    if args.default:
+        tuning.set_default(args.default)
+        print("this computer's default device is now auto: scenes that name none take the above")
+    else:
+        print(
+            f"this computer's default device: {tuning.default_device()} "
+            "(--default auto makes scenes that name none take the above)"
+        )
     return 0
 
 
@@ -599,10 +650,12 @@ def _performance_options(args: argparse.Namespace) -> dict[str, tuple[str, objec
     }
 
 
+DEFAULT_HELP = "acoustic-spaces tune --default auto|cpu changes it"
+
 TRIAL_HELP = (
-    "with simulation.late.device auto, skip the short trial that times the CPU and the GPU "
-    "on the scene, and take the choice saved from the last trial on this computer (the "
-    "CPU without one)"
+    "with simulation.late.device auto and no choice from acoustic-spaces tune for the "
+    "response length, skip the short trial that times the CPU and the GPU on the scene, "
+    "and take the choice kept for the nearest length on this computer (the CPU without one)"
 )
 
 
@@ -1763,6 +1816,40 @@ def build_parser() -> argparse.ArgumentParser:
     examples.add_argument("--copy", metavar="DIR", help="copy the examples into this folder")
     examples.set_defaults(func=_cmd_examples)
 
+    tune = sub.add_parser(
+        "tune",
+        help="time the CPU and the GPU on a scene and keep the fastest for device auto",
+        description=(
+            "Time the late stage on the CPU, the GPU and both, at several response lengths, "
+            "and the wave solver on the CPU and the GPU, and keep the fastest for this "
+            "computer: simulation.late.device and simulation.wave.device auto then take "
+            "them. Needs the gpu extra."
+        ),
+    )
+    tune.add_argument(
+        "scene", nargs="?", help="scene YAML file to time (default: the concert_hall example)"
+    )
+    tune.add_argument("--rays", type=int, help="rays per band (default: the scene's)")
+    tune.add_argument(
+        "--lengths",
+        type=float,
+        nargs="+",
+        metavar="SECONDS",
+        help="response lengths to time the late stage at (default: 0.5 1 2 4)",
+    )
+    tune.add_argument("--no-wave", action="store_true", help="leave the wave solver out")
+    tune.add_argument("--threads", type=int, help="CPU threads (default: the scene's)")
+    tune.add_argument(
+        "--default",
+        choices=DEFAULTS,
+        help=(
+            "this computer's device for scenes that name none (simulation.late.device and "
+            "simulation.wave.device not set): auto times first and then takes the fastest; "
+            "cpu switches back at once, without timing anything"
+        ),
+    )
+    tune.set_defaults(func=_cmd_tune)
+
     edit = sub.add_parser("edit", help="open the graphical editor (needs the gui extra)")
     edit.add_argument("scene", nargs="?", help="scene YAML file to open")
     _add_trial_argument(edit)
@@ -2253,11 +2340,77 @@ def _no_editor() -> str:
     return ""
 
 
+#: How the terminal shows a line's ``error:`` (red) and ``warning:`` (yellow), also
+#: after a command's name, as argparse writes its errors.
+HIGHLIGHTS = {"error": "\033[1;31m", "warning": "\033[1;33m"}
+_LEVEL = re.compile(r"^((?:[\w.-]+ )*[\w.-]+: )?(error|warning):")
+
+
+class _Highlighted:
+    """A terminal stream that shows the ``error:`` and ``warning:`` starting a line in
+    red and yellow."""
+
+    def __init__(self, stream) -> None:
+        self._stream = stream
+        self._line_start = True
+
+    def write(self, text: str) -> int:
+        shown = []
+        for piece in text.splitlines(keepends=True):
+            found = _LEVEL.match(piece) if self._line_start else None
+            if found:
+                command, level = found.group(1) or "", found.group(2)
+                rest = piece[found.end() :]
+                piece = f"{command}{HIGHLIGHTS[level]}{level}:\033[0m{rest}"
+            shown.append(piece)
+            self._line_start = piece.endswith("\n")
+        self._stream.write("".join(shown))
+        return len(text)
+
+    def __getattr__(self, name: str):
+        return getattr(self._stream, name)
+
+
+def _colours(stream) -> bool:
+    """Whether ``stream`` shows colours: a terminal, unless NO_COLOR is set or TERM is
+    dumb; on Windows, one that takes ANSI escape codes."""
+    if os.environ.get("NO_COLOR") or os.environ.get("TERM") == "dumb":
+        return False
+    try:
+        if not stream.isatty():
+            return False
+    except (AttributeError, ValueError):  # closed, or not a real stream
+        return False
+    return os.name != "nt" or _windows_escape_codes()
+
+
+def _windows_escape_codes() -> bool:  # pragma: no cover - Windows consoles only
+    """Turn on the escape codes in the Windows console that shows the errors."""
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.GetStdHandle(-12)  # the standard error
+    mode = ctypes.c_uint32()
+    if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+        return False
+    return bool(kernel32.SetConsoleMode(handle, mode.value | 0x0004))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         # Material descriptions contain characters a Windows console code page may lack.
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
+    stderr = sys.stderr
+    if _colours(stderr):
+        sys.stderr = _Highlighted(stderr)
+    try:
+        return _main(argv)
+    finally:
+        sys.stderr = stderr
+
+
+def _main(argv: Sequence[str] | None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     parser = build_parser()
     if not argv:

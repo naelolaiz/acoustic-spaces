@@ -35,6 +35,15 @@ class _FakeStream:
         return False
 
 
+@pytest.fixture(autouse=True)
+def device_choices(monkeypatch, tmp_path):
+    """Keeps the device choices of ``acoustic-spaces tune`` and of auto's trial in the
+    test's own folder, not the user's cache."""
+    path = tmp_path / "devices.json"
+    monkeypatch.setattr("acoustic_spaces.engine.tuning.cache_file", lambda: path)
+    return path
+
+
 @pytest.fixture
 def fake_sounddevice(monkeypatch):
     """A stand-in for the sounddevice module: streams play into ``played``."""

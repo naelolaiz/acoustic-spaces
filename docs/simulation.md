@@ -298,7 +298,8 @@ simulation:
     max_band_hz: 125           # the highest band it computes: 63, 125 (default), 250 or 500
     points_per_wavelength: 8   # grid cells per wavelength at the top of that band
     scheme: auto               # the grid's stencil: auto (default), isotropic or standard
-    device: cpu                # where it steps the grid: cpu (default), gpu or auto
+    device: cpu                # where it steps the grid: cpu, gpu or auto; left out: this
+                               # computer's default (cpu unless tune made it auto)
 ```
 
 - The sound field is computed with finite differences in time on a cubic grid over the
@@ -312,7 +313,12 @@ simulation:
 - With `device: gpu` the grid is stepped on the GPU instead, through WebGPU: Vulkan,
   Metal or Direct3D 12, so AMD, NVIDIA, Intel and Apple GPUs alike, with the `gpu`
   extra (wgpu); `auto` takes a hardware GPU when wgpu finds one, and the CPU otherwise.
-  The grid is laid out on the CPU either way, and the two agree to within about 1e-5 of
+  Left out, `device` is this computer's default (see
+  [Tuning the devices for a computer](#tuning-the-devices-for-a-computer)).
+  Once `acoustic-spaces tune` (below) has timed both on the computer, `auto` takes
+  whichever steps the run's grid as many times clearly faster: a GPU costs more to set
+  up and less per step, so it can lose on short responses. The grid is laid out on the
+  CPU either way, and the two agree to within about 1e-5 of
   the largest pressure (single-precision rounding). `acoustic-spaces info` names the GPU
   it finds.
 - Surfaces absorb as their materials do in each band: each material becomes a locally
@@ -408,9 +414,12 @@ alike.
 ```yaml
 simulation:
   late:
-    device: cpu       # cpu (default), gpu, both or auto
+    device: cpu       # cpu, gpu, both or auto; left out: this computer's default
 ```
 
+- Left out: this computer's default, `cpu` unless `acoustic-spaces tune --default auto`
+  (or OK in the editor's tune window) made it `auto` (see below). A scene that names a
+  device keeps it on every computer.
 - `cpu`: the compiled core, on `performance.threads`, as before.
 - `gpu`: one compute shader traces what the CPU does (detector spheres and rain, both
   kinds of scattering, the scattering of a surface's size, air absorption, the early
@@ -423,14 +432,60 @@ simulation:
   faster one traces more. Which rays each traces depends on how fast each goes, so two
   runs differ within the noise of the ray count; `cpu` and `gpu` give the same result
   every time.
-- `auto`: a short trial on the scene's own model (8,192 rays, the first 0.25 s of the
-  response) on the CPU and on the GPU, and the fastest of `cpu`, `gpu` and `both`. It
-  keeps the CPU, the safe choice, when wgpu finds no GPU or only a software one, or when
-  neither the GPU nor both together would be at least 20 % faster. The choice is saved
-  for the computer (`acoustic-spaces/late-device.json` in the user cache folder:
-  `~/.cache`, `~/Library/Caches` or `%LOCALAPPDATA%`). `--no-device-trial` (`simulate`
-  and `edit`) skips the trial: `auto` then takes the saved choice, or the CPU when there
-  is none.
+- `auto`: the fastest of `cpu`, `gpu` and `both` on this computer, for the run's
+  response length (a longer response keeps each ray going longer, which can change
+  which is fastest). It takes the choice `acoustic-spaces tune` kept for that length
+  (below). Without one, a short trial on the scene's own model traces 8,192 rays, for
+  the run's own length, on the CPU and on the GPU, picks the fastest and keeps it for
+  that range of lengths (up to 0.5, 1, 2, 4 s and so on). It keeps the
+  CPU, the safe choice, when wgpu finds no GPU or only a software one, or when neither
+  the GPU nor both together would be at least 20 % faster. `--no-device-trial`
+  (`simulate` and `edit`) skips the trial: `auto` then takes the choice kept for the
+  nearest length, or the CPU when there is none.
+
+### Tuning the devices for a computer
+
+`acoustic-spaces tune` times every option and keeps the fastest for `auto`, once per
+computer (again after changing the GPU or its driver):
+
+```sh
+acoustic-spaces tune                            # the concert_hall example
+acoustic-spaces tune my-hall.yaml --rays 50000  # your own scene, at your ray count
+acoustic-spaces tune --lengths 1 3 8            # other response lengths (s)
+acoustic-spaces tune --default auto             # time, then make auto this computer's default
+acoustic-spaces tune --default cpu              # back to the CPU, without timing anything
+acoustic-spaces info                            # the default, and what auto takes now
+```
+
+- The late stage traces the scene's first source to its listeners with the scene's
+  settings (or `--rays` per band) on `cpu`, `gpu` and `both`, for responses of 0.5, 1,
+  2 and 4 s (`--lengths`), and keeps the fastest for each: the CPU unless another is at
+  least 10 % faster. Each length stands for its range (up to 0.5, 1, 2, 4 s and so on).
+  `auto` then takes the choice for the run's range, or for the nearest longer one, else
+  for the longest, with no trial; `both` shares the rays by the speeds timed there.
+- The wave solver steps the scene's wave grid (as set in its wave settings, whether the
+  scene uses the solver or not) for two short responses on the CPU and on the GPU. The
+  two times give each device's cost per cell to set up and per step, so `auto` can
+  compare them for any run's step count; `--no-wave` leaves it out.
+- It prints a table of the times and what `auto` will take, and `acoustic-spaces info`
+  shows the choices later.
+- A software GPU (lavapipe, SwiftShader) is timed too, but `auto` never takes it.
+- `--default auto` then makes `auto` this computer's default: scenes that leave
+  `simulation.late.device` and `simulation.wave.device` out run on the fastest device
+  found. `--default cpu` switches back. Without `--default`, tune keeps the timings and
+  leaves the default as it is (`cpu` at first).
+- The choices are kept per computer (the GPU's name and the CPU's thread count) in
+  `acoustic-spaces/devices.json` in the user cache folder (`~/.cache`,
+  `~/Library/Caches` or `%LOCALAPPDATA%`), with the times and the default. Deleting the
+  file forgets them.
+- In the editor, Simulation > Tune CPU and GPU… times the open scene, shows the table,
+  and asks with a check box whether to make `auto` this computer's default (ticked).
+  OK saves the timings and that choice; Cancel saves nothing, not even the timings.
+- A scene that names its devices keeps them; it gives the same result on every
+  computer, and with `cpu` the seed repeats a run exactly (`both` varies a little).
+  Scenes saved by the editor before 3.1.0 name `cpu`: set **Run on** to *default* (or
+  leave the tune window's second check box ticked for the open scene) to let them
+  follow the default.
 
 Sound through partitions and openings, the face groups of material calibration and
 coverage maps are traced on the CPU whatever the setting. `simulate --late-device`

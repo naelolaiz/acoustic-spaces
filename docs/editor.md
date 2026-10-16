@@ -48,12 +48,24 @@ The editor works on the same scene files as the command line:
 - The scene tree's **Simulation** entry has the settings of
   [Simulation](simulation.md): the early part's method, highest order, rays,
   diffraction and **In pressure up to**; the late part's method, rays per band,
-  reception, ray splitting and **Run on** (the CPU, a GPU, or both); the scattering
-  model; the wave solver, its highest band and where it runs; **Performance** (CPU
+  reception, ray splitting and **Run on** (*default*: this computer's default, the CPU
+  unless the tune window made it *auto*; or the CPU, a GPU, both, or *auto*); the
+  scattering model; the wave solver, its highest band and where it runs; **Performance** (CPU
   threads and the ray search tree); and, under **Response**, the length, the sample
   rate, octave or third-octave **Bands**, the early-to-late transition and the seed.
   The scene's own entry sets the air's temperature, humidity and pressure, and shows
   the volume and the rooms the model holds.
+- **Simulation > Tune CPU and GPU…** times the CPU and the GPU on the open scene (or
+  on the concert hall example when the scene cannot run as it is), as
+  `acoustic-spaces tune` does (see
+  [Tuning the devices for a computer](simulation.md#tuning-the-devices-for-a-computer);
+  needs the `gpu` extra). It runs in the background, once per computer, and then shows
+  the table of times with a check box, **Make auto the default on this computer**
+  (ticked): scenes whose **Run on** is *default* then run on the fastest device found,
+  in the editor and on the command line. When the open scene names its own devices, a
+  second check box (ticked) sets its **Run on** back to *default* (an edit like any
+  other, undone with Undo). **OK** saves the timings and these choices; **Cancel**
+  saves nothing, not even the timings.
 - **Simulation > Run coverage map** (F6) maps every source over the audience area (see
   [Coverage maps](coverage-maps.md#coverage-maps)). The **Coverage map** panel shows any parameter
   and band from above, for one source or all of them together, and **Map in 3D** lays
@@ -88,7 +100,14 @@ The editor works on the same scene files as the command line:
   directivity index per band, opens the polar patterns, and the selected source shows
   its balloon in the 3D view.
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
-  as you edit.
+  as you edit, with the number of problems in red.
+- **Messages** shows warnings (leaks, results from before the latest changes, dropouts
+  while playing) in amber and errors (a refused change, a run that cannot start or
+  failed, a file that cannot be read or written) in red; so does the scene's own form
+  for its problems and warnings.
+- When a run, a coverage map or a tuning ends while another window is in front, the
+  editor's entry in the taskbar flashes (on macOS, its Dock icon bounces). Nothing pops
+  up: the results come to the front and **Messages** says how it went.
 - **View > Show leaks** traces rays from the sources and shows where they escape from a
   model that is not closed: its open edges, the escaping rays and a marker on each gap,
   with the report in the messages (see [Finding leaks](scenes.md#finding-leaks)). It

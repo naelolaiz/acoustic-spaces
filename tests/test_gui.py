@@ -18,7 +18,7 @@ pytest.importorskip("pyvistaqt")
 from PySide6.QtCore import QPoint, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QWheelEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QToolBar  # noqa: E402
+from PySide6.QtWidgets import QApplication, QLabel, QMenu, QMessageBox, QToolBar  # noqa: E402
 
 from acoustic_spaces.audio import write_wav  # noqa: E402
 from acoustic_spaces.examples import example_path, list_examples  # noqa: E402
@@ -33,7 +33,9 @@ from acoustic_spaces.gui.document import (  # noqa: E402
     plan_corners,
     unique_name,
 )
+from acoustic_spaces.gui.levels import level_colour  # noqa: E402
 from acoustic_spaces.gui.plan_view import grid_step, outline_segments, snap  # noqa: E402
+from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # noqa: E402
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
 from acoustic_spaces.gui.worker import MapJob, SimulationJob  # noqa: E402
 from acoustic_spaces.room import Room  # noqa: E402
@@ -296,6 +298,33 @@ def test_window_opens_every_example(window) -> None:
         assert example.path.name in window.windowTitle()
 
 
+def test_warnings_and_errors_stand_out(window) -> None:
+    window.log("all fine")
+    window.log("careful", "warning")
+    window.log("broken\nreally", "error")
+    brushes = {}
+    block = window.messages.document().begin()
+    while block.isValid():
+        brushes[block.text()] = block.begin().fragment().charFormat().foreground()
+        block = block.next()
+    assert brushes["all fine"].style() == Qt.BrushStyle.NoBrush  # the theme's own
+    assert brushes["careful"].color() == level_colour(window.messages, "warning")
+    error = level_colour(window.messages, "error")
+    assert brushes["broken"].color() == brushes["really"].color() == error
+    assert window.messages.toPlainText().endswith("all fine\ncareful\nbroken\nreally")
+    with pytest.raises(ValueError, match="info, warning, error"):
+        window.log("loud", "shout")
+    # Problems in the status bar, and the scene's warnings in its form.
+    window.document.edit("move", lambda data: data["sources"][0].update(position=[50, 0, 0]))
+    summary = window.summary.text()
+    assert f'<span style="color:{error.name()}">, ' in summary and "problem" in summary
+    window.open_example(example_path("leaky_classroom"))
+    window.select("scene")
+    stats = window.inspector.pages["scene"].stats.text()
+    warning = level_colour(window.messages, "warning").name()
+    assert f'<span style="color:{warning}">Warning: the model is not closed' in stats
+
+
 def test_leaks_are_found_and_shown(window, monkeypatch) -> None:
     import acoustic_spaces.engine.leaks as leaks_module
 
@@ -308,6 +337,8 @@ def test_leaks_are_found_and_shown(window, monkeypatch) -> None:
     window.leaks_action.trigger()
     log = window.messages.toPlainText()
     assert "Leaks: 300 rays" in log and "by east_wall" in log
+    last = window.messages.document().lastBlock().begin().fragment().charFormat()
+    assert last.foreground().color() == level_colour(window.messages, "warning")
     assert len(found) == 1
     # Found again only when the room changes where it matters.
     window.select("listeners", 0)
@@ -377,10 +408,14 @@ def test_selection_and_forms(window) -> None:
     page.ray_tree.setCurrentText("median")
     performance = window.document.scene.simulation.performance
     assert performance.threads == 2 and performance.ray_tree == "median"
-    assert page.late_device.currentText() == "cpu" and page.late_device.isEnabled()
+    # Not set in the scene: this computer's default, the CPU until tune makes it auto.
+    assert page.late_device.currentText() == "default (cpu)" and page.late_device.isEnabled()
     page.late_device.setCurrentText("both")
     assert window.document.scene.simulation.late.device == "both"
     assert window.document.scene.simulation.wave.device == "auto"
+    page.late_device.setCurrentIndex(0)
+    assert window.document.scene.simulation.late.device is None
+    page.late_device.setCurrentText("both")
     assert window.document.scene.simulation.early.diffraction == "direct"
     assert page.scattering_method.currentText() == "vector" and page.from_size.isChecked()
     assert page.by_band.isChecked() and page.by_band.isEnabled()
@@ -1059,6 +1094,85 @@ def test_coverage_map_in_the_editor(window, qapp, tmp_path: Path) -> None:
     _wait(qapp, lambda: window.job is None)
     assert panel.source.currentText() == "organ"  # kept across runs
     assert not panel.note.isVisible()
+
+
+def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
+    from acoustic_spaces.engine import tuning
+
+    timed = []
+
+    def tune(room, *, threads=None, say=None, keep=True):
+        assert not keep  # the window saves on OK only
+        say("late stage: starting the GPU")
+        timed.append(room.scene.name)
+        late = [tuning.LateTiming(1.0, {"cpu": 2.0, "gpu": 1.0, "both": 0.8}, "both")]
+        return tuning.Tuning(room.scene.name, "a GPU | 4 CPU threads", 500, late=late)
+
+    monkeypatch.setattr(tuning, "tune", tune)
+    shown = []
+    monkeypatch.setattr(TuneDialog, "open", lambda dialog: shown.append(dialog))
+    alerts = []
+    monkeypatch.setattr(QApplication, "alert", lambda widget, msec=0: alerts.append(widget))
+
+    def run_tune() -> TuneDialog:
+        window.tune_action.trigger()
+        _wait(qapp, lambda: window.job is None)
+        return shown[-1]
+
+    # Once in the Simulation menu, not in the toolbar.
+    tune_action = window.tune_action
+    menus = {menu.title(): menu for menu in window.findChildren(QMenu)}
+    assert tune_action in menus["&Simulation"].actions()
+    assert tune_action not in window.findChild(QToolBar, "main-toolbar").actions()
+    tune_action.trigger()
+    assert not tune_action.isEnabled() and not window.run_action.isEnabled()
+    _wait(qapp, lambda: window.job is None)
+    assert timed == [window.document.scene.name] and tune_action.isEnabled()
+    assert alerts == [window]  # flashes in the taskbar if another window is in front
+    assert "Tuned in" in window.messages.toPlainText()
+    assert "late stage 1 s both." in window.messages.toPlainText()
+    # The table, auto as this computer's default (ticked); a scene naming no device
+    # follows the default already, so nothing asks about it.
+    dialog = shown[0]
+    texts = "".join(label.text() for label in dialog.findChildren(QLabel))
+    assert "a GPU | 4 CPU threads" in texts
+    assert dialog.make_default.text() == MAKE_DEFAULT and dialog.make_default.isChecked()
+    assert dialog.follow is None
+    # Cancel saves nothing, not even the timings.
+    dialog.reject()
+    assert not tuning.cache_file().exists() and tuning.default_device() == "cpu"
+    assert "Tuning not saved" in window.messages.toPlainText()
+    # OK saves the timings and the default.
+    run_tune().accept()
+    assert tuning.default_device() == "auto"
+    assert tuning.late_choices()[1.0]["device"] == "both"
+    assert tuning.late_choices()[1.0]["from"] == "tune"
+    window.select("simulation")
+    assert window.inspector.pages["simulation"].late_device.currentText() == "default (auto)"
+    assert window.document.scene.simulation.late.device is None
+    # A scene naming its own devices: OK can let it follow the default, and unticked
+    # the default goes back to the CPU.
+    window.document.edit("cpu", lambda data: data["simulation"]["late"].update(device="cpu"))
+    dialog = run_tune()
+    assert dialog.follow.text() == FOLLOW and dialog.follow.isChecked()
+    dialog.make_default.setChecked(False)
+    dialog.accept()
+    assert tuning.default_device() == "cpu"
+    assert window.document.scene.simulation.late.device is None
+    assert window.document.undo_text() == "run on the default device"
+    assert window.inspector.pages["simulation"].late_device.currentText() == "default (cpu)"
+
+    # A scene that cannot run times the concert hall example; failures are said.
+    def refuse(room, **_):
+        timed.append(room.scene.name)
+        raise ValueError("no GPU here")
+
+    monkeypatch.setattr(tuning, "tune", refuse)
+    window.document.edit("move", lambda data: data["sources"][0].update(position=[50, 0, 0]))
+    window.run_tune()
+    _wait(qapp, lambda: window.job is None)
+    assert timed[-1].startswith("Concert hall")
+    assert "The tuning failed: no GPU here" in window.messages.toPlainText()
 
 
 def test_coverage_settings_form(window) -> None:

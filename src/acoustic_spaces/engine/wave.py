@@ -350,7 +350,7 @@ def wave_responses(
     from acoustic_spaces import _native
 
     say = say or (lambda _: None)
-    on_gpu = use_gpu(device)
+    use_gpu(device)  # an unknown device, or the GPU missing, before any work
     if max_band_hz not in OCTAVE_BANDS_HZ:
         raise ValueError(f"max_band_hz must be one of {OCTAVE_BANDS_HZ}, got {max_band_hz}")
     mesh = model.room.mesh
@@ -459,6 +459,7 @@ def wave_responses(
             )
         raise ValueError(f"listener {missing[0]!r} is not in the air of the wave grid")
     name = f"{centres[0]} Hz" if bands == 1 else f"{centres[0]}-{centres[bands - 1]} Hz"
+    on_gpu = use_gpu(device, steps)
     where = f" on {gpu_name()}" if on_gpu else ""
     say(
         f"{label}: wave solver, {name} ({solver.air_cells:,} cells of {100 * h:.0f} cm, "

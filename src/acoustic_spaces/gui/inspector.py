@@ -38,8 +38,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from acoustic_spaces.engine import tuning
 from acoustic_spaces.geometry.io import SUPPORTED_SUFFIXES, ifc_spaces
 from acoustic_spaces.gui.document import Document, EditError
+from acoustic_spaces.gui.levels import rich_lines
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.materials.bands import convert
 from acoustic_spaces.room import UNASSIGNED, matching_name
@@ -192,6 +194,7 @@ class ScenePage(Page):
         form.addRow("Relative humidity", self.humidity)
         form.addRow("Air pressure", self.pressure)
         self.stats = QLabel()
+        self.stats.setTextFormat(Qt.TextFormat.RichText)
         self.stats.setWordWrap(True)
         self.stats.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         form.addRow(self.stats)
@@ -221,11 +224,10 @@ class ScenePage(Page):
                     f"Reverberation time at {BAND_LABELS[k]}: {eyring[k]:.2f} s (Eyring), "
                     f"{sabine[k]:.2f} s (Sabine)"
                 )
-        for problem in room.problems():
-            lines.append(f"Problem: {problem}")
-        for warning in room.warnings():
-            lines.append(f"Warning: {warning}")
-        self.stats.setText("\n".join(lines))
+        shown = [(line, "info") for line in lines]
+        shown += [(f"Problem: {problem}", "error") for problem in room.problems()]
+        shown += [(f"Warning: {warning}", "warning") for warning in room.warnings()]
+        self.stats.setText(rich_lines(self.stats, shown))
 
     def _name(self) -> None:
         name = self.name.text().strip() or "untitled"
@@ -1011,6 +1013,21 @@ class PointPage(Page):
             self._update(eq_db=values)
 
 
+def _set_device(combo: QComboBox, device: str | None) -> None:
+    """Show a scene's device in a Run on box; its first item, this computer's default,
+    stands for none."""
+    combo.setItemText(0, f"default ({tuning.default_device()})")
+    if device is None:
+        combo.setCurrentIndex(0)
+    else:
+        combo.setCurrentText(device)
+
+
+def _device(combo: QComboBox) -> str | None:
+    """The device a Run on box names, None for this computer's default."""
+    return None if combo.currentIndex() == 0 else combo.currentText()
+
+
 class SimulationPage(Page):
     """The early and late stages, scattering, the wave solver, the response length,
     sample rate, bands and seed."""
@@ -1055,12 +1072,13 @@ class SimulationPage(Page):
         self.directions = int_spin(0, 1024, 16)
         self.splitting = QCheckBox("Split strong rays, thin out weak ones")
         self.late_device = QComboBox()
-        self.late_device.addItems(["cpu", "gpu", "both", "auto"])
+        self.late_device.addItems(["default", "cpu", "gpu", "both", "auto"])
         self.late_device.setToolTip(
-            "Where it traces the rays: the CPU, a GPU through WebGPU (needs the gpu extra), "
-            "both sharing the rays (results then vary slightly from run to run), or the "
-            "fastest of those on this computer, found by a short trial (the editor's "
-            "--no-device-trial takes the last trial's choice instead)"
+            "Where it traces the rays: this computer's default (the CPU, or auto once "
+            "Simulation > Tune CPU and GPU… made it so), the CPU, a GPU through WebGPU "
+            "(needs the gpu extra), both sharing the rays (results then vary slightly from "
+            "run to run), or auto: the fastest of those on this computer, as Tune CPU and "
+            "GPU… or a short trial found"
         )
         late_form.addRow("Method", self.late_method)
         late_form.addRow("Rays per band", self.late_rays)
@@ -1108,10 +1126,12 @@ class SimulationPage(Page):
             "The highest band it computes; each costs about 16 times the one below"
         )
         self.wave_device = QComboBox()
-        self.wave_device.addItems(["cpu", "gpu", "auto"])
+        self.wave_device.addItems(["default", "cpu", "gpu", "auto"])
         self.wave_device.setToolTip(
-            "Where it steps its grid: the CPU, a GPU through WebGPU (needs the gpu extra), "
-            "or a hardware GPU when there is one"
+            "Where it steps its grid: this computer's default (the CPU, or auto once "
+            "Simulation > Tune CPU and GPU… made it so), the CPU, a GPU through WebGPU "
+            "(needs the gpu extra), or auto: a hardware GPU when there is one, unless "
+            "Tune CPU and GPU… found the CPU faster for the run's length"
         )
         wave_form.addRow(self.wave)
         wave_form.addRow("Up to band (Hz)", self.wave_band)
@@ -1213,7 +1233,7 @@ class SimulationPage(Page):
         self.reception.setCurrentText(s.late.reception)
         self.directions.setValue(s.late.directions)
         self.splitting.setChecked(s.late.splitting)
-        self.late_device.setCurrentText(s.late.device)
+        _set_device(self.late_device, s.late.device)
         self.scattering_method.setCurrentText(s.scattering.method)
         self.from_size.setChecked(s.scattering.from_size)
         self.by_band.setChecked(s.scattering.by_band)
@@ -1221,7 +1241,7 @@ class SimulationPage(Page):
         self.wave.setChecked(s.wave.enabled)
         self.wave_band.setCurrentText(str(s.wave.max_band_hz))
         self.wave_band.setEnabled(s.wave.enabled)
-        self.wave_device.setCurrentText(s.wave.device)
+        _set_device(self.wave_device, s.wave.device)
         self.wave_device.setEnabled(s.wave.enabled)
         self.threads.setValue(s.performance.threads)
         self.ray_tree.setCurrentText(s.performance.ray_tree)
@@ -1267,7 +1287,7 @@ class SimulationPage(Page):
                 "reception": self.reception.currentText(),
                 "directions": self.directions.value(),
                 "splitting": self.splitting.isChecked(),
-                "device": self.late_device.currentText(),
+                "device": _device(self.late_device),
             },
             "scattering": {
                 "method": self.scattering_method.currentText(),
@@ -1278,7 +1298,7 @@ class SimulationPage(Page):
                 **self.document.scene.simulation.wave.model_dump(mode="json"),
                 "enabled": self.wave.isChecked(),
                 "max_band_hz": int(self.wave_band.currentText()),
-                "device": self.wave_device.currentText(),
+                "device": _device(self.wave_device),
             },
             "performance": {
                 "threads": self.threads.value(),

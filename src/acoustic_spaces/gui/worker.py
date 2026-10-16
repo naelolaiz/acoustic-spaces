@@ -23,6 +23,8 @@ class Cancelled(Exception):
 class SimulationJob(QThread):
     """Runs :func:`acoustic_spaces.engine.simulate` on a room in a worker thread."""
 
+    #: What it runs, for messages.
+    kind = "simulation"
     progress = Signal(str)
     #: The :class:`acoustic_spaces.engine.SimulationResult`.
     done = Signal(object)
@@ -80,10 +82,25 @@ class MapJob(SimulationJob):
     """Runs :func:`acoustic_spaces.engine.coverage_map`; ``done`` carries the
     :class:`~acoustic_spaces.engine.CoverageResult`."""
 
+    kind = "coverage map"
+
     def compute(self):
         return coverage_map(
             self.room, simulation=self.settings, threads=self.threads, progress=self._say
         )
 
 
-__all__ = ["Cancelled", "MapJob", "SimulationJob"]
+class TuneJob(SimulationJob):
+    """Runs :func:`acoustic_spaces.engine.tuning.tune` (``acoustic-spaces tune``);
+    ``done`` carries the :class:`~acoustic_spaces.engine.tuning.Tuning`, not yet
+    saved: the tune window saves it on OK."""
+
+    kind = "tuning"
+
+    def compute(self):
+        from acoustic_spaces.engine import tuning
+
+        return tuning.tune(self.room, threads=self.threads, say=self._say, keep=False)
+
+
+__all__ = ["Cancelled", "MapJob", "SimulationJob", "TuneJob"]
