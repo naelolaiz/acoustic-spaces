@@ -55,6 +55,10 @@ class TuneDialog(QDialog):
 
         self.make_default = QCheckBox(MAKE_DEFAULT)
         self.make_default.setChecked(True)
+        self.make_default.setToolTip(
+            "Scenes whose Run on is default then run on the fastest device found here; "
+            "unticked, on the CPU"
+        )
         layout.addSpacing(8)
         layout.addWidget(self.make_default)
         current = tuning.default_device()
@@ -76,6 +80,10 @@ class TuneDialog(QDialog):
         if named:
             self.follow = QCheckBox(FOLLOW)
             self.follow.setChecked(True)
+            self.follow.setToolTip(
+                "Set this scene's Run on back to default, so that it follows this computer's "
+                "default"
+            )
             layout.addWidget(self.follow)
             layout.addWidget(
                 _note(

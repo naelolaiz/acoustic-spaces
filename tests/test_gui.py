@@ -437,6 +437,88 @@ def test_selection_and_forms(window) -> None:
     assert window.selection == ("scene", None)
 
 
+def test_every_control_explains_itself(window) -> None:
+    """Resting the mouse on a label, field, button or column header shows a tip."""
+    from PySide6.QtWidgets import (
+        QAbstractSpinBox,
+        QCheckBox,
+        QComboBox,
+        QLineEdit,
+        QListWidget,
+        QPushButton,
+        QSlider,
+        QTableWidget,
+        QWidget,
+    )
+
+    from acoustic_spaces.gui.inspector import DIRECTIVITY_TIP
+
+    window.open_example(example_path("studio"))
+    scene = window.document.scene
+    for kind, key in (
+        ("geometry", None),
+        ("surface", 0),
+        ("material", next(iter(scene.materials))),
+        ("sources", 0),
+        ("listeners", 0),
+        ("coverage", None),
+    ):
+        window.select(kind, key)
+    roots = [*window.inspector.pages.values(), window.results, window.map_panel, window.plan]
+    fields = (QAbstractSpinBox, QCheckBox, QComboBox, QListWidget, QPushButton, QSlider)
+    missing = []
+    for root in roots:
+        for widget in root.findChildren(QWidget):
+            if isinstance(widget, QLabel):
+                if widget.buddy() is not None and widget.text() and not widget.toolTip():
+                    missing.append(f"label {widget.text()}")
+            elif isinstance(widget, QLineEdit):
+                inner = isinstance(widget.parentWidget(), (QComboBox, QAbstractSpinBox))
+                if not inner and not widget.toolTip():
+                    missing.append(f"line edit under {type(root).__name__}")
+            elif isinstance(widget, fields) and not widget.toolTip():
+                text = widget.text() if hasattr(widget, "text") else ""
+                missing.append(f"{type(widget).__name__} {text} under {type(root).__name__}")
+            elif isinstance(widget, QTableWidget):
+                items = [widget.horizontalHeaderItem(c) for c in range(widget.columnCount())]
+                items += [widget.verticalHeaderItem(r) for r in range(widget.rowCount())]
+                for item in items:
+                    if item is not None and not item.toolTip():
+                        missing.append(f"header {item.text()} under {type(root).__name__}")
+    assert not missing
+
+    # The Results panel's band: the label explains it as the list does, and each band
+    # column says which frequencies it holds.
+    results = window.results
+    band = next(
+        label
+        for label in results.findChildren(QLabel)
+        if label.text() == "Band" and label.buddy() is not None
+    )
+    assert band.toolTip() == results.band.toolTip() and "octave band" in band.toolTip()
+    header = results.table.horizontalHeaderItem(4).toolTip()
+    assert "1 kHz" in header and "707 Hz to 1.41 kHz" in header
+    assert results.table.verticalHeaderItem(2).toolTip().startswith("Reverberation time (s)")
+
+    # A tip that follows the scene: the source's directivity names the choice in use.
+    window.select("sources", 0)
+    page = window.inspector.pages["sources"]
+    tip = page.directivity.toolTip()
+    assert tip.startswith(DIRECTIVITY_TIP) and page.directivity.currentText() in tip
+    assert page._form.labelForField(page.directivity).toolTip() == tip
+
+    # Every menu entry says what it does, in the status bar and as a tip in the menu.
+    menus = [menu for menu in window.menuBar().findChildren(QMenu) if menu.title()]
+    titles = {menu.title() for menu in menus}
+    assert len(menus) >= 6
+    for menu in menus:
+        assert menu.toolTipsVisible(), menu.title()
+        for action in menu.actions():
+            if not action.isSeparator() and action.text() not in titles:
+                assert action.statusTip() and action.toolTip(), action.text()
+    assert window.run_action.toolTip().endswith("(F5)")
+
+
 def test_third_octave_materials_and_bands(window) -> None:
     window.open_example(example_path("studio"))
     third = [round(0.01 + 0.03 * k, 2) for k in range(24)]

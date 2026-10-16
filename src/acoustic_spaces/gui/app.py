@@ -151,6 +151,9 @@ class MainWindow(QMainWindow):
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.setMaximumWidth(160)
+        self.progress.setToolTip(
+            "Something runs in the background; Simulation > Cancel (Shift+F5) stops it"
+        )
         self.progress.hide()
         self.summary = QLabel()
         self.summary.setTextFormat(Qt.TextFormat.RichText)
@@ -174,6 +177,10 @@ class MainWindow(QMainWindow):
         self._menus()
         # While a recording plays, the status bar says so, whichever panel is on show.
         self.now_playing = QLabel()
+        self.now_playing.setToolTip(
+            "What plays through the room: the recording, and the source and listener of the "
+            "response it plays through"
+        )
         self.stop_button = QToolButton()
         self.stop_button.setDefaultAction(self.stop_action)
         self.stop_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -221,18 +228,24 @@ class MainWindow(QMainWindow):
     # -- menus ----------------------------------------------------------------------
 
     def _action(self, text: str, slot, shortcut=None, tip: str = "") -> QAction:
+        """An action whose tip shows in the status bar, and on the toolbar and in the
+        menus with its shortcut."""
         action = QAction(text, self)
         if shortcut is not None:
             action.setShortcut(QKeySequence(shortcut))
         if tip:
             action.setStatusTip(tip)
+            keys = action.shortcut().toString(QKeySequence.SequenceFormat.NativeText)
+            action.setToolTip(f"{tip} ({keys})" if keys else tip)
         action.triggered.connect(lambda *_: slot())
         return action
 
     def _actions(self) -> None:
         keys = QKeySequence.StandardKey
         a = self._action
-        self.new_action = a("&New box room…", self.new_box, keys.New, "Start from a box")
+        self.new_action = a(
+            "&New box room…", self.new_box, keys.New, "Start a new scene in a box-shaped room"
+        )
         self.new_model_action = a(
             "New from &model file…",
             self.new_from_model,
@@ -245,10 +258,23 @@ class MainWindow(QMainWindow):
             None,
             "Draw the floor plan of a new room, corner by corner",
         )
-        self.open_action = a("&Open…", self.open_dialog, keys.Open)
-        self.save_action = a("&Save", self.save, keys.Save)
-        self.save_as_action = a("Save &as…", self.save_as, keys.SaveAs)
-        self.export_action = a("&Export results…", self.export_results, None)
+        self.open_action = a("&Open…", self.open_dialog, keys.Open, "Open a scene file (YAML)")
+        self.save_action = a(
+            "&Save",
+            self.save,
+            keys.Save,
+            "Save the scene; an example asks where to keep your copy",
+        )
+        self.save_as_action = a(
+            "Save &as…", self.save_as, keys.SaveAs, "Save the scene in another file"
+        )
+        self.export_action = a(
+            "&Export results…",
+            self.export_results,
+            None,
+            "Write every response of the last run to a folder: a WAV file per output format "
+            "and parameters.json, as acoustic-spaces simulate does",
+        )
         self.blender_action = a(
             "Export to &Blender…",
             self.export_blender,
@@ -259,9 +285,11 @@ class MainWindow(QMainWindow):
             lambda: self.export_blender(particles=True),
             tip="Sound particles from the selected source (or the first) as a glTF animation",
         )
-        self.quit_action = a("&Quit", self.close, keys.Quit)
-        self.undo_action = a("&Undo", self.undo, keys.Undo)
-        self.redo_action = a("&Redo", self.redo, keys.Redo)
+        self.quit_action = a(
+            "&Quit", self.close, keys.Quit, "Close the editor; it asks about unsaved changes"
+        )
+        self.undo_action = a("&Undo", self.undo, keys.Undo, "Take back the last change")
+        self.redo_action = a("&Redo", self.redo, keys.Redo, "Make the change Undo took back")
         self.place_source_action = a(
             "Place &source",
             lambda: self.start_placing("sources"),
@@ -278,19 +306,46 @@ class MainWindow(QMainWindow):
             None,
             "Draw a new floor plan in the plan view; it replaces the room",
         )
-        self.add_material_action = a("Add &material from the database…", self.add_material)
+        self.add_material_action = a(
+            "Add &material from the database…",
+            self.add_material,
+            tip="A material of the built-in database of absorption coefficients",
+        )
         self.add_library_material_action = a(
             "Add material from a &library…",
             self.add_library_material,
             tip="A material of a CATT-Acoustic (ABS lines) or ODEON (.Li8) material library",
         )
-        self.remove_action = a("Re&move selected", self.remove_selected)
-        self.reset_camera_action = a("&Reset camera", self.viewport.reset_camera, "Ctrl+0")
-        self.show_3d_action = a(
-            "&3D view", lambda: self.views.setCurrentWidget(self.viewport), "Ctrl+1"
+        self.remove_action = a(
+            "Re&move selected",
+            self.remove_selected,
+            tip="Remove the selected source, listener or material (Delete, in the scene tree "
+            "or a view)",
         )
-        self.show_plan_action = a("P&lan", lambda: self.views.setCurrentWidget(self.plan), "Ctrl+2")
-        self.paths_action = a("Show reflection &paths", lambda: None)
+        self.reset_camera_action = a(
+            "&Reset camera",
+            self.viewport.reset_camera,
+            "Ctrl+0",
+            "Show the whole room in the 3D view from the usual angle",
+        )
+        self.show_3d_action = a(
+            "&3D view",
+            lambda: self.views.setCurrentWidget(self.viewport),
+            "Ctrl+1",
+            "Show the room in 3D",
+        )
+        self.show_plan_action = a(
+            "P&lan",
+            lambda: self.views.setCurrentWidget(self.plan),
+            "Ctrl+2",
+            "Show the room from above, to draw and change floor plans",
+        )
+        self.paths_action = a(
+            "Show reflection &paths",
+            lambda: None,
+            tip="Draw the early reflection paths of the source and listener the Results "
+            "panel shows, coloured by order",
+        )
         self.paths_action.setCheckable(True)
         self.paths_action.toggled.connect(self.results.paths.setChecked)
         self.leaks_action = a(
@@ -301,7 +356,9 @@ class MainWindow(QMainWindow):
         )
         self.leaks_action.setCheckable(True)
         self.leaks_action.toggled.connect(lambda *_: self._draw())
-        self.screenshot_action = a("Save &screenshot…", self.save_screenshot)
+        self.screenshot_action = a(
+            "Save &screenshot…", self.save_screenshot, tip="Save the 3D view as a PNG picture"
+        )
         self.run_action = a("&Run", self.run_simulation, "F5", "Simulate every source and listener")
         self.map_action = a(
             "Run coverage &map",
@@ -316,7 +373,12 @@ class MainWindow(QMainWindow):
             tip="Time the CPU and the GPU on this scene and keep the fastest on this computer "
             "for the device setting auto (acoustic-spaces tune; needs the gpu extra)",
         )
-        self.cancel_action = a("&Cancel", self.cancel_simulation, "Shift+F5")
+        self.cancel_action = a(
+            "&Cancel",
+            self.cancel_simulation,
+            "Shift+F5",
+            "Stop the run, coverage map or tuning going on, at its next stage",
+        )
         self.cancel_action.setEnabled(False)
         self.stop_action = a(
             "S&top playback",
@@ -325,7 +387,9 @@ class MainWindow(QMainWindow):
         )
         self.stop_action.setToolTip("Stop playback (Esc)")
         self.stop_action.setEnabled(False)
-        self.about_action = a("&About", self.about)
+        self.about_action = a(
+            "&About", self.about, tip="The version, licence and source of Acoustic Spaces"
+        )
         self.undo_action.setIconText("Undo")
         self.redo_action.setIconText("Redo")
         icon = self.style().standardIcon
@@ -356,14 +420,15 @@ class MainWindow(QMainWindow):
             examples = []
         for example in examples:
             action = self.examples_menu.addAction(example.title)
-            action.setStatusTip(example.description.split(". ")[0])
+            tip = example.description.split(". ")[0]
             if example.missing_extra:
                 # Opening it would only say how to install what reading its model needs.
                 action.setEnabled(False)
-                action.setStatusTip(
-                    f"Needs the {example.missing_extra} extra: "
-                    + install_hint(example.missing_extra)
+                tip = f"Needs the {example.missing_extra} extra: " + install_hint(
+                    example.missing_extra
                 )
+            action.setStatusTip(tip)
+            action.setToolTip(tip)
             action.triggered.connect(lambda *_, path=example.path: self.open_example(path))
         self.examples_menu.setEnabled(bool(examples))
         file.addSeparator()
@@ -388,7 +453,10 @@ class MainWindow(QMainWindow):
         view.addAction(self.screenshot_action)
         view.addSeparator()
         for dock in self.docks.values():
-            view.addAction(dock.toggleViewAction())
+            toggle = dock.toggleViewAction()
+            toggle.setStatusTip(f"Show or hide the {dock.windowTitle()} panel")
+            toggle.setToolTip(toggle.statusTip())
+            view.addAction(toggle)
 
         simulation = bar.addMenu("&Simulation")
         simulation.addActions([self.run_action, self.map_action, self.cancel_action])
@@ -396,7 +464,10 @@ class MainWindow(QMainWindow):
         simulation.addAction(self.tune_action)
         simulation.addSeparator()
         simulation.addAction(self.stop_action)
-        bar.addMenu("&Help").addAction(self.about_action)
+        help_menu = bar.addMenu("&Help")
+        help_menu.addAction(self.about_action)
+        for menu in (file, self.examples_menu, edit, view, simulation, help_menu):
+            menu.setToolTipsVisible(True)
 
         tools = self.addToolBar("Main")
         tools.setObjectName("main-toolbar")
@@ -486,7 +557,15 @@ class MainWindow(QMainWindow):
         if problems:
             lines.append((f", {len(problems)} problem{'s' if len(problems) > 1 else ''}", "error"))
         self.summary.setText(rich_lines(self.summary, lines).replace("<br>", ""))
-        self.summary.setToolTip("\n".join(problems))
+        self.summary.setToolTip(
+            "\n".join(
+                [
+                    "The room's volume and its reverberation time at 1 kHz estimated by the "
+                    "Eyring formula, kept up to date as you edit",
+                    *problems,
+                ]
+            )
+        )
 
     def log(self, text: str, level: str = "info") -> None:
         """Add ``text`` to the messages, a warning in amber and an error in red, and show

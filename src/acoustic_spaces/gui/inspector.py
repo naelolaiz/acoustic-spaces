@@ -42,6 +42,7 @@ from acoustic_spaces.engine import tuning
 from acoustic_spaces.geometry.io import SUPPORTED_SUFFIXES, ifc_spaces
 from acoustic_spaces.gui.document import Document, EditError
 from acoustic_spaces.gui.levels import rich_lines
+from acoustic_spaces.gui.tips import band_headers, row_headers, share_tips
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.materials.bands import convert
 from acoustic_spaces.room import UNASSIGNED, matching_name
@@ -65,6 +66,17 @@ DIRECTIVITIES = [
 SHAPES = ["point", "line", "surface"]
 #: The directivity list entry that asks for a SOFA or CSV file.
 MEASURED = "Measured data or an array from a file…"
+#: The tip of a source's directivity list, before the choice it shows.
+DIRECTIVITY_TIP = (
+    "How the source radiates round it: omni evenly; subcardioid to hypercardioid ever more "
+    "to the front; figure8 to the front and the back; lambert as a vibrating surface, to "
+    "the front only; or measured data (SOFA or CSV) or an array of sources from a file"
+)
+#: The tip of a source's sound power level.
+LEVEL_TIP = (
+    "The source's sound power level in all bands together (dB re 1 pW); Spectrum spreads "
+    "it over the bands"
+)
 SAMPLE_RATES = [16_000, 22_050, 32_000, 44_100, 48_000, 88_200, 96_000]
 #: Shown in the material list of a surface for "no assignment of its own".
 FALLBACK = "(default material)"
@@ -176,14 +188,30 @@ class ScenePage(Page):
         super().__init__(document)
         form = QFormLayout(self)
         self.name = QLineEdit()
+        self.name.setToolTip("The scene's name")
         self.name.editingFinished.connect(self._name)
         form.addRow("Name", self.name)
         self.default = QComboBox()
+        self.default.setToolTip(
+            "The material of every surface that has no material of its own; with none, "
+            "such surfaces are a problem and the run refuses to start"
+        )
         self.default.currentIndexChanged.connect(self._default)
         form.addRow("Default material", self.default)
         self.temperature = spin(-20, 50, 1, 1, "°C")
+        self.temperature.setToolTip(
+            "Temperature of the air (°C): it sets the speed of sound and, with the "
+            "humidity, how much the air absorbs at high frequencies (ISO 9613-1)"
+        )
         self.humidity = spin(0, 100, 1, 5, "%")
+        self.humidity.setToolTip(
+            "Relative humidity of the air (%): with the temperature, it sets how much the "
+            "air absorbs at high frequencies"
+        )
         self.pressure = spin(50, 110, 3, 0.5, "kPa")
+        self.pressure.setToolTip(
+            "Air pressure (kPa), 101.325 at sea level: it changes the air absorption a little"
+        )
         for box, field in (
             (self.temperature, "temperature_c"),
             (self.humidity, "humidity_percent"),
@@ -197,6 +225,11 @@ class ScenePage(Page):
         self.stats.setTextFormat(Qt.TextFormat.RichText)
         self.stats.setWordWrap(True)
         self.stats.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.stats.setToolTip(
+            "The room's size, and its reverberation time estimated from the volume and the "
+            "absorption alone (the Eyring and Sabine formulas, with air absorption). A run "
+            "gives the full answer"
+        )
         form.addRow(self.stats)
 
     def load(self) -> None:
@@ -263,9 +296,19 @@ class GeometryPage(Page):
         self.box_group = QGroupBox("Box")
         box_form = QFormLayout(self.box_group)
         self.box = [spin(0.1, LARGEST, 2, 0.5) for _ in range(3)]
-        for k, (label, box) in enumerate(
-            zip(("Length (x)", "Width (y)", "Height (z)"), self.box, strict=True)
+        for k, (label, box, tip) in enumerate(
+            zip(
+                ("Length (x)", "Width (y)", "Height (z)"),
+                self.box,
+                (
+                    "How long the room is along x",
+                    "How wide the room is along y",
+                    "How high the room is, floor to ceiling",
+                ),
+                strict=True,
+            )
         ):
+            box.setToolTip(f"{tip}, in the units the title shows")
             box.valueChanged.connect(lambda value, k=k: self._box(k, value))
             box_form.addRow(label, box)
         layout.addWidget(self.box_group)
@@ -274,11 +317,18 @@ class GeometryPage(Page):
         plan_layout = QVBoxLayout(self.plan_group)
         self.plan = QTableWidget(0, 2)
         self.plan.setHorizontalHeaderLabels(["x", "y"])
+        for col, axis in enumerate("xy"):
+            self.plan.horizontalHeaderItem(col).setToolTip(
+                f"The {axis} of each corner, in the units the title shows; the corners go "
+                "round the room in turn"
+            )
         self.plan.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.plan.itemChanged.connect(self._plan)
         plan_layout.addWidget(self.plan)
         buttons = QHBoxLayout()
         add, remove = QPushButton("Add corner"), QPushButton("Remove corner")
+        add.setToolTip("Add a corner halfway between the last corner and the first")
+        remove.setToolTip("Remove the selected corner, or the last one when none is selected")
         add.clicked.connect(self._add_corner)
         remove.clicked.connect(self._remove_corner)
         buttons.addWidget(add)
@@ -286,6 +336,9 @@ class GeometryPage(Page):
         plan_layout.addLayout(buttons)
         height_form = QFormLayout()
         self.height = spin(0.1, LARGEST, 2, 0.5)
+        self.height.setToolTip(
+            "How high the room is, floor to ceiling, in the units the title shows"
+        )
         self.height.valueChanged.connect(self._height)
         height_form.addRow("Height", self.height)
         plan_layout.addLayout(height_form)
@@ -295,16 +348,26 @@ class GeometryPage(Page):
         file_form = QFormLayout(self.file_group)
         self.file = QLabel()
         self.file.setWordWrap(True)
+        self.file.setToolTip("The model file the room comes from")
         choose = QPushButton("Choose another file…")
+        choose.setToolTip(
+            "Take the room from another model file; the materials and their assignments stay"
+        )
         choose.clicked.connect(self._choose)
         self.units = QComboBox()
         self.units.addItems(["file default", "m", "cm", "mm", "in", "ft"])
         self.units.setToolTip(
-            "file default: the units a DXF, IFC or Collada file records, else metres"
+            "The unit the model's lengths are in; file default: the units a DXF, IFC or "
+            "Collada file records, else metres"
         )
         self.units.currentTextChanged.connect(self._units)
         self.up_axis = QComboBox()
         self.up_axis.addItems(["format default", "y", "z"])
+        self.up_axis.setToolTip(
+            "The axis that points up in the model; format default: y for glTF and SketchUp, "
+            "the one a Collada file records, z for the others (Blender's OBJ export writes "
+            "y up)"
+        )
         self.up_axis.currentTextChanged.connect(self._up_axis)
         self.space = QComboBox()
         self.space.setToolTip(
@@ -322,6 +385,10 @@ class GeometryPage(Page):
 
         self.report = QLabel()
         self.report.setWordWrap(True)
+        self.report.setToolTip(
+            "A closed model has no gaps: each edge joins two faces. The volume and the "
+            "reverberation estimates need one; View > Show leaks finds the gaps"
+        )
         layout.addWidget(self.report)
         layout.addStretch()
 
@@ -342,7 +409,9 @@ class GeometryPage(Page):
             self.plan.setRowCount(len(geometry.floor_plan))
             for row, corner in enumerate(geometry.floor_plan):
                 for col, value in enumerate(corner):
-                    self.plan.setItem(row, col, QTableWidgetItem(f"{value:g}"))
+                    item = QTableWidgetItem(f"{value:g}")
+                    item.setToolTip(f"The {'xy'[col]} of corner {row + 1}")
+                    self.plan.setItem(row, col, item)
             self.plan.blockSignals(False)
             self.height.setValue(geometry.height)
         if geometry.file is not None:
@@ -472,10 +541,19 @@ class SurfacePage(Page):
         form = QFormLayout(self)
         self.name = QLabel()
         self.name.setWordWrap(True)
+        self.name.setToolTip(
+            "The names this group of faces has in the model (group, layer or object), "
+            "which material assignments match"
+        )
         form.addRow("Surface", self.name)
         self.area = QLabel()
+        self.area.setToolTip("The surface's area (m²)")
         form.addRow("Area", self.area)
         self.material = QComboBox()
+        self.material.setToolTip(
+            "The material of the surface's first name; (default material) leaves it to the "
+            "scene's default material"
+        )
         self.material.currentIndexChanged.connect(self._material)
         form.addRow("Material", self.material)
         self.note = QLabel()
@@ -523,6 +601,16 @@ class SurfacePage(Page):
 
 #: The material table's rows: absorption, scattering, and the sound reduction index.
 _MATERIAL_ROWS = ["Absorption", "Scattering", "Sound reduction (dB)"]
+#: What the rows of the material table mean, for their tips.
+_MATERIAL_TIPS = [
+    "Absorption coefficient (0 to 1): the share of the sound energy the surface takes in "
+    "at each reflection; 0 reflects everything, 1 takes in everything",
+    "Scattering coefficient (0 to 1): the share of the reflected energy that leaves in "
+    "random directions rather than as from a mirror; 0 for a smooth surface",
+    "Sound reduction index R (dB): how much quieter the sound is on the other side of the "
+    "surface, 30 to 60 dB for walls. Typed only when it lets part of the sound through; "
+    "a blank band takes its neighbour's value",
+]
 #: What a surface of the material lets through: nothing, part of the sound (with a
 #: sound reduction index per band), or everything (an opening).
 PASSING = ["nothing", "part of the sound", "everything (an opening)"]
@@ -562,9 +650,17 @@ class MaterialPage(Page):
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.name = QLineEdit()
+        self.name.setToolTip(
+            "The material's name; renaming it renames it in the assignments and the default "
+            "material too"
+        )
         self.name.editingFinished.connect(self._rename)
         form.addRow("Name", self.name)
         self.preset = QComboBox()
+        self.preset.setToolTip(
+            "The entry of the built-in material database the absorption comes from; type to "
+            "search. Picking one replaces the absorption and keeps the scattering"
+        )
         self.preset.setEditable(True)
         self.preset.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         entries = builtin_database().entries("absorption")
@@ -597,6 +693,7 @@ class MaterialPage(Page):
         self.table = QTableWidget(len(_MATERIAL_ROWS), len(OCTAVE_BANDS_HZ))
         self.table.setHorizontalHeaderLabels(BAND_LABELS)
         self.table.setVerticalHeaderLabels(_MATERIAL_ROWS)
+        row_headers(self.table, _MATERIAL_TIPS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.AllEditTriggers)
         self.table.setMaximumHeight(165)
@@ -604,11 +701,17 @@ class MaterialPage(Page):
         layout.addWidget(self.table)
         self.source = QLabel()
         self.source.setWordWrap(True)
+        self.source.setToolTip("Where the coefficients come from")
         layout.addWidget(self.source)
         self.usage = QLabel()
         self.usage.setWordWrap(True)
+        self.usage.setToolTip("How much of the room's surface has this material")
         layout.addWidget(self.usage)
         remove = QPushButton("Remove material")
+        remove.setToolTip(
+            "Remove this material and the assignments that use it; its surfaces take the "
+            "default material"
+        )
         remove.clicked.connect(self._remove)
         layout.addWidget(remove)
         layout.addStretch()
@@ -625,17 +728,21 @@ class MaterialPage(Page):
         labels = THIRD_OCTAVE_LABELS if third else BAND_LABELS
         self.table.setColumnCount(len(labels))
         self.table.setHorizontalHeaderLabels(labels)
+        band_headers(self.table, bands)
         mode = QHeaderView.ResizeMode.ResizeToContents if third else QHeaderView.ResizeMode.Stretch
         self.table.horizontalHeader().setSectionResizeMode(mode)
         for row, values in enumerate(material.coefficients(bands)):
             for col, value in enumerate(values):
-                self.table.setItem(row, col, QTableWidgetItem(f"{value:.2f}"))
+                item = QTableWidgetItem(f"{value:.2f}")
+                item.setToolTip(_MATERIAL_TIPS[row])
+                self.table.setItem(row, col, item)
         passing = material.transmission_coefficients(bands)
         kind = self._kind(passing)
         self.passing.setCurrentIndex(kind)
         self.audience.setChecked(material.audience)
         for col, value in enumerate(passing or [0.0] * len(labels)):
             item = QTableWidgetItem(_reduction_text(value))
+            item.setToolTip(_MATERIAL_TIPS[2])
             if kind != 1:  # set by the choice above, not typed
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(2, col, item)
@@ -764,16 +871,38 @@ class PointPage(Page):
     def __init__(self, document, kind: str) -> None:
         super().__init__(document)
         self.kind = kind
+        what = "source" if kind == "sources" else "listener"
         form = QFormLayout(self)
         self.name = QLineEdit()
+        self.name.setToolTip(f"The {what}'s name, as the results and the exported files show it")
         self.name.editingFinished.connect(self._name)
         form.addRow("Name", self.name)
         self.position = [spin(-1e4, 1e4, 2, 0.1, "m") for _ in range(3)]
         for k, (axis, box) in enumerate(zip("xyz", self.position, strict=True)):
+            box.setToolTip(
+                f"Where the {what} is along {axis} (m)"
+                + ("; z is up" if axis == "z" else "")
+                + ". Dragging it in the 3D view or the plan moves it too"
+            )
             box.valueChanged.connect(lambda value, k=k: self._position(k, value))
             form.addRow(axis, box)
+        faces = (
+            "where the source radiates most with a directional pattern"
+            if kind == "sources"
+            else "what the binaural, Ambisonics and loudspeaker outputs hear as the front"
+        )
         self.angles = [spin(-360, 360, 1, 5, "°") for _ in range(3)]
-        for angle, box in zip(("yaw", "pitch", "roll"), self.angles, strict=True):
+        for angle, box, tip in zip(
+            ("yaw", "pitch", "roll"),
+            self.angles,
+            (
+                f"Turns the {what} left, from facing +x towards +y (degrees)",
+                f"Tilts the {what} to look up (degrees)",
+                f"Tilts the {what} to the right, round the way it faces (degrees)",
+            ),
+            strict=True,
+        ):
+            box.setToolTip(f"{tip}. The way it faces sets {faces}")
             box.valueChanged.connect(lambda value, a=angle: self._orientation(a, value))
             form.addRow(angle.capitalize(), box)
         self.directivity = QComboBox()
@@ -781,13 +910,23 @@ class PointPage(Page):
             QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
         self.directivity.setMinimumContentsLength(12)
+        self.directivity.setToolTip(DIRECTIVITY_TIP)
         self.directivity.activated.connect(self._directivity)
         self.directivity_index = QLabel()
         self.directivity_index.setWordWrap(True)
+        self.directivity_index.setToolTip(
+            "How much louder the source is straight ahead than on average over all "
+            "directions, per octave band (dB): 0 dB for omni, about 5 dB for a cardioid"
+        )
         self.pattern = QPushButton("Show the pattern")
+        self.pattern.setToolTip(
+            "Open the source's polar patterns in every band; the selected source also shows "
+            "its balloon in the 3D view"
+        )
         self.pattern.clicked.connect(self.show_pattern)
         self.pattern_window = None
         self.level = spin(0, 200, 1, 1, "dB")
+        self.level.setToolTip(LEVEL_TIP)
         self.level.valueChanged.connect(self._level)
         self.spectrum = QComboBox()
         self.spectrum.addItems(SPECTRA)
@@ -797,7 +936,9 @@ class PointPage(Page):
         )
         self.spectrum.activated.connect(self._spectrum)
         self.gain = spin(-100, 60, 1, 1, "dB")
-        self.gain.setToolTip("Gain of the source's feed: on its level and its responses")
+        self.gain.setToolTip(
+            "Gain of the source's feed (dB): on its level and its impulse responses"
+        )
         self.gain.valueChanged.connect(lambda value: self._update(gain_db=value))
         self.eq = QLineEdit()
         self.eq.setPlaceholderText("none")
@@ -820,13 +961,24 @@ class PointPage(Page):
         )
         self.shape.activated.connect(self._shape)
         self.extent = [spin(0.01, 1000, 2, 0.5, "m") for _ in range(2)]
+        self.extent[0].setToolTip(
+            "How long a line source is, or how wide a surface source is, along the source's "
+            "left axis (m)"
+        )
+        self.extent[1].setToolTip("How high a surface source is, along the source's up axis (m)")
         for box in self.extent:
             box.valueChanged.connect(lambda _: self._extent())
         self.spacing = spin(0.05, 100, 2, 0.1, "m")
-        self.spacing.setToolTip("The most the point sources of a line or surface are apart")
+        self.spacing.setToolTip(
+            "The most the point sources of a line or surface are apart (m); closer is finer "
+            "and slower"
+        )
         self.spacing.valueChanged.connect(lambda value: self._update(spacing_m=value))
         self.elements = QLabel()
         self.elements.setWordWrap(True)
+        self.elements.setToolTip(
+            "The line or surface is made of these point sources; they share its sound power"
+        )
         self._form = form
         if kind == "sources":
             form.addRow("Shape", self.shape)
@@ -842,7 +994,8 @@ class PointPage(Page):
             form.addRow("Gain", self.gain)
             form.addRow("Equalizer", self.eq)
             form.addRow("Delay", self.delay)
-        remove = QPushButton("Remove " + ("source" if kind == "sources" else "listener"))
+        remove = QPushButton(f"Remove {what}")
+        remove.setToolTip(f"Remove this {what} from the scene (Delete in the tree or a view)")
         remove.clicked.connect(self._remove)
         form.addRow(remove)
         hint = QLabel(
@@ -875,7 +1028,9 @@ class PointPage(Page):
                 self.directivity.addItem(_directivity_label(item.directivity))
                 self.directivity.setCurrentIndex(len(DIRECTIVITIES))
             self.directivity.addItem(MEASURED)
-            self.directivity.setToolTip(self.directivity.currentText())
+            tip = f"{DIRECTIVITY_TIP}. Now: {self.directivity.currentText()}"
+            self.directivity.setToolTip(tip)
+            self._form.labelForField(self.directivity).setToolTip(tip)
             directivity = self.document.room.directivities[self.key]
             index = directivity.in_bands("octave").index()
             text = (
@@ -891,9 +1046,11 @@ class PointPage(Page):
             total = 10.0 * np.log10(np.sum(10.0 ** (np.array(item.level_db) / 10.0)))
             self.level.setValue(float(total))
             self.level.setEnabled(not per_band)
-            self.level.setToolTip(
-                "Given per band in the scene file; this is their sum" if per_band else ""
-            )
+            tip = LEVEL_TIP
+            if per_band:
+                tip += ". Given per band in the scene file; this is their sum"
+            self.level.setToolTip(tip)
+            self._form.labelForField(self.level).setToolTip(tip)
             self.spectrum.setCurrentText(item.spectrum)
             self.spectrum.setEnabled(not per_band)
             self.gain.setValue(item.gain_db)
@@ -1039,8 +1196,21 @@ class SimulationPage(Page):
         early_form = QFormLayout(early)
         self.early_method = QComboBox()
         self.early_method.addItems(["ray_tracing", "image_sources"])
+        self.early_method.setToolTip(
+            "How the early reflection paths are found: ray_tracing (rays find them; the "
+            "cost grows with the rays, not the surfaces) or image_sources (every sequence "
+            "of surfaces; complete, but it grows as the surfaces to the power of the "
+            "order). The paths found are exact either way"
+        )
         self.max_order = int_spin(0, 20)
+        self.max_order.setToolTip(
+            "The most reflections an early path has; the late reverberation takes the higher orders"
+        )
         self.early_rays = int_spin(1, 10_000_000, 1000)
+        self.early_rays.setToolTip(
+            "Rays that look for early reflection paths (ray tracing only); more find more "
+            "of the higher-order paths"
+        )
         self.diffraction = QComboBox()
         self.diffraction.addItems(["none", "direct", "first_order", "second_order"])
         self.diffraction.setToolTip(
@@ -1066,11 +1236,36 @@ class SimulationPage(Page):
         late_form = QFormLayout(late)
         self.late_method = QComboBox()
         self.late_method.addItems(["stochastic_ray_tracing", "statistical"])
+        self.late_method.setToolTip(
+            "How the late reverberation is found: stochastic_ray_tracing (rays per band "
+            "reflect and scatter off the surfaces) or statistical (a smooth decay at the "
+            "Eyring reverberation time, by Barron's revised theory; fast, for simple rooms)"
+        )
         self.late_rays = int_spin(1, 100_000_000, 10_000)
+        self.late_rays.setToolTip(
+            "Rays per band for the late reverberation; more give smoother decays and take longer"
+        )
         self.reception = QComboBox()
         self.reception.addItems(["diffuse_rain", "secondary_sources", "detector"])
+        self.reception.setToolTip(
+            "How reflected energy reaches the listeners: diffuse_rain (the scattered part "
+            "of each reflection radiates to every listener it can see, the rest counts when "
+            "a ray crosses a detector sphere), secondary_sources (all of it radiates, as in "
+            "ODEON: smoother, but it treats specular sound as diffuse) or detector (the "
+            "sphere only, classic ray tracing)"
+        )
         self.directions = int_spin(0, 1024, 16)
+        self.directions.setToolTip(
+            "How many directions the late energy is sorted into, every 10 ms, so that the "
+            "binaural, Ambisonics and loudspeaker outputs hear where the reverberation "
+            "comes from"
+        )
         self.splitting = QCheckBox("Split strong rays, thin out weak ones")
+        self.splitting.setToolTip(
+            "Split rays that carry much more energy than usual and thin out those that "
+            "carry much less; the expected result stays the same, and late tails stay "
+            "smooth where few rays survive (about 1.5 times the run time)"
+        )
         self.late_device = QComboBox()
         self.late_device.addItems(["default", "cpu", "gpu", "both", "auto"])
         self.late_device.setToolTip(
@@ -1161,8 +1356,16 @@ class SimulationPage(Page):
         response = QGroupBox("Response")
         response_form = QFormLayout(response)
         self.length = spin(0.05, 60, 2, 0.5, "s")
+        self.length.setToolTip(
+            "How long each impulse response lasts (s); longer than the reverberation time "
+            "keeps the whole decay"
+        )
         self.sample_rate = QComboBox()
         self.sample_rate.addItems([str(r) for r in SAMPLE_RATES])
+        self.sample_rate.setToolTip(
+            "Samples per second of the impulse responses (Hz); match the recordings you "
+            "will play through them"
+        )
         self.bands = QComboBox()
         self.bands.addItems(["octave", "third_octave"])
         self.bands.setToolTip(
@@ -1171,9 +1374,23 @@ class SimulationPage(Page):
             "given in octave bands either way"
         )
         self.auto_transition = QCheckBox("Automatic")
+        self.auto_transition.setToolTip(
+            "Ticked, the early paths hand over to the late reverberation by reflection "
+            "order (with the statistical method, at the mixing time: the square root of "
+            "the volume, in ms). Unticked, at the time below"
+        )
         self.transition = spin(1, 10_000, 0, 10, "ms")
+        self.transition.setToolTip(
+            "The early paths end this long after the direct sound (ms); the late "
+            "reverberation takes the rest"
+        )
         self.random_seed = QCheckBox("New random seed every run")
+        self.random_seed.setToolTip(
+            "Ticked, every run draws new random rays, so results vary a little from run to "
+            "run. Unticked, the seed below makes runs repeat exactly"
+        )
         self.seed = int_spin(0, 2**31 - 1)
+        self.seed.setToolTip("The random seed: the same seed and settings give the same results")
         response_form.addRow("Length", self.length)
         response_form.addRow("Sample rate (Hz)", self.sample_rate)
         response_form.addRow("Bands", self.bands)
@@ -1323,21 +1540,48 @@ class OutputsPage(Page):
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.mono = QCheckBox("Mono")
+        self.mono.setToolTip(
+            "Write one impulse response per source and listener, as an omnidirectional "
+            "microphone hears it"
+        )
         self.binaural = QCheckBox("Binaural")
+        self.binaural.setToolTip(
+            "Write a two-channel response for headphones, through the HRTF below"
+        )
         self.hrtf = QLabel()
         self.hrtf.setWordWrap(True)
+        self.hrtf.setToolTip(
+            "The head-related transfer functions (HRTF) the binaural response goes through: "
+            "a SOFA file, or a spherical head model"
+        )
         hrtf_buttons = QHBoxLayout()
         choose = QPushButton("HRTF file…")
+        choose.setToolTip("Pick a SOFA file of head-related transfer functions")
         choose.clicked.connect(self._choose_hrtf)
         head = QPushButton("Spherical head")
+        head.setToolTip("Use a spherical head model instead of an HRTF file")
         head.clicked.connect(lambda: self._set_hrtf(None))
         hrtf_buttons.addWidget(choose)
         hrtf_buttons.addWidget(head)
         self.ambisonics = QCheckBox("Ambisonics (AmbiX)")
+        self.ambisonics.setToolTip(
+            "Write an Ambisonics response (AmbiX: ACN channel order, SN3D normalisation), "
+            "to decode for any loudspeakers or turn with a head tracker"
+        )
         self.order = int_spin(0, 7)
+        self.order.setToolTip(
+            "The Ambisonics order: (order + 1)² channels; higher orders place sounds more sharply"
+        )
         self.loudspeakers = QCheckBox("Loudspeakers")
+        self.loudspeakers.setToolTip(
+            "Write one channel per loudspeaker of a standard layout, panned between them (VBAP)"
+        )
         self.layout_name = QComboBox()
         self.layout_name.addItems(LAYOUT_NAMES)
+        self.layout_name.setToolTip(
+            "The loudspeaker layout: stereo, surround (5.0, 7.0), with a low-frequency "
+            "channel (5.1, 7.1), and with four height speakers (.4)"
+        )
         form.addRow(self.mono)
         form.addRow(self.binaural)
         form.addRow("", self.hrtf)
@@ -1349,6 +1593,7 @@ class OutputsPage(Page):
         layout.addLayout(form)
         self.custom = QLabel()
         self.custom.setWordWrap(True)
+        self.custom.setToolTip("Layouts of your own, given speaker by speaker in the scene file")
         layout.addWidget(self.custom)
         layout.addStretch()
         for check in (self.mono, self.binaural, self.ambisonics, self.loudspeakers):
@@ -1430,13 +1675,22 @@ class CoveragePage(Page):
         area = QGroupBox("Audience area")
         area_layout = QVBoxLayout(area)
         self.automatic = QCheckBox("Automatic: surfaces named audience, else the floor")
+        self.automatic.setToolTip(
+            "Ticked, the map lies over the surfaces whose names hold audience, else over "
+            "the floor. Unticked, over the surfaces ticked below"
+        )
         self.surfaces = QListWidget()
+        self.surfaces.setToolTip("The surfaces the map lies over, when Automatic is unticked")
         self.surfaces.setMaximumHeight(140)
         area_layout.addWidget(self.automatic)
         area_layout.addWidget(self.surfaces)
         form = QFormLayout()
         self.height = spin(0.1, 20, 2, 0.1, "m")
+        self.height.setToolTip(
+            "How high above the surfaces the map's points are (m): about 1.2 m for seated ears"
+        )
         self.spacing = spin(0.1, 20, 2, 0.25, "m")
+        self.spacing.setToolTip("How far apart the map's points are (m); finer maps take longer")
         form.addRow("Listening height", self.height)
         form.addRow("Point spacing", self.spacing)
         area_layout.addLayout(form)
@@ -1445,7 +1699,11 @@ class CoveragePage(Page):
         rays = QGroupBox("Rays")
         rays_form = QFormLayout(rays)
         self.same_rays = QCheckBox("As for the late reverberation")
+        self.same_rays.setToolTip(
+            "Ticked, the map traces as many rays per band as the simulation's late reverberation"
+        )
         self.rays = int_spin(1, 100_000_000, 10_000)
+        self.rays.setToolTip("Rays per source and band for the map; more give smoother maps")
         rays_form.addRow(self.same_rays)
         rays_form.addRow("Rays per source and band", self.rays)
         layout.addWidget(rays)
@@ -1453,8 +1711,13 @@ class CoveragePage(Page):
         noise = QGroupBox("Speech transmission index")
         noise_layout = QVBoxLayout(noise)
         self.noisy = QCheckBox("Background noise (dB SPL per octave band)")
+        self.noisy.setToolTip(
+            "The background noise in each octave band (dB SPL), which lowers the speech "
+            "transmission index (STI). Unticked, there is none"
+        )
         self.noise = QTableWidget(1, len(OCTAVE_BANDS_HZ))
         self.noise.setHorizontalHeaderLabels(BAND_LABELS)
+        band_headers(self.noise)
         self.noise.verticalHeader().hide()
         self.noise.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.noise.setEditTriggers(QAbstractItemView.EditTrigger.AllEditTriggers)
@@ -1502,7 +1765,9 @@ class CoveragePage(Page):
         if not isinstance(values, list):
             values = [float(values)] * len(OCTAVE_BANDS_HZ)
         for col, value in enumerate(values):
-            self.noise.setItem(0, col, QTableWidgetItem(f"{value:g}"))
+            item = QTableWidgetItem(f"{value:g}")
+            item.setToolTip(f"Background noise at {BAND_LABELS[col]} (dB SPL)")
+            self.noise.setItem(0, col, item)
 
     @staticmethod
     def _defaults():
@@ -1565,6 +1830,7 @@ class Inspector(QStackedWidget):
             "coverage": CoveragePage(document),
         }
         for page in self.pages.values():
+            share_tips(page)
             self.addWidget(page)
             page.failed.connect(self.failed)
             page.select.connect(self.select)

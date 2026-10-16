@@ -36,6 +36,14 @@
   `gui` extra and a display; without them it prints the short usage and why, as
   before. `-h` still lists the commands.
 
+**Tips in the editor**
+
+- Resting the mouse on a label, field, button or column header of the editor shows what
+  it means, with its unit: the Results table's rows say what each parameter measures,
+  its band columns which frequencies each octave band holds, and **Band** which plots
+  it chooses for. Menu entries and toolbar buttons say what they do (with their
+  shortcut), and the scene tree's entries what they hold.
+
 ## 3.0.0
 
 Validation against two measured rooms, third-octave bands, vector-based scattering,
