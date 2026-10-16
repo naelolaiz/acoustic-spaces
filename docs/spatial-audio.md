@@ -28,8 +28,12 @@ The statistical tail arrives evenly from all around.
   height but nothing below the listener get an imaginary speaker straight down whose
   share is dropped. A gap of more than 90 degrees between the speakers on the horizon,
   as behind the listener in 5.x.4, gets imaginary speakers on the horizon that the two
-  speakers either side play, so arrivals there pan as in 5.0. Named layouts carry their WAV channel mask; the LFE channel of the
-  `.1` layouts stays silent, leaving bass management to the playback system.
+  speakers either side play, so arrivals there pan as in 5.0. Four or more speakers on
+  one plane, as the height ring of 5.x.4 and 7.x.4 and the rear corners of 7.x.4, get
+  one at their middle that they all play, so a symmetric layout pans symmetrically and
+  straight up plays from the whole ring. Named layouts carry their WAV channel mask;
+  the LFE channel of the `.1` layouts stays silent, leaving bass management to the
+  playback system.
 - **Binaural** gives every reflection and each late direction an HRTF interpolated
   between the measured directions: the measured directions are triangulated as for
   VBAP, and the responses at the corners of the triangle a direction falls in are
@@ -58,9 +62,12 @@ acoustic-spaces play results/talker__seat-a.binaural.wav --live      # microphon
 `convolve` takes any response WAV, with any number of channels; `auralize` reads a
 `simulate` folder and mixes every source's own signal as heard at one `--listener`, in
 one of the formats it wrote (`mono`, `binaural`, `ambix3`, `5.0`, ...), keeping the
-levels the simulation gives each source. Dry signals are mixed down to mono, as
-sources are points, and resampled to the response's rate. The results are 32-bit float
-WAV files; `--normalize` scales them to a -1 dBFS peak.
+levels the simulation gives each source. A binaural output through a SOFA file is
+written as `binaural-<file name>` (`talker__seat-a.binaural-kemar.wav` for
+`kemar.sofa`), so that it and the spherical head's can be written together; `--format
+binaural` finds it when it is the only binaural one. Dry signals are mixed down to
+mono, as sources are points, and resampled to the response's rate. The results are
+32-bit float WAV files; `--normalize` scales them to a -1 dBFS peak.
 
 `play` convolves in real time on the sound card (it needs the `measure` extra). The
 compiled convolver adds no latency beyond one `--block` of frames (256 by default, 5.3

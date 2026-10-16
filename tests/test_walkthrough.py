@@ -359,3 +359,37 @@ def test_cli_walkthrough(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
     assert main([*args, "--video", str(tmp_path / "walk.avi")]) == 1
     err = capsys.readouterr().err
     assert "gif or .mp4" in err and "traced" not in err
+
+
+def test_a_walk_takes_the_threads_of_the_scene(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from acoustic_spaces import walkthrough
+    from acoustic_spaces.audio import write_wav
+
+    asked = []
+
+    def stop(room, *, threads, **_):
+        asked.append(threads)
+        raise ValueError("stopped")
+
+    monkeypatch.setattr(walkthrough, "simulate", stop)
+    scene = _scene(
+        sources=[{"name": "s", "position": [7.0, 5.0, 1.5]}],
+        listeners=[_walker({"to": [[3.0, 1.0, 1.5]]})],
+    )
+    with pytest.raises(ValueError, match="stopped"):
+        simulate_walk(Room.from_scene(scene))
+    path = tmp_path / "scene.yaml"
+    scene.to_yaml(path)
+    dry = tmp_path / "dry.wav"
+    write_wav(dry, np.zeros((480, 1)), 48_000)
+    args = ["walkthrough", str(path), f"s={dry}", "--out", str(tmp_path / "walk.wav")]
+    assert main(args) == 1
+    assert main([*args, "--threads", "2"]) == 1
+    assert "error: stopped" in capsys.readouterr().err
+    # None: simulate takes the scene's simulation.performance.threads, as for simulate.
+    assert asked == [None, None, 2]
+    with pytest.raises(SystemExit):
+        main([*args, "--threads", "-1"])
+    assert "--threads" in capsys.readouterr().err

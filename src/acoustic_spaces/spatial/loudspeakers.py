@@ -8,7 +8,9 @@ play from the speakers at their azimuth; straight down, all its neighbours play 
 A gap wider than 90 degrees between the speakers on the horizon (behind the listener in
 5.x.4) gets imaginary speakers on the horizon too, which hand their share to the two
 speakers either side, so arrivals there stay on the horizon instead of going up to the
-height layer.
+height layer. Four or more speakers on one plane (the height ring of the .4 layouts, the
+rear corners of 7.x.4) get an imaginary speaker at their middle, which they play alike,
+so a symmetric layout pans symmetrically and straight up plays from all four.
 Low-frequency effects channels (LFE) take no part in panning and stay silent: a room's
 bass reaches every speaker already, and bass management belongs to the playback system.
 """
@@ -108,11 +110,25 @@ _HORIZON_DEG = 10.0
 _MAX_GAP_DEG = 90.0
 
 
+def _flat_faces(points: np.ndarray) -> list[tuple[int, ...]]:
+    """The points on each face of the convex hull of ``points`` that holds four or more."""
+    faces = set()
+    for i, j, k in itertools.combinations(range(len(points)), 3):
+        normal = np.cross(points[j] - points[i], points[k] - points[i])
+        if np.linalg.norm(normal) < 1e-12:
+            continue
+        side = (points - points[i]) @ (normal / np.linalg.norm(normal))
+        on = np.abs(side) < 1e-9
+        if on.sum() > 3 and (np.all(side < 1e-9) or np.all(side > -1e-9)):
+            faces.add(tuple(np.flatnonzero(on)))
+    return sorted(faces)
+
+
 def _hull_triangles(points: np.ndarray) -> list[tuple[int, int, int]]:
     """Faces of the convex hull of points on the unit sphere around the origin.
 
-    Points are nudged a tiny, fixed amount first, so four on one plane (a ring of height
-    speakers) give two triangles rather than four overlapping ones.
+    Points are nudged a tiny, fixed amount first, so four on one plane give two
+    triangles rather than four overlapping ones.
     """
     nudged = points + 1e-7 * np.random.default_rng(0).standard_normal(points.shape)
     faces = []
@@ -234,12 +250,21 @@ class Loudspeakers:
             extra.append([0.0, 0.0, 1.0])
             downmix.append(np.zeros(n_real))
         points = np.vstack([real, np.array(extra).reshape(-1, 3)])
+        downmix = np.vstack([np.eye(n_real), np.array(downmix).reshape(-1, n_real)])
+        # Four or more on one face of the hull: an imaginary speaker at their middle that
+        # they play alike (adding up to its direction), so that the face is split evenly
+        # around it rather than along one diagonal.
+        for face in _flat_faces(points):
+            middle = points[list(face)].sum(axis=0)
+            length = np.linalg.norm(middle)
+            points = np.vstack([points, middle / length])
+            downmix = np.vstack([downmix, downmix[list(face)].sum(axis=0) / length])
         bases = []
         for face in _hull_triangles(points):
             matrix = points[list(face)].T
             if abs(np.linalg.det(matrix)) > 1e-9:
                 bases.append((np.linalg.inv(matrix), face))
-        return bases, np.vstack([np.eye(n_real), np.array(downmix).reshape(-1, n_real)])
+        return bases, downmix
 
     def gains(self, directions: np.ndarray) -> np.ndarray:
         """VBAP gains (dirs, channels) of unit power for head directions (dirs, 3)."""

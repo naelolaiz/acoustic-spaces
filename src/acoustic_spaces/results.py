@@ -4,9 +4,9 @@ and the editor's Export produce.
 For every (source, listener) pair, one WAV file per output format
 (``<source>__<listener>.wav`` for mono, ``<source>__<listener>.<format>.wav`` for the
 others), and for the whole run ``parameters.json``: the settings, run details and the
-ISO 3382-1 parameters of every response (with IACC when a binaural response is written),
-its STI, STIPA and U50, and its echo criteria. ``acoustic-spaces auralize`` reads that
-folder.
+ISO 3382-1 parameters of every response (with IACC when a binaural response is written,
+from the first if there are several), its STI, STIPA and U50, and its echo criteria.
+``acoustic-spaces auralize`` reads that folder.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ def write_results(
     a source (the report's ``peak`` says by how much). ``plots`` adds the echogram and
     direction plots of :mod:`acoustic_spaces.viz` when matplotlib is installed.
     """
-    from acoustic_spaces.spatial import from_output
+    from acoustic_spaces.spatial import Binaural, from_output
 
     say = progress or (lambda _: None)
     if formats is None:
@@ -99,7 +99,7 @@ def write_results(
             write_wav(out / name, irs[(source, listener), label] * gain, sample_rate, mask)
             written.append({"format": label, "wav": name, "channels": fmt.channel_names})
         params = response.parameters()
-        binaural = [fmt.label for fmt in formats if fmt.label == "binaural"]
+        binaural = [fmt.label for fmt in formats if isinstance(fmt, Binaural)]
         if binaural:
             ears = irs[(source, listener), binaural[0]]
             params = dataclasses.replace(

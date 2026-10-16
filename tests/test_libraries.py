@@ -48,6 +48,28 @@ def test_catt_definitions_in_a_geometry_file(tmp_path: Path) -> None:
     assert material.source == "'seats' of hall.geo (63 Hz copied from the nearest band)"
 
 
+def test_catt_values_after_a_colon_and_in_fractions(tmp_path: Path) -> None:
+    # As CATT writes them: 8 and 16 kHz after a colon, and ABS1 materials in fractions.
+    geo = tmp_path / "room.geo"
+    geo.write_text(
+        "ABS wall = <10 10 10 10 10 20 : 30 40> L <10 10 10 10 10 10 : 20 30>\n"
+        "ABS seats = <40 50 60 70 80 80> L <30 40 50 60 70 80: 85>\n"
+        "abs1 felt = <0.05 0.1 0.3 0.6 0.8 0.9> L <0.1 0.1 0.2 0.3 0.4 0.5>\n"
+        "ABS curtain = felt\n"
+    )
+    wall, seats, felt, curtain = read_library(geo)
+    assert wall.frequencies[-1] == 16000.0
+    assert wall.absorption == pytest.approx((0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.3, 0.4))
+    assert wall.scattering == pytest.approx((0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.3))
+    assert seats.scattering == pytest.approx((0.3, 0.4, 0.5, 0.6, 0.7, 0.8))
+    assert felt.absorption == pytest.approx((0.05, 0.1, 0.3, 0.6, 0.8, 0.9))
+    assert felt.scattering == pytest.approx((0.1, 0.1, 0.2, 0.3, 0.4, 0.5))
+    assert curtain.name == "curtain" and curtain.absorption == felt.absorption
+    alone = tmp_path / "felt.geo"
+    alone.write_text("ABS1 felt = <0.05 0.1 0.3 0.6 0.8 0.9>\n")
+    assert read_library(alone)[0].absorption[3] == pytest.approx(0.6)
+
+
 def test_odeon_library_by_number_or_description() -> None:
     tiles, door = read_library(ODEON)
     assert tiles.number == 1001 and tiles.name.startswith("Acoustic ceiling tiles")

@@ -802,7 +802,7 @@ class MainWindow(QMainWindow):
             path, _ = QFileDialog.getOpenFileName(
                 self,
                 "Material library",
-                str(self.document.base_dir()),
+                str(self.document.base_dir),
                 "Material libraries (*.geo *.txt *.li8 *.Li8 *.lib);;All files (*)",
             )
             if not path:

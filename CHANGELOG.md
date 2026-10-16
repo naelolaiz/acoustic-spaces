@@ -44,6 +44,41 @@
   it chooses for. Menu entries and toolbar buttons say what they do (with their
   shortcut), and the scene tree's entries what they hold.
 
+**Fixes**
+
+- A binaural output through a SOFA file (`{format: binaural, hrtf: ...}`, or
+  `simulate --hrtf`) gave no IACC_E and IACC_L in `parameters.json`, the printed table
+  or the editor's Export; only the spherical head gave them. They now come from the
+  first binaural output, whichever head it has. Such a response is written as
+  `.binaural-<file name>.wav`, and `auralize --format binaural` finds it when it is the
+  only binaural one, instead of asking for that name.
+- Panning onto 5.x.4 and 7.x.4 layouts was lopsided. Their four height speakers, and
+  the rear corners of 7.x.4, each lie on a plane, which was split along one diagonal, so
+  20 to 28 % of all directions panned differently from their mirror image: a sound from
+  straight above played from two diagonally opposite height speakers, and the
+  reverberation of a symmetric room reached mirror-image speakers up to 2.8 dB apart.
+  Four or more speakers on one plane now get an imaginary speaker at their middle that
+  they play alike.
+- Responses rendered at 44.1, 22.05 or 88.2 kHz, where 1 ms is not a whole number of
+  samples, had random silent 1 ms gaps in their late part while it was still sparse (in
+  a hall through its first 200 to 400 ms, losing up to about 15 % of the late energy):
+  the noise's impulses were spread over slightly different slots from those its energy
+  was set in. Rates where 1 ms is a whole number of samples, such as 48 and 96 kHz,
+  were not affected and render as before.
+- `calibrate()` took `lf`, `lfc` and `t30_x`, `t30_y` and `t30_z`, which its own error
+  message offered, though the fit cannot work them out: it left them out, or with them
+  alone returned the absorption it started from. It refuses them now, as
+  `acoustic-spaces calibrate` did.
+- Material libraries of CATT-Acoustic that give the 8 and 16 kHz values after a colon
+  (`<a125 ... a4k : a8k a16k>`), as CATT writes them, could not be used at all, and
+  `ABS1` materials (in fractions from 0 to 1) were left out. Both are read now.
+- `acoustic-spaces walkthrough` ran on every core whatever the scene's
+  `simulation.performance.threads` said, and took a negative `--threads`. Like
+  `simulate`, it now takes the scene's setting unless `--threads` is given, and so does
+  `simulate_walk`.
+- The editor's Edit > Add material from a library… failed before showing its file
+  dialog. It opens in the scene's folder now.
+
 ## 3.0.0
 
 Validation against two measured rooms, third-octave bands, vector-based scattering,

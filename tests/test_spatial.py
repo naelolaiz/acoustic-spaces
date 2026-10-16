@@ -101,6 +101,21 @@ def test_vbap_pans_with_unit_power(name: str) -> None:
     assert layout.channel_mask() > 0
 
 
+@pytest.mark.parametrize("name", list(LAYOUTS))
+def test_vbap_pans_mirrored_directions_alike(name: str) -> None:
+    # The height ring of the .4 layouts and the rear corners of 7.x.4 lie on one plane;
+    # split along one diagonal, it panned to one side.
+    layout = Loudspeakers.layout(name)
+    speakers = [(s.azimuth, s.elevation, s.lfe) for s in layout.speakers]
+    mirror = [speakers.index((-azimuth, elevation, lfe)) for azimuth, elevation, lfe in speakers]
+    grid = np.vstack([fibonacci_sphere(600), [[0, 0, 1]]])
+    np.testing.assert_allclose(
+        layout.gains(grid * [1, -1, 1]), layout.gains(grid)[:, mirror], atol=1e-12
+    )
+    if name.endswith(".4"):  # straight up: the four height speakers alike
+        np.testing.assert_allclose(layout.gains([[0.0, 0.0, 1.0]])[0, -4:], 0.5)
+
+
 def test_vbap_between_and_outside_speakers() -> None:
     stereo = Loudspeakers.layout("stereo")
     gains = stereo.gains(from_angles([0.0, 180.0, 100.0], 0.0))

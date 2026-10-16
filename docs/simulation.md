@@ -74,7 +74,8 @@ The directions the sound arrives from give more of them:
 - LF, LFC and LJ (ISO 3382-1, annex A), from a figure of eight with its null on the
   source: the share of the early energy that arrives from the sides, which widens the
   source, and the level of the late lateral sound, which envelops the listener.
-- IACC early and late (annex B), from the binaural response when the scene writes one.
+- IACC early and late (annex B), from the binaural response when the scene writes one
+  (through the spherical head or a SOFA file; the first, if it writes several).
 - Stage support ST early (Gade's ST1) and ST late (annex C) for listeners within 1.5 m
   of a source, where musicians hear themselves and each other.
 - T30 of figures of eight facing forward, left and up from the listener: where sound
@@ -397,9 +398,10 @@ simulation:
   walk through the tree was slower too).
 
 `simulate`, `map` and `calibrate` take `--threads N` and `--ray-tree sah|median` to
-override them, `view` and `export` `--threads`; the editor's Simulation page has them
-under Performance. `acoustic-spaces info` prints how many cores there are. Where the
-wave solver steps its grid (CPU or GPU) is `simulation.wave.device`, above.
+override them, `view`, `export` and `walkthrough` `--threads`; the editor's Simulation
+page has them under Performance. `acoustic-spaces info` prints how many cores there
+are. Where the wave solver steps its grid (CPU or GPU) is `simulation.wave.device`,
+above.
 
 ```sh
 acoustic-spaces simulate validation/bras/CR3/scene.yaml --out cr3 --threads 3

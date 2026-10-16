@@ -7,9 +7,11 @@ A scene's material can take its coefficients from an entry of such a library, wi
 CATT-Acoustic writes materials in its geometry and library files as
 ``ABS name = <a125 a250 a500 a1k a2k a4k> L <s125 s250 s500 s1k s2k s4k> {r g b}``:
 absorption and scattering in percent from 125 Hz to 4 kHz, with values at 8 and 16 kHz
-optional. ``L <...>`` and the colour may be left out, ``;`` starts a comment, and
-``ABS name = other`` gives a material the coefficients of another in the same file.
-Scattering that CATT estimates itself (``L <estimate(...)>``) is not read.
+optional (after a colon, ``<a125 ... a4k : a8k a16k>``, or without one). ``ABS1`` gives
+them as fractions from 0 to 1 instead. ``L <...>`` and the colour may be left out, ``;``
+starts a comment, and ``ABS name = other`` gives a material the coefficients of another
+in the same file. Scattering that CATT estimates itself (``L <estimate(...)>``) is not
+read.
 
 ODEON's library (``Material.Li8``) has each material on two lines: its number and
 description, then eight absorption coefficients from 63 Hz to 8 kHz. ODEON's own
@@ -35,7 +37,7 @@ CATT_BANDS_HZ = (125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0)
 ODEON_BANDS_HZ = (63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0)
 
 _CATT = re.compile(
-    r"\bABS\s+(?P<name>[^\s=;]+)\s*=\s*"
+    r"\bABS(?P<fraction>1)?\s+(?P<name>[^\s=;]+)\s*=\s*"
     r"(?:<(?P<absorption>[^>]*)>|(?P<alias>[^\s<{;]+))"
     r"(?:\s*L\s*<(?P<scattering>[^>]*)>)?",
     re.IGNORECASE,
@@ -110,25 +112,28 @@ def _read_catt(path: Path, text: str) -> list[LibraryMaterial]:
         if match["alias"] is not None:
             aliases.append((name, match["alias"]))
             continue
-        absorption = _numbers(match["absorption"])
+        # ABS gives percent, ABS1 fractions; a colon may set off the 8 and 16 kHz values.
+        scale, unit = (1.0, "from 0 to 1") if match["fraction"] else (100.0, "in percent")
+        absorption = _numbers(match["absorption"].replace(":", " "))
         if absorption is None or not 6 <= len(absorption) <= len(CATT_BANDS_HZ):
             raise ValueError(
-                f"{path}: material {name!r}: expected 6 to 8 absorption values in percent "
+                f"{path}: material {name!r}: expected 6 to 8 absorption values {unit} "
                 f"(125 Hz to 4, 8 or 16 kHz), got <{match['absorption'].strip()}>"
             )
         # Scattering that CATT estimates (estimate(...)) is no list of numbers: none.
-        scattering = None if match["scattering"] is None else _numbers(match["scattering"])
+        given = match["scattering"]
+        scattering = None if given is None else _numbers(given.replace(":", " "))
         if scattering is not None and not 6 <= len(scattering) <= len(CATT_BANDS_HZ):
             raise ValueError(
-                f"{path}: material {name!r}: expected 6 to 8 scattering values in percent, "
-                f"got <{match['scattering'].strip()}>"
+                f"{path}: material {name!r}: expected 6 to 8 scattering values {unit}, "
+                f"got <{given.strip()}>"
             )
         found[name.lower()] = LibraryMaterial(
             name=name,
             number=None,
             frequencies=CATT_BANDS_HZ[: len(absorption)],
-            absorption=tuple(v / 100.0 for v in absorption),
-            scattering=None if scattering is None else _held(scattering, len(absorption)),
+            absorption=tuple(v / scale for v in absorption),
+            scattering=None if scattering is None else _held(scattering, len(absorption), scale),
         )
     for name, other in aliases:
         if other.lower() not in found:
@@ -140,10 +145,10 @@ def _read_catt(path: Path, text: str) -> list[LibraryMaterial]:
     return list(found.values())
 
 
-def _held(percent: list[float], count: int) -> tuple[float, ...]:
-    """Scattering in percent as shares at as many bands as the absorption: cut, or the
-    last value held."""
-    values = [v / 100.0 for v in percent]
+def _held(given: list[float], count: int, scale: float) -> tuple[float, ...]:
+    """Scattering in percent (``scale`` 100) or fractions (1) as shares at as many bands
+    as the absorption: cut, or the last value held."""
+    values = [v / scale for v in given]
     return tuple((values + values[-1:] * count)[:count])
 
 

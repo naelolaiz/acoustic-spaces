@@ -115,10 +115,11 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   echo as loud as the direct sound 100 ms later within 10 % of the jump of the centre
   time, and below the 10 % audibility mark for a smooth decay;
 - spatial outputs: SN3D spherical harmonics against closed forms and orthogonality,
-  VBAP gains of unit power that point at the panned direction, the direct sound's
-  direction in first-order Ambisonics, the mono energy kept by panned layouts (direct
-  sound within 1 %, late part within 5 %), a binaural render through flat HRTFs equal
-  to the mono response, and the spherical head's interaural delay (0.6 ms at the side);
+  VBAP gains of unit power that point at the panned direction and are mirrored for a
+  mirrored direction, the direct sound's direction in first-order Ambisonics, the mono
+  energy kept by panned layouts (direct sound within 1 %, late part within 5 %), a
+  binaural render through flat HRTFs equal to the mono response, and the spherical
+  head's interaural delay (0.6 ms at the side);
   HRTFs interpolated between measured directions give the measured responses at those
   directions and, round the horizon a degree at a time, an interaural delay that moves
   by less than 50 µs per degree where the nearest measured response jumps by more than

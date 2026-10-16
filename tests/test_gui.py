@@ -858,7 +858,7 @@ def test_place_remove_and_add_material(window, monkeypatch) -> None:
     window.remove_selected()  # the last one stays
     assert len(window.document.scene.sources) == 1
 
-    from PySide6.QtWidgets import QInputDialog
+    from PySide6.QtWidgets import QFileDialog, QInputDialog
 
     monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("carpet_cotton", True))
     window.add_material()
@@ -882,6 +882,15 @@ def test_place_remove_and_add_material(window, monkeypatch) -> None:
     assert window.document.scene.materials["walls"].scattering[5] == 0.1
     window.add_library_material(str(libraries / "scene.yaml"))
     assert "no materials found" in window.messages.toPlainText()
+    # From the menu: the file is picked in a dialog that opens in the scene's folder.
+    folders = []
+    picked = (str(libraries / "catt_materials.geo"), "")
+    monkeypatch.setattr(
+        QFileDialog, "getOpenFileName", lambda *a, **k: folders.append(a[2]) or picked
+    )
+    window.add_library_material_action.trigger()
+    assert folders == [str(window.document.base_dir)]
+    assert window.selection == ("material", "walls-2")
 
 
 def test_another_scene_cancels_placing(window) -> None:
