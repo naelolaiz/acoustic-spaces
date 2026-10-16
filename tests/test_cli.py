@@ -279,7 +279,12 @@ def test_simulate_checks_the_options_that_override_the_scene(
     report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
     assert report["settings"]["late"]["device"] == "cpu"
     assert not ray_device.trial_enabled()
-    for option, value in [("--threads", "-1"), ("--ray-tree", "octree"), ("--late-device", "tpu")]:
+    for option, value in [
+        ("--threads", "-1"),
+        ("--seed", "-1"),
+        ("--ray-tree", "octree"),
+        ("--late-device", "tpu"),
+    ]:
         with pytest.raises(SystemExit):
             main([*args, option, value])
         assert option in capsys.readouterr().err

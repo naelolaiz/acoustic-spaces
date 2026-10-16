@@ -39,10 +39,11 @@ def test_the_cpu_traces_as_before(reference) -> None:
     values = _arguments(reference, "vector")
     plan = ray_device.choose("cpu", values)
     assert plan == ray_device.Plan("cpu")
-    found = late_results(ray_device.trace(plan, values))
+    found, followed = ray_device.trace(plan, values)
+    assert followed == plan
     expected = late_results(_native.trace_stochastic(**values))
     for key, value in expected.items():
-        np.testing.assert_array_equal(found[key], value, err_msg=key)
+        np.testing.assert_array_equal(late_results(found)[key], value, err_msg=key)
 
 
 def test_gpu_settings_need_a_gpu(reference, monkeypatch) -> None:
@@ -220,10 +221,39 @@ def test_shared_rays_add_up_to_one_run(reference, monkeypatch, name) -> None:
     monkeypatch.setattr(gpu_tracer, "trace_stochastic", decline)
     values = _arguments(reference, name)
     plan = ray_device.Plan("both", cpu_rate=1.0, gpu_rate=3.0)
-    found = late_results(ray_device.trace(plan, values))
+    found, followed = ray_device.trace(plan, values)
+    # The CPU, as the GPU declined, unless the CPU took every part before it asked.
+    assert followed in (ray_device.Plan("cpu", reason="not here"), plan)
     expected = late_results(_native.trace_stochastic(**values))
     for key, value in expected.items():
-        np.testing.assert_allclose(found[key], value, rtol=1e-9, atol=1e-300, err_msg=key)
+        np.testing.assert_allclose(
+            late_results(found)[key], value, rtol=1e-9, atol=1e-300, err_msg=key
+        )
+
+
+def test_a_run_the_gpu_declines_says_where_it_went(reference, machine, monkeypatch) -> None:
+    def decline(**_):
+        raise gpu_tracer.Unsupported("the GPU's buffers cannot hold this run's results")
+
+    monkeypatch.setattr(gpu_tracer, "trace_stochastic", decline)
+    values = _arguments(reference, "vector")
+    cpu = ray_device.Plan("cpu", reason="the GPU's buffers cannot hold this run's results")
+    found, followed = ray_device.trace(ray_device.Plan("gpu"), values)
+    assert followed == cpu
+    np.testing.assert_array_equal(found[0], _native.trace_stochastic(**values)[0])
+    # auto's trial declined alike takes the CPU.
+    assert ray_device.choose("auto", values) == cpu
+
+    from acoustic_spaces.engine.simulate import simulate
+
+    room = Room.from_yaml(SHOEBOX)
+    sim = room.scene.simulation
+    late = sim.late.model_copy(update={"rays": 300, "device": "gpu"})
+    messages: list[str] = []
+    settings = sim.model_copy(update={"ir_length_s": 0.3, "late": late})
+    simulate(room, settings=settings, progress=messages.append)
+    where = [m for m in messages if "late rays traced on" in m]
+    assert where == [f"talker: late rays traced on the CPU ({cpu.reason})"]
 
 
 def test_simulate_says_where_the_late_rays_went(monkeypatch) -> None:

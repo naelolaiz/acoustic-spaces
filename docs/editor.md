@@ -163,8 +163,10 @@ the scene's (+z up, metres).
   per octave band. Sources (red) and listeners (blue) are spheres turned the way they
   face, with an arrow along the aim.
 - `--paths` adds the early reflection paths from `--source` to `--listener` up to
-  `--max-order`, one object of edges per order. Edges do not render: to render them,
-  use Object > Convert > Curve and give the curve a bevel depth.
+  `--max-order`, as long after the direct sound as a simulation keeps them
+  (`transition_ms`, or the mixing time with the statistical late method, see
+  [Simulation](simulation.md)), one object of edges per order. Edges do not render: to
+  render them, use Object > Convert > Curve and give the curve a bevel depth.
 - `--particles` adds the particles of `animate` as small spheres that move with them and
   shrink with their level, gone 60 dB down. The animation runs 40 times slower than the
   sound (`--slow-motion`): the default 100 ms take 4 s, 96 frames at 24 fps. If the

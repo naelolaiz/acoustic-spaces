@@ -102,6 +102,17 @@ def test_saved_paths_are_relative_to_the_scene_folder(tmp_path: Path) -> None:
     assert moved.geometry.file == (tmp_path / "shoebox" / "shoebox.obj").resolve()
 
 
+def test_seed_is_zero_or_more() -> None:
+    # Numpy takes no negative seed, which used to fail only once a run had started.
+    data = yaml.safe_load((EXAMPLES / "shoebox" / "scene.yaml").read_text(encoding="utf-8"))
+    data["simulation"]["seed"] = 0
+    assert Scene.model_validate(data).simulation.seed == 0
+    data["simulation"]["seed"] = -1
+    with pytest.raises(ValidationError, match="greater than or equal to 0") as info:
+        Scene.model_validate(data)
+    assert [err["loc"] for err in info.value.errors()] == [("simulation", "seed")]
+
+
 @pytest.mark.parametrize(
     "where",
     [

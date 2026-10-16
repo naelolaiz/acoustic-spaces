@@ -21,6 +21,7 @@ from acoustic_spaces.engine.wave import (
     LAYER_CELLS,
     LAYER_DAMPING,
     MAX_ABSORPTION,
+    WAVE_BANDS_HZ,
     WaveResponse,
     _first_order,
     absorption_of_impedance,
@@ -518,8 +519,20 @@ def test_wave_responses_refuse_listeners_outside_and_huge_grids() -> None:
         wave_responses(
             model, source, [source], ["l"], max_band_hz=500, points_per_wavelength=200, **common
         )
-    with pytest.raises(ValueError, match="max_band_hz"):
-        wave_responses(model, source, [source], ["l"], max_band_hz=100, **common)
+    # The 8 kHz band has no top edge to make a grid for; the schema stops at 500 Hz.
+    for band in (100, 1000, 8000):
+        with pytest.raises(ValueError, match="max_band_hz must be one of"):
+            wave_responses(model, source, [source], ["l"], max_band_hz=band, **common)
+
+
+def test_the_wave_bands_match_the_schema() -> None:
+    from typing import get_args
+
+    from acoustic_spaces import cli
+    from acoustic_spaces.scene.model import WaveStage
+
+    assert WAVE_BANDS_HZ == cli.WAVE_BANDS_HZ == (63, 125, 250, 500)
+    assert get_args(WaveStage.model_fields["max_band_hz"].annotation) == WAVE_BANDS_HZ
 
 
 def test_wave_responses_refuse_before_running(tmp_path: Path) -> None:

@@ -74,6 +74,8 @@ Scheme = Literal["auto", "standard", "isotropic"]
 STENCILS = {"standard": (7, COURANT), "isotropic": (19, ISOTROPIC_COURANT)}
 #: Grids with more cells than this are refused (about 20 bytes each).
 MAX_CELLS = 40_000_000
+#: The highest bands the solver may compute (``simulation.wave.max_band_hz``).
+WAVE_BANDS_HZ = OCTAVE_BANDS_HZ[:4]
 #: The source's high-pass, applied twice: once so that the air the source pushes into
 #: the room stops flowing, twice so that as much flows out again and a closed room's
 #: pressure comes back to rest (but for a slow swing from rounding L^2 down, far below
@@ -302,9 +304,10 @@ def _first_order(
 ) -> np.ndarray:
     """W, X, Y, Z (samples, 4) from the pressure at the listener and round it.
 
-    The velocity is the time integral of the pressure gradient (central differences,
-    or one-sided ones next to a surface), by the trapezoidal rule so that it falls on
-    the pressure's samples; X = rho c u_x points towards the sound.
+    X, Y and Z are c times the time integral of the pressure gradient (central
+    differences, or one-sided ones next to a surface), by the trapezoidal rule so that
+    they fall on the pressure's samples: X = -rho c u_x, against the particle velocity,
+    so that it points towards the sound (as in AmbiX).
     """
     if not found[0]:
         raise ValueError(f"listener {name!r} is not in the air of the wave grid")
@@ -351,8 +354,8 @@ def wave_responses(
 
     say = say or (lambda _: None)
     use_gpu(device)  # an unknown device, or the GPU missing, before any work
-    if max_band_hz not in OCTAVE_BANDS_HZ:
-        raise ValueError(f"max_band_hz must be one of {OCTAVE_BANDS_HZ}, got {max_band_hz}")
+    if max_band_hz not in WAVE_BANDS_HZ:
+        raise ValueError(f"max_band_hz must be one of {WAVE_BANDS_HZ}, got {max_band_hz}")
     mesh = model.room.mesh
     solid = ~model.transparent
     if model.transmission is not None:
@@ -509,6 +512,7 @@ __all__ = [
     "MAX_ABSORPTION",
     "MAX_CELLS",
     "STENCILS",
+    "WAVE_BANDS_HZ",
     "Scheme",
     "Admittance",
     "BandGrid",

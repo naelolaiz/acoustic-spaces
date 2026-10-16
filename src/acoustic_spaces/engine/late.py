@@ -473,7 +473,8 @@ def stochastic_energy(
             }
             if not plans:
                 plans.append(ray_device.choose(device, values))
-            energy, directional, moments, *rest = ray_device.trace(plans[0], values)
+            found, plans[0] = ray_device.trace(plans[0], values)
+            energy, directional, moments, *rest = found
             return [energy, directional, moments], *rest
 
         return _in_batches(trace, count, splitting, own)

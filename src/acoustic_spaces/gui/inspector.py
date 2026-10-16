@@ -1271,9 +1271,9 @@ class SimulationPage(Page):
         self.late_device.setToolTip(
             "Where it traces the rays: this computer's default (the CPU, or auto once "
             "Simulation > Tune CPU and GPU… made it so), the CPU, a GPU through WebGPU "
-            "(needs the gpu extra), both sharing the rays (results then vary slightly from "
-            "run to run), or auto: the fastest of those on this computer, as Tune CPU and "
-            "GPU… or a short trial found"
+            "(needs the gpu extra), both sharing the rays (with a GPU, results can vary "
+            "slightly from run to run), or auto: the fastest of those on this computer, as "
+            "Tune CPU and GPU… or a short trial found"
         )
         late_form.addRow("Method", self.late_method)
         late_form.addRow("Rays per band", self.late_rays)
@@ -1387,10 +1387,14 @@ class SimulationPage(Page):
         self.random_seed = QCheckBox("New random seed every run")
         self.random_seed.setToolTip(
             "Ticked, every run draws new random rays, so results vary a little from run to "
-            "run. Unticked, the seed below makes runs repeat exactly"
+            "run. Unticked, the seed below makes runs repeat, exactly with the late rays "
+            "on the CPU (on a GPU they can vary slightly)"
         )
         self.seed = int_spin(0, 2**31 - 1)
-        self.seed.setToolTip("The random seed: the same seed and settings give the same results")
+        self.seed.setToolTip(
+            "The random seed: the same seed and settings give the same results (on a GPU "
+            "they can vary slightly)"
+        )
         response_form.addRow("Length", self.length)
         response_form.addRow("Sample rate (Hz)", self.sample_rate)
         response_form.addRow("Bands", self.bands)

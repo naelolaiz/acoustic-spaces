@@ -367,8 +367,8 @@ cells per wavelength); walls on the grid lie within half a cell of the model's, 
 room's modes by a few percent (more `points_per_wavelength` moves them less); waves on
 the grid travel slower the shorter they are, at the top of the highest band with 8
 points per wavelength by 0.67 % in closed rooms and up to 1.7 % round open models
-(along the grid's axes, not at all along its diagonals), which nothing corrects, so the
-modes there come out up to that much low;
+(along the grid's axes, not at all along its body diagonals), which nothing corrects,
+so the modes there come out up to that much low;
 sources radiate equally in all directions in the wave bands; and air absorption,
 negligible there, is left out.
 
@@ -431,9 +431,10 @@ simulation:
   and check that they land within the spread of the CPU's own results over seeds.
 - `both`: the CPU (on all its threads but one, which keeps the GPU busy) and the GPU
   share the rays, each taking the next part as soon as it is done with the last, so the
-  faster one traces more. Which rays each traces depends on how fast each goes, so two
-  runs differ within the noise of the ray count; `cpu` and `gpu` give the same result
-  every time.
+  faster one traces more (if the GPU declines a part at run time, the CPU traces it and
+  the rest on all its threads). Which rays each traces depends on how fast each goes, so
+  two runs differ within the noise of the ray count. `cpu` gives the same result every
+  time, and so does `gpu` until the weight window fills a family of copies (see below).
 - `auto`: the fastest of `cpu`, `gpu` and `both` on this computer, for the run's
   response length (a longer response keeps each ray going longer, which can change
   which is fastest). It takes the choice `acoustic-spaces tune` kept for that length
@@ -484,22 +485,26 @@ acoustic-spaces info                            # the default, and what auto tak
   and asks with a check box whether to make `auto` this computer's default (ticked).
   OK saves the timings and that choice; Cancel saves nothing, not even the timings.
 - A scene that names its devices keeps them; it gives the same result on every
-  computer, and with `cpu` the seed repeats a run exactly (`both` varies a little).
-  Scenes saved by the editor before 3.1.0 name `cpu`: set **Run on** to *default* (or
-  leave the tune window's second check box ticked for the open scene) to let them
-  follow the default.
+  computer, and with `cpu` the seed repeats a run exactly (`gpu` and `both` may vary a
+  little). Scenes saved by the editor before 3.1.0 name `cpu`: set **Run on** to
+  *default* (or leave the tune window's second check box ticked for the open scene) to
+  let them follow the default.
 
 Sound through partitions and openings, the face groups of material calibration and
-coverage maps are traced on the CPU whatever the setting. `simulate --late-device`
-overrides the setting; the editor's Simulation page has it as "Run on" under Late
-reverberation. When it is not `cpu`, the progress messages say where the rays went and
-why (`talker: late rays traced on the CPU (no hardware GPU)`).
+coverage maps are traced on the CPU whatever the setting, and so are runs whose results
+the GPU's buffers cannot hold (many listeners and arrival directions over a long
+response). `simulate --late-device` overrides the setting; the editor's Simulation page
+has it as "Run on" under Late reverberation. When it is not `cpu`, the progress messages
+say where the rays went and why
+(`talker: late rays traced on the CPU (no hardware GPU)`).
 
 With splitting, a ray's copies on the GPU advance together, where the CPU follows each
 to its end before it takes the next. Where the weight window asks for more copies than
 a family may have (`max_family`), the GPU so makes them earlier and traces more
 reflections in the late tail (up to twice as many in the example box): the same
-expected energies, with a tail that varies less.
+expected energies, with a tail that varies less. Which of a family's copies split
+before it is full then depends on the order the GPU's threads come in, so two `gpu`
+runs of such a scene differ in the late tail, within the noise of the ray count.
 
 `python validation/late_gpu.py` times the late stage on each device in BRAS's two rooms
 and two example halls, and shows how far T30, EDT and C80 come out from the CPU's next

@@ -260,6 +260,9 @@ def test_stage_support_only_near_the_source() -> None:
     far = _response(early)
     far.direct_delay_s = 3.0 / C
     assert np.isnan(far.parameters().st_early).all()
+    # A source fed 10 ms late is still 1 m away.
+    delayed = near.fed(np.zeros(8), 0.010)
+    assert delayed.parameters().st_early == pytest.approx(np.full(8, -10.0))
 
 
 # -- speech -----------------------------------------------------------------------------

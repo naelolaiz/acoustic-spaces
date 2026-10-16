@@ -313,8 +313,9 @@ def _gaps(
             surfaces = (room.scene.sources[name].name,)
         else:
             surfaces = (_label_text(mesh.labels[name]),)
-        share = len(members) / max(reflections + count, 1)
-        found_area = area * share / max(1.0 - share, 1e-12) if k in (0, 2) else 0.0
+        # The surfaces take the reflections as the gap takes its rays, by area.
+        share = len(members) / max(reflections, 1)
+        found_area = area * share if k in (0, 2) else 0.0
         gap = Gap(
             rays=len(members),
             centre=leak_points[members].mean(axis=0),

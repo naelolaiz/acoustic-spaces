@@ -41,8 +41,8 @@ from acoustic_spaces.engine.simulate import (
     _Edges,
     _pick,
     _seed,
+    _transition,
     coherent_bands,
-    mixing_time,
 )
 from acoustic_spaces.geometry import points_inside
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
@@ -689,12 +689,7 @@ def coverage_map(
     statistical = sim.late.method == "statistical"
     if statistical and volume is None:
         raise ValueError("the statistical late method needs a closed model")
-    if sim.transition_ms is not None:
-        transition = sim.transition_ms * 1e-3
-    elif statistical:
-        transition = mixing_time(volume)
-    else:
-        transition = math.inf
+    transition = _transition(sim, volume)
     rays = settings.rays or sim.late.rays
     reference = 1.0 / (4.0 * math.pi * 100.0)
     details: dict[str, dict[str, float]] = {"map": {"points": float(len(grid))}}

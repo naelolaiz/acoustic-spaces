@@ -154,6 +154,18 @@ def test_transition_time_does_not_change_the_total(diffuse_result) -> None:
         np.testing.assert_allclose(other.parameters().g, response.parameters().g, atol=0.15)
 
 
+@pytest.mark.parametrize(
+    "simulation", [{"transition_ms": 20.0}, {"late": {"method": "statistical"}}]
+)
+def test_early_paths_end_where_a_run_hands_over(simulation) -> None:
+    room = _diffuse_box({"late": {"rays": 500}, "ir_length_s": 0.5, **simulation})
+    result = simulate(room)
+    for listener in ("l0", "l1"):
+        paths, early = early_paths(room, listener=listener), result["s", listener].early
+        assert 0 < len(paths) < 63  # 1 + 6 + 18 + 38 up to the third order
+        np.testing.assert_allclose(np.sort(paths.delay_s), np.sort(early.delay_s))
+
+
 def test_reception_modes_agree_in_a_diffuse_box(diffuse_result) -> None:
     _, rain = diffuse_result
     for reception in ("secondary_sources", "detector"):
@@ -399,6 +411,21 @@ def test_performance_settings_leave_results_unchanged() -> None:
         np.testing.assert_allclose(a[key].late, b[key].late, rtol=1e-12, atol=0)
 
 
+def test_some_sources_and_listeners_draw_as_in_a_run_of_all() -> None:
+    scene = _diffuse_box({"late": {"rays": 2000}, "ir_length_s": 0.5}).scene.model_copy(deep=True)
+    scene.sources.append(
+        scene.sources[0].model_copy(update={"name": "t", "position": (6.0, 4.0, 2.0)})
+    )
+    room = Room.from_scene(scene)
+    full = simulate(room)
+    some = simulate(room, sources=["t"], listeners=["l1"])
+    assert some["t", "l1"].seed == full["t", "l1"].seed
+    assert some.details["t"]["seed"] == full.details["t"]["seed"]
+    swapped = simulate(room, sources=["t", "s"])
+    for key in full.responses:
+        np.testing.assert_allclose(swapped[key].late, full[key].late, rtol=1e-12, atol=0)
+
+
 def test_simulate_checks_the_room() -> None:
     scene = _scene([0.1] * 8, 0.1, source=(2, 2, 1), listeners=[(5, 4, 9)])
     with pytest.raises(ValueError, match="outside the room"):
@@ -448,3 +475,15 @@ def test_particles_spread_reflect_and_fade() -> None:
         trace_particles(room, "piano")
     with pytest.raises(ValueError, match="band"):
         trace_particles(room, band=8)
+
+
+def test_particles_stop_at_their_last_reflection() -> None:
+    from acoustic_spaces.engine import trace_particles
+    from acoustic_spaces.engine.particles import MAX_REFLECTIONS
+
+    room = Room.from_yaml(SHOEBOX_YAML)
+    # The shoebox's particles reach their last reflection 1.5 to 1.8 s in.
+    particles = trace_particles(room, count=200, duration=2.5, frames=11, seed=3)
+    assert particles.order[-1].max() == MAX_REFLECTIONS
+    lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
+    assert np.all((particles.positions >= lo - 1e-9) & (particles.positions <= hi + 1e-9))

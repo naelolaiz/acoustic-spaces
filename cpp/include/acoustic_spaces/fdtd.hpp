@@ -7,9 +7,9 @@
 // Two stencils, each at its Courant limit L (the distance sound travels in a time step,
 // in cells):
 //
-// - the standard rectilinear one: 7 points, the six axial neighbours weighted
-//   g = 1/3, L = 1/sqrt(3); waves along the axes travel up to 1.7 % slow at 8 cells
-//   per wavelength, along the diagonals not at all;
+// - the standard rectilinear one: 7 points, the six axial neighbours weighted g = 1/3,
+//   L = 1/sqrt(3); waves along the axes travel up to 1.7 % slow at 8 cells per
+//   wavelength, along the face diagonals 0.44 %, along the body diagonals not at all;
 // - the interpolated isotropic one: 19 points, the axial neighbours weighted 1/4 and
 //   the twelve edge neighbours 1/8, L = sqrt(3/4); 0.67 % slow at 8 cells per
 //   wavelength, within 0.03 % the same in every direction.

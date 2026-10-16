@@ -67,6 +67,17 @@ def _towards(source: np.ndarray, listener: np.ndarray) -> np.ndarray | None:
     return d / length if length > 0 else None
 
 
+def _transition(settings: SimulationSettings, volume_m3: float | None) -> float:
+    """How long after the direct sound the early paths end (s). Without a set
+    transition the stochastic tracer hands over by order alone, and the statistical
+    method keeps early paths until the mixing time."""
+    if settings.transition_ms is not None:
+        return settings.transition_ms * 1e-3
+    if settings.late.method == "statistical":
+        return mixing_time(volume_m3)
+    return math.inf
+
+
 def _seed(base: int, index: int) -> int:
     return int(np.random.SeedSequence([base, index]).generate_state(1, np.uint64)[0])
 
@@ -145,7 +156,9 @@ def early_paths(
     threads: int | None = None,
 ) -> early_stage.EarlyReflections:
     """Specular and diffracted paths from one source to one listener, without the late
-    part.
+    part: those a simulation keeps as early paths, up to ``scene.simulation``'s
+    ``transition_ms`` after the direct sound (the mixing time with the statistical late
+    method) and within ``ir_length_s``.
 
     Names default to the first source and listener; ``max_order``, ``method`` and
     ``diffraction`` default to ``scene.simulation.early``, ``threads`` to
@@ -167,8 +180,13 @@ def early_paths(
     # A line's or a surface's points are uncorrelated: their paths add in energy.
     coherent = coherent_bands(scene.simulation, model.absorption.shape[1])
     coherent = coherent if len(elements) == 1 else 0
+    transition = _transition(scene.simulation, room.volume_m3)
     parts = []
     for position in elements:
+        cutoff = min(
+            float(np.linalg.norm(target - position)) / room.speed_of_sound() + transition,
+            scene.simulation.ir_length_s,
+        )
         candidates = _candidates(model, position, method or cfg.method, order, cfg.rays, threads)
         paths = early_stage.find_paths(
             model,
@@ -177,7 +195,7 @@ def early_paths(
             candidates,
             speed_of_sound=room.speed_of_sound(),
             air=room.air_attenuation(model.bands),
-            max_delay_s=scene.simulation.ir_length_s,
+            max_delay_s=cutoff,
             directivity=room.directivity(src.name, model.bands),
             orientation=orientation,
             coherent=coherent,
@@ -186,7 +204,7 @@ def early_paths(
             diffraction or cfg.diffraction, position, room, src.name, orientation, coherent
         )
         if found is not None:
-            paths = found.apply(target, paths, scene.simulation.ir_length_s)
+            paths = found.apply(target, paths, cutoff)
         parts.append(apply_grazing(model, target, paths))
     return _shared(parts, model.absorption.shape[1])
 
@@ -321,6 +339,10 @@ def simulate(
     chosen_listeners = _pick(scene.listeners, listeners, "listener")
     if not chosen_listeners:
         raise ValueError("no listener to simulate")
+    # Seeds follow the scene's order, so a run of some sources or listeners gives them
+    # what a run of all does, as coverage maps do.
+    source_index = {source.name: k for k, source in enumerate(scene.sources)}
+    listener_index = {listener.name: k for k, listener in enumerate(scene.listeners)}
 
     model = TraceModel.from_room(room, settings)
     c = room.speed_of_sound()
@@ -339,15 +361,8 @@ def simulate(
     if groups is not None and statistical:
         raise ValueError("face groups need the stochastic ray tracer, not the statistical method")
 
-    # Early paths end `transition` after the direct sound. Without a set transition the
-    # stochastic tracer hands over by order alone, and the statistical method keeps
-    # early paths until the mixing time.
-    if settings.transition_ms is not None:
-        transition = settings.transition_ms * 1e-3
-    elif statistical:
-        transition = mixing_time(volume)
-    else:
-        transition = math.inf
+    # Early paths end `transition` after the direct sound.
+    transition = _transition(settings, volume)
 
     listener_pos = np.array([lis.position for lis in chosen_listeners], dtype=float)
     late_from = {} if late_from is None or statistical else late_from
@@ -480,12 +495,12 @@ def simulate(
         return direct, paths, late
 
     done = {}
-    for s_index, source in enumerate(chosen_sources):
+    for source in chosen_sources:
         src = np.array(source.position, dtype=float)
         elements = source.elements()
         directivity = room.directivity(source.name, model.bands)
         orientation = np.array(source.orientation.rotation())
-        info: dict[str, float] = {"seed": _seed(seed, s_index)}
+        info: dict[str, float] = {"seed": _seed(seed, source_index[source.name])}
         if len(elements) > 1:
             info["elements"] = float(len(elements))
         own_late = source.name not in late_from
@@ -571,7 +586,7 @@ def simulate(
                 transition_s=float(cutoff[k]),
                 volume_m3=volume,
                 speed_of_sound=c,
-                seed=_seed(info["seed"], k + 1),
+                seed=_seed(info["seed"], listener_index[listener.name] + 1),
                 orientation=np.array(listener.orientation.rotation()),
                 late_directions=late.directions,
                 late_directional=late.directional[k]

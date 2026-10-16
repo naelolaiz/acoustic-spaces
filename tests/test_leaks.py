@@ -81,6 +81,30 @@ def test_a_missing_face_is_one_gap_of_its_size(tmp_path: Path) -> None:
     assert "through a gap of about 30 m2 (6.00 x 5.00 m) by " in leaks.summary()
 
 
+def test_gaps_whose_edges_make_no_loops_take_their_share_of_the_reflections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Without loops of open edges, the rays give a gap's area: in a diffuse field the
+    # walls' 66 m2 take 660 reflections, so each of two gaps that 300 rays escape
+    # through is 30 m2, however many leave through the other.
+    from acoustic_spaces.engine import leaks
+
+    monkeypatch.setattr(leaks, "_loop_area", lambda corners, vertices: None)
+    room = _box(tmp_path, without=("floor", "ceiling"))
+    starts = np.column_stack([np.linspace(1.0, 5.0, 300), np.full(300, 2.5), np.full(300, 2.0)])
+    up = np.tile([0.0, 0.0, 1.0], (300, 1))
+    escaped = leaks._Escapes(
+        starts=np.vstack([starts, starts]),
+        directions=np.vstack([up, -up]),
+        passed=np.full(600, -1),
+        bounced=np.ones(600, dtype=bool),
+        source=np.zeros(600, dtype=np.int64),
+    )
+    _, _, gaps = leaks._gaps(room, escaped, 660, 66.0)
+    assert [(gap.kind, gap.rays) for gap in gaps] == [("gap", 300), ("gap", 300)]
+    assert [gap.area_m2 for gap in gaps] == pytest.approx([30.0, 30.0])
+
+
 def test_the_example_classroom_has_its_two_holes_found() -> None:
     # The window's glass is missing (3 x 1.2 m) and the ceiling stops 3 cm short of the
     # north wall (9 m long): each is one gap, the window the one most rays find.
