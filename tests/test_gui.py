@@ -18,12 +18,11 @@ pytest.importorskip("pyvistaqt")
 from PySide6.QtCore import QPoint, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QWheelEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QToolBar  # noqa: E402
+from PySide6.QtWidgets import QApplication, QLabel, QMenu, QMessageBox, QToolBar  # noqa: E402
 
 from acoustic_spaces.audio import write_wav  # noqa: E402
 from acoustic_spaces.examples import example_path, list_examples  # noqa: E402
 from acoustic_spaces.geometry import RoomMesh  # noqa: E402
-from acoustic_spaces.gui.app import USE_AUTO  # noqa: E402
 from acoustic_spaces.gui.document import (  # noqa: E402
     Document,
     EditError,
@@ -35,6 +34,7 @@ from acoustic_spaces.gui.document import (  # noqa: E402
     unique_name,
 )
 from acoustic_spaces.gui.plan_view import grid_step, outline_segments, snap  # noqa: E402
+from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # noqa: E402
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
 from acoustic_spaces.gui.worker import MapJob, SimulationJob  # noqa: E402
 from acoustic_spaces.room import Room  # noqa: E402
@@ -378,10 +378,14 @@ def test_selection_and_forms(window) -> None:
     page.ray_tree.setCurrentText("median")
     performance = window.document.scene.simulation.performance
     assert performance.threads == 2 and performance.ray_tree == "median"
-    assert page.late_device.currentText() == "cpu" and page.late_device.isEnabled()
+    # Not set in the scene: this computer's default, the CPU until tune makes it auto.
+    assert page.late_device.currentText() == "default (cpu)" and page.late_device.isEnabled()
     page.late_device.setCurrentText("both")
     assert window.document.scene.simulation.late.device == "both"
     assert window.document.scene.simulation.wave.device == "auto"
+    page.late_device.setCurrentIndex(0)
+    assert window.document.scene.simulation.late.device is None
+    page.late_device.setCurrentText("both")
     assert window.document.scene.simulation.early.diffraction == "direct"
     assert page.scattering_method.currentText() == "vector" and page.from_size.isChecked()
     assert page.by_band.isChecked() and page.by_band.isEnabled()
@@ -1067,7 +1071,8 @@ def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
 
     timed = []
 
-    def tune(room, *, threads=None, say=None):
+    def tune(room, *, threads=None, say=None, keep=True):
+        assert not keep  # the window saves on OK only
         say("late stage: starting the GPU")
         timed.append(room.scene.name)
         late = [tuning.LateTiming(1.0, {"cpu": 2.0, "gpu": 1.0, "both": 0.8}, "both")]
@@ -1075,7 +1080,13 @@ def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
 
     monkeypatch.setattr(tuning, "tune", tune)
     shown = []
-    monkeypatch.setattr(QMessageBox, "open", lambda box: shown.append(box))
+    monkeypatch.setattr(TuneDialog, "open", lambda dialog: shown.append(dialog))
+
+    def run_tune() -> TuneDialog:
+        window.tune_action.trigger()
+        _wait(qapp, lambda: window.job is None)
+        return shown[-1]
+
     # Once in the Simulation menu, not in the toolbar.
     tune_action = window.tune_action
     menus = {menu.title(): menu for menu in window.findChildren(QMenu)}
@@ -1087,18 +1098,36 @@ def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
     assert timed == [window.document.scene.name] and tune_action.isEnabled()
     assert "Tuned in" in window.messages.toPlainText()
     assert "late stage 1 s both." in window.messages.toPlainText()
-    assert "<pre>" in shown[0].text() and "a GPU | 4 CPU threads" in shown[0].text()
-    # It offers to set the scene's devices, which default to the CPU, to auto.
-    settings = window.document.scene.simulation
-    assert (settings.late.device, settings.wave.device) == ("cpu", "cpu")
-    (use,) = [button for button in shown[0].buttons() if button.text() == USE_AUTO]
-    use.click()
-    settings = window.document.scene.simulation
-    assert (settings.late.device, settings.wave.device) == ("auto", "auto")
-    assert window.document.undo_text() == "run on auto"
-    window.run_tune()
-    _wait(qapp, lambda: window.job is None)
-    assert USE_AUTO not in [button.text() for button in shown[1].buttons()]
+    # The table, auto as this computer's default (ticked); a scene naming no device
+    # follows the default already, so nothing asks about it.
+    dialog = shown[0]
+    texts = "".join(label.text() for label in dialog.findChildren(QLabel))
+    assert "a GPU | 4 CPU threads" in texts
+    assert dialog.make_default.text() == MAKE_DEFAULT and dialog.make_default.isChecked()
+    assert dialog.follow is None
+    # Cancel saves nothing, not even the timings.
+    dialog.reject()
+    assert not tuning.cache_file().exists() and tuning.default_device() == "cpu"
+    assert "Tuning not saved" in window.messages.toPlainText()
+    # OK saves the timings and the default.
+    run_tune().accept()
+    assert tuning.default_device() == "auto"
+    assert tuning.late_choices()[1.0]["device"] == "both"
+    assert tuning.late_choices()[1.0]["from"] == "tune"
+    window.select("simulation")
+    assert window.inspector.pages["simulation"].late_device.currentText() == "default (auto)"
+    assert window.document.scene.simulation.late.device is None
+    # A scene naming its own devices: OK can let it follow the default, and unticked
+    # the default goes back to the CPU.
+    window.document.edit("cpu", lambda data: data["simulation"]["late"].update(device="cpu"))
+    dialog = run_tune()
+    assert dialog.follow.text() == FOLLOW and dialog.follow.isChecked()
+    dialog.make_default.setChecked(False)
+    dialog.accept()
+    assert tuning.default_device() == "cpu"
+    assert window.document.scene.simulation.late.device is None
+    assert window.document.undo_text() == "run on the default device"
+    assert window.inspector.pages["simulation"].late_device.currentText() == "default (cpu)"
 
     # A scene that cannot run times the concert hall example; failures are said.
     def refuse(room, **_):

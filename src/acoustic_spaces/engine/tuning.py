@@ -15,6 +15,10 @@ the computer (its GPU and CPU thread count):
 
 A software GPU (such as lavapipe or SwiftShader) is timed like any other, but ``auto``
 never takes it.
+
+``auto`` applies to scenes set to it, and to scenes that set no device once ``tune``
+has made it this computer's default (:func:`set_default`); otherwise those run on the
+CPU, so that a scene gives the same result on every computer.
 """
 
 from __future__ import annotations
@@ -39,6 +43,8 @@ WAVE_LENGTHS = (0.05, 0.2)
 SCENE = "concert_hall"
 #: How much faster the GPU, or both together, must be for ``auto`` to leave the CPU.
 MARGIN = 1.1
+#: What a scene that sets no device runs on: this computer's default, one of these.
+DEFAULTS = ("cpu", "auto")
 _DEVICES = ("cpu", "gpu", "both")
 
 
@@ -68,17 +74,17 @@ def _read_all() -> dict:
 
 
 def saved() -> dict:
-    """What is kept for this computer: ``{"late": {length: choice}, "wave": costs}``."""
+    """What is kept for this computer: ``{"late": {length: choice}, "wave": costs,
+    "default": device}``."""
     entry = _read_all().get(machine())
     return entry if isinstance(entry, dict) else {}
 
 
-def _keep(stage: str, update: Callable[[dict], dict]) -> None:
+def _keep(key: str, update: Callable[[object], object]) -> None:
     everything = _read_all()
     mine = everything.get(machine())
     mine = mine if isinstance(mine, dict) else {}
-    current = mine.get(stage)
-    mine[stage] = update(current if isinstance(current, dict) else {})
+    mine[key] = update(mine.get(key))
     everything[machine()] = mine
     path = cache_file()
     try:
@@ -86,6 +92,25 @@ def _keep(stage: str, update: Callable[[dict], dict]) -> None:
         path.write_text(json.dumps(everything, indent=1))
     except OSError:
         pass  # a read-only home: the choice is simply not kept
+
+
+def default_device() -> str:
+    """What scenes that set no device run on here: ``cpu``, or ``auto`` once ``tune``
+    made it the default."""
+    value = saved().get("default")
+    return value if value in DEFAULTS else "cpu"
+
+
+def set_default(device: str) -> None:
+    """Make ``device`` (cpu or auto) this computer's default for scenes that set none."""
+    if device not in DEFAULTS:
+        raise ValueError(f"the default device must be cpu or auto, not {device!r}")
+    _keep("default", lambda _: device)
+
+
+def resolve_device(setting: str | None) -> str:
+    """A scene's device setting, or this computer's default when it sets none."""
+    return default_device() if setting is None else setting
 
 
 def length_key(max_time: float) -> str:
@@ -131,7 +156,10 @@ def late_choice(max_time: float) -> dict | None:
 
 def keep_late(max_time: float, choice: dict) -> None:
     """Keep the late stage's ``choice`` for the range of ``max_time``."""
-    _keep("late", lambda late: late | {length_key(max_time): choice})
+    _keep(
+        "late",
+        lambda late: (late if isinstance(late, dict) else {}) | {length_key(max_time): choice},
+    )
 
 
 def wave_costs() -> dict | None:
@@ -213,6 +241,25 @@ class Tuning:
     software: bool = False
     file: Path = field(default_factory=lambda: cache_file())
 
+    def keep(self) -> None:
+        """Keep the choices for this computer, where ``auto`` reads them (:func:`tune`
+        does unless told not to)."""
+        for timing in self.late:
+            keep_late(
+                timing.length,
+                {
+                    "device": timing.device,
+                    "cpu_rate": self.rays / timing.seconds["cpu"],
+                    "gpu_rate": self.rays / timing.seconds["gpu"],
+                    "from": "tune",
+                    "length": timing.length,
+                    "rays": self.rays,
+                    "seconds": timing.seconds,
+                },
+            )
+        if self.wave is not None:
+            keep_wave(self.wave.costs | {"from": "tune", "cells": self.wave.cells})
+
     def summary(self) -> str:
         """The timings as a table, and what ``auto`` will pick."""
         lines = [
@@ -239,7 +286,6 @@ class Tuning:
             lines.append(
                 "this GPU is a software renderer: auto keeps the CPU whatever the timings say"
             )
-        lines.append(f"kept in {self.file}")
         return "\n".join(lines)
 
 
@@ -264,6 +310,7 @@ def tune(
     wave_lengths: Sequence[float] | None = WAVE_LENGTHS,
     threads: int | None = None,
     say: Callable[[str], None] | None = None,
+    keep: bool = True,
 ) -> Tuning:
     """Time the late stage and the wave solver of ``room`` (a loaded
     :class:`~acoustic_spaces.room.Room`) on the CPU and the GPU, keep the fastest
@@ -273,7 +320,8 @@ def tune(
     settings, ``rays`` per band (default: the scene's), once for each response length
     of ``lengths`` (s) on each device. The wave solver runs the scene's wave settings
     (enabled or not) for the two ``wave_lengths``; None leaves it out. ``threads``
-    defaults to the scene's.
+    defaults to the scene's. ``keep=False`` returns the timings without saving them;
+    :meth:`Tuning.keep` saves them later (the editor does that on OK).
     """
     import numpy as np
 
@@ -343,26 +391,14 @@ def tune(
         seconds["both"] = late_run(ray_device.Plan("both", cpu_rate, gpu_rate), length)
         device = _fastest(seconds)
         result.late.append(LateTiming(length, seconds, device))
-        keep_late(
-            length,
-            {
-                "device": device,
-                "cpu_rate": cpu_rate,
-                "gpu_rate": gpu_rate,
-                "from": "tune",
-                "length": length,
-                "rays": rays,
-                "seconds": seconds,
-            },
-        )
 
     if wave_lengths is not None:
         try:
             result.wave = _time_wave(room, model, position, listeners, threads, wave_lengths, say)
         except ValueError as exc:
             result.wave_skipped = str(exc)
-        else:
-            keep_wave(result.wave.costs | {"from": "tune", "cells": result.wave.cells})
+    if keep:
+        result.keep()
     return result
 
 

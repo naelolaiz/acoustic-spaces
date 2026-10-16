@@ -232,10 +232,31 @@ def test_simulate_says_where_the_late_rays_went(monkeypatch) -> None:
     monkeypatch.setattr(gpu, "hardware_gpu", lambda: False)
     room = Room.from_yaml(SHOEBOX)
     sim = room.scene.simulation
-    for device, said in [("cpu", None), ("auto", "the CPU (no hardware GPU)")]:
+    auto = "the CPU (no hardware GPU)"
+    for default, device, said in [
+        ("cpu", "cpu", None),
+        ("cpu", "auto", auto),
+        ("cpu", None, None),
+        ("auto", None, auto),  # a scene naming no device follows this computer's default
+        ("auto", "cpu", None),
+    ]:
+        tuning.set_default(default)
         late = sim.late.model_copy(update={"rays": 300, "device": device})
         messages: list[str] = []
         settings = sim.model_copy(update={"ir_length_s": 0.3, "late": late})
         simulate(room, settings=settings, progress=messages.append)
         where = [m for m in messages if "late rays traced on" in m]
         assert where == ([f"talker: late rays traced on {said}"] if said else [])
+
+
+def test_scenes_naming_no_device_follow_this_computers_default(machine, monkeypatch) -> None:
+    assert tuning.default_device() == "cpu" and tuning.resolve_device(None) == "cpu"
+    tuning.set_default("auto")
+    assert tuning.resolve_device(None) == "auto" and tuning.resolve_device("gpu") == "gpu"
+    with pytest.raises(ValueError, match="cpu or auto"):
+        tuning.set_default("both")
+    # Kept beside the timings, for this computer only.
+    tuning.keep_late(1.0, {"device": "gpu", "cpu_rate": 1, "gpu_rate": 2, "from": "tune"})
+    assert tuning.default_device() == "auto" and tuning.late_choice(1.0)["device"] == "gpu"
+    monkeypatch.setattr(gpu, "gpu_name", lambda: "Another GPU")
+    assert tuning.default_device() == "cpu"

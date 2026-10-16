@@ -72,7 +72,7 @@ acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
 acoustic-spaces map examples/lecture_hall/scene.yaml --plot sti.png --parameter sti
 acoustic-spaces walkthrough examples/gallery_walk/scene.yaml guide=speech.wav --out walk.wav  # a visitor walks
 acoustic-spaces examples                               # the bundled rooms, and where they are
-acoustic-spaces tune                                   # with the gpu extra: time CPU and GPU for device auto
+acoustic-spaces tune --default auto                    # with the gpu extra: run on the fastest device here
 python -m pytest                                       # the test suite
 ```
 

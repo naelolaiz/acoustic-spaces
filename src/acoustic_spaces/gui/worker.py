@@ -92,14 +92,15 @@ class MapJob(SimulationJob):
 
 class TuneJob(SimulationJob):
     """Runs :func:`acoustic_spaces.engine.tuning.tune` (``acoustic-spaces tune``);
-    ``done`` carries the :class:`~acoustic_spaces.engine.tuning.Tuning`."""
+    ``done`` carries the :class:`~acoustic_spaces.engine.tuning.Tuning`, not yet
+    saved: the tune window saves it on OK."""
 
     kind = "tuning"
 
     def compute(self):
         from acoustic_spaces.engine import tuning
 
-        return tuning.tune(self.room, threads=self.threads, say=self._say)
+        return tuning.tune(self.room, threads=self.threads, say=self._say, keep=False)
 
 
 __all__ = ["Cancelled", "MapJob", "SimulationJob", "TuneJob"]

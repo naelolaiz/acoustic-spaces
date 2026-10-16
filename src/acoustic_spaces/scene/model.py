@@ -807,15 +807,16 @@ class LateStage(_Model):
             "carry much less (unbiased); keeps late tails smooth where few rays survive"
         ),
     )
-    device: Literal["cpu", "gpu", "both", "auto"] = Field(
-        default="cpu",
+    device: Literal["cpu", "gpu", "both", "auto"] | None = Field(
+        default=None,
         description=(
             "stochastic ray tracing only: where it traces the rays: cpu, gpu (through "
             "WebGPU: Vulkan, Metal or Direct3D 12, with the gpu extra), both (the two share "
             "the rays; results then vary slightly from run to run) or auto (the fastest "
             "of those on this computer for the response length, as acoustic-spaces tune "
-            "or a short trial found; the CPU when unsure). Sound through partitions and "
-            "material calibration always run on the CPU"
+            "or a short trial found; the CPU when unsure). Not set: this computer's "
+            "default, cpu unless acoustic-spaces tune made it auto. Sound through "
+            "partitions and material calibration always run on the CPU"
         ),
     )
 
@@ -878,12 +879,14 @@ class WaveStage(_Model):
             "only the standard one has the matched layer"
         ),
     )
-    device: Literal["cpu", "gpu", "auto"] = Field(
-        default="cpu",
+    device: Literal["cpu", "gpu", "auto"] | None = Field(
+        default=None,
         description=(
             "where it steps the grid: cpu, gpu (through WebGPU: Vulkan, Metal or Direct3D 12, "
             "with the gpu extra) or auto (a hardware GPU when wgpu finds one, else the CPU; "
-            "once acoustic-spaces tune timed both, whichever is faster for the run's length)"
+            "once acoustic-spaces tune timed both, whichever is faster for the run's "
+            "length). Not set: this computer's default, cpu unless acoustic-spaces tune "
+            "made it auto"
         ),
     )
 

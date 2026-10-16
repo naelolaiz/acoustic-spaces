@@ -17,6 +17,7 @@ def test_info(capsys: pytest.CaptureFixture[str]) -> None:
     assert "acoustic_spaces" in out
     assert "compiled core: available" in out
     assert "CPU cores for ray tracing: " in out
+    assert "device for scenes that name none: cpu" in out
     assert "device choices for auto: none yet" in out
 
 
@@ -26,6 +27,18 @@ def test_tune_needs_a_gpu(capsys, monkeypatch) -> None:
     monkeypatch.setattr(gpu, "_adapter", lambda: None)
     assert main(["tune", str(SHOEBOX), "--rays", "10"]) == 1
     assert "error: tune compares the CPU with a GPU" in capsys.readouterr().err
+
+
+def test_tune_switches_the_default_back_to_the_cpu(capsys, monkeypatch) -> None:
+    from acoustic_spaces.engine import gpu, tuning
+
+    tuning.set_default("auto")
+    monkeypatch.setattr(gpu, "_adapter", lambda: None)  # times nothing, so needs no GPU
+    assert main(["tune", "--default", "cpu"]) == 0
+    assert "default device is now cpu" in capsys.readouterr().out
+    assert tuning.default_device() == "cpu"
+    with pytest.raises(SystemExit):
+        main(["tune", "--default", "gpu"])
 
 
 def test_validate_example(capsys: pytest.CaptureFixture[str]) -> None:

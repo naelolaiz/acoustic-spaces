@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from acoustic_spaces import __version__, native_available
 from acoustic_spaces.engine.ray_device import DEVICES, TRIAL_FLAG
+from acoustic_spaces.engine.tuning import DEFAULTS
 from acoustic_spaces.gltf import PARTICLE_COUNT, SLOW_MOTION
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
@@ -82,6 +83,7 @@ def _cmd_info(_: argparse.Namespace) -> int:
     print(f"GPU: {gpu_name() or 'none (needs the gpu extra and a driver)'}")
     from acoustic_spaces.engine import tuning
 
+    print(f"device for scenes that name none: {tuning.default_device()} ({DEFAULT_HELP})")
     late = tuning.late_choices()
     if late or tuning.wave_costs():
         print(f"device choices for auto ({tuning.cache_file()}):")
@@ -99,6 +101,10 @@ def _cmd_tune(args: argparse.Namespace) -> int:
     from acoustic_spaces.engine import tuning
     from acoustic_spaces.examples import example_path
 
+    if args.default == "cpu":
+        tuning.set_default("cpu")
+        print(f"this computer's default device is now cpu (kept in {tuning.cache_file()})")
+        return 0
     room = _load_room(args.scene or str(example_path(tuning.SCENE)))
     if room is None or not _print_checks(room):
         return 1
@@ -115,6 +121,15 @@ def _cmd_tune(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(result.summary())
+    print(f"timings kept in {result.file}")
+    if args.default:
+        tuning.set_default(args.default)
+        print("this computer's default device is now auto: scenes that name none take the above")
+    else:
+        print(
+            f"this computer's default device: {tuning.default_device()} "
+            "(--default auto makes scenes that name none take the above)"
+        )
     return 0
 
 
@@ -633,6 +648,8 @@ def _performance_options(args: argparse.Namespace) -> dict[str, tuple[str, objec
         "--ray-tree": ("performance.ray_tree", args.ray_tree),
     }
 
+
+DEFAULT_HELP = "acoustic-spaces tune --default auto|cpu changes it"
 
 TRIAL_HELP = (
     "with simulation.late.device auto and no choice from acoustic-spaces tune for the "
@@ -1817,6 +1834,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tune.add_argument("--no-wave", action="store_true", help="leave the wave solver out")
     tune.add_argument("--threads", type=int, help="CPU threads (default: the scene's)")
+    tune.add_argument(
+        "--default",
+        choices=DEFAULTS,
+        help=(
+            "this computer's device for scenes that name none (simulation.late.device and "
+            "simulation.wave.device not set): auto times first and then takes the fastest; "
+            "cpu switches back at once, without timing anything"
+        ),
+    )
     tune.set_defaults(func=_cmd_tune)
 
     edit = sub.add_parser("edit", help="open the graphical editor (needs the gui extra)")

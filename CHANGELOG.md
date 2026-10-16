@@ -9,8 +9,13 @@
   at the scene's ray count (`--rays`), and the wave solver on the CPU and the GPU. It
   prints the times and keeps the fastest for each in the user cache folder
   (`acoustic-spaces/devices.json`); `acoustic-spaces info` shows them. In the editor:
-  Simulation > Tune CPU and GPU…, which offers to set the open scene's devices to
-  `auto` (they stay `cpu` by default).
+  Simulation > Tune CPU and GPU…, whose window saves on OK only (Cancel saves nothing).
+- A per-computer default device: `simulation.late.device` and `simulation.wave.device`
+  may be left out (the editor's **Run on**: *default*), and then follow this computer's
+  default, `cpu` unless `tune --default auto` or the editor's tune window (a ticked
+  check box) made it `auto`; `tune --default cpu` switches back. Scenes that name a
+  device keep it. Scenes the editor saved before name `cpu`; the tune window offers to
+  let the open one follow the default.
 - The late stage's `auto` takes the choice for the run's response length. Without one,
   its trial traces the run's own length (it traced at most 0.25 s), and its choice is
   kept for that range of lengths. The 3.0.0 file `late-device.json` is no longer read.

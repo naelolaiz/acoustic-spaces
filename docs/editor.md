@@ -44,21 +44,24 @@ The editor works on the same scene files as the command line:
 - The scene tree's **Simulation** entry has the settings of
   [Simulation](simulation.md): the early part's method, highest order, rays,
   diffraction and **In pressure up to**; the late part's method, rays per band,
-  reception, ray splitting and **Run on** (the CPU, a GPU, or both); the scattering
-  model; the wave solver, its highest band and where it runs; **Performance** (CPU
+  reception, ray splitting and **Run on** (*default*: this computer's default, the CPU
+  unless the tune window made it *auto*; or the CPU, a GPU, both, or *auto*); the
+  scattering model; the wave solver, its highest band and where it runs; **Performance** (CPU
   threads and the ray search tree); and, under **Response**, the length, the sample
   rate, octave or third-octave **Bands**, the early-to-late transition and the seed.
   The scene's own entry sets the air's temperature, humidity and pressure, and shows
   the volume and the rooms the model holds.
 - **Simulation > Tune CPU and GPU…** times the CPU and the GPU on the open scene (or
-  on the concert hall example when the scene cannot run as it is) and keeps
-  the fastest on this computer for **Run on** and the wave solver's device set to
-  *auto*, as `acoustic-spaces tune` does (see
+  on the concert hall example when the scene cannot run as it is), as
+  `acoustic-spaces tune` does (see
   [Tuning the devices for a computer](simulation.md#tuning-the-devices-for-a-computer);
-  needs the `gpu` extra). It runs in the background and shows the table of times when
-  done; you need it once per computer. Both settings default to the CPU, so that a
-  scene gives the same result everywhere: **Use auto for this scene** in that window
-  sets them to *auto* for the open scene (an edit like any other, undone with Undo).
+  needs the `gpu` extra). It runs in the background, once per computer, and then shows
+  the table of times with a check box, **Make auto the default on this computer**
+  (ticked): scenes whose **Run on** is *default* then run on the fastest device found,
+  in the editor and on the command line. When the open scene names its own devices, a
+  second check box (ticked) sets its **Run on** back to *default* (an edit like any
+  other, undone with Undo). **OK** saves the timings and these choices; **Cancel**
+  saves nothing, not even the timings.
 - **Simulation > Run coverage map** (F6) maps every source over the audience area (see
   [Coverage maps](coverage-maps.md#coverage-maps)). The **Coverage map** panel shows any parameter
   and band from above, for one source or all of them together, and **Map in 3D** lays

@@ -22,6 +22,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QDockWidget,
     QFileDialog,
     QFrame,
@@ -55,14 +56,13 @@ from acoustic_spaces.gui.map_view import MapPanel
 from acoustic_spaces.gui.plan_view import PlanView
 from acoustic_spaces.gui.results_view import ResultsPanel
 from acoustic_spaces.gui.tree import SceneTree
+from acoustic_spaces.gui.tune_dialog import TuneDialog
 from acoustic_spaces.gui.viewport import Viewport
 from acoustic_spaces.gui.worker import MapJob, SimulationJob, TuneJob
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
 TITLE = "Acoustic Spaces editor"
-#: The tune dialog's button that sets the open scene's devices to auto.
-USE_AUTO = "Use auto for this scene"
 SCENE_FILTER = "Scenes (*.yaml *.yml)"
 MODEL_FILTER = f"Models ({' '.join('*' + s for s in SUPPORTED_SUFFIXES)})"
 GLB_FILTER = "glTF binary (*.glb)"
@@ -1064,41 +1064,42 @@ class MainWindow(QMainWindow):
         late = ", ".join(f"{t.length:g} s {t.device}" for t in result.late)
         wave = f"; wave solver {tuning.wave_pick(result.wave.costs)}" if result.wave else ""
         self.log(f"Tuned in {elapsed:.1f} s: late stage {late}{wave}.")
-        box = QMessageBox(
-            QMessageBox.Icon.Information,
-            "Tune CPU and GPU",
-            "",
-            QMessageBox.StandardButton.Ok,
-            self,
-        )
-        box.setTextFormat(Qt.TextFormat.RichText)
-        summary = result.summary().replace("&", "&amp;").replace("<", "&lt;")
-        box.setText(
-            f"<p>Device <i>auto</i> now takes the fastest on this computer:</p><pre>{summary}</pre>"
-        )
-        # The scene's devices default to the CPU, which tune leaves as they are.
         settings = self.document.scene.simulation
-        if settings.late.device != "auto" or settings.wave.device != "auto":
-            use = box.addButton(USE_AUTO, QMessageBox.ButtonRole.AcceptRole)
-            use.setToolTip("Set Run on (late reverberation) and the wave solver's device to auto")
-            use.clicked.connect(self.use_auto_devices)
-        box.open()
+        dialog = TuneDialog(result, settings.late.device, settings.wave.device, self)
+        dialog.finished.connect(lambda code: self._tune_answered(dialog, code))
+        dialog.open()
 
-    def use_auto_devices(self) -> None:
-        """Set the scene's late reverberation and wave solver to run on device auto: the
-        fastest on this computer, as tune found."""
+    def _tune_answered(self, dialog: TuneDialog, code: int) -> None:
+        """Save what the tune window asked for on OK; nothing on Cancel."""
+        dialog.deleteLater()
+        if code != QDialog.DialogCode.Accepted.value:
+            self.log("Tuning not saved: device auto and the default are as they were.")
+            return
+        dialog.timings.keep()
+        tuning.set_default(dialog.default())
+        self.log(
+            f"Timings saved in {dialog.timings.file}. This computer's default device: "
+            f"{dialog.default()}."
+        )
+        if dialog.follows():
+            self.follow_default_device()
+        self.inspector.refresh()
+
+    def follow_default_device(self) -> None:
+        """Let the scene's late reverberation and wave solver run on this computer's
+        default device (Run on: default) instead of devices of their own."""
 
         def change(data: dict) -> None:
-            simulation = data.setdefault("simulation", {})
-            simulation.setdefault("late", {})["device"] = "auto"
-            simulation.setdefault("wave", {})["device"] = "auto"
+            simulation = data.get("simulation", {})
+            simulation.get("late", {}).pop("device", None)
+            simulation.get("wave", {}).pop("device", None)
 
         try:
-            self.document.edit("run on auto", change)
+            self.document.edit("run on the default device", change)
         except EditError as exc:
             self._refused(str(exc))
             return
-        self.log("Late reverberation and the wave solver now run on auto.")
+        self.log("Late reverberation and the wave solver now run on this computer's default.")
 
     def _job_kind(self) -> str:
         return self.job.kind if self.job is not None else "simulation"

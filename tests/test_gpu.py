@@ -119,7 +119,7 @@ def test_wave_responses_on_the_gpu_match_the_cpu() -> None:
 
 
 def test_the_device_setting_picks_the_cpu_or_the_gpu(monkeypatch) -> None:
-    assert WaveStage().device == "cpu"
+    assert WaveStage().device is None  # this computer's default
     assert not gpu.use_gpu("cpu")
     with pytest.raises(ValueError, match="cpu, gpu or auto"):
         gpu.use_gpu("tpu")
@@ -339,9 +339,16 @@ def test_tune_times_each_device_and_auto_takes_its_choices(capsys, device_choice
     from acoustic_spaces.cli import main
     from acoustic_spaces.engine import tuning
 
-    assert main(["tune", str(SHOEBOX), "--rays", "200", "--lengths", "0.1", "0.3"]) == 0
+    room = Room.from_yaml(SHOEBOX)
+    # Without keep, nothing is saved (the editor saves on OK).
+    result = tuning.tune(room, rays=100, lengths=[0.1], wave_lengths=None, keep=False)
+    assert [timing.length for timing in result.late] == [0.1] and result.wave is None
+    assert not device_choices.exists()
+    argv = ["tune", str(SHOEBOX), "--rays", "200", "--lengths", "0.1", "0.3", "--default", "auto"]
+    assert main(argv) == 0
     out = capsys.readouterr().out
     assert "late stage, 200 rays per band (Shoebox" in out and str(device_choices) in out
+    assert "default device is now auto" in out and tuning.default_device() == "auto"
     assert "wave solver, " in out and "auto: the " in out
     # A software GPU (lavapipe, SwiftShader) is timed, but auto keeps the CPU.
     assert ("software renderer" in out) == (not gpu.hardware_gpu())
