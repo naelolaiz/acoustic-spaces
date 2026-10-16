@@ -300,8 +300,9 @@ class Room:
         out.extend(self._unreachable())
         if r.inconsistent_edges:
             out.append(
-                f"{r.inconsistent_edges} edges join faces with opposite orientation; "
-                "absorption is two-sided, so this only matters for the volume"
+                f"{r.inconsistent_edges} edges join faces with opposite orientation; the "
+                "rooms, the volume and the inside checks come from the sides of the faces, "
+                "so only the direction of the normals is unknown"
             )
         for key in self.unused_assignments:
             out.append(f"assignment {key!r} matches no name in the geometry")

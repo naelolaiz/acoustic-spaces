@@ -135,6 +135,68 @@ def test_inspect(capsys: pytest.CaptureFixture[str]) -> None:
     assert row.split()[1:9] == ["85.0"] * 8
 
 
+def test_inspect_gives_the_air_volume_of_walls_drawn_as_a_shell(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from acoustic_spaces.geometry import box_mesh
+
+    # A closed box inside a closed box, as a solid wall is drawn: the report counts the
+    # cavity between them as the room, the sources and the listener stand in the inner one.
+    vertices, faces = [], []
+    for low, size in (((0, 0, 0), (4.0, 3.0, 2.5)), ((1, 1, 1), (1.0, 1.0, 1.0))):
+        mesh = box_mesh(size)
+        faces += [f"f {' '.join(str(len(vertices) + 1 + i) for i in f)}" for f in mesh.faces]
+        vertices += [f"v {x} {y} {z}" for x, y, z in mesh.vertices + low]
+    obj = tmp_path / "shell.obj"
+    obj.write_text("\n".join([*vertices, "g walls", *faces]) + "\n", encoding="utf-8")
+    data = {
+        "geometry": {"file": obj.as_posix()},
+        "materials": {"m": {"absorption": [0.2] * 8}},
+        "default_material": "m",
+        "sources": [{"name": "s", "position": [1.5, 1.5, 1.5]}],
+        "listeners": [{"name": "l", "position": [1.7, 1.6, 1.4]}],
+    }
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(data), encoding="utf-8")
+    assert main(["inspect", str(scene)]) == 0
+    out = capsys.readouterr().out
+    assert "volume 29.00 m3" in out  # the cavity, as the report counts it
+    assert "air volume 1.00 m3" in out
+    # An ordinary room has one volume only.
+    assert main(["inspect", str(SHOEBOX)]) == 0
+    assert "air volume" not in capsys.readouterr().out
+
+
+def test_inspect_of_an_open_model_with_a_closed_room_in_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from acoustic_spaces.geometry import box_mesh
+
+    # A closed box and a stray panel outside it: the model is not closed (the panel has
+    # open edges) while the box still encloses a room, and inspect says what is open.
+    mesh = box_mesh((4.0, 3.0, 2.5))
+    vertices = [f"v {x} {y} {z}" for x, y, z in mesh.vertices]
+    faces = [f"f {' '.join(str(i + 1) for i in f)}" for f in mesh.faces]
+    n = len(vertices)
+    vertices += [f"v 10 {y} {z}" for y, z in ((0, 0), (1, 0), (1, 1), (0, 1))]
+    faces += [f"f {n + 1} {n + 2} {n + 3} {n + 4}"]
+    obj = tmp_path / "leaky.obj"
+    obj.write_text("\n".join([*vertices, "g walls", *faces]) + "\n", encoding="utf-8")
+    data = {
+        "geometry": {"file": obj.as_posix()},
+        "materials": {"m": {"absorption": [0.2] * 8}},
+        "default_material": "m",
+        "sources": [{"name": "s", "position": [1.0, 1.0, 1.0]}],
+        "listeners": [{"name": "l", "position": [2.0, 1.5, 1.2]}],
+    }
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(data), encoding="utf-8")
+    assert main(["inspect", str(scene)]) == 0
+    out = capsys.readouterr().out
+    assert "open:" in out
+    assert "air volume" not in out
+
+
 def test_inspect_shows_third_octave_data_in_octaves(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

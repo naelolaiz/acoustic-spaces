@@ -196,6 +196,10 @@ def test_calibration_checks_its_measurements():
         calibrate(scene, {})
     with pytest.raises(ValueError, match="at least one round"):
         calibrate(scene, {("s", "a"): parameters}, rounds=0)
+    # The prior takes the logarithm of the absorption, so the lower bound is above 0.
+    for bounds in [(0.0, 0.99), (0.5, 0.5), (0.01, 1.0)]:
+        with pytest.raises(ValueError, match="bounds must be 0 < low < high < 1"):
+            calibrate(scene, {("s", "a"): parameters}, bounds=bounds)
 
 
 def test_at_most_sixteen_materials_at_once():

@@ -6,9 +6,10 @@
   through a 48 kHz response.
 - :func:`auralize`: the sources of a simulation each playing their own signal, heard at
   one listener in a spatial format (mono, binaural, Ambisonics, loudspeakers), summed.
-- :class:`Convolver`: the compiled real-time convolver, block by block. It partitions
-  the response uniformly into blocks and multiplies in the frequency domain, so the only
-  latency is the block itself; nothing allocates while it runs.
+- :class:`Convolver`: the compiled real-time convolver, block by block. It divides the
+  response into partitions that grow along it, from the block size up to 8192 frames,
+  and multiplies in the frequency domain, so the only latency is the block itself;
+  nothing allocates while it runs.
 - :func:`play`: a signal, or live input, through a response on the sound card (needs the
   ``measure`` extra: sounddevice); or through any block processor with one input, such
   as :class:`~acoustic_spaces.headtracking.HeadTrackedBinaural`.

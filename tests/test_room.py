@@ -213,6 +213,15 @@ def test_open_model_skips_volume_and_inside_checks(tmp_path: Path) -> None:
         room.reverberation_time()
 
 
+def test_inconsistent_edges_are_not_said_to_matter_for_the_volume() -> None:
+    room = Room.from_yaml(SHOEBOX)
+    room.report.inconsistent_edges = 3  # a part that cannot be oriented, as a Moebius panel
+    (warning,) = room.warnings()
+    assert warning.startswith("3 edges join faces with opposite orientation")
+    assert "only the direction of the normals is unknown" in warning
+    assert "only matters for the volume" not in warning
+
+
 @pytest.mark.parametrize(
     "scene", sorted(EXAMPLES.glob("*/scene.yaml")), ids=lambda p: p.parent.name
 )

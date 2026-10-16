@@ -188,6 +188,10 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     print(f"geometry: {scene.geometry.describe()}")
     for line in room.report.summary().splitlines():
         print(f"  {line}")
+    if len(room.air_cells) and room.air_cells.tolist() != room.mesh.cells().rooms.tolist():
+        # The air is not what the report counts as the rooms (walls drawn as a closed
+        # shell inside another): the reverberation times below are of this volume.
+        print(f"  air volume {room.volume_m3:.2f} m3 (where the sources and listeners stand)")
 
     width = max([len(n) for n in room.material_names] + [12]) + 2
     print("\nmaterials (absorption per octave band, area)")

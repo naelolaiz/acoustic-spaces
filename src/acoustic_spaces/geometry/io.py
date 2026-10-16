@@ -100,6 +100,8 @@ def load_mesh(
         raise FileNotFoundError(f"geometry file not found: {path}")
     if space is not None and suffix != ".ifc":
         raise ValueError(f"space names a room of an IFC file; {path.name} is not one")
+    if up_axis not in (None, "y", "z"):
+        raise ValueError(f"up_axis must be 'y' or 'z', got {up_axis!r}")
 
     file_scale = file_up = None
     if suffix == ".obj":
@@ -122,8 +124,9 @@ def load_mesh(
     if up_axis == "y":
         # (x, y, z) with y up -> (x, -z, y) with z up; a rotation, so winding is kept.
         vertices = np.column_stack([vertices[:, 0], -vertices[:, 2], vertices[:, 1]])
-    elif up_axis != "z":
-        raise ValueError(f"up_axis must be 'y' or 'z', got {up_axis!r}")
+    elif up_axis == "x":
+        # Only a Collada file records +x up: (x, y, z) -> (-y, -z, x), right being -y.
+        vertices = np.column_stack([-vertices[:, 1], -vertices[:, 2], vertices[:, 0]])
     return RoomMesh(vertices, mesh.faces, mesh.face_labels, mesh.labels)
 
 
@@ -661,9 +664,9 @@ def read_collada(path: Path) -> RoomMesh:
     return _read_collada(path)[0]
 
 
-def _read_collada(path: Path) -> tuple[RoomMesh, float, str | None]:
+def _read_collada(path: Path) -> tuple[RoomMesh, float, str]:
     """The faces of a Collada file's scene, labelled by material and geometry name, the
-    metres per unit and the up axis the file records (None for X_UP: give up_axis).
+    metres per unit and the up axis the file records ("x", "y" or "z").
 
     Triangles, polylists and polygons are read (lines are left out, and holes in
     polygons); nodes keep their matrices, translations, rotations and scales, and
@@ -709,8 +712,10 @@ def _read_collada(path: Path) -> tuple[RoomMesh, float, str | None]:
         visit(node, np.eye(4), 0)
     unit = root.find("asset/unit")
     scale = float(unit.get("meter", 1.0)) if unit is not None else 1.0
-    up = {"Y_UP": "y", "Z_UP": "z"}.get((root.findtext("asset/up_axis") or "Y_UP").strip())
-    return builder.build(path), scale, up
+    up = (root.findtext("asset/up_axis") or "Y_UP").strip()
+    if up not in ("X_UP", "Y_UP", "Z_UP"):
+        raise ValueError(f"{path}: unknown up axis {up!r}; use X_UP, Y_UP or Z_UP")
+    return builder.build(path), scale, up[0].lower()
 
 
 def _numbers(element, kind=float) -> np.ndarray:

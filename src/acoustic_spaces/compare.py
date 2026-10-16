@@ -2,8 +2,8 @@
 
 A model is checked against the room it stands for by comparing its parameters with
 those measured there, octave band by octave band, in just noticeable differences (JNDs,
-ISO 3382-1:2009, annex A, table A.1): a difference of less than one JND is too small to
-be heard.
+ISO 3382-1:2009, annex A, table A.1; annex B for IACC): a difference of less than one
+JND is too small to be heard.
 
 - :func:`compare_impulse_responses` analyses two impulse responses, each at its own
   sample rate, as :func:`~acoustic_spaces.parameters.from_impulse_response` does.
@@ -40,11 +40,11 @@ from acoustic_spaces.parameters import (
     from_impulse_response,
 )
 
-#: Just noticeable differences (ISO 3382-1:2009, annex A, table A.1), per parameter: the
-#: JND, and whether it is a fraction of the measured value (the decay times) rather than
-#: a step in the parameter's own unit (dB, s, or none for D50). The directional decay
-#: times take that of T30. The standard gives none for LJ, IACC and stage support, which
-#: are not compared.
+#: Just noticeable differences (ISO 3382-1:2009, annex A, table A.1; annex B, table B.1
+#: for IACC), per parameter: the JND, and whether it is a fraction of the measured value
+#: (the decay times) rather than a step in the parameter's own unit (dB, s, or none for
+#: D50, LF, LFC and IACC). The directional decay times take that of T30. The standard
+#: gives none for LJ and stage support, which are not compared.
 JND: dict[str, tuple[float, bool]] = {
     "edt": (0.05, True),
     "t20": (0.05, True),
@@ -56,6 +56,8 @@ JND: dict[str, tuple[float, bool]] = {
     "g": (1.0, False),
     "lf": (0.05, False),
     "lfc": (0.05, False),
+    "iacc_e": (0.075, False),
+    "iacc_l": (0.075, False),
     "t30_x": (0.05, True),
     "t30_y": (0.05, True),
     "t30_z": (0.05, True),
@@ -294,7 +296,8 @@ def compare_parameters(simulated: RoomParameters, measured: RoomParameters) -> C
     a band with no parameter at all decays by less than 20 dB, G alone is NaN without a
     reference, and a decay time alone when the decay does not reach the bottom of its fit
     range (:func:`compare_impulse_responses` also tells when the noise is in the way).
-    LF, LFC and the directional decay times are compared where both sides give them.
+    LF, LFC, IACC and the directional decay times are compared where both sides give
+    them.
     """
     return _compare(simulated, measured)
 

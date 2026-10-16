@@ -39,8 +39,8 @@ export it with material names. Set `geometry.units` (`m`, `cm`, `mm`, `in`, `ft`
 and, when the file is +y up (Blender's OBJ default, glTF always), `geometry.up_axis: y`.
 Without `units`, a DXF file is read in the units its header records (`$INSUNITS`), an
 IFC or Collada file in the units it records, and any other file in metres; a Collada
-file's up axis is the one it records. SketchUp's Collada export (`.dae`) is read as it is
-(see [`examples/rehearsal_room`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/examples/rehearsal_room/scene.yaml)).
+file's up axis is the one it records (X_UP, Y_UP or Z_UP). SketchUp's Collada export
+(`.dae`) is read as it is (see [`examples/rehearsal_room`](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/examples/rehearsal_room/scene.yaml)).
 
 SketchUp files can also be read as they are, with the `sketchup` extra: openskp reads
 them without SketchUp, in metres. That reader is young. Faces are matched to materials
@@ -233,7 +233,9 @@ assignments:
   so is any space it opens into through surfaces that let sound through. The faces
   between two rooms have a room on both sides and reflect and absorb in both.
   `inspect` lists the rooms ("closed, 2 rooms of 48.00, 72.00 m3"), the editor too,
-  and the volume is theirs together.
+  and the volume is theirs together. When the sources and listeners stand in air that
+  the model's rooms do not include (walls drawn as a closed shell inside another),
+  `inspect` also gives that "air volume", the one its reverberation times use.
 - Early reflections pass through those surfaces, keeping the share that passes at each;
   through openings they pass unchanged. The rays of the late part that hit a partition
   go on as two: the reflection, and a copy behind it with the share that passes, so even
