@@ -4,9 +4,10 @@
 
 Validation against two measured rooms, third-octave bands, vector-based scattering,
 sources with their own spectra and line, surface and array sources, sound through walls
-and between coupled rooms, fitting materials to measurements, a GPU path for the wave
-solver, edge diffraction over two edges, early reflections in pressure at low
-frequencies, IFC and Collada models, material libraries, a leak finder and walkthroughs.
+and between coupled rooms, fitting materials to measurements, ray tracing 7 to 8 times
+faster, the late stage and the wave solver on a GPU, edge diffraction over two edges,
+early reflections in pressure at low frequencies, IFC and Collada models, material
+libraries, a leak finder and walkthroughs.
 
 Simulations scatter by vector and by the size of each surface, and trace rays of their
 own for each band, so rooms with smooth walls decay faster than in 2.0.0 and closer to

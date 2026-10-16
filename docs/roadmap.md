@@ -44,6 +44,8 @@ v3, version 3.0.0:
   a matched layer round open models.
 - [x] A GPU path for the wave solver through WebGPU (AMD, NVIDIA, Intel and Apple GPUs
   alike).
+- [x] Ray tracing 7 to 8 times faster, and the late stage's rays on a GPU too, alone or
+  sharing them with the CPU.
 - [x] A wave solver stencil with less than half the dispersion, the same in every
   direction.
 - [x] Second-order edge diffraction: the direct sound over two edges, checked against
