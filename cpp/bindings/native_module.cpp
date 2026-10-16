@@ -4,6 +4,7 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
+#include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
@@ -141,6 +142,40 @@ nb::tuple intersect(const as::Bvh &bvh, Points origins, Points directions, InArr
     return nb::make_tuple(to_numpy(std::move(t), {n}), to_numpy(std::move(face), {n}));
 }
 
+nb::ndarray<nb::numpy, bool> occluded(const as::Bvh &bvh, Points origins, Points directions,
+                                      InArray t_max, Indices ignore) {
+    const std::size_t n = origins.shape(0);
+    if (directions.shape(0) != n || t_max.shape(0) != n || ignore.shape(0) != n) {
+        throw std::invalid_argument("occluded: inputs must have the same length");
+    }
+    std::vector<std::uint8_t> blocked(n);
+    {
+        nb::gil_scoped_release release;
+        as::parallel_for(n, 0, [&](std::size_t begin, std::size_t end, std::size_t) {
+            for (std::size_t i = begin; i < end; ++i) {
+                const as::Vec3 o{origins(i, 0), origins(i, 1), origins(i, 2)};
+                const as::Vec3 d{directions(i, 0), directions(i, 1), directions(i, 2)};
+                blocked[i] = bvh.occluded(o, d, t_max(i), ignore(i)) ? 1 : 0;
+            }
+        });
+    }
+    auto *owned = new std::vector<std::uint8_t>(std::move(blocked));
+    nb::capsule owner(owned,
+                      [](void *p) noexcept { delete static_cast<std::vector<std::uint8_t> *>(p); });
+    // NumPy reads the 0 and 1 bytes as its bools.
+    const std::size_t shape[1] = {n};
+    return nb::ndarray<nb::numpy, bool>(reinterpret_cast<bool *>(owned->data()), 1, shape, owner);
+}
+
+nb::dict bvh_layout(const as::Bvh &bvh) {
+    nb::dict out;
+    bvh.layout([&](const char *name, const auto &values) {
+        using T = typename std::decay_t<decltype(values)>::value_type;
+        out[name] = to_numpy(std::vector<T>(values), {values.size()});
+    });
+    return out;
+}
+
 using Flags = nb::ndarray<const std::uint8_t, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
 
 nb::ndarray<nb::numpy, std::int64_t> specular_sequences(const as::Bvh &bvh, InArray source,
@@ -165,6 +200,39 @@ nb::ndarray<nb::numpy, std::int64_t> specular_sequences(const as::Bvh &bvh, InAr
 
 using FaceRooms = nb::ndarray<const std::int64_t, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
 
+// A source's directivity (see as::Directivity) over `bands` bands: the first-order
+// pattern's a per band (empty: omni), a table of weights (elevations x azimuths x bands;
+// empty: none) and the source's frame (forward, left and up in the columns).
+as::Directivity source_directivity(const std::string &fn, std::size_t bands,
+                                   InArray directivity_a, Matrix orientation,
+                                   Kernels directivity_table) {
+    if (directivity_a.shape(0) != 0 && directivity_a.shape(0) != bands) {
+        throw std::invalid_argument(fn + ": directivity_a must have one per band");
+    }
+    if (orientation.shape(0) != 3 || orientation.shape(1) != 3) {
+        throw std::invalid_argument(fn + ": orientation must be 3 x 3");
+    }
+    const std::size_t table_size = directivity_table.size();
+    if (table_size != 0 &&
+        (directivity_table.shape(0) < 2 || directivity_table.shape(2) != bands)) {
+        throw std::invalid_argument(
+            fn + ": directivity_table must be elevations (2 or more) x azimuths x bands");
+    }
+    as::Directivity directivity;
+    directivity.a.assign(directivity_a.data(), directivity_a.data() + directivity_a.shape(0));
+    if (table_size != 0) {
+        directivity.table.assign(directivity_table.data(),
+                                 directivity_table.data() + table_size);
+        directivity.elevations = directivity_table.shape(0);
+        directivity.azimuths = directivity_table.shape(1);
+    }
+    // Columns: the source's forward, left and up axes in room coordinates.
+    directivity.forward = {orientation(0, 0), orientation(1, 0), orientation(2, 0)};
+    directivity.left = {orientation(0, 1), orientation(1, 1), orientation(2, 1)};
+    directivity.up = {orientation(0, 2), orientation(1, 2), orientation(2, 2)};
+    return directivity;
+}
+
 // The room, source and directivity part of a stochastic scene.
 as::StochasticScene stochastic_scene(const char *name, const as::Bvh &bvh, InArray source,
                                      InArray directivity_a, Matrix orientation,
@@ -185,33 +253,11 @@ as::StochasticScene stochastic_scene(const char *name, const as::Bvh &bvh, InArr
         throw std::invalid_argument(
             fn + ": surface_size must be faces x 2 (or 0 x 2), with band_hz one per band");
     }
-    if (directivity_a.shape(0) != 0 && directivity_a.shape(0) != bands) {
-        throw std::invalid_argument(fn + ": directivity_a must have one per band");
-    }
-    if (orientation.shape(0) != 3 || orientation.shape(1) != 3) {
-        throw std::invalid_argument(fn + ": orientation must be 3 x 3");
-    }
-    const std::size_t table_size = directivity_table.size();
-    if (table_size != 0 &&
-        (directivity_table.shape(0) < 2 || directivity_table.shape(2) != bands)) {
-        throw std::invalid_argument(
-            fn + ": directivity_table must be elevations (2 or more) x azimuths x bands");
-    }
     as::StochasticScene scene;
     scene.bvh = &bvh;
     scene.source = vec3(source, "source");
-    auto &directivity = scene.directivity;
-    directivity.a.assign(directivity_a.data(), directivity_a.data() + directivity_a.shape(0));
-    if (table_size != 0) {
-        directivity.table.assign(directivity_table.data(),
-                                 directivity_table.data() + table_size);
-        directivity.elevations = directivity_table.shape(0);
-        directivity.azimuths = directivity_table.shape(1);
-    }
-    // Columns: the source's forward, left and up axes in room coordinates.
-    directivity.forward = {orientation(0, 0), orientation(1, 0), orientation(2, 0)};
-    directivity.left = {orientation(0, 1), orientation(1, 1), orientation(2, 1)};
-    directivity.up = {orientation(0, 2), orientation(1, 2), orientation(2, 2)};
+    scene.directivity =
+        source_directivity(fn, bands, directivity_a, orientation, directivity_table);
     scene.bands = bands;
     scene.absorption = absorption.data();
     scene.scattering = scattering.data();
@@ -240,6 +286,33 @@ as::StochasticScene stochastic_scene(const char *name, const as::Bvh &bvh, InArr
 }
 
 std::vector<double> to_vector(const InArray &a) { return {a.data(), a.data() + a.shape(0)}; }
+
+// The rays trace_stochastic sends from its source: for each of the random streams
+// first_ray .. first_ray + rays - 1, the direction its ray leaves in (rays x 3) and the
+// source's energy weights that way (rays x bands, before sharing the energy out).
+nb::tuple ray_starts(InArray directivity_a, Matrix orientation, Kernels directivity_table,
+                     std::size_t bands, std::size_t rays, std::uint64_t first_ray,
+                     std::uint64_t seed) {
+    if (bands == 0 || bands > as::kMaxBands) {
+        throw std::invalid_argument("ray_starts: 1 to 32 bands");
+    }
+    const as::Directivity directivity =
+        source_directivity("ray_starts", bands, directivity_a, orientation, directivity_table);
+    std::vector<double> directions(3 * rays), weights(rays * bands);
+    {
+        nb::gil_scoped_release release;
+        for (std::size_t i = 0; i < rays; ++i) {
+            as::Rng rng(seed, first_ray + i);
+            const as::Vec3 d = as::uniform_sphere(rng);
+            directions[3 * i] = d.x;
+            directions[3 * i + 1] = d.y;
+            directions[3 * i + 2] = d.z;
+            directivity.energy_weights(d, bands, weights.data() + i * bands);
+        }
+    }
+    return nb::make_tuple(to_numpy(std::move(directions), {rays, 3}),
+                          to_numpy(std::move(weights), {rays, bands}));
+}
 
 // Ray count, timing, seed, threads and weight window of a stochastic run.
 as::StochasticSettings stochastic_settings(std::size_t rays, double max_time,
@@ -488,15 +561,28 @@ NB_MODULE(_native, m) {
     nb::class_<as::Bvh>(m, "Bvh", "Bounding volume hierarchy over a triangle mesh.")
         .def(
             "__init__",
-            [](as::Bvh *self, Points vertices, Faces faces) {
+            [](as::Bvh *self, Points vertices, Faces faces, const std::string &split) {
+                if (split != "sah" && split != "median") {
+                    throw std::invalid_argument("Bvh: split must be 'sah' or 'median'");
+                }
                 new (self) as::Bvh(vertices.data(), vertices.shape(0), faces.data(),
-                                   faces.shape(0));
+                                   faces.shape(0),
+                                   split == "sah" ? as::BvhSplit::kSah : as::BvhSplit::kMedian);
             },
-            nb::arg("vertices"), nb::arg("faces"))
+            nb::arg("vertices"), nb::arg("faces"), nb::arg("split") = "sah",
+            "Builds the tree: split \"sah\" (by the surface area heuristic) or \"median\".")
         .def_prop_ro("face_count", &as::Bvh::face_count)
         .def("intersect", &intersect, nb::arg("origins"), nb::arg("directions"),
              nb::arg("t_max"), nb::arg("ignore"),
-             "Nearest hit per ray: (distance, face), with (inf, -1) for a miss.");
+             "Nearest hit per ray: (distance, face), with (inf, -1) for a miss.")
+        .def("occluded", &occluded, nb::arg("origins"), nb::arg("directions"),
+             nb::arg("t_max"), nb::arg("ignore"),
+             "Per ray, whether any face lies within t_max of its origin (ignoring face "
+             "ignore[i]).")
+        .def_prop_ro("scale", &as::Bvh::scale)
+        .def("layout", &bvh_layout,
+             "The tree as flat arrays (see Bvh::layout in bvh.hpp), for tracing elsewhere: "
+             "boxes (nodes x 6), first, count, faces and triangles (faces x 9).");
 
     nb::class_<as::WaveSolver>(
         m, "WaveSolver",
@@ -566,6 +652,14 @@ NB_MODULE(_native, m) {
           "puts faces in groups, and moments sums per receiver and bin of moment_time_step "
           "the energy times 1, the reflections a ray has had off each group, n_i, and their "
           "products n_i n_j (i <= j); else it is empty.");
+
+    m.def("ray_starts", &ray_starts, nb::arg("directivity_a"), nb::arg("orientation"),
+          nb::arg("directivity_table"), nb::arg("bands"), nb::arg("rays"), nb::arg("first_ray"),
+          nb::arg("seed"),
+          "The rays trace_stochastic sends from its source, for the random streams "
+          "first_ray .. first_ray + rays - 1: (directions[ray, 3], weights[ray, band]), the "
+          "source's energy weights in each direction (averaging 1 over the sphere), "
+          "directivity_a, orientation and directivity_table as for trace_stochastic.");
 
     m.def("trace_map", &trace_map, nb::arg("bvh"), nb::arg("source"), nb::arg("directivity_a"),
           nb::arg("orientation"), nb::arg("directivity_table"), nb::arg("absorption"),

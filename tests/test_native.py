@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pytest
 
@@ -67,6 +69,89 @@ def test_bvh_ray_through_an_edge_hits() -> None:
     t, face = bvh.intersect(origins, directions, np.full(2, 10.0), np.full(2, -1))
     assert np.all(face >= 0)
     np.testing.assert_allclose(t, [np.sqrt(0.5), np.sqrt(0.75)])
+
+
+def cube_with_seats(rng: np.random.Generator):
+    """The unit cube with 500 small triangles scattered inside, like seats in a hall."""
+    vertices, faces = _unit_cube()
+    corners = rng.uniform(0.1, 0.9, (500, 1, 3)) + rng.uniform(-0.02, 0.02, (500, 3, 3))
+    vertices = np.vstack([vertices, corners.reshape(-1, 3)])
+    faces = np.vstack([faces, 8 + np.arange(1500, dtype=np.int64).reshape(-1, 3)])
+    return vertices, faces
+
+
+def test_bvh_splits_find_the_same_hits() -> None:
+    from acoustic_spaces import _native
+
+    rng = np.random.default_rng(3)
+    vertices, faces = cube_with_seats(rng)
+    sah, median = (_native.Bvh(vertices, faces, split=s) for s in ("sah", "median"))
+    assert sah.face_count == median.face_count == 512
+    n = 5000
+    origins = rng.uniform(0.0, 1.0, (n, 3))
+    directions = rng.standard_normal((n, 3))
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    args = (origins, directions, np.full(n, 10.0), np.full(n, -1, dtype=np.int64))
+    t_sah, face_sah = sah.intersect(*args)
+    t_median, face_median = median.intersect(*args)
+    assert np.all(face_sah >= 0)  # inside a closed box
+    # The same distances; a face may differ only where two meet at that point.
+    np.testing.assert_array_equal(t_sah, t_median)
+    assert np.mean(face_sah == face_median) > 0.999
+    # No limit at all finds the same (a missed box must not pass for one entered then).
+    t_open, face_open = sah.intersect(origins, directions, np.full(n, np.inf), args[3])
+    np.testing.assert_array_equal(t_open, t_sah)
+    np.testing.assert_array_equal(face_open, face_sah)
+    with pytest.raises(ValueError, match="split"):
+        _native.Bvh(vertices, faces, split="octree")
+
+
+def test_bvh_layout_holds_the_tree_and_every_face_once() -> None:
+    from acoustic_spaces import _native
+
+    vertices, faces = cube_with_seats(np.random.default_rng(4))
+    bvh = _native.Bvh(vertices, faces)
+    assert bvh.scale == pytest.approx(np.sqrt(3.0))
+    layout = bvh.layout()
+    boxes = layout["boxes"].reshape(-1, 6)
+    first, count = layout["first"], layout["count"]
+    assert len(boxes) == len(first) == len(count)
+    # Every face sits in one leaf, and the triangles are the mesh's, in leaf order.
+    np.testing.assert_array_equal(np.sort(layout["faces"]), np.arange(len(faces)))
+    assert count.sum() == len(faces)
+    edges = layout["triangles"].reshape(-1, 3, 3)
+    corners = vertices[faces[layout["faces"]]]
+    np.testing.assert_allclose(edges[:, 0], corners[:, 0])
+    np.testing.assert_allclose(edges[:, 1], corners[:, 1] - corners[:, 0], atol=1e-12)
+    np.testing.assert_allclose(edges[:, 2], corners[:, 2] - corners[:, 0], atol=1e-12)
+    # A leaf's triangles lie in its box; an inner node's children lie in its box.
+    lo, hi = boxes[:, :3], boxes[:, 3:]
+    for node in np.flatnonzero(count > 0):
+        inside = corners[first[node] : first[node] + count[node]].reshape(-1, 3)
+        assert np.all(inside >= lo[node]) and np.all(inside <= hi[node])
+    for node in np.flatnonzero(count == 0):
+        children = [first[node], first[node] + 1]
+        assert np.all(lo[children] >= lo[node]) and np.all(hi[children] <= hi[node])
+
+
+def test_bvh_occluded_agrees_with_the_nearest_hit() -> None:
+    from acoustic_spaces import _native
+
+    rng = np.random.default_rng(5)
+    vertices, faces = cube_with_seats(rng)
+    bvh = _native.Bvh(vertices, faces)
+    n = 3000
+    origins = rng.uniform(0.0, 1.0, (n, 3))
+    targets = rng.uniform(0.0, 1.0, (n, 3))
+    distance = np.linalg.norm(targets - origins, axis=1)
+    directions = (targets - origins) / distance[:, None]
+    ignore = rng.integers(-1, len(faces), n)
+    t, _ = bvh.intersect(origins, directions, distance, ignore)
+    blocked = bvh.occluded(origins, directions, distance, ignore)
+    assert blocked.dtype == bool and 0 < blocked.sum() < n
+    np.testing.assert_array_equal(blocked, np.isfinite(t))
+    with pytest.raises(ValueError, match="same length"):
+        bvh.occluded(origins, directions, distance[:-1], ignore)
 
 
 def test_specular_sequences_stay_inside_a_closed_box() -> None:
@@ -254,6 +339,25 @@ def _trace_map(rays: int, **changes):
         room_level=np.zeros(0),
     )
     return _native.trace_map(**{**args, **changes})
+
+
+def test_rays_out_of_an_open_model_escape() -> None:
+    from acoustic_spaces import _native
+
+    vertices, faces = _unit_cube()
+    top = np.all(vertices[faces][:, :, 2] == 1.0, axis=1)
+    walls = len(faces) - int(top.sum())
+    changes = {
+        "bvh": _native.Bvh(vertices, faces[~top]),
+        "absorption": np.ones((walls, 1)),
+        "scattering": np.zeros((walls, 1)),
+    }
+    _, escaped, _, _, traced = _trace_map(200_000, **changes)
+    # The share of directions through the open top: its solid angle from the source,
+    # 0.8 m below the middle of the 1 m square, over 4 pi.
+    share = math.asin(0.25 / (0.25 + 0.64)) / math.pi
+    assert traced == 200_000
+    assert escaped / traced == pytest.approx(share, rel=0.03)
 
 
 def test_trace_map_counts_the_track_length_through_a_slab() -> None:

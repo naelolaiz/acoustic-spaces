@@ -18,7 +18,7 @@ pytest.importorskip("pyvistaqt")
 from PySide6.QtCore import QPoint, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QWheelEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QToolBar  # noqa: E402
 
 from acoustic_spaces.audio import write_wav  # noqa: E402
 from acoustic_spaces.examples import example_path, list_examples  # noqa: E402
@@ -371,6 +371,16 @@ def test_selection_and_forms(window) -> None:
     page.wave_device.setCurrentText("auto")
     wave = window.document.scene.simulation.wave
     assert wave.enabled and wave.max_band_hz == 63 and wave.device == "auto"
+    assert page.threads.value() == 0 and page.threads.specialValueText().startswith("All cores")
+    assert page.ray_tree.currentText() == "sah"
+    page.threads.setValue(2)
+    page.ray_tree.setCurrentText("median")
+    performance = window.document.scene.simulation.performance
+    assert performance.threads == 2 and performance.ray_tree == "median"
+    assert page.late_device.currentText() == "cpu" and page.late_device.isEnabled()
+    page.late_device.setCurrentText("both")
+    assert window.document.scene.simulation.late.device == "both"
+    assert window.document.scene.simulation.wave.device == "auto"
     assert window.document.scene.simulation.early.diffraction == "direct"
     assert page.scattering_method.currentText() == "vector" and page.from_size.isChecked()
     assert page.by_band.isChecked() and page.by_band.isEnabled()
@@ -801,7 +811,7 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, m
     assert window.play_file(tmp_path / "dry.wav")
     data, rate = fake_sounddevice.played[-1]
     assert data.shape[1] == 2 and rate == window.result.settings.sample_rate  # binaural
-    assert np.abs(data).max() == pytest.approx(10 ** (-1 / 20), rel=1e-5)
+    assert 0 < np.abs(data).max() <= 10 ** (-1 / 20) * (1 + 1e-6)
     window.stop_playing()
     assert not results.stop.isEnabled()
 
@@ -866,6 +876,81 @@ def test_one_playback_at_a_time(window, qapp, tmp_path: Path, fake_sounddevice) 
     _wait(qapp, lambda: window._player is None, timeout=30)
     assert not results.stop.isEnabled() and results.listen.isEnabled()
     results.tracking.setChecked(False)
+
+
+def test_stop_playback(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
+    _quick(window.document)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    stops = []
+    fake_sounddevice.play = lambda data, rate: fake_sounddevice.played.append((data, rate))
+    fake_sounddevice.stop = lambda: stops.append(1)
+    write_wav(tmp_path / "dry.wav", np.r_[1.0, np.zeros(5 * 16_000)], 16_000)  # 5 s
+    results, stop = window.results, window.stop_action
+    # Stop playback sits in the toolbar and the Simulation menu, apart from Cancel.
+    assert stop in window.findChild(QToolBar, "main-toolbar").actions()
+    menus = {menu.title(): menu for menu in window.findChildren(QMenu)}
+    assert stop in menus["&Simulation"].actions()
+    assert stop is not window.cancel_action and not stop.isEnabled()
+    assert not window.now_playing.isVisible() and not window.stop_button.isVisible()
+    assert window.play_file(tmp_path / "dry.wav")
+    assert stop.isEnabled() and results.stop.isEnabled()
+    assert fake_sounddevice.played[-1][0].shape[1] == 2  # binaural, though the scene is mono
+    # The status bar says what plays, whichever panel is on show.
+    window.docks["map"].raise_()
+    assert window.now_playing.isVisible() and window.stop_button.isVisible()
+    assert window.now_playing.text().startswith("Playing dry.wav from ")
+    # What plays does not follow edits, and the status bar says so until they are undone.
+    window.document.update_point("sources", 0, level_db=90.0)
+    assert window.now_playing.text().endswith("(before the latest changes)")
+    assert "does not follow them" in window.messages.toPlainText()
+    window.undo()
+    assert "before" not in window.now_playing.text()
+    window.stop_button.click()
+    assert stops and not stop.isEnabled() and not results.stop.isEnabled()
+    assert not window.now_playing.isVisible() and not window.stop_button.isVisible()
+    assert results.listen.isEnabled() and not window._play_timer.isActive()
+
+    # Esc first stops placing a source, then the playback.
+    assert window.play_file(tmp_path / "dry.wav")
+    window.views.setCurrentWidget(window.plan)
+    window.start_placing("sources")
+    assert window.plan.canvas.placing is not None
+    window._escape()
+    assert window.plan.canvas.placing is None and stop.isEnabled() and len(stops) == 1
+    window._escape()
+    assert len(stops) == 2 and not stop.isEnabled() and not results.stop.isEnabled()
+
+
+def test_playback_follows_the_pair_on_show(window, qapp, tmp_path: Path, fake_sounddevice) -> None:
+    window.open_example(example_path("church"))
+    _quick(window.document)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    fake_sounddevice.play = lambda data, rate: fake_sounddevice.played.append((data, rate))
+    fake_sounddevice.stop = lambda: None
+    write_wav(tmp_path / "dry.wav", np.r_[1.0, np.zeros(5 * 16_000)], 16_000)  # 5 s
+    results = window.results
+    assert window.play_file(tmp_path / "dry.wav")
+    played = window._played
+    # Another listener, picked in the scene: the sound goes on from where it was, no
+    # louder than before (the difference between listeners stays audible).
+    window.select("listeners", 2)
+    assert window._played["pair"] == results.pair() == (played["pair"][0], "nave-back")
+    assert window._played["start"] > 0 and window._played["gain"] <= played["gain"]
+    assert len(fake_sounddevice.played) == 2 and "at nave-back" in window.now_playing.text()
+    # Or picked in the results panel.
+    results.listener.setCurrentIndex(0)
+    assert window._played["pair"] == results.pair() == played["pair"]
+    # Ticking head tracking turns the playback into head-tracked playback, as loud.
+    gain = window._played["gain"]
+    results.head.port.setValue(0)  # no head tracker
+    results.tracking.setChecked(True)
+    assert window._played["tracked"] and window._player is not None
+    assert window._played["gain"] == gain
+    window.stop_playing()
+    results.tracking.setChecked(False)
+    assert window._played is None and not results.stop.isEnabled()
 
 
 def test_results_follow_the_selected_listener(window, qapp) -> None:

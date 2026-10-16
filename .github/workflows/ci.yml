@@ -43,6 +43,7 @@ jobs:
       - name: Build and install
         run: python -m pip install ".[test,sketchup,gpu,ifc]"
       - name: Test
+        timeout-minutes: 30  # a hung GPU test would otherwise hold the runner for 6 hours
         run: python -m pytest -q
       - name: Smoke-test the command line
         shell: bash  # stops at the first failing command on every platform

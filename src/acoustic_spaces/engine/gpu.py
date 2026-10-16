@@ -192,12 +192,12 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>,
 """
 
 
-def _wgpu():
+def _wgpu(what: str = "the wave solver"):
     try:
         import wgpu
     except ImportError as error:  # pragma: no cover - depends on the install
         raise RuntimeError(
-            'the wave solver needs wgpu to run on a GPU: pip install "acoustic-spaces[gpu]"'
+            f'{what} needs wgpu to run on a GPU: pip install "acoustic-spaces[gpu]"'
         ) from error
     return wgpu
 
@@ -219,10 +219,10 @@ def _adapter():
 def _device():
     adapter = _adapter()
     if adapter is None:
-        raise RuntimeError("wgpu finds no GPU to run the wave solver on")
+        raise RuntimeError("wgpu finds no GPU")
     names = ("max-storage-buffer-binding-size", "max-buffer-size")
     return adapter.request_device_sync(
-        label="acoustic-spaces wave solver",
+        label="acoustic-spaces",
         required_limits={name: adapter.limits[name] for name in names},
     )
 

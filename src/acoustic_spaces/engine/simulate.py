@@ -141,17 +141,20 @@ def early_paths(
     max_order: int | None = None,
     method: str | None = None,
     diffraction: str | None = None,
-    threads: int = 0,
+    threads: int | None = None,
 ) -> early_stage.EarlyReflections:
     """Specular and diffracted paths from one source to one listener, without the late
     part.
 
     Names default to the first source and listener; ``max_order``, ``method`` and
-    ``diffraction`` default to ``scene.simulation.early``. Useful for drawing paths.
+    ``diffraction`` default to ``scene.simulation.early``, ``threads`` to
+    ``scene.simulation.performance.threads``. Useful for drawing paths.
     """
     room = _as_room(room)
     scene = room.scene
     cfg = scene.simulation.early
+    if threads is None:
+        threads = scene.simulation.performance.threads
     src = _pick(scene.sources, None if source is None else [source], "source")[0]
     lis = _pick(scene.listeners, None if listener is None else [listener], "listener")[0]
     model = TraceModel.from_room(room)
@@ -266,13 +269,19 @@ def _shared(parts: list[early_stage.EarlyReflections], bands: int) -> early_stag
     )
 
 
+def _where(plan) -> str:
+    """Where a late stage's plan traced the rays, and why, for progress messages."""
+    where = {"cpu": "the CPU", "gpu": "the GPU", "both": "the CPU and the GPU"}[plan.device]
+    return f"{where} ({plan.reason})" if plan.reason else where
+
+
 def simulate(
     room: Room | Scene | str | Path,
     *,
     settings: SimulationSettings | None = None,
     sources: Sequence[str] | None = None,
     listeners: Sequence[str] | None = None,
-    threads: int = 0,
+    threads: int | None = None,
     progress: Callable[[str], None] | None = None,
     groups: np.ndarray | None = None,
     late_from: Mapping[str, Mapping[str, float]] | None = None,
@@ -280,9 +289,9 @@ def simulate(
     """Simulate the room's impulse responses as set in ``scene.simulation``.
 
     ``room`` may be a :class:`Room`, a :class:`Scene` or a scene file. ``sources`` and
-    ``listeners`` pick names from the scene (all by default). ``threads=0`` uses every
-    core. Raises ``ValueError`` if :meth:`Room.problems` reports anything or there is no
-    listener to simulate.
+    ``listeners`` pick names from the scene (all by default). ``threads`` overrides
+    ``simulation.performance.threads`` (0 uses every core). Raises ``ValueError`` if
+    :meth:`Room.problems` reports anything or there is no listener to simulate.
 
     ``groups`` (the group of each face, or -1;
     :func:`~acoustic_spaces.engine.reweight.face_groups`) keeps in each response the
@@ -303,6 +312,8 @@ def simulate(
         raise ValueError("; ".join(problems))
     scene = room.scene
     settings = settings or scene.simulation
+    if threads is None:
+        threads = settings.performance.threads
     say = progress or (lambda _: None)
 
     chosen_sources = _pick(scene.sources, sources, "source")
@@ -452,7 +463,10 @@ def simulate(
                 orientation=orientation,
                 threads=threads,
                 groups=groups,
+                device=late_cfg.device,
             )
+            if late.plan is not None and late_cfg.device != "cpu":
+                say(f"{label}: late rays traced on {_where(late.plan)}")
             add(info, "rays", float(late.rays))
             add(info, "escaped_rays", float(late.escaped_rays))
             add(info, "traced_rays", float(late.traced_rays))

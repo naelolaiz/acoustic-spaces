@@ -388,6 +388,17 @@ def test_seed_and_threads_give_identical_results() -> None:
         np.testing.assert_allclose(a[key].late, b[key].late, rtol=1e-12, atol=0)
 
 
+def test_performance_settings_leave_results_unchanged() -> None:
+    settings = {"late": {"rays": 3000}, "ir_length_s": 0.5}
+    room = _diffuse_box(settings)
+    assert room.scene.simulation.performance.threads == 0
+    assert room.scene.simulation.performance.ray_tree == "sah"
+    a = simulate(room)
+    b = simulate(_diffuse_box({**settings, "performance": {"threads": 2, "ray_tree": "median"}}))
+    for key in a.responses:
+        np.testing.assert_allclose(a[key].late, b[key].late, rtol=1e-12, atol=0)
+
+
 def test_simulate_checks_the_room() -> None:
     scene = _scene([0.1] * 8, 0.1, source=(2, 2, 1), listeners=[(5, 4, 9)])
     with pytest.raises(ValueError, match="outside the room"):

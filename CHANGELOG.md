@@ -397,6 +397,23 @@ changes results at 63 and 125 Hz)
 - `archway`: a bar and a dining room joined by an archway in a wall 40 cm thick,
   with `second_order` diffraction: a diner behind the wall hears the singer over both
   corners of the arch's jamb.
+- `town_hall_pa`: a sound system for speech in a reverberant town hall, two columns
+  (coherent arrays) beside the stage and two delay loudspeakers with their own gain,
+  equalizer and delay, over seats marked as audience. `delays.py` maps the STI with and
+  without the delays: the back rows' median goes from 0.52 to 0.59, the front's and the
+  middle's down by 0.04.
+- `workshop`: noise from a conveyor (a line source), a machine's casing (a surface
+  source) and a compressor, each with its own sound power spectrum, mapped as the
+  A-weighted level over the floor.
+- `apartment`: a living room and a bedroom with a wall and a door between them; the
+  television on the sofa at 73 dB(A) is 45 dB(A) in bed with the door closed, 63 dB(A)
+  with it open.
+- `room_modes`: the bass of a small bare room from the wave solver, in third-octave
+  bands, on the CPU or a GPU, against rays alone.
+- `fitting`: a seminar room that measured longer than designed, as the absorbing panels
+  of its back wall were left out. `make_measurements.py` makes up the measurements by
+  simulating the room as built; `compare` shows the gap, and `calibrate --materials
+  panels` finds the plain wall from 500 Hz up.
 - `orchestra`: an anechoic recording of Beethoven's 8th symphony (TU Berlin, CC BY 4.0)
   on the stage of the concert hall, one source for each of its 61 tracks, with scripts
   that mix a movement at a seat, draw pictures of the hall and the seating, and make a
@@ -439,8 +456,52 @@ changes results at 63 and 125 Hz)
   below by Ivanic and Ruedenberg's recursion instead of a least-squares fit on a grid of
   directions.
 
+**Faster ray tracing, and performance settings** (`simulation.performance`)
+
+- Ray queries are 7 to 8 times faster, and the late stage with them: the model's
+  bounding volume hierarchy is split by the surface area heuristic instead of at the
+  median, walked nearest box first, and its box test no longer calls the maths
+  library. One band of 50,000 rays in BRAS's chamber music hall takes 5.7 s instead of
+  41 s on four cores. Rays meet the same surfaces at the same distances; where a ray
+  meets two faces at exactly the same point (a shared edge), it may now take the other.
+- `simulation.performance.threads` (default 0: every core) and `ray_tree` (`sah`, the
+  default, or `median` for comparison) in scenes, under Performance on the editor's
+  Simulation page, and as `--threads` and `--ray-tree` for `simulate`, `map` and
+  `calibrate` (`--threads` for `view` and `export`). Without `--threads` they take the
+  scene's setting; `info` prints the number of CPU cores.
+- The ray searches run on a GPU too, through WebGPU (`gpu` extra): the first part of
+  tracing rays there. `validation/rays_gpu.py` times them against the CPU on rays like
+  the late tracer's and checks that both find the same faces. `Bvh.layout()` hands the
+  tree to it, and `Bvh.occluded` tests many rays at once on the CPU.
+- `validation/wave_gpu.py` times the grid's set-up and the time steps apart (the
+  speed-up is that of the steps), starts the GPU before timing, prints its settings
+  and each grid's cell size and stencil, and lines up its table in a terminal.
+- The late stage's rays can be traced on a GPU (`simulation.late.device`: `cpu`, the
+  default, `gpu`, `both` or `auto`; `acoustic_spaces.engine.gpu_tracer` and
+  `ray_device`). One WGSL compute shader traces what the CPU does, in single precision
+  and with random numbers of its own, so the two agree statistically. `both` shares the
+  rays between the CPU and the GPU as each is free; `auto` times a short trial on both
+  and keeps the fastest, or the CPU when wgpu finds no hardware GPU or nothing is
+  clearly faster, and saves its choice for the computer. Sound through partitions and
+  calibration's face groups stay on the CPU. `simulate --late-device`, "Run on" on the
+  editor's Simulation page, and `--no-device-trial` (`simulate`, `edit`) to take the
+  saved choice without a trial. `validation/late_gpu.py` times the late stage on each
+  device and compares the parameters it gives.
+- Tests hold the ray tracer to results stored from main before these changes
+  (`tests/reference/tracer.npz`): the trees' faces and distances, specular paths, and
+  every kind of late run on the CPU (to single precision), and statistically on a GPU.
+
 **Fixes**
 
+- The late stage's count of rays that left an open model (`escaped_rays` in the run
+  details) was always 0: a ray whose search found no face within the distance left to
+  it was taken for one that had run out of time. A ray that finds none is now checked
+  for a face anywhere ahead, on the CPU and on the GPU.
+- Runs that split rays (the late stage's weight window, sound passing both ways
+  through a partition) came out differently when the core was built with Clang, as on
+  macOS, than with GCC or MSVC: the two numbers that seed a copy's random stream were
+  drawn in an order the compiler chose. They are now drawn in the order GCC and MSVC
+  used, so Linux and Windows give the same results as before and macOS gives those too.
 - The sound diffracted by the free edge of a thin screen left out the term of the
   reflection off the screen's back wherever the reflection off its front reached the
   listener: up to 0.9 dB too little there, at high frequencies.
@@ -452,6 +513,25 @@ changes results at 63 and 125 Hz)
   indices under the 8 octave bands, the polar plots drew the lowest eight third octaves
   labelled as octaves, and the 3D view's balloon showed 125 Hz for 1 kHz. They show
   octaves now. Simulations were not affected.
+- The editor's Stop button for playback was easy to miss: it sat at the end of the
+  Results panel's bar, out of sight once another panel was on show, and the toolbar's
+  Cancel, which only cancels a run, had the same stop icon. While a recording plays, the
+  status bar now says so, with **Stop playback**, which is also in the toolbar and the
+  Simulation menu; Cancel has an icon of its own, and Esc stops playback when nothing is
+  being placed or drawn. Moving a source or listener while the sound played looked as if
+  it changed what plays, which it does not: the status bar marks the sound as from
+  before the latest changes, and the log says how to hear them.
+- Picking another source or listener, or ticking Head tracking, while a recording played
+  in the editor left the sound as it was. The playback now goes on from the same point
+  with the response picked (the run has them all), at the same level, so the
+  difference between listeners stays audible (lowered only if it would clip).
+- The editor's Listen played mono when the scene wrote no binaural output, while
+  head-tracked listening is always binaural, so the two sounded nothing alike (the
+  reverberation above all), and each set its own level. Listen plays binaurally now,
+  through the spherical head unless the scene names an HRTF, and both play the dry
+  signal at half its level through the response's omnidirectional energy (Listen
+  lowered only where it would clip), so ticking Head tracking changes only how the
+  head turns the sound.
 
 ## 2.0.0
 

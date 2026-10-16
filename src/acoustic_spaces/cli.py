@@ -6,6 +6,7 @@ import argparse
 import dataclasses
 import json
 import math
+import os
 import sys
 import textwrap
 from collections.abc import Sequence
@@ -14,6 +15,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from acoustic_spaces import __version__, native_available
+from acoustic_spaces.engine.ray_device import DEVICES, TRIAL_FLAG
 from acoustic_spaces.gltf import PARTICLE_COUNT, SLOW_MOTION
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
@@ -74,6 +76,7 @@ def _print_checks(room: Room) -> bool:
 def _cmd_info(_: argparse.Namespace) -> int:
     print(f"acoustic_spaces {__version__}")
     print(f"compiled core: {'available' if native_available() else 'missing'}")
+    print(f"CPU cores for ray tracing: {os.cpu_count() or 1}")
     from acoustic_spaces.engine.gpu import gpu_name
 
     print(f"GPU for the wave solver: {gpu_name() or 'none (needs the gpu extra and a driver)'}")
@@ -362,7 +365,10 @@ def _cmd_edit(args: argparse.Namespace) -> int:
     try:
         from acoustic_spaces.gui import main as editor
 
-        return editor([args.scene] if args.scene else [])
+        argv = [args.scene] if args.scene else []
+        if args.no_device_trial:
+            argv.append(TRIAL_FLAG)
+        return editor(argv)
     except ImportError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -564,6 +570,46 @@ def _outputs(room: Room, args: argparse.Namespace) -> list:
     return outputs
 
 
+THREADS_HELP = "worker threads (default: the scene's simulation.performance.threads; 0: every core)"
+
+
+def _threads(value: str) -> int:
+    """--threads: a count of worker threads, 0 for every core."""
+    count = int(value)
+    if count < 0:
+        raise argparse.ArgumentTypeError("give 0 (every core) or more threads")
+    return count
+
+
+def _add_performance_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--threads", type=_threads, help=THREADS_HELP)
+    parser.add_argument(
+        "--ray-tree",
+        choices=("sah", "median"),
+        help="override simulation.performance.ray_tree: split the tree that finds the "
+        "surface a ray meets by the surface area heuristic (sah, fastest) or at the "
+        "middle face (median, as before; for comparison)",
+    )
+
+
+def _performance_options(args: argparse.Namespace) -> dict[str, tuple[str, object]]:
+    return {
+        "--threads": ("performance.threads", args.threads),
+        "--ray-tree": ("performance.ray_tree", args.ray_tree),
+    }
+
+
+TRIAL_HELP = (
+    "with simulation.late.device auto, skip the short trial that times the CPU and the GPU "
+    "on the scene, and take the choice saved from the last trial on this computer (the "
+    "CPU without one)"
+)
+
+
+def _add_trial_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(TRIAL_FLAG, action="store_true", help=TRIAL_HELP)
+
+
 def _cmd_simulate(args: argparse.Namespace) -> int:
     from acoustic_spaces.engine import simulate
     from acoustic_spaces.results import REPORT_FILE, write_results
@@ -583,8 +629,10 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "--wave": ("wave.enabled", args.wave),
             "--wave-band": ("wave.max_band_hz", args.wave_band),
             "--wave-device": ("wave.device", args.wave_device),
+            "--late-device": ("late.device", args.late_device),
             "--length": ("ir_length_s", args.length),
             "--sample-rate": ("sample_rate", args.sample_rate),
+            **_performance_options(args),
         },
     )
     settings = _with_coherent(settings, args.coherent_band)
@@ -597,11 +645,14 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    if args.no_device_trial:
+        from acoustic_spaces.engine import ray_device
+
+        ray_device.set_trial(False)
     try:
         result = simulate(
             room,
             settings=settings,
-            threads=args.threads,
             progress=lambda message: print(message, file=sys.stderr),
         )
     except ValueError as exc:
@@ -722,6 +773,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
             "--max-order": ("early.max_order", args.max_order),
             "--diffraction": ("early.diffraction", args.diffraction),
             "--length": ("ir_length_s", args.length),
+            **_performance_options(args),
         },
     )
     simulation = _with_coherent(simulation, args.coherent_band)
@@ -744,7 +796,6 @@ def _cmd_map(args: argparse.Namespace) -> int:
             settings=settings,
             simulation=simulation,
             sources=[args.source] if args.source else None,
-            threads=args.threads,
             progress=lambda message: print(message, file=sys.stderr),
         )
     except ValueError as exc:
@@ -1209,6 +1260,7 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
             "--rays": ("late.rays", args.rays),
             "--seed": ("seed", args.seed),
             "--length": ("ir_length_s", args.length),
+            **_performance_options(args),
         },
     )
     if settings is None:
@@ -1226,7 +1278,6 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
             args.materials,
             parameters=args.parameters,
             rounds=args.rounds,
-            threads=args.threads,
             progress=lambda message: print(message, file=sys.stderr),
         )
     except (OSError, ValueError) as exc:
@@ -1710,6 +1761,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     edit = sub.add_parser("edit", help="open the graphical editor (needs the gui extra)")
     edit.add_argument("scene", nargs="?", help="scene YAML file to open")
+    _add_trial_argument(edit)
     edit.set_defaults(func=_cmd_edit)
 
     view = sub.add_parser("view", help="show the room in 3D (needs the viz extra)")
@@ -1722,7 +1774,7 @@ def build_parser() -> argparse.ArgumentParser:
     view.add_argument(
         "--diffraction", choices=DIFFRACTION_MODES, help="edge diffraction for --paths"
     )
-    view.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    view.add_argument("--threads", type=_threads, help=THREADS_HELP)
     view.add_argument(
         "--leaks", action="store_true", help="draw the rays that escape and the open edges"
     )
@@ -1793,7 +1845,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"seconds of animation per second of sound (default {SLOW_MOTION:g})",
     )
     export.add_argument("--seed", type=int, default=0, help="seed for diffuse reflections")
-    export.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    export.add_argument("--threads", type=_threads, help=THREADS_HELP)
     export.set_defaults(func=_cmd_export)
 
     simulate = sub.add_parser("simulate", help="simulate impulse responses and ISO 3382 parameters")
@@ -1838,7 +1890,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="override simulation.wave.device: step the wave solver's grid on the CPU, on "
         "a GPU (with the gpu extra) or on a hardware GPU when there is one",
     )
-    simulate.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    simulate.add_argument(
+        "--late-device",
+        choices=DEVICES,
+        help="override simulation.late.device: trace the late rays on the CPU, on a GPU "
+        "(with the gpu extra), on both sharing the rays, or on the fastest of those here",
+    )
+    _add_trial_argument(simulate)
+    _add_performance_arguments(simulate)
     simulate.add_argument(
         "--output",
         action="append",
@@ -1891,7 +1950,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="override simulation.early.coherent_max_band_hz (63, 125, 250, 500 or none)",
     )
     coverage.add_argument("--length", type=float, help="override simulation.ir_length_s")
-    coverage.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    _add_performance_arguments(coverage)
     coverage.add_argument(
         "--band",
         type=int,
@@ -2018,7 +2077,7 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("--rays", type=int, help="override simulation.late.rays")
     calibrate.add_argument("--seed", type=int, help="override simulation.seed")
     calibrate.add_argument("--length", type=float, help="override simulation.ir_length_s")
-    calibrate.add_argument("--threads", type=int, default=0, help="worker threads (0: all cores)")
+    _add_performance_arguments(calibrate)
     calibrate.add_argument("-o", "--out", metavar="YAML", help="write the fitted scene here")
     calibrate.add_argument("--json", metavar="FILE", help="also write the results as JSON")
     _add_analysis_arguments(calibrate, references=False, stage=False)

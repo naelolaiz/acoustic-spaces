@@ -24,7 +24,7 @@ def test_every_example_folder_is_listed() -> None:
 
 def test_example_path() -> None:
     assert example_path("studio").parent.name == "studio"
-    with pytest.raises(ValueError, match="examples: archway, bim_office, church"):
+    with pytest.raises(ValueError, match="examples: apartment, archway, bim_office"):
         example_path("cathedral")
 
 
@@ -45,9 +45,11 @@ def test_examples_simulate(name: str) -> None:
     assert len(result) == len(room.scene.sources) * len(room.scene.listeners)
     for source in room.scene.sources:
         for listener in room.scene.listeners:
-            distance = np.linalg.norm(np.subtract(listener.position, source.position))
+            # The nearest of a line's or surface's points, after the source's own delay.
+            distance = np.linalg.norm(source.elements() - listener.position, axis=1).min()
+            expected = distance / room.speed_of_sound() + source.delay_ms / 1000.0
             delay = result[source.name, listener.name].direct_delay_s
-            assert delay == pytest.approx(distance / room.speed_of_sound(), rel=1e-6)
+            assert delay == pytest.approx(expected, rel=1e-6)
 
 
 def test_copy_examples(tmp_path: Path) -> None:

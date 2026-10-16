@@ -30,9 +30,13 @@ and `eq_db`; see [Sources and directivity](scenes.md#sources-and-directivity)), 
 sound pressure levels. The STI (IEC 60268-16, with the male weighting, or the female
 one for a `speech_female` source) takes that as the speech level, with auditory masking
 and the reception threshold, and `noise_db` as the background noise. In the map of all
-sources together, each source's sound arrives its `delay_ms` later. `map` prints the range of every
-parameter, `--plot` saves the top view, `--screenshot` the 3D view and `--json` every
-value of every point. Settings live in the scene:
+sources together, each source's sound arrives its `delay_ms` later (the `town_hall_pa`
+example's `delays.py` maps its sound system with and without its delay loudspeakers).
+Line and surface sources add up the sound of their points and arrays radiate their
+beams, as they do at a listener (the `workshop` example maps the A-weighted noise of
+both). `map` prints the range of every parameter, `--plot` saves the top view,
+`--screenshot` the 3D view and `--json` every value of every point. Settings live in
+the scene:
 
 ```yaml
 coverage:

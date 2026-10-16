@@ -1,0 +1,62 @@
+# Noise in a workshop: a hall of 30 x 15 x 7 m with brick walls, a concrete floor and a
+# ceiling of metal panels with acoustic tiles behind them, where a conveyor runs most of
+# its length, a machine against a wall vibrates and a compressor stands in a corner. The
+# conveyor is a line source 20 m long, the machine's casing a surface source (2 x 1.5 m,
+# radiating as a vibrating panel), the compressor a point; each has its own sound power
+# spectrum. The map gives the A-weighted level over the floor:
+#
+#   acoustic-spaces map scene.yaml --parameter spl_a --plot noise.png
+#   acoustic-spaces simulate scene.yaml --out results
+#
+# The hall is loud everywhere, 85 dB(A) at the median point: away from the machines its
+# reverberation sets the level. Assign `absorber` to the ceiling (`ceiling: absorber`)
+# to see what a fibre absorber in place of the panels takes off: about 2 dB(A), near the
+# machines and away from them alike, since the panels absorb much of it already.
+name: Workshop noise (30 x 15 x 7 m)
+geometry:
+  box: [30, 15, 7]
+materials:
+  concrete:
+    preset: concrete_floor
+    scattering: 0.1
+  brick:
+    preset: brickwork
+    scattering: 0.2
+  panels:
+    preset: ceiling_metal_panel
+    scattering: 0.3
+  absorber:
+    preset: ceiling_fibre_absorber
+    scattering: 0.3
+assignments:
+  floor: concrete
+  ceiling: panels
+  walls: brick
+sources:
+  - name: conveyor
+    position: [15.0, 5.0, 1.0]
+    orientation: {yaw: 90}   # the line runs along the source's left axis: here -x
+    line_m: 20
+    level_db: [88, 92, 95, 96, 95, 92, 88, 82]
+  - name: machine
+    position: [22.0, 14.8, 1.2]
+    orientation: {yaw: -90}  # against the wall at y = 15, its casing faces into the hall
+    surface_m: [2.0, 1.5]
+    directivity: lambert
+    level_db: [90, 96, 98, 97, 94, 90, 85, 78]
+  - name: compressor
+    position: [2.0, 13.5, 0.8]
+    level_db: [98, 100, 99, 96, 93, 90, 86, 80]
+listeners:
+  - name: operator
+    position: [15.0, 6.5, 1.6]
+  - name: office_door
+    position: [28.0, 1.0, 1.6]
+simulation:
+  early: {method: ray_tracing, max_order: 2}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 2.5
+outputs:
+  - mono
+coverage:
+  spacing: 1.0

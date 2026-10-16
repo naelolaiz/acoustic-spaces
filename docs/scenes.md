@@ -264,6 +264,9 @@ opening into a live one against the two-room model (within 1 dB down to -40 dB).
 statistical method follows that model in both rooms, and maps over both rooms match
 listeners at their points.
 
+The `apartment` example has a wall and a door, closed or open, between the living room
+and the bedroom of a flat.
+
 ## Audience seating
 
 Sound that reaches a listener low over rows of seats loses much more than the seats'
@@ -295,6 +298,8 @@ materials:
   errs on the side of too little attenuation.
 - In a flat lecture hall with the talker at 1.6 m, it takes 10 dB off the direct sound
   at the back row in those bands and 1.3 dB off C50 there.
+
+The `town_hall_pa` example marks its seats as audience.
 
 ## Sources and directivity
 
@@ -432,6 +437,9 @@ sources:
   a source comes out as its sound power less 10 log10(4 π r²) = 23 dB and the air's
   absorption over the 4 m, to within 0.01 dB.
 
+The `town_hall_pa` example feeds two delay loudspeakers with their own gain, equalizer
+and delay, behind two columns that are coherent arrays.
+
 Line and surface sources, such as a road, a row of loudspeakers fed alike, a choir
 or a vibrating wall:
 
@@ -462,6 +470,9 @@ sources:
   and its number of points. The wave solver takes point sources only. The editor
   draws lines and surfaces in the 3D view and the plan, and the Blender export has
   them too.
+
+The `workshop` example maps the noise of a conveyor (a line), a machine's casing (a
+surface) and a compressor (a point).
 
 ![Polar patterns of the per-band directivity above, from omni in the bass to a narrow pattern at 8 kHz](images/directivity.png)
 

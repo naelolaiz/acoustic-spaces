@@ -389,18 +389,18 @@ def calibrate(
     rounds: int = 4,
     bounds: tuple[float, float] = (0.01, 0.99),
     tolerance: float = 0.01,
-    threads: int = 0,
+    threads: int | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> Calibration:
     """Fit the absorption of ``materials`` (default: every material on a surface but
     openings, at most 16) so that the simulated ``parameters`` match those ``measured``
     at each (source, listener) pair of the scene, band by band, in JNDs.
 
-    The scene's simulation settings (rays, response length, seed) are used, with
-    stochastic ray tracing in octave bands and no wave solver. At most ``rounds``
-    traces at new absorption are made; it stops sooner once no value moves by more than
-    ``tolerance``. Absorption stays within ``bounds``, and above what a material lets
-    through.
+    The scene's simulation settings (rays, response length, seed, and threads unless
+    ``threads`` is given) are used, with stochastic ray tracing in octave bands and no
+    wave solver. At most ``rounds`` traces at new absorption are made; it stops sooner
+    once no value moves by more than ``tolerance``. Absorption stays within ``bounds``,
+    and above what a material lets through.
     """
     room = _as_room(room)
     scene = room.scene
