@@ -82,54 +82,47 @@ fn hit_triangle(place: u32, o: vec3<f32>, d: vec3<f32>) -> f32 {
     let e2 = bitcast<vec3<f32>>(triangles[3u * place + 2u].xyz) - v0;
     let p = cross(d, e2);
     let det = dot(e1, p);
-    if (abs(det) < 1e-30) {
-        return -1.0;
-    }
-    let inv_det = 1.0 / det;
+    let flat = abs(det) < 1e-30;
+    let inv_det = 1.0 / select(det, 1.0, flat);
     let s = o - v0;
     let u = dot(s, p) * inv_det;
-    if (u < -EDGE || u > 1.0 + EDGE) {
-        return -1.0;
-    }
     let q = cross(s, e1);
     let v = dot(d, q) * inv_det;
-    if (v < -EDGE || u + v > 1.0 + EDGE) {
-        return -1.0;
-    }
-    return dot(e2, q) * inv_det;
+    let inside = !flat && u >= -EDGE && u <= 1.0 + EDGE && v >= -EDGE && u + v <= 1.0 + EDGE;
+    return select(-1.0, dot(e2, q) * inv_det, inside);
 }
 
 // The nearest face along o + t d (d of unit length) with t in (t_min, t_max), skipping
 // face `skip`, or (t_max, NONE); with `any_hit`, the first face found, which is enough
 // to know the way is blocked. Of two children the ray enters, the nearer goes first;
 // the other waits and is dropped if a hit nearer than its box turns up meanwhile.
+// (No early exits from the loops: Direct3D's shader compiler got them wrong.)
 fn search_ray(o: vec3<f32>, d: vec3<f32>, t_min: f32, t_max: f32, skip: u32,
               any_hit: bool) -> Hit {
     var best = Hit(t_max, NONE);
     let inv = reciprocal(d);
-    if (enter(0u, o, inv, t_max) > t_max) {
-        return best;
-    }
     var waiting_node: array<u32, STACK>;
     var waiting_entry: array<f32, STACK>;
     var top = 0u;
-    var node = 0u;
-    loop {
+    // The node to look in next; NONE once there is none.
+    var node = select(0u, NONE, enter(0u, o, inv, t_max) > t_max);
+    while (node != NONE) {
         let low = nodes[2u * node];
         let count = nodes[2u * node + 1u].w;
+        var next = NONE;
         if (count > 0u) {
-            for (var place = low.w; place < low.w + count; place++) {
+            let end = low.w + count;
+            for (var place = low.w; place < end && !(any_hit && best.face != NONE); place++) {
                 let face = triangles[3u * place].w;
-                if (face == skip) {
-                    continue;
-                }
-                let t = hit_triangle(place, o, d);
-                if (t > t_min && t < best.t) {
-                    best = Hit(t, face);
-                    if (any_hit) {
-                        return best;
+                if (face != skip) {
+                    let t = hit_triangle(place, o, d);
+                    if (t > t_min && t < best.t) {
+                        best = Hit(t, face);
                     }
                 }
+            }
+            if (any_hit && best.face != NONE) {
+                top = 0u;
             }
         } else {
             let left = low.w;
@@ -143,27 +136,19 @@ fn search_ray(o: vec3<f32>, d: vec3<f32>, t_min: f32, t_max: f32, skip: u32,
                 waiting_node[top] = select(left, right, left_first);
                 waiting_entry[top] = select(to_left, to_right, left_first);
                 top++;
-                node = select(right, left, left_first);
-                continue;
-            }
-            if (in_left || in_right) {
-                node = select(right, left, in_left);
-                continue;
+                next = select(right, left, left_first);
+            } else if (in_left || in_right) {
+                next = select(right, left, in_left);
             }
         }
-        // The nearest waiting node the ray still reaches before its best hit, if any.
-        var resumed = false;
-        while (top > 0u) {
+        // Else the nearest waiting node the ray still reaches before its best hit, if any.
+        while (next == NONE && top > 0u) {
             top--;
             if (waiting_entry[top] <= best.t) {
-                node = waiting_node[top];
-                resumed = true;
-                break;
+                next = waiting_node[top];
             }
         }
-        if (!resumed) {
-            break;
-        }
+        node = next;
     }
     return best;
 }
