@@ -66,11 +66,12 @@ class WalkResponses:
     kind: str
     #: The places it was simulated at.
     points: WalkPoints
-    #: The names the walker has at its places in :attr:`result`, in order.
+    #: The names the walker has at its places in :attr:`result`, in order
+    #: (``"<name> #<place> @ <time> s"``).
     names: tuple[str, ...]
     #: The simulation, with the walker at every place.
     result: SimulationResult
-    #: The places whose late part was traced (indices); the others mix theirs.
+    #: The places that have their own late part (indices); the others mix theirs.
     late_places: tuple[int, ...] = ()
 
     @property
@@ -108,6 +109,8 @@ def walk_points(item, step_m: float = STEP_M) -> WalkPoints:
     corners = np.array([item.position, *item.walk.to], dtype=np.float64)
     legs = np.linalg.norm(np.diff(corners, axis=0), axis=1)
     along = np.concatenate([[0.0], np.cumsum(legs)])
+    if along[-1] == 0.0:
+        raise ValueError(f"the walk of {item.name!r} goes nowhere: it never leaves its position")
     count = max(int(math.ceil(along[-1] / step_m)) + 1, 2)
     s = np.linspace(0.0, along[-1], count)
     positions = np.column_stack([np.interp(s, along, corners[:, k]) for k in range(3)])
@@ -180,13 +183,14 @@ def simulate_walk(
     (by default the scene's only listener), with the other sources standing still.
 
     The late part is traced every ``late_step_m`` (see the module's description), or at
-    every place with ``late_step_m=None``. ``settings`` (default: the scene's) and
-    ``threads`` (default: their ``performance.threads``) go to
-    :func:`~acoustic_spaces.engine.simulate`.
+    every place with ``late_step_m=None`` or the statistical late method. ``settings``
+    (default: the scene's) and ``threads`` (default: their ``performance.threads``) go
+    to :func:`~acoustic_spaces.engine.simulate`.
     """
     kind, item = _walker(room, name)
     points = walk_points(item, step_m)
-    names = tuple(f"{item.name} @ {t:.2f} s" for t in points.times)
+    # Numbered, as places less than 10 ms apart would share a time.
+    names = tuple(f"{item.name} #{k} @ {t:.2f} s" for k, t in enumerate(points.times))
     copies = []
     for k, (place, label) in enumerate(zip(points.positions, names, strict=True)):
         update = {"name": label, "position": tuple(place), "walk": None}
@@ -219,7 +223,9 @@ def simulate_walk(
                 f"{points.times[k]:.2f} s in"
             )
     distances = points.times * item.walk.speed_m_s
-    mixing = {} if late_step_m is None else late_mixing(distances, late_step_m)
+    # The statistical late method gives every place its own, as cheaply as a mix.
+    statistical = (settings or scene.simulation).late.method == "statistical"
+    mixing = {} if late_step_m is None or statistical else late_mixing(distances, late_step_m)
     late_from = {
         names[k]: {names[other]: weight for other, weight in parts.items()}
         for k, parts in mixing.items()

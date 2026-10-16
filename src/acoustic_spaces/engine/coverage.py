@@ -246,7 +246,8 @@ def map_grid(
     # Per column, each level of surface under it (stalls, a balcony above them, ...):
     # its height, the part of the column over it, and where the point goes across:
     # the column's centre, or the middle of the part over the surface when the centre
-    # is not over it (columns along a slanted wall).
+    # is not over it (columns along a slanted wall). A slab whose top and underside
+    # are in one group is walked on at its top.
     rows: list[tuple[int, int, int, float, float, float, float]] = []
     covers: list[np.ndarray] = []
     for s, e in zip(starts, ends, strict=True):
@@ -258,14 +259,15 @@ def map_grid(
         tops = z_sorted[np.r_[breaks, len(z_sorted) - 1]]
         for k, (bottom, top) in enumerate(zip(bottoms, tops, strict=True)):
             on = (z >= bottom) & (z <= top)
-            sub = np.unique(sub_x[on] * _SAMPLES + sub_y[on])
+            key, z_on = sub_x[on] * _SAMPLES + sub_y[on], z[on]
+            sub = np.unique(key)
             at_centre = on & (sub_x == centre) & (sub_y == centre)
             if at_centre.any():
-                px, py, height_at = centre + 0.5, centre + 0.5, float(z[at_centre][0])
+                px, py, height_at = centre + 0.5, centre + 0.5, float(z[at_centre].max())
             else:
                 px = float(np.mean(sub // _SAMPLES)) + 0.5
                 py = float(np.mean(sub % _SAMPLES)) + 0.5
-                height_at = float(np.mean(z[on]))
+                height_at = float(np.mean([z_on[key == q].max() for q in sub]))
             if len(sub) < _MIN_COVER * _SAMPLES**2:
                 continue  # a sliver: too few rays would cross its slab
             x = origin[0] + (ix + px / _SAMPLES) * spacing
@@ -530,12 +532,14 @@ def _point_values(
     spl = power_db + p.g + 10.0 * math.log10(reference)
     out["spl"] = spl
     out["spl_a"] = np.array(a_weighted(spl))
-    finite = np.isfinite(spl)
-    signal = np.where(finite, spl, -100.0)
+    # No STI without the level of each of its bands, 125 Hz to 8 kHz (silent, or a decay
+    # too short for G).
     out["sti"] = np.array(
         iso3382.speech_transmission_index(
-            energy, TIME_STEP, signal_db=signal, noise_db=noise_db, talker=talker
+            energy, TIME_STEP, signal_db=spl, noise_db=noise_db, talker=talker
         )
+        if np.isfinite(spl[1:]).all()
+        else math.nan
     )
     return out
 

@@ -187,7 +187,8 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
   is simulated at every one of them; the late field changes slowly, so the late part,
   by far the costliest to trace, is traced only every `--late-step` (2 m by default,
   14 places), and the places in between mix the late parts of the two on either side
-  in proportion to how near they are. Along the gallery, late parts mixed from places
+  in proportion to how near they are (with the statistical late method, which costs
+  little, every place has its own). Along the gallery, late parts mixed from places
   4 m apart, twice the default, came within 0.3 dB on average of those traced at the
   places themselves, band by band, and within 1.3 dB next to the corner, where the
   field changes fastest (with 10,000 rays per band, whose own noise is part of that).
@@ -205,11 +206,12 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
   signals last.
 - A walking listener hears every source; a walking source is heard at `--listener`,
   with the other sources where they stand. `--format` takes the formats of `simulate
-  --output` (by default the scene's first output) and `--video` saves the room, the
-  path and the walker going along it, with an arrow and its yaw for the way it faces,
-  as a GIF or an MP4 (both with the viz extra) at `--fps`. An MP4 carries the sound
-  when the format has one or two channels (mono, stereo, binaural) and then lasts as
-  long as the sound; with more channels, play the WAV alongside it.
+  --output` (by default the scene's first output, or binaural with `--hrtf`, which is
+  for binaural only) and `--video` saves the room, the path and the walker going along
+  it, with an arrow and its yaw for the way it faces, as a GIF or an MP4 (both with the
+  viz extra) at `--fps`. An MP4 carries the sound when the format has one or two
+  channels (mono, stereo, binaural) and then lasts as long as the sound; with more
+  channels, play the WAV alongside it.
 - A walker faces the way it goes (unless its walk says `face_forward: false`) and
   turns through each corner at 90 degrees per second. The gallery's visitor has the
   guide behind it all down the long arm, and at the corner turns over a second towards

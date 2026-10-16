@@ -313,12 +313,14 @@ class Response:
         """STI, STIPA and U50 for speech from a source of sound power ``level_db`` (dB
         re 1 pW: in all, spread evenly over the octave bands, or per octave band), with
         background noise ``noise_db`` (dB SPL, one value or one per band), as the
-        coverage maps take them, weighted for a male or female ``talker``.
+        coverage maps take them, weighted for a male or female ``talker``; the STI and
+        STIPA are NaN when a band from 125 Hz up has no level (its G is undefined).
         ``parameters`` are this response's, when already at hand."""
         params = self.parameters() if parameters is None else parameters
         level = self.levels(level_db, params)
         signal = np.where(np.isfinite(level), level, -100.0)
         energy = self.octave_energy()
+        # No STI without the level of each of its bands, 125 Hz to 8 kHz.
         sti, stipa = (
             iso3382.speech_transmission_index(
                 energy,
@@ -328,6 +330,8 @@ class Response:
                 stipa=short,
                 talker=talker,
             )
+            if np.isfinite(level[1:]).all()
+            else math.nan
             for short in (False, True)
         )
         u50 = iso3382.useful_to_detrimental(params.d50, signal, noise_db)
