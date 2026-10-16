@@ -169,8 +169,9 @@ jobs:
       - name: Build and test wheels
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
-          # Pull requests build one CPython per platform; tags build the full set from pyproject.toml.
-          CIBW_BUILD: ${{ startsWith(github.ref, 'refs/tags/') && 'cp310-* cp311-* cp312-* cp313-* cp314-*' || 'cp314-*' }}
+          # Pull requests build the oldest and the newest CPython per platform; tags build the
+          # full set from pyproject.toml.
+          CIBW_BUILD: ${{ startsWith(github.ref, 'refs/tags/') && 'cp310-* cp311-* cp312-* cp313-* cp314-*' || 'cp310-* cp314-*' }}
       - uses: actions/upload-artifact@v6
         with:
           name: wheels-${{ matrix.os }}
