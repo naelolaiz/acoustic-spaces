@@ -1,13 +1,16 @@
-"""Make the pictures the documentation shows.
+"""Make most of the pictures the documentation shows.
 
     xvfb-run -a -s "-screen 0 1920x1080x24" python docs/screenshots.py [--only NAME ...]
                                                                         [--bras DIR]
 
 Needs the viz and gui extras. The 3D pictures and the editor need a display with
-OpenGL, which ``xvfb-run`` gives on a machine without one. Every picture is drawn from
-the bundled examples with fixed seeds, so running the script again after a change
-shows what the change did. ``measured.png`` analyses a measured response of the BRAS
-benchmark (DOI 10.14279/depositonce-6726.3, CC BY-SA 4.0): ``--bras`` is the folder
+OpenGL, which ``xvfb-run`` gives on a machine without one. The simulated pictures are
+drawn from the bundled examples with fixed seeds, so running the script again after a
+change shows what the change did; only ``editor_map.png`` takes a new seed every time,
+as the lecture hall sets none. ``coverage.png``, ``plan.png``, ``editor.png``,
+``diffraction.png`` and ``orchestra_video.png`` are made by hand, and ``wave.png`` by
+``validation/wave_solver.py --plot``. ``measured.png`` analyses a measured response of the
+BRAS benchmark (DOI 10.14279/depositonce-6726.3, CC BY-SA 4.0): ``--bras`` is the folder
 the BRAS archives were unpacked into; without it, that picture is skipped.
 """
 

@@ -39,8 +39,8 @@ which frequencies each octave band holds.
   listeners move by dragging, in the 3D view or the plan, and keep their height above
   the floor (up a raked floor too); with Shift in the 3D view they move up and down.
   Surfaces take materials from their form, or from a new material picked from the
-  database (**Edit > Add material**) or from a CATT-Acoustic or ODEON library
-  (**Edit > Add material from a library**).
+  database (**Edit > Add material from the database**) or from a CATT-Acoustic or ODEON
+  library (**Edit > Add material from a library**).
 - A material's form sets its absorption and scattering per band (24 columns when it
   has third-octave data), whether it **Lets through** nothing, part of the sound (with
   its sound reduction index per band in the table) or everything (an opening), and

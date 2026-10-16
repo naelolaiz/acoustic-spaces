@@ -16,8 +16,8 @@ it on every `pip install -e .`.
 
 ## Checks
 
-CI runs these on Linux, macOS and Windows, and its logs are kept free of warnings, not
-only of errors (with uv, put `uv run` in front of each):
+CI runs the tests on Linux, macOS and Windows and ruff on Linux, and its logs are kept
+free of warnings, not only of errors (with uv, put `uv run` in front of each):
 
 ```sh
 ruff check .
@@ -32,7 +32,7 @@ The editor's tests (`tests/test_gui.py`, with the `gui` extra installed:
 `uv sync --extra gui`) use Qt's off-screen platform unless `QT_QPA_PLATFORM` says
 otherwise; there the 3D view shows a note instead and its click tests are skipped. To
 run those too on Linux without a display:
-`QT_QPA_PLATFORM=xcb xvfb-run -a uv run pytest tests/test_gui.py`.
+`QT_QPA_PLATFORM=xcb xvfb-run -a uv run pytest -W error tests/test_gui.py`.
 
 Example scenes live in `examples/<name>/scene.yaml`, with a comment at the top that
 `acoustic-spaces examples` shows; wheels carry them as `acoustic_spaces/example_scenes`.
@@ -51,8 +51,9 @@ get their details there and a line on the front page if they deserve one.
 `docs/api.md` the API reference, generated from the docstrings.
 
 `docs/screenshots.py` draws most of the documentation's pictures into `docs/images` from the
-example scenes, with fixed seeds; run it again after a change that shows in them. The 3D
-pictures and the editor need a display with OpenGL (`xvfb-run` gives one):
+example scenes, with fixed seeds but for the editor's map; run it again after a change
+that shows in them. The 3D pictures and the editor need a display with OpenGL
+(`xvfb-run` gives one):
 
 ```sh
 xvfb-run -a -s "-screen 0 1920x1080x24" python docs/screenshots.py --bras path/to/BRAS

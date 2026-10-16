@@ -25,9 +25,9 @@ Nine checks, printed as Markdown tables, each with both of the solver's stencils
   7-point stencil, the only one with a matched layer);
 - the level of the direct sound in the 63 and 125 Hz bands, in a large and very
   absorbing room, against the free-field level the rays give;
-- a 7 x 5 x 3 m box with 15 % absorption on every surface, simulated with the default
-  settings (the 63 and 125 Hz bands from the wave solver), against the sum of the box's
-  modes with those decay rates: G, EDT and T20 in both bands, also with the 7-point
+- a 7 x 5 x 3 m box with 15 % absorption on every surface, simulated with the wave
+  solver on at its default settings (the 63 and 125 Hz bands), against the sum of the
+  box's modes with those decay rates: G, EDT and T20 in both bands, also with the 7-point
   stencil, with twice as many cells per wavelength and from the rays alone; with
   ``--plot`` (needs matplotlib), the transfer functions from 15 to 250 Hz;
 - the run count and time of a box whose absorption differs in every band up to 500 Hz.

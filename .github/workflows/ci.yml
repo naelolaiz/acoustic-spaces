@@ -44,7 +44,7 @@ jobs:
         run: python -m pip install ".[test,sketchup,gpu,ifc]"
       - name: Test
         timeout-minutes: 30  # a hung GPU test would otherwise hold the runner for 6 hours
-        run: python -m pytest -q
+        run: python -m pytest -q -W error
       - name: Smoke-test the command line
         shell: bash  # stops at the first failing command on every platform
         run: |
@@ -73,7 +73,7 @@ jobs:
       - name: Build and install with the test tools
         run: uv sync
       - name: Test
-        run: uv run pytest -q
+        run: uv run pytest -q -W error
       - run: uv run acoustic-spaces info
 
   viz:
@@ -92,7 +92,7 @@ jobs:
       - name: Build and install
         run: python -m pip install ".[test,viz]"
       - name: Test
-        run: python -m pytest -q tests/test_viz.py
+        run: python -m pytest -q -W error tests/test_viz.py
       - name: Render the example scene
         run: |
           acoustic-spaces view examples/shoebox/scene.yaml --screenshot shoebox.png
@@ -141,12 +141,12 @@ jobs:
       - name: Build and install
         run: python -m pip install ".[test,gui,ifc]"
       - name: Test
-        run: python -m pytest -q tests/test_gui.py
+        run: python -m pytest -q -W error tests/test_gui.py
       - name: Test with a display and the 3D view (Xvfb)
         if: runner.os == 'Linux'
         env:
           QT_QPA_PLATFORM: xcb
-        run: xvfb-run -a -s "-screen 0 1600x1200x24" python -m pytest -q tests/test_gui.py
+        run: xvfb-run -a -s "-screen 0 1600x1200x24" python -m pytest -q -W error tests/test_gui.py
 
   wheels:
     name: Wheel (${{ matrix.os }})
