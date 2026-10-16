@@ -5,8 +5,9 @@
 **Wheels for Intel Macs**
 
 - Wheels for Intel Macs (macOS x86-64), on PyPI and the GitHub releases, so pip no
-  longer builds the package from source there. CI builds them on GitHub's Intel macOS
-  runner and runs the tests and the editor's tests there too.
+  longer builds the package from source there. They need macOS 10.15 or later. CI builds
+  them on GitHub's Intel macOS runner and runs the tests and the editor's tests there
+  too; pull requests now build the wheels for CPython 3.10 as well as 3.14.
 
 **Fixes**
 

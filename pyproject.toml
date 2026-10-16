@@ -124,6 +124,13 @@ test-requires = ["pytest", "h5py"]
 test-sources = ["tests", "examples"]
 test-command = "pytest -q tests"
 
+[[tool.cibuildwheel.overrides]]
+# CPython 3.10 to 3.13 for Intel Macs target macOS 10.9, where nanobind's aligned new and
+# delete are missing (they came with 10.13); 3.14 targets 10.15. All Intel Mac wheels
+# target 10.15.
+select = "*-macosx_x86_64"
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
+
 [tool.cibuildwheel.windows]
 # delvewheel bundles the first msvcp140.dll it finds on PATH; on GitHub's Windows runners
 # that is an older copy shipped with Java. Search the system's VC++ runtime first.

@@ -89,6 +89,12 @@ The version is written in one place, `src/acoustic_spaces/_version.py`.
    notes; one made on the Releases page keeps its own notes, or gets the changelog's
    when it has none.
 
+Pull requests build the wheels for the oldest and the newest CPython only, so a tag can
+still fail on the others. Nothing is published unless every job passes; after the fix is
+merged, move the tag to the new `main` (`git tag -f vX.Y.Z origin/main && git push -f
+origin vX.Y.Z`), which runs the release again and keeps a release made on the Releases
+page.
+
 The Intel Mac wheels come from GitHub's `macos-26-intel` runner, the last Intel macOS
 image GitHub offers; GitHub has not announced when it goes. Once it does, build them on
 `macos-latest` (Apple silicon) by setting `CIBW_ARCHS_MACOS: x86_64` for that job, which
