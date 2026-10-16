@@ -52,7 +52,7 @@ def _load_room(path: str) -> Room | None:
     """Load a scene and its geometry, printing a readable error on failure."""
     try:
         return Room.from_yaml(path)
-    except FileNotFoundError as exc:
+    except (OSError, ImportError) as exc:  # no such file, a folder, a model without its extra
         print(f"error: {exc}", file=sys.stderr)
     except ValidationError as exc:
         print(f"error: {path} is not a valid scene:", file=sys.stderr)
@@ -1567,9 +1567,13 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
     try:
         if args.format:
             output = _output_spec(args.format)
+        elif args.hrtf:
+            output = _output_spec("binaural")  # as simulate --hrtf adds a binaural output
         else:
             output = room.scene.outputs[0] if room.scene.outputs else _output_spec("mono")
-        if args.hrtf and output.format == "binaural":
+        if args.hrtf:
+            if output.format != "binaural":
+                raise ValueError(f"--hrtf is for binaural output, not {args.format}")
             output = output.model_copy(update={"hrtf": Path(args.hrtf)})
         fmt = from_output(output)
         bad = [text for text in args.signals if not text.partition("=")[2]]
@@ -1597,9 +1601,13 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
     except (OSError, ValueError, ImportError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    if settings.late.method == "statistical":
+        late = "each with its own statistical late part"
+    else:
+        late = f"the late part traced at {len(walk.late_places)} of them"
     print(
-        f"{walk.name} walks for {walk.duration_s:.1f} s: responses at {len(walk.names)} places, "
-        f"the late part traced at {len(walk.late_places)} of them",
+        f"{walk.name} walks for {walk.duration_s:.1f} s: responses at "
+        f"{len(walk.names)} places, {late}",
         file=sys.stderr,
     )
     mask = fmt.channel_mask() if hasattr(fmt, "channel_mask") else None
@@ -2253,10 +2261,14 @@ def build_parser() -> argparse.ArgumentParser:
     walkthrough.add_argument(
         "--format",
         metavar="FORMAT",
-        help="mono, binaural, ambisonics[:ORDER] or loudspeakers:LAYOUT (default: the "
-        "scene's first output, else mono)",
+        help="mono, binaural, ambisonics[:ORDER] or loudspeakers:LAYOUT (default: binaural "
+        "with --hrtf, else the scene's first output, else mono)",
     )
-    walkthrough.add_argument("--hrtf", metavar="SOFA", help="HRTF file for binaural output")
+    walkthrough.add_argument(
+        "--hrtf",
+        metavar="SOFA",
+        help="binaural output through this HRTF file (the default format with it)",
+    )
     walkthrough.add_argument(
         "--step",
         type=float,
@@ -2270,7 +2282,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=LATE_STEP_M,
         metavar="M",
         help="distance between the places the late part is traced at, the others mixing "
-        f"theirs (default {LATE_STEP_M:g} m; 0: at every place)",
+        f"theirs (default {LATE_STEP_M:g} m; 0: at every place, as with the statistical "
+        "late method)",
     )
     walkthrough.add_argument(
         "--crossfade",

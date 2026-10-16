@@ -7,7 +7,12 @@ import pytest
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import CoverageResult, coverage_map, map_grid
-from acoustic_spaces.engine.coverage import MAP_PARAMETERS, audience_surfaces
+from acoustic_spaces.engine.coverage import (
+    MAP_PARAMETERS,
+    TIME_STEP,
+    _point_values,
+    audience_surfaces,
+)
 from acoustic_spaces.parameters import speech_transmission_index
 from acoustic_spaces.scene import Coverage
 
@@ -102,6 +107,41 @@ def test_grid_puts_a_balcony_over_the_stalls(tmp_path: Path) -> None:
         map_grid(room, ["wall"])
     with pytest.raises(ValueError, match="no surface named stage"):
         map_grid(room, ["stage"])
+
+
+def test_grid_stands_on_the_top_of_a_slab(tmp_path: Path) -> None:
+    # A slab 0.3 m thick with its underside and its top in one group, the underside
+    # first, as an IFC slab read without `space:` has them.
+    obj = tmp_path / "slab.obj"
+    obj.write_text(
+        "\n".join(
+            [
+                "v 0 0 -0.3",
+                "v 8 0 -0.3",
+                "v 0 6 -0.3",
+                "v 0 0 0",
+                "v 8 0 0",
+                "v 0 6 0",
+                "g audience_slab",
+                "f 1 3 2",
+                "f 4 5 6",
+            ]
+        )
+    )
+    scene = Scene.model_validate(
+        {
+            "geometry": {"file": str(obj)},
+            "materials": {"m": {"absorption": [0.1] * 8, "scattering": 0.1}},
+            "default_material": "m",
+            "sources": [{"name": "s", "position": [1.0, 1.0, 1.5]}],
+            "listeners": [{"name": "l", "position": [2.0, 2.0, 1.2]}],
+        }
+    )
+    grid = map_grid(Room.from_scene(scene), height=1.2, spacing=1.0)
+    # Columns over the slab and along its slanted edge, whose centre is off it, alike.
+    assert len(grid) == 26 and not grid.cover[:, 12].all()
+    np.testing.assert_allclose(grid.surface, 0.0)
+    np.testing.assert_allclose(grid.points[:, 2], 1.2)
 
 
 def test_map_matches_listeners_at_its_points() -> None:
@@ -211,7 +251,25 @@ def test_short_responses_end_within_the_fine_late_slots() -> None:
     }
     m = coverage_map(_shoebox(simulation=simulation), settings=Coverage(spacing=2.0)).get()
     assert m.values["g"].shape == (len(m.grid), 8)
-    assert np.all(np.isfinite(m.value("sti")))
+    # Where the decay of a band from 125 Hz up has not reached -20 dB, G and the STI
+    # are undefined.
+    defined = np.isfinite(m.values["g"][:, 1:]).all(axis=1)
+    np.testing.assert_array_equal(np.isfinite(m.value("sti")), defined)
+
+
+def test_no_sti_without_the_level_of_every_band() -> None:
+    def sti(t60, seconds: float) -> float:
+        t = np.arange(round(seconds / TIME_STEP)) * TIME_STEP
+        energy = np.array([np.exp(-6.0 * math.log(10.0) * t / v) for v in t60])
+        return float(_point_values(energy, np.full(8, 85.0), 1e-2, None, "male")["sti"])
+
+    full = sti([0.5] * 8, 2.0)
+    assert 0.5 < full < 0.8
+    # 50 ms of a decay of 0.5 s: 6 dB, too little for G in any band (it was 0).
+    assert math.isnan(sti([0.5] * 8, 0.05))
+    # One band too slow to decay by 20 dB in 2 s: 125 Hz counts, 63 Hz does not.
+    assert math.isnan(sti([0.5, 10.0] + [0.5] * 6, 2.0))
+    assert sti([10.0] + [0.5] * 7, 2.0) == pytest.approx(full)
 
 
 def test_map_values_and_json() -> None:

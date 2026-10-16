@@ -182,8 +182,8 @@ class Geometry(_Model):
     units: Literal["m", "cm", "mm", "in", "ft"] | None = Field(
         default=None,
         description=(
-            "unit of the coordinates and dimensions; None takes the units a DXF file "
-            "records ($INSUNITS), and metres otherwise"
+            "unit of the coordinates and dimensions; None takes the units a DXF "
+            "($INSUNITS), IFC or Collada file records, and metres otherwise"
         ),
     )
     up_axis: Literal["y", "z"] | None = Field(
@@ -1069,14 +1069,25 @@ class Scene(_Model):
         """Load a scene file; relative paths in it are resolved against its folder."""
         path = Path(path)
         with path.open(encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
+            try:
+                data = yaml.safe_load(fh)
+            except yaml.YAMLError as exc:
+                raise ValueError(f"{path.name}: not valid YAML: {exc}") from None
         return cls.model_validate(data, context={"base_dir": path.resolve().parent})
+
+    def to_data(self) -> dict:
+        """The scene as plain YAML data, dicts and lists. Settings left unset are left out,
+        apart from those whose null is not their default."""
+        data = self.model_dump(mode="json", exclude_none=True)
+        if self.simulation.early.coherent_max_band_hz is None:
+            data["simulation"]["early"]["coherent_max_band_hz"] = None
+        return data
 
     def to_yaml(self, path: str | Path) -> None:
         """Write the scene file. Paths to files under its folder are written relative to
         it, so the folder can move; others stay absolute."""
         path = Path(path)
-        data = self.model_dump(mode="json", exclude_none=True)
+        data = self.to_data()
         base = path.resolve().parent
         geometry = data["geometry"]
         if "file" in geometry:
@@ -1089,8 +1100,13 @@ class Scene(_Model):
                 output["hrtf"] = _portable(output["hrtf"], base)
         for source in data["sources"]:
             directivity = source.get("directivity")
-            if isinstance(directivity, dict) and "file" in directivity:
-                directivity["file"] = _portable(directivity["file"], base)
+            if not isinstance(directivity, dict):
+                continue
+            # An inline array's element may have a file of its own.
+            element = directivity.get("array", {}).get("element")
+            for spec in (directivity, element):
+                if isinstance(spec, dict) and "file" in spec:
+                    spec["file"] = _portable(spec["file"], base)
         with path.open("w", encoding="utf-8") as fh:
             yaml.safe_dump(data, fh, sort_keys=False)
 

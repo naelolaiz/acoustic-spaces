@@ -1,7 +1,7 @@
 # An L-shaped gallery, 4 m high (1150 m3), with a marble floor, rough brick walls and
 # an absorbing ceiling: a guide talks in the long arm, and visitors round the corner hear
 # them only by the sound that bends round it (edge diffraction) and by reflections. The
-# plan's corners go round the floor; wall_4 and wall_5 meet at the inner corner (8, 8).
+# plan's corners go round the floor; wall_3 and wall_4 meet at the inner corner (8, 8).
 name: Gallery (L-shaped, 1150 m3)
 geometry:
   floor_plan: [[0, 0], [24, 0], [24, 8], [8, 8], [8, 20], [0, 20]]

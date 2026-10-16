@@ -445,41 +445,38 @@ class GeometryPage(Page):
 
         self.apply("resize box", change)
 
-    def _corners(self) -> list[list[float]] | None:
-        corners = []
-        for row in range(self.plan.rowCount()):
-            try:
-                corners.append([float(self.plan.item(row, c).text()) for c in range(2)])
-            except (AttributeError, ValueError):
-                return None
-        return corners
-
-    def _plan(self) -> None:
+    def _plan(self, item: QTableWidgetItem) -> None:
         if self._loading:
             return
-        corners = self._corners()
-        if corners is None:
+        try:
+            value = float(item.text())
+        except ValueError:
             self.failed.emit("floor plan corners need two numbers each")
             self.reload()
             return
-        self.apply("change floor plan", lambda data: data["geometry"].update(floor_plan=corners))
+        row, col = item.row(), item.column()
+
+        # Only the number that changed: the others show rounded.
+        def change(data: dict) -> None:
+            data["geometry"]["floor_plan"][row][col] = value
+
+        self.apply("change floor plan", change)
 
     def _add_corner(self) -> None:
-        corners = self._corners() or []
-        if len(corners) >= 2:
-            new = list(np.mean([corners[-1], corners[0]], axis=0))
-        else:
-            new = [0.0, 0.0]
-        corners.append(new)
-        self.apply("add corner", lambda data: data["geometry"].update(floor_plan=corners))
+        def change(data: dict) -> None:
+            corners = data["geometry"]["floor_plan"]
+            corners.append(list(np.mean([corners[-1], corners[0]], axis=0)))
+
+        self.apply("add corner", change)
 
     def _remove_corner(self) -> None:
-        corners = self._corners() or []
         row = self.plan.currentRow()
-        if not corners:
-            return
-        corners.pop(row if 0 <= row < len(corners) else -1)
-        self.apply("remove corner", lambda data: data["geometry"].update(floor_plan=corners))
+
+        def change(data: dict) -> None:
+            corners = data["geometry"]["floor_plan"]
+            corners.pop(row if 0 <= row < len(corners) else -1)
+
+        self.apply("remove corner", change)
 
     def _height(self, value: float) -> None:
         self.apply("change height", lambda data: data["geometry"].update(height=value))
@@ -1405,41 +1402,51 @@ class SimulationPage(Page):
         layout.addWidget(response)
         layout.addStretch()
 
-        for combo in (
-            self.early_method,
-            self.diffraction,
-            self.coherent,
-            self.late_method,
-            self.reception,
-            self.scattering_method,
-            self.wave_band,
-            self.wave_device,
-            self.late_device,
-            self.ray_tree,
-            self.sample_rate,
-            self.bands,
+        for combo, key in (
+            (self.early_method, "early.method"),
+            (self.diffraction, "early.diffraction"),
+            (self.late_method, "late.method"),
+            (self.reception, "late.reception"),
+            (self.scattering_method, "scattering.method"),
+            (self.ray_tree, "performance.ray_tree"),
+            (self.bands, "bands"),
         ):
-            combo.currentTextChanged.connect(self._changed)
-        for box in (
-            self.max_order,
-            self.early_rays,
-            self.late_rays,
-            self.directions,
-            self.threads,
-            self.seed,
+            combo.currentTextChanged.connect(lambda text, key=key: self._set(key, text))
+        for combo, key in ((self.wave_band, "wave.max_band_hz"), (self.sample_rate, "sample_rate")):
+            combo.currentTextChanged.connect(lambda text, key=key: self._set(key, int(text)))
+        self.coherent.currentTextChanged.connect(
+            lambda text: self._set(
+                "early.coherent_max_band_hz", None if text == "none" else int(text)
+            )
+        )
+        for combo, key in ((self.late_device, "late.device"), (self.wave_device, "wave.device")):
+            combo.currentTextChanged.connect(
+                lambda _, combo=combo, key=key: self._set(key, _device(combo))
+            )
+        for box, key in (
+            (self.max_order, "early.max_order"),
+            (self.early_rays, "early.rays"),
+            (self.late_rays, "late.rays"),
+            (self.directions, "late.directions"),
+            (self.threads, "performance.threads"),
+            (self.length, "ir_length_s"),
+            (self.transition, "transition_ms"),
+            (self.seed, "seed"),
         ):
-            box.valueChanged.connect(self._changed)
-        for box in (self.length, self.transition):
-            box.valueChanged.connect(self._changed)
-        for check in (
-            self.splitting,
-            self.from_size,
-            self.by_band,
-            self.wave,
-            self.auto_transition,
-            self.random_seed,
+            box.valueChanged.connect(lambda value, key=key: self._set(key, value))
+        for check, key in (
+            (self.splitting, "late.splitting"),
+            (self.from_size, "scattering.from_size"),
+            (self.by_band, "scattering.by_band"),
+            (self.wave, "wave.enabled"),
         ):
-            check.toggled.connect(self._changed)
+            check.toggled.connect(lambda on, key=key: self._set(key, on))
+        self.auto_transition.toggled.connect(
+            lambda on: self._set("transition_ms", None if on else self.transition.value())
+        )
+        self.random_seed.toggled.connect(
+            lambda on: self._set("seed", None if on else self.seed.value())
+        )
 
     def load(self) -> None:
         s = self.document.scene.simulation
@@ -1488,52 +1495,18 @@ class SimulationPage(Page):
             box.setEnabled(stochastic)
         self.early_rays.setEnabled(s.early.method == "ray_tracing")
 
-    def _changed(self) -> None:
-        if self._loading:
-            return
-        settings = {
-            "early": {
-                "method": self.early_method.currentText(),
-                "max_order": self.max_order.value(),
-                "rays": self.early_rays.value(),
-                "diffraction": self.diffraction.currentText(),
-                "coherent_max_band_hz": None
-                if self.coherent.currentText() == "none"
-                else int(self.coherent.currentText()),
-            },
-            "late": {
-                **self.document.scene.simulation.late.model_dump(mode="json", exclude_none=True),
-                "method": self.late_method.currentText(),
-                "rays": self.late_rays.value(),
-                "reception": self.reception.currentText(),
-                "directions": self.directions.value(),
-                "splitting": self.splitting.isChecked(),
-                "device": _device(self.late_device),
-            },
-            "scattering": {
-                "method": self.scattering_method.currentText(),
-                "from_size": self.from_size.isChecked(),
-                "by_band": self.by_band.isChecked(),
-            },
-            "wave": {
-                **self.document.scene.simulation.wave.model_dump(mode="json"),
-                "enabled": self.wave.isChecked(),
-                "max_band_hz": int(self.wave_band.currentText()),
-                "device": _device(self.wave_device),
-            },
-            "performance": {
-                "threads": self.threads.value(),
-                "ray_tree": self.ray_tree.currentText(),
-            },
-            "ir_length_s": self.length.value(),
-            "sample_rate": int(self.sample_rate.currentText()),
-            "bands": self.bands.currentText(),
-        }
-        if not self.auto_transition.isChecked():
-            settings["transition_ms"] = self.transition.value()
-        if not self.random_seed.isChecked():
-            settings["seed"] = self.seed.value()
-        self.apply("change simulation settings", lambda data: data.update(simulation=settings))
+    def _set(self, key: str, value) -> None:
+        """Write the one setting that changed (``late.rays``): the others show rounded to
+        their boxes' decimals."""
+        *groups, name = key.split(".")
+
+        def change(data: dict) -> None:
+            settings = data["simulation"]
+            for group in groups:
+                settings = settings[group]
+            settings[name] = value
+
+        self.apply("change simulation settings", change)
 
 
 class OutputsPage(Page):
@@ -1729,8 +1702,9 @@ class CoveragePage(Page):
         noise_layout.addWidget(self.noisy)
         noise_layout.addWidget(self.noise)
         hint = QLabel(
-            "Each source talks at its sound power level, spread evenly over the bands. "
-            "Run the map with Simulation > Run coverage map (F6)."
+            "Each source radiates its sound power over the bands as its spectrum, gain and "
+            "equalizer set, and the STI takes that as male speech, or female for the female "
+            "speech spectrum. Run the map with Simulation > Run coverage map (F6)."
         )
         hint.setWordWrap(True)
         noise_layout.addWidget(hint)

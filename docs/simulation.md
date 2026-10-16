@@ -81,8 +81,9 @@ The directions the sound arrives from give more of them:
 - T30 of figures of eight facing forward, left and up from the listener: where sound
   keeps running between two hard walls, the decay along that axis is longer.
 - STI and STIPA (IEC 60268-16) and U50, at the level the source's `level_db` gives and
-  the background noise of `coverage.noise_db`, as the coverage maps take them; and the
-  echo criteria of Dietsch and Kraak for speech and music.
+  the background noise of `coverage.noise_db`, as the coverage maps take them (NaN,
+  like G, when a band from 125 Hz up is undefined); and the echo criteria of Dietsch
+  and Kraak for speech and music.
 
 The echogram adds the arrivals in energy, as ODEON and CATT do, except the early
 reflections in the lowest bands, which add in pressure (see

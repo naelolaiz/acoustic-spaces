@@ -148,6 +148,9 @@ def test_save_and_open(qapp, tmp_path: Path) -> None:
     (tmp_path / "bad.yaml").write_text("name: x\n", encoding="utf-8")
     with pytest.raises(EditError, match="geometry"):
         Document.open(tmp_path / "bad.yaml")
+    (tmp_path / "broken.yaml").write_text("name: [x\n", encoding="utf-8")
+    with pytest.raises(EditError, match="broken.yaml: not valid YAML"):
+        Document.open(tmp_path / "broken.yaml")
 
 
 def test_saving_an_example_copies_its_files(qapp, tmp_path: Path) -> None:
@@ -157,6 +160,23 @@ def test_saving_an_example_copies_its_files(qapp, tmp_path: Path) -> None:
     assert "file: concert_hall.obj" in (tmp_path / "hall" / "scene.yaml").read_text()
     assert document.scene.geometry.file == (tmp_path / "hall" / "concert_hall.obj").resolve()
     assert not document.modified
+
+
+def test_saving_copies_the_element_file_of_an_inline_array(qapp, tmp_path: Path) -> None:
+    folder = tmp_path / "old"
+    folder.mkdir()
+    bands = ", ".join(f"{f} Hz" for f in (125, 250, 500, 1000, 2000, 4000, 8000))
+    rows = [f"{az}, {el}" + ", 0" * 7 for el in range(-90, 91, 10) for az in range(0, 360, 10)]
+    text = "\n".join([f"azimuth, elevation, {bands}", *rows])
+    (folder / "speaker.csv").write_text(text, encoding="utf-8")
+    document = Document(box_scene(), folder / "scene.yaml")
+    array = {"element": {"file": "speaker.csv"}, "count": 2, "spacing_m": 0.1}
+    document.edit("array", lambda data: data["sources"][0].update(directivity={"array": array}))
+    document.save(tmp_path / "new" / "scene.yaml", copy_files=True)
+    assert (tmp_path / "new" / "speaker.csv").is_file()
+    assert "file: speaker.csv" in (tmp_path / "new" / "scene.yaml").read_text()
+    element = document.scene.sources[0].directivity.array.element
+    assert element.file == (tmp_path / "new" / "speaker.csv").resolve()
 
 
 def test_model_scene_puts_points_inside(qapp) -> None:
@@ -720,6 +740,27 @@ def test_forms_write_back_only_what_changed(window) -> None:
     source = window.document.scene.sources[0]
     assert source.position == (1.234567, 2.345678, 1.6)
     assert (source.orientation.yaw, source.orientation.pitch) == (12.345, 10.0)
+
+    def fine(data: dict) -> None:
+        corners = [[0, 0], [8.1234567, 0], [8, 6.7654321], [0, 6]]
+        data["geometry"] = {"floor_plan": corners, "height": 3.0}
+        data["simulation"].update(ir_length_s=0.105, transition_ms=12.5)
+
+    window.document.edit("fine", fine)
+    window.select("geometry", None)
+    page = window.inspector.pages["geometry"]
+    page.plan.item(0, 1).setText("0.5")  # the others show rounded, to 8.12346 and 6.76543
+    page._add_corner()  # half-way from the last corner to the first
+    plan = [(0.0, 0.5), (8.1234567, 0.0), (8.0, 6.7654321), (0.0, 6.0), (0.0, 3.25)]
+    assert window.document.scene.geometry.floor_plan == plan
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    page.coherent.setCurrentText("none")
+    page.late_rays.setValue(1234)  # the length shows as 0.10 or 0.11, the transition as 12 or 13
+    simulation = window.document.scene.simulation
+    assert (simulation.ir_length_s, simulation.transition_ms) == (0.105, 12.5)
+    assert simulation.late.rays == 1234
+    assert simulation.early.coherent_max_band_hz is None
 
 
 def test_scene_form_keeps_the_humidity_to_a_tenth(window) -> None:

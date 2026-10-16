@@ -108,6 +108,21 @@ def test_validate_reports_schema_errors(tmp_path: Path, capsys: pytest.CaptureFi
     assert "materials.painted_concrete: no absorption material named 'smooth_brickwork'" in err
 
 
+def test_validate_reports_unreadable_scenes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # These ended in tracebacks.
+    path = tmp_path / "broken.yaml"
+    path.write_text("sources: [{name: s\n", encoding="utf-8")
+    assert main(["validate", str(path)]) == 1
+    assert capsys.readouterr().err.startswith("error: broken.yaml: not valid YAML: ")
+    assert main(["validate", str(tmp_path)]) == 1  # a folder
+    assert capsys.readouterr().err.startswith("error: ")
+    monkeypatch.setitem(sys.modules, "ifcopenshell", None)
+    assert main(["validate", str(EXAMPLES / "bim_office" / "scene.yaml")]) == 1
+    assert capsys.readouterr().err.startswith("error: reading IFC files needs IfcOpenShell")
+
+
 def test_validate_refuses_a_model_of_degenerate_faces(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

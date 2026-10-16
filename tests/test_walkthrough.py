@@ -101,6 +101,9 @@ def test_a_walk_needs_somewhere_to_go_and_a_point_source() -> None:
     }
     with pytest.raises(ValidationError, match="only a point source walks"):
         _scene(sources=[line], listeners=[{"name": "l", "position": [6, 4, 1.2]}])
+    nowhere = _scene(sources=sources, listeners=[_walker({"to": [[1.0, 1.0, 1.5]] * 2})])
+    with pytest.raises(ValueError, match="the walk of 'w' goes nowhere"):
+        walk_points(nowhere.listeners[0])
 
 
 def test_crossfade_weights_add_up_to_one() -> None:
@@ -195,11 +198,25 @@ def test_a_walking_listener() -> None:
     assert len(walked.result) == 2 * 15
     c = room.speed_of_sound()
     for k, name in enumerate(walked.names):
-        assert name == f"w @ {walked.points.times[k]:.2f} s"
+        assert name == f"w #{k} @ {walked.points.times[k]:.2f} s"
         distance = np.linalg.norm(walked.points.positions[k] - [7.0, 5.0, 1.5])
         assert walked.result["s", name].direct_delay_s == pytest.approx(distance / c)
     every = simulate_walk(room, step_m=0.5, late_step_m=None)
     assert every.late_places == tuple(range(15))
+    # The statistical method gives every place its own late part.
+    statistical = room.scene.simulation.model_copy(deep=True)
+    statistical.late.method = "statistical"
+    assert simulate_walk(room, step_m=0.5, settings=statistical).late_places == tuple(range(15))
+
+
+def test_places_less_than_10_ms_apart_have_names_of_their_own() -> None:
+    # 2 m at 30 m/s in steps of 0.25 m: 8.3 ms apart, two places at 0.03 s.
+    walk = {"to": [[3.0, 1.0, 1.5]], "speed_m_s": 30.0}
+    sources = [{"name": "s", "position": [7.0, 5.0, 1.5]}]
+    room = Room.from_scene(_scene(sources=sources, listeners=[_walker(walk)]))
+    walked = simulate_walk(room, late_step_m=1.0)
+    assert len(set(walked.names)) == len(walked.names) == 9
+    assert walked.late_places == (0, 4, 8) and len(walked.result) == 9
 
 
 def test_a_walking_source_is_heard_at_a_listener() -> None:
@@ -351,6 +368,13 @@ def test_cli_walkthrough(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
     assert "the late part traced at 2 of them" in capsys.readouterr().err
     assert main([*args, "--late-step", "0"]) == 0
     assert "traced at 3 of them" in capsys.readouterr().err
+    # --hrtf is for binaural output: the format without --format, refused with another.
+    hrtf = ["--hrtf", str(tmp_path / "missing.sofa")]
+    assert main([*args, *hrtf]) == 1
+    err = capsys.readouterr().err
+    assert "error: " in err and "traced" not in err
+    assert main([*args, "--format", "mono", *hrtf]) == 1
+    assert "error: --hrtf is for binaural output, not mono" in capsys.readouterr().err
     assert main(["inspect", str(path)]) == 0
     assert "walks 2.0 m to (3.00, 1.00, 1.50) in 1.0 s" in capsys.readouterr().out
     assert main(["walkthrough", str(path), "x", "--out", str(out)]) == 1

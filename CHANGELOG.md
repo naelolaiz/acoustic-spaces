@@ -124,6 +124,44 @@
 - `acoustic-spaces inspect` of a model whose walls are drawn as a closed shell inside
   another gave the volume of the cavity between them, while the reverberation times
   below it used the air inside. It also gives the "air volume" now.
+- A walk with places less than 10 ms apart (a `walkthrough --step` of about 1 cm at
+  walking pace, or a walker faster than 25 m/s) stopped with an error about late parts,
+  or with `--late-step 0` played some places through their neighbour's response: the
+  places were named by their time to 10 ms, and shared names. They are numbered now
+  (`<name> #<place> @ <time> s`). A walk whose points are all where it starts is
+  refused, naming the walker, where it divided by zero.
+- With the statistical late method every place of a walk has a late part of its own,
+  but `WalkResponses.late_places` and the `walkthrough` summary said that only those
+  every `--late-step` had. They say every place now.
+- `walkthrough --hrtf` did nothing unless the format was binaural, and took a missing
+  file without a word. Like `simulate --hrtf`, it now renders binaural through the HRTF
+  when `--format` is not given, and refuses another `--format`.
+- A coverage map over a slab whose top and underside are in one group (an IFC slab read
+  without `space:`, or a solid floor from a CAD program) could put its points `height`
+  above the underside, up to the slab's thickness too low. They stand on its top now.
+- The STI of a coverage map point, and in `parameters.json`, was 0, or too low, where
+  the decay of a band from 125 Hz up had not reached -20 dB by the end of the response
+  (a short `ir_length_s` or `map --length`), while the other parameters there were
+  undefined. It is undefined too now (`-`, or null in JSON).
+- `validate`, `simulate`, `map` and the other commands that read a scene printed a
+  Python traceback for a scene file that is not valid YAML, for a folder, and for an IFC
+  or SketchUp model without its extra. They print an `error:` now, and the editor says
+  why it could not open a file that is not valid YAML.
+- A scene saved with an inline array whose element is a file (`array: {element: {file:
+  cabinet.csv}, ...}`) kept that file's absolute path, so its folder could not move,
+  and the editor's Save As with copies left the file behind. It is written relative to
+  the scene's folder and copied along now.
+- The editor's floor plan table wrote every corner back as it showed it, to six
+  significant digits, when one changed or a corner was added or removed; the simulation
+  form wrote back every setting when one changed, rounding the response length to 10 ms
+  and the early-to-late time to whole milliseconds. They write only what changed now.
+- A scene's `simulation.early.coherent_max_band_hz: null` (early paths in energy
+  throughout) was left out when the scene was saved, and when the editor changed any
+  other setting, so it came back as the default, 125 Hz. It is kept now. `Scene.to_data()`
+  gives a scene as the data its file holds.
+- The coverage form's note said the sources' sound power is spread evenly over the
+  bands. It says how the map spreads it: as each source's spectrum, gain and equalizer
+  set.
 - The warning for edges that join faces of opposite orientation said that it only
   mattered for the volume. The volume and the inside checks do not depend on the
   normals; only their reported direction is unknown, and the warning says so.
@@ -132,6 +170,8 @@
   JND (how far it can move before the sum of the squared misses grows by one JND
   squared), and the module summary of `render` says the real-time convolver's
   partitions grow along the response, from the block size up to 8192 frames.
+- The gallery example's comment said that its inner corner is where wall_4 and wall_5
+  meet; it is wall_3 and wall_4.
 
 ## 3.0.0
 

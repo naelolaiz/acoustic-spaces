@@ -249,6 +249,26 @@ def test_scene_directivity_files_are_resolved_and_saved_relative(tmp_path: Path)
         Room.from_scene(scene)
 
 
+def test_an_inline_array_saves_its_element_file_relative(tmp_path: Path) -> None:
+    folder = tmp_path / "scene"
+    folder.mkdir()
+    _write_csv(folder / "speaker.csv", FirstOrder.pattern("cardioid"), OCTAVE_BANDS_HZ)
+    array = {"element": {"file": "speaker.csv"}, "count": 2, "spacing_m": 0.1}
+    data = _shoebox(directivity={"array": array})
+    (folder / "scene.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
+    scene = Scene.from_yaml(folder / "scene.yaml")
+    assert scene.sources[0].directivity.array.element.file == folder / "speaker.csv"
+    scene.to_yaml(folder / "copy.yaml")
+    saved = yaml.safe_load((folder / "copy.yaml").read_text(encoding="utf-8"))
+    assert saved["sources"][0]["directivity"]["array"]["element"] == {"file": "speaker.csv"}
+    # The folder can move.
+    folder.rename(tmp_path / "moved")
+    room = Room.from_yaml(tmp_path / "moved" / "copy.yaml")
+    assert room.scene.sources[0].directivity.array.element.file == (
+        tmp_path / "moved" / "speaker.csv"
+    )
+
+
 # -- simulation ----------------------------------------------------------------------
 
 

@@ -208,15 +208,17 @@ def _free_spots(plan: np.ndarray, mesh: RoomMesh, height: float, count: int) -> 
 
 
 def referenced_files(scene: Scene) -> list[Path]:
-    """The files ``scene`` uses: its model, material tables, source directivities and
-    HRTFs."""
+    """The files ``scene`` uses: its model, material tables, source directivities (an
+    inline array's element's too) and HRTFs."""
     files = [scene.geometry.file] if scene.geometry.file is not None else []
     files += [m.file for m in scene.materials.values() if m.file is not None]
-    files += [
-        s.directivity.file
-        for s in scene.sources
-        if not isinstance(s.directivity, str) and s.directivity.file is not None
+    specs = [s.directivity for s in scene.sources if not isinstance(s.directivity, str)]
+    specs += [
+        d.array.element
+        for d in specs
+        if d.array is not None and not isinstance(d.array.element, str)
     ]
+    files += [d.file for d in specs if d.file is not None]
     files += [o.hrtf for o in scene.outputs if o.hrtf is not None]
     return [Path(f) for f in files]
 
@@ -284,7 +286,7 @@ class Document(QObject):
         """Apply ``change`` to a plain copy of the scene (the YAML structure as dicts and
         lists) and make the result current. Raises :class:`EditError` if the scene
         schema or the geometry rejects it; the document is then unchanged."""
-        data = self.scene.model_dump(mode="json", exclude_none=True)
+        data = self.scene.to_data()
         change(data)
         try:
             scene = Scene.model_validate(data, context={"base_dir": self.base_dir})
@@ -319,9 +321,10 @@ class Document(QObject):
         """Write the scene file (to ``path``, which becomes the document's file).
 
         With ``copy_files``, the files the scene uses from its current folder (a model,
-        material tables, HRTFs) are copied along to the new folder, keeping their
-        relative places, and the scene refers to the copies. Files already there with
-        other contents are left alone; the scene then keeps using the originals.
+        material tables, directivities, HRTFs) are copied along to the new folder,
+        keeping their relative places, and the scene refers to the copies. Files already
+        there with other contents are left alone; the scene then keeps using the
+        originals.
         """
         target = Path(path) if path is not None else self.path
         if target is None:
@@ -352,7 +355,7 @@ class Document(QObject):
             moved[str(file)] = str(copy)
         if not moved:
             return
-        data = self.scene.model_dump(mode="json", exclude_none=True)
+        data = self.scene.to_data()
         if data["geometry"].get("file") in moved:
             data["geometry"]["file"] = moved[data["geometry"]["file"]]
         for material in data["materials"].values():
@@ -360,8 +363,12 @@ class Document(QObject):
                 material["file"] = moved[material["file"]]
         for source in data["sources"]:
             directivity = source.get("directivity")
-            if isinstance(directivity, dict) and directivity.get("file") in moved:
-                directivity["file"] = moved[directivity["file"]]
+            if not isinstance(directivity, dict):
+                continue
+            element = directivity.get("array", {}).get("element")
+            for spec in (directivity, element):
+                if isinstance(spec, dict) and spec.get("file") in moved:
+                    spec["file"] = moved[spec["file"]]
         for output in data["outputs"]:
             if output.get("hrtf") in moved:
                 output["hrtf"] = moved[output["hrtf"]]

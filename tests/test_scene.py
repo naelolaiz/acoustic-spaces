@@ -45,6 +45,14 @@ def test_round_trip(tmp_path: Path) -> None:
     assert again.model_dump() == scene.model_dump()
 
 
+def test_round_trip_keeps_a_null_that_is_not_the_default(tmp_path: Path) -> None:
+    scene = Scene.from_yaml(EXAMPLES / "shoebox" / "scene.yaml")
+    scene.simulation.early.coherent_max_band_hz = None  # the default is 125
+    scene.to_yaml(tmp_path / "copy.yaml")
+    assert Scene.from_yaml(tmp_path / "copy.yaml").simulation.early.coherent_max_band_hz is None
+    assert Scene.model_validate(scene.to_data()).simulation.early.coherent_max_band_hz is None
+
+
 def test_orientation_forward() -> None:
     from acoustic_spaces.scene.model import Orientation
 
