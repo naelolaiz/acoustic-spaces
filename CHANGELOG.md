@@ -1,10 +1,15 @@
 # Changelog
 
-## Unreleased
+## 3.2.1
+
+**Wheels for Intel Macs**
 
 - Wheels for Intel Macs (macOS x86-64), on PyPI and the GitHub releases, so pip no
   longer builds the package from source there. CI builds them on GitHub's Intel macOS
   runner and runs the tests and the editor's tests there too.
+
+**Fixes**
+
 - Loudspeaker panning gives the same gains on every processor: an arrival on an edge
   between speakers could leave a speaker beyond that edge a gain of about 1e-17 from
   rounding (the rear height speakers of 5.x.4, for sound from straight behind, on Intel
