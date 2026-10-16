@@ -27,6 +27,13 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces.gui.inspector import BAND_LABELS
+from acoustic_spaces.gui.tips import (
+    band_headers,
+    band_tip,
+    label_for,
+    row_headers,
+    share_tips,
+)
 from acoustic_spaces.headtracking import DEFAULT_OSC_PORT, HeadOrientation, OscReceiver
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import MORE_PARAMETERS, PARAMETERS
@@ -57,6 +64,43 @@ ROWS = [
 ]
 assert {name for name, _, _ in ROWS[:8]} == set(PARAMETERS)
 assert {name for name, _, _ in ROWS[9:]} <= set(MORE_PARAMETERS)
+#: What each row of the parameter table means, for its tip.
+ROW_TIPS = {
+    "edt": "Early decay time (s): how long the sound would take to die away by 60 dB at "
+    "the rate of its first 10 dB; the closest to how reverberant the room sounds",
+    "t20": "Reverberation time (s): how long the sound takes to die away by 60 dB, from "
+    "the decay between -5 and -25 dB",
+    "t30": "Reverberation time (s): how long the sound takes to die away by 60 dB, from "
+    "the decay between -5 and -35 dB",
+    "c50": "Clarity for speech (dB): the energy of the first 50 ms over the energy after. "
+    "Higher is clearer",
+    "c80": "Clarity for music (dB): the energy of the first 80 ms over the energy after. "
+    "Higher is clearer",
+    "d50": "Definition (0 to 1): the share of all the energy that arrives in the first 50 ms",
+    "ts": "Centre time (ms): the mean arrival time of the energy. Lower is clearer",
+    "g": "Strength (dB): how loud the source is here, over the same source 10 m away in free field",
+    "spl": "Sound pressure level (dB re 20 µPa) here, with the source at the sound power "
+    "level its form sets",
+    "lf": "Early lateral energy fraction (0 to 1): the share of the early sound (5 to "
+    "80 ms) that comes from the sides, which makes the source sound wider",
+    "lfc": "Early lateral energy fraction as LF, with each arrival weighted by the cosine "
+    "of its angle to the side rather than its square",
+    "lj": "Late lateral sound level (dB): the level of the sound from the sides after "
+    "80 ms, which surrounds the listener",
+    "st_early": "Early stage support (dB), for a listener within 1.5 m of the source: "
+    "the energy from 20 to 100 ms over that of the first 10 ms, how well musicians hear "
+    "each other",
+    "st_late": "Late stage support (dB), for a listener within 1.5 m of the source: the "
+    "energy from 100 to 1000 ms over that of the first 10 ms, how much of the room "
+    "musicians hear",
+    "t30_x": "T30 (s) of a figure-of-eight microphone facing forward from the listener. "
+    "Longer than T30 where sound keeps running between two hard walls along that line",
+    "t30_y": "T30 (s) of a figure-of-eight microphone facing left from the listener. "
+    "Longer than T30 where sound keeps running between two hard walls along that line",
+    "t30_z": "T30 (s) of a figure-of-eight microphone facing up from the listener. Longer "
+    "than T30 where sound keeps running between floor and ceiling",
+}
+assert set(ROW_TIPS) == {name for name, _, _ in ROWS}
 #: How often the head controls show the latest orientation (ms).
 HEAD_REFRESH_MS = 100
 
@@ -77,10 +121,10 @@ class HeadControls(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.yaw = QSlider(Qt.Orientation.Horizontal)
         self.yaw.setRange(-180, 180)
-        self.yaw.setToolTip("Turn the head: left is positive")
+        self.yaw.setToolTip("Turn the head (degrees): left is positive")
         self.pitch = QSlider(Qt.Orientation.Horizontal)
         self.pitch.setRange(-90, 90)
-        self.pitch.setToolTip("Tilt the head: up is positive")
+        self.pitch.setToolTip("Tilt the head (degrees): up is positive")
         self.centre = QPushButton("Centre")
         self.centre.setToolTip("Take the head tracker's current orientation as straight ahead")
         self.port = QSpinBox()
@@ -92,13 +136,17 @@ class HeadControls(QWidget):
             "(/ypr, /quaternion, /yaw, /pitch, /roll)"
         )
         self.facing = QLabel()
+        self.facing.setToolTip(
+            "Where the head faces now (degrees), and how many messages the head tracker sent"
+        )
         for label, widget in (("Yaw", self.yaw), ("Pitch", self.pitch)):
-            layout.addWidget(QLabel(label))
+            layout.addWidget(label_for(label, widget))
             layout.addWidget(widget, 1)
         layout.addWidget(self.centre)
-        layout.addWidget(QLabel("OSC port"))
+        layout.addWidget(label_for("OSC port", self.port))
         layout.addWidget(self.port)
         layout.addWidget(self.facing, 1)
+        share_tips(self)
         self._timer = QTimer(self)
         self._timer.setInterval(HEAD_REFRESH_MS)
         self._timer.timeout.connect(self.refresh)
@@ -179,26 +227,53 @@ class ResultsPanel(QWidget):
         layout = QVBoxLayout(self)
         bar = QHBoxLayout()
         self.source = QComboBox()
+        self.source.setToolTip(
+            "The source whose results the panel shows; selecting a source in the scene "
+            "shows its results too"
+        )
         self.listener = QComboBox()
+        self.listener.setToolTip(
+            "The listener whose results the panel shows; selecting a listener in the scene "
+            "shows its results too"
+        )
         self.band = QComboBox()
         self.band.addItems(BAND_LABELS)
         self.band.setCurrentIndex(OCTAVE_BANDS_HZ.index(1000))
+        for index, centre in enumerate(OCTAVE_BANDS_HZ):
+            self.band.setItemData(index, band_tip(centre), Qt.ItemDataRole.ToolTipRole)
+        self.band.setToolTip(
+            "The octave band (a range of frequencies, named by its centre) the echogram and "
+            "the arrival directions show. The parameter table and the decay curves show "
+            "every band"
+        )
         self.paths = QCheckBox("Paths in 3D")
+        self.paths.setToolTip(
+            "Draw the early reflection paths from this source to this listener in the 3D "
+            "view, coloured by order"
+        )
         self.tracking = QCheckBox("Head tracking")
         self.tracking.setToolTip(
             "Listen binaurally through Ambisonics that turns with the head: by hand, or as "
             "a head tracker reports it"
         )
         self.export = QPushButton("Export…")
+        self.export.setToolTip(
+            "Write every response of the run to a folder: a WAV file per output format and "
+            "parameters.json, as acoustic-spaces simulate does"
+        )
         self.listen = QPushButton("Listen…")
+        self.listen.setToolTip(
+            "Play a dry WAV recording through this response on the sound card, binaurally "
+            "(needs the measure extra)"
+        )
         self.stop = QPushButton("Stop")
         self.stop.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop))
         self.stop.setToolTip("Stop playing (Esc)")
         self.stop.setEnabled(False)
         for label, widget in (("Source", self.source), ("Listener", self.listener)):
-            bar.addWidget(QLabel(label))
+            bar.addWidget(label_for(label, widget))
             bar.addWidget(widget, 1)
-        bar.addWidget(QLabel("Band"))
+        bar.addWidget(label_for("Band", self.band))
         bar.addWidget(self.band)
         bar.addWidget(self.paths)
         bar.addStretch()
@@ -216,20 +291,37 @@ class ResultsPanel(QWidget):
         self.table = QTableWidget(len(ROWS), len(OCTAVE_BANDS_HZ))
         self.table.setHorizontalHeaderLabels(BAND_LABELS)
         self.table.setVerticalHeaderLabels([label for _, label, _ in ROWS])
+        band_headers(self.table)
+        row_headers(self.table, [ROW_TIPS[name] for name, _, _ in ROWS])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.tabs.addTab(self.table, "Parameters")
+        self.tabs.setTabToolTip(
+            0, "Room parameters (ISO 3382-1) in every octave band; rest on a row for its meaning"
+        )
         self.echogram = QScrollArea()
         self.tabs.addTab(self.echogram, "Echogram and decay")
+        self.tabs.setTabToolTip(
+            1,
+            "The energy arriving over time in the chosen band, with the early reflections "
+            "coloured by order, and the decay curves of every band",
+        )
         self.directions = QScrollArea()
         self.tabs.addTab(self.directions, "Directions")
+        self.tabs.setTabToolTip(
+            2, "Where the sound comes from, as the listener faces, in the chosen band"
+        )
         for holder in (self.echogram, self.directions):
             holder.setWidgetResizable(True)
             holder.setWidget(QWidget())
         self.details = QPlainTextEdit()
         self.details.setReadOnly(True)
         self.tabs.addTab(self.details, "Run details")
+        self.tabs.setTabToolTip(
+            3, "What the run did: its settings per source, and the paths it found per pair"
+        )
         layout.addWidget(self.tabs, 1)
+        share_tips(self)
 
         self.source.currentTextChanged.connect(self._pair)
         self.listener.currentTextChanged.connect(self._pair)
@@ -334,9 +426,12 @@ class ResultsPanel(QWidget):
                 values = spl
             else:
                 values = getattr(parameters, name) * (1e3 if name == "ts" else 1.0)
+            tip = ROW_TIPS[name]
             for col, value in enumerate(values):
-                text = fmt.format(value) if np.isfinite(value) else "–"
-                self.table.setItem(row, col, QTableWidgetItem(text))
+                defined = np.isfinite(value)
+                item = QTableWidgetItem(fmt.format(value) if defined else "–")
+                item.setToolTip(tip if defined else f"{tip}. Not defined for this response")
+                self.table.setItem(row, col, item)
             self.table.setRowHidden(row, row > 8 and not np.isfinite(values).any())
 
     def _details(self) -> None:
@@ -392,4 +487,4 @@ class ResultsPanel(QWidget):
         self.playing_changed.emit(playing)
 
 
-__all__ = ["HEAD_REFRESH_MS", "PLOT_SIZE", "ROWS", "HeadControls", "ResultsPanel"]
+__all__ = ["HEAD_REFRESH_MS", "PLOT_SIZE", "ROWS", "ROW_TIPS", "HeadControls", "ResultsPanel"]

@@ -15,6 +15,25 @@ from acoustic_spaces.room import UNASSIGNED, Room
 from acoustic_spaces.viz import LISTENER_COLOUR, SOURCE_COLOUR
 
 ROLE = Qt.ItemDataRole.UserRole
+#: The tip of each kind of entry, by (kind, key); a key of None stands for any.
+TIPS = {
+    ("scene", None): "The scene: its name, default material and air",
+    ("geometry", None): "The room's shape: a box, a floor plan or a model file",
+    ("geometry", "surfaces"): "The groups of faces that share a name in the model",
+    ("surface", None): "Select it to give it a material; its material and area follow",
+    ("", "materials"): "The materials of the scene, with the area each covers",
+    ("material", None): "Select it to change its absorption, scattering and what it lets through",
+    ("", "sources"): "The sound sources; place more with Place source",
+    ("sources", None): "Select it to change it; drag it in the 3D view or the plan to move it",
+    ("", "listeners"): "The listening positions; place more with Place listener",
+    ("listeners", None): "Select it to change it; drag it in the 3D view or the plan to move it",
+    ("simulation", None): "How the early reflections and the late reverberation are "
+    "computed, and the responses' length, sample rate and bands",
+    ("outputs", None): "The formats every response is written in: mono, binaural, "
+    "Ambisonics or loudspeakers",
+    ("coverage", None): "Where the coverage map lies, how fine it is, and the background "
+    "noise for the STI",
+}
 
 
 def swatch(colour: str) -> QIcon:
@@ -41,6 +60,10 @@ class SceneTree(QTreeWidget):
     def _item(self, parent, text: str, kind: str, key=None, detail: str = "", icon=None):
         item = QTreeWidgetItem(parent, [text, detail])
         item.setData(0, ROLE, len(self._keys))
+        tip = TIPS.get((kind, key)) or TIPS.get((kind, None))
+        if tip:
+            for column in range(2):
+                item.setToolTip(column, tip)
         self._keys.append((kind, key))
         if icon is not None:
             item.setIcon(0, icon)

@@ -15,7 +15,10 @@ say), it prints the short usage instead, with the reason.
 
 ![The editor with the concert hall example: the scene tree, the room with its early reflection paths, the source's properties and the echogram of a run](images/editor.png)
 
-The editor works on the same scene files as the command line:
+The editor works on the same scene files as the command line. Rest the mouse on any
+label, field, button or column header for a tip that says what it means, with its unit:
+the rows of the Results table say what each parameter measures, and the band columns
+which frequencies each octave band holds.
 
 - **File > Open example** opens the bundled rooms. Saving one asks where to keep your
   copy and takes its model file along; an example whose model needs an extra that is not

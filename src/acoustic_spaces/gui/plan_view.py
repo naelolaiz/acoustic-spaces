@@ -48,6 +48,7 @@ from acoustic_spaces.gui.document import (
     plan_corners,
     surface_heights,
 )
+from acoustic_spaces.gui.tips import label_for, share_tips
 from acoustic_spaces.gui.viewport import SELECTED_COLOUR, material_colour, surface_materials
 from acoustic_spaces.room import Room
 from acoustic_spaces.viz import BACKGROUND, EDGE_COLOUR, LISTENER_COLOUR, SOURCE_COLOUR
@@ -808,16 +809,19 @@ class PlanView(QWidget):
         for label, step in SNAP_STEPS:
             self.snap.addItem(label, step)
         self.snap.setCurrentIndex([s for _, s in SNAP_STEPS].index(DEFAULT_SNAP))
-        self.snap.setToolTip("Corners and points snap to this grid; hold Shift to move freely")
+        self.snap.setToolTip(
+            "Corners, sources and listeners snap to this grid; hold Shift to place them freely"
+        )
         fit = QPushButton("Fit")
-        fit.setToolTip("Show the whole room")
+        fit.setToolTip("Zoom to show the whole room")
         self.hint = QLabel()
         self.hint.setWordWrap(True)
         self.where = QLabel()
+        self.where.setToolTip("Where the mouse is in the plan, in metres")
         self.where.setMinimumWidth(130)
         self.where.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         bar.addWidget(self.draw)
-        bar.addWidget(QLabel("Snap"))
+        bar.addWidget(label_for("Snap", self.snap))
         bar.addWidget(self.snap)
         bar.addWidget(fit)
         bar.addWidget(self.hint, 1)
@@ -825,6 +829,7 @@ class PlanView(QWidget):
         layout.addLayout(bar)
         self.canvas = PlanCanvas(self)
         layout.addWidget(self.canvas, 1)
+        share_tips(self)
 
         self.draw.toggled.connect(self._draw_toggled)
         self.snap.currentIndexChanged.connect(
@@ -870,6 +875,7 @@ class PlanView(QWidget):
         if mode == "placing":
             text = text.format(what="source" if canvas.placing == "sources" else "listener")
         self.hint.setText(text)
+        self.hint.setToolTip(text)  # in full, should the bar cut it short
         self.draw.blockSignals(True)
         self.draw.setChecked(canvas.drawing is not None)
         self.draw.blockSignals(False)
