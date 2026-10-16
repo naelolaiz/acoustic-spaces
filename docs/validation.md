@@ -153,6 +153,12 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   against a grid too large for anything to come back; stable for 9,500 steps), one run
   for bands with their own absorption, and the level of the late part across the
   crossover to the rays (flat within 1 dB in sixth octaves);
+- the ray tracer against runs stored before its tree was rebuilt
+  (`tests/reference/tracer.npz`): the faces and distances the tree finds, the specular
+  paths, and every kind of late run on the CPU to single precision, so a change that
+  moves a result is seen; the same runs traced on a GPU (in CI, Mesa's software Vulkan
+  driver) land within the spread of the CPU's own results over seeds, and the GPU's ray
+  searches find the CPU's faces;
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
@@ -836,8 +842,10 @@ its peak (single precision).
   dependence on the angle it arrives at, and the wave solver leaves such walls out.
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
-- **The wave solver's speed on a hardware GPU.** CI checks the GPU path on Mesa's
-  software Vulkan driver, which shows that it agrees with the CPU, not how fast it is.
+- **Speed on a hardware GPU.** CI checks the wave solver's and the late stage's GPU
+  paths on Mesa's software Vulkan driver, which shows that they agree with the CPU, not
+  how fast they are; `validation/wave_gpu.py` and `validation/late_gpu.py` time them on
+  your own GPU.
 
 ## Reproducing
 
@@ -848,6 +856,8 @@ python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
 python validation/edge_diffraction.py --json diffraction.json
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
+python validation/late_gpu.py   # the late stage on each device, and its parameters
+python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
 python validation/bras_validation.py --json bras.json --plots docs/validation
 python validation/bras_validation.py --materials initial --plots docs/validation
 python validation/bras_validation.py --bands third_octave --json bras_third.json

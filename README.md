@@ -17,9 +17,9 @@ loudspeaker formats.
   and directional, line, surface and array sources; a leak finder shows where a model
   is open: [scene files](docs/scenes.md).
 - **Simulation**: ray-traced early reflections with edge diffraction, added in pressure
-  at low frequencies, a stochastic late tail and, for the lowest bands, a wave solver on
-  the CPU or a GPU; ISO 3382-1 parameters, the STI and echo criteria for every source
-  and listener: [simulation](docs/simulation.md).
+  at low frequencies, a stochastic late tail and, for the lowest bands, a wave solver,
+  both on the CPU or a GPU; ISO 3382-1 parameters, the STI and echo criteria for every
+  source and listener: [simulation](docs/simulation.md).
 - **Coverage maps** of the parameters and of the speech transmission index over the
   audience: [coverage maps](docs/coverage-maps.md).
 - **Listening**: impulse responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker

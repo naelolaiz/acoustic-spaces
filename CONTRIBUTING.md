@@ -70,6 +70,9 @@ python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
 ```
 
+The full list, with what each script checks and how long it takes, is under
+*Reproducing* at the end of `docs/validation.md`.
+
 ## Releasing
 
 The version is written in one place, `src/acoustic_spaces/_version.py`.

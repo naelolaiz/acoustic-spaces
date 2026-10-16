@@ -11,11 +11,12 @@ src/acoustic_spaces/   Python package
                        material libraries
   directivity.py       source directivity: patterns per band, SOFA and CSV balloons
   room.py              a scene with its geometry loaded: materials per face, checks
-  engine/              early reflections, edge diffraction, late reverberation, early
-                       paths in pressure, grazing attenuation over the audience, the
-                       wave solver (CPU, and GPU through WebGPU) and its wall
-                       admittances, re-weighting for new absorption, sound particles,
-                       the leak finder, responses, simulate(), coverage maps
+  engine/              early reflections, edge diffraction, late reverberation (on the
+                       CPU, or on a GPU through WebGPU), early paths in pressure,
+                       grazing attenuation over the audience, the wave solver (CPU and
+                       GPU) and its wall admittances, re-weighting for new absorption,
+                       sound particles, the leak finder, responses, simulate(),
+                       coverage maps
   air.py               ISO 9613-1 air absorption and speed of sound
   synthesis.py         octave filter bank and impulse response synthesis
   spatial/             Ambisonics, VBAP loudspeaker layouts, HRTFs, spatial rendering,

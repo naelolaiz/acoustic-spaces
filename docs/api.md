@@ -91,6 +91,20 @@ Simulation above; the module also has the parameters a map shows and the A-weigh
 .. automodule:: acoustic_spaces.engine.gpu
 ```
 
+## The late stage on a GPU
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.engine.ray_device
+```
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.engine.gpu_tracer
+```
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.engine.gpu_rays
+```
+
 ## Parameters, air and impulse responses
 
 ```{eval-rst}

@@ -32,7 +32,7 @@ with the test tools (pytest, ruff), and `--extra` adds the optional parts:
 uv sync --extra viz                    # viz: the 3D view (PyVista), plots, MP4 videos
 uv sync --extra viz --extra measure    # measure: sounddevice, for sweeps and playback
 uv sync --extra gui                    # gui: the graphical editor (Qt, PySide6)
-uv sync --extra gpu                    # gpu: the wave solver on a GPU (wgpu, WebGPU)
+uv sync --extra gpu                    # gpu: the wave solver and the late stage on a GPU (wgpu)
 uv sync --extra ifc                    # ifc: BIM models (IFC files, IfcOpenShell)
 uv sync --all-extras                   # everything, with sofa (h5py), sketchup and docs
 ```
@@ -49,7 +49,7 @@ python -m pip install -e ".[sofa]"        # h5py, to read HRTFs from SOFA files
 python -m pip install -e ".[sketchup]"    # openskp, to read SketchUp files (experimental)
 python -m pip install -e ".[ifc]"         # IfcOpenShell, to read IFC files (BIM models)
 python -m pip install -e ".[gui]"         # the graphical editor (Qt, PySide6)
-python -m pip install -e ".[gpu]"         # wgpu: the wave solver on a GPU (WebGPU)
+python -m pip install -e ".[gpu]"         # wgpu: the wave solver and the late stage on a GPU
 ```
 
 Check the installation and look at the example scene. The commands run in the environment
