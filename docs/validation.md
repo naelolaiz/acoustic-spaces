@@ -8,7 +8,8 @@ and how much of a block's time the real-time convolver needs. It ends with what 
 
 ## Checks against theory, on every change
 
-The test suite runs on Linux, macOS and Windows for every pull request and checks:
+The test suite runs on Linux, macOS (Apple silicon and Intel) and Windows for every pull
+request and checks:
 
 - an 8 x 6 x 3 m box against analytic image sources up to 4th order (1, 6, 18, 38
   and 66 paths), for both early methods and for symmetric placements where paths

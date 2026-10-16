@@ -48,8 +48,9 @@ pip install "acoustic-spaces[viz,gui]"     # with the 3D view and the graphical 
 ```
 
 PyPI and every [GitHub release](https://github.com/naelolaiz/acoustic-spaces/releases)
-have wheels for Linux (x86-64), macOS (Apple silicon) and Windows (x86-64), CPython 3.10
-to 3.14; elsewhere pip builds the package from source, which needs a C++17 compiler.
+have wheels for Linux (x86-64), macOS (Apple silicon and Intel) and Windows (x86-64),
+CPython 3.10 to 3.14; elsewhere pip builds the package from source, which needs a C++17
+compiler.
 From a source checkout, with [uv](https://docs.astral.sh/uv/), a C++17 compiler and
 CMake:
 
