@@ -5,7 +5,9 @@ The comparisons run wherever wgpu finds a GPU, software ones included (CI uses M
 lavapipe on Linux), and are skipped elsewhere.
 """
 
+import platform
 import runpy
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -62,9 +64,12 @@ def test_gpu_steps_a_room_with_resonant_walls_as_the_cpu_does(stencil: int) -> N
     assert np.abs(a).max() > 0.0
     # GPUs round differently from the CPU: in this nearly closed room the slow drift the
     # walls' branches leave picks that up, by the end 1.1e-5 of the peak on Apple's GPU
-    # and 7.9e-4 on the GPU of GitHub's Intel Mac runners (the same on every run there).
-    # A field swapped the wrong way between runs would differ by far more.
-    assert np.abs(a - b).max() < 2e-3 * np.abs(a).max()
+    # and 7.9e-4 on the GPU of GitHub's Intel Mac runners (the same on every run there),
+    # which alone get the wider margin. A field swapped the wrong way between runs would
+    # differ by far more than either.
+    intel_mac = sys.platform == "darwin" and platform.machine() == "x86_64"
+    tolerance = 2e-3 if intel_mac else 3e-5
+    assert np.abs(a - b).max() < tolerance * np.abs(a).max()
 
 
 @needs_gpu
