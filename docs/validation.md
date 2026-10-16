@@ -24,9 +24,9 @@ The test suite runs on Linux, macOS and Windows for every pull request and check
   never meet the ceiling and T30 is 5 to 20 times Eyring's estimate;
 - G in the same box against Barron's revised theory: within 1 dB;
 - the statistical late method against the stochastic one in the same box, with the
-  same absorption on every surface and scattering 0.3 and 1: G within 0.5 dB, C80
-  within 2.5 dB (higher from 1 kHz up, where the rays decay up to 7 % slower than
-  Eyring);
+  same absorption on every surface and scattering 0.3 and 1: G within 0.7 dB (up to
+  0.62 dB at scattering 0.3 and 0.43 dB at 1), C80 within 2.5 dB (higher from 1 kHz up,
+  where the rays decay up to 7 % slower than Eyring);
 - the late tail of the example box (absorbing ceiling, smooth walls, random
   scattering) from 10k rays with splitting against 1 million rays: within 4 dB on
   average from 0.5 to 2.5 s, and splitting or thinning out every ray keeps the energy
@@ -398,11 +398,13 @@ diffraction, 50,000 late rays per band and vector-based scattering with the scat
 of each surface's size, in the air measured on the day. Simulated and measured
 parameters were compared pair by pair in just noticeable differences
 (`acoustic_spaces.compare`, the same JNDs as `acoustic-spaces compare`) and averaged over
-the ten pairs. The measured responses were analysed by this package too. Its octave values
-are within 4 % of the third-octave averages BRAS publishes for T20 and EDT, and within
-0.5 dB for C80, from 500 Hz to 4 kHz. Below that the octave holds three third-octave bands
-whose values differ a lot, so averaging them is not the same analysis. G is left out
-because the responses have no free-field reference.
+the ten pairs. The measured responses were analysed by this package too. Its octave
+values, averaged over the ten pairs, are within 3 % of the mean of the three third-octave
+averages BRAS publishes for T20, within 5 % for EDT and within 0.7 dB for C80, from
+500 Hz to 4 kHz (the largest differences are in the hall at 500 Hz: EDT 4.3 % lower,
+C80 0.6 dB higher; elsewhere within 3.2 % and 0.5 dB). Below that the octave holds three
+third-octave bands whose values differ a lot, so averaging them is not the same analysis.
+G is left out because the responses have no free-field reference.
 
 BRAS gives two sets of absorption coefficients. The **fitted** set was adjusted until
 Eyring's formula gave the measured reverberation time; the scenes use it. The
@@ -490,7 +492,7 @@ does. Simulated with `simulation.bands: third_octave`, which keeps the thirds ap
 | CR3 octave bands (default) | 2.00 | 1.88 | 1.57 | 1.40 | 1.47 | 1.40 | 1.10 | 0.72 |
 | CR3 third-octave bands | 2.05 | 1.92 | 1.59 | 1.40 | 1.46 | 1.40 | 1.14 | 0.80 |
 
-The seminar room's decay at 250 Hz and 8 kHz, 13 and 17 % short in octave bands, comes
+The seminar room's decay at 250 Hz and 8 kHz, 13 and 18 % short in octave bands, comes
 within 4 % of the measurement: there its thirds' absorption, and at 8 kHz the air's,
 differ most. The hall's 8 kHz goes from 8 % short to 2 % long. From 500 Hz to 2 kHz
 nothing changes. At 63 and 125 Hz both rooms come out 2 to 5 % longer than in octave
@@ -635,9 +637,10 @@ block in line (0.6 dB):
 | block 3 m, oblique | +0.08 | +0.04 |
 | two screens 1 m apart | -0.11 | -0.12 |
 | two screens 2 m apart, the second 0.4 m higher | +0.03 | -0.00 |
- The textbook UTD for two edges, with the second edge's distance parameter
-for a wave from a line, was up to 6 dB low there; the engine takes it from the curvature
-of the first edge's wave where it reaches the second.
+
+The textbook UTD for two edges, with the second edge's distance parameter for a
+wave from a line, was up to 6 dB low there; the engine takes it from the curvature of
+the first edge's wave where it reaches the second.
 
 As the source rises through the plane of the 1 m block's top, 3 m in front of it, it
 comes into sight of the far corner, and the path over that corner alone takes over
@@ -787,8 +790,8 @@ at 125 Hz), and within 0.35 dB with the 7-point one (−0.05 to −0.13 dB at 63
 to −0.33 dB at 125 Hz).
 
 **A whole room.** A 7 x 5 x 3 m box with 15 % absorption on every surface, simulated
-with the default settings (the 63 and 125 Hz bands from the wave solver, 20 cm cells,
-the 19-point stencil),
+with the wave solver switched on at its default settings (the 63 and 125 Hz bands,
+20 cm cells, the 19-point stencil),
 against the sum of the box's modes up to 1.5 kHz, each with its decay rate, all
 analysed alike (ISO 3382-1, octave filters):
 
@@ -827,9 +830,12 @@ stencils. On Mesa's lavapipe, a Vulkan driver that runs on the CPU, with 4 cores
 The difference is relative to the largest pressure: the GPU's single-precision
 rounding, which stays at that level. Apple's GPU, in CI, rounds further from the CPU:
 in the test's nearly closed room with resonant walls the two differ by up to 1.1e-5
-after 1,601 steps, in the slow drift such a room builds up. The times include the grid's set-up on the CPU,
-the same on both. A software driver is no faster than the CPU solver; the script is
-there to time a hardware GPU.
+after 1,601 steps, in the slow drift such a room builds up. These times are from an
+earlier version of the script and include the grid's set-up on the CPU (the same on
+both) and, in the first room, the GPU's start-up; the script now prints the set-up on
+its own, the CPU's and the GPU's time steps without it, and the speed-up of the steps.
+A software driver is no faster than the CPU solver; the script is there to time a
+hardware GPU.
 
 ## Real-time convolver
 
@@ -874,7 +880,9 @@ its peak (single precision).
 - **Sound through walls** is checked against diffuse-field theory, not against
   measurements. A wall is one sound reduction index per band for sound from all
   directions: sound passes straight on in its direction, with no flanking paths and no
-  dependence on the angle it arrives at, and the wave solver leaves such walls out.
+  dependence on the angle it arrives at, and the wave solver does not model such walls:
+  with `simulation.wave.enabled`, a model with one stops with an error (openings are
+  fine).
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
 - **Speed on a hardware GPU.** CI checks the wave solver's and the late stage's GPU

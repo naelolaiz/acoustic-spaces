@@ -436,8 +436,8 @@ def alcove_hall() -> Room:
 
 
 def timing() -> dict:
-    """The cost of the early stage (reflections up to the default order, half a second)
-    in the hall with alcoves, with each diffraction mode."""
+    """The cost of the early stage (reflections up to the default order, within the default
+    2 s response) in the hall with alcoves, with each diffraction mode."""
     room = alcove_hall()
     out = {"edges": len(find_edges(TraceModel.from_room(room)))}
     for mode in ("none", "first_order", "second_order"):

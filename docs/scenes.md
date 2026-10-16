@@ -502,8 +502,8 @@ listeners:
   before the corner and half after it (no further than half-way along either leg), so
   a sound to one side moves round the head instead of jumping.
 - Everything else (`simulate`, `map`, the editor) sees the walker standing where its
-  walk starts; `inspect` lists how far each walk goes and for how long. Lines, surfaces
-  and arrays do not walk.
+  walk starts; `inspect` lists how far each walk goes and for how long. Lines and
+  surfaces do not walk.
 
 ## Air, response length and seed
 

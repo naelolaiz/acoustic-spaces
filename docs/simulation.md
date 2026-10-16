@@ -164,7 +164,7 @@ simulation:
   no single slope, and in the shoebox example its T30 comes out 8 % longer in third
   octaves. In the measured seminar room of the
   [validation report](validation.md)
-  they bring the reverberation time at 250 Hz and 8 kHz from 13 and 17 % short to
+  they bring the reverberation time at 250 Hz and 8 kHz from 13 and 18 % short to
   within 4 %. They trace three times the rays and take about three times as long.
 - `acoustic-spaces simulate --bands third_octave` sets them for one run, and the
   editor's simulation page has them. A material with third-octave data shows its 24
@@ -350,8 +350,8 @@ higher costs about 16 times as much: on 4 cores, up to the 125 Hz band, the stud
 responses) 28 s per source; 8 s and 19 s with `scheme: standard`, at the cost of its
 dispersion. Grids of more than 40 million cells are refused. `python
 validation/wave_gpu.py` times your GPU against your CPU; Mesa's lavapipe, a Vulkan
-driver that runs on the CPU (and what CI tests with), takes about 9 times as long as
-the CPU solver.
+driver that runs on the CPU (and what CI tests with), takes roughly 8 to 9 times as long
+as the CPU solver in a whole run (the [validation report](validation.md) has the times).
 
 ![Transfer function of a 7 x 5 x 3 m box from the sum of its modes, the wave solver and rays](images/wave.png)
 

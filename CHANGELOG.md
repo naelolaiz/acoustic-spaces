@@ -172,6 +172,20 @@
   partitions grow along the response, from the block size up to 8192 frames.
 - The gallery example's comment said that its inner corner is where wall_4 and wall_5
   meet; it is wall_3 and wall_4.
+- The user guide named the editor's menu entry **Edit > Add material** (it is **Add
+  material from the database**) and said that arrays do not walk (only lines and
+  surfaces do not; an array source walks like any point source), and gave the seminar
+  room's 8 kHz reverberation time as 17 % short (18 %) in the octave bands.
+- The validation report quoted the statistical late method's G as within 0.5 dB of the
+  stochastic one (the test allows 0.7 dB), the BRAS octave analysis as within 4 % and
+  0.5 dB of the published values (CR3's EDT at 500 Hz is 4.3 % lower, its C80 0.6 dB
+  higher), the seminar room's 8 kHz shortfall as 17 % (18 %), the wave solver as
+  leaving partitions out (it stops with an error) and the whole-room check as run with
+  default settings (the wave solver is switched on). Its GPU timing table now says it
+  comes from an earlier version of the script, and a paragraph that rendered as table
+  rows is a paragraph again.
+- CI runs the tests with `pytest -W error`, as the contributing guide said it did, so a
+  warning fails the run; ruff runs on Linux.
 
 ## 3.0.0
 

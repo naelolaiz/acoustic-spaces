@@ -114,8 +114,8 @@ in every format.
 
 ## Contributing
 
-Pull requests are welcome. Run `ruff check . && ruff format --check . && pytest`
-before opening one; CI runs the same checks on all three platforms.
+Pull requests are welcome. Run `ruff check . && ruff format --check . && pytest -W error`
+before opening one; CI runs the tests on all three platforms and ruff on Linux.
 [CONTRIBUTING.md](https://github.com/naelolaiz/acoustic_spaces_simulator/blob/main/CONTRIBUTING.md)
 covers the development setup, the documentation, the validation scripts and releases.
 
