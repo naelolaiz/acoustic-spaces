@@ -227,7 +227,10 @@ class MainWindow(QMainWindow):
         a = self._action
         self.new_action = a("&New box room…", self.new_box, keys.New, "Start from a box")
         self.new_model_action = a(
-            "New from &model file…", self.new_from_model, None, "Start from an OBJ or DXF model"
+            "New from &model file…",
+            self.new_from_model,
+            None,
+            "Start from a model file (OBJ, DXF, glTF, STL, IFC, Collada or SketchUp)",
         )
         self.new_plan_action = a(
             "New room from a &floor plan…",
