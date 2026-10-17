@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 3.2.2
 
 **Languages** (`acoustic_spaces.i18n`)
 
@@ -22,8 +22,6 @@
 - For contributors: text is marked with `_()` and collected into `locale/*.po` by
   `tools/catalog.py`, which CI runs to check that every catalog is complete; terms and
   style are in the new Translating page.
-
-## 3.2.2
 
 **Fixes**
 
