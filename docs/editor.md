@@ -115,8 +115,8 @@ which frequencies each octave band holds.
   model that is not closed: its open edges, the escaping rays and a marker on each gap,
   with the report in the messages (see [Finding leaks](scenes.md#finding-leaks)). It
   traces again when the geometry, the materials or the sources change.
-- **View > Language** shows the editor and the command line in English or Spanish, or
-  in the computer's language, from their next start (see
+- **View > Language** shows the editor and the command line in English, Spanish or
+  Catalan, or in the computer's language, from their next start (see
   [Language](getting-started.md#language)). Numbers in the editor follow the
   computer's regional settings: 0,85 where the decimal mark is a comma, with lists of
   numbers (an equalizer's gains) apart by semicolons there.

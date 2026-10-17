@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.3
+
+**Languages**
+
+- Translations for Catalan and Italian for editor and command line text.
+
 ## 3.2.2
 
 **Languages** (`acoustic_spaces.i18n`)
