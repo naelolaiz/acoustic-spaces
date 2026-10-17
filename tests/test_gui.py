@@ -835,7 +835,7 @@ def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
     box = page.directivity
     assert box.currentText().startswith("per band: omni, omni, omni, subcardioid")
     assert page.directivity_index.text().startswith("Directivity index: 0.0, 0.0, 0.0, 2.8")
-    box.activated.emit(DIRECTIVITIES.index("cardioid"))
+    box.activated.emit([value for value, _label in DIRECTIVITIES].index("cardioid"))
     assert window.document.scene.sources[0].directivity == "cardioid"
     assert box.currentText() == "cardioid"
     assert "4.8, 4.8" in page.directivity_index.text()
