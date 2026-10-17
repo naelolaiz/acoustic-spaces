@@ -1782,3 +1782,48 @@ def _display(viewport, point: QPoint) -> tuple[int, int]:
     widget = viewport.plotter.interactor
     ratio = widget.devicePixelRatioF()
     return round(point.x() * ratio), round((widget.height() - point.y() - 1) * ratio)
+
+
+def test_choosing_the_language(window, english, monkeypatch) -> None:
+    """View > Language keeps the choice for the next start; the editor stays as it is."""
+    from acoustic_spaces import i18n
+
+    menus = {menu.title(): menu for menu in window.menuBar().findChildren(QMenu)}
+    assert window.language_menu.menuAction() in menus["&View"].actions()
+    actions = window.language_actions
+    assert set(actions) == {None, *i18n.LANGUAGES}
+    assert actions[None].isChecked() and actions[None].text().startswith("System (")
+    assert actions["es"].text() == "Español"  # each language in its own words
+    assert all(action.statusTip() and action.toolTip() for action in actions.values())
+
+    actions["es"].trigger()
+    assert i18n.saved_language() == "es" and actions["es"].isChecked()
+    assert i18n.language() == "en"  # from the next start
+    # The variable the tests set wins over the choice, and the editor says so.
+    assert "ACOUSTIC_SPACES_LANG is set to en" in window.messages.toPlainText()
+
+    monkeypatch.delenv(i18n.ENV)
+    actions[None].trigger()
+    assert i18n.saved_language() is None and actions[None].isChecked()
+    name = i18n.LANGUAGES[i18n.system_language()]
+    assert window.messages.toPlainText().endswith(
+        f"Language from the next start of the editor and the command line: {name}"
+    )
+
+
+def test_qt_speaks_the_language_in_use(qapp) -> None:
+    """Qt's own dialogs and buttons follow the language, from the translations Qt ships."""
+    from PySide6.QtCore import QLibraryInfo
+
+    from acoustic_spaces import i18n
+    from acoustic_spaces.gui.app import install_qt_translation
+
+    assert install_qt_translation(qapp) is None  # English: nothing to load
+    i18n.set_language("es")
+    translator = install_qt_translation(qapp)
+    folder = Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath))
+    if (folder / "qtbase_es.qm").exists():
+        assert translator is not None
+        assert qapp.removeTranslator(translator)
+    else:
+        assert translator is None

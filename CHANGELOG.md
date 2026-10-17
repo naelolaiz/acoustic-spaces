@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+**Languages** (`acoustic_spaces.i18n`)
+
+- The editor and the command line can show their text in another language, English or
+  Spanish to start with. They follow the computer's language; **View > Language** in the
+  editor picks one for the user (from the next start), and `ACOUSTIC_SPACES_LANG=es` or
+  `en` sets it over both. `acoustic-spaces info` says which is in use and what chose it.
+  Qt's own dialogs and buttons follow it too. Scene files, commands, options and the
+  files the commands write stay in English.
+- The Spanish text comes in steps; this release has the language choice itself, and
+  text not translated yet shows in English.
+- For contributors: text is marked with `_()` and collected into `locale/*.po` by
+  `tools/catalog.py`, which CI runs to check that every catalog is complete; terms and
+  style are in the new Translating page.
+
 ## 3.2.1
 
 **Wheels for Intel Macs**

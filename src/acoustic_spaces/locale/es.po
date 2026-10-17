@@ -1,0 +1,70 @@
+# Spanish translation of Acoustic Spaces.
+# Terms and style: docs/translating.md. Keep this file in step with the code with
+# python tools/catalog.py update; python tools/catalog.py check is what CI runs.
+msgid ""
+msgstr ""
+"Project-Id-Version: acoustic-spaces\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: acoustic_spaces/cli.py
+#, python-brace-format
+msgid "chosen in the editor, kept in {path}"
+msgstr "elegido en el editor, guardado en {path}"
+
+#: acoustic_spaces/cli.py
+msgid "this computer's"
+msgstr "el del sistema"
+
+#: acoustic_spaces/cli.py
+#, python-brace-format
+msgid "language: {language} ({source})"
+msgstr "idioma: {language} ({source})"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Language"
+msgstr "&Idioma"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "System ({language})"
+msgstr "Sistema ({language})"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Show the editor and the command line in this computer's language, from their "
+"next start"
+msgstr ""
+"Mostrar el editor y la línea de comandos en el idioma del sistema a partir "
+"del próximo inicio"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Show the editor and the command line in this language, from their next start"
+msgstr ""
+"Mostrar el editor y la línea de comandos en este idioma a partir del próximo "
+"inicio"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot keep the language: {reason}"
+msgstr "No se pudo guardar el idioma: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"{variable} is set to {value}, so it decides the language, not this choice"
+msgstr ""
+"La variable {variable} tiene el valor {value} y prevalece sobre esta opción "
+"para decidir el idioma"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"Language from the next start of the editor and the command line: {language}"
+msgstr ""
+"Idioma a partir del próximo inicio del editor y de la línea de comandos: "
+"{language}"

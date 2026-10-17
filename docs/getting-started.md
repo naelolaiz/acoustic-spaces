@@ -163,3 +163,20 @@ ambix = response.spatial_impulse_response(Ambisonics(order=3), 48_000)  # 16 cha
 surround = response.spatial_impulse_response(Loudspeakers.layout("5.0"), 48_000)
 plot_directions(response, "talker__seat-a.directions.png")
 ```
+
+## Language
+
+The editor and the command line show their text in English or Spanish, following the
+computer's language unless told otherwise:
+
+- **View > Language** in the editor picks one for this user, or **System** to follow the
+  computer again. It applies from the next start of the editor and of the command line.
+- `ACOUSTIC_SPACES_LANG=es` (or `en`) in the environment sets it over both, for one shell
+  or one script.
+
+`acoustic-spaces info` says which language is in use and what chose it. Scene files,
+command and option names and the files the commands write stay in English whatever the
+language, so scripts keep working. The Spanish text is coming in steps: the editor first,
+then the command line and the library's messages (see the [roadmap](roadmap.md)); text
+not yet translated shows in English. [Translating](translating.md) explains how the
+catalogs work and the terms the Spanish uses.

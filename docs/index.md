@@ -20,5 +20,6 @@ validation
 api
 roadmap
 development
+translating
 changelog
 ```

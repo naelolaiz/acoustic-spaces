@@ -4,6 +4,7 @@ message log around them."""
 
 from __future__ import annotations
 
+import os
 import sys
 import threading
 import time
@@ -11,9 +12,10 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QLibraryInfo, Qt, QTimer, QTranslator
 from PySide6.QtGui import (
     QAction,
+    QActionGroup,
     QCloseEvent,
     QGuiApplication,
     QKeySequence,
@@ -40,7 +42,7 @@ from PySide6.QtWidgets import (
     QToolButton,
 )
 
-from acoustic_spaces import __version__
+from acoustic_spaces import __version__, i18n
 from acoustic_spaces._extras import install_hint
 from acoustic_spaces.engine import ray_device, reweight, tuning
 from acoustic_spaces.examples import example_path, list_examples
@@ -62,6 +64,7 @@ from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.tune_dialog import TuneDialog
 from acoustic_spaces.gui.viewport import Viewport
 from acoustic_spaces.gui.worker import MapJob, SimulationJob, TuneJob
+from acoustic_spaces.i18n import _
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
@@ -457,6 +460,9 @@ class MainWindow(QMainWindow):
             toggle.setStatusTip(f"Show or hide the {dock.windowTitle()} panel")
             toggle.setToolTip(toggle.statusTip())
             view.addAction(toggle)
+        view.addSeparator()
+        self.language_menu = view.addMenu(_("&Language"))
+        self._language_choices()
 
         simulation = bar.addMenu("&Simulation")
         simulation.addActions([self.run_action, self.map_action, self.cancel_action])
@@ -466,7 +472,8 @@ class MainWindow(QMainWindow):
         simulation.addAction(self.stop_action)
         help_menu = bar.addMenu("&Help")
         help_menu.addAction(self.about_action)
-        for menu in (file, self.examples_menu, edit, view, simulation, help_menu):
+        menus = (file, self.examples_menu, edit, view, self.language_menu, simulation, help_menu)
+        for menu in menus:
             menu.setToolTipsVisible(True)
 
         tools = self.addToolBar("Main")
@@ -481,6 +488,58 @@ class MainWindow(QMainWindow):
         tools.addActions([self.run_action, self.map_action, self.cancel_action])
         tools.addSeparator()
         tools.addAction(self.stop_action)
+
+    def _language_choices(self) -> None:
+        """View > Language: the computer's language, or one of the catalogs'."""
+        group = QActionGroup(self)
+        system = i18n.LANGUAGES[i18n.system_language()]
+        choices = [(None, _("System ({language})").format(language=system))]
+        choices += list(i18n.LANGUAGES.items())
+        saved = i18n.saved_language()
+        self.language_actions = {}
+        for code, text in choices:
+            action = self.language_menu.addAction(text)
+            action.setCheckable(True)
+            action.setChecked(code == saved)
+            if code is None:
+                tip = _(
+                    "Show the editor and the command line in this computer's language, from "
+                    "their next start"
+                )
+            else:
+                tip = _(
+                    "Show the editor and the command line in this language, from their next start"
+                )
+            action.setStatusTip(tip)
+            action.setToolTip(tip)
+            action.triggered.connect(lambda *args, code=code: self.choose_language(code))
+            group.addAction(action)
+            self.language_actions[code] = action
+
+    def choose_language(self, code: str | None) -> None:
+        """Keep ``code`` (None: the computer's) as the language from the next start."""
+        try:
+            i18n.save_language(code)
+        except OSError as exc:
+            self.log(_("Cannot keep the language: {reason}").format(reason=exc), "error")
+            self.language_actions[i18n.saved_language()].setChecked(True)
+            return
+        self.language_actions[code].setChecked(True)
+        name = i18n.LANGUAGES[code or i18n.system_language()]
+        variable = os.environ.get(i18n.ENV, "").strip()
+        if variable:
+            self.log(
+                _(
+                    "{variable} is set to {value}, so it decides the language, not this choice"
+                ).format(variable=i18n.ENV, value=variable),
+                "warning",
+            )
+        else:
+            self.log(
+                _(
+                    "Language from the next start of the editor and the command line: {language}"
+                ).format(language=name)
+            )
 
     # -- the document ---------------------------------------------------------------
 
@@ -1551,6 +1610,20 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
+def install_qt_translation(app: QApplication) -> QTranslator | None:
+    """Qt's own words (file dialogs, standard buttons, the menu of a text field) in the
+    language in use, from the translations Qt ships, when it has them."""
+    code = i18n.language()
+    if code not in i18n.LANGUAGES or code == "en":
+        return None
+    translator = QTranslator(app)
+    folder = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    if not translator.load(f"qtbase_{code}", folder):
+        return None
+    app.installTranslator(translator)
+    return translator
+
+
 def run(argv: list[str] | None = None) -> int:
     """Open the editor (with the scene file in ``argv``, if any) and run until it closes.
     ``--no-device-trial`` in ``argv`` switches off the late stage's device trial (see
@@ -1561,6 +1634,7 @@ def run(argv: list[str] | None = None) -> int:
         ray_device.set_trial(False)
     app = QApplication.instance() or QApplication([sys.argv[0] if sys.argv else TITLE])
     app.setApplicationName(TITLE)
+    install_qt_translation(app)
     window = MainWindow()
     if argv:
         window.open_file(argv[0])
@@ -1568,4 +1642,4 @@ def run(argv: list[str] | None = None) -> int:
     return app.exec()
 
 
-__all__ = ["MainWindow", "run"]
+__all__ = ["MainWindow", "install_qt_translation", "run"]

@@ -15,10 +15,11 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from acoustic_spaces import __version__, native_available
+from acoustic_spaces import __version__, i18n, native_available
 from acoustic_spaces.engine.ray_device import DEVICES, TRIAL_FLAG
 from acoustic_spaces.engine.tuning import DEFAULTS
 from acoustic_spaces.gltf import PARTICLE_COUNT, SLOW_MOTION
+from acoustic_spaces.i18n import _
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
@@ -75,9 +76,20 @@ def _print_checks(room: Room) -> bool:
     return not problems
 
 
-def _cmd_info(_: argparse.Namespace) -> int:
+def _cmd_info(args: argparse.Namespace) -> int:
     print(f"acoustic_spaces {__version__}")
     print(f"compiled core: {'available' if native_available() else 'missing'}")
+    code, chosen_by = i18n.chosen_language()
+    source = {
+        i18n.ENV: i18n.ENV,
+        "saved": _("chosen in the editor, kept in {path}").format(path=i18n.settings_file()),
+        "system": _("this computer's"),
+    }[chosen_by]
+    print(
+        _("language: {language} ({source})").format(
+            language=i18n.LANGUAGES.get(code, code), source=source
+        )
+    )
     print(f"CPU cores for ray tracing: {os.cpu_count() or 1}")
     from acoustic_spaces.engine.gpu import gpu_name
 

@@ -72,3 +72,8 @@ Version 3.2.0:
 Version 3.2.1:
 
 - [x] Wheels for Intel Macs.
+
+Next:
+
+- [ ] Spanish: the language choice and the catalogs (done), the editor, the command line
+  and the library's messages; the documentation later, apart.
