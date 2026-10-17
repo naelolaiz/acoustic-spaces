@@ -8,6 +8,7 @@ lavapipe on Linux), and are skipped elsewhere.
 import platform
 import runpy
 import sys
+import types
 from pathlib import Path
 
 import numpy as np
@@ -134,6 +135,25 @@ def test_the_device_setting_picks_the_cpu_or_the_gpu(monkeypatch) -> None:
     assert gpu.gpu_name() is None
     with pytest.raises(ValueError, match="simulation.wave.device is gpu"):
         gpu.use_gpu("gpu")
+
+
+def test_wgpu_leaves_its_opengl_backend_out(monkeypatch) -> None:
+    """Vulkan, Metal or Direct3D 12 only: setting up wgpu's OpenGL backend through EGL
+    aborts the process when the editor's 3D view holds an OpenGL context."""
+    asked = []
+    extras = types.ModuleType("wgpu.backends.wgpu_native.extras")
+    extras.set_instance_extras = lambda backends: asked.append(backends)
+    for name in ("wgpu", "wgpu.backends", "wgpu.backends.wgpu_native"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, extras.__name__, extras)
+    gpu._primary_backends()
+    assert asked == [["Primary"]]
+
+    def too_late(backends):
+        raise RuntimeError("Instance already exists")
+
+    extras.set_instance_extras = too_late
+    gpu._primary_backends()  # wgpu keeps the instance it has
 
 
 @needs_gpu
