@@ -12,6 +12,8 @@ menu shortcut (&) as the English. It needs only Python's standard library.
 Text is marked with ``_("...")``, ``N_("...")``, ``ngettext("...", "...", n)`` and
 ``pgettext("context", "...")`` (see acoustic_spaces.i18n). A comment starting with
 ``Translators:`` on the lines just above goes into the catalog for the translator.
+The example scenes' titles and descriptions (examples/*/scene.yaml) are collected too,
+in the context ``example``.
 """
 
 from __future__ import annotations
@@ -30,6 +32,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = ROOT / "src" / "acoustic_spaces"
 LOCALE = PACKAGE / "locale"
+EXAMPLES = ROOT / "examples"
+#: The context of the example scenes' titles and descriptions.
+EXAMPLE_CONTEXT = "example"
 WIDTH = 79
 
 # acoustic_spaces.i18n by its path, without importing the package (and numpy with it).
@@ -342,12 +347,39 @@ def merge(catalog: list[Entry], marked: list[Entry]) -> list[Entry]:
     return merged
 
 
+def extract_examples(folder: Path = EXAMPLES) -> list[Entry]:
+    """The title (``name``) and description (the comment at the top) of every example
+    scene, read as acoustic_spaces.examples reads them."""
+    entries = []
+    for scene in sorted(folder.glob("*/scene.yaml")):
+        reference = scene.relative_to(folder.parent).as_posix()
+        lines = scene.read_text(encoding="utf-8").splitlines()
+        comment = []
+        for line in lines:
+            if not line.startswith("#"):
+                break
+            comment.append(line.lstrip("#").strip())
+        names = [line[len("name:") :].strip() for line in lines if line.startswith("name:")]
+        title = names[0] if names else ""
+        for text in (title.strip("'\""), " ".join(comment)):
+            if text:
+                entry = Entry(text, context=EXAMPLE_CONTEXT, references=[reference])
+                entry.flags = _format_flags(text)
+                entries.append(entry)
+    return entries
+
+
+def marked_text() -> list[Entry]:
+    """Everything the catalogs translate: the code's marked text, then the examples'."""
+    return extract() + extract_examples()
+
+
 def catalogs() -> list[Path]:
     return sorted(LOCALE.glob("*.po"))
 
 
 def update() -> int:
-    marked = extract()
+    marked = marked_text()
     for path in catalogs():
         catalog = i18n.read_po(path.read_text(encoding="utf-8"), path.name)
         merged = merge(catalog, marked)
@@ -358,7 +390,7 @@ def update() -> int:
 
 
 def check() -> int:
-    marked = extract()
+    marked = marked_text()
     failed = False
     for path in catalogs():
         text = path.read_text(encoding="utf-8")

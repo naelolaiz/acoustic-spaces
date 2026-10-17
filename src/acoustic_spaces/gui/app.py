@@ -65,7 +65,7 @@ from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.tune_dialog import TuneDialog
 from acoustic_spaces.gui.viewport import Viewport
 from acoustic_spaces.gui.worker import MapJob, SimulationJob, TuneJob
-from acoustic_spaces.i18n import N_, _, ngettext
+from acoustic_spaces.i18n import N_, _, ngettext, pgettext
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
@@ -444,8 +444,9 @@ class MainWindow(QMainWindow):
         except FileNotFoundError:
             examples = []
         for example in examples:
-            action = self.examples_menu.addAction(example.title)
-            tip = example.description.split(". ")[0]
+            # The examples' titles and descriptions are in the catalogs (tools/catalog.py).
+            action = self.examples_menu.addAction(pgettext("example", example.title))
+            tip = pgettext("example", example.description).split(". ")[0]
             if example.missing_extra:
                 # Opening it would only say how to install what reading its model needs.
                 action.setEnabled(False)

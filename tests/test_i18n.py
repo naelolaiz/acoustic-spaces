@@ -231,6 +231,22 @@ def test_collecting_the_marked_text(catalog_tool, tmp_path) -> None:
     assert rooms.references == ["acoustic_spaces/module.py"]
 
 
+def test_collecting_the_examples(catalog_tool, tmp_path) -> None:
+    """Each example scene's title and the comment at its top go into the catalogs."""
+    scene = tmp_path / "examples" / "hall" / "scene.yaml"
+    scene.parent.mkdir(parents=True)
+    scene.write_text(
+        "# A hall.\n# Two seats.\nname: Hall (10 m)\nmaterials:\n  name: not this\n",
+        encoding="utf-8",
+    )
+    entries = catalog_tool.extract_examples(tmp_path / "examples")
+    assert [(e.context, e.msgid) for e in entries] == [
+        ("example", "Hall (10 m)"),
+        ("example", "A hall. Two seats."),
+    ]
+    assert entries[0].references == ["examples/hall/scene.yaml"]
+
+
 @pytest.mark.parametrize(
     ("source", "message"),
     [

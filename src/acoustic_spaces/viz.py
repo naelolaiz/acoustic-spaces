@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import numpy as np
 
 from acoustic_spaces._extras import install_hint
+from acoustic_spaces.i18n import N_, _
 from acoustic_spaces.room import UNASSIGNED, Room
 
 if TYPE_CHECKING:
@@ -119,11 +120,22 @@ def room_polydata(room: Room, faces: np.ndarray | None = None) -> pyvista.PolyDa
     return poly
 
 
+#: A reflection order's name by the suffix English gives its number.
+_ORDER_NAMES = {
+    # Translators: reflection orders: 1st order, 2nd order... {order} is the number.
+    "st": N_("{order}st order"),
+    "nd": N_("{order}nd order"),
+    "rd": N_("{order}rd order"),
+    "th": N_("{order}th order"),
+}
+
+
 def _order_name(order: int) -> str:
     if order == 0:
-        return "direct"
+        # Translators: the direct sound's paths, in a plot's legend.
+        return _("direct")
     suffix = {1: "st", 2: "nd", 3: "rd"}.get(order if order < 20 else order % 10, "th")
-    return f"{order}{suffix} order"
+    return _(_ORDER_NAMES[suffix]).format(order=order)
 
 
 def paths_polydata(
@@ -168,7 +180,7 @@ def path_groups(paths: EarlyReflections, max_order: int | None = None) -> list[P
             groups.append(PathGroup(_order_name(order), colour, mask, order))
     mask = paths.diffracted & (paths.order <= top)
     if mask.any():
-        groups.append(PathGroup("diffracted", DIFFRACTED_COLOUR, mask, None))
+        groups.append(PathGroup(_("diffracted"), DIFFRACTED_COLOUR, mask, None))
     return groups
 
 
@@ -204,12 +216,12 @@ def plot_leaks(
 
     pv = _pyvista()
     legend = []
-    corners, _ = open_edges(room)
+    corners, _faces = open_edges(room)
     if len(corners):
         lines = np.column_stack([np.full(len(corners), 2), corners]).reshape(-1)
         edges = pv.PolyData(room.mesh.vertices, lines=lines)
         plotter.add_mesh(edges, color=LEAK_COLOUR, line_width=5.0, render=False)
-        legend.append([f"open edges ({len(corners)})", LEAK_COLOUR])
+        legend.append([_("open edges ({count})").format(count=len(corners)), LEAK_COLOUR])
     if leaks.escaped:
         lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
         size = float(np.linalg.norm(hi - lo)) or 1.0
@@ -220,7 +232,7 @@ def plot_leaks(
         lines = np.column_stack([np.full(len(start), 2), np.arange(2 * len(start)).reshape(-1, 2)])
         rays = pv.PolyData(points, lines=lines.reshape(-1))
         plotter.add_mesh(rays, color=ESCAPE_COLOUR, line_width=1.5, opacity=0.6, render=False)
-        legend.append([f"escaping rays ({leaks.escaped})", ESCAPE_COLOUR])
+        legend.append([_("escaping rays ({count})").format(count=leaks.escaped), ESCAPE_COLOUR])
         radius = max(0.012 * size, 0.05)
         centres = np.array([gap.centre for gap in leaks.gaps])
         for centre in centres:
@@ -230,7 +242,9 @@ def plot_leaks(
         plotter.add_point_labels(
             centres + [0.0, 0.0, 1.5 * radius],
             [
-                f"gap {k}: {100.0 * gap.rays / leaks.rays:.1f} %"
+                _("gap {number}: {share:.1f} %").format(
+                    number=k, share=100.0 * gap.rays / leaks.rays
+                )
                 for k, gap in enumerate(leaks.gaps, 1)
             ],
             font_size=12,
@@ -327,7 +341,7 @@ def plot_room(
         part = room_polydata(room, missing)
         plotter.add_mesh(part, color=UNASSIGNED_COLOUR, opacity=max(opacity, 0.8))
         plotter.add_mesh(_outline(part), color=EDGE_COLOUR, line_width=1.5)
-        legend.append(["no material", UNASSIGNED_COLOUR])
+        legend.append([_("no material"), UNASSIGNED_COLOUR])
 
     lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
     size = float(np.linalg.norm(hi - lo)) or 1.0
@@ -455,9 +469,10 @@ def animate_particles(
     cloud["value"] = _particle_scalars(particles, 0, color, db_range)
     if color == "order":
         top = max(int(particles.order.max()), 1)
-        title, clim, cmap = "reflections", [0, top], "turbo"
+        title, clim, cmap = _("reflections"), [0, top], "turbo"
     else:
-        title, clim, cmap = f"level at {particles.band_hz} Hz (dB)", [-db_range, 0.0], "inferno"
+        title = _("level at {band} Hz (dB)").format(band=particles.band_hz)
+        clim, cmap = [-db_range, 0.0], "inferno"
     plotter.add_mesh(
         cloud,
         scalars="value",
@@ -484,7 +499,7 @@ def animate_particles(
             on_slider,
             [0.0, 1e3 * float(particles.times[-1])],
             value=0.0,
-            title="time (ms)",
+            title=_("time (ms)"),
             color="white",
             pointa=(0.35, 0.92),
             pointb=(0.95, 0.92),
@@ -621,7 +636,10 @@ def animate_walk(
             c, s = math.cos(yaw), math.sin(yaw)
             turn = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
             arrow.points = arrow_shape @ turn.T + where
-            text += f", facing yaw {180.0 - (180.0 - math.degrees(yaw)) % 360.0:.0f}°"
+            # Translators: added to the name and time shown on a walkthrough video.
+            text += _(", facing yaw {yaw:.0f}°").format(
+                yaw=180.0 - (180.0 - math.degrees(yaw)) % 360.0
+            )
         clock.SetText(0, text)
 
     _record(plotter, path, fps, frames, show, sound if mp4 else None)
@@ -692,7 +710,7 @@ def plot_response(response: Response, path: str | Path | None = None, *, band: i
         early_db = 10.0 * np.log10(np.maximum(early, 1e-30) / reference)
     late_t = np.arange(len(late_db)) * response.time_step * 1e3
     ax_e.fill_between(late_t, late_db, -100, step="post", color="#4da3ff", alpha=0.35, lw=0)
-    ax_e.step(late_t, late_db, where="post", color="#4da3ff", lw=0.8, label="late (per ms)")
+    ax_e.step(late_t, late_db, where="post", color="#4da3ff", lw=0.8, label=_("late (per ms)"))
     floor = float(np.max(early_db, initial=np.max(late_db, initial=0.0))) - 70.0
     for group in path_groups(response.early):
         delays = response.early.delay_s[group.mask] * 1e3
@@ -700,10 +718,12 @@ def plot_response(response: Response, path: str | Path | None = None, *, band: i
         ax_e.plot([], [], color=group.colour, label=group.label)
     ax_e.set_ylim(floor, floor + 80.0)
     ax_e.set_xlim(0, t_ms[-1] if len(t_ms) else 1)
-    ax_e.set_xlabel("time (ms)")
-    ax_e.set_ylabel("level re 10 m free field (dB)")
+    ax_e.set_xlabel(_("time (ms)"))
+    ax_e.set_ylabel(_("level re 10 m free field (dB)"))
     ax_e.set_title(
-        f"{response.source} to {response.listener}: echogram, {OCTAVE_BANDS_HZ[band]} Hz band"
+        _("{source} to {listener}: echogram, {band} Hz band").format(
+            source=response.source, listener=response.listener, band=OCTAVE_BANDS_HZ[band]
+        )
     )
     _legend(ax_e, loc="upper right")
 
@@ -712,13 +732,14 @@ def plot_response(response: Response, path: str | Path | None = None, *, band: i
         decay = decay_curve(energy[b, start:], response.time_step)
         if not np.isfinite(decay[0]):
             continue
-        label = f"{f} Hz" if f < 1000 else f"{f // 1000} kHz"
-        ax_d.plot(t_ms[start:] - t_ms[start], decay, color=BAND_COLOURS[b], lw=1.2, label=label)
+        ax_d.plot(
+            t_ms[start:] - t_ms[start], decay, color=BAND_COLOURS[b], lw=1.2, label=_band_name(f)
+        )
     ax_d.set_ylim(-70, 2)
     ax_d.set_xlim(0, t_ms[-1] if len(t_ms) else 1)
-    ax_d.set_xlabel("time after the direct sound (ms)")
-    ax_d.set_ylabel("decay (dB)")
-    ax_d.set_title("backward-integrated decay per octave band")
+    ax_d.set_xlabel(_("time after the direct sound (ms)"))
+    ax_d.set_ylabel(_("decay (dB)"))
+    ax_d.set_title(_("backward-integrated decay per octave band"))
     _legend(ax_d, ncol=4)
 
     if path is not None:
@@ -730,10 +751,11 @@ def _direction_axes(ax, title: str) -> None:
     ax.set_xlim(180, -180)  # left of the listener on the left
     ax.set_ylim(-90, 90)
     ax.set_xticks([180, 135, 90, 45, 0, -45, -90, -135, -180])
-    ax.set_xticklabels(["back", "135", "left", "45", "front", "-45", "right", "-135", "back"])
+    back, left, front, right = _("back"), _("left"), _("front"), _("right")
+    ax.set_xticklabels([back, "135", left, "45", front, "-45", right, "-135", back])
     ax.set_yticks([-90, -45, 0, 45, 90])
-    ax.set_xlabel("azimuth (degrees)")
-    ax.set_ylabel("elevation (degrees)")
+    ax.set_xlabel(_("azimuth (degrees)"))
+    ax.set_ylabel(_("elevation (degrees)"))
     ax.set_title(title)
 
 
@@ -769,12 +791,13 @@ def plot_directions(response: Response, path: str | Path | None = None, *, band:
             linewidths=0.4,
         )
         bar = fig.colorbar(dots, ax=ax_e, pad=0.01)
-        bar.set_label("delay after the direct sound (ms)", color="white")
+        bar.set_label(_("delay after the direct sound (ms)"), color="white")
         bar.ax.tick_params(colors="white")
     _direction_axes(
         ax_e,
-        f"{response.source} to {response.listener}: early reflections, "
-        f"{OCTAVE_BANDS_HZ[band]} Hz band (dot size: level, top 40 dB)",
+        _(
+            "{source} to {listener}: early reflections, {band} Hz band (dot size: level, top 40 dB)"
+        ).format(source=response.source, listener=response.listener, band=OCTAVE_BANDS_HZ[band]),
     )
 
     if len(response.late_directions) and response.late_directional.size:
@@ -797,19 +820,21 @@ def plot_directions(response: Response, path: str | Path | None = None, *, band:
             interpolation="nearest",
         )
         bar = fig.colorbar(image, ax=ax_l, pad=0.01)
-        bar.set_label("level re loudest direction (dB)", color="white")
+        bar.set_label(_("level re loudest direction (dB)"), color="white")
         bar.ax.tick_params(colors="white")
-        title = f"late energy by arrival direction, {OCTAVE_BANDS_HZ[band]} Hz band"
+        title = _("late energy by arrival direction, {band} Hz band").format(
+            band=OCTAVE_BANDS_HZ[band]
+        )
     else:
         ax_l.text(
             0,
             0,
-            "late energy arrives evenly from all directions",
+            _("late energy arrives evenly from all directions"),
             color="white",
             ha="center",
             va="center",
         )
-        title = "late energy by arrival direction"
+        title = _("late energy by arrival direction")
     _direction_axes(ax_l, title)
 
     if path is not None:
@@ -853,7 +878,7 @@ def plot_directivity(
     for ax, (plane, directions), title, zero in zip(
         axes,
         planes.items(),
-        ("horizontal plane (from above)", "vertical plane (from the side)"),
+        (_("horizontal plane (from above)"), _("vertical plane (from the side)")),
         ("N", "E"),
         strict=True,
     ):
@@ -864,7 +889,7 @@ def plot_directivity(
         for b, f in enumerate(OCTAVE_BANDS_HZ):
             if same and b != 4:
                 continue  # the same pattern in every band: one line
-            label = "every band" if same else f"{f} Hz" if f < 1000 else f"{f // 1000} kHz"
+            label = _("every band") if same else _band_name(f)
             ax.plot(
                 angle,
                 np.clip(level[:, b], -db_range, 0.0),
@@ -877,16 +902,22 @@ def plot_directivity(
         ax.set_rticks(ticks, [f"{t:.0f} dB" for t in ticks])
         ax.set_rlabel_position(200 if plane == "horizontal" else 290)
         if plane == "horizontal":
-            ax.set_xticks(np.radians([0, 90, 180, 270]), ["front", "left", "back", "right"])
+            ax.set_xticks(
+                np.radians([0, 90, 180, 270]), [_("front"), _("left"), _("back"), _("right")]
+            )
         else:
-            ax.set_xticks(np.radians([0, 90, 180, 270]), ["front", "up", "back", "down"])
+            ax.set_xticks(
+                np.radians([0, 90, 180, 270]), [_("front"), _("up"), _("back"), _("down")]
+            )
         ax.set_title(title, pad=14)
     _legend(axes[1], loc="upper left", bbox_to_anchor=(1.02, 1.0))
     index = directivity.index()[4]
-    name = directivity.name or "directivity"
+    name = directivity.name or _("directivity")
     fig.suptitle(
         # The name on a line of its own: a per-band one is long.
-        f"{name}\ndB re the loudest direction; directivity index {index:.1f} dB at 1 kHz",
+        _("{name}\ndB re the loudest direction; directivity index {index:.1f} dB at 1 kHz").format(
+            name=name, index=index
+        ),
         color="white",
     )
     if path is not None:
@@ -946,7 +977,7 @@ def plot_impulse_response(
 
     fig, (ax_e, ax_d) = _two_panels()
     level = 10.0 * np.log10(np.maximum(power / peak, 1e-30))
-    ax_e.plot(t_ms, level, color="#4da3ff", lw=0.8, label="broadband, 1 ms windows")
+    ax_e.plot(t_ms, level, color="#4da3ff", lw=0.8, label=_("broadband, 1 ms windows"))
     onset_ms = decay.onset_s * 1e3
     for b in range(len(OCTAVE_BANDS_HZ)):
         if decay.noise[b] > 0:
@@ -955,12 +986,12 @@ def plot_impulse_response(
             ax_e.hlines(noise_db, end_ms, t_ms[-1], color=BAND_COLOURS[b], lw=1.0)
             ax_e.plot([end_ms], [noise_db], "o", color=BAND_COLOURS[b], ms=3)
     if np.any(decay.noise > 0):
-        ax_e.plot([], [], "o-", color="#d0d0d0", ms=3, label="band noise from its crosspoint")
+        ax_e.plot([], [], "o-", color="#d0d0d0", ms=3, label=_("band noise from its crosspoint"))
     ax_e.set_ylim(max(float(level.min()), -120.0) - 5.0, 5.0)
     ax_e.set_xlim(0, t_ms[-1] if len(t_ms) else 1)
-    ax_e.set_xlabel("time (ms)")
-    ax_e.set_ylabel("level re peak (dB)")
-    ax_e.set_title(f"{title}: level" if title else "level")
+    ax_e.set_xlabel(_("time (ms)"))
+    ax_e.set_ylabel(_("level re peak (dB)"))
+    ax_e.set_title(_("{title}: level").format(title=title) if title else _("level"))
     _legend(ax_e, loc="upper right")
 
     for b, (f, curve) in enumerate(zip(OCTAVE_BANDS_HZ, _decay_curves(decay), strict=True)):
@@ -968,9 +999,9 @@ def plot_impulse_response(
             ax_d.plot(*curve, color=BAND_COLOURS[b], lw=1.2, label=_band_name(f))
     ax_d.set_ylim(-70, 2)
     ax_d.set_xlim(0, max(t_ms[-1] - onset_ms, 1.0) if len(t_ms) else 1)
-    ax_d.set_xlabel("time after the direct sound (ms)")
-    ax_d.set_ylabel("decay (dB)")
-    ax_d.set_title("backward-integrated decay per octave band, noise removed")
+    ax_d.set_xlabel(_("time after the direct sound (ms)"))
+    ax_d.set_ylabel(_("decay (dB)"))
+    ax_d.set_title(_("backward-integrated decay per octave band, noise removed"))
     _legend(ax_d, ncol=4)
 
     if path is not None:
@@ -1028,11 +1059,13 @@ def plot_comparison(
     axes[0].set_xlim(0, end_ms)
     axes[0].set_ylim(floor_db, 2)
     for ax in axes[4:]:
-        ax.set_xlabel("time after the direct sound (ms)")
+        ax.set_xlabel(_("time after the direct sound (ms)"))
     for ax in axes[::4]:
-        ax.set_ylabel("decay (dB)")
+        ax.set_ylabel(_("decay (dB)"))
     _legend(axes[0], loc="upper right")
-    fig.suptitle(title or "backward-integrated decay per octave band, noise removed", color="white")
+    fig.suptitle(
+        title or _("backward-integrated decay per octave band, noise removed"), color="white"
+    )
     if path is not None:
         fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
     return fig
@@ -1058,7 +1091,8 @@ def map_values(coverage: CoverageMap, parameter: str = "g", band: int = 4):
         raise ValueError(f"unknown parameter {parameter!r}; use one of {', '.join(MAP_PARAMETERS)}")
     info = MAP_PARAMETERS[parameter]
     values = coverage.value(parameter, band if info.per_band else None) * info.scale
-    title = f"{info.label}, {_band_name(OCTAVE_BANDS_HZ[band])}" if info.per_band else info.label
+    label = _(info.label)
+    title = f"{label}, {_band_name(OCTAVE_BANDS_HZ[band])}" if info.per_band else label
     return values, title
 
 
@@ -1099,7 +1133,7 @@ def plot_coverage(
     audience area, with a colour bar. Returns the actor of the tiles."""
     pv = _pyvista()
     poly = map_polydata(coverage, parameter, band)
-    _, title = map_values(coverage, parameter, band)
+    _values, title = map_values(coverage, parameter, band)
     actor = plotter.add_mesh(
         poly,
         scalars="value",
@@ -1231,7 +1265,7 @@ def plot_map(
         if room is not None:
             _floor_plan(ax, room)
             for source in room.scene.sources:
-                x, y, _ = source.position
+                x, y, _z = source.position
                 if source.extended:
                     corners = source.outline()
                     if len(corners) > 2:
@@ -1249,17 +1283,24 @@ def plot_map(
         ax.set_aspect("equal")
         ax.set_xlim(min(xs) - margin, max(xs) + margin)
         ax.set_ylim(min(ys) - margin, max(ys) + margin)
-        ax.set_xlabel("x (m)")
-        ax.set_ylabel("y (m)")
+        ax.set_xlabel(_("x (m)"))
+        ax.set_ylabel(_("y (m)"))
         if levels > 1:
             heights = grid.surface[index[has]]
-            ax.set_title(f"level {level + 1}, floor at about {np.median(heights):.1f} m")
+            ax.set_title(
+                _("level {number}, floor at about {height:.1f} m").format(
+                    number=level + 1, height=np.median(heights)
+                )
+            )
     bar = fig.colorbar(image, ax=list(axes), shrink=0.9)
     bar.set_label(title, color="white")
     bar.ax.tick_params(colors="white")
     bar.outline.set_edgecolor("#6b6e7a")
     fig.suptitle(
-        f"{coverage.source}: {title}, {len(grid)} points {grid.cell:g} m apart", color="white"
+        _("{source}: {title}, {count} points {spacing:g} m apart").format(
+            source=coverage.source, title=title, count=len(grid), spacing=grid.cell
+        ),
+        color="white",
     )
     if path is not None:
         fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())

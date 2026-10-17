@@ -33,7 +33,10 @@ LABELS = [N_("Open"), N_("Save")]  # module constants: marked here, _() where sh
 - `_` is the translation: a function that also names a variable `_` (`path, _ = ...`)
   cannot call it, and the catalog tool says so. Name the variable otherwise.
 - The code never compares shown text: it keeps a value (a scene-file value, a level) and
-  shows its translated label.
+  shows its translated label. A list of choices keeps the value as each entry's data
+  (`combo.addItem(_(label), value)`, read with `currentData()`); the English label of
+  a scene-file value is the value itself (`ray_tracing`), the Spanish one words
+  (*trazado de rayos*), and the tips that name the choices use the same words.
 - In the editor, numbers in a text go through `acoustic_spaces.gui.numbers`:
   `fmt(_("{time:.1f} s"), time=t)` writes them with the computer's decimal mark, and
   `parse_number` reads what a person typed in a table or field either way.
@@ -49,12 +52,14 @@ python tools/catalog.py check    # what CI runs
 some that is gone comes with the old translation marked `fuzzy`, to review. `check` fails
 when a catalog is out of date, has text untranslated or fuzzy, or a translation whose
 fields (`{name}`, `%s`) or menu shortcut (`&`) differ from the English. Both need only
-Python's standard library.
+Python's standard library. The example scenes' titles (`name`) and descriptions (the
+comment at the top of `examples/*/scene.yaml`) are collected too, in the context
+`example`; the editor shows them with `pgettext("example", text)`.
 
 `ACOUSTIC_SPACES_LANG=pseudo` shows every translatable text as ⟦text⟧, so text without
 brackets in the editor or the command line is text not yet marked. A test opens the
-editor in it and fails on any menu, panel title, tab, button, form label or tip that
-shows without brackets.
+editor in it and fails on any menu, panel title, tab, button, form label, list entry or
+tip that shows without brackets.
 
 ## Spanish
 

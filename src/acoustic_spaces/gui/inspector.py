@@ -53,19 +53,55 @@ from acoustic_spaces.scene.model import LAYOUT_NAMES
 BAND_LABELS = [f"{f} Hz" if f < 1000 else f"{f // 1000} kHz" for f in OCTAVE_BANDS_HZ]
 #: Column labels of the third-octave bands, short to fit 24 columns.
 THIRD_OCTAVE_LABELS = [f"{f}" if f < 1000 else f"{f / 1000:g}k" for f in THIRD_OCTAVE_BANDS_HZ]
+# The lists below pair a value as the scene file writes it with the text shown for it;
+# the English text is the value itself, so that it reads as in the scene file.
 #: The spectra a source's sound power can have.
-SPECTRA = ["flat", "speech_male", "speech_female"]
+SPECTRA = [
+    # Translators: this and the entries below are choices as the scene file names them;
+    # translate them as words, and keep the tips that name them in step.
+    ("flat", N_("flat")),
+    ("speech_male", N_("speech_male")),
+    ("speech_female", N_("speech_female")),
+]
 DIRECTIVITIES = [
-    "omni",
-    "subcardioid",
-    "cardioid",
-    "supercardioid",
-    "hypercardioid",
-    "figure8",
-    "lambert",
+    ("omni", N_("omni")),
+    ("subcardioid", N_("subcardioid")),
+    ("cardioid", N_("cardioid")),
+    ("supercardioid", N_("supercardioid")),
+    ("hypercardioid", N_("hypercardioid")),
+    ("figure8", N_("figure8")),
+    ("lambert", N_("lambert")),
 ]
 #: A source is a point, a line or a surface.
-SHAPES = ["point", "line", "surface"]
+SHAPES = [("point", N_("point")), ("line", N_("line")), ("surface", N_("surface"))]
+EARLY_METHODS = [("ray_tracing", N_("ray_tracing")), ("image_sources", N_("image_sources"))]
+DIFFRACTION = [
+    ("none", N_("none")),
+    ("direct", N_("direct")),
+    ("first_order", N_("first_order")),
+    ("second_order", N_("second_order")),
+]
+LATE_METHODS = [
+    ("stochastic_ray_tracing", N_("stochastic_ray_tracing")),
+    ("statistical", N_("statistical")),
+]
+RECEPTIONS = [
+    ("diffuse_rain", N_("diffuse_rain")),
+    ("secondary_sources", N_("secondary_sources")),
+    ("detector", N_("detector")),
+]
+# The first entry of a Run on list stands for this computer's default (see _set_device).
+LATE_DEVICES = [
+    (None, N_("default")),
+    ("cpu", "cpu"),
+    ("gpu", "gpu"),
+    ("both", N_("both")),
+    ("auto", N_("auto")),
+]
+WAVE_DEVICES = [(None, N_("default")), ("cpu", "cpu"), ("gpu", "gpu"), ("auto", N_("auto"))]
+SCATTERING_METHODS = [("vector", N_("vector")), ("random", N_("random"))]
+RAY_TREES = [("sah", "sah"), ("median", N_("median"))]
+BANDS = [("octave", N_("octave")), ("third_octave", N_("third_octave"))]
 #: The directivity list entry that asks for a SOFA or CSV file.
 MEASURED = N_("Measured data or an array from a file…")
 #: The tip of a source's directivity list, before the choice it shows.
@@ -955,6 +991,18 @@ class MaterialPage(Page):
         self.run(lambda: self.document.set_material(self.key, fields))
 
 
+def _fill(combo: QComboBox, choices) -> None:
+    """Fill a list with (value, text) pairs: the text shows, translated, and the value
+    is the item's data."""
+    for value, text in choices:
+        combo.addItem(_(text), value)
+
+
+def _choose(combo: QComboBox, value) -> None:
+    """Show the entry whose value is ``value``."""
+    combo.setCurrentIndex(max(combo.findData(value), 0))
+
+
 def _directivity_label(spec) -> str:
     """How the directivity list shows a source's setting that is not a pattern name."""
     if spec.file is not None:
@@ -1093,7 +1141,7 @@ class PointPage(Page):
         self.level.setToolTip(_(LEVEL_TIP))
         self.level.valueChanged.connect(self._level)
         self.spectrum = QComboBox()
-        self.spectrum.addItems(SPECTRA)
+        _fill(self.spectrum, SPECTRA)
         self.spectrum.setToolTip(
             _(
                 "How the sound power spreads over the bands: evenly over the octave bands, or "
@@ -1129,7 +1177,7 @@ class PointPage(Page):
         )
         self.delay.valueChanged.connect(lambda value: self._update(delay_ms=value))
         self.shape = QComboBox()
-        self.shape.addItems(SHAPES)
+        _fill(self.shape, SHAPES)
         self.shape.setToolTip(
             _(
                 "A line runs along the source's left axis and a surface spans its left and up "
@@ -1208,13 +1256,13 @@ class PointPage(Page):
             box.setValue(value)
         if self.kind == "sources":
             self.directivity.clear()
-            self.directivity.addItems(DIRECTIVITIES)
+            _fill(self.directivity, DIRECTIVITIES)
             if isinstance(item.directivity, str):
-                self.directivity.setCurrentText(item.directivity)
+                _choose(self.directivity, item.directivity)
             else:
-                self.directivity.addItem(_directivity_label(item.directivity))
+                self.directivity.addItem(_directivity_label(item.directivity), "")
                 self.directivity.setCurrentIndex(len(DIRECTIVITIES))
-            self.directivity.addItem(_(MEASURED))
+            self.directivity.addItem(_(MEASURED), MEASURED)
             # Translators: the directivity list's tip, then the choice it shows.
             tip = _("{tip}. Now: {choice}").format(
                 tip=_(DIRECTIVITY_TIP), choice=self.directivity.currentText()
@@ -1245,13 +1293,13 @@ class PointPage(Page):
                 )
             self.level.setToolTip(tip)
             self._form.labelForField(self.level).setToolTip(tip)
-            self.spectrum.setCurrentText(item.spectrum)
+            _choose(self.spectrum, item.spectrum)
             self.spectrum.setEnabled(not per_band)
             self.gain.setValue(item.gain_db)
             self.eq.setText("" if item.eq_db is None else numbers_text(item.eq_db))
             self.delay.setValue(item.delay_ms)
             shape = "line" if item.line_m else "surface" if item.surface_m else "point"
-            self.shape.setCurrentText(shape)
+            _choose(self.shape, shape)
             if item.line_m is not None:
                 self.extent[0].setValue(item.line_m)
             elif item.surface_m is not None:
@@ -1304,10 +1352,10 @@ class PointPage(Page):
             self._update(orientation=orientation)
 
     def _directivity(self, index: int) -> None:
-        value = self.directivity.itemText(index)
-        if value in DIRECTIVITIES:
+        value = self.directivity.itemData(index)
+        if value in dict(DIRECTIVITIES):
             self._update(directivity=value)
-        elif value == _(MEASURED):
+        elif value == MEASURED:
             path, _filter = QFileDialog.getOpenFileName(
                 self,
                 _("Source directivity"),
@@ -1341,7 +1389,7 @@ class PointPage(Page):
         self.pattern_window.raise_()
 
     def _shape(self, index: int) -> None:
-        shape = SHAPES[index]
+        shape = SHAPES[index][0]
         width, height = (box.value() for box in self.extent)
         if shape == "line":
             self._update(line_m=width, surface_m=None)
@@ -1358,7 +1406,7 @@ class PointPage(Page):
         self._update(level_db=value)
 
     def _spectrum(self, index: int) -> None:
-        self._update(spectrum=self.spectrum.itemText(index))
+        self._update(spectrum=self.spectrum.itemData(index))
 
     def _eq(self) -> None:
         try:
@@ -1376,15 +1424,12 @@ def _set_device(combo: QComboBox, device: str | None) -> None:
     stands for none."""
     # Translators: {device} is a device such as cpu or gpu, as the scene file writes it.
     combo.setItemText(0, _("default ({device})").format(device=tuning.default_device()))
-    if device is None:
-        combo.setCurrentIndex(0)
-    else:
-        combo.setCurrentText(device)
+    _choose(combo, device)
 
 
 def _device(combo: QComboBox) -> str | None:
     """The device a Run on box names, None for this computer's default."""
-    return None if combo.currentIndex() == 0 else combo.currentText()
+    return combo.currentData()
 
 
 class SimulationPage(Page):
@@ -1397,7 +1442,7 @@ class SimulationPage(Page):
         early = QGroupBox(_("Early reflections"))
         early_form = QFormLayout(early)
         self.early_method = QComboBox()
-        self.early_method.addItems(["ray_tracing", "image_sources"])
+        _fill(self.early_method, EARLY_METHODS)
         self.early_method.setToolTip(
             _(
                 "How the early reflection paths are found: ray_tracing (rays find them; the "
@@ -1421,7 +1466,7 @@ class SimulationPage(Page):
             )
         )
         self.diffraction = QComboBox()
-        self.diffraction.addItems(["none", "direct", "first_order", "second_order"])
+        _fill(self.diffraction, DIFFRACTION)
         self.diffraction.setToolTip(
             _(
                 "Sound bending round edges (pillars, balcony fronts, screens): none, of the "
@@ -1430,7 +1475,7 @@ class SimulationPage(Page):
             )
         )
         self.coherent = QComboBox()
-        self.coherent.addItems(["none", "63", "125", "250", "500"])
+        _fill(self.coherent, [(None, N_("none"))] + [(f, str(f)) for f in (63, 125, 250, 500)])
         self.coherent.setToolTip(
             _(
                 "The highest octave band (Hz) in which the early paths add in pressure, with "
@@ -1448,7 +1493,7 @@ class SimulationPage(Page):
         late = QGroupBox(_("Late reverberation"))
         late_form = QFormLayout(late)
         self.late_method = QComboBox()
-        self.late_method.addItems(["stochastic_ray_tracing", "statistical"])
+        _fill(self.late_method, LATE_METHODS)
         self.late_method.setToolTip(
             _(
                 "How the late reverberation is found: stochastic_ray_tracing (rays per band "
@@ -1461,7 +1506,7 @@ class SimulationPage(Page):
             _("Rays per band for the late reverberation; more give smoother decays and take longer")
         )
         self.reception = QComboBox()
-        self.reception.addItems(["diffuse_rain", "secondary_sources", "detector"])
+        _fill(self.reception, RECEPTIONS)
         self.reception.setToolTip(
             _(
                 "How reflected energy reaches the listeners: diffuse_rain (the scattered part "
@@ -1488,7 +1533,7 @@ class SimulationPage(Page):
             )
         )
         self.late_device = QComboBox()
-        self.late_device.addItems(["default", "cpu", "gpu", "both", "auto"])
+        _fill(self.late_device, LATE_DEVICES)
         self.late_device.setToolTip(
             _(
                 "Where it traces the rays: this computer's default (the CPU, or auto once "
@@ -1509,7 +1554,7 @@ class SimulationPage(Page):
         scattering = QGroupBox(_("Scattering"))
         scattering_form = QFormLayout(scattering)
         self.scattering_method = QComboBox()
-        self.scattering_method.addItems(["vector", "random"])
+        _fill(self.scattering_method, SCATTERING_METHODS)
         self.scattering_method.setToolTip(
             _(
                 "Where a reflected ray goes: vector (between the specular direction and a "
@@ -1552,7 +1597,7 @@ class SimulationPage(Page):
             _("The highest band it computes; each costs about 16 times the one below")
         )
         self.wave_device = QComboBox()
-        self.wave_device.addItems(["default", "cpu", "gpu", "auto"])
+        _fill(self.wave_device, WAVE_DEVICES)
         self.wave_device.setToolTip(
             _(
                 "Where it steps its grid: this computer's default (the CPU, or auto once "
@@ -1578,7 +1623,7 @@ class SimulationPage(Page):
             )
         )
         self.ray_tree = QComboBox()
-        self.ray_tree.addItems(["sah", "median"])
+        _fill(self.ray_tree, RAY_TREES)
         self.ray_tree.setToolTip(
             _(
                 "How the tree that finds the surface a ray meets is split: by the surface area "
@@ -1608,7 +1653,7 @@ class SimulationPage(Page):
             )
         )
         self.bands = QComboBox()
-        self.bands.addItems(["octave", "third_octave"])
+        _fill(self.bands, BANDS)
         self.bands.setToolTip(
             _(
                 "The bands it runs in: 8 octave bands, or 24 third-octave bands for finer "
@@ -1665,17 +1710,17 @@ class SimulationPage(Page):
             (self.ray_tree, "performance.ray_tree"),
             (self.bands, "bands"),
         ):
-            combo.currentTextChanged.connect(lambda text, key=key: self._set(key, text))
+            combo.currentIndexChanged.connect(
+                lambda index, combo=combo, key=key: self._set(key, combo.itemData(index))
+            )
         for combo, key in ((self.wave_band, "wave.max_band_hz"), (self.sample_rate, "sample_rate")):
             combo.currentTextChanged.connect(lambda text, key=key: self._set(key, int(text)))
-        self.coherent.currentTextChanged.connect(
-            lambda text: self._set(
-                "early.coherent_max_band_hz", None if text == "none" else int(text)
-            )
+        self.coherent.currentIndexChanged.connect(
+            lambda index: self._set("early.coherent_max_band_hz", self.coherent.itemData(index))
         )
         for combo, key in ((self.late_device, "late.device"), (self.wave_device, "wave.device")):
-            combo.currentTextChanged.connect(
-                lambda _, combo=combo, key=key: self._set(key, _device(combo))
+            combo.currentIndexChanged.connect(
+                lambda _index, combo=combo, key=key: self._set(key, _device(combo))
             )
         for box, key in (
             (self.max_order, "early.max_order"),
@@ -1704,19 +1749,19 @@ class SimulationPage(Page):
 
     def load(self) -> None:
         s = self.document.scene.simulation
-        self.early_method.setCurrentText(s.early.method)
+        _choose(self.early_method, s.early.method)
         self.max_order.setValue(s.early.max_order)
         self.early_rays.setValue(s.early.rays)
-        self.diffraction.setCurrentText(s.early.diffraction)
+        _choose(self.diffraction, s.early.diffraction)
         coherent = s.early.coherent_max_band_hz
-        self.coherent.setCurrentText("none" if coherent is None else str(coherent))
-        self.late_method.setCurrentText(s.late.method)
+        _choose(self.coherent, coherent)
+        _choose(self.late_method, s.late.method)
         self.late_rays.setValue(s.late.rays)
-        self.reception.setCurrentText(s.late.reception)
+        _choose(self.reception, s.late.reception)
         self.directions.setValue(s.late.directions)
         self.splitting.setChecked(s.late.splitting)
         _set_device(self.late_device, s.late.device)
-        self.scattering_method.setCurrentText(s.scattering.method)
+        _choose(self.scattering_method, s.scattering.method)
         self.from_size.setChecked(s.scattering.from_size)
         self.by_band.setChecked(s.scattering.by_band)
         self.by_band.setEnabled(s.scattering.method == "vector")
@@ -1726,12 +1771,12 @@ class SimulationPage(Page):
         _set_device(self.wave_device, s.wave.device)
         self.wave_device.setEnabled(s.wave.enabled)
         self.threads.setValue(s.performance.threads)
-        self.ray_tree.setCurrentText(s.performance.ray_tree)
+        _choose(self.ray_tree, s.performance.ray_tree)
         self.length.setValue(s.ir_length_s)
         if self.sample_rate.findText(str(s.sample_rate)) < 0:
             self.sample_rate.addItem(str(s.sample_rate))
         self.sample_rate.setCurrentText(str(s.sample_rate))
-        self.bands.setCurrentText(s.bands)
+        _choose(self.bands, s.bands)
         self.auto_transition.setChecked(s.transition_ms is None)
         self.transition.setEnabled(s.transition_ms is not None)
         self.transition.setValue(s.transition_ms or 80.0)
@@ -1817,7 +1862,10 @@ class OutputsPage(Page):
             _("Write one channel per loudspeaker of a standard layout, panned between them (VBAP)")
         )
         self.layout_name = QComboBox()
-        self.layout_name.addItems(LAYOUT_NAMES)
+        _fill(
+            self.layout_name,
+            [(name, N_("stereo") if name == "stereo" else name) for name in LAYOUT_NAMES],
+        )
         self.layout_name.setToolTip(
             _(
                 "The loudspeaker layout: stereo, surround (5.0, 7.0), with a low-frequency "
@@ -1841,7 +1889,7 @@ class OutputsPage(Page):
         for check in (self.mono, self.binaural, self.ambisonics, self.loudspeakers):
             check.toggled.connect(self._changed)
         self.order.valueChanged.connect(self._changed)
-        self.layout_name.currentTextChanged.connect(self._changed)
+        self.layout_name.currentIndexChanged.connect(self._changed)
         self._hrtf: str | None = None
 
     def load(self) -> None:
@@ -1864,7 +1912,7 @@ class OutputsPage(Page):
         self.order.setValue(by_format["ambisonics"].order if "ambisonics" in by_format else 1)
         speakers = by_format.get("loudspeakers")
         self.loudspeakers.setChecked(speakers is not None)
-        self.layout_name.setCurrentText((speakers.layout if speakers else None) or "5.0")
+        _choose(self.layout_name, (speakers.layout if speakers else None) or "5.0")
         custom = [o for o in outputs if o.format == "loudspeakers" and o.speakers]
         self.custom.setText(
             ngettext(
@@ -1890,7 +1938,7 @@ class OutputsPage(Page):
         if self.ambisonics.isChecked():
             outputs.append({"format": "ambisonics", "order": self.order.value()})
         if self.loudspeakers.isChecked():
-            outputs.append({"format": "loudspeakers", "layout": self.layout_name.currentText()})
+            outputs.append({"format": "loudspeakers", "layout": self.layout_name.currentData()})
         for output in self.document.scene.outputs:
             if output.format == "loudspeakers" and output.speakers:
                 outputs.append(output.model_dump(mode="json", exclude_none=True))

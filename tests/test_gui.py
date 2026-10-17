@@ -1850,10 +1850,17 @@ def _close(qapp, win) -> None:
 
 def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) -> None:
     """In the pseudo language every text marked for translation shows as ⟦text⟧: menus,
-    toolbar, panel titles, tabs, buttons, form labels, group titles and tips without
-    brackets are text not yet marked."""
+    toolbar, panel titles, tabs, buttons, form labels, group titles, list entries and tips
+    without brackets are text not yet marked."""
 
-    from PySide6.QtWidgets import QAbstractButton, QGroupBox, QTableWidget, QTabWidget, QWidget
+    from PySide6.QtWidgets import (
+        QAbstractButton,
+        QComboBox,
+        QGroupBox,
+        QTableWidget,
+        QTabWidget,
+        QWidget,
+    )
 
     win = _editor_in(qapp, monkeypatch, "pseudo")
     try:
@@ -1883,6 +1890,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
         for dock in win.docks.values():
             texts.append(("panel", dock.windowTitle()))
         roots = [win, *win.inspector.pages.values()]
+        presets = win.inspector.pages["material"].preset  # the database's ids, as written
         for root in roots:
             for widget in root.findChildren(QWidget):
                 if widget.objectName().startswith("qt_"):  # Qt's own, which Qt translates
@@ -1897,6 +1905,11 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                     texts.append(("group", widget.title()))
                 elif isinstance(widget, QTabWidget):
                     texts += [("tab", widget.tabText(k)) for k in range(widget.count())]
+                elif isinstance(widget, QComboBox) and widget is not presets:
+                    for k in range(widget.count()):
+                        # Names from the scene (materials, sources) show as they are.
+                        if widget.itemText(k) != widget.itemData(k):
+                            texts.append(("list entry", widget.itemText(k)))
                 elif isinstance(widget, QTableWidget):
                     items = [widget.horizontalHeaderItem(c) for c in range(widget.columnCount())]
                     items += [widget.verticalHeaderItem(r) for r in range(widget.rowCount())]
@@ -1905,7 +1918,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
         unmarked = {
             (what, text)
             for what, text in texts
-            if re.search(r"[A-Za-z]{3,}", text) and "⟦" not in text
+            if re.search(r"[A-Za-z]{3,}", text.replace("kHz", "")) and "⟦" not in text
         }
         assert not unmarked
     finally:
@@ -1925,6 +1938,14 @@ def test_the_editor_in_spanish(qapp, english, monkeypatch) -> None:
         assert win.undo_action.text() == "&Deshacer"
         win.document.add_point("sources", (2.0, 2.0, 1.5))
         assert win.undo_action.text() == "&Deshacer añadir fuente"
+        # Choices show in words; the scene keeps its values.
+        page = win.inspector.pages["simulation"]
+        assert [page.late_method.itemText(k) for k in range(2)] == [
+            "trazado de rayos estocástico",
+            "estadístico",
+        ]
+        assert page.late_method.itemData(0) == "stochastic_ray_tracing"
+        assert win.examples_menu.actions()[0].text().startswith("Piso con una puerta")
         # One shortcut letter per entry in each menu.
         for menu in win.menuBar().findChildren(QMenu):
             letters = [

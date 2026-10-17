@@ -52,9 +52,9 @@ class MapPanel(QWidget):
             _("The room parameter the map shows; rest on an entry in the list for its meaning")
         )
         for name, info in MAP_PARAMETERS.items():
-            self.parameter.addItem(info.label, name)
+            self.parameter.addItem(_(info.label), name)
             self.parameter.setItemData(
-                self.parameter.count() - 1, info.description, Qt.ItemDataRole.ToolTipRole
+                self.parameter.count() - 1, _(info.description), Qt.ItemDataRole.ToolTipRole
             )
         self.parameter.setCurrentIndex(list(MAP_PARAMETERS).index("sti"))
         self.band = QComboBox()

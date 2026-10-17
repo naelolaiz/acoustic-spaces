@@ -24,6 +24,94 @@ msgstr "el del sistema"
 msgid "language: {language} ({source})"
 msgstr "idioma: {language} ({source})"
 
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "SPL (dB)"
+msgstr "SPL (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "sound pressure level"
+msgstr "nivel de presión sonora"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "SPL (dB(A))"
+msgstr "SPL (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "A-weighted sound pressure level"
+msgstr "nivel de presión sonora con ponderación A"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "G (dB)"
+msgstr "G (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "strength"
+msgstr "fuerza sonora"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "C50 (dB)"
+msgstr "C50 (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "clarity, 50 ms"
+msgstr "claridad, 50 ms"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "C80 (dB)"
+msgstr "C80 (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "clarity, 80 ms"
+msgstr "claridad, 80 ms"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "D50"
+msgstr "D50"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "definition"
+msgstr "definición"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "EDT (s)"
+msgstr "EDT (s)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "early decay time"
+msgstr "tiempo de caída inicial"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "T20 (s)"
+msgstr "T20 (s)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "reverberation time from a 20 dB decay"
+msgstr "tiempo de reverberación a partir de una caída de 20 dB"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "T30 (s)"
+msgstr "T30 (s)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "reverberation time from a 30 dB decay"
+msgstr "tiempo de reverberación a partir de una caída de 30 dB"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Ts (ms)"
+msgstr "Ts (ms)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "centre time"
+msgstr "tiempo central"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "STI"
+msgstr "STI"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "speech transmission index"
+msgstr "índice de transmisión del habla"
+
 #: acoustic_spaces/gui/app.py
 msgid "Acoustic Spaces editor"
 msgstr "Editor de Acoustic Spaces"
@@ -1121,6 +1209,136 @@ msgstr "una escena necesita al menos un material"
 msgid "remove material {name}"
 msgstr "eliminar material {name}"
 
+#. Translators: this and the entries below are choices as the scene file names them; translate them as words, and keep the tips that name them in step.
+#: acoustic_spaces/gui/inspector.py
+msgid "flat"
+msgstr "plano"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "speech_male"
+msgstr "voz masculina"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "speech_female"
+msgstr "voz femenina"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "omni"
+msgstr "omnidireccional"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "subcardioid"
+msgstr "subcardioide"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "cardioid"
+msgstr "cardioide"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "supercardioid"
+msgstr "supercardioide"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "hypercardioid"
+msgstr "hipercardioide"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "figure8"
+msgstr "figura de ocho"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "lambert"
+msgstr "Lambert"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "point"
+msgstr "punto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "line"
+msgstr "línea"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "surface"
+msgstr "superficie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "ray_tracing"
+msgstr "trazado de rayos"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "image_sources"
+msgstr "fuentes imagen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "none"
+msgstr "ninguno"
+
+#. Translators: the direct sound's paths, in a plot's legend.
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py
+msgid "direct"
+msgstr "sonido directo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "first_order"
+msgstr "primer orden"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "second_order"
+msgstr "segundo orden"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "stochastic_ray_tracing"
+msgstr "trazado de rayos estocástico"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "statistical"
+msgstr "estadístico"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "diffuse_rain"
+msgstr "lluvia difusa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "secondary_sources"
+msgstr "fuentes secundarias"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "detector"
+msgstr "detector"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "default"
+msgstr "predeterminado"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "both"
+msgstr "ambas"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "auto"
+msgstr "auto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "vector"
+msgstr "vectorial"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "random"
+msgstr "aleatoria"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "median"
+msgstr "mediana"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "octave"
+msgstr "octavas"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "third_octave"
+msgstr "tercios de octava"
+
 #: acoustic_spaces/gui/inspector.py
 msgid "Measured data or an array from a file…"
 msgstr "Datos medidos o un array desde un archivo…"
@@ -1132,10 +1350,11 @@ msgid ""
 "vibrating surface, to the front only; or measured data (SOFA or CSV) or an "
 "array of sources from a file"
 msgstr ""
-"Cómo radia la fuente a su alrededor: omni por igual en todas direcciones; de "
-"subcardioid a hypercardioid cada vez más hacia delante; figure8 hacia "
-"delante y hacia atrás; lambert como una superficie vibrante, solo hacia "
-"delante; o datos medidos (SOFA o CSV) o un array de fuentes desde un archivo"
+"Cómo radia la fuente a su alrededor: omnidireccional por igual en todas "
+"direcciones; de subcardioide a hipercardioide cada vez más hacia delante; "
+"figura de ocho hacia delante y hacia atrás; Lambert como una superficie "
+"vibrante, solo hacia delante; o datos medidos (SOFA o CSV) o un array de "
+"fuentes desde un archivo"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -1545,10 +1764,6 @@ msgid "{area:,.1f} m²"
 msgstr "{area:,.1f} m²"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "none"
-msgstr "ninguno"
-
-#: acoustic_spaces/gui/inspector.py
 #, python-brace-format
 msgid ""
 "Now: {material}. Choosing a material assigns it to the name “{name}”, which "
@@ -1868,8 +2083,8 @@ msgid ""
 "directions, per octave band (dB): 0 dB for omni, about 5 dB for a cardioid"
 msgstr ""
 "Cuánto más fuerte suena la fuente justo enfrente que de media en todas las "
-"direcciones, por banda de octava (dB): 0 dB para omni, unos 5 dB para un "
-"cardioide"
+"direcciones, por banda de octava (dB): 0 dB para una omnidireccional, unos 5 "
+"dB para un cardioide"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Show the pattern"
@@ -2098,11 +2313,11 @@ msgid ""
 "of surfaces; complete, but it grows as the surfaces to the power of the "
 "order). The paths found are exact either way"
 msgstr ""
-"Cómo se buscan las trayectorias de las primeras reflexiones: ray_tracing "
-"(las encuentran los rayos; el coste crece con los rayos, no con las "
-"superficies) o image_sources (todas las secuencias de superficies; completo, "
-"pero crece como las superficies elevadas al orden). Las trayectorias "
-"encontradas son exactas en ambos casos"
+"Cómo se buscan las trayectorias de las primeras reflexiones: trazado de "
+"rayos (las encuentran los rayos; el coste crece con los rayos, no con las "
+"superficies) o fuentes imagen (todas las secuencias de superficies; "
+"completo, pero crece como las superficies elevadas al orden). Las "
+"trayectorias encontradas son exactas en ambos casos"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2173,8 +2388,8 @@ msgid ""
 "Eyring reverberation time, by Barron's revised theory; fast, for simple "
 "rooms)"
 msgstr ""
-"Cómo se obtiene la reverberación tardía: stochastic_ray_tracing (rayos por "
-"banda que se reflejan y dispersan en las superficies) o statistical (una "
+"Cómo se obtiene la reverberación tardía: trazado de rayos estocástico (rayos "
+"por banda que se reflejan y dispersan en las superficies) o estadístico (una "
 "caída suave con el tiempo de reverberación de Eyring, según la teoría "
 "revisada de Barron; rápido, para recintos sencillos)"
 
@@ -2194,9 +2409,9 @@ msgid ""
 "radiates, as in ODEON: smoother, but it treats specular sound as diffuse) or "
 "detector (the sphere only, classic ray tracing)"
 msgstr ""
-"Cómo llega la energía reflejada a los receptores: diffuse_rain (la parte "
+"Cómo llega la energía reflejada a los receptores: lluvia difusa (la parte "
 "dispersa de cada reflexión radia hacia todos los receptores que ve, el resto "
-"cuenta cuando un rayo atraviesa una esfera detectora), secondary_sources "
+"cuenta cuando un rayo atraviesa una esfera detectora), fuentes secundarias "
 "(radia toda, como en ODEON: más suave, pero trata el sonido especular como "
 "difuso) o detector (solo la esfera, el trazado de rayos clásico)"
 
@@ -2262,10 +2477,10 @@ msgid ""
 "random Lambert one, weighted by the scattering coefficient, as in ODEON) or "
 "random (specular, or with the scattering coefficient as probability Lambert)"
 msgstr ""
-"Hacia dónde va un rayo reflejado: vector (entre la dirección especular y una "
-"aleatoria de Lambert, ponderadas por el coeficiente de dispersión, como en "
-"ODEON) o random (especular, o de Lambert con el coeficiente de dispersión "
-"como probabilidad)"
+"Hacia dónde va un rayo reflejado: vectorial (entre la dirección especular y "
+"una aleatoria de Lambert, ponderadas por el coeficiente de dispersión, como "
+"en ODEON) o aleatoria (especular, o de Lambert con el coeficiente de "
+"dispersión como probabilidad)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Add the scattering of each surface's size"
@@ -2362,7 +2577,7 @@ msgid ""
 msgstr ""
 "Cómo se divide el árbol que encuentra la superficie con la que choca un "
 "rayo: por la heurística de área de superficie (sah, varias veces más rápida "
-"en modelos detallados) o por la cara central (median, como antes; para "
+"en modelos detallados) o por la cara central (mediana, como antes; para "
 "comparar). Los resultados no cambian"
 
 #: acoustic_spaces/gui/inspector.py
@@ -2547,6 +2762,10 @@ msgid ""
 msgstr ""
 "Escribir un canal por altavoz de una configuración estándar, con "
 "panoramización entre ellos (VBAP)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "stereo"
+msgstr "estéreo"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2910,42 +3129,6 @@ msgstr "Cuadrícula"
 #, python-brace-format
 msgid "x {x:.2f}, y {y:.2f} m"
 msgstr "x {x:.2f}; y {y:.2f} m"
-
-#: acoustic_spaces/gui/results_view.py
-msgid "EDT (s)"
-msgstr "EDT (s)"
-
-#: acoustic_spaces/gui/results_view.py
-msgid "T20 (s)"
-msgstr "T20 (s)"
-
-#: acoustic_spaces/gui/results_view.py
-msgid "T30 (s)"
-msgstr "T30 (s)"
-
-#: acoustic_spaces/gui/results_view.py
-msgid "C50 (dB)"
-msgstr "C50 (dB)"
-
-#: acoustic_spaces/gui/results_view.py
-msgid "C80 (dB)"
-msgstr "C80 (dB)"
-
-#: acoustic_spaces/gui/results_view.py
-msgid "D50"
-msgstr "D50"
-
-#: acoustic_spaces/gui/results_view.py
-msgid "Ts (ms)"
-msgstr "Ts (ms)"
-
-#: acoustic_spaces/gui/results_view.py
-msgid "G (dB)"
-msgstr "G (dB)"
-
-#: acoustic_spaces/gui/results_view.py
-msgid "SPL (dB)"
-msgstr "SPL (dB)"
 
 #: acoustic_spaces/gui/results_view.py
 msgid "LF"
@@ -3467,7 +3650,7 @@ msgstr "Geometría"
 msgid "Surfaces"
 msgstr "Superficies"
 
-#: acoustic_spaces/gui/tree.py
+#: acoustic_spaces/gui/tree.py acoustic_spaces/viz.py
 msgid "no material"
 msgstr "sin material"
 
@@ -3600,3 +3783,729 @@ msgstr "La vista 3D no está disponible aquí: {reason}"
 #: acoustic_spaces/gui/viewport.py
 msgid "The 3D view needs a display with OpenGL."
 msgstr "La vista 3D necesita una pantalla con OpenGL."
+
+#. Translators: reflection orders: 1st order, 2nd order... {order} is the number.
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{order}st order"
+msgstr "orden {order}"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{order}nd order"
+msgstr "orden {order}"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{order}rd order"
+msgstr "orden {order}"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{order}th order"
+msgstr "orden {order}"
+
+#: acoustic_spaces/viz.py
+msgid "diffracted"
+msgstr "difractadas"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "open edges ({count})"
+msgstr "aristas abiertas ({count})"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "escaping rays ({count})"
+msgstr "rayos que escapan ({count})"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "gap {number}: {share:.1f} %"
+msgstr "hueco {number}: {share:.1f} %"
+
+#: acoustic_spaces/viz.py
+msgid "reflections"
+msgstr "reflexiones"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "level at {band} Hz (dB)"
+msgstr "nivel a {band} Hz (dB)"
+
+#: acoustic_spaces/viz.py
+msgid "time (ms)"
+msgstr "tiempo (ms)"
+
+#. Translators: added to the name and time shown on a walkthrough video.
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid ", facing yaw {yaw:.0f}°"
+msgstr ", orientado con guiñada {yaw:.0f}°"
+
+#: acoustic_spaces/viz.py
+msgid "late (per ms)"
+msgstr "tardía (por ms)"
+
+#: acoustic_spaces/viz.py
+msgid "level re 10 m free field (dB)"
+msgstr "nivel respecto a 10 m en campo libre (dB)"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{source} to {listener}: echogram, {band} Hz band"
+msgstr "De {source} a {listener}: ecograma, banda de {band} Hz"
+
+#: acoustic_spaces/viz.py
+msgid "time after the direct sound (ms)"
+msgstr "tiempo tras el sonido directo (ms)"
+
+#: acoustic_spaces/viz.py
+msgid "decay (dB)"
+msgstr "caída (dB)"
+
+#: acoustic_spaces/viz.py
+msgid "backward-integrated decay per octave band"
+msgstr "caída por integración inversa por banda de octava"
+
+#: acoustic_spaces/viz.py
+msgid "back"
+msgstr "detrás"
+
+#: acoustic_spaces/viz.py
+msgid "left"
+msgstr "izquierda"
+
+#: acoustic_spaces/viz.py
+msgid "front"
+msgstr "delante"
+
+#: acoustic_spaces/viz.py
+msgid "right"
+msgstr "derecha"
+
+#: acoustic_spaces/viz.py
+msgid "azimuth (degrees)"
+msgstr "acimut (grados)"
+
+#: acoustic_spaces/viz.py
+msgid "elevation (degrees)"
+msgstr "elevación (grados)"
+
+#: acoustic_spaces/viz.py
+msgid "delay after the direct sound (ms)"
+msgstr "retardo tras el sonido directo (ms)"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid ""
+"{source} to {listener}: early reflections, {band} Hz band (dot size: level, "
+"top 40 dB)"
+msgstr ""
+"De {source} a {listener}: primeras reflexiones, banda de {band} Hz (tamaño "
+"del punto: nivel, 40 dB superiores)"
+
+#: acoustic_spaces/viz.py
+msgid "level re loudest direction (dB)"
+msgstr "nivel respecto a la dirección más fuerte (dB)"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "late energy by arrival direction, {band} Hz band"
+msgstr "energía tardía por dirección de llegada, banda de {band} Hz"
+
+#: acoustic_spaces/viz.py
+msgid "late energy arrives evenly from all directions"
+msgstr "la energía tardía llega por igual desde todas las direcciones"
+
+#: acoustic_spaces/viz.py
+msgid "late energy by arrival direction"
+msgstr "energía tardía por dirección de llegada"
+
+#: acoustic_spaces/viz.py
+msgid "horizontal plane (from above)"
+msgstr "plano horizontal (visto desde arriba)"
+
+#: acoustic_spaces/viz.py
+msgid "vertical plane (from the side)"
+msgstr "plano vertical (visto de lado)"
+
+#: acoustic_spaces/viz.py
+msgid "every band"
+msgstr "todas las bandas"
+
+#: acoustic_spaces/viz.py
+msgid "up"
+msgstr "arriba"
+
+#: acoustic_spaces/viz.py
+msgid "down"
+msgstr "abajo"
+
+#: acoustic_spaces/viz.py
+msgid "directivity"
+msgstr "directividad"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid ""
+"{name}\n"
+"dB re the loudest direction; directivity index {index:.1f} dB at 1 kHz"
+msgstr ""
+"{name}\n"
+"dB respecto a la dirección más fuerte; índice de directividad de {index:.1f} "
+"dB a 1 kHz"
+
+#: acoustic_spaces/viz.py
+msgid "broadband, 1 ms windows"
+msgstr "banda ancha, ventanas de 1 ms"
+
+#: acoustic_spaces/viz.py
+msgid "band noise from its crosspoint"
+msgstr "ruido de la banda desde su punto de cruce"
+
+#: acoustic_spaces/viz.py
+msgid "level re peak (dB)"
+msgstr "nivel respecto al pico (dB)"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{title}: level"
+msgstr "{title}: nivel"
+
+#: acoustic_spaces/viz.py
+msgid "level"
+msgstr "nivel"
+
+#: acoustic_spaces/viz.py
+msgid "backward-integrated decay per octave band, noise removed"
+msgstr "caída por integración inversa por banda de octava, sin ruido"
+
+#: acoustic_spaces/viz.py
+msgid "x (m)"
+msgstr "x (m)"
+
+#: acoustic_spaces/viz.py
+msgid "y (m)"
+msgstr "y (m)"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "level {number}, floor at about {height:.1f} m"
+msgstr "nivel {number}, suelo a unos {height:.1f} m"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{source}: {title}, {count} points {spacing:g} m apart"
+msgstr "{source}: {title}, {count} puntos separados {spacing:g} m"
+
+#: examples/apartment/scene.yaml
+msgctxt "example"
+msgid "Flat with a door between two rooms (living room 52 m3, bedroom 42 m3)"
+msgstr ""
+"Piso con una puerta entre dos habitaciones (salón de 52 m3, dormitorio de 42 "
+"m3)"
+
+#: examples/apartment/scene.yaml
+msgctxt "example"
+msgid ""
+"Two rooms of an empty flat: a living room with a television and, through a "
+"door in the wall between, a bedroom. The wall lets through 30 to 58 dB less "
+"than reaches it, band by band (plastered light concrete blocks), the closed "
+"door 15 to 24 dB less. How loud is the television in bed?  acoustic-spaces "
+"simulate scene.yaml --out results acoustic-spaces map scene.yaml --parameter "
+"spl_a --plot levels.png  With the door closed, the television that gives 73 "
+"dB(A) on the sofa gives 45 dB(A) in bed. Open the door (`door: open` below) "
+"and run them again: 63 dB(A) in bed. `inspect` lists the two rooms the model "
+"closes off. make_model.py writes apartment.obj."
+msgstr ""
+"Dos habitaciones de un piso vacío: un salón con un televisor y, tras una "
+"puerta en la pared que los separa, un dormitorio. La pared deja pasar entre "
+"30 y 58 dB menos de lo que le llega, banda a banda (bloques de hormigón "
+"ligero enlucidos), y la puerta cerrada entre 15 y 24 dB menos. ¿Cuánto se "
+"oye el televisor desde la cama?  acoustic-spaces simulate scene.yaml --out "
+"results acoustic-spaces map scene.yaml --parameter spl_a --plot levels.png  "
+"Con la puerta cerrada, el televisor que da 73 dB(A) en el sofá da 45 dB(A) "
+"en la cama. Abra la puerta (`door: open` más abajo) y vuelva a calcular: 63 "
+"dB(A) en la cama. `inspect` muestra los dos recintos que cierra el modelo. "
+"make_model.py escribe apartment.obj."
+
+#: examples/archway/scene.yaml
+msgctxt "example"
+msgid "Bar and dining room (archway in a thick wall)"
+msgstr "Bar y comedor (arco en un muro grueso)"
+
+#: examples/archway/scene.yaml
+msgctxt "example"
+msgid ""
+"A bar and a dining room, 3.2 m high (450 m3), joined by a 2 m wide archway "
+"in a wall 40 cm thick, the full height of the rooms. A singer stands by the "
+"wall in the bar; one diner sees them through the arch, the other sits behind "
+"the wall, where the shortest way round is over both corners of the arch's "
+"jamb in turn: `second_order` diffraction follows it, `first_order` only "
+"bends round one corner at a time."
+msgstr ""
+"Un bar y un comedor de 3,2 m de altura (450 m3), unidos por un arco de 2 m "
+"de ancho en un muro de 40 cm de espesor, de toda la altura de las salas. Un "
+"cantante está junto al muro, en el bar; un comensal lo ve a través del arco "
+"y el otro está sentado tras el muro, donde el camino más corto rodea, una "
+"tras otra, las dos esquinas de la jamba del arco: la difracción "
+"`second_order` sigue ese camino, y `first_order` solo rodea una esquina cada "
+"vez."
+
+#: examples/bim_office/scene.yaml
+msgctxt "example"
+msgid "Office from a BIM model (IFC)"
+msgstr "Oficina a partir de un modelo BIM (IFC)"
+
+#: examples/bim_office/scene.yaml
+msgctxt "example"
+msgid ""
+"An office of 6 x 4.5 x 2.8 m from a BIM model in IFC (office.ifc, written by "
+"make_model.py with IfcOpenShell), read with the ifc extra. `space: Office` "
+"takes the room's faces from the space boundaries the model has for that "
+"IfcSpace, each named by the element it lies on: its name, its materials and "
+"its IFC class, which assignments can use. Without `space`, every building "
+"element is read as a solid (walls with both sides and their thickness, the "
+"window set into its opening)."
+msgstr ""
+"Una oficina de 6 x 4,5 x 2,8 m a partir de un modelo BIM en IFC (office.ifc, "
+"escrito por make_model.py con IfcOpenShell), que se lee con el extra ifc. "
+"`space: Office` toma las caras del recinto de los límites de espacio que el "
+"modelo tiene para ese IfcSpace, cada una con el nombre del elemento sobre el "
+"que está: su nombre, sus materiales y su clase IFC, que las asignaciones "
+"pueden usar. Sin `space`, cada elemento constructivo se lee como un sólido "
+"(los muros con sus dos caras y su espesor, la ventana encajada en su hueco)."
+
+#: examples/church/scene.yaml
+msgctxt "example"
+msgid "Church (stone nave, 9500 m3)"
+msgstr "Iglesia (nave de piedra, 9500 m3)"
+
+#: examples/church/scene.yaml
+msgctxt "example"
+msgid ""
+"A stone church: a nave 34 m long and 14 m wide that ends in a five-sided "
+"apse, 18 m high (9500 m3), with wooden pews. Reverberation lasts about six "
+"seconds at 500 Hz and 1 kHz, and longer in the bass. wall_1 and wall_6 are "
+"the long sides, wall_2 to wall_5 the apse, wall_7 the entrance wall with the "
+"organ gallery."
+msgstr ""
+"Una iglesia de piedra: una nave de 34 m de largo y 14 m de ancho que termina "
+"en un ábside de cinco lados, de 18 m de altura (9500 m3), con bancos de "
+"madera. La reverberación dura unos seis segundos a 500 Hz y 1 kHz, y más en "
+"los graves. wall_1 y wall_6 son los lados largos, de wall_2 a wall_5 el "
+"ábside, y wall_7 el muro de la entrada con la tribuna del órgano."
+
+#: examples/concert_hall/scene.yaml
+msgctxt "example"
+msgid "Concert hall (shoebox, 9440 m3)"
+msgstr "Sala de conciertos (caja de zapatos, 9440 m3)"
+
+#: examples/concert_hall/scene.yaml
+msgctxt "example"
+msgid ""
+"A shoebox concert hall, 32 x 20 x 15 m (9440 m3), with a raised stage, "
+"upholstered seats, diffusing side walls and a coffered ceiling. Two sources "
+"on the stage, three seats in the stalls."
+msgstr ""
+"Una sala de conciertos en forma de caja de zapatos, de 32 x 20 x 15 m (9440 "
+"m3), con un escenario elevado, butacas tapizadas, paredes laterales "
+"difusoras y un techo artesonado. Dos fuentes en el escenario y tres asientos "
+"en el patio de butacas."
+
+#: examples/fitting/scene.yaml
+msgctxt "example"
+msgid "Seminar room as designed (10 x 7 x 3 m)"
+msgstr "Aula de seminarios según el proyecto (10 x 7 x 3 m)"
+
+#: examples/fitting/scene.yaml
+msgctxt "example"
+msgid ""
+"Fitting a model to measurements. A seminar room was designed with a carpet, "
+"an absorbing ceiling and absorbing panels on the back wall, and measured "
+"once built: the reverberation came out longer than the model said (T30 0.9 s "
+"against 0.7 s at 1 kHz). There is no real room behind this example, so "
+"make_measurements.py makes up its measurements by simulating the room as "
+"built, where the panels were left out, with noise and latency as a "
+"measurement would have. Then compare the model with them, in just noticeable "
+"differences, and fit the back wall's absorption to them:  python "
+"make_measurements.py acoustic-spaces simulate scene.yaml --out designed "
+"acoustic-spaces compare designed/dodecahedron__seat_a.wav "
+"measured/dodecahedron__seat_a.wav acoustic-spaces calibrate scene.yaml -o "
+"fitted.yaml --materials panels \\ --measured dodecahedron seat_a "
+"measured/dodecahedron__seat_a.wav \\ --measured dodecahedron seat_b "
+"measured/dodecahedron__seat_b.wav \\ --measured dodecahedron seat_c "
+"measured/dodecahedron__seat_c.wav  `calibrate` adjusts the panels' "
+"absorption band by band until T30, EDT and C80 at the three seats come as "
+"close as they can to those measured, and writes the fitted scene. From 500 "
+"Hz up it finds the plain wall that was built, 0.03 to 0.08 where "
+"plasterboard has 0.04 to 0.06, and T30 and C80 come within one JND on "
+"average, EDT within two. Below 500 Hz it is less sure (0.46 at 250 Hz): "
+"there the panels change the decay little next to the randomness of the "
+"made-up measurements. Without `--materials` it fits every material, which "
+"three seats and one source cannot tell apart. The source is omnidirectional, "
+"as the dodecahedron loudspeaker of a measurement to ISO 3382 is."
+msgstr ""
+"Ajuste de un modelo a mediciones. Un aula de seminarios se proyectó con "
+"moqueta, un techo absorbente y paneles absorbentes en la pared del fondo, y "
+"se midió una vez construida: la reverberación resultó más larga de lo que "
+"daba el modelo (T30 de 0,9 s frente a 0,7 s a 1 kHz). Detrás de este ejemplo "
+"no hay ninguna sala real, así que make_measurements.py se inventa las "
+"mediciones simulando la sala tal como se construyó, sin los paneles, con el "
+"ruido y la latencia que tendría una medición. Después se compara el modelo "
+"con ellas, en diferencias apenas perceptibles, y se ajusta a ellas la "
+"absorción de la pared del fondo:  python make_measurements.py "
+"acoustic-spaces simulate scene.yaml --out designed acoustic-spaces compare "
+"designed/dodecahedron__seat_a.wav measured/dodecahedron__seat_a.wav "
+"acoustic-spaces calibrate scene.yaml -o fitted.yaml --materials panels \\ "
+"--measured dodecahedron seat_a measured/dodecahedron__seat_a.wav \\ "
+"--measured dodecahedron seat_b measured/dodecahedron__seat_b.wav \\ "
+"--measured dodecahedron seat_c measured/dodecahedron__seat_c.wav  "
+"`calibrate` ajusta la absorción de los paneles banda a banda hasta que T30, "
+"EDT y C80 en los tres asientos se acercan todo lo posible a los medidos, y "
+"escribe la escena ajustada. De 500 Hz hacia arriba encuentra la pared lisa "
+"que se construyó, de 0,03 a 0,08 donde la placa de yeso tiene de 0,04 a "
+"0,06, y T30 y C80 quedan de media a menos de una JND, y EDT a menos de dos. "
+"Por debajo de 500 Hz está menos seguro (0,46 a 250 Hz): ahí los paneles "
+"cambian poco la caída frente a la aleatoriedad de las mediciones inventadas. "
+"Sin `--materials` ajusta todos los materiales, que tres asientos y una "
+"fuente no pueden distinguir. La fuente es omnidireccional, como el altavoz "
+"dodecaédrico de una medición según la ISO 3382."
+
+#: examples/gallery/scene.yaml
+msgctxt "example"
+msgid "Gallery (L-shaped, 1150 m3)"
+msgstr "Galería (en L, 1150 m3)"
+
+#: examples/gallery/scene.yaml
+msgctxt "example"
+msgid ""
+"An L-shaped gallery, 4 m high (1150 m3), with a marble floor, rough brick "
+"walls and an absorbing ceiling: a guide talks in the long arm, and visitors "
+"round the corner hear them only by the sound that bends round it (edge "
+"diffraction) and by reflections. The plan's corners go round the floor; "
+"wall_3 and wall_4 meet at the inner corner (8, 8)."
+msgstr ""
+"Una galería en forma de L, de 4 m de altura (1150 m3), con suelo de mármol, "
+"paredes de ladrillo rugoso y un techo absorbente: un guía habla en el brazo "
+"largo, y los visitantes que están tras la esquina solo lo oyen por el sonido "
+"que la rodea (difracción en aristas) y por las reflexiones. Los vértices de "
+"la planta recorren el suelo; wall_3 y wall_4 se unen en la esquina interior "
+"(8, 8)."
+
+#: examples/gallery_walk/scene.yaml
+msgctxt "example"
+msgid "Gallery walkthrough (L-shaped, 1150 m3)"
+msgstr "Recorrido por la galería (en L, 1150 m3)"
+
+#: examples/gallery_walk/scene.yaml
+msgctxt "example"
+msgid ""
+"A walkthrough of the L-shaped gallery: a visitor walks from in front of the "
+"guide, down the long arm and round the corner, at 1.2 m/s, while the guide "
+"talks. `acoustic-spaces walkthrough` simulates a response every 25 cm along "
+"the way (the late part every 2 m) and plays a recording through them, "
+"crossfading from each to the next, and can save the walk as a video: the "
+"guide's voice goes from direct and clear to the sound that bends round the "
+"corner."
+msgstr ""
+"Un recorrido por la galería en forma de L: un visitante camina desde delante "
+"del guía, a lo largo del brazo largo y doblando la esquina, a 1,2 m/s, "
+"mientras el guía habla. `acoustic-spaces walkthrough` simula una respuesta "
+"cada 25 cm del camino (la parte tardía cada 2 m), reproduce una grabación a "
+"través de ellas con un fundido de cada una a la siguiente, y puede guardar "
+"el recorrido como vídeo: la voz del guía pasa de directa y clara al sonido "
+"que rodea la esquina."
+
+#: examples/leaky_classroom/scene.yaml
+msgctxt "example"
+msgid "Leaky classroom (a model with two holes)"
+msgstr "Aula con fugas (un modelo con dos agujeros)"
+
+#: examples/leaky_classroom/scene.yaml
+msgctxt "example"
+msgid ""
+"A 9 x 7 x 3 m classroom exported from a CAD model with two mistakes that "
+"leave it open: the window glass in the east wall was left out, and the "
+"ceiling stops 3 cm short of the north wall. The leak finder shows both: "
+"`acoustic-spaces validate examples/leaky_classroom/scene.yaml --leaks` "
+"prints where rays escape, and `acoustic-spaces view "
+"examples/leaky_classroom/scene.yaml --leaks` draws them. Simulated as it is, "
+"the room loses sound through the holes and its reverberation is too short."
+msgstr ""
+"Un aula de 9 x 7 x 3 m exportada de un modelo CAD con dos errores que la "
+"dejan abierta: falta el vidrio de la ventana de la pared este, y el techo se "
+"queda a 3 cm de la pared norte. El buscador de fugas muestra ambos: "
+"`acoustic-spaces validate examples/leaky_classroom/scene.yaml --leaks` "
+"indica por dónde escapan los rayos, y `acoustic-spaces view "
+"examples/leaky_classroom/scene.yaml --leaks` los dibuja. Si se simula tal "
+"cual, la sala pierde sonido por los agujeros y su reverberación sale "
+"demasiado corta."
+
+#: examples/lecture_hall/scene.yaml
+msgctxt "example"
+msgid "Lecture hall (fan-shaped, 168 m2)"
+msgstr "Sala de conferencias (en abanico, 168 m2)"
+
+#: examples/lecture_hall/scene.yaml
+msgctxt "example"
+msgid ""
+"A fan-shaped lecture hall built from its floor plan, no CAD file needed. The "
+"plan's corners go round the floor; wall_1 is the stage wall, from (0, -4) to "
+"(0, 4), and the side walls open out to the back wall, 16 m wide and 14 m "
+"away."
+msgstr ""
+"Una sala de conferencias en forma de abanico construida a partir de su "
+"planta, sin necesidad de un archivo CAD. Los vértices de la planta recorren "
+"el suelo; wall_1 es la pared del estrado, de (0, -4) a (0, 4), y las paredes "
+"laterales se abren hasta la pared del fondo, de 16 m de ancho y a 14 m."
+
+#: examples/listening_room/scene.yaml
+msgctxt "example"
+msgid "Listening room (loudspeaker and front wall)"
+msgstr "Sala de escucha (altavoz y pared frontal)"
+
+#: examples/listening_room/scene.yaml
+msgctxt "example"
+msgid ""
+"A living room used for listening, 5.7 x 4.3 x 2.6 m, with plasterboard walls "
+"and an absorbing ceiling. The same loudspeaker stands against the front wall "
+"or a metre out from it, 2.2 m from the sofa: at low frequencies its "
+"reflection off the wall adds to the direct sound in pressure, and raises the "
+"bass from against the wall but takes from it a metre out (bass.py prints how "
+"much)."
+msgstr ""
+"Un salón que se usa para escuchar música, de 5,7 x 4,3 x 2,6 m, con paredes "
+"de placa de yeso y un techo absorbente. El mismo altavoz está pegado a la "
+"pared frontal o a un metro de ella, a 2,2 m del sofá: a bajas frecuencias su "
+"reflexión en la pared se suma en presión al sonido directo, y realza los "
+"graves cuando está pegado a la pared pero los reduce a un metro de ella "
+"(bass.py indica cuánto)."
+
+#: examples/material_libraries/scene.yaml
+msgctxt "example"
+msgid "Seminar room (materials from CATT and ODEON libraries)"
+msgstr "Aula de seminarios (materiales de bibliotecas de CATT y ODEON)"
+
+#: examples/material_libraries/scene.yaml
+msgctxt "example"
+msgid ""
+"A seminar room, 7.2 x 5.4 x 3 m, whose materials come from material "
+"libraries of other room acoustics programs: the carpet and the walls from a "
+"CATT-Acoustic file (catt_materials.geo, ABS lines in percent from 125 Hz to "
+"4 kHz, with scattering), the ceiling from an ODEON library "
+"(odeon_materials.li8, eight values from 63 Hz to 8 kHz). `acoustic-spaces "
+"materials --file examples/material_libraries/odeon_materials.li8` lists a "
+"library. The values are this example's own, not those of either program."
+msgstr ""
+"Un aula de seminarios de 7,2 x 5,4 x 3 m cuyos materiales proceden de "
+"bibliotecas de materiales de otros programas de acústica de salas: la "
+"moqueta y las paredes, de un archivo de CATT-Acoustic (catt_materials.geo, "
+"líneas ABS en porcentaje de 125 Hz a 4 kHz, con dispersión), y el techo, de "
+"una biblioteca de ODEON (odeon_materials.li8, ocho valores de 63 Hz a 8 "
+"kHz). `acoustic-spaces materials --file "
+"examples/material_libraries/odeon_materials.li8` muestra el contenido de una "
+"biblioteca. Los valores son propios de este ejemplo, no los de ninguno de "
+"los dos programas."
+
+#: examples/orchestra/scene.yaml
+msgctxt "example"
+msgid "Beethoven 8 orchestra (concert hall, 61 sources)"
+msgstr "Orquesta de la Octava de Beethoven (sala de conciertos, 61 fuentes)"
+
+#: examples/orchestra/scene.yaml
+msgctxt "example"
+msgid ""
+"The orchestra of an anechoic recording of Beethoven's Symphony No. 8 on the "
+"stage of the concert hall: 61 sources, one per track, and four seats. The "
+"tracks (TU Berlin, CC BY 4.0, https://doi.org/10.14279/depositonce-6729.2) "
+"are not included: download a movement and mix it at a seat with auralize.sh."
+msgstr ""
+"La orquesta de una grabación anecoica de la Sinfonía n.º 8 de Beethoven "
+"sobre el escenario de la sala de conciertos: 61 fuentes, una por pista, y "
+"cuatro asientos. Las pistas (TU Berlin, CC BY 4.0, "
+"https://doi.org/10.14279/depositonce-6729.2) no se incluyen: descargue un "
+"movimiento y mézclelo en un asiento con auralize.sh."
+
+#: examples/rehearsal_room/scene.yaml
+msgctxt "example"
+msgid "Rehearsal room from SketchUp (Collada)"
+msgstr "Sala de ensayo de SketchUp (Collada)"
+
+#: examples/rehearsal_room/scene.yaml
+msgctxt "example"
+msgid ""
+"A band's rehearsal room of 26 x 20 ft under a pitched roof, from a Collada "
+"file (room.dae, written by make_model.py as SketchUp exports one: in inches "
+"with +z up). The file records its unit and its up axis, so the scene gives "
+"neither. Surfaces are named by their material and their geometry's name, and "
+"assignments match names whatever their case: SketchUp's Brick_Rough is "
+"brick_rough."
+msgstr ""
+"La sala de ensayo de un grupo, de 26 x 20 ft bajo una cubierta inclinada, a "
+"partir de un archivo Collada (room.dae, escrito por make_model.py tal como "
+"lo exporta SketchUp: en pulgadas y con +z hacia arriba). El archivo indica "
+"su unidad y su eje vertical, así que la escena no da ninguno de los dos. Las "
+"superficies se nombran por su material y por el nombre de su geometría, y "
+"las asignaciones coinciden con los nombres sin distinguir mayúsculas: el "
+"Brick_Rough de SketchUp es brick_rough."
+
+#: examples/room_modes/scene.yaml
+msgctxt "example"
+msgid "Room modes in a small room (36 m3)"
+msgstr "Modos propios en una sala pequeña (36 m3)"
+
+#: examples/room_modes/scene.yaml
+msgctxt "example"
+msgid ""
+"The bass in a small, bare room: 4.2 x 3.4 x 2.5 m of plaster and a wooden "
+"floor, with a subwoofer in a corner and a seat in the middle. Below a few "
+"hundred hertz the room's modes decide what is heard, which rays cannot "
+"follow; the wave solver steps the sound field on a grid of air up to the 250 "
+"Hz octave, its walls absorbing as their materials do, and the rays take over "
+"above. It runs in third-octave bands (the parameters are still given in "
+"octaves).  acoustic-spaces simulate scene.yaml --out results --plot "
+"acoustic-spaces simulate scene.yaml --out rays --no-wave   # rays only, to "
+"compare acoustic-spaces simulate scene.yaml --out gpu --wave-device gpu   # "
+"with the gpu extra  At the seat the modes ring for 2.3 to 2.8 s from 63 to "
+"250 Hz, where the rays give 1.5 to 1.9 s, and make the 125 Hz band 2.3 dB "
+"louder. `device: auto` uses a hardware GPU when the gpu extra finds one (any "
+"vendor's, through WebGPU), else the CPU."
+msgstr ""
+"Los graves en una sala pequeña y desnuda: 4,2 x 3,4 x 2,5 m de yeso y suelo "
+"de madera, con un subwoofer en una esquina y un asiento en el centro. Por "
+"debajo de unos pocos cientos de hercios lo que se oye lo deciden los modos "
+"propios de la sala, que los rayos no pueden seguir; el método ondulatorio "
+"calcula el campo sonoro paso a paso en una malla de aire hasta la octava de "
+"250 Hz, con las paredes absorbiendo como sus materiales, y por encima se "
+"encargan los rayos. Se calcula en bandas de tercio de octava (los parámetros "
+"se siguen dando en octavas).  acoustic-spaces simulate scene.yaml --out "
+"results --plot acoustic-spaces simulate scene.yaml --out rays --no-wave   # "
+"rays only, to compare acoustic-spaces simulate scene.yaml --out gpu "
+"--wave-device gpu   # with the gpu extra  En el asiento, los modos resuenan "
+"de 2,3 a 2,8 s entre 63 y 250 Hz, donde los rayos dan de 1,5 a 1,9 s, y "
+"hacen la banda de 125 Hz 2,3 dB más fuerte. `device: auto` usa una GPU "
+"física cuando el extra gpu encuentra una (de cualquier fabricante, mediante "
+"WebGPU) y, si no, la CPU."
+
+#: examples/shoebox/scene.yaml
+msgctxt "example"
+msgid "Shoebox 8 x 6 x 3 m"
+msgstr "Caja de zapatos de 8 x 6 x 3 m"
+
+#: examples/shoebox/scene.yaml
+msgctxt "example"
+msgid ""
+"A plain rectangular room, the simplest case every method must get right. Its "
+"absorption sits on the ceiling and the carpet while the walls are hard and "
+"smooth, so sound running between the walls dies away slowly: the simulated "
+"T30 is several times the Sabine and Eyring estimates of `inspect`, which "
+"assume a diffuse field."
+msgstr ""
+"Una sala rectangular sencilla, el caso más simple, que cualquier método debe "
+"resolver bien. Su absorción está en el techo y en la moqueta, mientras que "
+"las paredes son duras y lisas, así que el sonido que va y viene entre las "
+"paredes se extingue despacio: el T30 simulado es varias veces las "
+"estimaciones de Sabine y Eyring de `inspect`, que suponen un campo difuso."
+
+#: examples/studio/scene.yaml
+msgctxt "example"
+msgid "Control room (6 x 4.5 x 3 m)"
+msgstr "Sala de control (6 x 4,5 x 3 m)"
+
+#: examples/studio/scene.yaml
+msgctxt "example"
+msgid ""
+"A small control room, 6 x 4.5 x 3 m, treated for mixing: an absorbing "
+"ceiling, panels on the side walls and a diffuser on the back wall. Two "
+"loudspeakers form an equilateral triangle with the listening position, 2 m "
+"to each side."
+msgstr ""
+"Una pequeña sala de control, de 6 x 4,5 x 3 m, tratada para mezclar: un "
+"techo absorbente, paneles en las paredes laterales y un difusor en la pared "
+"del fondo. Dos altavoces forman un triángulo equilátero con la posición de "
+"escucha, a 2 m a cada lado."
+
+#: examples/town_hall_pa/scene.yaml
+msgctxt "example"
+msgid "Town hall with a sound system (4000 m3)"
+msgstr "Salón de actos con sistema de sonido (4000 m3)"
+
+#: examples/town_hall_pa/scene.yaml
+msgctxt "example"
+msgid ""
+"A town hall with a sound system for speech: a stone hall of 4000 m3 with "
+"about two seconds of reverberation and a flat floor of seats, over which the "
+"sound of the stage fades (`audience: true`). Two column loudspeakers beside "
+"the stage tilt their beams down onto the seats (coherent arrays of 8 "
+"cardioid elements, steered 8 degrees down). Two delay loudspeakers on the "
+"side walls, 17 m down the hall, aim shorter arrays at the back rows. They "
+"play 60 ms after the columns, so their sound arrives just after the columns' "
+"and the voice still seems to come from the stage, 3 dB quieter and with the "
+"bass taken out, where the columns give enough. The program is speech "
+"(`spectrum: speech_male`).  acoustic-spaces map scene.yaml --parameter sti "
+"--plot sti.png python delays.py acoustic-spaces simulate scene.yaml --out "
+"results  delays.py maps the STI with and without the delay loudspeakers (two "
+"minutes on 4 cores). They lift the back rows' median from 0.52 to 0.59, but "
+"cost the front and the middle 0.04: in a hall this reverberant every "
+"loudspeaker adds to the reverberation everywhere, so delays pay off only "
+"where the columns' direct sound has faded. `inspect` lists each source's "
+"sound power with its feed."
+msgstr ""
+"Un salón de actos con un sistema de sonido para la palabra: una sala de "
+"piedra de 4000 m3 con unos dos segundos de reverberación y una platea plana "
+"de asientos, sobre la que se atenúa el sonido del escenario (`audience: "
+"true`). Dos columnas de altavoces a los lados del escenario inclinan su haz "
+"hacia los asientos (arrays coherentes de 8 elementos cardioides, orientados "
+"8 grados hacia abajo). Dos altavoces de retardo en las paredes laterales, a "
+"17 m a lo largo de la sala, apuntan arrays más cortos a las últimas filas. "
+"Suenan 60 ms después de las columnas, de modo que su sonido llega justo "
+"después del de las columnas y la voz sigue pareciendo venir del escenario, 3 "
+"dB más bajos y sin los graves, donde las columnas ya dan suficiente. El "
+"programa es voz (`spectrum: speech_male`).  acoustic-spaces map scene.yaml "
+"--parameter sti --plot sti.png python delays.py acoustic-spaces simulate "
+"scene.yaml --out results  delays.py hace el mapa del STI con y sin los "
+"altavoces de retardo (dos minutos con 4 núcleos). Suben la mediana de las "
+"últimas filas de 0,52 a 0,59, pero cuestan 0,04 a las de delante y a las del "
+"medio: en una sala tan reverberante, cada altavoz suma reverberación en "
+"todas partes, así que los retardos solo compensan donde el sonido directo de "
+"las columnas se ha atenuado. `inspect` muestra la potencia sonora de cada "
+"fuente con su señal."
+
+#: examples/workshop/scene.yaml
+msgctxt "example"
+msgid "Workshop noise (30 x 15 x 7 m)"
+msgstr "Ruido en un taller (30 x 15 x 7 m)"
+
+#: examples/workshop/scene.yaml
+msgctxt "example"
+msgid ""
+"Noise in a workshop: a hall of 30 x 15 x 7 m with brick walls, a concrete "
+"floor and a ceiling of metal panels with acoustic tiles behind them, where a "
+"conveyor runs most of its length, a machine against a wall vibrates and a "
+"compressor stands in a corner. The conveyor is a line source 20 m long, the "
+"machine's casing a surface source (2 x 1.5 m, radiating as a vibrating "
+"panel), the compressor a point; each has its own sound power spectrum. The "
+"map gives the A-weighted level over the floor:  acoustic-spaces map "
+"scene.yaml --parameter spl_a --plot noise.png acoustic-spaces simulate "
+"scene.yaml --out results  The hall is loud everywhere, 85 dB(A) at the "
+"median point: away from the machines its reverberation sets the level. "
+"Assign `absorber` to the ceiling (`ceiling: absorber`) to see what a fibre "
+"absorber in place of the panels takes off: about 2 dB(A), near the machines "
+"and away from them alike, since the panels absorb much of it already."
+msgstr ""
+"Ruido en un taller: una nave de 30 x 15 x 7 m con paredes de ladrillo, suelo "
+"de hormigón y un techo de paneles metálicos con placas acústicas detrás, "
+"donde una cinta transportadora recorre casi todo su largo, una máquina vibra "
+"junto a una pared y un compresor está en una esquina. La cinta es una fuente "
+"lineal de 20 m, la carcasa de la máquina una fuente superficial (2 x 1,5 m, "
+"que radia como un panel vibrante) y el compresor una fuente puntual; cada "
+"una tiene su propio espectro de potencia sonora. El mapa da el nivel con "
+"ponderación A sobre el suelo:  acoustic-spaces map scene.yaml --parameter "
+"spl_a --plot noise.png acoustic-spaces simulate scene.yaml --out results  La "
+"nave es ruidosa en todas partes, 85 dB(A) en el punto mediano: lejos de las "
+"máquinas, el nivel lo fija su reverberación. Asigne `absorber` al techo "
+"(`ceiling: absorber`) para ver cuánto reduce un absorbente de fibra en lugar "
+"de los paneles: unos 2 dB(A), igual cerca de las máquinas que lejos de "
+"ellas, ya que los paneles absorben gran parte."

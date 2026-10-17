@@ -10,12 +10,15 @@
   `en` sets it over both. `acoustic-spaces info` says which is in use and what chose it.
   Qt's own dialogs and buttons follow it too. Scene files, commands, options and the
   files the commands write stay in English.
-- The editor is in Spanish: menus, panels, forms, tips, messages and the tuning window.
-  Its numbers follow the computer's regional settings (0,85 in Spain, 0.85 in Mexico),
-  in what it shows and in what it reads from its tables and fields.
-- The Spanish text comes in steps: the command line, the library's messages (the
-  room's checks and a run's progress, which the editor shows too), the examples'
-  descriptions and the plots come next, and until then show in English.
+- The editor is in Spanish: menus, panels, forms, tips, messages and the tuning window,
+  the choices in its lists (methods, reception, spectra, shapes, directivities; the
+  scene file keeps its values), the coverage map's parameters, the examples' titles and
+  descriptions, and the plots' titles, axes and legends. Its numbers follow the
+  computer's regional settings (0,85 in Spain, 0.85 in Mexico), in what it shows and in
+  what it reads from its tables and fields.
+- The Spanish text comes in steps: the command line and the library's messages (the
+  room's checks and a run's progress, which the editor shows too) come next, and until
+  then show in English.
 - For contributors: text is marked with `_()` and collected into `locale/*.po` by
   `tools/catalog.py`, which CI runs to check that every catalog is complete; terms and
   style are in the new Translating page.
