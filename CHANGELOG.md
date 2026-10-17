@@ -23,6 +23,16 @@
   `tools/catalog.py`, which CI runs to check that every catalog is complete; terms and
   style are in the new Translating page.
 
+## 3.2.2
+
+**Fixes**
+
+- The editor no longer aborts with a wgpu panic (`egl.rs ... BadAccess`) when it looks
+  for a GPU, as it does on opening the Simulation settings: with the `gpu` extra
+  installed on Linux, wgpu also tried its OpenGL backend, whose set-up through EGL fails
+  while the 3D view holds an OpenGL context, and that failure ends the process. wgpu
+  now uses Vulkan, Metal or Direct3D 12 only, as the documentation says.
+
 ## 3.2.1
 
 **Wheels for Intel Macs**

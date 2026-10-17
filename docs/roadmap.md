@@ -73,6 +73,10 @@ Version 3.2.1:
 
 - [x] Wheels for Intel Macs.
 
+Version 3.2.2:
+
+- [x] Fix: the editor no longer aborts on looking for a GPU (wgpu's OpenGL backend).
+
 Next:
 
 - [ ] Spanish: the language choice and the catalogs (done), the editor (done), the

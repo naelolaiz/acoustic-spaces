@@ -203,6 +203,18 @@ def _wgpu(what: str = "the wave solver"):
     return wgpu
 
 
+def _primary_backends() -> None:
+    """Have wgpu use Vulkan, Metal or Direct3D 12 only, never its OpenGL backend: setting
+    that up through EGL aborts the whole process (a Rust panic Python cannot catch) when
+    the editor's 3D view already holds an OpenGL context."""
+    try:
+        from wgpu.backends.wgpu_native.extras import set_instance_extras
+
+        set_instance_extras(backends=["Primary"])
+    except (ImportError, KeyError, RuntimeError):  # another backend, or set up already
+        pass
+
+
 @functools.lru_cache(maxsize=1)
 def _adapter():
     """The GPU wgpu picks (a hardware one first), or None."""
@@ -210,6 +222,7 @@ def _adapter():
         import wgpu
     except ImportError:
         return None
+    _primary_backends()
     try:
         return wgpu.gpu.request_adapter_sync(power_preference="high-performance")
     except Exception:  # no driver, or none wgpu can use
