@@ -117,7 +117,9 @@ which frequencies each octave band holds.
   traces again when the geometry, the materials or the sources change.
 - **View > Language** shows the editor and the command line in English or Spanish, or
   in the computer's language, from their next start (see
-  [Language](getting-started.md#language)).
+  [Language](getting-started.md#language)). Numbers in the editor follow the
+  computer's regional settings: 0,85 where the decimal mark is a comma, with lists of
+  numbers (an equalizer's gains) apart by semicolons there.
 - **File > Export to Blender** writes the room with the reflection paths on show, and
   **File > Export particle animation to Blender** the sound particles leaving the
   selected source (see below).

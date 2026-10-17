@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from PySide6.QtCore import QObject, Signal
 
 from acoustic_spaces.geometry import UNIT_SCALE, RoomMesh, extruded_mesh, points_inside
+from acoustic_spaces.i18n import _
 from acoustic_spaces.room import Room, matching_name
 from acoustic_spaces.scene import Scene
 
@@ -328,7 +329,7 @@ class Document(QObject):
         """
         target = Path(path) if path is not None else self.path
         if target is None:
-            raise ValueError("no file to save to; give a path")
+            raise ValueError(_("no file to save to; give a path"))
         if copy_files and self.path is not None:
             self._copy_files(target.resolve().parent)
         self.scene.to_yaml(target)
@@ -384,36 +385,41 @@ class Document(QObject):
         ``position`` and return its index."""
         stem = "source" if kind == "sources" else "listener"
         entry = {"name": unique_name(stem, self.names()), "position": list(position)}
-        self.edit(f"add {stem}", lambda data: data[kind].append(entry))
+        description = _("add source") if kind == "sources" else _("add listener")
+        self.edit(description, lambda data: data[kind].append(entry))
         return len(getattr(self.scene, kind)) - 1
 
     def move_point(self, kind: str, index: int, position) -> None:
         """Move a source or listener to ``position`` (m)."""
-        stem = "source" if kind == "sources" else "listener"
         where = _rounded(position)
-        self.edit(f"move {stem}", lambda data: data[kind][index].update(position=where))
+        description = _("move source") if kind == "sources" else _("move listener")
+        self.edit(description, lambda data: data[kind][index].update(position=where))
 
     def update_point(self, kind: str, index: int, **fields) -> None:
         """Change fields of a source or listener (name, position, orientation...)."""
-        stem = "source" if kind == "sources" else "listener"
 
         def change(data: dict) -> None:
             data[kind][index].update(fields)
 
-        self.edit(f"change {stem}", change)
+        self.edit(_("change source") if kind == "sources" else _("change listener"), change)
 
     def remove_point(self, kind: str, index: int) -> None:
-        stem = "source" if kind == "sources" else "listener"
+        source = kind == "sources"
         if len(getattr(self.scene, kind)) == 1:
-            raise EditError(f"a scene needs at least one {stem}")
-        self.edit(f"remove {stem}", lambda data: data[kind].pop(index))
+            raise EditError(
+                _("a scene needs at least one source")
+                if source
+                else _("a scene needs at least one listener")
+            )
+        description = _("remove source") if source else _("remove listener")
+        self.edit(description, lambda data: data[kind].pop(index))
 
-    def set_floor_plan(self, corners, description: str = "change floor plan") -> None:
+    def set_floor_plan(self, corners, description: str | None = None) -> None:
         """New corners (m, seen from above) for a floor plan room. A box becomes a floor
         plan with the same walls, so its material assignments still apply."""
         geometry = self.scene.geometry
         if geometry.file is not None:
-            raise EditError("the room is a model file: draw a floor plan to replace it")
+            raise EditError(_("the room is a model file: draw a floor plan to replace it"))
         scale = UNIT_SCALE[geometry.units or "m"]
         height = geometry.height if geometry.floor_plan is not None else geometry.box[2]
         plan = [_rounded(np.asarray(corner, dtype=float) / scale) for corner in corners]
@@ -422,7 +428,7 @@ class Document(QObject):
             data["geometry"].pop("box", None)
             data["geometry"].update(floor_plan=plan, height=height)
 
-        self.edit(description, change)
+        self.edit(description or _("change floor plan"), change)
 
     def draw_floor_plan(self, corners, height: float | None = None) -> list[str]:
         """Make the room the floor plan ``corners`` (m), ``height`` metres high (by default
@@ -479,7 +485,7 @@ class Document(QObject):
             if default is not None:
                 data["default_material"] = default
 
-        self.edit("draw floor plan", change)
+        self.edit(_("draw floor plan"), change)
         return [getattr(self.scene, kind)[k].name for kind, k in moved]
 
     def assign(self, surface: str, material: str | None) -> None:
@@ -491,18 +497,24 @@ class Document(QObject):
             else:
                 data["assignments"][surface] = material
 
-        self.edit(f"assign {surface}", change)
+        self.edit(_("assign {surface}").format(surface=surface), change)
 
     def set_material(self, name: str, fields: dict) -> None:
         """Replace a material's settings (add it when new)."""
-        self.edit(f"change material {name}", lambda data: data["materials"].update({name: fields}))
+        self.edit(
+            _("change material {name}").format(name=name),
+            lambda data: data["materials"].update({name: fields}),
+        )
 
     def add_material(self, preset: str | None = None) -> str:
         """Add a material from a database entry (or a neutral one) and return its name."""
         name = unique_name(preset or "material", set(self.scene.materials))
         fields = {"preset": preset} if preset else {"absorption": [0.1] * 8}
         fields["scattering"] = 0.1
-        self.edit(f"add material {name}", lambda data: data["materials"].update({name: fields}))
+        self.edit(
+            _("add material {name}").format(name=name),
+            lambda data: data["materials"].update({name: fields}),
+        )
         return name
 
     def add_library_material(self, path: str | Path, entry: str) -> str:
@@ -520,16 +532,19 @@ class Document(QObject):
         fields: dict = {"file": str(path), "entry": entry_key}
         if found.scattering is None:
             fields["scattering"] = 0.1
-        self.edit(f"add material {name}", lambda data: data["materials"].update({name: fields}))
+        self.edit(
+            _("add material {name}").format(name=name),
+            lambda data: data["materials"].update({name: fields}),
+        )
         return name
 
     def rename_material(self, old: str, new: str) -> None:
         if new == old:
             return
         if new in self.scene.materials:
-            raise EditError(f"there is already a material named {new!r}")
+            raise EditError(_("there is already a material named “{name}”").format(name=new))
         if not new:
-            raise EditError("a material needs a name")
+            raise EditError(_("a material needs a name"))
 
         def change(data: dict) -> None:
             data["materials"] = {
@@ -541,12 +556,12 @@ class Document(QObject):
             if data.get("default_material") == old:
                 data["default_material"] = new
 
-        self.edit(f"rename material {old}", change)
+        self.edit(_("rename material {name}").format(name=old), change)
 
     def remove_material(self, name: str) -> None:
         """Remove a material and the assignments that use it."""
         if len(self.scene.materials) == 1:
-            raise EditError("a scene needs at least one material")
+            raise EditError(_("a scene needs at least one material"))
 
         def change(data: dict) -> None:
             del data["materials"][name]
@@ -558,7 +573,7 @@ class Document(QObject):
             if data.get("default_material") == name:
                 del data["default_material"]
 
-        self.edit(f"remove material {name}", change)
+        self.edit(_("remove material {name}").format(name=name), change)
 
 
 __all__ = [

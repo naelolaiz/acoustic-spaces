@@ -10,29 +10,39 @@ from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem
 
 from acoustic_spaces.gui.inspector import label_text
+from acoustic_spaces.gui.numbers import fmt, point_text
 from acoustic_spaces.gui.viewport import material_colour, surface_materials
+from acoustic_spaces.i18n import N_, _
 from acoustic_spaces.room import UNASSIGNED, Room
 from acoustic_spaces.viz import LISTENER_COLOUR, SOURCE_COLOUR
 
 ROLE = Qt.ItemDataRole.UserRole
 #: The tip of each kind of entry, by (kind, key); a key of None stands for any.
 TIPS = {
-    ("scene", None): "The scene: its name, default material and air",
-    ("geometry", None): "The room's shape: a box, a floor plan or a model file",
-    ("geometry", "surfaces"): "The groups of faces that share a name in the model",
-    ("surface", None): "Select it to give it a material; its material and area follow",
-    ("", "materials"): "The materials of the scene, with the area each covers",
-    ("material", None): "Select it to change its absorption, scattering and what it lets through",
-    ("", "sources"): "The sound sources; place more with Place source",
-    ("sources", None): "Select it to change it; drag it in the 3D view or the plan to move it",
-    ("", "listeners"): "The listening positions; place more with Place listener",
-    ("listeners", None): "Select it to change it; drag it in the 3D view or the plan to move it",
-    ("simulation", None): "How the early reflections and the late reverberation are "
-    "computed, and the responses' length, sample rate and bands",
-    ("outputs", None): "The formats every response is written in: mono, binaural, "
-    "Ambisonics or loudspeakers",
-    ("coverage", None): "Where the coverage map lies, how fine it is, and the background "
-    "noise for the STI",
+    ("scene", None): N_("The scene: its name, default material and air"),
+    ("geometry", None): N_("The room's shape: a box, a floor plan or a model file"),
+    ("geometry", "surfaces"): N_("The groups of faces that share a name in the model"),
+    ("surface", None): N_("Select it to give it a material; its material and area follow"),
+    ("", "materials"): N_("The materials of the scene, with the area each covers"),
+    ("material", None): N_(
+        "Select it to change its absorption, scattering and what it lets through"
+    ),
+    ("", "sources"): N_("The sound sources; place more with Place source"),
+    ("sources", None): N_("Select it to change it; drag it in the 3D view or the plan to move it"),
+    ("", "listeners"): N_("The listening positions; place more with Place listener"),
+    ("listeners", None): N_(
+        "Select it to change it; drag it in the 3D view or the plan to move it"
+    ),
+    ("simulation", None): N_(
+        "How the early reflections and the late reverberation are "
+        "computed, and the responses' length, sample rate and bands"
+    ),
+    ("outputs", None): N_(
+        "The formats every response is written in: mono, binaural, Ambisonics or loudspeakers"
+    ),
+    ("coverage", None): N_(
+        "Where the coverage map lies, how fine it is, and the background noise for the STI"
+    ),
 }
 
 
@@ -49,7 +59,7 @@ class SceneTree(QTreeWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setHeaderLabels(["Scene", ""])
+        self.setHeaderLabels([_("Scene"), ""])
         self.setColumnCount(2)
         self.setUniformRowHeights(True)
         self.itemSelectionChanged.connect(self._on_selection)
@@ -62,6 +72,7 @@ class SceneTree(QTreeWidget):
         item.setData(0, ROLE, len(self._keys))
         tip = TIPS.get((kind, key)) or TIPS.get((kind, None))
         if tip:
+            tip = _(tip)
             for column in range(2):
                 item.setToolTip(column, tip)
         self._keys.append((kind, key))
@@ -79,58 +90,66 @@ class SceneTree(QTreeWidget):
         face_areas = room.mesh.face_areas()
 
         top = self._item(self, scene.name, "scene")
-        geometry = self._item(top, "Geometry", "geometry", detail=scene.geometry.describe())
+        geometry = self._item(top, _("Geometry"), "geometry", detail=scene.geometry.describe())
         materials = surface_materials(room)
         surfaces = self._item(
-            geometry, "Surfaces", "geometry", "surfaces", detail=str(len(materials))
+            geometry, _("Surfaces"), "geometry", "surfaces", detail=str(len(materials))
         )
         for label, material in enumerate(materials):
             area = float(face_areas[room.mesh.face_labels == label].sum())
-            name = room.material_names[material] if material != UNASSIGNED else "no material"
+            name = room.material_names[material] if material != UNASSIGNED else _("no material")
             self._item(
                 surfaces,
                 label_text(room.mesh.labels[label]),
                 "surface",
                 label,
-                f"{name}, {area:.1f} m²",
+                fmt(_("{material}, {area:,.1f} m²"), material=name, area=area),
                 swatch(material_colour(room, material)),
             )
-        group = self._item(top, "Materials", "", "materials", str(len(scene.materials)))
+        group = self._item(top, _("Materials"), "", "materials", str(len(scene.materials)))
         for k, name in enumerate(room.material_names):
             self._item(
                 group,
                 name,
                 "material",
                 name,
-                f"{areas.get(name, 0.0):.1f} m²",
+                fmt(_("{area:,.1f} m²"), area=areas.get(name, 0.0)),
                 swatch(material_colour(room, k)),
             )
         for kind, title, colour in (
-            ("sources", "Sources", SOURCE_COLOUR),
-            ("listeners", "Listeners", LISTENER_COLOUR),
+            ("sources", _("Sources"), SOURCE_COLOUR),
+            ("listeners", _("Listeners"), LISTENER_COLOUR),
         ):
             items = getattr(scene, kind)
             group = self._item(top, title, "", kind, str(len(items)))
             for index, item in enumerate(items):
-                where = ", ".join(f"{v:.2f}" for v in np.asarray(item.position))
+                where = point_text(np.asarray(item.position))
                 self._item(group, item.name, kind, index, f"({where})", swatch(colour))
         simulation = scene.simulation
         self._item(
             top,
-            "Simulation",
+            _("Simulation"),
             "simulation",
             detail=f"{simulation.early.method}, {simulation.late.method}",
         )
         self._item(
             top,
-            "Outputs",
+            _("Outputs"),
             "outputs",
             detail=", ".join(o.format for o in scene.outputs),
         )
         coverage = scene.coverage
-        where = ", ".join(coverage.surfaces) if coverage and coverage.surfaces else "audience"
         spacing = coverage.spacing if coverage else 1.0
-        self._item(top, "Coverage map", "coverage", detail=f"{where}, {spacing:g} m apart")
+        if coverage and coverage.surfaces:
+            detail = fmt(
+                # Translators: {surfaces} lists the surfaces the map lies on.
+                _("{surfaces}, {spacing:g} m apart"),
+                surfaces=", ".join(coverage.surfaces),
+                spacing=spacing,
+            )
+        else:
+            detail = fmt(_("audience, {spacing:g} m apart"), spacing=spacing)
+        self._item(top, _("Coverage map"), "coverage", detail=detail)
         self.expandAll()
         surfaces.setExpanded(len(materials) <= 12)
         self.resizeColumnToContents(0)

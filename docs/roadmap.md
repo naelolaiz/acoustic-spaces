@@ -75,5 +75,6 @@ Version 3.2.1:
 
 Next:
 
-- [ ] Spanish: the language choice and the catalogs (done), the editor, the command line
-  and the library's messages; the documentation later, apart.
+- [ ] Spanish: the language choice and the catalogs (done), the editor (done), the
+  command line, the library's messages, the examples' descriptions and the plots; the
+  documentation later, apart.

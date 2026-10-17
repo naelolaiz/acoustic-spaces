@@ -34,6 +34,9 @@ LABELS = [N_("Open"), N_("Save")]  # module constants: marked here, _() where sh
   cannot call it, and the catalog tool says so. Name the variable otherwise.
 - The code never compares shown text: it keeps a value (a scene-file value, a level) and
   shows its translated label.
+- In the editor, numbers in a text go through `acoustic_spaces.gui.numbers`:
+  `fmt(_("{time:.1f} s"), time=t)` writes them with the computer's decimal mark, and
+  `parse_number` reads what a person typed in a table or field either way.
 
 ## The catalogs
 
@@ -49,7 +52,9 @@ fields (`{name}`, `%s`) or menu shortcut (`&`) differ from the English. Both nee
 Python's standard library.
 
 `ACOUSTIC_SPACES_LANG=pseudo` shows every translatable text as ⟦text⟧, so text without
-brackets in the editor or the command line is text not yet marked.
+brackets in the editor or the command line is text not yet marked. A test opens the
+editor in it and fails on any menu, panel title, tab, button, form label or tip that
+shows without brackets.
 
 ## Spanish
 

@@ -261,6 +261,18 @@ def test_a_variable_named_underscore_hides_the_translation(catalog_tool, tmp_pat
         catalog_tool.extract(package)
     _package(tmp_path, "f = lambda *_: print(1)\nprint(_('Open'))\n")
     assert [e.msgid for e in catalog_tool.extract(tmp_path / "acoustic_spaces")] == ["Open"]
+    # A comprehension or a lambda has a scope of its own: its _ hides nothing outside.
+    _package(
+        tmp_path,
+        """
+        def pick(pairs):
+            names = [name for name, _ in pairs]
+            return _("Open {names}").format(names=names)
+        """,
+    )
+    assert [e.msgid for e in catalog_tool.extract(tmp_path / "acoustic_spaces")] == [
+        "Open {names}"
+    ]
 
 
 def test_problems_of_a_translation(catalog_tool) -> None:

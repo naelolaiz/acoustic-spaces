@@ -95,19 +95,43 @@ def _calls_translation(node: ast.AST) -> bool:
     return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "_"
 
 
+_SCOPES = (
+    ast.FunctionDef,
+    ast.AsyncFunctionDef,
+    ast.Lambda,
+    ast.ClassDef,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,
+    ast.GeneratorExp,
+)
+
+
+def _own_scope(function: ast.AST):
+    """The nodes of ``function``'s own scope: not those of the functions, lambdas and
+    comprehensions inside it."""
+    stack = list(ast.iter_child_nodes(function))
+    while stack:
+        node = stack.pop()
+        yield node
+        if not isinstance(node, _SCOPES):
+            stack.extend(ast.iter_child_nodes(node))
+
+
 def _check_shadowing(tree: ast.Module, reference: str) -> None:
-    """A function that names a variable ``_`` (``path, _ = ...``) cannot call ``_()``."""
+    """A function that names a variable ``_`` (``path, _ = ...``) cannot call ``_()``,
+    nor can the functions inside it."""
     for function in ast.walk(tree):
         if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
             continue
         args = function.args
         names = [a.arg for a in [*args.posonlyargs, *args.args, *args.kwonlyargs]]
         names += [a.arg for a in (args.vararg, args.kwarg) if a is not None]
-        inside = list(ast.walk(function))
         bound = "_" in names or any(
-            isinstance(n, ast.Name) and n.id == "_" and isinstance(n.ctx, ast.Store) for n in inside
+            isinstance(n, ast.Name) and n.id == "_" and isinstance(n.ctx, ast.Store)
+            for n in _own_scope(function)
         )
-        if bound and any(_calls_translation(n) for n in inside):
+        if bound and any(_calls_translation(n) for n in ast.walk(function)):
             raise MarkError(
                 f"{reference}:{function.lineno}: _ is a variable here and the translation "
                 "too; rename the variable"

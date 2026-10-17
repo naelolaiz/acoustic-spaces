@@ -176,7 +176,10 @@ computer's language unless told otherwise:
 
 `acoustic-spaces info` says which language is in use and what chose it. Scene files,
 command and option names and the files the commands write stay in English whatever the
-language, so scripts keep working. The Spanish text is coming in steps: the editor first,
-then the command line and the library's messages (see the [roadmap](roadmap.md)); text
-not yet translated shows in English. [Translating](translating.md) explains how the
+language, so scripts keep working. The editor writes numbers as the computer's
+regional settings do (0,85 in Spain, 0.85 in Mexico) and reads them typed either way;
+the command line keeps the decimal point. The Spanish text is coming in steps: the
+editor is translated, the command line, the library's messages (which the editor shows
+too, such as the room's checks) and the plots come next (see the
+[roadmap](roadmap.md)); text not yet translated shows in English. [Translating](translating.md) explains how the
 catalogs work and the terms the Spanish uses.

@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from acoustic_spaces.geometry import points_inside
 from acoustic_spaces.gui.document import LISTENER_HEIGHT, SOURCE_HEIGHT, follow_floor
+from acoustic_spaces.i18n import _
 from acoustic_spaces.room import UNASSIGNED, Room
 from acoustic_spaces.viz import (
     BACKGROUND,
@@ -133,9 +134,9 @@ class Viewport(QWidget):
                 self.plotter.add_axes()
             except Exception as exc:  # no usable OpenGL context
                 self.plotter = None
-                self.note = f"The 3D view is not available here: {exc}"
+                self.note = _("The 3D view is not available here: {reason}").format(reason=exc)
         else:
-            self.note = "The 3D view needs a display with OpenGL."
+            self.note = _("The 3D view needs a display with OpenGL.")
         if self.plotter is None:
             label = QLabel(self.note)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)

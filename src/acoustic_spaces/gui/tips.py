@@ -8,11 +8,15 @@ from collections.abc import Sequence
 
 from PySide6.QtWidgets import QLabel, QTableWidget, QWidget
 
+from acoustic_spaces.gui.numbers import number
+from acoustic_spaces.i18n import _
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ
 
 
 def _hz(frequency: float) -> str:
-    return f"{frequency:.3g} Hz" if frequency < 1000 else f"{frequency / 1000:.3g} kHz"
+    if frequency < 1000:
+        return f"{number(frequency, '.3g')} Hz"
+    return f"{number(frequency / 1000, '.3g')} kHz"
 
 
 def band_tip(centre_hz: float, bands: str = "octave") -> str:
@@ -21,11 +25,12 @@ def band_tip(centre_hz: float, bands: str = "octave") -> str:
     steps = 1 if bands == "octave" else 3
     exact = 1000.0 * 2.0 ** (round(math.log2(centre_hz / 1000.0) * steps) / steps)
     half = 2.0 ** (0.5 / steps)
-    kind = "Octave" if bands == "octave" else "Third-octave"
-    return (
-        f"{kind} band centred on {_hz(centre_hz)}: the frequencies from "
-        f"{_hz(exact / half)} to {_hz(exact * half)}"
+    text = (
+        _("Octave band centred on {centre}: the frequencies from {low} to {high}")
+        if bands == "octave"
+        else _("Third-octave band centred on {centre}: the frequencies from {low} to {high}")
     )
+    return text.format(centre=_hz(centre_hz), low=_hz(exact / half), high=_hz(exact * half))
 
 
 def band_headers(table: QTableWidget, bands: str = "octave") -> None:
