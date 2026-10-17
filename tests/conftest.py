@@ -44,6 +44,20 @@ def device_choices(monkeypatch, tmp_path):
     return path
 
 
+@pytest.fixture(autouse=True)
+def english(monkeypatch, tmp_path):
+    """Runs every test in English, whatever the computer's language, with the language
+    picked in the editor kept in the test's own folder."""
+    from acoustic_spaces import i18n
+
+    path = tmp_path / "settings.json"
+    monkeypatch.setattr(i18n, "settings_file", lambda: path)
+    monkeypatch.setenv(i18n.ENV, "en")
+    i18n.set_language(None)
+    yield path
+    i18n.set_language(None)
+
+
 @pytest.fixture
 def fake_sounddevice(monkeypatch):
     """A stand-in for the sounddevice module: streams play into ``played``."""

@@ -23,8 +23,13 @@ Linux, and its logs are kept free of warnings, not only of errors (with uv, put
 ```sh
 ruff check .
 ruff format --check .
+python tools/catalog.py check
 pytest -W error
 ```
+
+Text the editor or the command line shows is marked for translation and goes into the
+catalogs with `python tools/catalog.py update`, translated; `check` fails otherwise. See
+[docs/translating.md](docs/translating.md).
 
 Tests that draw with OpenGL carry the `render` marker; without a display, run them with
 `VTK_DEFAULT_OPENGL_WINDOW=vtkOSOpenGLRenderWindow` (Linux, with OSMesa installed).

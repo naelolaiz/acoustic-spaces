@@ -76,3 +76,9 @@ Version 3.2.1:
 Version 3.2.2:
 
 - [x] Fix: the editor no longer aborts on looking for a GPU (wgpu's OpenGL backend).
+
+Next:
+
+- [ ] Spanish: the language choice and the catalogs (done), the editor (done), the
+  command line, the library's messages, the examples' descriptions and the plots; the
+  documentation later, apart.

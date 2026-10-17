@@ -35,10 +35,13 @@ src/acoustic_spaces/   Python package
   examples.py          the example scenes that ship with the package
   gui/                 the graphical editor (Qt)
   cli.py               command-line interface
+  i18n.py              the language of the text shown, and its translation
+  locale/              the translation catalogs (es.po: Spanish)
 cpp/include/           header-only C++ core: BVH, ray tracer (specular paths, stochastic
                        and map tracing), wave solver (FDTD), FFT, partitioned
                        convolver (no Python, so a plugin or player can reuse it)
 cpp/bindings/          nanobind module exposing the core as acoustic_spaces._native
+tools/catalog.py       keeps the translation catalogs in step with the code (see Translating)
 tests/                 pytest suite, run on Linux, macOS and Windows in CI
 examples/              example scenes and their scripts, installed with the package
 validation/            the longer checks behind the validation report; bras/ has the

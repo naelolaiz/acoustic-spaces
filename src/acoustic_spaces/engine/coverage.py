@@ -45,6 +45,7 @@ from acoustic_spaces.engine.simulate import (
     coherent_bands,
 )
 from acoustic_spaces.geometry import points_inside
+from acoustic_spaces.i18n import N_
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.materials.bands import to_octaves
 from acoustic_spaces.parameters import A_WEIGHTING_DB, Talker, a_weighted
@@ -69,7 +70,8 @@ _ABOVE_SURFACE = 0.05
 class MapParameter(NamedTuple):
     """How a map parameter is shown: ``label`` with its unit, what it is, whether it
     has a value per octave band, and the ``scale`` and number ``format`` of the shown
-    value (the stored value is in SI units: Ts in seconds shows in milliseconds)."""
+    value (the stored value is in SI units: Ts in seconds shows in milliseconds). The
+    label and description are marked for translation; show them through ``_()``."""
 
     label: str
     description: str
@@ -83,17 +85,23 @@ class MapParameter(NamedTuple):
 
 #: The parameters of every map point.
 MAP_PARAMETERS: dict[str, MapParameter] = {
-    "spl": MapParameter("SPL (dB)", "sound pressure level", True, 1.0, "{:.1f}"),
-    "spl_a": MapParameter("SPL (dB(A))", "A-weighted sound pressure level", False, 1.0, "{:.1f}"),
-    "g": MapParameter("G (dB)", "strength", True, 1.0, "{:.1f}"),
-    "c50": MapParameter("C50 (dB)", "clarity, 50 ms", True, 1.0, "{:.1f}"),
-    "c80": MapParameter("C80 (dB)", "clarity, 80 ms", True, 1.0, "{:.1f}"),
-    "d50": MapParameter("D50", "definition", True, 1.0, "{:.2f}"),
-    "edt": MapParameter("EDT (s)", "early decay time", True, 1.0, "{:.2f}"),
-    "t20": MapParameter("T20 (s)", "reverberation time from a 20 dB decay", True, 1.0, "{:.2f}"),
-    "t30": MapParameter("T30 (s)", "reverberation time from a 30 dB decay", True, 1.0, "{:.2f}"),
-    "ts": MapParameter("Ts (ms)", "centre time", True, 1e3, "{:.0f}"),
-    "sti": MapParameter("STI", "speech transmission index", False, 1.0, "{:.2f}"),
+    "spl": MapParameter(N_("SPL (dB)"), N_("sound pressure level"), True, 1.0, "{:.1f}"),
+    "spl_a": MapParameter(
+        N_("SPL (dB(A))"), N_("A-weighted sound pressure level"), False, 1.0, "{:.1f}"
+    ),
+    "g": MapParameter(N_("G (dB)"), N_("strength"), True, 1.0, "{:.1f}"),
+    "c50": MapParameter(N_("C50 (dB)"), N_("clarity, 50 ms"), True, 1.0, "{:.1f}"),
+    "c80": MapParameter(N_("C80 (dB)"), N_("clarity, 80 ms"), True, 1.0, "{:.1f}"),
+    "d50": MapParameter(N_("D50"), N_("definition"), True, 1.0, "{:.2f}"),
+    "edt": MapParameter(N_("EDT (s)"), N_("early decay time"), True, 1.0, "{:.2f}"),
+    "t20": MapParameter(
+        N_("T20 (s)"), N_("reverberation time from a 20 dB decay"), True, 1.0, "{:.2f}"
+    ),
+    "t30": MapParameter(
+        N_("T30 (s)"), N_("reverberation time from a 30 dB decay"), True, 1.0, "{:.2f}"
+    ),
+    "ts": MapParameter(N_("Ts (ms)"), N_("centre time"), True, 1e3, "{:.0f}"),
+    "sti": MapParameter(N_("STI"), N_("speech transmission index"), False, 1.0, "{:.2f}"),
 }
 
 

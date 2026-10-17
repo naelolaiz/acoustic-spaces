@@ -19,12 +19,14 @@ from PySide6.QtWidgets import (
 
 from acoustic_spaces.engine.coverage import MAP_PARAMETERS
 from acoustic_spaces.gui.inspector import BAND_LABELS
+from acoustic_spaces.gui.numbers import number_text
 from acoustic_spaces.gui.results_view import PLOT_SIZE
 from acoustic_spaces.gui.tips import band_tip, label_for, share_tips
+from acoustic_spaces.i18n import N_, _
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 
 #: The source list entry for all sources playing together.
-ALL_SOURCES = "All sources"
+ALL_SOURCES = N_("All sources")
 
 
 class MapPanel(QWidget):
@@ -42,15 +44,17 @@ class MapPanel(QWidget):
         layout = QVBoxLayout(self)
         bar = QHBoxLayout()
         self.source = QComboBox()
-        self.source.setToolTip("The source whose map is on show, or all sources playing together")
+        self.source.setToolTip(
+            _("The source whose map is on show, or all sources playing together")
+        )
         self.parameter = QComboBox()
         self.parameter.setToolTip(
-            "The room parameter the map shows; rest on an entry in the list for its meaning"
+            _("The room parameter the map shows; rest on an entry in the list for its meaning")
         )
         for name, info in MAP_PARAMETERS.items():
-            self.parameter.addItem(info.label, name)
+            self.parameter.addItem(_(info.label), name)
             self.parameter.setItemData(
-                self.parameter.count() - 1, info.description, Qt.ItemDataRole.ToolTipRole
+                self.parameter.count() - 1, _(info.description), Qt.ItemDataRole.ToolTipRole
             )
         self.parameter.setCurrentIndex(list(MAP_PARAMETERS).index("sti"))
         self.band = QComboBox()
@@ -59,19 +63,21 @@ class MapPanel(QWidget):
         for index, centre in enumerate(OCTAVE_BANDS_HZ):
             self.band.setItemData(index, band_tip(centre), Qt.ItemDataRole.ToolTipRole)
         self.band.setToolTip(
-            "The octave band (a range of frequencies, named by its centre) the map shows. "
-            "STI and SPL (dB(A)) take every band together, so they have no band"
+            _(
+                "The octave band (a range of frequencies, named by its centre) the map shows. "
+                "STI and SPL (dB(A)) take every band together, so they have no band"
+            )
         )
-        self.in_3d = QCheckBox("Map in 3D")
-        self.in_3d.setToolTip("Lay the map over the room in the 3D view")
-        self.run = QPushButton("Run map")
-        self.run.setToolTip("Simulate the coverage map of every source (F6)")
-        self.save = QPushButton("Save…")
-        self.save.setToolTip("Save the map as a PNG picture, or every map as JSON")
-        for label, widget in (("Source", self.source), ("Parameter", self.parameter)):
+        self.in_3d = QCheckBox(_("Map in 3D"))
+        self.in_3d.setToolTip(_("Lay the map over the room in the 3D view"))
+        self.run = QPushButton(_("Run map"))
+        self.run.setToolTip(_("Simulate the coverage map of every source (F6)"))
+        self.save = QPushButton(_("Save…"))
+        self.save.setToolTip(_("Save the map as a PNG picture, or every map as JSON"))
+        for label, widget in ((_("Source"), self.source), (_("Parameter"), self.parameter)):
             bar.addWidget(label_for(label, widget))
             bar.addWidget(widget, 1)
-        bar.addWidget(label_for("Band", self.band))
+        bar.addWidget(label_for(_("Band"), self.band))
         bar.addWidget(self.band)
         bar.addWidget(self.in_3d)
         bar.addStretch()
@@ -82,7 +88,7 @@ class MapPanel(QWidget):
         self.note.setWordWrap(True)
         layout.addWidget(self.note)
         self.summary = QLabel()
-        self.summary.setToolTip("The lowest, highest and median values of the map on show")
+        self.summary.setToolTip(_("The lowest, highest and median values of the map on show"))
         layout.addWidget(self.summary)
         self.plot = QScrollArea()
         self.plot.setWidgetResizable(True)
@@ -105,24 +111,28 @@ class MapPanel(QWidget):
         self.result, self.room = result, room
         self.save.setEnabled(result is not None)
         self.source.setEnabled(result is not None)
-        shown = self.source.currentText()
+        # The list's entries hold the source's name, or "" for all sources together.
+        shown = self.source.currentData() if self.source.currentIndex() >= 0 else None
         self.source.blockSignals(True)
         self.source.clear()
         if result is not None:
             if result.combined is not None:
-                self.source.addItem(ALL_SOURCES)
-            self.source.addItems(list(result.maps))
-            if self.source.findText(shown) >= 0:
-                self.source.setCurrentText(shown)
+                self.source.addItem(_(ALL_SOURCES), "")
+            for name in result.maps:
+                self.source.addItem(name, name)
+            if shown is not None and self.source.findData(shown) >= 0:
+                self.source.setCurrentIndex(self.source.findData(shown))
         self.source.blockSignals(False)
-        self._note("" if result is not None else "Run the coverage map (F6) to see it here.")
+        self._note("" if result is not None else _("Run the coverage map (F6) to see it here."))
         self._shown()
 
     def mark_stale(self, stale: bool) -> None:
         """Say whether the scene changed since the map was computed."""
         if self.result is None:
             return
-        self._note("The scene changed since this map; run it again to update it." if stale else "")
+        self._note(
+            _("The scene changed since this map; run it again to update it.") if stale else ""
+        )
 
     def _note(self, text: str) -> None:
         self.note.setText(text)
@@ -142,8 +152,9 @@ class MapPanel(QWidget):
         """The CoverageMap on show, or None."""
         if self.result is None:
             return None
-        source = self.source.currentText()
-        return self.result.get(None if source == ALL_SOURCES else source)
+        if self.source.currentIndex() < 0:
+            return None
+        return self.result.get(self.source.currentData() or None)
 
     def shown_in_3d(self):
         """(map, parameter, band) for the 3D view, or None."""
@@ -170,11 +181,17 @@ class MapPanel(QWidget):
         info = MAP_PARAMETERS[self.name()]
         if len(finite):
             low, mid, high = (
-                info.format.format(v) for v in (finite.min(), np.median(finite), finite.max())
+                number_text(info.format.format(v))
+                for v in (finite.min(), np.median(finite), finite.max())
             )
-            self.summary.setText(f"{title}: {low} to {high}, median {mid}")
+            self.summary.setText(
+                # Translators: {title} names the map on show, such as "STI".
+                _("{title}: {low} to {high}, median {median}").format(
+                    title=title, low=low, high=high, median=mid
+                )
+            )
         else:
-            self.summary.setText(f"{title}: no values")
+            self.summary.setText(_("{title}: no values").format(title=title))
         figure = plot_map(current, parameter=self.name(), band=self.band_index(), room=self.room)
         canvas = FigureCanvasQTAgg(figure)
         canvas.setMinimumSize(*PLOT_SIZE)

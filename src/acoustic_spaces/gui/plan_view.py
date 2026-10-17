@@ -48,14 +48,16 @@ from acoustic_spaces.gui.document import (
     plan_corners,
     surface_heights,
 )
+from acoustic_spaces.gui.numbers import fmt, number, point_text
 from acoustic_spaces.gui.tips import label_for, share_tips
 from acoustic_spaces.gui.viewport import SELECTED_COLOUR, material_colour, surface_materials
+from acoustic_spaces.i18n import N_, _
 from acoustic_spaces.room import Room
 from acoustic_spaces.viz import BACKGROUND, EDGE_COLOUR, LISTENER_COLOUR, SOURCE_COLOUR
 
 #: Grid steps the corners and points snap to (label, metres; 0 is off).
 SNAP_STEPS = (
-    ("Off", 0.0),
+    (N_("Off"), 0.0),
     ("1 cm", 0.01),
     ("5 cm", 0.05),
     ("10 cm", 0.1),
@@ -78,15 +80,24 @@ INVALID_COLOUR = "#ef476f"
 GRID_COLOURS = ("#1d1e25", "#2b2d37", "#4a4d5a")  # minor, major, axes
 
 HINTS = {
-    "plan": "Drag corners, sources and listeners; double-click a wall to add a corner; "
-    "right-click for more. Shift: no snapping.",
-    "box": "Drag a corner to reshape the box (it becomes a floor plan); drag sources and "
-    "listeners. Shift: no snapping.",
-    "file": "The model's outline from above: drag sources and listeners. Draw room "
-    "replaces the model with a floor plan.",
-    "drawing": "Click the corners of the new room; close it on the first corner, with a "
-    "double-click or Enter. Backspace takes a corner back, Esc stops.",
-    "placing": "Click where the new {what} goes; Esc cancels.",
+    "plan": N_(
+        "Drag corners, sources and listeners; double-click a wall to add a corner; "
+        "right-click for more. Shift: no snapping."
+    ),
+    "box": N_(
+        "Drag a corner to reshape the box (it becomes a floor plan); drag sources and "
+        "listeners. Shift: no snapping."
+    ),
+    "file": N_(
+        "The model's outline from above: drag sources and listeners. Draw room "
+        "replaces the model with a floor plan."
+    ),
+    "drawing": N_(
+        "Click the corners of the new room; close it on the first corner, with a "
+        "double-click or Enter. Backspace takes a corner back, Esc stops."
+    ),
+    "sources": N_("Click where the new source goes; Esc cancels."),
+    "listeners": N_("Click where the new listener goes; Esc cancels."),
 }
 
 
@@ -380,7 +391,7 @@ class PlanCanvas(QWidget):
         corners = np.array(self.drawing, dtype=float).reshape(-1, 2)
         problem = plan_problem(corners)
         if problem is not None:
-            self.message.emit(f"Not a room yet: {problem}")
+            self.message.emit(_("Not a room yet: {problem}").format(problem=problem))
             return False
         self.drawing = None
         self.unsetCursor()
@@ -422,16 +433,16 @@ class PlanCanvas(QWidget):
             return
         corners = [list(map(float, c)) for c in self.corners]
         corners.insert(wall + 1, [float(v) for v in point])
-        self.corners_changed.emit(corners, "add corner")
+        self.corners_changed.emit(corners, _("add corner"))
 
     def remove_corner(self, k: int) -> None:
         if self.corners is None:
             return
         if len(self.corners) <= 3:
-            self.message.emit("A floor plan needs at least three corners.")
+            self.message.emit(_("A floor plan needs at least three corners."))
             return
         corners = [list(map(float, c)) for i, c in enumerate(self.corners) if i != k]
-        self.corners_changed.emit(corners, "remove corner")
+        self.corners_changed.emit(corners, _("remove corner"))
 
     # -- mouse and keys -----------------------------------------------------------------
 
@@ -499,7 +510,7 @@ class PlanCanvas(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if self._press is None:
             return
-        _, target = self._press
+        _start, target = self._press
         drag, preview = self._drag, self._preview
         self._press = self._drag = self._preview = None
         if self._hover is None:
@@ -509,9 +520,9 @@ class PlanCanvas(QWidget):
         elif drag[0] == "corner" and preview is not None:
             problem = plan_problem(preview)
             if problem is not None:
-                self.message.emit(f"Not moved: {problem}")
+                self.message.emit(_("Not moved: {problem}").format(problem=problem))
             else:
-                self.corners_changed.emit(preview.tolist(), "move corner")
+                self.corners_changed.emit(preview.tolist(), _("move corner"))
         elif drag[0] in ("sources", "listeners") and preview is not None:
             kind, index = drag
             item = getattr(self.room.scene, kind)[index]
@@ -548,16 +559,19 @@ class PlanCanvas(QWidget):
         point = self._snapped(position)
         menu = QMenu(self)
         if target is not None and target[0] == "corner":
-            remove = menu.addAction("Remove corner")
+            remove = menu.addAction(_("Remove corner"))
             remove.setEnabled(len(self.corners) > 3)
             remove.triggered.connect(lambda *_: self.remove_corner(target[1]))
         elif target is not None and target[0] == "wall":
-            menu.addAction("Add corner here").triggered.connect(
+            menu.addAction(_("Add corner here")).triggered.connect(
                 lambda *_: self.add_corner(target[1], point)
             )
         if not menu.isEmpty():
             menu.addSeparator()
-        for kind, text in (("sources", "Place source here"), ("listeners", "Place listener here")):
+        for kind, text in (
+            ("sources", _("Place source here")),
+            ("listeners", _("Place listener here")),
+        ):
             menu.addAction(text).triggered.connect(
                 lambda *_, kind=kind: self.place.emit(kind, self.placement(kind, point))
             )
@@ -638,11 +652,11 @@ class PlanCanvas(QWidget):
         for x in np.arange(math.ceil(lo[0] / major) * major, hi[0], major):
             sx = self.to_screen((x, 0)).x()
             if sx < self.width() - 40:  # clear of the unit
-                painter.drawText(QPointF(sx + 3, self.height() - 4), f"{round(x, 9) + 0.0:g}")
+                painter.drawText(QPointF(sx + 3, self.height() - 4), number(round(x, 9) + 0.0))
         for y in np.arange(math.ceil(lo[1] / major) * major, hi[1], major):
             sy = self.to_screen((0, y)).y()
             if sy > 16:
-                painter.drawText(QPointF(3, sy - 3), f"{round(y, 9) + 0.0:g}")
+                painter.drawText(QPointF(3, sy - 3), number(round(y, 9) + 0.0))
         painter.drawText(QPointF(self.width() - 18, self.height() - 4), "m")
 
     def _material_of(self, label: int) -> str:
@@ -682,7 +696,9 @@ class PlanCanvas(QWidget):
             hovered = self._hover is not None and self._hover[0] == "wall" and self._hover[1] == k
             if dragging and self._drag[1] in (k, (k + 1) % n) or hovered:
                 length = float(np.linalg.norm(corners[(k + 1) % n] - corners[k]))
-                self._label(painter, (a + b) / 2, f"{length:.2f} m", "#ffffff")
+                self._label(
+                    painter, (a + b) / 2, fmt(_("{length:.2f} m"), length=length), "#ffffff"
+                )
             elif math.hypot(b.x() - a.x(), b.y() - a.y()) > 70:
                 painter.setFont(font)
                 self._label(painter, (a + b) / 2, f"wall_{k + 1}", "#8a8d99")
@@ -748,7 +764,7 @@ class PlanCanvas(QWidget):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             text = item.name
             if drag == (group, k) and self._preview is not None:
-                text += f"  ({position[0]:.2f}, {position[1]:.2f})"
+                text += f"  ({point_text(position[:2])})"
             painter.setPen(QColor("#ffffff"))
             painter.drawText(QPointF(p.x() + radius + 4, p.y() - radius), text)
 
@@ -766,7 +782,12 @@ class PlanCanvas(QWidget):
             length = float(
                 np.linalg.norm(snap(self.cursor_position, self.snap_step) - self.drawing[-1])
             )
-            self._label(painter, (points[-1] + hover) / 2, f"{length:.2f} m", "#ffffff")
+            self._label(
+                painter,
+                (points[-1] + hover) / 2,
+                fmt(_("{length:.2f} m"), length=length),
+                "#ffffff",
+            )
             if len(points) >= 2:
                 pen.setStyle(Qt.PenStyle.DashLine)
                 painter.setPen(pen)
@@ -802,26 +823,26 @@ class PlanView(QWidget):
         layout.setSpacing(2)
         bar = QHBoxLayout()
         bar.setContentsMargins(4, 4, 4, 0)
-        self.draw = QPushButton("Draw room")
+        self.draw = QPushButton(_("Draw room"))
         self.draw.setCheckable(True)
-        self.draw.setToolTip("Draw a new floor plan, corner by corner; it replaces the room")
+        self.draw.setToolTip(_("Draw a new floor plan, corner by corner; it replaces the room"))
         self.snap = QComboBox()
         for label, step in SNAP_STEPS:
-            self.snap.addItem(label, step)
-        self.snap.setCurrentIndex([s for _, s in SNAP_STEPS].index(DEFAULT_SNAP))
+            self.snap.addItem(_(label) if step == 0 else label, step)
+        self.snap.setCurrentIndex([step for _label, step in SNAP_STEPS].index(DEFAULT_SNAP))
         self.snap.setToolTip(
-            "Corners, sources and listeners snap to this grid; hold Shift to place them freely"
+            _("Corners, sources and listeners snap to this grid; hold Shift to place them freely")
         )
-        fit = QPushButton("Fit")
-        fit.setToolTip("Zoom to show the whole room")
+        fit = QPushButton(_("Fit"))
+        fit.setToolTip(_("Zoom to show the whole room"))
         self.hint = QLabel()
         self.hint.setWordWrap(True)
         self.where = QLabel()
-        self.where.setToolTip("Where the mouse is in the plan, in metres")
+        self.where.setToolTip(_("Where the mouse is in the plan, in metres"))
         self.where.setMinimumWidth(130)
         self.where.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         bar.addWidget(self.draw)
-        bar.addWidget(label_for("Snap", self.snap))
+        bar.addWidget(label_for(_("Snap"), self.snap))
         bar.addWidget(self.snap)
         bar.addWidget(fit)
         bar.addWidget(self.hint, 1)
@@ -871,16 +892,16 @@ class PlanView(QWidget):
     def _state(self) -> None:
         canvas = self.canvas
         mode = canvas.mode
-        text = HINTS[mode]
-        if mode == "placing":
-            text = text.format(what="source" if canvas.placing == "sources" else "listener")
+        text = _(HINTS[canvas.placing if mode == "placing" else mode])
         self.hint.setText(text)
         self.hint.setToolTip(text)  # in full, should the bar cut it short
         self.draw.blockSignals(True)
         self.draw.setChecked(canvas.drawing is not None)
         self.draw.blockSignals(False)
         where = canvas.cursor_position
-        self.where.setText("" if where is None else f"x {where[0]:.2f}, y {where[1]:.2f} m")
+        self.where.setText(
+            "" if where is None else fmt(_("x {x:.2f}, y {y:.2f} m"), x=where[0], y=where[1])
+        )
 
 
 __all__ = [

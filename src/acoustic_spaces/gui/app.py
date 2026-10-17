@@ -4,6 +4,7 @@ message log around them."""
 
 from __future__ import annotations
 
+import os
 import sys
 import threading
 import time
@@ -11,9 +12,10 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QLibraryInfo, Qt, QTimer, QTranslator
 from PySide6.QtGui import (
     QAction,
+    QActionGroup,
     QCloseEvent,
     QGuiApplication,
     QKeySequence,
@@ -40,7 +42,7 @@ from PySide6.QtWidgets import (
     QToolButton,
 )
 
-from acoustic_spaces import __version__
+from acoustic_spaces import __version__, i18n
 from acoustic_spaces._extras import install_hint
 from acoustic_spaces.engine import ray_device, reweight, tuning
 from acoustic_spaces.examples import example_path, list_examples
@@ -56,20 +58,25 @@ from acoustic_spaces.gui.document import (
 from acoustic_spaces.gui.inspector import BAND_LABELS, Inspector, label_text
 from acoustic_spaces.gui.levels import level_colour, rich_lines
 from acoustic_spaces.gui.map_view import MapPanel
+from acoustic_spaces.gui.numbers import fmt, point_text
 from acoustic_spaces.gui.plan_view import PlanView
 from acoustic_spaces.gui.results_view import ResultsPanel
 from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.tune_dialog import TuneDialog
 from acoustic_spaces.gui.viewport import Viewport
 from acoustic_spaces.gui.worker import MapJob, SimulationJob, TuneJob
+from acoustic_spaces.i18n import N_, _, ngettext, pgettext
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
-TITLE = "Acoustic Spaces editor"
-SCENE_FILTER = "Scenes (*.yaml *.yml)"
-MODEL_FILTER = f"Models ({' '.join('*' + s for s in SUPPORTED_SUFFIXES)})"
-GLB_FILTER = "glTF binary (*.glb)"
-MAP_FILTERS = "PNG picture (*.png);;JSON, every map (*.json)"
+TITLE = N_("Acoustic Spaces editor")
+SCENE_FILTER = N_("Scenes (*.yaml *.yml)")
+# Translators: {patterns} is the list of model file patterns, such as *.obj *.dxf.
+MODEL_FILTER = N_("Models ({patterns})")
+MODEL_PATTERNS = " ".join("*" + s for s in SUPPORTED_SUFFIXES)
+GLB_FILTER = N_("glTF binary (*.glb)")
+# Translators: two file types of a save dialog, kept apart by ;; (keep it).
+MAP_FILTERS = N_("PNG picture (*.png);;JSON, every map (*.json)")
 #: Kinds of item Edit > Remove works on.
 REMOVABLE = ("sources", "listeners", "material")
 
@@ -112,11 +119,13 @@ class MainWindow(QMainWindow):
         self.plan = PlanView()
         self.views = QTabWidget()
         self.views.setDocumentMode(True)
-        self.views.addTab(self.viewport, "3D view")
-        self.views.addTab(self.plan, "Plan")
-        self.views.setTabToolTip(0, "The room in 3D: click to select, drag sources and listeners")
+        self.views.addTab(self.viewport, _("3D view"))
+        self.views.addTab(self.plan, _("Plan"))
         self.views.setTabToolTip(
-            1, "The room from above: draw floor plans, drag corners and points"
+            0, _("The room in 3D: click to select, drag sources and listeners")
+        )
+        self.views.setTabToolTip(
+            1, _("The room from above: draw floor plans, drag corners and points")
         )
         self.setCentralWidget(self.views)
         self.tree = SceneTree()
@@ -133,11 +142,11 @@ class MainWindow(QMainWindow):
         forms.setWidget(self.inspector)
         self.docks = {}
         for name, title, widget, area in (
-            ("tree", "Scene", self.tree, Qt.DockWidgetArea.LeftDockWidgetArea),
-            ("inspector", "Properties", forms, Qt.DockWidgetArea.RightDockWidgetArea),
-            ("results", "Results", self.results, Qt.DockWidgetArea.BottomDockWidgetArea),
-            ("map", "Coverage map", self.map_panel, Qt.DockWidgetArea.BottomDockWidgetArea),
-            ("messages", "Messages", self.messages, Qt.DockWidgetArea.BottomDockWidgetArea),
+            ("tree", _("Scene"), self.tree, Qt.DockWidgetArea.LeftDockWidgetArea),
+            ("inspector", _("Properties"), forms, Qt.DockWidgetArea.RightDockWidgetArea),
+            ("results", _("Results"), self.results, Qt.DockWidgetArea.BottomDockWidgetArea),
+            ("map", _("Coverage map"), self.map_panel, Qt.DockWidgetArea.BottomDockWidgetArea),
+            ("messages", _("Messages"), self.messages, Qt.DockWidgetArea.BottomDockWidgetArea),
         ):
             dock = QDockWidget(title, self)
             dock.setObjectName(name)
@@ -152,7 +161,7 @@ class MainWindow(QMainWindow):
         self.progress.setRange(0, 0)
         self.progress.setMaximumWidth(160)
         self.progress.setToolTip(
-            "Something runs in the background; Simulation > Cancel (Shift+F5) stops it"
+            _("Something runs in the background; Simulation > Cancel (Shift+F5) stops it")
         )
         self.progress.hide()
         self.summary = QLabel()
@@ -178,8 +187,10 @@ class MainWindow(QMainWindow):
         # While a recording plays, the status bar says so, whichever panel is on show.
         self.now_playing = QLabel()
         self.now_playing.setToolTip(
-            "What plays through the room: the recording, and the source and listener of the "
-            "response it plays through"
+            _(
+                "What plays through the room: the recording, and the source and listener of the "
+                "response it plays through"
+            )
         )
         self.stop_button = QToolButton()
         self.stop_button.setDefaultAction(self.stop_action)
@@ -244,154 +255,168 @@ class MainWindow(QMainWindow):
         keys = QKeySequence.StandardKey
         a = self._action
         self.new_action = a(
-            "&New box room…", self.new_box, keys.New, "Start a new scene in a box-shaped room"
+            _("&New box room…"), self.new_box, keys.New, _("Start a new scene in a box-shaped room")
         )
         self.new_model_action = a(
-            "New from &model file…",
+            _("New from &model file…"),
             self.new_from_model,
             None,
-            "Start from a model file (OBJ, DXF, glTF, STL, IFC, Collada or SketchUp)",
+            _("Start from a model file (OBJ, DXF, glTF, STL, IFC, Collada or SketchUp)"),
         )
         self.new_plan_action = a(
-            "New room from a &floor plan…",
+            _("New room from a &floor plan…"),
             self.new_floor_plan,
             None,
-            "Draw the floor plan of a new room, corner by corner",
+            _("Draw the floor plan of a new room, corner by corner"),
         )
-        self.open_action = a("&Open…", self.open_dialog, keys.Open, "Open a scene file (YAML)")
+        self.open_action = a(
+            _("&Open…"), self.open_dialog, keys.Open, _("Open a scene file (YAML)")
+        )
         self.save_action = a(
-            "&Save",
+            _("&Save"),
             self.save,
             keys.Save,
-            "Save the scene; an example asks where to keep your copy",
+            _("Save the scene; an example asks where to keep your copy"),
         )
         self.save_as_action = a(
-            "Save &as…", self.save_as, keys.SaveAs, "Save the scene in another file"
+            _("Save &as…"), self.save_as, keys.SaveAs, _("Save the scene in another file")
         )
         self.export_action = a(
-            "&Export results…",
+            _("&Export results…"),
             self.export_results,
             None,
-            "Write every response of the last run to a folder: a WAV file per output format "
-            "and parameters.json, as acoustic-spaces simulate does",
+            _(
+                "Write every response of the last run to a folder: a WAV file per output format "
+                "and parameters.json, as acoustic-spaces simulate does"
+            ),
         )
         self.blender_action = a(
-            "Export to &Blender…",
+            _("Export to &Blender…"),
             self.export_blender,
-            tip="The room, and the reflection paths on show, as glTF",
+            tip=_("The room, and the reflection paths on show, as glTF"),
         )
         self.particles_action = a(
-            "Export &particle animation to Blender…",
+            _("Export &particle animation to Blender…"),
             lambda: self.export_blender(particles=True),
-            tip="Sound particles from the selected source (or the first) as a glTF animation",
+            tip=_("Sound particles from the selected source (or the first) as a glTF animation"),
         )
         self.quit_action = a(
-            "&Quit", self.close, keys.Quit, "Close the editor; it asks about unsaved changes"
+            _("&Quit"), self.close, keys.Quit, _("Close the editor; it asks about unsaved changes")
         )
-        self.undo_action = a("&Undo", self.undo, keys.Undo, "Take back the last change")
-        self.redo_action = a("&Redo", self.redo, keys.Redo, "Make the change Undo took back")
+        self.undo_action = a(_("&Undo"), self.undo, keys.Undo, _("Take back the last change"))
+        self.redo_action = a(_("&Redo"), self.redo, keys.Redo, _("Make the change Undo took back"))
         self.place_source_action = a(
-            "Place &source",
+            _("Place &source"),
             lambda: self.start_placing("sources"),
-            tip="Click a floor or wall in the 3D view to put a source there",
+            tip=_("Click a floor or wall in the 3D view to put a source there"),
         )
         self.place_listener_action = a(
-            "Place &listener",
+            _("Place &listener"),
             lambda: self.start_placing("listeners"),
-            tip="Click a floor or wall in the 3D view to put a listener there",
+            tip=_("Click a floor or wall in the 3D view to put a listener there"),
         )
         self.draw_action = a(
-            "&Draw floor plan",
+            _("&Draw floor plan"),
             self.draw_room,
             None,
-            "Draw a new floor plan in the plan view; it replaces the room",
+            _("Draw a new floor plan in the plan view; it replaces the room"),
         )
         self.add_material_action = a(
-            "Add &material from the database…",
+            _("Add &material from the database…"),
             self.add_material,
-            tip="A material of the built-in database of absorption coefficients",
+            tip=_("A material of the built-in database of absorption coefficients"),
         )
         self.add_library_material_action = a(
-            "Add material from a &library…",
+            _("Add material from a &library…"),
             self.add_library_material,
-            tip="A material of a CATT-Acoustic (ABS lines) or ODEON (.Li8) material library",
+            tip=_("A material of a CATT-Acoustic (ABS lines) or ODEON (.Li8) material library"),
         )
         self.remove_action = a(
-            "Re&move selected",
+            _("Re&move selected"),
             self.remove_selected,
-            tip="Remove the selected source, listener or material (Delete, in the scene tree "
-            "or a view)",
+            tip=_(
+                "Remove the selected source, listener or material (Delete, in the scene tree "
+                "or a view)"
+            ),
         )
         self.reset_camera_action = a(
-            "&Reset camera",
+            _("&Reset camera"),
             self.viewport.reset_camera,
             "Ctrl+0",
-            "Show the whole room in the 3D view from the usual angle",
+            _("Show the whole room in the 3D view from the usual angle"),
         )
         self.show_3d_action = a(
-            "&3D view",
+            _("&3D view"),
             lambda: self.views.setCurrentWidget(self.viewport),
             "Ctrl+1",
-            "Show the room in 3D",
+            _("Show the room in 3D"),
         )
         self.show_plan_action = a(
-            "P&lan",
+            _("P&lan"),
             lambda: self.views.setCurrentWidget(self.plan),
             "Ctrl+2",
-            "Show the room from above, to draw and change floor plans",
+            _("Show the room from above, to draw and change floor plans"),
         )
         self.paths_action = a(
-            "Show reflection &paths",
+            _("Show reflection &paths"),
             lambda: None,
-            tip="Draw the early reflection paths of the source and listener the Results "
-            "panel shows, coloured by order",
+            tip=_(
+                "Draw the early reflection paths of the source and listener the Results "
+                "panel shows, coloured by order"
+            ),
         )
         self.paths_action.setCheckable(True)
         self.paths_action.toggled.connect(self.results.paths.setChecked)
         self.leaks_action = a(
-            "Show &leaks",
+            _("Show &leaks"),
             lambda: None,
-            tip="Trace rays from the sources and show where they escape from a model that is "
-            "not closed",
+            tip=_(
+                "Trace rays from the sources and show where they escape from a model that is "
+                "not closed"
+            ),
         )
         self.leaks_action.setCheckable(True)
         self.leaks_action.toggled.connect(lambda *_: self._draw())
         self.screenshot_action = a(
-            "Save &screenshot…", self.save_screenshot, tip="Save the 3D view as a PNG picture"
+            _("Save &screenshot…"), self.save_screenshot, tip=_("Save the 3D view as a PNG picture")
         )
-        self.run_action = a("&Run", self.run_simulation, "F5", "Simulate every source and listener")
+        self.run_action = a(
+            _("&Run"), self.run_simulation, "F5", _("Simulate every source and listener")
+        )
         self.map_action = a(
-            "Run coverage &map",
+            _("Run coverage &map"),
             self.run_map,
             "F6",
-            "Room parameters on a grid over the audience area, for every source",
+            _("Room parameters on a grid over the audience area, for every source"),
         )
-        self.map_action.setIconText("Map")
+        self.map_action.setIconText(_("Map"))
         self.tune_action = a(
-            "&Tune CPU and GPU…",
+            _("&Tune CPU and GPU…"),
             self.run_tune,
-            tip="Time the CPU and the GPU on this scene and keep the fastest on this computer "
-            "for the device setting auto (acoustic-spaces tune; needs the gpu extra)",
+            tip=_(
+                "Time the CPU and the GPU on this scene and keep the fastest on this computer "
+                "for the device setting auto (acoustic-spaces tune; needs the gpu extra)"
+            ),
         )
         self.cancel_action = a(
-            "&Cancel",
+            _("&Cancel"),
             self.cancel_simulation,
             "Shift+F5",
-            "Stop the run, coverage map or tuning going on, at its next stage",
+            _("Stop the run, coverage map or tuning going on, at its next stage"),
         )
         self.cancel_action.setEnabled(False)
         self.stop_action = a(
-            "S&top playback",
+            _("S&top playback"),
             self.stop_playing,
-            tip="Stop the recording playing through the room (Esc)",
+            tip=_("Stop the recording playing through the room (Esc)"),
         )
-        self.stop_action.setToolTip("Stop playback (Esc)")
+        self.stop_action.setToolTip(_("Stop playback (Esc)"))
         self.stop_action.setEnabled(False)
         self.about_action = a(
-            "&About", self.about, tip="The version, licence and source of Acoustic Spaces"
+            _("&About"), self.about, tip=_("The version, licence and source of Acoustic Spaces")
         )
-        self.undo_action.setIconText("Undo")
-        self.redo_action.setIconText("Redo")
+        self.undo_action.setIconText(_("Undo"))
+        self.redo_action.setIconText(_("Redo"))
         icon = self.style().standardIcon
         pixmaps = QStyle.StandardPixmap
         for action, pixmap in (
@@ -409,23 +434,26 @@ class MainWindow(QMainWindow):
 
     def _menus(self) -> None:
         bar = self.menuBar()
-        file = bar.addMenu("&File")
+        file = bar.addMenu(_("&File"))
         file.addActions(
             [self.new_action, self.new_plan_action, self.new_model_action, self.open_action]
         )
-        self.examples_menu = file.addMenu("Open e&xample")
+        self.examples_menu = file.addMenu(_("Open e&xample"))
         try:
             examples = list_examples()
         except FileNotFoundError:
             examples = []
         for example in examples:
-            action = self.examples_menu.addAction(example.title)
-            tip = example.description.split(". ")[0]
+            # The examples' titles and descriptions are in the catalogs (tools/catalog.py).
+            action = self.examples_menu.addAction(pgettext("example", example.title))
+            tip = pgettext("example", example.description).split(". ")[0]
             if example.missing_extra:
                 # Opening it would only say how to install what reading its model needs.
                 action.setEnabled(False)
-                tip = f"Needs the {example.missing_extra} extra: " + install_hint(
-                    example.missing_extra
+                # Translators: {extra} is the name of an optional part of the
+                # installation (gui, ifc...); {hint} says how to install it.
+                tip = _("Needs the {extra} extra: {hint}").format(
+                    extra=example.missing_extra, hint=install_hint(example.missing_extra)
                 )
             action.setStatusTip(tip)
             action.setToolTip(tip)
@@ -437,7 +465,7 @@ class MainWindow(QMainWindow):
         file.addSeparator()
         file.addAction(self.quit_action)
 
-        edit = bar.addMenu("&Edit")
+        edit = bar.addMenu(_("&Edit"))
         edit.addActions([self.undo_action, self.redo_action])
         edit.addSeparator()
         edit.addActions([self.place_source_action, self.place_listener_action])
@@ -446,7 +474,7 @@ class MainWindow(QMainWindow):
         edit.addSeparator()
         edit.addAction(self.remove_action)
 
-        view = bar.addMenu("&View")
+        view = bar.addMenu(_("&View"))
         view.addActions([self.show_3d_action, self.show_plan_action])
         view.addSeparator()
         view.addActions([self.reset_camera_action, self.paths_action, self.leaks_action])
@@ -454,22 +482,29 @@ class MainWindow(QMainWindow):
         view.addSeparator()
         for dock in self.docks.values():
             toggle = dock.toggleViewAction()
-            toggle.setStatusTip(f"Show or hide the {dock.windowTitle()} panel")
+            toggle.setStatusTip(
+                # Translators: {panel} is a panel's title, such as Results.
+                _("Show or hide the {panel} panel").format(panel=dock.windowTitle())
+            )
             toggle.setToolTip(toggle.statusTip())
             view.addAction(toggle)
+        view.addSeparator()
+        self.language_menu = view.addMenu(_("&Language"))
+        self._language_choices()
 
-        simulation = bar.addMenu("&Simulation")
+        simulation = bar.addMenu(_("&Simulation"))
         simulation.addActions([self.run_action, self.map_action, self.cancel_action])
         simulation.addSeparator()
         simulation.addAction(self.tune_action)
         simulation.addSeparator()
         simulation.addAction(self.stop_action)
-        help_menu = bar.addMenu("&Help")
+        help_menu = bar.addMenu(_("&Help"))
         help_menu.addAction(self.about_action)
-        for menu in (file, self.examples_menu, edit, view, simulation, help_menu):
+        menus = (file, self.examples_menu, edit, view, self.language_menu, simulation, help_menu)
+        for menu in menus:
             menu.setToolTipsVisible(True)
 
-        tools = self.addToolBar("Main")
+        tools = self.addToolBar(_("Main"))
         tools.setObjectName("main-toolbar")
         tools.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         tools.addActions([self.open_action, self.save_action])
@@ -481,6 +516,58 @@ class MainWindow(QMainWindow):
         tools.addActions([self.run_action, self.map_action, self.cancel_action])
         tools.addSeparator()
         tools.addAction(self.stop_action)
+
+    def _language_choices(self) -> None:
+        """View > Language: the computer's language, or one of the catalogs'."""
+        group = QActionGroup(self)
+        system = i18n.LANGUAGES[i18n.system_language()]
+        choices = [(None, _("System ({language})").format(language=system))]
+        choices += list(i18n.LANGUAGES.items())
+        saved = i18n.saved_language()
+        self.language_actions = {}
+        for code, text in choices:
+            action = self.language_menu.addAction(text)
+            action.setCheckable(True)
+            action.setChecked(code == saved)
+            if code is None:
+                tip = _(
+                    "Show the editor and the command line in this computer's language, from "
+                    "their next start"
+                )
+            else:
+                tip = _(
+                    "Show the editor and the command line in this language, from their next start"
+                )
+            action.setStatusTip(tip)
+            action.setToolTip(tip)
+            action.triggered.connect(lambda *args, code=code: self.choose_language(code))
+            group.addAction(action)
+            self.language_actions[code] = action
+
+    def choose_language(self, code: str | None) -> None:
+        """Keep ``code`` (None: the computer's) as the language from the next start."""
+        try:
+            i18n.save_language(code)
+        except OSError as exc:
+            self.log(_("Cannot keep the language: {reason}").format(reason=exc), "error")
+            self.language_actions[i18n.saved_language()].setChecked(True)
+            return
+        self.language_actions[code].setChecked(True)
+        name = i18n.LANGUAGES[code or i18n.system_language()]
+        variable = os.environ.get(i18n.ENV, "").strip()
+        if variable:
+            self.log(
+                _(
+                    "{variable} is set to {value}, so it decides the language, not this choice"
+                ).format(variable=i18n.ENV, value=variable),
+                "warning",
+            )
+        else:
+            self.log(
+                _(
+                    "Language from the next start of the editor and the command line: {language}"
+                ).format(language=name)
+            )
 
     # -- the document ---------------------------------------------------------------
 
@@ -521,14 +608,21 @@ class MainWindow(QMainWindow):
 
     def _state(self) -> None:
         document = self.document
-        name = document.path.name if document.path is not None else "untitled"
-        self.setWindowTitle(f"{name}[*] - {TITLE}")
+        name = document.path.name if document.path is not None else _("untitled")
+        # Translators: the window's title; [*] shows whether the scene has unsaved
+        # changes (keep it as it is).
+        self.setWindowTitle(_("{name}[*] - {title}").format(name=name, title=_(TITLE)))
         self.setWindowModified(document.modified)
         undo, redo = document.undo_text(), document.redo_text()
-        self.undo_action.setText(f"&Undo {undo}" if undo else "&Undo")
-        self.redo_action.setText(f"&Redo {redo}" if redo else "&Redo")
-        self.undo_action.setToolTip(f"Undo {undo}" if undo else "Nothing to undo")
-        self.redo_action.setToolTip(f"Redo {redo}" if redo else "Nothing to redo")
+        # Translators: {edit} says what the last edit did, such as "move the source".
+        self.undo_action.setText(_("&Undo {edit}").format(edit=undo) if undo else _("&Undo"))
+        self.redo_action.setText(_("&Redo {edit}").format(edit=redo) if redo else _("&Redo"))
+        self.undo_action.setToolTip(
+            _("Undo {edit}").format(edit=undo) if undo else _("Nothing to undo")
+        )
+        self.redo_action.setToolTip(
+            _("Redo {edit}").format(edit=redo) if redo else _("Nothing to redo")
+        )
         self.undo_action.setEnabled(undo is not None)
         self.redo_action.setEnabled(redo is not None)
 
@@ -545,23 +639,37 @@ class MainWindow(QMainWindow):
 
     def _summary(self) -> None:
         room = self.document.room
-        parts = []
         if room.volume_m3:
             k = OCTAVE_BANDS_HZ.index(1000)
             rt = room.reverberation_time("eyring", air_absorption=True)[k]
-            parts += [f"{room.volume_m3:,.0f} m³", f"RT {rt:.2f} s at {BAND_LABELS[k]} (Eyring)"]
+            text = fmt(
+                # Translators: the status bar's summary of the room: its volume and its
+                # reverberation time at one band, such as "1 kHz".
+                _("{volume:,.0f} m³, RT {rt:.2f} s at {band} (Eyring)"),
+                volume=room.volume_m3,
+                rt=rt,
+                band=BAND_LABELS[k],
+            )
         else:
-            parts.append("model not closed")
-        lines = [(", ".join(parts), "info")]
+            text = _("model not closed")
+        lines = [(text, "info")]
         problems = room.problems()
         if problems:
-            lines.append((f", {len(problems)} problem{'s' if len(problems) > 1 else ''}", "error"))
+            count = len(problems)
+            lines.append(
+                (
+                    ngettext(", {count} problem", ", {count} problems", count).format(count=count),
+                    "error",
+                )
+            )
         self.summary.setText(rich_lines(self.summary, lines).replace("<br>", ""))
         self.summary.setToolTip(
             "\n".join(
                 [
-                    "The room's volume and its reverberation time at 1 kHz estimated by the "
-                    "Eyring formula, kept up to date as you edit",
+                    _(
+                        "The room's volume and its reverberation time at 1 kHz estimated by "
+                        "the Eyring formula, kept up to date as you edit"
+                    ),
                     *problems,
                 ]
             )
@@ -586,7 +694,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(text, 8000)
 
     def _refused(self, message: str) -> None:
-        self.log(f"Not changed: {message}", "error")
+        self.log(_("Not changed: {reason}").format(reason=message), "error")
 
     # -- selection and the 3D view ------------------------------------------------
 
@@ -617,7 +725,9 @@ class MainWindow(QMainWindow):
         """A click in the 3D view; empty space selects the scene."""
         self.select(kind or "scene", key)
         if kind == "surface":
-            self.log(f"Surface {label_text(self.document.room.mesh.labels[key])}")
+            self.log(
+                _("Surface {name}").format(name=label_text(self.document.room.mesh.labels[key]))
+            )
 
     def _shown_response(self):
         """The response whose reflection paths the 3D view shows, if any."""
@@ -649,7 +759,10 @@ class MainWindow(QMainWindow):
 
         leaks = find_leaks(room)
         self._found_leaks = (room, leaks)
-        self.log(f"Leaks: {leaks.summary()}", "warning" if leaks.leaked else "info")
+        self.log(
+            _("Leaks: {summary}").format(summary=leaks.summary()),
+            "warning" if leaks.leaked else "info",
+        )
         return leaks
 
     def _paths_toggled(self, on: bool) -> None:
@@ -657,20 +770,28 @@ class MainWindow(QMainWindow):
         self.paths_action.setChecked(on)
         self.paths_action.blockSignals(False)
         if on and self.result is None:
-            self.log("Reflection paths come from a run: run the simulation (F5) first.")
+            self.log(_("Reflection paths come from a run: run the simulation (F5) first."))
         self._draw()
 
     def start_placing(self, kind: str) -> None:
         """Put a new source or listener where the next click on a surface (in the plan,
         on the floor) lands."""
-        what = "source" if kind == "sources" else "listener"
+        source = kind == "sources"
         if self.views.currentWidget() is self.plan:
             self.plan.start_placing(kind)
-            self.statusBar().showMessage(f"Click in the plan to place the {what}; Esc cancels.", 0)
+            self.statusBar().showMessage(
+                _("Click in the plan to place the source; Esc cancels.")
+                if source
+                else _("Click in the plan to place the listener; Esc cancels."),
+                0,
+            )
         elif self.viewport.available:
             self.viewport.start_placing(kind)
             self.statusBar().showMessage(
-                f"Click a floor or wall to place the {what}; Esc cancels.", 0
+                _("Click a floor or wall to place the source; Esc cancels.")
+                if source
+                else _("Click a floor or wall to place the listener; Esc cancels."),
+                0,
             )
         else:
             self._place(kind, self._default_position(kind))
@@ -703,8 +824,7 @@ class MainWindow(QMainWindow):
             self._refused(str(exc))
             return
         item = getattr(self.document.scene, kind)[index]
-        where = ", ".join(f"{v:.2f}" for v in position)
-        self.log(f"Added {item.name} at ({where})")
+        self.log(_("Added {name} at ({point})").format(name=item.name, point=point_text(position)))
         self.select(kind, index)
 
     def _move_point(self, kind: str, index: int, position: tuple) -> None:
@@ -716,8 +836,9 @@ class MainWindow(QMainWindow):
             self._draw()
             return
         item = getattr(self.document.scene, kind)[index]
-        where = ", ".join(f"{v:.2f}" for v in item.position)
-        self.log(f"Moved {item.name} to ({where})")
+        self.log(
+            _("Moved {name} to ({point})").format(name=item.name, point=point_text(item.position))
+        )
         self.select(kind, index)
 
     def _set_corners(self, corners: list, description: str) -> None:
@@ -730,7 +851,7 @@ class MainWindow(QMainWindow):
             self._draw()
             return
         if was_box:
-            self.log("The box is now a floor plan with the same walls.")
+            self.log(_("The box is now a floor plan with the same walls."))
 
     def draw_room(self) -> None:
         """Draw a new floor plan in the plan view."""
@@ -750,24 +871,38 @@ class MainWindow(QMainWindow):
         self.viewport.reset_camera()
         height = self.document.scene.geometry.height
         self.log(
-            f"New floor plan with {len(corners)} corners, {height:g} m high; change the "
-            "height under Geometry."
+            fmt(
+                ngettext(
+                    "New floor plan with {count} corner, {height:g} m high; change the "
+                    "height under Geometry.",
+                    "New floor plan with {count} corners, {height:g} m high; change the "
+                    "height under Geometry.",
+                    len(corners),
+                ),
+                count=len(corners),
+                height=height,
+            )
         )
         if moved:
-            self.log(f"Moved {', '.join(moved)} into the new room.")
+            # Translators: {names} lists the sources and listeners moved.
+            self.log(_("Moved {names} into the new room.").format(names=", ".join(moved)))
         if self.document.scene.default_material != default:
             self.log(
-                f"Surfaces without an assignment are now {self.document.scene.default_material} "
-                "(the scene's default material)."
+                _(
+                    "Surfaces without an assignment are now {material} (the scene's default "
+                    "material)."
+                ).format(material=self.document.scene.default_material)
             )
         self.select("geometry", None)
 
     def confirm_replace_model(self) -> bool:
         answer = QMessageBox.question(
             self,
-            TITLE,
-            "Replace the model file with the drawn floor plan? Material assignments to the "
-            "model's surfaces will no longer match anything.",
+            _(TITLE),
+            _(
+                "Replace the model file with the drawn floor plan? Material assignments to the "
+                "model's surfaces will no longer match anything."
+            ),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         return answer == QMessageBox.StandardButton.Yes
@@ -783,7 +918,7 @@ class MainWindow(QMainWindow):
     def add_material(self) -> None:
         names = sorted(e.id for e in builtin_database().entries("absorption"))
         preset, ok = QInputDialog.getItem(
-            self, "Add material", "Material from the database:", names, 0, True
+            self, _("Add material"), _("Material from the database:"), names, 0, True
         )
         if not ok or not preset:
             return
@@ -799,11 +934,11 @@ class MainWindow(QMainWindow):
         from acoustic_spaces.materials import read_library
 
         if path is None:
-            path, _ = QFileDialog.getOpenFileName(
+            path, _filter = QFileDialog.getOpenFileName(
                 self,
-                "Material library",
+                _("Material library"),
                 str(self.document.base_dir),
-                "Material libraries (*.geo *.txt *.li8 *.Li8 *.lib);;All files (*)",
+                _("Material libraries (*.geo *.txt *.li8 *.Li8 *.lib);;All files (*)"),
             )
             if not path:
                 return
@@ -813,7 +948,7 @@ class MainWindow(QMainWindow):
             self._refused(str(exc))
             return
         labels = [m.label for m in materials]
-        label, ok = QInputDialog.getItem(self, "Add material", "Material:", labels, 0, False)
+        label, ok = QInputDialog.getItem(self, _("Add material"), _("Material:"), labels, 0, False)
         if not ok:
             return
         found = materials[labels.index(label)]
@@ -858,7 +993,7 @@ class MainWindow(QMainWindow):
             | QMessageBox.StandardButton.Cancel
         )
         return QMessageBox.question(
-            self, TITLE, "The scene has unsaved changes. Save them?", buttons
+            self, _(TITLE), _("The scene has unsaved changes. Save them?"), buttons
         )
 
     def new_box(self) -> None:
@@ -866,7 +1001,7 @@ class MainWindow(QMainWindow):
             return
         self.from_example = False
         self._attach(Document(box_scene()))
-        self.log("New box room; change its size under Geometry.")
+        self.log(_("New box room; change its size under Geometry."))
 
     def new_floor_plan(self) -> None:
         """A new room whose floor plan the user draws in the plan view."""
@@ -875,27 +1010,31 @@ class MainWindow(QMainWindow):
         self.from_example = False
         self._attach(Document(box_scene()))
         self.draw_room()
-        self.log("New room: click its corners in the plan, and close it on the first one.")
+        self.log(_("New room: click its corners in the plan, and close it on the first one."))
 
     def new_from_model(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Model file", "", MODEL_FILTER)
+        path, _filter = QFileDialog.getOpenFileName(
+            self, _("Model file"), "", _(MODEL_FILTER).format(patterns=MODEL_PATTERNS)
+        )
         if not path or not self._discard_ok():
             return
         try:
             with busy():
                 document = Document(model_scene(path))
         except EditError as exc:
-            self._error(f"Could not load {Path(path).name}", str(exc))
+            self._error(_("Could not load {name}").format(name=Path(path).name), str(exc))
             return
         self.from_example = False
         self._attach(document)
         self.log(
-            f"Loaded {Path(path).name}; set its units and up axis under Geometry if it "
-            "looks wrong, then assign materials to its surfaces."
+            _(
+                "Loaded {name}; set its units and up axis under Geometry if it looks wrong, "
+                "then assign materials to its surfaces."
+            ).format(name=Path(path).name)
         )
 
     def open_dialog(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Open scene", "", SCENE_FILTER)
+        path, _filter = QFileDialog.getOpenFileName(self, _("Open scene"), "", _(SCENE_FILTER))
         if path:
             self.open_file(path)
 
@@ -906,11 +1045,11 @@ class MainWindow(QMainWindow):
             with busy():
                 document = Document.open(path)
         except EditError as exc:
-            self._error(f"Could not open {Path(path).name}", str(exc))
+            self._error(_("Could not open {name}").format(name=Path(path).name), str(exc))
             return False
         self.from_example = example
         self._attach(document)
-        self.log(f"Opened {path}")
+        self.log(_("Opened {path}").format(path=path))
         return True
 
     def open_example(self, path: str | Path) -> bool:
@@ -926,7 +1065,9 @@ class MainWindow(QMainWindow):
         start = self.document.path
         if start is None or self.from_example:
             start = Path.home() / (start.parent.name if start else "scene") / "scene.yaml"
-        path, _ = QFileDialog.getSaveFileName(self, "Save scene", str(start), SCENE_FILTER)
+        path, _filter = QFileDialog.getSaveFileName(
+            self, _("Save scene"), str(start), _(SCENE_FILTER)
+        )
         if path and not Path(path).suffix:
             path += ".yaml"
             # The dialog asked before replacing the name as typed, not this one.
@@ -937,8 +1078,8 @@ class MainWindow(QMainWindow):
     def _confirm_overwrite(self, path: Path) -> bool:
         answer = QMessageBox.question(
             self,
-            TITLE,
-            f"{path.name} already exists. Replace it?",
+            _(TITLE),
+            _("{name} already exists. Replace it?").format(name=path.name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         return answer == QMessageBox.StandardButton.Yes
@@ -949,12 +1090,12 @@ class MainWindow(QMainWindow):
             path.parent.mkdir(parents=True, exist_ok=True)
             self.document.save(path, copy_files=self.from_example)
         except (OSError, ValueError) as exc:
-            self._error("Could not save", str(exc))
+            self._error(_("Could not save"), str(exc))
             return False
         if self.document.scene is not scene:
             self._files_moved(scene, self.document.scene)
         self.from_example = False
-        self.log(f"Saved {path}")
+        self.log(_("Saved {path}").format(path=path))
         return True
 
     def _files_moved(self, old, new) -> None:
@@ -972,10 +1113,12 @@ class MainWindow(QMainWindow):
         if not self.viewport.available:
             self.log(self.viewport.note, "warning")
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Save screenshot", "room.png", "PNG (*.png)")
+        path, _filter = QFileDialog.getSaveFileName(
+            self, _("Save screenshot"), "room.png", _("PNG (*.png)")
+        )
         if path:
             self.viewport.screenshot(path)
-            self.log(f"Saved {path}")
+            self.log(_("Saved {path}").format(path=path))
 
     def export_blender(self, particles: bool = False) -> bool:
         """Write the room as glTF for Blender, with the reflection paths on show, or with
@@ -983,9 +1126,9 @@ class MainWindow(QMainWindow):
         from acoustic_spaces.engine import trace_particles
         from acoustic_spaces.gltf import PARTICLE_COUNT, SLOW_MOTION, export_gltf
 
-        title = "Export particle animation to Blender" if particles else "Export to Blender"
+        title = _("Export particle animation to Blender") if particles else _("Export to Blender")
         start = "particles.glb" if particles else "room.glb"
-        path, _ = QFileDialog.getSaveFileName(self, title, start, GLB_FILTER)
+        path, _filter = QFileDialog.getSaveFileName(self, title, start, _(GLB_FILTER))
         if not path:
             return False
         room = self.document.room
@@ -1000,26 +1143,40 @@ class MainWindow(QMainWindow):
                 paths = None if response is None else response.early
                 export_gltf(room, path, paths=paths, particles=traced)
         except (OSError, ValueError) as exc:
-            self._error("Could not export", str(exc))
+            self._error(_("Could not export"), str(exc))
             return False
         if traced is not None:
             sound = float(traced.times[-1])
-            what = (
-                f"{PARTICLE_COUNT} particles from {traced.source}, {1e3 * sound:g} ms of "
-                f"sound over {SLOW_MOTION * sound:g} s"
+            text = fmt(
+                _(
+                    "Wrote {path}: {count} particles from {source}, {sound:g} ms of sound over "
+                    "{slow:g} s. In Blender: File > Import > glTF 2.0."
+                ),
+                path=path,
+                count=PARTICLE_COUNT,
+                source=traced.source,
+                sound=1e3 * sound,
+                slow=SLOW_MOTION * sound,
             )
         elif response is not None:
-            what = (
-                f"the room with {len(response.early)} reflection paths from "
-                f"{response.source} to {response.listener}"
-            )
+            count = len(response.early)
+            text = ngettext(
+                "Wrote {path}: the room with {count} reflection path from {source} to "
+                "{listener}. In Blender: File > Import > glTF 2.0.",
+                "Wrote {path}: the room with {count} reflection paths from {source} to "
+                "{listener}. In Blender: File > Import > glTF 2.0.",
+                count,
+            ).format(path=path, count=count, source=response.source, listener=response.listener)
         else:
-            what = "the room"
-        self.log(f"Wrote {path}: {what}. In Blender: File > Import > glTF 2.0.")
+            text = _("Wrote {path}: the room. In Blender: File > Import > glTF 2.0.").format(
+                path=path
+            )
+        self.log(text)
         return True
 
     def _error(self, title: str, text: str) -> None:
-        self.log(f"{title}: {text}", "error")
+        # Translators: an error's title, then what went wrong.
+        self.log(_("{title}: {reason}").format(title=title, reason=text), "error")
         QMessageBox.warning(self, title, text)
 
     # -- simulation -----------------------------------------------------------------
@@ -1056,7 +1213,7 @@ class MainWindow(QMainWindow):
             return
         problems = self.document.room.problems()
         if problems:
-            self.log("Cannot run: " + "; ".join(problems), "error")
+            self.log(_("Cannot run: {problems}").format(problems="; ".join(problems)), "error")
             self.docks["messages"].raise_()
             return
         # Count reflections off each material, so that changing absorption afterwards
@@ -1065,7 +1222,7 @@ class MainWindow(QMainWindow):
         groups = self._job_groups[0] if self._job_groups is not None else None
         job = SimulationJob(self.document.room, groups=groups)
         job.done.connect(self._done)
-        self._start(job, f"Simulating {self.document.scene.name}…")
+        self._start(job, _("Simulating {scene}…").format(scene=self.document.scene.name))
 
     def run_map(self) -> None:
         """Compute the coverage map of every source in the background."""
@@ -1074,12 +1231,12 @@ class MainWindow(QMainWindow):
         # Listeners play no part in a map.
         problems = [p for p in self.document.room.problems() if not p.startswith("listener ")]
         if problems:
-            self.log("Cannot map: " + "; ".join(problems), "error")
+            self.log(_("Cannot map: {problems}").format(problems="; ".join(problems)), "error")
             self.docks["messages"].raise_()
             return
         job = MapJob(self.document.room)
         job.done.connect(self._map_done)
-        self._start(job, f"Mapping {self.document.scene.name}…")
+        self._start(job, _("Mapping {scene}…").format(scene=self.document.scene.name))
 
     def run_tune(self) -> None:
         """Time the CPU and the GPU in the background (``acoustic-spaces tune``) on this
@@ -1091,7 +1248,7 @@ class MainWindow(QMainWindow):
             room = Room.from_yaml(example_path(tuning.SCENE))
         job = TuneJob(room)
         job.done.connect(self._tune_done)
-        self._start(job, f"Timing the CPU and the GPU on {room.scene.name}…")
+        self._start(job, _("Timing the CPU and the GPU on {scene}…").format(scene=room.scene.name))
 
     def _start(self, job: SimulationJob, message: str) -> None:
         self.job = job
@@ -1115,17 +1272,20 @@ class MainWindow(QMainWindow):
     def cancel_simulation(self) -> None:
         if self.job is not None:
             self.job.cancel()
-            self.log("Cancelling at the next stage…")
+            self.log(_("Cancelling at the next stage…"))
 
     def _progress(self, message: str) -> None:
-        self.log(f"{time.perf_counter() - self._started:6.1f} s  {message}")
+        # Translators: the time since a run started, then what it does now.
+        self.log(
+            fmt(_("{time:6.1f} s  {step}"), time=time.perf_counter() - self._started, step=message)
+        )
 
     def _closed_meanwhile(self) -> bool:
         """True (and a message) when the scene of the job that just ended is no longer
         open: another was opened or started while the job ran."""
         if self._job_document is self.document:
             return False
-        self.log("Dropped the results of the run: its scene is no longer open.", "warning")
+        self.log(_("Dropped the results of the run: its scene is no longer open."), "warning")
         return True
 
     def _done(self, result) -> None:
@@ -1143,7 +1303,17 @@ class MainWindow(QMainWindow):
         self.docks["results"].raise_()
         elapsed = time.perf_counter() - self._started
         count = len(result.responses)
-        self.log(f"Done in {elapsed:.1f} s: {count} response{'s' if count != 1 else ''}.")
+        self.log(
+            fmt(
+                ngettext(
+                    "Done in {time:.1f} s: {count} response.",
+                    "Done in {time:.1f} s: {count} responses.",
+                    count,
+                ),
+                time=elapsed,
+                count=count,
+            )
+        )
         self._draw()
 
     def _map_done(self, result) -> None:
@@ -1154,14 +1324,31 @@ class MainWindow(QMainWindow):
         self.map_panel.mark_stale(self._map_stale())
         self.docks["map"].raise_()
         elapsed = time.perf_counter() - self._started
-        self.log(f"Map done in {elapsed:.1f} s: {len(result.grid)} points.")
+        count = len(result.grid)
+        self.log(
+            fmt(
+                ngettext(
+                    "Map done in {time:.1f} s: {count:,} point.",
+                    "Map done in {time:.1f} s: {count:,} points.",
+                    count,
+                ),
+                time=elapsed,
+                count=count,
+            )
+        )
         self._draw()
 
     def _tune_done(self, result) -> None:
         elapsed = time.perf_counter() - self._started
-        late = ", ".join(f"{t.length:g} s {t.device}" for t in result.late)
-        wave = f"; wave solver {tuning.wave_pick(result.wave.costs)}" if result.wave else ""
-        self.log(f"Tuned in {elapsed:.1f} s: late stage {late}{wave}.")
+        late = ", ".join(
+            fmt(_("{length:g} s {device}"), length=t.length, device=t.device) for t in result.late
+        )
+        if result.wave:
+            text = _("Tuned in {time:.1f} s: late stage {late}; wave solver {wave}.")
+        else:
+            text = _("Tuned in {time:.1f} s: late stage {late}.")
+        wave = tuning.wave_pick(result.wave.costs) if result.wave else ""
+        self.log(fmt(text, time=elapsed, late=late, wave=wave))
         settings = self.document.scene.simulation
         dialog = TuneDialog(result, settings.late.device, settings.wave.device, self)
         dialog.finished.connect(lambda code: self._tune_answered(dialog, code))
@@ -1171,13 +1358,14 @@ class MainWindow(QMainWindow):
         """Save what the tune window asked for on OK; nothing on Cancel."""
         dialog.deleteLater()
         if code != QDialog.DialogCode.Accepted.value:
-            self.log("Tuning not saved: device auto and the default are as they were.")
+            self.log(_("Tuning not saved: device auto and the default are as they were."))
             return
         dialog.timings.keep()
         tuning.set_default(dialog.default())
         self.log(
-            f"Timings saved in {dialog.timings.file}. This computer's default device: "
-            f"{dialog.default()}."
+            _("Timings saved in {path}. This computer's default device: {device}.").format(
+                path=dialog.timings.file, device=dialog.default()
+            )
         )
         if dialog.follows():
             self.follow_default_device()
@@ -1193,21 +1381,30 @@ class MainWindow(QMainWindow):
             simulation.get("wave", {}).pop("device", None)
 
         try:
-            self.document.edit("run on the default device", change)
+            self.document.edit(_("run on the default device"), change)
         except EditError as exc:
             self._refused(str(exc))
             return
-        self.log("Late reverberation and the wave solver now run on this computer's default.")
+        self.log(_("Late reverberation and the wave solver now run on this computer's default."))
 
     def _job_kind(self) -> str:
         return self.job.kind if self.job is not None else "simulation"
 
     def _failed(self, message: str) -> None:
-        self.log(f"The {self._job_kind()} failed: {message}", "error")
+        text = {
+            "coverage map": _("The coverage map failed: {reason}"),
+            "tuning": _("The tuning failed: {reason}"),
+        }.get(self._job_kind(), _("The simulation failed: {reason}"))
+        self.log(text.format(reason=message), "error")
         self.docks["messages"].raise_()
 
     def _cancelled(self) -> None:
-        self.log(f"{self._job_kind().capitalize()} cancelled.")
+        self.log(
+            {
+                "coverage map": _("Coverage map cancelled."),
+                "tuning": _("Tuning cancelled."),
+            }.get(self._job_kind(), _("Simulation cancelled."))
+        )
 
     def _job_ended(self) -> None:
         job, self.job = self.job, None
@@ -1228,9 +1425,9 @@ class MainWindow(QMainWindow):
 
     def export_results(self) -> None:
         if self.result is None:
-            self.log("Nothing to export yet: run the simulation (F5) first.")
+            self.log(_("Nothing to export yet: run the simulation (F5) first."))
             return
-        folder = QFileDialog.getExistingDirectory(self, "Folder for the impulse responses")
+        folder = QFileDialog.getExistingDirectory(self, _("Folder for the impulse responses"))
         if folder:
             self.write_results(folder)
 
@@ -1241,25 +1438,33 @@ class MainWindow(QMainWindow):
             with busy():
                 report = write_results(self.result, folder, progress=self.log)
         except (OSError, ValueError, ImportError) as exc:
-            self._error("Could not export", str(exc))
+            self._error(_("Could not export"), str(exc))
             return None
         files = sum(len(r["outputs"]) for r in report["responses"])
-        self.log(f"Wrote {files} impulse response files and {REPORT_FILE} to {folder}")
+        self.log(
+            ngettext(
+                "Wrote {count} impulse response file and {report} to {folder}",
+                "Wrote {count} impulse response files and {report} to {folder}",
+                files,
+            ).format(count=files, report=REPORT_FILE, folder=folder)
+        )
         if report["peak"] > 1.0:
             self.log(
-                "Note: the float WAV files exceed full scale (a listener is closer than 1 m "
-                "to a source); scale them before playing them back."
+                _(
+                    "Note: the float WAV files exceed full scale (a listener is closer than 1 m "
+                    "to a source); scale them before playing them back."
+                )
             )
         if self._stale():
-            self.log("These results are from before the latest changes to the scene.", "warning")
+            self.log(_("These results are from before the latest changes to the scene."), "warning")
         return report
 
     def save_map(self) -> None:
         if self.coverage is None:
-            self.log("No map yet: run the coverage map (F6) first.")
+            self.log(_("No map yet: run the coverage map (F6) first."))
             return
         path, chosen = QFileDialog.getSaveFileName(
-            self, "Save the coverage map", str(self.document.base_dir), MAP_FILTERS
+            self, _("Save the coverage map"), str(self.document.base_dir), _(MAP_FILTERS)
         )
         if path:
             if not Path(path).suffix:
@@ -1287,11 +1492,11 @@ class MainWindow(QMainWindow):
                         room=panel.room,
                     )
         except (OSError, ValueError) as exc:
-            self._error("Could not save the map", str(exc))
+            self._error(_("Could not save the map"), str(exc))
             return False
-        self.log(f"Wrote {path}")
+        self.log(_("Wrote {path}").format(path=path))
         if self._map_stale():
-            self.log("This map is from before the latest changes to the scene.", "warning")
+            self.log(_("This map is from before the latest changes to the scene."), "warning")
         return True
 
     def _listening_format(self):
@@ -1317,8 +1522,8 @@ class MainWindow(QMainWindow):
     def listen(self) -> None:
         if self.results.pair() is None:
             return
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Dry recording to play in the room", "", "WAV files (*.wav)"
+        path, _filter = QFileDialog.getOpenFileName(
+            self, _("Dry recording to play in the room"), "", _("WAV files (*.wav)")
         )
         if path:
             self.play_file(path)
@@ -1340,14 +1545,14 @@ class MainWindow(QMainWindow):
         try:
             sd = _sounddevice()
             signal, rate = read_wav(path)
-            fmt = self._listening_format()
+            listening = self._listening_format()
             sample_rate = int(self.result.settings.sample_rate)
             with busy():
                 rest = signal[int(round(start * rate)) :]
-                mix = auralize(self.result, {pair[0]: (rest, rate)}, pair[1], fmt)
+                mix = auralize(self.result, {pair[0]: (rest, rate)}, pair[1], listening)
                 omni = self.result[pair].impulse_response(sample_rate)
         except (ImportError, OSError, ValueError) as exc:
-            self._error("Cannot play", str(exc))
+            self._error(_("Cannot play"), str(exc))
             return False
         gain = self._level(float((omni**2).sum()), gain)
         peak = float(np.abs(mix).max(initial=0.0)) * gain
@@ -1357,13 +1562,19 @@ class MainWindow(QMainWindow):
         try:
             sd.play(mix.astype(np.float32), sample_rate)
         except Exception as exc:  # PortAudio errors are not one type
-            self._error("Cannot play", str(exc))
+            self._error(_("Cannot play"), str(exc))
             return False
-        text = f"Playing {Path(path).name} from {pair[0]} at {pair[1]}"
+        names = {"name": Path(path).name, "source": pair[0], "listener": pair[1]}
+        text = _("Playing {name} from {source} at {listener}").format(**names)
         self._played = self._playback(path, pair, False, start, len(signal) / rate, gain, text)
         self.results.set_playing(True)
         self._play_timer.start(int(1000 * len(mix) / sample_rate) + 250)
-        self.log(f"{text} ({fmt.label})")
+        # Translators: {way} says how it is heard, such as "binaural (spherical head)".
+        self.log(
+            _("Playing {name} from {source} at {listener} ({way})").format(
+                **names, way=listening.label
+            )
+        )
         self._show_playing()
         return True
 
@@ -1391,7 +1602,7 @@ class MainWindow(QMainWindow):
             self.stop_playing()
         sample_rate = int(self.result.settings.sample_rate)
         order = self._tracking_order()
-        fmt = self._listening_format()
+        listening = self._listening_format()
         try:
             _sounddevice()
             signal, rate = read_wav(path)
@@ -1403,12 +1614,12 @@ class MainWindow(QMainWindow):
                 renderer = HeadTrackedBinaural(
                     ir,
                     sample_rate,
-                    hrtf=fmt.at(sample_rate),
+                    hrtf=listening.at(sample_rate),
                     orientation=self.results.head.head,
                     block=512,
                 )
         except (ImportError, OSError, ValueError) as exc:
-            self._error("Cannot play", str(exc))
+            self._error(_("Cannot play"), str(exc))
             return False
         gain = self._level(float((ir[:, 0] ** 2).sum()), gain)  # W: omnidirectional
         stop, outcome = threading.Event(), {}
@@ -1425,10 +1636,16 @@ class MainWindow(QMainWindow):
         self._player = (thread, stop, outcome)
         thread.start()
         self._player_timer.start()
-        text = f"Playing {Path(path).name} from {pair[0]} at {pair[1]}, head-tracked"
+        names = {"name": Path(path).name, "source": pair[0], "listener": pair[1]}
+        text = _("Playing {name} from {source} at {listener}, head-tracked").format(**names)
         self._played = self._playback(path, pair, True, start, len(signal) / rate, gain, text)
         self.results.set_playing(True)
-        self.log(f"{text} (order {order} Ambisonics to binaural)")
+        self.log(
+            _(
+                "Playing {name} from {source} at {listener}, head-tracked (order {order} "
+                "Ambisonics to binaural)"
+            ).format(**names, order=order)
+        )
         self._show_playing()
         return True
 
@@ -1462,14 +1679,22 @@ class MainWindow(QMainWindow):
     def _player_poll(self) -> None:
         if self._player is None or self._player[0].is_alive():
             return
-        _, _, outcome = self._player
+        _thread, _stop, outcome = self._player
         self._player = None
         self._player_timer.stop()
         self.results.set_playing(False)
         if "error" in outcome:
-            self._error("Cannot play", str(outcome["error"]))
+            self._error(_("Cannot play"), str(outcome["error"]))
         elif outcome["report"].xruns:
-            self.log(f"{outcome['report'].xruns} block(s) dropped out while playing.", "warning")
+            count = outcome["report"].xruns
+            self.log(
+                ngettext(
+                    "{count} block dropped out while playing.",
+                    "{count} blocks dropped out while playing.",
+                    count,
+                ).format(count=count),
+                "warning",
+            )
 
     def _playing(self, playing: bool) -> None:
         self.stop_action.setEnabled(playing)
@@ -1486,14 +1711,19 @@ class MainWindow(QMainWindow):
             return
         changed = played["scene"] is not self.document.scene
         self.now_playing.setText(
-            played["text"] + (" (before the latest changes)" if changed else "")
+            # Translators: {playing} is what plays, as "Playing {name} from..." says.
+            _("{playing} (before the latest changes)").format(playing=played["text"])
+            if changed
+            else played["text"]
         )
         if changed and not played["told"]:
             played["told"] = True
             self.log(
-                "The sound playing is from before the latest changes to the scene and does "
-                "not follow them: to hear them, Listen again (after running again, F5, if "
-                "the results are out of date)."
+                _(
+                    "The sound playing is from before the latest changes to the scene and does "
+                    "not follow them: to hear them, Listen again (after running again, F5, if "
+                    "the results are out of date)."
+                )
             )
 
     def stop_playing(self) -> None:
@@ -1516,13 +1746,17 @@ class MainWindow(QMainWindow):
     def about(self) -> None:
         QMessageBox.about(
             self,
-            TITLE,
-            f"<p><b>Acoustic Spaces</b> {__version__}</p>"
-            "<p>Room acoustics simulation: early reflections by ray tracing or image "
-            "sources, the late tail by stochastic ray tracing, and binaural, Ambisonics "
-            "and loudspeaker impulse responses.</p>"
-            "<p>GPL-3.0-or-later. "
-            '<a href="https://github.com/naelolaiz/acoustic-spaces">Source</a></p>',
+            _(TITLE),
+            f"<p><b>Acoustic Spaces</b> {__version__}</p><p>"
+            + _(
+                "Room acoustics simulation: early reflections by ray tracing or image "
+                "sources, the late tail by stochastic ray tracing, and binaural, Ambisonics "
+                "and loudspeaker impulse responses."
+            )
+            + "</p><p>GPL-3.0-or-later. "
+            + '<a href="https://github.com/naelolaiz/acoustic-spaces">'
+            + _("Source")
+            + "</a></p>",
         )
 
     def showEvent(self, event: QShowEvent) -> None:
@@ -1551,6 +1785,20 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
+def install_qt_translation(app: QApplication) -> QTranslator | None:
+    """Qt's own words (file dialogs, standard buttons, the menu of a text field) in the
+    language in use, from the translations Qt ships, when it has them."""
+    code = i18n.language()
+    if code not in i18n.LANGUAGES or code == "en":
+        return None
+    translator = QTranslator(app)
+    folder = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    if not translator.load(f"qtbase_{code}", folder):
+        return None
+    app.installTranslator(translator)
+    return translator
+
+
 def run(argv: list[str] | None = None) -> int:
     """Open the editor (with the scene file in ``argv``, if any) and run until it closes.
     ``--no-device-trial`` in ``argv`` switches off the late stage's device trial (see
@@ -1561,6 +1809,7 @@ def run(argv: list[str] | None = None) -> int:
         ray_device.set_trial(False)
     app = QApplication.instance() or QApplication([sys.argv[0] if sys.argv else TITLE])
     app.setApplicationName(TITLE)
+    install_qt_translation(app)
     window = MainWindow()
     if argv:
         window.open_file(argv[0])
@@ -1568,4 +1817,4 @@ def run(argv: list[str] | None = None) -> int:
     return app.exec()
 
 
-__all__ = ["MainWindow", "run"]
+__all__ = ["MainWindow", "install_qt_translation", "run"]

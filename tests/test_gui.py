@@ -2,6 +2,7 @@
 with a display (or Xvfb) the 3D view tests run too."""
 
 import os
+import re
 import socket
 import struct
 import sys
@@ -834,7 +835,7 @@ def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
     box = page.directivity
     assert box.currentText().startswith("per band: omni, omni, omni, subcardioid")
     assert page.directivity_index.text().startswith("Directivity index: 0.0, 0.0, 0.0, 2.8")
-    box.activated.emit(DIRECTIVITIES.index("cardioid"))
+    box.activated.emit([value for value, _label in DIRECTIVITIES].index("cardioid"))
     assert window.document.scene.sources[0].directivity == "cardioid"
     assert box.currentText() == "cardioid"
     assert "4.8, 4.8" in page.directivity_index.text()
@@ -1001,7 +1002,7 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, m
         _wait(qapp, lambda: head.receiver.received == 1, timeout=10)
     head.refresh()
     assert (head.yaw.value(), head.pitch.value()) == (30, 10)
-    assert "facing yaw 30°, pitch 10°, roll 0°; 1 tracker messages" in head.facing.text()
+    assert "facing yaw 30°, pitch 10°, roll 0°; 1 tracker message" in head.facing.text()
     head.centre.click()
     assert head.yaw.value() == 0
     head.yaw.setValue(-45)
@@ -1782,3 +1783,206 @@ def _display(viewport, point: QPoint) -> tuple[int, int]:
     widget = viewport.plotter.interactor
     ratio = widget.devicePixelRatioF()
     return round(point.x() * ratio), round((widget.height() - point.y() - 1) * ratio)
+
+
+def test_choosing_the_language(window, english, monkeypatch) -> None:
+    """View > Language keeps the choice for the next start; the editor stays as it is."""
+    from acoustic_spaces import i18n
+
+    menus = {menu.title(): menu for menu in window.menuBar().findChildren(QMenu)}
+    assert window.language_menu.menuAction() in menus["&View"].actions()
+    actions = window.language_actions
+    assert set(actions) == {None, *i18n.LANGUAGES}
+    assert actions[None].isChecked() and actions[None].text().startswith("System (")
+    assert actions["es"].text() == "Español"  # each language in its own words
+    assert all(action.statusTip() and action.toolTip() for action in actions.values())
+
+    actions["es"].trigger()
+    assert i18n.saved_language() == "es" and actions["es"].isChecked()
+    assert i18n.language() == "en"  # from the next start
+    # The variable the tests set wins over the choice, and the editor says so.
+    assert "ACOUSTIC_SPACES_LANG is set to en" in window.messages.toPlainText()
+
+    monkeypatch.delenv(i18n.ENV)
+    actions[None].trigger()
+    assert i18n.saved_language() is None and actions[None].isChecked()
+    name = i18n.LANGUAGES[i18n.system_language()]
+    assert window.messages.toPlainText().endswith(
+        f"Language from the next start of the editor and the command line: {name}"
+    )
+
+
+def test_qt_speaks_the_language_in_use(qapp) -> None:
+    """Qt's own dialogs and buttons follow the language, from the translations Qt ships."""
+    from PySide6.QtCore import QLibraryInfo
+
+    from acoustic_spaces import i18n
+    from acoustic_spaces.gui.app import install_qt_translation
+
+    assert install_qt_translation(qapp) is None  # English: nothing to load
+    i18n.set_language("es")
+    translator = install_qt_translation(qapp)
+    folder = Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath))
+    if (folder / "qtbase_es.qm").exists():
+        assert translator is not None
+        assert qapp.removeTranslator(translator)
+    else:
+        assert translator is None
+
+
+def _editor_in(qapp, monkeypatch, language: str):
+    """A new editor window showing its text in ``language`` (en, es or pseudo)."""
+    from acoustic_spaces import i18n
+    from acoustic_spaces.gui.app import MainWindow
+
+    monkeypatch.setenv(i18n.ENV, language)
+    i18n.set_language(None)
+    win = MainWindow()
+    monkeypatch.setattr(win, "ask_save", lambda: QMessageBox.StandardButton.Discard)
+    return win
+
+
+def _close(qapp, win) -> None:
+    win.close()
+    win.deleteLater()
+    qapp.processEvents()
+
+
+def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) -> None:
+    """In the pseudo language every text marked for translation shows as ⟦text⟧: menus,
+    toolbar, panel titles, tabs, buttons, form labels, group titles, list entries and tips
+    without brackets are text not yet marked."""
+
+    from PySide6.QtWidgets import (
+        QAbstractButton,
+        QComboBox,
+        QGroupBox,
+        QTableWidget,
+        QTabWidget,
+        QWidget,
+    )
+
+    win = _editor_in(qapp, monkeypatch, "pseudo")
+    try:
+        win.open_example(example_path("studio"))
+        scene = win.document.scene
+        for kind, key in (
+            ("scene", None),
+            ("geometry", None),
+            ("surface", 0),
+            ("material", next(iter(scene.materials))),
+            ("sources", 0),
+            ("listeners", 0),
+            ("simulation", None),
+            ("outputs", None),
+            ("coverage", None),
+        ):
+            win.select(kind, key)
+        texts = []  # (what, text)
+        for menu in win.menuBar().findChildren(QMenu):
+            if menu is win.examples_menu:  # the examples' own titles and descriptions
+                continue
+            texts.append(("menu", menu.title()))
+            for action in menu.actions():
+                if not action.isSeparator() and menu is not win.language_menu:
+                    texts.append(("menu entry", action.text()))
+                texts += [("tip", action.toolTip()), ("status tip", action.statusTip())]
+        for dock in win.docks.values():
+            texts.append(("panel", dock.windowTitle()))
+        roots = [win, *win.inspector.pages.values()]
+        presets = win.inspector.pages["material"].preset  # the database's ids, as written
+        for root in roots:
+            for widget in root.findChildren(QWidget):
+                if widget.objectName().startswith("qt_"):  # Qt's own, which Qt translates
+                    continue
+                texts.append((f"tip of {type(widget).__name__}", widget.toolTip()))
+                if isinstance(widget, QLabel) and widget.buddy() is not None:
+                    texts.append(("form label", widget.text()))
+                elif isinstance(widget, QAbstractButton) and widget.parent() is not None:
+                    if not isinstance(widget.parentWidget(), QToolBar):
+                        texts.append(("button", widget.text()))
+                elif isinstance(widget, QGroupBox):
+                    texts.append(("group", widget.title()))
+                elif isinstance(widget, QTabWidget):
+                    texts += [("tab", widget.tabText(k)) for k in range(widget.count())]
+                elif isinstance(widget, QComboBox) and widget is not presets:
+                    for k in range(widget.count()):
+                        # Names from the scene (materials, sources) show as they are.
+                        if widget.itemText(k) != widget.itemData(k):
+                            texts.append(("list entry", widget.itemText(k)))
+                elif isinstance(widget, QTableWidget):
+                    items = [widget.horizontalHeaderItem(c) for c in range(widget.columnCount())]
+                    items += [widget.verticalHeaderItem(r) for r in range(widget.rowCount())]
+                    texts += [("header tip", item.toolTip()) for item in items if item]
+        # Words need marking; numbers, units, symbols and single letters (x, y, z) do not.
+        unmarked = {
+            (what, text)
+            for what, text in texts
+            if re.search(r"[A-Za-z]{3,}", text.replace("kHz", "")) and "⟦" not in text
+        }
+        assert not unmarked
+    finally:
+        _close(qapp, win)
+
+
+def test_the_editor_in_spanish(qapp, english, monkeypatch) -> None:
+    """The editor shows its menus, panels and messages in Spanish."""
+    win = _editor_in(qapp, monkeypatch, "es")
+    try:
+        titles = [action.text() for action in win.menuBar().actions()]
+        assert titles == ["&Archivo", "&Editar", "&Ver", "&Simulación", "A&yuda"]
+        assert win.run_action.text() == "&Calcular"
+        assert win.docks["inspector"].windowTitle() == "Propiedades"
+        win.new_box()
+        assert "Recinto rectangular nuevo" in win.messages.toPlainText()
+        assert win.undo_action.text() == "&Deshacer"
+        win.document.add_point("sources", (2.0, 2.0, 1.5))
+        assert win.undo_action.text() == "&Deshacer añadir fuente"
+        # Choices show in words; the scene keeps its values.
+        page = win.inspector.pages["simulation"]
+        assert [page.late_method.itemText(k) for k in range(2)] == [
+            "trazado de rayos estocástico",
+            "estadístico",
+        ]
+        assert page.late_method.itemData(0) == "stochastic_ray_tracing"
+        assert win.examples_menu.actions()[0].text().startswith("Piso con una puerta")
+        # One shortcut letter per entry in each menu.
+        for menu in win.menuBar().findChildren(QMenu):
+            letters = [
+                re.search(r"&(\w)", action.text()).group(1).lower()
+                for action in menu.actions()
+                if "&" in action.text()
+            ]
+            assert len(letters) == len(set(letters)), menu.title()
+    finally:
+        _close(qapp, win)
+
+
+def test_numbers_follow_the_regional_settings(qapp) -> None:
+    """The editor writes and reads numbers as the computer's regional settings do."""
+    from PySide6.QtCore import QLocale
+
+    from acoustic_spaces.gui.numbers import (
+        fmt,
+        numbers_text,
+        parse_number,
+        parse_numbers,
+        point_text,
+    )
+
+    before = QLocale()
+    try:
+        QLocale.setDefault(QLocale("es_ES"))
+        assert fmt("{t:.2f} s, {n:,} rays, {name}", t=1.5, n=12000, name="hall_1.2") == (
+            "1,50 s, 12.000 rays, hall_1.2"
+        )
+        assert point_text((1.0, 2.5, 3.25)) == "1,00; 2,50; 3,25"
+        assert numbers_text([1.5, -2]) == "1,5; -2"
+        assert parse_number("0,85") == parse_number("0.85") == 0.85
+        assert parse_numbers("1,5; -2 3") == [1.5, -2.0, 3.0]
+        QLocale.setDefault(QLocale("en_US"))
+        assert fmt("{t:.2f} s, {n:,} rays", t=1.5, n=12000) == "1.50 s, 12,000 rays"
+        assert point_text((1.0, 2.5)) == "1.00, 2.50"
+        assert parse_numbers("1.5, -2 3") == [1.5, -2.0, 3.0]
+    finally:
+        QLocale.setDefault(before)
