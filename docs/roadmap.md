@@ -77,5 +77,5 @@ Version 3.2.2:
 
 - [x] Fix: the editor no longer aborts on looking for a GPU (wgpu's OpenGL backend).
 
-- [x] Translation supported. Spanish ready on catalogs and editor.
+- [x] Translation supported. Spanish and Catalan ready on catalogs and editor.
 

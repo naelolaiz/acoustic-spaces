@@ -4,7 +4,7 @@ The editor, the command line and the messages of the library show their text in 
 language [chosen as Getting started describes](getting-started.md#language). English is
 the text in the code; each other language has a catalog, `src/acoustic_spaces/locale/<code>.po`
 (gettext's format, which translation tools such as Poedit and Weblate read). Spanish
-(`es.po`) is the first.
+(`es.po`) and Catalan (`ca.po`) cover the editor, its plots and the examples' descriptions.
 
 What stays in English in every language: scene files (their keys and values), command
 and option names, the choices options take (`--early ray_tracing`), the files the
@@ -155,3 +155,49 @@ Glossary:
 | results, messages | resultados, mensajes | the editor's panels |
 | command line | línea de comandos | |
 | warning, error (message levels) | aviso, error | |
+
+## Catalan
+
+The Catalan catalog covers the same text as Spanish. Select **Català** under
+**View > Language**, or set `ACOUSTIC_SPACES_LANG=ca`. System locale names such as
+`ca_ES.UTF-8`, `ca-AD` and `ca_ES@valencia` also select it.
+
+Style:
+
+- Actions in the infinitive: *Obrir*, *Desar*, *Calcular*, *Cancel·lar*.
+- Tooltips and messages use impersonal forms, sentence case and no final full stop
+  on labels or tooltips, as in English.
+- Use *fitxer*, *ordinador* and *per defecte*. Keep the product name Acoustic Spaces,
+  file patterns, format names, units and parameter symbols (T20, C80, STI) as written.
+- Use « » for quotation marks. Numbers follow the computer's regional settings;
+  the command line keeps the decimal point.
+- Each menu entry has one `&` shortcut, distinct from the others in that menu.
+- Catalan uses two plural forms: singular for 1, plural for all other counts.
+
+Glossary:
+
+| English | Catalan |
+|---|---|
+| room, box room | recinte, recinte rectangular |
+| scene, model file | escena, fitxer de model |
+| floor plan, corner | planta, vèrtex |
+| wall, floor, ceiling | paret, terra, sostre |
+| source, listener | font, receptor |
+| sound power, sound pressure level | potència acústica, nivell de pressió sonora |
+| directivity, loudspeaker | directivitat, altaveu |
+| absorption, scattering, diffusion | absorció, dispersió, difusió |
+| sound reduction index | índex de reducció sonora |
+| early reflections, late reverberation | primeres reflexions, reverberació tardana |
+| ray tracing, image sources | traçat de raigs, fonts imatge |
+| wave solver, edge diffraction | mètode ondulatori, difracció en arestes |
+| impulse response, reverberation time | resposta impulsional, temps de reverberació |
+| early decay time, decay curve | temps de decaïment inicial, corba de decaïment |
+| clarity, definition, sound strength | claredat, definició, força sonora |
+| speech transmission index | índex de transmissió de la parla |
+| octave band, third-octave band | banda d'octava, banda de terç d'octava |
+| sample rate, background noise | freqüència de mostreig, soroll de fons |
+| coverage map, leak | mapa de cobertura, fuita |
+| auralization, dry recording | auralització, enregistrament anecoic |
+| playback, head tracking | reproducció, seguiment del cap |
+| gain, delay, equalizer | guany, retard, equalitzador |
+| results, messages, warning | resultats, missatges, avís |
