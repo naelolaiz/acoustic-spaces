@@ -270,9 +270,7 @@ def test_a_variable_named_underscore_hides_the_translation(catalog_tool, tmp_pat
             return _("Open {names}").format(names=names)
         """,
     )
-    assert [e.msgid for e in catalog_tool.extract(tmp_path / "acoustic_spaces")] == [
-        "Open {names}"
-    ]
+    assert [e.msgid for e in catalog_tool.extract(tmp_path / "acoustic_spaces")] == ["Open {names}"]
 
 
 def test_problems_of_a_translation(catalog_tool) -> None:

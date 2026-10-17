@@ -1951,7 +1951,7 @@ def test_numbers_follow_the_regional_settings(qapp) -> None:
 
     before = QLocale()
     try:
-        QLocale.setDefault(QLocale(QLocale.Language.Spanish, QLocale.Territory.Spain))
+        QLocale.setDefault(QLocale("es_ES"))
         assert fmt("{t:.2f} s, {n:,} rays, {name}", t=1.5, n=12000, name="hall_1.2") == (
             "1,50 s, 12.000 rays, hall_1.2"
         )
@@ -1959,7 +1959,7 @@ def test_numbers_follow_the_regional_settings(qapp) -> None:
         assert numbers_text([1.5, -2]) == "1,5; -2"
         assert parse_number("0,85") == parse_number("0.85") == 0.85
         assert parse_numbers("1,5; -2 3") == [1.5, -2.0, 3.0]
-        QLocale.setDefault(QLocale(QLocale.Language.English, QLocale.Territory.UnitedStates))
+        QLocale.setDefault(QLocale("en_US"))
         assert fmt("{t:.2f} s, {n:,} rays", t=1.5, n=12000) == "1.50 s, 12,000 rays"
         assert point_text((1.0, 2.5)) == "1.00, 2.50"
         assert parse_numbers("1.5, -2 3") == [1.5, -2.0, 3.0]
