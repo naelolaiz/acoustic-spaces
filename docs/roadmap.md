@@ -87,3 +87,5 @@ Version 3.2.3:
 
 - [x] Added German translation.
 
+- [x] Added Dutch translation.
+

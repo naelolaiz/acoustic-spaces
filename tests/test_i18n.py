@@ -93,7 +93,7 @@ def test_unreadable_lines_are_reported() -> None:
 
 @pytest.mark.parametrize(
     ("code", "language_menu"),
-    [("es", "&Idioma"), ("ca", "&Idioma"), ("it", "&Lingua"), ("de", "&Sprache")],
+    [("es", "&Idioma"), ("ca", "&Idioma"), ("it", "&Lingua"), ("de", "&Sprache"), ("nl", "&Taal")],
 )
 def test_catalog_translates_the_text_of_the_code(code, language_menu) -> None:
     i18n.set_language(code)
@@ -137,6 +137,8 @@ def test_pseudo_language_brackets_every_text() -> None:
         ({"LANG": "de_DE.UTF-8"}, "de"),
         ({"LANG": "de-AT"}, "de"),
         ({"LANG": "de_CH.UTF-8"}, "de"),
+        ({"LANG": "nl_NL.UTF-8"}, "nl"),
+        ({"LANG": "nl-BE"}, "nl"),
         ({"LANG": "en_GB.UTF-8"}, "en"),
         ({"LANG": "C.UTF-8"}, "en"),
         ({"LANG": "fr_FR.UTF-8"}, "en"),  # no French catalog
@@ -144,6 +146,7 @@ def test_pseudo_language_brackets_every_text() -> None:
         ({"LANGUAGE": "fr:ca:es", "LANG": "es_ES"}, "ca"),
         ({"LANGUAGE": "fr:it:es", "LANG": "es_ES"}, "it"),
         ({"LANGUAGE": "fr:de:es", "LANG": "es_ES"}, "de"),
+        ({"LANGUAGE": "fr:nl:es", "LANG": "es_ES"}, "nl"),
         ({"LANGUAGE": "en:es", "LANG": "es_ES"}, "en"),
         ({"LC_ALL": "es_MX", "LANG": "en_US"}, "es"),
         ({"LC_MESSAGES": "es_CL.UTF-8"}, "es"),
@@ -153,6 +156,8 @@ def test_pseudo_language_brackets_every_text() -> None:
         ({"LC_MESSAGES": "it_CH.UTF-8"}, "it"),
         ({"LC_ALL": "de_AT.UTF-8", "LANG": "en_US"}, "de"),
         ({"LC_MESSAGES": "de_CH.UTF-8"}, "de"),
+        ({"LC_ALL": "nl_NL.UTF-8", "LANG": "en_US"}, "nl"),
+        ({"LC_MESSAGES": "nl_BE.UTF-8"}, "nl"),
     ],
 )
 def test_the_system_language(monkeypatch, variables, expected) -> None:
@@ -175,6 +180,8 @@ def test_the_system_language(monkeypatch, variables, expected) -> None:
         (0x040A, "es"),
         (0x0410, "it"),
         (0x0810, "it"),
+        (0x0413, "nl"),
+        (0x0813, "nl"),
         (0x040C, "en"),
     ],
 )
@@ -200,6 +207,8 @@ def test_what_chooses_the_language(monkeypatch, english) -> None:
     assert i18n.chosen_language() == ("pseudo", i18n.ENV)
     monkeypatch.setenv(i18n.ENV, "de")
     assert i18n.chosen_language() == ("de", i18n.ENV)
+    monkeypatch.setenv(i18n.ENV, "nl")
+    assert i18n.chosen_language() == ("nl", i18n.ENV)
     monkeypatch.setenv(i18n.ENV, "fr")
     assert i18n.chosen_language() == ("en", i18n.ENV)  # no French catalog
 
@@ -235,6 +244,8 @@ def test_what_chooses_the_language(monkeypatch, english) -> None:
         ("it_IT.UTF-8", "lingua: Italiano (ACOUSTIC_SPACES_LANG)"),
         ("de", "Sprache: Deutsch (ACOUSTIC_SPACES_LANG)"),
         ("de_DE.UTF-8", "Sprache: Deutsch (ACOUSTIC_SPACES_LANG)"),
+        ("nl", "taal: Nederlands (ACOUSTIC_SPACES_LANG)"),
+        ("nl_NL.UTF-8", "taal: Nederlands (ACOUSTIC_SPACES_LANG)"),
     ],
 )
 def test_info_names_the_language(capsys, english, monkeypatch, code, message) -> None:

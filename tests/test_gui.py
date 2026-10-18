@@ -1785,7 +1785,7 @@ def _display(viewport, point: QPoint) -> tuple[int, int]:
     return round(point.x() * ratio), round((widget.height() - point.y() - 1) * ratio)
 
 
-@pytest.mark.parametrize("language", ["es", "ca", "it", "de"])
+@pytest.mark.parametrize("language", ["es", "ca", "it", "de", "nl"])
 def test_choosing_the_language(window, english, monkeypatch, language) -> None:
     """View > Language keeps the choice for the next start; the editor stays as it is."""
     from acoustic_spaces import i18n
@@ -1799,6 +1799,7 @@ def test_choosing_the_language(window, english, monkeypatch, language) -> None:
     assert actions["ca"].text() == "Català"
     assert actions["it"].text() == "Italiano"
     assert actions["de"].text() == "Deutsch"
+    assert actions["nl"].text() == "Nederlands"
     assert all(action.statusTip() and action.toolTip() for action in actions.values())
 
     actions[language].trigger()
@@ -1817,7 +1818,7 @@ def test_choosing_the_language(window, english, monkeypatch, language) -> None:
     )
 
 
-@pytest.mark.parametrize("language", ["es", "ca", "it", "de"])
+@pytest.mark.parametrize("language", ["es", "ca", "it", "de", "nl"])
 def test_qt_speaks_the_language_in_use(qapp, language) -> None:
     """Qt's own dialogs and buttons follow the language, from the translations Qt ships."""
     from PySide6.QtCore import QLibraryInfo
@@ -1837,7 +1838,7 @@ def test_qt_speaks_the_language_in_use(qapp, language) -> None:
 
 
 def _editor_in(qapp, monkeypatch, language: str):
-    """A new editor window showing its text in ``language`` (en, es, ca, it, de or pseudo)."""
+    """A new editor window showing its text in ``language`` (en, es, ca, it, de, nl or pseudo)."""
     from acoustic_spaces import i18n
     from acoustic_spaces.gui.app import MainWindow
 
@@ -1984,6 +1985,19 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "Quelle hinzufügen",
                 "late_methods": ["stochastische Strahlenverfolgung", "statistisch"],
                 "example": "Wohnung mit einer Tür",
+            },
+        ),
+        (
+            "nl",
+            {
+                "menus": ["&Bestand", "Be&werken", "B&eeld", "&Simulatie", "&Help"],
+                "run": "&Berekenen",
+                "properties": "Eigenschappen",
+                "new_room": "Nieuwe rechthoekige ruimte",
+                "undo": "&Ongedaan maken",
+                "add_source": "bron toevoegen",
+                "late_methods": ["stochastische straaltracering", "statistisch"],
+                "example": "Appartement met een deur",
             },
         ),
     ],

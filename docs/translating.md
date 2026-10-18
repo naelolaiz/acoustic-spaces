@@ -4,8 +4,8 @@ The editor, the command line and the messages of the library show their text in 
 language [chosen as Getting started describes](getting-started.md#language). English is
 the text in the code; each other language has a catalog, `src/acoustic_spaces/locale/<code>.po`
 (gettext's format, which translation tools such as Poedit and Weblate read). Spanish
-(`es.po`), Catalan (`ca.po`), Italian (`it.po`) and German (`de.po`) cover the editor,
-its plots and the examples' descriptions.
+(`es.po`), Catalan (`ca.po`), Italian (`it.po`), German (`de.po`) and Dutch (`nl.po`)
+cover the editor, its plots and the examples' descriptions.
 
 What stays in English in every language: scene files (their keys and values), command
 and option names, the choices options take (`--early ray_tracing`), the files the
@@ -302,3 +302,54 @@ Glossary:
 | gain, delay, equalizer | Verstärkung, Verzögerung, Equalizer |
 | yaw, pitch, roll | Gierwinkel, Nickwinkel, Rollwinkel |
 | results, messages, warning | Ergebnisse, Meldungen, Warnung |
+
+## Dutch
+
+The Dutch catalog covers the same text as Spanish, Catalan, Italian and German. Select
+**Nederlands** under **View > Language**, or set `ACOUSTIC_SPACES_LANG=nl`. System locale
+names such as `nl_NL.UTF-8` and `nl-BE` also select it, as does the Dutch display language
+on Windows or macOS.
+
+Style:
+
+- Use neutral Dutch for readers in the Netherlands and Belgium.
+- Actions use infinitives: *Openen*, *Opslaan*, *Berekenen*, *Annuleren*.
+- Tooltips use infinitives or impersonal descriptions, sentence case and no final full
+  stop on labels or tooltips, as in English.
+- Use *bestand*, *computer* and *standaard*. Keep the product name Acoustic Spaces,
+  file patterns, scene-file values, format names, units and parameter symbols as written.
+- Use ‘ ’ for quotation marks. Numbers follow the computer's regional settings;
+  the command line keeps the decimal point.
+- Each menu entry has one `&` shortcut, distinct from the others in that menu.
+- Dutch uses two plural forms: singular for 1, plural for all other counts.
+
+Glossary:
+
+| English | Dutch |
+|---|---|
+| room, box room | ruimte, rechthoekige ruimte |
+| scene, model file | scène, modelbestand |
+| floor plan, corner | plattegrond, hoek |
+| wall, floor, ceiling | wand, vloer, plafond |
+| source, listener | bron, ontvanger |
+| sound power, sound pressure level | geluidsvermogen, geluidsdrukniveau |
+| directivity, directivity index | richtingskarakteristiek, richtingsindex |
+| loudspeaker, loudspeaker layout | luidspreker, luidsprekeropstelling |
+| absorption, scattering, diffusion | absorptie, verstrooiing, diffusie |
+| sound reduction index | geluidreductie-index |
+| early reflections, late reverberation | vroege reflecties, late nagalm |
+| ray tracing, image sources | straaltracering, spiegelbronnen |
+| wave solver, edge diffraction | golfsolver, randdiffractie |
+| impulse response, reverberation time | impulsrespons, nagalmtijd |
+| early decay time, decay curve | vroege uitsterftijd, uitsterfcurve |
+| clarity, definition, sound strength | helderheid, definitie, geluidsterkte |
+| centre time | zwaartepunttijd |
+| speech transmission index | spraaktransmissie-index |
+| octave band, third-octave band | octaafband, tertsband |
+| sample rate, background noise | samplefrequentie, achtergrondgeluid |
+| coverage map, leak | dekkingskaart, lek |
+| auralization, dry recording | auralisatie, anechoïsche opname |
+| playback, head tracking | afspelen, hoofdtracking |
+| gain, delay, equalizer | versterking, vertraging, equalizer |
+| yaw, pitch, roll | gierhoek, stamphoek, rolhoek |
+| results, messages, warning | resultaten, meldingen, waarschuwing |
