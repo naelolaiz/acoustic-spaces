@@ -1785,7 +1785,7 @@ def _display(viewport, point: QPoint) -> tuple[int, int]:
     return round(point.x() * ratio), round((widget.height() - point.y() - 1) * ratio)
 
 
-@pytest.mark.parametrize("language", ["es", "ca"])
+@pytest.mark.parametrize("language", ["es", "ca", "it"])
 def test_choosing_the_language(window, english, monkeypatch, language) -> None:
     """View > Language keeps the choice for the next start; the editor stays as it is."""
     from acoustic_spaces import i18n
@@ -1797,6 +1797,7 @@ def test_choosing_the_language(window, english, monkeypatch, language) -> None:
     assert actions[None].isChecked() and actions[None].text().startswith("System (")
     assert actions["es"].text() == "Español"  # each language in its own words
     assert actions["ca"].text() == "Català"
+    assert actions["it"].text() == "Italiano"
     assert all(action.statusTip() and action.toolTip() for action in actions.values())
 
     actions[language].trigger()
@@ -1815,7 +1816,7 @@ def test_choosing_the_language(window, english, monkeypatch, language) -> None:
     )
 
 
-@pytest.mark.parametrize("language", ["es", "ca"])
+@pytest.mark.parametrize("language", ["es", "ca", "it"])
 def test_qt_speaks_the_language_in_use(qapp, language) -> None:
     """Qt's own dialogs and buttons follow the language, from the translations Qt ships."""
     from PySide6.QtCore import QLibraryInfo
@@ -1835,7 +1836,7 @@ def test_qt_speaks_the_language_in_use(qapp, language) -> None:
 
 
 def _editor_in(qapp, monkeypatch, language: str):
-    """A new editor window showing its text in ``language`` (en, es, ca or pseudo)."""
+    """A new editor window showing its text in ``language`` (en, es, ca, it or pseudo)."""
     from acoustic_spaces import i18n
     from acoustic_spaces.gui.app import MainWindow
 
@@ -1936,6 +1937,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
             "es",
             {
                 "menus": ["&Archivo", "&Editar", "&Ver", "&Simulación", "A&yuda"],
+                "run": "&Calcular",
                 "properties": "Propiedades",
                 "new_room": "Recinto rectangular nuevo",
                 "undo": "&Deshacer",
@@ -1948,12 +1950,26 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
             "ca",
             {
                 "menus": ["&Fitxer", "&Editar", "&Veure", "&Simulació", "&Ajuda"],
+                "run": "&Calcular",
                 "properties": "Propietats",
                 "new_room": "Recinte rectangular nou",
                 "undo": "&Desfer",
                 "add_source": "afegir font",
                 "late_methods": ["traçat de raigs estocàstic", "estadístic"],
                 "example": "Pis amb una porta",
+            },
+        ),
+        (
+            "it",
+            {
+                "menus": ["&File", "&Modifica", "&Visualizza", "&Simulazione", "&Aiuto"],
+                "run": "&Calcola",
+                "properties": "Proprietà",
+                "new_room": "Nuovo ambiente rettangolare",
+                "undo": "&Annulla",
+                "add_source": "aggiungi sorgente",
+                "late_methods": ["tracciamento di raggi stocastico", "statistico"],
+                "example": "Appartamento con una porta",
             },
         ),
     ],
@@ -1964,7 +1980,7 @@ def test_the_editor_in_translation(qapp, english, monkeypatch, language, words) 
     try:
         titles = [action.text() for action in win.menuBar().actions()]
         assert titles == words["menus"]
-        assert win.run_action.text() == "&Calcular"
+        assert win.run_action.text() == words["run"]
         assert win.docks["inspector"].windowTitle() == words["properties"]
         win.new_box()
         assert words["new_room"] in win.messages.toPlainText()

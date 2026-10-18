@@ -4,7 +4,8 @@ The editor, the command line and the messages of the library show their text in 
 language [chosen as Getting started describes](getting-started.md#language). English is
 the text in the code; each other language has a catalog, `src/acoustic_spaces/locale/<code>.po`
 (gettext's format, which translation tools such as Poedit and Weblate read). Spanish
-(`es.po`) and Catalan (`ca.po`) cover the editor, its plots and the examples' descriptions.
+(`es.po`), Catalan (`ca.po`) and Italian (`it.po`) cover the editor, its plots and the
+examples' descriptions.
 
 What stays in English in every language: scene files (their keys and values), command
 and option names, the choices options take (`--early ray_tracing`), the files the
@@ -201,3 +202,52 @@ Glossary:
 | playback, head tracking | reproducció, seguiment del cap |
 | gain, delay, equalizer | guany, retard, equalitzador |
 | results, messages, warning | resultats, missatges, avís |
+
+## Italian
+
+The Italian catalog covers the same text as Spanish and Catalan. Select **Italiano**
+under **View > Language**, or set `ACOUSTIC_SPACES_LANG=it`. System locale names such as
+`it_IT.UTF-8` and `it-CH` also select it, as does the Italian display language on Windows
+or macOS.
+
+Style:
+
+- Actions use the conventional Italian imperative: *Apri*, *Salva*, *Calcola*, *Annulla*.
+- Tooltips use infinitives or impersonal descriptions, sentence case and no final full
+  stop on labels or tooltips, as in English.
+- Use *file*, *computer* and *predefinito*. Keep the product name Acoustic Spaces,
+  file patterns, scene-file values, format names, units and parameter symbols as written.
+- Use « » for quotation marks. Numbers follow the computer's regional settings;
+  the command line keeps the decimal point.
+- Each menu entry has one `&` shortcut, distinct from the others in that menu.
+- Italian uses two plural forms: singular for 1, plural for all other counts.
+
+Glossary:
+
+| English | Italian |
+|---|---|
+| room, box room | ambiente, ambiente rettangolare |
+| scene, model file | scena, file di modello |
+| floor plan, corner | pianta, vertice |
+| wall, floor, ceiling | parete, pavimento, soffitto |
+| source, listener | sorgente, ricevitore |
+| sound power, sound pressure level | potenza sonora, livello di pressione sonora |
+| directivity, loudspeaker | direttività, altoparlante |
+| absorption, scattering, diffusion | assorbimento, dispersione, diffusione |
+| sound reduction index | potere fonoisolante |
+| early reflections, late reverberation | prime riflessioni, riverberazione tardiva |
+| ray tracing, image sources | tracciamento di raggi, sorgenti immagine |
+| wave solver, edge diffraction | solutore ondulatorio, diffrazione sugli spigoli |
+| impulse response, reverberation time | risposta all'impulso, tempo di riverberazione |
+| early decay time, decay curve | tempo di decadimento iniziale, curva di decadimento |
+| clarity, definition, sound strength | chiarezza, definizione, intensità sonora |
+| centre time | tempo baricentrico |
+| speech transmission index | indice di trasmissione del parlato |
+| octave band, third-octave band | banda d'ottava, banda di terzo d'ottava |
+| sample rate, background noise | frequenza di campionamento, rumore di fondo |
+| coverage map, leak | mappa di copertura, fuga |
+| auralization, dry recording | auralizzazione, registrazione anecoica |
+| playback, head tracking | riproduzione, tracciamento della testa |
+| gain, delay, equalizer | guadagno, ritardo, equalizzatore |
+| yaw, pitch, roll | imbardata, beccheggio, rollio |
+| results, messages, warning | risultati, messaggi, avviso |

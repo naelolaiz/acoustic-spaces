@@ -166,20 +166,21 @@ plot_directions(response, "talker__seat-a.directions.png")
 
 ## Language
 
-The editor and the command line show their text in English, Spanish or Catalan,
+The editor and the command line show their text in English, Spanish, Catalan or Italian,
 following the computer's language unless told otherwise:
 
 - **View > Language** in the editor picks one for this user, or **System** to follow the
   computer again. It applies from the next start of the editor and of the command line.
-- `ACOUSTIC_SPACES_LANG=ca` (or `es` or `en`) in the environment sets it over both, for
-  one shell or one script. In the editor, choose **Català** for Catalan.
+- `ACOUSTIC_SPACES_LANG=it` (or `ca`, `es` or `en`) in the environment sets it over both,
+  for one shell or one script. In the editor, choose **Italiano** for Italian or
+  **Català** for Catalan.
 
 `acoustic-spaces info` says which language is in use and what chose it. Scene files,
 command and option names and the files the commands write stay in English whatever the
 language, so scripts keep working. The editor writes numbers as the computer's
 regional settings do (0,85 in Spain, 0.85 in Mexico) and reads them typed either way;
-the command line keeps the decimal point. The Spanish and Catalan translations come
-in steps: the editor is translated, with its plots and the examples' descriptions;
+the command line keeps the decimal point. The Spanish, Catalan and Italian translations
+come in steps: the editor is translated, with its plots and the examples' descriptions;
 the command line and the library's messages (which the editor shows too, such as the
 room's checks) come next (see the [roadmap](roadmap.md)); text not yet translated
 shows in English. [Translating](translating.md) explains how the catalogs work and

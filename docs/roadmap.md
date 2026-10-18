@@ -82,5 +82,5 @@ Version 3.2.2:
 Versión 3.2.3:
 - [x] Added Catalan translation.
 
-- [ ] Added Italian translation.
+- [x] Added Italian translation.
 
