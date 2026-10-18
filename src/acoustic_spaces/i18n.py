@@ -1,11 +1,12 @@
 """The language of the text the command line, the editor and the library show.
 
 English is the text in the code; other languages come from catalogs in ``locale/``
-(``es.po`` for Spanish), read when the first text is translated. The language is, in
-order:
+(``es.po`` for Spanish, ``ca.po`` for Catalan, ``it.po`` for Italian, ``de.po`` for German,
+``nl.po`` for Dutch), read when the first text is translated.
+The language is, in order:
 
-1. ``ACOUSTIC_SPACES_LANG`` in the environment (``en``, ``es``; ``pseudo`` shows each
-   translatable text in brackets, to find text that is not);
+1. ``ACOUSTIC_SPACES_LANG`` in the environment (``en``, ``es``, ``ca``, ``it``, ``de``, ``nl``;
+   ``pseudo`` shows each translatable text in brackets, to find text that is not);
 2. the one picked in the editor (View > Language), kept per user in ``settings.json``;
 3. the system's: ``LANGUAGE``, ``LC_ALL``, ``LC_MESSAGES`` or ``LANG``, else the display
    language of Windows or macOS.
@@ -34,7 +35,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 #: The languages with a catalog, in their own words (as a language menu shows them).
-LANGUAGES = {"en": "English", "es": "Español"}
+LANGUAGES = {
+    "en": "English",
+    "es": "Español",
+    "ca": "Català",
+    "it": "Italiano",
+    "de": "Deutsch",
+    "nl": "Nederlands",
+}
 #: The environment variable that sets the language, over every other choice.
 ENV = "ACOUSTIC_SPACES_LANG"
 #: Shows each translatable text as ⟦text⟧: text without brackets is not translatable.
@@ -238,7 +246,9 @@ def system_language() -> str:
         import ctypes
 
         primary = ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0x3FF
-        return {0x09: "en", 0x0A: "es"}.get(primary, "en")
+        return {0x03: "ca", 0x07: "de", 0x09: "en", 0x0A: "es", 0x10: "it", 0x13: "nl"}.get(
+            primary, "en"
+        )
     if sys.platform == "darwin":
         path = Path.home() / "Library" / "Preferences" / ".GlobalPreferences.plist"
         try:
@@ -304,7 +314,7 @@ def chosen_language() -> tuple[str, str]:
 
 
 def language() -> str:
-    """The language in use (``en``, ``es`` or ``pseudo``)."""
+    """The language in use (``en``, ``es``, ``ca``, ``it``, ``de``, ``nl`` or ``pseudo``)."""
     return _current()[0]
 
 

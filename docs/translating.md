@@ -4,7 +4,8 @@ The editor, the command line and the messages of the library show their text in 
 language [chosen as Getting started describes](getting-started.md#language). English is
 the text in the code; each other language has a catalog, `src/acoustic_spaces/locale/<code>.po`
 (gettext's format, which translation tools such as Poedit and Weblate read). Spanish
-(`es.po`) is the first.
+(`es.po`), Catalan (`ca.po`), Italian (`it.po`), German (`de.po`) and Dutch (`nl.po`)
+cover the editor, its plots and the examples' descriptions.
 
 What stays in English in every language: scene files (their keys and values), command
 and option names, the choices options take (`--early ray_tracing`), the files the
@@ -155,3 +156,200 @@ Glossary:
 | results, messages | resultados, mensajes | the editor's panels |
 | command line | línea de comandos | |
 | warning, error (message levels) | aviso, error | |
+
+## Catalan
+
+The Catalan catalog covers the same text as Spanish. Select **Català** under
+**View > Language**, or set `ACOUSTIC_SPACES_LANG=ca`. System locale names such as
+`ca_ES.UTF-8`, `ca-AD` and `ca_ES@valencia` also select it.
+
+Style:
+
+- Actions in the infinitive: *Obrir*, *Desar*, *Calcular*, *Cancel·lar*.
+- Tooltips and messages use impersonal forms, sentence case and no final full stop
+  on labels or tooltips, as in English.
+- Use *fitxer*, *ordinador* and *per defecte*. Keep the product name Acoustic Spaces,
+  file patterns, format names, units and parameter symbols (T20, C80, STI) as written.
+- Use « » for quotation marks. Numbers follow the computer's regional settings;
+  the command line keeps the decimal point.
+- Each menu entry has one `&` shortcut, distinct from the others in that menu.
+- Catalan uses two plural forms: singular for 1, plural for all other counts.
+
+Glossary:
+
+| English | Catalan |
+|---|---|
+| room, box room | recinte, recinte rectangular |
+| scene, model file | escena, fitxer de model |
+| floor plan, corner | planta, vèrtex |
+| wall, floor, ceiling | paret, terra, sostre |
+| source, listener | font, receptor |
+| sound power, sound pressure level | potència acústica, nivell de pressió sonora |
+| directivity, loudspeaker | directivitat, altaveu |
+| absorption, scattering, diffusion | absorció, dispersió, difusió |
+| sound reduction index | índex de reducció sonora |
+| early reflections, late reverberation | primeres reflexions, reverberació tardana |
+| ray tracing, image sources | traçat de raigs, fonts imatge |
+| wave solver, edge diffraction | mètode ondulatori, difracció en arestes |
+| impulse response, reverberation time | resposta impulsional, temps de reverberació |
+| early decay time, decay curve | temps de decaïment inicial, corba de decaïment |
+| clarity, definition, sound strength | claredat, definició, força sonora |
+| speech transmission index | índex de transmissió de la parla |
+| octave band, third-octave band | banda d'octava, banda de terç d'octava |
+| sample rate, background noise | freqüència de mostreig, soroll de fons |
+| coverage map, leak | mapa de cobertura, fuita |
+| auralization, dry recording | auralització, enregistrament anecoic |
+| playback, head tracking | reproducció, seguiment del cap |
+| gain, delay, equalizer | guany, retard, equalitzador |
+| results, messages, warning | resultats, missatges, avís |
+
+## Italian
+
+The Italian catalog covers the same text as Spanish and Catalan. Select **Italiano**
+under **View > Language**, or set `ACOUSTIC_SPACES_LANG=it`. System locale names such as
+`it_IT.UTF-8` and `it-CH` also select it, as does the Italian display language on Windows
+or macOS.
+
+Style:
+
+- Actions use the conventional Italian imperative: *Apri*, *Salva*, *Calcola*, *Annulla*.
+- Tooltips use infinitives or impersonal descriptions, sentence case and no final full
+  stop on labels or tooltips, as in English.
+- Use *file*, *computer* and *predefinito*. Keep the product name Acoustic Spaces,
+  file patterns, scene-file values, format names, units and parameter symbols as written.
+- Use « » for quotation marks. Numbers follow the computer's regional settings;
+  the command line keeps the decimal point.
+- Each menu entry has one `&` shortcut, distinct from the others in that menu.
+- Italian uses two plural forms: singular for 1, plural for all other counts.
+
+Glossary:
+
+| English | Italian |
+|---|---|
+| room, box room | ambiente, ambiente rettangolare |
+| scene, model file | scena, file di modello |
+| floor plan, corner | pianta, vertice |
+| wall, floor, ceiling | parete, pavimento, soffitto |
+| source, listener | sorgente, ricevitore |
+| sound power, sound pressure level | potenza sonora, livello di pressione sonora |
+| directivity, loudspeaker | direttività, altoparlante |
+| absorption, scattering, diffusion | assorbimento, dispersione, diffusione |
+| sound reduction index | potere fonoisolante |
+| early reflections, late reverberation | prime riflessioni, riverberazione tardiva |
+| ray tracing, image sources | tracciamento di raggi, sorgenti immagine |
+| wave solver, edge diffraction | solutore ondulatorio, diffrazione sugli spigoli |
+| impulse response, reverberation time | risposta all'impulso, tempo di riverberazione |
+| early decay time, decay curve | tempo di decadimento iniziale, curva di decadimento |
+| clarity, definition, sound strength | chiarezza, definizione, intensità sonora |
+| centre time | tempo baricentrico |
+| speech transmission index | indice di trasmissione del parlato |
+| octave band, third-octave band | banda d'ottava, banda di terzo d'ottava |
+| sample rate, background noise | frequenza di campionamento, rumore di fondo |
+| coverage map, leak | mappa di copertura, fuga |
+| auralization, dry recording | auralizzazione, registrazione anecoica |
+| playback, head tracking | riproduzione, tracciamento della testa |
+| gain, delay, equalizer | guadagno, ritardo, equalizzatore |
+| yaw, pitch, roll | imbardata, beccheggio, rollio |
+| results, messages, warning | risultati, messaggi, avviso |
+
+## German
+
+The German catalog covers the same text as Spanish, Catalan and Italian. Select
+**Deutsch** under **View > Language**, or set `ACOUSTIC_SPACES_LANG=de`. System locale
+names such as `de_DE.UTF-8`, `de-AT` and `de_CH.UTF-8` also select it, as does the German
+display language on Windows or macOS.
+
+Style:
+
+- Actions use infinitives: *Öffnen*, *Speichern*, *Berechnen*, *Abbrechen*.
+- Tooltips use infinitives or impersonal descriptions. Capitalize nouns according to
+  German spelling, with no final full stop on labels or tooltips, as in English.
+- Use *Datei*, *Computer* and *Standard*. Keep the product name Acoustic Spaces,
+  file patterns, scene-file values, format names, units and parameter symbols as written.
+- Use „ “ for quotation marks. Numbers follow the computer's regional settings;
+  the command line keeps the decimal point.
+- Each menu entry has one `&` shortcut, distinct from the others in that menu.
+- German uses two plural forms: singular for 1, plural for all other counts.
+
+Glossary:
+
+| English | German |
+|---|---|
+| room, box room | Raum, Quaderraum |
+| scene, model file | Szene, Modelldatei |
+| floor plan, corner | Grundriss, Ecke |
+| wall, floor, ceiling | Wand, Boden, Decke |
+| source, listener | Quelle, Empfänger |
+| sound power, sound pressure level | Schallleistung, Schalldruckpegel |
+| directivity, directivity index | Richtcharakteristik, Richtwirkungsmaß |
+| loudspeaker, loudspeaker layout | Lautsprecher, Lautsprecheranordnung |
+| absorption coefficient, scattering coefficient | Absorptionsgrad, Streugrad |
+| scattering, diffusion | Streuung, Diffusion |
+| sound reduction index | Schalldämmmaß |
+| early reflections, late reverberation | frühe Reflexionen, später Nachhall |
+| ray tracing, image sources | Strahlenverfolgung, Spiegelquellen |
+| wave solver, edge diffraction | Wellensolver, Kantenbeugung |
+| impulse response, reverberation time | Impulsantwort, Nachhallzeit |
+| early decay time, decay curve | frühe Abklingzeit, Abklingkurve |
+| clarity, definition, sound strength | Klarheitsmaß, Deutlichkeitsgrad, Stärkemaß |
+| centre time | Schwerpunktzeit |
+| speech transmission index | Sprachübertragungsindex |
+| octave band, third-octave band | Oktavband, Terzband |
+| sample rate, background noise | Abtastrate, Hintergrundgeräusch |
+| coverage map, leak | Versorgungskarte, Undichtigkeit |
+| auralization, dry recording | Auralisation, reflexionsfreie Aufnahme |
+| playback, head tracking | Wiedergabe, Kopfverfolgung |
+| gain, delay, equalizer | Verstärkung, Verzögerung, Equalizer |
+| yaw, pitch, roll | Gierwinkel, Nickwinkel, Rollwinkel |
+| results, messages, warning | Ergebnisse, Meldungen, Warnung |
+
+## Dutch
+
+The Dutch catalog covers the same text as Spanish, Catalan, Italian and German. Select
+**Nederlands** under **View > Language**, or set `ACOUSTIC_SPACES_LANG=nl`. System locale
+names such as `nl_NL.UTF-8` and `nl-BE` also select it, as does the Dutch display language
+on Windows or macOS.
+
+Style:
+
+- Use neutral Dutch for readers in the Netherlands and Belgium.
+- Actions use infinitives: *Openen*, *Opslaan*, *Berekenen*, *Annuleren*.
+- Tooltips use infinitives or impersonal descriptions, sentence case and no final full
+  stop on labels or tooltips, as in English.
+- Use *bestand*, *computer* and *standaard*. Keep the product name Acoustic Spaces,
+  file patterns, scene-file values, format names, units and parameter symbols as written.
+- Use ‘ ’ for quotation marks. Numbers follow the computer's regional settings;
+  the command line keeps the decimal point.
+- Each menu entry has one `&` shortcut, distinct from the others in that menu.
+- Dutch uses two plural forms: singular for 1, plural for all other counts.
+
+Glossary:
+
+| English | Dutch |
+|---|---|
+| room, box room | ruimte, rechthoekige ruimte |
+| scene, model file | scène, modelbestand |
+| floor plan, corner | plattegrond, hoek |
+| wall, floor, ceiling | wand, vloer, plafond |
+| source, listener | bron, ontvanger |
+| sound power, sound pressure level | geluidsvermogen, geluidsdrukniveau |
+| directivity, directivity index | richtingskarakteristiek, richtingsindex |
+| loudspeaker, loudspeaker layout | luidspreker, luidsprekeropstelling |
+| absorption, scattering, diffusion | absorptie, verstrooiing, diffusie |
+| sound reduction index | geluidreductie-index |
+| early reflections, late reverberation | vroege reflecties, late nagalm |
+| ray tracing, image sources | straaltracering, spiegelbronnen |
+| wave solver, edge diffraction | golfsolver, randdiffractie |
+| impulse response, reverberation time | impulsrespons, nagalmtijd |
+| early decay time, decay curve | vroege uitsterftijd, uitsterfcurve |
+| clarity, definition, sound strength | helderheid, definitie, geluidsterkte |
+| centre time | zwaartepunttijd |
+| speech transmission index | spraaktransmissie-index |
+| octave band, third-octave band | octaafband, tertsband |
+| sample rate, background noise | samplefrequentie, achtergrondgeluid |
+| coverage map, leak | dekkingskaart, lek |
+| auralization, dry recording | auralisatie, anechoïsche opname |
+| playback, head tracking | afspelen, hoofdtracking |
+| gain, delay, equalizer | versterking, vertraging, equalizer |
+| yaw, pitch, roll | gierhoek, stamphoek, rolhoek |
+| results, messages, warning | resultaten, meldingen, waarschuwing |

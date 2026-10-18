@@ -1,0 +1,4498 @@
+# Italian translation of Acoustic Spaces.
+# See docs/translating.md for the glossary and style.
+msgid ""
+msgstr ""
+"Project-Id-Version: acoustic-spaces\n"
+"Language: it\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: acoustic_spaces/cli.py
+#, python-brace-format
+msgid "chosen in the editor, kept in {path}"
+msgstr "scelta nell'editor, salvata in {path}"
+
+#: acoustic_spaces/cli.py
+msgid "this computer's"
+msgstr "quella di questo computer"
+
+#: acoustic_spaces/cli.py
+#, python-brace-format
+msgid "language: {language} ({source})"
+msgstr "lingua: {language} ({source})"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "SPL (dB)"
+msgstr "SPL (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "sound pressure level"
+msgstr "livello di pressione sonora"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "SPL (dB(A))"
+msgstr "SPL (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "A-weighted sound pressure level"
+msgstr "livello di pressione sonora ponderato A"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "G (dB)"
+msgstr "G (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "strength"
+msgstr "intensità sonora"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "C50 (dB)"
+msgstr "C50 (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "clarity, 50 ms"
+msgstr "chiarezza, 50 ms"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "C80 (dB)"
+msgstr "C80 (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "clarity, 80 ms"
+msgstr "chiarezza, 80 ms"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "D50"
+msgstr "D50"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "definition"
+msgstr "definizione"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "EDT (s)"
+msgstr "EDT (s)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "early decay time"
+msgstr "tempo di decadimento iniziale"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "T20 (s)"
+msgstr "T20 (s)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "reverberation time from a 20 dB decay"
+msgstr "tempo di riverberazione da un decadimento di 20 dB"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "T30 (s)"
+msgstr "T30 (s)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "reverberation time from a 30 dB decay"
+msgstr "tempo di riverberazione da un decadimento di 30 dB"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Ts (ms)"
+msgstr "Ts (ms)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "centre time"
+msgstr "tempo baricentrico"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "STI"
+msgstr "STI"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "speech transmission index"
+msgstr "indice di trasmissione del parlato"
+
+#: acoustic_spaces/gui/app.py
+msgid "Acoustic Spaces editor"
+msgstr "Editor di Acoustic Spaces"
+
+#: acoustic_spaces/gui/app.py
+msgid "Scenes (*.yaml *.yml)"
+msgstr "Scene (*.yaml *.yml)"
+
+#. Translators: {patterns} is the list of model file patterns, such as *.obj *.dxf.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Models ({patterns})"
+msgstr "Modelli ({patterns})"
+
+#: acoustic_spaces/gui/app.py
+msgid "glTF binary (*.glb)"
+msgstr "glTF binario (*.glb)"
+
+#. Translators: two file types of a save dialog, kept apart by ;; (keep it).
+#: acoustic_spaces/gui/app.py
+msgid "PNG picture (*.png);;JSON, every map (*.json)"
+msgstr "Immagine PNG (*.png);;JSON, tutte le mappe (*.json)"
+
+#: acoustic_spaces/gui/app.py
+msgid "3D view"
+msgstr "Vista 3D"
+
+#: acoustic_spaces/gui/app.py
+msgid "Plan"
+msgstr "Pianta"
+
+#: acoustic_spaces/gui/app.py
+msgid "The room in 3D: click to select, drag sources and listeners"
+msgstr ""
+"L'ambiente in 3D: fare clic per selezionare, trascinare sorgenti e ricevitori"
+
+#: acoustic_spaces/gui/app.py
+msgid "The room from above: draw floor plans, drag corners and points"
+msgstr "L'ambiente dall'alto: disegnare piante, trascinare vertici e punti"
+
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/tree.py
+msgid "Scene"
+msgstr "Scena"
+
+#: acoustic_spaces/gui/app.py
+msgid "Properties"
+msgstr "Proprietà"
+
+#: acoustic_spaces/gui/app.py
+msgid "Results"
+msgstr "Risultati"
+
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/tree.py
+msgid "Coverage map"
+msgstr "Mappa di copertura"
+
+#: acoustic_spaces/gui/app.py
+msgid "Messages"
+msgstr "Messaggi"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Something runs in the background; Simulation > Cancel (Shift+F5) stops it"
+msgstr ""
+"Un'attività è in esecuzione in secondo piano; Simulazione > Annulla "
+"(Maiusc+F5) la interrompe"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"What plays through the room: the recording, and the source and listener of "
+"the response it plays through"
+msgstr ""
+"L'audio riprodotto attraverso l'ambiente: la registrazione, la sorgente e il "
+"ricevitore della risposta utilizzata"
+
+#: acoustic_spaces/gui/app.py
+msgid "&New box room…"
+msgstr "&Nuovo ambiente rettangolare…"
+
+#: acoustic_spaces/gui/app.py
+msgid "Start a new scene in a box-shaped room"
+msgstr "Creare una nuova scena in un ambiente rettangolare"
+
+#: acoustic_spaces/gui/app.py
+msgid "New from &model file…"
+msgstr "Nuovo da file di &modello…"
+
+#: acoustic_spaces/gui/app.py
+msgid "Start from a model file (OBJ, DXF, glTF, STL, IFC, Collada or SketchUp)"
+msgstr ""
+"Iniziare da un file di modello (OBJ, DXF, glTF, STL, IFC, Collada o SketchUp)"
+
+#: acoustic_spaces/gui/app.py
+msgid "New room from a &floor plan…"
+msgstr "Nuovo ambiente da una &pianta…"
+
+#: acoustic_spaces/gui/app.py
+msgid "Draw the floor plan of a new room, corner by corner"
+msgstr "Disegnare la pianta di un nuovo ambiente, vertice per vertice"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Open…"
+msgstr "&Apri…"
+
+#: acoustic_spaces/gui/app.py
+msgid "Open a scene file (YAML)"
+msgstr "Aprire un file di scena (YAML)"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Save"
+msgstr "&Salva"
+
+#: acoustic_spaces/gui/app.py
+msgid "Save the scene; an example asks where to keep your copy"
+msgstr ""
+"Salvare la scena; per un esempio viene chiesto dove salvare la propria copia"
+
+#: acoustic_spaces/gui/app.py
+msgid "Save &as…"
+msgstr "Salva &con nome…"
+
+#: acoustic_spaces/gui/app.py
+msgid "Save the scene in another file"
+msgstr "Salvare la scena in un altro file"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Export results…"
+msgstr "Esporta &risultati…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Write every response of the last run to a folder: a WAV file per output "
+"format and parameters.json, as acoustic-spaces simulate does"
+msgstr ""
+"Salvare tutte le risposte dell'ultimo calcolo in una cartella: un file WAV "
+"per formato di uscita e parameters.json, come acoustic-spaces simulate"
+
+#: acoustic_spaces/gui/app.py
+msgid "Export to &Blender…"
+msgstr "Esporta in &Blender…"
+
+#: acoustic_spaces/gui/app.py
+msgid "The room, and the reflection paths on show, as glTF"
+msgstr "L'ambiente e i percorsi di riflessione visualizzati, in formato glTF"
+
+#: acoustic_spaces/gui/app.py
+msgid "Export &particle animation to Blender…"
+msgstr "Esporta animazione di particelle in B&lender…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Sound particles from the selected source (or the first) as a glTF animation"
+msgstr ""
+"Particelle sonore della sorgente selezionata (o della prima) come animazione "
+"glTF"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Quit"
+msgstr "&Esci"
+
+#: acoustic_spaces/gui/app.py
+msgid "Close the editor; it asks about unsaved changes"
+msgstr "Chiudere l'editor; viene chiesto se salvare le modifiche"
+
+#. Translators: {edit} says what the last edit did, such as "move the source".
+#: acoustic_spaces/gui/app.py
+msgid "&Undo"
+msgstr "&Annulla"
+
+#: acoustic_spaces/gui/app.py
+msgid "Take back the last change"
+msgstr "Annullare l'ultima modifica"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Redo"
+msgstr "&Ripeti"
+
+#: acoustic_spaces/gui/app.py
+msgid "Make the change Undo took back"
+msgstr "Ripristinare la modifica annullata"
+
+#: acoustic_spaces/gui/app.py
+msgid "Place &source"
+msgstr "Posiziona &sorgente"
+
+#: acoustic_spaces/gui/app.py
+msgid "Click a floor or wall in the 3D view to put a source there"
+msgstr ""
+"Fare clic su un pavimento o una parete nella vista 3D per posizionare una "
+"sorgente"
+
+#: acoustic_spaces/gui/app.py
+msgid "Place &listener"
+msgstr "Posiziona ri&cevitore"
+
+#: acoustic_spaces/gui/app.py
+msgid "Click a floor or wall in the 3D view to put a listener there"
+msgstr ""
+"Fare clic su un pavimento o una parete nella vista 3D per posizionare un "
+"ricevitore"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Draw floor plan"
+msgstr "&Disegna pianta"
+
+#: acoustic_spaces/gui/app.py
+msgid "Draw a new floor plan in the plan view; it replaces the room"
+msgstr ""
+"Disegnare una nuova pianta nella vista in pianta; sostituisce l'ambiente"
+
+#: acoustic_spaces/gui/app.py
+msgid "Add &material from the database…"
+msgstr "Aggiungi &materiale dalla banca dati…"
+
+#: acoustic_spaces/gui/app.py
+msgid "A material of the built-in database of absorption coefficients"
+msgstr ""
+"Un materiale della banca dati integrata di coefficienti di assorbimento"
+
+#: acoustic_spaces/gui/app.py
+msgid "Add material from a &library…"
+msgstr "Aggiungi materiale da una &libreria…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"A material of a CATT-Acoustic (ABS lines) or ODEON (.Li8) material library"
+msgstr "Un materiale di una libreria CATT-Acoustic (righe ABS) o ODEON (.Li8)"
+
+#: acoustic_spaces/gui/app.py
+msgid "Re&move selected"
+msgstr "Rimuovi sele&zione"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Remove the selected source, listener or material (Delete, in the scene tree "
+"or a view)"
+msgstr ""
+"Rimuovere la sorgente, il ricevitore o il materiale selezionato (Canc, "
+"nell'albero della scena o in una vista)"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Reset camera"
+msgstr "&Ripristina vista"
+
+#: acoustic_spaces/gui/app.py
+msgid "Show the whole room in the 3D view from the usual angle"
+msgstr "Mostrare l'intero ambiente nella vista 3D dall'angolazione abituale"
+
+#: acoustic_spaces/gui/app.py
+msgid "&3D view"
+msgstr "Vista &3D"
+
+#: acoustic_spaces/gui/app.py
+msgid "Show the room in 3D"
+msgstr "Mostrare l'ambiente in 3D"
+
+#: acoustic_spaces/gui/app.py
+msgid "P&lan"
+msgstr "&Pianta"
+
+#: acoustic_spaces/gui/app.py
+msgid "Show the room from above, to draw and change floor plans"
+msgstr "Mostrare l'ambiente dall'alto, per disegnare e modificare piante"
+
+#: acoustic_spaces/gui/app.py
+msgid "Show reflection &paths"
+msgstr "Mostra percorsi di ri&flessione"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Draw the early reflection paths of the source and listener the Results panel "
+"shows, coloured by order"
+msgstr ""
+"Disegnare i percorsi delle prime riflessioni della sorgente e del ricevitore "
+"mostrati nel pannello Risultati, colorati per ordine"
+
+#: acoustic_spaces/gui/app.py
+msgid "Show &leaks"
+msgstr "Mostra f&ughe"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Trace rays from the sources and show where they escape from a model that is "
+"not closed"
+msgstr ""
+"Tracciare raggi dalle sorgenti e mostrare dove escono da un modello non "
+"chiuso"
+
+#: acoustic_spaces/gui/app.py
+msgid "Save &screenshot…"
+msgstr "Salva &schermata…"
+
+#: acoustic_spaces/gui/app.py
+msgid "Save the 3D view as a PNG picture"
+msgstr "Salvare la vista 3D come immagine PNG"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Run"
+msgstr "&Calcola"
+
+#: acoustic_spaces/gui/app.py
+msgid "Simulate every source and listener"
+msgstr "Simulare tutte le sorgenti e tutti i ricevitori"
+
+#: acoustic_spaces/gui/app.py
+msgid "Run coverage &map"
+msgstr "Calcola &mappa di copertura"
+
+#: acoustic_spaces/gui/app.py
+msgid "Room parameters on a grid over the audience area, for every source"
+msgstr ""
+"Parametri acustici su una griglia nell'area del pubblico, per ogni sorgente"
+
+#: acoustic_spaces/gui/app.py
+msgid "Map"
+msgstr "Mappa"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Tune CPU and GPU…"
+msgstr "&Ottimizza CPU e GPU…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Time the CPU and the GPU on this scene and keep the fastest on this computer "
+"for the device setting auto (acoustic-spaces tune; needs the gpu extra)"
+msgstr ""
+"Misurare i tempi di CPU e GPU su questa scena e conservare l'opzione più "
+"veloce su questo computer per l'impostazione auto del dispositivo "
+"(acoustic-spaces tune; richiede il componente aggiuntivo gpu)"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Cancel"
+msgstr "&Annulla"
+
+#: acoustic_spaces/gui/app.py
+msgid "Stop the run, coverage map or tuning going on, at its next stage"
+msgstr ""
+"Interrompere il calcolo, la mappa di copertura o l'ottimizzazione in corso "
+"alla fase successiva"
+
+#: acoustic_spaces/gui/app.py
+msgid "S&top playback"
+msgstr "In&terrompi riproduzione"
+
+#: acoustic_spaces/gui/app.py
+msgid "Stop the recording playing through the room (Esc)"
+msgstr "Interrompere la registrazione riprodotta attraverso l'ambiente (Esc)"
+
+#: acoustic_spaces/gui/app.py
+msgid "Stop playback (Esc)"
+msgstr "Interrompi riproduzione (Esc)"
+
+#: acoustic_spaces/gui/app.py
+msgid "&About"
+msgstr "&Informazioni"
+
+#: acoustic_spaces/gui/app.py
+msgid "The version, licence and source of Acoustic Spaces"
+msgstr "La versione, la licenza e il codice sorgente di Acoustic Spaces"
+
+#: acoustic_spaces/gui/app.py
+msgid "Undo"
+msgstr "Annulla"
+
+#: acoustic_spaces/gui/app.py
+msgid "Redo"
+msgstr "Ripeti"
+
+#: acoustic_spaces/gui/app.py
+msgid "&File"
+msgstr "&File"
+
+#: acoustic_spaces/gui/app.py
+msgid "Open e&xample"
+msgstr "Apri esempi&o"
+
+#. Translators: {extra} is the name of an optional part of the installation (gui, ifc...); {hint} says how to install it.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Needs the {extra} extra: {hint}"
+msgstr "Richiede il componente aggiuntivo {extra}: {hint}"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Edit"
+msgstr "&Modifica"
+
+#: acoustic_spaces/gui/app.py
+msgid "&View"
+msgstr "&Visualizza"
+
+#. Translators: {panel} is a panel's title, such as Results.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Show or hide the {panel} panel"
+msgstr "Mostrare o nascondere il pannello {panel}"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Language"
+msgstr "&Lingua"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Simulation"
+msgstr "&Simulazione"
+
+#: acoustic_spaces/gui/app.py
+msgid "&Help"
+msgstr "&Aiuto"
+
+#: acoustic_spaces/gui/app.py
+msgid "Main"
+msgstr "Principale"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "System ({language})"
+msgstr "Sistema ({language})"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Show the editor and the command line in this computer's language, from their "
+"next start"
+msgstr ""
+"Mostrare l'editor e la riga di comando nella lingua di questo computer, dal "
+"prossimo avvio"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Show the editor and the command line in this language, from their next start"
+msgstr ""
+"Mostrare l'editor e la riga di comando in questa lingua, dal prossimo avvio"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot keep the language: {reason}"
+msgstr "Impossibile salvare la lingua: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"{variable} is set to {value}, so it decides the language, not this choice"
+msgstr ""
+"{variable} è impostata su {value}, quindi determina la lingua al posto di "
+"questa scelta"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"Language from the next start of the editor and the command line: {language}"
+msgstr ""
+"Lingua dal prossimo avvio dell'editor e della riga di comando: {language}"
+
+#: acoustic_spaces/gui/app.py
+msgid "untitled"
+msgstr "senza titolo"
+
+#. Translators: the window's title; [*] shows whether the scene has unsaved changes (keep it as it is).
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "{name}[*] - {title}"
+msgstr "{name}[*] - {title}"
+
+#. Translators: {edit} says what the last edit did, such as "move the source".
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "&Undo {edit}"
+msgstr "&Annulla {edit}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "&Redo {edit}"
+msgstr "&Ripeti {edit}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Undo {edit}"
+msgstr "Annulla {edit}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Nothing to undo"
+msgstr "Nessuna modifica da annullare"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Redo {edit}"
+msgstr "Ripeti {edit}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Nothing to redo"
+msgstr "Nessuna modifica da ripetere"
+
+#. Translators: the status bar's summary of the room: its volume and its reverberation time at one band, such as "1 kHz".
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "{volume:,.0f} m³, RT {rt:.2f} s at {band} (Eyring)"
+msgstr "{volume:,.0f} m³, RT {rt:.2f} s a {band} (Eyring)"
+
+#: acoustic_spaces/gui/app.py
+msgid "model not closed"
+msgstr "modello non chiuso"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ", {count} problem"
+msgid_plural ", {count} problems"
+msgstr[0] ", {count} problema"
+msgstr[1] ", {count} problemi"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"The room's volume and its reverberation time at 1 kHz estimated by the "
+"Eyring formula, kept up to date as you edit"
+msgstr ""
+"Il volume dell'ambiente e il tempo di riverberazione a 1 kHz stimato con la "
+"formula di Eyring, aggiornati durante le modifiche"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Not changed: {reason}"
+msgstr "Modifica non applicata: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Surface {name}"
+msgstr "Superficie {name}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Leaks: {summary}"
+msgstr "Fughe: {summary}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Reflection paths come from a run: run the simulation (F5) first."
+msgstr ""
+"I percorsi di riflessione derivano da un calcolo: eseguire prima la "
+"simulazione (F5)."
+
+#: acoustic_spaces/gui/app.py
+msgid "Click in the plan to place the source; Esc cancels."
+msgstr "Fare clic nella pianta per posizionare la sorgente; Esc annulla."
+
+#: acoustic_spaces/gui/app.py
+msgid "Click in the plan to place the listener; Esc cancels."
+msgstr "Fare clic nella pianta per posizionare il ricevitore; Esc annulla."
+
+#: acoustic_spaces/gui/app.py
+msgid "Click a floor or wall to place the source; Esc cancels."
+msgstr ""
+"Fare clic su un pavimento o una parete per posizionare la sorgente; Esc "
+"annulla."
+
+#: acoustic_spaces/gui/app.py
+msgid "Click a floor or wall to place the listener; Esc cancels."
+msgstr ""
+"Fare clic su un pavimento o una parete per posizionare il ricevitore; Esc "
+"annulla."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Added {name} at ({point})"
+msgstr "Aggiunto {name} in ({point})"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Moved {name} to ({point})"
+msgstr "Spostato {name} in ({point})"
+
+#: acoustic_spaces/gui/app.py
+msgid "The box is now a floor plan with the same walls."
+msgstr "L'ambiente rettangolare è ora una pianta con le stesse pareti."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New floor plan with {count} corner, {height:g} m high; change the height "
+"under Geometry."
+msgid_plural ""
+"New floor plan with {count} corners, {height:g} m high; change the height "
+"under Geometry."
+msgstr[0] ""
+"Nuova pianta con {count} vertice, alta {height:g} m; modificare l'altezza in "
+"Geometria."
+msgstr[1] ""
+"Nuova pianta con {count} vertici, alta {height:g} m; modificare l'altezza in "
+"Geometria."
+
+#. Translators: {names} lists the sources and listeners moved.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Moved {names} into the new room."
+msgstr "Spostati {names} nel nuovo ambiente."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"Surfaces without an assignment are now {material} (the scene's default "
+"material)."
+msgstr ""
+"Le superfici senza assegnazione usano ora {material} (il materiale "
+"predefinito della scena)."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Replace the model file with the drawn floor plan? Material assignments to "
+"the model's surfaces will no longer match anything."
+msgstr ""
+"Sostituire il file di modello con la pianta disegnata? Le assegnazioni dei "
+"materiali alle superfici del modello non avranno più corrispondenza."
+
+#: acoustic_spaces/gui/app.py
+msgid "Add material"
+msgstr "Aggiungi materiale"
+
+#: acoustic_spaces/gui/app.py
+msgid "Material from the database:"
+msgstr "Materiale dalla banca dati:"
+
+#: acoustic_spaces/gui/app.py
+msgid "Material library"
+msgstr "Libreria di materiali"
+
+#: acoustic_spaces/gui/app.py
+msgid "Material libraries (*.geo *.txt *.li8 *.Li8 *.lib);;All files (*)"
+msgstr ""
+"Librerie di materiali (*.geo *.txt *.li8 *.Li8 *.lib);;Tutti i file (*)"
+
+#: acoustic_spaces/gui/app.py
+msgid "Material:"
+msgstr "Materiale:"
+
+#: acoustic_spaces/gui/app.py
+msgid "The scene has unsaved changes. Save them?"
+msgstr "La scena contiene modifiche non salvate. Salvarle?"
+
+#: acoustic_spaces/gui/app.py
+msgid "New box room; change its size under Geometry."
+msgstr "Nuovo ambiente rettangolare; modificarne le dimensioni in Geometria."
+
+#: acoustic_spaces/gui/app.py
+msgid "New room: click its corners in the plan, and close it on the first one."
+msgstr ""
+"Nuovo ambiente: fare clic sui vertici nella pianta e chiudere sul primo."
+
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/inspector.py
+msgid "Model file"
+msgstr "File di modello"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Could not load {name}"
+msgstr "Impossibile caricare {name}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"Loaded {name}; set its units and up axis under Geometry if it looks wrong, "
+"then assign materials to its surfaces."
+msgstr ""
+"Caricato {name}; se l'aspetto non è corretto, impostare le unità e l'asse "
+"verticale in Geometria, poi assegnare i materiali alle superfici."
+
+#: acoustic_spaces/gui/app.py
+msgid "Open scene"
+msgstr "Apri scena"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Could not open {name}"
+msgstr "Impossibile aprire {name}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Opened {path}"
+msgstr "Aperto {path}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Save scene"
+msgstr "Salva scena"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "{name} already exists. Replace it?"
+msgstr "{name} esiste già. Sostituirlo?"
+
+#: acoustic_spaces/gui/app.py
+msgid "Could not save"
+msgstr "Impossibile salvare"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Saved {path}"
+msgstr "Salvato {path}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Save screenshot"
+msgstr "Salva schermata"
+
+#: acoustic_spaces/gui/app.py
+msgid "PNG (*.png)"
+msgstr "PNG (*.png)"
+
+#: acoustic_spaces/gui/app.py
+msgid "Export particle animation to Blender"
+msgstr "Esporta animazione di particelle in Blender"
+
+#: acoustic_spaces/gui/app.py
+msgid "Export to Blender"
+msgstr "Esporta in Blender"
+
+#: acoustic_spaces/gui/app.py
+msgid "Could not export"
+msgstr "Impossibile esportare"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"Wrote {path}: {count} particles from {source}, {sound:g} ms of sound over "
+"{slow:g} s. In Blender: File > Import > glTF 2.0."
+msgstr ""
+"Scritto {path}: {count} particelle da {source}, {sound:g} ms di suono in "
+"{slow:g} s. In Blender: File > Importa > glTF 2.0."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"Wrote {path}: the room with {count} reflection path from {source} to "
+"{listener}. In Blender: File > Import > glTF 2.0."
+msgid_plural ""
+"Wrote {path}: the room with {count} reflection paths from {source} to "
+"{listener}. In Blender: File > Import > glTF 2.0."
+msgstr[0] ""
+"Scritto {path}: l'ambiente con {count} percorso di riflessione da {source} a "
+"{listener}. In Blender: File > Importa > glTF 2.0."
+msgstr[1] ""
+"Scritto {path}: l'ambiente con {count} percorsi di riflessione da {source} a "
+"{listener}. In Blender: File > Importa > glTF 2.0."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Wrote {path}: the room. In Blender: File > Import > glTF 2.0."
+msgstr "Scritto {path}: l'ambiente. In Blender: File > Importa > glTF 2.0."
+
+#. Translators: an error's title, then what went wrong.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "{title}: {reason}"
+msgstr "{title}: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot run: {problems}"
+msgstr "Impossibile avviare il calcolo: {problems}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Simulating {scene}…"
+msgstr "Simulazione di {scene}…"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot map: {problems}"
+msgstr "Impossibile calcolare la mappa: {problems}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Mapping {scene}…"
+msgstr "Calcolo della mappa di {scene}…"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Timing the CPU and the GPU on {scene}…"
+msgstr "Misurazione dei tempi di CPU e GPU su {scene}…"
+
+#: acoustic_spaces/gui/app.py
+msgid "Cancelling at the next stage…"
+msgstr "Annullamento alla fase successiva…"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "{time:6.1f} s  {step}"
+msgstr "{time:6.1f} s  {step}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Dropped the results of the run: its scene is no longer open."
+msgstr "Risultati del calcolo scartati: la scena non è più aperta."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Done in {time:.1f} s: {count} response."
+msgid_plural "Done in {time:.1f} s: {count} responses."
+msgstr[0] "Completato in {time:.1f} s: {count} risposta."
+msgstr[1] "Completato in {time:.1f} s: {count} risposte."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Map done in {time:.1f} s: {count:,} point."
+msgid_plural "Map done in {time:.1f} s: {count:,} points."
+msgstr[0] "Mappa completata in {time:.1f} s: {count:,} punto."
+msgstr[1] "Mappa completata in {time:.1f} s: {count:,} punti."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "{length:g} s {device}"
+msgstr "{length:g} s {device}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Tuned in {time:.1f} s: late stage {late}; wave solver {wave}."
+msgstr ""
+"Ottimizzazione completata in {time:.1f} s: fase tardiva {late}; solutore "
+"ondulatorio {wave}."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Tuned in {time:.1f} s: late stage {late}."
+msgstr "Ottimizzazione completata in {time:.1f} s: fase tardiva {late}."
+
+#: acoustic_spaces/gui/app.py
+msgid "Tuning not saved: device auto and the default are as they were."
+msgstr ""
+"Ottimizzazione non salvata: il dispositivo auto e quello predefinito restano "
+"invariati."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Timings saved in {path}. This computer's default device: {device}."
+msgstr ""
+"Tempi salvati in {path}. Dispositivo predefinito di questo computer: "
+"{device}."
+
+#: acoustic_spaces/gui/app.py
+msgid "run on the default device"
+msgstr "calcolo sul dispositivo predefinito"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Late reverberation and the wave solver now run on this computer's default."
+msgstr ""
+"La riverberazione tardiva e il solutore ondulatorio usano ora il dispositivo "
+"predefinito di questo computer."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "The coverage map failed: {reason}"
+msgstr "Calcolo della mappa di copertura non riuscito: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "The tuning failed: {reason}"
+msgstr "Ottimizzazione non riuscita: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "The simulation failed: {reason}"
+msgstr "Simulazione non riuscita: {reason}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Coverage map cancelled."
+msgstr "Mappa di copertura annullata."
+
+#: acoustic_spaces/gui/app.py
+msgid "Tuning cancelled."
+msgstr "Ottimizzazione annullata."
+
+#: acoustic_spaces/gui/app.py
+msgid "Simulation cancelled."
+msgstr "Simulazione annullata."
+
+#: acoustic_spaces/gui/app.py
+msgid "Nothing to export yet: run the simulation (F5) first."
+msgstr "Nessun risultato da esportare: eseguire prima la simulazione (F5)."
+
+#: acoustic_spaces/gui/app.py
+msgid "Folder for the impulse responses"
+msgstr "Cartella per le risposte all'impulso"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Wrote {count} impulse response file and {report} to {folder}"
+msgid_plural "Wrote {count} impulse response files and {report} to {folder}"
+msgstr[0] "Scritti {count} file di risposta all'impulso e {report} in {folder}"
+msgstr[1] "Scritti {count} file di risposta all'impulso e {report} in {folder}"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Note: the float WAV files exceed full scale (a listener is closer than 1 m "
+"to a source); scale them before playing them back."
+msgstr ""
+"Nota: i file WAV in virgola mobile superano il fondo scala (un ricevitore si "
+"trova a meno di 1 m da una sorgente); ridimensionarli prima della "
+"riproduzione."
+
+#: acoustic_spaces/gui/app.py
+msgid "These results are from before the latest changes to the scene."
+msgstr "Questi risultati precedono le ultime modifiche alla scena."
+
+#: acoustic_spaces/gui/app.py
+msgid "No map yet: run the coverage map (F6) first."
+msgstr "Nessuna mappa disponibile: calcolare prima la mappa di copertura (F6)."
+
+#: acoustic_spaces/gui/app.py
+msgid "Save the coverage map"
+msgstr "Salva la mappa di copertura"
+
+#: acoustic_spaces/gui/app.py
+msgid "Could not save the map"
+msgstr "Impossibile salvare la mappa"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Wrote {path}"
+msgstr "Scritto {path}"
+
+#: acoustic_spaces/gui/app.py
+msgid "This map is from before the latest changes to the scene."
+msgstr "Questa mappa precede le ultime modifiche alla scena."
+
+#: acoustic_spaces/gui/app.py
+msgid "Dry recording to play in the room"
+msgstr "Registrazione anecoica da riprodurre nell'ambiente"
+
+#: acoustic_spaces/gui/app.py
+msgid "WAV files (*.wav)"
+msgstr "File WAV (*.wav)"
+
+#: acoustic_spaces/gui/app.py
+msgid "Cannot play"
+msgstr "Impossibile riprodurre"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Playing {name} from {source} at {listener}"
+msgstr "Riproduzione di {name} da {source} in {listener}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Playing {name} from {source} at {listener} ({way})"
+msgstr "Riproduzione di {name} da {source} in {listener} ({way})"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Playing {name} from {source} at {listener}, head-tracked"
+msgstr ""
+"Riproduzione di {name} da {source} in {listener}, con tracciamento della "
+"testa"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"Playing {name} from {source} at {listener}, head-tracked (order {order} "
+"Ambisonics to binaural)"
+msgstr ""
+"Riproduzione di {name} da {source} in {listener}, con tracciamento della "
+"testa (da Ambisonics di ordine {order} a binaurale)"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "{count} block dropped out while playing."
+msgid_plural "{count} blocks dropped out while playing."
+msgstr[0] "Perso {count} blocco durante la riproduzione."
+msgstr[1] "Persi {count} blocchi durante la riproduzione."
+
+#. Translators: {playing} is what plays, as "Playing {name} from..." says.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "{playing} (before the latest changes)"
+msgstr "{playing} (prima delle ultime modifiche)"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"The sound playing is from before the latest changes to the scene and does "
+"not follow them: to hear them, Listen again (after running again, F5, if the "
+"results are out of date)."
+msgstr ""
+"L'audio in riproduzione precede le ultime modifiche alla scena e non le "
+"segue: per ascoltarle, premere di nuovo Ascolta (dopo un nuovo calcolo, F5, "
+"se i risultati non sono aggiornati)."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Room acoustics simulation: early reflections by ray tracing or image "
+"sources, the late tail by stochastic ray tracing, and binaural, Ambisonics "
+"and loudspeaker impulse responses."
+msgstr ""
+"Simulazione di acustica degli ambienti: prime riflessioni tramite "
+"tracciamento di raggi o sorgenti immagine, coda tardiva tramite tracciamento "
+"di raggi stocastico e risposte all'impulso binaurali, Ambisonics e per "
+"altoparlanti."
+
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
+msgid "Source"
+msgstr "Sorgente"
+
+#: acoustic_spaces/gui/document.py
+msgid "no file to save to; give a path"
+msgstr "nessun file in cui salvare; specificare un percorso"
+
+#: acoustic_spaces/gui/document.py
+msgid "add source"
+msgstr "aggiungi sorgente"
+
+#: acoustic_spaces/gui/document.py
+msgid "add listener"
+msgstr "aggiungi ricevitore"
+
+#: acoustic_spaces/gui/document.py
+msgid "move source"
+msgstr "sposta sorgente"
+
+#: acoustic_spaces/gui/document.py
+msgid "move listener"
+msgstr "sposta ricevitore"
+
+#: acoustic_spaces/gui/document.py
+msgid "change source"
+msgstr "modifica sorgente"
+
+#: acoustic_spaces/gui/document.py
+msgid "change listener"
+msgstr "modifica ricevitore"
+
+#: acoustic_spaces/gui/document.py
+msgid "a scene needs at least one source"
+msgstr "una scena richiede almeno una sorgente"
+
+#: acoustic_spaces/gui/document.py
+msgid "a scene needs at least one listener"
+msgstr "una scena richiede almeno un ricevitore"
+
+#: acoustic_spaces/gui/document.py
+msgid "remove source"
+msgstr "rimuovi sorgente"
+
+#: acoustic_spaces/gui/document.py
+msgid "remove listener"
+msgstr "rimuovi ricevitore"
+
+#: acoustic_spaces/gui/document.py
+msgid "the room is a model file: draw a floor plan to replace it"
+msgstr ""
+"l'ambiente proviene da un file di modello: disegnare una pianta per "
+"sostituirlo"
+
+#: acoustic_spaces/gui/document.py acoustic_spaces/gui/inspector.py
+msgid "change floor plan"
+msgstr "modifica pianta"
+
+#: acoustic_spaces/gui/document.py
+msgid "draw floor plan"
+msgstr "disegna pianta"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "assign {surface}"
+msgstr "assegna {surface}"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "change material {name}"
+msgstr "modifica materiale {name}"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "add material {name}"
+msgstr "aggiungi materiale {name}"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "there is already a material named “{name}”"
+msgstr "esiste già un materiale chiamato «{name}»"
+
+#: acoustic_spaces/gui/document.py
+msgid "a material needs a name"
+msgstr "un materiale richiede un nome"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "rename material {name}"
+msgstr "rinomina materiale {name}"
+
+#: acoustic_spaces/gui/document.py
+msgid "a scene needs at least one material"
+msgstr "una scena richiede almeno un materiale"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "remove material {name}"
+msgstr "rimuovi materiale {name}"
+
+#. Translators: this and the entries below are choices as the scene file names them; translate them as words, and keep the tips that name them in step.
+#: acoustic_spaces/gui/inspector.py
+msgid "flat"
+msgstr "piatto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "speech_male"
+msgstr "parlato maschile"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "speech_female"
+msgstr "parlato femminile"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "omni"
+msgstr "omnidirezionale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "subcardioid"
+msgstr "subcardioide"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "cardioid"
+msgstr "cardioide"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "supercardioid"
+msgstr "supercardioide"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "hypercardioid"
+msgstr "ipercardioide"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "figure8"
+msgstr "a otto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "lambert"
+msgstr "lambertiano"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "point"
+msgstr "puntuale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "line"
+msgstr "lineare"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "surface"
+msgstr "superficiale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "ray_tracing"
+msgstr "tracciamento di raggi"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "image_sources"
+msgstr "sorgenti immagine"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "none"
+msgstr "nessuno"
+
+#. Translators: the direct sound's paths, in a plot's legend.
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py
+msgid "direct"
+msgstr "diretto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "first_order"
+msgstr "primo ordine"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "second_order"
+msgstr "secondo ordine"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "stochastic_ray_tracing"
+msgstr "tracciamento di raggi stocastico"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "statistical"
+msgstr "statistico"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "diffuse_rain"
+msgstr "pioggia diffusa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "secondary_sources"
+msgstr "sorgenti secondarie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "detector"
+msgstr "rilevatore"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "default"
+msgstr "predefinito"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "both"
+msgstr "entrambi"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "auto"
+msgstr "automatico"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "vector"
+msgstr "vettoriale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "random"
+msgstr "casuale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "median"
+msgstr "mediana"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "octave"
+msgstr "ottava"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "third_octave"
+msgstr "terzo d'ottava"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Measured data or an array from a file…"
+msgstr "Dati misurati o un array da un file…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the source radiates round it: omni evenly; subcardioid to hypercardioid "
+"ever more to the front; figure8 to the front and the back; lambert as a "
+"vibrating surface, to the front only; or measured data (SOFA or CSV) or an "
+"array of sources from a file"
+msgstr ""
+"Come la sorgente irradia attorno a sé: omnidirezionale in modo uniforme; da "
+"subcardioide a ipercardioide sempre più in avanti; a otto in avanti e "
+"indietro; lambertiano come una superficie vibrante, solo in avanti; oppure "
+"dati misurati (SOFA o CSV) o un array di sorgenti da un file"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The source's sound power level in all bands together (dB re 1 pW); Spectrum "
+"spreads it over the bands"
+msgstr ""
+"Il livello di potenza sonora della sorgente su tutte le bande insieme (dB "
+"rif. 1 pW); lo Spettro lo distribuisce tra le bande"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "(default material)"
+msgstr "(materiale predefinito)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "(unnamed)"
+msgstr "(senza nome)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Select something in the scene tree or click it in the 3D view.\n"
+"\n"
+"Place a new source or listener with the toolbar buttons, then click a floor "
+"or wall in the 3D view."
+msgstr ""
+"Selezionare un elemento nell'albero della scena o fare clic su di esso nella "
+"vista 3D.\n"
+"\n"
+"Posizionare una nuova sorgente o un nuovo ricevitore con i pulsanti della "
+"barra degli strumenti, poi fare clic su un pavimento o una parete nella "
+"vista 3D."
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The scene's name"
+msgstr "Il nome della scena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Name"
+msgstr "Nome"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The material of every surface that has no material of its own; with none, "
+"such surfaces are a problem and the run refuses to start"
+msgstr ""
+"Il materiale di ogni superficie senza materiale assegnato; se assente, tali "
+"superfici costituiscono un problema e il calcolo non può iniziare"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Default material"
+msgstr "Materiale predefinito"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Temperature of the air (°C): it sets the speed of sound and, with the "
+"humidity, how much the air absorbs at high frequencies (ISO 9613-1)"
+msgstr ""
+"Temperatura dell'aria (°C): determina la velocità del suono e, insieme "
+"all'umidità, l'assorbimento dell'aria alle alte frequenze (ISO 9613-1)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Relative humidity of the air (%): with the temperature, it sets how much the "
+"air absorbs at high frequencies"
+msgstr ""
+"Umidità relativa dell'aria (%): insieme alla temperatura determina "
+"l'assorbimento dell'aria alle alte frequenze"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Air pressure (kPa), 101.325 at sea level: it changes the air absorption a "
+"little"
+msgstr ""
+"Pressione dell'aria (kPa), 101.325 al livello del mare: modifica leggermente "
+"l'assorbimento dell'aria"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Air temperature"
+msgstr "Temperatura dell'aria"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Relative humidity"
+msgstr "Umidità relativa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Air pressure"
+msgstr "Pressione dell'aria"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The room's size, and its reverberation time estimated from the volume and "
+"the absorption alone (the Eyring and Sabine formulas, with air absorption). "
+"A run gives the full answer"
+msgstr ""
+"Le dimensioni dell'ambiente e il tempo di riverberazione stimato soltanto "
+"dal volume e dall'assorbimento (formule di Eyring e Sabine, con assorbimento "
+"dell'aria). Un calcolo fornisce il risultato completo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "(none)"
+msgstr "(nessuno)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Surface area: {area:,.1f} m²"
+msgstr "Area superficiale: {area:,.1f} m²"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Volume: {volume:,.1f} m³ in {count} room ({each} m³)"
+msgid_plural "Volume: {volume:,.1f} m³ in {count} rooms ({each} m³)"
+msgstr[0] "Volume: {volume:,.1f} m³ in {count} ambiente ({each} m³)"
+msgstr[1] "Volume: {volume:,.1f} m³ in {count} ambienti ({each} m³)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Volume: {volume:,.1f} m³"
+msgstr "Volume: {volume:,.1f} m³"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Volume: model not closed"
+msgstr "Volume: modello non chiuso"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Reverberation time at {band}: {eyring:.2f} s (Eyring), {sabine:.2f} s "
+"(Sabine)"
+msgstr ""
+"Tempo di riverberazione a {band}: {eyring:.2f} s (Eyring), {sabine:.2f} s "
+"(Sabine)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Problem: {problem}"
+msgstr "Problema: {problem}"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Warning: {warning}"
+msgstr "Avviso: {warning}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "rename scene"
+msgstr "rinomina scena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change default material"
+msgstr "modifica materiale predefinito"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change air"
+msgstr "modifica aria"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Box"
+msgstr "Ambiente rettangolare"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Length (x)"
+msgstr "Lunghezza (x)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Width (y)"
+msgstr "Larghezza (y)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Height (z)"
+msgstr "Altezza (z)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How long the room is along x, in the units the title shows"
+msgstr "La lunghezza dell'ambiente lungo x, nelle unità indicate nel titolo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How wide the room is along y, in the units the title shows"
+msgstr "La larghezza dell'ambiente lungo y, nelle unità indicate nel titolo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high the room is, floor to ceiling, in the units the title shows"
+msgstr ""
+"L'altezza dell'ambiente, dal pavimento al soffitto, nelle unità indicate nel "
+"titolo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Floor plan"
+msgstr "Pianta"
+
+#. Translators: {axis} is x or y.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"The {axis} of each corner, in the units the title shows; the corners go "
+"round the room in turn"
+msgstr ""
+"La coordinata {axis} di ogni vertice, nelle unità indicate nel titolo; i "
+"vertici seguono il perimetro dell'ambiente"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add corner"
+msgstr "Aggiungi vertice"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/plan_view.py
+msgid "Remove corner"
+msgstr "Rimuovi vertice"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add a corner halfway between the last corner and the first"
+msgstr "Aggiungere un vertice a metà tra l'ultimo e il primo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected corner, or the last one when none is selected"
+msgstr "Rimuovere il vertice selezionato o l'ultimo se nessuno è selezionato"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Height"
+msgstr "Altezza"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The model file the room comes from"
+msgstr "Il file di modello da cui proviene l'ambiente"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Choose another file…"
+msgstr "Scegli un altro file…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Take the room from another model file; the materials and their assignments "
+"stay"
+msgstr ""
+"Importare l'ambiente da un altro file di modello; i materiali e le loro "
+"assegnazioni vengono mantenuti"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "file default"
+msgstr "predefinite del file"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The unit the model's lengths are in; file default: the units a DXF, IFC or "
+"Collada file records, else metres"
+msgstr ""
+"L'unità delle lunghezze del modello; predefinite del file: le unità "
+"registrate in un file DXF, IFC o Collada, altrimenti metri"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "format default"
+msgstr "predefinito del formato"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The axis that points up in the model; format default: y for glTF and "
+"SketchUp, the one a Collada file records, z for the others (Blender's OBJ "
+"export writes y up)"
+msgstr ""
+"L'asse verticale del modello; predefinito del formato: y per glTF e "
+"SketchUp, quello registrato in un file Collada, z per gli altri "
+"(l'esportazione OBJ di Blender usa y come asse verticale)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The room of an IFC model to take on its own, from its space boundaries; "
+"every element reads walls as solids, with both sides"
+msgstr ""
+"L'ambiente di un modello IFC da importare separatamente, tramite i confini "
+"dello spazio; tutti gli elementi legge le pareti come solidi, con entrambi i "
+"lati"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Units"
+msgstr "Unità"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Up axis"
+msgstr "Asse verticale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "IFC room"
+msgstr "Ambiente IFC"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A closed model has no gaps: each edge joins two faces. The volume and the "
+"reverberation estimates need one; View > Show leaks finds the gaps"
+msgstr ""
+"Un modello chiuso non ha fessure: ogni spigolo unisce due facce. È "
+"necessario per il volume e le stime della riverberazione; Visualizza > "
+"Mostra fughe individua le fessure"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Geometry: {kind}"
+msgstr "Geometria: {kind}"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Box ({units})"
+msgstr "Ambiente rettangolare ({units})"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Floor plan ({units})"
+msgstr "Pianta ({units})"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "The {axis} of corner {number}"
+msgstr "La coordinata {axis} del vertice {number}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "every element"
+msgstr "tutti gli elementi"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count:,} triangles, {area:,.1f} m², closed"
+msgstr "{count:,} triangoli, {area:,.1f} m², chiuso"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count:,} triangles, {area:,.1f} m², not closed"
+msgstr "{count:,} triangoli, {area:,.1f} m², non chiuso"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "resize box"
+msgstr "ridimensiona ambiente rettangolare"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "floor plan corners need two numbers each"
+msgstr "ogni vertice della pianta richiede due numeri"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/plan_view.py
+msgid "add corner"
+msgstr "aggiungi vertice"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/plan_view.py
+msgid "remove corner"
+msgstr "rimuovi vertice"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change height"
+msgstr "modifica altezza"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Room model"
+msgstr "Modello dell'ambiente"
+
+#. Translators: two file types of an open dialog, kept apart by ;; (keep it).
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Room models ({patterns});;All files (*)"
+msgstr "Modelli dell'ambiente ({patterns});;Tutti i file (*)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "replace model"
+msgstr "sostituisci modello"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "choose IFC room"
+msgstr "scegli ambiente IFC"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change units"
+msgstr "modifica unità"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change up axis"
+msgstr "modifica asse verticale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The names this group of faces has in the model (group, layer or object), "
+"which material assignments match"
+msgstr ""
+"I nomi di questo gruppo di facce nel modello (gruppo, livello o oggetto), "
+"usati per le assegnazioni dei materiali"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Surface"
+msgstr "Superficie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The surface's area (m²)"
+msgstr "L'area della superficie (m²)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Area"
+msgstr "Area"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The material of the surface's first name; (default material) leaves it to "
+"the scene's default material"
+msgstr ""
+"Il materiale del primo nome della superficie; (materiale predefinito) usa "
+"quello predefinito della scena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Material"
+msgstr "Materiale"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/tree.py
+#, python-brace-format
+msgid "{area:,.1f} m²"
+msgstr "{area:,.1f} m²"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Now: {material}. Choosing a material assigns it to the name “{name}”, which "
+"other surfaces may share."
+msgstr ""
+"Attuale: {material}. La scelta di un materiale lo assegna al nome «{name}», "
+"che può essere condiviso da altre superfici."
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Now: {material}. Choosing a material assigns it to the name “{name}”."
+msgstr ""
+"Attuale: {material}. La scelta di un materiale lo assegna al nome «{name}»."
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Now: {material}. This surface has no name; it takes the default material."
+msgstr ""
+"Attuale: {material}. Questa superficie non ha nome; usa il materiale "
+"predefinito."
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Absorption"
+msgstr "Assorbimento"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Scattering"
+msgstr "Dispersione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Sound reduction (dB)"
+msgstr "Potere fonoisolante (dB)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Absorption coefficient (0 to 1): the share of the sound energy the surface "
+"takes in at each reflection; 0 reflects everything, 1 takes in everything"
+msgstr ""
+"Coefficiente di assorbimento (da 0 a 1): la frazione di energia sonora "
+"assorbita dalla superficie a ogni riflessione; 0 riflette tutto, 1 assorbe "
+"tutto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Scattering coefficient (0 to 1): the share of the reflected energy that "
+"leaves in random directions rather than as from a mirror; 0 for a smooth "
+"surface"
+msgstr ""
+"Coefficiente di dispersione (da 0 a 1): la frazione di energia riflessa in "
+"direzioni casuali anziché come da uno specchio; 0 per una superficie liscia"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Sound reduction index R (dB): how much quieter the sound is on the other "
+"side of the surface, 30 to 60 dB for walls. Typed only when it lets part of "
+"the sound through; a blank band takes its neighbour's value"
+msgstr ""
+"Potere fonoisolante R (dB): l'attenuazione del suono dall'altro lato della "
+"superficie, da 30 a 60 dB per le pareti. Da inserire solo quando lascia "
+"passare parte del suono; una banda vuota usa il valore di quella adiacente"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "nothing"
+msgstr "nulla"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "part of the sound"
+msgstr "parte del suono"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "everything (an opening)"
+msgstr "tutto (un'apertura)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The material's name; renaming it renames it in the assignments and the "
+"default material too"
+msgstr ""
+"Il nome del materiale; rinominarlo lo aggiorna anche nelle assegnazioni e "
+"nel materiale predefinito"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The entry of the built-in material database the absorption comes from; type "
+"to search. Picking one replaces the absorption and keeps the scattering"
+msgstr ""
+"La voce della banca dati integrata da cui proviene l'assorbimento; digitare "
+"per cercare. La selezione sostituisce l'assorbimento e mantiene la "
+"dispersione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Database entry"
+msgstr "Voce della banca dati"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Sound that passes through a surface goes on into the room behind it, a "
+"partition's at its sound reduction index R (30 to 60 dB for walls), an "
+"opening's all of it. What passes counts as absorbed, so the absorption is at "
+"least 10^(-R/10), and an opening's is 1."
+msgstr ""
+"Il suono che attraversa una superficie prosegue nell'ambiente retrostante: "
+"per una partizione secondo il potere fonoisolante R (da 30 a 60 dB per le "
+"pareti), per un'apertura interamente. La parte trasmessa conta come "
+"assorbita, quindi l'assorbimento è almeno 10^(-R/10) e quello di un'apertura "
+"è 1."
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Lets through"
+msgstr "Lascia passare"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Audience seating"
+msgstr "Sedute del pubblico"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Sound that reaches a listener low over these seats loses more in the 500 Hz "
+"to 2 kHz bands, as it passes heads and seat backs (grazing incidence; the "
+"fit of Jurkiewicz et al., 2025)"
+msgstr ""
+"Il suono che raggiunge un ricevitore poco sopra queste sedute subisce "
+"un'attenuazione maggiore nelle bande da 500 Hz a 2 kHz passando tra teste e "
+"schienali (incidenza radente; modello di Jurkiewicz et al., 2025)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Where the coefficients come from"
+msgstr "La provenienza dei coefficienti"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How much of the room's surface has this material"
+msgstr "La parte della superficie dell'ambiente con questo materiale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove material"
+msgstr "Rimuovi materiale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove this material and the assignments that use it; its surfaces take the "
+"default material"
+msgstr ""
+"Rimuovere questo materiale e le assegnazioni che lo usano; le superfici "
+"useranno il materiale predefinito"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Source: {source}"
+msgstr "Fonte: {source}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Source: values given in the scene"
+msgstr "Fonte: valori specificati nella scena"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Covers {area:,.1f} m² of the room."
+msgstr "Copre {area:,.1f} m² dell'ambiente."
+
+#: acoustic_spaces/gui/inspector.py
+msgid "coefficients are numbers from 0 to 1"
+msgstr "i coefficienti sono numeri da 0 a 1"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "the sound reduction is in dB"
+msgstr "il potere fonoisolante è espresso in dB"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "file: {name}"
+msgstr "file: {name}"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "array of {count} element"
+msgid_plural "array of {count} elements"
+msgstr[0] "array di {count} elemento"
+msgstr[1] "array di {count} elementi"
+
+#. Translators: {patterns} lists a pattern name per band, such as omni, cardioid.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "per band: {patterns}"
+msgstr "per banda: {patterns}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The source's name, as the results and the exported files show it"
+msgstr "Il nome della sorgente, come appare nei risultati e nei file esportati"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The listener's name, as the results and the exported files show it"
+msgstr "Il nome del ricevitore, come appare nei risultati e nei file esportati"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the source is along x (m). Dragging it in the 3D view or the plan "
+"moves it too"
+msgstr ""
+"La posizione della sorgente lungo x (m). Si può spostare anche trascinandola "
+"nella vista 3D o nella pianta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the source is along y (m). Dragging it in the 3D view or the plan "
+"moves it too"
+msgstr ""
+"La posizione della sorgente lungo y (m). Si può spostare anche trascinandola "
+"nella vista 3D o nella pianta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the source is along z (m); z is up. Dragging it in the 3D view or the "
+"plan moves it too"
+msgstr ""
+"La posizione della sorgente lungo z (m); z è l'asse verticale. Si può "
+"spostare anche trascinandola nella vista 3D o nella pianta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the listener is along x (m). Dragging it in the 3D view or the plan "
+"moves it too"
+msgstr ""
+"La posizione del ricevitore lungo x (m). Si può spostare anche trascinandolo "
+"nella vista 3D o nella pianta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the listener is along y (m). Dragging it in the 3D view or the plan "
+"moves it too"
+msgstr ""
+"La posizione del ricevitore lungo y (m). Si può spostare anche trascinandolo "
+"nella vista 3D o nella pianta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the listener is along z (m); z is up. Dragging it in the 3D view or "
+"the plan moves it too"
+msgstr ""
+"La posizione del ricevitore lungo z (m); z è l'asse verticale. Si può "
+"spostare anche trascinandolo nella vista 3D o nella pianta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Turns the source left, from facing +x towards +y (degrees). The way it faces "
+"sets where the source radiates most with a directional pattern"
+msgstr ""
+"Ruota la sorgente a sinistra, da +x verso +y (gradi). L'orientamento "
+"determina la direzione in cui una sorgente direttiva irradia maggiormente"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Tilts the source to look up (degrees). The way it faces sets where the "
+"source radiates most with a directional pattern"
+msgstr ""
+"Inclina la sorgente verso l'alto (gradi). L'orientamento determina la "
+"direzione in cui una sorgente direttiva irradia maggiormente"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Tilts the source to the right, round the way it faces (degrees). The way it "
+"faces sets where the source radiates most with a directional pattern"
+msgstr ""
+"Inclina la sorgente a destra attorno al suo asse frontale (gradi). "
+"L'orientamento determina la direzione in cui una sorgente direttiva irradia "
+"maggiormente"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Turns the listener left, from facing +x towards +y (degrees). The way it "
+"faces sets what the binaural, Ambisonics and loudspeaker outputs hear as the "
+"front"
+msgstr ""
+"Ruota il ricevitore a sinistra, da +x verso +y (gradi). L'orientamento "
+"determina la direzione frontale nelle uscite binaurali, Ambisonics e per "
+"altoparlanti"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Tilts the listener to look up (degrees). The way it faces sets what the "
+"binaural, Ambisonics and loudspeaker outputs hear as the front"
+msgstr ""
+"Inclina il ricevitore verso l'alto (gradi). L'orientamento determina la "
+"direzione frontale nelle uscite binaurali, Ambisonics e per altoparlanti"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Tilts the listener to the right, round the way it faces (degrees). The way "
+"it faces sets what the binaural, Ambisonics and loudspeaker outputs hear as "
+"the front"
+msgstr ""
+"Inclina il ricevitore a destra attorno al suo asse frontale (gradi). "
+"L'orientamento determina la direzione frontale nelle uscite binaurali, "
+"Ambisonics e per altoparlanti"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/results_view.py
+msgid "Yaw"
+msgstr "Imbardata"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/results_view.py
+msgid "Pitch"
+msgstr "Beccheggio"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Roll"
+msgstr "Rollio"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How much louder the source is straight ahead than on average over all "
+"directions, per octave band (dB): 0 dB for omni, about 5 dB for a cardioid"
+msgstr ""
+"Quanto la sorgente è più intensa frontalmente rispetto alla media su tutte "
+"le direzioni, per banda d'ottava (dB): 0 dB per una sorgente "
+"omnidirezionale, circa 5 dB per una cardioide"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Show the pattern"
+msgstr "Mostra diagramma"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Open the source's polar patterns in every band; the selected source also "
+"shows its balloon in the 3D view"
+msgstr ""
+"Aprire i diagrammi polari della sorgente in ogni banda; la sorgente "
+"selezionata mostra anche il suo diagramma 3D nella vista 3D"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the sound power spreads over the bands: evenly over the octave bands, or "
+"as male or female speech (IEC 60268-16), which the STI then weights for"
+msgstr ""
+"Come la potenza sonora si distribuisce tra le bande: uniformemente tra le "
+"bande d'ottava oppure come parlato maschile o femminile (IEC 60268-16), con "
+"la ponderazione corrispondente dello STI"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Gain of the source's feed (dB): on its level and its impulse responses"
+msgstr ""
+"Guadagno del segnale di ingresso della sorgente (dB): sul livello e sulle "
+"risposte all'impulso"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Equalizer gain per band (dB): 8 octave values from 63 Hz to 8 kHz, or 24 "
+"third-octave values from 50 Hz to 10 kHz, separated by commas"
+msgstr ""
+"Guadagno dell'equalizzatore per banda (dB): 8 valori d'ottava da 63 Hz a 8 "
+"kHz o 24 valori di terzo d'ottava da 50 Hz a 10 kHz, separati da virgole"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Equalizer gain per band (dB): 8 octave values from 63 Hz to 8 kHz, or 24 "
+"third-octave values from 50 Hz to 10 kHz, separated by semicolons"
+msgstr ""
+"Guadagno dell'equalizzatore per banda (dB): 8 valori d'ottava da 63 Hz a 8 "
+"kHz o 24 valori di terzo d'ottava da 50 Hz a 10 kHz, separati da punti e "
+"virgola"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The source starts this long after the others: its arrivals and responses "
+"come that much later"
+msgstr ""
+"La sorgente inizia con questo ritardo rispetto alle altre: gli arrivi e le "
+"risposte sono ritardati della stessa quantità"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A line runs along the source's left axis and a surface spans its left and up "
+"axes, both centred on its position: uncorrelated point sources share the "
+"power"
+msgstr ""
+"Una linea si estende lungo l'asse sinistro della sorgente e una superficie "
+"lungo gli assi sinistro e verticale, entrambe centrate sulla posizione: "
+"sorgenti puntuali non correlate si dividono la potenza"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How long a line source is, or how wide a surface source is, along the "
+"source's left axis (m)"
+msgstr ""
+"La lunghezza di una sorgente lineare o la larghezza di una sorgente "
+"superficiale lungo l'asse sinistro della sorgente (m)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high a surface source is, along the source's up axis (m)"
+msgstr ""
+"L'altezza di una sorgente superficiale lungo l'asse verticale della sorgente "
+"(m)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The most the point sources of a line or surface are apart (m); closer is "
+"finer and slower"
+msgstr ""
+"La distanza massima tra le sorgenti puntuali di una linea o superficie (m); "
+"una distanza minore è più precisa e più lenta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The line or surface is made of these point sources; they share its sound "
+"power"
+msgstr ""
+"La linea o superficie è composta da queste sorgenti puntuali, che ne "
+"condividono la potenza sonora"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Shape"
+msgstr "Forma"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Length"
+msgstr "Lunghezza"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Spacing"
+msgstr "Spaziatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Directivity"
+msgstr "Direttività"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Sound power"
+msgstr "Potenza sonora"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Spectrum"
+msgstr "Spettro"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Gain"
+msgstr "Guadagno"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Equalizer"
+msgstr "Equalizzatore"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Delay"
+msgstr "Ritardo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove source"
+msgstr "Rimuovi sorgente"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove listener"
+msgstr "Rimuovi ricevitore"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove this source from the scene (Delete in the tree or a view)"
+msgstr ""
+"Rimuovere questa sorgente dalla scena (Canc nell'albero o in una vista)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove this listener from the scene (Delete in the tree or a view)"
+msgstr ""
+"Rimuovere questo ricevitore dalla scena (Canc nell'albero o in una vista)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Yaw turns left from +x towards +y, pitch looks up and roll tilts to the "
+"right. In the 3D view the long arrow points forward and the short one up."
+msgstr ""
+"L'imbardata ruota a sinistra da +x verso +y, il beccheggio inclina verso "
+"l'alto e il rollio inclina a destra. Nella vista 3D la freccia lunga punta "
+"in avanti e quella corta verso l'alto."
+
+#. Translators: the directivity list's tip, then the choice it shows.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Now: {choice}"
+msgstr "{tip}. Attuale: {choice}"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Directivity index: {values} dB (63 Hz to 8 kHz); {bands} Hz copied from the "
+"nearest octave"
+msgstr ""
+"Indice di direttività: {values} dB (da 63 Hz a 8 kHz); {bands} Hz copiati "
+"dall'ottava più vicina"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Directivity index: {values} dB (63 Hz to 8 kHz)"
+msgstr "Indice di direttività: {values} dB (da 63 Hz a 8 kHz)"
+
+#. Translators: {tip} is the sound power's tip.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{tip}. Given per band in the scene file; this is their sum"
+msgstr "{tip}. Specificato per banda nel file di scena; questa è la somma"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Width"
+msgstr "Larghezza"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count} uncorrelated point source"
+msgid_plural "{count} uncorrelated point sources"
+msgstr[0] "{count} sorgente puntuale non correlata"
+msgstr[1] "{count} sorgenti puntuali non correlate"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Source directivity"
+msgstr "Direttività della sorgente"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Directivity data or arrays (*.sofa *.csv *.yaml *.yml);;All files (*)"
+msgstr ""
+"Dati di direttività o array (*.sofa *.csv *.yaml *.yml);;Tutti i file (*)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Directivity of {name}"
+msgstr "Direttività di {name}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "the equalizer takes numbers (dB), one per band"
+msgstr "l'equalizzatore richiede numeri (dB), uno per banda"
+
+#. Translators: {device} is a device such as cpu or gpu, as the scene file writes it.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "default ({device})"
+msgstr "predefinito ({device})"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Early reflections"
+msgstr "Prime riflessioni"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the early reflection paths are found: ray_tracing (rays find them; the "
+"cost grows with the rays, not the surfaces) or image_sources (every sequence "
+"of surfaces; complete, but it grows as the surfaces to the power of the "
+"order). The paths found are exact either way"
+msgstr ""
+"Come vengono individuati i percorsi delle prime riflessioni: tracciamento di "
+"raggi (i raggi li individuano; il costo cresce con il numero di raggi, non "
+"di superfici) o sorgenti immagine (ogni sequenza di superfici; completo, ma "
+"cresce come il numero di superfici elevato all'ordine). I percorsi trovati "
+"sono esatti in entrambi i casi"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The most reflections an early path has; the late reverberation takes the "
+"higher orders"
+msgstr ""
+"Il numero massimo di riflessioni di un percorso iniziale; gli ordini "
+"superiori sono trattati dalla riverberazione tardiva"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Rays that look for early reflection paths (ray tracing only); more find more "
+"of the higher-order paths"
+msgstr ""
+"Raggi che cercano i percorsi delle prime riflessioni (solo per il "
+"tracciamento di raggi); un numero maggiore trova più percorsi di ordine "
+"elevato"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Sound bending round edges (pillars, balcony fronts, screens): none, of the "
+"direct sound only, of the direct sound and first-order reflections, or also "
+"of the direct sound over two edges in turn"
+msgstr ""
+"Il suono che aggira gli spigoli (pilastri, fronti di balconate, schermi): "
+"nessuno, solo del suono diretto, del suono diretto e delle riflessioni di "
+"primo ordine, oppure anche del suono diretto su due spigoli consecutivi"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The highest octave band (Hz) in which the early paths add in pressure, with "
+"the phase of every reflection, rather than in energy; the wave solver's "
+"bands take their place when it runs up to this band or higher"
+msgstr ""
+"La banda d'ottava più alta (Hz) in cui i percorsi iniziali si sommano in "
+"pressione, con la fase di ogni riflessione, anziché in energia; le bande del "
+"solutore ondulatorio li sostituiscono quando raggiunge questa banda o una "
+"superiore"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Method"
+msgstr "Metodo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Highest order"
+msgstr "Ordine massimo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Rays"
+msgstr "Raggi"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Diffraction"
+msgstr "Diffrazione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "In pressure up to"
+msgstr "In pressione fino a"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Late reverberation"
+msgstr "Riverberazione tardiva"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the late reverberation is found: stochastic_ray_tracing (rays per band "
+"reflect and scatter off the surfaces) or statistical (a smooth decay at the "
+"Eyring reverberation time, by Barron's revised theory; fast, for simple "
+"rooms)"
+msgstr ""
+"Come viene calcolata la riverberazione tardiva: tracciamento di raggi "
+"stocastico (raggi per banda riflessi e dispersi dalle superfici) o "
+"statistico (decadimento regolare con il tempo di riverberazione di Eyring, "
+"secondo la teoria riveduta di Barron; rapido, per ambienti semplici)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Rays per band for the late reverberation; more give smoother decays and take "
+"longer"
+msgstr ""
+"Raggi per banda per la riverberazione tardiva; un numero maggiore produce "
+"decadimenti più regolari e richiede più tempo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How reflected energy reaches the listeners: diffuse_rain (the scattered part "
+"of each reflection radiates to every listener it can see, the rest counts "
+"when a ray crosses a detector sphere), secondary_sources (all of it "
+"radiates, as in ODEON: smoother, but it treats specular sound as diffuse) or "
+"detector (the sphere only, classic ray tracing)"
+msgstr ""
+"Come l'energia riflessa raggiunge i ricevitori: pioggia diffusa (la parte "
+"dispersa di ogni riflessione irradia verso ogni ricevitore visibile; il "
+"resto viene contato quando un raggio attraversa una sfera di rilevamento), "
+"sorgenti secondarie (tutta l'energia irradia, come in ODEON: più regolare, "
+"ma tratta il suono speculare come diffuso) o rilevatore (solo la sfera, "
+"tracciamento di raggi classico)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How many directions the late energy is sorted into, every 10 ms, so that the "
+"binaural, Ambisonics and loudspeaker outputs hear where the reverberation "
+"comes from"
+msgstr ""
+"Il numero di direzioni in cui viene suddivisa l'energia tardiva ogni 10 ms, "
+"affinché le uscite binaurali, Ambisonics e per altoparlanti riproducano la "
+"provenienza della riverberazione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Split strong rays, thin out weak ones"
+msgstr "Suddividi i raggi forti, dirada quelli deboli"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Split rays that carry much more energy than usual and thin out those that "
+"carry much less; the expected result stays the same, and late tails stay "
+"smooth where few rays survive (about 1.5 times the run time)"
+msgstr ""
+"Suddividere i raggi che trasportano molta più energia del normale e diradare "
+"quelli che ne trasportano molta meno; il risultato atteso resta invariato e "
+"le code tardive rimangono regolari dove sopravvivono pochi raggi (circa 1.5 "
+"volte il tempo di calcolo)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where it traces the rays: this computer's default (the CPU, or auto once "
+"Simulation > Tune CPU and GPU… made it so), the CPU, a GPU through WebGPU "
+"(needs the gpu extra), both sharing the rays (with a GPU, results can vary "
+"slightly from run to run), or auto: the fastest of those on this computer, "
+"as Tune CPU and GPU… or a short trial found"
+msgstr ""
+"Dove vengono tracciati i raggi: il dispositivo predefinito di questo "
+"computer (CPU, oppure automatico dopo l'ottimizzazione con Simulazione > "
+"Ottimizza CPU e GPU…), CPU, GPU tramite WebGPU (richiede il componente "
+"aggiuntivo gpu), entrambi suddividendo i raggi (con una GPU i risultati "
+"possono variare leggermente tra i calcoli), oppure automatico: il più veloce "
+"su questo computer, determinato da Ottimizza CPU e GPU… o da una breve prova"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Rays per band"
+msgstr "Raggi per banda"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Reception"
+msgstr "Ricezione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Arrival directions"
+msgstr "Direzioni di arrivo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Run on"
+msgstr "Calcola su"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where a reflected ray goes: vector (between the specular direction and a "
+"random Lambert one, weighted by the scattering coefficient, as in ODEON) or "
+"random (specular, or with the scattering coefficient as probability Lambert)"
+msgstr ""
+"La direzione di un raggio riflesso: vettoriale (tra la direzione speculare e "
+"una direzione lambertiana casuale, ponderata dal coefficiente di "
+"dispersione, come in ODEON) o casuale (speculare oppure lambertiana con "
+"probabilità pari al coefficiente di dispersione)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add the scattering of each surface's size"
+msgstr "Aggiungi la dispersione dovuta alle dimensioni delle superfici"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Small surfaces, distant ones and grazing reflections reflect less specularly "
+"at low frequencies (Christensen and Rindel, 2005)"
+msgstr ""
+"Superfici piccole, distanti e riflessioni radenti sono meno speculari alle "
+"basse frequenze (Christensen e Rindel, 2005)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Trace each band with rays of its own"
+msgstr "Traccia ogni banda con raggi propri"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Vector-based scattering: where the bands scatter differently, each band "
+"follows its own scattering (exact). Off: one ray for all bands, turned by "
+"their mean scattering (faster)"
+msgstr ""
+"Dispersione vettoriale: dove le bande hanno dispersioni diverse, ciascuna "
+"segue la propria (esatto). Disattivato: un raggio per tutte le bande, "
+"deviato dalla dispersione media (più rapido)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Direction"
+msgstr "Direzione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Low frequencies"
+msgstr "Basse frequenze"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wave solver"
+msgstr "Solutore ondulatorio"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Compute the lowest octave bands from the sound field itself (finite "
+"differences on a grid) instead of rays: room modes, and sound bending round "
+"everything"
+msgstr ""
+"Calcolare le bande d'ottava più basse direttamente dal campo sonoro "
+"(differenze finite su una griglia) anziché con i raggi: modi dell'ambiente e "
+"suono che aggira ogni ostacolo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The highest band it computes; each costs about 16 times the one below"
+msgstr ""
+"La banda più alta calcolata; ciascuna costa circa 16 volte quella inferiore"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where it steps its grid: this computer's default (the CPU, or auto once "
+"Simulation > Tune CPU and GPU… made it so), the CPU, a GPU through WebGPU "
+"(needs the gpu extra), or auto: a hardware GPU when there is one, unless "
+"Tune CPU and GPU… found the CPU faster for the run's length"
+msgstr ""
+"Dove viene aggiornata la griglia: il dispositivo predefinito di questo "
+"computer (CPU, oppure automatico dopo l'ottimizzazione con Simulazione > "
+"Ottimizza CPU e GPU…), CPU, GPU tramite WebGPU (richiede il componente "
+"aggiuntivo gpu), oppure automatico: una GPU hardware se disponibile, a meno "
+"che Ottimizza CPU e GPU… abbia trovato la CPU più veloce per la durata del "
+"calcolo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Up to band (Hz)"
+msgstr "Fino alla banda (Hz)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Performance"
+msgstr "Prestazioni"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "All cores ({count})"
+msgstr "Tutti i core ({count})"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Worker threads for ray tracing and the wave solver on the CPU. Fewer leave "
+"the computer free for other work; the results stay the same"
+msgstr ""
+"Thread di lavoro per il tracciamento di raggi e il solutore ondulatorio "
+"sulla CPU. Un numero minore lascia il computer disponibile per altre "
+"attività; i risultati restano invariati"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the tree that finds the surface a ray meets is split: by the surface "
+"area heuristic (sah, several times faster in detailed models) or at the "
+"middle face (median, as before; for comparison). The results stay the same"
+msgstr ""
+"Come viene suddiviso l'albero che individua la superficie incontrata da un "
+"raggio: con l'euristica dell'area superficiale (sah, diverse volte più "
+"rapida nei modelli dettagliati) o alla faccia mediana (mediana, come prima; "
+"per confronto). I risultati restano invariati"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "CPU threads"
+msgstr "Thread della CPU"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ray search tree"
+msgstr "Albero di ricerca dei raggi"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Response"
+msgstr "Risposta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How long each impulse response lasts (s); longer than the reverberation time "
+"keeps the whole decay"
+msgstr ""
+"La durata di ogni risposta all'impulso (s); una durata superiore al tempo di "
+"riverberazione conserva l'intero decadimento"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Samples per second of the impulse responses (Hz); match the recordings you "
+"will play through them"
+msgstr ""
+"Campioni al secondo delle risposte all'impulso (Hz); usare la stessa "
+"frequenza delle registrazioni da riprodurre attraverso di esse"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The bands it runs in: 8 octave bands, or 24 third-octave bands for finer "
+"detail in the response (about three times the work). Room parameters are "
+"given in octave bands either way"
+msgstr ""
+"Le bande di calcolo: 8 bande d'ottava o 24 bande di terzo d'ottava per una "
+"risposta più dettagliata (circa il triplo del lavoro). I parametri acustici "
+"sono sempre forniti in bande d'ottava"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Automatic"
+msgstr "Automatico"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Ticked, the early paths hand over to the late reverberation by reflection "
+"order (with the statistical method, at the mixing time: the square root of "
+"the volume, in ms). Unticked, at the time below"
+msgstr ""
+"Se selezionato, il passaggio dalle prime riflessioni alla riverberazione "
+"tardiva dipende dall'ordine di riflessione (con il metodo statistico, dal "
+"tempo di mescolamento: la radice quadrata del volume, in ms). Altrimenti "
+"avviene al tempo indicato sotto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The early paths end this long after the direct sound (ms); the late "
+"reverberation takes the rest"
+msgstr ""
+"Le prime riflessioni terminano dopo questo intervallo dal suono diretto "
+"(ms); la riverberazione tardiva copre il resto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "New random seed every run"
+msgstr "Nuovo seme casuale a ogni calcolo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Ticked, every run draws new random rays, so results vary a little from run "
+"to run. Unticked, the seed below makes runs repeat, exactly with the late "
+"rays on the CPU (on a GPU they can vary slightly)"
+msgstr ""
+"Se selezionato, ogni calcolo genera nuovi raggi casuali e i risultati "
+"variano leggermente. Altrimenti il seme indicato sotto rende i calcoli "
+"ripetibili, esattamente con i raggi tardivi sulla CPU (su una GPU possono "
+"variare leggermente)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The random seed: the same seed and settings give the same results (on a GPU "
+"they can vary slightly)"
+msgstr ""
+"Il seme casuale: lo stesso seme e le stesse impostazioni danno gli stessi "
+"risultati (su una GPU possono variare leggermente)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Sample rate (Hz)"
+msgstr "Frequenza di campionamento (Hz)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Bands"
+msgstr "Bande"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Early to late"
+msgstr "Passaggio alla riverberazione tardiva"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Seed"
+msgstr "Seme"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change simulation settings"
+msgstr "modifica impostazioni della simulazione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Mono"
+msgstr "Mono"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Write one impulse response per source and listener, as an omnidirectional "
+"microphone hears it"
+msgstr ""
+"Scrivere una risposta all'impulso per ogni sorgente e ricevitore, come "
+"percepita da un microfono omnidirezionale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Binaural"
+msgstr "Binaurale"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Write a two-channel response for headphones, through the HRTF below"
+msgstr ""
+"Scrivere una risposta a due canali per cuffie, attraverso l'HRTF indicata "
+"sotto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The head-related transfer functions (HRTF) the binaural response goes "
+"through: a SOFA file, or a spherical head model"
+msgstr ""
+"Le funzioni di trasferimento relative alla testa (HRTF) usate per la "
+"risposta binaurale: un file SOFA o un modello di testa sferica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "HRTF file…"
+msgstr "File HRTF…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Pick a SOFA file of head-related transfer functions"
+msgstr ""
+"Scegliere un file SOFA di funzioni di trasferimento relative alla testa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Spherical head"
+msgstr "Testa sferica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Use a spherical head model instead of an HRTF file"
+msgstr "Usare un modello di testa sferica al posto di un file HRTF"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ambisonics (AmbiX)"
+msgstr "Ambisonics (AmbiX)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Write an Ambisonics response (AmbiX: ACN channel order, SN3D normalisation), "
+"to decode for any loudspeakers or turn with a head tracker"
+msgstr ""
+"Scrivere una risposta Ambisonics (AmbiX: ordine dei canali ACN, "
+"normalizzazione SN3D), da decodificare per qualsiasi configurazione di "
+"altoparlanti o ruotare con un sensore di tracciamento della testa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The Ambisonics order: (order + 1)² channels; higher orders place sounds more "
+"sharply"
+msgstr ""
+"L'ordine Ambisonics: (ordine + 1)² canali; gli ordini superiori localizzano "
+"i suoni con maggiore precisione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Loudspeakers"
+msgstr "Altoparlanti"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Write one channel per loudspeaker of a standard layout, panned between them "
+"(VBAP)"
+msgstr ""
+"Scrivere un canale per ogni altoparlante di una configurazione standard, con "
+"distribuzione del suono tra di essi (VBAP)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "stereo"
+msgstr "stereo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The loudspeaker layout: stereo, surround (5.0, 7.0), with a low-frequency "
+"channel (5.1, 7.1), and with four height speakers (.4)"
+msgstr ""
+"La configurazione degli altoparlanti: stereo, surround (5.0, 7.0), con un "
+"canale a bassa frequenza (5.1, 7.1) e con quattro altoparlanti in elevazione "
+"(.4)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Order"
+msgstr "Ordine"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Layout"
+msgstr "Configurazione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Layouts of your own, given speaker by speaker in the scene file"
+msgstr ""
+"Configurazioni personalizzate, specificate altoparlante per altoparlante nel "
+"file di scena"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "HRTF: {file}"
+msgstr "HRTF: {file}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "HRTF: spherical head model"
+msgstr "HRTF: modello di testa sferica"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "The scene also has {count} custom loudspeaker layout; it is kept."
+msgid_plural ""
+"The scene also has {count} custom loudspeaker layouts; they are kept."
+msgstr[0] ""
+"La scena contiene anche {count} configurazione personalizzata di "
+"altoparlanti, che viene mantenuta."
+msgstr[1] ""
+"La scena contiene anche {count} configurazioni personalizzate di "
+"altoparlanti, che vengono mantenute."
+
+#: acoustic_spaces/gui/inspector.py
+msgid "keep at least one output format"
+msgstr "mantenere almeno un formato di uscita"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change outputs"
+msgstr "modifica uscite"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "HRTF set"
+msgstr "Set HRTF"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "SOFA files (*.sofa);;All files (*)"
+msgstr "File SOFA (*.sofa);;Tutti i file (*)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Audience area"
+msgstr "Area del pubblico"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Automatic: surfaces named audience, else the floor"
+msgstr "Automatico: superfici chiamate audience, altrimenti il pavimento"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Ticked, the map lies over the surfaces whose names hold audience, else over "
+"the floor. Unticked, over the surfaces ticked below"
+msgstr ""
+"Se selezionato, la mappa si estende sulle superfici il cui nome contiene "
+"audience, altrimenti sul pavimento. Se deselezionato, sulle superfici "
+"selezionate sotto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The surfaces the map lies over, when Automatic is unticked"
+msgstr ""
+"Le superfici su cui si estende la mappa quando Automatico è deselezionato"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How high above the surfaces the map's points are (m): about 1.2 m for seated "
+"ears"
+msgstr ""
+"L'altezza dei punti della mappa sopra le superfici (m): circa 1.2 m per le "
+"orecchie di una persona seduta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How far apart the map's points are (m); finer maps take longer"
+msgstr ""
+"La distanza tra i punti della mappa (m); le mappe più fitte richiedono più "
+"tempo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Listening height"
+msgstr "Altezza di ascolto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Point spacing"
+msgstr "Distanza tra i punti"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "As for the late reverberation"
+msgstr "Come per la riverberazione tardiva"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Ticked, the map traces as many rays per band as the simulation's late "
+"reverberation"
+msgstr ""
+"Se selezionato, la mappa traccia lo stesso numero di raggi per banda della "
+"riverberazione tardiva della simulazione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Rays per source and band for the map; more give smoother maps"
+msgstr ""
+"Raggi per sorgente e banda per la mappa; un numero maggiore produce mappe "
+"più regolari"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Rays per source and band"
+msgstr "Raggi per sorgente e banda"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Speech transmission index"
+msgstr "Indice di trasmissione del parlato"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Background noise (dB SPL per octave band)"
+msgstr "Rumore di fondo (dB SPL per banda d'ottava)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The background noise in each octave band (dB SPL), which lowers the speech "
+"transmission index (STI). Unticked, there is none"
+msgstr ""
+"Il rumore di fondo in ogni banda d'ottava (dB SPL), che riduce l'indice di "
+"trasmissione del parlato (STI). Se deselezionato, è assente"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Each source radiates its sound power over the bands as its spectrum, gain "
+"and equalizer set, and the STI takes that as male speech, or female for the "
+"female speech spectrum. Run the map with Simulation > Run coverage map (F6)."
+msgstr ""
+"Ogni sorgente irradia la propria potenza sonora sulle bande secondo spettro, "
+"guadagno ed equalizzatore; lo STI la considera come parlato maschile, o "
+"femminile per lo spettro di parlato femminile. Calcolare la mappa con "
+"Simulazione > Calcola mappa di copertura (F6)."
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Background noise at {band} (dB SPL)"
+msgstr "Rumore di fondo a {band} (dB SPL)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "noise levels are numbers in dB"
+msgstr "i livelli di rumore sono numeri in dB"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change coverage map settings"
+msgstr "modifica impostazioni della mappa di copertura"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "All sources"
+msgstr "Tutte le sorgenti"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "The source whose map is on show, or all sources playing together"
+msgstr ""
+"La sorgente di cui viene mostrata la mappa o tutte le sorgenti che suonano "
+"insieme"
+
+#: acoustic_spaces/gui/map_view.py
+msgid ""
+"The room parameter the map shows; rest on an entry in the list for its "
+"meaning"
+msgstr ""
+"Il parametro acustico mostrato dalla mappa; soffermarsi su una voce "
+"dell'elenco per conoscerne il significato"
+
+#: acoustic_spaces/gui/map_view.py
+msgid ""
+"The octave band (a range of frequencies, named by its centre) the map shows. "
+"STI and SPL (dB(A)) take every band together, so they have no band"
+msgstr ""
+"La banda d'ottava (un intervallo di frequenze, indicato dalla frequenza "
+"centrale) mostrata dalla mappa. STI e SPL (dB(A)) considerano tutte le bande "
+"insieme e non hanno una banda"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "Map in 3D"
+msgstr "Mappa in 3D"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "Lay the map over the room in the 3D view"
+msgstr "Sovrapporre la mappa all'ambiente nella vista 3D"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "Run map"
+msgstr "Calcola mappa"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "Simulate the coverage map of every source (F6)"
+msgstr "Simulare la mappa di copertura di ogni sorgente (F6)"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "Save…"
+msgstr "Salva…"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "Save the map as a PNG picture, or every map as JSON"
+msgstr "Salvare la mappa come immagine PNG o tutte le mappe in formato JSON"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "Parameter"
+msgstr "Parametro"
+
+#: acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
+msgid "Band"
+msgstr "Banda"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "The lowest, highest and median values of the map on show"
+msgstr "I valori minimo, massimo e mediano della mappa visualizzata"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "Run the coverage map (F6) to see it here."
+msgstr "Calcolare la mappa di copertura (F6) per visualizzarla qui."
+
+#: acoustic_spaces/gui/map_view.py
+msgid "The scene changed since this map; run it again to update it."
+msgstr ""
+"La scena è stata modificata dopo questa mappa; ricalcolarla per aggiornarla."
+
+#. Translators: {title} names the map on show, such as "STI".
+#: acoustic_spaces/gui/map_view.py
+#, python-brace-format
+msgid "{title}: {low} to {high}, median {median}"
+msgstr "{title}: da {low} a {high}, mediana {median}"
+
+#: acoustic_spaces/gui/map_view.py
+#, python-brace-format
+msgid "{title}: no values"
+msgstr "{title}: nessun valore"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Off"
+msgstr "Disattivato"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Drag corners, sources and listeners; double-click a wall to add a corner; "
+"right-click for more. Shift: no snapping."
+msgstr ""
+"Trascinare vertici, sorgenti e ricevitori; doppio clic su una parete per "
+"aggiungere un vertice; clic destro per altre opzioni. Maiusc: senza aggancio."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Drag a corner to reshape the box (it becomes a floor plan); drag sources and "
+"listeners. Shift: no snapping."
+msgstr ""
+"Trascinare un vertice per modificare l'ambiente rettangolare (diventa una "
+"pianta); trascinare sorgenti e ricevitori. Maiusc: senza aggancio."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"The model's outline from above: drag sources and listeners. Draw room "
+"replaces the model with a floor plan."
+msgstr ""
+"Il contorno del modello dall'alto: trascinare sorgenti e ricevitori. Disegna "
+"ambiente sostituisce il modello con una pianta."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the new room; close it on the first corner, with a "
+"double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"Fare clic sui vertici del nuovo ambiente; chiuderlo sul primo vertice, con "
+"un doppio clic o Invio. Backspace rimuove l'ultimo vertice, Esc interrompe."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Click where the new source goes; Esc cancels."
+msgstr "Fare clic dove posizionare la nuova sorgente; Esc annulla."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Click where the new listener goes; Esc cancels."
+msgstr "Fare clic dove posizionare il nuovo ricevitore; Esc annulla."
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a room yet: {problem}"
+msgstr "L'ambiente non è ancora valido: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "A floor plan needs at least three corners."
+msgstr "Una pianta richiede almeno tre vertici."
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not moved: {problem}"
+msgstr "Spostamento non applicato: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "move corner"
+msgstr "sposta vertice"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Add corner here"
+msgstr "Aggiungi vertice qui"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Place source here"
+msgstr "Posiziona sorgente qui"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Place listener here"
+msgstr "Posiziona ricevitore qui"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "{length:.2f} m"
+msgstr "{length:.2f} m"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Draw room"
+msgstr "Disegna ambiente"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Draw a new floor plan, corner by corner; it replaces the room"
+msgstr ""
+"Disegnare una nuova pianta, vertice per vertice; sostituisce l'ambiente"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Corners, sources and listeners snap to this grid; hold Shift to place them "
+"freely"
+msgstr ""
+"Vertici, sorgenti e ricevitori si agganciano a questa griglia; tenere "
+"premuto Maiusc per posizionarli liberamente"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Fit"
+msgstr "Adatta"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Zoom to show the whole room"
+msgstr "Regolare lo zoom per mostrare l'intero ambiente"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Where the mouse is in the plan, in metres"
+msgstr "La posizione del mouse nella pianta, in metri"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Snap"
+msgstr "Aggancio"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "x {x:.2f}, y {y:.2f} m"
+msgstr "x {x:.2f}, y {y:.2f} m"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "LF"
+msgstr "LF"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "LFC"
+msgstr "LFC"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "LJ (dB)"
+msgstr "LJ (dB)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "ST early (dB)"
+msgstr "ST iniziale (dB)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "ST late (dB)"
+msgstr "ST tardivo (dB)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "T30 X (s)"
+msgstr "T30 X (s)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "T30 Y (s)"
+msgstr "T30 Y (s)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "T30 Z (s)"
+msgstr "T30 Z (s)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Early decay time (s): how long the sound would take to die away by 60 dB at "
+"the rate of its first 10 dB; the closest to how reverberant the room sounds"
+msgstr ""
+"Tempo di decadimento iniziale (s): il tempo necessario perché il suono si "
+"attenui di 60 dB al tasso dei primi 10 dB; il più vicino alla riverberazione "
+"percepita nell'ambiente"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Reverberation time (s): how long the sound takes to die away by 60 dB, from "
+"the decay between -5 and -25 dB"
+msgstr ""
+"Tempo di riverberazione (s): il tempo necessario perché il suono si attenui "
+"di 60 dB, ricavato dal decadimento tra -5 e -25 dB"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Reverberation time (s): how long the sound takes to die away by 60 dB, from "
+"the decay between -5 and -35 dB"
+msgstr ""
+"Tempo di riverberazione (s): il tempo necessario perché il suono si attenui "
+"di 60 dB, ricavato dal decadimento tra -5 e -35 dB"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Clarity for speech (dB): the energy of the first 50 ms over the energy "
+"after. Higher is clearer"
+msgstr ""
+"Chiarezza del parlato (dB): il rapporto tra l'energia dei primi 50 ms e "
+"quella successiva. Un valore maggiore indica maggiore chiarezza"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Clarity for music (dB): the energy of the first 80 ms over the energy after. "
+"Higher is clearer"
+msgstr ""
+"Chiarezza della musica (dB): il rapporto tra l'energia dei primi 80 ms e "
+"quella successiva. Un valore maggiore indica maggiore chiarezza"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Definition (0 to 1): the share of all the energy that arrives in the first "
+"50 ms"
+msgstr ""
+"Definizione (da 0 a 1): la frazione dell'energia totale che arriva nei primi "
+"50 ms"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Centre time (ms): the mean arrival time of the energy. Lower is clearer"
+msgstr ""
+"Tempo baricentrico (ms): il tempo medio di arrivo dell'energia. Un valore "
+"minore indica maggiore chiarezza"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Strength (dB): how loud the source is here, over the same source 10 m away "
+"in free field"
+msgstr ""
+"Intensità sonora (dB): il livello della sorgente in questo punto rispetto "
+"alla stessa sorgente a 10 m in campo libero"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Sound pressure level (dB re 20 µPa) here, with the source at the sound power "
+"level its form sets"
+msgstr ""
+"Livello di pressione sonora (dB rif. 20 µPa) in questo punto, con la "
+"sorgente al livello di potenza sonora impostato nel suo modulo"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Early lateral energy fraction (0 to 1): the share of the early sound (5 to "
+"80 ms) that comes from the sides, which makes the source sound wider"
+msgstr ""
+"Frazione di energia laterale iniziale (da 0 a 1): la frazione del suono "
+"iniziale (da 5 a 80 ms) proveniente dai lati, che fa percepire la sorgente "
+"come più ampia"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Early lateral energy fraction as LF, with each arrival weighted by the "
+"cosine of its angle to the side rather than its square"
+msgstr ""
+"Frazione di energia laterale iniziale come LF, con ogni arrivo ponderato dal "
+"coseno dell'angolo rispetto alla direzione laterale anziché dal suo quadrato"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Late lateral sound level (dB): the level of the sound from the sides after "
+"80 ms, which surrounds the listener"
+msgstr ""
+"Livello sonoro laterale tardivo (dB): il livello del suono proveniente dai "
+"lati dopo 80 ms, che avvolge il ricevitore"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Early stage support (dB), for a listener within 1.5 m of the source: the "
+"energy from 20 to 100 ms over that of the first 10 ms, how well musicians "
+"hear each other"
+msgstr ""
+"Supporto iniziale sul palco (dB), per un ricevitore entro 1.5 m dalla "
+"sorgente: il rapporto tra l'energia da 20 a 100 ms e quella dei primi 10 ms, "
+"che indica quanto bene i musicisti si sentono tra loro"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Late stage support (dB), for a listener within 1.5 m of the source: the "
+"energy from 100 to 1000 ms over that of the first 10 ms, how much of the "
+"room musicians hear"
+msgstr ""
+"Supporto tardivo sul palco (dB), per un ricevitore entro 1.5 m dalla "
+"sorgente: il rapporto tra l'energia da 100 a 1000 ms e quella dei primi 10 "
+"ms, che indica quanto i musicisti percepiscono l'ambiente"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"T30 (s) of a figure-of-eight microphone facing forward from the listener. "
+"Longer than T30 where sound keeps running between two hard walls along that "
+"line"
+msgstr ""
+"T30 (s) di un microfono a otto rivolto in avanti dal ricevitore. Superiore "
+"al T30 quando il suono continua a riflettersi tra due pareti rigide lungo "
+"quella direzione"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"T30 (s) of a figure-of-eight microphone facing left from the listener. "
+"Longer than T30 where sound keeps running between two hard walls along that "
+"line"
+msgstr ""
+"T30 (s) di un microfono a otto rivolto a sinistra dal ricevitore. Superiore "
+"al T30 quando il suono continua a riflettersi tra due pareti rigide lungo "
+"quella direzione"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"T30 (s) of a figure-of-eight microphone facing up from the listener. Longer "
+"than T30 where sound keeps running between floor and ceiling"
+msgstr ""
+"T30 (s) di un microfono a otto rivolto verso l'alto dal ricevitore. "
+"Superiore al T30 quando il suono continua a riflettersi tra pavimento e "
+"soffitto"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Turn the head (degrees): left is positive"
+msgstr "Ruotare la testa (gradi): valori positivi verso sinistra"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Tilt the head (degrees): up is positive"
+msgstr "Inclinare la testa (gradi): valori positivi verso l'alto"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Centre"
+msgstr "Centra"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Take the head tracker's current orientation as straight ahead"
+msgstr ""
+"Usare l'orientamento attuale del sensore di tracciamento della testa come "
+"direzione frontale"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "off"
+msgstr "disattivato"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"UDP port of this computer a head tracker sends OSC to (/ypr, /quaternion, "
+"/yaw, /pitch, /roll)"
+msgstr ""
+"Porta UDP di questo computer a cui il sensore di tracciamento della testa "
+"invia OSC (/ypr, /quaternion, /yaw, /pitch, /roll)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Where the head faces now (degrees), and how many messages the head tracker "
+"sent"
+msgstr ""
+"L'orientamento attuale della testa (gradi) e il numero di messaggi inviati "
+"dal sensore"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "OSC port"
+msgstr "Porta OSC"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "Cannot listen for a head tracker on UDP port {port}: {reason}"
+msgstr ""
+"Impossibile ricevere i dati di tracciamento della testa sulla porta UDP "
+"{port}: {reason}"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "Listening for a head tracker on UDP port {port} (OSC)."
+msgstr ""
+"In ascolto di un sensore di tracciamento della testa sulla porta UDP {port} "
+"(OSC)."
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "facing yaw {yaw:.0f}°, pitch {pitch:.0f}°, roll {roll:.0f}°"
+msgstr ""
+"orientamento: imbardata {yaw:.0f}°, beccheggio {pitch:.0f}°, rollio "
+"{roll:.0f}°"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"facing yaw {yaw:.0f}°, pitch {pitch:.0f}°, roll {roll:.0f}°; {count:,} "
+"tracker message"
+msgid_plural ""
+"facing yaw {yaw:.0f}°, pitch {pitch:.0f}°, roll {roll:.0f}°; {count:,} "
+"tracker messages"
+msgstr[0] ""
+"orientamento: imbardata {yaw:.0f}°, beccheggio {pitch:.0f}°, rollio "
+"{roll:.0f}°; {count:,} messaggio del sensore"
+msgstr[1] ""
+"orientamento: imbardata {yaw:.0f}°, beccheggio {pitch:.0f}°, rollio "
+"{roll:.0f}°; {count:,} messaggi del sensore"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"The source whose results the panel shows; selecting a source in the scene "
+"shows its results too"
+msgstr ""
+"La sorgente di cui il pannello mostra i risultati; anche selezionare una "
+"sorgente nella scena ne mostra i risultati"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"The listener whose results the panel shows; selecting a listener in the "
+"scene shows its results too"
+msgstr ""
+"Il ricevitore di cui il pannello mostra i risultati; anche selezionare un "
+"ricevitore nella scena ne mostra i risultati"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"The octave band (a range of frequencies, named by its centre) the echogram "
+"and the arrival directions show. The parameter table and the decay curves "
+"show every band"
+msgstr ""
+"La banda d'ottava (un intervallo di frequenze, indicato dalla frequenza "
+"centrale) mostrata dall'ecogramma e dalle direzioni di arrivo. La tabella "
+"dei parametri e le curve di decadimento mostrano tutte le bande"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Paths in 3D"
+msgstr "Percorsi in 3D"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Draw the early reflection paths from this source to this listener in the 3D "
+"view, coloured by order"
+msgstr ""
+"Disegnare nella vista 3D i percorsi delle prime riflessioni da questa "
+"sorgente a questo ricevitore, colorati per ordine"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Head tracking"
+msgstr "Tracciamento della testa"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Listen binaurally through Ambisonics that turns with the head: by hand, or "
+"as a head tracker reports it"
+msgstr ""
+"Ascoltare in binaurale tramite Ambisonics che ruota con la testa: "
+"manualmente o secondo i dati di un sensore di tracciamento della testa"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Export…"
+msgstr "Esporta…"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Write every response of the run to a folder: a WAV file per output format "
+"and parameters.json, as acoustic-spaces simulate does"
+msgstr ""
+"Salvare tutte le risposte del calcolo in una cartella: un file WAV per "
+"formato di uscita e parameters.json, come acoustic-spaces simulate"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Listen…"
+msgstr "Ascolta…"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Play a dry WAV recording through this response on the sound card, binaurally "
+"(needs the measure extra)"
+msgstr ""
+"Riprodurre una registrazione WAV anecoica attraverso questa risposta sulla "
+"scheda audio, in binaurale (richiede il componente aggiuntivo measure)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Stop"
+msgstr "Interrompi"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Stop playing (Esc)"
+msgstr "Interrompere la riproduzione (Esc)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Listener"
+msgstr "Ricevitore"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Parameters"
+msgstr "Parametri"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Room parameters (ISO 3382-1) in every octave band; rest on a row for its "
+"meaning"
+msgstr ""
+"Parametri acustici (ISO 3382-1) in ogni banda d'ottava; soffermarsi su una "
+"riga per conoscerne il significato"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Echogram and decay"
+msgstr "Ecogramma e decadimento"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"The energy arriving over time in the chosen band, with the early reflections "
+"coloured by order, and the decay curves of every band"
+msgstr ""
+"L'energia in arrivo nel tempo nella banda selezionata, con le prime "
+"riflessioni colorate per ordine, e le curve di decadimento di tutte le bande"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Directions"
+msgstr "Direzioni"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Where the sound comes from, as the listener faces, in the chosen band"
+msgstr ""
+"La provenienza del suono rispetto all'orientamento del ricevitore, nella "
+"banda selezionata"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Run details"
+msgstr "Dettagli del calcolo"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"What the run did: its settings per source, and the paths it found per pair"
+msgstr ""
+"Le operazioni del calcolo: impostazioni per sorgente e percorsi trovati per "
+"coppia"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Run the simulation (F5) to see results here."
+msgstr "Eseguire la simulazione (F5) per visualizzare qui i risultati."
+
+#: acoustic_spaces/gui/results_view.py
+msgid "The scene changed since this run; run again to update the results."
+msgstr ""
+"La scena è stata modificata dopo questo calcolo; ripeterlo per aggiornare i "
+"risultati."
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"The absorption changed since this run: these results re-weight its rays. Run "
+"again to trace them afresh."
+msgstr ""
+"L'assorbimento è stato modificato dopo questo calcolo: questi risultati "
+"riponderano i raggi. Ripetere il calcolo per tracciarli nuovamente."
+
+#. Translators: {tip} is what a parameter means.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "{tip}. Not defined for this response"
+msgstr "{tip}. Non definito per questa risposta"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"{source} -> {listener}: direct sound at {delay:.1f} ms, {count} early path "
+"({diffracted} diffracted)"
+msgid_plural ""
+"{source} -> {listener}: direct sound at {delay:.1f} ms, {count} early paths "
+"({diffracted} diffracted)"
+msgstr[0] ""
+"{source} -> {listener}: suono diretto a {delay:.1f} ms, {count} percorso "
+"iniziale ({diffracted} diffratto)"
+msgstr[1] ""
+"{source} -> {listener}: suono diretto a {delay:.1f} ms, {count} percorsi "
+"iniziali ({diffracted} diffratti)"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"{source} -> {listener}: direct sound at {delay:.1f} ms, {count} early path"
+msgid_plural ""
+"{source} -> {listener}: direct sound at {delay:.1f} ms, {count} early paths"
+msgstr[0] ""
+"{source} -> {listener}: suono diretto a {delay:.1f} ms, {count} percorso "
+"iniziale"
+msgstr[1] ""
+"{source} -> {listener}: suono diretto a {delay:.1f} ms, {count} percorsi "
+"iniziali"
+
+#: acoustic_spaces/gui/tips.py
+#, python-brace-format
+msgid "Octave band centred on {centre}: the frequencies from {low} to {high}"
+msgstr "Banda d'ottava centrata su {centre}: frequenze da {low} a {high}"
+
+#: acoustic_spaces/gui/tips.py
+#, python-brace-format
+msgid ""
+"Third-octave band centred on {centre}: the frequencies from {low} to {high}"
+msgstr ""
+"Banda di terzo d'ottava centrata su {centre}: frequenze da {low} a {high}"
+
+#: acoustic_spaces/gui/tree.py
+msgid "The scene: its name, default material and air"
+msgstr "La scena: nome, materiale predefinito e aria"
+
+#: acoustic_spaces/gui/tree.py
+msgid "The room's shape: a box, a floor plan or a model file"
+msgstr "La forma dell'ambiente: rettangolare, pianta o file di modello"
+
+#: acoustic_spaces/gui/tree.py
+msgid "The groups of faces that share a name in the model"
+msgstr "I gruppi di facce che condividono un nome nel modello"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Select it to give it a material; its material and area follow"
+msgstr "Selezionare per assegnare un materiale; seguono il materiale e l'area"
+
+#: acoustic_spaces/gui/tree.py
+msgid "The materials of the scene, with the area each covers"
+msgstr "I materiali della scena, con l'area coperta da ciascuno"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Select it to change its absorption, scattering and what it lets through"
+msgstr "Selezionare per modificare assorbimento, dispersione e trasmissione"
+
+#: acoustic_spaces/gui/tree.py
+msgid "The sound sources; place more with Place source"
+msgstr "Le sorgenti sonore; aggiungerne altre con Posiziona sorgente"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Select it to change it; drag it in the 3D view or the plan to move it"
+msgstr ""
+"Selezionare per modificare; trascinare nella vista 3D o nella pianta per "
+"spostare"
+
+#: acoustic_spaces/gui/tree.py
+msgid "The listening positions; place more with Place listener"
+msgstr "Le posizioni di ascolto; aggiungerne altre con Posiziona ricevitore"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"How the early reflections and the late reverberation are computed, and the "
+"responses' length, sample rate and bands"
+msgstr ""
+"Come vengono calcolate le prime riflessioni e la riverberazione tardiva, e "
+"la durata, la frequenza di campionamento e le bande delle risposte"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"The formats every response is written in: mono, binaural, Ambisonics or "
+"loudspeakers"
+msgstr ""
+"I formati in cui viene scritta ogni risposta: mono, binaurale, Ambisonics o "
+"altoparlanti"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"Where the coverage map lies, how fine it is, and the background noise for "
+"the STI"
+msgstr ""
+"La posizione della mappa di copertura, la sua risoluzione e il rumore di "
+"fondo per lo STI"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Geometry"
+msgstr "Geometria"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Surfaces"
+msgstr "Superfici"
+
+#: acoustic_spaces/gui/tree.py acoustic_spaces/viz.py
+msgid "no material"
+msgstr "nessun materiale"
+
+#: acoustic_spaces/gui/tree.py
+#, python-brace-format
+msgid "{material}, {area:,.1f} m²"
+msgstr "{material}, {area:,.1f} m²"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Materials"
+msgstr "Materiali"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Sources"
+msgstr "Sorgenti"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Listeners"
+msgstr "Ricevitori"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Simulation"
+msgstr "Simulazione"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Outputs"
+msgstr "Uscite"
+
+#. Translators: {surfaces} lists the surfaces the map lies on.
+#: acoustic_spaces/gui/tree.py
+#, python-brace-format
+msgid "{surfaces}, {spacing:g} m apart"
+msgstr "{surfaces}, distanza di {spacing:g} m"
+
+#: acoustic_spaces/gui/tree.py
+#, python-brace-format
+msgid "audience, {spacing:g} m apart"
+msgstr "pubblico, distanza di {spacing:g} m"
+
+#: acoustic_spaces/gui/tune_dialog.py
+msgid "Make auto the default on this computer"
+msgstr "Imposta automatico come predefinito su questo computer"
+
+#: acoustic_spaces/gui/tune_dialog.py
+msgid "Let this scene follow this computer's default too"
+msgstr ""
+"Usa l'impostazione predefinita di questo computer anche per questa scena"
+
+#: acoustic_spaces/gui/tune_dialog.py
+msgid "Tune CPU and GPU"
+msgstr "Ottimizza CPU e GPU"
+
+#: acoustic_spaces/gui/tune_dialog.py
+msgid "What the CPU and the GPU took on this computer:"
+msgstr "Tempi di CPU e GPU su questo computer:"
+
+#: acoustic_spaces/gui/tune_dialog.py
+msgid ""
+"Scenes whose Run on is default then run on the fastest device found here; "
+"unticked, on the CPU"
+msgstr ""
+"Le scene con Calcola su impostato su predefinito usano il dispositivo più "
+"veloce trovato qui; se deselezionato, la CPU"
+
+#: acoustic_spaces/gui/tune_dialog.py
+#, python-brace-format
+msgid ""
+"Scenes whose Run on is set to default, in the editor and on the command "
+"line, then run the late reverberation and the wave solver on the devices "
+"marked auto above. Unticked, they run on the CPU. The default now: {device}."
+msgstr ""
+"Le scene con Calcola su impostato su predefinito, nell'editor e nella riga "
+"di comando, calcolano la riverberazione tardiva e il solutore ondulatorio "
+"sui dispositivi indicati sopra come automatico. Se deselezionato, usano la "
+"CPU. Impostazione predefinita attuale: {device}."
+
+#. Translators: {late} and {wave} are devices, such as cpu or gpu.
+#: acoustic_spaces/gui/tune_dialog.py
+#, python-brace-format
+msgid "late reverberation on {late} and wave solver on {wave}"
+msgstr "riverberazione tardiva su {late} e solutore ondulatorio su {wave}"
+
+#: acoustic_spaces/gui/tune_dialog.py
+#, python-brace-format
+msgid "late reverberation on {late}"
+msgstr "riverberazione tardiva su {late}"
+
+#: acoustic_spaces/gui/tune_dialog.py
+#, python-brace-format
+msgid "wave solver on {wave}"
+msgstr "solutore ondulatorio su {wave}"
+
+#: acoustic_spaces/gui/tune_dialog.py
+msgid ""
+"Set this scene's Run on back to default, so that it follows this computer's "
+"default"
+msgstr ""
+"Reimpostare «Calcola su» di questa scena su «predefinito», per seguire "
+"l'impostazione predefinita di questo computer"
+
+#: acoustic_spaces/gui/tune_dialog.py
+#, python-brace-format
+msgid ""
+"This scene names its own devices ({devices}), so the default does not apply "
+"to it. Ticked, OK sets its Run on back to default (Edit > Undo takes that "
+"back)."
+msgstr ""
+"Questa scena specifica i propri dispositivi ({devices}), quindi "
+"l'impostazione predefinita non si applica. Se selezionato, OK reimposta "
+"«Calcola su» su «predefinito» (Modifica > Annulla ripristina la scelta "
+"precedente)."
+
+#: acoustic_spaces/gui/tune_dialog.py
+#, python-brace-format
+msgid "Save the timings and the choices above in {path}"
+msgstr "Salvare i tempi e le scelte indicate sopra in {path}"
+
+#: acoustic_spaces/gui/tune_dialog.py
+msgid "Close without saving anything, not even the timings"
+msgstr "Chiudere senza salvare nulla, nemmeno i tempi"
+
+#: acoustic_spaces/gui/tune_dialog.py
+msgid "OK saves the timings and the choices above. Cancel saves nothing."
+msgstr "OK salva i tempi e le scelte indicate sopra. Annulla non salva nulla."
+
+#: acoustic_spaces/gui/viewport.py
+#, python-brace-format
+msgid "The 3D view is not available here: {reason}"
+msgstr "La vista 3D non è disponibile qui: {reason}"
+
+#: acoustic_spaces/gui/viewport.py
+msgid "The 3D view needs a display with OpenGL."
+msgstr "La vista 3D richiede uno schermo con OpenGL."
+
+#. Translators: reflection orders: 1st order, 2nd order... {order} is the number.
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{order}st order"
+msgstr "{order}º ordine"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{order}nd order"
+msgstr "{order}º ordine"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{order}rd order"
+msgstr "{order}º ordine"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{order}th order"
+msgstr "{order}º ordine"
+
+#: acoustic_spaces/viz.py
+msgid "diffracted"
+msgstr "diffratto"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "open edges ({count})"
+msgstr "spigoli aperti ({count})"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "escaping rays ({count})"
+msgstr "raggi in uscita ({count})"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "gap {number}: {share:.1f} %"
+msgstr "fessura {number}: {share:.1f} %"
+
+#: acoustic_spaces/viz.py
+msgid "reflections"
+msgstr "riflessioni"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "level at {band} Hz (dB)"
+msgstr "livello a {band} Hz (dB)"
+
+#: acoustic_spaces/viz.py
+msgid "time (ms)"
+msgstr "tempo (ms)"
+
+#. Translators: added to the name and time shown on a walkthrough video.
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid ", facing yaw {yaw:.0f}°"
+msgstr ", orientato con imbardata {yaw:.0f}°"
+
+#: acoustic_spaces/viz.py
+msgid "late (per ms)"
+msgstr "tardivo (per ms)"
+
+#: acoustic_spaces/viz.py
+msgid "level re 10 m free field (dB)"
+msgstr "livello rif. 10 m in campo libero (dB)"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{source} to {listener}: echogram, {band} Hz band"
+msgstr "Da {source} a {listener}: ecogramma, banda di {band} Hz"
+
+#: acoustic_spaces/viz.py
+msgid "time after the direct sound (ms)"
+msgstr "tempo dopo il suono diretto (ms)"
+
+#: acoustic_spaces/viz.py
+msgid "decay (dB)"
+msgstr "decadimento (dB)"
+
+#: acoustic_spaces/viz.py
+msgid "backward-integrated decay per octave band"
+msgstr "decadimento integrato a ritroso per banda d'ottava"
+
+#: acoustic_spaces/viz.py
+msgid "back"
+msgstr "dietro"
+
+#: acoustic_spaces/viz.py
+msgid "left"
+msgstr "sinistra"
+
+#: acoustic_spaces/viz.py
+msgid "front"
+msgstr "davanti"
+
+#: acoustic_spaces/viz.py
+msgid "right"
+msgstr "destra"
+
+#: acoustic_spaces/viz.py
+msgid "azimuth (degrees)"
+msgstr "azimut (gradi)"
+
+#: acoustic_spaces/viz.py
+msgid "elevation (degrees)"
+msgstr "elevazione (gradi)"
+
+#: acoustic_spaces/viz.py
+msgid "delay after the direct sound (ms)"
+msgstr "ritardo rispetto al suono diretto (ms)"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid ""
+"{source} to {listener}: early reflections, {band} Hz band (dot size: level, "
+"top 40 dB)"
+msgstr ""
+"Da {source} a {listener}: prime riflessioni, banda di {band} Hz (dimensione "
+"dei punti: livello, 40 dB superiori)"
+
+#: acoustic_spaces/viz.py
+msgid "level re loudest direction (dB)"
+msgstr "livello rif. direzione più intensa (dB)"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "late energy by arrival direction, {band} Hz band"
+msgstr "energia tardiva per direzione di arrivo, banda di {band} Hz"
+
+#: acoustic_spaces/viz.py
+msgid "late energy arrives evenly from all directions"
+msgstr "l'energia tardiva arriva uniformemente da tutte le direzioni"
+
+#: acoustic_spaces/viz.py
+msgid "late energy by arrival direction"
+msgstr "energia tardiva per direzione di arrivo"
+
+#: acoustic_spaces/viz.py
+msgid "horizontal plane (from above)"
+msgstr "piano orizzontale (dall'alto)"
+
+#: acoustic_spaces/viz.py
+msgid "vertical plane (from the side)"
+msgstr "piano verticale (di lato)"
+
+#: acoustic_spaces/viz.py
+msgid "every band"
+msgstr "tutte le bande"
+
+#: acoustic_spaces/viz.py
+msgid "up"
+msgstr "alto"
+
+#: acoustic_spaces/viz.py
+msgid "down"
+msgstr "basso"
+
+#: acoustic_spaces/viz.py
+msgid "directivity"
+msgstr "direttività"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid ""
+"{name}\n"
+"dB re the loudest direction; directivity index {index:.1f} dB at 1 kHz"
+msgstr ""
+"{name}\n"
+"dB rif. direzione più intensa; indice di direttività {index:.1f} dB a 1 kHz"
+
+#: acoustic_spaces/viz.py
+msgid "broadband, 1 ms windows"
+msgstr "banda larga, finestre di 1 ms"
+
+#: acoustic_spaces/viz.py
+msgid "band noise from its crosspoint"
+msgstr "rumore di banda dal punto di intersezione"
+
+#: acoustic_spaces/viz.py
+msgid "level re peak (dB)"
+msgstr "livello rif. picco (dB)"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{title}: level"
+msgstr "{title}: livello"
+
+#: acoustic_spaces/viz.py
+msgid "level"
+msgstr "livello"
+
+#: acoustic_spaces/viz.py
+msgid "backward-integrated decay per octave band, noise removed"
+msgstr "decadimento integrato a ritroso per banda d'ottava, senza rumore"
+
+#: acoustic_spaces/viz.py
+msgid "x (m)"
+msgstr "x (m)"
+
+#: acoustic_spaces/viz.py
+msgid "y (m)"
+msgstr "y (m)"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "level {number}, floor at about {height:.1f} m"
+msgstr "livello {number}, pavimento a circa {height:.1f} m"
+
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{source}: {title}, {count} points {spacing:g} m apart"
+msgstr "{source}: {title}, {count} punti distanti {spacing:g} m"
+
+#: examples/apartment/scene.yaml
+msgctxt "example"
+msgid "Flat with a door between two rooms (living room 52 m3, bedroom 42 m3)"
+msgstr ""
+"Appartamento con una porta tra due ambienti (soggiorno 52 m3, camera 42 m3)"
+
+#: examples/apartment/scene.yaml
+msgctxt "example"
+msgid ""
+"Two rooms of an empty flat: a living room with a television and, through a "
+"door in the wall between, a bedroom. The wall lets through 30 to 58 dB less "
+"than reaches it, band by band (plastered light concrete blocks), the closed "
+"door 15 to 24 dB less. How loud is the television in bed?  acoustic-spaces "
+"simulate scene.yaml --out results acoustic-spaces map scene.yaml --parameter "
+"spl_a --plot levels.png  With the door closed, the television that gives 73 "
+"dB(A) on the sofa gives 45 dB(A) in bed. Open the door (`door: open` below) "
+"and run them again: 63 dB(A) in bed. `inspect` lists the two rooms the model "
+"closes off. make_model.py writes apartment.obj."
+msgstr ""
+"Due ambienti di un appartamento vuoto: un soggiorno con un televisore e, "
+"attraverso una porta nella parete divisoria, una camera da letto. La parete "
+"trasmette da 30 a 58 dB in meno rispetto al suono incidente, banda per banda "
+"(blocchi di calcestruzzo leggero intonacati), la porta chiusa da 15 a 24 dB "
+"in meno. Quanto si sente il televisore dal letto?  acoustic-spaces simulate "
+"scene.yaml --out results acoustic-spaces map scene.yaml --parameter spl_a "
+"--plot levels.png  Con la porta chiusa, il televisore che produce 73 dB(A) "
+"sul divano ne produce 45 dB(A) a letto. Aprire la porta (`door: open` sotto) "
+"e ripetere i calcoli: 63 dB(A) a letto. `inspect` elenca i due ambienti "
+"delimitati dal modello. make_model.py scrive apartment.obj."
+
+#: examples/archway/scene.yaml
+msgctxt "example"
+msgid "Bar and dining room (archway in a thick wall)"
+msgstr "Bar e sala da pranzo (passaggio in una parete spessa)"
+
+#: examples/archway/scene.yaml
+msgctxt "example"
+msgid ""
+"A bar and a dining room, 3.2 m high (450 m3), joined by a 2 m wide archway "
+"in a wall 40 cm thick, the full height of the rooms. A singer stands by the "
+"wall in the bar; one diner sees them through the arch, the other sits behind "
+"the wall, where the shortest way round is over both corners of the arch's "
+"jamb in turn: `second_order` diffraction follows it, `first_order` only "
+"bends round one corner at a time."
+msgstr ""
+"Un bar e una sala da pranzo, alti 3.2 m (450 m3), uniti da un passaggio "
+"largo 2 m in una parete spessa 40 cm, a tutta altezza. Un cantante si trova "
+"vicino alla parete nel bar; un commensale lo vede attraverso il passaggio, "
+"l'altro è seduto dietro la parete, dove il percorso più breve aggira in "
+"successione entrambi gli spigoli dello stipite: la diffrazione "
+"`second_order` lo segue, mentre `first_order` aggira un solo spigolo alla "
+"volta."
+
+#: examples/bim_office/scene.yaml
+msgctxt "example"
+msgid "Office from a BIM model (IFC)"
+msgstr "Ufficio da un modello BIM (IFC)"
+
+#: examples/bim_office/scene.yaml
+msgctxt "example"
+msgid ""
+"An office of 6 x 4.5 x 2.8 m from a BIM model in IFC (office.ifc, written by "
+"make_model.py with IfcOpenShell), read with the ifc extra. `space: Office` "
+"takes the room's faces from the space boundaries the model has for that "
+"IfcSpace, each named by the element it lies on: its name, its materials and "
+"its IFC class, which assignments can use. Without `space`, every building "
+"element is read as a solid (walls with both sides and their thickness, the "
+"window set into its opening)."
+msgstr ""
+"Un ufficio di 6 x 4.5 x 2.8 m da un modello BIM in IFC (office.ifc, scritto "
+"da make_model.py con IfcOpenShell), letto con il componente aggiuntivo ifc. "
+"`space: Office` ricava le facce dell'ambiente dai confini dello spazio "
+"presenti nel modello per quell'IfcSpace, ciascuna denominata secondo "
+"l'elemento su cui si trova: nome, materiali e classe IFC, utilizzabili nelle "
+"assegnazioni. Senza `space`, ogni elemento dell'edificio viene letto come "
+"solido (pareti con entrambi i lati e il loro spessore, la finestra inserita "
+"nell'apertura)."
+
+#: examples/church/scene.yaml
+msgctxt "example"
+msgid "Church (stone nave, 9500 m3)"
+msgstr "Chiesa (navata in pietra, 9500 m3)"
+
+#: examples/church/scene.yaml
+msgctxt "example"
+msgid ""
+"A stone church: a nave 34 m long and 14 m wide that ends in a five-sided "
+"apse, 18 m high (9500 m3), with wooden pews. Reverberation lasts about six "
+"seconds at 500 Hz and 1 kHz, and longer in the bass. wall_1 and wall_6 are "
+"the long sides, wall_2 to wall_5 the apse, wall_7 the entrance wall with the "
+"organ gallery."
+msgstr ""
+"Una chiesa in pietra: una navata lunga 34 m e larga 14 m che termina in "
+"un'abside a cinque lati, alta 18 m (9500 m3), con panche in legno. La "
+"riverberazione dura circa sei secondi a 500 Hz e 1 kHz, più a lungo alle "
+"basse frequenze. wall_1 e wall_6 sono i lati lunghi, da wall_2 a wall_5 "
+"l'abside, wall_7 la parete d'ingresso con la tribuna dell'organo."
+
+#: examples/concert_hall/scene.yaml
+msgctxt "example"
+msgid "Concert hall (shoebox, 9440 m3)"
+msgstr "Sala da concerto (rettangolare, 9440 m3)"
+
+#: examples/concert_hall/scene.yaml
+msgctxt "example"
+msgid ""
+"A shoebox concert hall, 32 x 20 x 15 m (9440 m3), with a raised stage, "
+"upholstered seats, diffusing side walls and a coffered ceiling. Two sources "
+"on the stage, three seats in the stalls."
+msgstr ""
+"Una sala da concerto rettangolare, 32 x 20 x 15 m (9440 m3), con palco "
+"rialzato, poltrone imbottite, pareti laterali diffondenti e soffitto a "
+"cassettoni. Due sorgenti sul palco, tre posti in platea."
+
+#: examples/fitting/scene.yaml
+msgctxt "example"
+msgid "Seminar room as designed (10 x 7 x 3 m)"
+msgstr "Sala seminari come da progetto (10 x 7 x 3 m)"
+
+#: examples/fitting/scene.yaml
+msgctxt "example"
+msgid ""
+"Fitting a model to measurements. A seminar room was designed with a carpet, "
+"an absorbing ceiling and absorbing panels on the back wall, and measured "
+"once built: the reverberation came out longer than the model said (T30 0.9 s "
+"against 0.7 s at 1 kHz). There is no real room behind this example, so "
+"make_measurements.py makes up its measurements by simulating the room as "
+"built, where the panels were left out, with noise and latency as a "
+"measurement would have. Then compare the model with them, in just noticeable "
+"differences, and fit the back wall's absorption to them:  python "
+"make_measurements.py acoustic-spaces simulate scene.yaml --out designed "
+"acoustic-spaces compare designed/dodecahedron__seat_a.wav "
+"measured/dodecahedron__seat_a.wav acoustic-spaces calibrate scene.yaml -o "
+"fitted.yaml --materials panels \\ --measured dodecahedron seat_a "
+"measured/dodecahedron__seat_a.wav \\ --measured dodecahedron seat_b "
+"measured/dodecahedron__seat_b.wav \\ --measured dodecahedron seat_c "
+"measured/dodecahedron__seat_c.wav  `calibrate` adjusts the panels' "
+"absorption band by band until T30, EDT and C80 at the three seats come as "
+"close as they can to those measured, and writes the fitted scene. From 500 "
+"Hz up it finds the plain wall that was built, 0.03 to 0.08 where "
+"plasterboard has 0.04 to 0.06, and T30 and C80 come within one JND on "
+"average, EDT within two. Below 500 Hz it is less sure (0.46 at 250 Hz): "
+"there the panels change the decay little next to the randomness of the "
+"made-up measurements. Without `--materials` it fits every material, which "
+"three seats and one source cannot tell apart. The source is omnidirectional, "
+"as the dodecahedron loudspeaker of a measurement to ISO 3382 is."
+msgstr ""
+"Adattamento di un modello alle misure. Una sala seminari è stata progettata "
+"con moquette, soffitto assorbente e pannelli assorbenti sulla parete "
+"posteriore, poi misurata dopo la costruzione: la riverberazione è risultata "
+"più lunga di quanto previsto dal modello (T30 di 0.9 s contro 0.7 s a 1 "
+"kHz). Questo esempio non corrisponde a un ambiente reale, quindi "
+"make_measurements.py genera le misure simulando la sala come costruita, "
+"senza i pannelli, con rumore e latenza tipici di una misura. Si confronta "
+"poi il modello con le misure, in differenze appena percepibili, e si adatta "
+"l'assorbimento della parete posteriore:  python make_measurements.py "
+"acoustic-spaces simulate scene.yaml --out designed acoustic-spaces compare "
+"designed/dodecahedron__seat_a.wav measured/dodecahedron__seat_a.wav "
+"acoustic-spaces calibrate scene.yaml -o fitted.yaml --materials panels \\ "
+"--measured dodecahedron seat_a measured/dodecahedron__seat_a.wav \\ "
+"--measured dodecahedron seat_b measured/dodecahedron__seat_b.wav \\ "
+"--measured dodecahedron seat_c measured/dodecahedron__seat_c.wav  "
+"`calibrate` regola l'assorbimento dei pannelli banda per banda finché T30, "
+"EDT e C80 nei tre posti si avvicinano il più possibile ai valori misurati e "
+"scrive la scena adattata. Da 500 Hz in su individua la parete semplice "
+"effettivamente costruita, da 0.03 a 0.08 dove il cartongesso ha da 0.04 a "
+"0.06, e porta T30 e C80 entro una JND in media, EDT entro due. Sotto 500 Hz "
+"il risultato è meno certo (0.46 a 250 Hz): lì i pannelli modificano poco il "
+"decadimento rispetto alla variabilità delle misure simulate. Senza "
+"`--materials` adatta tutti i materiali, che tre posti e una sorgente non "
+"permettono di distinguere. La sorgente è omnidirezionale, come "
+"l'altoparlante dodecaedrico di una misura secondo ISO 3382."
+
+#: examples/gallery/scene.yaml
+msgctxt "example"
+msgid "Gallery (L-shaped, 1150 m3)"
+msgstr "Galleria (a L, 1150 m3)"
+
+#: examples/gallery/scene.yaml
+msgctxt "example"
+msgid ""
+"An L-shaped gallery, 4 m high (1150 m3), with a marble floor, rough brick "
+"walls and an absorbing ceiling: a guide talks in the long arm, and visitors "
+"round the corner hear them only by the sound that bends round it (edge "
+"diffraction) and by reflections. The plan's corners go round the floor; "
+"wall_3 and wall_4 meet at the inner corner (8, 8)."
+msgstr ""
+"Una galleria a L, alta 4 m (1150 m3), con pavimento in marmo, pareti in "
+"mattoni ruvidi e soffitto assorbente: una guida parla nel braccio lungo e i "
+"visitatori dietro l'angolo la sentono soltanto attraverso il suono che lo "
+"aggira (diffrazione sugli spigoli) e le riflessioni. I vertici della pianta "
+"seguono il perimetro del pavimento; wall_3 e wall_4 si incontrano "
+"nell'angolo interno (8, 8)."
+
+#: examples/gallery_walk/scene.yaml
+msgctxt "example"
+msgid "Gallery walkthrough (L-shaped, 1150 m3)"
+msgstr "Percorso nella galleria (a L, 1150 m3)"
+
+#: examples/gallery_walk/scene.yaml
+msgctxt "example"
+msgid ""
+"A walkthrough of the L-shaped gallery: a visitor walks from in front of the "
+"guide, down the long arm and round the corner, at 1.2 m/s, while the guide "
+"talks. `acoustic-spaces walkthrough` simulates a response every 25 cm along "
+"the way (the late part every 2 m) and plays a recording through them, "
+"crossfading from each to the next, and can save the walk as a video: the "
+"guide's voice goes from direct and clear to the sound that bends round the "
+"corner."
+msgstr ""
+"Un percorso nella galleria a L: un visitatore cammina da davanti alla guida "
+"lungo il braccio maggiore e gira l'angolo, a 1.2 m/s, mentre la guida parla. "
+"`acoustic-spaces walkthrough` simula una risposta ogni 25 cm lungo il "
+"percorso (la parte tardiva ogni 2 m) e riproduce una registrazione "
+"attraverso di esse, con dissolvenza incrociata tra risposte consecutive, e "
+"può salvare il percorso come video: la voce della guida passa da diretta e "
+"chiara al suono che aggira l'angolo."
+
+#: examples/leaky_classroom/scene.yaml
+msgctxt "example"
+msgid "Leaky classroom (a model with two holes)"
+msgstr "Aula con fughe (un modello con due aperture)"
+
+#: examples/leaky_classroom/scene.yaml
+msgctxt "example"
+msgid ""
+"A 9 x 7 x 3 m classroom exported from a CAD model with two mistakes that "
+"leave it open: the window glass in the east wall was left out, and the "
+"ceiling stops 3 cm short of the north wall. The leak finder shows both: "
+"`acoustic-spaces validate examples/leaky_classroom/scene.yaml --leaks` "
+"prints where rays escape, and `acoustic-spaces view "
+"examples/leaky_classroom/scene.yaml --leaks` draws them. Simulated as it is, "
+"the room loses sound through the holes and its reverberation is too short."
+msgstr ""
+"Un'aula di 9 x 7 x 3 m esportata da un modello CAD con due errori che la "
+"lasciano aperta: manca il vetro della finestra nella parete est e il "
+"soffitto si ferma a 3 cm dalla parete nord. Il rilevatore di fughe mostra "
+"entrambi: `acoustic-spaces validate examples/leaky_classroom/scene.yaml "
+"--leaks` indica dove escono i raggi e `acoustic-spaces view "
+"examples/leaky_classroom/scene.yaml --leaks` li disegna. Simulata così "
+"com'è, l'aula perde suono attraverso le aperture e la sua riverberazione è "
+"troppo breve."
+
+#: examples/lecture_hall/scene.yaml
+msgctxt "example"
+msgid "Lecture hall (fan-shaped, 168 m2)"
+msgstr "Aula magna (a ventaglio, 168 m2)"
+
+#: examples/lecture_hall/scene.yaml
+msgctxt "example"
+msgid ""
+"A fan-shaped lecture hall built from its floor plan, no CAD file needed. The "
+"plan's corners go round the floor; wall_1 is the stage wall, from (0, -4) to "
+"(0, 4), and the side walls open out to the back wall, 16 m wide and 14 m "
+"away."
+msgstr ""
+"Un'aula magna a ventaglio costruita dalla pianta, senza bisogno di un file "
+"CAD. I vertici della pianta seguono il perimetro del pavimento; wall_1 è la "
+"parete del palco, da (0, -4) a (0, 4), e le pareti laterali si allargano "
+"verso quella posteriore, larga 16 m e distante 14 m."
+
+#: examples/listening_room/scene.yaml
+msgctxt "example"
+msgid "Listening room (loudspeaker and front wall)"
+msgstr "Sala d'ascolto (altoparlante e parete frontale)"
+
+#: examples/listening_room/scene.yaml
+msgctxt "example"
+msgid ""
+"A living room used for listening, 5.7 x 4.3 x 2.6 m, with plasterboard walls "
+"and an absorbing ceiling. The same loudspeaker stands against the front wall "
+"or a metre out from it, 2.2 m from the sofa: at low frequencies its "
+"reflection off the wall adds to the direct sound in pressure, and raises the "
+"bass from against the wall but takes from it a metre out (bass.py prints how "
+"much)."
+msgstr ""
+"Un soggiorno usato per l'ascolto, 5.7 x 4.3 x 2.6 m, con pareti in "
+"cartongesso e soffitto assorbente. Lo stesso altoparlante si trova contro la "
+"parete frontale o a un metro da essa, a 2.2 m dal divano: alle basse "
+"frequenze la riflessione della parete si somma al suono diretto in pressione "
+"e rafforza i bassi quando l'altoparlante è contro la parete, ma li riduce a "
+"un metro di distanza (bass.py ne indica l'entità)."
+
+#: examples/material_libraries/scene.yaml
+msgctxt "example"
+msgid "Seminar room (materials from CATT and ODEON libraries)"
+msgstr "Sala seminari (materiali da librerie CATT e ODEON)"
+
+#: examples/material_libraries/scene.yaml
+msgctxt "example"
+msgid ""
+"A seminar room, 7.2 x 5.4 x 3 m, whose materials come from material "
+"libraries of other room acoustics programs: the carpet and the walls from a "
+"CATT-Acoustic file (catt_materials.geo, ABS lines in percent from 125 Hz to "
+"4 kHz, with scattering), the ceiling from an ODEON library "
+"(odeon_materials.li8, eight values from 63 Hz to 8 kHz). `acoustic-spaces "
+"materials --file examples/material_libraries/odeon_materials.li8` lists a "
+"library. The values are this example's own, not those of either program."
+msgstr ""
+"Una sala seminari, 7.2 x 5.4 x 3 m, con materiali provenienti da librerie di "
+"altri programmi di acustica degli ambienti: moquette e pareti da un file "
+"CATT-Acoustic (catt_materials.geo, righe ABS in percentuale da 125 Hz a 4 "
+"kHz, con dispersione), soffitto da una libreria ODEON (odeon_materials.li8, "
+"otto valori da 63 Hz a 8 kHz). `acoustic-spaces materials --file "
+"examples/material_libraries/odeon_materials.li8` elenca una libreria. I "
+"valori sono propri di questo esempio e non di uno dei due programmi."
+
+#: examples/orchestra/scene.yaml
+msgctxt "example"
+msgid "Beethoven 8 orchestra (concert hall, 61 sources)"
+msgstr "Orchestra di Beethoven 8 (sala da concerto, 61 sorgenti)"
+
+#: examples/orchestra/scene.yaml
+msgctxt "example"
+msgid ""
+"The orchestra of an anechoic recording of Beethoven's Symphony No. 8 on the "
+"stage of the concert hall: 61 sources, one per track, and four seats. The "
+"tracks (TU Berlin, CC BY 4.0, https://doi.org/10.14279/depositonce-6729.2) "
+"are not included: download a movement and mix it at a seat with auralize.sh."
+msgstr ""
+"L'orchestra di una registrazione anecoica della Sinfonia n. 8 di Beethoven "
+"sul palco della sala da concerto: 61 sorgenti, una per traccia, e quattro "
+"posti. Le tracce (TU Berlin, CC BY 4.0, "
+"https://doi.org/10.14279/depositonce-6729.2) non sono incluse: scaricare un "
+"movimento e mixarlo per un posto con auralize.sh."
+
+#: examples/rehearsal_room/scene.yaml
+msgctxt "example"
+msgid "Rehearsal room from SketchUp (Collada)"
+msgstr "Sala prove da SketchUp (Collada)"
+
+#: examples/rehearsal_room/scene.yaml
+msgctxt "example"
+msgid ""
+"A band's rehearsal room of 26 x 20 ft under a pitched roof, from a Collada "
+"file (room.dae, written by make_model.py as SketchUp exports one: in inches "
+"with +z up). The file records its unit and its up axis, so the scene gives "
+"neither. Surfaces are named by their material and their geometry's name, and "
+"assignments match names whatever their case: SketchUp's Brick_Rough is "
+"brick_rough."
+msgstr ""
+"La sala prove di un gruppo musicale, 26 x 20 ft sotto un tetto a falde, da "
+"un file Collada (room.dae, scritto da make_model.py come un'esportazione "
+"SketchUp: in pollici con +z verso l'alto). Il file registra l'unità e l'asse "
+"verticale, quindi la scena non specifica nessuno dei due. Le superfici "
+"prendono il nome dal materiale e dalla geometria, e le assegnazioni trovano "
+"corrispondenze senza distinguere maiuscole e minuscole: Brick_Rough di "
+"SketchUp corrisponde a brick_rough."
+
+#: examples/room_modes/scene.yaml
+msgctxt "example"
+msgid "Room modes in a small room (36 m3)"
+msgstr "Modi acustici in un piccolo ambiente (36 m3)"
+
+#: examples/room_modes/scene.yaml
+msgctxt "example"
+msgid ""
+"The bass in a small, bare room: 4.2 x 3.4 x 2.5 m of plaster and a wooden "
+"floor, with a subwoofer in a corner and a seat in the middle. Below a few "
+"hundred hertz the room's modes decide what is heard, which rays cannot "
+"follow; the wave solver steps the sound field on a grid of air up to the 250 "
+"Hz octave, its walls absorbing as their materials do, and the rays take over "
+"above. It runs in third-octave bands (the parameters are still given in "
+"octaves).  acoustic-spaces simulate scene.yaml --out results --plot "
+"acoustic-spaces simulate scene.yaml --out rays --no-wave   # rays only, to "
+"compare acoustic-spaces simulate scene.yaml --out gpu --wave-device gpu   # "
+"with the gpu extra  At the seat the modes ring for 2.3 to 2.8 s from 63 to "
+"250 Hz, where the rays give 1.5 to 1.9 s, and make the 125 Hz band 2.3 dB "
+"louder. `device: auto` uses a hardware GPU when the gpu extra finds one (any "
+"vendor's, through WebGPU), else the CPU."
+msgstr ""
+"I bassi in un piccolo ambiente spoglio: 4.2 x 3.4 x 2.5 m con intonaco e "
+"pavimento in legno, un subwoofer in un angolo e un posto al centro. Sotto "
+"poche centinaia di hertz i modi dell'ambiente determinano ciò che si sente, "
+"un fenomeno che i raggi non possono seguire; il solutore ondulatorio "
+"aggiorna il campo sonoro su una griglia d'aria fino all'ottava di 250 Hz, "
+"con pareti che assorbono secondo i loro materiali, e i raggi subentrano al "
+"di sopra. Il calcolo usa bande di terzo d'ottava (i parametri sono comunque "
+"forniti in ottave).  acoustic-spaces simulate scene.yaml --out results "
+"--plot acoustic-spaces simulate scene.yaml --out rays --no-wave   # solo "
+"raggi, per confronto acoustic-spaces simulate scene.yaml --out gpu "
+"--wave-device gpu   # con il componente aggiuntivo gpu  Nel posto di ascolto "
+"i modi risuonano per 2.3-2.8 s da 63 a 250 Hz, dove i raggi danno 1.5-1.9 s, "
+"e aumentano il livello della banda di 125 Hz di 2.3 dB. `device: auto` usa "
+"una GPU hardware quando il componente aggiuntivo gpu ne trova una (di "
+"qualsiasi produttore, tramite WebGPU), altrimenti la CPU."
+
+#: examples/shoebox/scene.yaml
+msgctxt "example"
+msgid "Shoebox 8 x 6 x 3 m"
+msgstr "Ambiente rettangolare 8 x 6 x 3 m"
+
+#: examples/shoebox/scene.yaml
+msgctxt "example"
+msgid ""
+"A plain rectangular room, the simplest case every method must get right. Its "
+"absorption sits on the ceiling and the carpet while the walls are hard and "
+"smooth, so sound running between the walls dies away slowly: the simulated "
+"T30 is several times the Sabine and Eyring estimates of `inspect`, which "
+"assume a diffuse field."
+msgstr ""
+"Un semplice ambiente rettangolare, il caso più elementare che ogni metodo "
+"deve risolvere correttamente. L'assorbimento si concentra sul soffitto e "
+"sulla moquette mentre le pareti sono rigide e lisce, quindi il suono che si "
+"riflette tra le pareti decade lentamente: il T30 simulato è diverse volte "
+"superiore alle stime di Sabine ed Eyring di `inspect`, che presuppongono un "
+"campo diffuso."
+
+#: examples/studio/scene.yaml
+msgctxt "example"
+msgid "Control room (6 x 4.5 x 3 m)"
+msgstr "Regia (6 x 4.5 x 3 m)"
+
+#: examples/studio/scene.yaml
+msgctxt "example"
+msgid ""
+"A small control room, 6 x 4.5 x 3 m, treated for mixing: an absorbing "
+"ceiling, panels on the side walls and a diffuser on the back wall. Two "
+"loudspeakers form an equilateral triangle with the listening position, 2 m "
+"to each side."
+msgstr ""
+"Una piccola regia, 6 x 4.5 x 3 m, trattata per il missaggio: soffitto "
+"assorbente, pannelli sulle pareti laterali e un diffusore sulla parete "
+"posteriore. Due altoparlanti formano un triangolo equilatero con la "
+"posizione di ascolto, con lati di 2 m."
+
+#: examples/town_hall_pa/scene.yaml
+msgctxt "example"
+msgid "Town hall with a sound system (4000 m3)"
+msgstr "Sala comunale con impianto audio (4000 m3)"
+
+#: examples/town_hall_pa/scene.yaml
+msgctxt "example"
+msgid ""
+"A town hall with a sound system for speech: a stone hall of 4000 m3 with "
+"about two seconds of reverberation and a flat floor of seats, over which the "
+"sound of the stage fades (`audience: true`). Two column loudspeakers beside "
+"the stage tilt their beams down onto the seats (coherent arrays of 8 "
+"cardioid elements, steered 8 degrees down). Two delay loudspeakers on the "
+"side walls, 17 m down the hall, aim shorter arrays at the back rows. They "
+"play 60 ms after the columns, so their sound arrives just after the columns' "
+"and the voice still seems to come from the stage, 3 dB quieter and with the "
+"bass taken out, where the columns give enough. The program is speech "
+"(`spectrum: speech_male`).  acoustic-spaces map scene.yaml --parameter sti "
+"--plot sti.png python delays.py acoustic-spaces simulate scene.yaml --out "
+"results  delays.py maps the STI with and without the delay loudspeakers (two "
+"minutes on 4 cores). They lift the back rows' median from 0.52 to 0.59, but "
+"cost the front and the middle 0.04: in a hall this reverberant every "
+"loudspeaker adds to the reverberation everywhere, so delays pay off only "
+"where the columns' direct sound has faded. `inspect` lists each source's "
+"sound power with its feed."
+msgstr ""
+"Una sala comunale con impianto audio per il parlato: un salone in pietra di "
+"4000 m3 con circa due secondi di riverberazione e una platea piana di "
+"sedute, sopra la quale il suono del palco si attenua (`audience: true`). Due "
+"altoparlanti a colonna accanto al palco inclinano i fasci verso le sedute "
+"(array coerenti di 8 elementi cardioidi, orientati di 8 gradi verso il "
+"basso). Due altoparlanti di rinforzo ritardati sulle pareti laterali, a 17 m "
+"dal palco, dirigono array più corti verso le file posteriori. Suonano 60 ms "
+"dopo le colonne, così il loro suono arriva subito dopo quello delle colonne "
+"e la voce sembra ancora provenire dal palco, 3 dB più bassa e senza i bassi, "
+"dove le colonne sono sufficienti. Il programma è parlato (`spectrum: "
+"speech_male`).  acoustic-spaces map scene.yaml --parameter sti --plot "
+"sti.png python delays.py acoustic-spaces simulate scene.yaml --out results  "
+"delays.py calcola lo STI con e senza gli altoparlanti ritardati (due minuti "
+"su 4 core). Portano la mediana delle file posteriori da 0.52 a 0.59, ma "
+"riducono di 0.04 quella delle zone anteriore e centrale: in una sala così "
+"riverberante ogni altoparlante aumenta la riverberazione ovunque, quindi i "
+"rinforzi ritardati sono utili solo dove il suono diretto delle colonne si è "
+"attenuato. `inspect` elenca la potenza sonora di ogni sorgente con il suo "
+"segnale di ingresso."
+
+#: examples/workshop/scene.yaml
+msgctxt "example"
+msgid "Workshop noise (30 x 15 x 7 m)"
+msgstr "Rumore in officina (30 x 15 x 7 m)"
+
+#: examples/workshop/scene.yaml
+msgctxt "example"
+msgid ""
+"Noise in a workshop: a hall of 30 x 15 x 7 m with brick walls, a concrete "
+"floor and a ceiling of metal panels with acoustic tiles behind them, where a "
+"conveyor runs most of its length, a machine against a wall vibrates and a "
+"compressor stands in a corner. The conveyor is a line source 20 m long, the "
+"machine's casing a surface source (2 x 1.5 m, radiating as a vibrating "
+"panel), the compressor a point; each has its own sound power spectrum. The "
+"map gives the A-weighted level over the floor:  acoustic-spaces map "
+"scene.yaml --parameter spl_a --plot noise.png acoustic-spaces simulate "
+"scene.yaml --out results  The hall is loud everywhere, 85 dB(A) at the "
+"median point: away from the machines its reverberation sets the level. "
+"Assign `absorber` to the ceiling (`ceiling: absorber`) to see what a fibre "
+"absorber in place of the panels takes off: about 2 dB(A), near the machines "
+"and away from them alike, since the panels absorb much of it already."
+msgstr ""
+"Rumore in un'officina: un capannone di 30 x 15 x 7 m con pareti in mattoni, "
+"pavimento in calcestruzzo e soffitto di pannelli metallici con pannelli "
+"acustici retrostanti, dove un nastro trasportatore percorre quasi tutta la "
+"lunghezza, una macchina vibra contro una parete e un compressore si trova in "
+"un angolo. Il nastro è una sorgente lineare lunga 20 m, l'involucro della "
+"macchina una sorgente superficiale (2 x 1.5 m, che irradia come un pannello "
+"vibrante), il compressore una sorgente puntuale; ciascuno ha il proprio "
+"spettro di potenza sonora. La mappa fornisce il livello ponderato A sul "
+"pavimento:  acoustic-spaces map scene.yaml --parameter spl_a --plot "
+"noise.png acoustic-spaces simulate scene.yaml --out results  Il capannone è "
+"rumoroso ovunque, 85 dB(A) nel punto mediano: lontano dalle macchine è la "
+"riverberazione a determinare il livello. Assegnare `absorber` al soffitto "
+"(`ceiling: absorber`) per vedere quanto riduce il livello un assorbente "
+"fibroso al posto dei pannelli: circa 2 dB(A), sia vicino sia lontano dalle "
+"macchine, poiché i pannelli assorbono già gran parte del suono."

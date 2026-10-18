@@ -6,6 +6,7 @@ import json
 import sys
 import textwrap
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -90,14 +91,23 @@ def test_unreadable_lines_are_reported() -> None:
         read_po('"a"\n')
 
 
-def test_spanish_translates_the_text_of_the_code() -> None:
-    i18n.set_language("es")
-    assert i18n.language() == "es"
-    assert _("&Language") == "&Idioma"
+@pytest.mark.parametrize(
+    ("code", "language_menu"),
+    [("es", "&Idioma"), ("ca", "&Idioma"), ("it", "&Lingua"), ("de", "&Sprache"), ("nl", "&Taal")],
+)
+def test_catalog_translates_the_text_of_the_code(code, language_menu) -> None:
+    i18n.set_language(code)
+    assert i18n.language() == code
+    assert _("&Language") == language_menu
     assert _("A text without a translation") == "A text without a translation"
-    entries = read_po(i18n.catalog_path("es").read_text(encoding="utf-8"))
+    entries = read_po(i18n.catalog_path(code).read_text(encoding="utf-8"))
     for entry in entries[1:]:
-        if entry.context is None and entry.plural is None:
+        if entry.plural is not None:
+            for count in (0, 1, 2):
+                assert ngettext(entry.msgid, entry.plural, count) == entry.msgstr[count != 1]
+        elif entry.context is not None:
+            assert pgettext(entry.context, entry.msgid) == entry.msgstr[0]
+        else:
             assert _(entry.msgid) == entry.msgstr[0]
     i18n.set_language("en")
     assert _("&Language") == "&Language"
@@ -119,13 +129,35 @@ def test_pseudo_language_brackets_every_text() -> None:
     [
         ({"LANG": "es_AR.UTF-8"}, "es"),
         ({"LANG": "es-419"}, "es"),
+        ({"LANG": "ca_ES.UTF-8"}, "ca"),
+        ({"LANG": "ca-AD"}, "ca"),
+        ({"LANG": "ca_ES@valencia"}, "ca"),
+        ({"LANG": "it_IT.UTF-8"}, "it"),
+        ({"LANG": "it-CH"}, "it"),
+        ({"LANG": "de_DE.UTF-8"}, "de"),
+        ({"LANG": "de-AT"}, "de"),
+        ({"LANG": "de_CH.UTF-8"}, "de"),
+        ({"LANG": "nl_NL.UTF-8"}, "nl"),
+        ({"LANG": "nl-BE"}, "nl"),
         ({"LANG": "en_GB.UTF-8"}, "en"),
         ({"LANG": "C.UTF-8"}, "en"),
         ({"LANG": "fr_FR.UTF-8"}, "en"),  # no French catalog
         ({"LANGUAGE": "fr:es", "LANG": "fr_FR"}, "es"),  # the first with a catalog
+        ({"LANGUAGE": "fr:ca:es", "LANG": "es_ES"}, "ca"),
+        ({"LANGUAGE": "fr:it:es", "LANG": "es_ES"}, "it"),
+        ({"LANGUAGE": "fr:de:es", "LANG": "es_ES"}, "de"),
+        ({"LANGUAGE": "fr:nl:es", "LANG": "es_ES"}, "nl"),
         ({"LANGUAGE": "en:es", "LANG": "es_ES"}, "en"),
         ({"LC_ALL": "es_MX", "LANG": "en_US"}, "es"),
         ({"LC_MESSAGES": "es_CL.UTF-8"}, "es"),
+        ({"LC_ALL": "ca_ES.UTF-8", "LANG": "en_US"}, "ca"),
+        ({"LC_MESSAGES": "ca_ES.UTF-8"}, "ca"),
+        ({"LC_ALL": "it_IT.UTF-8", "LANG": "en_US"}, "it"),
+        ({"LC_MESSAGES": "it_CH.UTF-8"}, "it"),
+        ({"LC_ALL": "de_AT.UTF-8", "LANG": "en_US"}, "de"),
+        ({"LC_MESSAGES": "de_CH.UTF-8"}, "de"),
+        ({"LC_ALL": "nl_NL.UTF-8", "LANG": "en_US"}, "nl"),
+        ({"LC_MESSAGES": "nl_BE.UTF-8"}, "nl"),
     ],
 )
 def test_the_system_language(monkeypatch, variables, expected) -> None:
@@ -133,6 +165,34 @@ def test_the_system_language(monkeypatch, variables, expected) -> None:
         monkeypatch.delenv(name, raising=False)
     for name, value in variables.items():
         monkeypatch.setenv(name, value)
+    assert i18n.system_language() == expected
+
+
+@pytest.mark.parametrize(
+    ("language_id", "expected"),
+    [
+        (0x0403, "ca"),
+        (0x0803, "ca"),
+        (0x0407, "de"),
+        (0x0807, "de"),
+        (0x0C07, "de"),
+        (0x0409, "en"),
+        (0x040A, "es"),
+        (0x0410, "it"),
+        (0x0810, "it"),
+        (0x0413, "nl"),
+        (0x0813, "nl"),
+        (0x040C, "en"),
+    ],
+)
+def test_windows_display_language(monkeypatch, language_id, expected) -> None:
+    import ctypes
+
+    for name in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    kernel = SimpleNamespace(GetUserDefaultUILanguage=lambda: language_id)
+    monkeypatch.setattr(ctypes, "windll", SimpleNamespace(kernel32=kernel), raising=False)
     assert i18n.system_language() == expected
 
 
@@ -146,7 +206,11 @@ def test_what_chooses_the_language(monkeypatch, english) -> None:
     monkeypatch.setenv(i18n.ENV, "pseudo")
     assert i18n.chosen_language() == ("pseudo", i18n.ENV)
     monkeypatch.setenv(i18n.ENV, "de")
-    assert i18n.chosen_language() == ("en", i18n.ENV)  # no German catalog
+    assert i18n.chosen_language() == ("de", i18n.ENV)
+    monkeypatch.setenv(i18n.ENV, "nl")
+    assert i18n.chosen_language() == ("nl", i18n.ENV)
+    monkeypatch.setenv(i18n.ENV, "fr")
+    assert i18n.chosen_language() == ("en", i18n.ENV)  # no French catalog
 
     monkeypatch.delenv(i18n.ENV)
     assert i18n.saved_language() is None
@@ -169,11 +233,27 @@ def test_what_chooses_the_language(monkeypatch, english) -> None:
     assert i18n.saved_language() is None
 
 
-def test_info_names_the_language(capsys, english) -> None:
+@pytest.mark.parametrize(
+    ("code", "message"),
+    [
+        ("en", "language: English (ACOUSTIC_SPACES_LANG)"),
+        ("es", "idioma: Español (ACOUSTIC_SPACES_LANG)"),
+        ("ca", "idioma: Català (ACOUSTIC_SPACES_LANG)"),
+        ("ca_ES.UTF-8", "idioma: Català (ACOUSTIC_SPACES_LANG)"),
+        ("it", "lingua: Italiano (ACOUSTIC_SPACES_LANG)"),
+        ("it_IT.UTF-8", "lingua: Italiano (ACOUSTIC_SPACES_LANG)"),
+        ("de", "Sprache: Deutsch (ACOUSTIC_SPACES_LANG)"),
+        ("de_DE.UTF-8", "Sprache: Deutsch (ACOUSTIC_SPACES_LANG)"),
+        ("nl", "taal: Nederlands (ACOUSTIC_SPACES_LANG)"),
+        ("nl_NL.UTF-8", "taal: Nederlands (ACOUSTIC_SPACES_LANG)"),
+    ],
+)
+def test_info_names_the_language(capsys, english, monkeypatch, code, message) -> None:
     from acoustic_spaces.cli import main
 
+    monkeypatch.setenv(i18n.ENV, code)
     assert main(["info"]) == 0
-    assert "language: English (ACOUSTIC_SPACES_LANG)" in capsys.readouterr().out
+    assert message in capsys.readouterr().out
 
 
 # -- the catalog tool -------------------------------------------------------------------

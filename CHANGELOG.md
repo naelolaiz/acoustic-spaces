@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.2.3
+
+**Languages**
+
+- Translations for Catalan and Italian for editor and command line text.
+- German and Dutch translations with the same coverage: editor menus, forms, tips and
+  messages, plots, examples' titles and descriptions, and the command line's language report.
+  Select **Deutsch** or **Nederlands** under **View > Language** (from the next start),
+  set `ACOUSTIC_SPACES_LANG=de` or `nl`, or follow the system language, including the
+  Windows and macOS display language.
+
 ## 3.2.2
 
 **Languages** (`acoustic_spaces.i18n`)

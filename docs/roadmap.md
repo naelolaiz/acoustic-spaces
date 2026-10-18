@@ -79,3 +79,13 @@ Version 3.2.2:
 
 - [x] Translation supported. Spanish ready on catalogs and editor.
 
+Version 3.2.3:
+
+- [x] Added Catalan translation.
+
+- [x] Added Italian translation.
+
+- [x] Added German translation.
+
+- [x] Added Dutch translation.
+

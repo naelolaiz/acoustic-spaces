@@ -36,7 +36,8 @@ src/acoustic_spaces/   Python package
   gui/                 the graphical editor (Qt)
   cli.py               command-line interface
   i18n.py              the language of the text shown, and its translation
-  locale/              the translation catalogs (es.po: Spanish)
+  locale/              the translation catalogs (es.po: Spanish, ca.po: Catalan,
+                       it.po: Italian, de.po: German, nl.po: Dutch)
 cpp/include/           header-only C++ core: BVH, ray tracer (specular paths, stochastic
                        and map tracing), wave solver (FDTD), FFT, partitioned
                        convolver (no Python, so a plugin or player can reuse it)

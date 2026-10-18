@@ -1785,7 +1785,8 @@ def _display(viewport, point: QPoint) -> tuple[int, int]:
     return round(point.x() * ratio), round((widget.height() - point.y() - 1) * ratio)
 
 
-def test_choosing_the_language(window, english, monkeypatch) -> None:
+@pytest.mark.parametrize("language", ["es", "ca", "it", "de", "nl"])
+def test_choosing_the_language(window, english, monkeypatch, language) -> None:
     """View > Language keeps the choice for the next start; the editor stays as it is."""
     from acoustic_spaces import i18n
 
@@ -1795,15 +1796,20 @@ def test_choosing_the_language(window, english, monkeypatch) -> None:
     assert set(actions) == {None, *i18n.LANGUAGES}
     assert actions[None].isChecked() and actions[None].text().startswith("System (")
     assert actions["es"].text() == "Español"  # each language in its own words
+    assert actions["ca"].text() == "Català"
+    assert actions["it"].text() == "Italiano"
+    assert actions["de"].text() == "Deutsch"
+    assert actions["nl"].text() == "Nederlands"
     assert all(action.statusTip() and action.toolTip() for action in actions.values())
 
-    actions["es"].trigger()
-    assert i18n.saved_language() == "es" and actions["es"].isChecked()
+    actions[language].trigger()
+    assert i18n.saved_language() == language and actions[language].isChecked()
     assert i18n.language() == "en"  # from the next start
     # The variable the tests set wins over the choice, and the editor says so.
     assert "ACOUSTIC_SPACES_LANG is set to en" in window.messages.toPlainText()
 
     monkeypatch.delenv(i18n.ENV)
+    assert i18n.chosen_language() == (language, "saved")
     actions[None].trigger()
     assert i18n.saved_language() is None and actions[None].isChecked()
     name = i18n.LANGUAGES[i18n.system_language()]
@@ -1812,7 +1818,8 @@ def test_choosing_the_language(window, english, monkeypatch) -> None:
     )
 
 
-def test_qt_speaks_the_language_in_use(qapp) -> None:
+@pytest.mark.parametrize("language", ["es", "ca", "it", "de", "nl"])
+def test_qt_speaks_the_language_in_use(qapp, language) -> None:
     """Qt's own dialogs and buttons follow the language, from the translations Qt ships."""
     from PySide6.QtCore import QLibraryInfo
 
@@ -1820,10 +1827,10 @@ def test_qt_speaks_the_language_in_use(qapp) -> None:
     from acoustic_spaces.gui.app import install_qt_translation
 
     assert install_qt_translation(qapp) is None  # English: nothing to load
-    i18n.set_language("es")
+    i18n.set_language(language)
     translator = install_qt_translation(qapp)
     folder = Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath))
-    if (folder / "qtbase_es.qm").exists():
+    if (folder / f"qtbase_{language}.qm").exists():
         assert translator is not None
         assert qapp.removeTranslator(translator)
     else:
@@ -1831,7 +1838,7 @@ def test_qt_speaks_the_language_in_use(qapp) -> None:
 
 
 def _editor_in(qapp, monkeypatch, language: str):
-    """A new editor window showing its text in ``language`` (en, es or pseudo)."""
+    """A new editor window showing its text in ``language`` (en, es, ca, it, de, nl or pseudo)."""
     from acoustic_spaces import i18n
     from acoustic_spaces.gui.app import MainWindow
 
@@ -1925,27 +1932,94 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
         _close(qapp, win)
 
 
-def test_the_editor_in_spanish(qapp, english, monkeypatch) -> None:
-    """The editor shows its menus, panels and messages in Spanish."""
-    win = _editor_in(qapp, monkeypatch, "es")
+@pytest.mark.parametrize(
+    ("language", "words"),
+    [
+        (
+            "es",
+            {
+                "menus": ["&Archivo", "&Editar", "&Ver", "&Simulación", "A&yuda"],
+                "run": "&Calcular",
+                "properties": "Propiedades",
+                "new_room": "Recinto rectangular nuevo",
+                "undo": "&Deshacer",
+                "add_source": "añadir fuente",
+                "late_methods": ["trazado de rayos estocástico", "estadístico"],
+                "example": "Piso con una puerta",
+            },
+        ),
+        (
+            "ca",
+            {
+                "menus": ["&Fitxer", "&Editar", "&Veure", "&Simulació", "&Ajuda"],
+                "run": "&Calcular",
+                "properties": "Propietats",
+                "new_room": "Recinte rectangular nou",
+                "undo": "&Desfer",
+                "add_source": "afegir font",
+                "late_methods": ["traçat de raigs estocàstic", "estadístic"],
+                "example": "Pis amb una porta",
+            },
+        ),
+        (
+            "it",
+            {
+                "menus": ["&File", "&Modifica", "&Visualizza", "&Simulazione", "&Aiuto"],
+                "run": "&Calcola",
+                "properties": "Proprietà",
+                "new_room": "Nuovo ambiente rettangolare",
+                "undo": "&Annulla",
+                "add_source": "aggiungi sorgente",
+                "late_methods": ["tracciamento di raggi stocastico", "statistico"],
+                "example": "Appartamento con una porta",
+            },
+        ),
+        (
+            "de",
+            {
+                "menus": ["&Datei", "&Bearbeiten", "&Ansicht", "&Simulation", "&Hilfe"],
+                "run": "&Berechnen",
+                "properties": "Eigenschaften",
+                "new_room": "Neuer Quaderraum",
+                "undo": "&Rückgängig",
+                "add_source": "Quelle hinzufügen",
+                "late_methods": ["stochastische Strahlenverfolgung", "statistisch"],
+                "example": "Wohnung mit einer Tür",
+            },
+        ),
+        (
+            "nl",
+            {
+                "menus": ["&Bestand", "Be&werken", "B&eeld", "&Simulatie", "&Help"],
+                "run": "&Berekenen",
+                "properties": "Eigenschappen",
+                "new_room": "Nieuwe rechthoekige ruimte",
+                "undo": "&Ongedaan maken",
+                "add_source": "bron toevoegen",
+                "late_methods": ["stochastische straaltracering", "statistisch"],
+                "example": "Appartement met een deur",
+            },
+        ),
+    ],
+)
+def test_the_editor_in_translation(qapp, english, monkeypatch, language, words) -> None:
+    """The editor shows its menus, panels and messages in the chosen language."""
+    win = _editor_in(qapp, monkeypatch, language)
     try:
         titles = [action.text() for action in win.menuBar().actions()]
-        assert titles == ["&Archivo", "&Editar", "&Ver", "&Simulación", "A&yuda"]
-        assert win.run_action.text() == "&Calcular"
-        assert win.docks["inspector"].windowTitle() == "Propiedades"
+        assert titles == words["menus"]
+        assert win.run_action.text() == words["run"]
+        assert win.docks["inspector"].windowTitle() == words["properties"]
         win.new_box()
-        assert "Recinto rectangular nuevo" in win.messages.toPlainText()
-        assert win.undo_action.text() == "&Deshacer"
+        assert words["new_room"] in win.messages.toPlainText()
+        assert win.undo_action.text() == words["undo"]
         win.document.add_point("sources", (2.0, 2.0, 1.5))
-        assert win.undo_action.text() == "&Deshacer añadir fuente"
+        assert win.undo_action.text() == f"{words['undo']} {words['add_source']}"
         # Choices show in words; the scene keeps its values.
         page = win.inspector.pages["simulation"]
-        assert [page.late_method.itemText(k) for k in range(2)] == [
-            "trazado de rayos estocástico",
-            "estadístico",
-        ]
+        assert [page.late_method.itemText(k) for k in range(2)] == words["late_methods"]
         assert page.late_method.itemData(0) == "stochastic_ray_tracing"
-        assert win.examples_menu.actions()[0].text().startswith("Piso con una puerta")
+        assert win.examples_menu.actions()[0].text().startswith(words["example"])
         # One shortcut letter per entry in each menu.
         for menu in win.menuBar().findChildren(QMenu):
             letters = [
