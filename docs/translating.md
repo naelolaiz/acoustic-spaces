@@ -4,8 +4,8 @@ The editor, the command line and the messages of the library show their text in 
 language [chosen as Getting started describes](getting-started.md#language). English is
 the text in the code; each other language has a catalog, `src/acoustic_spaces/locale/<code>.po`
 (gettext's format, which translation tools such as Poedit and Weblate read). Spanish
-(`es.po`), Catalan (`ca.po`) and Italian (`it.po`) cover the editor, its plots and the
-examples' descriptions.
+(`es.po`), Catalan (`ca.po`), Italian (`it.po`) and German (`de.po`) cover the editor,
+its plots and the examples' descriptions.
 
 What stays in English in every language: scene files (their keys and values), command
 and option names, the choices options take (`--early ray_tracing`), the files the
@@ -251,3 +251,54 @@ Glossary:
 | gain, delay, equalizer | guadagno, ritardo, equalizzatore |
 | yaw, pitch, roll | imbardata, beccheggio, rollio |
 | results, messages, warning | risultati, messaggi, avviso |
+
+## German
+
+The German catalog covers the same text as Spanish, Catalan and Italian. Select
+**Deutsch** under **View > Language**, or set `ACOUSTIC_SPACES_LANG=de`. System locale
+names such as `de_DE.UTF-8`, `de-AT` and `de_CH.UTF-8` also select it, as does the German
+display language on Windows or macOS.
+
+Style:
+
+- Actions use infinitives: *Öffnen*, *Speichern*, *Berechnen*, *Abbrechen*.
+- Tooltips use infinitives or impersonal descriptions. Capitalize nouns according to
+  German spelling, with no final full stop on labels or tooltips, as in English.
+- Use *Datei*, *Computer* and *Standard*. Keep the product name Acoustic Spaces,
+  file patterns, scene-file values, format names, units and parameter symbols as written.
+- Use „ “ for quotation marks. Numbers follow the computer's regional settings;
+  the command line keeps the decimal point.
+- Each menu entry has one `&` shortcut, distinct from the others in that menu.
+- German uses two plural forms: singular for 1, plural for all other counts.
+
+Glossary:
+
+| English | German |
+|---|---|
+| room, box room | Raum, Quaderraum |
+| scene, model file | Szene, Modelldatei |
+| floor plan, corner | Grundriss, Ecke |
+| wall, floor, ceiling | Wand, Boden, Decke |
+| source, listener | Quelle, Empfänger |
+| sound power, sound pressure level | Schallleistung, Schalldruckpegel |
+| directivity, directivity index | Richtcharakteristik, Richtwirkungsmaß |
+| loudspeaker, loudspeaker layout | Lautsprecher, Lautsprecheranordnung |
+| absorption coefficient, scattering coefficient | Absorptionsgrad, Streugrad |
+| scattering, diffusion | Streuung, Diffusion |
+| sound reduction index | Schalldämmmaß |
+| early reflections, late reverberation | frühe Reflexionen, später Nachhall |
+| ray tracing, image sources | Strahlenverfolgung, Spiegelquellen |
+| wave solver, edge diffraction | Wellensolver, Kantenbeugung |
+| impulse response, reverberation time | Impulsantwort, Nachhallzeit |
+| early decay time, decay curve | frühe Abklingzeit, Abklingkurve |
+| clarity, definition, sound strength | Klarheitsmaß, Deutlichkeitsgrad, Stärkemaß |
+| centre time | Schwerpunktzeit |
+| speech transmission index | Sprachübertragungsindex |
+| octave band, third-octave band | Oktavband, Terzband |
+| sample rate, background noise | Abtastrate, Hintergrundgeräusch |
+| coverage map, leak | Versorgungskarte, Undichtigkeit |
+| auralization, dry recording | Auralisation, reflexionsfreie Aufnahme |
+| playback, head tracking | Wiedergabe, Kopfverfolgung |
+| gain, delay, equalizer | Verstärkung, Verzögerung, Equalizer |
+| yaw, pitch, roll | Gierwinkel, Nickwinkel, Rollwinkel |
+| results, messages, warning | Ergebnisse, Meldungen, Warnung |

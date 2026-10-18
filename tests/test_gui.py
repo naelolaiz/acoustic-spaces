@@ -1785,7 +1785,7 @@ def _display(viewport, point: QPoint) -> tuple[int, int]:
     return round(point.x() * ratio), round((widget.height() - point.y() - 1) * ratio)
 
 
-@pytest.mark.parametrize("language", ["es", "ca", "it"])
+@pytest.mark.parametrize("language", ["es", "ca", "it", "de"])
 def test_choosing_the_language(window, english, monkeypatch, language) -> None:
     """View > Language keeps the choice for the next start; the editor stays as it is."""
     from acoustic_spaces import i18n
@@ -1798,6 +1798,7 @@ def test_choosing_the_language(window, english, monkeypatch, language) -> None:
     assert actions["es"].text() == "Español"  # each language in its own words
     assert actions["ca"].text() == "Català"
     assert actions["it"].text() == "Italiano"
+    assert actions["de"].text() == "Deutsch"
     assert all(action.statusTip() and action.toolTip() for action in actions.values())
 
     actions[language].trigger()
@@ -1816,7 +1817,7 @@ def test_choosing_the_language(window, english, monkeypatch, language) -> None:
     )
 
 
-@pytest.mark.parametrize("language", ["es", "ca", "it"])
+@pytest.mark.parametrize("language", ["es", "ca", "it", "de"])
 def test_qt_speaks_the_language_in_use(qapp, language) -> None:
     """Qt's own dialogs and buttons follow the language, from the translations Qt ships."""
     from PySide6.QtCore import QLibraryInfo
@@ -1836,7 +1837,7 @@ def test_qt_speaks_the_language_in_use(qapp, language) -> None:
 
 
 def _editor_in(qapp, monkeypatch, language: str):
-    """A new editor window showing its text in ``language`` (en, es, ca, it or pseudo)."""
+    """A new editor window showing its text in ``language`` (en, es, ca, it, de or pseudo)."""
     from acoustic_spaces import i18n
     from acoustic_spaces.gui.app import MainWindow
 
@@ -1970,6 +1971,19 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "aggiungi sorgente",
                 "late_methods": ["tracciamento di raggi stocastico", "statistico"],
                 "example": "Appartamento con una porta",
+            },
+        ),
+        (
+            "de",
+            {
+                "menus": ["&Datei", "&Bearbeiten", "&Ansicht", "&Simulation", "&Hilfe"],
+                "run": "&Berechnen",
+                "properties": "Eigenschaften",
+                "new_room": "Neuer Quaderraum",
+                "undo": "&Rückgängig",
+                "add_source": "Quelle hinzufügen",
+                "late_methods": ["stochastische Strahlenverfolgung", "statistisch"],
+                "example": "Wohnung mit einer Tür",
             },
         ),
     ],

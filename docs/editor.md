@@ -116,7 +116,7 @@ which frequencies each octave band holds.
   with the report in the messages (see [Finding leaks](scenes.md#finding-leaks)). It
   traces again when the geometry, the materials or the sources change.
 - **View > Language** shows the editor and the command line in English, Spanish,
-  Catalan or Italian, or in the computer's language, from their next start (see
+  Catalan, Italian or German, or in the computer's language, from their next start (see
   [Language](getting-started.md#language)). Numbers in the editor follow the
   computer's regional settings: 0,85 where the decimal mark is a comma, with lists of
   numbers (an equalizer's gains) apart by semicolons there.

@@ -79,8 +79,11 @@ Version 3.2.2:
 
 - [x] Translation supported. Spanish ready on catalogs and editor.
 
-Versión 3.2.3:
+Version 3.2.3:
+
 - [x] Added Catalan translation.
 
 - [x] Added Italian translation.
+
+- [x] Added German translation.
 
