@@ -93,7 +93,9 @@ Outdoor acoustics, in steps:
 
 - [x] O1 Outdoor scenes: flat ground under an open sky, buildings, barriers and model
   files on it; responses as long as the distances need; coverage maps over the ground.
-- [ ] O2 Ground impedance (grass, soil, snow) and the spherical-wave ground reflection.
+- [x] O2 Ground impedance (grass, soil, snow) and the spherical-wave ground reflection;
+  mixed ground in zones, weighted by the Fresnel zone; the early paths in pressure in
+  every band outdoors; the wave solver fitted to the impedance.
 - [ ] O3 Wind and temperature gradients: curved rays and shadow zones.
 - [ ] O4 Atmospheric turbulence.
 - [ ] O5 Vegetation: trees, hedges and forests.

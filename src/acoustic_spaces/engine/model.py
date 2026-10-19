@@ -26,6 +26,10 @@ DIRECTIVITY_A = PATTERNS
 #: A straight line through more surfaces that let sound through than this counts as
 #: blocked.
 MAX_CROSSINGS = 64
+#: The size (m) an outdoor scene's ground counts as for the scattering of a surface's size
+#: (:func:`size_scattering`): it goes on past its extent. Finite, as the GPU tracer
+#: works in single precision.
+UNBOUNDED_M = 1e9
 
 
 def source_weights(
@@ -99,6 +103,22 @@ class TraceModel:
     #: Height (z) of an outdoor scene's ground, whose edges on it diffract nothing; None
     #: in a room.
     ground: float | None = None
+    #: (F,) for faces whose material has an impedance (a ground's: see
+    #: :class:`~acoustic_spaces.scene.Impedance`), its row of ``admittance``; -1 for the
+    #: others. None when no material has one.
+    face_impedance: np.ndarray | None = None
+    #: (K, bands, M) the normalised admittance of each material with an impedance at the
+    #: frequencies the early paths are evaluated at
+    #: (:func:`~acoustic_spaces.engine.diffraction.band_frequencies`).
+    admittance: np.ndarray | None = None
+    #: (F,) for an outdoor scene whose ground has zones (``geometry.ground.zones``), the
+    #: part of the ground each face of it lies in (0 outside the zones, then each zone),
+    #: whose reflections share their Fresnel zone with the parts round them; -1 for the
+    #: faces that are not the ground. None without zones.
+    ground_part: np.ndarray | None = None
+    #: (parts,) a face of each part of the ground, whose material it has; -1 for a part
+    #: with no faces (the zones may cover all the ground).
+    part_face: np.ndarray | None = None
 
     @classmethod
     def from_room(cls, room: Room, settings=None) -> TraceModel:
@@ -133,9 +153,28 @@ class TraceModel:
         coefficients = [materials[n].coefficients(simulation.bands) for n in room.material_names]
         absorption = np.array([a for a, _ in coefficients])
         scattering = np.array([s for _, s in coefficients])
+        face_impedance = admittance = None
+        impedances = [materials[n].impedance for n in room.material_names]
+        if any(i is not None for i in impedances):
+            from acoustic_spaces.engine.diffraction import band_frequencies
+
+            f = band_frequencies(bands=simulation.bands)[0]
+            rows = [k for k, i in enumerate(impedances) if i is not None]
+            row = np.full(len(impedances), -1, dtype=np.int64)
+            row[rows] = np.arange(len(rows))
+            face_impedance = row[room.face_materials]
+            admittance = np.array(
+                [impedances[k].admittance(f, room.speed_of_sound()) for k in rows]
+            )
+        ground_part = part_face = None
+        if room.outdoor is not None and room.outdoor.zones:
+            ground_part, part_face = _ground_parts(room)
         size = None
         if simulation.scattering.from_size:
             size = np.ascontiguousarray(surface_sizes(mesh.vertices, mesh.faces, face_plane))
+            if room.outdoor is not None:
+                # The ground goes on past its extent: its size scatters nothing.
+                size[_ground_faces(room)] = UNBOUNDED_M
         return cls(
             room=room,
             bvh=bvh,
@@ -157,6 +196,10 @@ class TraceModel:
             ray_tree=ray_tree,
             sky=None if room.outdoor is None else room.sky_faces(),
             ground=None if room.outdoor is None else room.outdoor.ground,
+            face_impedance=face_impedance,
+            admittance=admittance,
+            ground_part=ground_part,
+            part_face=part_face,
         )
 
     def __post_init__(self) -> None:
@@ -243,12 +286,31 @@ class TraceModel:
         distance = np.einsum("ij,ij->i", n, points) - self.plane_offset[planes]
         return points - 2.0 * distance[:, None] * n
 
-    def reflection(self, faces: np.ndarray, incoming: np.ndarray, order: int) -> np.ndarray:
+    def impedance_faces(self, faces: np.ndarray) -> np.ndarray:
+        """(n,) whether each of ``faces`` has a material with an impedance."""
+        if self.face_impedance is None:
+            return np.zeros(np.shape(faces), dtype=bool)
+        return self.face_impedance[np.asarray(faces, dtype=np.int64)] >= 0
+
+    def factor_faces(self, faces: np.ndarray) -> np.ndarray:
+        """(n,) whether reflections off each of ``faces`` take a reflection factor that
+        depends on the path (see :func:`~acoustic_spaces.engine.coherent.ground_factors`):
+        faces with an impedance, and the ground of a scene with ground zones."""
+        out = self.impedance_faces(faces)
+        if self.ground_part is not None:
+            out = out | (self.ground_part[np.asarray(faces, dtype=np.int64)] >= 0)
+        return out
+
+    def reflection(
+        self, faces: np.ndarray, incoming: np.ndarray, order: int, impedance: bool = False
+    ) -> np.ndarray:
         """(n, bands) specular energy share of reflections off ``faces`` (n,) of sound
         that travelled ``incoming`` (n, 3) from the source or the previous reflection,
         the ``order``-th reflection of its path: (1 - absorption) (1 - scattering), with
         the scattering of the surface's size when that applies, as the stochastic
-        tracer reflects its rays."""
+        tracer reflects its rays. With ``impedance``, the faces of :meth:`factor_faces`
+        give (1 - scattering) alone: their reflection factor, which depends on the path,
+        takes the place of the absorption."""
         faces = np.asarray(faces, dtype=np.int64)
         scattering = self.scattering[faces]
         if self.surface_size is not None and order >= self.size_from_order and len(faces):
@@ -266,7 +328,10 @@ class TraceModel:
                 scattering,
                 self.band_hz,
             )
-        return (1.0 - self.absorption[faces]) * (1.0 - scattering)
+        kept = 1.0 - self.absorption[faces]
+        if impedance and (self.face_impedance is not None or self.ground_part is not None):
+            kept = np.where(self.factor_faces(faces)[:, None], 1.0, kept)
+        return kept * (1.0 - scattering)
 
     def intersect(
         self, origins: np.ndarray, directions: np.ndarray, t_max: np.ndarray, ignore: np.ndarray
@@ -277,6 +342,32 @@ class TraceModel:
             np.ascontiguousarray(t_max, dtype=np.float64),
             np.ascontiguousarray(ignore, dtype=np.int64),
         )
+
+
+def _ground_faces(room: Room) -> np.ndarray:
+    """(F,) the faces of an outdoor scene's ground: those lying on it (the model file's
+    are left out, see :func:`~acoustic_spaces.geometry.outdoor.standing`)."""
+    from acoustic_spaces.geometry.outdoor import ON_GROUND_M
+
+    corners = room.mesh.vertices[room.mesh.faces][:, :, 2]  # (F, 3)
+    return np.all(np.abs(corners - room.outdoor.ground) <= ON_GROUND_M, axis=1)
+
+
+def _ground_parts(room: Room) -> tuple[np.ndarray, np.ndarray]:
+    """For an outdoor scene whose ground has zones: (F,) the part of the ground each face
+    lies in (0 outside the zones, then each zone; -1 for faces that are not the ground,
+    see :func:`_ground_faces`) and (parts,) a face of each part (-1 for a part with
+    none)."""
+    layout = room.outdoor
+    flat = _ground_faces(room)
+    part = np.full(len(flat), -1, dtype=np.int64)
+    part[flat] = layout.zone_at(room.mesh.vertices[room.mesh.faces[flat]].mean(axis=1)) + 1
+    first = np.full(1 + len(layout.zones), -1, dtype=np.int64)
+    for p in range(len(first)):
+        found = np.flatnonzero(part == p)
+        if len(found):
+            first[p] = found[0]
+    return part, first
 
 
 def size_scattering(

@@ -1785,6 +1785,35 @@ msgid "Remove barrier"
 msgstr "Geluidsscherm verwijderen"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Ground zones"
+msgstr "Grondzones"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The zone's name: a part of the ground (a road, a lawn) whose surfaces carry "
+"it, to give it a material of its own"
+msgstr ""
+"De naam van de zone: een deel van de grond (een weg, een grasveld) waarvan "
+"de vlakken hem dragen, om het een eigen materiaal te geven"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many corners the zone's outline has (set in the scene file)"
+msgstr ""
+"Hoeveel hoeken de omtrek van de zone heeft (ingesteld in het scènebestand)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove zone"
+msgstr "Zone verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the selected ground zone, or the last one when none is selected: its "
+"part of the ground takes the ground's material"
+msgstr ""
+"De geselecteerde grondzone verwijderen, of de laatste als er geen is "
+"geselecteerd: dat deel van de grond krijgt het materiaal van de grond"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "A closed model has no gaps: each edge joins two faces. The volume and the "
 "reverberation estimates need one; View > Show leaks finds the gaps"
@@ -1884,6 +1913,10 @@ msgid ""
 "Ground from ({x0:g}, {y0:g}) to ({x1:g}, {y1:g}) m, sky {sky:g} m over it"
 msgstr ""
 "Grond van ({x0:g}, {y0:g}) tot ({x1:g}, {y1:g}) m, hemel {sky:g} m erboven"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove zone"
+msgstr "zone verwijderen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change ground"
@@ -2015,6 +2048,54 @@ msgid "everything (an opening)"
 msgstr "alles (een opening)"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "snow"
+msgstr "sneeuw"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "forest floor"
+msgstr "bosgrond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "loose soil"
+msgstr "losse grond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grass"
+msgstr "gras"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "compacted soil"
+msgstr "verdichte grond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "gravel"
+msgstr "grind"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "asphalt"
+msgstr "asfalt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "water"
+msgstr "water"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "flow resistivity below"
+msgstr "stromingsweerstand hieronder"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Miki"
+msgstr "Miki"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Delany-Bazley"
+msgstr "Delany-Bazley"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "two-parameter"
+msgstr "twee parameters"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The material's name; renaming it renames it in the assignments and the "
 "default material too"
@@ -2066,6 +2147,91 @@ msgstr ""
 "rugleuningen (strijkende inval; de aanpassing van Jurkiewicz et al., 2025)"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Ground impedance"
+msgstr "Grondimpedantie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Ticked, the material is a porous ground (grass, soil, snow, gravel, "
+"asphalt): its absorption and its reflection come from its impedance, with "
+"the phase and the ground wave that make the dip over the ground outdoors. "
+"Unticked, the absorption is as given"
+msgstr ""
+"Aangevinkt: het materiaal is een poreuze grond (gras, aarde, sneeuw, grind, "
+"asfalt); de absorptie en de reflectie volgen uit de impedantie, met de fase "
+"en de grondgolf die buiten de dip boven de grond veroorzaken. Niet "
+"aangevinkt: de absorptie is zoals opgegeven"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The kind of ground: the ground classes of Nord2000, from snow (softest) to "
+"water and dense concrete (hardest), each with its flow resistivity; or a "
+"flow resistivity of your own"
+msgstr ""
+"De soort grond: de grondklassen van Nord2000, van sneeuw (het zachtst) tot "
+"water en dicht beton (het hardst), elk met een eigen stromingsweerstand; of "
+"een eigen stromingsweerstand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the impedance follows from the flow resistivity: Miki (passive at every "
+"frequency, the default), Delany-Bazley (as most of the literature quotes "
+"it), or two-parameter (a porosity that falls with depth, which fits measured "
+"grass and soil better)"
+msgstr ""
+"Hoe de impedantie uit de stromingsweerstand volgt: Miki (passief bij elke "
+"frequentie, de standaard), Delany-Bazley (zoals de meeste literatuur het "
+"aanhaalt) of twee parameters (een porositeit die met de diepte afneemt, wat "
+"beter past bij gemeten gras en aarde)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How hard it is to push air through the ground: about 10 to 30 kPa s/m² for "
+"snow, 200 for grass, 2000 for gravel, 20000 and more for asphalt"
+msgstr ""
+"Hoe moeilijk lucht door de grond te duwen is: ongeveer 10 tot 30 kPa s/m² "
+"voor sneeuw, 200 voor gras, 2000 voor grind, 20000 en meer voor asfalt"
+
+#. Translators: a ground layer with no thickness set: as deep as it likes.
+#: acoustic_spaces/gui/inspector.py
+msgid "deep"
+msgstr "diep"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A layer of the ground this thick on a hard backing (snow on frozen ground, a "
+"thin soil over rock); deep: as deep as it likes"
+msgstr ""
+"Een laag grond van deze dikte op een harde ondergrond (sneeuw op bevroren "
+"grond, een dunne laag aarde op rots); diep: onbeperkt diep"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Two-parameter model: how fast the ground's porosity falls with depth"
+msgstr ""
+"Model met twee parameters: hoe snel de porositeit van de grond met de diepte "
+"afneemt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground"
+msgstr "Grond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Model"
+msgstr "Model"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Flow resistivity"
+msgstr "Stromingsweerstand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Layer thickness"
+msgstr "Laagdikte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Porosity rate"
+msgstr "Porositeitsafname"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Where the coefficients come from"
 msgstr "De herkomst van de coëfficiënten"
 
@@ -2084,6 +2250,10 @@ msgid ""
 msgstr ""
 "Dit materiaal en de toewijzingen die het gebruiken verwijderen; de "
 "oppervlakken krijgen het standaardmateriaal"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Source: the ground's impedance"
+msgstr "Bron: de impedantie van de grond"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -2518,12 +2688,15 @@ msgstr ""
 msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
-"bands take their place when it runs up to this band or higher"
+"bands take their place when it runs up to this band or higher. Up to 500 Hz "
+"in a room; outdoors, where the paths are few, up to 8000 Hz, the default "
+"there"
 msgstr ""
 "De hoogste octaafband (Hz) waarin de vroege paden in geluidsdruk worden "
 "opgeteld, met de fase van elke reflectie, in plaats van in energie; de "
 "banden van de golfsolver nemen hun plaats in als deze tot deze band of hoger "
-"rekent"
+"rekent. Tot 500 Hz in een ruimte; buiten, waar er weinig paden zijn, tot "
+"8000 Hz, daar de standaard"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Method"
@@ -4577,6 +4750,33 @@ msgstr ""
 "krijgen de naam van hun materiaal en geometrie; toewijzingen negeren "
 "hoofdletters en kleine letters: Brick_Rough van SketchUp komt overeen met "
 "brick_rough."
+
+#: examples/roadside/scene.yaml
+msgctxt "example"
+msgid "Road across a meadow"
+msgstr "Weg langs een weiland"
+
+#: examples/roadside/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: traffic on a road between a meadow and a paved yard, heard 7.5, 25 "
+"and 50 m away over the grass, and 25 m away over the yard. Over soft ground "
+"the sound that reflects off it arrives out of step with the direct sound at "
+"a few hundred hertz and takes some of it away (the ground dip); over the "
+"hard yard the two add up there instead, and the dip comes higher up, near 2 "
+"kHz. The meadow, the road and the yard are parts of the ground, each with "
+"its impedance; a reflection near where two meet takes some of each, as much "
+"as each covers of its Fresnel zone."
+msgstr ""
+"Buiten: verkeer op een weg tussen een weiland en een verharde binnenplaats, "
+"gehoord op 7.5, 25 en 50 m boven het gras en op 25 m boven de binnenplaats. "
+"Boven zachte grond komt het geluid dat erop weerkaatst bij een paar honderd "
+"hertz uit fase met het directe geluid aan en neemt het er een deel van weg "
+"(de gronddip); boven de harde binnenplaats tellen de twee daar juist op, en "
+"de dip ligt hoger, rond 2 kHz. Het weiland, de weg en de binnenplaats zijn "
+"delen van de grond, elk met een eigen impedantie; een reflectie dicht bij "
+"waar twee elkaar raken neemt van elk iets, zoveel als elk van haar "
+"fresnelzone bedekt."
 
 #: examples/room_modes/scene.yaml
 msgctxt "example"

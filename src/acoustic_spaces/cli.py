@@ -31,7 +31,10 @@ DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
 WAVE_BANDS_HZ = (63, 125, 250, 500)
 #: Choices for the highest band the early paths add in pressure in
 #: (scene.model.EarlyStage.coherent_max_band_hz).
-COHERENT_BANDS = ("none", "63", "125", "250", "500")
+COHERENT_BANDS = ("none", "63", "125", "250", "500", "1000", "2000", "4000", "8000")
+#: The highest of them in a room; those above are for outdoor scenes
+#: (scene.model.INDOOR_COHERENT_MAX_BAND_HZ).
+INDOOR_COHERENT_MAX_BAND_HZ = 500
 #: Rays the leak finder traces by default (engine.leaks.RAYS).
 LEAK_RAYS = 5000
 #: Walkthrough defaults (walkthrough.STEP_M, LATE_STEP_M and CROSSFADE_S).
@@ -210,6 +213,12 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
             f"  outdoors: ground at z = {room.outdoor.ground:g} m from ({x0:g}, {y0:g}) to "
             f"({x1:g}, {y1:g}) m, sky at z = {room.outdoor.sky:g} m"
         )
+        if room.outdoor.zones:
+            zones = ", ".join(
+                f"{name} ({abs(_polygon_area(polygon)):.0f} m2)"
+                for name, polygon in room.outdoor.zones
+            )
+            print(f"  ground zones: {zones}")
 
     width = max([len(n) for n in room.material_names] + [12]) + 2
     print("\nmaterials (absorption per octave band, area)")
@@ -222,9 +231,14 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         if passing is not None:
             reduction = [max(0.0, -10.0 * math.log10(t)) if t > 0 else math.inf for t in passing]
             print(_band_row("  R (dB)", reduction, width, "6.1f") + "  sound reduction")
+        if material.impedance is not None:
+            print(
+                f"  impedance ({material.impedance.describe()}): the absorption above is "
+                "at random incidence; reflections are a ground's spherical wave"
+            )
         if material.audience:
             print("  audience seating: sound arriving low over it is attenuated (500 Hz-2 kHz)")
-        if len(material.absorption) > len(absorption):
+        if len(material.absorption) > len(absorption) and material.impedance is None:
             print("  third-octave data, shown as octave averages")
         if material.source:
             print(f"  {material.source}")
@@ -276,6 +290,15 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
             )
     print()
     return 0 if _print_checks(room) else 1
+
+
+def _polygon_area(polygon) -> float:
+    """The signed area of a polygon (n, 2)."""
+    points = [(float(x), float(y)) for x, y in polygon]
+    return 0.5 * sum(
+        x0 * y1 - x1 * y0
+        for (x0, y0), (x1, y1) in zip(points, points[1:] + points[:1], strict=True)
+    )
 
 
 def _extent_text(item) -> str:
@@ -576,12 +599,20 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
-def _with_coherent(settings, choice: str | None):
+def _with_coherent(settings, choice: str | None, outdoor: bool = False):
     """``settings`` (``scene.simulation``) with the highest band the early paths add in
-    pressure in, as ``--coherent-band`` gives it (None: as they are)."""
+    pressure in, as ``--coherent-band`` gives it (None: as they are); bands above
+    500 Hz only in an ``outdoor`` scene (else an error is printed and None returned)."""
     if settings is None or choice is None:
         return settings
     band = None if choice == "none" else int(choice)
+    if not outdoor and (band or 0) > INDOOR_COHERENT_MAX_BAND_HZ:
+        print(
+            f"error: --coherent-band: goes up to {INDOOR_COHERENT_MAX_BAND_HZ} Hz in a room, "
+            "whose early paths are many; higher bands are for outdoor scenes",
+            file=sys.stderr,
+        )
+        return None
     early = settings.early.model_copy(update={"coherent_max_band_hz": band})
     return settings.model_copy(update={"early": early})
 
@@ -723,7 +754,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             **_performance_options(args),
         },
     )
-    settings = _with_coherent(settings, args.coherent_band)
+    settings = _with_coherent(settings, args.coherent_band, room.outdoor is not None)
     if settings is None:
         return 1
     try:
@@ -864,7 +895,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
             **_performance_options(args),
         },
     )
-    simulation = _with_coherent(simulation, args.coherent_band)
+    simulation = _with_coherent(simulation, args.coherent_band, room.outdoor is not None)
     noise = args.noise[0] if args.noise is not None and len(args.noise) == 1 else args.noise
     settings = _override(
         scene.coverage or Coverage(),
@@ -2024,7 +2055,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=COHERENT_BANDS,
         metavar="HZ",
         help="override simulation.early.coherent_max_band_hz: the highest octave band in "
-        "which the early paths add in pressure (63, 125, 250, 500 or none)",
+        "which the early paths add in pressure (63 to 500, outdoors up to 8000, or none)",
     )
     simulate.add_argument(
         "--wave",
@@ -2102,7 +2133,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--coherent-band",
         choices=COHERENT_BANDS,
         metavar="HZ",
-        help="override simulation.early.coherent_max_band_hz (63, 125, 250, 500 or none)",
+        help="override simulation.early.coherent_max_band_hz (63 to 500, outdoors up to "
+        "8000, or none)",
     )
     coverage.add_argument("--length", type=float, help="override simulation.ir_length_s")
     _add_performance_arguments(coverage)

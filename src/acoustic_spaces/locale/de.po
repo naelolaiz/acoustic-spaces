@@ -1797,6 +1797,35 @@ msgid "Remove barrier"
 msgstr "Schallschirm entfernen"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Ground zones"
+msgstr "Bodenzonen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The zone's name: a part of the ground (a road, a lawn) whose surfaces carry "
+"it, to give it a material of its own"
+msgstr ""
+"Der Name der Zone: ein Teil des Geländes (eine Straße, ein Rasen), dessen "
+"Flächen ihn tragen, um ihm ein eigenes Material zu geben"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many corners the zone's outline has (set in the scene file)"
+msgstr ""
+"Wie viele Ecken der Umriss der Zone hat (in der Szenendatei festgelegt)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove zone"
+msgstr "Zone entfernen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the selected ground zone, or the last one when none is selected: its "
+"part of the ground takes the ground's material"
+msgstr ""
+"Die ausgewählte Bodenzone entfernen oder die letzte, wenn keine ausgewählt "
+"ist: ihr Teil des Geländes erhält das Material des Geländes"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "A closed model has no gaps: each edge joins two faces. The volume and the "
 "reverberation estimates need one; View > Show leaks finds the gaps"
@@ -1896,6 +1925,10 @@ msgid ""
 "Ground from ({x0:g}, {y0:g}) to ({x1:g}, {y1:g}) m, sky {sky:g} m over it"
 msgstr ""
 "Gelände von ({x0:g}, {y0:g}) bis ({x1:g}, {y1:g}) m, Himmel {sky:g} m darüber"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove zone"
+msgstr "Zone entfernen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change ground"
@@ -2026,6 +2059,54 @@ msgid "everything (an opening)"
 msgstr "alles (eine Öffnung)"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "snow"
+msgstr "Schnee"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "forest floor"
+msgstr "Waldboden"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "loose soil"
+msgstr "lockerer Boden"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grass"
+msgstr "Gras"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "compacted soil"
+msgstr "verdichteter Boden"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "gravel"
+msgstr "Kies"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "asphalt"
+msgstr "Asphalt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "water"
+msgstr "Wasser"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "flow resistivity below"
+msgstr "Strömungswiderstand wie unten angegeben"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Miki"
+msgstr "Miki"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Delany-Bazley"
+msgstr "Delany-Bazley"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "two-parameter"
+msgstr "Zwei-Parameter"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The material's name; renaming it renames it in the assignments and the "
 "default material too"
@@ -2079,6 +2160,91 @@ msgstr ""
 "2025)"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Ground impedance"
+msgstr "Bodenimpedanz"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Ticked, the material is a porous ground (grass, soil, snow, gravel, "
+"asphalt): its absorption and its reflection come from its impedance, with "
+"the phase and the ground wave that make the dip over the ground outdoors. "
+"Unticked, the absorption is as given"
+msgstr ""
+"Aktiviert: das Material ist ein poröser Boden (Gras, Erde, Schnee, Kies, "
+"Asphalt); seine Absorption und seine Reflexion ergeben sich aus seiner "
+"Impedanz, mit der Phase und der Bodenwelle, die im Freien die Senke über dem "
+"Boden erzeugen. Nicht aktiviert: die Absorption ist die angegebene"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The kind of ground: the ground classes of Nord2000, from snow (softest) to "
+"water and dense concrete (hardest), each with its flow resistivity; or a "
+"flow resistivity of your own"
+msgstr ""
+"Die Art des Bodens: die Bodenklassen von Nord2000, von Schnee (am weichsten) "
+"bis Wasser und dichtem Beton (am härtesten), jede mit ihrem "
+"Strömungswiderstand; oder ein eigener Strömungswiderstand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the impedance follows from the flow resistivity: Miki (passive at every "
+"frequency, the default), Delany-Bazley (as most of the literature quotes "
+"it), or two-parameter (a porosity that falls with depth, which fits measured "
+"grass and soil better)"
+msgstr ""
+"Wie sich die Impedanz aus dem Strömungswiderstand ergibt: Miki (bei jeder "
+"Frequenz passiv, die Voreinstellung), Delany-Bazley (wie es die meiste "
+"Literatur angibt) oder Zwei-Parameter (eine mit der Tiefe abnehmende "
+"Porosität, die zu gemessenem Gras und Boden besser passt)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How hard it is to push air through the ground: about 10 to 30 kPa s/m² for "
+"snow, 200 for grass, 2000 for gravel, 20000 and more for asphalt"
+msgstr ""
+"Wie schwer sich Luft durch den Boden drücken lässt: etwa 10 bis 30 kPa s/m² "
+"für Schnee, 200 für Gras, 2000 für Kies, 20000 und mehr für Asphalt"
+
+#. Translators: a ground layer with no thickness set: as deep as it likes.
+#: acoustic_spaces/gui/inspector.py
+msgid "deep"
+msgstr "tief"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A layer of the ground this thick on a hard backing (snow on frozen ground, a "
+"thin soil over rock); deep: as deep as it likes"
+msgstr ""
+"Eine Bodenschicht dieser Dicke auf einem harten Untergrund (Schnee auf "
+"gefrorenem Boden, eine dünne Erdschicht auf Fels); tief: beliebig tief"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Two-parameter model: how fast the ground's porosity falls with depth"
+msgstr ""
+"Zwei-Parameter-Modell: wie schnell die Porosität des Bodens mit der Tiefe "
+"abnimmt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground"
+msgstr "Boden"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Model"
+msgstr "Modell"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Flow resistivity"
+msgstr "Strömungswiderstand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Layer thickness"
+msgstr "Schichtdicke"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Porosity rate"
+msgstr "Porositätsabnahme"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Where the coefficients come from"
 msgstr "Die Herkunft der Koeffizienten"
 
@@ -2097,6 +2263,10 @@ msgid ""
 msgstr ""
 "Dieses Material und seine Zuweisungen entfernen; die Flächen verwenden "
 "danach das Standardmaterial"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Source: the ground's impedance"
+msgstr "Quelle: die Impedanz des Bodens"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -2529,12 +2699,15 @@ msgstr ""
 msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
-"bands take their place when it runs up to this band or higher"
+"bands take their place when it runs up to this band or higher. Up to 500 Hz "
+"in a room; outdoors, where the paths are few, up to 8000 Hz, the default "
+"there"
 msgstr ""
 "Das höchste Oktavband (Hz), in dem die frühen Pfade unter Berücksichtigung "
 "der Phase jeder Reflexion als Schalldrücke statt als Energien addiert "
 "werden; die Bänder des Wellensolvers ersetzen sie, wenn er dieses Band oder "
-"ein höheres erreicht"
+"ein höheres erreicht. In einem Raum bis 500 Hz; im Freien, wo es wenige "
+"Pfade gibt, bis 8000 Hz, dort die Voreinstellung"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Method"
@@ -4592,6 +4765,34 @@ msgstr ""
 "Material und dem Geometrienamen benannt. Zuweisungen berücksichtigen die "
 "Groß- und Kleinschreibung nicht: SketchUps Brick_Rough entspricht "
 "brick_rough."
+
+#: examples/roadside/scene.yaml
+msgctxt "example"
+msgid "Road across a meadow"
+msgstr "Straße an einer Wiese"
+
+#: examples/roadside/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: traffic on a road between a meadow and a paved yard, heard 7.5, 25 "
+"and 50 m away over the grass, and 25 m away over the yard. Over soft ground "
+"the sound that reflects off it arrives out of step with the direct sound at "
+"a few hundred hertz and takes some of it away (the ground dip); over the "
+"hard yard the two add up there instead, and the dip comes higher up, near 2 "
+"kHz. The meadow, the road and the yard are parts of the ground, each with "
+"its impedance; a reflection near where two meet takes some of each, as much "
+"as each covers of its Fresnel zone."
+msgstr ""
+"Im Freien: Verkehr auf einer Straße zwischen einer Wiese und einem "
+"befestigten Hof, gehört in 7.5, 25 und 50 m Entfernung über dem Gras und in "
+"25 m über dem Hof. Über weichem Boden kommt der Schall, der an ihm "
+"reflektiert wird, bei einigen hundert Hertz phasenverschoben zum "
+"Direktschall an und nimmt ihm einen Teil weg (die Bodensenke); über dem "
+"harten Hof addieren sich die beiden dort stattdessen, und die Senke liegt "
+"höher, bei etwa 2 kHz. Wiese, Straße und Hof sind Teile des Geländes, jeder "
+"mit seiner Impedanz; eine Reflexion nahe der Stelle, an der zwei "
+"aneinandergrenzen, nimmt von jedem etwas, so viel, wie jeder von ihrer "
+"Fresnelzone bedeckt."
 
 #: examples/room_modes/scene.yaml
 msgctxt "example"

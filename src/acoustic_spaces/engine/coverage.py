@@ -32,7 +32,7 @@ import numpy as np
 from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
-from acoustic_spaces.engine.coherent import EarlyPressure
+from acoustic_spaces.engine.coherent import coherent_energy
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.simulate import (
@@ -500,7 +500,7 @@ def _part_curve(
     if coherent and len(paths):
         # The lowest bands in pressure, as at a listener; what the band filters spread
         # to before the direct sound counts with it.
-        out[:coherent] = EarlyPressure(paths).energy(TIME_STEP, slots, origin=start)
+        out[:coherent] = coherent_energy(paths, TIME_STEP, slots, origin=start)
     late = part.late
     if late is not None:
         # The traced energy's slots start at this source's own direct sound.
@@ -584,7 +584,8 @@ def _trace_part(
 ) -> _Part:
     """Early paths and traced late energy at every point of one point source, which
     radiates all the power; timings and counts add up in ``info``. Unless ``single``,
-    one of the uncorrelated points of a line or surface, whose paths add in energy."""
+    one of the uncorrelated points of a line or surface, whose paths add in energy
+    (indoors; outdoors in pressure among themselves)."""
 
     def add(key: str, value: float) -> None:
         info[key] = info.get(key, 0.0) + value
@@ -599,7 +600,10 @@ def _trace_part(
     candidates = _candidates(
         model, position, sim.early.method, sim.early.max_order, sim.early.rays, threads
     )
-    coherent = coherent_bands(sim, model.absorption.shape[1]) if single else 0
+    # Indoors a line's or a surface's points add in energy; outdoors each point's own
+    # paths add in pressure, for the ground dip.
+    coherent = coherent_bands(sim, model.absorption.shape[1])
+    coherent = coherent if single or room.outdoor is not None else 0
     diffraction = edges.diffraction(
         sim.early.diffraction, position, room, name, orientation, coherent
     )

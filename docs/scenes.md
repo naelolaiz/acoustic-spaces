@@ -69,11 +69,14 @@ the objects of a model file standing on it. See [Outdoor scenes](outdoor.md).
 
 ```yaml
 geometry:
-  ground: {margin: 30}
+  ground:
+    margin: 30
+    zones:                      # parts of the ground with materials of their own
+      - {name: road, polygon: [[-40, -4], [60, -4], [60, 4], [-40, 4]]}
   buildings:
-    - {name: hall, footprint: [[0, 0], [20, 0], [20, 12], [0, 12]], height: 9}
+    - {name: hall, footprint: [[0, 10], [20, 10], [20, 22], [0, 22]], height: 9}
   barriers:
-    - {path: [[30, -10], [30, 20]], height: 3}
+    - {path: [[30, 6], [30, 20]], height: 3}
 ```
 
 ### BIM models (IFC)
@@ -164,7 +167,10 @@ Each entry in `materials` takes coefficients from one of:
 - `file: <library>` with `entry: <name>`: a material of a CATT-Acoustic or ODEON
   material library (see below);
 - `absorption: [...]` with eight octave values or 24 third-octave values, which also
-  overrides a preset or file.
+  overrides a preset or file;
+- `impedance:` a porous ground's impedance (`grass`, `snow`, `asphalt`... or a flow
+  resistivity), which gives the absorption and reflects as a ground does (see
+  [Ground impedance](outdoor.md#ground-impedance)).
 
 `scattering` is a number, eight or 24 values, or the id of a built-in scattering entry.
 File data with more than one value in some octave (third-octave tables) stays in

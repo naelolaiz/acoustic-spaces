@@ -204,9 +204,10 @@ def early_paths(
     orientation = np.array(src.orientation.rotation())
     edges = _Edges(model)
     elements = src.elements()
-    # A line's or a surface's points are uncorrelated: their paths add in energy.
+    # A line's or a surface's points are uncorrelated: their paths add in energy. Indoors
+    # each point's own do too; outdoors they add in pressure among themselves.
     coherent = coherent_bands(scene.simulation, model.absorption.shape[1])
-    coherent = coherent if len(elements) == 1 else 0
+    coherent = coherent if len(elements) == 1 or room.outdoor is not None else 0
     transition = _transition(scene.simulation, room.volume_m3)
     length = response_length(room, scene.simulation.ir_length_s, elements, target)
     parts = []
@@ -307,12 +308,17 @@ def coherent_bands(settings, bands: int) -> int:
 
 
 def _shared(parts: list[early_stage.EarlyReflections], bands: int) -> early_stage.EarlyReflections:
-    """The paths of a line or surface source's points, each with its share of the power."""
+    """The paths of a line or surface source's points, each with its share of the power
+    and the point it comes from."""
     if len(parts) == 1:
         return parts[0]
     share = 1.0 / len(parts)
     return early_stage.EarlyReflections.concatenate(
-        [dataclasses.replace(p, energy=share * p.energy) for p in parts], bands
+        [
+            dataclasses.replace(p, energy=share * p.energy, point=np.full(len(p), k))
+            for k, p in enumerate(parts)
+        ],
+        bands,
     )
 
 
@@ -425,9 +431,9 @@ def simulate(
         """Direct sound times, early paths and late energy at every listener of one point
         source, which radiates all the power; timings and counts go into ``info``.
         Unless ``single``, one of the uncorrelated points of a line or surface, whose
-        paths add in energy. Unless ``own_late``, no late energy (None): it comes from
-        other sources."""
-        coherent = low_bands if single else 0
+        paths add in energy (indoors; outdoors in pressure among themselves). Unless
+        ``own_late``, no late energy (None): it comes from other sources."""
+        coherent = low_bands if single or room.outdoor is not None else 0
         direct = np.linalg.norm(listener_pos - position, axis=1) / c
         cutoff = np.minimum(direct + transition, length)
         started = time.perf_counter()

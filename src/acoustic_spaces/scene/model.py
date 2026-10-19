@@ -45,6 +45,7 @@ folder.
 
 from __future__ import annotations
 
+import difflib
 import math
 from pathlib import Path
 from typing import Annotated, Literal
@@ -76,6 +77,8 @@ from acoustic_spaces.materials.bands import (
     power_levels,
     to_bands,
 )
+from acoustic_spaces.materials.ground import PRESETS as GROUND_PRESETS
+from acoustic_spaces.materials.ground import band_absorption, surface_impedance
 from acoustic_spaces.materials.libraries import find_material, read_library
 from acoustic_spaces.parameters import SPEECH_SPECTRUM_DB
 
@@ -162,7 +165,7 @@ class Orientation(_Model):
 
 
 #: Names an outdoor scene gives its surfaces by kind; buildings and barriers take others.
-OUTDOOR_NAMES = ("ground", "sky", "walls", "roofs", "buildings", "barriers")
+OUTDOOR_NAMES = ("ground", "sky", "walls", "roofs", "buildings", "barriers", "zones")
 #: The material of the sky of an outdoor scene unless the scene names its own: an
 #: opening, which lets all sound out of the scene.
 SKY = "sky"
@@ -171,6 +174,18 @@ SKY = "sky"
 def sky_material() -> Material:
     """The open sky: a surface that lets all sound through and reflects none."""
     return Material(transmission=1.0, scattering=0.0, source="the open sky")
+
+
+class GroundZone(_Model):
+    """A part of the ground with a material of its own (a road through a field, a lawn,
+    a pond): a polygon on the ground, its surfaces ``<name>``, ``zones`` and ``ground``
+    (an assignment to the zone's name wins over one to ``ground``). The part of it past
+    the ground's edge is left out."""
+
+    name: str | None = Field(default=None, description="None: zone_1, zone_2...")
+    polygon: list[tuple[float, float]] = Field(
+        min_length=3, description="(x, y) corners of the zone, in order"
+    )
 
 
 class Ground(_Model):
@@ -199,6 +214,14 @@ class Ground(_Model):
             "building, barrier or model"
         ),
     )
+    zones: list[GroundZone] | None = Field(
+        default=None,
+        description="parts of the ground with materials of their own; they may not overlap",
+    )
+
+    def zone_names(self) -> list[str]:
+        """The zones' names, ``zone_<n>`` for those without one."""
+        return [z.name or f"zone_{k + 1}" for k, z in enumerate(self.zones or [])]
 
     @model_validator(mode="after")
     def _extent_has_area(self) -> Ground:
@@ -316,13 +339,15 @@ class Geometry(_Model):
                 "with no buildings, barriers or model file, the ground needs an extent: "
                 "[[x_min, y_min], [x_max, y_max]]"
             )
-        names = self.building_names() + self.barrier_names()
+        names = self.building_names() + self.barrier_names() + self.ground.zone_names()
         reserved = sorted(set(names) & set(OUTDOOR_NAMES))
         if reserved:
             raise ValueError(f"{reserved[0]!r} names every surface of its kind; pick another name")
         duplicates = sorted({n for n in names if names.count(n) > 1})
         if duplicates:
-            raise ValueError(f"building and barrier names must be unique: {', '.join(duplicates)}")
+            raise ValueError(
+                f"building, barrier and zone names must be unique: {', '.join(duplicates)}"
+            )
         return self
 
     def building_names(self) -> list[str]:
@@ -355,6 +380,96 @@ class Geometry(_Model):
 
 
 DEFAULT_SCATTERING = 0.1
+
+
+class Impedance(_Model):
+    """The acoustic impedance of a porous ground (grass, soil, snow, gravel, asphalt),
+    from its flow resistivity by an empirical model (see
+    :mod:`acoustic_spaces.materials.ground`): a ``preset``, one of the ground classes of
+    Nord2000, or a ``flow_resistivity``; with a ``thickness``, a layer of it on a hard
+    backing.
+
+    A material with an impedance takes its absorption from it, and reflects sound as a
+    ground does: the spherical wave's reflection (Weyl-van der Pol), with its phase and
+    the ground wave near grazing incidence, in place of the absorption."""
+
+    preset: str | None = Field(
+        default=None,
+        description="a ground class of Nord2000: " + ", ".join(GROUND_PRESETS),
+    )
+    model: Literal["miki", "delany_bazley", "two_parameter"] = Field(
+        default="miki",
+        description=(
+            "miki (passive at every frequency), delany_bazley, or two_parameter (a "
+            "porosity that falls with depth)"
+        ),
+    )
+    flow_resistivity: PositiveFloat | None = Field(
+        default=None,
+        description="kPa s/m²; with two_parameter, the effective flow resistivity",
+    )
+    porosity_rate: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="two_parameter: how fast the porosity falls with depth (1/m)",
+    )
+    thickness: PositiveFloat | None = Field(
+        default=None, description="m: a layer of the ground on a hard backing"
+    )
+
+    @model_validator(mode="after")
+    def _complete(self) -> Impedance:
+        if self.preset is not None and self.preset not in GROUND_PRESETS:
+            close = difflib.get_close_matches(self.preset, list(GROUND_PRESETS), n=1)
+            hint = f"; did you mean {close[0]}?" if close else ""
+            raise ValueError(
+                f"no ground preset named {self.preset!r}{hint} (the presets are "
+                f"{', '.join(GROUND_PRESETS)})"
+            )
+        if (self.preset is None) == (self.flow_resistivity is None):
+            raise ValueError(
+                "give the ground a preset or a flow_resistivity (kPa s/m²), one of them"
+            )
+        if self.model == "two_parameter":
+            if self.porosity_rate is None:
+                raise ValueError("the two_parameter model needs a porosity_rate (1/m)")
+            if self.thickness is not None:
+                raise ValueError(
+                    "the two_parameter model takes no thickness: its porosity falls with depth"
+                )
+        elif self.porosity_rate is not None:
+            raise ValueError("porosity_rate is for the two_parameter model")
+        return self
+
+    @property
+    def resistivity(self) -> float:
+        """The flow resistivity (kPa s/m²), the preset's when a preset is given."""
+        if self.flow_resistivity is not None:
+            return float(self.flow_resistivity)
+        return GROUND_PRESETS[self.preset][0]
+
+    def admittance(self, f, speed_of_sound: float = 343.0) -> np.ndarray:
+        """The normalised admittance (1 / impedance) at frequencies ``f`` (Hz), in the
+        engine's sign convention, e^(jωt)."""
+        return 1.0 / surface_impedance(
+            f,
+            self.resistivity,
+            self.model,
+            porosity_rate=self.porosity_rate or 0.0,
+            thickness=self.thickness,
+            speed_of_sound=speed_of_sound,
+        )
+
+    def describe(self) -> str:
+        """In a few words: the preset or the flow resistivity, and the rest."""
+        model = {"miki": "Miki", "delany_bazley": "Delany-Bazley", "two_parameter": "two-parameter"}
+        words = [self.preset] if self.preset else []
+        words.append(f"{self.resistivity:g} kPa s/m²")
+        if self.porosity_rate is not None:
+            words.append(f"{self.porosity_rate:g}/m")
+        if self.thickness is not None:
+            words.append(f"{self.thickness:g} m thick")
+        return f"{model[self.model]}: " + ", ".join(words)
 
 
 class Material(_Model):
@@ -405,7 +520,19 @@ class Material(_Model):
             "as it passes heads and seats (grazing incidence)"
         ),
     )
+    impedance: Impedance | None = Field(
+        default=None,
+        description=(
+            "a porous ground's impedance (a preset such as grass, or its flow "
+            "resistivity), which gives the absorption and the ground's reflection"
+        ),
+    )
     source: str | None = Field(default=None, description="where the coefficients come from")
+
+    @field_validator("impedance", mode="before")
+    @classmethod
+    def _impedance_preset(cls, value):
+        return {"preset": value} if isinstance(value, str) else value
 
     @field_validator("absorption")
     @classmethod
@@ -451,7 +578,19 @@ class Material(_Model):
         absorption = scattering = None
         origin = scattering_origin = None
 
-        if self.preset is not None:
+        if self.impedance is not None:
+            if self.preset is not None or self.file is not None:
+                raise ValueError(
+                    "a material with an impedance takes its absorption from it: give no "
+                    "preset or file"
+                )
+            if self.transmission is not None or self.transmission_loss is not None:
+                raise ValueError("a material with an impedance lets no sound through")
+            # Third-octave bands, as the absorption changes fast with frequency; any
+            # absorption values written with it are replaced.
+            self.absorption = None
+            absorption = band_absorption(self.impedance.admittance, len(THIRD_OCTAVE_BANDS_HZ))
+        elif self.preset is not None:
             entry = _database_entry(self.preset, "absorption")
             absorption, extrapolated = _from_data(entry.frequencies, entry.coefficients)
             origin = _describe(entry.source, extrapolated)
@@ -878,6 +1017,12 @@ class Air(_Model):
     pressure_kpa: float = Field(default=101.325, gt=0.0)
 
 
+#: The highest ``simulation.early.coherent_max_band_hz`` in a room, and the default
+#: outdoors.
+INDOOR_COHERENT_MAX_BAND_HZ = 500
+OUTDOOR_COHERENT_MAX_BAND_HZ = 8000
+
+
 class EarlyStage(_Model):
     """Early reflections: exact specular paths with delay and arrival direction, and
     the sound diffracted at the edges of the room."""
@@ -893,13 +1038,14 @@ class EarlyStage(_Model):
             "of the direct sound over two edges in turn"
         ),
     )
-    coherent_max_band_hz: Literal[63, 125, 250, 500] | None = Field(
+    coherent_max_band_hz: Literal[63, 125, 250, 500, 1000, 2000, 4000, 8000] | None = Field(
         default=125,
         description=(
             "the highest octave band in which the early paths add in pressure, with the "
             "phase of every reflection and of the sound bent round edges, as they do at "
-            "low frequencies, rather than in energy; null for none. The wave solver's "
-            "bands take their place when it runs up to this band or higher"
+            "low frequencies, rather than in energy; null for none. Above 500 Hz only "
+            "outdoors, where every band is the default. The wave solver's bands take "
+            "their place when it runs up to this band or higher"
         ),
     )
 
@@ -1193,6 +1339,18 @@ class Scene(_Model):
     def _check_references(self) -> Scene:
         if self._default_sky() and SKY not in self.materials:
             self.materials[SKY] = sky_material()
+        early = self.simulation.early
+        if self.geometry.ground is not None:
+            # Over the ground the direct sound and its reflection interfere in every
+            # band (the ground dip), and the paths are few.
+            if "coherent_max_band_hz" not in early.model_fields_set:
+                early.coherent_max_band_hz = OUTDOOR_COHERENT_MAX_BAND_HZ
+        elif (early.coherent_max_band_hz or 0) > INDOOR_COHERENT_MAX_BAND_HZ:
+            raise ValueError(
+                f"simulation.early.coherent_max_band_hz goes up to "
+                f"{INDOOR_COHERENT_MAX_BAND_HZ} Hz in a room, whose early paths are many; "
+                "higher bands are for outdoor scenes"
+            )
         referenced = set(self.assignments.values())
         if self.default_material is not None:
             referenced.add(self.default_material)
@@ -1220,6 +1378,9 @@ class Scene(_Model):
         """The scene as plain YAML data, dicts and lists. Settings left unset are left out,
         apart from those whose null is not their default."""
         data = self.model_dump(mode="json", exclude_none=True)
+        for name, material in self.materials.items():
+            if material.impedance is not None:  # the impedance gives the absorption
+                data["materials"][name].pop("absorption", None)
         if self.simulation.early.coherent_max_band_hz is None:
             data["simulation"]["early"]["coherent_max_band_hz"] = None
         # The open sky's material is added when the scene is read: left out, as written.

@@ -3,7 +3,8 @@
 This report sums up how far the results of acoustic_spaces can be trusted: what the
 test suite checks against theory on every change, how the simulation compares with
 another program, [pyroomacoustics](https://github.com/LCAV/pyroomacoustics), and with
-measurements in two real rooms, how edge diffraction compares with the exact solution,
+measurements in two real rooms, how edge diffraction and the reflection off a porous
+ground compare with the exact solution,
 and how much of a block's time the real-time convolver needs. It ends with what has not been validated yet.
 
 ## Checks against theory, on every change
@@ -202,6 +203,16 @@ request and checks:
   top; no edge at the inside corner of an L-shaped building, whichever way its
   footprint runs; points inside buildings refused and left out of coverage maps; and
   responses that run `ir_length_s` past the latest direct sound;
+- grounds with an impedance: Miki's and Delany and Bazley's models at their constants,
+  the two-parameter model's closed form and a layer's impedance; the spherical wave
+  reflected whole off a hard ground, as the plane wave far from grazing and far away,
+  and within 0.4 dB of the exact solution over grass, a thin layer of snow and gravel;
+  the early part over grass within 0.05 dB of the spherical wave in every octave band,
+  however large the ground; the points of a line source added in energy; a ground zone
+  far past a reflection's Fresnel zone changing nothing (to 1e-9), one under all of it
+  the same as a ground of its own, and the change in between smooth; and the wave
+  solver's fit to an impedance within 0.05 of its reflection factor, from normal to
+  near grazing incidence, and within 0.01 of its absorption;
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
@@ -663,6 +674,62 @@ The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 sight, takes 90 ms per source and listener without diffraction, 120 ms with
 `first_order` and 170 ms with `second_order` (86 paths instead of 71).
 
+## Ground reflection against the exact solution
+
+`validation/ground_reflection.py` compares the reflection off a porous ground (see
+[Outdoor scenes](outdoor.md#ground-impedance)) with the exact solution for a point
+source over a locally reacting plane, Sommerfeld's integral as Chien and Soroka (1975)
+write it, which the script integrates numerically. The engine reflects with the
+Weyl-van der Pol factor Q, the integral's asymptotic form. Levels are those of the
+direct sound and its reflection together, in dB over the direct sound in free field.
+The grounds follow Miki's model with Nord2000's flow resistivities; the source and the
+listener are 2 and 1.2 m high 5 m apart, and 1 and 1.5 m high 20 and 100 m apart.
+
+Q against the exact solution, the largest difference in level at the third-octave
+centres from 50 Hz to 5 kHz (in brackets, in dips more than 20 dB deep):
+
+| ground (flow resistivity, kPa s/m²) | 5 m | 20 m | 100 m |
+|---|---:|---:|---:|
+| snow (12.5) | 0.16 | 0.19 | 0.12 |
+| snow 10 cm deep on ice (12.5) | 0.25 | 0.36 (2.2) | 0.41 (0.8) |
+| grass (200) | 0.02 | 0.04 | 0.04 |
+| gravel (2000) | 0.00 | 0.01 | 0.01 |
+| asphalt (20000) | 0.00 | 0.00 | 0.00 |
+
+Q is furthest off over the thin layer of snow, the most reactive of these grounds, and
+by more than half a decibel only in its deepest dips.
+
+The engine's early part over grass (image sources to first order, the direct sound and
+its reflection added in pressure, as outdoors by default) against the exact solution,
+whose energy is averaged over each octave band, as the engine reads a band:
+
+| over grass, exact (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 5 m, heights 2 and 1.2 m | 3.46 | -2.07 | 1.21 | 1.10 | 0.89 | 0.80 | 0.24 | 0.25 |
+| 20 m, heights 1 and 1.5 m | 5.46 | 4.00 | -0.49 | -5.28 | 2.46 | 0.19 | 1.65 | 1.93 |
+| 100 m, heights 1 and 1.5 m | 5.49 | 2.75 | -6.86 | -16.69 | -7.22 | -0.15 | 4.61 | 2.93 |
+
+| over grass, engine - exact (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 5 m, heights 2 and 1.2 m | -0.01 | +0.00 | -0.00 | -0.01 | -0.01 | -0.01 | +0.01 | -0.03 |
+| 20 m, heights 1 and 1.5 m | -0.01 | -0.02 | -0.03 | +0.01 | +0.00 | -0.00 | -0.00 | -0.01 |
+| 100 m, heights 1 and 1.5 m | -0.01 | -0.01 | -0.07 | +0.01 | +0.00 | +0.00 | -0.00 | -0.00 |
+
+The ground dip near 500 Hz deepens with distance, as the reflection comes in nearer
+grazing. Read through the analysis filters, whose skirts reach into the neighbouring
+bands, a sharp dip fills in by up to about 1 dB more than the band averages show.
+
+The wave solver fits the ground's admittance with branches without mass (see
+[Simulation](simulation.md#low-frequencies-the-wave-solver)). Over grass, against a
+rigid ground, with the source and the listener 1 and 1.5 m high 10 m apart, from the
+first 25 ms after the reflection, before anything off the grid's edges arrives (the
+solver up to its 250 Hz band):
+
+| Hz | 40 | 63 | 80 | 100 | 125 | 160 | 200 | 250 | 315 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| exact (dB) | -0.17 | -0.43 | -0.66 | -0.98 | -1.44 | -2.20 | -3.21 | -4.73 | -7.11 |
+| wave - exact (dB) | +0.02 | -0.02 | +0.01 | +0.01 | +0.02 | +0.02 | +0.05 | +0.10 | +0.11 |
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -891,9 +958,9 @@ its peak (single precision).
   dependence on the angle it arrives at, and the wave solver does not model such walls:
   with `simulation.wave.enabled`, a model with one stops with an error (openings are
   fine).
-- **Outdoor propagation** is checked against geometry and closed forms, not against
-  measurements yet: the ground is a plane with an absorption coefficient, and wind,
-  temperature gradients, turbulence and vegetation are not modelled (see
+- **Outdoor propagation** is checked against geometry, closed forms and the exact
+  solution for the reflection off a ground, not against measurements yet: the ground is
+  flat, and wind, temperature gradients, turbulence and vegetation are not modelled (see
   [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)).
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
@@ -910,6 +977,7 @@ python validation/pyroomacoustics_crosscheck.py --json results.json --plots docs
 python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
 python validation/edge_diffraction.py --json diffraction.json
+python validation/ground_reflection.py --wave --json ground.json
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
@@ -920,7 +988,8 @@ python validation/bras_validation.py --materials initial --calibrate LS1 --plots
 ```
 
 The cross-check takes about 20 minutes on 4 cores, the benchmark about 2 minutes, the
-wave solver's checks about 3.5 minutes (both stencils) and each BRAS run about 30 minutes (85 in
+wave solver's checks about 3.5 minutes (both stencils), the ground's about 5.5 (1.5 of
+them the wave solver's) and each BRAS run about 30 minutes (85 in
 third-octave bands, or half that per room with `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
 (`--pra-runs`); the means still move by a few percent from one call to the next, and the

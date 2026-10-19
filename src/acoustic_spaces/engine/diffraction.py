@@ -66,7 +66,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from acoustic_spaces.directivity import Directivity
-from acoustic_spaces.engine.coherent import reflection_phases
+from acoustic_spaces.engine.coherent import ground_factors, reflection_phases
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 from acoustic_spaces.geometry.outdoor import on_ground
@@ -461,6 +461,9 @@ def _join(model, p0, p1, e, along, normal, wedge, face0, face1) -> Edges:
     chosen = np.array(chosen, dtype=np.int64)
     begin, finish = np.array(begin), np.array(finish)
     faces = np.column_stack([face0[chosen], face1[chosen]]).astype(np.int64)
+    kept = 1.0 - model.absorption[faces]
+    if model.face_impedance is not None or model.ground_part is not None:
+        kept[model.factor_faces(faces)] = 1.0  # their reflection factor comes in on the way
     return Edges(
         start=foot[chosen] + begin[:, None] * e[chosen],
         direction=e[chosen],
@@ -470,7 +473,7 @@ def _join(model, p0, p1, e, along, normal, wedge, face0, face1) -> Edges:
         wedge=wedge[chosen],
         face=faces,
         plane=model.face_plane[faces].astype(np.int64),
-        reflection=np.sqrt((1.0 - model.absorption[faces]) * (1.0 - model.scattering[faces])),
+        reflection=np.sqrt(kept * (1.0 - model.scattering[faces])),
     )
 
 
@@ -547,14 +550,25 @@ class EdgeDiffraction:
         reflection = self.edges.reflection[edge][..., None]
         out = np.broadcast_to(reflection, (*reflection.shape[:3], self.wavenumber.shape[1]))
         out = out.astype(complex)
-        if self.coherent:
+        ground = self.model.factor_faces(self.edges.face[edge])  # (C, 2)
+        if self.coherent or ground.any():
             n = self.edges.wedge[edge]
             sines = np.column_stack([np.sin(phi_source), np.sin(n * np.pi - phi_source)])
             cosines = np.asarray(sin_beta)[:, None] * np.abs(sines)
             for side in (0, 1):
-                out[:, side, : self.coherent] *= reflection_phases(
-                    self.model, self.edges.face[edge, side], cosines[:, side], self.coherent
-                )
+                if self.coherent:
+                    out[:, side, : self.coherent] *= reflection_phases(
+                        self.model, self.edges.face[edge, side], cosines[:, side], self.coherent
+                    )
+                rows = np.flatnonzero(ground[:, side])
+                if len(rows):  # a surface with an impedance: its plane wave's factor
+                    out[rows, side] *= ground_factors(
+                        self.model,
+                        self.edges.face[edge[rows], side],
+                        cosines[rows, side],
+                        None,
+                        spherical=False,
+                    )
         return out
 
     def _coherent_share(self, share: np.ndarray) -> np.ndarray:
@@ -754,15 +768,17 @@ class EdgeDiffraction:
         on_plane = c["face"] >= 0
         if on_plane.any():
             face = c["face"][on_plane]
-            amplitude[on_plane] *= np.sqrt(
-                (1.0 - model.absorption[face]) * (1.0 - model.scattering[face])
-            )
+            kept = 1.0 - model.absorption[face]
+            if model.face_impedance is not None or model.ground_part is not None:
+                kept[model.factor_faces(face)] = 1.0  # their reflection factor comes below
+            amplitude[on_plane] *= np.sqrt(kept * (1.0 - model.scattering[face]))
         common = (
             amplitude[:, :, None]
             * wedge_prefactor(n[:, None, None], k, sin_beta[:, None, None])
             * np.exp(-1j * k * distance[:, None, None])
         )  # (C, B, M)
-        if self.coherent and on_plane.any():
+        grounds = on_plane.any() and model.factor_faces(c["face"][on_plane]).any()
+        if (self.coherent or grounds) and on_plane.any():
             # The phase of the reflection off the plane before or after the edge.
             rows = np.flatnonzero(on_plane)
             face = c["face"][rows]
@@ -776,7 +792,29 @@ class EdgeDiffraction:
             cosine = np.abs(np.einsum("ij,ij->i", normal, incoming)) / np.maximum(
                 np.linalg.norm(incoming, axis=1), 1e-300
             )
-            common[rows, : self.coherent] *= reflection_phases(model, face, cosine, self.coherent)
+            if self.coherent:
+                common[rows, : self.coherent] *= reflection_phases(
+                    model, face, cosine, self.coherent
+                )
+            ground = model.factor_faces(face)
+            if ground.any():
+                # A ground's spherical wave, from the image of the source or the listener
+                # to the edge.
+                leg = np.where(kind[rows] == 1, r1[rows], r2[rows])
+                via_source = (kind[rows] == 1)[:, None]
+                edge_point = c["point"][rows]
+                ends = (
+                    np.where(via_source, self.source[None], edge_point),
+                    bounce,
+                    np.where(via_source, edge_point, listener[None]),
+                )
+                common[rows[ground]] *= ground_factors(
+                    model,
+                    face[ground],
+                    cosine[ground],
+                    leg[ground],
+                    ends=tuple(p[ground] for p in ends),
+                )
         factors = self._face_factors(edge, sin_beta, c["phi_s"])
         waves = _waves(n, c["phi_r"], c["phi_s"], kl, lit, factors)
         waves *= common[:, None]  # (C, 3, B, M): incident, off face 0, off face n

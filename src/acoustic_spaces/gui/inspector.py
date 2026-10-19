@@ -47,8 +47,9 @@ from acoustic_spaces.gui.tips import band_headers, row_headers, share_tips
 from acoustic_spaces.i18n import N_, _, ngettext
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.materials.bands import convert
+from acoustic_spaces.materials.ground import PRESETS
 from acoustic_spaces.room import UNASSIGNED, matching_name
-from acoustic_spaces.scene.model import LAYOUT_NAMES
+from acoustic_spaces.scene.model import INDOOR_COHERENT_MAX_BAND_HZ, LAYOUT_NAMES
 
 BAND_LABELS = [f"{f} Hz" if f < 1000 else f"{f // 1000} kHz" for f in OCTAVE_BANDS_HZ]
 #: Column labels of the third-octave bands, short to fit 24 columns.
@@ -554,6 +555,31 @@ class GeometryPage(Page):
             remove.clicked.connect(lambda _checked=False, kind=kind: self._remove_part(kind))
             ground_layout.addWidget(remove)
             self.parts[kind] = table
+        ground_layout.addWidget(QLabel(_("Ground zones")))
+        self.zones = QTableWidget(0, 2)
+        self.zones.setHorizontalHeaderLabels([_("Name"), _("Corners")])
+        for col, tip in enumerate(
+            (
+                _(
+                    "The zone's name: a part of the ground (a road, a lawn) whose surfaces "
+                    "carry it, to give it a material of its own"
+                ),
+                _("How many corners the zone's outline has (set in the scene file)"),
+            )
+        ):
+            self.zones.horizontalHeaderItem(col).setToolTip(tip)
+        self.zones.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.zones.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        ground_layout.addWidget(self.zones)
+        remove = QPushButton(_("Remove zone"))
+        remove.setToolTip(
+            _(
+                "Remove the selected ground zone, or the last one when none is selected: its "
+                "part of the ground takes the ground's material"
+            )
+        )
+        remove.clicked.connect(self._remove_zone)
+        ground_layout.addWidget(remove)
         layout.addWidget(self.ground_group)
 
         self.report = QLabel()
@@ -757,6 +783,27 @@ class GeometryPage(Page):
                         cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     table.setItem(row, col, cell)
             table.blockSignals(False)
+        zones = ground.zones or []
+        self.zones.setRowCount(len(zones))
+        for row, (name, zone) in enumerate(zip(ground.zone_names(), zones, strict=True)):
+            for col, text in enumerate((name, str(len(zone.polygon)))):
+                cell = QTableWidgetItem(text)
+                cell.setToolTip(self.zones.horizontalHeaderItem(col).toolTip())
+                self.zones.setItem(row, col, cell)
+
+    def _remove_zone(self) -> None:
+        if not self.zones.rowCount():
+            return
+        row = self.zones.currentRow()
+
+        def change(data: dict) -> None:
+            ground = data["geometry"]["ground"]
+            zones = ground["zones"]
+            zones.pop(row if 0 <= row < len(zones) else -1)
+            if not zones:
+                del ground["zones"]
+
+        self.apply(_("remove zone"), change)
 
     def _ground(self, field: str, value: float | None) -> None:
         def change(data: dict) -> None:
@@ -910,8 +957,31 @@ def _nearest_filled(values: list[float | None]) -> list[float]:
     ]
 
 
+#: The octave bands the early paths may add in pressure up to; those above
+#: INDOOR_COHERENT_MAX_BAND_HZ outdoors only.
+COHERENT_BANDS_HZ = (63, 125, 250, 500, 1000, 2000, 4000, 8000)
+
 #: Fields a material keeps when its coefficients or database entry change.
 _KEPT = ("transmission", "transmission_loss", "audience")
+#: The ground presets (materials.ground.PRESETS) as the material page lists them, and
+#: a flow resistivity of one's own.
+_GROUNDS = (
+    ("snow", N_("snow")),
+    ("forest_floor", N_("forest floor")),
+    ("loose_soil", N_("loose soil")),
+    ("grass", N_("grass")),
+    ("compacted_soil", N_("compacted soil")),
+    ("gravel", N_("gravel")),
+    ("asphalt", N_("asphalt")),
+    ("water", N_("water")),
+    ("", N_("flow resistivity below")),
+)
+#: The impedance models (materials.ground.MODELS).
+_GROUND_MODELS = (
+    ("miki", N_("Miki")),
+    ("delany_bazley", N_("Delany-Bazley")),
+    ("two_parameter", N_("two-parameter")),
+)
 
 
 def _without_transmission(fields: dict) -> dict:
@@ -925,6 +995,8 @@ class MaterialPage(Page):
 
     def __init__(self, document) -> None:
         super().__init__(document)
+        #: The material the ground controls last showed an impedance of.
+        self._ground_of = None
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.name = QLineEdit()
@@ -976,6 +1048,68 @@ class MaterialPage(Page):
         self.audience.toggled.connect(self._audience)
         form.addRow(self.audience)
         layout.addLayout(form)
+        self.ground = QGroupBox(_("Ground impedance"))
+        self.ground.setCheckable(True)
+        self.ground.setToolTip(
+            _(
+                "Ticked, the material is a porous ground (grass, soil, snow, gravel, "
+                "asphalt): its absorption and its reflection come from its impedance, with "
+                "the phase and the ground wave that make the dip over the ground outdoors. "
+                "Unticked, the absorption is as given"
+            )
+        )
+        self.ground.toggled.connect(self._ground_toggled)
+        ground_form = QFormLayout(self.ground)
+        self.ground_kind = QComboBox()
+        _fill(self.ground_kind, _GROUNDS)
+        self.ground_kind.setToolTip(
+            _(
+                "The kind of ground: the ground classes of Nord2000, from snow (softest) to "
+                "water and dense concrete (hardest), each with its flow resistivity; or a "
+                "flow resistivity of your own"
+            )
+        )
+        self.ground_kind.activated.connect(lambda _index: self._set_impedance())
+        self.ground_model = QComboBox()
+        _fill(self.ground_model, _GROUND_MODELS)
+        self.ground_model.setToolTip(
+            _(
+                "How the impedance follows from the flow resistivity: Miki (passive at every "
+                "frequency, the default), Delany-Bazley (as most of the literature quotes "
+                "it), or two-parameter (a porosity that falls with depth, which fits "
+                "measured grass and soil better)"
+            )
+        )
+        self.ground_model.activated.connect(lambda _index: self._set_impedance())
+        self.flow = spin(0.1, 1e7, 1, 10.0, "kPa s/m²")
+        self.flow.setToolTip(
+            _(
+                "How hard it is to push air through the ground: about 10 to 30 kPa s/m² for "
+                "snow, 200 for grass, 2000 for gravel, 20000 and more for asphalt"
+            )
+        )
+        self.flow.valueChanged.connect(lambda _value: self._set_impedance())
+        self.thickness = spin(0.0, 100.0, 3, 0.01, "m")
+        # Translators: a ground layer with no thickness set: as deep as it likes.
+        self.thickness.setSpecialValueText(_("deep"))
+        self.thickness.setToolTip(
+            _(
+                "A layer of the ground this thick on a hard backing (snow on frozen ground, "
+                "a thin soil over rock); deep: as deep as it likes"
+            )
+        )
+        self.thickness.valueChanged.connect(lambda _value: self._set_impedance())
+        self.porosity = spin(0.0, 1e4, 1, 10.0, "1/m")
+        self.porosity.setToolTip(
+            _("Two-parameter model: how fast the ground's porosity falls with depth")
+        )
+        self.porosity.valueChanged.connect(lambda _value: self._set_impedance())
+        ground_form.addRow(_("Ground"), self.ground_kind)
+        ground_form.addRow(_("Model"), self.ground_model)
+        ground_form.addRow(_("Flow resistivity"), self.flow)
+        ground_form.addRow(_("Layer thickness"), self.thickness)
+        ground_form.addRow(_("Porosity rate"), self.porosity)
+        layout.addWidget(self.ground)
         self.table = QTableWidget(len(_MATERIAL_ROWS), len(OCTAVE_BANDS_HZ))
         self.table.setHorizontalHeaderLabels(BAND_LABELS)
         self.table.setVerticalHeaderLabels([_(text) for text in _MATERIAL_ROWS])
@@ -1034,13 +1168,40 @@ class MaterialPage(Page):
             if kind != 1:  # set by the choice above, not typed
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(2, col, item)
+        impedance = material.impedance
+        self.ground.setChecked(impedance is not None)
+        self.preset.setEnabled(impedance is None)
+        self.passing.setEnabled(impedance is None)
+        if impedance is not None:
+            _choose(self.ground_kind, impedance.preset or "")
+            _choose(self.ground_model, impedance.model)
+            self.flow.setValue(impedance.resistivity)
+            self.thickness.setValue(impedance.thickness or 0.0)
+            self.porosity.setValue(impedance.porosity_rate or 0.0)
+            for col in range(len(labels)):  # the impedance gives the absorption
+                item = self.table.item(0, col)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self._ground_of = self.key
+        elif self._ground_of != self.key:  # ticked again, the same as before; else grass
+            self._ground_of = None
+            _choose(self.ground_kind, "grass")
+            _choose(self.ground_model, "miki")
+            self.flow.setValue(PRESETS["grass"][0])
+            self.thickness.setValue(0.0)
+            self.porosity.setValue(0.0)
+        # Set after the group's tick, which enables its controls again when ticked.
+        self.flow.setEnabled(impedance is not None and impedance.preset is None)
+        two = impedance is not None and impedance.model == "two_parameter"
+        self.thickness.setEnabled(impedance is not None and not two)
+        self.porosity.setEnabled(two)
         # Translators: {source} is where the coefficients come from, as the material
         # database (in English) or the scene file says it.
-        self.source.setText(
-            _("Source: {source}").format(source=material.source)
-            if material.source
-            else _("Source: values given in the scene")
-        )
+        if impedance is not None:
+            self.source.setText(_("Source: the ground's impedance"))
+        elif material.source:
+            self.source.setText(_("Source: {source}").format(source=material.source))
+        else:
+            self.source.setText(_("Source: values given in the scene"))
         area = self.document.room.area_by_material().get(self.key, 0.0)
         self.usage.setText(fmt(_("Covers {area:,.1f} m² of the room."), area=area))
 
@@ -1082,6 +1243,44 @@ class MaterialPage(Page):
         fields |= {k: v for k, v in self._fields().items() if k in _KEPT}
         self.run(lambda: self.document.set_material(self.key, fields))
 
+    def _impedance(self) -> dict:
+        """The impedance the ground controls show, as the scene file writes it."""
+        out: dict = {}
+        kind = self.ground_kind.currentData()
+        if not kind:
+            out["flow_resistivity"] = self.flow.value()
+        else:
+            out["preset"] = kind
+        model = self.ground_model.currentData()
+        if model != "miki":
+            out["model"] = model
+        if model == "two_parameter":
+            out["porosity_rate"] = self.porosity.value()
+        elif self.thickness.value() > 0.0:
+            out["thickness"] = self.thickness.value()
+        return out
+
+    def _set_impedance(self) -> None:
+        if self._loading or not self.ground.isChecked():
+            return
+        material = self.document.scene.materials[self.key]
+        fields = {"impedance": self._impedance(), "scattering": material.scattering}
+        if material.audience:
+            fields["audience"] = True
+        self.run(lambda: self.document.set_material(self.key, fields))
+
+    def _ground_toggled(self, checked: bool) -> None:
+        if self._loading:
+            return
+        if checked:
+            self._set_impedance()
+            return
+        # The absorption the impedance gave stays, as values of the material's own.
+        fields = self._fields()
+        fields.pop("impedance", None)
+        fields["source"] = "edited from a ground impedance"
+        self.run(lambda: self.document.set_material(self.key, fields))
+
     def _audience(self, checked: bool) -> None:
         if self._loading:
             return
@@ -1111,6 +1310,14 @@ class MaterialPage(Page):
             return
         material = self.document.scene.materials[self.key]
         bands = self._bands(material)
+        if material.impedance is not None:  # only the scattering is typed
+            if rows[1] == [round(v, 2) for v in convert(material.scattering, bands)]:
+                return
+            fields = {"impedance": self._impedance(), "scattering": rows[1]}
+            if material.audience:
+                fields["audience"] = True
+            self.run(lambda: self.document.set_material(self.key, fields))
+            return
         passing = material.transmission_coefficients(bands)
         reduction = None
         if self._kind(passing) == 1:
@@ -1634,12 +1841,13 @@ class SimulationPage(Page):
             )
         )
         self.coherent = QComboBox()
-        _fill(self.coherent, [(None, N_("none"))] + [(f, str(f)) for f in (63, 125, 250, 500)])
+        _fill(self.coherent, [(None, N_("none"))] + [(f, str(f)) for f in COHERENT_BANDS_HZ])
         self.coherent.setToolTip(
             _(
                 "The highest octave band (Hz) in which the early paths add in pressure, with "
                 "the phase of every reflection, rather than in energy; the wave solver's bands "
-                "take their place when it runs up to this band or higher"
+                "take their place when it runs up to this band or higher. Up to 500 Hz in a "
+                "room; outdoors, where the paths are few, up to 8000 Hz, the default there"
             )
         )
         early_form.addRow(_("Method"), self.early_method)
@@ -1913,6 +2121,11 @@ class SimulationPage(Page):
         self.early_rays.setValue(s.early.rays)
         _choose(self.diffraction, s.early.diffraction)
         coherent = s.early.coherent_max_band_hz
+        outdoor = self.document.scene.geometry.ground is not None
+        for row in range(self.coherent.count()):  # the bands above 500 Hz are outdoors only
+            value = self.coherent.itemData(row)
+            if value is not None and value > INDOOR_COHERENT_MAX_BAND_HZ:
+                self.coherent.model().item(row).setEnabled(outdoor)
         _choose(self.coherent, coherent)
         _choose(self.late_method, s.late.method)
         self.late_rays.setValue(s.late.rays)

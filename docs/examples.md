@@ -22,6 +22,7 @@
 | `room_modes` | The bass in a small bare room from the [wave solver](simulation.md#low-frequencies-the-wave-solver), in third-octave bands, on the CPU or a GPU, against rays alone. |
 | `fitting` | A seminar room that measured longer than it was designed, as the panels on its back wall were left out: `make_measurements.py` makes up the measurements, then [compare](measurements.md#comparing-with-measurements) the model with them and [fit](measurements.md#fitting-materials-to-measurements) the back wall to them. |
 | `street` | Outdoors: traffic along a street between a row of houses and an office block, heard on the pavement, on a balcony and in a garden behind a noise barrier, where the sound comes over the barrier and round its ends ([outdoor scenes](outdoor.md)). |
+| `roadside` | Outdoors: traffic on a road between a meadow and a paved yard, heard over the grass at 7.5, 25 and 50 m and over the yard at 25 m: the [ground dip](outdoor.md#ground-impedance) over the grass at a few hundred hertz, which the hard yard does not have. |
 | `measurement` | No scene, a script: it records a sweep in a simulated room, as a microphone would, to try the [measurement](measurements.md#measuring-impulse-responses) commands without a sound card. |
 
 `acoustic-spaces examples` lists them with where they are installed, and

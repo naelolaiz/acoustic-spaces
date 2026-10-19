@@ -943,6 +943,72 @@ def test_outdoor_geometry_form(window, monkeypatch) -> None:
     assert window.document.scene.geometry.floor_plan is not None
     assert window.document.scene.default_material == "asphalt"
     assert page.ground_group.isHidden()
+    # Outdoors the early paths were in pressure up to 8 kHz; a room takes its default.
+    assert window.document.scene.simulation.early.coherent_max_band_hz == 125
+
+
+def test_ground_impedance_and_zones(window) -> None:
+    from PySide6.QtCore import Qt
+
+    window.open_example(example_path("roadside"))
+    window.select("material", "meadow")
+    page = window.inspector.pages["material"]
+    assert page.ground.isChecked() and page.ground_kind.currentData() == "grass"
+    assert not page.preset.isEnabled() and not page.passing.isEnabled()
+    assert not page.flow.isEnabled() and page.flow.value() == 200.0
+    assert not page.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsEditable
+    assert page.source.text() == "Source: the ground's impedance"
+
+    def choose(combo, value) -> None:
+        combo.setCurrentIndex(combo.findData(value))
+        combo.activated.emit(combo.currentIndex())
+
+    def impedance():
+        return window.document.scene.materials["meadow"].impedance
+
+    choose(page.ground_kind, "snow")
+    assert impedance().preset == "snow"
+    choose(page.ground_kind, "")  # a flow resistivity of its own, the preset's to start
+    assert impedance().preset is None and impedance().flow_resistivity == 12.5
+    assert page.flow.isEnabled()
+    page.flow.setValue(300.0)
+    assert impedance().flow_resistivity == 300.0
+    page.thickness.setValue(0.1)
+    assert impedance().thickness == 0.1
+    choose(page.ground_model, "two_parameter")
+    assert impedance().model == "two_parameter" and impedance().thickness is None
+    assert page.porosity.isEnabled() and not page.thickness.isEnabled()
+    page.table.item(1, 0).setText("0.40")  # the scattering is the material's own
+    assert window.document.scene.materials["meadow"].scattering[0] == 0.4
+    assert impedance().model == "two_parameter"
+    page.ground.setChecked(False)  # the absorption stays, as values of its own
+    material = window.document.scene.materials["meadow"]
+    assert material.impedance is None and len(material.absorption) == 24
+    assert page.preset.isEnabled() and material.source == "edited from a ground impedance"
+    page.ground.setChecked(True)
+    assert impedance() is not None and impedance().flow_resistivity == 300.0
+
+    window.select("geometry", None)
+    geometry = window.inspector.pages["geometry"]
+    assert geometry.zones.rowCount() == 2
+    assert [geometry.zones.item(0, c).text() for c in range(2)] == ["road", "4"]
+    geometry.zones.setCurrentCell(1, 0)
+    geometry._remove_zone()
+    assert [z.name for z in window.document.scene.geometry.ground.zones] == ["road"]
+    geometry._remove_zone()
+    assert window.document.scene.geometry.ground.zones is None
+    assert geometry.zones.rowCount() == 0
+
+    # In pressure up to 8 kHz outdoors; up to 500 Hz in a room.
+    window.select("simulation")
+    simulation = window.inspector.pages["simulation"]
+    assert simulation.coherent.currentText() == "8000"
+    top = simulation.coherent.findData(8000)
+    assert simulation.coherent.model().item(top).isEnabled()
+    window.open_example(example_path("shoebox"))
+    window.select("simulation")
+    assert not simulation.coherent.model().item(top).isEnabled()
+    assert simulation.coherent.model().item(simulation.coherent.findData(500)).isEnabled()
 
 
 def test_model_units_default_to_the_file(window) -> None:

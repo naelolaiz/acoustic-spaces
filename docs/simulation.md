@@ -254,15 +254,22 @@ echogram that adds the paths in energy misses it. Up to
 ```yaml
 simulation:
   early:
-    coherent_max_band_hz: 125   # 63, 125 (default), 250, 500, or null for energy throughout
+    coherent_max_band_hz: 125   # 63, 125 (default), 250, 500, or null for energy throughout;
+                                # outdoors up to 8000, the default there
 ```
 
 - Each reflection turns the phase as a locally reacting surface with the material's
   absorption does: R = (cos θ - Y) / (cos θ + Y) at the angle of incidence θ, with the
   admittance Y fitted as for the wave solver. A hard surface reflects in phase at every
   angle; an absorbing one turns the phase of sound that grazes it, by half a turn at
-  grazing incidence, as a lawn does outdoors. Above those bands each path keeps the
-  phase it has at their top, so the bands join without a step.
+  grazing incidence. Above those bands each path keeps the phase it has at their top,
+  so the bands join without a step. A surface whose material has an impedance (a
+  ground's) reflects with its spherical wave's factor instead, in every band (see
+  [Ground impedance](outdoor.md#ground-impedance)).
+- Outdoors the paths are few, and the ground dip spans several bands: the early paths
+  add in pressure up to 8000 Hz by default there. Above 500 Hz they add pair by pair,
+  each pair's cross term as far as the band leaves the two coherent; a room takes
+  500 Hz at most, as its paths are many.
 - Sound bent round an edge carries the whole complex UTD coefficient, whose terms add to
   the specular paths in pressure, as the theory has them, rather than through the cross
   terms that stand for that interference in the higher bands.
@@ -326,7 +333,12 @@ simulation:
 - Surfaces absorb as their materials do in each band: each material becomes a locally
   reacting surface whose admittance changes with frequency (a constant and resonant
   mass-spring-damper branches), fitted so that its random-incidence absorption matches
-  the material's in every wave band. One run covers all the bands.
+  the material's in every wave band. A material with an impedance (a ground's, see
+  [Ground impedance](outdoor.md#ground-impedance)) is fitted to its admittance itself,
+  phase and all, with branches without mass whose corner frequencies spread an octave
+  apart, as a ladder of resistors and capacitors makes a porous ground's admittance,
+  which grows with frequency at a nearly constant phase: over grass the level matches
+  the exact solution within 0.12 dB from 40 to 315 Hz. One run covers all the bands.
 - Closed rooms, open models and thin screens all work. Round an open model the grid
   grows by a perfectly matched layer of 8 cells, which takes in the sound leaving it:
   what comes back is 57 to 74 dB down, against 7 to 14 dB from the grid's edge alone.

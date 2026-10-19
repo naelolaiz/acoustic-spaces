@@ -61,6 +61,7 @@ from acoustic_spaces.engine.impedance import (
     absorption_of_impedance,
     admittance,
     fit_admittance,
+    fit_impedance,
 )
 from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, OCTAVE_BANDS_HZ, band_centres
 
@@ -377,9 +378,16 @@ def wave_responses(
     centres = band_centres(model.bands)
     bands = (OCTAVE_BANDS_HZ.index(max_band_hz) + 1) * BANDS_PER_OCTAVE[model.bands]
     total = len(centres)
-    # Each material's admittance, fitted to its absorption in the wave bands.
+    # Each material's admittance, fitted to its absorption in the wave bands, or for a
+    # material with an impedance (a ground's) to that impedance's admittance.
     coefficients = np.round(model.absorption[solid, :bands], 6)
-    rows, face_material = np.unique(coefficients, axis=0, return_inverse=True)
+    impedance = None
+    if model.face_impedance is not None:
+        keys = np.column_stack([coefficients, model.face_impedance[solid]])
+        keys, face_material = np.unique(keys, axis=0, return_inverse=True)
+        rows, impedance = keys[:, :bands], keys[:, bands].astype(np.int64)
+    else:
+        rows, face_material = np.unique(coefficients, axis=0, return_inverse=True)
 
     def prepare(stencil: str, layer: int):
         """The solver, grid, fits and probes for the stencil, with ``layer`` cells of
@@ -405,6 +413,11 @@ def wave_responses(
                 "max_band_hz or points_per_wavelength"
             )
         fits = [fit_admittance(row, total, grid.rate) for row in rows]
+        if impedance is not None:
+            for m in np.flatnonzero(impedance >= 0).tolist():
+                fits[m] = fit_impedance(
+                    _impedance_of(model, int(impedance[m])), bands, total, grid.rate
+                )
         branches = [fit.branches(grid.rate) for fit in fits]
         branch_material = np.concatenate(
             [np.full(len(b), m, dtype=np.int64) for m, b in enumerate(branches)]
@@ -500,6 +513,16 @@ def wave_responses(
         signals = _first_order(run[part], found[part], listener, courant)
         responses.append(WaveResponse(grid.rate, signals, bands, h, total))
     return responses, info
+
+
+def _impedance_of(model, row: int):
+    """The admittance at frequencies f (Hz) of the material with the impedance in row
+    ``row`` of the model's (see
+    :attr:`~acoustic_spaces.engine.model.TraceModel.face_impedance`)."""
+    room = model.room
+    face = int(np.flatnonzero(model.face_impedance == row)[0])
+    material = room.scene.materials[room.material_names[room.face_materials[face]]]
+    return lambda f: material.impedance.admittance(f, room.speed_of_sound())
 
 
 __all__ = [

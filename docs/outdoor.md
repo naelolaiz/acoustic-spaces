@@ -40,17 +40,18 @@ checked to stand in it, and the tracers know which side of every face the air is
 
 The sky is the material `sky`, an opening: everything that reaches it passes through
 and leaves the scene, as sound leaves into the open. Nothing reflects off it, its edges
-diffract nothing and its edge with the ground does not either, so the ground reads as if
-it went on for ever: a source over the ground has its direct sound and one reflection
+diffract nothing and its edge with the ground does not either, and the ground scatters
+nothing for its size (as a surface of limited size does at low frequencies, see
+[Scattering](simulation.md#scattering)), so the ground reads as if it went on for ever: a source over the ground has its direct sound and one reflection
 off the ground, and nothing else. A scene may give the sky a material of its own
 (`assignments: {sky: ...}`); otherwise the scene file leaves it out.
 
-The ground is an absorbing plane, as a floor is: its material's absorption and
-scattering per band. The reflection is a plane wave's, in energy, and in pressure in
-the lowest bands with `simulation.early.coherent_max_band_hz` (see
-[Low frequencies: early reflections in pressure](simulation.md#low-frequencies-early-reflections-in-pressure)).
-A ground's impedance (grass, snow, porous soil) and the spherical-wave reflection near
-grazing incidence are not modelled yet (see [What is not modelled yet](#what-is-not-modelled-yet)).
+The ground takes a material as any surface does. A material with an `impedance` (grass,
+soil, snow, gravel, asphalt) reflects sound as a real ground does, with the phase and
+the ground wave that make the dip over soft ground (see [Ground impedance](#ground-impedance));
+one with absorption coefficients alone reflects as a floor does. Parts of the ground
+can have materials of their own: a road, a lawn, a car park (see
+[Ground zones](#ground-zones)).
 
 The ground and the sky are the surfaces `ground` and `sky`.
 
@@ -85,6 +86,123 @@ Sources and listeners must stand in the open air: above the ground, under the sk
 inside the extent and not inside one of the `buildings`; `validate` and the editor say
 which one is not.
 
+## Ground impedance
+
+A material with an `impedance` is a porous ground. Its impedance follows from its flow
+resistivity σ (kPa s/m², how hard it is to push air through it), by a preset or a value
+of its own:
+
+```yaml
+materials:
+  lawn: {impedance: grass}                    # a preset (see below)
+  field:
+    impedance: {flow_resistivity: 150, model: delany_bazley}
+  snow_on_ice:
+    impedance: {preset: snow, thickness: 0.1} # a layer 10 cm thick on a hard backing
+  pasture:
+    impedance: {model: two_parameter, flow_resistivity: 100, porosity_rate: 20}
+assignments:
+  ground: lawn
+```
+
+- `model` is the empirical model of porous media the impedance comes from: `miki` (Miki,
+  1990; the default), which stays passive and causal at every frequency;
+  `delany_bazley` (Delany and Bazley, 1970), as most of the outdoor literature quotes
+  it; or `two_parameter` (Attenborough, 1985), a porosity that falls off with depth at
+  `porosity_rate` (1/m) under an effective flow resistivity, which fits measured grass
+  and soil better than one parameter does.
+- `thickness` (m) makes the ground a layer of that thickness on a hard backing: snow on
+  frozen ground, a thin soil over rock. Not with `two_parameter`.
+- The presets are the ground classes of Nord2000, with their flow resistivities. Real
+  grounds spread over a factor of two or more round them.
+
+| `preset` | σ (kPa s/m²) | Ground |
+| --- | ---: | --- |
+| `snow` | 12.5 | very soft: new snow, moss |
+| `forest_floor` | 31.5 | soft forest floor, short dense heather, thick moss |
+| `loose_soil` | 80 | uncompacted loose ground: turf, loose soil |
+| `grass` | 200 | normal uncompacted ground: pasture, lawns |
+| `compacted_soil` | 500 | compacted field and gravel: trodden lawns, parks |
+| `gravel` | 2000 | compacted dense ground: gravel roads, car parks |
+| `asphalt` | 20000 | hard surfaces: most asphalt and concrete |
+| `water` | 200000 | very hard and dense: dense asphalt, concrete, water |
+
+A material with an impedance takes its absorption from it: the random-incidence
+absorption of its impedance (Paris's formula), in third-octave bands, which the late
+part's rays use and `inspect` shows (grass absorbs 0.18 at 63 Hz and 0.89 at 8 kHz). It
+takes no `preset`, `file` or transmission, and any `absorption` given with it is
+replaced; its `scattering` is its own.
+
+The early paths use the impedance itself. A point source's spherical wave does not
+reflect off a ground as a plane wave does: near grazing incidence, where the plane wave's
+reflection factor R tends to -1 and would cancel the direct sound, a ground wave makes
+up part of it. A reflection off a ground takes the spherical wave's factor Q = R +
+(1 - R) F(w) (Weyl-van der Pol), with F the ground wave's, which depends on the path's
+length, the angle of incidence and the frequency. It is the asymptotic form of the exact
+solution for a locally reacting plane: from 5 m away, the level is within 0.05 dB of the
+exact solution's over grass and harder grounds, 0.2 dB over snow and 0.4 dB over a
+layer of snow 10 cm thick, more only in dips over 20 dB deep (see
+[Validation](validation.md#ground-reflection-against-the-exact-solution)).
+
+Over soft ground the reflection arrives turned in phase and cancels part of the direct
+sound over a band of frequencies: the ground dip, at a few hundred hertz for a source and
+a listener a metre or two up over grass, deeper and wider the farther apart they are.
+Over hard ground the dip lies where the reflected path is half a wavelength longer,
+often above 1 kHz. In the `roadside` example, 25 m from the road and 1.5 m up, the
+500 Hz band is 10.7 dB quieter over the meadow than over the paved yard across the road,
+and the yard has its own dip at 2 kHz.
+
+So that the dip shows in every band, outdoors the early paths add in pressure in every
+band by default (`simulation.early.coherent_max_band_hz: 8000`; a room takes 500 at
+most, see [Low frequencies: early reflections in pressure](simulation.md#low-frequencies-early-reflections-in-pressure)):
+outdoors the paths are few. Up to 500 Hz they go through the band filters as indoors;
+higher up each pair of paths adds its cross term as far as the band leaves the two
+coherent, which it does less the more their delays differ. The points of a line or
+surface source still add in energy, as they are uncorrelated; the paths from each point
+add in pressure.
+
+The wave solver fits each ground to its impedance itself, its admittance and phase as
+well as its absorption (see [the wave solver](simulation.md#low-frequencies-the-wave-solver)).
+Any surface may have an impedance, indoors too. `calibrate` (see
+[Fitting materials to measurements](measurements.md#fitting-materials-to-measurements))
+fits absorption coefficients, so it leaves materials with an impedance alone, and
+outdoor scenes, which do not decay as a room does.
+
+## Ground zones
+
+Zones are parts of the ground with a material of their own: a road across a meadow, a
+lawn in a paved square, a car park.
+
+```yaml
+geometry:
+  ground:
+    margin: 30
+    zones:
+      - name: road
+        polygon: [[-100, -4], [100, -4], [100, 4], [-100, 4]]   # corners, in order
+      - name: car_park
+        polygon: [[20, 4], [60, 4], [60, 40], [20, 40]]
+assignments:
+  ground: lawn        # the ground outside the zones, and zones without a material
+  road: asphalt
+  car_park: asphalt
+```
+
+A zone is a polygon on the ground, cut to the ground's extent; zones may touch but not
+overlap. Its surfaces are `<name>`, `zones` and `ground`, so a zone without an
+assignment of its own takes the ground's material. Zones without a `name` are `zone_1`,
+`zone_2` and so on, and the names of zones, buildings and barriers are all different.
+
+A reflection near where two grounds meet takes some of each. The sound that reflects
+comes from a patch of ground round the reflection point, its first Fresnel zone: the
+ellipse where a path through the ground is at most half a wavelength longer than the
+reflected path, small at high frequencies and near normal incidence, long near grazing
+incidence. The reflection factor is the sum of each ground's (Q for a ground with an
+impedance, the square root of 1 - absorption for one without), each weighted by the
+share of the Fresnel zone it covers, band by band, as engineering models such as
+Nord2000 and Harmonoise weight mixed ground. Past the ground's extent the ground goes on
+as it is at its edge.
+
 ## What the simulation does outdoors
 
 - **Early paths** are found as in a room: the direct sound, reflections off the ground,
@@ -108,6 +226,9 @@ which one is not.
 - **The wave solver** sees the sky as an opening and puts a matched layer round the
   grid, as for any open model.
 - **Air** absorbs per band as indoors (ISO 9613-1, from `air`), along every path.
+- **The early paths add in pressure in every band** (see
+  [Ground impedance](#ground-impedance)): `simulation.early.coherent_max_band_hz` is
+  8000 outdoors unless the scene sets it.
 
 `acoustic-spaces inspect` says where the ground and the sky lie, and leaves out the
 statistical reverberation times, which need a diffuse field.
@@ -115,25 +236,31 @@ statistical reverberation times, which need a diffuse field.
 ## In the editor
 
 The **Geometry** entry of an outdoor scene has an **Outdoors** group: the ground's height,
-the margin and the sky, where the ground ends, and the buildings and barriers with
-their heights, which can be changed or removed. Footprints and paths are set in the
-scene file. The 3D view and the export to Blender leave the sky out (the 3D view keeps
-its edges, to show where the ground ends), and the status bar gives the ground's area
+the margin and the sky, where the ground ends, the buildings and barriers with their
+heights, which can be changed or removed, and the ground zones, which can be removed.
+Footprints, paths and the zones' outlines are set in the scene file. A material's page
+has a **Ground impedance** group: tick it to make the material a ground (grass to
+start with), then pick the ground, the model, a flow resistivity of your own, a layer's
+thickness or the porosity rate. Unticked, the material keeps the absorption the
+impedance gave it. On the simulation page, **In pressure up to** goes up to 8000 Hz in an outdoor
+scene. The 3D view and the export to Blender leave the sky out (the 3D view keeps its
+edges, to show where the ground ends), and the status bar gives the ground's area
 instead of a reverberation time. **Draw room** replaces an outdoor scene with a floor
-plan after asking.
+plan after asking, and brings **In pressure up to** back to a room's default when it
+was above 500 Hz.
 
 ## What is not modelled yet
 
 These come next, each in its own step (see the [roadmap](roadmap.md)):
 
-- ground impedance (grass, soil, snow) and the spherical-wave reflection that makes the
-  ground dip at a few hundred hertz;
 - wind and temperature gradients, which bend sound up (shadow zones) or down;
 - turbulence, which scatters sound into shadow zones and blurs the ground dip;
 - vegetation: trees, hedges and forests as volumes that scatter and absorb;
 - the wave solver with a speed of sound that changes from place to place.
 
-Until then the air is still and uniform, rays travel straight and the ground is a plane
-with an absorption coefficient: results are good near the ground for hard surfaces
-(asphalt, paving, water) at short and middle distances, and for street canyons and
-courtyards, where the buildings matter most.
+Until then the air is still and uniform and rays travel straight: results are good over
+any ground at short and middle distances (up to a hundred metres or two, where wind and
+temperature gradients bend sound little), and for street canyons and courtyards, where
+the buildings matter most. The ground is flat and reacts locally: its impedance does not
+change with the angle sound meets it at, which holds for grass, soil and snow, though
+less for a thick layer of very soft snow.

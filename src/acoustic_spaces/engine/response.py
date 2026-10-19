@@ -86,13 +86,16 @@ class Response:
         those it covers."""
         return self.early.coherent_bands
 
-    def _early_pressure(self) -> coherent.EarlyPressure:
+    def _early_pressure(self) -> dict:
+        """The :class:`~acoustic_spaces.engine.coherent.EarlyPressure` of each point
+        source's paths, as far as they were made, for
+        :func:`~acoustic_spaces.engine.coherent.coherent_energy`."""
         early = self.early
-        key = (early, early.energy, early.delay_s, early.direction, early.spectrum)
+        key = (early, early.energy, early.delay_s, early.direction, early.spectrum, early.point)
         if self._pressure is None or any(
             a is not b for a, b in zip(self._pressure[0], key, strict=True)
         ):
-            self._pressure = (key, coherent.EarlyPressure(early))
+            self._pressure = (key, {})
         return self._pressure[1]
 
     @property
@@ -151,8 +154,15 @@ class Response:
         if count and len(self.early):
             # The lowest bands read from the early part's pressure, as from a measured
             # response (or the wave solver's).
-            pressure = self._early_pressure()
-            out[:count] += pressure.energy(step, slots, axis, exponent, start=self.direct_delay_s)
+            out[:count] += coherent.coherent_energy(
+                self.early,
+                step,
+                slots,
+                axis,
+                exponent,
+                start=self.direct_delay_s,
+                cache=self._early_pressure(),
+            )
         if self.wave is not None:
             out[: self.wave.bands] = self.wave.energy(step, slots, axis, exponent)
         return out

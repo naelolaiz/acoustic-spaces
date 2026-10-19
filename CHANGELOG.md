@@ -11,8 +11,9 @@
   it or `margin` over the highest of them. Surfaces are named after each building
   (`<name>_roof`, `<name>_wall_1`...) and by kind (`walls`, `roofs`, `buildings`,
   `barriers`, `ground`, `sky`).
-- Nothing reflects off the sky and no edge of the sky or on the ground diffracts, so the
-  ground reads as endless; the inside corners of buildings do not diffract either.
+- Nothing reflects off the sky, no edge of the sky or on the ground diffracts and the
+  ground's size scatters nothing, so the ground reads as endless; the inside corners of
+  buildings do not diffract either.
 - Sources and listeners inside a building, below the ground, above the sky or past the
   ground's edge are reported as problems.
 - Outdoors, `ir_length_s` counts from the latest direct sound, so far listeners are not
@@ -25,6 +26,32 @@
 - New example: `street`, traffic in a street between two buildings, heard on the
   pavement, on a balcony and in a garden behind a noise barrier.
 - Rooms are unchanged: indoor scenes give the same results, bit for bit.
+
+**Ground impedance**
+
+- A material's `impedance` makes it a porous ground: a Nord2000 ground class (`snow`,
+  `forest_floor`, `loose_soil`, `grass`, `compacted_soil`, `gravel`, `asphalt`, `water`)
+  or a flow resistivity, by Miki's model (the default), Delany and Bazley's or the
+  two-parameter model, optionally as a layer on a hard backing. Its absorption is its
+  random-incidence absorption, in third-octave bands.
+- Reflections off it take the spherical wave's reflection factor (Weyl-van der Pol),
+  with the phase and the ground wave near grazing incidence that make the ground dip:
+  within 0.05 dB of the exact solution over grass and harder grounds, 0.2 dB over snow
+  and 0.4 dB over a layer of snow 10 cm thick, outside dips more than 20 dB deep.
+- Ground zones (`geometry.ground.zones`): parts of the ground with materials of their
+  own, such as a road across a meadow. A reflection near where two grounds meet takes
+  each one's factor, weighted by the share of its Fresnel zone each covers, band by band.
+- Outdoors the early paths add in pressure in every band by default
+  (`coherent_max_band_hz: 8000`; a room takes 500 at most), and the paths of each point
+  of a line or surface source add in pressure, the points in energy.
+- The wave solver fits a ground to its impedance itself, phase and all, with branches
+  without mass: within 0.12 dB of the exact solution over grass from 40 to 315 Hz.
+- The editor's material page has a **Ground impedance** group; the **Outdoors** group
+  lists the ground zones; **In pressure up to** goes up to 8000 Hz outdoors. `inspect`
+  shows each material's impedance and the zones; `--coherent-band` takes 1000 to 8000
+  outdoors. `calibrate` leaves materials with an impedance alone.
+- New example: `roadside`, traffic on a road between a meadow and a paved yard, with the
+  ground dip over the grass. New validation: `validation/ground_reflection.py`.
 
 **Editor**
 

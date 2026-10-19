@@ -24,7 +24,11 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from acoustic_spaces.directivity import Directivity
-from acoustic_spaces.engine.coherent import reflection_phases, sample_frequencies
+from acoustic_spaces.engine.coherent import (
+    ground_factors,
+    reflection_phases,
+    sample_frequencies,
+)
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 
 #: Distance (metres) below which a point counts as lying on a plane.
@@ -59,12 +63,18 @@ class EarlyReflections:
     #: mean of its squared magnitude over a band's frequencies is 1). None when the
     #: paths add in energy in every band.
     spectrum: np.ndarray | None = None
+    #: (n,) which of the uncorrelated points of a line or surface source each path comes
+    #: from (outdoors, where those paths carry a spectrum): in the coherent bands the
+    #: paths of one point add in pressure, those of different points in energy.
+    point: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         if self.edge is None:
             self.edge = np.full(len(self.order), -1, dtype=np.int64)
         if self.crossings is None:
             self.crossings = np.zeros(len(self.order), dtype=np.int64)
+        if self.point is None:
+            self.point = np.zeros(len(self.order), dtype=np.int64)
 
     def __len__(self) -> int:
         return len(self.order)
@@ -83,6 +93,7 @@ class EarlyReflections:
             edge=self.edge[rows],
             crossings=self.crossings[rows],
             spectrum=None if self.spectrum is None else self.spectrum[rows],
+            point=self.point[rows],
         )
 
     @property
@@ -133,6 +144,7 @@ class EarlyReflections:
             edge=np.concatenate([p.edge for p in parts]),
             crossings=np.concatenate([p.crossings for p in parts]),
             spectrum=spectrum,
+            point=np.concatenate([p.point for p in parts]),
         )
         return out.sorted()
 
@@ -333,11 +345,17 @@ def find_paths(
         spectrum = None
         if coherent:
             spectrum = np.ones((len(idx), *sample_frequencies(bands, coherent).shape), complex)
+        # Reflections off surfaces with an impedance (a ground's) take its spherical
+        # wave's reflection factor, in every band: its energy averaged over each band,
+        # and in the coherent bands its pressure; on a ground with zones, those of the
+        # grounds round the reflection.
+        grounds = bool(k) and model.factor_faces(faces[idx]).any()
+        factor = None
         before = np.broadcast_to(source, (len(idx), 3))
         for j in range(k):
             incoming = points[j][idx] - before
-            energy *= model.reflection(faces[idx, j], incoming, j + 1)
-            if coherent:
+            energy *= model.reflection(faces[idx, j], incoming, j + 1, impedance=True)
+            if coherent or grounds:
                 # At a corner the path reflects where it reflected last: it meets the
                 # second plane at the angle it leaves it.
                 after = points[j + 1][idx] - points[j][idx]
@@ -347,8 +365,22 @@ def find_paths(
                 cosine = np.abs(np.einsum("ij,ij->i", normal, incoming)) / np.maximum(
                     np.linalg.norm(incoming, axis=1), 1e-300
                 )
-                spectrum *= reflection_phases(model, faces[idx, j], cosine, coherent)
+                if coherent:
+                    spectrum *= reflection_phases(model, faces[idx, j], cosine, coherent)
+                if grounds:
+                    following = points[j + 1][idx] if j + 1 < k else listener
+                    ends = (before, points[j][idx], np.broadcast_to(following, before.shape))
+                    q = ground_factors(model, faces[idx, j], cosine, dist, ends=ends)
+                    factor = q if factor is None else factor * q
             before = points[j][idx]
+        if factor is not None:
+            gain = np.mean(np.abs(factor) ** 2, axis=2)  # (n, bands)
+            energy *= gain
+            if coherent:
+                level = np.sqrt(gain[:, :coherent, None])
+                spectrum *= np.where(
+                    level > 0.0, factor[:, :coherent] / np.where(level > 0.0, level, 1.0), 1.0
+                )
         first = points[0][idx] if k else np.broadcast_to(listener, (len(idx), 3))
         departure = first - source
         departure /= np.maximum(np.linalg.norm(departure, axis=1), 1e-300)[:, None]

@@ -50,6 +50,14 @@ if TYPE_CHECKING:
 
 #: Paths whose spectra are built at once.
 _CHUNK = 256
+#: Outdoors, where every band adds in pressure, at most this many values (paths times
+#: frequencies) of the impulse response's spectra are built at once.
+_MAX_VALUES = 1 << 22
+#: The coherent bands up to this octave band are read through the analysis's band
+#: filters (:class:`EarlyPressure`); outdoors, the bands above it from the interference
+#: of each pair of paths averaged over the band (:func:`pair_energy`), which costs the
+#: same however far the sound travels.
+FILTERED_MAX_BAND_HZ = 500
 #: How much longer than the last early path the echogram's early part is taken (s),
 #: for the band filters' ringing.
 _TAIL_S = 0.3
@@ -68,6 +76,13 @@ def band_count(max_band_hz: int | None, bands: int, wave_max_band_hz: int | None
     return octaves * BANDS_PER_OCTAVE[resolution_of(bands)]
 
 
+def filtered_bands(paths: EarlyReflections) -> int:
+    """How many of the paths' coherent bands are read through the band filters: those
+    up to :data:`FILTERED_MAX_BAND_HZ`."""
+    bands = paths.energy.shape[1]
+    return min(paths.coherent_bands, band_count(FILTERED_MAX_BAND_HZ, bands))
+
+
 def sample_frequencies(bands: int, count: int) -> np.ndarray:
     """(count, M) the frequencies (Hz) a spectrum holds in each of the lowest ``count``
     of ``bands`` bands: those the edge diffraction is evaluated at."""
@@ -82,15 +97,30 @@ def reflection_phases(
     """(n, count, M) e^(j arg R) of the reflections off ``faces`` (n,) of sound that
     meets them at incidence cosines ``cosines`` (n,), at the frequencies of
     :func:`sample_frequencies`: R is that of a locally reacting surface whose
-    admittance gives the face's absorption in the lowest ``count`` bands."""
-    from acoustic_spaces.engine.impedance import fit_admittance
-
+    admittance gives the face's absorption in the lowest ``count`` bands; 1 for the
+    faces whose reflection :func:`ground_factors` gives (see
+    :meth:`~acoustic_spaces.engine.model.TraceModel.factor_faces`)."""
     faces = np.asarray(faces, dtype=np.int64)
     total = model.absorption.shape[1]
     f = sample_frequencies(total, count)
     out = np.ones((len(faces), *f.shape), dtype=complex)
     if len(faces) == 0 or count == 0:
         return out
+    if model.face_impedance is not None or model.ground_part is not None:
+        fitted = ~model.factor_faces(faces)
+        if fitted.any():
+            out[fitted] = _fitted_phases(
+                model, faces[fitted], np.asarray(cosines)[fitted], count, f, out[fitted]
+            )
+        return out
+    return _fitted_phases(model, faces, cosines, count, f, out)
+
+
+def _fitted_phases(model, faces, cosines, count, f, out):
+    """:func:`reflection_phases` into ``out`` for faces without an impedance."""
+    from acoustic_spaces.engine.impedance import fit_admittance
+
+    total = model.absorption.shape[1]
     rows, inverse = np.unique(model.absorption[faces, :count], axis=0, return_inverse=True)
     admittance = np.array([fit_admittance(row, total, None)(f) for row in rows])
     y = admittance[inverse.reshape(-1)]
@@ -100,6 +130,106 @@ def reflection_phases(
     r = (cos - y) / np.where(hard, 1.0, total_)
     magnitude = np.abs(r)
     out[...] = np.where(hard | (magnitude < 1e-12), 1.0, r / np.maximum(magnitude, 1e-300))
+    return out
+
+
+def ground_factors(
+    model: TraceModel,
+    faces: np.ndarray,
+    cosines: np.ndarray,
+    distance: np.ndarray | None,
+    spherical: bool = True,
+    ends: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None,
+) -> np.ndarray:
+    """(n, bands, M) the reflection factors off ``faces`` (n,) of sound that meets them
+    at incidence cosines ``cosines`` (n,), at the frequencies of every band's samples
+    (:func:`~acoustic_spaces.engine.diffraction.band_frequencies`): for surfaces with an
+    impedance, that of the spherical wave (Weyl-van der Pol, see
+    :func:`~acoustic_spaces.materials.ground.spherical_reflection`) along paths
+    ``distance`` (n,) m long from the image source, or with ``spherical`` False the
+    plane wave's; 1 for the others.
+
+    On the ground of a scene with ground zones, a reflection is the sum of the factors
+    of the grounds its Fresnel zone covers, each weighted by the share it covers (see
+    :meth:`~acoustic_spaces.geometry.outdoor.Layout.fresnel_shares`), from the points
+    ``ends`` (n, 3) before the reflection, of the reflection and after it; without
+    ``ends``, the ground's own. There, a ground without an impedance reflects with the
+    square root of (1 - its absorption) and the phase of :func:`reflection_phases`."""
+    from acoustic_spaces.engine.diffraction import band_frequencies
+
+    faces = np.asarray(faces, dtype=np.int64)
+    f = band_frequencies(bands=model.bands)[0]
+    out = np.ones((len(faces), *f.shape), dtype=complex)
+    mixed = np.zeros(len(faces), dtype=bool)
+    if model.ground_part is not None:
+        mixed = model.ground_part[faces] >= 0
+    rows = np.flatnonzero(model.impedance_faces(faces) & ~mixed)
+    if len(rows):
+        length = None if distance is None else np.asarray(distance, dtype=float)[rows]
+        out[rows] = _surface_factors(model, faces[rows], cosines, rows, length, spherical, f)
+    rows = np.flatnonzero(mixed)
+    if len(rows) == 0:
+        return out
+    part = model.ground_part[faces[rows]]
+    if ends is None:
+        shares = np.zeros((len(rows), f.shape[0], len(model.part_face)))
+        shares[np.arange(len(rows)), :, part] = 1.0
+    else:
+        before, at, after = (np.asarray(p, dtype=float)[rows] for p in ends)
+        wavelength = model.room.speed_of_sound() / np.asarray(model.band_hz, dtype=float)
+        shares = model.room.outdoor.fresnel_shares(before, at, after, wavelength)
+        # A part with no faces (the ground outside zones that cover it all) is the one
+        # the reflection lies in.
+        empty = model.part_face < 0
+        if empty.any():
+            shares[np.arange(len(rows)), :, part] += shares[..., empty].sum(axis=-1)
+            shares[..., empty] = 0.0
+    mix = np.zeros((len(rows), *f.shape), dtype=complex)
+    length = None if distance is None else np.asarray(distance, dtype=float)[rows]
+    for p, face in enumerate(model.part_face.tolist()):
+        some = np.flatnonzero(np.any(shares[:, :, p] > 0.0, axis=1))
+        if face < 0 or len(some) == 0:
+            continue
+        factor = _surface_factors(
+            model,
+            np.full(len(some), face),
+            cosines,
+            rows[some],
+            None if length is None else length[some],
+            spherical,
+            f,
+        )
+        mix[some] += shares[some, :, p, None] * factor
+    out[rows] = mix
+    return out
+
+
+def _surface_factors(model, faces, cosines, rows, distance, spherical, f) -> np.ndarray:
+    """(n, bands, M) :func:`ground_factors` off ``faces`` (n,) on their own, at the
+    incidence cosines ``cosines[rows]``: an impedance's spherical (or plane) wave, or for
+    a surface without one the square root of (1 - its absorption) with the phase of its
+    fitted admittance."""
+    from acoustic_spaces.materials.ground import plane_reflection, spherical_reflection
+
+    cos = np.asarray(cosines, dtype=float)[rows]
+    out = np.empty((len(faces), *f.shape), dtype=complex)
+    own = model.impedance_faces(faces)
+    if own.any():
+        admittance = model.admittance[model.face_impedance[faces[own]]]  # (r, bands, M)
+        if spherical:
+            k = 2.0 * np.pi * f / model.room.speed_of_sound()
+            length = np.asarray(distance, dtype=float)[own, None, None]
+            out[own] = spherical_reflection(admittance, cos[own, None, None], k, length)
+        else:
+            out[own] = plane_reflection(admittance, cos[own, None, None])
+    if not own.all():
+        other = ~own
+        bands = f.shape[0]
+        phase = _fitted_phases(
+            model, faces[other], cos[other], bands, f, np.ones((other.sum(), *f.shape), complex)
+        )
+        level = np.sqrt(np.clip(1.0 - model.absorption[faces[other]], 0.0, None))
+        out[other] = level[:, :, None] * phase
     return out
 
 
@@ -197,8 +327,11 @@ def signal(
     f = np.fft.rfftfreq(n_fft, 1.0 / sample_rate)[:top]
     weights = np.ones((len(paths), 1)) if weights is None else np.asarray(weights, dtype=float)
     out = np.zeros((n_fft // 2 + 1, k), dtype=complex)
-    for start in range(0, len(paths), _CHUNK):
-        part = slice(start, start + _CHUNK)
+    chunk = _CHUNK
+    if count > filtered_bands(paths):  # every band: long spectra
+        chunk = max(1, min(_CHUNK, _MAX_VALUES // top))
+    for start in range(0, len(paths), chunk):
+        part = slice(start, start + chunk)
         spectra = amplitude_spectra(paths[part], f, gains[:, :top], only_coherent=True)
         spectra *= np.exp(-2j * np.pi * np.outer(paths.delay_s[part], f))
         for column in range(k):  # one at a time: a mono response and W add alike
@@ -210,7 +343,8 @@ def total_energy(paths: EarlyReflections) -> np.ndarray:
     """(bands,) the paths' energy together in each band: their sum, and in the coherent
     bands that of their pressures added at each of the band's frequencies, averaged over
     them; each frequency stands for its slice of the band, over which the interference
-    of two paths that arrive far apart averages out."""
+    of two paths that arrive far apart averages out. Paths of different points of a line
+    or a surface source add in energy."""
     from acoustic_spaces.engine.diffraction import band_frequencies
 
     out = paths.energy.sum(axis=0)
@@ -223,10 +357,99 @@ def total_energy(paths: EarlyReflections) -> np.ndarray:
     pressure = np.sqrt(paths.energy[:, :count, None]) * paths.spectrum
     pressure = pressure * np.exp(-2j * np.pi * paths.delay_s[:, None, None] * f[None])
     apart = paths.delay_s[:, None] - paths.delay_s[None, :]
+    same = paths.point[:, None] == paths.point[None, :]
     for b in range(count):
         products = np.real(pressure[:, None, b] * np.conj(pressure[None, :, b])).mean(axis=2)
-        out[b] = float(np.sum(products * np.sinc(apart * width[b])))
+        out[b] = float(np.sum(products * np.sinc(apart * width[b]) * same))
     return out
+
+
+def pair_energy(
+    paths: EarlyReflections,
+    bands: range,
+    time_step: float,
+    slots: int,
+    axis: np.ndarray | None = None,
+    exponent: int = 2,
+    origin: float = 0.0,
+) -> np.ndarray:
+    """(len(bands), slots) energy per time slot of ``time_step`` (slot 0 at ``origin``,
+    s from emission) in ``bands`` of the paths' coherent ones, adding them in pressure:
+    each path's own energy where it arrives, and the cross term of each pair of paths,
+    averaged over the band's frequencies as in :func:`total_energy`, shared between the
+    two paths' slots as their energies are (a slot that would go below zero is left at
+    zero). With ``axis``, that of a figure of eight facing it (``exponent`` as in
+    :meth:`EarlyPressure.energy`; with 1 the cross terms take the geometric mean of the
+    two paths' weights)."""
+    from acoustic_spaces.engine.diffraction import band_frequencies
+
+    out = np.zeros((len(bands), slots))
+    if len(paths) == 0:
+        return out
+    f, width = band_frequencies(bands=resolution_of(paths.energy.shape[1]))
+    slot = np.floor((paths.delay_s - origin) / time_step + 1e-9).astype(np.int64)
+    keep = (slot >= 0) & (slot < slots)
+    apart = paths.delay_s[:, None] - paths.delay_s[None, :]
+    weight = np.ones(len(paths))
+    if axis is not None:
+        cosine = paths.direction @ np.asarray(axis, dtype=float)
+        weight = cosine if exponent == 2 else np.sqrt(np.abs(cosine))
+    for row, b in enumerate(bands):
+        energy = paths.energy[:, b]
+        pressure = np.sqrt(energy)[:, None] * paths.spectrum[:, b]
+        pressure = pressure * np.exp(-2j * np.pi * np.outer(paths.delay_s, f[b]))
+        cross = np.real(pressure @ pressure.conj().T) / f.shape[1]
+        cross *= np.sinc(apart * width[b]) * np.outer(weight, weight)
+        # A pair's cross terms, 2 Re(p_i p_j*), shared between its two paths.
+        total = energy[:, None] + energy[None, :]
+        share = np.divide(2.0 * energy[:, None], total, out=np.zeros_like(cross), where=total > 0)
+        np.fill_diagonal(share, 1.0)
+        mine = np.sum(cross * share, axis=1)
+        np.add.at(out[row], slot[keep], mine[keep])
+    return np.maximum(out, 0.0)
+
+
+def coherent_energy(
+    paths: EarlyReflections,
+    time_step: float,
+    slots: int,
+    axis: np.ndarray | None = None,
+    exponent: int = 2,
+    origin: float = 0.0,
+    start: float | None = None,
+    cache: dict | None = None,
+) -> np.ndarray:
+    """(coherent bands, slots) the coherent bands' energy per time slot (arguments as
+    for :meth:`EarlyPressure.energy`): through the band filters up to
+    :data:`FILTERED_MAX_BAND_HZ` and by :func:`pair_energy` above. The paths of each of
+    a line's or a surface's points add in pressure, those of different points in
+    energy. ``cache`` (a dict) keeps the :class:`EarlyPressure` of each point between
+    calls on the same paths."""
+    count = paths.coherent_bands
+    filtered = filtered_bands(paths)
+    points = np.unique(paths.point)
+    if len(points) <= 1 and count == filtered:
+        pressure = _pressure(paths, 0, cache)
+        return pressure.energy(time_step, slots, axis, exponent, origin, start)
+    out = np.zeros((count, slots))
+    for point in points:
+        part = paths[paths.point == point] if len(points) > 1 else paths
+        if filtered:
+            pressure = _pressure(part, int(point), cache)
+            out[:filtered] += pressure.energy(time_step, slots, axis, exponent, origin, start)
+        if count > filtered:
+            out[filtered:] += pair_energy(
+                part, range(filtered, count), time_step, slots, axis, exponent, origin
+            )
+    return out
+
+
+def _pressure(paths: EarlyReflections, point: int, cache: dict | None) -> EarlyPressure:
+    if cache is None:
+        return EarlyPressure(paths)
+    if point not in cache:
+        cache[point] = EarlyPressure(paths)
+    return cache[point]
 
 
 class EarlyPressure:
@@ -243,7 +466,7 @@ class EarlyPressure:
     def __init__(self, paths: EarlyReflections, weights: np.ndarray | None = None) -> None:
         bands = paths.energy.shape[1]
         self.bands = bands
-        self.count = paths.coherent_bands
+        self.count = filtered_bands(paths)
         top = band_centres(resolution_of(bands))[max(self.count, 1) - 1]
         # Rate high enough for the band filters of the coherent bands to have died out,
         # and a whole number of samples to a millisecond; each sample stands for the
@@ -325,11 +548,16 @@ class EarlyPressure:
 
 
 __all__ = [
+    "FILTERED_MAX_BAND_HZ",
     "EarlyPressure",
     "amplitude_spectra",
     "band_count",
     "band_impulses",
+    "coherent_energy",
+    "filtered_bands",
+    "ground_factors",
     "held_phase",
+    "pair_energy",
     "reflection_phases",
     "sample_frequencies",
     "shapes",

@@ -24,6 +24,7 @@ from acoustic_spaces.geometry.outdoor import SKY
 from acoustic_spaces.i18n import _
 from acoustic_spaces.room import Room, matching_name
 from acoustic_spaces.scene import Scene
+from acoustic_spaces.scene.model import INDOOR_COHERENT_MAX_BAND_HZ
 
 #: Heights above a floor for new sources and listeners (m): a talker, a seated ear.
 SOURCE_HEIGHT = 1.5
@@ -485,6 +486,11 @@ class Document(QObject):
 
         def change(data: dict) -> None:
             data["geometry"] = {"floor_plan": plan, "height": height}
+            # Outdoors the early paths may add in pressure in every band; a room's take
+            # the default.
+            early = data.get("simulation", {}).get("early", {})
+            if (early.get("coherent_max_band_hz") or 0) > INDOOR_COHERENT_MAX_BAND_HZ:
+                del early["coherent_max_band_hz"]
             for (kind, k), position in moved.items():
                 data[kind][k]["position"] = position
             if default is not None:
