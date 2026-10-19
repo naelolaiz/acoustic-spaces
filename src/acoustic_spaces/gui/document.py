@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from PySide6.QtCore import QObject, Signal
 
 from acoustic_spaces.geometry import UNIT_SCALE, RoomMesh, extruded_mesh, points_inside
+from acoustic_spaces.geometry.outdoor import SKY
 from acoustic_spaces.i18n import _
 from acoustic_spaces.room import Room, matching_name
 from acoustic_spaces.scene import Scene
@@ -418,6 +419,8 @@ class Document(QObject):
         """New corners (m, seen from above) for a floor plan room. A box becomes a floor
         plan with the same walls, so its material assignments still apply."""
         geometry = self.scene.geometry
+        if geometry.ground is not None:
+            raise EditError(_("the scene is outdoors: draw a floor plan to replace it"))
         if geometry.file is not None:
             raise EditError(_("the room is a model file: draw a floor plan to replace it"))
         scale = UNIT_SCALE[geometry.units or "m"]
@@ -476,6 +479,8 @@ class Document(QObject):
             matching_name(label, names) is None for label in mesh.labels
         ):
             areas = self.room.area_by_material()
+            if self.room.outdoor is not None:
+                areas.pop(SKY, None)  # an opening: walls of it would let everything out
             default = max(areas, key=areas.get) if areas else next(iter(self.scene.materials))
 
         def change(data: dict) -> None:

@@ -34,6 +34,7 @@ from acoustic_spaces.geometry import (
     load_mesh,
 )
 from acoustic_spaces.geometry.cells import MeshCells, cell_of
+from acoustic_spaces.geometry.outdoor import SKY, Layout, outdoor_mesh
 from acoustic_spaces.materials.bands import Resolution, band_centres
 from acoustic_spaces.scene import Scene
 
@@ -124,6 +125,9 @@ class Room:
     #: cells inside the walls' shell), the cells they lie in, with those that surfaces
     #: letting sound through join to them. Empty when the mesh is not closed.
     air_cells: np.ndarray
+    #: Where the ground and the sky lie in an outdoor scene (``geometry.ground``); None
+    #: for a room.
+    outdoor: Layout | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> Room:
@@ -138,11 +142,19 @@ class Room:
         materials or positions), and so are directivities read from the same settings.
         """
         geometry = scene.geometry
+        outdoor = None
         if reuse is not None and reuse.scene.geometry == geometry:
-            mesh, report = reuse.mesh, reuse.report
+            mesh, report, outdoor = reuse.mesh, reuse.report, reuse.outdoor
         else:
             scale = UNIT_SCALE[geometry.units or "m"]
-            if geometry.file is not None:
+            if geometry.ground is not None:
+                objects = None
+                if geometry.file is not None:
+                    objects = load_mesh(
+                        geometry.file, units=geometry.units, up_axis=geometry.up_axis
+                    )
+                raw, outdoor = outdoor_mesh(geometry, objects, scale)
+            elif geometry.file is not None:
                 raw = load_mesh(
                     geometry.file,
                     units=geometry.units,
@@ -221,6 +233,7 @@ class Room:
             unused_assignments=unused,
             directivities=directivities,
             air_cells=air,
+            outdoor=outdoor,
         )
 
     def directivity(self, source: str, bands: Resolution = "octave") -> Directivity:
@@ -240,6 +253,28 @@ class Room:
     def band_centres(self) -> tuple[int, ...]:
         """Centre frequencies (Hz) of the bands the scene's simulation runs in."""
         return band_centres(self.bands)
+
+    def sky_faces(self) -> np.ndarray:
+        """(F,) the faces of an outdoor scene's open sky (all False for a room)."""
+        if self.outdoor is None:
+            return np.zeros(len(self.mesh.faces), dtype=bool)
+        sky = np.array([label == (SKY,) for label in self.mesh.labels] or [False], dtype=bool)
+        return sky[self.mesh.face_labels]
+
+    def building_faces(self) -> np.ndarray:
+        """(F,) the faces of an outdoor scene's buildings (``geometry.buildings``)."""
+        if self.outdoor is None:
+            return np.zeros(len(self.mesh.faces), dtype=bool)
+        built = np.array(
+            [bool(label) and label[-1] == "buildings" for label in self.mesh.labels] or [False],
+            dtype=bool,
+        )
+        return built[self.mesh.face_labels]
+
+    def shown_faces(self) -> np.ndarray:
+        """(F,) the faces worth drawing: all but an outdoor scene's sky, which would hide
+        the rest."""
+        return ~self.sky_faces()
 
     # -- checks -------------------------------------------------------------------
 
@@ -266,11 +301,26 @@ class Room:
             ("source", self.scene.sources, self.sources_inside),
             ("listener", self.scene.listeners, self.listeners_inside),
         ):
+            if self.outdoor is not None:
+                for item in items:
+                    points = item.elements() if kind == "source" else [item.position]
+                    building = next((b for b in self.outdoor.building_at(points) if b), None)
+                    if building is not None:
+                        out.append(
+                            f"{kind} {item.name!r} at {list(item.position)} is inside building "
+                            f"{building!r}"
+                        )
             if inside is None:
                 continue
             for item, ok in zip(items, inside, strict=True):
-                if not ok:
-                    where = "reaches" if getattr(item, "extended", False) else "is"
+                where = "reaches" if getattr(item, "extended", False) else "is"
+                if not ok and self.outdoor is not None:
+                    out.append(
+                        f"{kind} {item.name!r} at {list(item.position)} {where} outside the "
+                        "open air: below the ground, above the sky or past the edge of the "
+                        "ground (geometry.ground's extent, margin and sky)"
+                    )
+                elif not ok:
                     out.append(
                         f"{kind} {item.name!r} at {list(item.position)} {where} outside the room"
                     )

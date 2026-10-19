@@ -911,6 +911,40 @@ def test_an_ifc_model_picks_its_room(window) -> None:
     assert not page.file_form.isRowVisible(page.space)
 
 
+def test_outdoor_geometry_form(window, monkeypatch) -> None:
+    window.open_example(example_path("street"))
+    window.select("geometry", None)
+    page = window.inspector.pages["geometry"]
+    assert not page.ground_group.isHidden() and page.box_group.isHidden()
+    assert page.ground_group.title() == "Outdoors (m)"
+    assert page.sky.text() == "auto" and page.margin.value() == 30
+    buildings = page.parts["buildings"]
+    assert buildings.rowCount() == 2
+    assert [buildings.item(0, c).text() for c in range(3)] == ["houses", "9", "4"]
+    buildings.item(0, 1).setText("12")
+    assert window.document.scene.geometry.buildings[0].height == 12.0
+    page.sky.setValue(60.0)
+    assert window.document.scene.geometry.ground.sky == 60.0
+    assert window.document.room.outdoor.sky == 60.0
+    page.sky.setValue(0.0)  # auto again
+    assert window.document.scene.geometry.ground.sky is None
+    page.parts["barriers"].setCurrentCell(0, 0)
+    page._remove_part("barriers")
+    assert window.document.scene.geometry.barriers is None
+    assert page.parts["barriers"].rowCount() == 0
+    page._remove_part("barriers")  # nothing left to remove
+    # Drawing a room over the scene asks first, and the sky is no default material.
+    asked = []
+    monkeypatch.setattr(window, "confirm_replace_outdoors", lambda: asked.append(1) or False)
+    window.plan.canvas.drawn.emit([[0, 0], [10, 0], [10, 8], [0, 8]])
+    assert asked and window.document.scene.geometry.ground is not None
+    monkeypatch.setattr(window, "confirm_replace_outdoors", lambda: True)
+    window.plan.canvas.drawn.emit([[0, 0], [10, 0], [10, 8], [0, 8]])
+    assert window.document.scene.geometry.floor_plan is not None
+    assert window.document.scene.default_material == "asphalt"
+    assert page.ground_group.isHidden()
+
+
 def test_model_units_default_to_the_file(window) -> None:
     window.open_example(example_path("shoebox"))  # its scene says units: m
     window.select("geometry", None)

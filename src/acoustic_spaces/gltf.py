@@ -254,7 +254,8 @@ def _add_room(doc: _Document, room: Room) -> None:
     areas = mesh.face_areas()
     materials: dict[int, int] = {}
     group = doc.node("room")
-    for label in np.unique(mesh.face_labels):
+    shown = room.shown_faces()  # outdoors, not the open sky
+    for label in np.unique(mesh.face_labels[shown]):
         faces = np.flatnonzero(mesh.face_labels == label)
         k = int(room.face_materials[faces[0]])
         if k not in materials:

@@ -155,6 +155,11 @@ room every corner is a handle:
   the reason under **Messages**.
 - The wheel zooms, dragging empty space pans and **Fit** shows the whole room again.
 
+The **Geometry** entry of an [outdoor scene](outdoor.md) has an **Outdoors** group
+instead: the ground's height, the margin and the sky, and the buildings and barriers
+with their heights, which can be changed or removed. The 3D view leaves the sky out but
+for its edges, which show where the ground ends.
+
 Rooms from model files show their outline, and their sources and listeners move the
 same way. Every change can be undone.
 

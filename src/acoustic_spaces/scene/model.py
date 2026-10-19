@@ -161,9 +161,85 @@ class Orientation(_Model):
         return [[forward[i], left[i], up[i]] for i in range(3)]
 
 
+#: Names an outdoor scene gives its surfaces by kind; buildings and barriers take others.
+OUTDOOR_NAMES = ("ground", "sky", "walls", "roofs", "buildings", "barriers")
+#: The material of the sky of an outdoor scene unless the scene names its own: an
+#: opening, which lets all sound out of the scene.
+SKY = "sky"
+
+
+def sky_material() -> Material:
+    """The open sky: a surface that lets all sound through and reflects none."""
+    return Material(transmission=1.0, scattering=0.0, source="the open sky")
+
+
+class Ground(_Model):
+    """Flat ground under an open sky: it makes the scene an outdoor one (see
+    :mod:`acoustic_spaces.geometry.outdoor`). Lengths are in the geometry's units."""
+
+    height: float = Field(default=0.0, description="height (z) of the ground")
+    extent: tuple[tuple[float, float], tuple[float, float]] | None = Field(
+        default=None,
+        description=(
+            "[[x_min, y_min], [x_max, y_max]] of the ground; None: the buildings, barriers "
+            "and model file, with margin round them"
+        ),
+    )
+    margin: PositiveFloat = Field(
+        default=30.0,
+        description=(
+            "ground round the buildings, barriers and model file when extent is left out, "
+            "and sky above the highest of them when sky is"
+        ),
+    )
+    sky: PositiveFloat | None = Field(
+        default=None,
+        description=(
+            "height of the open sky above the ground; None: margin above the highest "
+            "building, barrier or model"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _extent_has_area(self) -> Ground:
+        if self.extent is not None:
+            (x0, y0), (x1, y1) = self.extent
+            if not (x0 < x1 and y0 < y1):
+                raise ValueError(
+                    "ground extent is [[x_min, y_min], [x_max, y_max]], each min < max"
+                )
+        return self
+
+
+class Building(_Model):
+    """A building standing on the ground: its footprint raised to a height (surfaces
+    ``<name>_wall_1``..., ``<name>_walls``, ``<name>_roof``, and ``walls``, ``roofs``
+    and ``buildings`` for all of them)."""
+
+    name: str | None = Field(default=None, description="None: building_1, building_2...")
+    footprint: list[tuple[float, float]] = Field(
+        min_length=3, description="(x, y) corners of the footprint, in order"
+    )
+    height: PositiveFloat = Field(description="height of the roof above the ground")
+
+
+class Barrier(_Model):
+    """A thin screen standing on the ground along a path (surfaces ``<name>`` and
+    ``barriers``)."""
+
+    name: str | None = Field(default=None, description="None: barrier_1, barrier_2...")
+    path: list[tuple[float, float]] = Field(
+        min_length=2, description="(x, y) points along the barrier, in order"
+    )
+    height: PositiveFloat = Field(description="height of its top above the ground")
+
+
 class Geometry(_Model):
     """The room's surfaces: a CAD file, or a box or extruded floor plan built from
-    dimensions (surfaces ``floor``, ``ceiling``, ``walls`` and ``wall_1``, ``wall_2``...)."""
+    dimensions (surfaces ``floor``, ``ceiling``, ``walls`` and ``wall_1``, ``wall_2``...).
+
+    Outdoors, ``ground`` lays flat ground under an open sky, with ``buildings`` and
+    ``barriers`` built on it and, from ``file``, any other objects standing on it."""
 
     file: Path | None = Field(
         default=None,
@@ -197,6 +273,16 @@ class Geometry(_Model):
         ),
     )
 
+    ground: Ground | None = Field(
+        default=None, description="flat ground under an open sky: an outdoor scene"
+    )
+    buildings: list[Building] | None = Field(
+        default=None, description="outdoors: buildings standing on the ground"
+    )
+    barriers: list[Barrier] | None = Field(
+        default=None, description="outdoors: thin screens standing on the ground"
+    )
+
     @field_validator("file")
     @classmethod
     def _resolve_file(cls, value: Path | None, info: ValidationInfo) -> Path | None:
@@ -204,6 +290,10 @@ class Geometry(_Model):
 
     @model_validator(mode="after")
     def _one_kind(self) -> Geometry:
+        if self.ground is not None:
+            return self._outdoor()
+        if self.buildings is not None or self.barriers is not None:
+            raise ValueError("buildings and barriers stand on the ground: add geometry.ground")
         given = [k for k in ("file", "box", "floor_plan") if getattr(self, k) is not None]
         if len(given) != 1:
             raise ValueError("geometry needs exactly one of file, box or floor_plan")
@@ -213,7 +303,48 @@ class Geometry(_Model):
             raise ValueError("space names a room of an IFC file: give one as file")
         return self
 
+    def _outdoor(self) -> Geometry:
+        if self.box is not None or self.floor_plan is not None or self.height is not None:
+            raise ValueError(
+                "an outdoor scene (geometry.ground) takes buildings, barriers and a model "
+                "file, not a box or floor_plan"
+            )
+        if self.space is not None:
+            raise ValueError("space picks a room of an IFC file; outdoors, leave it out")
+        if self.ground.extent is None and not (self.file or self.buildings or self.barriers):
+            raise ValueError(
+                "with no buildings, barriers or model file, the ground needs an extent: "
+                "[[x_min, y_min], [x_max, y_max]]"
+            )
+        names = self.building_names() + self.barrier_names()
+        reserved = sorted(set(names) & set(OUTDOOR_NAMES))
+        if reserved:
+            raise ValueError(f"{reserved[0]!r} names every surface of its kind; pick another name")
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            raise ValueError(f"building and barrier names must be unique: {', '.join(duplicates)}")
+        return self
+
+    def building_names(self) -> list[str]:
+        """The buildings' names, ``building_<n>`` for those without one."""
+        return [b.name or f"building_{k + 1}" for k, b in enumerate(self.buildings or [])]
+
+    def barrier_names(self) -> list[str]:
+        """The barriers' names, ``barrier_<n>`` for those without one."""
+        return [b.name or f"barrier_{k + 1}" for k, b in enumerate(self.barriers or [])]
+
     def describe(self) -> str:
+        if self.ground is not None:
+            parts = ["outdoors"]
+            for count, one, many in (
+                (len(self.buildings or []), "building", "buildings"),
+                (len(self.barriers or []), "barrier", "barriers"),
+            ):
+                if count:
+                    parts.append(f"{count} {one if count == 1 else many}")
+            if self.file is not None:
+                parts.append(self.file.name)
+            return ", ".join(parts)
         if self.file is not None:
             return self.file.name + (f" (space {self.space})" if self.space else "")
         units = self.units or "m"
@@ -1060,6 +1191,8 @@ class Scene(_Model):
 
     @model_validator(mode="after")
     def _check_references(self) -> Scene:
+        if self._default_sky() and SKY not in self.materials:
+            self.materials[SKY] = sky_material()
         referenced = set(self.assignments.values())
         if self.default_material is not None:
             referenced.add(self.default_material)
@@ -1089,7 +1222,17 @@ class Scene(_Model):
         data = self.model_dump(mode="json", exclude_none=True)
         if self.simulation.early.coherent_max_band_hz is None:
             data["simulation"]["early"]["coherent_max_band_hz"] = None
+        # The open sky's material is added when the scene is read: left out, as written.
+        if self._default_sky() and self.materials.get(SKY) == sky_material():
+            del data["materials"][SKY]
         return data
+
+    def _default_sky(self) -> bool:
+        """Whether the sky of an outdoor scene takes the built-in open sky: the scene
+        assigns the sky no material of its own."""
+        return self.geometry.ground is not None and not any(
+            key.casefold() == SKY for key in self.assignments
+        )
 
     def to_yaml(self, path: str | Path) -> None:
         """Write the scene file. Paths to files under its folder are written relative to

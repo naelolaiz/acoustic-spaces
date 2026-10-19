@@ -49,7 +49,10 @@ both edges the path over two edges is left out: it is then a correction of a
 correction.
 
 Openings are not there for diffraction: the edges of a doorway are the free edges of the
-wall round it, and diffracted paths pass through openings as through air. Any other
+wall round it, and diffracted paths pass through openings as through air. Outdoors, the
+open sky is an opening too, but the edges it meets diffract nothing (the ground goes on
+past them), nor do edges that lie on the ground, which closes the corner of a wall or a
+barrier standing on it (see :mod:`acoustic_spaces.geometry.outdoor`). Any other
 surface stops them, even one that lets some sound through: the sound diffracted
 through a wall is left out, as it is far weaker than the sound that passes it straight.
 """
@@ -66,6 +69,7 @@ from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.coherent import reflection_phases
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
+from acoustic_spaces.geometry.outdoor import on_ground
 from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, Resolution, band_centres
 
 #: Faces that bend away from each other by less than this (degrees) make no
@@ -324,7 +328,11 @@ def find_edges(model: TraceModel, min_bend_deg: float = MIN_BEND_DEG) -> Edges:
     one edge between the same two planes are joined."""
     mesh = model.room.mesh
     vertices = np.asarray(mesh.vertices, dtype=float)
-    solid = np.flatnonzero(~model.transparent)  # openings are holes here
+    solid = ~model.transparent  # openings are holes here
+    if model.sky is not None:
+        # An outdoor scene's sky is an opening, but no hole: the ground goes on past it.
+        solid |= model.sky
+    solid = np.flatnonzero(solid)
     faces = mesh.faces[solid]
     first = faces.reshape(-1)
     second = faces[:, [1, 2, 0]].reshape(-1)
@@ -381,10 +389,29 @@ def find_edges(model: TraceModel, min_bend_deg: float = MIN_BEND_DEG) -> Edges:
             np.ones(len(single), dtype=bool),
         )
     )
+    if model.sky is not None:
+        parts = [(*part[:8], part[8] & _outdoors(model, part)) for part in parts]
     p0, p1, e, along, normal, wedge, face0, face1 = (
         np.concatenate([part[i][part[8]] for part in parts]) for i in range(8)
     )
     return _join(model, p0, p1, e, along, normal, wedge, face0, face1)
+
+
+def _outdoors(model: TraceModel, part) -> np.ndarray:
+    """Which edges of an outdoor scene diffract: not those the sky meets, where the
+    ground goes on and the air is open, nor those on the ground, where it closes the
+    corner of a wall or barrier that stands on it, nor the inside corners of buildings.
+
+    A building is open underneath, so there is air on both sides of its walls and the
+    model cannot tell its outside corners from its inside ones; but its faces point out
+    of it, and an edge between two of them is an outside corner when the side ``part``
+    takes as open (``normal``) is the side a face points to."""
+    p0, p1, normal, face0, face1 = part[0], part[1], part[4], part[6], part[7]
+    grounded = on_ground(p0, model.ground) & on_ground(p1, model.ground)
+    building = model.room.building_faces()
+    out = model.room.mesh.face_normals()[face0]
+    inside = building[face0] & building[face1] & (np.einsum("ij,ij->i", out, normal) < 0.0)
+    return ~(model.sky[face0] | model.sky[face1] | grounded | inside)
 
 
 def _join(model, p0, p1, e, along, normal, wedge, face0, face1) -> Edges:

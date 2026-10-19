@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+**Outdoor scenes**
+
+- `geometry.ground` makes a scene outdoors: a flat ground under an open sky, which lets
+  all sound out, with `buildings` (footprints raised to a height, open underneath),
+  `barriers` (thin screens along a path) and a model file's objects standing on it. The
+  ground reaches `margin` past them or over a set `extent`, and the sky lies `sky` over
+  it or `margin` over the highest of them. Surfaces are named after each building
+  (`<name>_roof`, `<name>_wall_1`...) and by kind (`walls`, `roofs`, `buildings`,
+  `barriers`, `ground`, `sky`).
+- Nothing reflects off the sky and no edge of the sky or on the ground diffracts, so the
+  ground reads as endless; the inside corners of buildings do not diffract either.
+- Sources and listeners inside a building, below the ground, above the sky or past the
+  ground's edge are reported as problems.
+- Outdoors, `ir_length_s` counts from the latest direct sound, so far listeners are not
+  cut off; the statistical late method, which needs a diffuse field, stops with an
+  error; coverage maps cover the ground and leave out points inside buildings.
+- The editor's **Geometry** form has an **Outdoors** group (ground height, margin, sky,
+  buildings' and barriers' heights); the 3D view, the plots and the Blender export leave
+  the sky out; `inspect` and the status bar describe the ground instead of a
+  reverberation time.
+- New example: `street`, traffic in a street between two buildings, heard on the
+  pavement, on a balcony and in a garden behind a noise barrier.
+- Rooms are unchanged: indoor scenes give the same results, bit for bit.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

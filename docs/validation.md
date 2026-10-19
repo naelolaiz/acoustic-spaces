@@ -195,6 +195,13 @@ request and checks:
   in inches with its up axis as written, and instanced components placed by their
   nodes; and materials from CATT-Acoustic files and ODEON libraries, the latter as
   ODEON writes it (Windows encodings and six-band tables too);
+- outdoor scenes: over a flat ground under the open sky, exactly two paths, the direct
+  sound and the ground's reflection, at their distances and with the reflection's
+  energy (absorption, spreading and air) to rounding, from both early methods; a
+  barrier's top and ends as its only diffracting edges, with the shortest path over its
+  top; no edge at the inside corner of an L-shaped building, whichever way its
+  footprint runs; points inside buildings refused and left out of coverage maps; and
+  responses that run `ir_length_s` past the latest direct sound;
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
@@ -884,6 +891,10 @@ its peak (single precision).
   dependence on the angle it arrives at, and the wave solver does not model such walls:
   with `simulation.wave.enabled`, a model with one stops with an error (openings are
   fine).
+- **Outdoor propagation** is checked against geometry and closed forms, not against
+  measurements yet: the ground is a plane with an absorption coefficient, and wind,
+  temperature gradients, turbulence and vegetation are not modelled (see
+  [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)).
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
 - **Speed on a hardware GPU.** CI checks the wave solver's and the late stage's GPU

@@ -620,6 +620,12 @@ msgstr "Refer {edit}"
 msgid "Nothing to redo"
 msgstr "Res a refer"
 
+#. Translators: the status bar's summary of an outdoor scene.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "outdoors, {area:,.0f} m² of ground"
+msgstr "a l'aire lliure, {area:,.0f} m² de terreny"
+
 #. Translators: the status bar's summary of the room: its volume and its reverberation time at one band, such as "1 kHz".
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -734,6 +740,16 @@ msgid ""
 msgstr ""
 "Substituir el fitxer de model per la planta dibuixada? Les assignacions de "
 "materials a les superfícies del model ja no correspondran a cap superfície."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Replace the outdoor scene (its ground, buildings, barriers and model file) "
+"with the drawn floor plan? Material assignments to their surfaces will no "
+"longer match anything."
+msgstr ""
+"Substituir l'escena a l'aire lliure (el terreny, els edificis, les pantalles "
+"acústiques i el fitxer de model) per la planta dibuixada? Les assignacions "
+"de materials a les seves superfícies ja no correspondran a cap superfície."
 
 #: acoustic_spaces/gui/app.py
 msgid "Add material"
@@ -1165,6 +1181,10 @@ msgid "remove listener"
 msgstr "eliminar receptor"
 
 #: acoustic_spaces/gui/document.py
+msgid "the scene is outdoors: draw a floor plan to replace it"
+msgstr "l'escena és a l'aire lliure: cal dibuixar una planta per substituir-la"
+
+#: acoustic_spaces/gui/document.py
 msgid "the room is a model file: draw a floor plan to replace it"
 msgstr ""
 "el recinte és un fitxer de model: cal dibuixar una planta per substituir-lo"
@@ -1321,6 +1341,7 @@ msgstr "per defecte"
 msgid "both"
 msgstr "tots dos"
 
+#. Translators: the sky's height when it is not set: worked out from the scene.
 #: acoustic_spaces/gui/inspector.py
 msgid "auto"
 msgstr "automàtic"
@@ -1638,6 +1659,115 @@ msgid "IFC room"
 msgstr "Recinte IFC"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Outdoors"
+msgstr "A l'aire lliure"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The height (z) of the flat ground, in the units the title shows"
+msgstr "L'alçada (z) del terreny pla, en les unitats del títol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How far the ground reaches past the buildings, barriers and model, unless "
+"its extent is set, and how high the sky is over the highest of them, unless "
+"the sky is set; in the units the title shows"
+msgstr ""
+"Fins on arriba el terreny més enllà dels edificis, les pantalles i el model, "
+"si no se'n fixa l'extensió, i a quina alçada queda el cel sobre el més alt, "
+"si no es fixa el cel; en les unitats del títol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How high the open sky lies over the ground, in the units the title shows; "
+"auto: the margin over the highest building, barrier or model part. Sound "
+"that reaches the sky leaves the scene"
+msgstr ""
+"A quina alçada queda el cel obert sobre el terreny, en les unitats del "
+"títol; automàtic: el marge sobre l'edifici, la pantalla o la part del model "
+"més alta. El so que arriba al cel surt de l'escena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground height"
+msgstr "Alçada del terreny"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Margin"
+msgstr "Marge"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Sky"
+msgstr "Cel"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the ground ends: past it, sound leaves the scene as if the ground went "
+"on"
+msgstr ""
+"On acaba el terreny: més enllà, el so surt de l'escena com si el terreny "
+"continués"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Buildings"
+msgstr "Edificis"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Corners"
+msgstr "Vèrtexs"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The building's name; its surfaces are named after it"
+msgstr "El nom de l'edifici; les seves superfícies porten el seu nom"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high the building is, ground to roof, in the units the title shows"
+msgstr ""
+"L'alçada de l'edifici, del terreny a la coberta, en les unitats del títol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many corners the building's footprint has (set in the scene file)"
+msgstr ""
+"Quants vèrtexs té la petjada de l'edifici (es fixen al fitxer d'escena)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected building, or the last one when none is selected"
+msgstr ""
+"Eliminar l'edifici seleccionat o l'últim si no n'hi ha cap de seleccionat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Barriers"
+msgstr "Pantalles acústiques"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Points"
+msgstr "Punts"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The barrier's name, which its surfaces carry"
+msgstr "El nom de la pantalla, que porten les seves superfícies"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high the barrier is over the ground, in the units the title shows"
+msgstr "L'alçada de la pantalla sobre el terreny, en les unitats del títol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many points the barrier's path has (set in the scene file)"
+msgstr "Quants punts té el traçat de la pantalla (es fixen al fitxer d'escena)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected barrier, or the last one when none is selected"
+msgstr ""
+"Eliminar la pantalla seleccionada o l'última si no n'hi ha cap de "
+"seleccionada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove building"
+msgstr "Eliminar edifici"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove barrier"
+msgstr "Eliminar pantalla"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "A closed model has no gaps: each edge joins two faces. The volume and the "
 "reverberation estimates need one; View > Show leaks finds the gaps"
@@ -1660,6 +1790,11 @@ msgstr "Recinte rectangular ({units})"
 #, python-brace-format
 msgid "Floor plan ({units})"
 msgstr "Planta ({units})"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Outdoors ({units})"
+msgstr "A l'aire lliure ({units})"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -1725,6 +1860,29 @@ msgstr "canviar les unitats"
 #: acoustic_spaces/gui/inspector.py
 msgid "change up axis"
 msgstr "canviar l'eix vertical"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Ground from ({x0:g}, {y0:g}) to ({x1:g}, {y1:g}) m, sky {sky:g} m over it"
+msgstr ""
+"Terreny de ({x0:g}, {y0:g}) a ({x1:g}, {y1:g}) m, cel a {sky:g} m per sobre"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change ground"
+msgstr "canviar el terreny"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a height is one number"
+msgstr "una alçada és un sol nombre"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove building"
+msgstr "eliminar edifici"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove barrier"
+msgstr "eliminar pantalla"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -4456,6 +4614,33 @@ msgstr ""
 "les parets són dures i llises, de manera que el so que rebota entre elles "
 "s'atenua lentament: el T30 simulat és diverses vegades superior a les "
 "estimacions de Sabine i Eyring d'`inspect`, que assumeixen un camp difús."
+
+#: examples/street/scene.yaml
+msgctxt "example"
+msgid "Street with a noise barrier"
+msgstr "Carrer amb pantalla acústica"
+
+#: examples/street/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a street 12 m wide between a row of houses 9 m high and an office "
+"block 15 m high, with traffic along it (a line source 30 m long). Past the "
+"end of the houses a noise barrier 3 m high shields a garden. The scene is "
+"the ground and the open sky over it: sound that reaches the sky leaves, and "
+"the ground reaches 30 m past the buildings, then goes on as if it never "
+"ended. One listener stands on the pavement, one on a balcony of the office "
+"block, one in the garden, where the traffic comes over the top of the "
+"barrier and round its ends: `first_order` diffraction follows it."
+msgstr ""
+"A l'aire lliure: un carrer de 12 m d'amplada entre una filera de cases de 9 "
+"m d'alçada i un bloc d'oficines de 15 m, amb trànsit al llarg (una font "
+"lineal de 30 m). Passat el final de les cases, una pantalla acústica de 3 m "
+"d'alçada protegeix un jardí. L'escena és el terreny i el cel obert al "
+"damunt: el so que arriba al cel surt de l'escena, i el terreny s'estén 30 m "
+"més enllà dels edificis i després continua com si no s'acabés mai. Un "
+"receptor és a la vorera, un altre en un balcó del bloc d'oficines i un altre "
+"al jardí, on el trànsit arriba per sobre de la pantalla i pels seus extrems: "
+"la difracció `first_order` el segueix."
 
 #: examples/studio/scene.yaml
 msgctxt "example"

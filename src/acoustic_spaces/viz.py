@@ -327,8 +327,14 @@ def plot_room(
     if plotter is None:
         plotter = pv.Plotter()
     legend = []
+    # Outdoors, the open sky would hide the rest: only its edges, where the ground ends.
+    shown = room.shown_faces()
+    if not shown.all():
+        plotter.add_mesh(
+            _outline(room_polydata(room, np.flatnonzero(~shown))), color=EDGE_COLOUR, line_width=1.0
+        )
     for k, name in enumerate(room.material_names):
-        faces = np.flatnonzero(room.face_materials == k)
+        faces = np.flatnonzero((room.face_materials == k) & shown)
         if len(faces) == 0:
             continue
         part = room_polydata(room, faces)
@@ -336,7 +342,7 @@ def plot_room(
         plotter.add_mesh(part, color=colour, opacity=opacity)
         plotter.add_mesh(_outline(part), color=EDGE_COLOUR, line_width=1.5)
         legend.append([name, colour])
-    missing = np.flatnonzero(room.face_materials == UNASSIGNED)
+    missing = np.flatnonzero((room.face_materials == UNASSIGNED) & shown)
     if len(missing):
         part = room_polydata(room, missing)
         plotter.add_mesh(part, color=UNASSIGNED_COLOUR, opacity=max(opacity, 0.8))

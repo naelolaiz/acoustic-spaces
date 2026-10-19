@@ -184,11 +184,17 @@ class Viewport(QWidget):
         kind, key = selection or ("", None)
 
         materials = surface_materials(room)
+        sky = room.sky_faces()
         for label, material in enumerate(materials):
             faces = np.flatnonzero(room.mesh.face_labels == label)
             if len(faces) == 0:
                 continue
             part = room_polydata(room, faces)
+            if sky[faces[0]]:
+                # Outdoors, the open sky would hide the rest: only its edges, where the
+                # ground ends.
+                plotter.add_mesh(_outline(part), color=EDGE_COLOUR, line_width=1.0, render=False)
+                continue
             chosen = kind == "surface" and key == label
             colour = SELECTED_COLOUR if chosen else material_colour(room, material)
             opacity = 0.75 if chosen else 0.4 if material != UNASSIGNED else 0.8

@@ -204,6 +204,12 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         # The air is not what the report counts as the rooms (walls drawn as a closed
         # shell inside another): the reverberation times below are of this volume.
         print(f"  air volume {room.volume_m3:.2f} m3 (where the sources and listeners stand)")
+    if room.outdoor is not None:
+        x0, y0, x1, y1 = room.outdoor.extent
+        print(
+            f"  outdoors: ground at z = {room.outdoor.ground:g} m from ({x0:g}, {y0:g}) to "
+            f"({x1:g}, {y1:g}) m, sky at z = {room.outdoor.sky:g} m"
+        )
 
     width = max([len(n) for n in room.material_names] + [12]) + 2
     print("\nmaterials (absorption per octave band, area)")
@@ -243,7 +249,8 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         if feed:
             print(f"  {feed}")
 
-    if room.volume_m3 is not None:
+    # Outdoors there is no diffuse field for a reverberation time.
+    if room.volume_m3 is not None and room.outdoor is None:
         print("\nstatistical reverberation time (s), without air absorption")
         print(_band_header("", width))
         times = {}

@@ -67,6 +67,33 @@ def _towards(source: np.ndarray, listener: np.ndarray) -> np.ndarray | None:
     return d / length if length > 0 else None
 
 
+def response_length(room: Room, length_s: float, starts, ends) -> float:
+    """How long responses last (s): ``length_s`` (``simulation.ir_length_s``). Outdoors,
+    where sources and listeners can lie hundreds of metres apart, ``length_s`` counts
+    from the latest direct sound, from any of ``starts`` (n, 3) to any of ``ends``
+    (m, 3), so no response is cut off before its sound arrives."""
+    if room.outdoor is None:
+        return length_s
+    starts = np.atleast_2d(np.asarray(starts, dtype=float))
+    ends = np.atleast_2d(np.asarray(ends, dtype=float))
+    farthest = float(np.max(np.linalg.norm(starts[:, None] - ends[None], axis=2)))
+    return farthest / room.speed_of_sound() + length_s
+
+
+def check_late_method(room: Room, settings: SimulationSettings) -> None:
+    """Raise ``ValueError`` if the statistical late method cannot run in ``room``: it
+    needs a closed room, and outdoors there is no diffuse field to reckon it from."""
+    if settings.late.method != "statistical":
+        return
+    if room.outdoor is not None:
+        raise ValueError(
+            "the statistical late method needs a closed room; outdoors, use the stochastic "
+            "ray tracer (simulation.late.method: stochastic_ray_tracing)"
+        )
+    if room.volume_m3 is None:
+        raise ValueError("the statistical late method needs a closed model")
+
+
 def _transition(settings: SimulationSettings, volume_m3: float | None) -> float:
     """How long after the direct sound the early paths end (s). Without a set
     transition the stochastic tracer hands over by order alone, and the statistical
@@ -181,11 +208,12 @@ def early_paths(
     coherent = coherent_bands(scene.simulation, model.absorption.shape[1])
     coherent = coherent if len(elements) == 1 else 0
     transition = _transition(scene.simulation, room.volume_m3)
+    length = response_length(room, scene.simulation.ir_length_s, elements, target)
     parts = []
     for position in elements:
         cutoff = min(
             float(np.linalg.norm(target - position)) / room.speed_of_sound() + transition,
-            scene.simulation.ir_length_s,
+            length,
         )
         candidates = _candidates(model, position, method or cfg.method, order, cfg.rays, threads)
         paths = early_stage.find_paths(
@@ -348,7 +376,13 @@ def simulate(
     c = room.speed_of_sound()
     air = room.air_attenuation(model.bands)
     volume = room.volume_m3
-    length = settings.ir_length_s
+    listener_pos = np.array([lis.position for lis in chosen_listeners], dtype=float)
+    length = response_length(
+        room,
+        settings.ir_length_s,
+        [point for source in chosen_sources for point in source.elements()],
+        listener_pos,
+    )
     seed = settings.seed
     if seed is None:
         seed = int(np.random.SeedSequence().generate_state(1, np.uint32)[0])
@@ -356,15 +390,13 @@ def simulate(
     # Not set in the scene: this computer's default.
     late_device = tuning.resolve_device(late_cfg.device)
     statistical = late_cfg.method == "statistical"
-    if statistical and volume is None:
-        raise ValueError("the statistical late method needs a closed model")
+    check_late_method(room, settings)
     if groups is not None and statistical:
         raise ValueError("face groups need the stochastic ray tracer, not the statistical method")
 
     # Early paths end `transition` after the direct sound.
     transition = _transition(settings, volume)
 
-    listener_pos = np.array([lis.position for lis in chosen_listeners], dtype=float)
     late_from = {} if late_from is None or statistical else late_from
     unknown = sorted(set(late_from) - {item.name for item in [*chosen_listeners, *chosen_sources]})
     if unknown:
@@ -503,6 +535,8 @@ def simulate(
         info: dict[str, float] = {"seed": _seed(seed, source_index[source.name])}
         if len(elements) > 1:
             info["elements"] = float(len(elements))
+        if length != settings.ir_length_s:
+            info["ir_length_s"] = length
         own_late = source.name not in late_from
         traced = []
         for e_index, position in enumerate(elements):
@@ -604,4 +638,12 @@ def simulate(
     return SimulationResult(room=room, settings=settings, responses=responses, details=details)
 
 
-__all__ = ["TIME_STEP", "SimulationResult", "early_paths", "mixing_time", "simulate"]
+__all__ = [
+    "TIME_STEP",
+    "SimulationResult",
+    "check_late_method",
+    "early_paths",
+    "mixing_time",
+    "response_length",
+    "simulate",
+]

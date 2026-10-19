@@ -176,8 +176,13 @@ def ray_traced_candidates(
 def exhaustive_candidates(
     model: TraceModel, source: np.ndarray, max_order: int, limit: int = MAX_CANDIDATES
 ) -> list[np.ndarray]:
-    """Every plane sequence whose images stay in front of the next plane."""
+    """Every plane sequence whose images stay in front of the next plane (outdoors, not
+    the planes of the open sky, which reflects nothing)."""
     normals, offsets = model.plane_normal, model.plane_offset
+    sky = None
+    if model.sky is not None:
+        sky = np.ones(model.plane_count, dtype=bool)
+        np.logical_and.at(sky, model.face_plane, model.sky)
     seqs = np.zeros((1, 0), dtype=np.int64)
     images = np.asarray(source, dtype=np.float64)[None, :]
     out = []
@@ -190,6 +195,8 @@ def exhaustive_candidates(
             ok = model.in_front(img @ normals.T - offsets, _ON_PLANE)  # (n, planes)
             if s.shape[1]:
                 ok[np.arange(len(s)), s[:, -1]] = False
+            if sky is not None:
+                ok[:, sky] = False
             rows, cols = np.nonzero(ok)
             new_seqs.append(np.column_stack([s[rows], cols]))
             new_images.append(model.mirror(img[rows], cols))

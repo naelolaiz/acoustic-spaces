@@ -12,6 +12,7 @@ getting-started
 editor
 examples
 scenes
+outdoor
 simulation
 coverage-maps
 spatial-audio

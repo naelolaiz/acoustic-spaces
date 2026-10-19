@@ -312,7 +312,8 @@ class ScenePage(Page):
             lines.append(fmt(_("Volume: {volume:,.1f} m³"), volume=room.volume_m3))
         else:
             lines.append(_("Volume: model not closed"))
-        if room.volume_m3:
+        # Outdoors there is no diffuse field for a reverberation time.
+        if room.volume_m3 and room.outdoor is None:
             sabine = room.reverberation_time("sabine", air_absorption=True)
             eyring = room.reverberation_time("eyring", air_absorption=True)
             for band in (500, 1000):
@@ -363,7 +364,8 @@ class ScenePage(Page):
 
 
 class GeometryPage(Page):
-    """A box's dimensions, a floor plan's corners and height, or a model file."""
+    """A box's dimensions, a floor plan's corners and height, a model file, or the
+    ground, buildings and barriers of an outdoor scene."""
 
     def __init__(self, document) -> None:
         super().__init__(document)
@@ -474,6 +476,86 @@ class GeometryPage(Page):
         self.file_form = file_form
         layout.addWidget(self.file_group)
 
+        self.ground_group = QGroupBox(_("Outdoors"))
+        ground_layout = QVBoxLayout(self.ground_group)
+        ground_form = QFormLayout()
+        self.ground_height = spin(-LARGEST, LARGEST, 2, 0.5)
+        self.ground_height.setToolTip(
+            _("The height (z) of the flat ground, in the units the title shows")
+        )
+        self.ground_height.valueChanged.connect(lambda value: self._ground("height", value))
+        self.margin = spin(0.1, LARGEST, 1, 5.0)
+        self.margin.setToolTip(
+            _(
+                "How far the ground reaches past the buildings, barriers and model, unless "
+                "its extent is set, and how high the sky is over the highest of them, "
+                "unless the sky is set; in the units the title shows"
+            )
+        )
+        self.margin.valueChanged.connect(lambda value: self._ground("margin", value))
+        self.sky = spin(0.0, LARGEST, 1, 5.0)
+        # Translators: the sky's height when it is not set: worked out from the scene.
+        self.sky.setSpecialValueText(_("auto"))
+        self.sky.setToolTip(
+            _(
+                "How high the open sky lies over the ground, in the units the title shows; "
+                "auto: the margin over the highest building, barrier or model part. Sound "
+                "that reaches the sky leaves the scene"
+            )
+        )
+        self.sky.valueChanged.connect(lambda value: self._ground("sky", value or None))
+        ground_form.addRow(_("Ground height"), self.ground_height)
+        ground_form.addRow(_("Margin"), self.margin)
+        ground_form.addRow(_("Sky"), self.sky)
+        ground_layout.addLayout(ground_form)
+        self.extent = QLabel()
+        self.extent.setWordWrap(True)
+        self.extent.setToolTip(
+            _("Where the ground ends: past it, sound leaves the scene as if the ground went on")
+        )
+        ground_layout.addWidget(self.extent)
+        self.parts = {}
+        for kind, title, count, tips in (
+            (
+                "buildings",
+                _("Buildings"),
+                _("Corners"),
+                (
+                    _("The building's name; its surfaces are named after it"),
+                    _("How high the building is, ground to roof, in the units the title shows"),
+                    _("How many corners the building's footprint has (set in the scene file)"),
+                    _("Remove the selected building, or the last one when none is selected"),
+                ),
+            ),
+            (
+                "barriers",
+                _("Barriers"),
+                _("Points"),
+                (
+                    _("The barrier's name, which its surfaces carry"),
+                    _("How high the barrier is over the ground, in the units the title shows"),
+                    _("How many points the barrier's path has (set in the scene file)"),
+                    _("Remove the selected barrier, or the last one when none is selected"),
+                ),
+            ),
+        ):
+            ground_layout.addWidget(QLabel(title))
+            table = QTableWidget(0, 3)
+            table.setHorizontalHeaderLabels([_("Name"), _("Height"), count])
+            for col in range(3):
+                table.horizontalHeaderItem(col).setToolTip(tips[col])
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            table.itemChanged.connect(lambda item, kind=kind: self._part_height(kind, item))
+            ground_layout.addWidget(table)
+            remove = QPushButton(
+                _("Remove building") if kind == "buildings" else _("Remove barrier")
+            )
+            remove.setToolTip(tips[3])
+            remove.clicked.connect(lambda _checked=False, kind=kind: self._remove_part(kind))
+            ground_layout.addWidget(remove)
+            self.parts[kind] = table
+        layout.addWidget(self.ground_group)
+
         self.report = QLabel()
         self.report.setWordWrap(True)
         self.report.setToolTip(
@@ -491,9 +573,13 @@ class GeometryPage(Page):
         self.box_group.setVisible(geometry.box is not None)
         self.plan_group.setVisible(geometry.floor_plan is not None)
         self.file_group.setVisible(geometry.file is not None)
+        self.ground_group.setVisible(geometry.ground is not None)
         units = geometry.units or "m"  # a box or floor plan without units is in metres
         self.box_group.setTitle(_("Box ({units})").format(units=units))
         self.plan_group.setTitle(_("Floor plan ({units})").format(units=units))
+        self.ground_group.setTitle(_("Outdoors ({units})").format(units=units))
+        if geometry.ground is not None:
+            self._load_outdoors(geometry, room)
         if geometry.box is not None:
             for box, value in zip(self.box, geometry.box, strict=True):
                 box.setValue(value)
@@ -637,6 +723,79 @@ class GeometryPage(Page):
                 data["geometry"]["up_axis"] = axis
 
         self.apply(_("change up axis"), change)
+
+    def _load_outdoors(self, geometry, room) -> None:
+        ground = geometry.ground
+        self.ground_height.setValue(ground.height)
+        self.margin.setValue(ground.margin)
+        self.sky.setValue(ground.sky or 0.0)
+        if room.outdoor is not None:
+            x0, y0, x1, y1 = room.outdoor.extent
+            self.extent.setText(
+                fmt(
+                    _("Ground from ({x0:g}, {y0:g}) to ({x1:g}, {y1:g}) m, sky {sky:g} m over it"),
+                    x0=x0,
+                    y0=y0,
+                    x1=x1,
+                    y1=y1,
+                    sky=room.outdoor.sky - room.outdoor.ground,
+                )
+            )
+        for kind, names, items in (
+            ("buildings", geometry.building_names(), geometry.buildings or []),
+            ("barriers", geometry.barrier_names(), geometry.barriers or []),
+        ):
+            table = self.parts[kind]
+            table.blockSignals(True)
+            table.setRowCount(len(items))
+            for row, (name, item) in enumerate(zip(names, items, strict=True)):
+                points = item.footprint if kind == "buildings" else item.path
+                for col, text in enumerate((name, number(item.height), str(len(points)))):
+                    cell = QTableWidgetItem(text)
+                    cell.setToolTip(table.horizontalHeaderItem(col).toolTip())
+                    if col != 1:
+                        cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    table.setItem(row, col, cell)
+            table.blockSignals(False)
+
+    def _ground(self, field: str, value: float | None) -> None:
+        def change(data: dict) -> None:
+            ground = data["geometry"]["ground"]
+            if value is None:
+                ground.pop(field, None)
+            else:
+                ground[field] = value
+
+        self.apply(_("change ground"), change)
+
+    def _part_height(self, kind: str, item: QTableWidgetItem) -> None:
+        if self._loading or item.column() != 1:
+            return
+        try:
+            value = parse_number(item.text())
+        except ValueError:
+            self.failed.emit(_("a height is one number"))
+            self.reload()
+            return
+        row = item.row()
+
+        def change(data: dict) -> None:
+            data["geometry"][kind][row]["height"] = value
+
+        self.apply(_("change height"), change)
+
+    def _remove_part(self, kind: str) -> None:
+        if not self.parts[kind].rowCount():
+            return
+        row = self.parts[kind].currentRow()
+
+        def change(data: dict) -> None:
+            items = data["geometry"][kind]
+            items.pop(row if 0 <= row < len(items) else -1)
+            if not items:
+                del data["geometry"][kind]
+
+        self.apply(_("remove building") if kind == "buildings" else _("remove barrier"), change)
 
 
 class SurfacePage(Page):

@@ -93,6 +93,12 @@ class TraceModel:
     #: How ``bvh`` was split (``simulation.performance.ray_tree``); trees built from
     #: this model's mesh later take the same.
     ray_tree: str = "sah"
+    #: (F,) the faces of an outdoor scene's open sky, whose edges diffract nothing; None
+    #: in a room.
+    sky: np.ndarray | None = None
+    #: Height (z) of an outdoor scene's ground, whose edges on it diffract nothing; None
+    #: in a room.
+    ground: float | None = None
 
     @classmethod
     def from_room(cls, room: Room, settings=None) -> TraceModel:
@@ -149,6 +155,8 @@ class TraceModel:
             face_room=face_room,
             room_volumes=room.room_volumes if oriented else np.zeros(0),
             ray_tree=ray_tree,
+            sky=None if room.outdoor is None else room.sky_faces(),
+            ground=None if room.outdoor is None else room.outdoor.ground,
         )
 
     def __post_init__(self) -> None:

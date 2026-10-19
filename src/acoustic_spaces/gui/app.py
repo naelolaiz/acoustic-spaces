@@ -640,7 +640,11 @@ class MainWindow(QMainWindow):
 
     def _summary(self) -> None:
         room = self.document.room
-        if room.volume_m3:
+        if room.outdoor is not None:
+            x0, y0, x1, y1 = room.outdoor.extent
+            # Translators: the status bar's summary of an outdoor scene.
+            text = fmt(_("outdoors, {area:,.0f} m² of ground"), area=(x1 - x0) * (y1 - y0))
+        elif room.volume_m3:
             k = OCTAVE_BANDS_HZ.index(1000)
             rt = room.reverberation_time("eyring", air_absorption=True)[k]
             text = fmt(
@@ -849,7 +853,11 @@ class MainWindow(QMainWindow):
         self.plan.start_drawing()
 
     def _drawn(self, corners: list) -> None:
-        if self.document.scene.geometry.file is not None and not self.confirm_replace_model():
+        geometry = self.document.scene.geometry
+        if geometry.ground is not None:
+            if not self.confirm_replace_outdoors():
+                return
+        elif geometry.file is not None and not self.confirm_replace_model():
             return
         default = self.document.scene.default_material
         try:
@@ -892,6 +900,19 @@ class MainWindow(QMainWindow):
             _(
                 "Replace the model file with the drawn floor plan? Material assignments to the "
                 "model's surfaces will no longer match anything."
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
+    def confirm_replace_outdoors(self) -> bool:
+        answer = QMessageBox.question(
+            self,
+            _(TITLE),
+            _(
+                "Replace the outdoor scene (its ground, buildings, barriers and model file) with "
+                "the drawn floor plan? Material assignments to their surfaces will no longer "
+                "match anything."
             ),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )

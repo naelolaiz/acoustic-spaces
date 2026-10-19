@@ -42,9 +42,12 @@ from acoustic_spaces.engine.simulate import (
     _pick,
     _seed,
     _transition,
+    check_late_method,
     coherent_bands,
+    response_length,
 )
 from acoustic_spaces.geometry import points_inside
+from acoustic_spaces.geometry.outdoor import GROUND
 from acoustic_spaces.i18n import N_
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.materials.bands import to_octaves
@@ -167,11 +170,13 @@ class MapGrid:
 
 def audience_surfaces(room: Room) -> list[str]:
     """The surfaces a map covers when none are named: those whose names contain
-    "audience", else "floor"."""
+    "audience", else "floor" (outdoors, "ground")."""
     names = room.mesh.label_names()
     audience = [n for n in names if "audience" in n.lower()]
     if audience:
         return audience
+    if room.outdoor is not None:
+        return [GROUND]
     if "floor" in names:
         return ["floor"]
     raise ValueError(
@@ -189,7 +194,8 @@ def map_grid(
 ) -> MapGrid:
     """Map points ``spacing`` metres apart, ``height`` metres above the named surfaces
     (default: :func:`audience_surfaces`). Only faces that can be walked on count, not
-    walls, and only points inside the room are kept."""
+    walls, and only points inside the room are kept (outdoors, in the open air: not
+    inside a building)."""
     if not (height > 0 and spacing > 0):
         raise ValueError("height and spacing must be positive")
     mesh = room.mesh
@@ -297,6 +303,8 @@ def map_grid(
     keep = np.ones(len(points), dtype=bool)
     if room.report.closed:
         keep = np.asarray(points_inside(mesh, points), dtype=bool)
+    if room.outdoor is not None:
+        keep &= np.array([b is None for b in room.outdoor.building_at(points)], dtype=bool)
     if not keep.any():
         raise ValueError("no map point lies inside the room; check height and surfaces")
     cover = np.array(covers)
@@ -565,6 +573,7 @@ def _trace_part(
     directivity,
     orientation: np.ndarray,
     transition: float,
+    length: float,
     rays: int,
     seed: int,
     statistical: bool,
@@ -582,7 +591,6 @@ def _trace_part(
 
     c = room.speed_of_sound()
     air = room.air_attenuation(model.bands)
-    length = sim.ir_length_s
     onset = np.linalg.norm(grid.points - position, axis=1) / c
     cutoff = np.minimum(onset + transition, length)
 
@@ -693,18 +701,24 @@ def coverage_map(
     edges = _Edges(model)
     c = room.speed_of_sound()
     volume = room.volume_m3
-    length = sim.ir_length_s
+    length = response_length(
+        room,
+        sim.ir_length_s,
+        [point for source in chosen for point in source.elements()],
+        grid.points,
+    )
     bands = model.absorption.shape[1]
     seed = sim.seed
     if seed is None:
         seed = int(np.random.SeedSequence().generate_state(1, np.uint32)[0])
     statistical = sim.late.method == "statistical"
-    if statistical and volume is None:
-        raise ValueError("the statistical late method needs a closed model")
+    check_late_method(room, sim)
     transition = _transition(sim, volume)
     rays = settings.rays or sim.late.rays
     reference = 1.0 / (4.0 * math.pi * 100.0)
     details: dict[str, dict[str, float]] = {"map": {"points": float(len(grid))}}
+    if length != sim.ir_length_s:
+        details["map"]["ir_length_s"] = length
 
     runs: dict[str, _SourceRun] = {}
     names = {source.name for source in chosen}
@@ -734,6 +748,7 @@ def coverage_map(
                     directivity=directivity,
                     orientation=orientation,
                     transition=transition,
+                    length=length,
                     rays=math.ceil(rays / len(elements)),
                     seed=info["seed"] if single else _seed(info["seed"], e_index + 1),
                     statistical=statistical,

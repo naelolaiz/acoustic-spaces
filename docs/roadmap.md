@@ -89,6 +89,16 @@ Version 3.2.3:
 
 - [x] Added Dutch translation.
 
+Outdoor acoustics, in steps:
+
+- [x] O1 Outdoor scenes: flat ground under an open sky, buildings, barriers and model
+  files on it; responses as long as the distances need; coverage maps over the ground.
+- [ ] O2 Ground impedance (grass, soil, snow) and the spherical-wave ground reflection.
+- [ ] O3 Wind and temperature gradients: curved rays and shadow zones.
+- [ ] O4 Atmospheric turbulence.
+- [ ] O5 Vegetation: trees, hedges and forests.
+- [ ] O6 The wave solver with a speed of sound that changes from place to place.
+
 Unreleased:
 
 - [x] Editor: the background task in the status bar says what runs, with Cancel beside

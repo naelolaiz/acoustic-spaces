@@ -61,6 +61,21 @@ match nothing. Normals may point either way: the room is the space the faces clo
 found from the faces themselves (see [Walls, doors and openings](#walls-doors-and-openings)),
 and a panel standing in the room, with air on both sides, reflects and absorbs on both.
 
+### Outdoors
+
+`geometry.ground` makes a scene outdoors: a flat ground under an open sky, with
+`buildings` (footprints raised to a height), `barriers` (thin screens along a path) and
+the objects of a model file standing on it. See [Outdoor scenes](outdoor.md).
+
+```yaml
+geometry:
+  ground: {margin: 30}
+  buildings:
+    - {name: hall, footprint: [[0, 0], [20, 0], [20, 12], [0, 12]], height: 9}
+  barriers:
+    - {path: [[30, -10], [30, 20]], height: 3}
+```
+
 ### BIM models (IFC)
 
 IFC files from Revit, ArchiCAD, Vectorworks or any other BIM program are read with the
@@ -522,6 +537,8 @@ simulation:
 
 - `air` sets the speed of sound and the air absorption per band (ISO 9613-1), for the
   rays, the wave solver and the statistical reverberation times alike.
+- Outdoors, `ir_length_s` counts from the latest direct sound of the run, as sources
+  and listeners can stand far apart (see [Outdoor scenes](outdoor.md#what-the-simulation-does-outdoors)).
 - A response that ends before the room has decayed is extended by its fitted decay
   rate when the parameters are computed (see [Simulation](simulation.md)); a longer
   `ir_length_s` makes longer files, and more time steps for the wave solver.

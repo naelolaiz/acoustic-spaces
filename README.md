@@ -89,6 +89,8 @@ print(response.parameters().table())
 - [Example scenes](docs/examples.md): the bundled rooms and what each shows.
 - [Scene files](docs/scenes.md): geometry, materials, walls and openings, audience
   seating, sources and directivity.
+- [Outdoor scenes](docs/outdoor.md): the ground and the open sky, buildings and
+  barriers.
 - [Simulation](docs/simulation.md): early reflections, the late part, scattering,
   frequency bands, edge diffraction, low frequencies and the wave solver.
 - [Coverage maps](docs/coverage-maps.md): parameters and the STI over the audience area.

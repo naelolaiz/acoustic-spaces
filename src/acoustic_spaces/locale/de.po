@@ -630,6 +630,12 @@ msgstr "Wiederholen {edit}"
 msgid "Nothing to redo"
 msgstr "Nichts zu wiederholen"
 
+#. Translators: the status bar's summary of an outdoor scene.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "outdoors, {area:,.0f} m² of ground"
+msgstr "im Freien, {area:,.0f} m² Gelände"
+
 #. Translators: the status bar's summary of the room: its volume and its reverberation time at one band, such as "1 kHz".
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -748,6 +754,16 @@ msgstr ""
 "Die Modelldatei durch den gezeichneten Grundriss ersetzen? "
 "Materialzuweisungen an die Flächen des Modells haben dann keine Entsprechung "
 "mehr."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Replace the outdoor scene (its ground, buildings, barriers and model file) "
+"with the drawn floor plan? Material assignments to their surfaces will no "
+"longer match anything."
+msgstr ""
+"Die Szene im Freien (Gelände, Gebäude, Schallschirme und Modelldatei) durch "
+"den gezeichneten Grundriss ersetzen? Materialzuweisungen an ihre Flächen "
+"haben dann keine Entsprechung mehr."
 
 #: acoustic_spaces/gui/app.py
 msgid "Add material"
@@ -1183,6 +1199,10 @@ msgid "remove listener"
 msgstr "Empfänger entfernen"
 
 #: acoustic_spaces/gui/document.py
+msgid "the scene is outdoors: draw a floor plan to replace it"
+msgstr "die Szene liegt im Freien: zum Ersetzen einen Grundriss zeichnen"
+
+#: acoustic_spaces/gui/document.py
 msgid "the room is a model file: draw a floor plan to replace it"
 msgstr ""
 "der Raum stammt aus einer Modelldatei: zum Ersetzen einen Grundriss zeichnen"
@@ -1339,6 +1359,7 @@ msgstr "Standard"
 msgid "both"
 msgstr "beide"
 
+#. Translators: the sky's height when it is not set: worked out from the scene.
 #: acoustic_spaces/gui/inspector.py
 msgid "auto"
 msgstr "automatisch"
@@ -1658,6 +1679,124 @@ msgid "IFC room"
 msgstr "IFC-Raum"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Outdoors"
+msgstr "Im Freien"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The height (z) of the flat ground, in the units the title shows"
+msgstr ""
+"Die Höhe (z) des ebenen Geländes, in den im Titel angegebenen Einheiten"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How far the ground reaches past the buildings, barriers and model, unless "
+"its extent is set, and how high the sky is over the highest of them, unless "
+"the sky is set; in the units the title shows"
+msgstr ""
+"Wie weit das Gelände über die Gebäude, Schallschirme und das Modell "
+"hinausreicht, sofern seine Ausdehnung nicht festgelegt ist, und wie hoch der "
+"Himmel über dem höchsten von ihnen liegt, sofern der Himmel nicht festgelegt "
+"ist; in den im Titel angegebenen Einheiten"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How high the open sky lies over the ground, in the units the title shows; "
+"auto: the margin over the highest building, barrier or model part. Sound "
+"that reaches the sky leaves the scene"
+msgstr ""
+"Wie hoch der offene Himmel über dem Gelände liegt, in den im Titel "
+"angegebenen Einheiten; automatisch: der Rand über dem höchsten Gebäude, "
+"Schallschirm oder Modellteil. Schall, der den Himmel erreicht, verlässt die "
+"Szene"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground height"
+msgstr "Geländehöhe"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Margin"
+msgstr "Rand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Sky"
+msgstr "Himmel"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the ground ends: past it, sound leaves the scene as if the ground went "
+"on"
+msgstr ""
+"Wo das Gelände endet: dahinter verlässt der Schall die Szene, als ginge das "
+"Gelände weiter"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Buildings"
+msgstr "Gebäude"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Corners"
+msgstr "Ecken"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The building's name; its surfaces are named after it"
+msgstr "Der Name des Gebäudes; seine Flächen sind nach ihm benannt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high the building is, ground to roof, in the units the title shows"
+msgstr ""
+"Die Höhe des Gebäudes vom Gelände bis zum Dach, in den im Titel angegebenen "
+"Einheiten"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many corners the building's footprint has (set in the scene file)"
+msgstr ""
+"Wie viele Ecken die Grundfläche des Gebäudes hat (in der Szenendatei "
+"festgelegt)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected building, or the last one when none is selected"
+msgstr ""
+"Das ausgewählte Gebäude entfernen oder das letzte, wenn keines ausgewählt ist"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Barriers"
+msgstr "Schallschirme"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Points"
+msgstr "Punkte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The barrier's name, which its surfaces carry"
+msgstr "Der Name des Schallschirms, den seine Flächen tragen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high the barrier is over the ground, in the units the title shows"
+msgstr ""
+"Die Höhe des Schallschirms über dem Gelände, in den im Titel angegebenen "
+"Einheiten"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many points the barrier's path has (set in the scene file)"
+msgstr ""
+"Wie viele Punkte der Verlauf des Schallschirms hat (in der Szenendatei "
+"festgelegt)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected barrier, or the last one when none is selected"
+msgstr ""
+"Den ausgewählten Schallschirm entfernen oder den letzten, wenn keiner "
+"ausgewählt ist"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove building"
+msgstr "Gebäude entfernen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove barrier"
+msgstr "Schallschirm entfernen"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "A closed model has no gaps: each edge joins two faces. The volume and the "
 "reverberation estimates need one; View > Show leaks finds the gaps"
@@ -1680,6 +1819,11 @@ msgstr "Quaderraum ({units})"
 #, python-brace-format
 msgid "Floor plan ({units})"
 msgstr "Grundriss ({units})"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Outdoors ({units})"
+msgstr "Im Freien ({units})"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -1745,6 +1889,29 @@ msgstr "Einheiten ändern"
 #: acoustic_spaces/gui/inspector.py
 msgid "change up axis"
 msgstr "Hochachse ändern"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Ground from ({x0:g}, {y0:g}) to ({x1:g}, {y1:g}) m, sky {sky:g} m over it"
+msgstr ""
+"Gelände von ({x0:g}, {y0:g}) bis ({x1:g}, {y1:g}) m, Himmel {sky:g} m darüber"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change ground"
+msgstr "Gelände ändern"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a height is one number"
+msgstr "eine Höhe ist eine einzige Zahl"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove building"
+msgstr "Gebäude entfernen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove barrier"
+msgstr "Schallschirm entfernen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -4484,6 +4651,34 @@ msgstr ""
 "zwischen den Wänden hin- und herlaufende Schall langsam ab: das simulierte "
 "T30 beträgt ein Mehrfaches der Sabine- und Eyring-Schätzungen von `inspect`, "
 "die ein diffuses Schallfeld voraussetzen."
+
+#: examples/street/scene.yaml
+msgctxt "example"
+msgid "Street with a noise barrier"
+msgstr "Straße mit Lärmschutzwand"
+
+#: examples/street/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a street 12 m wide between a row of houses 9 m high and an office "
+"block 15 m high, with traffic along it (a line source 30 m long). Past the "
+"end of the houses a noise barrier 3 m high shields a garden. The scene is "
+"the ground and the open sky over it: sound that reaches the sky leaves, and "
+"the ground reaches 30 m past the buildings, then goes on as if it never "
+"ended. One listener stands on the pavement, one on a balcony of the office "
+"block, one in the garden, where the traffic comes over the top of the "
+"barrier and round its ends: `first_order` diffraction follows it."
+msgstr ""
+"Im Freien: eine 12 m breite Straße zwischen einer 9 m hohen Häuserzeile und "
+"einem 15 m hohen Bürogebäude, mit Verkehr entlang der Straße (eine 30 m "
+"lange Linienquelle). Hinter dem Ende der Häuser schirmt eine 3 m hohe "
+"Lärmschutzwand einen Garten ab. Die Szene besteht aus dem Gelände und dem "
+"offenen Himmel darüber: Schall, der den Himmel erreicht, verlässt die Szene, "
+"und das Gelände reicht 30 m über die Gebäude hinaus und geht dann weiter, "
+"als würde es nie enden. Ein Empfänger steht auf dem Gehweg, einer auf einem "
+"Balkon des Bürogebäudes, einer im Garten, wo der Verkehr über die Oberkante "
+"der Wand und um ihre Enden herum ankommt: die Beugung `first_order` folgt "
+"ihm."
 
 #: examples/studio/scene.yaml
 msgctxt "example"

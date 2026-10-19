@@ -13,7 +13,8 @@ acoustic-spaces map examples/concert_hall/scene.yaml --spacing 0.5 --json map.js
 ![Coverage map of the speech transmission index in the lecture hall example, seen from above](images/coverage.png)
 
 The map covers the surfaces named in `coverage.surfaces` (by default those whose names
-contain "audience", else the floor) with square columns `spacing` metres wide, with a
+contain "audience", else the floor; [outdoors](outdoor.md), the ground, leaving out
+the points inside buildings) with square columns `spacing` metres wide, with a
 point at the listening `height` above the surface in each (above its top, when a
 slab's underside is in the same group); a balcony over the stalls gets a second level
 of points. Columns along a slanted wall keep the part over the surface, in every room of
