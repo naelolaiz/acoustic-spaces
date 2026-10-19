@@ -5,6 +5,7 @@ from acoustic_spaces.scene.model import (
     THIRD_OCTAVE_BANDS_HZ,
     Air,
     ArrayElement,
+    Atmosphere,
     ArraySpec,
     Barrier,
     Building,
@@ -21,6 +22,7 @@ from acoustic_spaces.scene.model import (
     Source,
     Speaker,
     Walk,
+    Wind,
 )
 
 __all__ = [
@@ -28,6 +30,7 @@ __all__ = [
     "THIRD_OCTAVE_BANDS_HZ",
     "Air",
     "ArrayElement",
+    "Atmosphere",
     "ArraySpec",
     "Barrier",
     "Building",
@@ -44,4 +47,5 @@ __all__ = [
     "Source",
     "Speaker",
     "Walk",
+    "Wind",
 ]

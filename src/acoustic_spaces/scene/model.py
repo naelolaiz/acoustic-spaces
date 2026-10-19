@@ -63,6 +63,7 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
+from acoustic_spaces.air import SOUND_SPEED_0C
 from acoustic_spaces.materials import (
     OCTAVE_BANDS_HZ,
     THIRD_OCTAVE_BANDS_HZ,
@@ -1017,6 +1018,178 @@ class Air(_Model):
     pressure_kpa: float = Field(default=101.325, gt=0.0)
 
 
+class Wind(_Model):
+    """The wind over the ground: its speed at a height, the way it blows, and how the
+    speed grows with height."""
+
+    speed_m_s: float = Field(default=0.0, ge=0.0, le=40.0, description="speed at height_m (m/s)")
+    direction_deg: float = Field(
+        default=0.0,
+        description=(
+            "the way it blows to, in degrees counterclockwise from +x seen from above "
+            "(0: along +x, 90: along +y)"
+        ),
+    )
+    height_m: PositiveFloat = Field(default=10.0, description="the height the speed is at (m)")
+    profile: Literal["log", "linear", "constant"] = Field(
+        default="log",
+        description=(
+            "log: speed ln(1 + z/roughness) over the ground's friction, the usual profile; "
+            "linear: in proportion to the height; constant: the same at every height"
+        ),
+    )
+
+
+#: The atmosphere presets: the fields each sets, indicative values (the temperatures
+#: as the ground's plus gradient z + log ln(1 + z / roughness)).
+ATMOSPHERE_PRESETS: dict[str, dict] = {
+    # No wind, the same temperature everywhere: sound goes in straight lines.
+    "neutral": {},
+    # A moderate wind, 5 m/s at 10 m over grass: sound bends down downwind and up
+    # upwind.
+    "windy": {"wind": {"speed_m_s": 5.0}},
+    # Sunshine warming the ground: the air cools with height and sound bends up, with a
+    # shadow zone a few hundred metres away.
+    "sunny_day": {"temperature_log_k": -0.5, "temperature_gradient_k_m": -0.0098},
+    # A clear night cooling the ground: the air warms with height (an inversion) and
+    # sound bends down.
+    "clear_night": {"temperature_log_k": 0.5, "temperature_gradient_k_m": 0.0},
+}
+
+
+class Atmosphere(_Model):
+    """How the speed of sound changes with height outdoors, which bends sound: the
+    temperature (warmer air carries sound faster) and the wind (sound goes faster with
+    it). Both vary with height only. The scene's air temperature is the temperature at
+    the ground. Heights are in metres above the ground."""
+
+    preset: str | None = Field(
+        default=None,
+        description="a weather to start from: " + ", ".join(ATMOSPHERE_PRESETS),
+    )
+    wind: Wind | None = Field(default=None, description="None: no wind")
+    temperature_gradient_k_m: float = Field(
+        default=0.0,
+        ge=-0.2,
+        le=0.2,
+        description="how the temperature changes per metre of height (K/m)",
+    )
+    temperature_log_k: float = Field(
+        default=0.0,
+        ge=-5.0,
+        le=5.0,
+        description=(
+            "a change of temperature fastest near the ground, in K times ln(1 + z / "
+            "roughness_m): negative on a sunny day, positive on a clear night"
+        ),
+    )
+    roughness_m: PositiveFloat = Field(
+        default=0.05,
+        le=2.0,
+        description="the ground's roughness length (m), for the log profiles: 0.01 to 0.1 over grass",
+    )
+    table: list[tuple[float, float, float]] | None = Field(
+        default=None,
+        description=(
+            "measured profile in place of the formulas: [height above the ground (m), "
+            "temperature (°C), wind speed (m/s)] rows, by height; between them linear, "
+            "above the top as at the top"
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_preset(cls, data):
+        if isinstance(data, dict) and data.get("preset") is not None:
+            preset = data["preset"]
+            if preset not in ATMOSPHERE_PRESETS:
+                close = difflib.get_close_matches(str(preset), list(ATMOSPHERE_PRESETS), n=1)
+                hint = f"; did you mean {close[0]}?" if close else ""
+                raise ValueError(
+                    f"no atmosphere preset named {preset!r}{hint} (the presets are "
+                    f"{', '.join(ATMOSPHERE_PRESETS)})"
+                )
+            given = dict(data)
+            data = {**ATMOSPHERE_PRESETS[preset], **given}
+            if isinstance(given.get("wind"), dict) and "wind" in ATMOSPHERE_PRESETS[preset]:
+                data["wind"] = {**ATMOSPHERE_PRESETS[preset]["wind"], **given["wind"]}
+        return data
+
+    @model_validator(mode="after")
+    def _check_table(self) -> Atmosphere:
+        if self.table is None:
+            return self
+        formulas = {"temperature_gradient_k_m", "temperature_log_k"} & self.model_fields_set
+        if self.preset is None and formulas:
+            raise ValueError(
+                "give the atmosphere a table or the temperature's gradient and log terms, "
+                "not both"
+            )
+        heights = [row[0] for row in self.table]
+        if len(heights) < 2 or heights[0] < 0.0 or np.any(np.diff(heights) <= 0.0):
+            raise ValueError(
+                "an atmosphere table has two rows or more, by height from the ground up"
+            )
+        if any(row[2] < 0.0 for row in self.table):
+            raise ValueError("an atmosphere table's wind speeds are not negative")
+        return self
+
+    def to_wind(self) -> np.ndarray:
+        """(2,) the unit vector the wind blows along."""
+        angle = math.radians(self.wind.direction_deg if self.wind is not None else 0.0)
+        return np.array([math.cos(angle), math.sin(angle)])
+
+    def temperature(self, z, ground_c: float) -> np.ndarray:
+        """The temperature (°C) at heights ``z`` (m) above the ground, the ground's
+        being ``ground_c`` (a table gives its own)."""
+        z = np.maximum(np.asarray(z, dtype=float), 0.0)
+        if self.table is not None:
+            rows = np.asarray(self.table, dtype=float)
+            return np.interp(z, rows[:, 0], rows[:, 1])
+        return (
+            ground_c
+            + self.temperature_gradient_k_m * z
+            + self.temperature_log_k * np.log1p(z / self.roughness_m)
+        )
+
+    def wind_speed(self, z) -> np.ndarray:
+        """The wind's speed (m/s) at heights ``z`` (m) above the ground."""
+        z = np.maximum(np.asarray(z, dtype=float), 0.0)
+        if self.table is not None:
+            rows = np.asarray(self.table, dtype=float)
+            return np.interp(z, rows[:, 0], rows[:, 2])
+        wind = self.wind
+        if wind is None or wind.speed_m_s == 0.0:
+            return np.zeros_like(z)
+        if wind.profile == "constant":
+            return np.full_like(z, wind.speed_m_s)
+        if wind.profile == "linear":
+            return wind.speed_m_s * z / wind.height_m
+        return wind.speed_m_s * np.log1p(z / self.roughness_m) / math.log1p(
+            wind.height_m / self.roughness_m
+        )
+
+    def sound_speed(self, z, ground_c: float, towards=None) -> np.ndarray:
+        """The speed of sound (m/s) at heights ``z`` (m) above the ground: in still air,
+        or the effective speed along the horizontal direction ``towards`` (2,), the
+        wind's component along it added."""
+        z = np.asarray(z, dtype=float)
+        speed = SOUND_SPEED_0C * np.sqrt(1.0 + self.temperature(z, ground_c) / 273.15)
+        if towards is not None:
+            along = float(np.dot(self.to_wind(), towards))
+            speed = speed + along * self.wind_speed(z)
+        return speed
+
+    @property
+    def still(self) -> bool:
+        """Whether sound goes in straight lines: no wind and one temperature."""
+        if self.table is not None:
+            rows = np.asarray(self.table, dtype=float)
+            return bool(np.all(rows[:, 1] == rows[0, 1]) and np.all(rows[:, 2] == 0.0))
+        calm = self.wind is None or self.wind.speed_m_s == 0.0
+        return calm and self.temperature_gradient_k_m == 0.0 and self.temperature_log_k == 0.0
+
+
 #: The highest ``simulation.early.coherent_max_band_hz`` in a room, and the default
 #: outdoors.
 INDOOR_COHERENT_MAX_BAND_HZ = 500
@@ -1326,6 +1499,10 @@ class Scene(_Model):
     sources: list[Source] = Field(min_length=1)
     listeners: list[Listener] = Field(min_length=1)
     air: Air = Field(default_factory=Air)
+    atmosphere: Atmosphere | None = Field(
+        default=None,
+        description="outdoors: wind and temperature changing with height, which bend sound",
+    )
     simulation: Simulation = Field(default_factory=Simulation)
     outputs: list[Output] = Field(
         default_factory=lambda: [Output(format="mono")],
@@ -1345,6 +1522,11 @@ class Scene(_Model):
             # band (the ground dip), and the paths are few.
             if "coherent_max_band_hz" not in early.model_fields_set:
                 early.coherent_max_band_hz = OUTDOOR_COHERENT_MAX_BAND_HZ
+        elif self.atmosphere is not None:
+            raise ValueError(
+                "atmosphere is for outdoor scenes (geometry.ground): in a room the air is "
+                "one temperature and still"
+            )
         elif (early.coherent_max_band_hz or 0) > INDOOR_COHERENT_MAX_BAND_HZ:
             raise ValueError(
                 f"simulation.early.coherent_max_band_hz goes up to "

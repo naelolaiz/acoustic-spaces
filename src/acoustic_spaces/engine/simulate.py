@@ -19,6 +19,7 @@ from acoustic_spaces.engine.coherent import band_count
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.engine.refracted import refraction_for
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.geometry import distance_to_surface
 from acoustic_spaces.parameters import RoomParameters
@@ -217,7 +218,7 @@ def early_paths(
             length,
         )
         candidates = _candidates(model, position, method or cfg.method, order, cfg.rays, threads)
-        paths = early_stage.find_paths(
+        paths = straight = early_stage.find_paths(
             model,
             position,
             target,
@@ -234,6 +235,18 @@ def early_paths(
         )
         if found is not None:
             paths = found.apply(target, paths, cutoff)
+        refraction = refraction_for(
+            model,
+            position,
+            speed_of_sound=room.speed_of_sound(),
+            air=room.air_attenuation(model.bands),
+            directivity=room.directivity(src.name, model.bands),
+            orientation=orientation,
+            coherent=coherent,
+            max_order=order,
+        )
+        if refraction is not None:
+            paths = refraction.apply(target[None], [straight], [paths], np.array([cutoff]))[0]
         parts.append(apply_grazing(model, target, paths))
     return _shared(parts, model.absorption.shape[1])
 
@@ -441,7 +454,7 @@ def simulate(
         candidates = _candidates(
             model, position, early_cfg.method, early_cfg.max_order, early_cfg.rays, threads
         )
-        paths = [
+        paths = straight = [
             early_stage.find_paths(
                 model,
                 position,
@@ -468,6 +481,19 @@ def simulate(
             ]
             info["edges"] = float(len(diffraction.edges))
             add(info, "diffracted_paths", float(sum(int(p.diffracted.sum()) for p in paths)))
+        refraction = refraction_for(
+            model,
+            position,
+            speed_of_sound=c,
+            air=air,
+            directivity=directivity,
+            orientation=orientation,
+            coherent=coherent,
+            max_order=early_cfg.max_order,
+        )
+        if refraction is not None:
+            say(f"{label}: paths bent by the wind and the temperature")
+            paths = refraction.apply(listener_pos, straight, paths, cutoff)
         # The diffuse field is reckoned less the paths as they would come without the
         # audience, so what the seats take from them is lost, not made up by the tail.
         plain = paths

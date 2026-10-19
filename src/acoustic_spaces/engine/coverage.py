@@ -35,6 +35,7 @@ from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine.coherent import coherent_energy
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.engine.refracted import refraction_for
 from acoustic_spaces.engine.simulate import (
     _as_room,
     _candidates,
@@ -607,7 +608,7 @@ def _trace_part(
     diffraction = edges.diffraction(
         sim.early.diffraction, position, room, name, orientation, coherent
     )
-    early, plain = [], []
+    found, straight = [], []
     diffracted = 0
     for k in range(len(grid)):
         paths = early_stage.find_paths(
@@ -622,11 +623,26 @@ def _trace_part(
             orientation=orientation,
             coherent=coherent,
         )
+        straight.append(paths)
         if diffraction is not None:
             paths = diffraction.apply(grid.points[k], paths, float(cutoff[k]))
             diffracted += int(paths.diffracted.sum())
-        early.append(apply_grazing(model, grid.points[k], paths))
-        plain.append(paths)
+        found.append(paths)
+    refraction = refraction_for(
+        model,
+        position,
+        speed_of_sound=c,
+        air=air,
+        directivity=directivity,
+        orientation=orientation,
+        coherent=coherent,
+        max_order=sim.early.max_order,
+    )
+    if refraction is not None:
+        say(f"{label}: paths bent by the wind and the temperature")
+        found = refraction.apply(grid.points, straight, found, cutoff)
+    plain = found
+    early = [apply_grazing(model, grid.points[k], paths) for k, paths in enumerate(found)]
     if diffraction is not None:
         info["edges"] = float(len(diffraction.edges))
         add("diffracted_paths", float(diffracted))
