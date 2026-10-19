@@ -41,6 +41,12 @@ _BISECTIONS = 80
 #: How close (m, plus a share of the range) an eigenray's range must come to the
 #: listener's to count: a bracket over a jump of the range is no eigenray.
 _RANGE_TOLERANCE = 1e-6
+#: Where a branch of rays starts between two of the fan's, its range is searched up to
+#: that start unless it runs away from the listener's there, or its first ray misses
+#: by more than this many times its last step (the range of rays that only just reach
+#: a height goes as the square root of how far they are from that: at most 2.4 times
+#: the last step to the end).
+_EDGE_REACH = 4.0
 #: The most a ray tube focuses: a caustic's level is capped at this many times the
 #: spherical spreading over the path's length (10 dB).
 CAUSTIC_CAP = 10.0
@@ -374,7 +380,15 @@ class Rays:
             # first ray on it and that start.
             for kind, k in zip(*np.nonzero(finite[:, :-1] != finite[:, 1:]), strict=True):
                 inside = k if finite[kind, k] else k + 1
-                edges.append((kind, cycle, inside, k + 1 if inside == k else k, f[kind, inside]))
+                outside = k + 1 if inside == k else k
+                # Unless the range runs far off its trend in the last step, the listener
+                # is out of reach there.
+                deeper = 2 * inside - outside
+                if 0 <= deeper < f.shape[1] and finite[kind, deeper]:
+                    last, step = f[kind, inside], f[kind, inside] - f[kind, deeper]
+                    if last * step > 0.0 or abs(last) > _EDGE_REACH * abs(step):
+                        continue
+                edges.append((kind, cycle, inside, outside, f[kind, inside]))
             if cycle >= 1 and not np.any(f <= 0.0):
                 # The rays only go farther pass after pass: once none of a pass's falls
                 # short of the listener, none after it does.

@@ -38,11 +38,20 @@ import numpy as np
 
 #: Height steps per wavelength.
 STEPS_PER_WAVELENGTH = 10
-#: Range step in wavelengths.
+#: Range step in wavelengths, at least RANGE_STEP_MIN_M (finer changes nothing: within
+#: 0.25 dB of steps of a wavelength at 2 kHz, 0.4 dB at 63 Hz, in 5 m/s of wind).
 RANGE_STEP_WAVELENGTHS = 5.0
-#: Within this many sample spacings of the real axis, the pole of the ground's
-#: reflection factor is left to the field continued below the ground.
-NEAR_POLE = 3.0
+RANGE_STEP_MIN_M = 1.2
+#: The pole of the ground's reflection factor is left to the field continued below the
+#: ground within this many sample spacings below the real axis (where that field stays
+#: bounded) and above it (where it grows with depth). The sampled reflection factor
+#: holds from 4 spacings below the axis and 2 above (to 0.1 dB at 400 m).
+BELOW_AXIS_POLE = 6.0
+ABOVE_AXIS_POLE = 3.0
+#: The continued field is faded out over the lower half of its depth, or, where it grows
+#: with depth, of the depth at which it has grown by this factor: what lies deeper does
+#: not reach the ground in a step, and its edge would ring through the transform.
+FADE_GROWTH = 10.0
 #: The absorbing layer: its thickness in wavelengths (at least LAYER_MIN_M) and its
 #: strength (1/m at its top; growing as the square of the depth into it).
 LAYER_WAVELENGTHS = 50.0
@@ -71,10 +80,8 @@ def march(
     heights = np.asarray(heights, dtype=float)
     c0 = float(np.asarray(speed(np.array([0.0])))[0])
     ka = 2.0 * math.pi * f / c0  # (F,)
-    shortest, longest = c0 / f.max(), c0 / f.min()
-    dz = shortest / STEPS_PER_WAVELENGTH
-    thickness = max(LAYER_WAVELENGTHS * longest, LAYER_MIN_M)
-    n = int(2 ** math.ceil(math.log2((top + thickness) / dz)))
+    shortest = c0 / f.max()
+    n, dz, thickness = _grid(f, c0, top)
     z = np.arange(n) * dz
     k = 2.0 * math.pi * f[:, None] / np.asarray(speed(z), dtype=float)[None, :]
     depth = np.clip((z - top) / thickness, 0.0, 1.0)
@@ -88,7 +95,7 @@ def march(
 
     order = np.argsort(ranges, kind="stable")
     out = np.zeros((len(f), len(ranges)), dtype=complex)
-    step = RANGE_STEP_WAVELENGTHS * shortest
+    step = max(RANGE_STEP_WAVELENGTHS * shortest, RANGE_STEP_MIN_M)
     r = 0.0
     tilted = np.zeros((len(f), 2 * n), dtype=complex)
     steps: dict[float, tuple] = {}
@@ -133,6 +140,7 @@ def march(
                 inner = here.growth[image] * screened[image]
                 integral = (np.cumsum(inner, axis=1) - 0.5 * (inner[:, :1] + inner)) * dz
                 below = screened[image] + here.scale[image, None] * here.shrink[image] * integral
+                below *= here.fade[image]
                 tilted[image, n + 1 :] = below[:, 1:][:, ::-1]
             spectrum = np.fft.fft(tilted, axis=1) * dz
             field = np.fft.ifft((spectrum + here.reflection * spectrum[:, mirror]) * propagate, axis=1) / dz
@@ -150,6 +158,22 @@ def march(
     return out
 
 
+def _grid(f: np.ndarray, c0: float, top: float) -> tuple[int, float, float]:
+    """The heights' count and spacing, and the absorbing layer's thickness, for the
+    frequencies ``f`` under an absorbing layer from ``top``."""
+    dz = c0 / f.max() / STEPS_PER_WAVELENGTH
+    thickness = max(LAYER_WAVELENGTHS * c0 / f.min(), LAYER_MIN_M)
+    return int(2 ** math.ceil(math.log2((top + thickness) / dz))), dz, thickness
+
+
+def footprint(frequencies, c0: float, top: float) -> int:
+    """About the memory (bytes) :func:`march` takes for ``frequencies`` under an
+    absorbing layer from ``top`` in air of speed ``c0`` on the ground."""
+    f = np.atleast_1d(np.asarray(frequencies, dtype=float))
+    n = _grid(f, c0, top)[0]
+    return 24 * len(f) * 2 * n * 16
+
+
 class _Ground:
     """How a ground of normalised impedances ``zg`` (F,; infinite: rigid) reflects at
     the march's frequencies: R (F, 2n) and the surface wave (rows ``surface``), or for
@@ -162,7 +186,9 @@ class _Ground:
 
         psi(-y) = psi(y) + 2 i (ka / Z) int_0^y exp(-i kp (y - t)) psi(t) dt,
 
-    and marched in free field: what the march does in kz, done in z."""
+    and marched in free field: what the march does in kz, done in z. With the pole above
+    the axis that holds the surface wave too, continued into the ground, where it grows
+    as exp(Im kp y). Deep down it is faded out (see FADE_GROWTH)."""
 
     def __init__(self, zg, ka, kz, z, width) -> None:
         zg = np.asarray(zg, dtype=complex)
@@ -170,7 +196,7 @@ class _Ground:
         rigid = ~np.isfinite(zg)
         safe = np.where(rigid, 1.0, zg)
         kp = np.where(rigid, 0.0, -ka / safe)
-        self.image = ~rigid & (np.abs(kp.imag) < NEAR_POLE * width)
+        self.image = ~rigid & (kp.imag > -BELOW_AXIS_POLE * width) & (kp.imag < ABOVE_AXIS_POLE * width)
         self.plain = ~self.image
         self.normal = np.where(rigid, 1.0, (safe - 1.0) / (safe + 1.0))
         reflection = (kz[None, :] * safe[:, None] - ka[:, None]) / (kz[None, :] * safe[:, None] + ka[:, None])
@@ -187,6 +213,11 @@ class _Ground:
         self.growth[self.image] = np.exp(1j * kp[self.image, None] * z[None, :])
         self.shrink[self.image] = np.exp(-1j * kp[self.image, None] * z[None, :])
         self.scale = 2j * ka / safe
+        self.fade = np.ones((len(zg), len(z)))
+        for row in np.flatnonzero(self.image):
+            depth = min(math.log(FADE_GROWTH) / kp[row].imag, z[-1]) if kp[row].imag > 0.0 else z[-1]
+            t = np.clip((z - 0.5 * depth) / (0.5 * depth), 0.0, 1.0)
+            self.fade[row] = 0.5 * (1.0 + np.cos(math.pi * t))
 
 
-__all__ = ["march"]
+__all__ = ["footprint", "march"]

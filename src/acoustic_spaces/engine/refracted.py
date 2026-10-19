@@ -34,7 +34,10 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import os
+import threading
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import numpy as np
@@ -42,7 +45,7 @@ import numpy as np
 from acoustic_spaces.engine.coherent import ground_factors, reflection_phases
 from acoustic_spaces.engine.early import _EDGE_TOLERANCE, EarlyReflections, _face_at
 from acoustic_spaces.engine.model import TraceModel, _ground_faces, source_weights
-from acoustic_spaces.engine.parabolic import march
+from acoustic_spaces.engine.parabolic import footprint, march
 from acoustic_spaces.engine.refraction import Profile, Rays, _sine, node_heights
 from acoustic_spaces.engine.shadow import equivalent_radius, shadow_start
 
@@ -69,6 +72,8 @@ WAVE_TOP_SLOPE = 0.15
 #: The directions sound goes in are rounded to this many degrees from the wind's: the
 #: rays and the parabolic equation in one serve all within it.
 AZIMUTH_STEP_DEG = 1.0
+#: The parabolic equation's runs go side by side in at most this much memory (bytes).
+WAVE_MEMORY_BYTES = 1 << 30
 #: The grounds along the parabolic equation's way are looked up this often (m).
 GROUND_STEP_M = 0.25
 #: The most times a curved path bounces off the ground.
@@ -107,7 +112,8 @@ class _Wave:
 
 class Refraction:
     """Bends the early paths of the source at ``source`` in an outdoor scene's
-    atmosphere (not still)."""
+    atmosphere (not still), running the parabolic equation on ``threads`` threads (0:
+    every core)."""
 
     def __init__(
         self,
@@ -120,6 +126,7 @@ class Refraction:
         orientation: np.ndarray | None = None,
         coherent: int = 0,
         max_order: int = 1,
+        threads: int = 0,
     ) -> None:
         from acoustic_spaces.engine.diffraction import band_frequencies
 
@@ -151,6 +158,8 @@ class Refraction:
         self._weather = (self.atmosphere.model_dump_json(), self.ground_c)
         self._profiles: dict[float, Profile] = {}
         self._admittances: dict[int, np.ndarray] = {}
+        self._lock = threading.Lock()
+        self.threads = int(threads) or os.cpu_count() or 1
         self._starts: dict[tuple, float | None] = {}
 
     # -- profiles ----------------------------------------------------------------------
@@ -592,16 +601,17 @@ class Refraction:
 
     def _admittance(self, face: int) -> np.ndarray:
         """(bands, M) the normalised admittance (time as exp(j omega t)) of ``face``."""
-        if face not in self._admittances:
-            model = self.model
-            if model.impedance_faces(np.array([face]))[0]:
-                value = model.admittance[model.face_impedance[face]]
-            else:
-                from acoustic_spaces.engine.impedance import fit_admittance
+        with self._lock:
+            if face not in self._admittances:
+                model = self.model
+                if model.impedance_faces(np.array([face]))[0]:
+                    value = model.admittance[model.face_impedance[face]]
+                else:
+                    from acoustic_spaces.engine.impedance import fit_admittance
 
-                value = fit_admittance(model.absorption[face], self.bands, None)(self.frequencies)
-            self._admittances[face] = np.asarray(value, dtype=complex)
-        return self._admittances[face]
+                    value = fit_admittance(model.absorption[face], self.bands, None)(self.frequencies)
+                self._admittances[face] = np.asarray(value, dtype=complex)
+            return self._admittances[face]
 
     def _grounds_along(self, direction: np.ndarray, reach: float):
         """A function giving the face of the ground (its material) at a distance along
@@ -627,34 +637,46 @@ class Refraction:
         groups: dict[tuple, list[_Wave]] = {}
         for request in requests:
             groups.setdefault(request.key, []).append(request)
+        runs = []
         for (key, azimuth), members in groups.items():
-            profile = self.profile(key)
             if azimuth is None:
                 direction = members[0].direction
             else:
                 angle = math.radians(azimuth)
                 direction = np.array([math.cos(angle), math.sin(angle)])
             face_at = self._grounds_along(direction, max(m.range for m in members))
-            pressure = {id(m): np.zeros(self.frequencies.shape, dtype=complex) for m in members}
             top = max(m.top for m in members)
             for band in range(self.bands):
                 needing = [m for m in members if m.bands[band]]
-                if not needing:
-                    continue
-                ranges = np.array([m.range for m in needing])
-                heights = np.array([m.height for m in needing])
+                if needing:
+                    runs.append((self.profile(key), face_at, band, needing, top))
 
-                def impedance(r, band=band):
-                    beta = self._admittance(face_at(r))[band]
-                    with np.errstate(divide="ignore"):
-                        return np.where(beta == 0.0, np.inf, 1.0 / np.conj(beta))
+        def run(job) -> np.ndarray:
+            profile, face_at, band, needing, top = job
 
-                values = march(
-                    self.frequencies[band], profile.speed, impedance, self.zs, ranges, heights, top
-                )
-                for m, value in zip(needing, values.T, strict=True):
-                    # Time as exp(j omega t), as the early paths have it.
-                    pressure[id(m)][band] = np.conj(value)
+            def impedance(r):
+                beta = self._admittance(face_at(r))[band]
+                with np.errstate(divide="ignore"):
+                    return np.where(beta == 0.0, np.inf, 1.0 / np.conj(beta))
+
+            ranges = np.array([m.range for m in needing])
+            heights = np.array([m.height for m in needing])
+            return march(self.frequencies[band], profile.speed, impedance, self.zs, ranges, heights, top)
+
+        # The runs side by side, as many as the threads and the memory allow.
+        biggest = max((footprint(self.frequencies[job[2]], self.c, job[4]) for job in runs), default=0)
+        workers = min(self.threads, len(runs), max(1, WAVE_MEMORY_BYTES // max(biggest, 1)))
+        if workers > 1:
+            with ThreadPoolExecutor(workers) as pool:
+                results = list(pool.map(run, runs))
+        else:
+            results = [run(job) for job in runs]
+        pressure = {id(m): np.zeros(self.frequencies.shape, dtype=complex) for m in requests}
+        for (_, _, band, needing, _), values in zip(runs, results, strict=True):
+            for m, value in zip(needing, values.T, strict=True):
+                # Time as exp(j omega t), as the early paths have it.
+                pressure[id(m)][band] = np.conj(value)
+        for members in groups.values():
             for m in members:
                 self._place(m, pressure[id(m)], parts, listeners)
 

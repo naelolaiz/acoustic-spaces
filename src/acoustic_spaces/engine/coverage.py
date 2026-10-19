@@ -637,6 +637,7 @@ def _trace_part(
         orientation=orientation,
         coherent=coherent,
         max_order=sim.early.max_order,
+        threads=threads,
     )
     if refraction is not None:
         say(f"{label}: paths bent by the wind and the temperature")

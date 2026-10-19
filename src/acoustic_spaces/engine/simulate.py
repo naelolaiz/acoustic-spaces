@@ -244,6 +244,7 @@ def early_paths(
             orientation=orientation,
             coherent=coherent,
             max_order=order,
+            threads=threads,
         )
         if refraction is not None:
             paths = refraction.apply(target[None], [straight], [paths], np.array([cutoff]))[0]
@@ -490,6 +491,7 @@ def simulate(
             orientation=orientation,
             coherent=coherent,
             max_order=early_cfg.max_order,
+            threads=threads,
         )
         if refraction is not None:
             say(f"{label}: paths bent by the wind and the temperature")
