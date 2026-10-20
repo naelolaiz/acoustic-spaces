@@ -1,6 +1,6 @@
 """Check the reflection off a ground with an impedance against the exact solution.
 
-    python validation/ground_reflection.py [--wave] [--json results.json]
+    python validation/ground_reflection.py [--wave] [--parabolic] [--json results.json]
 
 A point source over a locally reacting plane of normalised admittance beta has an exact
 solution (Sommerfeld; Chien and Soroka, 1975; in e^(-iwt) and with the image source's
@@ -26,7 +26,12 @@ of that integral (see :mod:`acoustic_spaces.materials.ground`). The checks:
 - with ``--wave``, the wave solver: its ground is fitted to the impedance itself (see
   :func:`acoustic_spaces.engine.impedance.fit_impedance`); the level over grass over the
   level over a rigid ground, from 40 to 315 Hz, against the exact solution. About a
-  minute and a half.
+  minute and a half;
+- with ``--parabolic``, the parabolic equation that gives the sound over the open
+  ground in wind and temperature gradients (:mod:`acoustic_spaces.engine.parabolic`),
+  here in still air: the level over the same grounds at the third-octave centres from
+  63 Hz to 2 kHz, from a source 1 m high at 25, 100 and 400 m and from one 119 m high
+  (as a wind turbine's hub) at 178, 535 and 845 m, 1.5 and 1.7 m up.
 """
 
 from __future__ import annotations
@@ -239,14 +244,58 @@ def check_wave() -> dict:
     return out
 
 
+#: The parabolic equation's checks: source and listener heights (m), and the distances
+#: along the ground (m).
+PE_GEOMETRIES = (((1.0, 1.5), (25.0, 100.0, 400.0)), ((119.0, 1.7), (178.0, 535.0, 845.0)))
+#: Third-octave centres from 63 Hz to 2 kHz, the bands it gives outdoors.
+PE_FREQUENCIES = 1000.0 * 2.0 ** (np.arange(-12, 4) / 3.0)
+
+
+def check_parabolic() -> dict:
+    """The parabolic equation outdoors, in still air, against the exact solution."""
+    from acoustic_spaces.engine.parabolic import march
+
+    print("The parabolic equation against the exact solution: largest difference in")
+    print("the field's level over the free field's, 63 Hz to 2 kHz (dB)\n")
+    start = time.time()
+    still = lambda z: np.full(np.shape(z), SPEED_OF_SOUND)  # noqa: E731
+    out = {}
+    for (zs, zr), ranges in PE_GEOMETRIES:
+        ranges = np.array(ranges)
+        print(f"source {zs:g} m, listener {zr:g} m high" + "".join(f"{f'{r:g} m':>10}" for r in ranges))
+        top = max(1.5 * zs, zs + 20.0, 0.15 * ranges.max())
+        for name, sigma, thickness in GROUNDS:
+            worst = np.zeros(len(ranges))
+            for f in PE_FREQUENCIES:
+                k = 2.0 * math.pi * f / SPEED_OF_SOUND
+                z = complex(surface_impedance(np.array(f), sigma, thickness=thickness))
+                # The parabolic equation's time goes as exp(-i omega t).
+                pressure = march([f], still, lambda r, z=z: np.conj(z), zs, ranges, np.full(len(ranges), zr), top)[0]
+                for i, r in enumerate(ranges):
+                    r1, r2 = math.hypot(r, zs - zr), math.hypot(r, zs + zr)
+                    exact = field(exact_reflection(1.0 / z, k, r, zs, zr), k, r1, r2)
+                    miss = abs(20.0 * math.log10(abs(pressure[i]) * r1) - 20.0 * math.log10(abs(exact)))
+                    worst[i] = max(worst[i], miss)
+            out[f"{name}, heights {zs:g} and {zr:g} m"] = dict(zip((f"{r:g} m" for r in ranges), worst.tolist()))
+            print(f"{name:34}" + "".join(f"{w:10.2f}" for w in worst))
+        print()
+    print(f"({time.time() - start:.0f} s)\n")
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--wave", action="store_true", help="also check the wave solver")
+    parser.add_argument(
+        "--parabolic", action="store_true", help="also check the parabolic equation"
+    )
     parser.add_argument("--json", help="write the results to this file")
     args = parser.parse_args(argv)
     results = {"q": check_q(), "engine": check_engine()}
     if args.wave:
         results["wave"] = check_wave()
+    if args.parabolic:
+        results["parabolic"] = check_parabolic()
     if args.json:
         with open(args.json, "w", encoding="utf-8") as out:
             json.dump(results, out, indent=1)

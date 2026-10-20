@@ -4,8 +4,8 @@ This report sums up how far the results of acoustic_spaces can be trusted: what 
 test suite checks against theory on every change, how the simulation compares with
 another program, [pyroomacoustics](https://github.com/LCAV/pyroomacoustics), and with
 measurements in two real rooms, how edge diffraction and the reflection off a porous
-ground compare with the exact solution,
-and how much of a block's time the real-time convolver needs. It ends with what has not been validated yet.
+ground compare with the exact solution, how sound outdoors compares with measurements
+up to 845 m away, and how much of a block's time the real-time convolver needs. It ends with what has not been validated yet.
 
 ## Checks against theory, on every change
 
@@ -719,6 +719,26 @@ The ground dip near 500 Hz deepens with distance, as the reflection comes in nea
 grazing. Read through the analysis filters, whose skirts reach into the neighbouring
 bands, a sharp dip fills in by up to about 1 dB more than the band averages show.
 
+The parabolic equation that gives the sound over the open ground in wind and
+temperature gradients (see [Outdoor scenes](outdoor.md#wind-and-temperature)), here in
+still air against the exact solution (`--parabolic`): the largest difference in level
+at the third-octave centres from 63 Hz to 2 kHz, from a source 1 m high to a listener
+1.5 m high, and from a source 119 m high (a wind turbine's hub) to one 1.7 m high:
+
+| ground | 25 m | 100 m | 400 m | 178 m, from 119 m | 535 m | 845 m |
+|---|---:|---:|---:|---:|---:|---:|
+| snow (12.5) | 0.64 | 0.38 | 0.39 | 0.26 | 0.02 | 0.04 |
+| snow 10 cm deep on ice (12.5) | 1.81 | 0.97 | 1.05 | 0.41 | 0.06 | 0.08 |
+| grass (200) | 0.13 | 0.14 | 0.16 | 0.28 | 0.02 | 0.05 |
+| gravel (2000) | 0.12 | 0.15 | 0.19 | 0.45 | 0.02 | 0.10 |
+| asphalt (20000) | 0.17 | 0.05 | 0.09 | 0.26 | 0.04 | 0.02 |
+
+It is furthest off over the softest grounds near a low source at low frequencies (the
+1.81 dB in a dip 36 dB deep at 160 Hz), where the field it starts from, which stands
+for the source and its image, matters most. From the hub, 178 m away comes in 33
+degrees from the horizontal, about as steep as it is used (34 degrees); in the engine
+the paths come in flatter there, and rays take the steeper ones.
+
 The wave solver fits the ground's admittance with branches without mass (see
 [Simulation](simulation.md#low-frequencies-the-wave-solver)). Over grass, against a
 rigid ground, with the source and the listener 1 and 1.5 m high 10 m apart, from the
@@ -729,6 +749,58 @@ solver up to its 250 Hz band):
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | exact (dB) | -0.17 | -0.43 | -0.66 | -0.98 | -1.44 | -2.20 | -3.21 | -4.73 | -7.11 |
 | wave - exact (dB) | +0.02 | -0.02 | +0.01 | +0.01 | +0.02 | +0.02 | +0.05 | +0.10 | +0.11 |
+
+## Outdoor propagation against measurements (Hannover)
+
+The Hannover wind turbine propagation data (Könecke, Hörmeyer, Bohne and Rolfes, 2021,
+[DOI 10.25835/0012136](https://doi.org/10.25835/0012136), CC BY-SA 3.0) measured a wind
+turbine 178, 535 and 845 m away, with microphones 1.7 m above a field on one line, in
+ten spells of five minutes in different weather, and gives the loss from the nearest
+microphone to the two others in the third-octave bands from 80 Hz to 2 kHz, with the
+inputs and the result of the authors' parabolic equation model.
+`validation/outdoor_propagation.py` downloads the ten cases and builds each as the
+authors modelled it: three point sources of equal power 71, 119 and 167 m up across the
+rotor, a flat ground of Miki's impedance (200 kPa s/m²), the air measured 53 m up, and
+their effective speed of sound c(z) = a0 + alog ln(1 + z / z0) + alin z as a measured
+atmosphere, the log term as the wind and the linear one as the temperature. The scene
+runs in third-octave bands with this package's defaults outdoors, the three sources'
+energies added at each microphone.
+
+Overall is the energy sum of the fifteen band losses, as the data gives it (so it reads
+about 15 dB above any one band); then the mean absolute difference from the measured
+loss over the bands. Each pair is at 535 m / 845 m, in dB:
+
+| case | weather | overall, measured | published model | this package | mean difference, published model | this package |
+|---|---|---|---|---|---|---|
+| 1 | light downwind | 22.6 / 27.5 | 21.6 / 26.6 | 22.9 / 29.0 | 1.8 / 3.2 | 1.8 / 2.4 |
+| 2 | light downwind | 22.2 / 26.7 | 21.6 / 26.8 | 22.9 / 29.1 | 1.6 / 2.8 | 1.9 / 2.9 |
+| 3 | cross/downwind | 20.8 / 26.5 | 21.4 / 26.8 | 22.8 / 28.9 | 1.8 / 2.7 | 2.1 / 2.8 |
+| 4 | cross/downwind | 20.6 / 26.3 | 21.3 / 26.9 | 22.8 / 28.8 | 2.0 / 2.7 | 2.3 / 2.8 |
+| 5 | cross/upwind | 21.0 / 26.6 | 21.0 / 25.9 | 22.7 / 28.4 | 1.9 / 2.5 | 1.9 / 2.4 |
+| 6 | cross/upwind | 20.6 / 25.7 | 20.9 / 26.0 | 22.6 / 28.4 | 1.7 / 2.8 | 2.3 / 2.9 |
+| 7 | light upwind | 21.9 / 26.2 | 20.7 / 24.9 | 22.4 / 27.9 | 2.0 / 2.2 | 2.3 / 2.3 |
+| 8 | light upwind | 22.2 / 27.0 | 20.5 / 25.1 | 22.4 / 28.1 | 2.2 / 2.2 | 2.4 / 2.2 |
+| 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 21.8 / 28.0 | 3.2 / 8.3 | 2.0 / 2.7 |
+| 10 | strong upwind | 23.1 / 27.2 | 19.9 / 50.0 | 21.8 / 28.1 | 3.1 / 7.7 | 2.1 / 2.6 |
+
+In the eight cases of light winds, this package is about as close to the measurements
+as the authors' model: 1.8 to 2.4 dB per band on average at 535 m, 2.2 to 2.9 dB at 845
+m, against their 1.6 to 2.2 and 2.2 to 3.2 dB; the spread of the measurements over the
+five minutes is 1 to 3 dB. Both lose a few decibels more than was measured from 80 to
+160 Hz, this package more (overall 1 to 2.5 dB more loss at 845 m). These winds bend
+the sound little over these distances: in still air (`--still`) the overall losses
+move by 1.2 dB at most and the mean differences by 0.4 dB at most, except downwind at
+845 m in cases 1 and 2, which still air matches better (1.4 and 1.9 dB): there the wind
+takes 1 to 3 dB more from 100 to 250 Hz than was measured, the dip of the ground
+moving down in frequency as the sound comes in steeper.
+
+Cases 9 and 10 are strong upwind. The published model puts 845 m deep in a shadow,
+50 dB overall where 27 dB was measured, and the authors put the gap down to
+turbulence, which scatters sound into a shadow and which neither model has. Here the
+rays in the same profile reach 845 m from the two upper sources: the shadow starts 690
+m away for the source 71 m up, but 980 and 1230 m away for those 119 and 167 m up, so
+only the lowest one is in it, and the loss stays within 1 dB of the measured one
+overall. Turbulence is still to come (see [Not validated yet](#not-validated-yet)).
 
 ## Wave-based solver
 
@@ -958,10 +1030,12 @@ its peak (single precision).
   dependence on the angle it arrives at, and the wave solver does not model such walls:
   with `simulation.wave.enabled`, a model with one stops with an error (openings are
   fine).
-- **Outdoor propagation** is checked against geometry, closed forms and the exact
-  solution for the reflection off a ground, not against measurements yet: the ground is
-  flat, and wind, temperature gradients, turbulence and vegetation are not modelled (see
-  [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)).
+- **Outdoor propagation** is checked against geometry, closed forms, the exact solution
+  for the reflection off a ground and one set of measurements, a wind turbine up to 845
+  m away in light winds. The ground is flat, and turbulence and vegetation are not
+  modelled (see [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)); strong winds
+  and temperature gradients, where they matter most, have not been compared with
+  measurements.
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
 - **Speed on a hardware GPU.** CI checks the wave solver's and the late stage's GPU
@@ -977,7 +1051,8 @@ python validation/pyroomacoustics_crosscheck.py --json results.json --plots docs
 python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
 python validation/edge_diffraction.py --json diffraction.json
-python validation/ground_reflection.py --wave --json ground.json
+python validation/ground_reflection.py --wave --parabolic --json ground.json
+python validation/outdoor_propagation.py --json outdoor.json --plots docs/validation
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
@@ -988,8 +1063,8 @@ python validation/bras_validation.py --materials initial --calibrate LS1 --plots
 ```
 
 The cross-check takes about 20 minutes on 4 cores, the benchmark about 2 minutes, the
-wave solver's checks about 3.5 minutes (both stencils), the ground's about 5.5 (1.5 of
-them the wave solver's) and each BRAS run about 30 minutes (85 in
+wave solver's checks about 3.5 minutes (both stencils), the ground's about 7.5 (1.5 of
+them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5 and each BRAS run about 30 minutes (85 in
 third-octave bands, or half that per room with `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
 (`--pra-runs`); the means still move by a few percent from one call to the next, and the

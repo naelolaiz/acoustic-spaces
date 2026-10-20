@@ -21,10 +21,11 @@ ground's normalised impedance Z, and beta = ka / Z, the surface wave, kept where
 decays with height. Over a hard ground the pole of R, at kz = -beta, comes close to the
 real axis, where the samples miss it: there the field is continued below the ground in
 height instead (see the code), and marched in free field. An absorbing layer at the top
-takes the sound that goes up; the ground's impedance may change along the way. The
-Gaussian starting field (Salomons' eq. G.67) makes the free field exp(ikR) / R. Over
-grass, and over hard grounds, in still air it is within 0.2 dB of the exact solution
-from 20 m.
+takes the sound that goes up; the ground's impedance may change along the way. Greene's
+starting field (Greene 1984; Jensen et al., Computational Ocean Acoustics, ch. 6), the
+Gaussian's of Salomons' eq. G.67 widened, makes the free field exp(ikR) / R up to some
+35 degrees from the horizontal (0.2 dB; the Gaussian's falls 2 dB short there). Over
+grass, and over hard grounds, in still air it is within 0.25 dB of the exact solution.
 
 The frequencies of one band are marched together, on the grid and in the steps of the
 highest, under the absorbing layer of the lowest.
@@ -116,8 +117,7 @@ def march(
 
     here = _Ground(impedances(0.0), ka, kz, z, width)
     psi = np.sqrt(1j * ka)[:, None] * (
-        np.exp(-(ka[:, None] ** 2) * (z - zs) ** 2 / 2.0)
-        + here.normal[:, None] * np.exp(-(ka[:, None] ** 2) * (z + zs) ** 2 / 2.0)
+        _starter(ka[:, None] * (z - zs)) + here.normal[:, None] * _starter(ka[:, None] * (z + zs))
     )
     key = here.key
     for index in order:
@@ -156,6 +156,11 @@ def march(
         h = heights[index]
         out[:, index] = [np.interp(h, z, row.real) + 1j * np.interp(h, z, row.imag) for row in p]
     return out
+
+
+def _starter(x: np.ndarray) -> np.ndarray:
+    """Greene's starting field at ``x`` = ka times the height from the source."""
+    return (1.4467 - 0.4201 * x**2) * np.exp(-(x**2) / 3.0512)
 
 
 def _grid(f: np.ndarray, c0: float, top: float) -> tuple[int, float, float]:

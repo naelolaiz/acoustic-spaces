@@ -59,9 +59,10 @@ SHADOW_WAVE_MAX_BAND_HZ = 2000
 #: equation's bands go up to ``SHADOW_WAVE_MAX_BAND_HZ`` as in the shadow.
 PENUMBRA = 0.5
 #: The parabolic equation applies from this many times the source's and the listener's
-#: heights (added) away along the ground: nearer, the sound comes in too steeply for it,
-#: and the atmosphere has had no room to bend it.
-WAVE_MIN_RANGE = 2.75
+#: heights (added) away along the ground, where the sound comes in at 34 degrees from
+#: the horizontal or flatter (within 0.2 dB of the exact solution there): nearer, it
+#: comes in too steeply for it, and the atmosphere has had little room to bend it.
+WAVE_MIN_RANGE = 1.5
 #: The parabolic equation's absorbing layer starts this many times higher than the
 #: source, the listener and the rays between them, at least ``WAVE_MIN_HEADROOM_M``
 #: above the source and the listener and at least ``WAVE_TOP_SLOPE`` times the range up
