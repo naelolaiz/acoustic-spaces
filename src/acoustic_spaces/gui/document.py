@@ -491,6 +491,10 @@ class Document(QObject):
             early = data.get("simulation", {}).get("early", {})
             if (early.get("coherent_max_band_hz") or 0) > INDOOR_COHERENT_MAX_BAND_HZ:
                 del early["coherent_max_band_hz"]
+            # The wind and temperature, and the insertion loss of buildings, barriers and
+            # vegetation, are for outdoor scenes.
+            data.pop("atmosphere", None)
+            data.get("simulation", {}).pop("insertion_loss_of", None)
             for (kind, k), position in moved.items():
                 data[kind][k]["position"] = position
             if default is not None:

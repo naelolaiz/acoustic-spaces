@@ -18,7 +18,7 @@ from acoustic_spaces.engine import wave as wave_stage
 from acoustic_spaces.engine.coherent import band_count
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
 from acoustic_spaces.engine.grazing import apply_grazing
-from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.engine.model import TraceModel, free_field_energy
 from acoustic_spaces.engine.refracted import direct_times, refraction_for
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.turbulence import Eddies
@@ -47,6 +47,12 @@ class SimulationResult:
     responses: dict[tuple[str, str], Response]
     #: Per source: rays, escaped rays, receiver radius, seed and timings.
     details: dict[str, dict[str, float]] = field(default_factory=dict)
+    #: The buildings, barriers and vegetation of an outdoor scene that it was also run
+    #: without (:func:`~acoustic_spaces.engine.insertion.simulate`), and their insertion
+    #: loss per (source, listener) in each octave band (dB): the level without them less
+    #: the level with them. Empty otherwise.
+    removed: tuple[str, ...] = ()
+    insertion_loss: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)
 
     def parameters(self) -> dict[tuple[str, str], RoomParameters]:
         """ISO 3382-1 parameters of every response."""
@@ -655,6 +661,15 @@ def simulate(
             )
         info = details[source.name]
         fed = source.gain_db != 0 or source.eq_db is not None or source.delay_ms > 0
+        free_field = None
+        if room.outdoor is not None:
+            free_field = free_field_energy(
+                source.elements(),
+                listener_pos,
+                air,
+                room.directivity(source.name, model.bands),
+                np.array(source.orientation.rotation()),
+            )
         for k, listener in enumerate(chosen_listeners):
             response = Response(
                 source=source.name,
@@ -678,6 +693,7 @@ def simulate(
                 source_direction=_towards(src, listener_pos[k]),
                 late_moments=late.moments[k] if late.moments.size else np.zeros((0, 0, 0)),
                 moment_step=late.moment_step,
+                free_field=None if free_field is None else free_field[k],
             )
             if fed:
                 response = response.fed(source.feed_db(model.bands), source.delay_ms * 1e-3)

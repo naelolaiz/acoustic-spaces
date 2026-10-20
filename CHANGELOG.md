@@ -160,6 +160,36 @@
 - Indoors, and outdoors in still air, the wave solver gives the same results as before,
   bit for bit.
 
+**Outdoor results**
+
+- Outdoors, every response and map point gives its level relative to free field, per
+  octave band and A-weighted: how much louder the source is there than the same source
+  as far away in free field, with the same air; with the sign turned, the excess
+  attenuation. `simulate` prints it, `parameters.json` holds it (`re_free_field_db`,
+  `re_free_field_a_db`), maps have the parameter `re_free_field` and the editor's
+  Results panel the row **Re free field**.
+- `simulation.insertion_loss_of` names buildings, barriers or vegetation (`--without`
+  on the command line, for `simulate` and `map`; an **Insertion loss** list on the
+  editor's Simulation page): the scene is run again without them, with the same seed,
+  and the results carry their insertion loss at every listener (`insertion_loss_db`,
+  `insertion_loss_a_db`) and map point (`insertion_loss`, `insertion_loss_a`), the
+  level without them less the level with them; the report says what was left out
+  (`removed`). `Scene.without(names)` is the scene without them, and
+  `acoustic_spaces.engine.insertion` runs both.
+- Outdoors, G of a response that holds no decay to read (an open field, a lone
+  barrier) is that of the energy it holds instead of undefined, and so are the levels
+  and the STI that take it; the other parameters stay undefined. Indoors nothing
+  changes.
+- New validation: `validation/insertion_loss.py`, a barrier's insertion loss against
+  the exact solution for a half-plane (within 0.07 dB over an absorbing ground) and the
+  level over grass against the exact solution for a ground (within 0.15 dB, up to 1.1
+  dB in the ground dip below 1 kHz, which the band filters fill). It also shows what
+  the path reflected both before and after a barrier, which `first_order` diffraction
+  leaves out, costs over a rigid ground: 0.3 to 0.8 dB from 1 kHz up, a few decibels
+  in the bands below.
+- Scenes without `insertion_loss_of` give the same results as before, bit for bit,
+  except that G outdoors is now defined where it was not.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

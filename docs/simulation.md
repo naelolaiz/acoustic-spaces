@@ -67,6 +67,9 @@ and G. `Response.parameters()` computes them from the simulated energies;
 [Measuring impulse responses](measurements.md#measuring-impulse-responses)). A response that ends
 before it has decayed is extended by its fitted decay rate; one that ends before it
 has decayed by 20 dB leaves too much to that estimate, and all its parameters are NaN.
+Outdoors, where a response may hold no decay at all, G is then that of the energy it
+holds, and so are the levels and the STI that take it; the other parameters stay NaN
+(see [Results outdoors](outdoor.md#results-outdoors)).
 Air absorption follows ISO 9613-1 for the scene's temperature, humidity and pressure.
 
 The directions the sound arrives from give more of them:

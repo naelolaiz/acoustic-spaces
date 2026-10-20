@@ -236,6 +236,12 @@ request and checks:
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
   within 5 % of the noise-free value.
+- outdoor results: the level relative to free field over grass against the exact
+  spherical-wave reflection (within 0.05 dB from 1 kHz up, 0.75 dB in the
+  band-filtered dip at 500 Hz), and over an absorbing ground that of free field; a
+  barrier's insertion loss the level relative to free field with its sign turned,
+  with a reflection back on the source's side that of its image source; the two runs
+  sharing their seed, and maps giving the same at their points.
 
 ## Cross-check against pyroomacoustics
 
@@ -980,6 +986,85 @@ starts a few hundred metres away at these heights) nor reflections off buildings
 the effective speed of sound along the horizontal from the source stands in for the
 flow, were checked.
 
+## Outdoor results against exact solutions
+
+`validation/insertion_loss.py` runs whole outdoor scenes through the results an outdoor
+run reports, the level relative to free field and the insertion loss (see
+[Outdoor scenes](outdoor.md#results-outdoors)), and compares them with exact solutions.
+
+A thin barrier 3 m high, 10 m from a source 1 m up, with listeners 1.5 m up, 2 to 90 m
+behind it, over a ground that absorbs everything: its insertion loss, from the two
+runs, against the Biot-Tolstoy-Medwin solution for a half-plane
+([Edge diffraction](#edge-diffraction-against-the-exact-solution)), per octave band, and
+Maekawa's chart for reference:
+
+| listener | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
+|---|---|---|---|---|---|---|---|---|---|
+| 2 m behind | 8.84 | 11.09 | 13.67 | 16.49 | 19.44 | 22.43 | 25.43 | 28.44 | exact, dB |
+| | -0.01 | -0.00 | +0.00 | +0.00 | +0.00 | +0.01 | +0.02 | +0.07 | engine - exact |
+| | +0.22 | +0.06 | -0.05 | -0.15 | -0.23 | -0.29 | -0.33 | -0.35 | Maekawa - exact |
+| 10 m behind | 8.32 | 10.06 | 12.16 | 14.63 | 17.38 | 20.30 | 23.28 | 26.28 | exact, dB |
+| | -0.01 | -0.01 | -0.00 | +0.00 | +0.00 | +0.00 | +0.01 | +0.03 | engine - exact |
+| | -1.14 | -1.35 | -1.43 | -1.47 | -1.54 | -1.62 | -1.68 | -1.71 | Maekawa - exact |
+| 40 m behind | 8.16 | 9.69 | 11.58 | 13.87 | 16.50 | 19.35 | 22.31 | 25.30 | exact, dB |
+| | -0.01 | -0.00 | -0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.02 | engine - exact |
+| | -1.49 | -1.72 | -1.80 | -1.82 | -1.86 | -1.93 | -2.00 | -2.05 | Maekawa - exact |
+| 90 m behind | 8.12 | 9.61 | 11.46 | 13.70 | 16.30 | 19.13 | 22.09 | 25.08 | exact, dB |
+| | -0.00 | -0.00 | -0.00 | +0.00 | +0.00 | +0.00 | +0.01 | +0.02 | engine - exact |
+| | -1.55 | -1.79 | -1.87 | -1.88 | -1.92 | -1.99 | -2.06 | -2.11 | Maekawa - exact |
+
+The engine agrees within 0.07 dB; Maekawa's chart is within 2 dB.
+
+The same barrier on a rigid ground, against the four paths over its top (the source
+and its image in the ground, to the listener and its image), each by the exact
+solution, and without the barrier the direct sound and its reflection, averaged over
+each band:
+
+| listener | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
+|---|---|---|---|---|---|---|---|---|---|
+| 2 m behind | 14.21 | 11.15 | 23.60 | 10.22 | 19.58 | 22.62 | 24.84 | 28.15 | exact, dB |
+| | -2.33 | +1.48 | -3.93 | +0.90 | +0.34 | +0.30 | +0.51 | +0.54 | engine - exact |
+| | -0.01 | -0.03 | -0.11 | +0.14 | -0.01 | -0.00 | -0.01 | -0.01 | without the barrier |
+| 10 m behind | 6.31 | 13.90 | 25.19 | 14.78 | 9.06 | 22.29 | 22.66 | 25.94 | exact, dB |
+| | +0.92 | -1.69 | -5.00 | +0.86 | +0.53 | +0.43 | +0.65 | +0.54 | engine - exact |
+| | -0.00 | -0.01 | -0.04 | -0.13 | +0.00 | -0.00 | +0.00 | -0.02 | without the barrier |
+| 40 m behind | 4.41 | 8.42 | 18.06 | 18.55 | 18.19 | 15.47 | 21.19 | 24.47 | exact, dB |
+| | +1.70 | +0.70 | -2.72 | +1.81 | +0.41 | +0.27 | +0.71 | +0.61 | engine - exact |
+| | -0.00 | -0.00 | -0.01 | -0.03 | +0.00 | +0.01 | -0.01 | -0.01 | without the barrier |
+| 90 m behind | 4.17 | 7.93 | 16.66 | 12.67 | 20.67 | 24.87 | 16.25 | 23.53 | exact, dB |
+| | +1.85 | +1.04 | -2.43 | +1.77 | -0.52 | -0.74 | +0.77 | +0.67 | engine - exact |
+| | -0.00 | -0.00 | -0.00 | -0.01 | +0.00 | +0.00 | +0.01 | -0.01 | without the barrier |
+
+Without the barrier the engine's level (the direct sound and its reflection, added in
+pressure) is within 0.14 dB of the exact one, the band filters below 1 kHz apart. With
+it, the engine's `first_order` diffraction takes one reflection, before or after the
+edge, and leaves out the path reflected both before and after the barrier, a quarter
+of the sound over it: from 1 kHz up the insertion loss comes out 0.3 to 0.8 dB too
+high, and in the bands below, where the four paths interfere, up to 5 dB off either
+way. Over grass and other soft grounds, whose reflections near grazing are weak, the
+gap is smaller; the [roadmap](roadmap.md) has the missing path. The sound that goes
+over the top, down to the ground and over the top again is left out of both.
+
+A source 1 m over grass and nothing else, the listener 1.5 m up: the level relative to
+free field against the exact solution for a locally reacting ground
+([Ground reflection](#ground-reflection-against-the-exact-solution)), averaged over each
+band:
+
+| distance | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
+|---|---|---|---|---|---|---|---|---|---|
+| 10 m | 5.27 | 3.74 | -1.23 | -1.55 | 1.43 | 0.27 | 1.10 | 0.85 | exact, dB |
+| | -0.04 | -0.10 | -0.04 | +0.41 | -0.01 | -0.00 | -0.01 | -0.01 | engine - exact |
+| 50 m | 5.52 | 3.58 | -3.02 | -11.16 | -2.05 | 3.84 | 2.74 | 2.43 | exact, dB |
+| | -0.06 | -0.14 | -0.01 | +0.82 | +0.00 | -0.00 | -0.00 | -0.00 | engine - exact |
+| 200 m | 5.31 | 1.10 | -13.10 | -22.37 | -12.89 | -5.56 | 0.52 | 4.91 | exact, dB |
+| | -0.13 | -0.09 | +1.07 | +0.70 | +0.00 | +0.00 | -0.00 | -0.00 | engine - exact |
+
+From 1 kHz up the engine averages each pair of paths' interference over the band
+exactly and agrees within 0.01 dB; in the bands up to 500 Hz it reads the early paths
+through band filters, whose skirts fill the ground dip by up to about 1 dB, as in the
+ground's own check above. Both results are checked against theory, not against
+measurements of a barrier or a ground.
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -1221,6 +1306,10 @@ its peak (single precision).
   measurements; how much the sound flickers over time is not checked against either.
   The wave solver in wind and temperature is checked against the parabolic equation
   over open ground up to 200 m, not against measurements, nor round buildings.
+  The level relative to free field and a barrier's insertion loss are checked against
+  exact solutions, not against measurements; over a rigid ground the engine leaves
+  out the path reflected both before and after a barrier (see
+  [Outdoor results](#outdoor-results-against-exact-solutions)).
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
 - **Speed on a hardware GPU.** CI checks the wave solver's and the late stage's GPU
@@ -1242,6 +1331,7 @@ python validation/outdoor_propagation.py --turbulence moderate
 python validation/turbulence.py --json turbulence.json
 python validation/vegetation.py --json vegetation.json
 python validation/wave_outdoor.py --json wave_outdoor.json
+python validation/insertion_loss.py --json insertion_loss.json
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
@@ -1255,7 +1345,7 @@ The cross-check takes about 20 minutes on 4 cores, the benchmark about 2 minutes
 wave solver's checks about 3.5 minutes (both stencils), the ground's about 7.5 (1.5 of
 them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5
 (3 with turbulence), the turbulence's about 7, the vegetation's about 5, the wave
-solver's outdoors about 18 and each BRAS
+solver's outdoors about 18, the outdoor results' about a minute and each BRAS
 run about 30 minutes (85 in third-octave bands, or half that per room with
 `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it

@@ -44,7 +44,9 @@ from acoustic_spaces.parameters import MORE_PARAMETERS, PARAMETERS
 PLOT_SIZE = (720, 480)
 #: Rows of the parameter table: name, label, number format. After the first eight comes
 #: the sound pressure level at the source's sound power; the rest show only where the
-#: response gives them (stage support needs a listener near the source).
+#: response gives them: outdoors the level relative to free field and the insertion loss
+#: of what the run was also made without, then those of ISO 3382-1 that need directions
+#: (stage support needs a listener near the source).
 ROWS = [
     ("edt", N_("EDT (s)"), "{:.2f}"),
     ("t20", N_("T20 (s)"), "{:.2f}"),
@@ -55,6 +57,8 @@ ROWS = [
     ("ts", N_("Ts (ms)"), "{:.0f}"),
     ("g", N_("G (dB)"), "{:.1f}"),
     ("spl", N_("SPL (dB)"), "{:.1f}"),
+    ("re_free_field", N_("Re free field (dB)"), "{:.1f}"),
+    ("insertion_loss", N_("Insertion loss (dB)"), "{:.1f}"),
     ("lf", N_("LF"), "{:.2f}"),
     ("lfc", N_("LFC"), "{:.2f}"),
     ("lj", N_("LJ (dB)"), "{:.1f}"),
@@ -65,7 +69,10 @@ ROWS = [
     ("t30_z", N_("T30 Z (s)"), "{:.2f}"),
 ]
 assert {row[0] for row in ROWS[:8]} == set(PARAMETERS)
-assert {row[0] for row in ROWS[9:]} <= set(MORE_PARAMETERS)
+#: The outdoor rows, right after the sound pressure level.
+OUTDOOR_ROWS = ("re_free_field", "insertion_loss")
+assert {row[0] for row in ROWS[9:11]} == set(OUTDOOR_ROWS)
+assert {row[0] for row in ROWS[11:]} <= set(MORE_PARAMETERS)
 #: What each row of the parameter table means, for its tip.
 ROW_TIPS = {
     "edt": N_(
@@ -96,6 +103,17 @@ ROW_TIPS = {
     "spl": N_(
         "Sound pressure level (dB re 20 µPa) here, with the source at the sound power "
         "level its form sets"
+    ),
+    "re_free_field": N_(
+        "Level relative to free field (dB), outdoors: how much louder the source is here "
+        "than the same source as far away in free field, with the same air. The ground, "
+        "the weather, buildings, barriers and vegetation make the difference; negative, "
+        "it is their excess attenuation"
+    ),
+    "insertion_loss": N_(
+        "Insertion loss (dB) of the buildings, barriers or vegetation the simulation page "
+        "names: the level here without them less the level with them. Positive where they "
+        "shield the listener"
     ),
     "lf": N_(
         "Early lateral energy fraction (0 to 1): the share of the early sound (5 to "
@@ -492,9 +510,14 @@ class ResultsPanel(QWidget):
         source = sources.get(response.source)
         power = 94.0 if source is None else source.power_db("octave")
         spl = response.levels(power, parameters)
+        nan = np.full(len(OCTAVE_BANDS_HZ), np.nan)
         for row, (name, _label, template) in enumerate(ROWS):
             if name == "spl":
                 values = spl
+            elif name == "re_free_field":
+                values = response.relative_to_free_field()
+            elif name == "insertion_loss":
+                values = self.result.insertion_loss.get(self.pair(), nan)
             else:
                 values = getattr(parameters, name) * (1e3 if name == "ts" else 1.0)
             tip = _(ROW_TIPS[name])
@@ -515,6 +538,18 @@ class ResultsPanel(QWidget):
         for source, info in self.result.details.items():
             parts = [fmt("{key} = {value:g}", key=key, value=value) for key, value in info.items()]
             lines.append(f"{source}: " + "; ".join(parts))
+        removed = self.result.removed
+        if removed:
+            lines.append(
+                fmt(
+                    ngettext(
+                        "Insertion loss of {names}: the scene was also run without it",
+                        "Insertion loss of {names}: the scene was also run without them",
+                        len(removed),
+                    ),
+                    names=", ".join(removed),
+                )
+            )
         for (source, listener), response in self.result.responses.items():
             diffracted = int(response.early.diffracted.sum())
             count = len(response.early)

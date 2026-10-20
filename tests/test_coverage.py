@@ -8,7 +8,7 @@ import pytest
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import CoverageResult, coverage_map, map_grid
 from acoustic_spaces.engine.coverage import (
-    MAP_PARAMETERS,
+    ROOM_MAP_PARAMETERS,
     TIME_STEP,
     _point_values,
     audience_surfaces,
@@ -160,7 +160,7 @@ def test_map_matches_listeners_at_its_points() -> None:
     assert isinstance(coverage, CoverageResult)
     assert coverage.combined is None
     values = coverage.get("talker").values
-    assert set(values) == set(MAP_PARAMETERS)
+    assert set(values) == set(ROOM_MAP_PARAMETERS)  # a room's: no outdoor ones
     for k in picks:
         response = responses["talker", f"p{k}"]
         p = response.parameters()

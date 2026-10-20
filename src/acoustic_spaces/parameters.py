@@ -308,10 +308,17 @@ def _arrived(edges: np.ndarray, cumulative: np.ndarray, tail: float, rate: float
 
 
 def _band_parameters(
-    e: np.ndarray, dt: float, offset: float, reference: float | None, stage: bool = False
+    e: np.ndarray,
+    dt: float,
+    offset: float,
+    reference: float | None,
+    stage: bool = False,
+    open_air: bool = False,
 ):
     """Parameters of one band; ``e`` starts at the slot holding the onset, which lies
-    ``offset`` seconds into it. With ``stage``, ST_early and ST_late as well."""
+    ``offset`` seconds into it. With ``stage``, ST_early and ST_late as well. With
+    ``open_air``, G of a response that does not decay as a room's does is that of the
+    energy it holds, rather than undefined."""
     edges = np.arange(len(e) + 1) * dt - offset  # slot edges, time after the onset
     tail, rate = _tail(e, dt)
     total = float(e.sum()) + tail
@@ -333,6 +340,10 @@ def _band_parameters(
     # The fall counts at the end of the curve, tail included, or along the early decay's
     # slope, as one strong ray late in a sparse tail can hold the end of the curve up.
     if level[-1] > _MIN_DECAY_DB and not 60.0 * edges[-1] / out["edt"] >= -_MIN_DECAY_DB:
+        if open_air and reference:
+            # Outdoors the response holds what arrives: no reverberation goes on past its
+            # end to be extrapolated, and its level is that of its energy.
+            undefined["g"] = 10.0 * math.log10(float(e.sum()) / reference)
         return undefined
     cumulative = total - remaining
     early50 = float(np.interp(0.05, edges, cumulative))
@@ -403,6 +414,7 @@ def from_energy(
     stage: bool = False,
     lateral: tuple[np.ndarray, np.ndarray] | None = None,
     directional: Sequence[np.ndarray] | None = None,
+    open_air: bool = False,
 ) -> RoomParameters:
     """Parameters from energy per band and time slot (bands, slots), slot 0 at emission.
 
@@ -413,7 +425,9 @@ def from_energy(
     null on the source picks up and its product with the pressure, each on the slots of
     ``energy``, for ``lf``, ``lfc`` and ``lj``; ``directional`` the energies of
     figure-of-eight pickups facing forward, left and up, for ``t30_x``, ``t30_y`` and
-    ``t30_z``.
+    ``t30_z``. With ``open_air`` (an outdoor scene's response), G is that of the energy
+    the response holds in a band that does not decay as a room's does, where the other
+    parameters stay undefined: there is no reverberation to extrapolate past its end.
     """
     energy = np.atleast_2d(np.asarray(energy, dtype=float))
     first = min(int(onset_s / time_step), energy.shape[1] - 1)
@@ -423,7 +437,7 @@ def from_energy(
     else:
         references = [float(r) for r in np.broadcast_to(reference_energy, (len(energy),))]
     per_band = [
-        _band_parameters(row[first:], time_step, offset, ref, stage)
+        _band_parameters(row[first:], time_step, offset, ref, stage, open_air)
         for row, ref in zip(energy, references, strict=True)
     ]
     if lateral is not None:

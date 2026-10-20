@@ -24,7 +24,22 @@ from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
 #: What the map command can plot (the keys of engine.coverage.MAP_PARAMETERS).
-MAP_PARAMETER_NAMES = ("spl", "spl_a", "g", "c50", "c80", "d50", "edt", "t20", "t30", "ts", "sti")
+MAP_PARAMETER_NAMES = (
+    "spl",
+    "spl_a",
+    "g",
+    "c50",
+    "c80",
+    "d50",
+    "edt",
+    "t20",
+    "t30",
+    "ts",
+    "sti",
+    "re_free_field",
+    "insertion_loss",
+    "insertion_loss_a",
+)
 #: Edge diffraction settings (engine.diffraction.DIFFRACTION_MODES).
 DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
 #: Highest octave bands the wave solver can compute (engine.wave.WAVE_BANDS_HZ).
@@ -796,8 +811,18 @@ def _add_trial_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(TRIAL_FLAG, action="store_true", help=TRIAL_HELP)
 
 
+def _add_without_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--without",
+        nargs="+",
+        metavar="NAME",
+        help="override simulation.insertion_loss_of: outdoors, run the scene again without "
+        "these buildings, barriers or vegetation and give their insertion loss",
+    )
+
+
 def _cmd_simulate(args: argparse.Namespace) -> int:
-    from acoustic_spaces.engine import simulate
+    from acoustic_spaces.engine.insertion import simulate
     from acoustic_spaces.results import REPORT_FILE, write_results
     from acoustic_spaces.spatial import from_output
 
@@ -818,6 +843,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "--late-device": ("late.device", args.late_device),
             "--length": ("ir_length_s", args.length),
             "--sample-rate": ("sample_rate", args.sample_rate),
+            "--without": ("insertion_loss_of", args.without),
             **_performance_options(args),
         },
     )
@@ -870,6 +896,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         )
         print(RoomParameters.from_dict(entry["parameters"]).table())
         print(_level_text(entry))
+        for line in _outdoor_lines(entry, result.removed):
+            print(line)
         print(_speech_text(entry["speech"], entry["echo"]))
     files = sum(len(entry["outputs"]) for entry in report["responses"])
     print(f"\nwrote {files} impulse response files and {REPORT_FILE} to {out}")
@@ -901,6 +929,21 @@ def _level_text(entry: dict) -> str:
     """One line: the A-weighted sound pressure level and that of each octave band."""
     bands = " ".join(_number(v, ".1f") for v in entry["spl_db"])
     return f"SPL {_number(entry['spl_a_db'], '.1f')} dB(A); per octave band, dB: {bands}"
+
+
+def _outdoor_lines(entry: dict, removed) -> list[str]:
+    """Outdoors: the level relative to free field, and the insertion loss of what the run
+    was also made without, each A-weighted and per octave band."""
+    lines = []
+    for key, what in (
+        ("re_free_field", "re free field"),
+        ("insertion_loss", f"insertion loss of {', '.join(removed)}"),
+    ):
+        if f"{key}_db" in entry:
+            bands = " ".join(_number(v, "+.1f") for v in entry[f"{key}_db"])
+            total = _number(entry[f"{key}_a_db"], "+.1f")
+            lines.append(f"{what} {total} dB(A); per octave band, dB: {bands}")
+    return lines
 
 
 def _number(value, fmt: str = ".2f") -> str:
@@ -942,8 +985,8 @@ def _early_text(paths) -> str:
 def _cmd_map(args: argparse.Namespace) -> int:
     import numpy as np
 
-    from acoustic_spaces.engine import coverage_map
     from acoustic_spaces.engine.coverage import MAP_PARAMETERS
+    from acoustic_spaces.engine.insertion import coverage_map
     from acoustic_spaces.scene import Coverage
 
     room = _load_room(args.scene)
@@ -959,6 +1002,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
             "--max-order": ("early.max_order", args.max_order),
             "--diffraction": ("early.diffraction", args.diffraction),
             "--length": ("ir_length_s", args.length),
+            "--without": ("insertion_loss_of", args.without),
             **_performance_options(args),
         },
     )
@@ -998,17 +1042,26 @@ def _cmd_map(args: argparse.Namespace) -> int:
     )
     for chosen in [*result.maps.values(), *([result.combined] if result.combined else [])]:
         print(f"\n{chosen.source} (bands: {band_text})")
-        print(f"{'':<14}{'min':>8}{'median':>8}{'max':>8}")
-        for name, info in MAP_PARAMETERS.items():
+        width = max(14, *(len(MAP_PARAMETERS[name].label) + 2 for name in chosen.parameters()))
+        print(f"{'':<{width}}{'min':>8}{'median':>8}{'max':>8}")
+        for name in chosen.parameters():
+            info = MAP_PARAMETERS[name]
             values = chosen.value(name, band if info.per_band else None)
             finite = values[np.isfinite(values)]
             if len(finite) == 0:
                 row = ["-"] * 3
             else:
                 row = [info.text(float(v)) for v in (finite.min(), np.median(finite), finite.max())]
-            print(f"{info.label:<14}" + "".join(f"{cell:>8}" for cell in row))
+            print(f"{info.label:<{width}}" + "".join(f"{cell:>8}" for cell in row))
 
     shown = result.get(args.source)
+    if (args.plot or args.screenshot) and args.parameter not in shown.parameters():
+        print(
+            f"error: --parameter {args.parameter}: this map has none; it has "
+            f"{', '.join(shown.parameters())}",
+            file=sys.stderr,
+        )
+        return 1
     if args.json:
         path = Path(args.json)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -2168,6 +2221,7 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument(
         "--plot", action="store_true", help="save echogram and decay plots (needs viz extra)"
     )
+    _add_without_argument(simulate)
     simulate.set_defaults(func=_cmd_simulate)
 
     coverage = sub.add_parser(
@@ -2221,6 +2275,7 @@ def build_parser() -> argparse.ArgumentParser:
     coverage.add_argument("--plot", metavar="PNG", help="save the map seen from above")
     coverage.add_argument("--screenshot", metavar="PNG", help="save the map in the 3D view")
     coverage.add_argument("--json", metavar="FILE", help="write every map as JSON")
+    _add_without_argument(coverage)
     coverage.set_defaults(func=_cmd_map)
 
     sweep = sub.add_parser("sweep", help="write an exponential sweep excitation (WAV and JSON)")

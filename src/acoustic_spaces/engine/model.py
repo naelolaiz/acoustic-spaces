@@ -48,6 +48,33 @@ def source_weights(
     return directivity.energy(local)
 
 
+def free_field_energy(
+    elements: np.ndarray,
+    points: np.ndarray,
+    air: np.ndarray,
+    directivity: Directivity | None = None,
+    orientation: np.ndarray | None = None,
+) -> np.ndarray:
+    """Energy per band (points, bands) of a source of unit energy at ``points`` in free
+    field: its direct sound over the straight line, with the air's attenuation ``air``
+    (1/m per band) and the source's directivity, as the early paths carry it. A line's
+    or a surface's points (``elements``, (m, 3)) share the energy equally. NaN at a
+    point on the source."""
+    elements = np.asarray(elements, dtype=float).reshape(-1, 3)
+    points = np.asarray(points, dtype=float).reshape(-1, 3)
+    air = np.asarray(air, dtype=float)
+    out = np.zeros((len(points), len(air)))
+    for element in elements:
+        delta = points - element
+        distance = np.linalg.norm(delta, axis=1)
+        safe = np.where(distance > 0.0, distance, 1.0)
+        energy = np.exp(-np.outer(distance, air)) / (4.0 * np.pi * safe[:, None] ** 2)
+        energy *= source_weights(directivity, orientation, delta / safe[:, None], len(air))
+        energy[distance <= 0.0] = np.nan
+        out += energy
+    return out / len(elements)
+
+
 def _plants(room: Room, bands: Resolution):
     """The vegetation of an outdoor scene in ``bands``, or None."""
     if room.outdoor is None or not room.outdoor.vegetation:

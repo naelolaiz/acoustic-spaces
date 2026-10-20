@@ -111,6 +111,38 @@ msgstr "STI"
 msgid "speech transmission index"
 msgstr "spraaktransmissie-index"
 
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Re free field (dB)"
+msgstr "Re vrije veld (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"level relative to free field, outdoors: the excess attenuation with its sign "
+"turned"
+msgstr ""
+"niveau ten opzichte van het vrije veld, buiten: de extra demping met "
+"omgekeerd teken"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Insertion loss (dB)"
+msgstr "Invoegdemping (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"insertion loss of the buildings, barriers or vegetation the map was also run "
+"without"
+msgstr ""
+"invoegdemping van de gebouwen, geluidsschermen of vegetatie waarzonder de "
+"kaart ook is berekend"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Insertion loss (dB(A))"
+msgstr "Invoegdemping (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "A-weighted insertion loss of the buildings, barriers or vegetation"
+msgstr "A-gewogen invoegdemping van de gebouwen, geluidsschermen of vegetatie"
+
 #. Translators: a background task such as "Simulating hall…", then how long it has run so far.
 #: acoustic_spaces/gui/activity.py
 #, python-brace-format
@@ -3380,6 +3412,33 @@ msgid "Seed"
 msgstr "Startwaarde"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Insertion loss"
+msgstr "Invoegdemping"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors: tick buildings, barriers or vegetation to run the scene, and the "
+"map, again without them. The results and the map then give their insertion "
+"loss, the level without them less the level with them; each run takes twice "
+"as long"
+msgstr ""
+"Buiten: vink gebouwen, geluidsschermen of vegetatie aan om de scène, en de "
+"kaart, nog eens zonder ze te berekenen. De resultaten en de kaart geven dan "
+"hun invoegdemping, het niveau zonder ze min het niveau met ze; elke "
+"berekening duurt twee keer zo lang"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Ticked, the run is also made without {name}, for its insertion loss"
+msgstr ""
+"Aangevinkt wordt de berekening ook zonder {name} gemaakt, voor de "
+"invoegdemping ervan"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the insertion loss"
+msgstr "de invoegdemping wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "change simulation settings"
 msgstr "simulatie-instellingen wijzigen"
 
@@ -3999,6 +4058,28 @@ msgstr ""
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
+"Level relative to free field (dB), outdoors: how much louder the source is "
+"here than the same source as far away in free field, with the same air. The "
+"ground, the weather, buildings, barriers and vegetation make the difference; "
+"negative, it is their excess attenuation"
+msgstr ""
+"Niveau ten opzichte van het vrije veld (dB), buiten: hoeveel luider de bron "
+"hier is dan dezelfde bron op dezelfde afstand in het vrije veld, met "
+"dezelfde lucht. De grond, het weer, gebouwen, geluidsschermen en vegetatie "
+"maken het verschil; negatief is het hun extra demping"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Insertion loss (dB) of the buildings, barriers or vegetation the simulation "
+"page names: the level here without them less the level with them. Positive "
+"where they shield the listener"
+msgstr ""
+"Invoegdemping (dB) van de gebouwen, geluidsschermen of vegetatie die de "
+"simulatiepagina noemt: het niveau hier zonder ze min het niveau met ze. "
+"Positief waar ze de ontvanger afschermen"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
 "Early lateral energy fraction (0 to 1): the share of the early sound (5 to "
 "80 ms) that comes from the sides, which makes the source sound wider"
 msgstr ""
@@ -4295,6 +4376,14 @@ msgstr ""
 #, python-brace-format
 msgid "{tip}. Not defined for this response"
 msgstr "{tip}. Niet gedefinieerd voor deze respons"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "Insertion loss of {names}: the scene was also run without it"
+msgid_plural "Insertion loss of {names}: the scene was also run without them"
+msgstr[0] "Invoegdemping van {names}: de scène is ook zonder dit deel berekend"
+msgstr[1] ""
+"Invoegdemping van {names}: de scène is ook zonder deze delen berekend"
 
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format

@@ -2342,3 +2342,47 @@ def test_numbers_follow_the_regional_settings(qapp) -> None:
         assert parse_numbers("1.5, -2 3") == [1.5, -2.0, 3.0]
     finally:
         QLocale.setDefault(before)
+
+
+def test_insertion_loss_list(window) -> None:
+    """The simulation page of an outdoor scene lists its buildings, barriers and
+    vegetation to tick for their insertion loss; a part removed from the geometry page
+    leaves the choice; a room has nothing to tick."""
+    window.open_example(example_path("street"))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    assert not page.insertion_group.isHidden()
+
+    def listed():
+        return [page.insertion.item(r).text() for r in range(page.insertion.count())]
+
+    def ticked():
+        return [
+            page.insertion.item(r).text()
+            for r in range(page.insertion.count())
+            if page.insertion.item(r).checkState() == Qt.CheckState.Checked
+        ]
+
+    names = listed()
+    assert names == window.document.scene.geometry.part_names()
+    assert names == ["houses", "offices", "noise_barrier"]
+    assert ticked() == [] and window.document.scene.simulation.insertion_loss_of is None
+    page.insertion.item(names.index("noise_barrier")).setCheckState(Qt.CheckState.Checked)
+    assert window.document.scene.simulation.insertion_loss_of == ["noise_barrier"]
+    page.insertion.item(0).setCheckState(Qt.CheckState.Checked)
+    assert window.document.scene.simulation.insertion_loss_of == ["houses", "noise_barrier"]
+    window.select("simulation")  # loaded again, the ticks are the scene's
+    assert ticked() == ["houses", "noise_barrier"]
+    # Removing the barrier on the geometry page drops it from the choice.
+    window.select("geometry", None)
+    geometry = window.inspector.pages["geometry"]
+    geometry.parts["barriers"].setCurrentCell(0, 0)
+    geometry._remove_part("barriers")
+    assert window.document.scene.simulation.insertion_loss_of == ["houses"]
+    window.select("simulation")
+    assert listed() == ["houses", "offices"] and ticked() == ["houses"]
+    page.insertion.item(0).setCheckState(Qt.CheckState.Unchecked)
+    assert window.document.scene.simulation.insertion_loss_of is None
+    window.open_example(example_path("shoebox"))
+    window.select("simulation")
+    assert page.insertion_group.isHidden()

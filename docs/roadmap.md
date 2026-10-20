@@ -112,6 +112,13 @@ Outdoor acoustics, in steps:
   and its matched layer; checked against the parabolic equation at 63 and 125 Hz. It
   runs on the CPU; the GPU may follow, and the flow itself (the linearised Euler
   equations) stays out.
+- [x] O7 Outdoor results: the level relative to free field and the insertion loss of
+  buildings, barriers and vegetation (a second run without them), at listeners and on
+  maps, in the report, on the command line and in the editor; checked against the
+  exact solutions for a half-plane and for a ground.
+- [ ] Sound reflected off the ground both before and after bending over an edge (a
+  barrier on a hard ground): `first_order` diffraction takes one reflection, before or
+  after the edge, and leaves that path out.
 
 Unreleased:
 

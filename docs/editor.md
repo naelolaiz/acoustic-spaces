@@ -79,8 +79,10 @@ which frequencies each octave band holds.
   ![The editor with the lecture hall example and its speech transmission index map laid over the room](images/editor_map.png)
 
 - **Simulation > Run** (F5) works in the background. The **Results** panel shows the
-  ISO 3382-1 parameters, the echogram and decay curves and the arrival directions of
-  any source and listener, and draws their reflection paths in the room. **Export**
+  ISO 3382-1 parameters (outdoors also the level relative to free field and the
+  insertion loss, see [Results outdoors](outdoor.md#results-outdoors)), the echogram
+  and decay curves and the arrival directions of any source and listener, and draws
+  their reflection paths in the room. **Export**
   writes the same files as `simulate`; **Listen** plays a dry WAV file through the
   response on the sound card, binaurally (through the HRTF of the scene's binaural
   output if it has one, else a spherical head; needs the `measure` extra), or

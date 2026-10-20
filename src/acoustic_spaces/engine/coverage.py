@@ -34,7 +34,7 @@ from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine.coherent import coherent_energy
 from acoustic_spaces.engine.grazing import apply_grazing
-from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.engine.model import TraceModel, free_field_energy
 from acoustic_spaces.engine.refracted import direct_times, refraction_for
 from acoustic_spaces.engine.simulate import (
     _as_room,
@@ -107,7 +107,39 @@ MAP_PARAMETERS: dict[str, MapParameter] = {
     ),
     "ts": MapParameter(N_("Ts (ms)"), N_("centre time"), True, 1e3, "{:.0f}"),
     "sti": MapParameter(N_("STI"), N_("speech transmission index"), False, 1.0, "{:.2f}"),
+    "re_free_field": MapParameter(
+        N_("Re free field (dB)"),
+        N_("level relative to free field, outdoors: the excess attenuation with its sign turned"),
+        True,
+        1.0,
+        "{:.1f}",
+    ),
+    "insertion_loss": MapParameter(
+        N_("Insertion loss (dB)"),
+        N_("insertion loss of the buildings, barriers or vegetation the map was also run without"),
+        True,
+        1.0,
+        "{:.1f}",
+    ),
+    "insertion_loss_a": MapParameter(
+        N_("Insertion loss (dB(A))"),
+        N_("A-weighted insertion loss of the buildings, barriers or vegetation"),
+        False,
+        1.0,
+        "{:.1f}",
+    ),
 }
+#: The map parameters of an outdoor scene alone, and those of a map also run without some
+#: of its buildings, barriers or vegetation (``simulation.insertion_loss_of``).
+OUTDOOR_MAP_PARAMETERS = ("re_free_field",)
+INSERTION_LOSS_MAP_PARAMETERS = ("insertion_loss", "insertion_loss_a")
+#: The parameters of every map; an outdoor map, and one also run without some of its
+#: buildings, barriers or vegetation, have the others as well.
+ROOM_MAP_PARAMETERS = tuple(
+    name
+    for name in MAP_PARAMETERS
+    if name not in OUTDOOR_MAP_PARAMETERS + INSERTION_LOSS_MAP_PARAMETERS
+)
 
 
 @dataclass
@@ -365,6 +397,13 @@ class CoverageMap:
     #: Parameter name (see :data:`MAP_PARAMETERS`) -> (points, bands) or (points,).
     values: dict[str, np.ndarray]
 
+    def parameters(self) -> list[str]:
+        """The parameters the map has, in the order of :data:`MAP_PARAMETERS`: those of
+        :data:`OUTDOOR_MAP_PARAMETERS` outdoors only, and those of
+        :data:`INSERTION_LOSS_MAP_PARAMETERS` when the map was also run without some of
+        the scene's buildings, barriers or vegetation."""
+        return [name for name in MAP_PARAMETERS if name in self.values]
+
     def value(self, name: str, band: int | None = None) -> np.ndarray:
         """One value per point: a parameter in one band (index into
         ``OCTAVE_BANDS_HZ``), or a parameter that has no bands."""
@@ -403,6 +442,13 @@ class CoverageResult:
     #: All sources playing together at their levels; None with one source.
     combined: CoverageMap | None = None
     details: dict[str, dict[str, float]] = field(default_factory=dict)
+    #: The buildings, barriers and vegetation the map was also run without, for the
+    #: insertion loss (:func:`~acoustic_spaces.engine.insertion.coverage_map`).
+    removed: tuple[str, ...] = ()
+
+    def parameters(self) -> list[str]:
+        """The parameters of its maps (see :meth:`CoverageMap.parameters`)."""
+        return self.get().parameters()
 
     def get(self, source: str | None = None) -> CoverageMap:
         """The map of one source; None gives all sources together (or the only one)."""
@@ -422,12 +468,13 @@ class CoverageResult:
             "settings": self.settings.model_dump(mode="json"),
             "bands_hz": list(OCTAVE_BANDS_HZ),
             "points": self.grid.points.round(3).tolist(),
-            "parameters": {name: p.label for name, p in MAP_PARAMETERS.items()},
+            "parameters": {name: MAP_PARAMETERS[name].label for name in self.parameters()},
             "maps": {
                 m.source: {k: v for k, v in m.as_dict().items() if k not in ("points", "bands_hz")}
                 for m in maps
             },
             "details": self.details,
+            **({"removed": list(self.removed)} if self.removed else {}),
         }
 
 
@@ -459,6 +506,9 @@ class _SourceRun:
     parts: list[_Part]
     #: Statistical tail: (T60 per band, volume, speed of sound).
     statistical: tuple[np.ndarray, float, float] | None
+    #: Outdoors: the energy per octave band at each point (points, bands) of a source of
+    #: unit power there in free field; else None.
+    free_field: np.ndarray | None = None
 
     @property
     def onset(self) -> np.ndarray:
@@ -540,12 +590,20 @@ def _part_curve(
 
 
 def _point_values(
-    energy: np.ndarray, power_db: np.ndarray, reference: float, noise_db, talker: Talker
+    energy: np.ndarray,
+    power_db: np.ndarray,
+    reference: float,
+    noise_db,
+    talker: Talker,
+    free_field: np.ndarray | None = None,
 ) -> dict[str, np.ndarray]:
     """All map parameters of one point's energy response (slot 0 at its direct sound);
     ``power_db`` is the source's sound power per band, ``reference`` the free-field
-    energy at 10 m of a unit source."""
-    p = iso3382.from_energy(energy, TIME_STEP, 0.0, reference_energy=reference)
+    energy at 10 m of a unit source. Outdoors, ``free_field`` is the energy per octave
+    band of the same source here in free field, for the level relative to it."""
+    p = iso3382.from_energy(
+        energy, TIME_STEP, 0.0, reference_energy=reference, open_air=free_field is not None
+    )
     out = {name: getattr(p, name) for name in ("g", "c50", "c80", "d50", "edt", "t20", "t30", "ts")}
     spl = power_db + p.g + 10.0 * math.log10(reference)
     out["spl"] = spl
@@ -559,6 +617,11 @@ def _point_values(
         if np.isfinite(spl[1:]).all()
         else math.nan
     )
+    if free_field is not None:
+        # The energy the point holds over the free field's: nothing extrapolated past the
+        # response's end, as G does for a room's decay.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out["re_free_field"] = 10.0 * np.log10(energy.sum(axis=1) / free_field)
     return out
 
 
@@ -698,6 +761,7 @@ def coverage_map(
     sources: Sequence[str] | None = None,
     threads: int | None = None,
     progress: Callable[[str], None] | None = None,
+    grid: MapGrid | None = None,
 ) -> CoverageResult:
     """Coverage maps of the scene's sources (all by default) over its audience area.
 
@@ -708,7 +772,11 @@ def coverage_map(
     band (:meth:`~acoustic_spaces.scene.Source.power_db`: its level, spectrum, gain and
     equalizer), which the speech transmission index takes as the speech level, weighted
     for female speech when the source's spectrum is ``speech_female``. In the map of
-    all sources together, each source's sound arrives ``delay_ms`` later.
+    all sources together, each source's sound arrives ``delay_ms`` later. Outdoors,
+    every point also has its level relative to free field (``re_free_field``).
+
+    ``grid`` takes the place of the one the settings give, so that two runs of a scene
+    share their points (:func:`~acoustic_spaces.engine.insertion.coverage_map`).
     """
     room = _as_room(room)
     # Listeners play no part in a map.
@@ -724,7 +792,8 @@ def coverage_map(
     chosen = _pick(scene.sources, sources, "source")
 
     started = time.perf_counter()
-    grid = map_grid(room, settings.surfaces, height=settings.height, spacing=settings.spacing)
+    if grid is None:
+        grid = map_grid(room, settings.surfaces, height=settings.height, spacing=settings.spacing)
     say(f"Map: {len(grid)} points, {grid.cell:g} m apart")
     model = TraceModel.from_room(room, sim)
     edges = _Edges(model)
@@ -792,12 +861,25 @@ def coverage_map(
             t60 = room.reverberation_time("eyring", air_absorption=True, bands=model.bands)
             stat = (np.asarray(t60, dtype=float), float(volume), c)
         details[source.name] = info
+        free_field = None
+        if room.outdoor is not None:
+            free_field = to_octaves(
+                free_field_energy(
+                    elements,
+                    grid.points,
+                    room.air_attenuation(model.bands),
+                    directivity,
+                    orientation,
+                ),
+                axis=1,
+            )
         runs[source.name] = _SourceRun(
             source.power_db("octave"),
             source.delay_ms * 1e-3,
             source.talker,
             parts,
             stat,
+            free_field,
         )
 
     say("Map: parameters at every point")
@@ -814,7 +896,8 @@ def coverage_map(
         for name, run in runs.items():
             curve = to_octaves(_curve(run, k, length, bands))
             curves[name] = curve
-            values = _point_values(curve, run.power_db, reference, noise, run.talker)
+            free_field = None if run.free_field is None else run.free_field[k]
+            values = _point_values(curve, run.power_db, reference, noise, run.talker, free_field)
             per_source[name].append(values)
         if len(runs) > 1:
             # All sources together, on the time axis of the earliest direct sound; each
@@ -823,15 +906,20 @@ def coverage_map(
             last = max(run.delay_s for run in runs.values())
             slots = int(math.ceil((length + last - first) / TIME_STEP - 1e-9))
             total = np.zeros((octaves, slots))
+            free_field = None if room.outdoor is None else np.zeros(octaves)
             for name, run in runs.items():
                 shift = int(round((run.onset[k] + run.delay_s - first) / TIME_STEP))
                 curve = curves[name][:, : max(0, slots - shift)]
                 weight = 10.0 ** ((run.power_db - loudest) / 10.0)
                 total[:, shift : shift + curve.shape[1]] += weight[:, None] * curve
-            combined.append(_point_values(total, loudest, reference, noise, talker))
+                if free_field is not None:
+                    free_field += weight * run.free_field[k]
+            combined.append(_point_values(total, loudest, reference, noise, talker, free_field))
 
     def stack(rows: list[dict[str, np.ndarray]]) -> dict[str, np.ndarray]:
-        return {name: np.array([r[name] for r in rows]) for name in MAP_PARAMETERS}
+        return {
+            name: np.array([r[name] for r in rows]) for name in MAP_PARAMETERS if name in rows[0]
+        }
 
     maps = {name: CoverageMap(name, grid, stack(rows)) for name, rows in per_source.items()}
     together = CoverageMap("all sources", grid, stack(combined)) if combined else None
@@ -841,7 +929,10 @@ def coverage_map(
 
 __all__ = [
     "A_WEIGHTING_DB",
+    "INSERTION_LOSS_MAP_PARAMETERS",
     "MAP_PARAMETERS",
+    "OUTDOOR_MAP_PARAMETERS",
+    "ROOM_MAP_PARAMETERS",
     "TIME_STEP",
     "CoverageMap",
     "CoverageResult",

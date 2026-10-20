@@ -111,6 +111,40 @@ msgstr "STI"
 msgid "speech transmission index"
 msgstr "indice di trasmissione del parlato"
 
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Re free field (dB)"
+msgstr "Re campo libero (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"level relative to free field, outdoors: the excess attenuation with its sign "
+"turned"
+msgstr ""
+"livello rispetto al campo libero, all'aperto: l'attenuazione in eccesso con "
+"il segno cambiato"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Insertion loss (dB)"
+msgstr "Perdita per inserzione (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"insertion loss of the buildings, barriers or vegetation the map was also run "
+"without"
+msgstr ""
+"perdita per inserzione degli edifici, delle barriere acustiche o della "
+"vegetazione senza i quali la mappa è stata anche calcolata"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Insertion loss (dB(A))"
+msgstr "Perdita per inserzione (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "A-weighted insertion loss of the buildings, barriers or vegetation"
+msgstr ""
+"perdita per inserzione ponderata A degli edifici, delle barriere acustiche o "
+"della vegetazione"
+
 #. Translators: a background task such as "Simulating hall…", then how long it has run so far.
 #: acoustic_spaces/gui/activity.py
 #, python-brace-format
@@ -3374,6 +3408,33 @@ msgid "Seed"
 msgstr "Seme"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Insertion loss"
+msgstr "Perdita per inserzione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors: tick buildings, barriers or vegetation to run the scene, and the "
+"map, again without them. The results and the map then give their insertion "
+"loss, the level without them less the level with them; each run takes twice "
+"as long"
+msgstr ""
+"All'aperto: spuntare edifici, barriere acustiche o vegetazione per calcolare "
+"la scena, e la mappa, di nuovo senza di essi. I risultati e la mappa danno "
+"allora la loro perdita per inserzione, il livello senza di essi meno il "
+"livello con essi; ogni calcolo dura il doppio"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Ticked, the run is also made without {name}, for its insertion loss"
+msgstr ""
+"Spuntato, il calcolo viene fatto anche senza {name}, per la sua perdita per "
+"inserzione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the insertion loss"
+msgstr "cambiare la perdita per inserzione"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "change simulation settings"
 msgstr "modifica impostazioni della simulazione"
 
@@ -3999,6 +4060,29 @@ msgstr ""
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
+"Level relative to free field (dB), outdoors: how much louder the source is "
+"here than the same source as far away in free field, with the same air. The "
+"ground, the weather, buildings, barriers and vegetation make the difference; "
+"negative, it is their excess attenuation"
+msgstr ""
+"Livello rispetto al campo libero (dB), all'aperto: quanto più forte è la "
+"sorgente qui rispetto alla stessa sorgente alla stessa distanza in campo "
+"libero, con la stessa aria. La differenza la fanno il terreno, il tempo, gli "
+"edifici, le barriere acustiche e la vegetazione; negativo, è la loro "
+"attenuazione in eccesso"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Insertion loss (dB) of the buildings, barriers or vegetation the simulation "
+"page names: the level here without them less the level with them. Positive "
+"where they shield the listener"
+msgstr ""
+"Perdita per inserzione (dB) degli edifici, delle barriere acustiche o della "
+"vegetazione indicati nella pagina della simulazione: il livello qui senza di "
+"essi meno il livello con essi. Positiva dove schermano il ricevitore"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
 "Early lateral energy fraction (0 to 1): the share of the early sound (5 to "
 "80 ms) that comes from the sides, which makes the source sound wider"
 msgstr ""
@@ -4303,6 +4387,17 @@ msgstr ""
 #, python-brace-format
 msgid "{tip}. Not defined for this response"
 msgstr "{tip}. Non definito per questa risposta"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "Insertion loss of {names}: the scene was also run without it"
+msgid_plural "Insertion loss of {names}: the scene was also run without them"
+msgstr[0] ""
+"Perdita per inserzione di {names}: la scena è stata calcolata anche senza "
+"questa parte"
+msgstr[1] ""
+"Perdita per inserzione di {names}: la scena è stata calcolata anche senza "
+"queste parti"
 
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format

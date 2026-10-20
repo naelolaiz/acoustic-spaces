@@ -1249,7 +1249,28 @@ class GeometryPage(Page):
 
         def change(data: dict) -> None:
             items = data["geometry"][kind]
-            items.pop(row if 0 <= row < len(items) else -1)
+            index = row if 0 <= row < len(items) else len(items) - 1
+            before = [_part_name(kind, k, item) for k, item in enumerate(items)]
+            items.pop(index)
+            # The insertion loss keeps to the parts that stay, under their new names (an
+            # unnamed part's name is its place in the list).
+            renamed = dict(
+                zip(
+                    before[:index] + before[index + 1 :],
+                    [_part_name(kind, k, item) for k, item in enumerate(items)],
+                    strict=True,
+                )
+            )
+            settings = data["simulation"]
+            kept = [
+                renamed.get(name, name)
+                for name in settings.get("insertion_loss_of") or []
+                if name != before[index]
+            ]
+            if kept:
+                settings["insertion_loss_of"] = kept
+            else:
+                settings.pop("insertion_loss_of", None)
             if not items:
                 del data["geometry"][kind]
 
@@ -1259,6 +1280,13 @@ class GeometryPage(Page):
             "vegetation": _("remove vegetation"),
         }
         self.apply(what[kind], change)
+
+
+def _part_name(kind: str, index: int, item: dict) -> str:
+    """The name of a building, barrier or vegetation in the scene data (as
+    :meth:`~acoustic_spaces.scene.Geometry.part_names` gives it)."""
+    prefix = {"buildings": "building", "barriers": "barrier", "vegetation": "vegetation"}[kind]
+    return item.get("name") or f"{prefix}_{index + 1}"
 
 
 def _plant_shape(plant) -> str:
@@ -2515,7 +2543,23 @@ class SimulationPage(Page):
         response_form.addRow(_("Seed"), self.random_seed)
         response_form.addRow("", self.seed)
         layout.addWidget(response)
+
+        self.insertion_group = QGroupBox(_("Insertion loss"))
+        insertion_layout = QVBoxLayout(self.insertion_group)
+        self.insertion = QListWidget()
+        self.insertion.setToolTip(
+            _(
+                "Outdoors: tick buildings, barriers or vegetation to run the scene, and the "
+                "map, again without them. The results and the map then give their insertion "
+                "loss, the level without them less the level with them; each run takes twice "
+                "as long"
+            )
+        )
+        self.insertion.setMaximumHeight(140)
+        insertion_layout.addWidget(self.insertion)
+        layout.addWidget(self.insertion_group)
         layout.addStretch()
+        self.insertion.itemChanged.connect(self._insertion)
 
         for combo, key in (
             (self.early_method, "early.method"),
@@ -2604,6 +2648,20 @@ class SimulationPage(Page):
         self.random_seed.setChecked(s.seed is None)
         self.seed.setEnabled(s.seed is not None)
         self.seed.setValue(s.seed or 0)
+        parts = self.document.scene.geometry.part_names() if outdoor else []
+        chosen = set(s.insertion_loss_of or [])
+        self.insertion_group.setVisible(bool(parts))
+        self.insertion.clear()
+        for name in parts:
+            item = QListWidgetItem(name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if name in chosen else Qt.CheckState.Unchecked)
+            item.setToolTip(
+                _("Ticked, the run is also made without {name}, for its insertion loss").format(
+                    name=name
+                )
+            )
+            self.insertion.addItem(item)
         stochastic = s.late.method == "stochastic_ray_tracing"
         for box in (
             self.late_rays,
@@ -2614,6 +2672,21 @@ class SimulationPage(Page):
         ):
             box.setEnabled(stochastic)
         self.early_rays.setEnabled(s.early.method == "ray_tracing")
+
+    def _insertion(self) -> None:
+        names = [
+            self.insertion.item(row).text()
+            for row in range(self.insertion.count())
+            if self.insertion.item(row).checkState() == Qt.CheckState.Checked
+        ]
+
+        def change(data: dict) -> None:
+            if names:
+                data["simulation"]["insertion_loss_of"] = names
+            else:
+                data["simulation"].pop("insertion_loss_of", None)
+
+        self.apply(_("change the insertion loss"), change)
 
     def _set(self, key: str, value) -> None:
         """Write the one setting that changed (``late.rays``): the others show rounded to

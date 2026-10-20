@@ -2,7 +2,10 @@
 
 A coverage map gives the parameters on a grid over the audience area, the way CATT and
 ODEON draw them: strength G and sound pressure level, C50, C80, D50, EDT, T20, T30 and
-Ts per octave band, and the A-weighted level and speech transmission index.
+Ts per octave band, and the A-weighted level and speech transmission index; outdoors
+also the level relative to free field, and the insertion loss of the buildings,
+barriers or vegetation the map was also run without (see
+[Results outdoors](outdoor.md#results-outdoors)).
 
 ```sh
 acoustic-spaces map examples/lecture_hall/scene.yaml --plot sti.png --parameter sti

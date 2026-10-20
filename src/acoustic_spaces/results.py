@@ -6,6 +6,8 @@ For every (source, listener) pair, one WAV file per output format
 others), and for the whole run ``parameters.json``: the settings, run details and the
 ISO 3382-1 parameters of every response (with IACC when a binaural response is written,
 from the first if there are several), its STI, STIPA and U50, and its echo criteria.
+Outdoors also its level relative to free field, and the insertion loss of the buildings,
+barriers or vegetation the run was also made without (``simulation.insertion_loss_of``).
 ``acoustic-spaces auralize`` reads that folder.
 """
 
@@ -94,6 +96,8 @@ def write_results(
         },
         "responses": [],
     }
+    if result.removed:
+        report["removed"] = list(result.removed)
     for (source, listener), response in result.responses.items():
         stem = response_stem(source, listener)
         written = []
@@ -130,6 +134,18 @@ def write_results(
             "speech": response.speech(power, noise_db, parameters=params, talker=talker).as_dict(),
             "echo": _echo(mono, sample_rate),
         }
+        if response.free_field is not None:
+            relative = response.relative_to_free_field()
+            entry["re_free_field_db"] = [_plain(v) for v in relative]
+            entry["re_free_field_a_db"] = _plain(
+                iso3382.a_weighted(spl) - iso3382.a_weighted(spl - relative)
+            )
+        loss = result.insertion_loss.get((source, listener))
+        if loss is not None:
+            entry["insertion_loss_db"] = [_plain(v) for v in loss]
+            entry["insertion_loss_a_db"] = _plain(
+                iso3382.a_weighted(spl + loss) - iso3382.a_weighted(spl)
+            )
         if plots:
             try:
                 from acoustic_spaces.viz import plot_directions, plot_response

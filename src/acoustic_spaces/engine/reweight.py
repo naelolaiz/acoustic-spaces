@@ -96,7 +96,8 @@ def reweighted_result(result, traced, face_group: np.ndarray, materials: Sequenc
         return None
     ratio = log_ratio(np.array([old[n] for n in materials]), fresh)
     responses = {key: r.reweighted(face_group, ratio) for key, r in result.responses.items()}
-    return dataclasses.replace(result, responses=responses)
+    # The run without the removed parts is not re-weighted: their insertion loss goes.
+    return dataclasses.replace(result, responses=responses, removed=(), insertion_loss={})
 
 
 def log_ratio(old: np.ndarray, new: np.ndarray) -> np.ndarray:

@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import difflib
 import math
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -535,6 +536,11 @@ class Geometry(_Model):
     def vegetation_names(self) -> list[str]:
         """The vegetation's names, ``vegetation_<n>`` for those without one."""
         return [v.name or f"vegetation_{k + 1}" for k, v in enumerate(self.vegetation or [])]
+
+    def part_names(self) -> list[str]:
+        """The names of an outdoor scene's buildings, barriers and vegetation, in turn:
+        what an insertion loss can be given for (``simulation.insertion_loss_of``)."""
+        return [*self.building_names(), *self.barrier_names(), *self.vegetation_names()]
 
     def describe(self) -> str:
         if self.ground is not None:
@@ -1715,6 +1721,15 @@ class Simulation(_Model):
     ir_length_s: float = Field(default=2.0, gt=0.0)
     sample_rate: int = Field(default=48_000, ge=8_000, le=192_000)
     seed: int | None = Field(default=None, ge=0, description="random seed, for reproducible runs")
+    insertion_loss_of: list[str] | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "outdoors: buildings, barriers or vegetation, by name, whose insertion loss the "
+            "simulate and map commands give: the scene is also run without them, and the "
+            "level without them less the level with them is the insertion loss"
+        ),
+    )
 
 
 class Coverage(_Model):
@@ -1802,7 +1817,49 @@ class Scene(_Model):
         duplicates = sorted({n for n in names if names.count(n) > 1})
         if duplicates:
             raise ValueError(f"source and listener names must be unique: {', '.join(duplicates)}")
+        removed = self.simulation.insertion_loss_of
+        if removed is not None:
+            if self.geometry.ground is None:
+                raise ValueError(
+                    "simulation.insertion_loss_of is for outdoor scenes (geometry.ground): "
+                    "it names their buildings, barriers or vegetation"
+                )
+            parts = self.geometry.part_names()
+            unknown = [name for name in removed if name not in parts]
+            if unknown:
+                known = ", ".join(parts) or "none"
+                raise ValueError(
+                    f"simulation.insertion_loss_of names {unknown[0]!r}, which is no "
+                    f"building, barrier or vegetation of the scene (they are: {known})"
+                )
+            twice = sorted({name for name in removed if removed.count(name) > 1})
+            if twice:
+                raise ValueError(f"simulation.insertion_loss_of names {twice[0]!r} twice")
         return self
+
+    def without(self, names: Sequence[str]) -> Scene:
+        """This outdoor scene without the buildings, barriers and vegetation of these
+        names (see :meth:`Geometry.part_names`), and without ``insertion_loss_of``."""
+        parts = self.geometry.part_names()
+        unknown = [name for name in names if name not in parts]
+        if unknown:
+            raise ValueError(f"no building, barrier or vegetation is named {unknown[0]!r}")
+        data = self.to_data()
+        geometry = data["geometry"]
+        for kind, kept in (
+            ("buildings", self.geometry.building_names()),
+            ("barriers", self.geometry.barrier_names()),
+            ("vegetation", self.geometry.vegetation_names()),
+        ):
+            if kind not in geometry:
+                continue
+            geometry[kind] = [
+                item for item, name in zip(geometry[kind], kept, strict=True) if name not in names
+            ]
+            if not geometry[kind]:
+                del geometry[kind]
+        data["simulation"].pop("insertion_loss_of", None)
+        return Scene.model_validate(data)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> Scene:

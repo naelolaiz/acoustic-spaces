@@ -555,6 +555,7 @@ simulation:
   ir_length_s: 2.0          # length of the impulse responses (s), default 2
   sample_rate: 48000        # of the impulse responses (Hz), default 48000
   seed: 1                   # random seed, 0 or more; unset, every run draws its own
+  insertion_loss_of: [noise_barrier]  # outdoors: run again without these parts
 ```
 
 - `air` sets the speed of sound and the air absorption per band (ISO 9613-1), for the
@@ -573,3 +574,8 @@ simulation:
   slightly from run to run, as do those of the CPU and a GPU sharing the rays (see
   [The late stage on a GPU](simulation.md#the-late-stage-on-a-gpu)). The editor's
   **Simulation** entry has these under **Response**, and the scene's own entry the air.
+- Outdoors, `insertion_loss_of` names buildings, barriers or vegetation to run the
+  scene again without, for their insertion loss (see
+  [Results outdoors](outdoor.md#results-outdoors)); `--without` on the command line
+  overrides it for one run, and the editor's **Simulation** entry lists the parts to
+  tick.

@@ -555,6 +555,50 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
 atmosphere, and leaves out the statistical reverberation times, which need a diffuse
 field.
 
+## Results outdoors
+
+Outdoors every response and every map point also gives its **level relative to free
+field**: how much louder (or, negative, quieter) the source is there than the same
+source as far away in free field, with the same air between them, per octave band and
+A-weighted. The ground, the weather, buildings, barriers and vegetation make the
+difference; with the sign turned it is the excess attenuation of outdoor acoustics. It
+compares the energy the response holds with the free field's, so it needs no decay to
+read, and neither does G outdoors: where a response does not decay as a room's does
+(an open field, a lone barrier), G and the levels that take it are those of the energy
+it holds instead of undefined; the other parameters stay undefined. `simulate` prints
+it, `parameters.json` has `re_free_field_db` and `re_free_field_a_db`, maps have the
+parameter `re_free_field` and the editor's Results panel the row **Re free field**.
+
+The **insertion loss** of buildings, barriers or vegetation is what they take off the
+level: the level without them less the level with them, per octave band and A-weighted
+for the source's sound power. Name them in the scene,
+
+```yaml
+simulation:
+  insertion_loss_of: [noise_barrier]   # buildings, barriers or vegetation, by name
+```
+
+or for one run on the command line (`acoustic-spaces simulate scene.yaml --without
+noise_barrier`, and the same for `map`), and the scene is run as it is and again
+without them, with the same settings and seed so that both runs trace the same rays; a
+run takes twice as long. The results of the scene as it is then carry the insertion
+loss at every listener (`insertion_loss_db` and `insertion_loss_a_db` in
+`parameters.json`, printed by `simulate`) and at every map point (the map parameters
+`insertion_loss` and `insertion_loss_a`), and the report says what was left out
+(`removed`). A part without a name goes by its kind and its place in the list
+(`building_1`, `barrier_2`, `vegetation_1`). A barrier that shields the listener has a
+positive insertion loss, a building that sends sound back towards the listener a
+negative one. In the editor, the **Simulation** entry of an outdoor scene has an
+**Insertion loss** list with every building, barrier and vegetation to tick, and the
+Results panel the row **Insertion loss**. From Python,
+`acoustic_spaces.engine.insertion.simulate` and `coverage_map` take `without=[...]`, and
+`Scene.without(names)` is the scene without them.
+
+Both are checked against exact solutions: a barrier's insertion loss within 0.07 dB of
+the Biot-Tolstoy-Medwin solution over an absorbing ground, the level over grass within
+0.15 dB of the exact ground reflection outside the band-filtered dip (see
+[Validation](validation.md#outdoor-results-against-exact-solutions)).
+
 ## In the editor
 
 The **Geometry** entry of an outdoor scene has an **Outdoors** group: the ground's height,
@@ -578,7 +622,10 @@ scene. The 3D view and the export to Blender leave the sky out (the 3D view keep
 edges, to show where the ground ends), and the status bar gives the ground's area
 instead of a reverberation time. **Draw room** replaces an outdoor scene with a floor
 plan after asking, and brings **In pressure up to** back to a room's default when it
-was above 500 Hz.
+was above 500 Hz. The **Simulation** entry of an outdoor scene with buildings,
+barriers or vegetation has an **Insertion loss** list, where ticking them runs the
+scene again without them (see [Results outdoors](#results-outdoors)), and the Results
+panel has the rows **Re free field** and **Insertion loss**.
 
 ## What is not modelled yet
 
@@ -597,3 +644,12 @@ eddies are as strong at every height as near the ground. The
 ground is flat and reacts locally: its impedance does not
 change with the angle sound meets it at, which holds for grass, soil and snow, though
 less for a thick layer of very soft snow.
+
+Sound that reflects off the ground both before and after bending over an edge (two
+reflections and a diffraction) is left out: `first_order` diffraction takes one
+reflection, before or after the edge. Over a rigid ground that path carries a quarter
+of the sound over a barrier, so the barrier's insertion loss comes out 0.3 to 0.8 dB too
+high from 1 kHz up and a few decibels off in the bands below, where the paths
+interfere; over grass and other soft grounds, whose reflections near grazing are weak,
+the gap is smaller (see
+[Validation](validation.md#outdoor-results-against-exact-solutions)).
