@@ -205,6 +205,30 @@
   up and up to 3 dB off below.
 - `one_side` stays the default, so existing scenes give the same results, bit for bit.
 
+**Foliage from the leaves' size and density**
+
+- `foliage: {leaf_area_per_m3: F, leaf_width: a}` on a vegetation volume gives its
+  leaves instead of a preset or measured rates: their area (one side's) per cubic
+  metre and their width, the diameter of a disc of a leaf's area. The engine works out
+  what they take in each band from thin rigid discs turned every way alike
+  (`engine.vegetation.disc_scattering`, `leaves_medium`): a dipole, from the air a
+  small disc holds back, 16 (kr)⁴ / (81 π²) of its area; twice the mean projected area
+  of a large one, half the forward shadow and half reflected every way alike; the two
+  bridged smoothly in between. They absorb in the viscous and thermal boundary layers
+  on their faces (`leaf_absorption`, Morse and Ingard's rigid wall), a few per mille of
+  their area. The scattered share and its mean cosine per band replace `albedo` and
+  `asymmetry`. The editor's vegetation list and `inspect` show such leaves; the late
+  rays, the early paths and coverage maps take them as any other foliage.
+- New validation: `validation/leaves.py`, the disc's cross-section against its closed
+  forms at both ends, the absorption against the wall's in closed form, and a wood of
+  leaves 50 m deep compared with ISO 9613-2's dense-foliage table: leaves 5 cm wide at
+  0.1 m² per m³ take about what the table gives at 4 kHz (3 to 3.5 dB against 4.5),
+  more at 8 kHz and next to nothing below 1 kHz, where the table's 1 to 3 dB are not
+  what leaves scatter. `validation/vegetation.py` runs the late rays through such
+  leaves against its particle simulation too.
+- The `dense` preset, `none` and measured `attenuation` give the same results as
+  before, bit for bit.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

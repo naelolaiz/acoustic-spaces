@@ -15,10 +15,18 @@ from acoustic_spaces.engine.coverage import coverage_map
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.ray_device import _unsupported
 from acoustic_spaces.engine.vegetation import (
+    AIR_GAMMA,
+    AIR_PRANDTL,
+    AIR_VISCOSITY_M2_S,
     DB_PER_NEPER,
+    DISC_RAYLEIGH,
+    SHADOW_SHARE,
     Plants,
     cylinder_scattering,
+    disc_scattering,
     foliage_medium,
+    leaf_absorption,
+    leaves_medium,
     plant_arguments,
     stems_medium,
 )
@@ -82,6 +90,17 @@ def test_shapes_and_what_fills_them() -> None:
         ({**BELT, "foliage": {"preset": "none", "albedo": 0.5}}, "nothing to scatter"),
         ({**BELT, "foliage": {"attenuation": [0.1] * 5}}, "expected 8 attenuation values"),
         ({**BELT, "stems": {"per_m2": 0.1}}, "diameter"),
+        ({**BELT, "foliage": {"leaf_area_per_m3": 2}}, "go together"),
+        ({**BELT, "foliage": {"leaf_width": 0.1}}, "go together"),
+        (
+            {**BELT, "foliage": {"preset": "dense", "leaf_area_per_m3": 2, "leaf_width": 0.1}},
+            "one of them",
+        ),
+        (
+            {**BELT, "foliage": {"leaf_area_per_m3": 2, "leaf_width": 0.1, "albedo": 0.5}},
+            "work out what they scatter",
+        ),
+        ({**BELT, "foliage": {"leaf_area_per_m3": 2, "leaf_width": 2}}, "less than or equal to 1"),
     ],
 )
 def test_vegetation_is_checked(data, message) -> None:
@@ -116,6 +135,96 @@ def test_the_dense_preset_is_iso_9613s_table() -> None:
     assert mine.scattering == pytest.approx(mine.extinction / 4)
     assert (mine.asymmetry == 0.5).all()
     assert foliage_medium(Foliage(preset="none"), "octave") is None
+
+
+def test_a_disc_scatters_as_a_dipole_when_small_and_twice_its_shadow_when_large() -> None:
+    kr = np.array([0.01, 0.05, 0.2])
+    efficiency, cosine = disc_scattering(kr)
+    # The dipole of the air a rigid disc holds back: its added mass 8 rho r^3 / 3 along
+    # its normal gives 16 (kr)^4 r^2 / (27 pi) with the wave along the normal, a third
+    # of that turned every way alike, over pi r^2.
+    assert DISC_RAYLEIGH == pytest.approx(16 / (81 * math.pi**2))
+    assert efficiency == pytest.approx(16 * kr**4 / (81 * math.pi**2), rel=2e-3)
+    assert cosine == pytest.approx(0.0, abs=1e-3)  # as much back as on
+    large, forward = disc_scattering(np.array([30.0, 300.0]))
+    # Twice its mean projected area (pi r^2 / 2): half the forward shadow, straight on,
+    # half reflected every way alike.
+    assert large == pytest.approx(1.0, abs=1e-4)
+    assert forward == pytest.approx(SHADOW_SHARE, abs=1e-4)
+    rising, _ = disc_scattering(np.linspace(0.1, 10, 50))
+    assert np.all(np.diff(rising) > 0)
+
+
+def test_a_leaf_absorbs_in_its_boundary_layers() -> None:
+    k = 2 * math.pi * np.array([125.0, 1000.0, 8000.0]) / 343.0
+    omega = k * 343.0
+    delta_v = np.sqrt(2 * AIR_VISCOSITY_M2_S / omega)
+    delta_t = delta_v / math.sqrt(AIR_PRANDTL)
+    # Morse and Ingard's rigid wall, per face (k / 2)(delta_v sin^2 + (gamma - 1) delta_t),
+    # sin^2 averaging 2/3 over the leaf's turns, on both faces.
+    exact = k * (2 / 3 * delta_v + (AIR_GAMMA - 1) * delta_t)
+    assert leaf_absorption(k, 343.0) == pytest.approx(exact, rel=1e-12)
+    assert exact[1] == pytest.approx(1.45e-3, rel=0.02)  # a few per mille of its area
+    assert leaf_absorption(4 * k, 343.0) == pytest.approx(2 * exact, rel=1e-12)  # as sqrt(f)
+
+
+def test_leaves_make_a_medium_from_their_area_and_width() -> None:
+    foliage = Foliage(leaf_area_per_m3=2.0, leaf_width=0.08)
+    assert not foliage.bare and foliage.describe() == "leaves of 2 m²/m³, 0.08 m wide"
+    medium = foliage_medium(foliage, "octave", 343.0)
+    assert medium is not None and not medium.upright
+    # The area per cubic metre times a disc's cross-sections over its area, each band
+    # the mean over its frequencies.
+    lower, upper = 63 / math.sqrt(2), 63 * math.sqrt(2)
+    f = np.exp(np.linspace(math.log(lower), math.log(upper), 10)[:-1] + math.log(2) / 18)
+    k = 2 * math.pi * f / 343.0
+    efficiency, cosine = disc_scattering(k * 0.04)
+    assert medium.scattering[0] == pytest.approx(2.0 * efficiency.mean(), rel=1e-9)
+    assert medium.absorption[0] == pytest.approx(2.0 * leaf_absorption(k, 343.0).mean(), rel=1e-9)
+    assert medium.asymmetry[0] == pytest.approx((efficiency * cosine).sum() / efficiency.sum())
+    # Little taken at low frequencies, and absorbed; at high ones scattered, mostly on.
+    assert medium.extinction[0] < 1e-3 < 1.0 < medium.extinction[-1]
+    assert medium.absorption[0] > medium.scattering[0]
+    assert medium.scattering[-1] > 100 * medium.absorption[-1]
+    assert 0.4 < medium.asymmetry[-1] < SHADOW_SHARE and medium.asymmetry[0] < 1e-6
+    assert np.all(np.diff(medium.extinction) > 0)
+    # What the foliage takes in all, per metre, as a scene reports it, and the same at
+    # third-octave resolution, which the scene's own bands take.
+    assert foliage.attenuation_db("octave", 343.0) == pytest.approx(
+        medium.extinction * DB_PER_NEPER
+    )
+    assert len(foliage.attenuation_db("third_octave", 343.0)) == 24
+    # Wider leaves of the same area scatter more at the frequencies where a leaf's size
+    # nears the wavelength, and all leaves the same once far past it.
+    wide = leaves_medium(2.0, 0.16, "octave", 343.0)
+    assert wide.scattering[4] > 2 * medium.scattering[4]
+    assert wide.scattering[-1] == pytest.approx(medium.scattering[-1], rel=0.15)
+    # The speed of sound sets the wavelength.
+    cold = foliage_medium(foliage, "octave", 330.0)
+    assert cold.scattering[4] > medium.scattering[4]
+    assert Vegetation.model_validate({**BELT, "foliage": foliage.model_dump()}).describe() == (
+        "leaves of 2 m²/m³, 0.08 m wide"
+    )
+
+
+def test_leaves_in_a_scene_lose_and_scatter() -> None:
+    scene = planted({**BELT, "foliage": {"leaf_area_per_m3": 1.0, "leaf_width": 0.05}})
+    room = Room.from_scene(scene)
+    plants = Plants.of(room, "octave", room.speed_of_sound())
+    medium = leaves_medium(1.0, 0.05, "octave", room.speed_of_sound())
+    assert len(plants.media) == 1 and plants.media[0].scattering == pytest.approx(medium.scattering)
+    through = plants.depth(np.array([[0.0, 0, 5]]), np.array([[100.0, 0, 5]]))
+    assert through[0] == pytest.approx(30 * medium.extinction)
+    result = simulate(scene)
+    response = result["s", "l0"]
+    # The highest bands' early paths lose most; what they scatter comes back late.
+    bare = simulate(field())["s", "l0"]
+    early_loss = 10 * np.log10(bare.early.energy.sum(axis=0) / response.early.energy.sum(axis=0))
+    assert early_loss[-1] == pytest.approx(30 * medium.extinction[-1] * DB_PER_NEPER, rel=0.05)
+    assert early_loss[0] < 0.1
+    # At 2 and 4 kHz what the leaves scatter out of the early paths reaches the listener
+    # as late sound; at 8 kHz they scatter so much that most of it leaves through the sky.
+    assert np.all(response.late.sum(axis=1)[5:7] > 2 * bare.late.sum(axis=1)[5:7])
 
 
 # -- shapes --------------------------------------------------------------------------

@@ -224,7 +224,12 @@ request and checks:
   through a layer of them barely touches them); two bands traced with one set of rays
   as each traced alone
   (within 3 %); the rain of foliage and of stems against the detector spheres; and
-  scenes without vegetation unchanged;
+  scenes without vegetation unchanged; leaves given by their area and width against a
+  thin disc's closed forms (the dipole of a small one to 0.2 %, twice the mean
+  projected area of a large one, its mean cosine towards 1/2) and a rigid wall's
+  boundary-layer absorption (to 1e-12), per band as the mean over its frequencies,
+  wider leaves of the same area taking more where their size nears the wavelength, and
+  the early paths through a belt of them losing what the medium says (within 5 %);
 - the wave solver in wind and temperature: the grid's own speed of sound in every cell
   giving the run without a speed per cell, to the bit (both stencils, with walls of
   frequency-dependent admittance); 0.8 times it giving sound that comes 1.25 times as
@@ -922,26 +927,104 @@ mean ± standard error of 16 runs of a million particles:
 | stems | through | 0.685 ± 0.003 | 0.682 ± 0.002 | 0.685 ± 0.002 | 0.682 ± 0.001 |
 | stems | beside | 1.254 ± 0.001 | 1.253 ± 0.001 | 1.254 ± 0.001 | 1.254 ± 0.001 |
 | stems | behind | 1.187 ± 0.001 | 1.185 ± 0.001 | 1.186 ± 0.000 | 1.185 ± 0.000 |
-| two bands, band 1 | through | 0.992 ± 0.002 | 0.995 ± 0.003 | 0.983 ± 0.001 | 0.988 ± 0.001 |
-| two bands, band 1 | beside | 1.418 ± 0.002 | 1.416 ± 0.002 | 1.417 ± 0.000 | 1.418 ± 0.000 |
-| two bands, band 1 | behind | 1.205 ± 0.001 | 1.200 ± 0.002 | 1.201 ± 0.000 | 1.202 ± 0.000 |
-| two bands, band 2 | through | 0.735 ± 0.002 | 0.736 ± 0.002 | 0.730 ± 0.001 | 0.732 ± 0.001 |
-| two bands, band 2 | beside | 1.101 ± 0.000 | 1.101 ± 0.000 | 1.098 ± 0.000 | 1.098 ± 0.000 |
-| two bands, band 2 | behind | 1.031 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 |
+| leaves | through | 0.947 ± 0.003 | 0.949 ± 0.002 | 0.939 ± 0.002 | 0.943 ± 0.002 |
+| leaves | beside | 1.529 ± 0.002 | 1.525 ± 0.002 | 1.528 ± 0.001 | 1.527 ± 0.001 |
+| leaves | behind | 1.252 ± 0.001 | 1.252 ± 0.001 | 1.251 ± 0.000 | 1.252 ± 0.000 |
+| two bands, band 1 | through | 0.994 ± 0.003 | 1.004 ± 0.004 | 0.988 ± 0.002 | 0.991 ± 0.003 |
+| two bands, band 1 | beside | 1.418 ± 0.002 | 1.421 ± 0.002 | 1.417 ± 0.000 | 1.417 ± 0.000 |
+| two bands, band 1 | behind | 1.203 ± 0.001 | 1.203 ± 0.002 | 1.202 ± 0.000 | 1.202 ± 0.000 |
+| two bands, band 2 | through | 0.736 ± 0.002 | 0.743 ± 0.003 | 0.732 ± 0.001 | 0.734 ± 0.003 |
+| two bands, band 2 | beside | 1.101 ± 0.001 | 1.103 ± 0.001 | 1.098 ± 0.000 | 1.098 ± 0.000 |
+| two bands, band 2 | behind | 1.030 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 |
 
-The four media: foliage that scatters every way alike, 0.03 per metre; foliage that
+The five media: foliage that scatters every way alike, 0.03 per metre; foliage that
 scatters forwards (mean cosine 0.6), 0.02 per metre, and absorbs 0.01; stems, 0.03 per
-metre of horizontal travel, turning sound by a mean cosine of -0.3; and the first two
-in two bands at once, which the engine traces with one set of rays. The engine agrees
-with the particles within 0.54 % through the slab, beside it and behind the source,
-with the spheres and with the rain: at most three of their standard errors, and the
-particles' own runs differ as much from one set of seeds to another (0.990 and 0.983
-through the slab, rain, the same foliage alone and in two bands). Next to the slab
+metre of horizontal travel, turning sound by a mean cosine of -0.3; leaves of 0.25 m²
+per m³, 5 cm wide, as the engine works them out in the 4 kHz band
+([Leaves](#leaves-against-closed-forms-and-iso-9613-2): 0.0535 per metre scattered
+with a mean cosine of 0.14, 0.00075 absorbed); and the first two in two bands at
+once, which the engine traces with one set of rays. The engine agrees with the
+particles within 1 % through the slab (0.4 % with one medium alone) and 0.3 % beside
+it and behind the source, with the spheres and with the rain: at most two to three of
+their standard errors, and the particles' own runs differ as much from one set of
+seeds to another (0.990 and 0.988 through the slab, rain, the same foliage alone and
+in two bands). Next to the slab
 the rain gives a little less than the spheres in both programs alike, as it takes
 the scattered sound at the sphere's centre and the spheres its mean over the sphere.
 Beside and behind the slab the rain is steadier than the spheres. Only a slab was
 checked, and against a simulation of the same model, not against measurements
 through trees.
+
+## Leaves against closed forms and ISO 9613-2
+
+`validation/leaves.py` checks foliage given as leaves (`foliage: {leaf_area_per_m3,
+leaf_width}`, see [Vegetation](outdoor.md#vegetation)), which the engine takes as thin
+rigid discs turned every way alike. The disc's scattering cross-section over its area
+against its closed forms: small against the wavelength, the dipole of the air the
+disc holds back, 16 (kr)⁴ / (81 π²) (from a disc's added mass, 8 ρ r³ / 3, a third of
+it turned every way alike); large, twice its mean projected area. In between the
+engine bridges the two, as the exact cross-section of a disc about a wavelength
+across is not in closed form:
+
+| kr | 0.1 | 0.3 | 1 | 2 | 3 | 5 | 10 | 30 |
+|---|---|---|---|---|---|---|---|---|
+| dipole | 2.0e-6 | 1.6e-4 | 0.020 | 0.32 | 1.6 | 13 | 200 | 1.6e4 |
+| engine | 2.0e-6 | 1.6e-4 | 0.020 | 0.24 | 0.62 | 0.93 | 0.995 | 0.9999 |
+| mean cosine | 0 | 0 | 0.01 | 0.12 | 0.31 | 0.46 | 0.50 | 0.50 |
+
+The leaves' absorption, the viscous and thermal boundary layers on their two faces,
+matches a rigid wall's in closed form (Morse and Ingard 1968, 6.4) to 1e-12: 3.6e-4
+of a leaf's area at 63 Hz, 1.5e-3 at 1 kHz, 4.1e-3 at 8 kHz, as the square root of
+the frequency.
+
+Then a wood of leaves 50 m deep over a ground that absorbs everything, the source and
+listeners 1.5 m up, the listeners 5, 20 and 50 m behind it: the wood's insertion loss
+(the level without it less the level with it, from two runs of the early paths and
+100,000 late rays per band), compared with ISO 9613-2's dense-foliage attenuation for
+50 m of foliage (Annex A, its rates per metre for 20 to 200 m), and with what the
+early paths alone lose (the leaves' extinction):
+
+| leaves | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
+|---|---|---|---|---|---|---|---|---|---|
+| ISO 9613-2, dense foliage | 1.00 | 1.50 | 2.00 | 2.50 | 3.00 | 4.00 | 4.50 | 6.00 | dB |
+| 0.1 m²/m³, 5 cm wide | 0.01 | 0.01 | 0.02 | 0.02 | 0.06 | 0.45 | 4.66 | 16.49 | early paths' loss |
+| | 0.01 | 0.01 | 0.02 | 0.02 | 0.05 | 0.31 | 2.92 | 8.76 | 5 m behind |
+| | 0.01 | 0.01 | 0.02 | 0.02 | 0.05 | 0.36 | 3.48 | 10.47 | 50 m behind |
+| 0.25 m²/m³, 5 cm wide | 0.02 | 0.03 | 0.04 | 0.06 | 0.14 | 1.11 | 11.65 | 41.22 | early paths' loss |
+| | 0.02 | 0.03 | 0.04 | 0.06 | 0.12 | 0.79 | 7.06 | 17.33 | 5 m behind |
+| | 0.02 | 0.03 | 0.04 | 0.06 | 0.13 | 0.90 | 8.17 | 19.98 | 50 m behind |
+| 0.5 m²/m³, 5 cm wide | 0.04 | 0.06 | 0.08 | 0.12 | 0.29 | 2.23 | 23.30 | 82.45 | early paths' loss |
+| | 0.04 | 0.06 | 0.08 | 0.12 | 0.24 | 1.57 | 11.88 | 32.19 | 5 m behind |
+| | 0.04 | 0.06 | 0.08 | 0.12 | 0.26 | 1.78 | 14.79 | 30.69 | 50 m behind |
+| 1 m²/m³, 5 cm wide | 0.08 | 0.11 | 0.16 | 0.24 | 0.57 | 4.45 | 46.61 | 164.90 | early paths' loss |
+| | 0.08 | 0.11 | 0.16 | 0.23 | 0.49 | 3.08 | 20.12 | 36.15 | 5 m behind |
+| | 0.08 | 0.11 | 0.16 | 0.24 | 0.51 | 3.37 | 23.22 | 39.98 | 50 m behind |
+| 0.25 m²/m³, 2 cm wide | 0.02 | 0.03 | 0.04 | 0.06 | 0.08 | 0.14 | 0.58 | 5.92 | early paths' loss |
+| | 0.02 | 0.03 | 0.04 | 0.06 | 0.08 | 0.13 | 0.45 | 4.21 | 5 m behind |
+| | 0.02 | 0.03 | 0.04 | 0.06 | 0.08 | 0.13 | 0.50 | 4.78 | 50 m behind |
+| 0.25 m²/m³, 10 cm wide | 0.02 | 0.03 | 0.04 | 0.12 | 1.08 | 11.61 | 41.16 | 53.29 | early paths' loss |
+| | 0.02 | 0.03 | 0.04 | 0.10 | 0.75 | 6.78 | 15.88 | 19.27 | 5 m behind |
+| | 0.02 | 0.03 | 0.04 | 0.11 | 0.85 | 7.99 | 18.41 | 22.07 | 50 m behind |
+
+The standard's table is empirical, for the foliage of whole woods, so this compares
+magnitudes rather than checking against an exact answer. Leaves 5 cm wide at 0.1 m²
+per m³, about a wood's trunk space with some foliage in it, take about what the table
+gives at 4 kHz (3 to 3.5 dB against 4.5) and more at 8 kHz (9 to 10 against 6); below
+1 kHz they take next to nothing, where the table's 1 to 3 dB are the standard's
+allowance for the whole wood, not what leaves scatter. The loss rises far more
+steeply with frequency than the table, and with the leaves' area and width, as
+measurements in dense foliage do (Aylor 1972 measured the loss through reeds and corn
+rising by several decibels per octave above 500 Hz): a leaf scatters once its size
+nears the wavelength, so wider
+leaves take hold at lower frequencies, and leaves 2 cm wide hardly matter below
+8 kHz. What the leaves scatter comes back as late sound, so a listener loses far less
+than the early paths do (the extinction row): with 1 m² per m³ the early paths lose
+165 dB at 8 kHz and the listener 36 to 40, the rest arriving scattered. The level
+behind dense leaves comes with the late rays' noise, a few tenths of a decibel at
+100,000 rays. No measurement of a known leaf area and width was available to check
+against; the bridge between the disc's two limits, the discs standing in for real
+leaves, which flex and hang in clumps, and the single phase function per band are
+the model's assumptions.
 
 ## The wave solver in wind and temperature against a parabolic equation
 
@@ -1327,7 +1410,9 @@ its peak (single precision).
   gradients, where they matter most, have not been compared with measurements.
   Vegetation is checked against a particle simulation of the same model, not against
   measurements through trees; its foliage takes ISO 9613-2's rates, which the
-  standard gives for depths of 20 to 200 m.
+  standard gives for depths of 20 to 200 m, or leaves as thin rigid discs, whose
+  cross-section between its two closed-form limits is bridged, not exact, and which
+  are compared with the standard's table, not with measurements of leaves.
   Turbulence is checked against a parabolic equation through random eddies in two
   dimensions, with the source and the listener near the ground, not against
   measurements; how much the sound flickers over time is not checked against either.
@@ -1358,6 +1443,7 @@ python validation/outdoor_propagation.py --json outdoor.json --plots docs/valida
 python validation/outdoor_propagation.py --turbulence moderate
 python validation/turbulence.py --json turbulence.json
 python validation/vegetation.py --json vegetation.json
+python validation/leaves.py --json leaves.json
 python validation/wave_outdoor.py --json wave_outdoor.json
 python validation/insertion_loss.py --json insertion_loss.json
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
@@ -1372,8 +1458,8 @@ python validation/bras_validation.py --materials initial --calibrate LS1 --plots
 The cross-check takes about 20 minutes on 4 cores, the benchmark about 2 minutes, the
 wave solver's checks about 3.5 minutes (both stencils), the ground's about 7.5 (1.5 of
 them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5
-(3 with turbulence), the turbulence's about 7, the vegetation's about 5, the wave
-solver's outdoors about 18, the outdoor results' about 3 and each BRAS
+(3 with turbulence), the turbulence's about 7, the vegetation's about 6, the wave
+solver's outdoors about 18, the outdoor results' about 3, the leaves' about 2 and each BRAS
 run about 30 minutes (85 in third-octave bands, or half that per room with
 `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it

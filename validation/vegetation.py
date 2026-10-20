@@ -16,12 +16,15 @@ its slope, so they send a receiver nothing straight, and from every scattering o
 them it counts the track that the next leg would have through each sphere, averaged
 over 16 turns drawn at random. The engine's compiled tracer runs the same with its
 detector spheres and with its rain (for stems, a quadrature over the turns that cross
-the sphere), for four media:
+the sphere), for five media:
 
 - foliage that scatters every way alike, absorbing nothing: 0.03 per metre;
 - foliage that scatters forwards (mean cosine 0.6), 0.02 per metre, and absorbs 0.01;
 - stems, which scatter sideways keeping the slope: 0.03 per metre of horizontal travel,
   the turn's mean cosine -0.3 (rigid cylinders at low frequencies scatter backwards);
+- leaves of 0.25 m² per cubic metre, 5 cm wide, as the engine works them out in the
+  4 kHz band (:func:`~acoustic_spaces.engine.vegetation.leaves_medium`): 0.0535 per
+  metre scattered with a mean cosine of 0.14, 0.00075 absorbed;
 - the first two in two bands at once, which the engine traces with one set of rays,
   weighting each band by what it meets (the reference runs each band on its own).
 
@@ -58,6 +61,8 @@ MEDIA = {
     "isotropic": {"absorption": 0.0, "scattering": 0.03, "asymmetry": 0.0, "upright": False},
     "forward": {"absorption": 0.01, "scattering": 0.02, "asymmetry": 0.6, "upright": False},
     "stems": {"absorption": 0.0, "scattering": 0.03, "asymmetry": -0.3, "upright": True},
+    # Leaves of 0.25 m² per m³, 5 cm wide, in the 4 kHz band (engine.vegetation.leaves_medium).
+    "leaves": {"absorption": 0.00075, "scattering": 0.0535, "asymmetry": 0.14, "upright": False},
 }
 
 

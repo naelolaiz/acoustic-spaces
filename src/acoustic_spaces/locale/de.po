@@ -2145,10 +2145,12 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "What fills it: foliage, which takes so many dB per metre from sound passing "
-"through, and stems, which scatter it sideways"
+"through, or leaves by their area and width, which work that out for "
+"themselves; and stems, which scatter it sideways"
 msgstr ""
-"Was es füllt: Laub, das dem durchgehenden Schall so viele dB pro Meter "
-"nimmt, und Stämme, die ihn seitlich streuen"
+"Was es füllt: Laub, das dem hindurchgehenden Schall so viele dB pro Meter "
+"nimmt, oder Blätter nach Fläche und Breite, aus denen sich das von selbst "
+"ergibt; und Stämme, die ihn seitlich streuen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Remove the selected vegetation, or the last one when none is selected"
@@ -2332,6 +2334,11 @@ msgstr "Baum, Krone mit {diameter} Durchmesser"
 #: acoustic_spaces/gui/inspector.py
 msgid "dense foliage"
 msgstr "dichtes Laub"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "leaves {area} m²/m³, {width} m wide"
+msgstr "Blätter {area} m²/m³, {width} m breit"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format

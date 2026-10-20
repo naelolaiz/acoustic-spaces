@@ -121,6 +121,12 @@ Outdoor acoustics, in steps:
   `simulation.early.diffraction_reflections: both_sides`, on the command line and in
   the editor; the barrier's insertion loss is then within 0.15 dB of the exact
   solution. `one_side` stays the default, so existing scenes give the same results.
+- [x] O8 Foliage from the leaves' size and density: `foliage: {leaf_area_per_m3,
+  leaf_width}` works out what the leaves scatter and absorb in each band, and how far
+  forward, from thin rigid discs turned every way alike; checked against the disc's
+  closed forms at both ends and a wall's boundary-layer absorption, the late rays
+  through such leaves against the particle simulation, and a wood of them compared
+  with ISO 9613-2's dense-foliage table. Presets and measured rates stay as they were.
 
 Unreleased:
 

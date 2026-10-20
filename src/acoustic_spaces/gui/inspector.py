@@ -943,7 +943,8 @@ class GeometryPage(Page):
                     ),
                     _(
                         "What fills it: foliage, which takes so many dB per metre from sound "
-                        "passing through, and stems, which scatter it sideways"
+                        "passing through, or leaves by their area and width, which work that "
+                        "out for themselves; and stems, which scatter it sideways"
                     ),
                     _("Remove the selected vegetation, or the last one when none is selected"),
                 ),
@@ -1309,6 +1310,14 @@ def _plant_fill(plant) -> str:
     foliage = plant.foliage
     if foliage.preset == "dense":
         parts.append(_("dense foliage"))
+    elif foliage.leaf_area_per_m3 is not None:
+        parts.append(
+            fmt(
+                _("leaves {area} m²/m³, {width} m wide"),
+                area=number(foliage.leaf_area_per_m3),
+                width=number(foliage.leaf_width),
+            )
+        )
     elif not foliage.bare:
         values = "/".join(number(v) for v in foliage.attenuation)
         parts.append(fmt(_("foliage {values} dB/m"), values=values))

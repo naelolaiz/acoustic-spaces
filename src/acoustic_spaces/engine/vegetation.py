@@ -9,7 +9,14 @@ between two heights, or a lone tree's crown, a spheroid) holds one or two media:
   cosine ``asymmetry``, and the rest absorbed. The ``dense`` preset is ISO 9613-2's
   dense foliage (Annex A, Table A.1, its rates for 20 to 200 m of it), all absorbed:
   the table is what dense foliage takes from sound passing through it in all, with
-  what it scatters onwards counted in, so it adds no scattered sound of its own.
+  what it scatters onwards counted in, so it adds no scattered sound of its own. Or
+  its leaves (``leaf_area_per_m3``, ``leaf_width``): thin rigid discs turned every way
+  alike, ``leaf_area_per_m3`` of them (one side's area) per cubic metre, each the
+  diameter ``leaf_width``, which scatter (:func:`disc_scattering`: a dipole where the
+  disc is small against the wavelength, from the air it holds back; twice its mean
+  projected area where it is large, half of that the forward shadow) and absorb in the
+  viscous and thermal boundary layers on their faces (:func:`leaf_absorption`), each
+  band averaged over its frequencies.
 - Its stems (``Vegetation.stems``): upright rigid cylinders, ``per_m2`` per square
   metre of ground and ``diameter`` across, which absorb nothing and scatter, per
   metre of horizontal travel, their number times the scattering width of a rigid
@@ -50,10 +57,24 @@ from acoustic_spaces.materials.bands import Resolution, band_limits
 
 #: dB per neper of energy: 10 log10(e).
 DB_PER_NEPER = 10.0 / math.log(10.0)
-#: Frequencies per band over which the stems' scattering is averaged.
+#: Frequencies per band over which the stems' and the leaves' scattering is averaged.
 BAND_SAMPLES = 9
 #: Angles at which a cylinder's scattering is summed for its mean cosine.
 ANGLES = 512
+#: A thin rigid disc's scattering cross-section over its area where it is small against
+#: the wavelength, over (kr)^4: the air it holds back is a dipole of the disc's added
+#: mass, 8 rho r^3 / 3 along its normal, so with the wave along the normal it scatters
+#: 16 (kr)^4 r^2 / (27 pi); turned every way alike (cos^2 of the angle to the normal
+#: averages 1/3), 16 (kr)^4 r^2 / (81 pi) over pi r^2.
+DISC_RAYLEIGH = 16.0 / (81.0 * math.pi**2)
+#: The air at 20 °C for the boundary layers on the leaves: kinematic viscosity (m^2/s),
+#: Prandtl number and ratio of specific heats.
+AIR_VISCOSITY_M2_S = 1.51e-5
+AIR_PRANDTL = 0.71
+AIR_GAMMA = 1.4
+#: The share of a large disc's scattering that is its forward shadow, which goes straight
+#: on; the rest, reflected off faces turned every way alike, goes every way alike.
+SHADOW_SHARE = 0.5
 
 
 @dataclass
@@ -73,16 +94,78 @@ class Medium:
         return self.absorption + self.scattering
 
 
-def foliage_medium(foliage, resolution: Resolution) -> Medium | None:
+def foliage_medium(foliage, resolution: Resolution, speed_of_sound: float = 343.0) -> Medium | None:
     """The medium of a volume's ``foliage`` (:class:`~acoustic_spaces.scene.Foliage`) in
-    the bands at ``resolution``; None for none."""
+    the bands at ``resolution``, for sound at ``speed_of_sound`` (m/s, which only its
+    leaves take); None for none."""
     if foliage.bare:
         return None
+    if foliage.leaf_area_per_m3 is not None:
+        return leaves_medium(
+            foliage.leaf_area_per_m3, foliage.leaf_width, resolution, speed_of_sound
+        )
     total = foliage.attenuation_db(resolution) / DB_PER_NEPER
     return Medium(
         absorption=(1.0 - foliage.albedo) * total,
         scattering=foliage.albedo * total,
         asymmetry=np.full(len(total), float(foliage.asymmetry)),
+    )
+
+
+def disc_scattering(kr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """For a thin rigid disc of radius r turned every way alike, at ``kr`` (k the
+    wavenumber): its scattering cross-section over its area (one side's), and the mean
+    cosine of the angle it scatters through.
+
+    Small against the wavelength the disc is a dipole, :data:`DISC_RAYLEIGH` (kr)^4,
+    which scatters as much back as on (mean cosine 0); large, it takes twice its mean
+    projected area, pi r^2 / 2, half of it the forward shadow, which goes straight on,
+    and half reflected off its faces, which, turned every way alike, goes every way
+    alike (mean cosine :data:`SHADOW_SHARE`). In between the two limits are bridged
+    by s / (1 + s), s the dipole's share of the large disc's cross-section: the exact
+    cross-section of a disc of a size near the wavelength is not in closed form, and
+    the bridge keeps both limits and the rise between them smooth.
+    """
+    kr = np.asarray(kr, dtype=float)
+    s = DISC_RAYLEIGH * kr**4
+    efficiency = s / (1.0 + s)
+    return efficiency, SHADOW_SHARE * efficiency
+
+
+def leaf_absorption(k: np.ndarray, speed_of_sound: float) -> np.ndarray:
+    """A leaf's absorption cross-section over its area (one side's) at the wavenumbers
+    ``k``: the viscous and thermal boundary layers on its two faces, in the wave as it
+    comes (the leaf turned every way alike, so the tangential velocity's square averages
+    2/3 of the wave's). Per face and unit area a rigid isothermal wall takes
+    (k / 2) (delta_v sin^2 theta + (gamma - 1) delta_t) of the intensity that reaches it,
+    delta_v and delta_t the viscous and thermal boundary layer thicknesses sqrt(2 nu /
+    omega) and delta_v / sqrt(Pr) (Morse and Ingard 1968, 6.4)."""
+    k = np.asarray(k, dtype=float)
+    omega = k * speed_of_sound
+    delta_v = np.sqrt(2.0 * AIR_VISCOSITY_M2_S / omega)
+    delta_t = delta_v / math.sqrt(AIR_PRANDTL)
+    return k * (2.0 / 3.0 * delta_v + (AIR_GAMMA - 1.0) * delta_t)
+
+
+def leaves_medium(
+    area_per_m3: float, width: float, resolution: Resolution, speed_of_sound: float
+) -> Medium:
+    """The medium of leaves of ``area_per_m3`` (one side's area per cubic metre) and
+    ``width`` (m, the diameter of a disc of a leaf's area) in the bands at
+    ``resolution``, for sound at ``speed_of_sound`` (m/s): per metre, the leaf area
+    times a disc's scattering (:func:`disc_scattering`) and absorption
+    (:func:`leaf_absorption`) over its area, averaged over each band's frequencies."""
+    lower, upper = band_limits(resolution)
+    f = np.exp(
+        np.linspace(np.log(lower), np.log(upper), BAND_SAMPLES + 1)[:-1]
+        + 0.5 * np.log(upper / lower) / BAND_SAMPLES
+    )  # (samples, bands), even in log frequency over each band
+    k = 2.0 * np.pi * f / speed_of_sound
+    efficiency, cosine = disc_scattering(k * 0.5 * width)
+    return Medium(
+        absorption=area_per_m3 * leaf_absorption(k, speed_of_sound).mean(axis=0),
+        scattering=area_per_m3 * efficiency.mean(axis=0),
+        asymmetry=np.sum(efficiency * cosine, axis=0) / np.sum(efficiency, axis=0),
     )
 
 
@@ -192,7 +275,7 @@ class Plants:
         media, fills = [], []
         for index, spec in enumerate(room.scene.geometry.vegetation):
             for medium in (
-                foliage_medium(spec.foliage, resolution),
+                foliage_medium(spec.foliage, resolution, speed_of_sound),
                 None
                 if spec.stems is None
                 else stems_medium(spec.stems, resolution, speed_of_sound),
@@ -299,7 +382,10 @@ __all__ = [
     "Medium",
     "Plants",
     "cylinder_scattering",
+    "disc_scattering",
     "foliage_medium",
+    "leaf_absorption",
+    "leaves_medium",
     "plant_arguments",
     "stems_medium",
 ]

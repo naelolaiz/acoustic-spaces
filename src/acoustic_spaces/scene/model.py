@@ -268,9 +268,12 @@ DENSE_FOLIAGE_DB_PER_M = (0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.09, 0.12)
 
 class Foliage(_Model):
     """What the leaves and twigs of a vegetation volume take from sound passing through
-    it, per metre: a preset, or an attenuation per band. ``albedo`` is the share of it
-    that they scatter on, the rest they absorb; ``asymmetry`` how far forward they
-    scatter it (the mean cosine of the angle, as in a Henyey-Greenstein phase function)."""
+    it, per metre: a preset, an attenuation per band, or the leaves themselves, their
+    area per cubic metre and their width, from which the engine works out what they
+    scatter and absorb in each band. ``albedo`` is the share of an attenuation that
+    they scatter on, the rest they absorb; ``asymmetry`` how far forward they scatter
+    it (the mean cosine of the angle, as in a Henyey-Greenstein phase function); leaves
+    given by their size and density work both out for themselves."""
 
     preset: Literal["dense", "none"] | None = Field(
         default=None,
@@ -282,6 +285,20 @@ class Foliage(_Model):
     attenuation: list[Annotated[float, Field(ge=0.0, le=10.0)]] | None = Field(
         default=None,
         description="dB per metre per octave or third-octave band, when no preset says it",
+    )
+    leaf_area_per_m3: PositiveFloat | None = Field(
+        default=None,
+        le=50.0,
+        description=(
+            "the leaves' area (one side's), square metres per cubic metre of the volume, "
+            "with leaf_width: the engine works out what they scatter and absorb in each "
+            "band from thin rigid discs of that size, turned every way alike"
+        ),
+    )
+    leaf_width: PositiveFloat | None = Field(
+        default=None,
+        le=1.0,
+        description="a leaf's width (m): the diameter of a disc of a leaf's area",
     )
     albedo: Coefficient = Field(
         default=0.0,
@@ -320,10 +337,29 @@ class Foliage(_Model):
 
     @model_validator(mode="after")
     def _one_way(self) -> Foliage:
-        if (self.preset is None) == (self.attenuation is None):
-            raise ValueError("foliage takes a preset or an attenuation per band, one of them")
+        if (self.leaf_area_per_m3 is None) != (self.leaf_width is None):
+            raise ValueError("leaf_area_per_m3 and leaf_width go together")
+        ways = [
+            w
+            for w, given in (
+                ("a preset", self.preset is not None),
+                ("an attenuation per band", self.attenuation is not None),
+                ("leaves by their area and width", self.leaf_area_per_m3 is not None),
+            )
+            if given
+        ]
+        if len(ways) != 1:
+            raise ValueError(
+                "foliage takes a preset, an attenuation per band or leaves by their area and "
+                "width, one of them"
+            )
         if self.preset == "none" and (self.albedo or self.asymmetry):
             raise ValueError("foliage none has nothing to scatter: leave out albedo and asymmetry")
+        if self.leaf_area_per_m3 is not None and (self.albedo or self.asymmetry):
+            raise ValueError(
+                "leaves given by their area and width work out what they scatter: leave out "
+                "albedo and asymmetry"
+            )
         return self
 
     @property
@@ -331,10 +367,23 @@ class Foliage(_Model):
         """Whether there is no foliage."""
         if self.preset is not None:
             return self.preset == "none"
+        if self.leaf_area_per_m3 is not None:
+            return False
         return not any(self.attenuation)
 
-    def attenuation_db(self, resolution: Resolution = "octave") -> np.ndarray:
-        """dB per metre in each band at ``resolution``."""
+    def attenuation_db(
+        self, resolution: Resolution = "octave", speed_of_sound: float = 343.0
+    ) -> np.ndarray:
+        """dB per metre in each band at ``resolution``: what the foliage takes in all,
+        scattered on or absorbed; leaves given by their area and width take it for sound
+        at ``speed_of_sound`` (m/s)."""
+        if self.leaf_area_per_m3 is not None:
+            from acoustic_spaces.engine.vegetation import DB_PER_NEPER, leaves_medium
+
+            medium = leaves_medium(
+                self.leaf_area_per_m3, self.leaf_width, resolution, speed_of_sound
+            )
+            return medium.extinction * DB_PER_NEPER
         if self.preset == "none":
             values = [0.0] * len(OCTAVE_BANDS_HZ)
         elif self.preset == "dense":
@@ -346,6 +395,8 @@ class Foliage(_Model):
     def describe(self) -> str:
         if self.preset is not None:
             return f"{self.preset} foliage" if self.preset == "dense" else "no foliage"
+        if self.leaf_area_per_m3 is not None:
+            return f"leaves of {self.leaf_area_per_m3:g} m²/m³, {self.leaf_width:g} m wide"
         return "foliage of " + "/".join(f"{v:g}" for v in self.attenuation) + " dB/m"
 
 
@@ -385,7 +436,10 @@ class Vegetation(_Model):
     )
     foliage: Foliage = Field(
         default_factory=lambda: Foliage(preset="dense"),
-        description="what the leaves and twigs take: a preset (dense, none) or values",
+        description=(
+            "what the leaves and twigs take: a preset (dense, none), values, or the leaves "
+            "by their area and width"
+        ),
     )
     stems: Stems | None = Field(default=None, description="trunks and stems in it, if any")
 

@@ -463,6 +463,7 @@ overlap, what fills them adds up.
 | `dense` (the default) | ISO 9613-2's dense foliage (Annex A): 0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.09 and 0.12 dB per metre from 63 Hz to 8 kHz, all absorbed |
 | `none` | no foliage: bare stems, a wood in winter (then it needs `stems`) |
 | `{attenuation: [...], albedo: 0.5, asymmetry: 0.3}` | dB per metre per octave or third-octave band; `albedo` is the share of it that the foliage scatters on instead of absorbing (0 by default), `asymmetry` the mean cosine of the angle it scatters through (0 every way alike, towards 1 onwards) |
+| `{leaf_area_per_m3: 0.5, leaf_width: 0.06}` | the leaves themselves: their area (one side's) per cubic metre of the volume and their width (the diameter of a disc of a leaf's area, m); what they scatter and absorb in each band, and how far forward they scatter it, follow from their size (below) |
 
 ISO 9613-2's rates are what dense foliage takes from sound passing through it in all,
 with what it scatters onwards counted in, so the preset absorbs all of it and adds no
@@ -470,6 +471,29 @@ scattered sound. The standard gives them for 20 to 200 m of foliage, a fixed 1 t
 for 10 to 20 m and none below; the engine takes the rates per metre at any depth, so a
 belt under 20 m deep loses a little less than the standard says, and it measures the
 depth along the straight path, where the standard takes an arc of 5 km radius.
+
+**Leaves** given by their area and width are taken as thin rigid discs of that size,
+turned every way alike, `leaf_area_per_m3` of them per cubic metre. Each scatters as
+a disc does: small against the wavelength, as a dipole, from the air it holds back
+(16 (kr)⁴ / (81 π²) of its area, k the wavenumber and r its radius), so the low bands
+pass almost untouched; large against it, twice its mean projected area, half of that
+the shadow it casts, which goes nearly straight on, and half reflected off its faces,
+which go every way alike. In between the two limits are bridged smoothly, as the
+exact cross-section of a disc about a wavelength across is not in closed form. The
+leaves absorb in the viscous and thermal boundary layers on their two faces, a few
+per mille of their area, which is what they take at the low frequencies where they
+scatter nothing. Per metre, the volume takes its leaf area times those
+cross-sections over a disc's area, averaged over each band (the speed of sound sets
+the wavelength); the scattered share and its mean cosine (0 for the dipole, towards
+1/2 for a large disc) replace `albedo` and `asymmetry`, which leaves do not take.
+Leaves 5 cm wide at 0.5 m² per m³, a dense canopy, take 0.05 dB per metre at 2 kHz,
+0.5 at 4 kHz and 1.6 at 8 kHz out of the early paths, and almost nothing below 1 kHz;
+a hedge's leaves (2 to 6 m² per m³) take several decibels per metre from 4 kHz up. Much of it
+comes back scattered, with the late rays, so what a listener loses is far less
+(see [Validation](validation.md#leaves-against-closed-forms-and-iso-9613-2)). A real
+leaf is neither rigid nor a disc, and leaves hang in clumps: measured foliage, where
+there is any, is the better input, as `attenuation` with an `albedo` and an
+`asymmetry`.
 
 **Stems** are upright rigid cylinders. They absorb nothing and scatter, per metre of
 horizontal travel, their number times a cylinder's scattering width: the exact series
@@ -514,7 +538,7 @@ example traces 200000, and G behind its trees still varies from run to run, by 0
 0.7 dB (one standard deviation) depending on the band.
 
 `acoustic-spaces inspect` lists the vegetation with what sound loses per metre through
-each, foliage and stems together. The editor's 3D view, `view` and the export to
+each, foliage (or leaves) and stems together. The editor's 3D view, `view` and the export to
 Blender draw the volumes in see-through green, and coverage maps outline them.
 
 ## What the simulation does outdoors
