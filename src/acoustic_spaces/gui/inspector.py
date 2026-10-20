@@ -644,7 +644,8 @@ class ScenePage(Page):
                 # Their size is the place's, not the weather's: it stays.
                 if isinstance(old, dict) and "outer_scale_m" in old:
                     atmosphere["turbulence"]["outer_scale_m"] = old["outer_scale_m"]
-            if atmosphere:
+            # Still air without eddies is no atmosphere (the scene writes the defaults out).
+            if atmosphere and atmosphere != Atmosphere().model_dump(mode="json", exclude_none=True):
                 data["atmosphere"] = atmosphere
             else:
                 data.pop("atmosphere", None)
