@@ -68,6 +68,7 @@ def march(
     ranges: np.ndarray,
     heights: np.ndarray,
     top: float,
+    screen=None,
 ) -> np.ndarray:
     """(F, n) the complex pressure at ``frequencies`` (F,) Hz (time as exp(-i omega t),
     free field exp(ikR) / R) at the points ``ranges`` (n,, m along the ground from the
@@ -75,7 +76,10 @@ def march(
     effective speed of sound ``speed(z)`` (m/s, an array function of the height).
     ``impedance(r)`` gives the ground's normalised impedance at the frequencies (F,,
     time as exp(-i omega t); infinite: rigid) at range r, or None where it is rigid.
-    The absorbing layer starts at height ``top``."""
+    The absorbing layer starts at height ``top``. ``screen(r, dr, z)``, when given,
+    returns the fluctuation of the index of refraction integrated over the step from r to
+    r + dr at heights z (m): a turbulent phase screen, half of whose phase each half step
+    takes (for validation, :mod:`validation.turbulence`)."""
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
@@ -129,6 +133,8 @@ def march(
                 here = _Ground(value, ka, kz, z, width)
                 key = here.key
             half, propagate = stepping(dr)
+            if screen is not None:
+                half = half * np.exp(0.5j * ka[:, None] * screen(r, dr, z)[None, :])
             screened = half * psi
             tilted[:, :n] = screened
             tilted[:, n:] = 0.0

@@ -1421,6 +1421,18 @@ msgid "constant"
 msgstr "constante"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "weak"
+msgstr "débil"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "moderate"
+msgstr "moderada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "strong"
+msgstr "fuerte"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Measured data or an array from a file…"
 msgstr "Datos medidos o un array desde un archivo…"
 
@@ -1644,6 +1656,66 @@ msgstr "Rugosidad"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"The eddies of the wind and of the temperature, which make sound outdoors "
+"flicker: the direct sound and its reflections stop adding in step (the dip "
+"of the ground fills in), sound is scattered into shadow zones, and renders "
+"and walkthroughs change as the eddies drift past. (none): steady air; weak, "
+"overcast with a light wind; moderate, a breeze and some sun; strong, a "
+"strong wind or a hot sun; custom, the values below"
+msgstr ""
+"Los remolinos del viento y de la temperatura, que hacen fluctuar el sonido "
+"al aire libre: el sonido directo y sus reflexiones dejan de sumarse en fase "
+"(la depresión del terreno se rellena), el sonido se dispersa hacia las zonas "
+"de sombra, y las escuchas y los recorridos cambian a medida que pasan los "
+"remolinos. (ninguno): aire estable; débil, nublado con un viento ligero; "
+"moderada, una brisa y algo de sol; fuerte, un viento fuerte o un sol "
+"intenso; personalizado, los valores de abajo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the temperature's eddies are: its structure parameter C_T² (K² "
+"m^-2/3), about 0.001 to 1 near the ground, the most in sunshine"
+msgstr ""
+"La intensidad de los remolinos de la temperatura: su parámetro de estructura "
+"C_T² (K² m^-2/3), de unos 0,001 a 1 cerca del suelo, el mayor con sol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the wind's eddies are: its structure parameter C_v² (m^4/3 s^-2), "
+"about 0.01 to 1 near the ground, the more the stronger the wind"
+msgstr ""
+"La intensidad de los remolinos del viento: su parámetro de estructura C_v² "
+"(m^4/3 s^-2), de unos 0,01 a 1 cerca del suelo, tanto mayor cuanto más "
+"fuerte es el viento"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The size of the largest eddies (m), some metres near the ground: they take "
+"this long to drift past at the wind's speed, which sets how fast the sound "
+"flickers"
+msgstr ""
+"El tamaño de los remolinos más grandes (m), unos metros cerca del suelo: "
+"tardan lo que tardan en pasar a la velocidad del viento, lo que fija lo "
+"rápido que fluctúa el sonido"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies"
+msgstr "Turbulencia"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature eddies"
+msgstr "Turbulencia de la temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind eddies"
+msgstr "Turbulencia del viento"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddy size"
+msgstr "Tamaño de los remolinos"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "A measured profile from the scene file: the temperature and the wind's speed "
 "come from it, in straight lines between its heights"
 msgstr ""
@@ -1734,6 +1806,10 @@ msgstr "modificar aire"
 #: acoustic_spaces/gui/inspector.py
 msgid "change the weather"
 msgstr "modificar el tiempo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the eddies"
+msgstr "cambiar la turbulencia"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change the wind and temperature"
@@ -4988,10 +5064,10 @@ msgid ""
 "towards the ground, and sound going against it bends up, over the listeners' "
 "heads. Downwind the sound comes sooner, and louder in the low bands; 300 m "
 "upwind the listeners are in its shadow, where only what bends round its edge "
-"arrives, the less the higher the band: there the bands from 1 kHz up are "
-"some 60 dB below those downwind, more than one would measure, as the "
-"turbulence that scatters sound into a shadow is not modelled yet. Remove the "
-"atmosphere to hear the same park in still air."
+"and what the wind's eddies scatter into it arrive: there the bands from 1 "
+"kHz up are some 19 dB below those downwind, where without the eddies they "
+"would be 60 dB below. The eddies also make the sound flicker as they drift "
+"past. Remove the atmosphere to hear the same park in still air."
 msgstr ""
 "Al aire libre: los altavoces de un escenario a 5 m de altura, escuchados a "
 "100 y 300 m a través de un parque en una tarde de viento, a favor y en "
@@ -5001,11 +5077,11 @@ msgstr ""
 "encima de las cabezas de los oyentes. A favor del viento el sonido llega "
 "antes, y más fuerte en las bandas graves; a 300 m en contra del viento los "
 "oyentes están en su sombra, donde solo llega lo que se curva alrededor de su "
-"borde, tanto menos cuanto más alta es la banda: allí las bandas desde 1 kHz "
-"quedan unos 60 dB por debajo de las de a favor del viento, más de lo que se "
-"mediría, porque la turbulencia que dispersa el sonido hacia una sombra aún "
-"no se modela. Quite la atmósfera para escuchar el mismo parque con el aire "
-"en calma."
+"borde y lo que los remolinos del viento dispersan hacia ella: allí las "
+"bandas desde 1 kHz quedan unos 19 dB por debajo de las de a favor del "
+"viento, cuando sin los remolinos quedarían 60 dB por debajo. Los remolinos "
+"también hacen fluctuar el sonido a medida que pasan. Quite la atmósfera para "
+"escuchar el mismo parque con el aire en calma."
 
 #: examples/orchestra/scene.yaml
 msgctxt "example"

@@ -47,6 +47,7 @@ from acoustic_spaces.engine.simulate import (
     coherent_bands,
     response_length,
 )
+from acoustic_spaces.engine.turbulence import Eddies
 from acoustic_spaces.geometry import points_inside
 from acoustic_spaces.geometry.outdoor import GROUND
 from acoustic_spaces.i18n import N_
@@ -644,6 +645,9 @@ def _trace_part(
         found = refraction.apply(grid.points, straight, found, cutoff)
         # The response starts when the bent direct sound arrives.
         onset = direct_times(onset, found)
+    eddies = Eddies.of(model, c)
+    if eddies is not None:
+        found = [eddies.attach(paths) for paths in found]
     plain = found
     early = [apply_grazing(model, grid.points[k], paths) for k, paths in enumerate(found)]
     if diffraction is not None:

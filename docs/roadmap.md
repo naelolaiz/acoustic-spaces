@@ -99,7 +99,10 @@ Outdoor acoustics, in steps:
 - [x] O3 Wind and temperature gradients: curved rays and shadow zones; a parabolic
   equation for the sound over the ground below 500 Hz and in the shadows; validated
   against measurements of a wind turbine up to 845 m away.
-- [ ] O4 Atmospheric turbulence.
+- [x] O4 Atmospheric turbulence: the coherence of the paths (the ground dip filling
+  in), sound scattered into shadows, and impulse responses, renders and walkthroughs
+  that flicker as the eddies drift past; checked against a parabolic equation through
+  random eddies.
 - [ ] O5 Vegetation: trees, hedges and forests.
 - [ ] O6 The wave solver with a speed of sound that changes from place to place.
 

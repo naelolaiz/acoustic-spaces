@@ -54,7 +54,9 @@ from acoustic_spaces.scene.model import (
     ATMOSPHERE_PRESETS,
     INDOOR_COHERENT_MAX_BAND_HZ,
     LAYOUT_NAMES,
+    TURBULENCE_PRESETS,
     Atmosphere,
+    Turbulence,
     Wind,
 )
 
@@ -120,6 +122,13 @@ WEATHERS = [
     ("custom", N_("custom")),
 ]
 WIND_PROFILES = [("log", N_("log")), ("linear", N_("linear")), ("constant", N_("constant"))]
+EDDIES = [
+    (None, N_("(none)")),
+    ("weak", N_("weak")),
+    ("moderate", N_("moderate")),
+    ("strong", N_("strong")),
+    ("custom", N_("custom")),
+]
 #: The directivity list entry that asks for a SOFA or CSV file.
 MEASURED = N_("Measured data or an array from a file…")
 #: The tip of a source's directivity list, before the choice it shows.
@@ -387,6 +396,51 @@ class ScenePage(Page):
         form.addRow(_("Temperature gradient"), self.gradient)
         form.addRow(_("Temperature near the ground"), self.log_term)
         form.addRow(_("Roughness"), self.roughness)
+        self.eddies = QComboBox()
+        _fill(self.eddies, EDDIES)
+        self.eddies.setToolTip(
+            _(
+                "The eddies of the wind and of the temperature, which make sound outdoors "
+                "flicker: the direct sound and its reflections stop adding in step (the dip "
+                "of the ground fills in), sound is scattered into shadow zones, and renders "
+                "and walkthroughs change as the eddies drift past. (none): steady air; weak, "
+                "overcast with a light wind; moderate, a breeze and some sun; strong, a strong "
+                "wind or a hot sun; custom, the values below"
+            )
+        )
+        self.eddies.currentIndexChanged.connect(self._eddies)
+        self.temperature_eddies = spin(0, 10, 4, 0.001)
+        self.temperature_eddies.setToolTip(
+            _(
+                "How strong the temperature's eddies are: its structure parameter C_T² "
+                "(K² m^-2/3), about 0.001 to 1 near the ground, the most in sunshine"
+            )
+        )
+        self.wind_eddies = spin(0, 10, 3, 0.01)
+        self.wind_eddies.setToolTip(
+            _(
+                "How strong the wind's eddies are: its structure parameter C_v² (m^4/3 s^-2), "
+                "about 0.01 to 1 near the ground, the more the stronger the wind"
+            )
+        )
+        self.eddy_size = spin(0.1, 1000, 1, 1, "m")
+        self.eddy_size.setToolTip(
+            _(
+                "The size of the largest eddies (m), some metres near the ground: they take "
+                "this long to drift past at the wind's speed, which sets how fast the sound "
+                "flickers"
+            )
+        )
+        for box, field in (
+            (self.temperature_eddies, "temperature_structure"),
+            (self.wind_eddies, "wind_structure"),
+            (self.eddy_size, "outer_scale_m"),
+        ):
+            box.valueChanged.connect(lambda value, f=field: self._eddy(f, value))
+        form.addRow(_("Eddies"), self.eddies)
+        form.addRow(_("Temperature eddies"), self.temperature_eddies)
+        form.addRow(_("Wind eddies"), self.wind_eddies)
+        form.addRow(_("Eddy size"), self.eddy_size)
         self.table = QLabel()
         self.table.setWordWrap(True)
         self.table.setToolTip(
@@ -417,8 +471,14 @@ class ScenePage(Page):
 
     def _load_weather(self, scene) -> None:
         atmosphere = scene.atmosphere
-        _choose(self.weather, None if atmosphere is None else atmosphere.preset or "custom")
+        _choose(self.weather, _weather_of(atmosphere))
         shown = atmosphere or Atmosphere()
+        eddies = shown.turbulence
+        _choose(self.eddies, None if eddies is None else eddies.preset or "custom")
+        eddies = eddies or Turbulence()
+        self.temperature_eddies.setValue(eddies.temperature_structure)
+        self.wind_eddies.setValue(eddies.wind_structure)
+        self.eddy_size.setValue(eddies.outer_scale_m)
         wind = shown.wind or Wind()
         self.wind_speed.setValue(wind.speed_m_s)
         self.wind_direction.setValue(wind.direction_deg % 360.0)
@@ -542,8 +602,7 @@ class ScenePage(Page):
         if self.weather.currentIndex() < 0:
             return
         value = self.weather.currentData()
-        atmosphere = self.document.scene.atmosphere
-        if value == (None if atmosphere is None else atmosphere.preset or "custom"):
+        if value == _weather_of(self.document.scene.atmosphere):
             return
 
         def change(data: dict) -> None:
@@ -558,8 +617,49 @@ class ScenePage(Page):
                 wind = old.get("wind")
                 if isinstance(wind, dict) and "direction_deg" in wind:
                     data["atmosphere"]["wind"] = {"direction_deg": wind["direction_deg"]}
+            # So do the eddies.
+            if old.get("turbulence") is not None:
+                data.setdefault("atmosphere", {})["turbulence"] = old["turbulence"]
 
         self.apply(_("change the weather"), change)
+
+    def _eddies(self) -> None:
+        if self.eddies.currentIndex() < 0:
+            return
+        value = self.eddies.currentData()
+        atmosphere = self.document.scene.atmosphere
+        eddies = None if atmosphere is None else atmosphere.turbulence
+        if value == (None if eddies is None else eddies.preset or "custom"):
+            return
+
+        def change(data: dict) -> None:
+            atmosphere = data.get("atmosphere") or {}
+            old = atmosphere.get("turbulence")
+            if value is None:
+                atmosphere.pop("turbulence", None)
+            elif value == "custom":
+                atmosphere["turbulence"] = _eddies_written_out(old)
+            else:
+                atmosphere["turbulence"] = {"preset": value}
+                # Their size is the place's, not the weather's: it stays.
+                if isinstance(old, dict) and "outer_scale_m" in old:
+                    atmosphere["turbulence"]["outer_scale_m"] = old["outer_scale_m"]
+            if atmosphere:
+                data["atmosphere"] = atmosphere
+            else:
+                data.pop("atmosphere", None)
+
+        self.apply(_("change the eddies"), change)
+
+    def _eddy(self, field: str, value) -> None:
+        def change(data: dict) -> None:
+            atmosphere = data.get("atmosphere") or {}
+            eddies = _eddies_written_out(atmosphere.get("turbulence"))
+            eddies[field] = value
+            atmosphere["turbulence"] = eddies
+            data["atmosphere"] = atmosphere
+
+        self.apply(_("change the eddies"), change)
 
     def _atmosphere(self, field: str, value) -> None:
         def change(data: dict) -> None:
@@ -609,6 +709,26 @@ class ScenePage(Page):
         )
         self.profile_window.show()
         self.profile_window.raise_()
+
+
+def _weather_of(atmosphere: Atmosphere | None) -> str | None:
+    """The weather the form shows: none, a preset or custom (the eddies aside)."""
+    if atmosphere is None:
+        return None
+    if atmosphere.preset is not None:
+        return atmosphere.preset
+    plain = atmosphere.model_copy(update={"turbulence": None})
+    return None if plain == Atmosphere() else "custom"
+
+
+def _eddies_written_out(eddies) -> dict:
+    """A copy of the eddies' scene-file data with their preset's values written out in
+    place of its name, so that changing one of them keeps the others."""
+    if eddies is None:
+        return {}
+    eddies = {"preset": eddies} if isinstance(eddies, str) else copy.deepcopy(eddies)
+    preset = eddies.pop("preset", None)
+    return {**TURBULENCE_PRESETS.get(preset, {}), **eddies}
 
 
 def _written_out(atmosphere: dict) -> dict:

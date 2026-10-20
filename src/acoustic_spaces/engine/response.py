@@ -352,7 +352,8 @@ class Response:
 
         Early paths become fractional-delay impulses filtered per band, in the lowest
         bands with the phase of their reflections
-        (:mod:`~acoustic_spaces.engine.coherent`); the late energy drives a random-sign
+        (:mod:`~acoustic_spaces.engine.coherent`), in turbulence as at one moment
+        (:meth:`moment`); the late energy drives a random-sign
         Dirac sequence with the density of reflections in the room.
         From 50 ms after the direct sound the late energy is smoothed over 10 ms first,
         so a single strong ray late in the tail does not become a click. The wave
@@ -362,8 +363,9 @@ class Response:
         """
         n = int(math.ceil(self.length_s * sample_rate))
         scale = synthesis.ENERGY_TO_IR
-        band_signals, quadrature = coherent.band_impulses(self.early, n, sample_rate)
-        low = coherent.signal(self.early, n, sample_rate)[:, 0]
+        paths = self.moment(seed)
+        band_signals, quadrature = coherent.band_impulses(paths, n, sample_rate)
+        low = coherent.signal(paths, n, sample_rate)[:, 0]
         noise_signals = np.zeros_like(band_signals)
         if np.any(self.late > 0):
             rng = np.random.default_rng(self.seed if seed is None else seed)
@@ -384,6 +386,13 @@ class Response:
         noise = synthesis.combine_bands(noise_signals, sample_rate)
         late = self.wave.high_pass(noise, sample_rate, late=True)
         return early + late + self.wave.field(sample_rate, n)[:, 0]
+
+    def moment(self, seed: int | None = None) -> EarlyReflections:
+        """The early paths at a moment of the turbulent air, drawn with ``seed``
+        (default the response's): outdoors in turbulence the eddies delay each path at
+        random, and an impulse response is one moment of them, whose levels scatter
+        about the echogram's average. Without turbulence, the early paths."""
+        return self.early.frozen(self.seed if seed is None else seed)
 
     def spatial_impulse_response(
         self, fmt, sample_rate: int = 48_000, seed: int | None = None

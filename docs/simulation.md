@@ -280,6 +280,9 @@ simulation:
   material fit. An impulse response and the echogram it came from now give the same
   parameters in those bands: in a 7.3 x 5.1 x 3 m box, G within 0.01 dB and C50 within
   0.05 dB, where adding the paths in energy leaves them up to 2.1 and 1.6 dB apart.
+- Outdoors in turbulence the echogram takes each two paths' coherence factor, the
+  average over the eddies, and an impulse response is one moment of them, whose levels
+  scatter about the echogram's (see [Turbulence](outdoor.md#turbulence)).
 - The late part still adds in energy: its rays stand for many paths with random phases.
   So do the points of a line or surface source, which are uncorrelated.
 - With the wave solver up to the same band or higher, its bands take their place.

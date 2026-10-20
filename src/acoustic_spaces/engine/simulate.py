@@ -21,6 +21,7 @@ from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.refracted import direct_times, refraction_for
 from acoustic_spaces.engine.response import Response
+from acoustic_spaces.engine.turbulence import Eddies
 from acoustic_spaces.geometry import distance_to_surface
 from acoustic_spaces.parameters import RoomParameters
 from acoustic_spaces.room import Room
@@ -211,6 +212,7 @@ def early_paths(
     coherent = coherent if len(elements) == 1 or room.outdoor is not None else 0
     transition = _transition(scene.simulation, room.volume_m3)
     length = response_length(room, scene.simulation.ir_length_s, elements, target)
+    eddies = Eddies.of(model, room.speed_of_sound())
     parts = []
     for position in elements:
         cutoff = min(
@@ -248,6 +250,8 @@ def early_paths(
         )
         if refraction is not None:
             paths = refraction.apply(target[None], [straight], [paths], np.array([cutoff]))[0]
+        if eddies is not None:
+            paths = eddies.attach(paths)
         parts.append(apply_grazing(model, target, paths))
     return _shared(parts, model.absorption.shape[1])
 
@@ -427,6 +431,7 @@ def simulate(
     traced_at = slice(None) if listener_mix is None else listener_mix[0]
     edges = _Edges(model)
     low_bands = coherent_bands(settings, model.absorption.shape[1])
+    eddies = Eddies.of(model, c)
     responses: dict[tuple[str, str], Response] = {}
     details: dict[str, dict[str, float]] = {}
     for source in chosen_sources:
@@ -497,6 +502,8 @@ def simulate(
             say(f"{label}: paths bent by the wind and the temperature")
             paths = refraction.apply(listener_pos, straight, paths, cutoff)
             direct = direct_times(direct, paths)
+        if eddies is not None:
+            paths = [eddies.attach(p) for p in paths]
         # The diffuse field is reckoned less the paths as they would come without the
         # audience, so what the seats take from them is lost, not made up by the tail.
         plain = paths

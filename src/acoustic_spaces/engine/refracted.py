@@ -51,6 +51,7 @@ from acoustic_spaces.engine.model import TraceModel, _ground_faces, source_weigh
 from acoustic_spaces.engine.parabolic import footprint, march
 from acoustic_spaces.engine.refraction import CHORD_SAGITTA_M, Profile, Rays, _sine, node_heights
 from acoustic_spaces.engine.shadow import equivalent_radius, shadow_start
+from acoustic_spaces.engine.turbulence import Eddies
 
 #: Bands up to this one (centre, Hz) take the sound over the open ground from the
 #: parabolic equation.
@@ -169,6 +170,7 @@ class Refraction:
         self._lock = threading.Lock()
         self.threads = int(threads) or os.cpu_count() or 1
         self._starts: dict[tuple, float | None] = {}
+        self.eddies = Eddies.of(model, self.c)
 
     # -- profiles ----------------------------------------------------------------------
 
@@ -599,6 +601,9 @@ class Refraction:
                 ell = (radius / (2.0 * k**2)) ** (1.0 / 3.0)
                 kappa = np.sqrt(k**2 - _FIRST_MODE * np.exp(1j * np.pi / 3.0) / ell**2 + 0j)
                 gain = np.exp(-2.0 * np.abs(kappa.imag) * (across - start))
+                if self.eddies is not None:
+                    scattered = self.eddies.scattered(profile, za, zb, across, self.centres, start)
+                    gain = np.minimum(gain + scattered, 1.0)
         return gain, shift
 
     def _start(self, key: float, za: float, zb: float) -> float | None:
@@ -714,6 +719,14 @@ class Refraction:
                 octaves = math.log2(self.centres[band] / self.centres[last])
                 excess[band] = excess[last] * slope**octaves
             bands = np.ones(self.bands, dtype=bool)
+            if self.eddies is not None:
+                # What the eddies scatter into the shadow.
+                key = wave.key[0]
+                start = self._start(key, self.zs, wave.height)
+                if start is not None:
+                    excess += self.eddies.scattered(
+                        self.profile(key), self.zs, wave.height, wave.range, self.centres, start
+                    )
         weight = source_weights(
             self.directivity, self.orientation, wave.departure[None], self.bands
         )[0]
@@ -736,6 +749,8 @@ class Refraction:
             spectrum[~computed] = 1.0
         found = parts[wave.listener]
         family = found[0]
+        if self.eddies is not None and wave.carrier >= 0:
+            energy = self._blurred(energy, family[wave.family], bands)
         if wave.carrier < 0:
             listener = listeners[wave.listener]
             arrival = self.source - listener
@@ -759,6 +774,26 @@ class Refraction:
             low = np.flatnonzero(bands[:coherent])
             family.spectrum[wave.carrier, low] = spectrum[low]
             family.spectrum[others[:, None], low[None]] = 1.0
+
+    def _blurred(self, energy: np.ndarray, rays: EarlyReflections, bands: np.ndarray):
+        """The parabolic equation's ``energy`` (bands,) in still air, in the ``bands``
+        it gives, as the eddies blur it: E = C E_pe + (1 - C) E_rays, E_rays the
+        family's ``rays`` added in energy and C their coherence factor, weighted by
+        sqrt(E_i E_j) over each two of them."""
+        if len(rays) < 2:
+            return energy
+        wander = self.eddies.wander(rays)
+        out = energy.copy()
+        off = ~np.eye(len(rays), dtype=bool)
+        for band in np.flatnonzero(bands):
+            alone = rays.energy[:, band]
+            weights = np.sqrt(np.outer(alone, alone))[off]
+            if weights.sum() <= 0.0:
+                continue
+            together = wander.coherence(self.frequencies[band]).mean(axis=2)[off]
+            share = float(np.sum(together * weights) / weights.sum())
+            out[band] = share * energy[band] + (1.0 - share) * alone.sum()
+        return out
 
 
 def _departure(points: np.ndarray) -> np.ndarray:

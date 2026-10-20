@@ -1411,6 +1411,18 @@ msgid "constant"
 msgstr "constant"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "weak"
+msgstr "zwak"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "moderate"
+msgstr "matig"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "strong"
+msgstr "sterk"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Measured data or an array from a file…"
 msgstr "Meetgegevens of een array uit een bestand…"
 
@@ -1632,6 +1644,67 @@ msgstr "Ruwheid"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"The eddies of the wind and of the temperature, which make sound outdoors "
+"flicker: the direct sound and its reflections stop adding in step (the dip "
+"of the ground fills in), sound is scattered into shadow zones, and renders "
+"and walkthroughs change as the eddies drift past. (none): steady air; weak, "
+"overcast with a light wind; moderate, a breeze and some sun; strong, a "
+"strong wind or a hot sun; custom, the values below"
+msgstr ""
+"De wervelingen van de wind en van de temperatuur, die geluid buiten laten "
+"schommelen: het directe geluid en zijn reflecties tellen niet meer in fase "
+"op (de grondinzinking vult zich), geluid wordt in schaduwzones verstrooid, "
+"en beluisteringen en wandelingen veranderen terwijl de wervelingen "
+"voorbijdrijven. (geen): rustige lucht; zwak, bewolkt met een lichte wind; "
+"matig, een bries en wat zon; sterk, een harde wind of felle zon; aangepast, "
+"de waarden hieronder"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the temperature's eddies are: its structure parameter C_T² (K² "
+"m^-2/3), about 0.001 to 1 near the ground, the most in sunshine"
+msgstr ""
+"Hoe sterk de wervelingen van de temperatuur zijn: haar structuurparameter "
+"C_T² (K² m^-2/3), ongeveer 0,001 tot 1 dicht bij de grond, het grootst in de "
+"zon"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the wind's eddies are: its structure parameter C_v² (m^4/3 s^-2), "
+"about 0.01 to 1 near the ground, the more the stronger the wind"
+msgstr ""
+"Hoe sterk de wervelingen van de wind zijn: zijn structuurparameter C_v² "
+"(m^4/3 s^-2), ongeveer 0,01 tot 1 dicht bij de grond, groter naarmate de "
+"wind sterker is"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The size of the largest eddies (m), some metres near the ground: they take "
+"this long to drift past at the wind's speed, which sets how fast the sound "
+"flickers"
+msgstr ""
+"De grootte van de grootste wervelingen (m), enkele meters dicht bij de "
+"grond: zo lang doen ze erover om met de windsnelheid voorbij te drijven, wat "
+"bepaalt hoe snel het geluid schommelt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies"
+msgstr "Turbulentie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature eddies"
+msgstr "Turbulentie van de temperatuur"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind eddies"
+msgstr "Turbulentie van de wind"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddy size"
+msgstr "Grootte van de wervelingen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "A measured profile from the scene file: the temperature and the wind's speed "
 "come from it, in straight lines between its heights"
 msgstr ""
@@ -1721,6 +1794,10 @@ msgstr "luchtinstellingen wijzigen"
 #: acoustic_spaces/gui/inspector.py
 msgid "change the weather"
 msgstr "weer wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the eddies"
+msgstr "turbulentie wijzigen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change the wind and temperature"
@@ -4955,23 +5032,23 @@ msgid ""
 "towards the ground, and sound going against it bends up, over the listeners' "
 "heads. Downwind the sound comes sooner, and louder in the low bands; 300 m "
 "upwind the listeners are in its shadow, where only what bends round its edge "
-"arrives, the less the higher the band: there the bands from 1 kHz up are "
-"some 60 dB below those downwind, more than one would measure, as the "
-"turbulence that scatters sound into a shadow is not modelled yet. Remove the "
-"atmosphere to hear the same park in still air."
+"and what the wind's eddies scatter into it arrive: there the bands from 1 "
+"kHz up are some 19 dB below those downwind, where without the eddies they "
+"would be 60 dB below. The eddies also make the sound flicker as they drift "
+"past. Remove the atmosphere to hear the same park in still air."
 msgstr ""
 "Buiten: de luidsprekers van een podium op 5 m hoogte, gehoord op 100 en 300 "
-"m over een park op een winderige avond, met de wind mee en tegen de wind in. "
-"De wind, 5 m/s op 10 m hoogte, neemt toe met de hoogte, dus geluid dat met "
-"de wind meegaat, gaat hoger sneller en buigt naar de grond, en geluid tegen "
-"de wind in buigt omhoog, over de hoofden van de luisteraars. Met de wind mee "
-"komt het geluid eerder aan, en luider in de lage banden; 300 m tegen de wind "
-"in zitten de luisteraars in de schaduw, waar alleen aankomt wat om de rand "
-"ervan buigt, des te minder naarmate de band hoger is: daar liggen de banden "
-"vanaf 1 kHz zo'n 60 dB onder die met de wind mee, meer dan je zou meten, "
-"want de turbulentie die geluid in een schaduw verstrooit, wordt nog niet "
-"gemodelleerd. Verwijder de atmosfeer om hetzelfde park bij stilstaande lucht "
-"te horen."
+"m afstand over een park op een winderige avond, met de wind mee en tegen de "
+"wind in. De wind, 5 m/s op 10 m hoogte, neemt toe met de hoogte, zodat "
+"geluid dat met hem meegaat hoger op sneller gaat en naar de grond buigt, en "
+"geluid ertegenin omhoog buigt, over de hoofden van de luisteraars. Met de "
+"wind mee komt het geluid eerder aan, en luider in de lage banden; 300 m "
+"tegen de wind in staan de luisteraars in zijn schaduw, waar alleen aankomt "
+"wat om de rand ervan buigt en wat de wervelingen van de wind erin "
+"verstrooien: daar liggen de banden vanaf 1 kHz zo'n 19 dB onder die met de "
+"wind mee, waar ze zonder de wervelingen 60 dB lager zouden liggen. De "
+"wervelingen laten het geluid ook schommelen terwijl ze voorbijdrijven. "
+"Verwijder de atmosfeer om hetzelfde park in stilstaande lucht te horen."
 
 #: examples/orchestra/scene.yaml
 msgctxt "example"

@@ -278,9 +278,26 @@ def amplitude_spectra(
     low = amplitude[:, :count] @ gains[:count]
     if count:
         low = low * shapes(paths.spectrum, bands, f)
-    if only_coherent:
-        return low
-    return low + (amplitude[:, count:] @ gains[count:]) * held_phase(paths)[:, None]
+    if not only_coherent:
+        low = low + (amplitude[:, count:] @ gains[count:]) * held_phase(paths)[:, None]
+    lagged = lag_phase(paths, f)
+    return low if lagged is None else low * lagged
+
+
+def lag_phase(paths: EarlyReflections, f: np.ndarray) -> np.ndarray | None:
+    """(n, len(f)) at a moment of turbulence, the phase factor of each path's
+    :attr:`~acoustic_spaces.engine.early.EarlyReflections.lag` at frequencies ``f``
+    (Hz), the lag interpolated linearly in log frequency between the bands' centres and
+    held beyond the first and the last; None without one."""
+    if paths.lag is None:
+        return None
+    f = np.asarray(f, dtype=float)
+    centres = np.log2(np.asarray(band_centres(resolution_of(paths.energy.shape[1])), float))
+    x = np.log2(np.clip(f, 2.0 ** centres[0], 2.0 ** centres[-1]))
+    j = np.clip(np.searchsorted(centres, x, side="right") - 1, 0, len(centres) - 2)
+    w = (x - centres[j]) / (centres[j + 1] - centres[j])
+    lag = paths.lag[:, j] * (1.0 - w) + paths.lag[:, j + 1] * w
+    return np.exp(-2j * np.pi * lag * f)
 
 
 def band_impulses(
@@ -295,18 +312,20 @@ def band_impulses(
     if gains is not None:
         amplitudes = amplitudes * np.asarray(gains, dtype=float)[:, None]
     held = held_phase(paths)
+
+    def place(values: np.ndarray) -> np.ndarray:
+        if paths.lag is None:
+            return synthesis.place_impulses(paths.delay_s, values, n, sample_rate)
+        # At a moment of turbulence each band's paths come at their own delays.
+        out = np.zeros((values.shape[1], n))
+        for b in range(paths.coherent_bands, values.shape[1]):
+            delay = paths.delay_s + paths.lag[:, b]
+            out[b] = synthesis.place_impulses(delay, values[:, b : b + 1], n, sample_rate)[0]
+        return out
+
     if np.all(np.abs(held.imag) < 1e-12):
-        held = held.real
-        return synthesis.place_impulses(
-            paths.delay_s, amplitudes * held[:, None], n, sample_rate
-        ), None
-    signals = synthesis.place_impulses(
-        paths.delay_s, amplitudes * held.real[:, None], n, sample_rate
-    )
-    quadrature = synthesis.place_impulses(
-        paths.delay_s, amplitudes * held.imag[:, None], n, sample_rate
-    )
-    return signals, quadrature
+        return place(amplitudes * held.real[:, None]), None
+    return place(amplitudes * held.real[:, None]), place(amplitudes * held.imag[:, None])
 
 
 def signal(
@@ -343,8 +362,9 @@ def total_energy(paths: EarlyReflections) -> np.ndarray:
     """(bands,) the paths' energy together in each band: their sum, and in the coherent
     bands that of their pressures added at each of the band's frequencies, averaged over
     them; each frequency stands for its slice of the band, over which the interference
-    of two paths that arrive far apart averages out. Paths of different points of a line
-    or a surface source add in energy."""
+    of two paths that arrive far apart averages out; in turbulence it takes their
+    coherence factor (:meth:`~acoustic_spaces.engine.turbulence.Wander.coherence`).
+    Paths of different points of a line or a surface source add in energy."""
     from acoustic_spaces.engine.diffraction import band_frequencies
 
     out = paths.energy.sum(axis=0)
@@ -359,8 +379,14 @@ def total_energy(paths: EarlyReflections) -> np.ndarray:
     apart = paths.delay_s[:, None] - paths.delay_s[None, :]
     same = paths.point[:, None] == paths.point[None, :]
     for b in range(count):
-        products = np.real(pressure[:, None, b] * np.conj(pressure[None, :, b])).mean(axis=2)
-        out[b] = float(np.sum(products * np.sinc(apart * width[b]) * same))
+        here = pressure[:, b]
+        lagged = lag_phase(paths, f[b])
+        if lagged is not None:
+            here = here * lagged
+        products = np.real(here[:, None] * np.conj(here[None, :]))
+        if paths.wander is not None:
+            products = products * paths.wander.coherence(f[b])
+        out[b] = float(np.sum(products.mean(axis=2) * np.sinc(apart * width[b]) * same))
     return out
 
 
@@ -376,11 +402,11 @@ def pair_energy(
     """(len(bands), slots) energy per time slot of ``time_step`` (slot 0 at ``origin``,
     s from emission) in ``bands`` of the paths' coherent ones, adding them in pressure:
     each path's own energy where it arrives, and the cross term of each pair of paths,
-    averaged over the band's frequencies as in :func:`total_energy`, shared between the
-    two paths' slots as their energies are (a slot that would go below zero is left at
-    zero). With ``axis``, that of a figure of eight facing it (``exponent`` as in
-    :meth:`EarlyPressure.energy`; with 1 the cross terms take the geometric mean of the
-    two paths' weights)."""
+    averaged over the band's frequencies as in :func:`total_energy` (with their
+    coherence factor in turbulence), shared between the two paths' slots as their
+    energies are (a slot that would go below zero is left at zero). With ``axis``, that
+    of a figure of eight facing it (``exponent`` as in :meth:`EarlyPressure.energy`; with
+    1 the cross terms take the geometric mean of the two paths' weights)."""
     from acoustic_spaces.engine.diffraction import band_frequencies
 
     out = np.zeros((len(bands), slots))
@@ -398,7 +424,15 @@ def pair_energy(
         energy = paths.energy[:, b]
         pressure = np.sqrt(energy)[:, None] * paths.spectrum[:, b]
         pressure = pressure * np.exp(-2j * np.pi * np.outer(paths.delay_s, f[b]))
-        cross = np.real(pressure @ pressure.conj().T) / f.shape[1]
+        lagged = lag_phase(paths, f[b])
+        if lagged is not None:
+            pressure = pressure * lagged
+        if paths.wander is None:
+            cross = np.real(pressure @ pressure.conj().T) / f.shape[1]
+        else:
+            together = paths.wander.coherence(f[b])
+            cross = np.einsum("im,jm,ijm->ij", pressure, pressure.conj(), together).real
+            cross /= f.shape[1]
         cross *= np.sinc(apart * width[b]) * np.outer(weight, weight)
         # A pair's cross terms, 2 Re(p_i p_j*), shared between its two paths.
         total = energy[:, None] + energy[None, :]
@@ -461,7 +495,9 @@ class EarlyPressure:
     Each band is scaled so that every path alone carries its energy in it: the analysis
     filters also let in a little of the neighbouring bands, whose levels differ, and the
     filters of the impulse response's bands overlap with them. What is left is the
-    paths' interference."""
+    paths' interference, which in turbulence takes each two paths' coherence factor:
+    there each path's spectrum is kept, and :meth:`energy` adds the filtered paths'
+    products."""
 
     def __init__(self, paths: EarlyReflections, weights: np.ndarray | None = None) -> None:
         bands = paths.energy.shape[1]
@@ -483,6 +519,10 @@ class EarlyPressure:
         self.spectra = np.zeros((np.shape(weights)[1], len(f)), dtype=complex)
         self._alone = np.zeros(len(f))  # the paths' squared spectra, summed
         self._energy = paths.energy[:, : self.count].sum(axis=0)
+        self._wander = paths.wander if len(paths) > 1 else None
+        if self._wander is not None:
+            self._each = np.zeros((len(paths), len(f)), dtype=complex)
+            self._weights = np.asarray(weights, dtype=float)
         for start in range(0, len(paths), _CHUNK):
             part = slice(start, start + _CHUNK)
             spectra = amplitude_spectra(paths[part], f, gains)
@@ -490,6 +530,8 @@ class EarlyPressure:
             shift = paths.delay_s[part] + self.lead - 0.5 / self.rate
             spectra *= np.exp(-2j * np.pi * np.outer(shift, f))
             self.spectra += weights[part].T @ spectra
+            if self._wander is not None:
+                self._each[part] = spectra
 
     def band(
         self,
@@ -507,6 +549,13 @@ class EarlyPressure:
         before ``start`` (s from emission; default ``origin``), the arrival of the
         direct sound, counts as arriving with it, as in the analysis of a measured
         response."""
+        gain, keep, slot, scale = self._filter(b, time_step, slots, origin, start)
+        pressure = np.fft.irfft(gain * self.spectra, self.n_fft, axis=1)[:, keep]
+        return pressure, slot, scale
+
+    def _filter(self, b, time_step, slots, origin, start):
+        """Band b's analysis filter, which samples fall into the slots, their slots,
+        and the factor that makes a squared sample energy (see :meth:`band`)."""
         from acoustic_spaces.parameters import band_filter_gains
 
         gain = band_filter_gains(self.n_fft, self.rate, self.bands)[b]
@@ -514,12 +563,31 @@ class EarlyPressure:
         time = np.maximum(time, origin if start is None else max(start, origin)) - origin
         slot = (time / time_step + 1e-9).astype(np.int64)
         keep = slot < slots
-        pressure = np.fft.irfft(gain * self.spectra, self.n_fft, axis=1)[:, keep]
         weights = np.full(len(gain), 2.0)
         weights[0] = weights[-1] = 1.0
         alone = float(np.sum(weights * gain**2 * self._alone)) / self.n_fft
         scale = float(self._energy[b]) / alone if alone > 0.0 else 0.0
-        return pressure, slot[keep], scale
+        return gain, keep, slot[keep], scale
+
+    def _turbulent(self, b, time_step, slots, axis, exponent, origin, start) -> np.ndarray:
+        """(slots,) band b's energy with each two paths' products taken by their
+        coherence factor, averaged over the band's frequencies."""
+        from acoustic_spaces.engine.diffraction import band_frequencies
+
+        gain, keep, slot, scale = self._filter(b, time_step, slots, origin, start)
+        signals = np.fft.irfft(gain * self._each, self.n_fft, axis=1)[:, keep]
+        f = band_frequencies(bands=resolution_of(self.bands))[0][b]
+        together = self._wander.coherence(f).mean(axis=2)
+        plain = self._weights[:, 0]
+        if axis is None:
+            first = second = plain
+        else:
+            side = self._weights[:, 1:] @ np.asarray(axis, dtype=float)
+            first, second = side, (side if exponent == 2 else plain)
+        power = np.sum((first[:, None] * signals) * (together @ (second[:, None] * signals)), 0)
+        if axis is not None and exponent != 2:
+            power = np.abs(power)
+        return np.bincount(slot, power * scale, minlength=slots)[:slots]
 
     def energy(
         self,
@@ -537,6 +605,9 @@ class EarlyPressure:
         (``exponent`` as there)."""
         out = np.zeros((self.count, slots))
         for b in range(self.count):
+            if self._wander is not None:
+                out[b] = self._turbulent(b, time_step, slots, axis, exponent, origin, start)
+                continue
             pressure, slot, scale = self.band(b, time_step, slots, origin, start)
             if axis is None:
                 power = pressure[0] ** 2

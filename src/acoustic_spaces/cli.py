@@ -319,9 +319,17 @@ def _atmosphere_lines(atmosphere, ground_c: float, outdoor) -> list[str]:
                 f"temperature {atmosphere.temperature_gradient_k_m:+g} K/m "
                 f"{atmosphere.temperature_log_k:+g} K ln(1 + z / {atmosphere.roughness_m:g} m)"
             )
+    eddies = []
+    turbulence = atmosphere.turbulence
+    if turbulence is not None and not turbulence.calm:
+        name = f"{turbulence.preset}, " if turbulence.preset else ""
+        eddies.append(
+            f"eddies: {name}C_T² {turbulence.temperature_structure:g} K² m^-2/3, C_v² "
+            f"{turbulence.wind_structure:g} m^4/3 s^-2, {turbulence.outer_scale_m:g} m across"
+        )
     if atmosphere.still:
         parts.append("still air: sound goes in straight lines")
-        return ["atmosphere: " + "; ".join(parts)]
+        return ["atmosphere: " + "; ".join(parts), *eddies]
     if atmosphere.table is not None:
         windy = any(row[2] > 0.0 for row in atmosphere.table)
     else:
@@ -329,7 +337,7 @@ def _atmosphere_lines(atmosphere, ground_c: float, outdoor) -> list[str]:
     if windy:
         direction = wind.direction_deg if wind is not None else 0.0
         parts.append(f"blowing towards {direction:g} deg from +x")
-    lines = ["atmosphere: " + "; ".join(parts)]
+    lines = ["atmosphere: " + "; ".join(parts), *eddies]
     top = outdoor.sky - outdoor.ground
     heights = [h for h in (0.0, 2.0, 10.0, 50.0, 200.0) if h <= top]
     width = 22

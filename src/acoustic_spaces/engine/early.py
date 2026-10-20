@@ -19,6 +19,7 @@ openings): its energy is then multiplied by their transmission, band by band.
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -30,6 +31,7 @@ from acoustic_spaces.engine.coherent import (
     sample_frequencies,
 )
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
+from acoustic_spaces.engine.turbulence import Wander
 
 #: Distance (metres) below which a point counts as lying on a plane.
 _ON_PLANE = 1e-9
@@ -67,6 +69,15 @@ class EarlyReflections:
     #: from (outdoors, where those paths carry a spectrum): in the coherent bands the
     #: paths of one point add in pressure, those of different points in energy.
     point: np.ndarray | None = None
+    #: Outdoors in turbulence, how the eddies delay the paths at random
+    #: (:class:`~acoustic_spaces.engine.turbulence.Wander`): on average two paths'
+    #: pressures add with their coherence factor. None without turbulence, and at a
+    #: moment of it (:meth:`frozen`).
+    wander: Wander | None = None
+    #: (n, bands) at a moment of turbulence, each path's delay (s) in each band beyond
+    #: ``delay_s``, its delay in the highest band (the eddies part paths near the
+    #: ground less at low frequencies); None otherwise.
+    lag: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         if self.edge is None:
@@ -94,12 +105,48 @@ class EarlyReflections:
             crossings=self.crossings[rows],
             spectrum=None if self.spectrum is None else self.spectrum[rows],
             point=self.point[rows],
+            wander=None if self.wander is None else self.wander[rows],
+            lag=None if self.lag is None else self.lag[rows],
         )
 
     @property
     def coherent_bands(self) -> int:
         """How many of the lowest bands the paths add in pressure in."""
         return 0 if self.spectrum is None else self.spectrum.shape[1]
+
+    def frozen(self, seed: int) -> EarlyReflections:
+        """The paths at a moment of the turbulent air drawn with ``seed``: each
+        delayed in each band as the eddies have it then, adding in pressure (the same
+        paths without turbulence)."""
+        if self.wander is None:
+            return self
+        roots = self.wander_roots()
+        return self.at_moment(roots, _draws(roots, seed))
+
+    def wander_roots(self) -> list:
+        """How the eddies delay the paths, band by band, as
+        :meth:`~acoustic_spaces.engine.turbulence.Wander.roots` (empty without
+        turbulence)."""
+        if self.wander is None:
+            return []
+        from acoustic_spaces.materials.bands import band_centres, resolution_of
+
+        centres = band_centres(resolution_of(self.energy.shape[1]))
+        return self.wander.roots(centres, self.point)
+
+    def at_moment(self, roots: list, draws: list[np.ndarray]) -> EarlyReflections:
+        """The paths delayed as :meth:`~acoustic_spaces.engine.turbulence.Wander.delays`
+        has it for the normal variables ``draws`` (one array per group of ``roots``,
+        :meth:`wander_roots`)."""
+        if self.wander is None:
+            return self
+        delays = Wander.delays(roots, draws, len(self))
+        return dataclasses.replace(
+            self,
+            delay_s=self.delay_s + delays[:, -1],
+            wander=None,
+            lag=delays - delays[:, -1:],
+        )
 
     @property
     def diffracted(self) -> np.ndarray:
@@ -145,12 +192,29 @@ class EarlyReflections:
             crossings=np.concatenate([p.crossings for p in parts]),
             spectrum=spectrum,
             point=np.concatenate([p.point for p in parts]),
+            wander=Wander.stacked([p.wander for p in parts], [len(p) for p in parts]),
+            lag=_lags(parts, bands),
         )
         return out.sorted()
 
     def sorted(self) -> EarlyReflections:
         """The same paths in order of arrival."""
         return self[np.argsort(self.delay_s, kind="stable")]
+
+
+def _lags(parts: list[EarlyReflections], bands: int) -> np.ndarray | None:
+    """The parts' :attr:`~EarlyReflections.lag` one above the other (zero for paths
+    without one); None when no part has one."""
+    if all(p.lag is None for p in parts):
+        return None
+    return np.concatenate([np.zeros((len(p), bands)) if p.lag is None else p.lag for p in parts])
+
+
+def _draws(roots: list, seed: int) -> list[np.ndarray]:
+    """Normal variables for each group of ``roots`` (see
+    :meth:`EarlyReflections.at_moment`), drawn with ``seed``."""
+    rng = np.random.default_rng(seed)
+    return [rng.standard_normal(len(rows)) for rows, _ in roots]
 
 
 def ray_traced_candidates(

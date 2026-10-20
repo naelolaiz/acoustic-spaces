@@ -1032,8 +1032,20 @@ def test_wind_and_temperature_form(window) -> None:
     page.gradient.setValue(-0.02)
     assert atmosphere().preset is None and atmosphere().temperature_log_k == -0.5
     assert atmosphere().temperature_gradient_k_m == -0.02
-    page.weather.setCurrentIndex(0)  # (none): still air
-    assert atmosphere() is None and page.wind_speed.value() == 0.0
+    # The eddies: a preset, then a value of their own; they stay as the weather changes.
+    page.eddies.setCurrentIndex(page.eddies.findData("moderate"))
+    assert atmosphere().turbulence.preset == "moderate" and page.wind_eddies.value() == 0.12
+    page.wind_eddies.setValue(0.3)
+    eddies = atmosphere().turbulence
+    assert eddies.preset is None and eddies.wind_structure == 0.3
+    assert eddies.temperature_structure == 0.008 and page.eddies.currentData() == "custom"
+    page.weather.setCurrentIndex(page.weather.findData("windy"))
+    assert atmosphere().preset == "windy" and atmosphere().turbulence.wind_structure == 0.3
+    page.weather.setCurrentIndex(0)  # (none): still air, still with its eddies
+    assert atmosphere().still and atmosphere().turbulence.wind_structure == 0.3
+    assert page.weather.currentData() is None and page.wind_speed.value() == 0.0
+    page.eddies.setCurrentIndex(0)
+    assert atmosphere() is None and page.eddies.currentData() is None
     # A measured profile comes from the scene file; the form can drop it.
     window.document.edit(
         "measured", lambda data: data.update(atmosphere={"table": [[0, 15, 0], [10, 14, 3]]})

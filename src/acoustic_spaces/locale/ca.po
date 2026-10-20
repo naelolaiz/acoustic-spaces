@@ -1403,6 +1403,18 @@ msgid "constant"
 msgstr "constant"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "weak"
+msgstr "feble"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "moderate"
+msgstr "moderada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "strong"
+msgstr "forta"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Measured data or an array from a file…"
 msgstr "Dades mesurades o un conjunt de fonts d'un fitxer…"
 
@@ -1623,6 +1635,66 @@ msgstr "Rugositat"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"The eddies of the wind and of the temperature, which make sound outdoors "
+"flicker: the direct sound and its reflections stop adding in step (the dip "
+"of the ground fills in), sound is scattered into shadow zones, and renders "
+"and walkthroughs change as the eddies drift past. (none): steady air; weak, "
+"overcast with a light wind; moderate, a breeze and some sun; strong, a "
+"strong wind or a hot sun; custom, the values below"
+msgstr ""
+"Els remolins del vent i de la temperatura, que fan fluctuar el so a l'aire "
+"lliure: el so directe i les seves reflexions deixen de sumar-se en fase (la "
+"depressió del terreny s'omple), el so es dispersa cap a les zones d'ombra, i "
+"les escoltes i els recorreguts canvien a mesura que passen els remolins. "
+"(cap): aire estable; feble, ennuvolat amb un vent lleuger; moderada, una "
+"brisa i una mica de sol; forta, un vent fort o un sol intens; personalitzat, "
+"els valors de sota"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the temperature's eddies are: its structure parameter C_T² (K² "
+"m^-2/3), about 0.001 to 1 near the ground, the most in sunshine"
+msgstr ""
+"La intensitat dels remolins de la temperatura: el seu paràmetre d'estructura "
+"C_T² (K² m^-2/3), d'uns 0,001 a 1 prop del terra, el més gran amb sol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the wind's eddies are: its structure parameter C_v² (m^4/3 s^-2), "
+"about 0.01 to 1 near the ground, the more the stronger the wind"
+msgstr ""
+"La intensitat dels remolins del vent: el seu paràmetre d'estructura C_v² "
+"(m^4/3 s^-2), d'uns 0,01 a 1 prop del terra, tant més gran com més fort és "
+"el vent"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The size of the largest eddies (m), some metres near the ground: they take "
+"this long to drift past at the wind's speed, which sets how fast the sound "
+"flickers"
+msgstr ""
+"La mida dels remolins més grans (m), uns quants metres prop del terra: "
+"triguen això a passar a la velocitat del vent, cosa que fixa com de ràpid "
+"fluctua el so"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies"
+msgstr "Turbulència"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature eddies"
+msgstr "Turbulència de la temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind eddies"
+msgstr "Turbulència del vent"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddy size"
+msgstr "Mida dels remolins"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "A measured profile from the scene file: the temperature and the wind's speed "
 "come from it, in straight lines between its heights"
 msgstr ""
@@ -1712,6 +1784,10 @@ msgstr "modificar l'aire"
 #: acoustic_spaces/gui/inspector.py
 msgid "change the weather"
 msgstr "modificar el temps"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the eddies"
+msgstr "canviar la turbulència"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change the wind and temperature"
@@ -4933,23 +5009,23 @@ msgid ""
 "towards the ground, and sound going against it bends up, over the listeners' "
 "heads. Downwind the sound comes sooner, and louder in the low bands; 300 m "
 "upwind the listeners are in its shadow, where only what bends round its edge "
-"arrives, the less the higher the band: there the bands from 1 kHz up are "
-"some 60 dB below those downwind, more than one would measure, as the "
-"turbulence that scatters sound into a shadow is not modelled yet. Remove the "
-"atmosphere to hear the same park in still air."
+"and what the wind's eddies scatter into it arrive: there the bands from 1 "
+"kHz up are some 19 dB below those downwind, where without the eddies they "
+"would be 60 dB below. The eddies also make the sound flicker as they drift "
+"past. Remove the atmosphere to hear the same park in still air."
 msgstr ""
 "A l'aire lliure: els altaveus d'un escenari a 5 m d'alçada, escoltats a 100 "
 "i 300 m a través d'un parc en un vespre de vent, a favor i en contra del "
 "vent. El vent, de 5 m/s a 10 m d'alçada, creix amb l'alçada, de manera que "
-"el so que va amb ell viatja més de pressa més amunt i es corba cap al terra, "
-"i el que va en contra es corba cap amunt, per sobre dels caps dels oients. A "
+"el so que va amb ell viatja més ràpid més amunt i es corba cap al terra, i "
+"el que va en contra es corba cap amunt, per sobre dels caps dels oients. A "
 "favor del vent el so arriba abans, i més fort a les bandes greus; a 300 m en "
 "contra del vent els oients són a la seva ombra, on només arriba el que es "
-"corba al voltant de la seva vora, tant menys com més alta és la banda: allà "
-"les bandes des d'1 kHz queden uns 60 dB per sota de les de a favor del vent, "
-"més del que es mesuraria, perquè la turbulència que dispersa el so cap a una "
-"ombra encara no es modela. Traieu l'atmosfera per escoltar el mateix parc "
-"amb l'aire en calma."
+"corba al voltant de la seva vora i el que els remolins del vent hi "
+"dispersen: allà les bandes des d'1 kHz queden uns 19 dB per sota de les de a "
+"favor del vent, quan sense els remolins quedarien 60 dB per sota. Els "
+"remolins també fan fluctuar el so a mesura que passen. Traieu l'atmosfera "
+"per escoltar el mateix parc amb l'aire en calma."
 
 #: examples/orchestra/scene.yaml
 msgctxt "example"

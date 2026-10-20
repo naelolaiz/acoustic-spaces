@@ -21,6 +21,8 @@ so the crossfades join tails that only differ in their decay. The walker stands 
 end of its path once it is there, for as long as the signals last.
 
 There is no Doppler shift: at walking speed it is under half a percent (8 cents).
+Outdoors in turbulence the early sound flickers along the walk as in
+:func:`~acoustic_spaces.render.auralize`, through the same eddies from place to place.
 """
 
 from __future__ import annotations
@@ -32,7 +34,15 @@ from dataclasses import dataclass
 import numpy as np
 
 from acoustic_spaces.engine.simulate import SimulationResult, simulate
-from acoustic_spaces.render import _as_2d, convolve, power_gains, resample
+from acoustic_spaces.render import (
+    _as_2d,
+    convolve,
+    flickers,
+    gusts_for,
+    power_gains,
+    resample,
+    through_eddies,
+)
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene.model import Simulation as SimulationSettings
 
@@ -324,11 +334,13 @@ def render_walk(
 
     cache: dict[tuple[str, str], np.ndarray] = {}
 
-    def response(source: str, k: int) -> np.ndarray:
+    def key_of(source: str, k: int) -> tuple[str, str]:
         if walk.kind == "listeners":
-            key = (source, walk.names[k])
-        else:
-            key = (walk.names[k] if source == walk.name else source, listener)
+            return (source, walk.names[k])
+        return (walk.names[k] if source == walk.name else source, listener)
+
+    def response(source: str, k: int) -> np.ndarray:
+        key = key_of(source, k)
         if key not in cache:
             cache.clear()  # a place's responses are used one after the other
             cache[key] = result[key].spatial_impulse_response(fmt, rate, seed)
@@ -339,7 +351,17 @@ def render_walk(
     taps = max(len(response(s, 0)) for s in dry)
     length = max(len(x) for x in dry.values()) + taps - 1
     out = np.zeros((length, fmt.channels))
+    # Outdoors in turbulence the early paths flicker as the eddies drift past, the same
+    # eddies all along the walk.
+    turbulent = [r for r in result if flickers(r)]
+    gusts = gusts_for(turbulent[0], length / rate, seed) if turbulent else None
     for source in still:
+        if flickers(result[key_of(source, 0)]):
+            end = len(dry[source]) + len(response(source, 0)) - 1
+            out[:end] += through_eddies(
+                dry[source], result[key_of(source, 0)], fmt, rate, seed, gusts, 0, end
+            )
+            continue
         wet = convolve(dry[source], response(source, 0))
         out[: len(wet)] += wet
     if not moving:
@@ -355,6 +377,12 @@ def render_walk(
         t = np.arange(begin, end) / rate
         weight = (_past(starts, lengths, k, t) - _past(starts, lengths, k + 1, t))[:, None]
         for source in moving:
+            if flickers(result[key_of(source, k)]):
+                wet = through_eddies(
+                    dry[source], result[key_of(source, k)], fmt, rate, seed, gusts, begin, end
+                )
+                out[begin:end] += weight[: len(wet)] * wet
+                continue
             ir = response(source, k)
             first = max(begin - len(ir) + 1, 0)
             piece = dry[source][first:end]

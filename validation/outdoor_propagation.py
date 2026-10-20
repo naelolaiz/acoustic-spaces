@@ -1,8 +1,8 @@
 """Validation against outdoor measurements: a wind turbine heard 178, 535 and 845 m away.
 
     python validation/outdoor_propagation.py [--cases 1 2 ... 10] [--data DIR]
-                                             [--still] [--json results.json]
-                                             [--plots DIR]
+                                             [--still] [--turbulence PRESET]
+                                             [--json results.json] [--plots DIR]
 
 The Hannover wind turbine propagation data (Könecke, Hörmeyer, Bohne and Rolfes, 2021,
 DOI 10.25835/0012136, CC BY-SA 3.0) measured a wind turbine with microphones 1.7 m
@@ -23,11 +23,13 @@ as the wind (towards the microphones where alog is positive, away from them wher
 is negative), the linear one as the temperature. The scene runs in third-octave bands;
 the three sources' energies add at each microphone, and the loss from the 178 m one is
 compared with the measured one band by band. ``Overall`` is the energy sum of the
-fifteen band losses, as the data has it. ``--still`` leaves the atmosphere out.
+fifteen band losses, as the data has it. ``--still`` leaves the atmosphere out;
+``--turbulence`` adds eddies of a preset's strength (``weak``, ``moderate`` or
+``strong``: the data does not give them).
 
 Cases 9 and 10 are strong upwind: there the published model puts the 845 m microphone
 in a deep shadow (50 dB overall where 27 dB was measured), the gap that the authors put
-down to turbulence, which no model here has.
+down to turbulence, which their model does not have.
 
 The script prints a Markdown table: per case the measured, published and simulated
 overall losses, and the mean absolute difference from the measured losses over the
@@ -101,7 +103,7 @@ def load(path: Path):
     return loadmat(path, squeeze_me=True, struct_as_record=False)
 
 
-def scene_of(case: int, inputs, still: bool = False) -> Scene:
+def scene_of(case: int, inputs, still: bool = False, turbulence: str | None = None) -> Scene:
     """The outdoor scene of a case's model inputs."""
     heights = np.asarray(inputs.hs, dtype=float)
     ranges = np.asarray(inputs.R, dtype=float)
@@ -143,8 +145,11 @@ def scene_of(case: int, inputs, still: bool = False) -> Scene:
             "ir_length_s": 0.3,
         },
     }
+    if turbulence is not None:
+        data["atmosphere"] = {"turbulence": turbulence}
     if not still:
         data["atmosphere"] = {
+            **data.get("atmosphere", {}),
             "table": [
                 [float(z), float(t), float(u)]
                 for z, t, u in zip(HEIGHTS, temperature, wind, strict=True)
@@ -154,14 +159,14 @@ def scene_of(case: int, inputs, still: bool = False) -> Scene:
     return Scene.model_validate(data)
 
 
-def run_case(case: int, folder: Path, still: bool) -> dict:
+def run_case(case: int, folder: Path, still: bool, turbulence: str | None = None) -> dict:
     content = load(fetch(case, folder))
     inputs, measured, model = (
         content["Inputparameter"],
         content["MeasurementsLoss"],
         content["ModelLoss"],
     )
-    scene = scene_of(case, inputs, still)
+    scene = scene_of(case, inputs, still, turbulence)
     result = simulate(Room.from_scene(scene))
     listeners = [lis.name for lis in scene.listeners]
     energy = np.zeros((len(listeners), len(THIRD_OCTAVE_BANDS_HZ)))
@@ -253,6 +258,9 @@ def main() -> None:
         help="where the cases are kept (downloaded there if missing)",
     )
     parser.add_argument("--still", action="store_true", help="leave the atmosphere out")
+    parser.add_argument(
+        "--turbulence", choices=["weak", "moderate", "strong"], help="add eddies this strong"
+    )
     parser.add_argument("--json", type=Path, help="write every number to this file")
     parser.add_argument("--plots", type=Path, help="draw a PNG per case into this folder")
     args = parser.parse_args()
@@ -260,7 +268,7 @@ def main() -> None:
     start = time.time()
     for case in args.cases:
         print(f"case {case} ({time.time() - start:.0f} s)", file=sys.stderr)
-        results[case] = run_case(case, args.data, args.still)
+        results[case] = run_case(case, args.data, args.still, args.turbulence)
     print(table(results))
     if args.json:
         args.json.write_text(json.dumps(results, indent=1))

@@ -81,12 +81,15 @@ geometry:
 
 Outdoors, `atmosphere` sets the wind and the temperature over the ground, which bend
 sound down or up, into shadow zones (see
-[Wind and temperature](outdoor.md#wind-and-temperature)):
+[Wind and temperature](outdoor.md#wind-and-temperature)), and their eddies, which blur
+the ground dip, scatter sound into shadows and make it flicker (see
+[Turbulence](outdoor.md#turbulence)):
 
 ```yaml
 atmosphere:
   preset: windy                 # neutral, windy, sunny_day or clear_night
   wind: {speed_m_s: 8, direction_deg: 90}   # 8 m/s 10 m up, blowing towards +y
+  turbulence: moderate          # weak, moderate or strong, or its structure parameters
 ```
 
 ### BIM models (IFC)

@@ -1409,6 +1409,18 @@ msgid "constant"
 msgstr "costante"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "weak"
+msgstr "debole"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "moderate"
+msgstr "moderata"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "strong"
+msgstr "forte"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Measured data or an array from a file…"
 msgstr "Dati misurati o un array da un file…"
 
@@ -1633,6 +1645,66 @@ msgstr "Rugosità"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"The eddies of the wind and of the temperature, which make sound outdoors "
+"flicker: the direct sound and its reflections stop adding in step (the dip "
+"of the ground fills in), sound is scattered into shadow zones, and renders "
+"and walkthroughs change as the eddies drift past. (none): steady air; weak, "
+"overcast with a light wind; moderate, a breeze and some sun; strong, a "
+"strong wind or a hot sun; custom, the values below"
+msgstr ""
+"I vortici del vento e della temperatura, che fanno fluttuare il suono "
+"all'aperto: il suono diretto e le sue riflessioni smettono di sommarsi in "
+"fase (l'avvallamento del terreno si riempie), il suono viene diffuso nelle "
+"zone d'ombra, e gli ascolti e i percorsi cambiano man mano che i vortici "
+"passano. (nessuno): aria stabile; debole, nuvoloso con un vento leggero; "
+"moderata, una brezza e un po' di sole; forte, un vento forte o un sole "
+"intenso; personalizzato, i valori qui sotto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the temperature's eddies are: its structure parameter C_T² (K² "
+"m^-2/3), about 0.001 to 1 near the ground, the most in sunshine"
+msgstr ""
+"Quanto sono forti i vortici della temperatura: il suo parametro di struttura "
+"C_T² (K² m^-2/3), da circa 0,001 a 1 vicino al suolo, il più alto al sole"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the wind's eddies are: its structure parameter C_v² (m^4/3 s^-2), "
+"about 0.01 to 1 near the ground, the more the stronger the wind"
+msgstr ""
+"Quanto sono forti i vortici del vento: il suo parametro di struttura C_v² "
+"(m^4/3 s^-2), da circa 0,01 a 1 vicino al suolo, tanto più alto quanto più "
+"forte è il vento"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The size of the largest eddies (m), some metres near the ground: they take "
+"this long to drift past at the wind's speed, which sets how fast the sound "
+"flickers"
+msgstr ""
+"La dimensione dei vortici più grandi (m), qualche metro vicino al suolo: "
+"impiegano questo tanto a passare alla velocità del vento, il che fissa "
+"quanto in fretta fluttua il suono"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies"
+msgstr "Turbolenza"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature eddies"
+msgstr "Turbolenza della temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind eddies"
+msgstr "Turbolenza del vento"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddy size"
+msgstr "Dimensione dei vortici"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "A measured profile from the scene file: the temperature and the wind's speed "
 "come from it, in straight lines between its heights"
 msgstr ""
@@ -1722,6 +1794,10 @@ msgstr "modifica aria"
 #: acoustic_spaces/gui/inspector.py
 msgid "change the weather"
 msgstr "modifica il tempo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the eddies"
+msgstr "cambiare la turbolenza"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change the wind and temperature"
@@ -4964,23 +5040,23 @@ msgid ""
 "towards the ground, and sound going against it bends up, over the listeners' "
 "heads. Downwind the sound comes sooner, and louder in the low bands; 300 m "
 "upwind the listeners are in its shadow, where only what bends round its edge "
-"arrives, the less the higher the band: there the bands from 1 kHz up are "
-"some 60 dB below those downwind, more than one would measure, as the "
-"turbulence that scatters sound into a shadow is not modelled yet. Remove the "
-"atmosphere to hear the same park in still air."
+"and what the wind's eddies scatter into it arrive: there the bands from 1 "
+"kHz up are some 19 dB below those downwind, where without the eddies they "
+"would be 60 dB below. The eddies also make the sound flicker as they drift "
+"past. Remove the atmosphere to hear the same park in still air."
 msgstr ""
 "All'aperto: gli altoparlanti di un palco a 5 m d'altezza, ascoltati a 100 e "
 "300 m attraverso un parco in una sera di vento, sottovento e controvento. Il "
 "vento, 5 m/s a 10 m d'altezza, cresce con l'altezza, così il suono che va "
 "con esso viaggia più veloce più in alto e si curva verso il suolo, e quello "
-"che va controvento si curva verso l'alto, sopra le teste degli ascoltatori. "
-"Sottovento il suono arriva prima, e più forte nelle bande basse; a 300 m "
+"che va contro si curva verso l'alto, sopra le teste degli ascoltatori. "
+"Sottovento il suono arriva prima, e più forte nelle bande gravi; a 300 m "
 "controvento gli ascoltatori sono nella sua ombra, dove arriva solo ciò che "
-"si curva attorno al suo bordo, tanto meno quanto più alta è la banda: lì le "
-"bande da 1 kHz in su sono circa 60 dB sotto quelle sottovento, più di quanto "
-"si misurerebbe, perché la turbolenza che diffonde il suono in un'ombra non è "
-"ancora modellata. Togliete l'atmosfera per ascoltare lo stesso parco con "
-"l'aria calma."
+"si curva attorno al suo bordo e ciò che i vortici del vento vi diffondono: "
+"lì le bande da 1 kHz in su sono circa 19 dB sotto quelle sottovento, dove "
+"senza i vortici sarebbero 60 dB sotto. I vortici fanno anche fluttuare il "
+"suono man mano che passano. Togliete l'atmosfera per ascoltare lo stesso "
+"parco con l'aria calma."
 
 #: examples/orchestra/scene.yaml
 msgctxt "example"

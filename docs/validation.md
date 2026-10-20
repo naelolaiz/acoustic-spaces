@@ -5,7 +5,8 @@ test suite checks against theory on every change, how the simulation compares wi
 another program, [pyroomacoustics](https://github.com/LCAV/pyroomacoustics), and with
 measurements in two real rooms, how edge diffraction and the reflection off a porous
 ground compare with the exact solution, how sound outdoors compares with measurements
-up to 845 m away, and how much of a block's time the real-time convolver needs. It ends with what has not been validated yet.
+up to 845 m away, how its turbulence compares with a parabolic equation through random
+eddies, and how much of a block's time the real-time convolver needs. It ends with what has not been validated yet.
 
 ## Checks against theory, on every change
 
@@ -802,7 +803,70 @@ turbulence, which scatters sound into a shadow and which neither model has. Here
 rays in the same profile reach 845 m from the two upper sources: the shadow starts 690
 m away for the source 71 m up, but 980 and 1230 m away for those 119 and 167 m up, so
 only the lowest one is in it, and the loss stays within about 1 dB of the measured
-one overall. Turbulence is still to come (see [Not validated yet](#not-validated-yet)).
+one overall.
+
+The data gives no measure of the eddies. With `--turbulence moderate` the overall
+losses drop by up to 0.4 dB at 845 m and 0.2 dB at 535 m, as the eddies fill the ground
+dip a little; the mean differences move by 0.3 dB at most, better at 845 m in eight
+cases and 0.2 dB worse in case 8. In cases 9 and 10 the overall loss at 845 m comes to
+27.5 dB, against 27.4 and 27.2 measured.
+
+## Turbulence against a parabolic equation through random eddies
+
+`validation/turbulence.py` marches the engine's own parabolic equation (checked against
+the exact solution, see
+[Ground reflection](#ground-reflection-against-the-exact-solution)) through random
+eddies and averages its sound's energy over 16 of them (Gilbert, Raspet and Di 1990):
+each is a field of the index of refraction drawn with the von Kármán spectrum, outer
+scale 10 m, in the vertical plane through the source and the listener. Both checks
+fitted constants of the engine, so they show how well those fits hold over the cases
+rather than test it independently.
+
+**The ground dip.** In still air with the `strong` eddies, the level of the direct sound
+and its reflection off the ground, 50, 100, 200 and 400 m away at 13 frequencies from
+125 Hz to 2 kHz, against the parabolic equation's: the engine's coherence factor, and the
+Markov approximation's alone (Clifford and Lataitis 1983), which fills the dip over soft
+grounds far more than the parabolic equation does. Mean (largest) absolute difference,
+in dB:
+
+| ground | source / listener (m) | engine | Markov alone |
+|---|---|---:|---:|
+| grass | 2 / 1.5 | 0.75 (3.2) | 2.57 (13.6) |
+| grass | 5 / 1.5 | 0.64 (3.8) | 1.61 (7.1) |
+| loose soil | 1 / 1 | 1.29 (4.6) | 3.55 (14.1) |
+| gravel | 2 / 1.5 | 1.27 (7.0) | 2.06 (11.7) |
+| grass | 10 / 2 | 0.58 (2.1) | 0.93 (5.8) |
+| asphalt | 10 / 2 | 0.92 (3.5) | 0.86 (3.7) |
+| asphalt | 5 / 1.5 | 0.93 (7.2) | 0.91 (7.7) |
+| compacted soil | 3 / 3 | 0.75 (3.5) | 1.49 (7.8) |
+
+Over the five soft grounds the engine is 0.9 dB off on average, against 2.1 for the
+Markov approximation alone; over the three hard ones (asphalt and compacted soil) 0.9
+against 1.1.
+
+**Into a shadow.** Over grass, the source 2 m and the listener 1.5 m up, on a sunny day
+and upwind in the `windy` preset, deep in the shadow (2.5 to 9 times as far as it
+starts), from 250 Hz to 2 kHz: the parabolic equation's level through the eddies against
+the engine's, which is the parabolic equation's in still air plus what the eddies
+scatter into the shadow. Mean (largest) absolute difference:
+
+| atmosphere | shadow from | `moderate` eddies | `strong` eddies |
+|---|---:|---:|---:|
+| sunny day | 56 m | 0.8 dB (2.9) | 1.2 dB (3.5) |
+| windy, upwind | 31 m | 0.7 dB (2.8) | 0.9 dB (2.5) |
+
+The farthest points with `moderate` eddies, in dB over the free field:
+
+| Hz | sunny day 503 m, still air | through eddies | engine | windy 281 m, still air | through eddies | engine |
+|---|---:|---:|---:|---:|---:|---:|
+| 250 | -33.3 | -27.1 | -25.9 | -25.8 | -25.7 | -24.8 |
+| 500 | -49.2 | -20.4 | -21.8 | -61.1 | -26.3 | -24.8 |
+| 1000 | -68.2 | -13.4 | -14.1 | -64.9 | -24.3 | -21.5 |
+| 2000 | -61.9 | -11.0 | -11.6 | -58.4 | -19.7 | -21.1 |
+
+At these points, without the eddies the shadow sinks 49 to 68 dB below the free field
+from 500 Hz; through them it stays 11 to 26 dB below, and the engine follows within 3 dB.
+Only these heights and these two profiles were checked.
 
 ## Wave-based solver
 
@@ -1034,10 +1098,12 @@ its peak (single precision).
   fine).
 - **Outdoor propagation** is checked against geometry, closed forms, the exact solution
   for the reflection off a ground and one set of measurements, a wind turbine up to 845
-  m away in light winds. The ground is flat, and turbulence and vegetation are not
-  modelled (see [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)); strong winds
-  and temperature gradients, where they matter most, have not been compared with
-  measurements.
+  m away in light winds. The ground is flat, and vegetation is not modelled (see
+  [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)); strong winds and temperature
+  gradients, where they matter most, have not been compared with measurements.
+  Turbulence is checked against a parabolic equation through random eddies in two
+  dimensions, with the source and the listener near the ground, not against
+  measurements; how much the sound flickers over time is not checked against either.
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
 - **Speed on a hardware GPU.** CI checks the wave solver's and the late stage's GPU
@@ -1055,6 +1121,8 @@ python validation/wave_solver.py --plot docs/images/wave.png
 python validation/edge_diffraction.py --json diffraction.json
 python validation/ground_reflection.py --wave --parabolic --json ground.json
 python validation/outdoor_propagation.py --json outdoor.json --plots docs/validation
+python validation/outdoor_propagation.py --turbulence moderate
+python validation/turbulence.py --json turbulence.json
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
@@ -1066,7 +1134,8 @@ python validation/bras_validation.py --materials initial --calibrate LS1 --plots
 
 The cross-check takes about 20 minutes on 4 cores, the benchmark about 2 minutes, the
 wave solver's checks about 3.5 minutes (both stencils), the ground's about 7.5 (1.5 of
-them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5 and each BRAS run about 30 minutes (85 in
+them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5
+(3 with turbulence), the turbulence's about 7 and each BRAS run about 30 minutes (85 in
 third-octave bands, or half that per room with `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
 (`--pra-runs`); the means still move by a few percent from one call to the next, and the

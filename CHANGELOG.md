@@ -84,6 +84,34 @@
 - Scenes without an atmosphere, or with one in which sound goes straight, give the same
   results as before, bit for bit.
 
+**Turbulence**
+
+- `atmosphere.turbulence`: the eddies of the wind and of the temperature, by their
+  structure parameters C_T² and C_v² and the size of the largest eddies, with a von
+  Kármán spectrum; presets `weak`, `moderate` and `strong`. Also in still air.
+- Each two early paths of a sound add in pressure with their coherence factor, from the
+  Markov approximation along both, reduced for paths that differ only by reflections
+  off the ground as a parabolic equation marched through random eddies has it: the
+  ground dip fills in at long distances and high frequencies, within about 1 dB of that
+  parabolic equation on average over eight grounds and heights. The echogram, the
+  parameters and the coverage maps take this average; in the parabolic equation's bands
+  the eddies blur its sound towards the rays' added in energy.
+- Eddies scatter sound into the shadows of the wind and of the temperature: once from
+  the air over the shadow's edge (the Born approximation), and at high frequencies by
+  shaking the refraction near the ground: within about 1 dB of a parabolic equation
+  through random eddies on average. 300 m upwind in the `windy` preset the bands from
+  1 kHz up are about 19 dB below those downwind with moderate eddies, 60 without.
+- An impulse response is one moment of the eddies (drawn with the seed), each path
+  delayed band by band; `auralize`, the editor's **Listen** and `walkthrough` go through
+  a new moment every sixteenth of the time the eddies take to drift past (at most 20
+  times a second), crossfaded, so the sound flickers.
+- The editor's **Wind and temperature** group has **Eddies** (none, a preset or custom)
+  with the structure parameters and the eddies' size; `inspect` describes them.
+- The `open_air_stage` example has moderate eddies. New validation:
+  `validation/turbulence.py`, against a parabolic equation through random eddies;
+  `validation/outdoor_propagation.py --turbulence` adds eddies to the Hannover cases.
+- Scenes without turbulence give the same results as before, bit for bit.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

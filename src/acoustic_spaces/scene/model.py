@@ -1057,11 +1057,81 @@ ATMOSPHERE_PRESETS: dict[str, dict] = {
 }
 
 
+#: The turbulence presets: the structure parameters of the temperature (C_T², K² m^-2/3)
+#: and of the wind (C_v², m^4/3 s^-2) near the ground, indicative values.
+TURBULENCE_PRESETS: dict[str, dict] = {
+    # Overcast, a light wind: the air hardly stirs.
+    "weak": {"temperature_structure": 0.001, "wind_structure": 0.03},
+    # A breeze and some sun, the usual day.
+    "moderate": {"temperature_structure": 0.008, "wind_structure": 0.12},
+    # A strong wind or a hot sun: gusty air.
+    "strong": {"temperature_structure": 0.08, "wind_structure": 0.5},
+}
+
+
+class Turbulence(_Model):
+    """The eddies of the wind and of the temperature, which make sound outdoors flicker:
+    the paths of one sound that take different ways stop adding in step (the ground dip
+    fills in), and sound is scattered into shadow zones. Their strength is given by the
+    structure parameters of the temperature and of the wind, C_T² and C_v², with a von
+    Kármán spectrum whose largest eddies are ``outer_scale_m`` across."""
+
+    preset: str | None = Field(
+        default=None,
+        description="a strength to start from: " + ", ".join(TURBULENCE_PRESETS),
+    )
+    temperature_structure: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=10.0,
+        description=(
+            "the temperature's structure parameter C_T² (K² m^-2/3): about 0.001 to 1 near "
+            "the ground"
+        ),
+    )
+    wind_structure: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=10.0,
+        description=(
+            "the wind's structure parameter C_v² (m^4/3 s^-2): about 0.01 to 1 near the ground"
+        ),
+    )
+    outer_scale_m: PositiveFloat = Field(
+        default=10.0,
+        le=1000.0,
+        description="the size of the largest eddies (m): some metres near the ground",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_preset(cls, data):
+        if isinstance(data, str):
+            data = {"preset": data}
+        if isinstance(data, dict) and data.get("preset") is not None:
+            preset = data["preset"]
+            if preset not in TURBULENCE_PRESETS:
+                close = difflib.get_close_matches(str(preset), list(TURBULENCE_PRESETS), n=1)
+                hint = f"; did you mean {close[0]}?" if close else ""
+                raise ValueError(
+                    f"no turbulence preset named {preset!r}{hint} (the presets are "
+                    f"{', '.join(TURBULENCE_PRESETS)})"
+                )
+            data = {**TURBULENCE_PRESETS[preset], **data}
+        return data
+
+    @property
+    def calm(self) -> bool:
+        """Whether there are no eddies at all."""
+        return self.temperature_structure == 0.0 and self.wind_structure == 0.0
+
+
 class Atmosphere(_Model):
     """How the speed of sound changes with height outdoors, which bends sound: the
     temperature (warmer air carries sound faster) and the wind (sound goes faster with
     it). Both vary with height only. The scene's air temperature is the temperature at
-    the ground. Heights are in metres above the ground."""
+    the ground. Heights are in metres above the ground. Eddies of both (``turbulence``)
+    make the sound flicker."""
 
     preset: str | None = Field(
         default=None,
@@ -1097,6 +1167,10 @@ class Atmosphere(_Model):
             "temperature (°C), wind speed (m/s)] rows, by height; between them linear, "
             "above the top as at the top"
         ),
+    )
+    turbulence: Turbulence | None = Field(
+        default=None,
+        description="the eddies of the wind and of the temperature; None: none",
     )
 
     @model_validator(mode="before")

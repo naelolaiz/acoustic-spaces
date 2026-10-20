@@ -159,7 +159,8 @@ The **Geometry** entry of an [outdoor scene](outdoor.md) has an **Outdoors** gro
 instead: the ground's height, the margin and the sky, and the buildings and barriers
 with their heights, which can be changed or removed. The scene's own entry then has a
 **Wind and temperature** group: the weather, the wind and the temperature over the
-ground, and **Show the profile**, a plot of them and of the speed of sound (see
+ground, their **Eddies** (see [Turbulence](outdoor.md#turbulence)), and **Show the
+profile**, a plot of them and of the speed of sound (see
 [Wind and temperature](outdoor.md#wind-and-temperature)). The 3D view leaves the sky out but
 for its edges, which show where the ground ends.
 

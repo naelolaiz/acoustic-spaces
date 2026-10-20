@@ -301,10 +301,10 @@ shares the work out over the cores. An atmosphere in which sound goes straight (
 and no temperature gradient) changes nothing: the results are those of still air, bit
 for bit.
 
-**Shadows come out deeper than measured.** Turbulence, which scatters sound into a
-shadow, keeps it to some 20 to 30 dB in practice; it is not modelled yet (see
-[What is not modelled yet](#what-is-not-modelled-yet)), and without it a shadow far
-from its start can be 60 dB deep at high frequencies.
+**Without turbulence, shadows come out deeper than measured.** The eddies of the wind
+and of the temperature scatter sound into a shadow and keep it to some 20 to 30 dB in
+practice; without them a shadow far from its start can be 60 dB deep at high
+frequencies. Give the atmosphere its `turbulence` (see [Turbulence](#turbulence)).
 
 Against measurements of a wind turbine up to 845 m away in light winds, the bands from
 80 Hz to 2 kHz are within 1.7 to 2.7 dB on average, about as close as the published
@@ -314,6 +314,94 @@ parabolic equation model (see [Validation](validation.md#outdoor-propagation-aga
 the wind, downwind and upwind at a few heights up to the sky. From Python,
 `acoustic_spaces.viz.plot_atmosphere(scene.atmosphere, scene.air.temperature_c,
 "profile.png")` draws the temperature, the wind and the speed of sound over the ground.
+
+## Turbulence
+
+The wind and the temperature are not steady: eddies of every size, from the gusts of
+the wind to the warm plumes the sun raises off the ground, drift past, and the speed of
+sound flickers with them. Outdoors that matters in three ways:
+
+- The paths of one sound that go different ways stop adding in step: the **ground dip**,
+  where the direct sound and its reflection off the ground cancel, fills in at long
+  distances and high frequencies.
+- Sound is **scattered into shadows**: a shadow of the wind or of the sun's warmth
+  stays some 15 to 30 dB deep instead of 60.
+- The sound of a far source **flickers**, louder and softer by several decibels from
+  one second to the next, as the eddies drift past.
+
+```yaml
+atmosphere:
+  preset: windy
+  turbulence: moderate          # weak, moderate or strong; or the values themselves:
+  # turbulence: {temperature_structure: 0.008, wind_structure: 0.12, outer_scale_m: 10}
+```
+
+`turbulence` goes in the `atmosphere`, also in still air (`atmosphere: {turbulence:
+strong}`). Its fields:
+
+| field | what it sets |
+|---|---|
+| `preset` | a strength to start from (below); fields given with it change it |
+| `temperature_structure` | the temperature's structure parameter C_T² (K² m^-2/3): about 0.001 to 1 near the ground, the most in sunshine |
+| `wind_structure` | the wind's structure parameter C_v² (m^4/3 s^-2): about 0.01 to 1 near the ground, the more the stronger the wind |
+| `outer_scale_m` | the size of the largest eddies (m, 10 by default): some metres near the ground |
+
+| preset | C_T² | C_v² | weather |
+|---|---:|---:|---|
+| `weak` | 0.001 | 0.03 | overcast, a light wind |
+| `moderate` | 0.008 | 0.12 | a breeze and some sun |
+| `strong` | 0.08 | 0.5 | a strong wind or a hot sun |
+
+These are indicative: the eddies are strongest near the ground and weaken with height,
+and they are taken here as the same at every height, at the strength near the
+ground. Without `turbulence`, or with both structure parameters 0, the results are
+those without eddies, bit for bit.
+
+### How the simulation takes eddies into account
+
+The eddies make the index of refraction fluctuate, by -T' / (2 T0) for the
+temperature's and -v' / c0 for the wind's, both with a von Kármán spectrum of outer
+scale `outer_scale_m`, taken together as one of strength Cn² = C_T² / (4 T0²) + (11/6)
+C_v² / c0² (Ostashev and Wilson 2015).
+
+- **Each two early paths of a sound** add in pressure times their coherence factor
+  exp(-D / 2): D grows with the square of the frequency, with the distance and with how
+  far apart the two paths go, from the Markov approximation along both (Clifford and
+  Lataitis 1983) at 24 points each. Near the ground the eddies that part the direct
+  sound and its reflection span few wavelengths, and a parabolic equation marched
+  through random eddies fills the dip far less than that: two paths that differ only by
+  reflections off the ground take D times 1 / (1 + (32 / k rho)^1.7), rho their largest
+  separation, fitted to it. With it the level of the direct sound and its reflection is
+  within about 1 dB of the parabolic equation's on average over eight grounds and
+  heights (see [Validation](validation.md#turbulence-against-a-parabolic-equation-through-random-eddies)).
+  The echogram, the parameters and the coverage maps take this average.
+- **In the parabolic equation's bands** (in wind or temperature gradients, see
+  [How the simulation bends sound](#how-the-simulation-bends-sound)) the eddies blur its
+  sound towards the rays' added in energy, by the rays' coherence factors.
+- **In a shadow** the eddies add the sound they scatter into it: once, from the air
+  that the source and the listener both see over the shadow's edge (the Born
+  approximation, which the parabolic equation through random eddies bears out at 250
+  Hz), and at higher frequencies by shaking the refraction near the ground that makes
+  the shadow, a share of the free field's energy that grows as the square of the eddies'
+  speed of sound against the fall of the speed of sound over the heights. That share is
+  fitted to the parabolic equation on a sunny day and upwind in the `windy` preset, the
+  source 2 m and the listener 1.5 m up, and deep in those shadows the engine is within
+  about 1 dB of it on average, 3.5 dB at most; the shadows of other heights and profiles
+  follow the same formula, untested. A barrier's or a building's shadow takes nothing from the
+  eddies.
+- **An impulse response is one moment of the eddies.** Each path is delayed at random,
+  band by band, as the eddies have it at that moment (the seed draws it), so the levels
+  of a response scatter about the echogram's average, the more the stronger the eddies
+  and the higher the band; averaged over many moments they give it. In the parabolic
+  equation's bands a response carries the average.
+- **Listening and walkthroughs flicker.** `acoustic_spaces.render.auralize`, the
+  editor's **Listen** and `walkthrough` send the sound through a new moment of the
+  eddies every sixteenth of the time they take to drift past (the outer scale over the
+  wind's speed, at least 1 m/s; at most every 50 ms), each crossfaded into the next; the
+  moments change as an Ornstein-Uhlenbeck process, so the delays drift rather than
+  jump, and a walker keeps the same eddies from place to place. The `auralize` command
+  and live playback (`play`, head tracking) go through the saved responses, one moment
+  each.
 
 ## What the simulation does outdoors
 
@@ -339,7 +427,9 @@ the wind, downwind and upwind at a few heights up to the sky. From Python,
   grid, as for any open model.
 - **Air** absorbs per band as indoors (ISO 9613-1, from `air`), along every path.
 - **Wind and temperature** bend the paths and the rays (see
-  [Wind and temperature](#wind-and-temperature)).
+  [Wind and temperature](#wind-and-temperature)), and their eddies blur the paths'
+  interference, scatter sound into shadows and make it flicker (see
+  [Turbulence](#turbulence)).
 - **The early paths add in pressure in every band** (see
   [Ground impedance](#ground-impedance)): `simulation.early.coherent_max_band_hz` is
   8000 outdoors unless the scene sets it.
@@ -360,7 +450,9 @@ thickness or the porosity rate. Unticked, the material keeps the absorption the
 impedance gave it. The scene's own entry has a **Wind and temperature** group: the
 weather (a preset, or custom), the wind's speed, direction, height and profile, the
 temperature's gradient and its change near the ground, and the roughness; changing a
-value makes the weather custom. A measured profile is set in the scene file, and
+value makes the weather custom. Under them, **Eddies** picks the turbulence (none, a
+preset or custom), with the temperature's and the wind's structure parameters and the
+size of the largest eddies; they stay as the weather changes. A measured profile is set in the scene file, and
 **Remove the measured profile** drops it; **Show the profile** plots the temperature,
 the wind and the speed of sound over the ground, across the wind, downwind and upwind.
 On the simulation page, **In pressure up to** goes up to 8000 Hz in an outdoor
@@ -374,13 +466,12 @@ was above 500 Hz.
 
 These come next, each in its own step (see the [roadmap](roadmap.md)):
 
-- turbulence, which scatters sound into shadow zones and blurs the ground dip;
 - vegetation: trees, hedges and forests as volumes that scatter and absorb;
 - the wave solver with a speed of sound that changes from place to place: it runs in
   still air, the wind and the temperature gradients left out.
 
-Until then shadow zones come out deeper than measured, the ground dip sharper at long
-distances, and the wind and the temperature are the same over the whole scene. The
+The wind, the temperature and the eddies are the same over the whole scene, and the
+eddies are as strong at every height as near the ground. The
 ground is flat and reacts locally: its impedance does not
 change with the angle sound meets it at, which holds for grass, soil and snow, though
 less for a thick layer of very soft snow.

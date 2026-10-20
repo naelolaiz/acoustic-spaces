@@ -1421,6 +1421,18 @@ msgid "constant"
 msgstr "konstant"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "weak"
+msgstr "schwach"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "moderate"
+msgstr "mäßig"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "strong"
+msgstr "stark"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Measured data or an array from a file…"
 msgstr "Messdaten oder ein Array aus einer Datei…"
 
@@ -1644,6 +1656,65 @@ msgstr "Rauigkeit"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"The eddies of the wind and of the temperature, which make sound outdoors "
+"flicker: the direct sound and its reflections stop adding in step (the dip "
+"of the ground fills in), sound is scattered into shadow zones, and renders "
+"and walkthroughs change as the eddies drift past. (none): steady air; weak, "
+"overcast with a light wind; moderate, a breeze and some sun; strong, a "
+"strong wind or a hot sun; custom, the values below"
+msgstr ""
+"Die Wirbel des Windes und der Temperatur, die den Schall im Freien schwanken "
+"lassen: der Direktschall und seine Reflexionen addieren sich nicht mehr "
+"phasengleich (die Bodensenke füllt sich), Schall wird in Schattenzonen "
+"gestreut, und Hörproben und Rundgänge ändern sich, während die Wirbel "
+"vorbeiziehen. (keine): ruhige Luft; schwach, bedeckt mit leichtem Wind; "
+"mäßig, eine Brise und etwas Sonne; stark, starker Wind oder kräftige Sonne; "
+"benutzerdefiniert, die Werte unten"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the temperature's eddies are: its structure parameter C_T² (K² "
+"m^-2/3), about 0.001 to 1 near the ground, the most in sunshine"
+msgstr ""
+"Wie stark die Wirbel der Temperatur sind: ihr Strukturparameter C_T² (K² "
+"m^-2/3), etwa 0,001 bis 1 nahe am Boden, am größten bei Sonnenschein"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the wind's eddies are: its structure parameter C_v² (m^4/3 s^-2), "
+"about 0.01 to 1 near the ground, the more the stronger the wind"
+msgstr ""
+"Wie stark die Wirbel des Windes sind: sein Strukturparameter C_v² (m^4/3 "
+"s^-2), etwa 0,01 bis 1 nahe am Boden, umso größer, je stärker der Wind"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The size of the largest eddies (m), some metres near the ground: they take "
+"this long to drift past at the wind's speed, which sets how fast the sound "
+"flickers"
+msgstr ""
+"Die Größe der größten Wirbel (m), einige Meter nahe am Boden: so lange "
+"brauchen sie, um mit der Windgeschwindigkeit vorbeizuziehen, was bestimmt, "
+"wie schnell der Schall schwankt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies"
+msgstr "Turbulenz"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature eddies"
+msgstr "Turbulenz der Temperatur"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind eddies"
+msgstr "Turbulenz des Windes"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddy size"
+msgstr "Wirbelgröße"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "A measured profile from the scene file: the temperature and the wind's speed "
 "come from it, in straight lines between its heights"
 msgstr ""
@@ -1731,6 +1802,10 @@ msgstr "Luftbedingungen ändern"
 #: acoustic_spaces/gui/inspector.py
 msgid "change the weather"
 msgstr "Wetterlage ändern"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the eddies"
+msgstr "Turbulenz ändern"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change the wind and temperature"
@@ -4969,23 +5044,23 @@ msgid ""
 "towards the ground, and sound going against it bends up, over the listeners' "
 "heads. Downwind the sound comes sooner, and louder in the low bands; 300 m "
 "upwind the listeners are in its shadow, where only what bends round its edge "
-"arrives, the less the higher the band: there the bands from 1 kHz up are "
-"some 60 dB below those downwind, more than one would measure, as the "
-"turbulence that scatters sound into a shadow is not modelled yet. Remove the "
-"atmosphere to hear the same park in still air."
+"and what the wind's eddies scatter into it arrive: there the bands from 1 "
+"kHz up are some 19 dB below those downwind, where without the eddies they "
+"would be 60 dB below. The eddies also make the sound flicker as they drift "
+"past. Remove the atmosphere to hear the same park in still air."
 msgstr ""
 "Im Freien: die Lautsprecher einer Bühne in 5 m Höhe, gehört in 100 und 300 m "
-"Entfernung quer über einen Park an einem windigen Abend, mit dem Wind und "
-"gegen den Wind. Der Wind, 5 m/s in 10 m Höhe, nimmt mit der Höhe zu: Schall, "
-"der mit ihm läuft, ist weiter oben schneller und beugt sich zum Boden, "
-"Schall gegen ihn beugt sich nach oben, über die Köpfe der Zuhörer hinweg. "
-"Mit dem Wind kommt der Schall früher an, und in den tiefen Bändern lauter; "
-"300 m gegen den Wind sitzen die Zuhörer in seinem Schatten, in den nur "
-"gelangt, was sich um seinen Rand beugt, umso weniger, je höher das Band: "
-"dort liegen die Bänder ab 1 kHz etwa 60 dB unter denen mit dem Wind, mehr, "
-"als man messen würde, da die Turbulenz, die Schall in einen Schatten streut, "
-"noch nicht modelliert wird. Entfernen Sie die Atmosphäre, um denselben Park "
-"bei ruhender Luft zu hören."
+"Entfernung über einen Park an einem windigen Abend, mit dem Wind und gegen "
+"den Wind. Der Wind, 5 m/s in 10 m Höhe, nimmt mit der Höhe zu, sodass "
+"Schall, der mit ihm läuft, weiter oben schneller ist und sich zum Boden hin "
+"beugt, und Schall gegen ihn sich nach oben beugt, über die Köpfe der Zuhörer "
+"hinweg. Mit dem Wind kommt der Schall früher und in den tiefen Bändern "
+"lauter an; 300 m gegen den Wind stehen die Zuhörer in seinem Schatten, wo "
+"nur ankommt, was sich um seinen Rand beugt und was die Wirbel des Windes "
+"hineinstreuen: dort liegen die Bänder ab 1 kHz etwa 19 dB unter denen mit "
+"dem Wind, wo sie ohne die Wirbel 60 dB darunter lägen. Die Wirbel lassen den "
+"Schall auch schwanken, während sie vorbeiziehen. Entfernen Sie die "
+"Atmosphäre, um denselben Park bei ruhender Luft zu hören."
 
 #: examples/orchestra/scene.yaml
 msgctxt "example"
