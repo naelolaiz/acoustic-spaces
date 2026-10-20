@@ -1375,6 +1375,42 @@ msgid "third_octave"
 msgstr "terts"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "(none)"
+msgstr "(geen)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "neutral"
+msgstr "neutraal"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "windy"
+msgstr "winderig"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "sunny_day"
+msgstr "zonnige dag"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "clear_night"
+msgstr "heldere nacht"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "custom"
+msgstr "aangepast"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "log"
+msgstr "logaritmisch"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "linear"
+msgstr "lineair"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "constant"
+msgstr "constant"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Measured data or an array from a file…"
 msgstr "Meetgegevens of een array uit een bestand…"
 
@@ -1485,8 +1521,151 @@ msgstr ""
 "Een berekening geeft het volledige resultaat"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "(none)"
-msgstr "(geen)"
+msgid "Wind and temperature"
+msgstr "Wind en temperatuur"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The weather, which bends sound outdoors: (none) or neutral, still air and "
+"sound in straight lines; windy, 5 m/s 10 m up, bending sound down downwind "
+"and up upwind; sunny_day, air cooling with height, bending sound up into a "
+"shadow a few hundred metres away; clear_night, air warming with height, "
+"bending sound down; custom, the values below. Changing one of them makes the "
+"weather custom. The air temperature above is the ground's"
+msgstr ""
+"Het weer, dat geluid buiten afbuigt: (geen) of neutraal, stilstaande lucht "
+"en geluid in rechte lijnen; winderig, 5 m/s op 10 m hoogte, buigt geluid met "
+"de wind mee omlaag en tegen de wind in omhoog; zonnige dag, lucht die met de "
+"hoogte afkoelt, buigt geluid omhoog, een schaduw in op een paar honderd "
+"meter; heldere nacht, lucht die met de hoogte warmer wordt, buigt geluid "
+"omlaag; aangepast, de waarden hieronder. Een daarvan wijzigen maakt het weer "
+"aangepast. De luchttemperatuur hierboven is die aan de grond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weather"
+msgstr "Weer"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The wind's speed at the height below (m/s): sound goes faster with the wind "
+"and slower against it"
+msgstr ""
+"De windsnelheid op de hoogte hieronder (m/s): geluid gaat sneller met de "
+"wind mee en langzamer ertegenin"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The way the wind blows to, in degrees counterclockwise from +x seen from "
+"above (0: along +x, 90: along +y)"
+msgstr ""
+"Waarheen de wind waait, in graden tegen de klok in vanaf +x, van bovenaf "
+"gezien (0: langs +x, 90: langs +y)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The height above the ground the wind's speed is at (m)"
+msgstr "De hoogte boven de grond waarop de windsnelheid geldt (m)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the wind's speed grows with height: log, with the logarithm of the "
+"height over the roughness, the usual profile; linear, in proportion to the "
+"height; constant, the same at every height"
+msgstr ""
+"Hoe de windsnelheid met de hoogte toeneemt: logaritmisch, met de logaritme "
+"van de hoogte boven de ruwheid, het gebruikelijke profiel; lineair, "
+"evenredig met de hoogte; constant, op elke hoogte gelijk"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the temperature changes per metre of height (K/m): -0.0098 in air "
+"stirred by the sun, positive in an inversion. Sound goes faster in warmer "
+"air and bends away from it"
+msgstr ""
+"Hoe de temperatuur per meter hoogte verandert (K/m): -0.0098 in lucht die "
+"door de zon wordt gemengd, positief bij een inversie. Geluid gaat sneller in "
+"warmere lucht en buigt ervan af"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A change of temperature fastest near the ground (K, times ln(1 + height / "
+"roughness)): negative on a sunny day, positive on a clear night"
+msgstr ""
+"Een temperatuurverandering die vlak bij de grond het snelst is (K, maal ln(1 "
+"+ hoogte / ruwheid)): negatief op een zonnige dag, positief in een heldere "
+"nacht"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The ground's roughness length (m), for the log profiles: 0.01 to 0.1 over "
+"grass, up to 1 among buildings and trees"
+msgstr ""
+"De ruwheidslengte van de grond (m), voor de logaritmische profielen: 0.01 "
+"tot 0.1 boven gras, tot 1 tussen gebouwen en bomen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind speed"
+msgstr "Windsnelheid"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind direction"
+msgstr "Windrichting"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind height"
+msgstr "Windhoogte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind profile"
+msgstr "Windprofiel"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature gradient"
+msgstr "Temperatuurgradiënt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature near the ground"
+msgstr "Temperatuur bij de grond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Roughness"
+msgstr "Ruwheid"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A measured profile from the scene file: the temperature and the wind's speed "
+"come from it, in straight lines between its heights"
+msgstr ""
+"Een gemeten profiel uit het scènebestand: de temperatuur en de windsnelheid "
+"komen eruit, lineair tussen de hoogtes"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the measured profile"
+msgstr "Gemeten profiel verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Use the values above in place of the measured profile of the scene file"
+msgstr ""
+"De waarden hierboven gebruiken in plaats van het gemeten profiel uit het "
+"scènebestand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Show the profile"
+msgstr "Profiel tonen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Open a plot of the temperature, the wind and the speed of sound over the "
+"ground: across the wind, downwind and upwind"
+msgstr ""
+"Opent een grafiek van de temperatuur, de wind en de geluidssnelheid boven de "
+"grond: dwars op de wind, met de wind mee en tegen de wind in"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Measured profile at {count} height, from the scene file"
+msgid_plural "Measured profile at {count} heights, from the scene file"
+msgstr[0] "Gemeten profiel op {count} hoogte, uit het scènebestand"
+msgstr[1] "Gemeten profiel op {count} hoogtes, uit het scènebestand"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -1538,6 +1717,23 @@ msgstr "standaardmateriaal wijzigen"
 #: acoustic_spaces/gui/inspector.py
 msgid "change air"
 msgstr "luchtinstellingen wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather"
+msgstr "weer wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the wind and temperature"
+msgstr "wind en temperatuur wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove the measured profile"
+msgstr "gemeten profiel verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Wind and temperature of {name}"
+msgstr "Wind en temperatuur van {name}"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Box"
@@ -4359,6 +4555,42 @@ msgstr ""
 "dB t.o.v. de luidste richting; richtingsindex {index:.1f} dB bij 1 kHz"
 
 #: acoustic_spaces/viz.py
+msgid "temperature (°C)"
+msgstr "temperatuur (°C)"
+
+#: acoustic_spaces/viz.py
+msgid "height above the ground (m)"
+msgstr "hoogte boven de grond (m)"
+
+#: acoustic_spaces/viz.py
+msgid "wind speed (m/s)"
+msgstr "windsnelheid (m/s)"
+
+#: acoustic_spaces/viz.py
+msgid "across the wind"
+msgstr "dwars op de wind"
+
+#: acoustic_spaces/viz.py
+msgid "downwind"
+msgstr "met de wind mee"
+
+#: acoustic_spaces/viz.py
+msgid "upwind"
+msgstr "tegen de wind in"
+
+#: acoustic_spaces/viz.py
+msgid "speed of sound (m/s)"
+msgstr "geluidssnelheid (m/s)"
+
+#: acoustic_spaces/viz.py
+msgid "Still air: sound goes in straight lines"
+msgstr "Stilstaande lucht: geluid gaat in rechte lijnen"
+
+#: acoustic_spaces/viz.py
+msgid "Sound bends towards where the speed of sound is lower"
+msgstr "Geluid buigt af naar waar de geluidssnelheid lager is"
+
+#: acoustic_spaces/viz.py
 msgid "broadband, 1 ms windows"
 msgstr "breedband, vensters van 1 ms"
 
@@ -4708,6 +4940,38 @@ msgstr ""
 "materials --file examples/material_libraries/odeon_materials.li8` geeft de "
 "inhoud van een bibliotheek weer. De waarden zijn eigen aan dit voorbeeld en "
 "komen niet uit een van beide programma's."
+
+#: examples/open_air_stage/scene.yaml
+msgctxt "example"
+msgid "Open-air stage in the wind"
+msgstr "Openluchtpodium in de wind"
+
+#: examples/open_air_stage/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a stage's loudspeakers 5 m up, heard 100 and 300 m away across a "
+"park on a windy evening, downwind and upwind. The wind, 5 m/s 10 m up, grows "
+"with height, so sound going with it travels faster higher up and bends down "
+"towards the ground, and sound going against it bends up, over the listeners' "
+"heads. Downwind the sound comes sooner, and louder in the low bands; 300 m "
+"upwind the listeners are in its shadow, where only what bends round its edge "
+"arrives, the less the higher the band: there the bands from 1 kHz up are "
+"some 60 dB below those downwind, more than one would measure, as the "
+"turbulence that scatters sound into a shadow is not modelled yet. Remove the "
+"atmosphere to hear the same park in still air."
+msgstr ""
+"Buiten: de luidsprekers van een podium op 5 m hoogte, gehoord op 100 en 300 "
+"m over een park op een winderige avond, met de wind mee en tegen de wind in. "
+"De wind, 5 m/s op 10 m hoogte, neemt toe met de hoogte, dus geluid dat met "
+"de wind meegaat, gaat hoger sneller en buigt naar de grond, en geluid tegen "
+"de wind in buigt omhoog, over de hoofden van de luisteraars. Met de wind mee "
+"komt het geluid eerder aan, en luider in de lage banden; 300 m tegen de wind "
+"in zitten de luisteraars in de schaduw, waar alleen aankomt wat om de rand "
+"ervan buigt, des te minder naarmate de band hoger is: daar liggen de banden "
+"vanaf 1 kHz zo'n 60 dB onder die met de wind mee, meer dan je zou meten, "
+"want de turbulentie die geluid in een schaduw verstrooit, wordt nog niet "
+"gemodelleerd. Verwijder de atmosfeer om hetzelfde park bij stilstaande lucht "
+"te horen."
 
 #: examples/orchestra/scene.yaml
 msgctxt "example"

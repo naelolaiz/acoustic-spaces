@@ -150,7 +150,15 @@ def trace_particles(
     bent = bending(model)
     if bent:
         return _bent_particles(
-            model, bent, (origins, directions, energy), rng, duration, frames, band, c, air,
+            model,
+            bent,
+            (origins, directions, energy),
+            rng,
+            duration,
+            frames,
+            band,
+            c,
+            air,
             source,
         )
     for order in range(1, MAX_REFLECTIONS + 1):

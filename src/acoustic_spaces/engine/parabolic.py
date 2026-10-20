@@ -143,12 +143,20 @@ def march(
                 below *= here.fade[image]
                 tilted[image, n + 1 :] = below[:, 1:][:, ::-1]
             spectrum = np.fft.fft(tilted, axis=1) * dz
-            field = np.fft.ifft((spectrum + here.reflection * spectrum[:, mirror]) * propagate, axis=1) / dz
+            field = (
+                np.fft.ifft((spectrum + here.reflection * spectrum[:, mirror]) * propagate, axis=1)
+                / dz
+            )
             psi_next = field[:, :n]
             surface = here.surface
             if surface.any():
                 amplitude = np.sum(tilted[surface, :n] * here.decay[surface], axis=1) * dz
-                lift = 2j * here.beta[surface] * amplitude * np.exp(1j * dr * (here.wave[surface] - ka[surface]))
+                lift = (
+                    2j
+                    * here.beta[surface]
+                    * amplitude
+                    * np.exp(1j * dr * (here.wave[surface] - ka[surface]))
+                )
                 psi_next[surface] += lift[:, None] * here.decay[surface]
             psi = half * psi_next
             r += dr
@@ -201,11 +209,17 @@ class _Ground:
         rigid = ~np.isfinite(zg)
         safe = np.where(rigid, 1.0, zg)
         kp = np.where(rigid, 0.0, -ka / safe)
-        self.image = ~rigid & (kp.imag > -BELOW_AXIS_POLE * width) & (kp.imag < ABOVE_AXIS_POLE * width)
+        self.image = (
+            ~rigid & (kp.imag > -BELOW_AXIS_POLE * width) & (kp.imag < ABOVE_AXIS_POLE * width)
+        )
         self.plain = ~self.image
         self.normal = np.where(rigid, 1.0, (safe - 1.0) / (safe + 1.0))
-        reflection = (kz[None, :] * safe[:, None] - ka[:, None]) / (kz[None, :] * safe[:, None] + ka[:, None])
-        self.reflection = np.where(rigid[:, None], 1.0, np.where(self.image[:, None], 0.0, reflection))
+        reflection = (kz[None, :] * safe[:, None] - ka[:, None]) / (
+            kz[None, :] * safe[:, None] + ka[:, None]
+        )
+        self.reflection = np.where(
+            rigid[:, None], 1.0, np.where(self.image[:, None], 0.0, reflection)
+        )
         self.beta = -kp
         # The surface wave goes as exp(-i beta z): kept where that decays.
         self.surface = ~rigid & self.plain & (self.beta.imag < 0.0)
@@ -220,7 +234,9 @@ class _Ground:
         self.scale = 2j * ka / safe
         self.fade = np.ones((len(zg), len(z)))
         for row in np.flatnonzero(self.image):
-            depth = min(math.log(FADE_GROWTH) / kp[row].imag, z[-1]) if kp[row].imag > 0.0 else z[-1]
+            depth = (
+                min(math.log(FADE_GROWTH) / kp[row].imag, z[-1]) if kp[row].imag > 0.0 else z[-1]
+            )
             t = np.clip((z - 0.5 * depth) / (0.5 * depth), 0.0, 1.0)
             self.fade[row] = 0.5 * (1.0 + np.cos(math.pi * t))
 

@@ -772,35 +772,37 @@ loss over the bands. Each pair is at 535 m / 845 m, in dB:
 
 | case | weather | overall, measured | published model | this package | mean difference, published model | this package |
 |---|---|---|---|---|---|---|
-| 1 | light downwind | 22.6 / 27.5 | 21.6 / 26.6 | 22.9 / 29.0 | 1.8 / 3.2 | 1.8 / 2.4 |
-| 2 | light downwind | 22.2 / 26.7 | 21.6 / 26.8 | 22.9 / 29.1 | 1.6 / 2.8 | 1.9 / 2.9 |
-| 3 | cross/downwind | 20.8 / 26.5 | 21.4 / 26.8 | 22.8 / 28.9 | 1.8 / 2.7 | 2.1 / 2.8 |
-| 4 | cross/downwind | 20.6 / 26.3 | 21.3 / 26.9 | 22.8 / 28.8 | 2.0 / 2.7 | 2.3 / 2.8 |
-| 5 | cross/upwind | 21.0 / 26.6 | 21.0 / 25.9 | 22.7 / 28.4 | 1.9 / 2.5 | 1.9 / 2.4 |
-| 6 | cross/upwind | 20.6 / 25.7 | 20.9 / 26.0 | 22.6 / 28.4 | 1.7 / 2.8 | 2.3 / 2.9 |
-| 7 | light upwind | 21.9 / 26.2 | 20.7 / 24.9 | 22.4 / 27.9 | 2.0 / 2.2 | 2.3 / 2.3 |
-| 8 | light upwind | 22.2 / 27.0 | 20.5 / 25.1 | 22.4 / 28.1 | 2.2 / 2.2 | 2.4 / 2.2 |
-| 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 21.8 / 28.0 | 3.2 / 8.3 | 2.0 / 2.7 |
-| 10 | strong upwind | 23.1 / 27.2 | 19.9 / 50.0 | 21.8 / 28.1 | 3.1 / 7.7 | 2.1 / 2.6 |
+| 1 | light downwind | 22.6 / 27.5 | 21.6 / 26.6 | 23.3 / 28.9 | 1.8 / 3.2 | 1.7 / 2.3 |
+| 2 | light downwind | 22.2 / 26.7 | 21.6 / 26.8 | 23.3 / 28.9 | 1.6 / 2.8 | 1.9 / 2.7 |
+| 3 | cross/downwind | 20.8 / 26.5 | 21.4 / 26.8 | 23.1 / 28.7 | 1.8 / 2.7 | 2.2 / 2.7 |
+| 4 | cross/downwind | 20.6 / 26.3 | 21.3 / 26.9 | 23.1 / 28.6 | 2.0 / 2.7 | 2.3 / 2.6 |
+| 5 | cross/upwind | 21.0 / 26.6 | 21.0 / 25.9 | 23.0 / 28.3 | 1.9 / 2.5 | 2.0 / 2.3 |
+| 6 | cross/upwind | 20.6 / 25.7 | 20.9 / 26.0 | 22.9 / 28.2 | 1.7 / 2.8 | 2.4 / 2.7 |
+| 7 | light upwind | 21.9 / 26.2 | 20.7 / 24.9 | 22.7 / 27.8 | 2.0 / 2.2 | 2.2 / 2.2 |
+| 8 | light upwind | 22.2 / 27.0 | 20.5 / 25.1 | 22.7 / 27.9 | 2.2 / 2.2 | 2.3 / 2.1 |
+| 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 22.0 / 27.9 | 3.2 / 8.3 | 2.0 / 2.6 |
+| 10 | strong upwind | 23.1 / 27.2 | 19.9 / 50.0 | 22.1 / 27.9 | 3.1 / 7.7 | 2.0 / 2.5 |
 
 In the eight cases of light winds, this package is about as close to the measurements
-as the authors' model: 1.8 to 2.4 dB per band on average at 535 m, 2.2 to 2.9 dB at 845
+as the authors' model: 1.7 to 2.4 dB per band on average at 535 m, 2.1 to 2.7 dB at 845
 m, against their 1.6 to 2.2 and 2.2 to 3.2 dB; the spread of the measurements over the
 five minutes is 1 to 3 dB. Both lose a few decibels more than was measured from 80 to
 160 Hz, this package more (overall 1 to 2.5 dB more loss at 845 m). These winds bend
 the sound little over these distances: in still air (`--still`) the overall losses
-move by 1.2 dB at most and the mean differences by 0.4 dB at most, except downwind at
-845 m in cases 1 and 2, which still air matches better (1.4 and 1.9 dB): there the wind
+move by 1.1 dB at most and the mean differences by 0.4 dB at most, except downwind at
+845 m in cases 1 and 2, which still air matches better (1.4 and 1.8 dB): there the wind
 takes 1 to 3 dB more from 100 to 250 Hz than was measured, the dip of the ground
-moving down in frequency as the sound comes in steeper.
+moving down in frequency as the sound comes in steeper. The field is flat and smooth,
+as the authors modelled it, so its material scatters nothing: with the few late rays
+that get this far, random scattering would only add noise (up to 1 dB in a band).
 
 Cases 9 and 10 are strong upwind. The published model puts 845 m deep in a shadow,
 50 dB overall where 27 dB was measured, and the authors put the gap down to
 turbulence, which scatters sound into a shadow and which neither model has. Here the
 rays in the same profile reach 845 m from the two upper sources: the shadow starts 690
 m away for the source 71 m up, but 980 and 1230 m away for those 119 and 167 m up, so
-only the lowest one is in it, and the loss stays within 1 dB of the measured one
-overall. Turbulence is still to come (see [Not validated yet](#not-validated-yet)).
+only the lowest one is in it, and the loss stays within about 1 dB of the measured
+one overall. Turbulence is still to come (see [Not validated yet](#not-validated-yet)).
 
 ## Wave-based solver
 

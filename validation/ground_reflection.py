@@ -262,7 +262,10 @@ def check_parabolic() -> dict:
     out = {}
     for (zs, zr), ranges in PE_GEOMETRIES:
         ranges = np.array(ranges)
-        print(f"source {zs:g} m, listener {zr:g} m high" + "".join(f"{f'{r:g} m':>10}" for r in ranges))
+        print(
+            f"source {zs:g} m, listener {zr:g} m high"
+            + "".join(f"{f'{r:g} m':>10}" for r in ranges)
+        )
         top = max(1.5 * zs, zs + 20.0, 0.15 * ranges.max())
         for name, sigma, thickness in GROUNDS:
             worst = np.zeros(len(ranges))
@@ -270,13 +273,19 @@ def check_parabolic() -> dict:
                 k = 2.0 * math.pi * f / SPEED_OF_SOUND
                 z = complex(surface_impedance(np.array(f), sigma, thickness=thickness))
                 # The parabolic equation's time goes as exp(-i omega t).
-                pressure = march([f], still, lambda r, z=z: np.conj(z), zs, ranges, np.full(len(ranges), zr), top)[0]
+                pressure = march(
+                    [f], still, lambda r, z=z: np.conj(z), zs, ranges, np.full(len(ranges), zr), top
+                )[0]
                 for i, r in enumerate(ranges):
                     r1, r2 = math.hypot(r, zs - zr), math.hypot(r, zs + zr)
                     exact = field(exact_reflection(1.0 / z, k, r, zs, zr), k, r1, r2)
-                    miss = abs(20.0 * math.log10(abs(pressure[i]) * r1) - 20.0 * math.log10(abs(exact)))
+                    miss = abs(
+                        20.0 * math.log10(abs(pressure[i]) * r1) - 20.0 * math.log10(abs(exact))
+                    )
                     worst[i] = max(worst[i], miss)
-            out[f"{name}, heights {zs:g} and {zr:g} m"] = dict(zip((f"{r:g} m" for r in ranges), worst.tolist()))
+            out[f"{name}, heights {zs:g} and {zr:g} m"] = dict(
+                zip((f"{r:g} m" for r in ranges), worst.tolist(), strict=True)
+            )
             print(f"{name:34}" + "".join(f"{w:10.2f}" for w in worst))
         print()
     print(f"({time.time() - start:.0f} s)\n")

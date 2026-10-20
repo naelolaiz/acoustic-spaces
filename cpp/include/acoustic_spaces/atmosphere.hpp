@@ -215,8 +215,8 @@ public:
         } else if (z_ >= air.height[n - 1]) {
             layer = static_cast<int>(n) - 1;
         } else {
-            layer = static_cast<int>(
-                std::upper_bound(air.height.begin(), air.height.end(), z_) - air.height.begin() - 1);
+            const auto above = std::upper_bound(air.height.begin(), air.height.end(), z_);
+            layer = static_cast<int>(above - air.height.begin() - 1);
         }
         if (layer >= 0 && z_ == air.height[static_cast<std::size_t>(layer)] && theta_ < 0.0) {
             --layer;

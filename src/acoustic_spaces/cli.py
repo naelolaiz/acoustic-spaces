@@ -219,6 +219,9 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
                 for name, polygon in room.outdoor.zones
             )
             print(f"  ground zones: {zones}")
+        if scene.atmosphere is not None:
+            for line in _atmosphere_lines(scene.atmosphere, scene.air.temperature_c, room.outdoor):
+                print(f"  {line}")
 
     width = max([len(n) for n in room.material_names] + [12]) + 2
     print("\nmaterials (absorption per octave band, area)")
@@ -299,6 +302,46 @@ def _polygon_area(polygon) -> float:
         x0 * y1 - x1 * y0
         for (x0, y0), (x1, y1) in zip(points, points[1:] + points[:1], strict=True)
     )
+
+
+def _atmosphere_lines(atmosphere, ground_c: float, outdoor) -> list[str]:
+    """An outdoor scene's wind and temperature, and the speed of sound they give at a few
+    heights up to the sky."""
+    parts = [f"{atmosphere.preset} weather"] if atmosphere.preset else []
+    wind = atmosphere.wind
+    if atmosphere.table is not None:
+        parts.append(f"measured profile at {len(atmosphere.table)} heights")
+    else:
+        if wind is not None and wind.speed_m_s > 0.0:
+            parts.append(f"wind {wind.speed_m_s:g} m/s {wind.height_m:g} m up ({wind.profile})")
+        if atmosphere.temperature_gradient_k_m or atmosphere.temperature_log_k:
+            parts.append(
+                f"temperature {atmosphere.temperature_gradient_k_m:+g} K/m "
+                f"{atmosphere.temperature_log_k:+g} K ln(1 + z / {atmosphere.roughness_m:g} m)"
+            )
+    if atmosphere.still:
+        parts.append("still air: sound goes in straight lines")
+        return ["atmosphere: " + "; ".join(parts)]
+    if atmosphere.table is not None:
+        windy = any(row[2] > 0.0 for row in atmosphere.table)
+    else:
+        windy = wind is not None and wind.speed_m_s > 0.0
+    if windy:
+        direction = wind.direction_deg if wind is not None else 0.0
+        parts.append(f"blowing towards {direction:g} deg from +x")
+    lines = ["atmosphere: " + "; ".join(parts)]
+    top = outdoor.sky - outdoor.ground
+    heights = [h for h in (0.0, 2.0, 10.0, 50.0, 200.0) if h <= top]
+    width = 22
+    lines.append(f"{'speed of sound m/s at':<{width}}" + "".join(f"{h:>7g} m" for h in heights))
+    rows = [("across the wind" if windy else "in every direction", None)]
+    if windy:
+        along = atmosphere.to_wind()
+        rows += [("downwind", along), ("upwind", -along)]
+    for name, towards in rows:
+        speeds = atmosphere.sound_speed(heights, ground_c, towards)
+        lines.append(f"  {name:<{width - 2}}" + "".join(f"{c:9.1f}" for c in speeds))
+    return lines
 
 
 def _extent_text(item) -> str:

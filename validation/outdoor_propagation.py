@@ -16,6 +16,7 @@ part of this package.
 Each case becomes an outdoor scene as the authors modelled it: the turbine as three
 point sources of equal power 71, 119 and 167 m up (across the rotor, after Barlas et
 al., 2017), a flat ground of Miki's impedance with a flow resistivity of 200 kPa s/m²,
+which scatters nothing (the late rays' random scattering would only add noise),
 the air's temperature and humidity measured 53 m up, and their effective speed of
 sound, c(z) = a0 + alog ln(1 + z / z0) + alin z, as a measured atmosphere: the log term
 as the wind (towards the microphones where alog is positive, away from them where it
@@ -105,7 +106,12 @@ def scene_of(case: int, inputs, still: bool = False) -> Scene:
     heights = np.asarray(inputs.hs, dtype=float)
     ranges = np.asarray(inputs.R, dtype=float)
     hr = float(inputs.hr)
-    a0, alog, alin, z0 = (float(inputs.a0), float(inputs.alog), float(inputs.alin), float(inputs.z0))
+    a0, alog, alin, z0 = (
+        float(inputs.a0),
+        float(inputs.alog),
+        float(inputs.alin),
+        float(inputs.z0),
+    )
     # The speed of sound without the log term, as a temperature; the log term as wind.
     speed = a0 + alin * HEIGHTS
     temperature = 273.15 * ((speed / SOUND_SPEED_0C) ** 2 - 1.0)
@@ -119,14 +125,14 @@ def scene_of(case: int, inputs, still: bool = False) -> Scene:
             }
         },
         "materials": {
+            # Flat and smooth, as the authors modelled it: nothing scatters.
             "field": {
-                "impedance": {"model": "miki", "flow_resistivity": float(inputs.sigma_G) / 1000.0}
+                "impedance": {"model": "miki", "flow_resistivity": float(inputs.sigma_G) / 1000.0},
+                "scattering": 0.0,
             }
         },
         "assignments": {"ground": "field"},
-        "sources": [
-            {"name": f"{h:g} m up", "position": [0.0, 0.0, float(h)]} for h in heights
-        ],
+        "sources": [{"name": f"{h:g} m up", "position": [0.0, 0.0, float(h)]} for h in heights],
         "listeners": [{"name": f"{r:g} m", "position": [float(r), 0.0, hr]} for r in ranges],
         "air": {"temperature_c": float(inputs.T), "humidity_percent": float(inputs.Hu)},
         "simulation": {
@@ -139,7 +145,10 @@ def scene_of(case: int, inputs, still: bool = False) -> Scene:
     }
     if not still:
         data["atmosphere"] = {
-            "table": [[float(z), float(t), float(u)] for z, t, u in zip(HEIGHTS, temperature, wind)],
+            "table": [
+                [float(z), float(t), float(u)]
+                for z, t, u in zip(HEIGHTS, temperature, wind, strict=True)
+            ],
             "wind": {"direction_deg": 0.0 if alog >= 0.0 else 180.0},
         }
     return Scene.model_validate(data)
@@ -147,7 +156,11 @@ def scene_of(case: int, inputs, still: bool = False) -> Scene:
 
 def run_case(case: int, folder: Path, still: bool) -> dict:
     content = load(fetch(case, folder))
-    inputs, measured, model = content["Inputparameter"], content["MeasurementsLoss"], content["ModelLoss"]
+    inputs, measured, model = (
+        content["Inputparameter"],
+        content["MeasurementsLoss"],
+        content["ModelLoss"],
+    )
     scene = scene_of(case, inputs, still)
     result = simulate(Room.from_scene(scene))
     listeners = [lis.name for lis in scene.listeners]

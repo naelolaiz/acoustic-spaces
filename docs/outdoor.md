@@ -203,6 +203,118 @@ share of the Fresnel zone it covers, band by band, as engineering models such as
 Nord2000 and Harmonoise weight mixed ground. Past the ground's extent the ground goes on
 as it is at its edge.
 
+## Wind and temperature
+
+Outdoors the speed of sound changes with height. The air is warmer or cooler higher
+up, and sound travels faster in warmer air; the wind, slowed by the ground, blows
+faster higher up, and sound travels faster with it and slower against it. Sound bends
+towards where it travels slower:
+
+- **down** when its speed grows with height: downwind, and on a clear night, when the
+  ground cools the air next to it (an inversion). Sound comes back to the ground again
+  and again on its way, and carries further than in still air.
+- **up** when its speed falls with height: upwind, and on a sunny day, when the ground
+  warms the air next to it. Past some distance a listener near the ground is in a
+  **shadow** that no ray reaches: only the sound that bends round its edge gets there,
+  less and less with distance and with frequency.
+
+```yaml
+atmosphere:
+  preset: windy                 # neutral, windy, sunny_day or clear_night
+  wind: {direction_deg: 90}     # the preset's 5 m/s 10 m up, blowing towards +y
+```
+
+`atmosphere` is for outdoor scenes; in a room the air is still and one temperature, and
+a room with an atmosphere stops with an error. Its fields:
+
+| field | what it sets |
+|---|---|
+| `preset` | a weather to start from: `neutral` (still air), `windy` (5 m/s 10 m up), `sunny_day` (the air cooling with height: `temperature_log_k: -0.5`, `temperature_gradient_k_m: -0.0098`) or `clear_night` (the air warming with height: `temperature_log_k: 0.5`). Fields given with it change it. |
+| `wind.speed_m_s`, `wind.height_m` | the wind's speed (m/s) at a height above the ground (m, 10 by default) |
+| `wind.direction_deg` | the way the wind blows to, in degrees counterclockwise from +x seen from above (0: along +x, 90: along +y) |
+| `wind.profile` | how its speed grows with height: `log`, as ln(1 + z / `roughness_m`), the usual profile over open ground (the default); `linear`, in proportion to the height; `constant` |
+| `temperature_gradient_k_m` | how the temperature changes per metre of height (K/m): -0.0098 in air the sun stirs up |
+| `temperature_log_k` | a change of temperature fastest near the ground, in K times ln(1 + z / `roughness_m`): negative on a sunny day, positive on a clear night |
+| `roughness_m` | the ground's roughness length for the log profiles (m, 0.05 by default; 0.01 to 0.1 over grass, up to 1 among buildings and trees) |
+| `table` | a measured profile in place of the formulas: rows of [height above the ground (m), temperature (°C), wind speed (m/s)] by height, linear between them and as at the top above them; the wind blows along `wind.direction_deg` |
+
+The scene's `air.temperature_c` is the temperature at the ground (a table gives its
+own). The wind and the temperature depend on the height only, the same over the whole
+scene: this suits open ground better than streets, where buildings shelter the wind and
+channel it. See [`examples/open_air_stage/scene.yaml`](https://github.com/naelolaiz/acoustic-spaces/blob/main/examples/open_air_stage/scene.yaml):
+a stage heard 100 and 300 m away across a park, downwind and upwind.
+
+### How the simulation bends sound
+
+Along each direction from a source, sound travels at the effective speed
+c(z) = c_T(z) + u(z) cos a: the speed of sound in still air at that height, plus the
+wind's speed times the cosine of the angle a between the wind and the way the sound
+goes (faster downwind, slower upwind, as in still air across the wind). This speed is taken as
+linear in height between 160 heights from 1 cm to 1 km, closest together near the
+ground, where the profiles change fastest, and constant above. Within each layer a ray
+is an arc of a circle, so its travel time and its length are exact.
+
+- **The direct sound and its reflections off the open ground** are the eigenrays: the
+  curved paths from the source to the listener, straight there or off the ground up to
+  ten times. Downwind there may be several where still air has one; in the shadow there
+  are none. Each comes in with its own travel time and angle, at a level set by how far
+  its neighbouring rays spread apart (1/R² for a straight path), fitted over the rays
+  that turn back in the air a few layers above and below it, as the layers' corners
+  would otherwise make it jump. Where neighbouring rays cross (a caustic) the level is
+  capped at 10 dB over a straight path's, and each caustic delays the phase by a
+  quarter period. Against an independent ray tracer on the smooth profiles, the levels
+  of these paths are within 1 dB, 1.5 dB near a caustic.
+- **In the bands up to 500 Hz** rays fail over the ground, as the profiles change most
+  within a wavelength of it, where the direct sound and its reflection meet. There the
+  sound over the open ground comes from a parabolic equation (the Green's function
+  parabolic equation of Gilbert and Di) marched out from the source in the vertical
+  plane through the listener, over the grounds along the way and their impedances. In
+  the shadow, and from halfway to its start, where rays come out too loud, it gives the
+  bands up to 2 kHz, and above them the shadow deepens with frequency as it does over
+  the octave below. It applies from 1.5 times the source's and the listener's heights
+  added away along the ground, where the sound comes in at 34 degrees from the
+  horizontal or flatter; nearer, the atmosphere has had little room to bend it, and the
+  rays give it. In still air the parabolic equation is within 0.25 dB of the exact
+  solution over grass and harder grounds (see
+  [Validation](validation.md#ground-reflection-against-the-exact-solution)).
+- **Off façades and barriers** the paths bend the same way, in the vertical plane the
+  reflections fold them into, with the wind's mean component over their legs. A path
+  that would pass over the wall, or through something on the way, is left out.
+- **Over an edge** (a roof, the top of a barrier) each leg keeps its straight course and
+  takes the travel time of its heights, and past the start of the shadow its level
+  falls as a creeping wave's does.
+- **The direct sound's time** in the results is when the bent direct sound arrives:
+  sooner downwind, later upwind (the time along the ground in the shadow).
+- **The late rays** follow their arcs through the layers, in chords that stray at most
+  2 cm from them, reflect where they meet a surface, and leave the scene once they are
+  bent up out of it. The energy they rain onto listeners goes straight, in the time of
+  the heights it crosses, and does not reach a listener in the shadow of where it
+  leaves. These rays run on the CPU: `simulation.late.device: gpu` or `auto` falls back
+  to it, and says so.
+- **The animation's particles** and **the drawn paths** (`view --paths`, the Blender
+  export) curve as the sound does.
+
+Bending takes time: the `open_air_stage` example runs in 3 s instead of 0.2 s in still
+air, a scene's late rays take about three times as long, and coverage maps about six
+times, the parabolic equation running for each point; `simulation.performance.threads`
+shares the work out over the cores. An atmosphere in which sound goes straight (`neutral`, no wind
+and no temperature gradient) changes nothing: the results are those of still air, bit
+for bit.
+
+**Shadows come out deeper than measured.** Turbulence, which scatters sound into a
+shadow, keeps it to some 20 to 30 dB in practice; it is not modelled yet (see
+[What is not modelled yet](#what-is-not-modelled-yet)), and without it a shadow far
+from its start can be 60 dB deep at high frequencies.
+
+Against measurements of a wind turbine up to 845 m away in light winds, the bands from
+80 Hz to 2 kHz are within 1.7 to 2.7 dB on average, about as close as the published
+parabolic equation model (see [Validation](validation.md#outdoor-propagation-against-measurements-hannover)).
+
+`acoustic-spaces inspect` describes the atmosphere and gives the speed of sound across
+the wind, downwind and upwind at a few heights up to the sky. From Python,
+`acoustic_spaces.viz.plot_atmosphere(scene.atmosphere, scene.air.temperature_c,
+"profile.png")` draws the temperature, the wind and the speed of sound over the ground.
+
 ## What the simulation does outdoors
 
 - **Early paths** are found as in a room: the direct sound, reflections off the ground,
@@ -226,12 +338,15 @@ as it is at its edge.
 - **The wave solver** sees the sky as an opening and puts a matched layer round the
   grid, as for any open model.
 - **Air** absorbs per band as indoors (ISO 9613-1, from `air`), along every path.
+- **Wind and temperature** bend the paths and the rays (see
+  [Wind and temperature](#wind-and-temperature)).
 - **The early paths add in pressure in every band** (see
   [Ground impedance](#ground-impedance)): `simulation.early.coherent_max_band_hz` is
   8000 outdoors unless the scene sets it.
 
-`acoustic-spaces inspect` says where the ground and the sky lie, and leaves out the
-statistical reverberation times, which need a diffuse field.
+`acoustic-spaces inspect` says where the ground and the sky lie, describes the
+atmosphere, and leaves out the statistical reverberation times, which need a diffuse
+field.
 
 ## In the editor
 
@@ -242,7 +357,13 @@ Footprints, paths and the zones' outlines are set in the scene file. A material'
 has a **Ground impedance** group: tick it to make the material a ground (grass to
 start with), then pick the ground, the model, a flow resistivity of your own, a layer's
 thickness or the porosity rate. Unticked, the material keeps the absorption the
-impedance gave it. On the simulation page, **In pressure up to** goes up to 8000 Hz in an outdoor
+impedance gave it. The scene's own entry has a **Wind and temperature** group: the
+weather (a preset, or custom), the wind's speed, direction, height and profile, the
+temperature's gradient and its change near the ground, and the roughness; changing a
+value makes the weather custom. A measured profile is set in the scene file, and
+**Remove the measured profile** drops it; **Show the profile** plots the temperature,
+the wind and the speed of sound over the ground, across the wind, downwind and upwind.
+On the simulation page, **In pressure up to** goes up to 8000 Hz in an outdoor
 scene. The 3D view and the export to Blender leave the sky out (the 3D view keeps its
 edges, to show where the ground ends), and the status bar gives the ground's area
 instead of a reverberation time. **Draw room** replaces an outdoor scene with a floor
@@ -253,14 +374,13 @@ was above 500 Hz.
 
 These come next, each in its own step (see the [roadmap](roadmap.md)):
 
-- wind and temperature gradients, which bend sound up (shadow zones) or down;
 - turbulence, which scatters sound into shadow zones and blurs the ground dip;
 - vegetation: trees, hedges and forests as volumes that scatter and absorb;
-- the wave solver with a speed of sound that changes from place to place.
+- the wave solver with a speed of sound that changes from place to place: it runs in
+  still air, the wind and the temperature gradients left out.
 
-Until then the air is still and uniform and rays travel straight: results are good over
-any ground at short and middle distances (up to a hundred metres or two, where wind and
-temperature gradients bend sound little), and for street canyons and courtyards, where
-the buildings matter most. The ground is flat and reacts locally: its impedance does not
+Until then shadow zones come out deeper than measured, the ground dip sharper at long
+distances, and the wind and the temperature are the same over the whole scene. The
+ground is flat and reacts locally: its impedance does not
 change with the angle sound meets it at, which holds for grass, soil and snow, though
 less for a thick layer of very soft snow.

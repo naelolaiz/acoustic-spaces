@@ -57,6 +57,13 @@ _MAX_CYCLES = 40
 _CAUSTIC_SAMPLES = 10
 #: The greatest sagitta (m) of a chord drawn for an arc of a ray.
 CHORD_SAGITTA_M = 0.02
+#: A ray that turns in the air has its tube's width fitted over rays whose turning
+#: points lie up to this many of the profile's layers above and below its own, and this
+#: many rays across them: in a profile linear between nodes, the range of such rays
+#: wiggles as their turning points cross the nodes, and its derivative there is up to
+#: twice the smooth profile's.
+_TURN_LAYERS = 2.0
+_TURN_RAYS = 9
 
 
 @dataclass(frozen=True)
@@ -174,7 +181,9 @@ def _segment(profile: Profile, p, layer, lo, hi):
     # Closed pieces: any speeds the ray could have, for the formulas to stay finite.
     ca, cb = np.where(open_, ca, 0.0), np.where(open_, cb, 0.0)
     dz = np.where(open_, top - bottom, 0.0)
-    dx, dt, ds = _piece(np.where(open_, p, 0.0), np.where(open_, ca, 1.0), np.where(open_, cb, 1.0), dz)
+    dx, dt, ds = _piece(
+        np.where(open_, p, 0.0), np.where(open_, ca, 1.0), np.where(open_, cb, 1.0), dz
+    )
     return np.where(open_[..., None], np.stack([dx, dt, ds], axis=-1), 0.0)
 
 
@@ -197,9 +206,7 @@ class _Fan:
         z, c, g = profile.z, profile.c, profile.gradient
         layers = np.arange(len(z) - 1)
         pieces = _segment(profile, p[:, None], layers[None], z[None, :-1], z[None, 1:])
-        self.table = np.concatenate(
-            [np.zeros((len(p), 1, 3)), np.cumsum(pieces, axis=1)], axis=1
-        )
+        self.table = np.concatenate([np.zeros((len(p), 1, 3)), np.cumsum(pieces, axis=1)], axis=1)
         limit = 1.0 / np.maximum(p, 1e-300)
         blocked = c[None, :] > limit[:, None]  # (P, N + 1) at the nodes
         source = int(profile.layer(self.zs))
@@ -307,7 +314,9 @@ def _phase(fan: _Fan, zr: float, up, arrives_up, cycle, heights=None) -> np.ndar
         up & arrives_up, zr >= fan.zs, np.where(~up & ~arrives_up, zr <= fan.zs, True)
     )
     ok = reach & np.where(turns > 0, finite, straight)
-    high = np.where((turns > 0)[..., None], turns[..., None] * np.where(finite[:, None], h, 0.0), 0.0)
+    high = np.where(
+        (turns > 0)[..., None], turns[..., None] * np.where(finite[:, None], h, 0.0), 0.0
+    )
     out = np.where(up[..., None], -a, a) + np.where(arrives_up[..., None], b, -b) + high
     ok &= np.all(np.isfinite(out), axis=-1)
     return np.where(ok[..., None], out, np.nan)
@@ -509,6 +518,13 @@ class Rays:
             return None
         x, t, s = out[0]
         slope = (out[2, 0] - out[1, 0]) / (ps[2] - ps[1])
+        turns = []
+        if branch.upper_turns:
+            turns.append(float(fan.hi[0]))
+        if branch.lower_events and not fan.ground[0]:
+            turns.append(float(fan.lo[0]))
+        if turns:
+            slope = self._turning_slope(zr, p, branch, turns, top, slope)
         sin_s = float(_sine(p, self.cs))
         sin_r = float(_sine(p, float(self.profile.speed(zr))))
         launch = math.copysign(math.acos(min(p * self.cs, 1.0)), 1.0 if branch.up else -1.0)
@@ -539,6 +555,31 @@ class Rays:
             "bounces": bounces,
             "capped": capped,
         }
+
+    def _turning_slope(self, zr, p, branch, turns, top, slope) -> float:
+        """dr/dp of a ray with parameter ``p`` along ``branch`` that turns in the air at
+        the heights ``turns``, fitted over the rays whose turning points lie
+        ``_TURN_LAYERS`` layers about its own (``slope``, the local one, where they do
+        not all reach the listener the same way)."""
+        z, g = self.profile.z, self.profile.gradient
+        width = 0.0
+        for height in turns:
+            j = int(self.profile.layer(height))
+            if j < len(z) - 1:
+                # The turning height moves by c / (p g) per unit of p, c being 1 / p.
+                width = max(width, _TURN_LAYERS * (z[j + 1] - z[j]) * p * p * abs(g[j]))
+        for _ in range(4):
+            if width <= 0.0:
+                break
+            ps = p + width * np.linspace(-1.0, 1.0, _TURN_RAYS)
+            if ps[0] > 0.0 and ps[-1] <= top:
+                fan = _Fan(self.profile, ps, self.zs)
+                r = _phase(fan, zr, branch.up, branch.arrives_up, branch.cycle)[:, 0]
+                if np.all(np.isfinite(r)):
+                    # The derivative at the middle of a parabola fitted through them.
+                    return float(np.polyfit((ps - p) / width, r, 2)[1] / width)
+            width *= 0.5
+        return slope
 
     def _events(self, fan: _Fan, branch: Branch) -> np.ndarray:
         """Horizontal distances from the source of the lower events of the first ray of
@@ -645,4 +686,13 @@ class Rays:
         heights = np.where(step == count[piece], b[piece], np.clip(heights, a[piece], b[piece]))
         return np.concatenate([[lo], heights])
 
-__all__ = ["CAUSTIC_CAP", "CHORD_SAGITTA_M", "Branch", "Eigenrays", "Profile", "Rays", "node_heights"]
+
+__all__ = [
+    "CAUSTIC_CAP",
+    "CHORD_SAGITTA_M",
+    "Branch",
+    "Eigenrays",
+    "Profile",
+    "Rays",
+    "node_heights",
+]

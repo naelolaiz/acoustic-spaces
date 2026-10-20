@@ -1086,7 +1086,9 @@ class Atmosphere(_Model):
     roughness_m: PositiveFloat = Field(
         default=0.05,
         le=2.0,
-        description="the ground's roughness length (m), for the log profiles: 0.01 to 0.1 over grass",
+        description=(
+            "the ground's roughness length (m), for the log profiles: 0.01 to 0.1 over grass"
+        ),
     )
     table: list[tuple[float, float, float]] | None = Field(
         default=None,
@@ -1119,11 +1121,11 @@ class Atmosphere(_Model):
     def _check_table(self) -> Atmosphere:
         if self.table is None:
             return self
-        formulas = {"temperature_gradient_k_m", "temperature_log_k"} & self.model_fields_set
+        # Zeros are what a written-out scene has (Scene.to_data writes every field).
+        formulas = self.temperature_gradient_k_m != 0.0 or self.temperature_log_k != 0.0
         if self.preset is None and formulas:
             raise ValueError(
-                "give the atmosphere a table or the temperature's gradient and log terms, "
-                "not both"
+                "give the atmosphere a table or the temperature's gradient and log terms, not both"
             )
         heights = [row[0] for row in self.table]
         if len(heights) < 2 or heights[0] < 0.0 or np.any(np.diff(heights) <= 0.0):
@@ -1165,8 +1167,10 @@ class Atmosphere(_Model):
             return np.full_like(z, wind.speed_m_s)
         if wind.profile == "linear":
             return wind.speed_m_s * z / wind.height_m
-        return wind.speed_m_s * np.log1p(z / self.roughness_m) / math.log1p(
-            wind.height_m / self.roughness_m
+        return (
+            wind.speed_m_s
+            * np.log1p(z / self.roughness_m)
+            / math.log1p(wind.height_m / self.roughness_m)
         )
 
     def sound_speed(self, z, ground_c: float, towards=None) -> np.ndarray:

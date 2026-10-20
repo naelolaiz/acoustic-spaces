@@ -121,7 +121,9 @@ def shadow_start(profile, zs: float, zr: float) -> float | None:
     (a :class:`~acoustic_spaces.engine.refraction.Profile`) starts for a source and a
     listener at heights ``zs`` and ``zr``: where the ray that grazes the ground reaches
     the listener's height; None where no shadow forms (the speed does not fall from the
-    ground to either height)."""
+    ground to either height). In a profile whose gradient eases with height (the wind's
+    log profile), rays that turn just above the ground reach farther (three quarters as
+    far again 5 m up in the ``windy`` preset): the shadow proper begins there."""
     from acoustic_spaces.engine.refraction import _Fan
 
     c0 = float(profile.c[0])

@@ -258,9 +258,7 @@ class Refraction:
         out: list[EarlyReflections] = []
         request = None
         for planes, rows in groups.items():
-            vertical = all(
-                abs(float(self.model.plane_normal[p][2])) <= _VERTICAL for p in planes
-            )
+            vertical = all(abs(float(self.model.plane_normal[p][2])) <= _VERTICAL for p in planes)
             if not vertical:
                 bent.extend(rows)
                 continue
@@ -429,7 +427,9 @@ class Refraction:
         """(n,) the face of the ground under each of ``points`` (n, 3), or -1."""
         start = np.asarray(points, dtype=float) + np.array([0.0, 0.0, 0.01])
         down = np.broadcast_to(np.array([0.0, 0.0, -1.0]), start.shape)
-        _, face = self.model.intersect(start, down, np.full(len(start), 0.02), np.full(len(start), -1))
+        _, face = self.model.intersect(
+            start, down, np.full(len(start), 0.02), np.full(len(start), -1)
+        )
         return np.where((face >= 0) & self.flat[np.maximum(face, 0)], face, -1)
 
     def _passes(self, points: np.ndarray, face: np.ndarray):
@@ -542,7 +542,9 @@ class Refraction:
         arrival /= np.maximum(np.linalg.norm(arrival, axis=1), 1e-300)[:, None]
         # The ray's own direction at the listener rather than its last chord's.
         lean = found.arrival[index]
-        horizontal = arrival[:, :2] / np.maximum(np.linalg.norm(arrival[:, :2], axis=1), 1e-300)[:, None]
+        horizontal = (
+            arrival[:, :2] / np.maximum(np.linalg.norm(arrival[:, :2], axis=1), 1e-300)[:, None]
+        )
         arrival = np.column_stack([horizontal * np.cos(lean)[:, None], -np.sin(lean)])
         return EarlyReflections(
             order=np.array([int(np.count_nonzero(r[3] > 0)) for r in rows], dtype=np.int64),
@@ -617,7 +619,9 @@ class Refraction:
                 else:
                     from acoustic_spaces.engine.impedance import fit_admittance
 
-                    value = fit_admittance(model.absorption[face], self.bands, None)(self.frequencies)
+                    value = fit_admittance(model.absorption[face], self.bands, None)(
+                        self.frequencies
+                    )
                 self._admittances[face] = np.asarray(value, dtype=complex)
             return self._admittances[face]
 
@@ -669,10 +673,14 @@ class Refraction:
 
             ranges = np.array([m.range for m in needing])
             heights = np.array([m.height for m in needing])
-            return march(self.frequencies[band], profile.speed, impedance, self.zs, ranges, heights, top)
+            return march(
+                self.frequencies[band], profile.speed, impedance, self.zs, ranges, heights, top
+            )
 
         # The runs side by side, as many as the threads and the memory allow.
-        biggest = max((footprint(self.frequencies[job[2]], self.c, job[4]) for job in runs), default=0)
+        biggest = max(
+            (footprint(self.frequencies[job[2]], self.c, job[4]) for job in runs), default=0
+        )
         workers = min(self.threads, len(runs), max(1, WAVE_MEMORY_BYTES // max(biggest, 1)))
         if workers > 1:
             with ThreadPoolExecutor(workers) as pool:
@@ -696,7 +704,9 @@ class Refraction:
             # octave below: by the same factor per octave.
             computed = np.flatnonzero(bands)
             last = computed[-1]
-            octave = np.flatnonzero(np.abs(self.centres - self.centres[last] / 2.0) < 1e-6 * self.centres[last])
+            octave = np.flatnonzero(
+                np.abs(self.centres - self.centres[last] / 2.0) < 1e-6 * self.centres[last]
+            )
             slope = 1.0
             if len(octave) and excess[octave[0]] > 0.0:
                 slope = min(excess[last] / excess[octave[0]], 1.0)
@@ -704,7 +714,9 @@ class Refraction:
                 octaves = math.log2(self.centres[band] / self.centres[last])
                 excess[band] = excess[last] * slope**octaves
             bands = np.ones(self.bands, dtype=bool)
-        weight = source_weights(self.directivity, self.orientation, wave.departure[None], self.bands)[0]
+        weight = source_weights(
+            self.directivity, self.orientation, wave.departure[None], self.bands
+        )[0]
         energy = (
             excess
             / (4.0 * np.pi * wave.distance**2)
@@ -717,7 +729,9 @@ class Refraction:
         if coherent:
             level = np.sqrt(np.mean(np.abs(pressure[:coherent]) ** 2, axis=1))[:, None]
             turn = np.exp(2j * np.pi * self.frequencies[:coherent] * wave.delay)
-            spectrum = np.where(level > 0.0, pressure[:coherent] * turn / np.where(level > 0.0, level, 1.0), 1.0)
+            spectrum = np.where(
+                level > 0.0, pressure[:coherent] * turn / np.where(level > 0.0, level, 1.0), 1.0
+            )
             computed = wave.bands[:coherent]
             spectrum[~computed] = 1.0
         found = parts[wave.listener]
@@ -826,9 +840,7 @@ def bending(model: TraceModel) -> dict:
         return {}
     z = node_heights(atmosphere)
     ground_c = float(scene.air.temperature_c)
-    rows = np.column_stack(
-        [z, atmosphere.sound_speed(z, ground_c), atmosphere.wind_speed(z)]
-    )
+    rows = np.column_stack([z, atmosphere.sound_speed(z, ground_c), atmosphere.wind_speed(z)])
     rows = rows[_thinned(rows, LATE_SPEED_TOLERANCE)]
     return {
         "atmosphere": np.ascontiguousarray(rows, dtype=np.float64),
@@ -836,6 +848,19 @@ def bending(model: TraceModel) -> dict:
         "ground": float(model.ground),
         "chord_sagitta": CHORD_SAGITTA_M,
     }
+
+
+def direct_times(times: np.ndarray, paths: list[EarlyReflections]) -> np.ndarray:
+    """(n,) when the direct sound reaches each listener along its bent path: the earliest
+    of its ``paths`` that neither reflects nor goes round an edge, sooner downwind and
+    later upwind than along the straight line; ``times``, the straight line's, where
+    there is none (behind a building)."""
+    out = np.array(times, dtype=float)
+    for k, found in enumerate(paths):
+        clear = (found.order == 0) & ~found.diffracted
+        if clear.any():
+            out[k] = float(found.delay_s[clear].min())
+    return out
 
 
 def refraction_for(model: TraceModel, source: np.ndarray, **kwargs) -> Refraction | None:
@@ -856,5 +881,6 @@ __all__ = [
     "WAVE_MIN_RANGE",
     "Refraction",
     "bending",
+    "direct_times",
     "refraction_for",
 ]

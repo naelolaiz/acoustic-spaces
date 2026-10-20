@@ -10,7 +10,8 @@
   going along its walk, as a video to go with its sound.
 - Response plots (matplotlib): echogram with the early paths, decay curves per band, and
   arrival directions as the listener faces; the decays of a simulated and a measured
-  response band by band; polar patterns of a source directivity.
+  response band by band; polar patterns of a source directivity; the wind, temperature
+  and speed of sound over the ground outdoors.
 - Coverage maps: a parameter over the audience area, from above (matplotlib) or as
   coloured tiles in the 3D view.
 
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from acoustic_spaces.engine.leaks import Leaks
     from acoustic_spaces.engine.particles import Particles
     from acoustic_spaces.parameters import BandDecay
+    from acoustic_spaces.scene.model import Atmosphere
     from acoustic_spaces.walkthrough import WalkResponses
 
 #: ColorBrewer Set3: light colours, so the saturated source and listener markers stand out.
@@ -926,6 +928,69 @@ def plot_directivity(
         ),
         color="white",
     )
+    if path is not None:
+        fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
+    return fig
+
+
+def plot_atmosphere(
+    atmosphere: Atmosphere,
+    ground_c: float,
+    path: str | Path | None = None,
+    *,
+    top: float = 100.0,
+):
+    """An outdoor atmosphere from the ground to ``top`` metres up: the temperature and
+    the wind's speed (left), and the speed of sound (right) in still air and, with a
+    wind, as sound going with it and against it, the speed that bends sound: towards
+    where it is lower. ``ground_c`` is the temperature at the ground (the scene's air
+    temperature). Returns the matplotlib figure."""
+    z = np.concatenate([[0.0], np.geomspace(min(0.01, top / 100.0), top, 400)])
+    fig = _figure(figsize=(10, 5), layout="constrained")
+    fig.patch.set_facecolor(BACKGROUND[0])
+    left, right = fig.subplots(1, 2, sharey=True)
+    for ax in (left, right):
+        _dark(ax)
+    left.plot(atmosphere.temperature(z, ground_c), z, color="#fdae61", lw=1.5)
+    left.set_xlabel(_("temperature (°C)"), color="#fdae61")
+    left.set_ylabel(_("height above the ground (m)"))
+    wind = atmosphere.wind_speed(z)
+    if np.any(wind > 0.0):
+        speed = left.twiny()
+        speed.plot(wind, z, color="#80b1d3", lw=1.5)
+        speed.set_xlabel(_("wind speed (m/s)"), color="#80b1d3")
+        speed.tick_params(colors="white")
+        speed.set_xlim(left=0.0)
+        right.plot(
+            atmosphere.sound_speed(z, ground_c),
+            z,
+            color="#d9d9d9",
+            lw=1.2,
+            ls="--",
+            label=_("across the wind"),
+        )
+        along = atmosphere.to_wind()
+        for sign, colour, label in (
+            (1.0, "#80b1d3", _("downwind")),
+            (-1.0, "#fb8072", _("upwind")),
+        ):
+            right.plot(
+                atmosphere.sound_speed(z, ground_c, sign * along),
+                z,
+                color=colour,
+                lw=1.5,
+                label=label,
+            )
+        _legend(right, loc="best")
+    else:
+        right.plot(atmosphere.sound_speed(z, ground_c), z, color="#d9d9d9", lw=1.5)
+    right.set_xlabel(_("speed of sound (m/s)"))
+    left.set_ylim(0.0, top)
+    if atmosphere.still:
+        title = _("Still air: sound goes in straight lines")
+    else:
+        title = _("Sound bends towards where the speed of sound is lower")
+    fig.suptitle(title, color="white")
     if path is not None:
         fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
     return fig

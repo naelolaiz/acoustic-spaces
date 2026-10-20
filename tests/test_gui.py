@@ -1011,6 +1011,48 @@ def test_ground_impedance_and_zones(window) -> None:
     assert simulation.coherent.model().item(simulation.coherent.findData(500)).isEnabled()
 
 
+def test_wind_and_temperature_form(window) -> None:
+    window.open_example(example_path("open_air_stage"))
+    window.select("scene", None)
+    page = window.inspector.pages["scene"]
+    assert not page.weather_group.isHidden()
+    assert page.weather.currentData() == "windy" and page.wind_speed.value() == 5.0
+
+    def atmosphere():
+        return window.document.scene.atmosphere
+
+    page.wind_speed.setValue(8.0)  # a value of its own makes the weather custom
+    assert atmosphere().preset is None and atmosphere().wind.speed_m_s == 8.0
+    assert page.weather.currentData() == "custom"
+    page.wind_direction.setValue(90.0)
+    assert atmosphere().wind.direction_deg == 90.0 and atmosphere().wind.speed_m_s == 8.0
+    # Another weather keeps the way the wind blows.
+    page.weather.setCurrentIndex(page.weather.findData("sunny_day"))
+    assert atmosphere().preset == "sunny_day" and atmosphere().wind.direction_deg == 90.0
+    page.gradient.setValue(-0.02)
+    assert atmosphere().preset is None and atmosphere().temperature_log_k == -0.5
+    assert atmosphere().temperature_gradient_k_m == -0.02
+    page.weather.setCurrentIndex(0)  # (none): still air
+    assert atmosphere() is None and page.wind_speed.value() == 0.0
+    # A measured profile comes from the scene file; the form can drop it.
+    window.document.edit(
+        "measured", lambda data: data.update(atmosphere={"table": [[0, 15, 0], [10, 14, 3]]})
+    )
+    form = page._weather_form
+    assert form.isRowVisible(page.drop_table) and not page.wind_speed.isEnabled()
+    assert page.table.text() == "Measured profile at 2 heights, from the scene file"
+    page.wind_direction.setValue(180.0)  # the table's wind blows that way
+    assert atmosphere().table is not None and atmosphere().wind.direction_deg == 180.0
+    page.drop_table.click()
+    assert atmosphere().table is None and not form.isRowVisible(page.drop_table)
+    page.show_profile()
+    assert page.profile_window.isVisible()
+    page.profile_window.close()
+    window.open_example(example_path("shoebox"))
+    window.select("scene", None)
+    assert page.weather_group.isHidden()
+
+
 def test_model_units_default_to_the_file(window) -> None:
     window.open_example(example_path("shoebox"))  # its scene says units: m
     window.select("geometry", None)

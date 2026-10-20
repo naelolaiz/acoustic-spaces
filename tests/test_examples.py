@@ -43,13 +43,15 @@ def test_examples_simulate(name: str) -> None:
     )
     result = simulate(room, settings=quick)
     assert len(result) == len(room.scene.sources) * len(room.scene.listeners)
+    # Wind and temperature change the speed of sound along the way, and bend the path.
+    tolerance = 1e-6 if room.scene.atmosphere is None else 0.02
     for source in room.scene.sources:
         for listener in room.scene.listeners:
             # The nearest of a line's or surface's points, after the source's own delay.
             distance = np.linalg.norm(source.elements() - listener.position, axis=1).min()
             expected = distance / room.speed_of_sound() + source.delay_ms / 1000.0
             delay = result[source.name, listener.name].direct_delay_s
-            assert delay == pytest.approx(expected, rel=1e-6)
+            assert delay == pytest.approx(expected, rel=tolerance)
 
 
 def test_copy_examples(tmp_path: Path) -> None:

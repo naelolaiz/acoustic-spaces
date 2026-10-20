@@ -53,6 +53,37 @@
 - New example: `roadside`, traffic on a road between a meadow and a paved yard, with the
   ground dip over the grass. New validation: `validation/ground_reflection.py`.
 
+**Wind and temperature**
+
+- `atmosphere` (outdoor scenes): the wind and the temperature over the ground, which
+  bend sound down (downwind, a clear night) or up into shadow zones (upwind, a sunny
+  day). Presets `neutral`, `windy`, `sunny_day` and `clear_night`; the wind's speed,
+  direction, height and log, linear or constant profile; a temperature gradient and a
+  log term near the ground; the ground's roughness; or a measured table of heights,
+  temperatures and wind speeds.
+- The direct sound and the reflections off the open ground are the eigenrays of the
+  effective speed of sound, curved paths with exact travel times, levels from the ray
+  tubes' spreading (capped at caustics) and the phase lost at each caustic: several
+  downwind, none in a shadow. Paths off façades bend in their unfolded plane; paths
+  over edges fall into the shadow as a creeping wave.
+- Below 500 Hz, and up to 2 kHz in and near a shadow, the sound over the open ground
+  comes from a Green's function parabolic equation over the grounds' impedances, with
+  Greene's starting field: within 0.25 dB of the exact solution in still air over grass
+  and harder grounds. It runs on `simulation.performance.threads`.
+- The late rays follow their arcs through the layers (on the CPU: the GPU devices fall
+  back to it); the animation's particles, `view --paths` and the Blender export curve
+  too. The direct sound's time in the results is the bent path's.
+- The editor's scene page has a **Wind and temperature** group with **Show the
+  profile**; `inspect` describes the atmosphere and the speed of sound at a few
+  heights; `acoustic_spaces.viz.plot_atmosphere` draws it.
+- New example: `open_air_stage`, a stage heard 100 and 300 m away across a park,
+  downwind and upwind in a 5 m/s wind. New validation:
+  `validation/outdoor_propagation.py`, a wind turbine heard 178 to 845 m away (the
+  Hannover data, downloaded on first use): 1.7 to 2.7 dB per band on average in light
+  winds, as close as the authors' own model.
+- Scenes without an atmosphere, or with one in which sound goes straight, give the same
+  results as before, bit for bit.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

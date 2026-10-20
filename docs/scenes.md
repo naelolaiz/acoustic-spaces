@@ -79,6 +79,16 @@ geometry:
     - {path: [[30, 6], [30, 20]], height: 3}
 ```
 
+Outdoors, `atmosphere` sets the wind and the temperature over the ground, which bend
+sound down or up, into shadow zones (see
+[Wind and temperature](outdoor.md#wind-and-temperature)):
+
+```yaml
+atmosphere:
+  preset: windy                 # neutral, windy, sunny_day or clear_night
+  wind: {speed_m_s: 8, direction_deg: 90}   # 8 m/s 10 m up, blowing towards +y
+```
+
 ### BIM models (IFC)
 
 IFC files from Revit, ArchiCAD, Vectorworks or any other BIM program are read with the
@@ -542,7 +552,9 @@ simulation:
 ```
 
 - `air` sets the speed of sound and the air absorption per band (ISO 9613-1), for the
-  rays, the wave solver and the statistical reverberation times alike.
+  rays, the wave solver and the statistical reverberation times alike. Outdoors,
+  `temperature_c` is the temperature at the ground, and an `atmosphere` changes it with
+  height (see [Wind and temperature](outdoor.md#wind-and-temperature)).
 - Outdoors, `ir_length_s` counts from the latest direct sound of the run, as sources
   and listeners can stand far apart (see [Outdoor scenes](outdoor.md#what-the-simulation-does-outdoors)).
 - A response that ends before the room has decayed is extended by its fitted decay

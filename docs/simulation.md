@@ -267,7 +267,9 @@ simulation:
   ground's) reflects with its spherical wave's factor instead, in every band (see
   [Ground impedance](outdoor.md#ground-impedance)).
 - Outdoors the paths are few, and the ground dip spans several bands: the early paths
-  add in pressure up to 8000 Hz by default there. Above 500 Hz they add pair by pair,
+  add in pressure up to 8000 Hz by default there. Wind and temperature gradients bend
+  them, and below 500 Hz a parabolic equation gives the sound over the open ground (see
+  [Wind and temperature](outdoor.md#wind-and-temperature)). Above 500 Hz they add pair by pair,
   each pair's cross term as far as the band leaves the two coherent; a room takes
   500 Hz at most, as its paths are many.
 - Sound bent round an edge carries the whole complex UTD coefficient, whose terms add to
@@ -503,8 +505,9 @@ acoustic-spaces info                            # the default, and what auto tak
   *default* (or leave the tune window's second check box ticked for the open scene) to
   let them follow the default.
 
-Sound through partitions and openings, the face groups of material calibration and
-coverage maps are traced on the CPU whatever the setting, and so are runs whose results
+Sound through partitions and openings, the face groups of material calibration,
+coverage maps and the rays bent by [wind and temperature](outdoor.md#wind-and-temperature)
+outdoors are traced on the CPU whatever the setting, and so are runs whose results
 the GPU's buffers cannot hold (many listeners and arrival directions over a long
 response). `simulate --late-device` overrides the setting; the editor's Simulation page
 has it as "Run on" under Late reverberation. When it is not `cpu`, the progress messages

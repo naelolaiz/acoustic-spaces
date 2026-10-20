@@ -35,7 +35,7 @@ from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine.coherent import coherent_energy
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel
-from acoustic_spaces.engine.refracted import refraction_for
+from acoustic_spaces.engine.refracted import direct_times, refraction_for
 from acoustic_spaces.engine.simulate import (
     _as_room,
     _candidates,
@@ -642,6 +642,8 @@ def _trace_part(
     if refraction is not None:
         say(f"{label}: paths bent by the wind and the temperature")
         found = refraction.apply(grid.points, straight, found, cutoff)
+        # The response starts when the bent direct sound arrives.
+        onset = direct_times(onset, found)
     plain = found
     early = [apply_grazing(model, grid.points[k], paths) for k, paths in enumerate(found)]
     if diffraction is not None:

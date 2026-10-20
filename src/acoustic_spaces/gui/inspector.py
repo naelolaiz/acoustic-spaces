@@ -8,6 +8,7 @@ the scene as it still is.
 
 from __future__ import annotations
 
+import copy
 import math
 import os
 from collections.abc import Callable
@@ -49,7 +50,13 @@ from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, bu
 from acoustic_spaces.materials.bands import convert
 from acoustic_spaces.materials.ground import PRESETS
 from acoustic_spaces.room import UNASSIGNED, matching_name
-from acoustic_spaces.scene.model import INDOOR_COHERENT_MAX_BAND_HZ, LAYOUT_NAMES
+from acoustic_spaces.scene.model import (
+    ATMOSPHERE_PRESETS,
+    INDOOR_COHERENT_MAX_BAND_HZ,
+    LAYOUT_NAMES,
+    Atmosphere,
+    Wind,
+)
 
 BAND_LABELS = [f"{f} Hz" if f < 1000 else f"{f // 1000} kHz" for f in OCTAVE_BANDS_HZ]
 #: Column labels of the third-octave bands, short to fit 24 columns.
@@ -103,6 +110,16 @@ WAVE_DEVICES = [(None, N_("default")), ("cpu", "cpu"), ("gpu", "gpu"), ("auto", 
 SCATTERING_METHODS = [("vector", N_("vector")), ("random", N_("random"))]
 RAY_TREES = [("sah", "sah"), ("median", N_("median"))]
 BANDS = [("octave", N_("octave")), ("third_octave", N_("third_octave"))]
+#: The weathers an outdoor scene starts from: none, a preset, or values of its own.
+WEATHERS = [
+    (None, N_("(none)")),
+    ("neutral", N_("neutral")),
+    ("windy", N_("windy")),
+    ("sunny_day", N_("sunny_day")),
+    ("clear_night", N_("clear_night")),
+    ("custom", N_("custom")),
+]
+WIND_PROFILES = [("log", N_("log")), ("linear", N_("linear")), ("constant", N_("constant"))]
 #: The directivity list entry that asks for a SOFA or CSV file.
 MEASURED = N_("Measured data or an array from a file…")
 #: The tip of a source's directivity list, before the choice it shows.
@@ -268,6 +285,7 @@ class ScenePage(Page):
         form.addRow(_("Air temperature"), self.temperature)
         form.addRow(_("Relative humidity"), self.humidity)
         form.addRow(_("Air pressure"), self.pressure)
+        form.addRow(self._weather_group())
         self.stats = QLabel()
         self.stats.setTextFormat(Qt.TextFormat.RichText)
         self.stats.setWordWrap(True)
@@ -281,6 +299,159 @@ class ScenePage(Page):
         )
         form.addRow(self.stats)
 
+    def _weather_group(self) -> QGroupBox:
+        """Outdoors: the wind and the temperature over the ground, which bend sound."""
+        self.weather_group = QGroupBox(_("Wind and temperature"))
+        form = QFormLayout(self.weather_group)
+        self.weather = QComboBox()
+        _fill(self.weather, WEATHERS)
+        self.weather.setToolTip(
+            _(
+                "The weather, which bends sound outdoors: (none) or neutral, still air and "
+                "sound in straight lines; windy, 5 m/s 10 m up, bending sound down downwind "
+                "and up upwind; sunny_day, air cooling with height, bending sound up into a "
+                "shadow a few hundred metres away; clear_night, air warming with height, "
+                "bending sound down; custom, the values below. Changing one of them makes "
+                "the weather custom. The air temperature above is the ground's"
+            )
+        )
+        self.weather.currentIndexChanged.connect(self._weather)
+        form.addRow(_("Weather"), self.weather)
+        self.wind_speed = spin(0, 40, 1, 0.5, "m/s")
+        self.wind_speed.setToolTip(
+            _(
+                "The wind's speed at the height below (m/s): sound goes faster with the wind "
+                "and slower against it"
+            )
+        )
+        self.wind_direction = spin(0, 360, 1, 15, "°")
+        self.wind_direction.setWrapping(True)
+        self.wind_direction.setToolTip(
+            _(
+                "The way the wind blows to, in degrees counterclockwise from +x seen from "
+                "above (0: along +x, 90: along +y)"
+            )
+        )
+        self.wind_height = spin(0.1, 1000, 1, 1, "m")
+        self.wind_height.setToolTip(_("The height above the ground the wind's speed is at (m)"))
+        self.wind_profile = QComboBox()
+        _fill(self.wind_profile, WIND_PROFILES)
+        self.wind_profile.setToolTip(
+            _(
+                "How the wind's speed grows with height: log, with the logarithm of the "
+                "height over the roughness, the usual profile; linear, in proportion to the "
+                "height; constant, the same at every height"
+            )
+        )
+        self.gradient = spin(-0.2, 0.2, 4, 0.001, "K/m")
+        self.gradient.setToolTip(
+            _(
+                "How the temperature changes per metre of height (K/m): -0.0098 in air "
+                "stirred by the sun, positive in an inversion. Sound goes faster in warmer "
+                "air and bends away from it"
+            )
+        )
+        self.log_term = spin(-5, 5, 2, 0.1, "K")
+        self.log_term.setToolTip(
+            _(
+                "A change of temperature fastest near the ground (K, times ln(1 + height / "
+                "roughness)): negative on a sunny day, positive on a clear night"
+            )
+        )
+        self.roughness = spin(0.001, 2, 3, 0.01, "m")
+        self.roughness.setToolTip(
+            _(
+                "The ground's roughness length (m), for the log profiles: 0.01 to 0.1 over "
+                "grass, up to 1 among buildings and trees"
+            )
+        )
+        for box, field in (
+            (self.wind_speed, "speed_m_s"),
+            (self.wind_direction, "direction_deg"),
+            (self.wind_height, "height_m"),
+        ):
+            box.valueChanged.connect(lambda value, f=field: self._wind(f, value))
+        self.wind_profile.currentIndexChanged.connect(
+            lambda: self._wind("profile", self.wind_profile.currentData())
+        )
+        for box, field in (
+            (self.gradient, "temperature_gradient_k_m"),
+            (self.log_term, "temperature_log_k"),
+            (self.roughness, "roughness_m"),
+        ):
+            box.valueChanged.connect(lambda value, f=field: self._atmosphere(f, value))
+        form.addRow(_("Wind speed"), self.wind_speed)
+        form.addRow(_("Wind direction"), self.wind_direction)
+        form.addRow(_("Wind height"), self.wind_height)
+        form.addRow(_("Wind profile"), self.wind_profile)
+        form.addRow(_("Temperature gradient"), self.gradient)
+        form.addRow(_("Temperature near the ground"), self.log_term)
+        form.addRow(_("Roughness"), self.roughness)
+        self.table = QLabel()
+        self.table.setWordWrap(True)
+        self.table.setToolTip(
+            _(
+                "A measured profile from the scene file: the temperature and the wind's "
+                "speed come from it, in straight lines between its heights"
+            )
+        )
+        form.addRow(self.table)
+        self.drop_table = QPushButton(_("Remove the measured profile"))
+        self.drop_table.setToolTip(
+            _("Use the values above in place of the measured profile of the scene file")
+        )
+        self.drop_table.clicked.connect(self._drop_table)
+        form.addRow(self.drop_table)
+        self.profile = QPushButton(_("Show the profile"))
+        self.profile.setToolTip(
+            _(
+                "Open a plot of the temperature, the wind and the speed of sound over the "
+                "ground: across the wind, downwind and upwind"
+            )
+        )
+        self.profile.clicked.connect(self.show_profile)
+        self.profile_window = None
+        form.addRow(self.profile)
+        self._weather_form = form
+        return self.weather_group
+
+    def _load_weather(self, scene) -> None:
+        atmosphere = scene.atmosphere
+        _choose(self.weather, None if atmosphere is None else atmosphere.preset or "custom")
+        shown = atmosphere or Atmosphere()
+        wind = shown.wind or Wind()
+        self.wind_speed.setValue(wind.speed_m_s)
+        self.wind_direction.setValue(wind.direction_deg % 360.0)
+        self.wind_height.setValue(wind.height_m)
+        _choose(self.wind_profile, wind.profile)
+        self.gradient.setValue(shown.temperature_gradient_k_m)
+        self.log_term.setValue(shown.temperature_log_k)
+        self.roughness.setValue(shown.roughness_m)
+        # A table gives the temperature and the wind's speed; the direction still counts.
+        measured = shown.table is not None
+        for box in (
+            self.wind_speed,
+            self.wind_height,
+            self.wind_profile,
+            self.gradient,
+            self.log_term,
+            self.roughness,
+        ):
+            box.setEnabled(not measured)
+        if measured:
+            count = len(shown.table)
+            self.table.setText(
+                ngettext(
+                    "Measured profile at {count} height, from the scene file",
+                    "Measured profile at {count} heights, from the scene file",
+                    count,
+                ).format(count=count)
+            )
+        self._weather_form.setRowVisible(self.table, measured)
+        self._weather_form.setRowVisible(self.drop_table, measured)
+        if self.profile_window is not None and self.profile_window.isVisible():
+            self.show_profile()
+
     def load(self) -> None:
         scene, room = self.document.scene, self.document.room
         self.name.setText(scene.name)
@@ -293,6 +464,10 @@ class ScenePage(Page):
         self.temperature.setValue(scene.air.temperature_c)
         self.humidity.setValue(scene.air.humidity_percent)
         self.pressure.setValue(scene.air.pressure_kpa)
+        outdoors = scene.geometry.ground is not None
+        self.weather_group.setVisible(outdoors)
+        if outdoors:
+            self._load_weather(scene)
         lines = [fmt(_("Surface area: {area:,.1f} m²"), area=room.report.surface_area_m2)]
         count = len(room.room_volumes)
         if count > 1:
@@ -362,6 +537,95 @@ class ScenePage(Page):
 
     def _air(self, field: str, value: float) -> None:
         self.apply(_("change air"), lambda data: data.setdefault("air", {}).update({field: value}))
+
+    def _weather(self) -> None:
+        if self.weather.currentIndex() < 0:
+            return
+        value = self.weather.currentData()
+        atmosphere = self.document.scene.atmosphere
+        if value == (None if atmosphere is None else atmosphere.preset or "custom"):
+            return
+
+        def change(data: dict) -> None:
+            old = data.get("atmosphere") or {}
+            if value is None:
+                data.pop("atmosphere", None)
+            elif value == "custom":
+                data["atmosphere"] = _written_out(old)
+            else:
+                # The way the wind blows is the scene's, not the weather's: it stays.
+                data["atmosphere"] = {"preset": value}
+                wind = old.get("wind")
+                if isinstance(wind, dict) and "direction_deg" in wind:
+                    data["atmosphere"]["wind"] = {"direction_deg": wind["direction_deg"]}
+
+        self.apply(_("change the weather"), change)
+
+    def _atmosphere(self, field: str, value) -> None:
+        def change(data: dict) -> None:
+            data["atmosphere"] = _written_out(data.get("atmosphere") or {})
+            data["atmosphere"][field] = value
+
+        self.apply(_("change the wind and temperature"), change)
+
+    def _wind(self, field: str, value) -> None:
+        def change(data: dict) -> None:
+            atmosphere = _written_out(data.get("atmosphere") or {})
+            if not isinstance(atmosphere.get("wind"), dict):
+                atmosphere["wind"] = {}
+            atmosphere["wind"][field] = value
+            data["atmosphere"] = atmosphere
+
+        self.apply(_("change the wind and temperature"), change)
+
+    def _drop_table(self) -> None:
+        def change(data: dict) -> None:
+            atmosphere = _written_out(data.get("atmosphere") or {})
+            atmosphere.pop("table", None)
+            data["atmosphere"] = atmosphere
+
+        self.apply(_("remove the measured profile"), change)
+
+    def show_profile(self) -> None:
+        """Open (or refresh) a window with the temperature, wind and speed of sound over
+        the ground."""
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+
+        from acoustic_spaces.viz import plot_atmosphere
+
+        scene, outdoor = self.document.scene, self.document.room.outdoor
+        top = 100.0 if outdoor is None else max(outdoor.sky - outdoor.ground, 1.0)
+        figure = plot_atmosphere(scene.atmosphere or Atmosphere(), scene.air.temperature_c, top=top)
+        if self.profile_window is None:
+            self.profile_window = QWidget(self, Qt.WindowType.Window)
+            QVBoxLayout(self.profile_window)
+            self.profile_window.resize(1000, 520)
+        layout = self.profile_window.layout()
+        while layout.count():
+            layout.takeAt(0).widget().deleteLater()
+        layout.addWidget(FigureCanvasQTAgg(figure))
+        self.profile_window.setWindowTitle(
+            _("Wind and temperature of {name}").format(name=scene.name)
+        )
+        self.profile_window.show()
+        self.profile_window.raise_()
+
+
+def _written_out(atmosphere: dict) -> dict:
+    """A copy of an atmosphere's scene-file data with its weather's values written out in
+    place of the weather's name, so that changing one of them keeps the others."""
+    atmosphere = copy.deepcopy(atmosphere)
+    preset = atmosphere.pop("preset", None)
+    if preset not in ATMOSPHERE_PRESETS:
+        return atmosphere
+    values = copy.deepcopy(ATMOSPHERE_PRESETS[preset])
+    if atmosphere.get("table") is not None:
+        # A table gives the temperature; the formulas would contradict it.
+        values.pop("temperature_gradient_k_m", None)
+        values.pop("temperature_log_k", None)
+    if isinstance(atmosphere.get("wind"), dict) and "wind" in values:
+        atmosphere["wind"] = {**values.pop("wind"), **atmosphere["wind"]}
+    return {**values, **atmosphere}
 
 
 class GeometryPage(Page):

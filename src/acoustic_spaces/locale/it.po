@@ -1373,6 +1373,42 @@ msgid "third_octave"
 msgstr "terzo d'ottava"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "(none)"
+msgstr "(nessuno)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "neutral"
+msgstr "neutro"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "windy"
+msgstr "ventoso"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "sunny_day"
+msgstr "giornata di sole"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "clear_night"
+msgstr "notte serena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "custom"
+msgstr "personalizzato"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "log"
+msgstr "logaritmico"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "linear"
+msgstr "lineare"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "constant"
+msgstr "costante"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Measured data or an array from a file…"
 msgstr "Dati misurati o un array da un file…"
 
@@ -1485,8 +1521,151 @@ msgstr ""
 "dell'aria). Un calcolo fornisce il risultato completo"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "(none)"
-msgstr "(nessuno)"
+msgid "Wind and temperature"
+msgstr "Vento e temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The weather, which bends sound outdoors: (none) or neutral, still air and "
+"sound in straight lines; windy, 5 m/s 10 m up, bending sound down downwind "
+"and up upwind; sunny_day, air cooling with height, bending sound up into a "
+"shadow a few hundred metres away; clear_night, air warming with height, "
+"bending sound down; custom, the values below. Changing one of them makes the "
+"weather custom. The air temperature above is the ground's"
+msgstr ""
+"Il tempo, che curva il suono all'aperto: (nessuno) o neutro, aria calma e "
+"suono in linea retta; ventoso, 5 m/s a 10 m d'altezza, che curva il suono "
+"verso il basso sottovento e verso l'alto controvento; giornata di sole, aria "
+"che si raffredda con l'altezza, che curva il suono verso l'alto, in un'ombra "
+"a qualche centinaio di metri; notte serena, aria che si riscalda con "
+"l'altezza, che curva il suono verso il basso; personalizzato, i valori qui "
+"sotto. Cambiarne uno rende il tempo personalizzato. La temperatura dell'aria "
+"qui sopra è quella del terreno"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weather"
+msgstr "Tempo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The wind's speed at the height below (m/s): sound goes faster with the wind "
+"and slower against it"
+msgstr ""
+"La velocità del vento all'altezza qui sotto (m/s): il suono va più veloce "
+"con il vento e più lento contro"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The way the wind blows to, in degrees counterclockwise from +x seen from "
+"above (0: along +x, 90: along +y)"
+msgstr ""
+"Verso dove soffia il vento, in gradi in senso antiorario da +x visto "
+"dall'alto (0: lungo +x, 90: lungo +y)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The height above the ground the wind's speed is at (m)"
+msgstr "L'altezza sul terreno a cui è data la velocità del vento (m)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the wind's speed grows with height: log, with the logarithm of the "
+"height over the roughness, the usual profile; linear, in proportion to the "
+"height; constant, the same at every height"
+msgstr ""
+"Come cresce la velocità del vento con l'altezza: logaritmico, con il "
+"logaritmo dell'altezza sulla rugosità, il profilo abituale; lineare, in "
+"proporzione all'altezza; costante, la stessa a ogni altezza"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the temperature changes per metre of height (K/m): -0.0098 in air "
+"stirred by the sun, positive in an inversion. Sound goes faster in warmer "
+"air and bends away from it"
+msgstr ""
+"Come cambia la temperatura per metro d'altezza (K/m): -0.0098 in aria "
+"rimescolata dal sole, positivo in un'inversione. Il suono va più veloce "
+"nell'aria più calda e si curva allontanandosene"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A change of temperature fastest near the ground (K, times ln(1 + height / "
+"roughness)): negative on a sunny day, positive on a clear night"
+msgstr ""
+"Un cambiamento di temperatura più rapido vicino al terreno (K, per ln(1 + "
+"altezza / rugosità)): negativo in una giornata di sole, positivo in una "
+"notte serena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The ground's roughness length (m), for the log profiles: 0.01 to 0.1 over "
+"grass, up to 1 among buildings and trees"
+msgstr ""
+"La lunghezza di rugosità del terreno (m), per i profili logaritmici: da 0.01 "
+"a 0.1 sull'erba, fino a 1 tra edifici e alberi"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind speed"
+msgstr "Velocità del vento"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind direction"
+msgstr "Direzione del vento"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind height"
+msgstr "Altezza del vento"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind profile"
+msgstr "Profilo del vento"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature gradient"
+msgstr "Gradiente di temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature near the ground"
+msgstr "Temperatura vicino al terreno"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Roughness"
+msgstr "Rugosità"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A measured profile from the scene file: the temperature and the wind's speed "
+"come from it, in straight lines between its heights"
+msgstr ""
+"Un profilo misurato dal file della scena: la temperatura e la velocità del "
+"vento vengono da lì, in linea retta tra le sue altezze"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the measured profile"
+msgstr "Rimuovi il profilo misurato"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Use the values above in place of the measured profile of the scene file"
+msgstr ""
+"Usa i valori qui sopra al posto del profilo misurato del file della scena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Show the profile"
+msgstr "Mostra il profilo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Open a plot of the temperature, the wind and the speed of sound over the "
+"ground: across the wind, downwind and upwind"
+msgstr ""
+"Apre un grafico della temperatura, del vento e della velocità del suono "
+"sopra il terreno: trasversale al vento, sottovento e controvento"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Measured profile at {count} height, from the scene file"
+msgid_plural "Measured profile at {count} heights, from the scene file"
+msgstr[0] "Profilo misurato a {count} altezza, dal file della scena"
+msgstr[1] "Profilo misurato a {count} altezze, dal file della scena"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -1539,6 +1718,23 @@ msgstr "modifica materiale predefinito"
 #: acoustic_spaces/gui/inspector.py
 msgid "change air"
 msgstr "modifica aria"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather"
+msgstr "modifica il tempo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the wind and temperature"
+msgstr "modifica vento e temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove the measured profile"
+msgstr "rimuovi il profilo misurato"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Wind and temperature of {name}"
+msgstr "Vento e temperatura di {name}"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Box"
@@ -4369,6 +4565,42 @@ msgstr ""
 "dB rif. direzione più intensa; indice di direttività {index:.1f} dB a 1 kHz"
 
 #: acoustic_spaces/viz.py
+msgid "temperature (°C)"
+msgstr "temperatura (°C)"
+
+#: acoustic_spaces/viz.py
+msgid "height above the ground (m)"
+msgstr "altezza sul terreno (m)"
+
+#: acoustic_spaces/viz.py
+msgid "wind speed (m/s)"
+msgstr "velocità del vento (m/s)"
+
+#: acoustic_spaces/viz.py
+msgid "across the wind"
+msgstr "trasversale al vento"
+
+#: acoustic_spaces/viz.py
+msgid "downwind"
+msgstr "sottovento"
+
+#: acoustic_spaces/viz.py
+msgid "upwind"
+msgstr "controvento"
+
+#: acoustic_spaces/viz.py
+msgid "speed of sound (m/s)"
+msgstr "velocità del suono (m/s)"
+
+#: acoustic_spaces/viz.py
+msgid "Still air: sound goes in straight lines"
+msgstr "Aria calma: il suono va in linea retta"
+
+#: acoustic_spaces/viz.py
+msgid "Sound bends towards where the speed of sound is lower"
+msgstr "Il suono si curva verso dove la velocità del suono è minore"
+
+#: acoustic_spaces/viz.py
 msgid "broadband, 1 ms windows"
 msgstr "banda larga, finestre di 1 ms"
 
@@ -4717,6 +4949,38 @@ msgstr ""
 "otto valori da 63 Hz a 8 kHz). `acoustic-spaces materials --file "
 "examples/material_libraries/odeon_materials.li8` elenca una libreria. I "
 "valori sono propri di questo esempio e non di uno dei due programmi."
+
+#: examples/open_air_stage/scene.yaml
+msgctxt "example"
+msgid "Open-air stage in the wind"
+msgstr "Palco all'aperto nel vento"
+
+#: examples/open_air_stage/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a stage's loudspeakers 5 m up, heard 100 and 300 m away across a "
+"park on a windy evening, downwind and upwind. The wind, 5 m/s 10 m up, grows "
+"with height, so sound going with it travels faster higher up and bends down "
+"towards the ground, and sound going against it bends up, over the listeners' "
+"heads. Downwind the sound comes sooner, and louder in the low bands; 300 m "
+"upwind the listeners are in its shadow, where only what bends round its edge "
+"arrives, the less the higher the band: there the bands from 1 kHz up are "
+"some 60 dB below those downwind, more than one would measure, as the "
+"turbulence that scatters sound into a shadow is not modelled yet. Remove the "
+"atmosphere to hear the same park in still air."
+msgstr ""
+"All'aperto: gli altoparlanti di un palco a 5 m d'altezza, ascoltati a 100 e "
+"300 m attraverso un parco in una sera di vento, sottovento e controvento. Il "
+"vento, 5 m/s a 10 m d'altezza, cresce con l'altezza, così il suono che va "
+"con esso viaggia più veloce più in alto e si curva verso il suolo, e quello "
+"che va controvento si curva verso l'alto, sopra le teste degli ascoltatori. "
+"Sottovento il suono arriva prima, e più forte nelle bande basse; a 300 m "
+"controvento gli ascoltatori sono nella sua ombra, dove arriva solo ciò che "
+"si curva attorno al suo bordo, tanto meno quanto più alta è la banda: lì le "
+"bande da 1 kHz in su sono circa 60 dB sotto quelle sottovento, più di quanto "
+"si misurerebbe, perché la turbolenza che diffonde il suono in un'ombra non è "
+"ancora modellata. Togliete l'atmosfera per ascoltare lo stesso parco con "
+"l'aria calma."
 
 #: examples/orchestra/scene.yaml
 msgctxt "example"

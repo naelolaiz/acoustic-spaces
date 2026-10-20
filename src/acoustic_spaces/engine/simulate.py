@@ -19,7 +19,7 @@ from acoustic_spaces.engine.coherent import band_count
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel
-from acoustic_spaces.engine.refracted import refraction_for
+from acoustic_spaces.engine.refracted import direct_times, refraction_for
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.geometry import distance_to_surface
 from acoustic_spaces.parameters import RoomParameters
@@ -496,6 +496,7 @@ def simulate(
         if refraction is not None:
             say(f"{label}: paths bent by the wind and the temperature")
             paths = refraction.apply(listener_pos, straight, paths, cutoff)
+            direct = direct_times(direct, paths)
         # The diffuse field is reckoned less the paths as they would come without the
         # audience, so what the seats take from them is lost, not made up by the tail.
         plain = paths
