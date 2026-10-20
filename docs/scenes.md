@@ -64,8 +64,9 @@ and a panel standing in the room, with air on both sides, reflects and absorbs o
 ### Outdoors
 
 `geometry.ground` makes a scene outdoors: a flat ground under an open sky, with
-`buildings` (footprints raised to a height), `barriers` (thin screens along a path) and
-the objects of a model file standing on it. See [Outdoor scenes](outdoor.md).
+`buildings` (footprints raised to a height), `barriers` (thin screens along a path),
+`vegetation` (belts of trees, hedges and lone trees, which sound passes through) and the
+objects of a model file standing on it. See [Outdoor scenes](outdoor.md).
 
 ```yaml
 geometry:
@@ -77,6 +78,8 @@ geometry:
     - {name: hall, footprint: [[0, 10], [20, 10], [20, 22], [0, 22]], height: 9}
   barriers:
     - {path: [[30, 6], [30, 20]], height: 3}
+  vegetation:
+    - {name: hedge, path: [[30, 24], [50, 24]], width: 1.5, height: 2}
 ```
 
 Outdoors, `atmosphere` sets the wind and the temperature over the ground, which bend

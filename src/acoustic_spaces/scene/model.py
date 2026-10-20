@@ -258,12 +258,174 @@ class Barrier(_Model):
     height: PositiveFloat = Field(description="height of its top above the ground")
 
 
+#: The foliage presets: ``dense``, ISO 9613-2's dense foliage, and ``none``, bare stems.
+FOLIAGE_PRESETS = ("dense", "none")
+#: ISO 9613-2 (1996), Annex A, Table A.1: what dense foliage takes from sound passing 20
+#: to 200 m through it, dB per metre in the octave bands of ``OCTAVE_BANDS_HZ``.
+DENSE_FOLIAGE_DB_PER_M = (0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.09, 0.12)
+
+
+class Foliage(_Model):
+    """What the leaves and twigs of a vegetation volume take from sound passing through
+    it, per metre: a preset, or an attenuation per band. ``albedo`` is the share of it
+    that they scatter on, the rest they absorb; ``asymmetry`` how far forward they
+    scatter it (the mean cosine of the angle, as in a Henyey-Greenstein phase function)."""
+
+    preset: Literal["dense", "none"] | None = Field(
+        default=None,
+        description=(
+            "dense: ISO 9613-2's dense foliage (Annex A), its attenuation from 20 to 200 m "
+            "of foliage per metre; none: no foliage (bare stems, winter)"
+        ),
+    )
+    attenuation: list[Annotated[float, Field(ge=0.0, le=10.0)]] | None = Field(
+        default=None,
+        description="dB per metre per octave or third-octave band, when no preset says it",
+    )
+    albedo: Coefficient = Field(
+        default=0.0,
+        description="share of what the foliage takes that it scatters on rather than absorbs",
+    )
+    asymmetry: float = Field(
+        default=0.0,
+        ge=-0.9,
+        le=0.9,
+        description=(
+            "mean cosine of the angle the foliage scatters sound through: 0 every way "
+            "alike, towards 1 onwards"
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_preset(cls, data):
+        if isinstance(data, str):
+            data = {"preset": data}
+        if isinstance(data, dict) and data.get("preset") is not None:
+            preset = data["preset"]
+            if preset not in FOLIAGE_PRESETS:
+                close = difflib.get_close_matches(str(preset), list(FOLIAGE_PRESETS), n=1)
+                hint = f"; did you mean {close[0]}?" if close else ""
+                raise ValueError(
+                    f"no foliage preset named {preset!r}{hint} (the presets are "
+                    f"{', '.join(FOLIAGE_PRESETS)})"
+                )
+        return data
+
+    @field_validator("attenuation")
+    @classmethod
+    def _bands(cls, value: list[float] | None) -> list[float] | None:
+        return None if value is None else _per_band_or_third("attenuation", value)
+
+    @model_validator(mode="after")
+    def _one_way(self) -> Foliage:
+        if (self.preset is None) == (self.attenuation is None):
+            raise ValueError("foliage takes a preset or an attenuation per band, one of them")
+        if self.preset == "none" and (self.albedo or self.asymmetry):
+            raise ValueError("foliage none has nothing to scatter: leave out albedo and asymmetry")
+        return self
+
+    @property
+    def bare(self) -> bool:
+        """Whether there is no foliage."""
+        if self.preset is not None:
+            return self.preset == "none"
+        return not any(self.attenuation)
+
+    def attenuation_db(self, resolution: Resolution = "octave") -> np.ndarray:
+        """dB per metre in each band at ``resolution``."""
+        if self.preset == "none":
+            values = [0.0] * len(OCTAVE_BANDS_HZ)
+        elif self.preset == "dense":
+            values = list(DENSE_FOLIAGE_DB_PER_M)
+        else:
+            values = self.attenuation
+        return np.asarray(convert(values, resolution), dtype=float)
+
+    def describe(self) -> str:
+        if self.preset is not None:
+            return f"{self.preset} foliage" if self.preset == "dense" else "no foliage"
+        return "foliage of " + "/".join(f"{v:g}" for v in self.attenuation) + " dB/m"
+
+
+class Stems(_Model):
+    """The trunks and stems of a vegetation volume: upright rigid cylinders, which
+    scatter sound sideways, all of it (Bullen and Fricke 1982)."""
+
+    per_m2: PositiveFloat = Field(le=100.0, description="stems per square metre of ground")
+    diameter: PositiveFloat = Field(le=5.0, description="their mean diameter (m)")
+
+
+class Vegetation(_Model):
+    """Plants standing on the ground outdoors: a volume through which sound loses some of
+    itself, scattered on or absorbed. Its shape is one of a ``footprint`` raised from
+    ``base`` to ``height`` (a tree belt, a wood), a ``path`` of a ``width`` (a hedge),
+    or a lone tree's crown over ``tree``: a spheroid ``crown_diameter`` across from
+    ``base`` to ``height``. Lengths and heights are in the geometry's units, over the
+    ground; ``foliage`` and ``stems`` say what fills it."""
+
+    name: str | None = Field(default=None, description="None: vegetation_1, vegetation_2...")
+    footprint: list[tuple[float, float]] | None = Field(
+        default=None, min_length=3, description="(x, y) corners of a belt or wood, in order"
+    )
+    path: list[tuple[float, float]] | None = Field(
+        default=None, min_length=2, description="(x, y) points along a hedge, in order"
+    )
+    width: PositiveFloat | None = Field(default=None, description="a hedge's width")
+    tree: tuple[float, float] | None = Field(default=None, description="(x, y) of a lone tree")
+    crown_diameter: PositiveFloat | None = Field(
+        default=None, description="how wide a lone tree's crown is"
+    )
+    height: PositiveFloat = Field(description="height of the top over the ground")
+    base: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="height of the bottom over the ground; a tree's, where its crown starts",
+    )
+    foliage: Foliage = Field(
+        default_factory=lambda: Foliage(preset="dense"),
+        description="what the leaves and twigs take: a preset (dense, none) or values",
+    )
+    stems: Stems | None = Field(default=None, description="trunks and stems in it, if any")
+
+    @model_validator(mode="after")
+    def _one_shape(self) -> Vegetation:
+        given = [k for k in ("footprint", "path", "tree") if getattr(self, k) is not None]
+        if len(given) != 1:
+            raise ValueError("vegetation needs exactly one of footprint, path or tree")
+        if (self.width is not None) != (self.path is not None):
+            raise ValueError("width goes with path, and a path needs it")
+        if (self.crown_diameter is not None) != (self.tree is not None):
+            raise ValueError("crown_diameter goes with tree, and a tree needs it")
+        if self.base >= self.height:
+            raise ValueError(f"base ({self.base:g}) must be below height ({self.height:g})")
+        if self.foliage.bare and self.stems is None:
+            raise ValueError("vegetation with no foliage and no stems does nothing")
+        return self
+
+    @property
+    def kind(self) -> Literal["belt", "hedge", "tree"]:
+        """belt (a footprint), hedge (a path) or tree."""
+        if self.footprint is not None:
+            return "belt"
+        return "hedge" if self.path is not None else "tree"
+
+    def describe(self) -> str:
+        """What fills it, as text: its foliage and stems."""
+        parts = [] if self.foliage.bare else [self.foliage.describe()]
+        if self.stems is not None:
+            parts.append(f"{self.stems.per_m2:g} stems/m², {self.stems.diameter:g} m across")
+        return ", ".join(parts) or "nothing"
+
+
 class Geometry(_Model):
     """The room's surfaces: a CAD file, or a box or extruded floor plan built from
     dimensions (surfaces ``floor``, ``ceiling``, ``walls`` and ``wall_1``, ``wall_2``...).
 
     Outdoors, ``ground`` lays flat ground under an open sky, with ``buildings`` and
-    ``barriers`` built on it and, from ``file``, any other objects standing on it."""
+    ``barriers`` built on it and, from ``file``, any other objects standing on it.
+    ``vegetation`` adds trees, hedges and belts of them, which are no surfaces: sound
+    passes through them, losing some of itself."""
 
     file: Path | None = Field(
         default=None,
@@ -306,6 +468,9 @@ class Geometry(_Model):
     barriers: list[Barrier] | None = Field(
         default=None, description="outdoors: thin screens standing on the ground"
     )
+    vegetation: list[Vegetation] | None = Field(
+        default=None, description="outdoors: trees, hedges and belts of them"
+    )
 
     @field_validator("file")
     @classmethod
@@ -318,6 +483,8 @@ class Geometry(_Model):
             return self._outdoor()
         if self.buildings is not None or self.barriers is not None:
             raise ValueError("buildings and barriers stand on the ground: add geometry.ground")
+        if self.vegetation is not None:
+            raise ValueError("vegetation stands on the ground: add geometry.ground")
         given = [k for k in ("file", "box", "floor_plan") if getattr(self, k) is not None]
         if len(given) != 1:
             raise ValueError("geometry needs exactly one of file, box or floor_plan")
@@ -335,11 +502,17 @@ class Geometry(_Model):
             )
         if self.space is not None:
             raise ValueError("space picks a room of an IFC file; outdoors, leave it out")
-        if self.ground.extent is None and not (self.file or self.buildings or self.barriers):
+        if self.ground.extent is None and not (
+            self.file or self.buildings or self.barriers or self.vegetation
+        ):
             raise ValueError(
-                "with no buildings, barriers or model file, the ground needs an extent: "
-                "[[x_min, y_min], [x_max, y_max]]"
+                "with no buildings, barriers, vegetation or model file, the ground needs an "
+                "extent: [[x_min, y_min], [x_max, y_max]]"
             )
+        plants = self.vegetation_names()
+        repeated = sorted({n for n in plants if plants.count(n) > 1})
+        if repeated:
+            raise ValueError(f"vegetation names must be unique: {', '.join(repeated)}")
         names = self.building_names() + self.barrier_names() + self.ground.zone_names()
         reserved = sorted(set(names) & set(OUTDOOR_NAMES))
         if reserved:
@@ -359,12 +532,20 @@ class Geometry(_Model):
         """The barriers' names, ``barrier_<n>`` for those without one."""
         return [b.name or f"barrier_{k + 1}" for k, b in enumerate(self.barriers or [])]
 
+    def vegetation_names(self) -> list[str]:
+        """The vegetation's names, ``vegetation_<n>`` for those without one."""
+        return [v.name or f"vegetation_{k + 1}" for k, v in enumerate(self.vegetation or [])]
+
     def describe(self) -> str:
         if self.ground is not None:
             parts = ["outdoors"]
             for count, one, many in (
                 (len(self.buildings or []), "building", "buildings"),
                 (len(self.barriers or []), "barrier", "barriers"),
+                *(
+                    (sum(v.kind == kind for v in self.vegetation or []), kind, f"{kind}s")
+                    for kind in ("tree", "hedge", "belt")
+                ),
             ):
                 if count:
                     parts.append(f"{count} {one if count == 1 else many}")

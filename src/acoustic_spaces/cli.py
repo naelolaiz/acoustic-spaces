@@ -219,6 +219,22 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
                 for name, polygon in room.outdoor.zones
             )
             print(f"  ground zones: {zones}")
+        if room.outdoor.vegetation:
+            from acoustic_spaces.engine.vegetation import DB_PER_NEPER, Plants
+
+            plants = Plants.of(room, "octave", room.speed_of_sound())
+            loss = [[0.0] * plants.bands for _shape in plants.shapes]
+            for shape, medium in plants.fills:
+                extinction = plants.media[medium].extinction * DB_PER_NEPER
+                loss[shape] = [a + float(b) for a, b in zip(loss[shape], extinction, strict=True)]
+            for shape, plant, row in zip(
+                plants.shapes, scene.geometry.vegetation, loss, strict=True
+            ):
+                rates = "/".join(f"{v:.2g}" for v in row)
+                print(
+                    f"  {shape.kind} {shape.name}: {plant.describe()}, {shape.low:g} to "
+                    f"{shape.high:g} m high; sound through it loses {rates} dB/m"
+                )
         if scene.atmosphere is not None:
             for line in _atmosphere_lines(scene.atmosphere, scene.air.temperature_c, room.outdoor):
                 print(f"  {line}")

@@ -48,6 +48,15 @@ def source_weights(
     return directivity.energy(local)
 
 
+def _plants(room: Room, bands: Resolution):
+    """The vegetation of an outdoor scene in ``bands``, or None."""
+    if room.outdoor is None or not room.outdoor.vegetation:
+        return None
+    from acoustic_spaces.engine.vegetation import Plants
+
+    return Plants.of(room, bands, room.speed_of_sound())
+
+
 @dataclass
 class TraceModel:
     room: Room
@@ -119,6 +128,9 @@ class TraceModel:
     #: (parts,) a face of each part of the ground, whose material it has; -1 for a part
     #: with no faces (the zones may cover all the ground).
     part_face: np.ndarray | None = None
+    #: An outdoor scene's vegetation in ``bands``
+    #: (:class:`~acoustic_spaces.engine.vegetation.Plants`); None without any.
+    plants: object | None = None
 
     @classmethod
     def from_room(cls, room: Room, settings=None) -> TraceModel:
@@ -200,6 +212,7 @@ class TraceModel:
             admittance=admittance,
             ground_part=ground_part,
             part_face=part_face,
+            plants=_plants(room, simulation.bands),
         )
 
     def __post_init__(self) -> None:

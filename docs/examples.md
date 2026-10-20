@@ -24,6 +24,7 @@
 | `street` | Outdoors: traffic along a street between a row of houses and an office block, heard on the pavement, on a balcony and in a garden behind a noise barrier, where the sound comes over the barrier and round its ends ([outdoor scenes](outdoor.md)). |
 | `roadside` | Outdoors: traffic on a road between a meadow and a paved yard, heard over the grass at 7.5, 25 and 50 m and over the yard at 25 m: the [ground dip](outdoor.md#ground-impedance) over the grass at a few hundred hertz, which the hard yard does not have. |
 | `open_air_stage` | Outdoors: a stage heard 100 and 300 m away across a park in a 5 m/s wind, downwind and upwind: the sound [bent](outdoor.md#wind-and-temperature) down to the ground downwind, sooner and louder in the low bands, and up over the listeners' heads upwind, into a shadow 300 m away that the wind's [eddies](outdoor.md#turbulence) scatter sound into. |
+| `tree_belt` | Outdoors: traffic on a road heard from two gardens 55 m away, one behind a belt of trees 30 m deep and one across an open meadow: the trees' [foliage and trunks](outdoor.md#vegetation) take up to about 8 dB from the highest bands and almost nothing from the lowest, and scatter some of the sound into the late part. |
 | `measurement` | No scene, a script: it records a sweep in a simulated room, as a microphone would, to try the [measurement](measurements.md#measuring-impulse-responses) commands without a sound card. |
 
 `acoustic-spaces examples` lists them with where they are installed, and

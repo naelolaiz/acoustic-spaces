@@ -2017,6 +2017,10 @@ msgid "Remove the selected building, or the last one when none is selected"
 msgstr "Rimuovere l'edificio selezionato o l'ultimo se nessuno è selezionato"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Remove building"
+msgstr "Rimuovi edificio"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Barriers"
 msgstr "Barriere acustiche"
 
@@ -2043,12 +2047,59 @@ msgid "Remove the selected barrier, or the last one when none is selected"
 msgstr "Rimuovere la barriera selezionata o l'ultima se nessuna è selezionata"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Remove building"
-msgstr "Rimuovi edificio"
-
-#: acoustic_spaces/gui/inspector.py
 msgid "Remove barrier"
 msgstr "Rimuovi barriera"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Vegetation"
+msgstr "Vegetazione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Shape"
+msgstr "Forma"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Plants"
+msgstr "Piante"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The name of the tree, hedge or belt of trees: no surface, a volume that "
+"sound passes through, losing some of itself"
+msgstr ""
+"Il nome dell'albero, della siepe o della fascia di alberi: non una "
+"superficie, ma un volume che il suono attraversa, perdendone una parte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high its top is over the ground, in the units the title shows"
+msgstr ""
+"L'altezza della sua sommità sopra il terreno, nelle unità indicate nel titolo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A belt of trees (a footprint raised from the ground), a hedge (a path of a "
+"width) or a lone tree's crown (set in the scene file)"
+msgstr ""
+"Una fascia di alberi (un'impronta sollevata dal terreno), una siepe (un "
+"tracciato con una larghezza) o la chioma di un albero isolato (impostata nel "
+"file di scena)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"What fills it: foliage, which takes so many dB per metre from sound passing "
+"through, and stems, which scatter it sideways"
+msgstr ""
+"Ciò che lo riempie: il fogliame, che toglie tanti dB al metro al suono che "
+"lo attraversa, e i fusti, che lo disperdono lateralmente"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected vegetation, or the last one when none is selected"
+msgstr ""
+"Rimuovere la vegetazione selezionata o l'ultima se nessuna è selezionata"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove vegetation"
+msgstr "Rimuovi vegetazione"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Ground zones"
@@ -2198,6 +2249,39 @@ msgstr "rimuovi edificio"
 #: acoustic_spaces/gui/inspector.py
 msgid "remove barrier"
 msgstr "rimuovi barriera"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove vegetation"
+msgstr "rimuovi vegetazione"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "belt, {count} corners"
+msgstr "fascia, {count} vertici"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "hedge {width} wide, {count} points"
+msgstr "siepe larga {width}, {count} punti"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "tree, crown {diameter} across"
+msgstr "albero, chioma di {diameter} di diametro"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "dense foliage"
+msgstr "fogliame denso"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "foliage {values} dB/m"
+msgstr "fogliame {values} dB/m"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count} stems/m², {diameter} m across"
+msgstr "{count} fusti/m², {diameter} m di diametro"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2784,10 +2868,6 @@ msgid ""
 msgstr ""
 "La linea o superficie è composta da queste sorgenti puntuali, che ne "
 "condividono la potenza sonora"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Shape"
-msgstr "Forma"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Length"
@@ -4510,6 +4590,10 @@ msgid "gap {number}: {share:.1f} %"
 msgstr "fessura {number}: {share:.1f} %"
 
 #: acoustic_spaces/viz.py
+msgid "vegetation"
+msgstr "vegetazione"
+
+#: acoustic_spaces/viz.py
 msgid "reflections"
 msgstr "riflessioni"
 
@@ -5276,6 +5360,35 @@ msgstr ""
 "rinforzi ritardati sono utili solo dove il suono diretto delle colonne si è "
 "attenuato. `inspect` elenca la potenza sonora di ogni sorgente con il suo "
 "segnale di ingresso."
+
+#: examples/tree_belt/scene.yaml
+msgctxt "example"
+msgid "Road behind a belt of trees"
+msgstr "Strada dietro una fascia di alberi"
+
+#: examples/tree_belt/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: traffic on a road heard from two gardens in front of a row of "
+"houses, 55 m away over grass: one behind a belt of trees 30 m deep, the "
+"other across an open meadow. The belt's foliage takes ISO 9613-2's "
+"dense-foliage rates from the sound passing through it (up to 0.12 dB per "
+"metre at 8 kHz) and its trunks scatter some of it aside, into the late "
+"sound; a lone oak stands by the open garden. Trees cut less than a wall "
+"would: up to about 8 dB in the highest bands, under 1 dB at the lowest. "
+"Behind them much of the sound comes scattered, with the late rays, so the "
+"scene traces more of them than the default."
+msgstr ""
+"All'aperto: traffico su una strada ascoltato da due giardini davanti a una "
+"fila di case, a 55 m di distanza sull'erba: uno dietro una fascia di alberi "
+"profonda 30 m, l'altro al di là di un prato aperto. Il fogliame della fascia "
+"toglie al suono che la attraversa i valori del fogliame denso della ISO "
+"9613-2 (fino a 0.12 dB al metro a 8 kHz) e i suoi tronchi ne disperdono una "
+"parte lateralmente, nel suono tardivo; una quercia isolata si trova accanto "
+"al giardino aperto. Gli alberi attenuano meno di un muro: fino a circa 8 dB "
+"nelle bande più alte, meno di 1 dB nella più bassa. Dietro di essi gran "
+"parte del suono arriva dispersa, con i raggi tardivi, perciò la scena "
+"traccia più raggi di quelli predefiniti."
 
 #: examples/workshop/scene.yaml
 msgctxt "example"

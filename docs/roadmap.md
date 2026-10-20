@@ -103,7 +103,10 @@ Outdoor acoustics, in steps:
   in), sound scattered into shadows, and impulse responses, renders and walkthroughs
   that flicker as the eddies drift past; checked against a parabolic equation through
   random eddies.
-- [ ] O5 Vegetation: trees, hedges and forests.
+- [x] O5 Vegetation: belts of trees, hedges and lone trees as volumes of foliage and
+  stems that absorb and scatter sound, along the early paths and the late rays; checked
+  against a separate particle simulation. Their late rays are traced on the CPU; the
+  GPU devices may follow.
 - [ ] O6 The wave solver with a speed of sound that changes from place to place.
 
 Unreleased:

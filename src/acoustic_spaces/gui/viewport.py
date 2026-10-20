@@ -33,6 +33,7 @@ from acoustic_spaces.viz import (
     plot_coverage,
     plot_leaks,
     plot_paths,
+    plot_vegetation,
     room_polydata,
 )
 
@@ -207,6 +208,7 @@ class Viewport(QWidget):
                 line_width=3.0 if chosen else 1.5,
                 render=False,
             )
+        plot_vegetation(room, plotter, render=False)
 
         lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
         size = float(np.linalg.norm(hi - lo)) or 1.0

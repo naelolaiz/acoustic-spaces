@@ -645,6 +645,8 @@ def _trace_part(
         found = refraction.apply(grid.points, straight, found, cutoff)
         # The response starts when the bent direct sound arrives.
         onset = direct_times(onset, found)
+    if model.plants is not None:
+        found = [model.plants.attenuate(paths) for paths in found]
     eddies = Eddies.of(model, c)
     if eddies is not None:
         found = [eddies.attach(paths) for paths in found]

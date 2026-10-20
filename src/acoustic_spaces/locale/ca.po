@@ -2004,6 +2004,10 @@ msgstr ""
 "Eliminar l'edifici seleccionat o l'últim si no n'hi ha cap de seleccionat"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Remove building"
+msgstr "Eliminar edifici"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Barriers"
 msgstr "Pantalles acústiques"
 
@@ -2030,12 +2034,60 @@ msgstr ""
 "seleccionada"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Remove building"
-msgstr "Eliminar edifici"
-
-#: acoustic_spaces/gui/inspector.py
 msgid "Remove barrier"
 msgstr "Eliminar pantalla"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Vegetation"
+msgstr "Vegetació"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Shape"
+msgstr "Forma"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Plants"
+msgstr "Plantes"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The name of the tree, hedge or belt of trees: no surface, a volume that "
+"sound passes through, losing some of itself"
+msgstr ""
+"El nom de l'arbre, la tanca o la franja d'arbres: no és una superfície, sinó "
+"un volum que el so travessa, perdent-ne una part"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high its top is over the ground, in the units the title shows"
+msgstr ""
+"L'alçada de la seva part superior sobre el terreny, en les unitats del títol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A belt of trees (a footprint raised from the ground), a hedge (a path of a "
+"width) or a lone tree's crown (set in the scene file)"
+msgstr ""
+"Una franja d'arbres (una petjada elevada des del terreny), una tanca (un "
+"traçat amb una amplada) o la capçada d'un arbre aïllat (es fixa al fitxer "
+"d'escena)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"What fills it: foliage, which takes so many dB per metre from sound passing "
+"through, and stems, which scatter it sideways"
+msgstr ""
+"El que l'omple: el fullatge, que treu tants dB per metre al so que el "
+"travessa, i els troncs, que el dispersen cap als costats"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected vegetation, or the last one when none is selected"
+msgstr ""
+"Eliminar la vegetació seleccionada o l'última si no n'hi ha cap de "
+"seleccionada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove vegetation"
+msgstr "Eliminar vegetació"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Ground zones"
@@ -2185,6 +2237,39 @@ msgstr "eliminar edifici"
 #: acoustic_spaces/gui/inspector.py
 msgid "remove barrier"
 msgstr "eliminar pantalla"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove vegetation"
+msgstr "eliminar vegetació"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "belt, {count} corners"
+msgstr "franja, {count} vèrtexs"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "hedge {width} wide, {count} points"
+msgstr "tanca de {width} d'amplada, {count} punts"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "tree, crown {diameter} across"
+msgstr "arbre, capçada de {diameter} de diàmetre"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "dense foliage"
+msgstr "fullatge dens"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "foliage {values} dB/m"
+msgstr "fullatge {values} dB/m"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count} stems/m², {diameter} m across"
+msgstr "{count} troncs/m², {diameter} m de diàmetre"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2766,10 +2851,6 @@ msgid ""
 msgstr ""
 "La línia o superfície es compon d'aquestes fonts puntuals; es reparteixen la "
 "potència acústica"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Shape"
-msgstr "Forma"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Length"
@@ -4480,6 +4561,10 @@ msgid "gap {number}: {share:.1f} %"
 msgstr "buit {number}: {share:.1f} %"
 
 #: acoustic_spaces/viz.py
+msgid "vegetation"
+msgstr "vegetació"
+
+#: acoustic_spaces/viz.py
 msgid "reflections"
 msgstr "reflexions"
 
@@ -5244,6 +5329,35 @@ msgstr ""
 "retard només compensa on el so directe de les columnes s'ha afeblit. "
 "`inspect` enumera la potència acústica de cada font amb el seu senyal "
 "d'entrada."
+
+#: examples/tree_belt/scene.yaml
+msgctxt "example"
+msgid "Road behind a belt of trees"
+msgstr "Carretera darrere d'una franja d'arbres"
+
+#: examples/tree_belt/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: traffic on a road heard from two gardens in front of a row of "
+"houses, 55 m away over grass: one behind a belt of trees 30 m deep, the "
+"other across an open meadow. The belt's foliage takes ISO 9613-2's "
+"dense-foliage rates from the sound passing through it (up to 0.12 dB per "
+"metre at 8 kHz) and its trunks scatter some of it aside, into the late "
+"sound; a lone oak stands by the open garden. Trees cut less than a wall "
+"would: up to about 8 dB in the highest bands, under 1 dB at the lowest. "
+"Behind them much of the sound comes scattered, with the late rays, so the "
+"scene traces more of them than the default."
+msgstr ""
+"A l'aire lliure: trànsit en una carretera escoltat des de dos jardins davant "
+"d'una filera de cases, a 55 m sobre l'herba: un darrere d'una franja "
+"d'arbres de 30 m de fons i l'altre a l'altra banda d'un prat obert. El "
+"fullatge de la franja treu al so que la travessa els valors de fullatge dens "
+"de la ISO 9613-2 (fins a 0,12 dB per metre a 8 kHz) i els seus troncs en "
+"dispersen una part cap als costats, cap al so tardà; un roure aïllat s'alça "
+"al costat del jardí obert. Els arbres atenuen menys que un mur: fins a uns 8 "
+"dB a les bandes més altes i menys d'1 dB a la més baixa. Darrere d'ells bona "
+"part del so arriba dispersat, amb els raigs tardans, per això l'escena traça "
+"més raigs dels que s'usen per defecte."
 
 #: examples/workshop/scene.yaml
 msgctxt "example"

@@ -947,6 +947,31 @@ def test_outdoor_geometry_form(window, monkeypatch) -> None:
     assert window.document.scene.simulation.early.coherent_max_band_hz == 125
 
 
+def test_vegetation_table(window) -> None:
+    window.open_example(example_path("tree_belt"))
+    window.select("geometry", None)
+    page = window.inspector.pages["geometry"]
+    plants = page.parts["vegetation"]
+    assert plants.rowCount() == 2 and plants.columnCount() == 4
+    assert [plants.item(0, c).text() for c in range(4)] == [
+        "wood",
+        "15",
+        "belt, 4 corners",
+        "dense foliage, 0.08 stems/m², 0.3 m across",
+    ]
+    assert plants.item(1, 2).text() == "tree, crown 10 across"
+    plants.item(0, 1).setText("18")
+    assert window.document.scene.geometry.vegetation[0].height == 18.0
+    assert window.document.room.outdoor.vegetation[0].high == 18.0
+    plants.setCurrentCell(1, 0)
+    page._remove_part("vegetation")
+    assert [v.name for v in window.document.scene.geometry.vegetation] == ["wood"]
+    page._remove_part("vegetation")
+    assert window.document.scene.geometry.vegetation is None and plants.rowCount() == 0
+    window.open_example(example_path("street"))
+    assert page.parts["vegetation"].rowCount() == 0
+
+
 def test_ground_impedance_and_zones(window) -> None:
     from PySide6.QtCore import Qt
 

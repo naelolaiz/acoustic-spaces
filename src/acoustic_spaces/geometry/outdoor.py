@@ -21,6 +21,10 @@ diffract nothing, so the ground reads as endless.
   building's floor, the file's own ground), so they are open underneath too.
 - Edges that lie on the ground diffract nothing: where a wall or a barrier meets it, the
   ground closes the corner (see :func:`acoustic_spaces.engine.diffraction.find_edges`).
+- Vegetation (trees, hedges, belts of trees) is no surface: each is a volume
+  (:class:`PlantShape`) that sound passes through, losing some of itself (see
+  :mod:`acoustic_spaces.engine.vegetation`). The ground reaches round it, and the sky
+  over it, as round and over a building.
 - Zones are parts of the ground with surfaces of their own (a road, a lawn): polygons,
   cut to the ground's extent, that may touch but not overlap. The ground is then split
   into strips at the zones' corners and each strip into pieces between the zones' edges,
@@ -57,6 +61,8 @@ class Layout:
     buildings: tuple[tuple[str, np.ndarray, float], ...] = ()
     #: Each ground zone's name and polygon (n, 2), cut to the extent.
     zones: tuple[tuple[str, np.ndarray], ...] = ()
+    #: The volumes of the scene's vegetation, in ``geometry.vegetation`` order.
+    vegetation: tuple[PlantShape, ...] = ()
 
     def zone_at(self, points: np.ndarray) -> np.ndarray:
         """(n,) the index of the zone each point (n, 2 or 3) lies in, or -1."""
@@ -122,6 +128,98 @@ class Layout:
 #: The Fresnel zone of a reflection off the ground: where a path through the ground is at
 #: most this many wavelengths longer than the reflected one (the first Fresnel zone).
 FRESNEL_PATH_DIFFERENCE = 0.5
+
+
+@dataclass(frozen=True, eq=False)
+class PlantShape:
+    """The volume of a tree, a hedge or a belt of trees (m): with an ``outline`` (n, 2),
+    the polygon raised from ``low`` to ``high`` (z); with a ``centre`` (3,), a lone
+    tree's crown, a spheroid ``radius`` across horizontally from ``low`` to ``high``."""
+
+    name: str
+    kind: str  # belt, hedge or tree
+    low: float
+    high: float
+    outline: np.ndarray | None = None
+    centre: np.ndarray | None = None
+    radius: float = 0.0
+
+    @property
+    def half_height(self) -> float:
+        return 0.5 * (self.high - self.low)
+
+    def corners(self) -> np.ndarray:
+        """(k, 3) corners of a box round it."""
+        if self.outline is not None:
+            plan = self.outline
+        else:
+            x, y = self.centre[:2]
+            r = self.radius
+            plan = np.array([[x - r, y - r], [x + r, y + r]])
+        n = len(plan)
+        return np.vstack([np.column_stack([plan, np.full(n, z)]) for z in (self.low, self.high)])
+
+    def inside(self, points: np.ndarray) -> np.ndarray:
+        """Whether each point (..., 3) lies inside."""
+        points = np.asarray(points, dtype=float)
+        if self.outline is None:
+            q = (points - self.centre) / [self.radius, self.radius, self.half_height]
+            return np.einsum("...i,...i->...", q, q) < 1.0
+        flat = points.reshape(-1, 3)
+        within = (flat[:, 2] > self.low) & (flat[:, 2] < self.high)
+        within &= in_polygon(flat[:, :2], self.outline)
+        return within.reshape(points.shape[:-1])
+
+
+def strip(path, width: float) -> np.ndarray:
+    """The outline (n, 2) of a strip ``width`` wide along ``path`` (m, 2): its sides half
+    the width either side, mitred at the bends (at most twice that far out)."""
+    path = np.asarray(path, dtype=float)
+    along = np.diff(path, axis=0)
+    lengths = np.linalg.norm(along, axis=1)
+    scale = max(float(np.ptp(path, axis=0).max()), 1.0)
+    if np.any(lengths <= 1e-9 * scale):
+        k = int(np.argmax(lengths <= 1e-9 * scale))
+        raise ValueError(f"points {k + 1} and {k + 2} are in one place")
+    along /= lengths[:, None]
+    normals = np.column_stack([-along[:, 1], along[:, 0]])
+    offsets = np.vstack([normals[:1], normals[:-1] + normals[1:], normals[-1:]])
+    offsets /= np.maximum(np.linalg.norm(offsets, axis=1), 1e-12)[:, None]
+    # The mitre: as far out as keeps the sides half the width off the path.
+    reach = np.ones(len(path))
+    reach[1:-1] = 1.0 / np.maximum(np.einsum("ij,ij->i", offsets[1:-1], normals[1:]), 0.5)
+    side = 0.5 * width * offsets * reach[:, None]
+    return np.vstack([path + side, (path - side)[::-1]])
+
+
+def vegetation_shapes(geometry, scale: float = 1.0) -> tuple[PlantShape, ...]:
+    """The volumes of ``geometry.vegetation`` (a scene's :class:`Geometry`), in metres
+    (``scale``: the geometry's units in metres) over its ground."""
+    ground = scale * geometry.ground.height
+    shapes = []
+    for name, plant in zip(geometry.vegetation_names(), geometry.vegetation or [], strict=True):
+        low, high = ground + scale * plant.base, ground + scale * plant.height
+        if plant.kind == "tree":
+            x, y = (scale * v for v in plant.tree)
+            centre = np.array([x, y, 0.5 * (low + high)])
+            radius = 0.5 * scale * plant.crown_diameter
+            shapes.append(PlantShape(name, "tree", low, high, centre=centre, radius=radius))
+            continue
+        if plant.kind == "hedge":
+            try:
+                outline = strip(scale * np.asarray(plant.path, dtype=float), scale * plant.width)
+            except ValueError as exc:
+                raise ValueError(f"hedge {name!r}: {exc}") from None
+        else:
+            outline = scale * np.asarray(plant.footprint, dtype=float)
+        problem = plan_problem(outline)
+        if problem is not None:
+            words = problem.replace("a floor plan", "an outline").replace(
+                "the floor plan", "the outline"
+            )
+            raise ValueError(f"{plant.kind} {name!r}: {words}")
+        shapes.append(PlantShape(name, plant.kind, low, high, outline=outline))
+    return tuple(shapes)
 
 
 def _sunflower(count: int) -> np.ndarray:
@@ -475,7 +573,7 @@ def outdoor_mesh(geometry, objects: RoomMesh | None = None, scale: float = 1.0):
     metres; ``scale`` the geometry's units in metres."""
     spec = geometry.ground
     ground = scale * spec.height
-    parts: list[tuple[str, RoomMesh]] = []
+    parts: list[tuple[str, RoomMesh | None]] = []
     buildings = []
     for name, building in zip(geometry.building_names(), geometry.buildings or [], strict=True):
         footprint = scale * np.asarray(building.footprint, dtype=float)
@@ -497,11 +595,17 @@ def outdoor_mesh(geometry, objects: RoomMesh | None = None, scale: float = 1.0):
     for what, corners in zip([w for w, _ in parts], points, strict=True):
         if corners[:, 2].min() < ground - ON_GROUND_M:
             raise ValueError(f"{what} reaches below the ground (z = {ground:g} m)")
+    plants = vegetation_shapes(geometry, scale) if geometry.vegetation else ()
+    parts += [(f"{p.kind} {p.name!r}", None) for p in plants]
+    points += [p.corners() for p in plants]
     top = max((float(p[:, 2].max()) for p in points), default=ground)
     if spec.extent is not None:
         (x0, y0), (x1, y1) = (scale * np.asarray(corner, dtype=float) for corner in spec.extent)
-        for what, corners in zip([w for w, _ in parts], points, strict=True):
+        for (what, mesh), corners in zip(parts, points, strict=True):
             lo, hi = corners[:, :2].min(axis=0), corners[:, :2].max(axis=0)
+            # Vegetation may run on past the edge (a wood the ground cuts off).
+            if mesh is None:
+                continue
             if lo[0] <= x0 or lo[1] <= y0 or hi[0] >= x1 or hi[1] >= y1:
                 raise ValueError(f"{what} reaches past the edge of the ground (its extent)")
     else:
@@ -519,8 +623,10 @@ def outdoor_mesh(geometry, objects: RoomMesh | None = None, scale: float = 1.0):
         )
     extent = (float(x0), float(y0), float(x1), float(y1))
     zones = zone_polygons(geometry, extent, scale)
-    mesh = RoomMesh.concatenate([ground_box(extent, ground, sky, zones), *[m for _, m in parts]])
-    return mesh, Layout(extent, float(ground), float(sky), tuple(buildings), zones)
+    mesh = RoomMesh.concatenate(
+        [ground_box(extent, ground, sky, zones), *[m for _, m in parts if m is not None]]
+    )
+    return mesh, Layout(extent, float(ground), float(sky), tuple(buildings), zones, plants)
 
 
 def on_ground(points: np.ndarray, ground: float) -> np.ndarray:

@@ -87,6 +87,8 @@ ESCAPE_COLOUR = "#ffd166"
 MAX_ESCAPES_DRAWN = 400
 #: A simulated and a measured response drawn together.
 COMPARISON_COLOURS = ("#4da3ff", "#ffd166")
+#: Trees, hedges and belts of trees outdoors.
+VEGETATION_COLOUR = "#5cb85c"
 
 
 def _outline(part: pyvista.PolyData) -> pyvista.PolyData:
@@ -304,6 +306,35 @@ def extent_polydata(source, radius: float) -> pyvista.PolyData | None:
     return pv.PolyData(corners, faces=[4, 0, 1, 2, 3])
 
 
+def vegetation_polydata(shape) -> pyvista.PolyData:
+    """The volume of a tree, a hedge or a belt of trees
+    (:class:`~acoustic_spaces.geometry.outdoor.PlantShape`) as a closed surface: a lone
+    tree's crown, or an outline raised from its bottom to its top."""
+    pv = _pyvista()
+    if shape.outline is None:
+        crown = pv.Sphere(radius=1.0, theta_resolution=24, phi_resolution=16)
+        axes = np.array([shape.radius, shape.radius, shape.half_height])
+        crown.points = np.asarray(crown.points) * axes + shape.centre
+        return crown
+    n = len(shape.outline)
+    bottom = np.column_stack([shape.outline, np.full(n, shape.low)])
+    plan = pv.PolyData(bottom, faces=[n, *range(n)])
+    return plan.extrude((0.0, 0.0, shape.high - shape.low), capping=True).triangulate()
+
+
+def plot_vegetation(room: Room, plotter: pyvista.Plotter, *, render: bool = True) -> list:
+    """Add an outdoor ``room``'s trees, hedges and belts of trees to ``plotter``, as
+    see-through green volumes; returns their legend entries."""
+    shapes = room.outdoor.vegetation if room.outdoor is not None else ()
+    for shape in shapes:
+        part = vegetation_polydata(shape)
+        plotter.add_mesh(part, color=VEGETATION_COLOUR, opacity=0.3, pickable=False, render=render)
+        plotter.add_mesh(
+            _outline(part), color=VEGETATION_COLOUR, line_width=1.0, pickable=False, render=render
+        )
+    return [[_("vegetation"), VEGETATION_COLOUR]] if shapes else []
+
+
 def plot_room(
     room: Room,
     plotter: pyvista.Plotter | None = None,
@@ -350,6 +381,7 @@ def plot_room(
         plotter.add_mesh(part, color=UNASSIGNED_COLOUR, opacity=max(opacity, 0.8))
         plotter.add_mesh(_outline(part), color=EDGE_COLOUR, line_width=1.5)
         legend.append([_("no material"), UNASSIGNED_COLOUR])
+    legend.extend(plot_vegetation(room, plotter))
 
     lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
     size = float(np.linalg.norm(hi - lo)) or 1.0
@@ -1249,9 +1281,10 @@ def plot_coverage(
 
 
 def _floor_plan(ax, room: Room) -> None:
-    """The walls seen from above, as thin lines."""
+    """The walls seen from above, as thin lines, and any vegetation's outlines."""
     from matplotlib.collections import LineCollection
 
+    _vegetation_plan(ax, room)
     mesh = room.mesh
     walls = np.abs(mesh.face_normals()[:, 2]) < 0.25
     tri = mesh.triangles[walls][:, :, :2]
@@ -1264,6 +1297,20 @@ def _floor_plan(ax, room: Room) -> None:
     rows = np.arange(len(tri))
     segments = np.stack([tri[rows, best[:, 0]], tri[rows, best[:, 1]]], axis=1)
     ax.add_collection(LineCollection(segments, colors=EDGE_COLOUR, linewidths=0.8, alpha=0.6))
+
+
+def _vegetation_plan(ax, room: Room) -> None:
+    """The outlines of an outdoor room's trees, hedges and belts of trees, seen from
+    above, as dashed green lines."""
+    from matplotlib.patches import Ellipse, Polygon
+
+    for shape in room.outdoor.vegetation if room.outdoor is not None else ():
+        style = dict(fill=False, edgecolor=VEGETATION_COLOUR, linestyle="--", linewidth=1.0)
+        if shape.outline is None:
+            size = 2.0 * shape.radius
+            ax.add_patch(Ellipse(shape.centre[:2], size, size, **style))
+        else:
+            ax.add_patch(Polygon(shape.outline, closed=True, **style))
 
 
 def plot_map(

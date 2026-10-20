@@ -2020,6 +2020,10 @@ msgstr ""
 "geselecteerd"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Remove building"
+msgstr "Gebouw verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Barriers"
 msgstr "Geluidsschermen"
 
@@ -2050,12 +2054,62 @@ msgstr ""
 "geselecteerd"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Remove building"
-msgstr "Gebouw verwijderen"
-
-#: acoustic_spaces/gui/inspector.py
 msgid "Remove barrier"
 msgstr "Geluidsscherm verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Vegetation"
+msgstr "Vegetatie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Shape"
+msgstr "Vorm"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Plants"
+msgstr "Planten"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The name of the tree, hedge or belt of trees: no surface, a volume that "
+"sound passes through, losing some of itself"
+msgstr ""
+"De naam van de boom, de haag of de bomenstrook: geen oppervlak, maar een "
+"volume waar het geluid doorheen gaat en waarbij het een deel van zichzelf "
+"verliest"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high its top is over the ground, in the units the title shows"
+msgstr ""
+"De hoogte van de bovenkant boven de grond, in de eenheden die in de titel "
+"staan"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A belt of trees (a footprint raised from the ground), a hedge (a path of a "
+"width) or a lone tree's crown (set in the scene file)"
+msgstr ""
+"Een bomenstrook (een grondvlak dat vanaf de grond is opgetrokken), een haag "
+"(een tracé met een breedte) of de kroon van een losse boom (ingesteld in het "
+"scènebestand)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"What fills it: foliage, which takes so many dB per metre from sound passing "
+"through, and stems, which scatter it sideways"
+msgstr ""
+"Waarmee het gevuld is: gebladerte, dat het geluid dat erdoorheen gaat zoveel "
+"dB per meter ontneemt, en stammen, die het zijwaarts verstrooien"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected vegetation, or the last one when none is selected"
+msgstr ""
+"De geselecteerde vegetatie verwijderen, of de laatste als er geen is "
+"geselecteerd"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove vegetation"
+msgstr "Vegetatie verwijderen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Ground zones"
@@ -2206,6 +2260,39 @@ msgstr "gebouw verwijderen"
 #: acoustic_spaces/gui/inspector.py
 msgid "remove barrier"
 msgstr "geluidsscherm verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove vegetation"
+msgstr "vegetatie verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "belt, {count} corners"
+msgstr "strook, {count} hoeken"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "hedge {width} wide, {count} points"
+msgstr "haag van {width} breed, {count} punten"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "tree, crown {diameter} across"
+msgstr "boom, kroon met een diameter van {diameter}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "dense foliage"
+msgstr "dicht gebladerte"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "foliage {values} dB/m"
+msgstr "gebladerte {values} dB/m"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count} stems/m², {diameter} m across"
+msgstr "{count} stammen/m², {diameter} m doorsnede"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2790,10 +2877,6 @@ msgid ""
 msgstr ""
 "De lijn of het oppervlak bestaat uit deze puntbronnen; ze delen het "
 "geluidsvermogen"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Shape"
-msgstr "Vorm"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Length"
@@ -4501,6 +4584,10 @@ msgid "gap {number}: {share:.1f} %"
 msgstr "gat {number}: {share:.1f} %"
 
 #: acoustic_spaces/viz.py
+msgid "vegetation"
+msgstr "vegetatie"
+
+#: acoustic_spaces/viz.py
 msgid "reflections"
 msgstr "reflecties"
 
@@ -5268,6 +5355,35 @@ msgstr ""
 "steunluidsprekers zijn dus alleen nuttig waar het directe geluid van de "
 "kolommen is verzwakt. `inspect` vermeldt het geluidsvermogen van elke bron "
 "inclusief het ingangssignaal."
+
+#: examples/tree_belt/scene.yaml
+msgctxt "example"
+msgid "Road behind a belt of trees"
+msgstr "Weg achter een bomenstrook"
+
+#: examples/tree_belt/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: traffic on a road heard from two gardens in front of a row of "
+"houses, 55 m away over grass: one behind a belt of trees 30 m deep, the "
+"other across an open meadow. The belt's foliage takes ISO 9613-2's "
+"dense-foliage rates from the sound passing through it (up to 0.12 dB per "
+"metre at 8 kHz) and its trunks scatter some of it aside, into the late "
+"sound; a lone oak stands by the open garden. Trees cut less than a wall "
+"would: up to about 8 dB in the highest bands, under 1 dB at the lowest. "
+"Behind them much of the sound comes scattered, with the late rays, so the "
+"scene traces more of them than the default."
+msgstr ""
+"Buiten: verkeer op een weg, gehoord vanuit twee tuinen voor een rij huizen, "
+"55 m verderop boven gras: de ene achter een bomenstrook van 30 m diep, de "
+"andere aan de overkant van een open weiland. Het gebladerte van de strook "
+"neemt het geluid dat erdoorheen gaat de waarden voor dicht gebladerte uit "
+"ISO 9613-2 af (tot 0.12 dB per meter bij 8 kHz) en de stammen verstrooien er "
+"een deel van zijwaarts, naar het late geluid; een losse eik staat bij de "
+"open tuin. Bomen dempen minder dan een muur: tot ongeveer 8 dB in de hoogste "
+"banden, minder dan 1 dB in de laagste. Achter de bomen komt een groot deel "
+"van het geluid verstrooid aan, met de late stralen, dus volgt de scène meer "
+"stralen dan standaard."
 
 #: examples/workshop/scene.yaml
 msgctxt "example"

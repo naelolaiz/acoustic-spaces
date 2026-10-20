@@ -112,6 +112,34 @@
   `validation/outdoor_propagation.py --turbulence` adds eddies to the Hannover cases.
 - Scenes without turbulence give the same results as before, bit for bit.
 
+**Vegetation**
+
+- `geometry.vegetation` (outdoor scenes): belts of trees and woods (a footprint raised
+  to a height), hedges (a path of a width, mitred at its bends) and lone trees (a
+  spheroid crown), which sound passes through. Each holds foliage, ISO 9613-2's `dense`
+  preset (the default, all absorbed) or an attenuation per band with an albedo and a
+  mean cosine of scattering, and stems, upright rigid cylinders by their number per m²
+  and their diameter, which scatter by the exact series and only sound's horizontal
+  share. Overlapping volumes add up, and a volume may run past the ground's edge.
+- The early paths lose what the plants take along each leg (Beer-Lambert), the
+  parabolic equation's sound what its direct path loses. The late rays absorb along
+  their way and scatter in the plants at random: foliage by Henyey and Greenstein's
+  phase function, with its share sent straight to each listener, stems sideways,
+  keeping the slope, with what the next leg carries through each listener's sphere
+  averaged over the turns; in several bands at once each band keeps its own
+  expectation. The rain from every reflection loses what the plants take on its way.
+  Coverage maps take both. Late rays through vegetation are traced on the CPU (the GPU
+  devices fall back to it); the wave solver's bands leave vegetation out.
+- The editor's **Outdoors** group lists the vegetation (its shape, what fills it, its
+  heights, and **Remove**); the 3D view, `view` and the Blender export draw it in
+  see-through green, coverage maps outline it, and `inspect` gives what sound loses per
+  metre through each.
+- New example: `tree_belt`, traffic on a road heard behind a belt of trees and across an
+  open meadow. New validation: `validation/vegetation.py`, the late rays against a
+  separate particle simulation through a slab of foliage or stems: within a few tenths
+  of a percent.
+- Scenes without vegetation give the same results as before, bit for bit.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

@@ -8,6 +8,7 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
+#include <cmath>
 #include <complex>
 #include <cstdint>
 #include <stdexcept>
@@ -315,6 +316,68 @@ bool atmosphere(const char *name, const Points &rows, const InArray &wind_direct
     return true;
 }
 
+// The plants of an outdoor stochastic run, into `out` (see vegetation.hpp): rows of 8
+// per volume and medium in it (kind 0, medium, low, high, first corner in outline,
+// corners, 0, 0 for an upright prism; kind 1, medium, x, y, z, horizontal and vertical
+// semi-axes, 0 for a spheroid), the prisms' corners (x, y), and each medium's
+// absorption, scattering and mean cosine per band and whether it stands upright.
+// False with no rows (None): no plants.
+bool vegetation(const char *name, std::size_t bands, const Matrix &rows, const Matrix &outline,
+                const Matrix &absorption, const Matrix &scattering, const Matrix &asymmetry,
+                const Flags &upright, as::Vegetation &out) {
+    if (!rows.is_valid() || rows.shape(0) == 0) return false;
+    const std::string fn = name;
+    const auto bad = [&](const char *what) {
+        return std::invalid_argument(fn + ": " + what);
+    };
+    if (!outline.is_valid() || !absorption.is_valid() || !scattering.is_valid() ||
+        !asymmetry.is_valid() || !upright.is_valid()) {
+        throw bad("plants need plant_outline, plant_absorption, plant_scattering, "
+                  "plant_asymmetry and plant_upright");
+    }
+    const std::size_t media = upright.shape(0);
+    if (rows.shape(1) != 8 || outline.shape(1) != 2 || absorption.shape(0) != media ||
+        scattering.shape(0) != media || asymmetry.shape(0) != media ||
+        absorption.shape(1) != bands || scattering.shape(1) != bands ||
+        asymmetry.shape(1) != bands) {
+        throw bad("plants must have rows of 8, plant_outline rows of (x, y), and one row "
+                  "of plant_absorption, plant_scattering and plant_asymmetry per medium, "
+                  "with one value per band");
+    }
+    out.bands = bands;
+    out.outline.assign(outline.data(), outline.data() + outline.size());
+    out.absorption.assign(absorption.data(), absorption.data() + absorption.size());
+    out.scattering.assign(scattering.data(), scattering.data() + scattering.size());
+    out.asymmetry.assign(asymmetry.data(), asymmetry.data() + asymmetry.size());
+    out.upright.assign(upright.data(), upright.data() + media);
+    const auto whole = [&](double v) {
+        if (!(v >= 0.0) || v != std::floor(v) || v > 1e12) throw bad("bad plants row");
+        return static_cast<std::size_t>(v);
+    };
+    for (std::size_t i = 0; i < rows.shape(0); ++i) {
+        as::Vegetation::Shape shape;
+        shape.kind = static_cast<int>(whole(rows(i, 0)));
+        shape.medium = whole(rows(i, 1));
+        if (shape.kind == 0) {
+            shape.z0 = rows(i, 2);
+            shape.z1 = rows(i, 3);
+            shape.first = whole(rows(i, 4));
+            shape.count = whole(rows(i, 5));
+        } else {
+            shape.centre = {rows(i, 2), rows(i, 3), rows(i, 4)};
+            shape.radius = rows(i, 5);
+            shape.half_height = rows(i, 6);
+        }
+        out.shapes.push_back(shape);
+    }
+    if (!out.prepare()) {
+        throw bad("plants must be prisms of 3 or more corners between rising heights or "
+                  "spheroids of positive size, each with a medium, absorption and scattering "
+                  "not negative and mean cosines between -1 and 1");
+    }
+    return true;
+}
+
 // The rays trace_stochastic sends from its source: for each of the random streams
 // first_ray .. first_ray + rays - 1, the direction its ray leaves in (rays x 3) and the
 // source's energy weights that way (rays x bands, before sharing the energy out).
@@ -385,7 +448,9 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
                            std::size_t max_split, std::size_t max_family, InArray room_level,
                            Indices face_group, std::size_t groups, double moment_time_step,
                            Points atmosphere_rows, InArray wind_direction, double ground,
-                           double chord_sagitta) {
+                           double chord_sagitta, Matrix plants, Matrix plant_outline,
+                           Matrix plant_absorption, Matrix plant_scattering,
+                           Matrix plant_asymmetry, Flags plant_upright) {
     as::StochasticScene scene =
         stochastic_scene("trace_stochastic", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
@@ -396,6 +461,11 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
         scene.atmosphere = &bending;
     }
     const std::size_t bands = scene.bands;
+    as::Vegetation greenery;
+    if (vegetation("trace_stochastic", bands, plants, plant_outline, plant_absorption,
+                   plant_scattering, plant_asymmetry, plant_upright, greenery)) {
+        scene.vegetation = &greenery;
+    }
     scene.receivers = points(receivers);
     scene.directions = points(directions);
     if (groups > 0) {
@@ -499,7 +569,9 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
                     std::size_t threads, double window_time_step, std::uint64_t first_ray,
                     InArray split_target, double split_ratio, std::size_t max_split,
                     std::size_t max_family, InArray room_level, Points atmosphere_rows,
-                    InArray wind_direction, double ground, double chord_sagitta) {
+                    InArray wind_direction, double ground, double chord_sagitta, Matrix plants,
+                    Matrix plant_outline, Matrix plant_absorption, Matrix plant_scattering,
+                    Matrix plant_asymmetry, Flags plant_upright) {
     as::StochasticScene scene =
         stochastic_scene("trace_map", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
@@ -510,6 +582,11 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
         scene.atmosphere = &bending;
     }
     const std::size_t bands = scene.bands;
+    as::Vegetation greenery;
+    if (vegetation("trace_map", bands, plants, plant_outline, plant_absorption,
+                   plant_scattering, plant_asymmetry, plant_upright, greenery)) {
+        scene.vegetation = &greenery;
+    }
     if (origin.shape(0) != 2) throw std::invalid_argument("trace_map: origin must be (x, y)");
     as::MapGrid &map = scene.map;
     map.x0 = origin(0);
@@ -720,6 +797,11 @@ NB_MODULE(_native, m) {
           nb::arg("groups"), nb::arg("moment_time_step"),
           nb::arg("atmosphere").none() = nb::none(), nb::arg("wind_direction").none() = nb::none(),
           nb::arg("ground") = 0.0, nb::arg("chord_sagitta") = 0.02,
+          nb::arg("plants").none() = nb::none(), nb::arg("plant_outline").none() = nb::none(),
+          nb::arg("plant_absorption").none() = nb::none(),
+          nb::arg("plant_scattering").none() = nb::none(),
+          nb::arg("plant_asymmetry").none() = nb::none(),
+          nb::arg("plant_upright").none() = nb::none(),
           "Stochastic ray tracing: (energy[r, band, bin], directional[r, dir, band, bin], "
           "moments[r, term, band, moment bin], escaped rays, ray_energy[window], "
           "reflections[window], traced rays); "
@@ -741,7 +823,17 @@ NB_MODULE(_native, m) {
           "products n_i n_j (i <= j); else it is empty. Outdoors, atmosphere (rows of height "
           "above the ground, speed of sound in still air and wind speed, from height 0 up; "
           "None: straight rays) with wind_direction (x, y, unit) and ground (z) bends the "
-          "rays, followed in chords within chord_sagitta (m) of their arcs.");
+          "rays, followed in chords within chord_sagitta (m) of their arcs. Plants (None: "
+          "none) absorb and scatter the rays: rows of 8 per volume and medium in it (kind "
+          "0, medium, low, high, first corner in plant_outline, corners, 0, 0 for a polygon "
+          "of corners (x, y) raised from low to high; kind 1, medium, x, y, z, horizontal "
+          "and vertical semi-axes, 0 for a spheroid), filled with media whose absorption "
+          "and scattering per metre (energy) and mean cosine of scattering per band are "
+          "the rows of plant_absorption, plant_scattering and plant_asymmetry (media x "
+          "bands); plant_upright (one per medium) marks stems, met by the horizontal share "
+          "of a ray and scattering it sideways, keeping its slope: with rain, they send "
+          "each receiver what the ray's next leg carries through its sphere, averaged over "
+          "the turns.");
 
     m.def("ray_starts", &ray_starts, nb::arg("directivity_a"), nb::arg("orientation"),
           nb::arg("directivity_table"), nb::arg("bands"), nb::arg("rays"), nb::arg("first_ray"),
@@ -774,6 +866,11 @@ NB_MODULE(_native, m) {
           nb::arg("max_family"), nb::arg("room_level"),
           nb::arg("atmosphere").none() = nb::none(), nb::arg("wind_direction").none() = nb::none(),
           nb::arg("ground") = 0.0, nb::arg("chord_sagitta") = 0.02,
+          nb::arg("plants").none() = nb::none(), nb::arg("plant_outline").none() = nb::none(),
+          nb::arg("plant_absorption").none() = nb::none(),
+          nb::arg("plant_scattering").none() = nb::none(),
+          nb::arg("plant_asymmetry").none() = nb::none(),
+          nb::arg("plant_upright").none() = nb::none(),
           "Stochastic ray tracing onto a coverage map: (energy[point, band, bin], escaped "
           "rays, ray_energy[window], reflections[window], traced rays). point (ny x nx x "
           "layers) holds the map point of each column of width cell from origin (x, y), "

@@ -6,7 +6,8 @@ another program, [pyroomacoustics](https://github.com/LCAV/pyroomacoustics), and
 measurements in two real rooms, how edge diffraction and the reflection off a porous
 ground compare with the exact solution, how sound outdoors compares with measurements
 up to 845 m away, how its turbulence compares with a parabolic equation through random
-eddies, and how much of a block's time the real-time convolver needs. It ends with what has not been validated yet.
+eddies, how its rays through vegetation compare with a separate particle simulation,
+and how much of a block's time the real-time convolver needs. It ends with what has not been validated yet.
 
 ## Checks against theory, on every change
 
@@ -214,6 +215,15 @@ request and checks:
   the same as a ground of its own, and the change in between smooth; and the wave
   solver's fit to an impedance within 0.05 of its reflection factor, from normal to
   near grazing incidence, and within 0.01 of its absorption;
+- vegetation: ISO 9613-2's dense foliage to its table, a rigid cylinder's scattering
+  against the exact series' small and large limits, and the depth through belts, hedges
+  mitred at their bends and crowns; the early paths losing exp(-Σ μ l) along their legs
+  to 1e-9; the late rays losing what a slab absorbs as Beer-Lambert has it (within
+  0.3 %), and upright stems meeting sound by its horizontal share (sound going up
+  through a layer of them barely touches them); two bands traced with one set of rays
+  as each traced alone
+  (within 3 %); the rain of foliage and of stems against the detector spheres; and
+  scenes without vegetation unchanged;
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
@@ -868,6 +878,57 @@ At these points, without the eddies the shadow sinks 49 to 68 dB below the free 
 from 500 Hz; through them it stays 11 to 26 dB below, and the engine follows within 3 dB.
 Only these heights and these two profiles were checked.
 
+## Vegetation against a particle simulation
+
+`validation/vegetation.py` checks the late rays through vegetation against a particle
+simulation written apart from the engine, in numpy: a source in the middle of a box
+200 m across whose walls absorb everything, a slab of plants from x = 10 to 40 m across
+it, and three receivers, spheres 10 m in radius 50 m from the source, through the slab
+(+x), beside it (+y) and behind the source (-x). The particles go straight to their
+next scattering, drawn at the medium's rate, and leave in a direction drawn from its
+phase function. Both count the energy in the spheres by the length of track through
+them, and as the engine's rain does: next-event estimates from every scattering in
+foliage, and from every scattering off stems the track the next leg would have through
+each sphere, averaged over the turns. Each run also sends the same particles through
+empty air, and the table gives its energy less that run's plus the exact free field's,
+so the direct sound's own randomness drops out. Energy over the free field's at 50 m,
+mean ± standard error of 16 runs of a million particles:
+
+| medium | receiver | reference, spheres | engine, spheres | reference, rain | engine, rain |
+|---|---|---|---|---|---|
+| none (exact 1.008) | through | 1.008 ± 0.002 | 1.010 ± 0.002 | - | - |
+| none (exact 1.008) | beside | 1.003 ± 0.003 | 1.011 ± 0.003 | - | - |
+| none (exact 1.008) | behind | 1.009 ± 0.002 | 1.006 ± 0.002 | - | - |
+| isotropic | through | 0.997 ± 0.002 | 0.995 ± 0.003 | 0.990 ± 0.002 | 0.988 ± 0.002 |
+| isotropic | beside | 1.418 ± 0.002 | 1.419 ± 0.002 | 1.418 ± 0.000 | 1.418 ± 0.000 |
+| isotropic | behind | 1.204 ± 0.002 | 1.202 ± 0.001 | 1.202 ± 0.000 | 1.202 ± 0.000 |
+| forward | through | 0.737 ± 0.002 | 0.734 ± 0.003 | 0.730 ± 0.001 | 0.732 ± 0.002 |
+| forward | beside | 1.103 ± 0.001 | 1.102 ± 0.001 | 1.098 ± 0.000 | 1.098 ± 0.000 |
+| forward | behind | 1.030 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 |
+| stems | through | 0.685 ± 0.003 | 0.682 ± 0.002 | 0.685 ± 0.002 | 0.682 ± 0.001 |
+| stems | beside | 1.254 ± 0.001 | 1.253 ± 0.001 | 1.254 ± 0.001 | 1.254 ± 0.001 |
+| stems | behind | 1.187 ± 0.001 | 1.185 ± 0.001 | 1.186 ± 0.000 | 1.185 ± 0.000 |
+| two bands, band 1 | through | 0.992 ± 0.002 | 0.995 ± 0.003 | 0.983 ± 0.001 | 0.988 ± 0.001 |
+| two bands, band 1 | beside | 1.418 ± 0.002 | 1.416 ± 0.002 | 1.417 ± 0.000 | 1.418 ± 0.000 |
+| two bands, band 1 | behind | 1.205 ± 0.001 | 1.200 ± 0.002 | 1.201 ± 0.000 | 1.202 ± 0.000 |
+| two bands, band 2 | through | 0.735 ± 0.002 | 0.736 ± 0.002 | 0.730 ± 0.001 | 0.732 ± 0.001 |
+| two bands, band 2 | beside | 1.101 ± 0.000 | 1.101 ± 0.000 | 1.098 ± 0.000 | 1.098 ± 0.000 |
+| two bands, band 2 | behind | 1.031 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 |
+
+The four media: foliage that scatters every way alike, 0.03 per metre; foliage that
+scatters forwards (mean cosine 0.6), 0.02 per metre, and absorbs 0.01; stems, 0.03 per
+metre of horizontal travel, turning sound by a mean cosine of -0.3; and the first two
+in two bands at once, which the engine traces with one set of rays. The engine agrees
+with the particles within 0.54 % through the slab, beside it and behind the source,
+with the spheres and with the rain: at most three of their standard errors, and the
+particles' own runs differ as much from one set of seeds to another (0.990 and 0.983
+through the slab, rain, the same foliage alone and in two bands). Next to the slab
+the rain gives a little less than the spheres in both programs alike, as it takes
+the scattered sound at the sphere's centre and the spheres its mean over the sphere.
+Beside and behind the slab the rain is steadier than the spheres. Only a slab was
+checked, and against a simulation of the same model, not against measurements
+through trees.
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -1098,9 +1159,12 @@ its peak (single precision).
   fine).
 - **Outdoor propagation** is checked against geometry, closed forms, the exact solution
   for the reflection off a ground and one set of measurements, a wind turbine up to 845
-  m away in light winds. The ground is flat, and vegetation is not modelled (see
+  m away in light winds. The ground is flat (see
   [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)); strong winds and temperature
   gradients, where they matter most, have not been compared with measurements.
+  Vegetation is checked against a particle simulation of the same model, not against
+  measurements through trees; its foliage takes ISO 9613-2's rates, which the
+  standard gives for depths of 20 to 200 m.
   Turbulence is checked against a parabolic equation through random eddies in two
   dimensions, with the source and the listener near the ground, not against
   measurements; how much the sound flickers over time is not checked against either.
@@ -1123,6 +1187,7 @@ python validation/ground_reflection.py --wave --parabolic --json ground.json
 python validation/outdoor_propagation.py --json outdoor.json --plots docs/validation
 python validation/outdoor_propagation.py --turbulence moderate
 python validation/turbulence.py --json turbulence.json
+python validation/vegetation.py --json vegetation.json
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
@@ -1135,8 +1200,9 @@ python validation/bras_validation.py --materials initial --calibrate LS1 --plots
 The cross-check takes about 20 minutes on 4 cores, the benchmark about 2 minutes, the
 wave solver's checks about 3.5 minutes (both stencils), the ground's about 7.5 (1.5 of
 them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5
-(3 with turbulence), the turbulence's about 7 and each BRAS run about 30 minutes (85 in
-third-octave bands, or half that per room with `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
+(3 with turbulence), the turbulence's about 7, the vegetation's about 5 and each BRAS
+run about 30 minutes (85 in third-octave bands, or half that per room with
+`--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
 (`--pra-runs`); the means still move by a few percent from one call to the next, and the
 differences in the tables with them. Other seeds move this package's numbers by a few

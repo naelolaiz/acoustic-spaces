@@ -26,6 +26,7 @@ from acoustic_spaces.engine import ray_device
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.refracted import bending
+from acoustic_spaces.engine.vegetation import plant_arguments
 
 _DECAY = 6.0 * math.log(10.0)  # 60 dB in nepers of energy
 
@@ -474,6 +475,7 @@ def stochastic_energy(
                 "groups": n_groups,
                 "moment_time_step": float(moment_step),
                 **bent,
+                **plant_arguments(model, band),
             }
             if not plans:
                 plans.append(ray_device.choose(device, values))
@@ -601,6 +603,7 @@ def stochastic_map_energy(
                 MAX_FAMILY,
                 level,
                 **bent,
+                **plant_arguments(model, band),
             )
             return [energy], *rest
 

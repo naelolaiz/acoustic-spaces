@@ -509,8 +509,9 @@ acoustic-spaces info                            # the default, and what auto tak
   let them follow the default.
 
 Sound through partitions and openings, the face groups of material calibration,
-coverage maps and the rays bent by [wind and temperature](outdoor.md#wind-and-temperature)
-outdoors are traced on the CPU whatever the setting, and so are runs whose results
+coverage maps, the rays bent by [wind and temperature](outdoor.md#wind-and-temperature)
+outdoors and those through [vegetation](outdoor.md#vegetation) are traced on the CPU
+whatever the setting, and so are runs whose results
 the GPU's buffers cannot hold (many listeners and arrival directions over a long
 response). `simulate --late-device` overrides the setting; the editor's Simulation page
 has it as "Run on" under Late reverberation. When it is not `cpu`, the progress messages

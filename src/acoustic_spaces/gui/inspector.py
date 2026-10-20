@@ -900,42 +900,64 @@ class GeometryPage(Page):
         )
         ground_layout.addWidget(self.extent)
         self.parts = {}
-        for kind, title, count, tips in (
+        for kind, title, columns, tips, remove_text in (
             (
                 "buildings",
                 _("Buildings"),
-                _("Corners"),
+                (_("Name"), _("Height"), _("Corners")),
                 (
                     _("The building's name; its surfaces are named after it"),
                     _("How high the building is, ground to roof, in the units the title shows"),
                     _("How many corners the building's footprint has (set in the scene file)"),
                     _("Remove the selected building, or the last one when none is selected"),
                 ),
+                _("Remove building"),
             ),
             (
                 "barriers",
                 _("Barriers"),
-                _("Points"),
+                (_("Name"), _("Height"), _("Points")),
                 (
                     _("The barrier's name, which its surfaces carry"),
                     _("How high the barrier is over the ground, in the units the title shows"),
                     _("How many points the barrier's path has (set in the scene file)"),
                     _("Remove the selected barrier, or the last one when none is selected"),
                 ),
+                _("Remove barrier"),
+            ),
+            (
+                "vegetation",
+                _("Vegetation"),
+                (_("Name"), _("Height"), _("Shape"), _("Plants")),
+                (
+                    _(
+                        "The name of the tree, hedge or belt of trees: no surface, a volume "
+                        "that sound passes through, losing some of itself"
+                    ),
+                    _("How high its top is over the ground, in the units the title shows"),
+                    _(
+                        "A belt of trees (a footprint raised from the ground), a hedge (a path "
+                        "of a width) or a lone tree's crown (set in the scene file)"
+                    ),
+                    _(
+                        "What fills it: foliage, which takes so many dB per metre from sound "
+                        "passing through, and stems, which scatter it sideways"
+                    ),
+                    _("Remove the selected vegetation, or the last one when none is selected"),
+                ),
+                _("Remove vegetation"),
             ),
         ):
             ground_layout.addWidget(QLabel(title))
-            table = QTableWidget(0, 3)
-            table.setHorizontalHeaderLabels([_("Name"), _("Height"), count])
-            for col in range(3):
+            table = QTableWidget(0, len(columns))
+            table.setHorizontalHeaderLabels(list(columns))
+            for col in range(len(columns)):
                 table.horizontalHeaderItem(col).setToolTip(tips[col])
             table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
             table.itemChanged.connect(lambda item, kind=kind: self._part_height(kind, item))
             ground_layout.addWidget(table)
-            remove = QPushButton(
-                _("Remove building") if kind == "buildings" else _("Remove barrier")
-            )
-            remove.setToolTip(tips[3])
+            remove = QPushButton(remove_text)
+            remove.setToolTip(tips[-1])
             remove.clicked.connect(lambda _checked=False, kind=kind: self._remove_part(kind))
             ground_layout.addWidget(remove)
             self.parts[kind] = table
@@ -1154,13 +1176,17 @@ class GeometryPage(Page):
         for kind, names, items in (
             ("buildings", geometry.building_names(), geometry.buildings or []),
             ("barriers", geometry.barrier_names(), geometry.barriers or []),
+            ("vegetation", geometry.vegetation_names(), geometry.vegetation or []),
         ):
             table = self.parts[kind]
             table.blockSignals(True)
             table.setRowCount(len(items))
             for row, (name, item) in enumerate(zip(names, items, strict=True)):
-                points = item.footprint if kind == "buildings" else item.path
-                for col, text in enumerate((name, number(item.height), str(len(points)))):
+                if kind == "vegetation":
+                    rest = (_plant_shape(item), _plant_fill(item))
+                else:
+                    rest = (str(len(item.footprint if kind == "buildings" else item.path)),)
+                for col, text in enumerate((name, number(item.height), *rest)):
                     cell = QTableWidgetItem(text)
                     cell.setToolTip(table.horizontalHeaderItem(col).toolTip())
                     if col != 1:
@@ -1226,7 +1252,45 @@ class GeometryPage(Page):
             if not items:
                 del data["geometry"][kind]
 
-        self.apply(_("remove building") if kind == "buildings" else _("remove barrier"), change)
+        what = {
+            "buildings": _("remove building"),
+            "barriers": _("remove barrier"),
+            "vegetation": _("remove vegetation"),
+        }
+        self.apply(what[kind], change)
+
+
+def _plant_shape(plant) -> str:
+    """A vegetation volume's shape, in words."""
+    if plant.kind == "belt":
+        return fmt(_("belt, {count} corners"), count=len(plant.footprint))
+    if plant.kind == "hedge":
+        return fmt(
+            _("hedge {width} wide, {count} points"),
+            width=number(plant.width),
+            count=len(plant.path),
+        )
+    return fmt(_("tree, crown {diameter} across"), diameter=number(plant.crown_diameter))
+
+
+def _plant_fill(plant) -> str:
+    """What fills a vegetation volume, in words."""
+    parts = []
+    foliage = plant.foliage
+    if foliage.preset == "dense":
+        parts.append(_("dense foliage"))
+    elif not foliage.bare:
+        values = "/".join(number(v) for v in foliage.attenuation)
+        parts.append(fmt(_("foliage {values} dB/m"), values=values))
+    if plant.stems is not None:
+        parts.append(
+            fmt(
+                _("{count} stems/m², {diameter} m across"),
+                count=number(plant.stems.per_m2),
+                diameter=number(plant.stems.diameter),
+            )
+        )
+    return ", ".join(parts)
 
 
 class SurfacePage(Page):

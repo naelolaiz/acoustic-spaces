@@ -1,0 +1,63 @@
+# Outdoors: traffic on a road heard from two gardens in front of a row of houses, 55 m
+# away over grass: one behind a belt of trees 30 m deep, the other across an open
+# meadow. The belt's foliage takes ISO 9613-2's dense-foliage rates from the sound
+# passing through it (up to 0.12 dB per metre at 8 kHz) and its trunks scatter some of
+# it aside, into the late sound; a lone oak stands by the open garden. Trees cut less
+# than a wall would: up to about 8 dB in the highest bands, under 1 dB at the lowest.
+# Behind them much of the sound comes scattered, with the late rays, so the scene traces
+# more of them than the default.
+name: Road behind a belt of trees
+geometry:
+  ground:
+    extent: [[-90, -30], [90, 90]]
+    sky: 25
+    zones:
+      - name: road
+        polygon: [[-90, -4], [90, -4], [90, 4], [-90, 4]]
+  buildings:
+    - name: houses
+      footprint: [[-60, 64], [60, 64], [60, 74], [-60, 74]]
+      height: 8
+  vegetation:
+    - name: wood
+      footprint: [[-90, 15], [0, 15], [0, 45], [-90, 45]]
+      height: 15
+      foliage: dense
+      stems: {per_m2: 0.08, diameter: 0.3}
+    - name: oak
+      tree: [45, 52]
+      crown_diameter: 10
+      base: 3
+      height: 14
+materials:
+  meadow:
+    impedance: grass
+  asphalt:
+    impedance: asphalt
+  rendered:
+    absorption: [0.02, 0.02, 0.03, 0.03, 0.04, 0.05, 0.05, 0.05]
+    scattering: 0.1
+assignments:
+  ground: meadow
+  road: asphalt
+  houses: rendered
+sources:
+  - name: traffic
+    position: [0, 0, 0.5]
+    orientation: {yaw: 90}
+    line_m: 120
+    spacing_m: 5
+    level_db: 100
+listeners:
+  - name: behind_trees
+    position: [-30, 55, 1.5]
+    orientation: {yaw: -90}
+  - name: open_meadow
+    position: [30, 55, 1.5]
+    orientation: {yaw: -90}
+simulation:
+  early: {method: image_sources, max_order: 1, diffraction: none}
+  late: {method: stochastic_ray_tracing, rays: 200000}
+  ir_length_s: 0.6
+outputs:
+  - mono

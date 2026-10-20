@@ -7,7 +7,8 @@
 // - trace_stochastic: energy-based stochastic ray tracing with diffuse rain, giving
 //   energy per receiver, octave band and time slot (and, optionally, per arrival
 //   direction) for the late part of the response, and optionally over a coverage map.
-//   Outdoors its rays may bend in a refracting atmosphere (atmosphere.hpp).
+//   Outdoors its rays may bend in a refracting atmosphere (atmosphere.hpp), and plants
+//   absorb and scatter them (vegetation.hpp).
 //
 // Units: a source of unit energy; results are time-integrated intensity, so the
 // direct sound at distance r contributes 1 / (4 pi r^2).
@@ -27,6 +28,7 @@
 #include "acoustic_spaces/atmosphere.hpp"
 #include "acoustic_spaces/bvh.hpp"
 #include "acoustic_spaces/vec3.hpp"
+#include "acoustic_spaces/vegetation.hpp"
 
 namespace acoustic_spaces {
 
@@ -400,6 +402,9 @@ struct StochasticScene {
     // absorbs over its length; the rain from a reflection goes straight, in the time
     // the line takes, and none reaches a receiver in the shadow of upward refraction.
     const Atmosphere *atmosphere = nullptr;
+    // Optional, outdoors: plants (prepared, with these bands) that absorb along the rays
+    // and scatter them. The rain on the way to a receiver loses what the plants take.
+    const Vegetation *vegetation = nullptr;
 };
 
 struct StochasticResult {
@@ -470,6 +475,151 @@ inline bool passing_share(const StochasticScene &scene, const Vec3 &origin, cons
         ignore = hit.face;
     }
     return false;
+}
+
+// A straight piece of a ray through plants: where along it the ray scatters, and how
+// much of each band reaches any point of it. Scatterings are drawn at one rate for all
+// bands, each medium's scattering averaged over the bands weighted by the ray's energy;
+// the bands are then weighted by what they meet against that rate (w_b(s) = exp(S(s) -
+// tau_b(s)), S the drawn rate and tau_b the band's absorption and scattering, both
+// integrated to s), so each keeps its expected energy.
+struct Track {
+    std::vector<Vegetation::Span> spans;
+    std::vector<double> cuts;
+    std::vector<double> edges;    // where the rates change, from 0 to the piece's end
+    std::vector<double> drawn;    // at each edge: the drawn rate integrated so far
+    std::vector<double> met;      // edges x bands: tau_b at each edge
+    std::vector<double> rate;     // per medium: the drawn rate per metre of it
+    std::vector<double> chance;   // per span: its medium's drawn rate times its share
+    std::size_t bands = 0;
+    std::size_t scattered = 0;    // the piece between edges collide last scattered in
+
+    // The piece from p along unit d for `length` metres, for a ray with `energy` per
+    // band; false where it meets no plants.
+    bool build(const Vegetation &plants, const Vec3 &p, const Vec3 &d, double length,
+               const double *energy) {
+        plants.spans(p, d, length, spans, cuts);
+        if (spans.empty()) return false;
+        bands = plants.bands;
+        const std::size_t media = plants.media();
+        double total = 0.0;
+        for (std::size_t b = 0; b < bands; ++b) total += energy[b];
+        rate.assign(media, 0.0);
+        for (std::size_t m = 0; m < media && total > 0.0; ++m) {
+            const double *s = plants.scattering.data() + m * bands;
+            for (std::size_t b = 0; b < bands; ++b) rate[m] += energy[b] * s[b];
+            rate[m] /= total;
+        }
+        chance.resize(spans.size());
+        edges.assign({0.0, length});
+        for (std::size_t i = 0; i < spans.size(); ++i) {
+            chance[i] = rate[spans[i].medium] * plants.share(spans[i].medium, d);
+            edges.push_back(spans[i].t0);
+            edges.push_back(spans[i].t1);
+        }
+        std::sort(edges.begin(), edges.end());
+        edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+        drawn.assign(edges.size(), 0.0);
+        met.assign(edges.size() * bands, 0.0);
+        for (std::size_t e = 0; e + 1 < edges.size(); ++e) {
+            const double t0 = edges[e], t1 = edges[e + 1], middle = 0.5 * (t0 + t1);
+            double here = 0.0;
+            double *next = met.data() + (e + 1) * bands;
+            std::copy(met.data() + e * bands, next, next);
+            for (std::size_t i = 0; i < spans.size(); ++i) {
+                const Vegetation::Span &s = spans[i];
+                if (!(s.t0 <= middle && middle <= s.t1)) continue;
+                const double metres = (t1 - t0) * plants.share(s.medium, d);
+                here += chance[i] * (t1 - t0);
+                const double *a = plants.absorption.data() + s.medium * bands;
+                const double *c = plants.scattering.data() + s.medium * bands;
+                for (std::size_t b = 0; b < bands; ++b) next[b] += (a[b] + c[b]) * metres;
+            }
+            drawn[e + 1] = drawn[e] + here;
+        }
+        return true;
+    }
+
+    // Where along the piece the ray scatters, or infinity where it goes through. Draws
+    // from rng only where it may scatter.
+    double collide(Rng &rng) {
+        if (!(drawn.back() > 0.0)) return std::numeric_limits<double>::infinity();
+        const double target = -std::log(1.0 - rng.uniform());
+        if (target >= drawn.back()) return std::numeric_limits<double>::infinity();
+        const auto e = static_cast<std::size_t>(
+            std::upper_bound(drawn.begin(), drawn.end(), target) - drawn.begin() - 1);
+        scattered = e;
+        const double f = (target - drawn[e]) / (drawn[e + 1] - drawn[e]);
+        return std::min(edges[e] + f * (edges[e + 1] - edges[e]), edges[e + 1]);
+    }
+
+    // The weight w_b of each band at s metres along the piece.
+    void weight(double s, double *w) const {
+        const auto found = std::upper_bound(edges.begin(), edges.end(), s);
+        const auto after = static_cast<std::size_t>(found - edges.begin());
+        const std::size_t e = std::min(after == 0 ? 0 : after - 1, edges.size() - 2);
+        const double f = std::clamp((s - edges[e]) / (edges[e + 1] - edges[e]), 0.0, 1.0);
+        const double sampled = drawn[e] + f * (drawn[e + 1] - drawn[e]);
+        const double *a = met.data() + e * bands, *b = a + bands;
+        for (std::size_t k = 0; k < bands; ++k) w[k] = std::exp(sampled - a[k] - f * (b[k] - a[k]));
+    }
+
+    // The medium the ray scatters in where collide had it scatter: one of those there,
+    // at random in proportion to their drawn rates.
+    std::size_t medium(Rng &rng) const {
+        const double middle = 0.5 * (edges[scattered] + edges[scattered + 1]);
+        const auto there = [&](std::size_t i) {
+            return spans[i].t0 <= middle && middle <= spans[i].t1 && chance[i] > 0.0;
+        };
+        double total = 0.0;
+        std::size_t only = 0, count = 0;
+        for (std::size_t i = 0; i < spans.size(); ++i) {
+            if (!there(i)) continue;
+            total += chance[i];
+            only = i;
+            ++count;
+        }
+        if (count <= 1) return spans[only].medium;
+        double pick = rng.uniform() * total;
+        for (std::size_t i = 0; i < spans.size(); ++i) {
+            if (!there(i)) continue;
+            only = i;
+            pick -= chance[i];
+            if (pick < 0.0) break;
+        }
+        return spans[only].medium;
+    }
+};
+
+// Turns over which the stems' rain averages the leg they send through a receiver's
+// sphere.
+constexpr std::size_t kStemTurns = 12;
+
+// Henyey and Greenstein's phase function: the share per steradian of what foliage
+// scatters that goes off at cos(angle) mu to the way the sound went, mean cosine g.
+inline double henyey_greenstein(double mu, double g) {
+    const double q = 1.0 + g * g - 2.0 * g * mu;
+    return (1.0 - g * g) / (4.0 * kPi * q * std::sqrt(q));
+}
+
+// The cosine of an angle drawn from henyey_greenstein with mean cosine g.
+inline double henyey_greenstein_cosine(double g, Rng &rng) {
+    const double u = rng.uniform();
+    if (std::abs(g) < 1e-6) return 1.0 - 2.0 * u;
+    const double s = (1.0 - g * g) / (1.0 - g + 2.0 * g * u);
+    return std::clamp((1.0 + g * g - s * s) / (2.0 * g), -1.0, 1.0);
+}
+
+// The wrapped Cauchy distribution's density at angle phi, mean cosine rho: how stems
+// share out the angles through which they turn sound sideways.
+inline double wrapped_cauchy(double phi, double rho) {
+    return (1.0 - rho * rho) / (2.0 * kPi * (1.0 + rho * rho - 2.0 * rho * std::cos(phi)));
+}
+
+// An angle drawn from wrapped_cauchy with mean cosine rho.
+inline double wrapped_cauchy_angle(double rho, Rng &rng) {
+    const double u = rng.uniform();
+    return 2.0 * std::atan((1.0 - rho) / (1.0 + rho) * std::tan(kPi * (u - 0.5)));
 }
 
 struct Accumulator {
@@ -546,9 +696,10 @@ struct Accumulator {
     // metres from the source at `pos`, to every map slab it passes through. A chord of a
     // bent ray adds `rate` to travelled per metre, and the air absorbs from `path` on,
     // `stretch` metres per metre of chord (path negative: as travelled).
+    // Through plants, `track` (from pos along dir) weights the bands at each point.
     void add_map(const Vec3 &pos, const Vec3 &dir, double length, double travelled,
                  const double *energy, const double *alone, int order, double rate = 1.0,
-                 double path = -1.0, double stretch = 1.0) {
+                 double path = -1.0, double stretch = 1.0, const Track *track = nullptr) {
         const MapGrid &map = scene.map;
         constexpr double kFlat = 1e-12;
         const double inf = std::numeric_limits<double>::infinity();
@@ -617,11 +768,19 @@ struct Accumulator {
                 if (bin >= out.map_bins) continue;
                 const double factor = (b - a) / map.volume[k];
                 double *row = out.map_energy.data() + k * bands * out.map_bins;
+                std::array<double, kMaxBands> weights{};
+                if (track != nullptr) track->weight(middle, weights.data());
                 for (std::size_t band = 0; band < bands; ++band) {
                     // The specular-only share of a covered path is the early stage's.
                     const double share = covered ? 1.0 - alone[band] : 1.0;
-                    row[band * out.map_bins + bin] +=
-                        energy[band] * share * factor * std::exp(-scene.air[band] * absorbing);
+                    if (track == nullptr) {
+                        row[band * out.map_bins + bin] +=
+                            energy[band] * share * factor * std::exp(-scene.air[band] * absorbing);
+                    } else {
+                        row[band * out.map_bins + bin] += energy[band] * weights[band] * share *
+                                                          factor *
+                                                          std::exp(-scene.air[band] * absorbing);
+                    }
                 }
             }
             if (t_out >= t1) break;
@@ -670,6 +829,10 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
     const Atmosphere *atmosphere = scene.atmosphere;
     if (atmosphere != nullptr && (!atmosphere->valid() || atmosphere->buckets == 0)) {
         throw std::invalid_argument("trace_stochastic: bad atmosphere");
+    }
+    const Vegetation *plants = scene.vegetation;
+    if (plants != nullptr && plants->bands != scene.bands) {
+        throw std::invalid_argument("trace_stochastic: bad vegetation");
     }
     const Bvh &bvh = *scene.bvh;
     const std::size_t bands = scene.bands;
@@ -744,7 +907,12 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         acc.map_bottom = map_bottom;
         acc.map_top = map_top;
         std::array<double, kMaxBands> reflected{}, rain{}, scatter{}, counted{}, through{},
-            share{}, seen_before{}, alone_before{};
+            share{}, seen_before{}, alone_before{}, weights{}, depth{};
+        // A piece of a ray through plants, and room to find what a line meets in them.
+        detail::Track track;
+        std::vector<Vegetation::Span> line_spans;
+        std::vector<double> line_cuts;
+        const double inf = std::numeric_limits<double>::infinity();
         // The weight window's level of a room relative to the source's.
         const auto level = [&](std::int64_t room) {
             if (room < 0 || static_cast<std::size_t>(room) >= settings.room_level.size()) {
@@ -755,10 +923,11 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         // The receivers' detector spheres along a straight piece of a ray: `segment`
         // metres from `from` along `along` (unit). On a chord of a bent ray, travelled
         // grows by `rate` per metre and the air absorbs from `path` on, `stretch` metres
-        // per metre (path negative: as travelled).
+        // per metre (path negative: as travelled). Through plants, `plant_track` (the
+        // piece's) weights the bands.
         const auto spheres = [&](const Vec3 &from, const Vec3 &along, double segment,
                                  const detail::RayState &state, double rate, double path,
-                                 double stretch) {
+                                 double stretch, const detail::Track *plant_track) {
             for (std::size_t k = 0; k < n_rec; ++k) {
                 const Vec3 rel = scene.receivers[k] - from;
                 const double s = dot(rel, along);
@@ -775,15 +944,91 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                      (settings.covered_time.empty() ||
                                       distance / c <= settings.covered_time[k]);
                 // The specular-only share of a covered path is the early stage's.
+                std::array<double, kMaxBands> passed;
+                if (plant_track != nullptr) plant_track->weight(nearest, passed.data());
                 double any = 0.0;
                 for (std::size_t b = 0; b < bands; ++b) {
                     counted[b] = state.energy[b] *
                                  std::max(state.seen[b] - (covered ? state.alone[b] : 0.0), 0.0);
+                    if (plant_track != nullptr) counted[b] *= passed[b];
                     any += counted[b];
                 }
                 if (any <= 0.0) continue;
                 acc.add(k, counted.data(), (t1 - t0) / sphere_volume[k], distance, -along,
                         state.hits.data(), path < 0.0 ? -1.0 : path + stretch * nearest);
+            }
+        };
+
+        // What stems at state.pos send each receiver as rain: the detector sphere's count
+        // of the leg the ray goes on along after they turn it, on average over the turns
+        // (mean cosine g[b] per band) instead of for the one turn drawn. The leg keeps the
+        // slope of state.dir, so it crosses a sphere for the turns in one range, by
+        // quadrature over the sine of the angle from its middle (the chord grows from
+        // nothing at the ends). Each turn's leg ends at the first face in the sphere, and
+        // the plants and faces that let sound through on the way take their share.
+        const auto stem_rain = [&](const detail::RayState &state, const double *g) {
+            const Vec3 &p = state.pos, &d = state.dir;
+            const double flat = std::hypot(d.x, d.y);
+            if (!(flat > 0.0)) return;
+            const double heading = std::atan2(d.y, d.x);
+            for (std::size_t k = 0; k < n_rec; ++k) {
+                const double r = settings.receiver_radius[k];
+                const Vec3 v = scene.receivers[k] - p;
+                const double vv = dot(v, v), across = std::hypot(v.x, v.y);
+                // A leg heading a meets the sphere ahead where v . leg > sqrt(|v|^2 - r^2),
+                // v . leg = flat * across * cos(a - bearing) + d.z * v.z: every heading
+                // from inside, none or a range round the bearing from outside.
+                double middle = 0.0, half = kPi;
+                if (vv > r * r) {
+                    const double need = std::sqrt(vv - r * r) - d.z * v.z;
+                    const double most = flat * across;
+                    if (need >= most) continue;
+                    if (need > -most) {
+                        middle = std::atan2(v.y, v.x);
+                        half = std::acos(need / most);
+                    }
+                }
+                const bool round = half >= kPi;
+                for (std::size_t j = 0; j < detail::kStemTurns; ++j) {
+                    const double x = (static_cast<double>(j) + 0.5) / detail::kStemTurns;
+                    double heading_j, width;  // the leg's heading and its share of the range
+                    if (round) {
+                        heading_j = middle + kPi * (2.0 * x - 1.0);
+                        width = 2.0 * kPi / detail::kStemTurns;
+                    } else {
+                        const double psi = kPi * (x - 0.5);
+                        heading_j = middle + half * std::sin(psi);
+                        width = half * std::cos(psi) * kPi / detail::kStemTurns;
+                    }
+                    const Vec3 leg{flat * std::cos(heading_j), flat * std::sin(heading_j), d.z};
+                    const double along = dot(v, leg);
+                    const double d2 = vv - along * along;
+                    if (d2 >= r * r) continue;
+                    const double chord = std::sqrt(r * r - d2);
+                    const double t0 = std::max(along - chord, 0.0);
+                    double t1 = along + chord;
+                    if (t1 <= t0) continue;
+                    if (!detail::passing_share(scene, p, leg, t0, -1, share.data())) continue;
+                    const Hit wall = bvh.intersect(p + leg * t0, leg, t1 - t0, -1);
+                    if (wall.found()) t1 = t0 + wall.t;
+                    const double nearest = std::clamp(along, t0, t1);
+                    const Vec3 there = p + leg * nearest;
+                    if (atmosphere != nullptr && atmosphere->shadowed(p, there)) continue;
+                    plants->depth(p, leg, nearest, depth.data(), line_spans, line_cuts);
+                    const double turn = heading_j - heading;
+                    double any = 0.0;
+                    for (std::size_t b = 0; b < bands; ++b) {
+                        counted[b] = state.energy[b] * detail::wrapped_cauchy(turn, g[b]) * width *
+                                     share[b] * std::exp(-depth[b]);
+                        any += counted[b];
+                    }
+                    if (!(any > 0.0)) continue;
+                    const double reach =
+                        atmosphere == nullptr ? nearest : c * atmosphere->straight_time(p, there);
+                    acc.add(k, counted.data(), (t1 - t0) / sphere_volume[k],
+                            state.travelled + reach, -leg, state.hits.data(),
+                            atmosphere == nullptr ? -1.0 : state.path + nearest);
+                }
             }
         };
 
@@ -808,6 +1053,39 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                              -1, first_rng, scene.source_room, {}, 0.0, {},
                                              false});
             std::size_t family = 1;
+            // The weight window after a reflection or a scattering in window `window`:
+            // splits the ray (its copies go on the stack) or plays roulette with it;
+            // false when it dies.
+            const auto weigh = [&](detail::RayState &state, std::size_t window) {
+                if (settings.split_target.empty()) return true;
+                const double expected =
+                    settings.split_target[std::min(window, settings.split_target.size() - 1)] *
+                    level(state.room);
+                if (!(expected > 0.0)) return true;
+                double now = 0.0;
+                for (std::size_t b = 0; b < bands; ++b) now += state.energy[b];
+                now /= static_cast<double>(bands);
+                if (now > settings.split_ratio * expected && family < settings.max_family) {
+                    const auto copies = static_cast<std::size_t>(std::min<double>(
+                        {std::ceil(now / expected), static_cast<double>(settings.max_split),
+                         static_cast<double>(settings.max_family - family + 1)}));
+                    if (copies >= 2) {
+                        for (std::size_t b = 0; b < bands; ++b) {
+                            state.energy[b] /= static_cast<double>(copies);
+                        }
+                        for (std::size_t i = 1; i < copies; ++i) {
+                            stack.push_back(state);
+                            stack.back().rng = state.rng.split();
+                        }
+                        family += copies - 1;
+                    }
+                } else if (now * settings.split_ratio < expected) {
+                    const double survive = now / expected;
+                    if (state.rng.uniform() >= survive) return false;
+                    for (std::size_t b = 0; b < bands; ++b) state.energy[b] /= survive;
+                }
+                return true;
+            };
 
             while (!stack.empty()) {
                 detail::RayState ray_state = stack.back();
@@ -819,15 +1097,30 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                 while (travelled < max_length) {
                     Hit hit;
                     double leg = 0.0;  // metres the sound went to the face it meets
+                    // Where on its piece (track) the ray scatters in plants, if it does.
+                    double scatter_at = inf;
                     if (atmosphere == nullptr) {
                         hit = bvh.intersect(pos, dir, max_length - travelled, last);
-                        const double segment = hit.found() ? hit.t : max_length - travelled;
-                        if (!settings.specular_rain) spheres(pos, dir, segment, ray_state, 1.0, -1.0, 1.0);
+                        double segment = hit.found() ? hit.t : max_length - travelled;
+                        const detail::Track *plant_track = nullptr;
+                        if (plants != nullptr &&
+                            track.build(*plants, pos, dir, segment, energy.data())) {
+                            plant_track = &track;
+                            scatter_at = track.collide(rng);
+                            if (hit.found() && scatter_at > hit.t - offset) scatter_at = inf;
+                            segment = std::min(segment, scatter_at);
+                        }
+                        if (!settings.specular_rain) {
+                            spheres(pos, dir, segment, ray_state, 1.0, -1.0, 1.0, plant_track);
+                        }
                         if (has_map) {
                             acc.add_map(pos, dir, segment, travelled, energy.data(), alone.data(),
-                                        order);
+                                        order, 1.0, -1.0, 1.0, plant_track);
                         }
-                        if (!hit.found()) {
+                        if (scatter_at < inf) {
+                            travelled += segment;
+                            pos = pos + dir * segment;
+                        } else if (!hit.found()) {
                             // Out of time, or out of the model: then no face lies anywhere
                             // ahead. (The search above only looks as far as the ray can go.)
                             if (!bvh.occluded(pos, dir, std::numeric_limits<double>::infinity(),
@@ -835,10 +1128,15 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                 ++out.escaped_rays;
                             }
                             break;
+                        } else {
+                            travelled += hit.t;
+                            pos = pos + dir * hit.t;
+                            leg = hit.t;
+                            if (plant_track != nullptr) {
+                                track.weight(hit.t, weights.data());
+                                for (std::size_t b = 0; b < bands; ++b) energy[b] *= weights[b];
+                            }
                         }
-                        travelled += hit.t;
-                        pos = pos + dir * hit.t;
-                        leg = hit.t;
                     } else {
                         // Chord by chord along the bent ray, to the first face it meets.
                         BentRay bent(*atmosphere, pos, dir);
@@ -852,15 +1150,38 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             if (length > 0.0) {
                                 const Vec3 along = span / length;
                                 const Hit met = bvh.intersect(chord.start, along, length, last);
-                                const double segment = met.found() ? met.t : length;
+                                double segment = met.found() ? met.t : length;
                                 const double rate = c * chord.time / length;
                                 const double stretch = chord.arc / length;
+                                const detail::Track *plant_track = nullptr;
+                                if (plants != nullptr &&
+                                    track.build(*plants, chord.start, along, segment, energy.data())) {
+                                    plant_track = &track;
+                                    scatter_at = track.collide(rng);
+                                    if (met.found() && scatter_at > met.t - offset) scatter_at = inf;
+                                    segment = std::min(segment, scatter_at);
+                                }
                                 if (!settings.specular_rain) {
-                                    spheres(chord.start, along, segment, ray_state, rate, path, stretch);
+                                    spheres(chord.start, along, segment, ray_state, rate, path, stretch,
+                                            plant_track);
                                 }
                                 if (has_map) {
                                     acc.add_map(chord.start, along, segment, travelled, energy.data(),
-                                                alone.data(), order, rate, path, stretch);
+                                                alone.data(), order, rate, path, stretch, plant_track);
+                                }
+                                if (scatter_at < inf) {
+                                    // It scatters in the plants, going the ray's way there.
+                                    travelled += rate * segment;
+                                    path += stretch * segment;
+                                    pos = chord.start + along * segment;
+                                    BentRay there = before;
+                                    there.chord(chord.arc * segment / length, leaving ? &away : nullptr);
+                                    dir = there.direction();
+                                    break;
+                                }
+                                if (plant_track != nullptr) {
+                                    track.weight(segment, weights.data());
+                                    for (std::size_t b = 0; b < bands; ++b) energy[b] *= weights[b];
                                 }
                                 if (met.found()) {
                                     travelled += rate * met.t;
@@ -889,13 +1210,109 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                 break;
                             }
                         }
-                        if (!hit.found()) {
+                        if (scatter_at == inf && !hit.found()) {
                             if (!bvh.occluded(pos, dir, std::numeric_limits<double>::infinity(),
                                               last)) {
                                 ++out.escaped_rays;
                             }
                             break;
                         }
+                    }
+
+                    if (scatter_at < inf) {
+                        // The ray scatters in the plants at pos: in medium m, its bands
+                        // weighted by what they met on the way and by m's scattering
+                        // against the rate the scattering was drawn at.
+                        const std::size_t m = track.medium(rng);
+                        track.weight(scatter_at, weights.data());
+                        const double *mu = plants->scattering.data() + m * bands;
+                        const double *g = plants->asymmetry.data() + m * bands;
+                        double mean = 0.0, kept = 0.0, mean_g = 0.0;
+                        for (std::size_t b = 0; b < bands; ++b) {
+                            energy[b] *= weights[b];
+                            mean += energy[b];
+                            energy[b] *= mu[b] / track.rate[m];
+                            kept += energy[b];
+                            mean_g += energy[b] * g[b];
+                            alone[b] = 0.0;
+                        }
+                        const std::size_t window =
+                            std::min(out.windows - 1,
+                                     static_cast<std::size_t>(travelled / c / settings.window_time_step));
+                        if (room == scene.source_room) {
+                            out.ray_energy[window] += mean / static_cast<double>(bands);
+                            out.reflections[window] += 1.0;
+                        }
+                        if (!(kept > 0.0)) break;
+                        mean_g /= kept;
+                        last = -1;
+                        leaving = false;
+                        const bool rains = settings.diffuse_rain || settings.specular_rain;
+                        if (plants->upright[m]) {
+                            // Stems turn it sideways, keeping its slope, and send each
+                            // receiver what its next leg carries through the receiver's
+                            // sphere, on average over the turns.
+                            if (rains) stem_rain(ray_state, g);
+                            const double turn = detail::wrapped_cauchy_angle(mean_g, rng);
+                            const double cos_turn = std::cos(turn), sin_turn = std::sin(turn);
+                            dir = normalized(Vec3{dir.x * cos_turn - dir.y * sin_turn,
+                                                  dir.x * sin_turn + dir.y * cos_turn, dir.z});
+                            const double drawn = detail::wrapped_cauchy(turn, mean_g);
+                            for (std::size_t b = 0; b < bands; ++b) {
+                                energy[b] *= detail::wrapped_cauchy(turn, g[b]) / drawn;
+                                seen[b] = rains ? 0.0 : 1.0;  // the rain covered it
+                            }
+                        } else {
+                            // Foliage sends its share straight to each receiver as the phase
+                            // function has it, and the ray goes on in a direction drawn
+                            // from it.
+                            for (std::size_t k = 0; rains && k < n_rec; ++k) {
+                                const Vec3 v = scene.receivers[k] - pos;
+                                const double gap = norm(v);
+                                if (!(gap > 0.0)) continue;
+                                if (atmosphere != nullptr &&
+                                    atmosphere->shadowed(pos, scene.receivers[k])) {
+                                    continue;
+                                }
+                                const Vec3 toward = v / gap;
+                                if (!detail::passing_share(scene, pos, toward, gap, -1,
+                                                           share.data())) {
+                                    continue;
+                                }
+                                plants->depth(pos, toward, gap, depth.data(), line_spans, line_cuts);
+                                const double cosine = dot(dir, toward);
+                                for (std::size_t b = 0; b < bands; ++b) {
+                                    counted[b] = energy[b] * detail::henyey_greenstein(cosine, g[b]) *
+                                                 share[b] * std::exp(-depth[b]);
+                                }
+                                const double dist = std::max(gap, settings.receiver_radius[k]);
+                                const double reach =
+                                    atmosphere == nullptr
+                                        ? dist
+                                        : c * atmosphere->straight_time(pos, scene.receivers[k]);
+                                acc.add(k, counted.data(), 1.0 / (dist * dist), travelled + reach,
+                                        -toward, hits.data(), atmosphere == nullptr ? -1.0 : path + gap);
+                            }
+                            const double cosine = detail::henyey_greenstein_cosine(mean_g, rng);
+                            const double azimuth = 2.0 * kPi * rng.uniform();
+                            const Vec3 helper =
+                                std::abs(dir.x) < 0.9 ? Vec3{1.0, 0.0, 0.0} : Vec3{0.0, 1.0, 0.0};
+                            const Vec3 t = normalized(cross(dir, helper));
+                            const Vec3 u = cross(dir, t);
+                            const double sine = std::sqrt(std::max(0.0, 1.0 - cosine * cosine));
+                            dir = normalized(dir * cosine + (t * std::cos(azimuth) +
+                                                             u * std::sin(azimuth)) * sine);
+                            const double drawn = detail::henyey_greenstein(cosine, mean_g);
+                            for (std::size_t b = 0; b < bands; ++b) {
+                                energy[b] *= detail::henyey_greenstein(cosine, g[b]) / drawn;
+                                seen[b] = rains ? 0.0 : 1.0;  // the rain covered it
+                            }
+                        }
+                        double peak = 0.0;
+                        for (std::size_t b = 0; b < bands; ++b) peak = std::max(peak, energy[b]);
+                        if (peak < cutoff) break;
+                        if (!weigh(ray_state, window)) break;
+                        continue;
                     }
 
                     const auto face = static_cast<std::size_t>(hit.face);
@@ -980,6 +1397,11 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             if (!detail::passing_share(scene, origin, toward, norm(v), last,
                                                        share.data())) {
                                 continue;
+                            }
+                            if (plants != nullptr) {
+                                plants->depth(origin, toward, norm(v), depth.data(), line_spans,
+                                              line_cuts);
+                                for (std::size_t b = 0; b < bands; ++b) share[b] *= std::exp(-depth[b]);
                             }
                             const double factor = cos_theta / (kPi * dist * dist);
                             // In an atmosphere: the time the straight line takes.
@@ -1067,33 +1489,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         dir = reflect(dir, n);
                     }
 
-                    if (settings.split_target.empty()) continue;
-                    const double expected =
-                        settings.split_target[std::min(window, settings.split_target.size() - 1)] *
-                        level(room);
-                    if (!(expected > 0.0)) continue;
-                    double now = 0.0;
-                    for (std::size_t b = 0; b < bands; ++b) now += energy[b];
-                    now /= static_cast<double>(bands);
-                    if (now > settings.split_ratio * expected && family < settings.max_family) {
-                        const auto copies = static_cast<std::size_t>(std::min<double>(
-                            {std::ceil(now / expected), static_cast<double>(settings.max_split),
-                             static_cast<double>(settings.max_family - family + 1)}));
-                        if (copies >= 2) {
-                            for (std::size_t b = 0; b < bands; ++b) {
-                                energy[b] /= static_cast<double>(copies);
-                            }
-                            for (std::size_t i = 1; i < copies; ++i) {
-                                stack.push_back(ray_state);
-                                stack.back().rng = rng.split();
-                            }
-                            family += copies - 1;
-                        }
-                    } else if (now * settings.split_ratio < expected) {
-                        const double survive = now / expected;
-                        if (rng.uniform() >= survive) break;
-                        for (std::size_t b = 0; b < bands; ++b) energy[b] /= survive;
-                    }
+                    if (!weigh(ray_state, window)) break;
                 }
             }
         }

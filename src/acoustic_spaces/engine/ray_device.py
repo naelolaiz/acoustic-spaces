@@ -17,10 +17,9 @@
   nearest length, or the CPU when there is none.
 
 What only the CPU traces (rays bent by an outdoor atmosphere, sound through
-partitions and openings, the face groups of material calibration) runs there, whatever
-the setting, and so does a run the GPU
-declines once it has it (one whose results its buffers cannot hold): the plan
-:func:`trace` returns says so.
+vegetation, partitions and openings, the face groups of material calibration) runs
+there, whatever the setting, and so does a run the GPU declines once it has it (one
+whose results its buffers cannot hold): the plan :func:`trace` returns says so.
 
 The two agree statistically, not ray for ray (the GPU works in single precision and
 draws its own random numbers). With ``cpu`` a run gives the same result every time,
@@ -92,6 +91,8 @@ def _unsupported(values: dict) -> str:
     """Why only the CPU can trace this run, or ''."""
     if values.get("atmosphere") is not None:
         return "rays bent by the atmosphere are traced on the CPU"
+    if values.get("plants") is not None:
+        return "sound through vegetation is traced on the CPU"
     if np.asarray(values["transmission"]).size:
         return "sound through partitions and openings is traced on the CPU"
     if values["groups"]:

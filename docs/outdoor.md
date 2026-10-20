@@ -2,7 +2,8 @@
 
 Sound outdoors: a street, a square, a courtyard, a stage in a park, a noise barrier by a
 road. A scene is outdoors when its geometry has a `ground`: a flat ground under an open
-sky, with buildings, barriers and the objects of a model file standing on it.
+sky, with buildings, barriers, trees and hedges and the objects of a model file standing
+on it.
 
 ```yaml
 geometry:
@@ -403,6 +404,108 @@ C_v² / c0² (Ostashev and Wilson 2015).
   and live playback (`play`, head tracking) go through the saved responses, one moment
   each.
 
+## Vegetation
+
+Trees, hedges and belts of trees are no surfaces: sound passes through them, and their
+leaves, twigs and trunks take some of it on the way, absorbing it or scattering it on.
+`geometry.vegetation` lists them:
+
+```yaml
+geometry:
+  ground: {extent: [[-90, -30], [90, 90]], sky: 25}
+  vegetation:
+    - name: wood                   # a belt of trees: a footprint raised to a height
+      footprint: [[-90, 15], [0, 15], [0, 45], [-90, 45]]
+      height: 15
+      foliage: dense               # ISO 9613-2's dense foliage, the default
+      stems: {per_m2: 0.08, diameter: 0.3}
+    - name: hedge                  # a hedge: a path of a width
+      path: [[10, 50], [40, 50], [40, 60]]
+      width: 1.5
+      height: 2
+    - name: oak                    # a lone tree's crown
+      tree: [45, 52]
+      crown_diameter: 10
+      base: 3                      # where the crown starts
+      height: 14
+```
+
+| field | what it sets |
+|---|---|
+| `name` | its name (`vegetation_1`, `vegetation_2`... by default) |
+| `footprint` | a belt of trees or a wood: the (x, y) corners of the ground it covers, raised from `base` to `height` |
+| `path`, `width` | a hedge: the (x, y) points along it and how wide it is (its sides mitred at the bends) |
+| `tree`, `crown_diameter` | a lone tree: where it stands and how wide its crown is; the crown is a spheroid from `base` to `height` |
+| `height` | its top over the ground |
+| `base` | its bottom over the ground (0 by default); for a tree, where the crown starts, the trunk below left out |
+| `foliage` | what the leaves and twigs take: a preset or values (below) |
+| `stems` | the trunks and stems in it: `per_m2` per square metre of ground, `diameter` across (m) |
+
+Each has one of `footprint`, `path` or `tree`, in the geometry's units over the ground.
+A volume may run past the ground's edge (a wood the ground cuts off), and where two
+overlap, what fills them adds up.
+
+**Foliage** is a preset or an attenuation per metre:
+
+| `foliage` | what it takes |
+|---|---|
+| `dense` (the default) | ISO 9613-2's dense foliage (Annex A): 0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.09 and 0.12 dB per metre from 63 Hz to 8 kHz, all absorbed |
+| `none` | no foliage: bare stems, a wood in winter (then it needs `stems`) |
+| `{attenuation: [...], albedo: 0.5, asymmetry: 0.3}` | dB per metre per octave or third-octave band; `albedo` is the share of it that the foliage scatters on instead of absorbing (0 by default), `asymmetry` the mean cosine of the angle it scatters through (0 every way alike, towards 1 onwards) |
+
+ISO 9613-2's rates are what dense foliage takes from sound passing through it in all,
+with what it scatters onwards counted in, so the preset absorbs all of it and adds no
+scattered sound. The standard gives them for 20 to 200 m of foliage, a fixed 1 to 3 dB
+for 10 to 20 m and none below; the engine takes the rates per metre at any depth, so a
+belt under 20 m deep loses a little less than the standard says, and it measures the
+depth along the straight path, where the standard takes an arc of 5 km radius.
+
+**Stems** are upright rigid cylinders. They absorb nothing and scatter, per metre of
+horizontal travel, their number times a cylinder's scattering width: the exact series
+for sound at right angles to its axis (Morse and Ingard 1968), averaged over the band.
+0.08 stems per m² 0.3 m across scatter about 0.003 dB per metre at 63 Hz and 0.2 dB at
+8 kHz. Sound going up or down meets them along its horizontal share only, and they turn
+it sideways, keeping its slope: in the low bands mostly back the way it came, in the
+high bands mostly onwards.
+
+### How the simulation takes vegetation into account
+
+- **Early paths** (the direct sound, the reflections, the paths round edges) lose
+  exp(-Σ μ l) of their energy, μ each medium's attenuation per metre (the stems' times
+  the horizontal share of the leg) and l the length of each leg inside each volume:
+  Beer-Lambert. In the parabolic equation's bands (in wind or temperature gradients)
+  the sound over the ground loses what the direct path loses. What the plants scatter
+  out of the early paths comes back in the late part.
+- **The late rays** lose what the plants absorb along their way and scatter in them at
+  random, as often as the media scatter. Where a ray scatters in foliage, the foliage
+  sends its share straight to each listener the way its phase function has it
+  (Henyey-Greenstein), as a surface's scattered sound reaches them, and the ray goes on
+  in a direction drawn from it; where it scatters off stems, it turns sideways, keeping
+  its slope, so the stems send a listener nothing straight: they send what the ray's
+  next leg would carry through the listener's detector sphere, averaged over the turns
+  (a quadrature over those that cross it). The rain from every reflection loses what
+  the plants take on its way to the listener. In several bands at once, the rays
+  scatter at the rate of the bands' energy-weighted mean and each band is weighted by
+  what it meets, so each keeps its own expectation. Against a separate particle
+  simulation through a slab of foliage or stems, the tracer agrees within its noise,
+  a few tenths of a percent (see
+  [Validation](validation.md#vegetation-against-a-particle-simulation)). Rays through
+  vegetation are traced on the CPU: the GPU devices fall back to it.
+- **Coverage maps** take the same: the early paths' loss and the late rays'.
+- **The wave solver's bands** leave vegetation out: at their low frequencies foliage
+  takes little (0.02 to 0.03 dB per metre in the `dense` preset).
+
+Behind vegetation that scatters (stems, or foliage with an `albedo`), much of the sound
+comes scattered, with the late rays, and their noise shows in the levels: trace more
+of them (`simulation.late.rays`) for steadier results. The
+[`tree_belt`](https://github.com/naelolaiz/acoustic-spaces/blob/main/examples/tree_belt/scene.yaml)
+example traces 200000, and G behind its trees still varies from run to run, by 0.1 to
+0.7 dB (one standard deviation) depending on the band.
+
+`acoustic-spaces inspect` lists the vegetation with what sound loses per metre through
+each, foliage and stems together. The editor's 3D view, `view` and the export to
+Blender draw the volumes in see-through green, and coverage maps outline them.
+
 ## What the simulation does outdoors
 
 - **Early paths** are found as in a room: the direct sound, reflections off the ground,
@@ -430,6 +533,8 @@ C_v² / c0² (Ostashev and Wilson 2015).
   [Wind and temperature](#wind-and-temperature)), and their eddies blur the paths'
   interference, scatter sound into shadows and make it flicker (see
   [Turbulence](#turbulence)).
+- **Vegetation** takes sound from the paths through it and scatters some of it into
+  the late part (see [Vegetation](#vegetation)).
 - **The early paths add in pressure in every band** (see
   [Ground impedance](#ground-impedance)): `simulation.early.coherent_max_band_hz` is
   8000 outdoors unless the scene sets it.
@@ -441,9 +546,10 @@ field.
 ## In the editor
 
 The **Geometry** entry of an outdoor scene has an **Outdoors** group: the ground's height,
-the margin and the sky, where the ground ends, the buildings and barriers with their
-heights, which can be changed or removed, and the ground zones, which can be removed.
-Footprints, paths and the zones' outlines are set in the scene file. A material's page
+the margin and the sky, where the ground ends, the buildings, barriers and vegetation
+with their heights, which can be changed or removed (the vegetation's table also gives
+each one's shape and what fills it), and the ground zones, which can be removed.
+Footprints, paths, trees and the zones' outlines are set in the scene file. A material's page
 has a **Ground impedance** group: tick it to make the material a ground (grass to
 start with), then pick the ground, the model, a flow resistivity of your own, a layer's
 thickness or the porosity rate. Unticked, the material keeps the absorption the
@@ -464,11 +570,13 @@ was above 500 Hz.
 
 ## What is not modelled yet
 
-These come next, each in its own step (see the [roadmap](roadmap.md)):
+This comes next (see the [roadmap](roadmap.md)): the wave solver with a speed of sound
+that changes from place to place. It runs in still air, the wind and the temperature
+gradients left out, and without vegetation.
 
-- vegetation: trees, hedges and forests as volumes that scatter and absorb;
-- the wave solver with a speed of sound that changes from place to place: it runs in
-  still air, the wind and the temperature gradients left out.
+Vegetation is volumes filled evenly: a lone tree's trunk is left out, the foliage's
+attenuation is given, not derived from its leaves' size and density, and stems stand
+upright at random. The rays through it are traced on the CPU only.
 
 The wind, the temperature and the eddies are the same over the whole scene, and the
 eddies are as strong at every height as near the ground. The

@@ -250,6 +250,8 @@ def early_paths(
         )
         if refraction is not None:
             paths = refraction.apply(target[None], [straight], [paths], np.array([cutoff]))[0]
+        if model.plants is not None:
+            paths = model.plants.attenuate(paths)
         if eddies is not None:
             paths = eddies.attach(paths)
         parts.append(apply_grazing(model, target, paths))
@@ -502,6 +504,9 @@ def simulate(
             say(f"{label}: paths bent by the wind and the temperature")
             paths = refraction.apply(listener_pos, straight, paths, cutoff)
             direct = direct_times(direct, paths)
+        if model.plants is not None:
+            say(f"{label}: paths through vegetation")
+            paths = [model.plants.attenuate(p) for p in paths]
         if eddies is not None:
             paths = [eddies.attach(p) for p in paths]
         # The diffuse field is reckoned less the paths as they would come without the
