@@ -107,7 +107,11 @@ Outdoor acoustics, in steps:
   stems that absorb and scatter sound, along the early paths and the late rays; checked
   against a separate particle simulation. Their late rays are traced on the CPU; the
   GPU devices may follow.
-- [ ] O6 The wave solver with a speed of sound that changes from place to place.
+- [x] O6 The wave solver in wind and temperature: a speed of sound per cell (the
+  effective one along the horizontal from the source) in the grid, its walls, its source
+  and its matched layer; checked against the parabolic equation at 63 and 125 Hz. It
+  runs on the CPU; the GPU may follow, and the flow itself (the linearised Euler
+  equations) stays out.
 
 Unreleased:
 

@@ -140,6 +140,26 @@
   of a percent.
 - Scenes without vegetation give the same results as before, bit for bit.
 
+**The wave solver in wind and temperature**
+
+- Outdoors, in an atmosphere whose wind or temperature changes with height, the wave
+  solver's speed of sound changes from cell to cell: the still air's at each cell's
+  height, plus the wind's component along the horizontal from the source, the effective
+  speed of sound the rays and the parabolic equation take. The grid is fine enough for
+  the slowest sound and steps in time for the fastest; each cell weighs its neighbours
+  by the square of its speed over the grid's, its walls by that speed (their admittance
+  is relative to the local rho c) and the source by its square, and so does the matched
+  layer. The flow itself (the linearised Euler equations) stays out.
+- In wind and temperature the wave solver runs on the CPU (`simulation.wave.device:
+  gpu` or `auto` falls back to it, and says so). The run's details give the slowest and
+  the fastest speed of sound on the grid (`wave_speed_min_m_s`, `wave_speed_max_m_s`).
+- New validation: `validation/wave_outdoor.py`, the 63 and 125 Hz bands over grass, 50
+  to 200 m from the source, in still air, downwind and upwind, on a sunny day and on a
+  clear night, against the parabolic equation: within 0.7 dB at 63 Hz and 0.4 dB at
+  125 Hz, 0.2 dB on average.
+- Indoors, and outdoors in still air, the wave solver gives the same results as before,
+  bit for bit.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

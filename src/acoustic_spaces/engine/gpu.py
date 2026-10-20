@@ -382,6 +382,8 @@ class GpuWaveSolver:
         wgpu = _wgpu()
         self._device = device = _device()
         layout = solver.layout()
+        if int(layout["scaled"][0]):
+            raise ValueError("a grid whose speed of sound changes is stepped on the CPU only")
         nx, ny, nz = (int(v) for v in layout["shape"])
         n = nx * ny * nz
         table, offsets = _tables(layout)

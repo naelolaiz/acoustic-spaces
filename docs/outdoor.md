@@ -292,6 +292,17 @@ is an arc of a circle, so its travel time and its length are exact.
   the heights it crosses, and does not reach a listener in the shadow of where it
   leaves. These rays run on the CPU: `simulation.late.device: gpu` or `auto` falls back
   to it, and says so.
+- **The wave solver** (`simulation.wave`) steps the sound field itself in its bands, with
+  a speed of sound that changes from cell to cell: at each cell's height, the still
+  air's plus the wind's component along the horizontal from the source, as above, so
+  the rays, the parabolic equation and the wave solver bend sound alike. Its grid is
+  fine enough for the slowest sound and steps in time for the fastest, a few percent
+  more cells and steps than in still air in the `windy` preset. Over grass, 50 to 200
+  m from the source, in the 63 and 125 Hz bands, it is within 0.7 dB of the parabolic
+  equation, 0.2 dB on average (see [Validation](validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
+  It runs on the CPU: `simulation.wave.device: gpu` or `auto` falls back to it, and
+  says so. The run's details give the slowest and the fastest speed of sound on the
+  grid (`wave_speed_min_m_s`, `wave_speed_max_m_s`).
 - **The animation's particles** and **the drawn paths** (`view --paths`, the Blender
   export) curve as the sound does.
 
@@ -527,7 +538,8 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
 - **Coverage maps** cover the ground by default and leave out the points inside
   buildings (see [Coverage maps](coverage-maps.md)).
 - **The wave solver** sees the sky as an opening and puts a matched layer round the
-  grid, as for any open model.
+  grid, as for any open model, and in wind and temperature takes a speed of sound per
+  cell (see [How the simulation bends sound](#how-the-simulation-bends-sound)).
 - **Air** absorbs per band as indoors (ISO 9613-1, from `air`), along every path.
 - **Wind and temperature** bend the paths and the rays (see
   [Wind and temperature](#wind-and-temperature)), and their eddies blur the paths'
@@ -570,9 +582,11 @@ was above 500 Hz.
 
 ## What is not modelled yet
 
-This comes next (see the [roadmap](roadmap.md)): the wave solver with a speed of sound
-that changes from place to place. It runs in still air, the wind and the temperature
-gradients left out, and without vegetation.
+The wave solver takes the wind as the rays and the parabolic equation do, as a speed of
+sound that the wind's component along the horizontal from the source changes, not as
+air that flows (the linearised Euler equations): sound that a building sends back
+towards the source travels at the speed of sound going away from it. It leaves out
+vegetation and the eddies, and in wind and temperature runs on the CPU only.
 
 Vegetation is volumes filled evenly: a lone tree's trunk is left out, the foliage's
 attenuation is given, not derived from its leaves' size and density, and stems stand

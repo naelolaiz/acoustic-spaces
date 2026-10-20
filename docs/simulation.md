@@ -347,6 +347,11 @@ simulation:
 - Closed rooms, open models and thin screens all work. Round an open model the grid
   grows by a perfectly matched layer of 8 cells, which takes in the sound leaving it:
   what comes back is 57 to 74 dB down, against 7 to 14 dB from the grid's edge alone.
+- Outdoors in wind and temperature (an [atmosphere](outdoor.md#wind-and-temperature)
+  in which sound bends), the speed of sound changes from cell to cell: the still air's
+  at the cell's height, plus the wind's component along the horizontal from the source.
+  The grid is then fine enough for the slowest sound and steps in time for the fastest,
+  and runs on the CPU (see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)).
 - The listener records the pressure and its gradient, so the low end keeps its
   direction in Ambisonics, binaural and loudspeaker outputs (to first order).
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177

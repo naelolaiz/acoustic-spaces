@@ -7,7 +7,8 @@ measurements in two real rooms, how edge diffraction and the reflection off a po
 ground compare with the exact solution, how sound outdoors compares with measurements
 up to 845 m away, how its turbulence compares with a parabolic equation through random
 eddies, how its rays through vegetation compare with a separate particle simulation,
-and how much of a block's time the real-time convolver needs. It ends with what has not been validated yet.
+how its wave solver in wind and temperature compares with a parabolic equation, and how
+much of a block's time the real-time convolver needs. It ends with what has not been validated yet.
 
 ## Checks against theory, on every change
 
@@ -224,6 +225,13 @@ request and checks:
   as each traced alone
   (within 3 %); the rain of foliage and of stems against the detector spheres; and
   scenes without vegetation unchanged;
+- the wave solver in wind and temperature: the grid's own speed of sound in every cell
+  giving the run without a speed per cell, to the bit (both stencils, with walls of
+  frequency-dependent admittance); 0.8 times it giving sound that comes 1.25 times as
+  late and as loud, its velocity as large next to its pressure; sound bent by a speed of
+  sound that grows or falls by 65 m/s over 60 m arriving from 5 degrees above or below,
+  within 12 % of the eigenrays' angle; and the matched layer stable where the speed of
+  sound halves with height and jumps across the grid;
 - sweep measurements of synthetic rooms through a distorting loudspeaker, with
   noise and interface latency: from 250 Hz up, the room's response comes back with
   errors 30 dB below it and T30 within 3 %; with a noise floor 55 dB down, T30 stays
@@ -929,6 +937,49 @@ Beside and behind the slab the rain is steadier than the spheres. Only a slab wa
 checked, and against a simulation of the same model, not against measurements
 through trees.
 
+## The wave solver in wind and temperature against a parabolic equation
+
+`validation/wave_outdoor.py` checks the wave solver's speed of sound per cell against
+the engine's parabolic equation (itself within 0.25 dB of the exact solution over grass
+in still air, see [above](#ground-reflection-against-the-exact-solution)), marched in
+the vertical plane through the source and the listener with the effective speed of
+sound along it. Both take the same profiles; the wave solver steps the scene in three
+dimensions. Over grass (Miki's impedance, 200 kPa s/m²), the source 2 m up, the
+listeners 1.5 and 5 m up, 50 to 200 m away: the 63 Hz band from a grid for that band
+(8 points per wavelength, 23 million cells), the 125 Hz band from one for it (32
+million cells), up to 100 m. The ground reaches three times the half-width of the
+reflection's first Fresnel zone at the farthest listener to either side, and 30 m past
+it, so that its edges change little. Levels in dB over the free field, the mean square
+of the pressure over the band's slices, wave solver / parabolic equation:
+
+| 63 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up | 200 m, 1.5 m up | 200 m, 5 m up |
+|---|---|---|---|---|---|---|
+| still | +5.2 / +5.2 | +4.3 / +4.4 | +5.0 / +5.2 | +4.2 / +4.4 | +5.0 / +5.0 | +4.0 / +4.0 |
+| downwind | +5.2 / +5.8 | +3.9 / +4.4 | +5.8 / +6.3 | +4.2 / +5.0 | +7.0 / +7.2 | +5.0 / +5.4 |
+| upwind | +4.4 / +4.6 | +4.0 / +4.3 | +3.5 / +3.8 | +3.4 / +3.4 | +1.7 / +1.8 | +1.6 / +1.6 |
+| sunny day | +4.9 / +5.1 | +4.2 / +4.4 | +4.5 / +4.8 | +3.9 / +4.1 | +4.0 / +4.0 | +3.3 / +3.3 |
+| clear night | +5.1 / +5.4 | +4.1 / +4.4 | +5.2 / +5.6 | +4.1 / +4.6 | +5.6 / +5.8 | +4.4 / +4.6 |
+
+| 125 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up |
+|---|---|---|---|---|
+| still | +2.6 / +2.8 | +0.6 / +0.8 | +1.9 / +1.9 | +0.2 / +0.3 |
+| downwind | +2.9 / +3.3 | -0.5 / -0.2 | +2.6 / +2.9 | -1.1 / -0.9 |
+| upwind | +2.4 / +2.1 | +1.6 / +1.4 | +0.2 / +0.1 | +0.4 / +0.4 |
+| sunny day | +2.4 / +2.6 | +0.8 / +1.0 | +1.4 / +1.4 | +0.3 / +0.4 |
+| clear night | +3.0 / +3.0 | +0.6 / +0.5 | +2.5 / +2.3 | +0.2 / +0.0 |
+
+The weathers are the presets: downwind and upwind in the `windy` one (5 m/s 10 m up),
+`sunny_day` and `clear_night`. The wave solver is within 0.7 dB of the parabolic
+equation everywhere, 0.23 dB on average at 63 Hz and 0.17 dB at 125 Hz, and follows
+the weather as it does: 2 dB louder downwind than in still air at 200 m, 3.3 dB
+quieter upwind. At 63 Hz it comes out a little low downwind and under the night's
+inversion (by up to 0.7 dB), where the wind and the temperature change fastest in the
+lowest cells, and comes closer on a finer grid: downwind at 50 m, 63 Hz, 0.44 dB below at 8 points per
+wavelength and 0.21 dB at 12 (in a narrower scene). Neither the deep shadow upwind (it
+starts a few hundred metres away at these heights) nor reflections off buildings, where
+the effective speed of sound along the horizontal from the source stands in for the
+flow, were checked.
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -1168,6 +1219,8 @@ its peak (single precision).
   Turbulence is checked against a parabolic equation through random eddies in two
   dimensions, with the source and the listener near the ground, not against
   measurements; how much the sound flickers over time is not checked against either.
+  The wave solver in wind and temperature is checked against the parabolic equation
+  over open ground up to 200 m, not against measurements, nor round buildings.
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
 - **Speed on a hardware GPU.** CI checks the wave solver's and the late stage's GPU
@@ -1188,6 +1241,7 @@ python validation/outdoor_propagation.py --json outdoor.json --plots docs/valida
 python validation/outdoor_propagation.py --turbulence moderate
 python validation/turbulence.py --json turbulence.json
 python validation/vegetation.py --json vegetation.json
+python validation/wave_outdoor.py --json wave_outdoor.json
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
@@ -1200,7 +1254,8 @@ python validation/bras_validation.py --materials initial --calibrate LS1 --plots
 The cross-check takes about 20 minutes on 4 cores, the benchmark about 2 minutes, the
 wave solver's checks about 3.5 minutes (both stencils), the ground's about 7.5 (1.5 of
 them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5
-(3 with turbulence), the turbulence's about 7, the vegetation's about 5 and each BRAS
+(3 with turbulence), the turbulence's about 7, the vegetation's about 5, the wave
+solver's outdoors about 18 and each BRAS
 run about 30 minutes (85 in third-octave bands, or half that per room with
 `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
