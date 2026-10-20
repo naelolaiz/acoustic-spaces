@@ -42,6 +42,8 @@ MAP_PARAMETER_NAMES = (
 )
 #: Edge diffraction settings (engine.diffraction.DIFFRACTION_MODES).
 DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
+#: Where a diffracted path may reflect (scene.model.EarlyStage.diffraction_reflections).
+DIFFRACTION_REFLECTIONS = ("one_side", "both_sides")
 #: Highest octave bands the wave solver can compute (engine.wave.WAVE_BANDS_HZ).
 WAVE_BANDS_HZ = (63, 125, 250, 500)
 #: Choices for the highest band the early paths add in pressure in
@@ -837,6 +839,10 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "--rays": ("late.rays", args.rays),
             "--max-order": ("early.max_order", args.max_order),
             "--diffraction": ("early.diffraction", args.diffraction),
+            "--diffraction-reflections": (
+                "early.diffraction_reflections",
+                args.diffraction_reflections,
+            ),
             "--wave": ("wave.enabled", args.wave),
             "--wave-band": ("wave.max_band_hz", args.wave_band),
             "--wave-device": ("wave.device", args.wave_device),
@@ -1001,6 +1007,10 @@ def _cmd_map(args: argparse.Namespace) -> int:
             "--seed": ("seed", args.seed),
             "--max-order": ("early.max_order", args.max_order),
             "--diffraction": ("early.diffraction", args.diffraction),
+            "--diffraction-reflections": (
+                "early.diffraction_reflections",
+                args.diffraction_reflections,
+            ),
             "--length": ("ir_length_s", args.length),
             "--without": ("insertion_loss_of", args.without),
             **_performance_options(args),
@@ -2171,6 +2181,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--diffraction", choices=DIFFRACTION_MODES, help="override simulation.early.diffraction"
     )
     simulate.add_argument(
+        "--diffraction-reflections",
+        choices=DIFFRACTION_REFLECTIONS,
+        help="override simulation.early.diffraction_reflections: whether a path over an "
+        "edge may reflect on one side of it or on both",
+    )
+    simulate.add_argument(
         "--coherent-band",
         choices=COHERENT_BANDS,
         metavar="HZ",
@@ -2249,6 +2265,11 @@ def build_parser() -> argparse.ArgumentParser:
     coverage.add_argument("--max-order", type=int, help="override simulation.early.max_order")
     coverage.add_argument(
         "--diffraction", choices=DIFFRACTION_MODES, help="override simulation.early.diffraction"
+    )
+    coverage.add_argument(
+        "--diffraction-reflections",
+        choices=DIFFRACTION_REFLECTIONS,
+        help="override simulation.early.diffraction_reflections",
     )
     coverage.add_argument(
         "--coherent-band",

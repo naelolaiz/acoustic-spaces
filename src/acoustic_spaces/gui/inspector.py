@@ -91,6 +91,7 @@ DIFFRACTION = [
     ("first_order", N_("first_order")),
     ("second_order", N_("second_order")),
 ]
+DIFFRACTION_REFLECTIONS = [("one_side", N_("one side")), ("both_sides", N_("both sides"))]
 LATE_METHODS = [
     ("stochastic_ray_tracing", N_("stochastic_ray_tracing")),
     ("statistical", N_("statistical")),
@@ -2317,6 +2318,16 @@ class SimulationPage(Page):
                 "of the direct sound over two edges in turn"
             )
         )
+        self.diffraction_reflections = QComboBox()
+        _fill(self.diffraction_reflections, DIFFRACTION_REFLECTIONS)
+        self.diffraction_reflections.setToolTip(
+            _(
+                "Where a path over one edge may reflect: on one side of the edge, before or "
+                "after it (off the ground on the way to a barrier, or off a façade behind "
+                "it), or on both sides, before and after (off the ground on the way to a "
+                "barrier and again behind it: all four paths over a barrier on the ground)"
+            )
+        )
         self.coherent = QComboBox()
         _fill(self.coherent, [(None, N_("none"))] + [(f, str(f)) for f in COHERENT_BANDS_HZ])
         self.coherent.setToolTip(
@@ -2331,6 +2342,7 @@ class SimulationPage(Page):
         early_form.addRow(_("Highest order"), self.max_order)
         early_form.addRow(_("Rays"), self.early_rays)
         early_form.addRow(_("Diffraction"), self.diffraction)
+        early_form.addRow(_("Reflections over an edge"), self.diffraction_reflections)
         early_form.addRow(_("In pressure up to"), self.coherent)
         layout.addWidget(early)
 
@@ -2564,6 +2576,7 @@ class SimulationPage(Page):
         for combo, key in (
             (self.early_method, "early.method"),
             (self.diffraction, "early.diffraction"),
+            (self.diffraction_reflections, "early.diffraction_reflections"),
             (self.late_method, "late.method"),
             (self.reception, "late.reception"),
             (self.scattering_method, "scattering.method"),
@@ -2613,6 +2626,11 @@ class SimulationPage(Page):
         self.max_order.setValue(s.early.max_order)
         self.early_rays.setValue(s.early.rays)
         _choose(self.diffraction, s.early.diffraction)
+        _choose(self.diffraction_reflections, s.early.diffraction_reflections)
+        # Only diffraction with reflections has paths that reflect on both sides.
+        self.diffraction_reflections.setEnabled(
+            s.early.diffraction in ("first_order", "second_order")
+        )
         coherent = s.early.coherent_max_band_hz
         outdoor = self.document.scene.geometry.ground is not None
         for row in range(self.coherent.count()):  # the bands above 500 Hz are outdoors only

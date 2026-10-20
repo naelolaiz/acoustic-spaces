@@ -116,9 +116,11 @@ Outdoor acoustics, in steps:
   buildings, barriers and vegetation (a second run without them), at listeners and on
   maps, in the report, on the command line and in the editor; checked against the
   exact solutions for a half-plane and for a ground.
-- [ ] Sound reflected off the ground both before and after bending over an edge (a
-  barrier on a hard ground): `first_order` diffraction takes one reflection, before or
-  after the edge, and leaves that path out.
+- [x] O20 Sound reflected off the ground both before and after bending over an edge
+  (the fourth of the four paths over a barrier on a hard ground):
+  `simulation.early.diffraction_reflections: both_sides`, on the command line and in
+  the editor; the barrier's insertion loss is then within 0.15 dB of the exact
+  solution. `one_side` stays the default, so existing scenes give the same results.
 
 Unreleased:
 

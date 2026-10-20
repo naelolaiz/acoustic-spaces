@@ -670,7 +670,13 @@ def _trace_part(
     coherent = coherent_bands(sim, model.absorption.shape[1])
     coherent = coherent if single or room.outdoor is not None else 0
     diffraction = edges.diffraction(
-        sim.early.diffraction, position, room, name, orientation, coherent
+        sim.early.diffraction,
+        position,
+        room,
+        name,
+        orientation,
+        coherent,
+        both_sides=sim.early.diffraction_reflections == "both_sides",
     )
     found, straight = [], []
     diffracted = 0

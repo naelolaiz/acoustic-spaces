@@ -50,7 +50,8 @@ which frequencies each octave band holds.
   see [Walkthroughs](spatial-audio.md#walkthroughs)), but keeps them when it saves.
 - The scene tree's **Simulation** entry has the settings of
   [Simulation](simulation.md): the early part's method, highest order, rays,
-  diffraction and **In pressure up to**; the late part's method, rays per band,
+  diffraction, **Reflections over an edge** (on one side of it or on both) and **In
+  pressure up to**; the late part's method, rays per band,
   reception, ray splitting and **Run on** (*default*: this computer's default, the CPU
   unless the tune window made it *auto*; or the CPU, a GPU, both, or *auto*); the
   scattering model; the wave solver, its highest band and where it runs; **Performance** (CPU

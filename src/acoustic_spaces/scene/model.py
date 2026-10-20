@@ -1476,6 +1476,16 @@ class EarlyStage(_Model):
             "of the direct sound over two edges in turn"
         ),
     )
+    diffraction_reflections: Literal["one_side", "both_sides"] = Field(
+        default="one_side",
+        description=(
+            "with first_order or second_order diffraction, where a path over one edge may "
+            "reflect: on one side of the edge, before it or after it (off the ground on "
+            "the way to a barrier, or off a façade behind it), or on both sides, before "
+            "and after (off the ground on the way to a barrier and again behind it: the "
+            "four paths over a barrier on the ground)"
+        ),
+    )
     coherent_max_band_hz: Literal[63, 125, 250, 500, 1000, 2000, 4000, 8000] | None = Field(
         default=125,
         description=(

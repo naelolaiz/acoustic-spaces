@@ -158,9 +158,11 @@ class _Edges:
         name: str,
         orientation: np.ndarray,
         coherent: int = 0,
+        both_sides: bool = False,
     ) -> EdgeDiffraction | None:
         """Diffraction of the sound of source ``name`` at ``source``, coherent in the
-        lowest ``coherent`` bands; None when off."""
+        lowest ``coherent`` bands, with paths that reflect on both sides of an edge when
+        ``both_sides``; None when off."""
         if mode == "none":
             return None
         if self._edges is None:
@@ -177,6 +179,7 @@ class _Edges:
             mode=mode,
             edges=self._edges,
             coherent=coherent,
+            both_sides=both_sides,
         )
 
 
@@ -239,7 +242,13 @@ def early_paths(
             coherent=coherent,
         )
         found = edges.diffraction(
-            diffraction or cfg.diffraction, position, room, src.name, orientation, coherent
+            diffraction or cfg.diffraction,
+            position,
+            room,
+            src.name,
+            orientation,
+            coherent,
+            both_sides=cfg.diffraction_reflections == "both_sides",
         )
         if found is not None:
             paths = found.apply(target, paths, cutoff)
@@ -485,7 +494,13 @@ def simulate(
         ]
         add(info, "candidates", float(sum(len(x) for x in candidates)))
         diffraction = edges.diffraction(
-            early_cfg.diffraction, position, room, source.name, orientation, coherent
+            early_cfg.diffraction,
+            position,
+            room,
+            source.name,
+            orientation,
+            coherent,
+            both_sides=early_cfg.diffraction_reflections == "both_sides",
         )
         if diffraction is not None:
             say(f"{label}: edge diffraction ({early_cfg.diffraction})")

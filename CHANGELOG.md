@@ -183,12 +183,27 @@
 - New validation: `validation/insertion_loss.py`, a barrier's insertion loss against
   the exact solution for a half-plane (within 0.07 dB over an absorbing ground) and the
   level over grass against the exact solution for a ground (within 0.15 dB, up to 1.1
-  dB in the ground dip below 1 kHz, which the band filters fill). It also shows what
-  the path reflected both before and after a barrier, which `first_order` diffraction
-  leaves out, costs over a rigid ground: 0.3 to 0.8 dB from 1 kHz up, a few decibels
-  in the bands below.
+  dB in the ground dip below 1 kHz, which the band filters fill), and a barrier over a
+  rigid ground against the four paths over it (below).
 - Scenes without `insertion_loss_of` give the same results as before, bit for bit,
   except that G outdoors is now defined where it was not.
+
+**Reflections on both sides of an edge**
+
+- `simulation.early.diffraction_reflections: both_sides` (`--diffraction-reflections`
+  for `simulate` and `map`; **Reflections over an edge** on the editor's Simulation
+  page) lets a diffracted path reflect both before and after the edge: off the ground
+  on the way to a barrier and again behind it, the fourth of the four paths over a
+  barrier on the ground, which carries a quarter of the sound over it on a hard ground.
+  Its reflections take the materials' coefficients and phases as any other path's, and
+  it counts as a diffracted path of order 2 (its two reflections) where paths are
+  drawn, exported and reported.
+- Validation (`validation/insertion_loss.py`): a barrier on a rigid ground against the
+  four paths by the exact solution, the exact solution read through the engine's own
+  band filters below 1 kHz: within 0.15 dB at every listener and band with
+  `both_sides`; with `one_side` the insertion loss is 0.3 to 0.8 dB too high from 1 kHz
+  up and up to 3 dB off below.
+- `one_side` stays the default, so existing scenes give the same results, bit for bit.
 
 **Editor**
 

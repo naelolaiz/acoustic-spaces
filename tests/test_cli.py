@@ -340,6 +340,12 @@ def test_simulate_checks_the_options_that_override_the_scene(
     report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
     assert report["settings"]["early"]["coherent_max_band_hz"] is None
     assert report["settings"]["performance"] == {"threads": 0, "ray_tree": "sah"}
+    assert report["settings"]["early"]["diffraction_reflections"] == "one_side"
+    both = ["--rays", "500", "--max-order", "1", "--diffraction-reflections", "both_sides"]
+    assert main([*args, *both]) == 0
+    capsys.readouterr()
+    report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
+    assert report["settings"]["early"]["diffraction_reflections"] == "both_sides"
 
     performance = ["--threads", "1", "--ray-tree", "median"]
     assert main([*args, "--rays", "500", "--max-order", "1", *performance]) == 0

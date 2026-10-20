@@ -503,10 +503,21 @@ def test_selection_and_forms(window) -> None:
     window.inspector.pages["simulation"].late_rays.setValue(1234)
     assert window.document.scene.simulation.late.rays == 1234
     assert window.inspector.pages["simulation"].diffraction.currentText() == "first_order"
+    page = window.inspector.pages["simulation"]
+    assert page.diffraction_reflections.currentText() == "one side"
+    assert page.diffraction_reflections.isEnabled()
+    page.diffraction_reflections.setCurrentText("both sides")
+    assert window.document.scene.simulation.early.diffraction_reflections == "both_sides"
     window.inspector.pages["simulation"].diffraction.setCurrentText("direct")
     assert window.document.scene.simulation.early.diffraction == "direct"
     assert window.document.scene.simulation.late.rays == 1234
-    page = window.inspector.pages["simulation"]
+    # Only diffraction with reflections has paths that reflect on both sides of an edge.
+    assert not page.diffraction_reflections.isEnabled()
+    page.diffraction.setCurrentText("second_order")
+    assert page.diffraction_reflections.isEnabled()
+    page.diffraction_reflections.setCurrentText("one side")
+    page.diffraction.setCurrentText("direct")
+    assert window.document.scene.simulation.early.diffraction_reflections == "one_side"
     assert page.coherent.currentText() == "125"
     page.coherent.setCurrentText("none")
     assert window.document.scene.simulation.early.coherent_max_band_hz is None

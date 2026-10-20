@@ -498,3 +498,115 @@ def test_levels_are_continuous_over_a_barriers_top(tmp_path: Path) -> None:
     ):
         jump = np.abs(np.diff(level, axis=0))
         assert jump.max() < 1.0 and jump[:, 4:].max() < 0.1
+
+
+# -- reflections on both sides of an edge ----------------------------------------------
+
+
+def _ground_barrier(both_sides: bool, listener=(20.0, 0.0, 1.5), absorption: float = 0.0) -> Room:
+    """A thin barrier 3 m high, 10 m from a source 1 m over a ground of this absorption."""
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {
+                    "ground": {"extent": [[-100, -200], [200, 200]], "sky": 40},
+                    "barriers": [
+                        {"name": "barrier", "path": [[10, -190], [10, 190]], "height": 3.0}
+                    ],
+                },
+                "materials": {
+                    "ground": {"absorption": [absorption] * 8, "scattering": 0.0},
+                    "rigid": {"absorption": [0.0] * 8, "scattering": 0.0},
+                },
+                "default_material": "ground",
+                "assignments": {"barrier": "rigid"},
+                "sources": [{"name": "s", "position": [0.0, 0.0, 1.0]}],
+                "listeners": [{"name": "l", "position": list(listener)}],
+                "simulation": {
+                    "ir_length_s": 0.3,
+                    "seed": 1,
+                    "late": {"rays": 300},
+                    "early": {
+                        "method": "image_sources",
+                        "max_order": 2,
+                        "diffraction": "first_order",
+                        "diffraction_reflections": "both_sides" if both_sides else "one_side",
+                    },
+                },
+            }
+        )
+    )
+
+
+def _diffracted(room: Room, both_sides: bool, mode: str = "first_order"):
+    """The paths of a room's one listener with the waves' terms in energy in every band
+    (``coherent=0``), as :func:`_over_barrier` finds them."""
+    model = TraceModel.from_room(room)
+    c, air = room.speed_of_sound(), room.air_attenuation("octave")
+    source = np.array(room.scene.sources[0].position)
+    at = np.array(room.scene.listeners[0].position)
+    diffraction = EdgeDiffraction(
+        model, source, speed_of_sound=c, air=air, mode=mode, both_sides=both_sides
+    )
+    paths = early_stage.find_paths(model, source, at, [], speed_of_sound=c, air=air, max_delay_s=1)
+    return diffraction.apply(at, paths, 1.0)
+
+
+def test_a_barrier_on_the_ground_gets_its_fourth_path(tmp_path: Path) -> None:
+    """One side: over the top, and over it with a reflection off the ground before or
+    after. Both sides: also with a reflection before and after, a path of order 2 that
+    the mirrored geometry, a screen in free space, has as its direct sound over the
+    top."""
+    one = early_paths(_ground_barrier(False))
+    assert one.diffracted.all() and one.order.tolist() == [0, 1, 1]
+    both = early_paths(_ground_barrier(True))
+    assert both.diffracted.all() and both.order.tolist() == [0, 1, 1, 2]
+    np.testing.assert_array_equal(both.energy[:3], one.energy)
+    fourth = len(both) - 1
+    assert len(both.points[fourth]) == 5 and len(both.faces[fourth]) == 2
+    bounces = both.points[fourth][[1, 3]]
+    assert bounces[:, 2] == pytest.approx(0.0) and 0 < bounces[0, 0] < 10 < bounces[1, 0] < 20
+    assert both.delay_s[fourth] > both.delay_s.max(initial=0.0, where=np.arange(4) < 3)
+    # The same wave as the direct sound over a screen whose top is 4 m over the mirrored
+    # source and listener, 1 and 1.5 m below the ground: the terms in energy in both.
+    screen = _screen(tmp_path, (-10.0, 0.0, -4.0), (10.0, 0.0, -4.5))
+    mirrored = _diffracted(screen, False, "direct")
+    assert len(mirrored) == 1 and mirrored.order[0] == 0
+    exact = _diffracted(_ground_barrier(True), True)
+    assert exact.order.tolist() == [0, 1, 1, 2]
+    np.testing.assert_allclose(exact.energy[3], mirrored.energy[0], rtol=1e-9)
+    assert exact.distance_m[3] == pytest.approx(mirrored.distance_m[0], abs=1e-9)
+    # Over an absorbing ground the reflections carry nothing, so the fourth path is
+    # found and dropped, and the level is that of the direct sound over the top.
+    absorbing = early_paths(_ground_barrier(True, absorption=1.0))
+    assert absorbing.order.tolist() == [0]
+
+
+def test_both_sides_is_off_by_default_and_a_setting() -> None:
+    assert EarlyStage().diffraction_reflections == "one_side"
+    with pytest.raises(ValueError):
+        EarlyStage(diffraction_reflections="all")
+    # The simulation takes it from the scene: the level behind the barrier rises.
+    one = simulate(_ground_barrier(False))[("s", "l")]
+    both = simulate(_ground_barrier(True))[("s", "l")]
+    assert one.early.order.max() == 1 and both.early.order.max() == 2
+    assert both.early.energy.sum() > one.early.energy.sum()
+    assert (both.relative_to_free_field()[4:] > one.relative_to_free_field()[4:]).all()
+
+
+def test_both_sides_in_a_room() -> None:
+    """Behind the corner of the L-shaped room the floor and ceiling reflections also
+    arrive over the edge with a reflection on each side (floor then ceiling, and the
+    other way round); the paths that reflect on one side are unchanged."""
+    one = early_paths(_l_room([[2.0, 8.0, 1.5]]), max_order=2, diffraction="first_order")
+    room = _l_room([[2.0, 8.0, 1.5]], early={"diffraction_reflections": "both_sides"})
+    both = early_paths(room, max_order=2, diffraction="first_order")
+    second = both.diffracted & (both.order == 2)
+    assert second.sum() >= 2
+    for k in np.flatnonzero(second):
+        assert len(both.points[k]) == 5 and len(both.faces[k]) == 2
+        assert both.faces[k][0] != both.faces[k][1]  # floor and ceiling, not one plane twice
+    kept = both[~second] if hasattr(both, "__getitem__") else None
+    if kept is not None:
+        assert len(kept) == len(one)
+        np.testing.assert_allclose(np.sort(kept.delay_s), np.sort(one.delay_s))

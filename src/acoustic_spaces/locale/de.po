@@ -1365,6 +1365,14 @@ msgid "second_order"
 msgstr "zweite Ordnung"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "one side"
+msgstr "eine Seite"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "both sides"
+msgstr "beide Seiten"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "stochastic_ray_tracing"
 msgstr "stochastische Strahlenverfolgung"
 
@@ -3082,6 +3090,19 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Where a path over one edge may reflect: on one side of the edge, before or "
+"after it (off the ground on the way to a barrier, or off a façade behind "
+"it), or on both sides, before and after (off the ground on the way to a "
+"barrier and again behind it: all four paths over a barrier on the ground)"
+msgstr ""
+"Wo ein Weg über eine Kante reflektiert werden darf: auf einer Seite der "
+"Kante, davor oder dahinter (am Boden auf dem Weg zu einem Schallschirm oder "
+"an einer Fassade dahinter), oder auf beiden Seiten, davor und dahinter (am "
+"Boden auf dem Weg zum Schirm und noch einmal dahinter: alle vier Wege über "
+"einen Schirm auf dem Boden)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
 "bands take their place when it runs up to this band or higher. Up to 500 Hz "
@@ -3109,6 +3130,10 @@ msgstr "Strahlen"
 #: acoustic_spaces/gui/inspector.py
 msgid "Diffraction"
 msgstr "Beugung"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Reflections over an edge"
+msgstr "Reflexionen über eine Kante"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "In pressure up to"

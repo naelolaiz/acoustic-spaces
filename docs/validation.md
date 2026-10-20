@@ -1018,32 +1018,59 @@ The engine agrees within 0.07 dB; Maekawa's chart is within 2 dB.
 The same barrier on a rigid ground, against the four paths over its top (the source
 and its image in the ground, to the listener and its image), each by the exact
 solution, and without the barrier the direct sound and its reflection, averaged over
-each band:
+each band. In the bands up to 500 Hz the engine reads the early paths through band
+filters, whose skirts let in a little of the neighbouring bands where four paths
+interfere, so the table also compares it with the exact solution read through the same
+filters (*through the filters*; from 1 kHz up the engine averages each pair of paths'
+interference over the band exactly, and the row repeats the one above it). First with
+`simulation.early.diffraction_reflections: both_sides`, which takes all four paths:
 
 | listener | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
 |---|---|---|---|---|---|---|---|---|---|
 | 2 m behind | 14.21 | 11.15 | 23.60 | 10.22 | 19.58 | 22.62 | 24.84 | 28.15 | exact, dB |
-| | -2.33 | +1.48 | -3.93 | +0.90 | +0.34 | +0.30 | +0.51 | +0.54 | engine - exact |
-| | -0.01 | -0.03 | -0.11 | +0.14 | -0.01 | -0.00 | -0.01 | -0.01 | without the barrier |
+| | -0.59 | +0.23 | -2.10 | +0.42 | +0.01 | +0.00 | +0.04 | +0.15 | engine - exact |
+| | -0.04 | -0.06 | -0.05 | +0.02 | +0.01 | +0.00 | +0.04 | +0.15 | through the filters |
+| | +0.00 | +0.00 | +0.00 | +0.01 | -0.01 | -0.00 | -0.01 | -0.01 | without the barrier |
 | 10 m behind | 6.31 | 13.90 | 25.19 | 14.78 | 9.06 | 22.29 | 22.66 | 25.94 | exact, dB |
-| | +0.92 | -1.69 | -5.00 | +0.86 | +0.53 | +0.43 | +0.65 | +0.54 | engine - exact |
-| | -0.00 | -0.01 | -0.04 | -0.13 | +0.00 | -0.00 | +0.00 | -0.02 | without the barrier |
+| | +0.05 | -0.10 | -2.24 | -0.06 | +0.01 | +0.00 | +0.04 | +0.07 | engine - exact |
+| | -0.04 | -0.13 | -0.05 | -0.05 | +0.01 | +0.00 | +0.04 | +0.07 | through the filters |
+| | +0.00 | +0.00 | +0.00 | +0.01 | +0.00 | -0.00 | +0.00 | -0.02 | without the barrier |
 | 40 m behind | 4.41 | 8.42 | 18.06 | 18.55 | 18.19 | 15.47 | 21.19 | 24.47 | exact, dB |
-| | +1.70 | +0.70 | -2.72 | +1.81 | +0.41 | +0.27 | +0.71 | +0.61 | engine - exact |
-| | -0.00 | -0.00 | -0.01 | -0.03 | +0.00 | +0.01 | -0.01 | -0.01 | without the barrier |
+| | +0.03 | +0.06 | -0.54 | +0.16 | +0.00 | +0.01 | +0.00 | +0.05 | engine - exact |
+| | -0.04 | -0.08 | -0.10 | -0.08 | +0.00 | +0.01 | +0.00 | +0.05 | through the filters |
+| | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.01 | -0.01 | -0.01 | without the barrier |
 | 90 m behind | 4.17 | 7.93 | 16.66 | 12.67 | 20.67 | 24.87 | 16.25 | 23.53 | exact, dB |
-| | +1.85 | +1.04 | -2.43 | +1.77 | -0.52 | -0.74 | +0.77 | +0.67 | engine - exact |
-| | -0.00 | -0.00 | -0.00 | -0.01 | +0.00 | +0.00 | +0.01 | -0.01 | without the barrier |
+| | +0.03 | +0.06 | -0.63 | +0.27 | +0.01 | +0.01 | +0.02 | +0.06 | engine - exact |
+| | -0.04 | -0.08 | -0.09 | -0.01 | +0.01 | +0.01 | +0.02 | +0.06 | through the filters |
+| | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.01 | -0.01 | without the barrier |
 
-Without the barrier the engine's level (the direct sound and its reflection, added in
-pressure) is within 0.14 dB of the exact one, the band filters below 1 kHz apart. With
-it, the engine's `first_order` diffraction takes one reflection, before or after the
-edge, and leaves out the path reflected both before and after the barrier, a quarter
-of the sound over it: from 1 kHz up the insertion loss comes out 0.3 to 0.8 dB too
-high, and in the bands below, where the four paths interfere, up to 5 dB off either
-way. Over grass and other soft grounds, whose reflections near grazing are weak, the
-gap is smaller; the [roadmap](roadmap.md) has the missing path. The sound that goes
-over the top, down to the ground and over the top again is left out of both.
+Read alike, the engine is within 0.15 dB of the exact solution at every listener and
+band (0.13 dB up to 500 Hz, 0.15 dB at 8 kHz, 0.07 dB elsewhere), and without the
+barrier (the direct sound and its reflection, added in pressure) within 0.02 dB. The
+2 dB at 250 Hz near the barrier is what the band filters let in from the bands beside
+a deep interference dip, as a measured response read through the same filters would
+show, not a gap in the model.
+
+Then with the default `one_side`, where a path reflects before or after the edge but
+not both, so the path reflected both before and after the barrier, a quarter of the
+sound over it, is left out:
+
+| listener | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
+|---|---|---|---|---|---|---|---|---|---|
+| 2 m behind | -2.33 | +1.48 | -3.93 | +0.90 | +0.34 | +0.30 | +0.51 | +0.54 | engine - exact |
+| | -1.78 | +1.19 | -1.88 | +0.50 | +0.34 | +0.30 | +0.51 | +0.54 | through the filters |
+| 10 m behind | +0.92 | -1.69 | -5.00 | +0.86 | +0.53 | +0.43 | +0.65 | +0.54 | engine - exact |
+| | +0.83 | -1.72 | -2.81 | +0.87 | +0.53 | +0.43 | +0.65 | +0.54 | through the filters |
+| 40 m behind | +1.70 | +0.70 | -2.72 | +1.81 | +0.41 | +0.27 | +0.71 | +0.61 | engine - exact |
+| | +1.64 | +0.56 | -2.29 | +1.57 | +0.41 | +0.27 | +0.71 | +0.61 | through the filters |
+| 90 m behind | +1.85 | +1.04 | -2.43 | +1.77 | -0.52 | -0.74 | +0.77 | +0.67 | engine - exact |
+| | +1.78 | +0.90 | -1.89 | +1.48 | -0.52 | -0.74 | +0.77 | +0.67 | through the filters |
+
+Without that path the insertion loss comes out 0.3 to 0.8 dB too high from 1 kHz up,
+and in the bands below, where the four paths interfere, up to 3 dB off either way.
+Over grass and other soft grounds, whose reflections near grazing are weak, the gap is
+smaller. The sound that goes over the top, down to the ground and over the top again
+is left out of both.
 
 A source 1 m over grass and nothing else, the listener 1.5 m up: the level relative to
 free field against the exact solution for a locally reacting ground
@@ -1307,8 +1334,9 @@ its peak (single precision).
   The wave solver in wind and temperature is checked against the parabolic equation
   over open ground up to 200 m, not against measurements, nor round buildings.
   The level relative to free field and a barrier's insertion loss are checked against
-  exact solutions, not against measurements; over a rigid ground the engine leaves
-  out the path reflected both before and after a barrier (see
+  exact solutions, not against measurements; the path reflected both before and after
+  a barrier is checked over a rigid ground only, and the sound that goes over a
+  barrier, down to the ground and over it again is left out (see
   [Outdoor results](#outdoor-results-against-exact-solutions)).
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
@@ -1345,7 +1373,7 @@ The cross-check takes about 20 minutes on 4 cores, the benchmark about 2 minutes
 wave solver's checks about 3.5 minutes (both stencils), the ground's about 7.5 (1.5 of
 them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5
 (3 with turbulence), the turbulence's about 7, the vegetation's about 5, the wave
-solver's outdoors about 18, the outdoor results' about a minute and each BRAS
+solver's outdoors about 18, the outdoor results' about 3 and each BRAS
 run about 30 minutes (85 in third-octave bands, or half that per room with
 `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it

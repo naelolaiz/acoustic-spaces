@@ -19,10 +19,14 @@ compares:
 - the same barrier on a rigid ground: the insertion loss against the four paths over
   the top (the source and its image in the ground, to the listener and its image), each
   by the exact solution, and without the barrier the direct sound and its reflection.
-  The engine's ``first_order`` diffraction takes one reflection, before or after the
-  edge, so it leaves out the path reflected both before and after the barrier, a
-  quarter of the sound over it; the table shows what that costs. The sound that goes
-  over the top, down to the ground and over the top again is left out of both;
+  Twice: with ``diffraction_reflections: both_sides``, which takes all four paths, and
+  with the default ``one_side``, where a path reflects before or after the edge but not
+  both, so the path reflected both before and after the barrier, a quarter of the sound
+  over it, is left out; the second table shows what that costs. The sound that goes
+  over the top, down to the ground and over the top again is left out of both. In the
+  bands up to 500 Hz the engine reads the early paths through band filters, whose
+  skirts let in a little of the neighbouring bands where four paths interfere; the
+  tables also compare it with the exact solution read through the same filters;
 - a source 1 m over grass and nothing else: the level relative to free field at 10, 50
   and 200 m against the exact solution for a locally reacting ground
   (:mod:`ground_reflection`), averaged over each band as the engine reads it. In the
@@ -34,6 +38,7 @@ compares:
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import math
 import sys
@@ -49,9 +54,11 @@ from ground_reflection import SLICES, exact_reflection, field  # noqa: E402
 
 from acoustic_spaces import Room, Scene  # noqa: E402
 from acoustic_spaces.engine import insertion  # noqa: E402
+from acoustic_spaces.engine.coherent import FILTERED_MAX_BAND_HZ  # noqa: E402
 from acoustic_spaces.engine.diffraction import band_frequencies  # noqa: E402
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ  # noqa: E402
 from acoustic_spaces.materials.ground import PRESETS, surface_impedance  # noqa: E402
+from acoustic_spaces.parameters import octave_filter_gains  # noqa: E402
 
 #: The barrier: along y at this x, this high; the source stands at the origin, 1 m up.
 BARRIER_X = 10.0
@@ -66,11 +73,18 @@ GRASS = ((10.0, 1.0, 1.5), (50.0, 1.0, 1.5), (200.0, 1.0, 1.5))
 #: band): dense enough for the ripples of four paths that differ by up to 0.6 m.
 FREQUENCIES, _ = band_frequencies(96)
 K = 2.0 * np.pi * FREQUENCIES.ravel() / C
+#: The engine reads the early paths of the bands up to FILTERED_MAX_BAND_HZ through the
+#: analysis's band filters, which let in a little of the neighbouring bands; the exact
+#: solution over the rigid ground is read through the same filters there, on this FFT
+#: grid up to the frequency past which those filters pass nothing.
+FILTERED_BANDS = OCTAVE_BANDS_HZ.index(FILTERED_MAX_BAND_HZ) + 1
+FILTER_N_FFT, FILTER_RATE, FILTER_MAX_HZ = 1 << 14, 48000.0, 4000.0
 
 
-def barrier_scene(ground: dict, listeners) -> Scene:
+def barrier_scene(ground: dict, listeners, both_sides: bool = False) -> Scene:
     """A barrier across a ground of this material, long and wide enough for its ends
-    and the ground's edge to add nothing."""
+    and the ground's edge to add nothing; with the paths reflected both before and after
+    the barrier when ``both_sides``."""
     far = max(x for x, _, _ in listeners) + 100.0
     return Scene.model_validate(
         {
@@ -92,7 +106,12 @@ def barrier_scene(ground: dict, listeners) -> Scene:
             "simulation": {
                 "ir_length_s": 0.4,
                 "seed": 1,
-                "early": {"method": "image_sources", "max_order": 2, "diffraction": "first_order"},
+                "early": {
+                    "method": "image_sources",
+                    "max_order": 2,
+                    "diffraction": "first_order",
+                    "diffraction_reflections": "both_sides" if both_sides else "one_side",
+                },
                 "late": {"rays": 2000},
             },
         }
@@ -116,19 +135,40 @@ def _level(pressure: np.ndarray, distance: float) -> np.ndarray:
     return 10.0 * np.log10(energy * distance**2)
 
 
-def _btm(listener, ground: str) -> np.ndarray:
-    """The sound over the barrier at ``listener`` by the exact solution, per wave number,
-    as the direct sound in free field is e^(-jkr) / r: over an absorbing ground the one
-    path, over a rigid one the four."""
+def _btm(listener, ground: str, k: np.ndarray = K) -> np.ndarray:
+    """The sound over the barrier at ``listener`` by the exact solution, per wave number
+    of ``k``, as the direct sound in free field is e^(-jkr) / r: over an absorbing
+    ground the one path, over a rigid one the four."""
     edge = Edge([BARRIER_X, 0.0, BARRIER_HEIGHT], [0, 1, 0], [0, 0, -1], [1, 0, 0], 2.0)
     listener = np.asarray(listener, dtype=float)
-    pressure = btm_first(edge, SOURCE, listener, K)
+    pressure = btm_first(edge, SOURCE, listener, k)
     if ground == "rigid":
         mirror = np.array([1.0, 1.0, -1.0])
-        pressure = pressure + btm_first(edge, SOURCE * mirror, listener, K)
-        pressure += btm_first(edge, SOURCE, listener * mirror, K)
-        pressure += btm_first(edge, SOURCE * mirror, listener * mirror, K)
+        pressure = pressure + btm_first(edge, SOURCE * mirror, listener, k)
+        pressure += btm_first(edge, SOURCE, listener * mirror, k)
+        pressure += btm_first(edge, SOURCE * mirror, listener * mirror, k)
     return pressure
+
+
+def _filter_grid() -> tuple[np.ndarray, np.ndarray]:
+    """The wave numbers of the FFT grid up to FILTER_MAX_HZ and the squared gains
+    (FILTERED_BANDS, n) of the band filters at them."""
+    f = np.fft.rfftfreq(FILTER_N_FFT, 1.0 / FILTER_RATE)
+    keep = (f > 0.0) & (f <= FILTER_MAX_HZ)
+    gains = octave_filter_gains(FILTER_N_FFT, FILTER_RATE)[:FILTERED_BANDS, keep] ** 2
+    return 2.0 * np.pi * f[keep] / C, gains
+
+
+def _as_read(exact: np.ndarray, pressure, distance: float) -> np.ndarray:
+    """``exact``, octave band levels by :func:`_level`, with the bands the engine reads
+    through the band filters replaced by the spectrum ``pressure(k)`` (per wave number,
+    as :func:`_btm`) read through the same filters: the energy through each filter over
+    that of the direct sound in free field through it."""
+    k, gains = _filter_grid()
+    energy = np.abs(pressure(k)) ** 2 * distance**2
+    out = np.array(exact, dtype=float)
+    out[:FILTERED_BANDS] = 10.0 * np.log10((gains * energy).sum(axis=1) / gains.sum(axis=1))
+    return out
 
 
 def _maekawa(listener) -> np.ndarray:
@@ -141,19 +181,38 @@ def _maekawa(listener) -> np.ndarray:
     return 10.0 * np.log10(3.0 + 20.0 * fresnel)
 
 
-def _bare_level(listener) -> np.ndarray:
-    """The level relative to free field without the barrier over a rigid ground, per
-    octave band: the direct sound and its reflection, averaged over each band."""
+def _bare_pressure(listener, k: np.ndarray = K) -> np.ndarray:
+    """Without the barrier over a rigid ground, the direct sound and its reflection at
+    ``listener`` per wave number of ``k``, relative to the direct sound in free field."""
     listener = np.asarray(listener, dtype=float)
     r1 = float(np.linalg.norm(listener - SOURCE))
     r2 = float(np.linalg.norm(listener * [1, 1, -1] - SOURCE))
-    pressure = (np.exp(-1j * K * r1) / r1 + np.exp(-1j * K * r2) / r2) * r1
-    return _level(pressure, 1.0)
+    return (np.exp(-1j * k * r1) / r1 + np.exp(-1j * k * r2) / r2) * r1
 
 
-def check_barrier(ground: str) -> list[dict]:
+def _bare_level(listener) -> np.ndarray:
+    """The level relative to free field without the barrier over a rigid ground, per
+    octave band: the direct sound and its reflection, averaged over each band."""
+    return _level(_bare_pressure(listener), 1.0)
+
+
+@functools.cache
+def _exact_rigid(listener: tuple) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Over the rigid ground at ``listener``: the exact level relative to free field
+    with the barrier and without it, each averaged over the bands exactly and as the
+    engine reads it (through the band filters up to FILTERED_MAX_BAND_HZ)."""
+    distance = float(np.linalg.norm(np.array(listener) - SOURCE))
+    relative = _level(_btm(listener, "rigid"), distance)
+    read = _as_read(relative, lambda k: _btm(listener, "rigid", k), distance)
+    bare = _bare_level(listener)
+    bare_read = _as_read(bare, lambda k: _bare_pressure(listener, k), 1.0)
+    return relative, read, bare, bare_read
+
+
+def check_barrier(ground: str, both_sides: bool = False) -> list[dict]:
     """The barrier over an absorbing or a rigid ground: the engine against the exact
-    solution at every listener."""
+    solution at every listener, with the paths reflected on both sides of the barrier
+    when ``both_sides``."""
     material = (
         {"absorption": [1.0] * 8, "scattering": 0.0}
         if ground == "absorbing"
@@ -161,16 +220,22 @@ def check_barrier(ground: str) -> list[dict]:
     )
     listeners = [(x, 0.0, LISTENER_HEIGHT) for x in BEHIND]
     started = time.perf_counter()
-    relative, loss = _engine(barrier_scene(material, listeners))
+    relative, loss = _engine(barrier_scene(material, listeners, both_sides))
     seconds = time.perf_counter() - started
     print(f"A barrier {BARRIER_HEIGHT:g} m high, {BARRIER_X:g} m from the source, over")
-    print(f"{'an absorbing' if ground == 'absorbing' else 'a rigid'} ground ({seconds:.0f} s)")
+    where = "an absorbing" if ground == "absorbing" else "a rigid"
+    sides = ", reflections on both sides of it" if both_sides else ""
+    print(f"{where} ground{sides} ({seconds:.0f} s)")
     print(f"{'':30}" + "".join(f"{f:>7g}" for f in OCTAVE_BANDS_HZ))
     rows = []
     for listener, engine_relative, engine_loss in zip(listeners, relative, loss, strict=True):
         distance = float(np.linalg.norm(np.array(listener) - SOURCE))
-        exact_relative = _level(_btm(listener, ground), distance)
-        exact_loss = (0.0 if ground == "absorbing" else _bare_level(listener)) - exact_relative
+        if ground == "absorbing":
+            exact_relative = _level(_btm(listener, ground), distance)
+            exact_loss = -exact_relative
+        else:
+            exact_relative, read_relative, bare, bare_read = _exact_rigid(tuple(listener))
+            exact_loss, read_loss = bare - exact_relative, bare_read - read_relative
         name = f"{listener[0] - BARRIER_X:g} m behind it"
         print(f"{name:30}" + "".join(f"{v:7.2f}" for v in exact_loss) + "  exact insertion loss")
         print(
@@ -194,10 +259,16 @@ def check_barrier(ground: str) -> list[dict]:
                 + "  Maekawa - exact"
             )
         else:
-            bare = _bare_level(listener)
+            row["exact_insertion_loss_as_read_db"] = read_loss.tolist()
+            row["exact_re_free_field_as_read_db"] = read_relative.tolist()
             print(
                 f"{'':30}"
-                + "".join(f"{v:+7.2f}" for v in engine_relative + engine_loss - bare)
+                + "".join(f"{v:+7.2f}" for v in engine_loss - read_loss)
+                + f"  engine - exact through the band filters (to {FILTERED_MAX_BAND_HZ} Hz)"
+            )
+            print(
+                f"{'':30}"
+                + "".join(f"{v:+7.2f}" for v in engine_relative + engine_loss - bare_read)
                 + "  engine - exact, without the barrier"
             )
         rows.append(row)
@@ -255,6 +326,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     results = {
         "barrier_absorbing_ground": check_barrier("absorbing"),
+        "barrier_rigid_ground_both_sides": check_barrier("rigid", both_sides=True),
         "barrier_rigid_ground": check_barrier("rigid"),
         "grass": check_grass(),
     }

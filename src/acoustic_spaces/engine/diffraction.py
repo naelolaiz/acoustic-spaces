@@ -486,7 +486,9 @@ class EdgeDiffraction:
 
     ``mode`` is ``"direct"`` (the direct sound only), ``"first_order"`` (also the
     first-order reflections, before or after the edge) or ``"second_order"`` (also the
-    direct sound over two edges in turn). ``air`` is the energy
+    direct sound over two edges in turn); with ``both_sides`` the paths over one edge
+    may also reflect both before and after it (the four paths over a barrier on the
+    ground). ``air`` is the energy
     attenuation per metre per band; ``directivity`` and ``orientation`` are the source's,
     as for :func:`~acoustic_spaces.engine.early.find_paths`. In the lowest ``coherent``
     bands the terms of every wave add coherently, the faces of the edges and the planes
@@ -508,6 +510,7 @@ class EdgeDiffraction:
         mode: str = "first_order",
         edges: Edges | None = None,
         coherent: int = 0,
+        both_sides: bool = False,
     ) -> None:
         if mode not in DIFFRACTION_MODES[1:]:
             raise ValueError(f"unknown diffraction mode {mode!r}")
@@ -520,6 +523,7 @@ class EdgeDiffraction:
         self.mode = mode
         self.coherent = int(coherent)
         self.reflections = mode != "direct"
+        self.both_sides = bool(both_sides) and self.reflections
         self.two_edges = mode == "second_order"
         self._edge_pair_cache: np.ndarray | None = None
         self.size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
@@ -627,8 +631,10 @@ class EdgeDiffraction:
         edge, side, t_s, rho_s, phi_s = self._source_side
         tolerance = _TOLERANCE * self.size
 
-        # Listener sides: the listener, for every source side; and its images, for the
-        # source itself.
+        # Listener sides: the listener, for every source side; its images, for the
+        # source itself; and, with both_sides, its images for the source's images too.
+        # ``kind`` says which: 0 nothing reflected, 1 before the edge (``plane``), 2
+        # after it (``plane``), 3 both (``plane`` before, ``plane2`` after).
         planes = self._facing(listener) if self.reflections else np.zeros(0, np.int64)
         all_edges = np.arange(len(edges))
         t_l, rho_l, phi_l, in_l = edges.frame(all_edges, np.broadcast_to(listener, (len(edges), 3)))
@@ -646,6 +652,7 @@ class EdgeDiffraction:
                 t_l[edge[ok]],
                 rho_l[edge[ok]],
                 phi_l[edge[ok]],
+                np.full(int(ok.sum()), -1, dtype=np.int64),
             )
         ]
         if len(planes):
@@ -672,10 +679,40 @@ class EdgeDiffraction:
                     t_i[ok],
                     rho_i[ok],
                     phi_i[ok],
+                    np.full(int(ok.sum()), -1, dtype=np.int64),
                 )
             )
-        (edge, src, rcv, plane, kind, t_s, rho_s, phi_s, t_r, rho_r, phi_r) = (
-            np.concatenate([p[i] for p in parts]) for i in range(11)
+            if self.both_sides:
+                # The source's images to the listener's: a reflection on each side.
+                imaged = self.source_planes[side] >= 0
+                e1, s1 = edge[imaged], side[imaged]
+                ts1, rs1, ps1 = t_s[imaged], rho_s[imaged], phi_s[imaged]
+                pe = np.repeat(e1, len(planes))
+                ps = np.repeat(np.arange(len(e1)), len(planes))
+                pp = np.tile(np.arange(len(planes)), len(e1))
+                t_i, rho_i, phi_i, in_i = edges.frame(pe, images[pp])
+                plane_l = planes[pp]
+                ok = in_i & (rho_i > tolerance)
+                ok &= (plane_l != edges.plane[pe, 0]) & (plane_l != edges.plane[pe, 1])
+                rows = ps[ok]
+                parts.append(
+                    (
+                        pe[ok],
+                        self.source_points[s1[rows]],
+                        images[pp[ok]],
+                        self.source_planes[s1[rows]],
+                        np.full(int(ok.sum()), 3),
+                        ts1[rows],
+                        rs1[rows],
+                        ps1[rows],
+                        t_i[ok],
+                        rho_i[ok],
+                        phi_i[ok],
+                        plane_l[ok],
+                    )
+                )
+        (edge, src, rcv, plane, kind, t_s, rho_s, phi_s, t_r, rho_r, phi_r, plane2) = (
+            np.concatenate([p[i] for p in parts]) for i in range(12)
         )
 
         # The point on the edge where the path makes equal angles with it on both sides.
@@ -687,12 +724,13 @@ class EdgeDiffraction:
         # counts at the start of the edge, only the second at its end.
         length = edges.length[edge]
         ok = np.where(kind == 2, (t_k > 0.0) & (t_k <= length), (t_k >= 0.0) & (t_k < length))
+        ok &= (kind != 3) | ((t_k > 0.0) & (t_k < length))  # at an end, one of those two
         ok &= (r1 + r2) / self.speed_of_sound <= max_delay_s
         if not ok.any():
             return None
         sel = np.flatnonzero(ok)
         edge, src, rcv, plane, kind = edge[sel], src[sel], rcv[sel], plane[sel], kind[sel]
-        t_k, r1, r2 = t_k[sel], r1[sel], r2[sel]
+        t_k, r1, r2, plane2 = t_k[sel], r1[sel], r2[sel], plane2[sel]
         phi_s, phi_r, rho_s = phi_s[sel], phi_r[sel], rho_s[sel]
         point = edges.start[edge] + t_k[:, None] * edges.direction[edge]
 
@@ -704,18 +742,26 @@ class EdgeDiffraction:
         start = point + along[:, None] * edges.direction[edge] + offset * edges.bisector()[edge]
         reflected = np.full(len(edge), -1, dtype=np.int64)
         bounce = np.zeros((len(edge), 3))
+        reflected2 = np.full(len(edge), -1, dtype=np.int64)  # after the edge, kind 3
+        bounce2 = np.zeros((len(edge), 3))
         ok = np.ones(len(edge), dtype=bool)
         for end, image_kind in ((self.source, 1), (listener, 2)):
             ends = np.broadcast_to(end, (len(edge), 3))
-            via = kind == image_kind
+            via = (kind == image_kind) | (kind == 3)
             plain = ~via
             if plain.any():
                 ok[plain] &= _clear(self.model, start[plain], ends[plain])
             if via.any():
                 target = src[via] if image_kind == 1 else rcv[via]
-                hit, where, face = _reflect(self.model, start[via], target, plane[via], ends[via])
+                through = plane[via]
+                if image_kind == 2:
+                    through = np.where(kind[via] == 3, plane2[via], through)
+                hit, where, face = _reflect(self.model, start[via], target, through, ends[via])
                 ok[via] &= hit
-                bounce[via], reflected[via] = where, face
+                rows = np.flatnonzero(via)
+                second = (kind[via] == 3) & (image_kind == 2)
+                bounce[rows[~second]], reflected[rows[~second]] = where[~second], face[~second]
+                bounce2[rows[second]], reflected2[rows[second]] = where[second], face[second]
         if not ok.any():
             return None
         sel = np.flatnonzero(ok)
@@ -723,10 +769,13 @@ class EdgeDiffraction:
             "edge": edge[sel],
             "source_side": src[sel],
             "plane": plane[sel],
+            "plane2": plane2[sel],
             "kind": kind[sel],
             "point": point[sel],
             "bounce": bounce[sel],
             "face": reflected[sel],
+            "bounce2": bounce2[sel],
+            "face2": reflected2[sel],
             "r1": r1[sel],
             "r2": r2[sel],
             "rho_s": rho_s[sel],
@@ -757,7 +806,8 @@ class EdgeDiffraction:
         angle = boundary_angles(n, c["phi_r"], c["phi_s"])
         lit = (angle > _ON_BOUNDARY) | ((np.abs(angle) <= _ON_BOUNDARY) & (found >= 0))
         kl = k * length_param[:, None, None]
-        first = np.where((kind == 1)[:, None], c["bounce"], c["point"])
+        before = (kind == 1) | (kind == 3)  # a reflection before the edge
+        first = np.where(before[:, None], c["bounce"], c["point"])
         departure = first - self.source
         departure /= np.maximum(np.linalg.norm(departure, axis=1), 1e-300)[:, None]
         weight = source_weights(
@@ -765,28 +815,39 @@ class EdgeDiffraction:
         )  # (C, B)
         amplitude = np.sqrt(weight * np.exp(-np.outer(distance, self.air)) / (4.0 * np.pi))
         amplitude /= np.sqrt(r1 * r2 * distance)[:, None]
-        on_plane = c["face"] >= 0
-        if on_plane.any():
-            face = c["face"][on_plane]
-            kept = 1.0 - model.absorption[face]
-            if model.face_impedance is not None or model.ground_part is not None:
-                kept[model.factor_faces(face)] = 1.0  # their reflection factor comes below
-            amplitude[on_plane] *= np.sqrt(kept * (1.0 - model.scattering[face]))
+        # The reflections on the way: before the edge or after it ("face", "bounce"),
+        # and after it as well for the paths that reflect on both sides ("face2").
+        legs = (
+            (c["face"], c["bounce"], before),
+            (c["face2"], c["bounce2"], np.zeros(len(kind), dtype=bool)),
+        )
+        for faces, _, _ in legs:
+            on_plane = faces >= 0
+            if on_plane.any():
+                face = faces[on_plane]
+                kept = 1.0 - model.absorption[face]
+                if model.face_impedance is not None or model.ground_part is not None:
+                    kept[model.factor_faces(face)] = 1.0  # their reflection factor comes below
+                amplitude[on_plane] *= np.sqrt(kept * (1.0 - model.scattering[face]))
         common = (
             amplitude[:, :, None]
             * wedge_prefactor(n[:, None, None], k, sin_beta[:, None, None])
             * np.exp(-1j * k * distance[:, None, None])
         )  # (C, B, M)
-        grounds = on_plane.any() and model.factor_faces(c["face"][on_plane]).any()
-        if (self.coherent or grounds) and on_plane.any():
+        for faces, bounces, via in legs:
+            on_plane = faces >= 0
+            grounds = on_plane.any() and model.factor_faces(faces[on_plane]).any()
+            if not ((self.coherent or grounds) and on_plane.any()):
+                continue
             # The phase of the reflection off the plane before or after the edge.
             rows = np.flatnonzero(on_plane)
-            face = c["face"][rows]
+            face = faces[rows]
             # The leg between the plane and the source or the listener: the one between
             # it and the edge vanishes where the path reflects at an end of the edge.
-            bounce = c["bounce"][rows]
+            bounce = bounces[rows]
+            via_source = via[rows]
             incoming = np.where(
-                (kind[rows] == 1)[:, None], bounce - self.source[None], listener[None] - bounce
+                via_source[:, None], bounce - self.source[None], listener[None] - bounce
             )
             normal = model.plane_normal[model.face_plane[face]]
             cosine = np.abs(np.einsum("ij,ij->i", normal, incoming)) / np.maximum(
@@ -800,13 +861,12 @@ class EdgeDiffraction:
             if ground.any():
                 # A ground's spherical wave, from the image of the source or the listener
                 # to the edge.
-                leg = np.where(kind[rows] == 1, r1[rows], r2[rows])
-                via_source = (kind[rows] == 1)[:, None]
+                leg = np.where(via_source, r1[rows], r2[rows])
                 edge_point = c["point"][rows]
                 ends = (
-                    np.where(via_source, self.source[None], edge_point),
+                    np.where(via_source[:, None], self.source[None], edge_point),
                     bounce,
-                    np.where(via_source, edge_point, listener[None]),
+                    np.where(via_source[:, None], edge_point, listener[None]),
                 )
                 common[rows[ground]] *= ground_factors(
                     model,
@@ -852,7 +912,17 @@ class EdgeDiffraction:
                 return [c["bounce"][i], c["point"][i]]
             if kind[i] == 2:
                 return [c["point"][i], c["bounce"][i]]
+            if kind[i] == 3:
+                return [c["bounce"][i], c["point"][i], c["bounce2"][i]]
             return [c["point"][i]]
+
+        def faces(i: int) -> np.ndarray:
+            if kind[i] == 3:
+                return np.array([c["face"][i], c["face2"][i]], dtype=np.int64)
+            return np.array([c["face"][i]] if kind[i] else [], dtype=np.int64)
+
+        last = np.where((kind == 2)[:, None], c["bounce"], c["point"])
+        last = np.where((kind == 3)[:, None], c["bounce2"], last)
 
         return {
             "c": c,
@@ -863,11 +933,11 @@ class EdgeDiffraction:
             "spectrum": self._spectrum((waves * counted[:, :, None, None]).sum(axis=1), distance),
             "distance": distance,
             "paths": out,
-            "order": np.where(kind > 0, 1, 0).astype(np.int64),
+            "order": np.where(kind == 3, 2, np.where(kind > 0, 1, 0)).astype(np.int64),
             "edge": edge,
-            "last": np.where((kind == 2)[:, None], c["bounce"], c["point"]),
+            "last": last,
             "corners": corners,
-            "faces": lambda i: np.array([c["face"][i]] if kind[i] else [], dtype=np.int64),
+            "faces": faces,
         }
 
     def _double(self, listener: np.ndarray, max_delay_s: float, single: dict | None):
@@ -1110,7 +1180,7 @@ class EdgeDiffraction:
         planes = len(self.model.plane_normal) + 1
 
         def key(edge, kind, through):
-            return (np.asarray(edge) * 3 + kind) * planes + np.asarray(through) + 1
+            return (np.asarray(edge) * 4 + kind) * planes + np.asarray(through) + 1
 
         known = key(c["edge"], c["kind"], c["plane"])
         order = np.argsort(known)
@@ -1200,14 +1270,15 @@ class EdgeDiffraction:
             return out
         images = listener + paths.direction[specular] * paths.distance_m[specular, None]
         orders = paths.order[specular]
-        kind, plane = c["kind"], c["plane"]
+        kind, plane, plane2 = c["kind"], c["plane"], c["plane2"]
         base = np.broadcast_to(self.source, (count, 3)).copy()
         has_plane = kind > 0
         base[has_plane] = model.mirror(base[has_plane], plane[has_plane])
+        both = kind == 3  # and off the listener's plane last
         tolerance = 1e-6 * self.size
         for column, wedge_face in ((0, None), (1, 0), (2, 1)):
             if wedge_face is None:
-                image, order = base, has_plane.astype(np.int64)
+                image, order = base.copy(), has_plane.astype(np.int64)
             else:
                 face_plane = edges.plane[c["edge"], wedge_face]
                 image = base.copy()
@@ -1222,6 +1293,9 @@ class EdgeDiffraction:
                     )
                     image[before] = model.mirror(first, plane[before])
                 order = has_plane.astype(np.int64) + 1
+            if both.any():
+                image[both] = model.mirror(image[both], plane2[both])
+                order = order + both.astype(np.int64)
             out[:, column] = _match(image, order, images, orders, specular, tolerance)
         # A reflection off a face needs the wave to come from in front of it: on a free
         # edge both faces' images are the same point, and only one side is in front.

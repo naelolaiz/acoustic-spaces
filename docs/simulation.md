@@ -189,6 +189,23 @@ each octave band:
 - `direct`: only the direct sound.
 - `none`: specular paths only.
 
+With `first_order` and `second_order`, `simulation.early.diffraction_reflections` says
+where a path over one edge may reflect: `one_side` (the default), before or after the
+edge, off the ground on the way to a barrier or off a façade behind it; or
+`both_sides`, before and after, which adds the path reflected off the ground on the
+way to a barrier and again behind it, the fourth of the four paths over a barrier on
+the ground. Over a hard ground that path carries a quarter of the sound over the
+barrier, and without it the insertion loss comes out 0.3 to 0.8 dB too high from 1 kHz
+up and a few decibels off in the bands below, where the four paths interfere; with it
+the engine is within 0.15 dB of the exact solution (see the
+[validation report](validation.md#outdoor-results-against-exact-solutions)). Over grass
+and other soft grounds, whose reflections near grazing are weak, the path matters
+less. `both_sides` pairs every reflection before an edge with every one after it, so
+it costs more where many faces reflect (in the `street` example about a sixth more
+diffracted paths and a few tens of milliseconds per listener);
+`--diffraction-reflections` sets it for one run of `simulate` or `map`, and the editor
+has it as **Reflections over an edge** under **Early reflections**.
+
 The edges are found in the model: corners where two faces meet with more than 195° of
 open air round them (the inside corner of an L-shaped room, the front of a stage or a
 balcony) and the free edges of thin screens. Each source and listener get the shortest

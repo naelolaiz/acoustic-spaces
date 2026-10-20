@@ -525,7 +525,10 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
   Edges on the ground (the foot of a wall or a barrier) and the inside corners where two
   wings of a building meet diffract nothing. `second_order` follows the sound over a
   building, its front and back edges in turn; `first_order` bends over one edge at a
-  time, which is enough for a barrier.
+  time, which is enough for a barrier. With `diffraction_reflections: both_sides` a
+  path reflects off the ground both before and after the edge, the fourth of the four
+  paths over a barrier on the ground (see
+  [Edge diffraction](simulation.md#edge-diffraction)).
 - **The late part** comes from the stochastic ray tracer: rays reflect and scatter off
   the ground and the buildings until they leave through the sky. Between tall buildings
   (a street canyon, a courtyard) that is a tail of its own; in the open, almost nothing.
@@ -646,10 +649,13 @@ change with the angle sound meets it at, which holds for grass, soil and snow, t
 less for a thick layer of very soft snow.
 
 Sound that reflects off the ground both before and after bending over an edge (two
-reflections and a diffraction) is left out: `first_order` diffraction takes one
-reflection, before or after the edge. Over a rigid ground that path carries a quarter
-of the sound over a barrier, so the barrier's insertion loss comes out 0.3 to 0.8 dB too
-high from 1 kHz up and a few decibels off in the bands below, where the paths
-interfere; over grass and other soft grounds, whose reflections near grazing are weak,
-the gap is smaller (see
-[Validation](validation.md#outdoor-results-against-exact-solutions)).
+reflections and a diffraction) is left out unless
+`simulation.early.diffraction_reflections` is `both_sides`: by default a path
+reflects before or after the edge, not both. Over a rigid ground that path carries a
+quarter of the sound over a barrier, so without it the barrier's insertion loss comes
+out 0.3 to 0.8 dB too high from 1 kHz up and a few decibels off in the bands below,
+where the paths interfere; with it the engine is within 0.15 dB of the exact solution.
+Over grass and other soft grounds, whose reflections near grazing are weak, the gap is
+smaller (see [Validation](validation.md#outdoor-results-against-exact-solutions)).
+Sound that goes over a barrier, down to the ground and over the barrier again is left
+out either way.
