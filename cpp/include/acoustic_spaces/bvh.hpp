@@ -72,6 +72,10 @@ public:
         Box all;
         for (const Box &b : boxes) all.grow(b);
         scale_ = n_faces > 0 ? std::max(norm(all.hi - all.lo), 1e-9) : 1.0;
+        if (n_faces > 0) {
+            lower_ = all.lo;
+            upper_ = all.hi;
+        }
         // Pad the boxes so that rays grazing an edge or a vertex still reach its faces.
         const Vec3 pad{1e-9 * scale_, 1e-9 * scale_, 1e-9 * scale_};
         for (Box &b : boxes) {
@@ -104,6 +108,12 @@ public:
 
     // Length of the model's bounding box diagonal; used to scale tolerances.
     double scale() const { return scale_; }
+
+    // Whether p lies inside the model's bounding box, grown by `pad` on every side.
+    bool encloses(const Vec3 &p, double pad) const {
+        return p.x >= lower_.x - pad && p.x <= upper_.x + pad && p.y >= lower_.y - pad &&
+               p.y <= upper_.y + pad && p.z >= lower_.z - pad && p.z <= upper_.z + pad;
+    }
 
     // Nearest hit with t in (t_min, t_max); `ignore` is a face to skip (the one a
     // reflected ray starts on), or -1.
@@ -207,6 +217,7 @@ private:
     std::vector<std::uint32_t> place_;   // place in tri_ of each face
     std::vector<Node> nodes_;
     double scale_ = 1.0;
+    Vec3 lower_, upper_;  // corners of the model's bounding box
     BvhSplit split_ = BvhSplit::kSah;
 
     // Splits faces order_[begin, end) at the binned surface area heuristic's best plane,

@@ -287,6 +287,34 @@ as::StochasticScene stochastic_scene(const char *name, const as::Bvh &bvh, InArr
 
 std::vector<double> to_vector(const InArray &a) { return {a.data(), a.data() + a.shape(0)}; }
 
+// The atmosphere of an outdoor stochastic run, into `air`: rows of (height above the
+// ground, speed of sound in still air, wind speed) and the way the wind blows (x, y).
+// False with no rows (None): the rays go straight.
+bool atmosphere(const char *name, const Points &rows, const InArray &wind_direction,
+                double ground, double chord_sagitta, as::Atmosphere &air) {
+    if (!rows.is_valid() || rows.shape(0) == 0) return false;
+    const std::string fn = name;
+    if (!wind_direction.is_valid() || wind_direction.shape(0) != 2) {
+        throw std::invalid_argument(fn + ": wind_direction must be (x, y)");
+    }
+    for (std::size_t i = 0; i < rows.shape(0); ++i) {
+        air.height.push_back(rows(i, 0));
+        air.still.push_back(rows(i, 1));
+        air.wind.push_back(rows(i, 2));
+    }
+    air.wind_x = wind_direction(0);
+    air.wind_y = wind_direction(1);
+    air.ground = ground;
+    air.sagitta = chord_sagitta;
+    if (!air.valid()) {
+        throw std::invalid_argument(
+            fn + ": atmosphere rows must start at height 0 and rise, with speeds above the "
+                 "wind's, and wind_direction a unit vector");
+    }
+    air.prepare();
+    return true;
+}
+
 // The rays trace_stochastic sends from its source: for each of the random streams
 // first_ray .. first_ray + rays - 1, the direction its ray leaves in (rays x 3) and the
 // source's energy weights that way (rays x bands, before sharing the energy out).
@@ -355,11 +383,18 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
                            std::size_t threads, double window_time_step,
                            std::uint64_t first_ray, InArray split_target, double split_ratio,
                            std::size_t max_split, std::size_t max_family, InArray room_level,
-                           Indices face_group, std::size_t groups, double moment_time_step) {
+                           Indices face_group, std::size_t groups, double moment_time_step,
+                           Points atmosphere_rows, InArray wind_direction, double ground,
+                           double chord_sagitta) {
     as::StochasticScene scene =
         stochastic_scene("trace_stochastic", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
                          transmission, face_room, source_room);
+    as::Atmosphere bending;
+    if (atmosphere("trace_stochastic", atmosphere_rows, wind_direction, ground, chord_sagitta,
+                   bending)) {
+        scene.atmosphere = &bending;
+    }
     const std::size_t bands = scene.bands;
     scene.receivers = points(receivers);
     scene.directions = points(directions);
@@ -406,6 +441,50 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
         to_numpy(std::move(result.reflections), {result.windows}), result.traced_rays);
 }
 
+// One chord of each of n rays bent by an atmosphere (see atmosphere.hpp): from
+// origins along directions (unit), at most budget metres of arc, stopping where a ray
+// turns back towards the plane of normal away (zero: none). Returns the chord ends (n x
+// 3), the rays' directions there (n x 3), the metres of arc and seconds along it (n),
+// and whether each turned back (n).
+nb::tuple bent_chords(Points origins, Points directions, InArray budget, Points away,
+                      Points atmosphere_rows, InArray wind_direction, double ground,
+                      double chord_sagitta) {
+    const std::size_t n = origins.shape(0);
+    if (directions.shape(0) != n || budget.shape(0) != n || away.shape(0) != n) {
+        throw std::invalid_argument("bent_chords: one origin, direction, budget and away per ray");
+    }
+    as::Atmosphere air;
+    if (!atmosphere("bent_chords", atmosphere_rows, wind_direction, ground, chord_sagitta, air)) {
+        throw std::invalid_argument("bent_chords: no atmosphere");
+    }
+    std::vector<double> ends(3 * n), tangents(3 * n), arcs(n), times(n);
+    std::vector<std::uint8_t> turned(n);
+    {
+        nb::gil_scoped_release release;
+        for (std::size_t i = 0; i < n; ++i) {
+            const as::Vec3 o{origins(i, 0), origins(i, 1), origins(i, 2)};
+            const as::Vec3 d{directions(i, 0), directions(i, 1), directions(i, 2)};
+            const as::Vec3 a{away(i, 0), away(i, 1), away(i, 2)};
+            const bool leaving = a.x != 0.0 || a.y != 0.0 || a.z != 0.0;
+            as::BentRay ray(air, o, d);
+            const as::BentRay::Chord chord = ray.chord(budget(i), leaving ? &a : nullptr);
+            const as::Vec3 t = ray.direction();
+            ends[3 * i] = chord.end.x;
+            ends[3 * i + 1] = chord.end.y;
+            ends[3 * i + 2] = chord.end.z;
+            tangents[3 * i] = t.x;
+            tangents[3 * i + 1] = t.y;
+            tangents[3 * i + 2] = t.z;
+            arcs[i] = chord.arc;
+            times[i] = chord.time;
+            turned[i] = chord.turned ? 1 : 0;
+        }
+    }
+    return nb::make_tuple(to_numpy(std::move(ends), {n, 3}), to_numpy(std::move(tangents), {n, 3}),
+                          to_numpy(std::move(arcs), {n}), to_numpy(std::move(times), {n}),
+                          to_numpy(std::move(turned), {n}));
+}
+
 using MapIndex = nb::ndarray<const std::int64_t, nb::ndim<3>, nb::c_contig, nb::device::cpu>;
 
 nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
@@ -419,11 +498,17 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
                     double speed_of_sound, int covered_order, std::uint64_t seed,
                     std::size_t threads, double window_time_step, std::uint64_t first_ray,
                     InArray split_target, double split_ratio, std::size_t max_split,
-                    std::size_t max_family, InArray room_level) {
+                    std::size_t max_family, InArray room_level, Points atmosphere_rows,
+                    InArray wind_direction, double ground, double chord_sagitta) {
     as::StochasticScene scene =
         stochastic_scene("trace_map", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
                          transmission, face_room, source_room);
+    as::Atmosphere bending;
+    if (atmosphere("trace_map", atmosphere_rows, wind_direction, ground, chord_sagitta,
+                   bending)) {
+        scene.atmosphere = &bending;
+    }
     const std::size_t bands = scene.bands;
     if (origin.shape(0) != 2) throw std::invalid_argument("trace_map: origin must be (x, y)");
     as::MapGrid &map = scene.map;
@@ -633,6 +718,8 @@ NB_MODULE(_native, m) {
           nb::arg("split_target"), nb::arg("split_ratio"), nb::arg("max_split"),
           nb::arg("max_family"), nb::arg("room_level"), nb::arg("face_group"),
           nb::arg("groups"), nb::arg("moment_time_step"),
+          nb::arg("atmosphere").none() = nb::none(), nb::arg("wind_direction").none() = nb::none(),
+          nb::arg("ground") = 0.0, nb::arg("chord_sagitta") = 0.02,
           "Stochastic ray tracing: (energy[r, band, bin], directional[r, dir, band, bin], "
           "moments[r, term, band, moment bin], escaped rays, ray_energy[window], "
           "reflections[window], traced rays); "
@@ -651,7 +738,10 @@ NB_MODULE(_native, m) {
           "the source's room. With groups > 0, face_group (one per face, -1 for none) "
           "puts faces in groups, and moments sums per receiver and bin of moment_time_step "
           "the energy times 1, the reflections a ray has had off each group, n_i, and their "
-          "products n_i n_j (i <= j); else it is empty.");
+          "products n_i n_j (i <= j); else it is empty. Outdoors, atmosphere (rows of height "
+          "above the ground, speed of sound in still air and wind speed, from height 0 up; "
+          "None: straight rays) with wind_direction (x, y, unit) and ground (z) bends the "
+          "rays, followed in chords within chord_sagitta (m) of their arcs.");
 
     m.def("ray_starts", &ray_starts, nb::arg("directivity_a"), nb::arg("orientation"),
           nb::arg("directivity_table"), nb::arg("bands"), nb::arg("rays"), nb::arg("first_ray"),
@@ -660,6 +750,15 @@ NB_MODULE(_native, m) {
           "first_ray .. first_ray + rays - 1: (directions[ray, 3], weights[ray, band]), the "
           "source's energy weights in each direction (averaging 1 over the sphere), "
           "directivity_a, orientation and directivity_table as for trace_stochastic.");
+
+    m.def("bent_chords", &bent_chords, nb::arg("origins"), nb::arg("directions"),
+          nb::arg("budget"), nb::arg("away"), nb::arg("atmosphere"), nb::arg("wind_direction"),
+          nb::arg("ground"), nb::arg("chord_sagitta"),
+          "One chord of each ray bent by an atmosphere (as trace_stochastic's): from origins "
+          "(n x 3) along directions (n x 3, unit), at most budget (n) metres of arc, stopping "
+          "where a ray turns back towards the plane whose normal is its row of away (n x 3; "
+          "zeros: none). Returns (ends[n, 3], directions at the ends[n, 3], arc lengths[n] "
+          "(m), times[n] (s), turned[n]).");
 
     m.def("trace_map", &trace_map, nb::arg("bvh"), nb::arg("source"), nb::arg("directivity_a"),
           nb::arg("orientation"), nb::arg("directivity_table"), nb::arg("absorption"),
@@ -673,6 +772,8 @@ NB_MODULE(_native, m) {
           nb::arg("threads"), nb::arg("window_time_step"), nb::arg("first_ray"),
           nb::arg("split_target"), nb::arg("split_ratio"), nb::arg("max_split"),
           nb::arg("max_family"), nb::arg("room_level"),
+          nb::arg("atmosphere").none() = nb::none(), nb::arg("wind_direction").none() = nb::none(),
+          nb::arg("ground") = 0.0, nb::arg("chord_sagitta") = 0.02,
           "Stochastic ray tracing onto a coverage map: (energy[point, band, bin], escaped "
           "rays, ray_energy[window], reflections[window], traced rays). point (ny x nx x "
           "layers) holds the map point of each column of width cell from origin (x, y), "

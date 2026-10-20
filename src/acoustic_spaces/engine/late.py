@@ -5,7 +5,8 @@
   the scattering of each surface's size added); how their energy reaches the listeners
   is set by ``reception`` (see :data:`RECEPTION`). Specular paths the early
   stage computes exactly are left out, so the two parts add up without double counting
-  or a crossfade.
+  or a crossfade. Outdoors in wind or a temperature gradient the rays bend
+  (:func:`~acoustic_spaces.engine.refracted.bending`).
 - ``stochastic_map_energy``: the same tracer counting energy over a coverage map
   instead of at listeners.
 - ``statistical_energy``: the reflected energy of Barron's revised theory, an
@@ -24,6 +25,7 @@ from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine import ray_device
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.engine.refracted import bending
 
 _DECAY = 6.0 * math.log(10.0)  # 60 dB in nepers of energy
 
@@ -417,6 +419,7 @@ def stochastic_energy(
         directivity, orientation, model.absorption.shape[1]
     )
     face_room, source_room, level, own = _rooms(model, source, air, listeners)
+    bent = bending(model)
     if groups is None:
         face_group, n_groups = np.zeros(0, dtype=np.int64), 0
     else:
@@ -470,6 +473,7 @@ def stochastic_energy(
                 "face_group": face_group,
                 "groups": n_groups,
                 "moment_time_step": float(moment_step),
+                **bent,
             }
             if not plans:
                 plans.append(ray_device.choose(device, values))
@@ -552,6 +556,7 @@ def stochastic_map_energy(
         directivity, orientation, model.absorption.shape[1]
     )
     face_room, source_room, level, own = _rooms(model, source, air, grid.points)
+    bent = bending(model)
 
     def run(band: slice, count: int):
         first_order, band_table, absorption, scattering, band_air, sizes = _band_arguments(
@@ -595,6 +600,7 @@ def stochastic_map_energy(
                 MAX_SPLIT,
                 MAX_FAMILY,
                 level,
+                **bent,
             )
             return [energy], *rest
 

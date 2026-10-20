@@ -7,6 +7,7 @@
 // - trace_stochastic: energy-based stochastic ray tracing with diffuse rain, giving
 //   energy per receiver, octave band and time slot (and, optionally, per arrival
 //   direction) for the late part of the response, and optionally over a coverage map.
+//   Outdoors its rays may bend in a refracting atmosphere (atmosphere.hpp).
 //
 // Units: a source of unit energy; results are time-integrated intensity, so the
 // direct sound at distance r contributes 1 / (4 pi r^2).
@@ -23,6 +24,7 @@
 #include <thread>
 #include <vector>
 
+#include "acoustic_spaces/atmosphere.hpp"
 #include "acoustic_spaces/bvh.hpp"
 #include "acoustic_spaces/vec3.hpp"
 
@@ -393,6 +395,11 @@ struct StochasticScene {
     std::vector<Vec3> receivers;
     std::vector<Vec3> directions;  // unit vectors for directional bins; may be empty
     MapGrid map;                   // no points: no map
+    // Optional, outdoors: the atmosphere bends the rays, followed in chords (see
+    // atmosphere.hpp; prepared). Times then follow the speed along each ray and the air
+    // absorbs over its length; the rain from a reflection goes straight, in the time
+    // the line takes, and none reaches a receiver in the shadow of upward refraction.
+    const Atmosphere *atmosphere = nullptr;
 };
 
 struct StochasticResult {
@@ -430,6 +437,12 @@ struct RayState {
     std::int64_t room;   // the room the ray is in (StochasticScene::face_room), or -1
     // Reflections so far off each face group (StochasticScene::face_group).
     std::array<std::uint16_t, kMaxGroups> hits{};
+    // In an atmosphere: metres along the ray so far (travelled is then the speed of
+    // sound times the time), and, while `leaving`, the normal of the face the ray left
+    // (pointing the way it went), which it cannot meet again until it turns back.
+    double path = 0.0;
+    Vec3 away{};
+    bool leaving = false;
 };
 
 // The share of sound per band that travels from `origin` along `dir` (unit) for
@@ -478,9 +491,10 @@ struct Accumulator {
     }
 
     // Adds energy[b] * factor * air(distance) arriving from `arrival` at `distance`, from
-    // a ray with `hits` reflections off each face group.
+    // a ray with `hits` reflections off each face group; the air absorbs over
+    // `air_distance` instead where that is not negative.
     void add(std::size_t receiver, const double *energy, double factor, double distance,
-             const Vec3 &arrival, const std::uint16_t *hits) {
+             const Vec3 &arrival, const std::uint16_t *hits, double air_distance = -1.0) {
         const double time = distance / settings.speed_of_sound;
         const auto bin = static_cast<std::size_t>(time / settings.time_step);
         if (bin >= out.bins) return;
@@ -512,8 +526,9 @@ struct Accumulator {
             drow = out.directional.data() +
                    (receiver * scene.directions.size() + d) * bands * out.dir_bins;
         }
+        const double absorbing = air_distance < 0.0 ? distance : air_distance;
         for (std::size_t b = 0; b < bands; ++b) {
-            const double e = energy[b] * factor * std::exp(-scene.air[b] * distance);
+            const double e = energy[b] * factor * std::exp(-scene.air[b] * absorbing);
             row[b * out.bins + bin] += e;
             if (drow) drow[b * out.dir_bins + dbin] += e;
             if (moments != nullptr && e != 0.0) {
@@ -528,9 +543,12 @@ struct Accumulator {
     double map_bottom = 0.0, map_top = 0.0;
 
     // Adds a leg that leaves `pos` along `dir` (unit) for `length` metres, `travelled`
-    // metres from the source at `pos`, to every map slab it passes through.
+    // metres from the source at `pos`, to every map slab it passes through. A chord of a
+    // bent ray adds `rate` to travelled per metre, and the air absorbs from `path` on,
+    // `stretch` metres per metre of chord (path negative: as travelled).
     void add_map(const Vec3 &pos, const Vec3 &dir, double length, double travelled,
-                 const double *energy, const double *alone, int order) {
+                 const double *energy, const double *alone, int order, double rate = 1.0,
+                 double path = -1.0, double stretch = 1.0) {
         const MapGrid &map = scene.map;
         constexpr double kFlat = 1e-12;
         const double inf = std::numeric_limits<double>::infinity();
@@ -590,7 +608,9 @@ struct Accumulator {
                     b = std::min(b, zb);
                 }
                 if (!(b > a)) continue;
-                const double distance = travelled + 0.5 * (a + b);
+                const double middle = 0.5 * (a + b);
+                const double distance = travelled + rate * middle;
+                const double absorbing = path < 0.0 ? distance : path + stretch * middle;
                 const bool covered =
                     order <= settings.covered_order && distance / c <= map.covered_time[k];
                 const std::size_t bin = map.bin(distance / c - map.onset[k]);
@@ -601,7 +621,7 @@ struct Accumulator {
                     // The specular-only share of a covered path is the early stage's.
                     const double share = covered ? 1.0 - alone[band] : 1.0;
                     row[band * out.map_bins + bin] +=
-                        energy[band] * share * factor * std::exp(-scene.air[band] * distance);
+                        energy[band] * share * factor * std::exp(-scene.air[band] * absorbing);
                 }
             }
             if (t_out >= t1) break;
@@ -647,6 +667,10 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
     const MapGrid &map = scene.map;
     const bool has_map = map.points() > 0;
     if (has_map && !map.valid()) throw std::invalid_argument("trace_stochastic: bad map");
+    const Atmosphere *atmosphere = scene.atmosphere;
+    if (atmosphere != nullptr && (!atmosphere->valid() || atmosphere->buckets == 0)) {
+        throw std::invalid_argument("trace_stochastic: bad atmosphere");
+    }
     const Bvh &bvh = *scene.bvh;
     const std::size_t bands = scene.bands;
     const std::size_t n_rec = scene.receivers.size();
@@ -728,6 +752,40 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
             }
             return settings.room_level[static_cast<std::size_t>(room)];
         };
+        // The receivers' detector spheres along a straight piece of a ray: `segment`
+        // metres from `from` along `along` (unit). On a chord of a bent ray, travelled
+        // grows by `rate` per metre and the air absorbs from `path` on, `stretch` metres
+        // per metre (path negative: as travelled).
+        const auto spheres = [&](const Vec3 &from, const Vec3 &along, double segment,
+                                 const detail::RayState &state, double rate, double path,
+                                 double stretch) {
+            for (std::size_t k = 0; k < n_rec; ++k) {
+                const Vec3 rel = scene.receivers[k] - from;
+                const double s = dot(rel, along);
+                const double d2 = dot(rel, rel) - s * s;
+                const double r = settings.receiver_radius[k];
+                if (d2 >= r * r) continue;
+                const double half = std::sqrt(r * r - d2);
+                const double t0 = std::max(s - half, 0.0);
+                const double t1 = std::min(s + half, segment);
+                if (t1 <= t0) continue;
+                const double nearest = std::clamp(s, t0, t1);
+                const double distance = state.travelled + rate * nearest;
+                const bool covered = state.order <= settings.covered_order &&
+                                     (settings.covered_time.empty() ||
+                                      distance / c <= settings.covered_time[k]);
+                // The specular-only share of a covered path is the early stage's.
+                double any = 0.0;
+                for (std::size_t b = 0; b < bands; ++b) {
+                    counted[b] = state.energy[b] *
+                                 std::max(state.seen[b] - (covered ? state.alone[b] : 0.0), 0.0);
+                    any += counted[b];
+                }
+                if (any <= 0.0) continue;
+                acc.add(k, counted.data(), (t1 - t0) / sphere_volume[k], distance, -along,
+                        state.hits.data(), path < 0.0 ? -1.0 : path + stretch * nearest);
+            }
+        };
 
         std::vector<detail::RayState> stack;
 
@@ -747,70 +805,107 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
             std::array<double, kMaxBands> whole{};
             whole.fill(1.0);
             stack.push_back(detail::RayState{scene.source, first_dir, start, whole, whole, 0.0, 0,
-                                             -1, first_rng, scene.source_room, {}});
+                                             -1, first_rng, scene.source_room, {}, 0.0, {},
+                                             false});
             std::size_t family = 1;
 
             while (!stack.empty()) {
                 detail::RayState ray_state = stack.back();
                 stack.pop_back();
                 ++out.traced_rays;
-                auto &[pos, dir, energy, seen, alone, travelled, order, last, rng, room, hits] =
-                    ray_state;
+                auto &[pos, dir, energy, seen, alone, travelled, order, last, rng, room, hits,
+                       path, away, leaving] = ray_state;
 
                 while (travelled < max_length) {
-                    const Hit hit = bvh.intersect(pos, dir, max_length - travelled, last);
-                    const double segment = hit.found() ? hit.t : max_length - travelled;
-
-                    if (!settings.specular_rain) {
-                        for (std::size_t k = 0; k < n_rec; ++k) {
-                            const Vec3 rel = scene.receivers[k] - pos;
-                            const double s = dot(rel, dir);
-                            const double d2 = dot(rel, rel) - s * s;
-                            const double r = settings.receiver_radius[k];
-                            if (d2 >= r * r) continue;
-                            const double half = std::sqrt(r * r - d2);
-                            const double t0 = std::max(s - half, 0.0);
-                            const double t1 = std::min(s + half, segment);
-                            if (t1 <= t0) continue;
-                            const double distance = travelled + std::clamp(s, t0, t1);
-                            const bool covered =
-                                order <= settings.covered_order &&
-                                (settings.covered_time.empty() ||
-                                 distance / c <= settings.covered_time[k]);
-                            // The specular-only share of a covered path is the early
-                            // stage's.
-                            double any = 0.0;
-                            for (std::size_t b = 0; b < bands; ++b) {
-                                counted[b] =
-                                    energy[b] * std::max(seen[b] - (covered ? alone[b] : 0.0), 0.0);
-                                any += counted[b];
+                    Hit hit;
+                    double leg = 0.0;  // metres the sound went to the face it meets
+                    if (atmosphere == nullptr) {
+                        hit = bvh.intersect(pos, dir, max_length - travelled, last);
+                        const double segment = hit.found() ? hit.t : max_length - travelled;
+                        if (!settings.specular_rain) spheres(pos, dir, segment, ray_state, 1.0, -1.0, 1.0);
+                        if (has_map) {
+                            acc.add_map(pos, dir, segment, travelled, energy.data(), alone.data(),
+                                        order);
+                        }
+                        if (!hit.found()) {
+                            // Out of time, or out of the model: then no face lies anywhere
+                            // ahead. (The search above only looks as far as the ray can go.)
+                            if (!bvh.occluded(pos, dir, std::numeric_limits<double>::infinity(),
+                                              last)) {
+                                ++out.escaped_rays;
                             }
-                            if (any <= 0.0) continue;
-                            acc.add(k, counted.data(), (t1 - t0) / sphere_volume[k], distance,
-                                    -dir, hits.data());
+                            break;
                         }
-                    }
-                    if (has_map) {
-                        acc.add_map(pos, dir, segment, travelled, energy.data(), alone.data(),
-                                    order);
-                    }
-                    if (!hit.found()) {
-                        // Out of time, or out of the model: then no face lies anywhere
-                        // ahead. (The search above only looks as far as the ray can go.)
-                        if (!bvh.occluded(pos, dir, std::numeric_limits<double>::infinity(),
-                                          last)) {
-                            ++out.escaped_rays;
+                        travelled += hit.t;
+                        pos = pos + dir * hit.t;
+                        leg = hit.t;
+                    } else {
+                        // Chord by chord along the bent ray, to the first face it meets.
+                        BentRay bent(*atmosphere, pos, dir);
+                        while (travelled < max_length) {
+                            const BentRay before = bent;
+                            const double budget =
+                                1.05 * (max_length - travelled) / c * bent.speed() + offset;
+                            const BentRay::Chord chord = bent.chord(budget, leaving ? &away : nullptr);
+                            const Vec3 span = chord.end - chord.start;
+                            const double length = norm(span);
+                            if (length > 0.0) {
+                                const Vec3 along = span / length;
+                                const Hit met = bvh.intersect(chord.start, along, length, last);
+                                const double segment = met.found() ? met.t : length;
+                                const double rate = c * chord.time / length;
+                                const double stretch = chord.arc / length;
+                                if (!settings.specular_rain) {
+                                    spheres(chord.start, along, segment, ray_state, rate, path, stretch);
+                                }
+                                if (has_map) {
+                                    acc.add_map(chord.start, along, segment, travelled, energy.data(),
+                                                alone.data(), order, rate, path, stretch);
+                                }
+                                if (met.found()) {
+                                    travelled += rate * met.t;
+                                    path += stretch * met.t;
+                                    leg += stretch * met.t;
+                                    pos = chord.start + along * met.t;
+                                    // The ray's own direction where it meets the face.
+                                    BentRay there = before;
+                                    there.chord(chord.arc * met.t / length, leaving ? &away : nullptr);
+                                    dir = there.direction();
+                                    hit = met;
+                                    break;
+                                }
+                            }
+                            travelled += c * chord.time;
+                            path += chord.arc;
+                            leg += chord.arc;
+                            pos = chord.end;
+                            dir = bent.direction();
+                            // Out of the model: it left the scene, as through the open sky.
+                            if (!bvh.encloses(pos, offset)) break;
+                            if (chord.turned) {
+                                leaving = false;  // back towards the face it left
+                                last = -1;
+                            } else if (!(length > 0.0)) {
+                                break;
+                            }
                         }
-                        break;
+                        if (!hit.found()) {
+                            if (!bvh.occluded(pos, dir, std::numeric_limits<double>::infinity(),
+                                              last)) {
+                                ++out.escaped_rays;
+                            }
+                            break;
+                        }
                     }
 
-                    travelled += hit.t;
-                    pos = pos + dir * hit.t;
                     const auto face = static_cast<std::size_t>(hit.face);
                     Vec3 n = bvh.normal(face);
                     const bool from_back = dot(n, dir) > 0.0;
                     if (from_back) n = -n;  // face the side the ray came from
                     last = hit.face;
+                    // The ray leaves the face on the side it came from (when it reflects).
+                    away = n;
+                    leaving = true;
 
                     const double *alpha = scene.absorption + face * bands;
                     // What passes through into the room beyond, and what reflects.
@@ -832,6 +927,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         // An opening: the ray goes on into the next room, as it was.
                         std::copy(through.begin(), through.begin() + bands, energy.begin());
                         room = beyond;
+                        away = -n;
                         continue;
                     }
                     std::copy(seen.begin(), seen.begin() + bands, seen_before.begin());
@@ -844,7 +940,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     const double *surface = scene.scattering + face * bands;
                     if (scene.surface_size != nullptr && order >= settings.size_from_order) {
                         size_scattering(scene.surface_size[2 * face], scene.surface_size[2 * face + 1],
-                                        hit.t, -dot(n, dir), c, bands, scene.band_hz, surface,
+                                        leg, -dot(n, dir), c, bands, scene.band_hz, surface,
                                         scatter.data());
                     } else {
                         std::copy(surface, surface + bands, scatter.begin());
@@ -875,6 +971,10 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             const double dist = std::max(norm(v), settings.receiver_radius[k]);
                             const double cos_theta = dot(n, v) / dist;
                             if (cos_theta <= 0.0) continue;
+                            if (atmosphere != nullptr &&
+                                atmosphere->shadowed(origin, scene.receivers[k])) {
+                                continue;
+                            }
                             const Vec3 toward = v / norm(v);
                             // Through the surfaces on the way that let sound through.
                             if (!detail::passing_share(scene, origin, toward, norm(v), last,
@@ -882,13 +982,18 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                 continue;
                             }
                             const double factor = cos_theta / (kPi * dist * dist);
+                            // In an atmosphere: the time the straight line takes.
+                            const double reach =
+                                atmosphere == nullptr
+                                    ? dist
+                                    : c * atmosphere->straight_time(origin, scene.receivers[k]);
                             // All reflected energy radiates with secondary sources, but the
                             // specular-only share of a path the early stage computes
                             // exactly stays out.
                             const bool covered =
                                 settings.specular_rain && order <= settings.covered_order &&
                                 (settings.covered_time.empty() ||
-                                 (travelled + dist) / c <= settings.covered_time[k]);
+                                 (travelled + reach) / c <= settings.covered_time[k]);
                             for (std::size_t b = 0; b < bands; ++b) {
                                 const double radiated =
                                     settings.specular_rain
@@ -896,8 +1001,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                         : rain[b];
                                 counted[b] = radiated * share[b];
                             }
-                            acc.add(k, counted.data(), factor, travelled + dist, -toward,
-                                    hits.data());
+                            acc.add(k, counted.data(), factor, travelled + reach, -toward,
+                                    hits.data(), atmosphere == nullptr ? -1.0 : path + norm(v));
                         }
                     }
                     if (passed > 0.0) {
@@ -906,7 +1011,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             // Both ways: a copy goes on through, on the leg it was on.
                             stack.push_back(detail::RayState{pos, dir, through, seen_before,
                                                              alone_before, travelled, order - 1,
-                                                             last, rng.split(), beyond, hits});
+                                                             last, rng.split(), beyond, hits,
+                                                             path, -n, true});
                             if (group >= 0) --stack.back().hits[static_cast<std::size_t>(group)];
                             ++family;
                         } else {
@@ -920,6 +1026,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                 --order;
                                 if (group >= 0) --hits[static_cast<std::size_t>(group)];
                                 room = beyond;
+                                away = -n;
                                 continue;
                             }
                             for (std::size_t b = 0; b < bands; ++b) {

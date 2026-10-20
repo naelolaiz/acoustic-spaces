@@ -28,6 +28,9 @@ the way: the first of the eigenrays carries it, the others nothing in those band
 shadow zone, where no ray arrives, the parabolic equation gives the sound in the bands
 up to :data:`SHADOW_WAVE_MAX_BAND_HZ`, and above it the shadow deepens with frequency as
 it does over the octave below.
+
+The late stage's rays bend too: the compiled tracer follows each one along its arcs
+through the layers, in chords (:func:`bending` gives it the atmosphere).
 """
 
 from __future__ import annotations
@@ -46,7 +49,7 @@ from acoustic_spaces.engine.coherent import ground_factors, reflection_phases
 from acoustic_spaces.engine.early import _EDGE_TOLERANCE, EarlyReflections, _face_at
 from acoustic_spaces.engine.model import TraceModel, _ground_faces, source_weights
 from acoustic_spaces.engine.parabolic import footprint, march
-from acoustic_spaces.engine.refraction import Profile, Rays, _sine, node_heights
+from acoustic_spaces.engine.refraction import CHORD_SAGITTA_M, Profile, Rays, _sine, node_heights
 from acoustic_spaces.engine.shadow import equivalent_radius, shadow_start
 
 #: Bands up to this one (centre, Hz) take the sound over the open ground from the
@@ -85,6 +88,10 @@ _FIRST_MODE = -1.0187929716474710
 _VERTICAL = 1e-9
 
 
+#: How far (m/s) the late tracer's profile may stray from the atmosphere's, in the speed
+#: of sound plus the wind's: it drops the nodes it can (each layer is a piece of arc to
+#: follow), keeping those where the profile bends.
+LATE_SPEED_TOLERANCE = 0.005
 #: Rays kept for reuse (about 4 MB each), from the most recently used: the points of a
 #: line or surface source share them, and the listeners round a source.
 _KEPT_RAYS = 24
@@ -784,6 +791,53 @@ def _family_ratios(paths, rows, ratio, flat, bands):
     return r0, r1
 
 
+def _thinned(rows: np.ndarray, tolerance: float) -> np.ndarray:
+    """Which of the profile's ``rows`` (height, speed in still air, wind speed) to keep
+    for the speed and the wind, linear between the rows kept, to stay within
+    ``tolerance`` (m/s, the two errors added) at every row dropped: the first, the last
+    and as few between as that allows, each layer as tall as it can be."""
+    z, still, wind = rows.T
+    keep = [0]
+    i, last = 0, len(z) - 1
+    while i < last:
+        j = i + 1
+        while j < last:
+            k = j + 1
+            t = (z[i + 1 : k] - z[i]) / (z[k] - z[i])
+            off = np.abs(still[i] + t * (still[k] - still[i]) - still[i + 1 : k]).max()
+            off += np.abs(wind[i] + t * (wind[k] - wind[i]) - wind[i + 1 : k]).max()
+            if off > tolerance:
+                break
+            j = k
+        keep.append(j)
+        i = j
+    return np.array(keep)
+
+
+def bending(model: TraceModel) -> dict:
+    """The arguments that bend the rays of ``_native.trace_stochastic``, ``trace_map``
+    and ``bent_chords`` in an outdoor scene's atmosphere: its profile (rows of height
+    above the ground, speed of sound in still air and wind speed), the way the wind
+    blows, the ground's height and how far a chord may stray from its arc. Empty where
+    sound goes straight: indoors, or outdoors in still air."""
+    scene = model.room.scene
+    atmosphere = getattr(scene, "atmosphere", None)
+    if model.room.outdoor is None or atmosphere is None or atmosphere.still:
+        return {}
+    z = node_heights(atmosphere)
+    ground_c = float(scene.air.temperature_c)
+    rows = np.column_stack(
+        [z, atmosphere.sound_speed(z, ground_c), atmosphere.wind_speed(z)]
+    )
+    rows = rows[_thinned(rows, LATE_SPEED_TOLERANCE)]
+    return {
+        "atmosphere": np.ascontiguousarray(rows, dtype=np.float64),
+        "wind_direction": np.ascontiguousarray(atmosphere.to_wind(), dtype=np.float64),
+        "ground": float(model.ground),
+        "chord_sagitta": CHORD_SAGITTA_M,
+    }
+
+
 def refraction_for(model: TraceModel, source: np.ndarray, **kwargs) -> Refraction | None:
     """The :class:`Refraction` of the source at ``source``, or None where sound goes
     straight: indoors, or outdoors in still air."""
@@ -801,5 +855,6 @@ __all__ = [
     "WAVE_MAX_BAND_HZ",
     "WAVE_MIN_RANGE",
     "Refraction",
+    "bending",
     "refraction_for",
 ]
