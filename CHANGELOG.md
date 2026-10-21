@@ -274,6 +274,26 @@
 - Scenes without a terrain or a buildings file give the same results as before, bit
   for bit.
 
+**Outdoor scenes in the editor**
+
+- **File > New outdoor scene** starts a flat meadow 200 m across under an open sky,
+  with a source and a listener 50 m apart, to build on.
+- The **Geometry** form's **Outdoors** group draws new parts in the plan view: **Add
+  building**, **Add zone** and a belt of trees as outlines closed on their first corner,
+  **Add barrier** and a hedge as paths ended with Enter or a double-click, and a lone
+  tree with one click; each takes the usual sizes (a building 10 m high, a barrier 3 m,
+  a belt 12 m, a hedge 2 m high and 1.5 m wide, a tree's crown 8 m across from 2.5 to
+  10 m up, dense foliage) to change afterwards, and **Remove** takes it out again. The
+  plan shows the vegetation in dashed green and the zones in their materials' colours.
+- The ground's **Extent** is set in the form (or left to the margin), **Terrain from a
+  file** and **Remove terrain** set and drop a terrain, and **Buildings from a map**
+  adds a GeoJSON file's buildings after asking which of its properties hold their
+  heights (or one height for all) and their names, with **Remove the map's buildings**
+  to drop the file; `acoustic_spaces.geometry.terrain.footprint_properties` reads what
+  a file offers.
+- A saved scene refers to its terrain and map by paths relative to the scene file, like
+  its model file.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

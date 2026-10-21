@@ -2221,6 +2221,11 @@ class Scene(_Model):
         geometry = data["geometry"]
         if "file" in geometry:
             geometry["file"] = _portable(geometry["file"], base)
+        terrain = geometry.get("ground", {}).get("terrain", {})
+        if "file" in terrain:
+            terrain["file"] = _portable(terrain["file"], base)
+        if "file" in geometry.get("buildings_file", {}):
+            geometry["buildings_file"]["file"] = _portable(geometry["buildings_file"]["file"], base)
         for material in data["materials"].values():
             if "file" in material:
                 material["file"] = _portable(material["file"], base)

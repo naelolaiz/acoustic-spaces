@@ -33,6 +33,18 @@ LISTENER_HEIGHT = 1.2
 HISTORY = 200
 #: Height of a drawn room when the scene had none to keep (m).
 DRAWN_HEIGHT = 3.0
+#: The ground of a new outdoor scene, metres across.
+NEW_GROUND_SIZE = 200.0
+#: Sizes (m) of the parts drawn in the plan of an outdoor scene, to change afterwards:
+#: a building's height, a barrier's, a belt of trees', a hedge's height and width, and
+#: a lone tree's height, where its crown starts and how wide it is.
+NEW_PART_SIZES = {
+    "building": {"height": 10.0},
+    "barrier": {"height": 3.0},
+    "belt": {"height": 12.0},
+    "hedge": {"height": 2.0, "width": 1.5},
+    "tree": {"height": 10.0, "base": 2.5, "crown_diameter": 8.0},
+}
 #: A dragged source or listener keeps its height above the floor while the floor under
 #: it rises or falls by at most this much (m) from one place to the next (a raked
 #: floor); past a bigger step (a balcony edge) it keeps its height instead.
@@ -76,6 +88,28 @@ def box_scene(size: tuple[float, float, float] = (8.0, 6.0, 3.0)) -> Scene:
                 {
                     "name": "listener",
                     "position": [length * 0.7, width * 0.5, LISTENER_HEIGHT],
+                    "orientation": {"yaw": 180.0},
+                }
+            ],
+        }
+    )
+
+
+def outdoor_scene(size: float = NEW_GROUND_SIZE) -> Scene:
+    """A new outdoor scene: a flat meadow ``size`` m across under an open sky, with a
+    source and a listener 50 m apart in the middle of it, facing each other."""
+    half = size / 2.0
+    return Scene.model_validate(
+        {
+            "name": "untitled",
+            "geometry": {"ground": {"extent": [[-half, -half], [half, half]]}},
+            "materials": {"meadow": {"impedance": "grass"}},
+            "default_material": "meadow",
+            "sources": [{"name": "source", "position": [-25.0, 0.0, SOURCE_HEIGHT]}],
+            "listeners": [
+                {
+                    "name": "listener",
+                    "position": [25.0, 0.0, LISTENER_HEIGHT],
                     "orientation": {"yaw": 180.0},
                 }
             ],
@@ -211,9 +245,14 @@ def _free_spots(plan: np.ndarray, mesh: RoomMesh, height: float, count: int) -> 
 
 
 def referenced_files(scene: Scene) -> list[Path]:
-    """The files ``scene`` uses: its model, material tables, source directivities (an
-    inline array's element's too) and HRTFs."""
-    files = [scene.geometry.file] if scene.geometry.file is not None else []
+    """The files ``scene`` uses: its model, terrain and map of buildings, material
+    tables, source directivities (an inline array's element's too) and HRTFs."""
+    geometry = scene.geometry
+    files = [geometry.file] if geometry.file is not None else []
+    if geometry.ground is not None and geometry.ground.terrain is not None:
+        files += [geometry.ground.terrain.file] if geometry.ground.terrain.file else []
+    if geometry.buildings_file is not None:
+        files.append(geometry.buildings_file.file)
     files += [m.file for m in scene.materials.values() if m.file is not None]
     specs = [s.directivity for s in scene.sources if not isinstance(s.directivity, str)]
     specs += [
@@ -224,6 +263,22 @@ def referenced_files(scene: Scene) -> list[Path]:
     files += [d.file for d in specs if d.file is not None]
     files += [o.hrtf for o in scene.outputs if o.hrtf is not None]
     return [Path(f) for f in files]
+
+
+def _in_units(item: dict, scale: float) -> dict:
+    """``item``, a building's, barrier's, vegetation's or zone's scene entry with its
+    corners, points and sizes in metres, with them in the geometry's units (``scale``
+    metres each)."""
+    out = dict(item)
+    for key in ("footprint", "path", "polygon"):
+        if key in out:
+            out[key] = [_rounded(np.asarray(p, dtype=float) / scale) for p in out[key]]
+    if "tree" in out:
+        out["tree"] = _rounded(np.asarray(out["tree"], dtype=float) / scale)
+    for key in ("height", "base", "width", "crown_diameter"):
+        if key in out:
+            out[key] = round(float(out[key]) / scale, DECIMALS)
+    return out
 
 
 def unique_name(stem: str, taken: set[str]) -> str:
@@ -503,6 +558,95 @@ class Document(QObject):
         self.edit(_("draw floor plan"), change)
         return [getattr(self.scene, kind)[k].name for kind, k in moved]
 
+    # -- outdoors -------------------------------------------------------------------
+
+    def add_part(self, kind: str, item: dict) -> int:
+        """Add a building, a barrier or vegetation (``kind`` "buildings", "barriers" or
+        "vegetation") to an outdoor scene: ``item`` is its scene entry with its corners,
+        points and sizes in metres, which go into the geometry's units. Returns its
+        index."""
+        what = {
+            "buildings": _("add building"),
+            "barriers": _("add barrier"),
+            "vegetation": _("add vegetation"),
+        }
+        entry = _in_units(item, UNIT_SCALE[self.scene.geometry.units or "m"])
+        self.edit(what[kind], lambda data: data["geometry"].setdefault(kind, []).append(entry))
+        return len(getattr(self.scene.geometry, kind)) - 1
+
+    def add_zone(self, polygon) -> int:
+        """Add a ground zone with these corners (m) to an outdoor scene; it takes the
+        ground's material until one is assigned to it. Returns its index."""
+        entry = _in_units({"polygon": polygon}, UNIT_SCALE[self.scene.geometry.units or "m"])
+        self.edit(
+            _("add zone"),
+            lambda data: data["geometry"]["ground"].setdefault("zones", []).append(entry),
+        )
+        return len(self.scene.geometry.ground.zones) - 1
+
+    def set_extent(self, extent) -> None:
+        """Set where the ground of an outdoor scene ends: ``[[x_min, y_min], [x_max,
+        y_max]]`` in the geometry's units, or None for the margin round what stands on
+        it (or the whole terrain)."""
+
+        def change(data: dict) -> None:
+            ground = data["geometry"]["ground"]
+            if extent is None:
+                ground.pop("extent", None)
+            else:
+                ground["extent"] = [_rounded(corner) for corner in extent]
+
+        self.edit(_("change ground"), change)
+
+    def set_terrain(self, path: str | Path | None) -> None:
+        """Make the ground of an outdoor scene follow the heights in ``path`` (an Esri
+        ASCII grid, or x y z points on a grid), or flat again with None. A terrain sets
+        the ground's size, so a set extent goes with it."""
+
+        def change(data: dict) -> None:
+            ground = data["geometry"]["ground"]
+            if path is None:
+                ground.pop("terrain", None)
+            else:
+                ground["terrain"] = {"file": str(Path(path).resolve())}
+                ground.pop("extent", None)
+
+        self.edit(_("set terrain") if path is not None else _("remove terrain"), change)
+
+    def set_buildings_file(
+        self,
+        path: str | Path | None,
+        height: str | float = "height",
+        name: str = "name",
+        default_height: float | None = None,
+    ) -> None:
+        """Add the buildings of the GeoJSON file ``path`` to an outdoor scene, each as
+        high as its property ``height`` says (or that height for all of them, and
+        ``default_height`` where the property is missing) and named by its property
+        ``name``; None drops the file and its buildings."""
+        geometry = self.scene.geometry
+        gone = set(geometry.building_names()[len(geometry.buildings or []) :])
+
+        def change(data: dict) -> None:
+            if path is None:
+                data["geometry"].pop("buildings_file", None)
+                settings = data["simulation"]
+                kept = [n for n in settings.get("insertion_loss_of") or [] if n not in gone]
+                if kept:
+                    settings["insertion_loss_of"] = kept
+                else:
+                    settings.pop("insertion_loss_of", None)
+                return
+            spec = {"file": str(Path(path).resolve()), "height": height, "name": name}
+            if default_height is not None:
+                spec["default_height"] = default_height
+            data["geometry"]["buildings_file"] = spec
+
+        self.edit(
+            _("add buildings from a map") if path is not None else _("remove the map's buildings"),
+            change,
+        )
+
     def assign(self, surface: str, material: str | None) -> None:
         """Give the surfaces named ``surface`` a material (None removes the assignment)."""
 
@@ -595,6 +739,8 @@ __all__ = [
     "DRAWN_HEIGHT",
     "FOLLOW_STEP",
     "LISTENER_HEIGHT",
+    "NEW_GROUND_SIZE",
+    "NEW_PART_SIZES",
     "SOURCE_HEIGHT",
     "Document",
     "EditError",
@@ -602,6 +748,7 @@ __all__ = [
     "floor_height",
     "follow_floor",
     "model_scene",
+    "outdoor_scene",
     "plan_corners",
     "referenced_files",
     "room_height",

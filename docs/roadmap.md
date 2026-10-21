@@ -136,9 +136,17 @@ Outdoor acoustics, in steps:
   wedge per crest with both slopes' reflections in its terms, the equivalent edge and
   thick-screen factor for a rounded top, and the nearest crest's wave in sight, so the
   level is continuous across the edge of a hill's shadow; the late rays bounce off the
-  triangles. A ridge is within 0.2 dB of the exact wedge to 4 kHz, a flat terrain and a
-  slope give the flat ground's and the image's paths, a smooth hill is within about a
-  decibel of the thin screen's attenuation. Scenes without a terrain are unchanged.
+  triangles. A ridge is within 0.2 dB of the exact wedge in every band, a flat terrain
+  and a slope give the flat ground's and the image's paths, a smooth hill over soft
+  ground lets 1.4 to 1.8 dB more past than the thin screen (its crest is a wedge open
+  wider than a half-plane), over rigid ground the flanks' reflections add. Scenes
+  without a terrain are unchanged.
+- [x] O10 Outdoor scenes in the editor: **File > New outdoor scene** (a meadow to build
+  on), buildings, barriers, vegetation (a belt, a hedge or a tree) and ground zones
+  drawn in the plan from the Geometry form, the ground's extent set there, a terrain
+  from a file and the buildings of a map (asking which properties hold their heights
+  and names), each with a button to remove it; the plan shows the vegetation and the
+  zones. Saved scenes refer to their terrain and map by relative paths.
 
 Unreleased:
 

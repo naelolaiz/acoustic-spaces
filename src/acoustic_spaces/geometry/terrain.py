@@ -332,29 +332,8 @@ def read_footprints(
     refused without one. Holes in a footprint are built over. The coordinates must be
     on a plane, not degrees of longitude and latitude."""
     path = Path(path)
-    try:
-        with path.open(encoding="utf-8") as fh:
-            data = json.load(fh)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"{path.name}: not valid JSON: {exc}") from None
-    if not isinstance(data, dict):
-        raise ValueError(f"{path.name}: not GeoJSON (its top level is no object)")
-    kind = data.get("type")
-    if kind == "FeatureCollection":
-        features = data.get("features")
-        if not isinstance(features, list):
-            raise ValueError(f"{path.name}: the FeatureCollection has no features list")
-    elif kind == "Feature":
-        features = [data]
-    elif kind in ("Polygon", "MultiPolygon"):
-        features = [{"type": "Feature", "geometry": data, "properties": {}}]
-    else:
-        raise ValueError(
-            f"{path.name}: not GeoJSON buildings (a FeatureCollection of Polygon or "
-            f"MultiPolygon features); its type is {kind!r}"
-        )
     out: list[Footprint] = []
-    for number, feature in enumerate(features, 1):
+    for number, feature in enumerate(_features(path), 1):
         if not isinstance(feature, dict):
             raise ValueError(f"{path.name}: feature {number} is no object")
         properties = feature.get("properties") or {}
@@ -399,6 +378,59 @@ def read_footprints(
     return out
 
 
+def _features(path: Path) -> list:
+    """The features of the GeoJSON file ``path``: a FeatureCollection's, the one
+    Feature, or a bare Polygon or MultiPolygon as one feature without properties."""
+    try:
+        with path.open(encoding="utf-8") as fh:
+            data = json.load(fh)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path.name}: not valid JSON: {exc}") from None
+    if not isinstance(data, dict):
+        raise ValueError(f"{path.name}: not GeoJSON (its top level is no object)")
+    kind = data.get("type")
+    if kind == "FeatureCollection":
+        features = data.get("features")
+        if not isinstance(features, list):
+            raise ValueError(f"{path.name}: the FeatureCollection has no features list")
+        return features
+    if kind == "Feature":
+        return [data]
+    if kind in ("Polygon", "MultiPolygon"):
+        return [{"type": "Feature", "geometry": data, "properties": {}}]
+    raise ValueError(
+        f"{path.name}: not GeoJSON buildings (a FeatureCollection of Polygon or "
+        f"MultiPolygon features); its type is {kind!r}"
+    )
+
+
+def footprint_properties(path: str | Path) -> tuple[int, dict[str, str]]:
+    """How many buildings (``Polygon`` and ``MultiPolygon`` features) the GeoJSON file
+    ``path`` holds, and the properties they carry: each one's name and what it holds,
+    ``"number"`` where every building that has it gives a number (a height, say),
+    else ``"text"``. For picking the properties that hold the heights and the names."""
+    path = Path(path)
+    count, kinds = 0, {}
+    for feature in _features(path):
+        if not isinstance(feature, dict):
+            continue
+        geometry = feature.get("geometry")
+        shape = geometry.get("type") if isinstance(geometry, dict) else None
+        if shape not in ("Polygon", "MultiPolygon"):
+            continue
+        count += 1
+        properties = feature.get("properties") or {}
+        if not isinstance(properties, dict):
+            continue
+        for key, value in properties.items():
+            try:
+                number = not isinstance(value, bool) and math.isfinite(float(value))
+            except (TypeError, ValueError):
+                number = False
+            kinds[key] = "number" if number and kinds.get(key, "number") == "number" else "text"
+    return count, kinds
+
+
 def _ring(coordinates, path: Path, where: str) -> np.ndarray:
     """A ring's corners (n, 2), its closing point dropped, in the file's units."""
     try:
@@ -422,6 +454,7 @@ __all__ = [
     "LONLAT_EXTENT",
     "TERRAIN_SUFFIXES",
     "Footprint",
+    "footprint_properties",
     "HeightGrid",
     "read_footprints",
     "read_height_grid",

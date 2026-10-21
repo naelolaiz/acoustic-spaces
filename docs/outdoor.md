@@ -755,14 +755,21 @@ the Biot-Tolstoy-Medwin solution over an absorbing ground, the level over grass 
 
 ## In the editor
 
-The **Geometry** entry of an outdoor scene has an **Outdoors** group: the ground's height,
-the margin and the sky, where the ground ends, the buildings, barriers and vegetation
-with their heights, which can be changed or removed (the vegetation's table also gives
-each one's shape and what fills it), and the ground zones, which can be removed. A
-terrain is described under the ground's fields (its points, heights and grid), and the
-buildings of a map file stand in the buildings table after the scene's own, where
-**Remove** leaves one out of the file. Footprints, paths, trees, the zones' outlines,
-the terrain and the map file are set in the scene file. A material's page
+**File > New outdoor scene** starts one: a flat meadow 200 m across, with a source and
+a listener 50 m apart. The **Geometry** entry of an outdoor scene has an **Outdoors**
+group: the ground's height, the margin and the sky, its extent (ticked, where the
+ground ends; unticked, the margin round what stands on it), the buildings, barriers and
+vegetation with their heights, which can be changed or removed (the vegetation's table
+also gives each one's shape and what fills it), and the ground zones. **Add building**,
+**Add barrier**, **Add vegetation** (a belt of trees, a hedge or a lone tree) and **Add
+zone** draw them in the plan view, with the usual sizes to change afterwards; what the
+scene file sets besides (a hedge's width, a tree's crown, the foliage and stems) stays
+there. **Terrain from a file** makes the ground follow a grid of heights, described
+under the ground's fields (its points, heights and grid), and **Buildings from a map**
+adds a GeoJSON file's buildings after asking which properties hold their heights and
+names; they stand in the buildings table after the scene's own, where **Remove
+building** leaves one out of the file (see [the editor](editor.md#outdoor-scenes)). A
+material's page
 has a **Ground impedance** group: tick it to make the material a ground (grass to
 start with), then pick the ground, the model, a flow resistivity of your own, a layer's
 thickness or the porosity rate. Unticked, the material keeps the absorption the

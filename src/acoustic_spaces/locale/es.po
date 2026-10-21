@@ -182,6 +182,65 @@ msgstr "Editor de Acoustic Spaces"
 msgid "Scenes (*.yaml *.yml)"
 msgstr "Escenas (*.yaml *.yml)"
 
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New building with {count} corners, {height:g} m high; change its height "
+"under Geometry."
+msgstr ""
+"Edificio nuevo de {count} vértices y {height:g} m de altura; la altura se "
+"cambia en Geometría."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New barrier along {count} points, {height:g} m high; change its height under "
+"Geometry."
+msgstr ""
+"Pantalla nueva de {count} puntos y {height:g} m de altura; la altura se "
+"cambia en Geometría."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New belt of trees with {count} corners, {height:g} m high, with dense "
+"foliage; change its height under Geometry and the rest in the scene file."
+msgstr ""
+"Franja de árboles nueva de {count} vértices y {height:g} m de altura, con "
+"follaje denso; la altura se cambia en Geometría y el resto en el archivo de "
+"escena."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New hedge along {count} points, {width:g} m wide and {height:g} m high, with "
+"dense foliage; change its height under Geometry and the rest in the scene "
+"file."
+msgstr ""
+"Seto nuevo de {count} puntos, {width:g} m de ancho y {height:g} m de altura, "
+"con follaje denso; la altura se cambia en Geometría y el resto en el archivo "
+"de escena."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New tree {height:g} m high, its crown {crown_diameter:g} m across from "
+"{base:g} m up, with dense foliage; change its height under Geometry and the "
+"rest in the scene file."
+msgstr ""
+"Árbol nuevo de {height:g} m de altura, con la copa de {crown_diameter:g} m "
+"de diámetro desde {base:g} m de alto y follaje denso; la altura se cambia en "
+"Geometría y el resto en el archivo de escena."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New ground zone with {count} corners; give its surface a material of its own "
+"in the scene tree."
+msgstr ""
+"Zona del terreno nueva de {count} vértices; asigne un material propio a su "
+"superficie en el árbol de la escena."
+
 #. Translators: {patterns} is the list of model file patterns, such as *.obj *.dxf.
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -268,6 +327,19 @@ msgstr "Nuevo recinto desde una &planta…"
 #: acoustic_spaces/gui/app.py
 msgid "Draw the floor plan of a new room, corner by corner"
 msgstr "Dibujar la planta de un recinto nuevo, vértice a vértice"
+
+#: acoustic_spaces/gui/app.py
+msgid "New &outdoor scene…"
+msgstr "Nueva escena al aire &libre…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Start a new scene on open ground, to draw buildings, barriers, vegetation "
+"and ground zones on, or to set a terrain and buildings from a map"
+msgstr ""
+"Empezar una escena nueva sobre terreno abierto, para dibujar en él "
+"edificios, pantallas acústicas, vegetación y zonas del terreno, o para "
+"ponerle un relieve y edificios desde un mapa"
 
 #: acoustic_spaces/gui/app.py
 msgid "&Open…"
@@ -825,6 +897,17 @@ msgid "New box room; change its size under Geometry."
 msgstr "Recinto rectangular nuevo; su tamaño se cambia en Geometría."
 
 #: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New outdoor scene: a meadow {size:g} m across. Draw buildings, barriers, "
+"vegetation and ground zones from the Geometry form, or set a terrain and "
+"buildings from a map there."
+msgstr ""
+"Escena al aire libre nueva: una pradera de {size:g} m de lado. Dibuje "
+"edificios, pantallas acústicas, vegetación y zonas del terreno desde el "
+"formulario de Geometría, o ponga allí un relieve y edificios desde un mapa."
+
+#: acoustic_spaces/gui/app.py
 msgid "New room: click its corners in the plan, and close it on the first one."
 msgstr ""
 "Recinto nuevo: hacer clic en sus vértices en la planta y cerrarlo en el "
@@ -1248,6 +1331,42 @@ msgstr "modificar planta"
 #: acoustic_spaces/gui/document.py
 msgid "draw floor plan"
 msgstr "dibujar planta"
+
+#: acoustic_spaces/gui/document.py
+msgid "add building"
+msgstr "añadir edificio"
+
+#: acoustic_spaces/gui/document.py
+msgid "add barrier"
+msgstr "añadir pantalla"
+
+#: acoustic_spaces/gui/document.py
+msgid "add vegetation"
+msgstr "añadir vegetación"
+
+#: acoustic_spaces/gui/document.py
+msgid "add zone"
+msgstr "añadir zona"
+
+#: acoustic_spaces/gui/document.py acoustic_spaces/gui/inspector.py
+msgid "change ground"
+msgstr "cambiar terreno"
+
+#: acoustic_spaces/gui/document.py
+msgid "set terrain"
+msgstr "poner relieve"
+
+#: acoustic_spaces/gui/document.py
+msgid "remove terrain"
+msgstr "eliminar relieve"
+
+#: acoustic_spaces/gui/document.py
+msgid "add buildings from a map"
+msgstr "añadir edificios desde un mapa"
+
+#: acoustic_spaces/gui/document.py
+msgid "remove the map's buildings"
+msgstr "eliminar los edificios del mapa"
 
 #: acoustic_spaces/gui/document.py
 #, python-brace-format
@@ -2042,6 +2161,38 @@ msgid "Sky"
 msgstr "Cielo"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Extent"
+msgstr "Extensión"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the ground ends, from its south-west corner (x, y) to its north-east "
+"one, in the units the title shows; off: the margin round the buildings, "
+"barriers and model, or the whole terrain. Past the ground's edge, sound "
+"leaves the scene as if the ground went on"
+msgstr ""
+"Dónde acaba el terreno, de su esquina suroeste (x, y) a la noreste, en las "
+"unidades que indica el título; desactivado: el margen alrededor de los "
+"edificios, las pantallas y el modelo, o el relieve entero. Más allá del "
+"borde del terreno, el sonido sale de la escena como si el terreno siguiera"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "x where the ground starts (its west edge)"
+msgstr "x donde empieza el terreno (su borde oeste)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "y where the ground starts (its south edge)"
+msgstr "y donde empieza el terreno (su borde sur)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "x where the ground ends (its east edge)"
+msgstr "x donde acaba el terreno (su borde este)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "y where the ground ends (its north edge)"
+msgstr "y donde acaba el terreno (su borde norte)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "Where the ground ends: past it, sound leaves the scene as if the ground went "
 "on"
@@ -2051,12 +2202,39 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"The terrain the ground follows (set in the scene file): its heights on a "
-"grid, from a file or given, sampled over the ground's extent"
+"The terrain the ground follows: its heights on a grid, from a file or given "
+"in the scene file, sampled over the ground's extent"
 msgstr ""
-"El relieve que sigue el terreno (fijado en el archivo de escena): sus "
-"alturas en una cuadrícula, de un archivo o dadas, muestreadas sobre la "
-"extensión del terreno"
+"El relieve que sigue el terreno: sus alturas en una cuadrícula, de un "
+"archivo o dadas en el archivo de escena, muestreadas sobre la extensión del "
+"terreno"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Terrain from a file…"
+msgstr "Relieve desde un archivo…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Make the ground follow the heights in a file: an Esri ASCII grid (.asc) or x "
+"y z points on a regular grid (.xyz, .txt, .csv), in the units the title "
+"shows. The terrain sets the ground's size, unless an extent inside it is set"
+msgstr ""
+"Hacer que el terreno siga las alturas de un archivo: una cuadrícula Esri "
+"ASCII (.asc) o puntos x y z en una cuadrícula regular (.xyz, .txt, .csv), en "
+"las unidades que indica el título. El relieve fija el tamaño del terreno, "
+"salvo que se fije una extensión dentro de él"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove terrain"
+msgstr "Eliminar relieve"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Flatten the ground again, at the ground height, with the margin round the "
+"parts"
+msgstr ""
+"Volver a allanar el terreno, a la altura del terreno, con el margen "
+"alrededor de los elementos"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Buildings"
@@ -2077,15 +2255,28 @@ msgstr ""
 "indica el título"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "How many corners the building's footprint has (set in the scene file)"
+msgid "How many corners the building's footprint has (as drawn in the plan)"
 msgstr ""
-"Cuántos vértices tiene la huella del edificio (se fijan en el archivo de "
-"escena)"
+"Cuántos vértices tiene la huella del edificio (como se dibujó en la planta)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Remove the selected building, or the last one when none is selected"
 msgstr ""
 "Eliminar el edificio seleccionado, o el último si no hay ninguno seleccionado"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add building"
+msgstr "Añadir edificio"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Draw a building's footprint in the plan, corner by corner, and close it on "
+"the first corner; it rises {height:g} m from the ground, to change in the "
+"table"
+msgstr ""
+"Dibujar la huella de un edificio en la planta, vértice a vértice, y cerrarla "
+"en el primero; se eleva {height:g} m sobre el terreno, a cambiar en la tabla"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Remove building"
@@ -2110,15 +2301,27 @@ msgstr ""
 "título"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "How many points the barrier's path has (set in the scene file)"
+msgid "How many points the barrier's path has (as drawn in the plan)"
 msgstr ""
-"Cuántos puntos tiene el trazado de la pantalla (se fijan en el archivo de "
-"escena)"
+"Cuántos puntos tiene el trazado de la pantalla (como se dibujó en la planta)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Remove the selected barrier, or the last one when none is selected"
 msgstr ""
 "Eliminar la pantalla seleccionada, o la última si no hay ninguna seleccionada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add barrier"
+msgstr "Añadir pantalla"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Draw a barrier's path in the plan, point by point, and finish it with Enter "
+"or a double click; it stands {height:g} m high, to change in the table"
+msgstr ""
+"Dibujar el trazado de una pantalla en la planta, punto a punto, y terminarlo "
+"con Intro o doble clic; tiene {height:g} m de altura, a cambiar en la tabla"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Remove barrier"
@@ -2153,11 +2356,11 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "A belt of trees (a footprint raised from the ground), a hedge (a path of a "
-"width) or a lone tree's crown (set in the scene file)"
+"width) or a lone tree's crown, as drawn in the plan"
 msgstr ""
 "Una franja de árboles (una huella elevada desde el terreno), un seto (un "
-"trazado con una anchura) o la copa de un árbol aislado (se fija en el "
-"archivo de escena)"
+"trazado con una anchura) o la copa de un árbol aislado, como se dibujó en la "
+"planta"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2176,8 +2379,72 @@ msgstr ""
 "seleccionada"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Add vegetation"
+msgstr "Añadir vegetación"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw the shape chosen beside in the plan: a belt's footprint closed on its "
+"first corner, a hedge's path finished with Enter, or a tree's place with one "
+"click; dense foliage, its height to change in the table and the rest in the "
+"scene file"
+msgstr ""
+"Dibujar en la planta la forma elegida al lado: la huella de una franja "
+"cerrada en su primer vértice, el trazado de un seto terminado con Intro, o "
+"el lugar de un árbol con un clic; follaje denso, la altura se cambia en la "
+"tabla y el resto en el archivo de escena"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Remove vegetation"
 msgstr "Eliminar vegetación"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"What to draw next: a belt of trees (its footprint, corner by corner), a "
+"hedge (its path, point by point, {width:g} m wide) or a lone tree (one "
+"click, its crown {crown:g} m across)"
+msgstr ""
+"Qué dibujar a continuación: una franja de árboles (su huella, vértice a "
+"vértice), un seto (su trazado, punto a punto, de {width:g} m de ancho) o un "
+"árbol aislado (un clic, con la copa de {crown:g} m de diámetro)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The map the buildings marked 'from the buildings file' come from: a GeoJSON "
+"file of footprints, each raised to the height a property of it gives (or one "
+"height for all) and named by another"
+msgstr ""
+"El mapa del que vienen los edificios marcados como «del archivo de "
+"edificios»: un archivo GeoJSON de huellas, cada una elevada hasta la altura "
+"que da una de sus propiedades (o una misma altura para todas) y con el "
+"nombre de otra"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Buildings from a map…"
+msgstr "Edificios desde un mapa…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Add the buildings of a GeoJSON file of footprints, on a plane in the units "
+"the title shows (not longitude and latitude), each as high as a property of "
+"it says; they join the ones drawn here"
+msgstr ""
+"Añadir los edificios de un archivo GeoJSON de huellas, en un plano en las "
+"unidades que indica el título (no longitud y latitud), cada uno tan alto "
+"como diga una de sus propiedades; se suman a los dibujados aquí"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the map's buildings"
+msgstr "Eliminar los edificios del mapa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Drop the map and every building that came from it; the buildings drawn here "
+"stay"
+msgstr ""
+"Quitar el mapa y todos los edificios que vinieron de él; los edificios "
+"dibujados aquí se quedan"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Ground zones"
@@ -2192,10 +2459,9 @@ msgstr ""
 "superficies lo llevan, para darle un material propio"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "How many corners the zone's outline has (set in the scene file)"
+msgid "How many corners the zone's outline has (as drawn in the plan)"
 msgstr ""
-"Cuántos vértices tiene el contorno de la zona (se fijan en el archivo de "
-"escena)"
+"Cuántos vértices tiene el contorno de la zona (como se dibujó en la planta)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Remove zone"
@@ -2208,6 +2474,19 @@ msgid ""
 msgstr ""
 "Eliminar la zona del terreno seleccionada, o la última si no hay ninguna "
 "seleccionada: su parte del terreno toma el material del terreno"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add zone"
+msgstr "Añadir zona"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw a part of the ground in the plan, corner by corner, and close it on the "
+"first corner; then give its surface a material of its own in the scene tree"
+msgstr ""
+"Dibujar una parte del terreno en la planta, vértice a vértice, y cerrarla en "
+"el primero; después asigne un material propio a su superficie en el árbol de "
+"la escena"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2313,6 +2592,23 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
+msgid "height from {property}"
+msgstr "altura según {property}"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{height} high"
+msgstr "{height} de altura"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Map {name}: {count} building, {height}"
+msgid_plural "Map {name}: {count} buildings, {height}"
+msgstr[0] "Mapa {name}: {count} edificio, {height}"
+msgstr[1] "Mapa {name}: {count} edificios, {height}"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
 msgid "Terrain: {points} points, z from {low} to {high} m, grid {spacing} m"
 msgstr ""
 "Relieve: {points} puntos, z de {low} a {high} m, cuadrícula de {spacing} m"
@@ -2322,12 +2618,30 @@ msgid "From the buildings file, which sets its footprint and height"
 msgstr "Del archivo de edificios, que fija su planta y su altura"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "remove zone"
-msgstr "eliminar zona"
+msgid "Terrain"
+msgstr "Relieve"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "change ground"
-msgstr "cambiar terreno"
+msgid "Height grids (*.asc *.xyz *.txt *.csv);;All files (*)"
+msgstr ""
+"Cuadrículas de alturas (*.asc *.xyz *.txt *.csv);;Todos los archivos (*)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Buildings from a map"
+msgstr "Edificios desde un mapa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "GeoJSON (*.geojson *.json);;All files (*)"
+msgstr "GeoJSON (*.geojson *.json);;Todos los archivos (*)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} holds no building footprints"
+msgstr "{name} no contiene huellas de edificios"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove zone"
+msgstr "eliminar zona"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "a height is one number"
@@ -2348,6 +2662,67 @@ msgstr "eliminar pantalla"
 #: acoustic_spaces/gui/inspector.py
 msgid "remove vegetation"
 msgstr "eliminar vegetación"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "belt of trees"
+msgstr "franja de árboles"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "hedge"
+msgstr "seto"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "lone tree"
+msgstr "árbol aislado"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} holds {count} building. How high is it, and what is it called?"
+msgid_plural ""
+"{name} holds {count} buildings. How high are they, and what are they called?"
+msgstr[0] ""
+"{name} contiene {count} edificio. ¿Qué altura tiene y cómo se llama?"
+msgstr[1] ""
+"{name} contiene {count} edificios. ¿Qué altura tienen y cómo se llaman?"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The property of each building that holds its height (one that holds a number "
+"in every building that has it), or one height for all of them"
+msgstr ""
+"La propiedad de cada edificio que contiene su altura (una que contiene un "
+"número en todos los edificios que la tienen), o una misma altura para todos"
+
+#. Translators: the choice of one height for every building of the map.
+#: acoustic_spaces/gui/inspector.py
+msgid "the same for all"
+msgstr "la misma para todos"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The height of every building, or of those whose property is missing, in the "
+"geometry's units"
+msgstr ""
+"La altura de todos los edificios, o de aquellos a los que les falta la "
+"propiedad, en las unidades de la geometría"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The property that names each building, or numbered names for all of them"
+msgstr ""
+"La propiedad que da nombre a cada edificio, o nombres numerados para todos"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "building_1, building_2, …"
+msgstr "building_1, building_2, …"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Height of all"
+msgstr "Altura de todos"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Height when missing"
+msgstr "Altura si falta"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -3922,6 +4297,34 @@ msgid "Off"
 msgstr "Desactivado"
 
 #: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a room yet: {problem}"
+msgstr "Todavía no es un recinto: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a building yet: {problem}"
+msgstr "Todavía no es un edificio: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a belt of trees yet: {problem}"
+msgstr "Todavía no es una franja de árboles: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a zone yet: {problem}"
+msgstr "Todavía no es una zona: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Not a barrier yet: it needs two points at least"
+msgstr "Todavía no es una pantalla: necesita al menos dos puntos"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Not a hedge yet: it needs two points at least"
+msgstr "Todavía no es un seto: necesita al menos dos puntos"
+
+#: acoustic_spaces/gui/plan_view.py
 msgid ""
 "Drag corners, sources and listeners; double-click a wall to add a corner; "
 "right-click for more. Shift: no snapping."
@@ -3957,17 +4360,61 @@ msgstr ""
 "dibujo."
 
 #: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the new building's footprint; close it on the first "
+"corner, with a double-click or Enter. Backspace takes a corner back, Esc "
+"stops."
+msgstr ""
+"Hacer clic en los vértices de la huella del edificio nuevo; cerrarla en el "
+"primer vértice, con doble clic o Intro. Retroceso quita el último vértice, "
+"Esc detiene el dibujo."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the points along the new barrier, end to end; finish with a "
+"double-click or Enter. Backspace takes a point back, Esc stops."
+msgstr ""
+"Hacer clic en los puntos de la pantalla nueva, de un extremo al otro; "
+"terminar con doble clic o Intro. Retroceso quita el último punto, Esc "
+"detiene el dibujo."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the belt of trees; close it on the first corner, with a "
+"double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"Hacer clic en los vértices de la franja de árboles; cerrarla en el primer "
+"vértice, con doble clic o Intro. Retroceso quita el último vértice, Esc "
+"detiene el dibujo."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the points along the hedge, end to end; finish with a double-click or "
+"Enter. Backspace takes a point back, Esc stops."
+msgstr ""
+"Hacer clic en los puntos del seto, de un extremo al otro; terminar con doble "
+"clic o Intro. Retroceso quita el último punto, Esc detiene el dibujo."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Click where the tree stands; Esc cancels."
+msgstr "Hacer clic donde está el árbol; Esc cancela."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the ground zone; close it on the first corner, with a "
+"double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"Hacer clic en los vértices de la zona del terreno; cerrarla en el primer "
+"vértice, con doble clic o Intro. Retroceso quita el último vértice, Esc "
+"detiene el dibujo."
+
+#: acoustic_spaces/gui/plan_view.py
 msgid "Click where the new source goes; Esc cancels."
 msgstr "Hacer clic donde va la fuente nueva; Esc cancela."
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "Click where the new listener goes; Esc cancels."
 msgstr "Hacer clic donde va el receptor nuevo; Esc cancela."
-
-#: acoustic_spaces/gui/plan_view.py
-#, python-brace-format
-msgid "Not a room yet: {problem}"
-msgstr "Todavía no es un recinto: {problem}"
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "A floor plan needs at least three corners."
@@ -4004,8 +4451,13 @@ msgid "Draw room"
 msgstr "Dibujar recinto"
 
 #: acoustic_spaces/gui/plan_view.py
-msgid "Draw a new floor plan, corner by corner; it replaces the room"
-msgstr "Dibujar una planta nueva, vértice a vértice; sustituye al recinto"
+msgid ""
+"Draw a new floor plan, corner by corner; it replaces the room. Buildings, "
+"barriers, vegetation and ground zones are drawn from the Geometry form"
+msgstr ""
+"Dibujar una planta nueva, vértice a vértice; sustituye al recinto. Los "
+"edificios, las pantallas, la vegetación y las zonas del terreno se dibujan "
+"desde el formulario de Geometría"
 
 #: acoustic_spaces/gui/plan_view.py
 msgid ""

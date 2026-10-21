@@ -12,6 +12,7 @@ import copy
 import math
 import os
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QLocale, Qt, Signal
@@ -20,6 +21,8 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QCompleter,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -40,8 +43,10 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces.engine import tuning
+from acoustic_spaces.geometry import UNIT_SCALE
 from acoustic_spaces.geometry.io import SUPPORTED_SUFFIXES, ifc_spaces
-from acoustic_spaces.gui.document import Document, EditError
+from acoustic_spaces.geometry.terrain import footprint_properties
+from acoustic_spaces.gui.document import NEW_PART_SIZES, Document, EditError
 from acoustic_spaces.gui.levels import rich_lines
 from acoustic_spaces.gui.numbers import fmt, number, numbers_text, parse_number, parse_numbers
 from acoustic_spaces.gui.tips import band_headers, row_headers, share_tips
@@ -182,6 +187,9 @@ class Page(QWidget):
     failed = Signal(str)
     #: The page asks to select another item (after a rename or removal).
     select = Signal(str, object)
+    #: The page asks for something to be drawn in the plan view: one of
+    #: :data:`~acoustic_spaces.gui.plan_view.PURPOSES` other than a room.
+    draw = Signal(str)
 
     def __init__(self, document: Callable[[], Document]) -> None:
         super().__init__()
@@ -898,6 +906,31 @@ class GeometryPage(Page):
         ground_form.addRow(_("Margin"), self.margin)
         ground_form.addRow(_("Sky"), self.sky)
         ground_layout.addLayout(ground_form)
+        extent_row = QHBoxLayout()
+        self.extent_set = QCheckBox(_("Extent"))
+        self.extent_set.setToolTip(
+            _(
+                "Where the ground ends, from its south-west corner (x, y) to its north-east "
+                "one, in the units the title shows; off: the margin round the buildings, "
+                "barriers and model, or the whole terrain. Past the ground's edge, sound "
+                "leaves the scene as if the ground went on"
+            )
+        )
+        self.extent_set.toggled.connect(self._extent_toggled)
+        extent_row.addWidget(self.extent_set)
+        self.extent_spins = []
+        for tip in (
+            _("x where the ground starts (its west edge)"),
+            _("y where the ground starts (its south edge)"),
+            _("x where the ground ends (its east edge)"),
+            _("y where the ground ends (its north edge)"),
+        ):
+            box = spin(-LARGEST, LARGEST, 2, 5.0)
+            box.setToolTip(tip)
+            box.valueChanged.connect(self._extent_changed)
+            extent_row.addWidget(box)
+            self.extent_spins.append(box)
+        ground_layout.addLayout(extent_row)
         self.extent = QLabel()
         self.extent.setWordWrap(True)
         self.extent.setToolTip(
@@ -908,13 +941,32 @@ class GeometryPage(Page):
         self.terrain.setWordWrap(True)
         self.terrain.setToolTip(
             _(
-                "The terrain the ground follows (set in the scene file): its heights on a "
-                "grid, from a file or given, sampled over the ground's extent"
+                "The terrain the ground follows: its heights on a grid, from a file or given "
+                "in the scene file, sampled over the ground's extent"
             )
         )
         ground_layout.addWidget(self.terrain)
+        terrain_row = QHBoxLayout()
+        self.terrain_button = QPushButton(_("Terrain from a file…"))
+        self.terrain_button.setToolTip(
+            _(
+                "Make the ground follow the heights in a file: an Esri ASCII grid (.asc) or "
+                "x y z points on a regular grid (.xyz, .txt, .csv), in the units the title "
+                "shows. The terrain sets the ground's size, unless an extent inside it is set"
+            )
+        )
+        self.terrain_button.clicked.connect(self._choose_terrain)
+        self.remove_terrain = QPushButton(_("Remove terrain"))
+        self.remove_terrain.setToolTip(
+            _("Flatten the ground again, at the ground height, with the margin round the parts")
+        )
+        self.remove_terrain.clicked.connect(self._remove_terrain)
+        terrain_row.addWidget(self.terrain_button)
+        terrain_row.addWidget(self.remove_terrain)
+        terrain_row.addStretch(1)
+        ground_layout.addLayout(terrain_row)
         self.parts = {}
-        for kind, title, columns, tips, remove_text in (
+        for kind, title, columns, tips, add_text, add_tip, remove_text in (
             (
                 "buildings",
                 _("Buildings"),
@@ -922,9 +974,15 @@ class GeometryPage(Page):
                 (
                     _("The building's name; its surfaces are named after it"),
                     _("How high the building is, ground to roof, in the units the title shows"),
-                    _("How many corners the building's footprint has (set in the scene file)"),
+                    _("How many corners the building's footprint has (as drawn in the plan)"),
                     _("Remove the selected building, or the last one when none is selected"),
                 ),
+                _("Add building"),
+                _(
+                    "Draw a building's footprint in the plan, corner by corner, and close it "
+                    "on the first corner; it rises {height:g} m from the ground, to change in "
+                    "the table"
+                ).format(height=NEW_PART_SIZES["building"]["height"]),
                 _("Remove building"),
             ),
             (
@@ -934,9 +992,15 @@ class GeometryPage(Page):
                 (
                     _("The barrier's name, which its surfaces carry"),
                     _("How high the barrier is over the ground, in the units the title shows"),
-                    _("How many points the barrier's path has (set in the scene file)"),
+                    _("How many points the barrier's path has (as drawn in the plan)"),
                     _("Remove the selected barrier, or the last one when none is selected"),
                 ),
+                _("Add barrier"),
+                _(
+                    "Draw a barrier's path in the plan, point by point, and finish it with "
+                    "Enter or a double click; it stands {height:g} m high, to change in the "
+                    "table"
+                ).format(height=NEW_PART_SIZES["barrier"]["height"]),
                 _("Remove barrier"),
             ),
             (
@@ -951,7 +1015,7 @@ class GeometryPage(Page):
                     _("How high its top is over the ground, in the units the title shows"),
                     _(
                         "A belt of trees (a footprint raised from the ground), a hedge (a path "
-                        "of a width) or a lone tree's crown (set in the scene file)"
+                        "of a width) or a lone tree's crown, as drawn in the plan"
                     ),
                     _(
                         "What fills it: foliage, which takes so many dB per metre from sound "
@@ -959,6 +1023,13 @@ class GeometryPage(Page):
                         "out for themselves; and stems, which scatter it sideways"
                     ),
                     _("Remove the selected vegetation, or the last one when none is selected"),
+                ),
+                _("Add vegetation"),
+                _(
+                    "Draw the shape chosen beside in the plan: a belt's footprint closed on its "
+                    "first corner, a hedge's path finished with Enter, or a tree's place with "
+                    "one click; dense foliage, its height to change in the table and the rest "
+                    "in the scene file"
                 ),
                 _("Remove vegetation"),
             ),
@@ -971,11 +1042,66 @@ class GeometryPage(Page):
             table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
             table.itemChanged.connect(lambda item, kind=kind: self._part_height(kind, item))
             ground_layout.addWidget(table)
+            buttons = QHBoxLayout()
+            if kind == "vegetation":
+                self.plant_shape = QComboBox()
+                for purpose, label in PLANT_SHAPES:
+                    self.plant_shape.addItem(_(label), purpose)
+                self.plant_shape.setToolTip(
+                    _(
+                        "What to draw next: a belt of trees (its footprint, corner by corner), "
+                        "a hedge (its path, point by point, {width:g} m wide) or a lone tree "
+                        "(one click, its crown {crown:g} m across)"
+                    ).format(
+                        width=NEW_PART_SIZES["hedge"]["width"],
+                        crown=NEW_PART_SIZES["tree"]["crown_diameter"],
+                    )
+                )
+                buttons.addWidget(self.plant_shape)
+            add = QPushButton(add_text)
+            add.setToolTip(add_tip)
+            add.clicked.connect(lambda _checked=False, kind=kind: self._add(kind))
+            buttons.addWidget(add)
             remove = QPushButton(remove_text)
             remove.setToolTip(tips[-1])
             remove.clicked.connect(lambda _checked=False, kind=kind: self._remove_part(kind))
-            ground_layout.addWidget(remove)
+            buttons.addWidget(remove)
+            buttons.addStretch(1)
+            ground_layout.addLayout(buttons)
             self.parts[kind] = table
+            if kind == "buildings":
+                self.map_label = QLabel()
+                self.map_label.setWordWrap(True)
+                self.map_label.setToolTip(
+                    _(
+                        "The map the buildings marked 'from the buildings file' come from: a "
+                        "GeoJSON file of footprints, each raised to the height a property of it "
+                        "gives (or one height for all) and named by another"
+                    )
+                )
+                ground_layout.addWidget(self.map_label)
+                map_row = QHBoxLayout()
+                self.map_button = QPushButton(_("Buildings from a map…"))
+                self.map_button.setToolTip(
+                    _(
+                        "Add the buildings of a GeoJSON file of footprints, on a plane in the "
+                        "units the title shows (not longitude and latitude), each as high as a "
+                        "property of it says; they join the ones drawn here"
+                    )
+                )
+                self.map_button.clicked.connect(self._choose_buildings_file)
+                self.remove_map = QPushButton(_("Remove the map's buildings"))
+                self.remove_map.setToolTip(
+                    _(
+                        "Drop the map and every building that came from it; the buildings "
+                        "drawn here stay"
+                    )
+                )
+                self.remove_map.clicked.connect(self._remove_buildings_file)
+                map_row.addWidget(self.map_button)
+                map_row.addWidget(self.remove_map)
+                map_row.addStretch(1)
+                ground_layout.addLayout(map_row)
         ground_layout.addWidget(QLabel(_("Ground zones")))
         self.zones = QTableWidget(0, 2)
         self.zones.setHorizontalHeaderLabels([_("Name"), _("Corners")])
@@ -985,7 +1111,7 @@ class GeometryPage(Page):
                     "The zone's name: a part of the ground (a road, a lawn) whose surfaces "
                     "carry it, to give it a material of its own"
                 ),
-                _("How many corners the zone's outline has (set in the scene file)"),
+                _("How many corners the zone's outline has (as drawn in the plan)"),
             )
         ):
             self.zones.horizontalHeaderItem(col).setToolTip(tip)
@@ -1000,7 +1126,19 @@ class GeometryPage(Page):
             )
         )
         remove.clicked.connect(self._remove_zone)
-        ground_layout.addWidget(remove)
+        buttons = QHBoxLayout()
+        add = QPushButton(_("Add zone"))
+        add.setToolTip(
+            _(
+                "Draw a part of the ground in the plan, corner by corner, and close it on the "
+                "first corner; then give its surface a material of its own in the scene tree"
+            )
+        )
+        add.clicked.connect(lambda _checked=False: self._add("zone"))
+        buttons.addWidget(add)
+        buttons.addWidget(remove)
+        buttons.addStretch(1)
+        ground_layout.addLayout(buttons)
         layout.addWidget(self.ground_group)
 
         self.report = QLabel()
@@ -1176,6 +1314,18 @@ class GeometryPage(Page):
         self.ground_height.setValue(ground.height)
         self.margin.setValue(ground.margin)
         self.sky.setValue(ground.sky or 0.0)
+        scale = UNIT_SCALE[geometry.units or "m"]
+        given = ground.extent is not None
+        if given:
+            (x0, y0), (x1, y1) = ground.extent
+        elif room.outdoor is not None:
+            x0, y0, x1, y1 = (value / scale for value in room.outdoor.extent)
+        else:
+            x0 = y0 = x1 = y1 = 0.0
+        self.extent_set.setChecked(given)
+        for box, value in zip(self.extent_spins, (x0, y0, x1, y1), strict=True):
+            box.setValue(value)
+            box.setEnabled(given)
         if room.outdoor is not None:
             x0, y0, x1, y1 = room.outdoor.extent
             self.extent.setText(
@@ -1190,6 +1340,23 @@ class GeometryPage(Page):
             )
         terrain = room.outdoor.terrain if room.outdoor is not None else None
         self.terrain.setVisible(terrain is not None)
+        self.remove_terrain.setVisible(terrain is not None)
+        spec = geometry.buildings_file
+        self.map_label.setVisible(spec is not None)
+        self.remove_map.setVisible(spec is not None)
+        if spec is not None:
+            count = len(geometry.all_buildings()) - len(geometry.buildings or [])
+            if isinstance(spec.height, str):
+                height = _("height from {property}").format(property=spec.height)
+            else:
+                height = _("{height} high").format(height=number(spec.height))
+            self.map_label.setText(
+                ngettext(
+                    "Map {name}: {count} building, {height}",
+                    "Map {name}: {count} buildings, {height}",
+                    count,
+                ).format(name=spec.file.name, count=count, height=height)
+            )
         if terrain is not None:
             self.terrain.setText(
                 fmt(
@@ -1233,6 +1400,72 @@ class GeometryPage(Page):
                 cell = QTableWidgetItem(text)
                 cell.setToolTip(self.zones.horizontalHeaderItem(col).toolTip())
                 self.zones.setItem(row, col, cell)
+
+    def _add(self, kind: str) -> None:
+        """Ask for a part of ``kind`` ("buildings", "barriers", "vegetation" or "zone")
+        to be drawn in the plan view."""
+        if self._loading:
+            return
+        if kind == "vegetation":
+            self.draw.emit(self.plant_shape.currentData())
+        else:
+            self.draw.emit({"buildings": "building", "barriers": "barrier"}.get(kind, kind))
+
+    def _extent_toggled(self, on: bool) -> None:
+        if self._loading:
+            return
+        if on:
+            self._extent_changed()
+        else:
+            self.run(lambda: self.document.set_extent(None))
+
+    def _extent_changed(self) -> None:
+        if self._loading or not self.extent_set.isChecked():
+            return
+        x0, y0, x1, y1 = (box.value() for box in self.extent_spins)
+        self.run(lambda: self.document.set_extent([[x0, y0], [x1, y1]]))
+
+    def _choose_terrain(self) -> None:
+        if self._loading:
+            return
+        path, _filter = QFileDialog.getOpenFileName(
+            self,
+            _("Terrain"),
+            str(self.document.base_dir),
+            _("Height grids (*.asc *.xyz *.txt *.csv);;All files (*)"),
+        )
+        if path:
+            self.run(lambda: self.document.set_terrain(path))
+
+    def _remove_terrain(self) -> None:
+        self.run(lambda: self.document.set_terrain(None))
+
+    def _choose_buildings_file(self) -> None:
+        if self._loading:
+            return
+        path, _filter = QFileDialog.getOpenFileName(
+            self,
+            _("Buildings from a map"),
+            str(self.document.base_dir),
+            _("GeoJSON (*.geojson *.json);;All files (*)"),
+        )
+        if not path:
+            return
+        try:
+            count, properties = footprint_properties(path)
+        except (OSError, ValueError) as exc:
+            self.failed.emit(str(exc))
+            return
+        if not count:
+            self.failed.emit(_("{name} holds no building footprints").format(name=Path(path).name))
+            return
+        dialog = MapDialog(self, Path(path).name, count, properties)
+        if dialog.exec():
+            choice = dialog.choice()
+            self.run(lambda: self.document.set_buildings_file(path, **choice))
+
+    def _remove_buildings_file(self) -> None:
+        self.run(lambda: self.document.set_buildings_file(None))
 
     def _remove_zone(self) -> None:
         if not self.zones.rowCount():
@@ -1332,6 +1565,101 @@ class GeometryPage(Page):
             "vegetation": _("remove vegetation"),
         }
         self.apply(what[kind], change)
+
+
+#: The vegetation the Geometry form draws, as the plan view names it, with its label.
+PLANT_SHAPES = [
+    ("belt", N_("belt of trees")),
+    ("hedge", N_("hedge")),
+    ("tree", N_("lone tree")),
+]
+
+
+class MapDialog(QDialog):
+    """How to read the buildings of a map: the property that holds their heights (or
+    one height for all of them), the height of those without it, and the property
+    that names them. :meth:`choice` gives :meth:`Document.set_buildings_file` its
+    arguments."""
+
+    def __init__(self, parent, name: str, count: int, properties: dict[str, str]) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(_("Buildings from a map"))
+        layout = QVBoxLayout(self)
+        intro = QLabel(
+            ngettext(
+                "{name} holds {count} building. How high is it, and what is it called?",
+                "{name} holds {count} buildings. How high are they, and what are they called?",
+                count,
+            ).format(name=name, count=count)
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        form = QFormLayout()
+        self.height = QComboBox()
+        self.height.setToolTip(
+            _(
+                "The property of each building that holds its height (one that holds a "
+                "number in every building that has it), or one height for all of them"
+            )
+        )
+        numbers = [key for key, kind in properties.items() if kind == "number"]
+        for key in numbers:
+            self.height.addItem(key, key)
+        # Translators: the choice of one height for every building of the map.
+        self.height.addItem(_("the same for all"), None)
+        self.height.setCurrentIndex(
+            numbers.index("height") if "height" in numbers else len(numbers)
+        )
+        self.height.currentIndexChanged.connect(self._relabel)
+        self.metres = spin(0.1, LARGEST, 1, 1.0)
+        self.metres.setValue(NEW_PART_SIZES["building"]["height"])
+        self.metres.setToolTip(
+            _(
+                "The height of every building, or of those whose property is missing, in "
+                "the geometry's units"
+            )
+        )
+        self.metres_label = QLabel()
+        self.metres_label.setToolTip(self.metres.toolTip())
+        self.name = QComboBox()
+        self.name.setToolTip(
+            _("The property that names each building, or numbered names for all of them")
+        )
+        for key in properties:
+            self.name.addItem(key, key)
+        self.name.addItem(_("building_1, building_2, …"), None)
+        keys = list(properties)
+        self.name.setCurrentIndex(keys.index("name") if "name" in keys else len(keys))
+        height_label = QLabel(_("Height"))
+        height_label.setToolTip(self.height.toolTip())
+        form.addRow(height_label, self.height)
+        form.addRow(self.metres_label, self.metres)
+        name_label = QLabel(_("Name"))
+        name_label.setToolTip(self.name.toolTip())
+        form.addRow(name_label, self.name)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self._relabel()
+
+    def _relabel(self) -> None:
+        same = self.height.currentData() is None
+        self.metres_label.setText(_("Height of all") if same else _("Height when missing"))
+
+    def choice(self) -> dict:
+        """The arguments of :meth:`Document.set_buildings_file` the user chose."""
+        key = self.height.currentData()
+        out = {"name": self.name.currentData() or "name"}
+        if key is None:
+            out["height"] = float(self.metres.value())
+        else:
+            out["height"] = key
+            out["default_height"] = float(self.metres.value())
+        return out
 
 
 def _part_name(kind: str, index: int, item: dict) -> str:
@@ -3093,6 +3421,7 @@ class Inspector(QStackedWidget):
 
     failed = Signal(str)
     select = Signal(str, object)
+    draw = Signal(str)
 
     def __init__(self, document: Callable[[], Document]) -> None:
         super().__init__()
@@ -3113,6 +3442,7 @@ class Inspector(QStackedWidget):
             self.addWidget(page)
             page.failed.connect(self.failed)
             page.select.connect(self.select)
+            page.draw.connect(self.draw)
         self.kind = ""
 
     def show_item(self, kind: str, key=None) -> None:
@@ -3125,4 +3455,4 @@ class Inspector(QStackedWidget):
         self.currentWidget().reload()
 
 
-__all__ = ["Inspector", "Page", "label_text"]
+__all__ = ["Inspector", "MapDialog", "Page", "label_text"]

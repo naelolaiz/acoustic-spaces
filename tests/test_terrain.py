@@ -24,6 +24,7 @@ from acoustic_spaces.engine.model import TraceModel, _ground_faces
 from acoustic_spaces.geometry.outdoor import TerrainSurface, outdoor_mesh
 from acoustic_spaces.geometry.terrain import (
     HeightGrid,
+    footprint_properties,
     read_footprints,
     read_height_grid,
     write_asc,
@@ -292,6 +293,58 @@ def test_footprints_with_holes_are_built_over_and_said_so(tmp_path: Path) -> Non
     )
     assert any("holes (courtyards), which are built over: court" in w for w in room.warnings())
     assert room.outdoor.building_at([[30, 30, 3]]) == ["court"]
+
+
+def test_the_properties_of_a_maps_buildings_are_told_apart(tmp_path: Path) -> None:
+    path = tmp_path / "town.geojson"
+    path.write_text(
+        json.dumps(
+            geojson(
+                [
+                    feature(SQUARE, {"name": "hall", "height": 9, "floors": 3, "listed": True}),
+                    feature(SQUARE, {"name": "barn", "height": "4.5", "floors": "two"}),
+                    feature(SQUARE, {"height": 12.0, "area": float("nan")}),
+                    {"type": "Feature", "properties": {"height": "x"}, "geometry": None},
+                    feature([[0, 0], [1, 1]], {"height": 1}, kind="LineString"),
+                ]
+            )
+        )
+    )
+    # Three buildings; a property holds numbers when every building that has it gives one
+    # (as text too); a boolean or a NaN is no number, and a line is no building.
+    assert footprint_properties(path) == (
+        3,
+        {"name": "text", "height": "number", "floors": "text", "listed": "text", "area": "text"},
+    )
+    bare = tmp_path / "bare.geojson"
+    bare.write_text(json.dumps({"type": "Polygon", "coordinates": SQUARE}))
+    assert footprint_properties(bare) == (1, {})
+    (tmp_path / "empty.geojson").write_text(json.dumps(geojson([])))
+    assert footprint_properties(tmp_path / "empty.geojson") == (0, {})
+    (tmp_path / "points.geojson").write_text(json.dumps({"type": "Point", "coordinates": [0, 0]}))
+    with pytest.raises(ValueError, match="not GeoJSON buildings"):
+        footprint_properties(tmp_path / "points.geojson")
+
+
+def test_a_saved_scene_refers_to_its_terrain_and_map_by_relative_paths(tmp_path: Path) -> None:
+    write_asc(tmp_path / "hill.asc", HeightGrid((0, 0), 10.0, grid_rows(ridge)))
+    buildings_file(tmp_path)
+    s = scene(
+        {
+            "ground": {"terrain": {"file": str(tmp_path / "hill.asc")}, "sky": 40},
+            "buildings_file": {"file": str(tmp_path / "map.geojson")},
+        }
+    )
+    s.to_yaml(tmp_path / "scene.yaml")
+    text = (tmp_path / "scene.yaml").read_text(encoding="utf-8")
+    assert "file: hill.asc" in text and "file: map.geojson" in text
+    assert str(tmp_path) not in text
+    (tmp_path / "elsewhere").mkdir()
+    s.to_yaml(tmp_path / "elsewhere" / "scene.yaml")
+    moved = Scene.from_yaml(tmp_path / "elsewhere" / "scene.yaml")
+    assert moved.geometry.ground.terrain.file == (tmp_path / "hill.asc").resolve()
+    assert moved.geometry.buildings_file.file == (tmp_path / "map.geojson").resolve()
+    assert Room.from_scene(moved).outdoor.terrain is not None
 
 
 # -- terrain in a scene ------------------------------------------------------------

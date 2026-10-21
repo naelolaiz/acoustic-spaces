@@ -23,9 +23,10 @@ which frequencies each octave band holds.
 - **File > Open example** opens the bundled rooms. Saving one asks where to keep your
   copy and takes its model file along; an example whose model needs an extra that is not
   installed is greyed out, and its tip says how to install it. **New box room**, **New
-  room from a floor plan** and **New from model file** (OBJ, STL, PLY, OFF, glTF, DXF,
-  IFC, Collada or SketchUp) start from scratch. For an IFC model, the geometry's form
-  picks one room of the building (**IFC room**) or every element.
+  room from a floor plan**, **New from model file** (OBJ, STL, PLY, OFF, glTF, DXF,
+  IFC, Collada or SketchUp) and **New outdoor scene** (a meadow 200 m across, to build
+  on; see [Outdoor scenes](#outdoor-scenes)) start from scratch. For an IFC model, the
+  geometry's form picks one room of the building (**IFC room**) or every element.
 - The **Plan** tab, next to the 3D view, shows the room from above and draws rooms (see
   below).
 - The **scene tree** lists the geometry and its surfaces, the materials, sources,
@@ -158,22 +159,46 @@ room every corner is a handle:
   the reason under **Messages**.
 - The wheel zooms, dragging empty space pans and **Fit** shows the whole room again.
 
-The **Geometry** entry of an [outdoor scene](outdoor.md) has an **Outdoors** group
-instead: the ground's height, the margin and the sky, and the buildings, barriers and
-[vegetation](outdoor.md#vegetation) with their heights, which can be changed or removed
-(the vegetation's table also gives each one's shape and what fills it); a
-[terrain](outdoor.md#terrain) is described under the ground's fields, and the buildings
-of a [map file](outdoor.md#buildings-from-a-map) stand in the buildings table, where
-**Remove** leaves one out of the file. The 3D view draws the vegetation in see-through
-green. The scene's own entry then has a
+Rooms from model files show their outline, and their sources and listeners move the
+same way. Every change can be undone.
+
+## Outdoor scenes
+
+**File > New outdoor scene** starts an [outdoor scene](outdoor.md): a flat meadow 200 m
+across under an open sky, with a source and a listener 50 m apart. The **Geometry**
+entry of an outdoor scene has an **Outdoors** group instead of the room's: the
+ground's height, the margin, the sky and the **Extent** (tick it to set where the
+ground ends; unticked, the ground reaches the margin past what stands on it), then the
+buildings, barriers, [vegetation](outdoor.md#vegetation) and ground zones in tables,
+with their heights, which can be changed, and buttons to add and remove them:
+
+- **Add building**, **Add zone** and **Add vegetation** with *belt of trees* chosen
+  draw an outline in the plan, like a floor plan: click its corners in turn and close
+  it on the first one, with a double-click or Enter. **Add barrier** and **Add
+  vegetation** with *hedge* chosen draw a path: click its points and finish with a
+  double-click or Enter. A *lone tree* stands where the next click lands. Backspace
+  takes a point back and Esc stops. A new building is 10 m high, a barrier 3 m, a belt
+  of trees 12 m, a hedge 2 m high and 1.5 m wide, a tree 10 m high with a crown 8 m
+  across; change the heights in the tables and the rest in the scene file. A zone takes
+  the ground's material until its surface is given one in the scene tree.
+- **Terrain from a file** makes the ground follow the heights in an Esri ASCII grid or
+  a table of x y z points (see [Terrain](outdoor.md#terrain)); the form then describes
+  it (its points, heights and grid), and **Remove terrain** flattens the ground again.
+- **Buildings from a map** adds the buildings of a GeoJSON file of footprints (see
+  [Buildings from a map](outdoor.md#buildings-from-a-map)), after asking which of its
+  properties holds their heights (or one height for all of them), the height of those
+  without it, and which property names them. They stand in the buildings table after
+  the scene's own, where **Remove building** leaves one out of the file, and **Remove
+  the map's buildings** drops the file.
+
+The plan draws the vegetation in dashed green and the zones in their materials'
+colours; the 3D view draws the vegetation in see-through green and leaves the sky out
+but for its edges, which show where the ground ends. The scene's own entry then has a
 **Wind and temperature** group: the weather, the wind and the temperature over the
 ground, their **Eddies** (see [Turbulence](outdoor.md#turbulence)), and **Show the
 profile**, a plot of them and of the speed of sound (see
-[Wind and temperature](outdoor.md#wind-and-temperature)). The 3D view leaves the sky out but
-for its edges, which show where the ground ends.
-
-Rooms from model files show their outline, and their sources and listeners move the
-same way. Every change can be undone.
+[Wind and temperature](outdoor.md#wind-and-temperature)). **Draw room** replaces an
+outdoor scene with a floor plan, after asking.
 
 ## Exporting to Blender
 

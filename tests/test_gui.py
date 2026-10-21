@@ -1,6 +1,7 @@
 """The editor. Runs on Qt's off-screen platform unless QT_QPA_PLATFORM says otherwise;
 with a display (or Xvfb) the 3D view tests run too."""
 
+import json
 import os
 import re
 import socket
@@ -19,19 +20,30 @@ pytest.importorskip("pyvistaqt")
 from PySide6.QtCore import QPoint, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QWheelEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QLabel, QMenu, QMessageBox, QToolBar  # noqa: E402
+from PySide6.QtWidgets import (  # noqa: E402
+    QApplication,
+    QDialog,
+    QLabel,
+    QMenu,
+    QMessageBox,
+    QToolBar,
+)
 
 from acoustic_spaces.audio import write_wav  # noqa: E402
 from acoustic_spaces.examples import example_path, list_examples  # noqa: E402
 from acoustic_spaces.geometry import RoomMesh  # noqa: E402
 from acoustic_spaces.gui.document import (  # noqa: E402
+    NEW_PART_SIZES,
     Document,
     EditError,
+    _in_units,
     box_scene,
     floor_height,
     follow_floor,
     model_scene,
+    outdoor_scene,
     plan_corners,
+    referenced_files,
     unique_name,
 )
 from acoustic_spaces.gui.levels import level_colour  # noqa: E402
@@ -981,6 +993,440 @@ def test_vegetation_table(window) -> None:
     assert window.document.scene.geometry.vegetation is None and plants.rowCount() == 0
     window.open_example(example_path("street"))
     assert page.parts["vegetation"].rowCount() == 0
+
+
+def test_outdoor_parts_in_the_document(qapp, tmp_path) -> None:
+    from acoustic_spaces.geometry.terrain import HeightGrid, write_asc
+
+    document = Document(outdoor_scene())
+    scene = document.scene
+    assert scene.geometry.ground.extent == ((-100.0, -100.0), (100.0, 100.0))
+    assert scene.sources[0].position == (-25.0, 0.0, 1.5)
+    assert scene.listeners[0].position[0] == 25.0 and scene.listeners[0].orientation.yaw == 180.0
+    assert scene.materials["meadow"].impedance.preset == "grass"
+    assert document.room.problems() == [] and document.room.outdoor is not None
+
+    # Parts and zones are added with their corners in metres; the names follow.
+    assert (
+        document.add_part("buildings", {"footprint": [[0, 0], [20, 0], [20, 15]], "height": 10})
+        == 0
+    )
+    assert document.undo_text() == "add building"
+    building = document.scene.geometry.buildings[0]
+    assert building.footprint == [(0.0, 0.0), (20.0, 0.0), (20.0, 15.0)] and building.height == 10
+    assert document.add_part("barriers", {"path": [[-30, 20], [30, 20]], "height": 3}) == 0
+    assert document.undo_text() == "add barrier" and document.room.problems() == []
+    assert any("building_1_walls" in label for label in document.room.mesh.labels)
+
+    # The extent, in the geometry's units; None leaves the margin to decide.
+    document.set_extent([[-50, -60], [70, 80]])
+    assert document.scene.geometry.ground.extent == ((-50.0, -60.0), (70.0, 80.0))
+    assert document.room.outdoor.extent == (-50.0, -60.0, 70.0, 80.0)
+    with pytest.raises(EditError, match="min < max"):
+        document.set_extent([[50, 0], [-50, 10]])
+    document.set_extent(None)
+    assert document.scene.geometry.ground.extent is None
+    assert document.room.outdoor.extent == (-60.0, -30.0, 60.0, 50.0)  # the parts, 30 m round
+    assert document.undo_text() == "change ground"
+
+    assert document.add_part("vegetation", {"tree": [40, -30], **NEW_PART_SIZES["tree"]}) == 0
+    assert (
+        document.add_part("vegetation", {"path": [[0, 40], [50, 40]], **NEW_PART_SIZES["hedge"]})
+        == 1
+    )
+    plants = document.scene.geometry.vegetation
+    assert (
+        plants[0].tree == (40.0, -30.0)
+        and plants[0].crown_diameter == 8.0
+        and plants[0].base == 2.5
+    )
+    assert plants[1].width == 1.5 and plants[1].height == 2.0
+    assert document.add_zone([[-80, -80], [-40, -80], [-40, -40], [-80, -40]]) == 0
+    assert document.scene.geometry.ground.zone_names() == ["zone_1"]
+    assert document.undo_text() == "add zone" and document.room.problems() == []
+    with pytest.raises(EditError, match="cross"):
+        document.add_part("buildings", {"footprint": [[0, 0], [4, 4], [4, 0], [0, 4]], "height": 5})
+    assert len(document.scene.geometry.buildings) == 1
+    with pytest.raises(EditError):
+        document.add_part("vegetation", {"tree": [0, 0], "height": 1.0, "base": 2.0})
+    document.undo()
+    assert document.scene.geometry.ground.zones is None
+
+    # A terrain from a file sets the ground's size; an extent goes with it.
+    document.set_extent([[-60, -60], [60, 60]])
+    assert document.room.outdoor.extent == (-60.0, -60.0, 60.0, 60.0)
+    hill = tmp_path / "hill.asc"
+    rows = [[0.5 * i for i in range(21)] for _ in range(21)]  # a slope up along x, 10 m high
+    write_asc(hill, HeightGrid((-100.0, -100.0), 10.0, rows))
+    document.set_terrain(hill)
+    assert document.scene.geometry.ground.terrain.file == hill.resolve()
+    assert document.scene.geometry.ground.extent is None
+    assert document.room.outdoor.extent == (-100.0, -100.0, 100.0, 100.0)
+    assert document.room.outdoor.ground_at([[0.0, 0.0]]).tolist() == [5.0]
+    assert document.undo_text() == "set terrain" and document.room.problems() == []
+    with pytest.raises(EditError):
+        document.set_terrain(tmp_path / "nowhere.asc")
+    assert document.scene.geometry.ground.terrain.file == hill.resolve()
+
+    # Buildings from a map join the drawn ones, and leave with the map.
+    town = tmp_path / "town.geojson"
+    town.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "properties": {"name": "hall", "height": 9},
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[[-60, -60], [-50, -60], [-50, -50], [-60, -50]]],
+                        },
+                    },
+                    {
+                        "type": "Feature",
+                        "properties": {"name": "shed"},
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[[60, 60], [66, 60], [66, 66], [60, 66]]],
+                        },
+                    },
+                ],
+            }
+        )
+    )
+    document.set_buildings_file(town, default_height=4.0)
+    assert document.scene.geometry.building_names() == ["building_1", "hall", "shed"]
+    assert [b.height for b in document.scene.geometry.all_buildings()] == [10.0, 9.0, 4.0]
+    assert referenced_files(document.scene) == [hill.resolve(), town.resolve()]
+    document.edit(
+        "loss", lambda d: d["simulation"].update(insertion_loss_of=["hall", "building_1"])
+    )
+    document.set_buildings_file(None)
+    assert document.scene.geometry.buildings_file is None
+    assert document.scene.simulation.insertion_loss_of == ["building_1"]
+    assert document.undo_text() == "remove the map's buildings"
+    document.set_buildings_file(town, height=6.0, name="name")
+    assert [b.height for b in document.scene.geometry.all_buildings()] == [10.0, 6.0, 6.0]
+    document.set_terrain(None)
+    assert document.scene.geometry.ground.terrain is None and document.room.problems() == []
+
+    # Drawn in metres, kept in the geometry's units.
+    assert _in_units({"footprint": [[1, 2], [3, 4]], "height": 5, "name": "a"}, 0.01) == {
+        "footprint": [[100.0, 200.0], [300.0, 400.0]],
+        "height": 500.0,
+        "name": "a",
+    }
+    assert _in_units({"tree": [1.5, -2], "crown_diameter": 8, "base": 2.5, "height": 10}, 0.5) == {
+        "tree": [3.0, -4.0],
+        "crown_diameter": 16.0,
+        "base": 5.0,
+        "height": 20.0,
+    }
+    assert _in_units({"path": [[0, 0], [1, 0]], "width": 1.5, "height": 2}, 1.0) == {
+        "path": [[0.0, 0.0], [1.0, 0.0]],
+        "width": 1.5,
+        "height": 2.0,
+    }
+
+
+def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
+    window.new_outdoor()
+    assert window.document.scene.geometry.ground is not None and not window.document.modified
+    assert window.selection == ("geometry", None)
+    assert "New outdoor scene: a meadow 200 m across" in window.messages.toPlainText()
+    page = window.inspector.pages["geometry"]
+    assert not page.ground_group.isHidden() and page.ground_group.title() == "Outdoors (m)"
+    assert page.extent.text().startswith("Ground from (-100, -100) to (100, 100) m")
+    canvas = _plan(window, qapp)
+
+    # The Geometry form's buttons start a drawing of their kind in the plan view.
+    window.views.setCurrentWidget(window.viewport)
+    page._add("buildings")
+    assert window.views.currentWidget() is window.plan
+    assert canvas.mode == "drawing" and canvas.purpose == "building"
+    assert not window.plan.draw.isChecked() and "footprint" in window.plan.hint.text()
+    window.plan.canvas.part_drawn.emit("building", [[0, 0], [20, 0], [20, 15], [0, 15]])
+    buildings = window.document.scene.geometry.buildings
+    assert len(buildings) == 1 and buildings[0].height == 10.0
+    assert buildings[0].footprint == [(0.0, 0.0), (20.0, 0.0), (20.0, 15.0), (0.0, 15.0)]
+    assert "New building with 4 corners, 10 m high" in window.messages.toPlainText()
+    assert page.parts["buildings"].rowCount() == 1 and window.selection == ("geometry", None)
+    assert [page.parts["buildings"].item(0, c).text() for c in range(3)] == [
+        "building_1",
+        "10",
+        "4",
+    ]
+
+    # A barrier is clicked point by point and finished with Enter.
+    page._add("barriers")
+    assert canvas.purpose == "barrier" and "end to end" in window.plan.hint.text()
+    for point in [(-30, 20), (30, 20)]:
+        QTest.mouseClick(
+            canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, point)
+        )
+        QTest.mouseMove(canvas, _at(canvas, (0, 30)))
+    canvas.grab()  # the path so far, with the length of the next stretch
+    QTest.keyClick(canvas, Qt.Key.Key_Return)
+    qapp.processEvents()
+    barriers = window.document.scene.geometry.barriers
+    assert len(barriers) == 1 and barriers[0].height == 3.0
+    assert np.allclose(barriers[0].path, [(-30, 20), (30, 20)], atol=0.5)
+    assert canvas.mode == "plan" and canvas.purpose == "room"
+    assert "New barrier along 2 points, 3 m high" in window.messages.toPlainText()
+
+    # Vegetation takes the shape chosen beside the button: a tree is one click.
+    page.plant_shape.setCurrentIndex(page.plant_shape.findData("tree"))
+    page._add("vegetation")
+    assert canvas.purpose == "tree"
+    QTest.mouseMove(canvas, _at(canvas, (40, -30)))
+    canvas.grab()  # the crown follows the cursor
+    QTest.mouseClick(
+        canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (40, -30))
+    )
+    qapp.processEvents()
+    plants = window.document.scene.geometry.vegetation
+    assert len(plants) == 1 and plants[0].kind == "tree" and plants[0].crown_diameter == 8.0
+    assert np.allclose(plants[0].tree, (40, -30), atol=0.5) and canvas.mode == "plan"
+    assert "New tree 10 m high, its crown 8 m across from 2.5 m up" in window.messages.toPlainText()
+    page.plant_shape.setCurrentIndex(page.plant_shape.findData("hedge"))
+    page._add("vegetation")
+    assert canvas.purpose == "hedge"
+    window.plan.canvas.part_drawn.emit("hedge", [[0, 40], [50, 40], [50, 60]])
+    plants = window.document.scene.geometry.vegetation
+    assert plants[1].kind == "hedge" and plants[1].width == 1.5 and plants[1].height == 2.0
+    page.plant_shape.setCurrentIndex(page.plant_shape.findData("belt"))
+    page._add("vegetation")
+    assert canvas.purpose == "belt"
+    window.plan.canvas.part_drawn.emit("belt", [[-90, 50], [-60, 50], [-60, 90], [-90, 90]])
+    plants = window.document.scene.geometry.vegetation
+    assert plants[2].kind == "belt" and plants[2].height == 12.0
+    assert page.parts["vegetation"].rowCount() == 3
+    assert page.parts["vegetation"].item(2, 2).text() == "belt, 4 corners"
+
+    # A zone, drawn and closed on its first corner, takes the ground's material.
+    page._add("zone")
+    assert canvas.purpose == "zone" and "zone" in window.plan.hint.text()
+    for point in [(-80, -80), (-40, -80), (-40, -40), (-80, -40), (-80, -80)]:
+        QTest.mouseClick(
+            canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, point)
+        )
+    qapp.processEvents()
+    zones = window.document.scene.geometry.ground.zones
+    assert len(zones) == 1 and len(zones[0].polygon) == 4 and canvas.mode == "plan"
+    assert window.document.scene.geometry.ground.zone_names() == ["zone_1"]
+    assert "New ground zone with 4 corners" in window.messages.toPlainText()
+    assert page.zones.rowCount() == 1 and page.zones.item(0, 0).text() == "zone_1"
+    assert window.document.room.problems() == []
+    canvas.grab()  # zones and vegetation drawn in the plan
+    window.document.set_extent(None)
+    canvas.grab()
+
+    # What cannot be a building yet says so and goes on; Esc stops it.
+    page._add("buildings")
+    for point in [(0, -50), (20, -30), (20, -50), (0, -30)]:
+        QTest.mouseClick(
+            canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, point)
+        )
+    QTest.keyClick(canvas, Qt.Key.Key_Return)
+    assert "Not a building yet:" in window.messages.toPlainText() and canvas.mode == "drawing"
+    window._escape()
+    assert canvas.mode == "plan" and canvas.purpose == "room"
+    assert len(window.document.scene.geometry.buildings) == 1
+    page._add("barriers")
+    QTest.mouseClick(
+        canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (0, -50))
+    )
+    QTest.keyClick(canvas, Qt.Key.Key_Return)
+    assert "Not a barrier yet: it needs two points" in window.messages.toPlainText()
+    window._escape()
+    # The Draw room button draws a room, whatever was being drawn before.
+    page._add("zone")
+    window.plan.draw.click()
+    assert canvas.mode == "drawing" and canvas.purpose == "room"
+    window.plan.draw.click()
+    assert canvas.mode == "plan"
+
+    # A refused part is reported, not added.
+    window.plan.canvas.part_drawn.emit("zone", [[-80, -80], [-40, -80], [-40, -40], [-80, -40]])
+    assert "Not changed:" in window.messages.toPlainText()  # overlaps the first zone
+    assert len(window.document.scene.geometry.ground.zones) == 1
+
+    # The removals, and undo all the way back to the meadow.
+    page._remove_part("vegetation")
+    assert len(window.document.scene.geometry.vegetation) == 2
+    page._remove_zone()
+    assert window.document.scene.geometry.ground.zones is None
+    while window.document.undo_text() is not None:
+        window.document.undo()
+    geometry = window.document.scene.geometry
+    assert geometry.buildings is None and geometry.barriers is None and geometry.vegetation is None
+
+
+def test_outdoor_extent_terrain_and_map_controls(window, qapp, tmp_path, monkeypatch) -> None:
+    import acoustic_spaces.gui.inspector as inspector
+    from acoustic_spaces.geometry.terrain import HeightGrid, write_asc
+    from acoustic_spaces.gui.inspector import MapDialog
+
+    window.new_outdoor()
+    page = window.inspector.pages["geometry"]
+    document = window.document
+    assert page.extent_set.isChecked()  # a new scene sets its extent
+    assert [box.value() for box in page.extent_spins] == [-100.0, -100.0, 100.0, 100.0]
+    page.extent_spins[2].setValue(150.0)
+    assert document.scene.geometry.ground.extent == ((-100.0, -100.0), (150.0, 100.0))
+    assert document.room.outdoor.extent == (-100.0, -100.0, 150.0, 100.0)
+    page.extent_set.setChecked(False)  # nothing stands on the ground to go round
+    assert "Not changed: " in window.messages.toPlainText() and "needs an extent" in (
+        window.messages.toPlainText()
+    )
+    assert page.extent_set.isChecked() and document.scene.geometry.ground.extent is not None
+    document.add_part(
+        "buildings", {"footprint": [[-20, -10], [20, -10], [20, 10], [-20, 10]], "height": 10}
+    )
+    page.extent_set.setChecked(False)
+    assert document.scene.geometry.ground.extent is None
+    assert not page.extent_spins[0].isEnabled()
+    assert page.extent.text().startswith("Ground from (-50, -40) to (50, 40) m")  # 30 m round
+    assert [box.value() for box in page.extent_spins] == [-50.0, -40.0, 50.0, 40.0]
+    page.extent_set.setChecked(True)  # takes the extent as it stands
+    assert document.scene.geometry.ground.extent == ((-50.0, -40.0), (50.0, 40.0))
+    assert page.extent_spins[0].isEnabled()
+    page.extent_spins[0].setValue(60.0)  # west of east: refused, and the form reloads
+    assert "min < max" in window.messages.toPlainText()
+    assert page.extent_spins[0].value() == -50.0
+    assert document.scene.geometry.ground.extent == ((-50.0, -40.0), (50.0, 40.0))
+
+    # A terrain from a file, through the file dialog.
+    hill = tmp_path / "hill.asc"
+    rows = [[0.5 * i for i in range(21)] for _ in range(21)]
+    write_asc(hill, HeightGrid((-100.0, -100.0), 10.0, rows))
+    chosen = [str(hill)]
+    monkeypatch.setattr(
+        inspector.QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (chosen[0], ""))
+    )
+    assert page.remove_terrain.isHidden() and page.terrain.isHidden()
+    page.terrain_button.click()
+    assert document.scene.geometry.ground.terrain.file == hill.resolve()
+    assert document.scene.geometry.ground.extent is None
+    assert not page.remove_terrain.isHidden() and not page.terrain.isHidden()
+    assert page.terrain.text() == "Terrain: 21 × 21 points, z from 0 to 10 m, grid 10 m"
+    assert document.room.outdoor.extent == (-100.0, -100.0, 100.0, 100.0)
+    assert not page.extent_set.isChecked()
+    assert [box.value() for box in page.extent_spins] == [-100.0, -100.0, 100.0, 100.0]
+    chosen[0] = ""  # cancelled
+    page.terrain_button.click()
+    assert document.scene.geometry.ground.terrain is not None
+    page.remove_terrain.click()
+    assert document.scene.geometry.ground.terrain is None and page.remove_terrain.isHidden()
+
+    # Buildings from a map: the file dialog, then how to read its heights and names.
+    town = tmp_path / "town.geojson"
+    town.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "properties": {"name": "hall", "height": 9, "floors": 3},
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[[-60, -60], [-50, -60], [-50, -50], [-60, -50]]],
+                        },
+                    },
+                    {
+                        "type": "Feature",
+                        "properties": {"name": "shed", "floors": 1},
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[[60, 60], [66, 60], [66, 66], [60, 66]]],
+                        },
+                    },
+                ],
+            }
+        )
+    )
+    dialogs = []
+
+    def accept(dialog) -> int:
+        dialogs.append(dialog)
+        return int(QDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(MapDialog, "exec", accept)
+    chosen[0] = str(town)
+    assert page.remove_map.isHidden() and page.map_label.isHidden()
+    page.map_button.click()
+    dialog = dialogs[-1]
+    assert dialog.height.currentData() == "height" and dialog.name.currentData() == "name"
+    assert [dialog.height.itemText(k) for k in range(dialog.height.count())] == [
+        "height",
+        "floors",
+        "the same for all",
+    ]
+    assert dialog.metres_label.text() == "Height when missing" and dialog.metres.value() == 10.0
+    spec = document.scene.geometry.buildings_file
+    assert spec.file == town.resolve() and spec.height == "height" and spec.default_height == 10.0
+    assert document.scene.geometry.building_names() == ["building_1", "hall", "shed"]
+    assert [b.height for b in document.scene.geometry.all_buildings()] == [10.0, 9.0, 10.0]
+    assert page.map_label.text() == "Map town.geojson: 2 buildings, height from height"
+    assert not page.remove_map.isHidden() and page.parts["buildings"].rowCount() == 3
+    assert page.parts["buildings"].item(0, 1).flags() & Qt.ItemFlag.ItemIsEditable
+    assert page.parts["buildings"].item(1, 1).toolTip().startswith("From the buildings file")
+    assert not page.parts["buildings"].item(1, 1).flags() & Qt.ItemFlag.ItemIsEditable
+    # One of its buildings left out, by name; the map stays.
+    page.parts["buildings"].setCurrentCell(2, 0)
+    page._remove_part("buildings")
+    assert document.scene.geometry.buildings_file.without == ["shed"]
+    assert document.scene.geometry.building_names() == ["building_1", "hall"]
+    page.remove_map.click()
+    assert document.scene.geometry.buildings_file is None
+    assert page.parts["buildings"].rowCount() == 1 and page.remove_map.isHidden()
+
+    # The same height for every building, and numbered names.
+    def same_for_all(dialog) -> int:
+        dialog.height.setCurrentIndex(dialog.height.count() - 1)
+        assert dialog.metres_label.text() == "Height of all"
+        dialog.metres.setValue(6.5)
+        dialog.name.setCurrentIndex(dialog.name.count() - 1)
+        return int(QDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(MapDialog, "exec", same_for_all)
+    page.map_button.click()
+    spec = document.scene.geometry.buildings_file
+    assert spec.height == 6.5 and spec.default_height is None and spec.name == "name"
+    assert page.map_label.text() == "Map town.geojson: 2 buildings, 6.5 high"
+    monkeypatch.setattr(MapDialog, "exec", lambda dialog: int(QDialog.DialogCode.Rejected))
+    page.map_button.click()
+    assert document.scene.geometry.buildings_file.height == 6.5  # cancelled: as it was
+
+    # A file without footprints, or no GeoJSON at all, is refused with a message.
+    empty = tmp_path / "empty.geojson"
+    empty.write_text(json.dumps({"type": "FeatureCollection", "features": []}))
+    chosen[0] = str(empty)
+    page.map_button.click()
+    assert (
+        "Not changed: empty.geojson holds no building footprints" in window.messages.toPlainText()
+    )
+    (tmp_path / "point.geojson").write_text(json.dumps({"type": "Point", "coordinates": [0, 0]}))
+    chosen[0] = str(tmp_path / "point.geojson")
+    page.map_button.click()
+    assert "not GeoJSON buildings" in window.messages.toPlainText()
+    assert document.scene.geometry.buildings_file.height == 6.5
+
+    # The dialog on its own: a map whose properties hold no numbers offers one height.
+    dialog = MapDialog(window, "plain.geojson", 1, {"name": "text", "use": "text"})
+    assert dialog.height.currentData() is None and dialog.height.count() == 1
+    assert dialog.choice() == {"name": "name", "height": 10.0}
+    dialog.name.setCurrentIndex(dialog.name.findData("use"))
+    assert dialog.choice() == {"name": "use", "height": 10.0}
+    dialog.deleteLater()
+
+    # Saved next to its files, the scene refers to them by name.
+    document.set_terrain(hill)
+    document.save(tmp_path / "scene.yaml")
+    text = (tmp_path / "scene.yaml").read_text(encoding="utf-8")
+    assert "file: hill.asc" in text and "file: town.geojson" in text and str(tmp_path) not in text
 
 
 def test_ground_impedance_and_zones(window) -> None:

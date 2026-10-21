@@ -46,11 +46,14 @@ from acoustic_spaces.geometry import SUPPORTED_SUFFIXES, points_inside
 from acoustic_spaces.gui.activity import Activity
 from acoustic_spaces.gui.document import (
     LISTENER_HEIGHT,
+    NEW_GROUND_SIZE,
+    NEW_PART_SIZES,
     SOURCE_HEIGHT,
     Document,
     EditError,
     box_scene,
     model_scene,
+    outdoor_scene,
 )
 from acoustic_spaces.gui.inspector import BAND_LABELS, Inspector, label_text
 from acoustic_spaces.gui.levels import rich_lines
@@ -69,6 +72,33 @@ from acoustic_spaces.room import Room
 
 TITLE = N_("Acoustic Spaces editor")
 SCENE_FILTER = N_("Scenes (*.yaml *.yml)")
+#: What the messages say of a part drawn in the plan, by the plan view's purpose;
+#: {count} its corners or points and the rest its sizes (:data:`NEW_PART_SIZES`).
+DRAWN = {
+    "building": N_(
+        "New building with {count} corners, {height:g} m high; change its height under Geometry."
+    ),
+    "barrier": N_(
+        "New barrier along {count} points, {height:g} m high; change its height under Geometry."
+    ),
+    "belt": N_(
+        "New belt of trees with {count} corners, {height:g} m high, with dense foliage; "
+        "change its height under Geometry and the rest in the scene file."
+    ),
+    "hedge": N_(
+        "New hedge along {count} points, {width:g} m wide and {height:g} m high, with "
+        "dense foliage; change its height under Geometry and the rest in the scene file."
+    ),
+    "tree": N_(
+        "New tree {height:g} m high, its crown {crown_diameter:g} m across from {base:g} m "
+        "up, with dense foliage; change its height under Geometry and the rest in the "
+        "scene file."
+    ),
+    "zone": N_(
+        "New ground zone with {count} corners; give its surface a material of its own in "
+        "the scene tree."
+    ),
+}
 # Translators: {patterns} is the list of model file patterns, such as *.obj *.dxf.
 MODEL_FILTER = N_("Models ({patterns})")
 MODEL_PATTERNS = " ".join("*" + s for s in SUPPORTED_SUFFIXES)
@@ -205,9 +235,11 @@ class MainWindow(QMainWindow):
         self.plan.moved.connect(self._move_point)
         self.plan.corners_changed.connect(self._set_corners)
         self.plan.drawn.connect(self._drawn)
+        self.plan.part_drawn.connect(self._part_drawn)
         self.plan.message.connect(self.log)
         self.inspector.failed.connect(self._refused)
         self.inspector.select.connect(self.select)
+        self.inspector.draw.connect(self.start_drawing)
         self.results.pair_changed.connect(lambda *_: self._draw())
         self.results.paths_toggled.connect(self._paths_toggled)
         self.results.export_requested.connect(self.export_results)
@@ -266,6 +298,15 @@ class MainWindow(QMainWindow):
             self.new_floor_plan,
             None,
             _("Draw the floor plan of a new room, corner by corner"),
+        )
+        self.new_outdoor_action = a(
+            _("New &outdoor scene…"),
+            self.new_outdoor,
+            None,
+            _(
+                "Start a new scene on open ground, to draw buildings, barriers, vegetation "
+                "and ground zones on, or to set a terrain and buildings from a map"
+            ),
         )
         self.open_action = a(
             _("&Open…"), self.open_dialog, keys.Open, _("Open a scene file (YAML)")
@@ -434,7 +475,13 @@ class MainWindow(QMainWindow):
         bar = self.menuBar()
         file = bar.addMenu(_("&File"))
         file.addActions(
-            [self.new_action, self.new_plan_action, self.new_model_action, self.open_action]
+            [
+                self.new_action,
+                self.new_plan_action,
+                self.new_model_action,
+                self.new_outdoor_action,
+                self.open_action,
+            ]
         )
         self.examples_menu = file.addMenu(_("Open e&xample"))
         try:
@@ -852,6 +899,37 @@ class MainWindow(QMainWindow):
         self.views.setCurrentWidget(self.plan)
         self.plan.start_drawing()
 
+    def start_drawing(self, purpose: str) -> None:
+        """Draw a building, a barrier, vegetation or a ground zone (one of the plan
+        view's purposes) in the plan view."""
+        self.views.setCurrentWidget(self.plan)
+        self.plan.start_drawing(purpose)
+
+    def _part_drawn(self, purpose: str, points: list) -> None:
+        """A building, barrier, vegetation or zone drawn in the plan: into the scene,
+        with the usual sizes (:data:`NEW_PART_SIZES`), to change under Geometry."""
+        sizes = NEW_PART_SIZES.get(purpose, {})
+        try:
+            if purpose == "building":
+                self.document.add_part("buildings", {"footprint": points, **sizes})
+            elif purpose == "barrier":
+                self.document.add_part("barriers", {"path": points, **sizes})
+            elif purpose == "belt":
+                self.document.add_part("vegetation", {"footprint": points, **sizes})
+            elif purpose == "hedge":
+                self.document.add_part("vegetation", {"path": points, **sizes})
+            elif purpose == "tree":
+                self.document.add_part("vegetation", {"tree": points[0], **sizes})
+            elif purpose == "zone":
+                self.document.add_zone(points)
+            else:  # pragma: no cover - the plan view draws nothing else
+                return
+        except EditError as exc:
+            self._refused(str(exc))
+            return
+        self.select("geometry")
+        self.log(fmt(_(DRAWN[purpose]), count=len(points), **sizes))
+
     def _drawn(self, corners: list) -> None:
         geometry = self.document.scene.geometry
         if geometry.ground is not None:
@@ -1013,6 +1091,25 @@ class MainWindow(QMainWindow):
         self.from_example = False
         self._attach(Document(box_scene()))
         self.log(_("New box room; change its size under Geometry."))
+
+    def new_outdoor(self) -> None:
+        """A new outdoor scene: open ground to draw buildings, barriers and vegetation
+        on, or to set a terrain and buildings from a map."""
+        if not self._discard_ok():
+            return
+        self.from_example = False
+        self._attach(Document(outdoor_scene()))
+        self.select("geometry")
+        self.log(
+            fmt(
+                _(
+                    "New outdoor scene: a meadow {size:g} m across. Draw buildings, barriers, "
+                    "vegetation and ground zones from the Geometry form, or set a terrain "
+                    "and buildings from a map there."
+                ),
+                size=NEW_GROUND_SIZE,
+            )
+        )
 
     def new_floor_plan(self) -> None:
         """A new room whose floor plan the user draws in the plan view."""
