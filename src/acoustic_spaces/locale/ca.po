@@ -1182,6 +1182,10 @@ msgid "Tuning cancelled."
 msgstr "Ajust cancel·lat."
 
 #: acoustic_spaces/gui/app.py
+msgid "Export cancelled."
+msgstr "Exportació cancel·lada."
+
+#: acoustic_spaces/gui/app.py
 msgid "Simulation cancelled."
 msgstr "Simulació cancel·lada."
 
@@ -1191,8 +1195,17 @@ msgstr ""
 "Encara no hi ha res per exportar: cal executar primer la simulació (F5)."
 
 #: acoustic_spaces/gui/app.py
+msgid "Wait for the current run to end, then export."
+msgstr "Cal esperar que acabi el càlcul en curs per exportar."
+
+#: acoustic_spaces/gui/app.py
 msgid "Folder for the impulse responses"
 msgstr "Carpeta per a les respostes impulsionals"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Exporting the impulse responses to {folder}…"
+msgstr "Exportant les respostes impulsionals a {folder}…"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format

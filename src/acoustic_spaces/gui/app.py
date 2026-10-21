@@ -65,7 +65,7 @@ from acoustic_spaces.gui.results_view import ResultsPanel
 from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.tune_dialog import TuneDialog
 from acoustic_spaces.gui.viewport import Viewport
-from acoustic_spaces.gui.worker import MapJob, SimulationJob, TuneJob
+from acoustic_spaces.gui.worker import ExportJob, MapJob, SimulationJob, TuneJob
 from acoustic_spaces.i18n import N_, _, ngettext, pgettext
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
@@ -136,6 +136,7 @@ class MainWindow(QMainWindow):
         #: result, scene, face groups and their materials; None when it cannot be.
         self._traced = None
         self._job_groups = None
+        self._export_folder, self._export_stale = None, False
         #: The room the leaks on show were found in, and the leaks; None before any.
         self._found_leaks = None
         self.coverage = None
@@ -1516,6 +1517,9 @@ class MainWindow(QMainWindow):
         return self.job.kind if self.job is not None else "simulation"
 
     def _failed(self, message: str) -> None:
+        if self._job_kind() == "export":
+            self._error(_("Could not export"), message)
+            return
         text = {
             "coverage map": _("The coverage map failed: {reason}"),
             "tuning": _("The tuning failed: {reason}"),
@@ -1528,6 +1532,7 @@ class MainWindow(QMainWindow):
             {
                 "coverage map": _("Coverage map cancelled."),
                 "tuning": _("Tuning cancelled."),
+                "export": _("Export cancelled."),
             }.get(self._job_kind(), _("Simulation cancelled."))
         )
 
@@ -1552,26 +1557,33 @@ class MainWindow(QMainWindow):
         if self.result is None:
             self.log(_("Nothing to export yet: run the simulation (F5) first."))
             return
+        if self.job is not None:
+            self.log(_("Wait for the current run to end, then export."))
+            return
         folder = QFileDialog.getExistingDirectory(self, _("Folder for the impulse responses"))
         if folder:
             self.write_results(folder)
 
-    def write_results(self, folder: str | Path) -> dict | None:
-        from acoustic_spaces.results import REPORT_FILE, write_results
+    def write_results(self, folder: str | Path) -> None:
+        """Write the last run's responses into ``folder`` in the background; the messages
+        say when it is done."""
+        if self.job is not None or self.result is None:
+            return
+        job = ExportJob(self.result, Path(folder))
+        job.done.connect(self._exported)
+        self._export_folder, self._export_stale = folder, self._stale()
+        self._start(job, _("Exporting the impulse responses to {folder}…").format(folder=folder))
 
-        try:
-            with busy():
-                report = write_results(self.result, folder, progress=self.log)
-        except (OSError, ValueError, ImportError) as exc:
-            self._error(_("Could not export"), str(exc))
-            return None
+    def _exported(self, report: dict) -> None:
+        from acoustic_spaces.results import REPORT_FILE
+
         files = sum(len(r["outputs"]) for r in report["responses"])
         self.log(
             ngettext(
                 "Wrote {count} impulse response file and {report} to {folder}",
                 "Wrote {count} impulse response files and {report} to {folder}",
                 files,
-            ).format(count=files, report=REPORT_FILE, folder=folder)
+            ).format(count=files, report=REPORT_FILE, folder=self._export_folder)
         )
         if report["peak"] > 1.0:
             self.log(
@@ -1580,9 +1592,8 @@ class MainWindow(QMainWindow):
                     "to a source); scale them before playing them back."
                 )
             )
-        if self._stale():
+        if self._export_stale:
             self.log(_("These results are from before the latest changes to the scene."), "warning")
-        return report
 
     def save_map(self) -> None:
         if self.coverage is None:

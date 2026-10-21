@@ -443,7 +443,8 @@ simulation:
 ```
 
 - `threads`: the worker threads of the ray tracer (early candidates, the late part,
-  coverage maps, calibration) and of the wave solver on the CPU. Fewer leave the
+  coverage maps, calibration), of the wave solver on the CPU, and of writing the
+  responses' files (`simulate --out`, the editor's Export). Fewer leave the
   computer free for other work while a long run goes on. Results do not depend on it.
 - `ray_tree`: the bounding volume hierarchy that finds the surface a ray meets, and
   whether a listener can see a reflection, which is nearly all of the run time. `sah`

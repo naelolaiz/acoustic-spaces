@@ -544,6 +544,28 @@ def read_array(path: str | Path):
         raise ValueError(f"{path.name}: not an array description: {exc}") from None
 
 
+def directivity_files(spec, _seen: frozenset[Path] = frozenset()) -> list[Path]:
+    """The files a source's directivity entry uses: its own file and, for a coherent
+    array, its element's, whether the array is in the entry or in a YAML file (which
+    names its element's file relative to itself), and so on down."""
+    if spec is None or isinstance(spec, str):
+        return []
+    if getattr(spec, "file", None) is not None:
+        return [Path(spec.file), *array_files(spec.file, _seen)]
+    if getattr(spec, "array", None) is not None:
+        return directivity_files(spec.array.element, _seen)
+    return []
+
+
+def array_files(path: str | Path, _seen: frozenset[Path] = frozenset()) -> list[Path]:
+    """The files a coherent array's YAML file names for its element, and those they name
+    in turn; none for other files, or a missing one."""
+    path = Path(path)
+    if path.suffix.lower() not in (".yaml", ".yml") or not path.is_file() or path in _seen:
+        return []
+    return directivity_files(read_array(path).element, _seen | {path})
+
+
 def _amplitudes(element: Directivity, local: np.ndarray) -> np.ndarray:
     """Pressure amplitudes (elements, directions, bands) of an element pattern towards
     directions in each element's own frame (elements, directions, 3): first-order
@@ -706,7 +728,9 @@ __all__ = [
     "FirstOrder",
     "NearField",
     "array_directivity",
+    "array_files",
     "array_length",
+    "directivity_files",
     "far_field_distance",
     "lambert",
     "load_directivity",

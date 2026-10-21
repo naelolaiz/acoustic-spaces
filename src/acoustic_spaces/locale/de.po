@@ -1197,6 +1197,10 @@ msgid "Tuning cancelled."
 msgstr "Optimierung abgebrochen."
 
 #: acoustic_spaces/gui/app.py
+msgid "Export cancelled."
+msgstr "Export abgebrochen."
+
+#: acoustic_spaces/gui/app.py
 msgid "Simulation cancelled."
 msgstr "Simulation abgebrochen."
 
@@ -1206,8 +1210,17 @@ msgstr ""
 "Noch keine Ergebnisse zum Exportieren: zuerst die Simulation starten (F5)."
 
 #: acoustic_spaces/gui/app.py
+msgid "Wait for the current run to end, then export."
+msgstr "Exportieren ist erst nach dem Ende der laufenden Berechnung möglich."
+
+#: acoustic_spaces/gui/app.py
 msgid "Folder for the impulse responses"
 msgstr "Ordner für die Impulsantworten"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Exporting the impulse responses to {folder}…"
+msgstr "Die Impulsantworten werden nach {folder} exportiert…"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format

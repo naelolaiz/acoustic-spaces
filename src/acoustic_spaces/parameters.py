@@ -762,8 +762,17 @@ def octave_bands(signal: np.ndarray, sample_rate: float, filters: str = "iec") -
     n = len(signal)
     n_fft = synthesis.fft_size(n, sample_rate)
     spectrum = np.fft.rfft(signal, n_fft)
-    gains = octave_filter_gains(n_fft, sample_rate)
+    gains = _octave_gains(n_fft, float(sample_rate))
     return np.fft.irfft(spectrum[None, :] * gains, n_fft, axis=1)[:, :n]
+
+
+@functools.lru_cache(maxsize=4)
+def _octave_gains(n_fft: int, sample_rate: float) -> np.ndarray:
+    """:func:`octave_filter_gains`, kept for the next signal of the same length:
+    read-only."""
+    gains = octave_filter_gains(n_fft, sample_rate)
+    gains.flags.writeable = False
+    return gains
 
 
 def band_energy_share(sample_rate: float, filters: str = "iec") -> np.ndarray:

@@ -1,5 +1,5 @@
-"""Simulations and coverage maps in the background, so the editor stays responsive
-while rays fly.
+"""Simulations, coverage maps and exports in the background, so the editor stays
+responsive while rays fly.
 
 The compiled tracer releases Python's lock while it works, so the window keeps
 drawing. A cancelled run stops at the next stage (the early or late part of the next
@@ -107,4 +107,22 @@ class TuneJob(SimulationJob):
         return tuning.tune(self.room, threads=self.threads, say=self._say, keep=False)
 
 
-__all__ = ["Cancelled", "MapJob", "SimulationJob", "TuneJob"]
+class ExportJob(SimulationJob):
+    """Writes the responses of a run into a folder
+    (:func:`acoustic_spaces.results.write_results`, as ``acoustic-spaces simulate``
+    does); ``done`` carries the report. Cancelled, it stops before the next response."""
+
+    kind = "export"
+
+    def __init__(self, result, folder) -> None:
+        super().__init__(result.room)
+        self.result = result
+        self.folder = folder
+
+    def compute(self):
+        from acoustic_spaces.results import write_results
+
+        return write_results(self.result, self.folder, progress=self._say)
+
+
+__all__ = ["Cancelled", "ExportJob", "MapJob", "SimulationJob", "TuneJob"]

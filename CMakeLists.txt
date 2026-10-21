@@ -42,4 +42,6 @@ install(
   PATTERN "*.li8"
   PATTERN "*.ifc"
   PATTERN "*.dae"
+  PATTERN "*.asc"
+  PATTERN "*.geojson"
 )

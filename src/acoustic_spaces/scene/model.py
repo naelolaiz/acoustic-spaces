@@ -2337,8 +2337,9 @@ class Performance(_Model):
         default=0,
         ge=0,
         description=(
-            "worker threads for ray tracing and the wave solver on the CPU; 0 uses every "
-            "core. Fewer leave the computer free for other work"
+            "worker threads for ray tracing and the wave solver on the CPU, and for "
+            "writing the responses' files; 0 uses every core. Fewer leave the computer "
+            "free for other work"
         ),
     )
     ray_tree: Literal["sah", "median"] = Field(
@@ -2665,16 +2666,41 @@ class Scene(_Model):
             if "hrtf" in output:
                 output["hrtf"] = _portable(output["hrtf"], base)
         for source in data["sources"]:
-            directivity = source.get("directivity")
-            if not isinstance(directivity, dict):
-                continue
             # An inline array's element may have a file of its own.
-            element = directivity.get("array", {}).get("element")
-            for spec in (directivity, element):
-                if isinstance(spec, dict) and "file" in spec:
+            for spec in directivity_entries(source.get("directivity")):
+                if "file" in spec:
                     spec["file"] = _portable(spec["file"], base)
         with path.open("w", encoding="utf-8") as fh:
             yaml.safe_dump(data, fh, sort_keys=False)
+
+    def files(self) -> list[Path]:
+        """The files the scene uses, each once: its model, terrain and map of buildings,
+        material tables, source directivities (with the files a coherent array names for
+        its element, in the scene or in its YAML file) and HRTFs."""
+        from acoustic_spaces.directivity import directivity_files
+
+        geometry = self.geometry
+        files = [geometry.file] if geometry.file is not None else []
+        if geometry.ground is not None and geometry.ground.terrain is not None:
+            files += [geometry.ground.terrain.file] if geometry.ground.terrain.file else []
+        if geometry.buildings_file is not None:
+            files.append(geometry.buildings_file.file)
+        files += [m.file for m in self.materials.values() if m.file is not None]
+        for source in self.sources:
+            files += directivity_files(source.directivity)
+        files += [o.hrtf for o in self.outputs if o.hrtf is not None]
+        return list(dict.fromkeys(Path(f) for f in files))
+
+
+def directivity_entries(spec) -> list[dict]:
+    """A source's directivity entry as scene data (a dict, or a pattern's name) and, for
+    an inline array, its element's entry, and so on down: the entries that can name a
+    file."""
+    entries = []
+    while isinstance(spec, dict):
+        entries.append(spec)
+        spec = (spec.get("array") or {}).get("element")
+    return entries
 
 
 def _portable(file: str, base: Path) -> str:

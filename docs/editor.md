@@ -21,8 +21,9 @@ the rows of the Results table say what each parameter measures, and the band col
 which frequencies each octave band holds.
 
 - **File > Open example** opens the bundled rooms, in the groups of
-  [Example scenes](examples.md). Saving one asks where to keep your copy and takes its
-  model file along; an example whose model needs an extra that is not installed is
+  [Example scenes](examples.md). Saving one asks where to keep your copy and takes the
+  files it uses along (its model, terrain, tables, directivities, and the patterns its
+  array files name); an example whose model needs an extra that is not installed is
   greyed out, and its tip says how to install it. **New box room**, **New
   room from a floor plan**, **New from model file** (OBJ, STL, PLY, OFF, glTF, DXF,
   IFC, Collada or SketchUp) and **New outdoor scene** (a meadow 200 m across, to build
@@ -88,7 +89,8 @@ which frequencies each octave band holds.
   and [Levels over a long term](outdoor.md#levels-over-a-long-term)), the echogram
   and decay curves and the arrival directions of any source and listener, and draws
   their reflection paths in the room. **Export**
-  writes the same files as `simulate`; **Listen** plays a dry WAV file through the
+  writes the same files as `simulate`, in the background (**Cancel** stops it);
+  **Listen** plays a dry WAV file through the
   response on the sound card, binaurally (through the HRTF of the scene's binaural
   output if it has one, else a spherical head; needs the `measure` extra), or
   head-tracked with **Head tracking** ticked (see

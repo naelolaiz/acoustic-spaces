@@ -590,6 +590,24 @@
   the barrier tables by 0.2 dB, the ground dip at 250 Hz 200 m out) and rooms by
   under 0.0001 dB (the crossovers between the lowest bands' filters are drawn band by
   band, a difference of a hundred-thousandth of the peak).
+- Saving an example elsewhere from the editor failed for the stadium ("directivity file
+  not found: .../box.csv"): an array's YAML file names its element's pattern beside
+  itself, and only the array file was copied. The files an array file names now go
+  along with it (or, when one lies outside the example's folder, the scene keeps using
+  the original array file), and a save that fails leaves no copies behind. Saving the
+  hillside example also took its terrain and map of buildings along but kept pointing
+  at the originals; it now uses the copies. `Scene.files()` lists every file a scene
+  uses, the ones its array files name included.
+- The editor stopped answering while it exported a big run's results (Not Responding
+  for over a minute with the stadium's 204 responses): the export ran in the window's
+  own thread. It now runs in the background, with progress in the messages and
+  **Cancel**, and `write_results` (and so `simulate --out`) renders and reads the
+  responses on `simulation.performance.threads` (every core by default): the stadium's
+  export takes 47 s instead of 81 s on 4 cores. The files and the report are the same
+  to the last bit.
+- Wheels left out the hillside example's terrain (`.asc`) and map of buildings
+  (`.geojson`), so the installed example could not load. A test now checks that every
+  file the examples use is installed.
 - `second_order` diffraction printed a floating-point overflow warning where two
   edges meet at a corner and the shortest path over both runs through it. The path is
   still turned down, as it was, and the warning is gone.

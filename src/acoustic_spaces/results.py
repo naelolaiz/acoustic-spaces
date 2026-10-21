@@ -16,8 +16,10 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import os
 import re
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -70,11 +72,24 @@ def write_results(
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
 
-    irs = {}
-    for key, response in result.responses.items():
+    # The responses side by side, on the run's threads: each is rendered and read as it
+    # would be alone, so the files and the report are the same as one after another.
+    threads = result.settings.performance.threads or os.cpu_count() or 1
+    workers = max(1, min(threads, len(result.responses)))
+
+    def render(key) -> dict:
+        rendered = {}
         for fmt in formats:
             say(f"{key[0]} -> {key[1]}: rendering {fmt.label}")
-            irs[key, fmt.label] = response.spatial_impulse_response(fmt, sample_rate)
+            rendered[key, fmt.label] = result.responses[key].spatial_impulse_response(
+                fmt, sample_rate
+            )
+        return rendered
+
+    irs = {}
+    with ThreadPoolExecutor(workers) as pool:
+        for rendered in pool.map(render, result.responses):
+            irs.update(rendered)
     peak = max((float(abs(ir).max(initial=0.0)) for ir in irs.values()), default=0.0)
     gain = 10.0 ** (-1.0 / 20.0) / peak if normalize and peak > 0 else 1.0
 
@@ -117,7 +132,11 @@ def write_results(
             ],
             "rating": long_term.rating,
         }
-    for (source, listener), response in result.responses.items():
+
+    def write(key) -> dict:
+        """Write the response's files; its entry in the report, without plots."""
+        source, listener = key
+        response = result.responses[key]
         stem = response_stem(source, listener)
         written = []
         for fmt in formats:
@@ -167,6 +186,15 @@ def write_results(
             )
         if long_term is not None and (source, listener) in long_term.levels:
             entry["long_term"] = _long_term_entry(long_term, (source, listener))
+        return entry
+
+    with ThreadPoolExecutor(workers) as pool:
+        report["responses"] = list(pool.map(write, result.responses))
+    # Plots one after another: matplotlib draws in one thread.
+    for entry, ((source, listener), response) in zip(
+        report["responses"], result.responses.items(), strict=True
+    ):
+        stem = response_stem(source, listener)
         if plots:
             try:
                 from acoustic_spaces.viz import plot_directions, plot_response
@@ -178,7 +206,6 @@ def write_results(
             except ImportError as exc:
                 say(f"warning: {exc}")
                 plots = False
-        report["responses"].append(entry)
     (out / REPORT_FILE).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
 

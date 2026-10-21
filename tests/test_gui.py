@@ -192,6 +192,75 @@ def test_saving_copies_the_element_file_of_an_inline_array(qapp, tmp_path: Path)
     assert element.file == (tmp_path / "new" / "speaker.csv").resolve()
 
 
+def _speaker_csv(path: Path) -> None:
+    bands = ", ".join(f"{f} Hz" for f in (125, 250, 500, 1000, 2000, 4000, 8000))
+    rows = [f"{az}, {el}" + ", 0" * 7 for el in range(-90, 91, 10) for az in range(0, 360, 10)]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join([f"azimuth, elevation, {bands}", *rows]), encoding="utf-8")
+
+
+def test_saving_copies_the_files_an_array_file_names(qapp, tmp_path: Path) -> None:
+    """An array's YAML file names its element's file relative to itself: both move, or
+    neither does."""
+    old = tmp_path / "old"
+    _speaker_csv(old / "arrays" / "box.csv")
+    column = "element: {file: box.csv}\ncount: 2\nspacing_m: 0.4\n"
+    (old / "arrays" / "column.yaml").write_text(column, encoding="utf-8")
+    _speaker_csv(tmp_path / "shared" / "box.csv")
+    outside = "element: {file: ../../shared/box.csv}\ncount: 2\nspacing_m: 0.4\n"
+    (old / "arrays" / "outside.yaml").write_text(outside, encoding="utf-8")
+    document = Document(box_scene(), old / "scene.yaml")
+    document.edit(
+        "arrays",
+        lambda data: data["sources"][0].update(directivity={"file": "arrays/column.yaml"}),
+    )
+    document.save(tmp_path / "new" / "scene.yaml", copy_files=True)
+    assert (tmp_path / "new" / "arrays" / "box.csv").is_file()
+    assert "file: arrays/column.yaml" in (tmp_path / "new" / "scene.yaml").read_text()
+    assert (
+        document.scene.sources[0].directivity.file
+        == (tmp_path / "new" / "arrays" / "column.yaml").resolve()
+    )
+    # An element's file outside the scene's folder stays where it is, and so does the
+    # array file that names it.
+    document = Document(box_scene(), old / "scene.yaml")
+    document.edit(
+        "arrays",
+        lambda data: data["sources"][0].update(directivity={"file": "arrays/outside.yaml"}),
+    )
+    (tmp_path / "other").mkdir()  # as the editor makes it before saving
+    document.save(tmp_path / "other" / "scene.yaml", copy_files=True)
+    assert not (tmp_path / "other" / "arrays").exists()
+    assert document.scene.sources[0].directivity.file == old / "arrays" / "outside.yaml"
+    assert Room.from_yaml(tmp_path / "other" / "scene.yaml").problems() == []
+
+
+def test_a_failed_save_of_an_example_leaves_no_copies(
+    qapp, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    document = Document.open(example_path("concert_hall"))
+    scene = document.scene
+
+    def broken(*args, **kwargs):
+        raise ValueError("cannot read it")
+
+    monkeypatch.setattr(Room, "from_scene", broken)
+    with pytest.raises(ValueError, match="cannot read it"):
+        document.save(tmp_path / "hall" / "deeper" / "scene.yaml", copy_files=True)
+    assert not (tmp_path / "hall").exists()
+    assert document.scene is scene
+
+
+def test_saving_an_example_copies_its_terrain_and_map(qapp, tmp_path: Path) -> None:
+    document = Document.open(example_path("hillside"))
+    document.save(tmp_path / "hill" / "scene.yaml", copy_files=True)
+    geometry = document.scene.geometry
+    assert geometry.ground.terrain.file == (tmp_path / "hill" / "hill.asc").resolve()
+    assert geometry.buildings_file.file == (tmp_path / "hill" / "houses.geojson").resolve()
+    saved = (tmp_path / "hill" / "scene.yaml").read_text(encoding="utf-8")
+    assert "file: hill.asc" in saved and "file: houses.geojson" in saved
+
+
 def test_model_scene_puts_points_inside(qapp) -> None:
     scene = model_scene(EXAMPLES / "concert_hall" / "concert_hall.obj")
     room = Room.from_scene(scene)
@@ -1966,8 +2035,12 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, m
     results.paths.setChecked(True)
     assert window.paths_action.isChecked()
 
-    report = window.write_results(tmp_path / "out")
-    assert report is not None and (tmp_path / "out" / "parameters.json").is_file()
+    # The export runs in the background, so the window keeps answering.
+    window.write_results(tmp_path / "out")
+    assert window.job is not None and not window.run_action.isEnabled()
+    _wait(qapp, lambda: window.job is None)
+    assert (tmp_path / "out" / "parameters.json").is_file()
+    assert "impulse response files and parameters.json" in window.messages.toPlainText()
     from PySide6.QtWidgets import QFileDialog
 
     glb = tmp_path / "studio.glb"

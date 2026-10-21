@@ -1,4 +1,6 @@
 import importlib.util
+import re
+from fnmatch import fnmatch
 from pathlib import Path
 
 import numpy as np
@@ -15,9 +17,27 @@ from acoustic_spaces.examples import (
     list_examples,
 )
 from acoustic_spaces.room import Room
+from acoustic_spaces.scene import Scene
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 NAMES = [e.name for e in list_examples()]
+
+
+def test_wheels_carry_every_file_the_examples_use() -> None:
+    """CMakeLists.txt installs the examples' files by their extension: every file a
+    scene uses (an array's element's too) and every script must have one of them."""
+    cmake = EXAMPLES.parent / "CMakeLists.txt"
+    if not cmake.is_file():
+        pytest.skip("needs the source tree")
+    text = cmake.read_text(encoding="utf-8")
+    rule = text[text.index("DESTINATION acoustic_spaces/example_scenes") :]
+    patterns = re.findall(r'PATTERN "([^"]+)"', rule[: rule.index(")")])
+    for scene in sorted(EXAMPLES.glob("*/scene.yaml")):
+        folder = scene.parent
+        used = [f for f in Scene.from_yaml(scene).files() if f.is_relative_to(folder)]
+        used += [*folder.glob("*.py"), *folder.glob("*.sh"), scene]
+        left_out = [f.name for f in used if not any(fnmatch(f.name, p) for p in patterns)]
+        assert not left_out, folder.name
 
 
 def test_every_example_folder_is_listed() -> None:

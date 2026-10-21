@@ -9,6 +9,7 @@ reason. Undo and redo step through whole scenes, which are small.
 
 from __future__ import annotations
 
+import contextlib
 import filecmp
 import re
 import shutil
@@ -19,12 +20,13 @@ import numpy as np
 from pydantic import ValidationError
 from PySide6.QtCore import QObject, Signal
 
+from acoustic_spaces.directivity import array_files
 from acoustic_spaces.geometry import UNIT_SCALE, RoomMesh, extruded_mesh, points_inside
 from acoustic_spaces.geometry.outdoor import SKY
 from acoustic_spaces.i18n import _
 from acoustic_spaces.room import Room, matching_name
 from acoustic_spaces.scene import Scene
-from acoustic_spaces.scene.model import INDOOR_COHERENT_MAX_BAND_HZ
+from acoustic_spaces.scene.model import INDOOR_COHERENT_MAX_BAND_HZ, directivity_entries
 
 #: Heights above a floor for new sources and listeners (m): a talker, a seated ear.
 SOURCE_HEIGHT = 1.5
@@ -245,24 +247,10 @@ def _free_spots(plan: np.ndarray, mesh: RoomMesh, height: float, count: int) -> 
 
 
 def referenced_files(scene: Scene) -> list[Path]:
-    """The files ``scene`` uses: its model, terrain and map of buildings, material
-    tables, source directivities (an inline array's element's too) and HRTFs."""
-    geometry = scene.geometry
-    files = [geometry.file] if geometry.file is not None else []
-    if geometry.ground is not None and geometry.ground.terrain is not None:
-        files += [geometry.ground.terrain.file] if geometry.ground.terrain.file else []
-    if geometry.buildings_file is not None:
-        files.append(geometry.buildings_file.file)
-    files += [m.file for m in scene.materials.values() if m.file is not None]
-    specs = [s.directivity for s in scene.sources if not isinstance(s.directivity, str)]
-    specs += [
-        d.array.element
-        for d in specs
-        if d.array is not None and not isinstance(d.array.element, str)
-    ]
-    files += [d.file for d in specs if d.file is not None]
-    files += [o.hrtf for o in scene.outputs if o.hrtf is not None]
-    return [Path(f) for f in files]
+    """The files ``scene`` uses (:meth:`~acoustic_spaces.scene.Scene.files`): its model,
+    terrain and map of buildings, material tables, source directivities (with the files
+    an array names for its element) and HRTFs."""
+    return scene.files()
 
 
 def _in_units(item: dict, scale: float) -> dict:
@@ -398,7 +386,7 @@ class Document(QObject):
         old = self.base_dir.resolve()
         if folder == old:
             return
-        moved: dict[str, str] = {}
+        copies: dict[Path, Path] = {}
         for file in referenced_files(self.scene):
             try:
                 relative = file.resolve().relative_to(old)
@@ -407,25 +395,56 @@ class Document(QObject):
             copy = folder / relative
             if copy.exists() and not filecmp.cmp(file, copy, shallow=False):
                 continue
-            copy.parent.mkdir(parents=True, exist_ok=True)
-            if not copy.exists():
-                shutil.copy2(file, copy)
-            moved[str(file)] = str(copy)
-        if not moved:
+            copies[file] = copy
+        # An array's YAML file names its element's file relative to itself: it moves only
+        # along with every file it names, or its copy would look for them in vain.
+        while True:
+            moving = {file.resolve() for file in copies}
+            stays = [f for f in copies if any(n.resolve() not in moving for n in array_files(f))]
+            if not stays:
+                break
+            for file in stays:
+                del copies[file]
+        if not copies:
             return
+        made: list[Path] = []
+        folders: list[Path] = []
+        try:
+            for file, copy in copies.items():
+                if copy.exists():
+                    continue
+                folders += [p for p in (copy.parent, *copy.parent.parents) if not p.exists()]
+                copy.parent.mkdir(parents=True, exist_ok=True)
+                made.append(copy)
+                shutil.copy2(file, copy)
+            self._use_copies({str(file): str(copy) for file, copy in copies.items()}, folder)
+        except Exception:
+            # A save that fails leaves nothing behind in the new folder.
+            for copy in made:
+                copy.unlink(missing_ok=True)
+            for made_folder in sorted(folders, key=lambda p: len(p.parts), reverse=True):
+                with contextlib.suppress(OSError):
+                    made_folder.rmdir()
+            raise
+
+    def _use_copies(self, moved: dict[str, str], folder: Path) -> None:
+        """Point the scene at the copies of its files (``moved``, original to copy) in
+        ``folder``."""
         data = self.scene.to_data()
         if data["geometry"].get("file") in moved:
             data["geometry"]["file"] = moved[data["geometry"]["file"]]
+        terrain = data["geometry"].get("ground", {}).get("terrain", {})
+        if terrain.get("file") in moved:
+            terrain["file"] = moved[terrain["file"]]
+        buildings = data["geometry"].get("buildings_file", {})
+        if buildings.get("file") in moved:
+            buildings["file"] = moved[buildings["file"]]
         for material in data["materials"].values():
             if material.get("file") in moved:
                 material["file"] = moved[material["file"]]
         for source in data["sources"]:
-            directivity = source.get("directivity")
-            if not isinstance(directivity, dict):
-                continue
-            element = directivity.get("array", {}).get("element")
-            for spec in (directivity, element):
-                if isinstance(spec, dict) and spec.get("file") in moved:
+            for spec in directivity_entries(source.get("directivity")):
+                if spec.get("file") in moved:
                     spec["file"] = moved[spec["file"]]
         for output in data["outputs"]:
             if output.get("hrtf") in moved:
