@@ -10,6 +10,7 @@ reason. Undo and redo step through whole scenes, which are small.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import filecmp
 import re
 import shutil
@@ -450,8 +451,10 @@ class Document(QObject):
             if output.get("hrtf") in moved:
                 output["hrtf"] = moved[output["hrtf"]]
         scene = Scene.model_validate(data, context={"base_dir": folder})
-        # The same scene with other copies of its files: no undo step.
-        self.scene, self.room = scene, Room.from_scene(scene, reuse=self.room)
+        # The same scene with other copies of its files: no undo step. The copies hold
+        # the same bytes, so the loaded geometry and directivities stay (an array's take
+        # seconds to add up again).
+        self.scene, self.room = scene, dataclasses.replace(self.room, scene=scene)
         self.changed.emit()
 
     # -- common edits -----------------------------------------------------------------

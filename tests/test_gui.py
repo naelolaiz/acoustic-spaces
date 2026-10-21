@@ -52,6 +52,7 @@ from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # 
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
 from acoustic_spaces.gui.worker import MapJob, SimulationJob  # noqa: E402
 from acoustic_spaces.room import Room  # noqa: E402
+from acoustic_spaces.scene import Scene  # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 
@@ -214,8 +215,12 @@ def test_saving_copies_the_files_an_array_file_names(qapp, tmp_path: Path) -> No
         "arrays",
         lambda data: data["sources"][0].update(directivity={"file": "arrays/column.yaml"}),
     )
+    loaded = document.room
     document.save(tmp_path / "new" / "scene.yaml", copy_files=True)
     assert (tmp_path / "new" / "arrays" / "box.csv").is_file()
+    # The copies hold the same bytes: what was loaded from them is kept, not read again.
+    assert document.room.directivities[0] is loaded.directivities[0]
+    assert document.room.mesh is loaded.mesh
     assert "file: arrays/column.yaml" in (tmp_path / "new" / "scene.yaml").read_text()
     assert (
         document.scene.sources[0].directivity.file
@@ -244,7 +249,7 @@ def test_a_failed_save_of_an_example_leaves_no_copies(
     def broken(*args, **kwargs):
         raise ValueError("cannot read it")
 
-    monkeypatch.setattr(Room, "from_scene", broken)
+    monkeypatch.setattr(Scene, "model_validate", broken)
     with pytest.raises(ValueError, match="cannot read it"):
         document.save(tmp_path / "hall" / "deeper" / "scene.yaml", copy_files=True)
     assert not (tmp_path / "hall").exists()
@@ -253,7 +258,9 @@ def test_a_failed_save_of_an_example_leaves_no_copies(
 
 def test_saving_an_example_copies_its_terrain_and_map(qapp, tmp_path: Path) -> None:
     document = Document.open(example_path("hillside"))
+    loaded = document.room
     document.save(tmp_path / "hill" / "scene.yaml", copy_files=True)
+    assert document.room.mesh is loaded.mesh  # the terrain is not read again
     geometry = document.scene.geometry
     assert geometry.ground.terrain.file == (tmp_path / "hill" / "hill.asc").resolve()
     assert geometry.buildings_file.file == (tmp_path / "hill" / "houses.geojson").resolve()
@@ -903,7 +910,6 @@ def test_a_surface_takes_a_material_of_its_own(window) -> None:
 
 
 def test_outputs_form_keeps_a_custom_loudspeaker_layout(window) -> None:
-    from acoustic_spaces.scene import Scene
 
     data = box_scene().model_dump(mode="json", exclude_none=True)
     custom = {"format": "loudspeakers", "speakers": [{"name": "L", "azimuth": 30}]}
@@ -971,7 +977,6 @@ def test_scene_form_keeps_the_humidity_to_a_tenth(window) -> None:
 
 
 def test_geometry_form_shows_the_room_units(window) -> None:
-    from acoustic_spaces.scene import Scene
 
     window.select("geometry", None)
     page = window.inspector.pages["geometry"]
@@ -1829,7 +1834,6 @@ def test_weather_classes_form(window, qapp) -> None:
 
 def test_a_run_over_a_long_term(window, qapp) -> None:
     from acoustic_spaces.gui.results_view import ROWS
-    from acoustic_spaces.scene import Scene
 
     scene = Scene.model_validate(
         {

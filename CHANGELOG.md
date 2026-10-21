@@ -597,7 +597,10 @@
   the original array file), and a save that fails leaves no copies behind. Saving the
   hillside example also took its terrain and map of buildings along but kept pointing
   at the originals; it now uses the copies. `Scene.files()` lists every file a scene
-  uses, the ones its array files name included.
+  uses, the ones its array files name included. Saving also kept the window busy for
+  seconds (Not Responding), adding up the arrays again from the copies; the copies
+  hold the same bytes, so what was loaded stays: the stadium now saves in under a tenth
+  of a second.
 - The editor stopped answering while it exported a big run's results (Not Responding
   for over a minute with the stadium's 204 responses): the export ran in the window's
   own thread. It now runs in the background, with progress in the messages and
