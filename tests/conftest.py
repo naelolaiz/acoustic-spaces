@@ -35,6 +35,17 @@ class _FakeStream:
         return False
 
 
+@pytest.fixture(autouse=True, scope="session")
+def device_choices_of_the_session(tmp_path_factory):
+    """Keeps fixtures a module or the session shares, which are set up before any test's
+    own folder, off the user's device choices too: a scene that sets no device runs on
+    the CPU, as in CI, whatever ``acoustic-spaces tune`` made the default here."""
+    path = tmp_path_factory.mktemp("devices") / "devices.json"
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr("acoustic_spaces.engine.tuning.cache_file", lambda: path)
+        yield path
+
+
 @pytest.fixture(autouse=True)
 def device_choices(monkeypatch, tmp_path):
     """Keeps the device choices of ``acoustic-spaces tune`` and of auto's trial in the
