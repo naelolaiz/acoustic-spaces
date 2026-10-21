@@ -1075,6 +1075,9 @@ def plot_comparison(
 
 #: Colour map of coverage maps.
 MAP_COLOURS = "turbo"
+#: Opacity of a coverage map in 3D: see-through, so the sources and listeners at
+#: listening height, half under its tiles, stay in sight.
+MAP_OPACITY = 0.7
 
 
 def _band_name(f: int) -> str:
@@ -1140,6 +1143,7 @@ def plot_coverage(
         cmap=MAP_COLOURS,
         clim=_limits(poly.cell_data["value"]),
         nan_color="#6b6e7a",
+        opacity=MAP_OPACITY,
         pickable=False,
         render=render,
         scalar_bar_args={
@@ -1163,7 +1167,12 @@ def plot_coverage(
         lines = np.column_stack([np.full(n, 5), np.arange(4 * n).reshape(n, 4), 4 * np.arange(n)])
         outline = pv.PolyData(whole.reshape(-1, 3), lines=lines.ravel())
         plotter.add_mesh(
-            outline, color=BACKGROUND[0], line_width=0.6, pickable=False, render=render
+            outline,
+            color=BACKGROUND[0],
+            line_width=0.6,
+            opacity=MAP_OPACITY,
+            pickable=False,
+            render=render,
         )
     return actor
 

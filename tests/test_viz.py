@@ -362,6 +362,8 @@ def test_map_tiles_carry_the_values() -> None:
     assert actor.mapper.scalar_range == pytest.approx(
         (coverage.value("spl_a").min(), coverage.value("spl_a").max())
     )
+    # See-through: the sources and listeners half under it stay in sight.
+    assert 0.0 < actor.prop.opacity < 1.0
     plotter.close()
 
 
