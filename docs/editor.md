@@ -107,7 +107,15 @@ which frequencies each octave band holds.
 - **Messages** shows warnings (leaks, results from before the latest changes, dropouts
   while playing) in amber and errors (a refused change, a run that cannot start or
   failed, a file that cannot be read or written) in red; so does the scene's own form
-  for its problems and warnings.
+  for its problems and warnings. Every other message is shaded, so that one ends where
+  the next begins. The ticks above them show or hide the info, the warnings and the
+  errors (with how many there are of each); **Item** keeps only the messages that name
+  one source, listener or material (the list holds those that messages name, with how
+  many do), and the filter keeps only those holding some words. **Clear** removes the
+  messages on show and keeps those hidden.
+- While a run, a coverage map or a tuning goes on, the status bar says what runs, what
+  it does now and for how long, beside a moving bar and a **Cancel** button; resting
+  the mouse on the bar says so at length.
 - When a run, a coverage map or a tuning ends while another window is in front, the
   editor's entry in the taskbar flashes (on macOS, its Dock icon bounces). Nothing pops
   up: the results come to the front and **Messages** says how it went.

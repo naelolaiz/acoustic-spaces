@@ -111,6 +111,33 @@ msgstr "STI"
 msgid "speech transmission index"
 msgstr "índex de transmissió de la parla"
 
+#. Translators: a background task such as "Simulating hall…", then how long it has run so far.
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "{task} {time:.0f} s"
+msgstr "{task} {time:.0f} s"
+
+#. Translators: the task and its time, then what it does now.
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "{task}: {step}"
+msgstr "{task}: {step}"
+
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "Now: {step}"
+msgstr "Ara: {step}"
+
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "Running for {time:.0f} s"
+msgstr "En marxa des de fa {time:.0f} s"
+
+#: acoustic_spaces/gui/activity.py
+msgid "Cancel, or Simulation > Cancel (Shift+F5), stops it at its next stage"
+msgstr ""
+"Cancel·lar, o Simulació > Cancel·lar (Maj+F5), l'atura a la següent etapa"
+
 #: acoustic_spaces/gui/app.py
 msgid "Acoustic Spaces editor"
 msgstr "Editor d'Acoustic Spaces"
@@ -170,11 +197,6 @@ msgstr "Mapa de cobertura"
 #: acoustic_spaces/gui/app.py
 msgid "Messages"
 msgstr "Missatges"
-
-#: acoustic_spaces/gui/app.py
-msgid ""
-"Something runs in the background; Simulation > Cancel (Shift+F5) stops it"
-msgstr "Hi ha una tasca en segon pla; Simulació > Cancel·lar (Maj+F5) l'atura"
 
 #: acoustic_spaces/gui/app.py
 msgid ""
@@ -881,6 +903,7 @@ msgstr "Mesurant el temps de la CPU i la GPU amb {scene}…"
 msgid "Cancelling at the next stage…"
 msgstr "Es cancel·larà a la fase següent…"
 
+#. Translators: the time since a run started, then what it does now.
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid "{time:6.1f} s  {step}"
@@ -2976,6 +2999,71 @@ msgstr "{title}: de {low} a {high}, mediana {median}"
 #, python-brace-format
 msgid "{title}: no values"
 msgstr "{title}: sense valors"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Show the messages that only say what happened, such as a run's steps"
+msgstr ""
+"Mostrar els missatges que només diuen què ha passat, com els passos d'una "
+"simulació"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Show the warnings (in amber): results to check, not failures"
+msgstr "Mostrar els avisos (en ambre): resultats per revisar, no fallades"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Show the errors (in red): what could not be done, and why"
+msgstr "Mostrar els errors (en vermell): el que no s'ha pogut fer, i per què"
+
+#: acoustic_spaces/gui/messages.py
+msgid ""
+"Show only the messages about one source, listener or material; the list "
+"holds those that messages name, with how many do"
+msgstr ""
+"Mostrar només els missatges sobre una font, un receptor o un material; la "
+"llista recull els que anomenen els missatges, amb quants ho fan"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Filter"
+msgstr "Filtrar"
+
+#: acoustic_spaces/gui/messages.py
+msgid ""
+"Show only the messages holding these words (capitals or not); empty shows all"
+msgstr ""
+"Mostrar només els missatges que contenen aquestes paraules (en majúscules o "
+"no); buit els mostra tots"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Clear"
+msgstr "Esborrar"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Remove the messages on show; those that the choices here hide stay"
+msgstr ""
+"Treure els missatges a la vista; els que amaguen les opcions d'aquí es queden"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Item"
+msgstr "Element"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Info ({count})"
+msgstr "Info ({count})"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Warnings ({count})"
+msgstr "Avisos ({count})"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Errors ({count})"
+msgstr "Errors ({count})"
+
+#: acoustic_spaces/gui/messages.py
+msgid "All items"
+msgstr "Tots els elements"
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "Off"

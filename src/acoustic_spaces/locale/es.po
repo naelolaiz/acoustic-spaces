@@ -112,6 +112,34 @@ msgstr "STI"
 msgid "speech transmission index"
 msgstr "índice de transmisión del habla"
 
+#. Translators: a background task such as "Simulating hall…", then how long it has run so far.
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "{task} {time:.0f} s"
+msgstr "{task} {time:.0f} s"
+
+#. Translators: the task and its time, then what it does now.
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "{task}: {step}"
+msgstr "{task}: {step}"
+
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "Now: {step}"
+msgstr "Ahora: {step}"
+
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "Running for {time:.0f} s"
+msgstr "En marcha desde hace {time:.0f} s"
+
+#: acoustic_spaces/gui/activity.py
+msgid "Cancel, or Simulation > Cancel (Shift+F5), stops it at its next stage"
+msgstr ""
+"Cancelar, o Simulación > Cancelar (Mayús+F5), la detiene en su siguiente "
+"etapa"
+
 #: acoustic_spaces/gui/app.py
 msgid "Acoustic Spaces editor"
 msgstr "Editor de Acoustic Spaces"
@@ -172,12 +200,6 @@ msgstr "Mapa de cobertura"
 #: acoustic_spaces/gui/app.py
 msgid "Messages"
 msgstr "Mensajes"
-
-#: acoustic_spaces/gui/app.py
-msgid ""
-"Something runs in the background; Simulation > Cancel (Shift+F5) stops it"
-msgstr ""
-"Hay una tarea en segundo plano; Simulación > Cancelar (Mayús+F5) la detiene"
 
 #: acoustic_spaces/gui/app.py
 msgid ""
@@ -892,6 +914,7 @@ msgstr "Midiendo los tiempos de la CPU y la GPU con {scene}…"
 msgid "Cancelling at the next stage…"
 msgstr "Cancelando en la siguiente etapa…"
 
+#. Translators: the time since a run started, then what it does now.
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid "{time:6.1f} s  {step}"
@@ -3010,6 +3033,73 @@ msgstr "{title}: de {low} a {high}, mediana {median}"
 #, python-brace-format
 msgid "{title}: no values"
 msgstr "{title}: sin valores"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Show the messages that only say what happened, such as a run's steps"
+msgstr ""
+"Mostrar los mensajes que solo dicen lo que ocurrió, como los pasos de una "
+"simulación"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Show the warnings (in amber): results to check, not failures"
+msgstr ""
+"Mostrar los avisos (en ámbar): resultados que conviene revisar, no fallos"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Show the errors (in red): what could not be done, and why"
+msgstr "Mostrar los errores (en rojo): lo que no se pudo hacer, y por qué"
+
+#: acoustic_spaces/gui/messages.py
+msgid ""
+"Show only the messages about one source, listener or material; the list "
+"holds those that messages name, with how many do"
+msgstr ""
+"Mostrar solo los mensajes sobre una fuente, un receptor o un material; la "
+"lista recoge los que nombran los mensajes, con cuántos lo hacen"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Filter"
+msgstr "Filtrar"
+
+#: acoustic_spaces/gui/messages.py
+msgid ""
+"Show only the messages holding these words (capitals or not); empty shows all"
+msgstr ""
+"Mostrar solo los mensajes que contienen estas palabras (en mayúsculas o no); "
+"vacío muestra todos"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Clear"
+msgstr "Borrar"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Remove the messages on show; those that the choices here hide stay"
+msgstr ""
+"Quitar los mensajes a la vista; los que ocultan las opciones de aquí se "
+"quedan"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Item"
+msgstr "Elemento"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Info ({count})"
+msgstr "Info ({count})"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Warnings ({count})"
+msgstr "Avisos ({count})"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Errors ({count})"
+msgstr "Errores ({count})"
+
+#: acoustic_spaces/gui/messages.py
+msgid "All items"
+msgstr "Todos los elementos"
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "Off"

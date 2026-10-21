@@ -21,8 +21,6 @@ from PySide6.QtGui import (
     QKeySequence,
     QShortcut,
     QShowEvent,
-    QTextCharFormat,
-    QTextCursor,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -34,8 +32,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
-    QPlainTextEdit,
-    QProgressBar,
     QScrollArea,
     QStyle,
     QTabWidget,
@@ -47,6 +43,7 @@ from acoustic_spaces._extras import install_hint
 from acoustic_spaces.engine import ray_device, reweight, tuning
 from acoustic_spaces.examples import example_path, list_examples
 from acoustic_spaces.geometry import SUPPORTED_SUFFIXES, points_inside
+from acoustic_spaces.gui.activity import Activity
 from acoustic_spaces.gui.document import (
     LISTENER_HEIGHT,
     SOURCE_HEIGHT,
@@ -56,8 +53,9 @@ from acoustic_spaces.gui.document import (
     model_scene,
 )
 from acoustic_spaces.gui.inspector import BAND_LABELS, Inspector, label_text
-from acoustic_spaces.gui.levels import level_colour, rich_lines
+from acoustic_spaces.gui.levels import rich_lines
 from acoustic_spaces.gui.map_view import MapPanel
+from acoustic_spaces.gui.messages import MessagesPanel
 from acoustic_spaces.gui.numbers import fmt, point_text
 from acoustic_spaces.gui.plan_view import PlanView
 from acoustic_spaces.gui.results_view import ResultsPanel
@@ -132,9 +130,9 @@ class MainWindow(QMainWindow):
         self.inspector = Inspector(lambda: self.document)
         self.results = ResultsPanel()
         self.map_panel = MapPanel()
-        self.messages = QPlainTextEdit()
-        self.messages.setReadOnly(True)
-        self.messages.setMaximumBlockCount(2000)
+        self.message_panel = MessagesPanel()
+        #: The messages' text, as shown.
+        self.messages = self.message_panel.view
         # Forms scroll rather than make the window as tall as the longest one.
         forms = QScrollArea()
         forms.setWidgetResizable(True)
@@ -146,7 +144,12 @@ class MainWindow(QMainWindow):
             ("inspector", _("Properties"), forms, Qt.DockWidgetArea.RightDockWidgetArea),
             ("results", _("Results"), self.results, Qt.DockWidgetArea.BottomDockWidgetArea),
             ("map", _("Coverage map"), self.map_panel, Qt.DockWidgetArea.BottomDockWidgetArea),
-            ("messages", _("Messages"), self.messages, Qt.DockWidgetArea.BottomDockWidgetArea),
+            (
+                "messages",
+                _("Messages"),
+                self.message_panel,
+                Qt.DockWidgetArea.BottomDockWidgetArea,
+            ),
         ):
             dock = QDockWidget(title, self)
             dock.setObjectName(name)
@@ -157,16 +160,8 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.docks["map"], self.docks["messages"])
         self.docks["results"].raise_()
 
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 0)
-        self.progress.setMaximumWidth(160)
-        self.progress.setToolTip(
-            _("Something runs in the background; Simulation > Cancel (Shift+F5) stops it")
-        )
-        self.progress.hide()
         self.summary = QLabel()
         self.summary.setTextFormat(Qt.TextFormat.RichText)
-        self.statusBar().addPermanentWidget(self.progress)
         self.statusBar().addPermanentWidget(self.summary)
         self._play_timer = QTimer(self)
         self._play_timer.setSingleShot(True)
@@ -198,6 +193,9 @@ class MainWindow(QMainWindow):
         for index, widget in enumerate((self.now_playing, self.stop_button)):
             widget.hide()
             self.statusBar().insertPermanentWidget(index, widget)
+        # While a run, map or tuning goes on: what it does, for how long, and Cancel.
+        self.activity = Activity(self.cancel_action)
+        self.statusBar().insertPermanentWidget(2, self.activity)
         self.tree.selected.connect(lambda kind, key: self.select(kind, key, from_tree=True))
         self.viewport.picked.connect(self._picked)
         self.viewport.place.connect(self._place)
@@ -605,6 +603,9 @@ class MainWindow(QMainWindow):
         self._draw()
         self._summary()
         self._show_playing()
+        scene = self.document.scene
+        points = [*scene.sources, *scene.listeners]
+        self.message_panel.set_names([*(point.name for point in points), *scene.materials])
 
     def _state(self) -> None:
         document = self.document
@@ -675,23 +676,12 @@ class MainWindow(QMainWindow):
             )
         )
 
-    def log(self, text: str, level: str = "info") -> None:
+    def log(self, text: str, level: str = "info", *, status: bool = True) -> None:
         """Add ``text`` to the messages, a warning in amber and an error in red, and show
-        it in the status bar."""
-        style = QTextCharFormat()
-        colour = level_colour(self.messages, level)
-        if colour is not None:
-            style.setForeground(colour)
-        bar = self.messages.verticalScrollBar()
-        following = bar.value() == bar.maximum()
-        cursor = QTextCursor(self.messages.document())
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        if not self.messages.document().isEmpty():
-            cursor.insertBlock()
-        cursor.insertText(text, style)
-        if following:  # as appending does: stay at the end unless scrolled back
-            bar.setValue(bar.maximum())
-        self.statusBar().showMessage(text, 8000)
+        it in the status bar unless ``status`` is False."""
+        self.message_panel.add(text, level)
+        if status:
+            self.statusBar().showMessage(text, 8000)
 
     def _refused(self, message: str) -> None:
         self.log(_("Not changed: {reason}").format(reason=message), "error")
@@ -1265,7 +1255,7 @@ class MainWindow(QMainWindow):
         self.tune_action.setEnabled(False)
         self.map_panel.set_running(True)
         self.cancel_action.setEnabled(True)
-        self.progress.show()
+        self.activity.start(message)
         self.log(message)
         job.start()
 
@@ -1275,9 +1265,12 @@ class MainWindow(QMainWindow):
             self.log(_("Cancelling at the next stage…"))
 
     def _progress(self, message: str) -> None:
-        # Translators: the time since a run started, then what it does now.
+        self.activity.step(message)
+        # The status bar says it already, beside the moving bar.
         self.log(
-            fmt(_("{time:6.1f} s  {step}"), time=time.perf_counter() - self._started, step=message)
+            # Translators: the time since a run started, then what it does now.
+            fmt(_("{time:6.1f} s  {step}"), time=time.perf_counter() - self._started, step=message),
+            status=False,
         )
 
     def _closed_meanwhile(self) -> bool:
@@ -1419,7 +1412,7 @@ class MainWindow(QMainWindow):
         self.tune_action.setEnabled(True)
         self.map_panel.set_running(False)
         self.cancel_action.setEnabled(False)
-        self.progress.hide()
+        self.activity.stop()
 
     # -- results --------------------------------------------------------------------
 

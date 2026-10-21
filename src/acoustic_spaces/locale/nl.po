@@ -111,6 +111,34 @@ msgstr "STI"
 msgid "speech transmission index"
 msgstr "spraaktransmissie-index"
 
+#. Translators: a background task such as "Simulating hall…", then how long it has run so far.
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "{task} {time:.0f} s"
+msgstr "{task} {time:.0f} s"
+
+#. Translators: the task and its time, then what it does now.
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "{task}: {step}"
+msgstr "{task}: {step}"
+
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "Now: {step}"
+msgstr "Nu: {step}"
+
+#: acoustic_spaces/gui/activity.py
+#, python-brace-format
+msgid "Running for {time:.0f} s"
+msgstr "Loopt al {time:.0f} s"
+
+#: acoustic_spaces/gui/activity.py
+msgid "Cancel, or Simulation > Cancel (Shift+F5), stops it at its next stage"
+msgstr ""
+"Annuleren, of Simulatie > Annuleren (Shift+F5), stopt deze bij de volgende "
+"stap"
+
 #: acoustic_spaces/gui/app.py
 msgid "Acoustic Spaces editor"
 msgstr "Acoustic Spaces-editor"
@@ -171,13 +199,6 @@ msgstr "Dekkingskaart"
 #: acoustic_spaces/gui/app.py
 msgid "Messages"
 msgstr "Meldingen"
-
-#: acoustic_spaces/gui/app.py
-msgid ""
-"Something runs in the background; Simulation > Cancel (Shift+F5) stops it"
-msgstr ""
-"Er loopt een taak op de achtergrond; Simulatie > Annuleren (Shift+F5) stopt "
-"deze"
 
 #: acoustic_spaces/gui/app.py
 msgid ""
@@ -893,6 +914,7 @@ msgstr "Rekentijden van CPU en GPU voor {scene} worden gemeten…"
 msgid "Cancelling at the next stage…"
 msgstr "Annuleren bij de volgende fase…"
 
+#. Translators: the time since a run started, then what it does now.
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid "{time:6.1f} s  {step}"
@@ -2991,6 +3013,74 @@ msgstr "{title}: {low} tot {high}, mediaan {median}"
 #, python-brace-format
 msgid "{title}: no values"
 msgstr "{title}: geen waarden"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Show the messages that only say what happened, such as a run's steps"
+msgstr ""
+"De meldingen tonen die alleen zeggen wat er gebeurde, zoals de stappen van "
+"een simulatie"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Show the warnings (in amber): results to check, not failures"
+msgstr ""
+"De waarschuwingen tonen (in amber): resultaten om te controleren, geen "
+"mislukkingen"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Show the errors (in red): what could not be done, and why"
+msgstr "De fouten tonen (in rood): wat niet kon, en waarom"
+
+#: acoustic_spaces/gui/messages.py
+msgid ""
+"Show only the messages about one source, listener or material; the list "
+"holds those that messages name, with how many do"
+msgstr ""
+"Alleen de meldingen over één bron, ontvanger of materiaal tonen; de lijst "
+"bevat de items die meldingen noemen, met hoeveel dat doen"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Filter"
+msgstr "Filter"
+
+#: acoustic_spaces/gui/messages.py
+msgid ""
+"Show only the messages holding these words (capitals or not); empty shows all"
+msgstr ""
+"Alleen de meldingen met deze woorden tonen (hoofdletters of niet); leeg "
+"toont alle"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Clear"
+msgstr "Wissen"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Remove the messages on show; those that the choices here hide stay"
+msgstr ""
+"De getoonde meldingen verwijderen; de meldingen die de keuzes hier "
+"verbergen, blijven staan"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Item"
+msgstr "Item"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Info ({count})"
+msgstr "Info ({count})"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Warnings ({count})"
+msgstr "Waarschuwingen ({count})"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Errors ({count})"
+msgstr "Fouten ({count})"
+
+#: acoustic_spaces/gui/messages.py
+msgid "All items"
+msgstr "Alle items"
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "Off"

@@ -89,3 +89,8 @@ Version 3.2.3:
 
 - [x] Added Dutch translation.
 
+Unreleased:
+
+- [x] Editor: the background task in the status bar says what runs, with Cancel beside
+  it; messages that can be shown or hidden by level, filtered by item or words, and
+  cleared, every other one shaded.
