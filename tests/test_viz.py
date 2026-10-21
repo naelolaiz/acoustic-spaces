@@ -5,6 +5,7 @@ import pytest
 
 pv = pytest.importorskip("pyvista")
 
+from acoustic_spaces.examples import list_examples  # noqa: E402
 from acoustic_spaces.room import Room  # noqa: E402
 from acoustic_spaces.viz import (  # noqa: E402
     balloon_polydata,
@@ -30,6 +31,19 @@ def test_plot_room_adds_surfaces_and_markers() -> None:
     plot_room(room, plotter)
     # three materials (surface + outline each), a source and a listener with its arrow
     assert len(plotter.renderer.actors) >= 3 * 2 + 3
+    plotter.close()
+
+
+@pytest.mark.parametrize(
+    "example",
+    [e for e in list_examples() if not e.missing_extra],
+    ids=lambda example: example.name,
+)
+def test_every_example_is_drawn(example) -> None:
+    # tree_belt's lone oak: a round crown, with no edges to outline.
+    plotter = pv.Plotter(off_screen=True)
+    plot_room(Room.from_yaml(example.path), plotter)
+    assert plotter.renderer.actors
     plotter.close()
 
 

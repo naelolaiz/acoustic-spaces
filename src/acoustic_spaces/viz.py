@@ -383,9 +383,11 @@ def plot_vegetation(room: Room, plotter: pyvista.Plotter, *, render: bool = True
     for shape in shapes:
         part = vegetation_polydata(shape)
         plotter.add_mesh(part, color=VEGETATION_COLOUR, opacity=0.3, pickable=False, render=render)
-        plotter.add_mesh(
-            _outline(part), color=VEGETATION_COLOUR, line_width=1.0, pickable=False, render=render
-        )
+        edges = _outline(part)
+        if edges.n_points:  # a lone tree's round crown has none
+            plotter.add_mesh(
+                edges, color=VEGETATION_COLOUR, line_width=1.0, pickable=False, render=render
+            )
     return [[_("vegetation"), VEGETATION_COLOUR]] if shapes else []
 
 

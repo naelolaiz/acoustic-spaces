@@ -53,7 +53,7 @@ octave bands replace the ray-traced ones.
   exactly, so a uniform wind gives the convected wave equation: downwind sound at
   c + v, upwind at c - v whichever way it turned. Where the wind changes, the term
   of the linearised Euler equations that the wind's shear puts on the air's velocity is
-  left out, about |dv/dz| / omega of the rest. The air moves no more than half a cell a
+  left out, about ``|dv/dz| / omega`` of the rest. The air moves no more than half a cell a
   step, and the matched layer's air is still. It costs three to four times the
   effective speed of sound's run, and runs on the CPU (asked for the GPU, it says so and stays
   there).
