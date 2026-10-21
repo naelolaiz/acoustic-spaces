@@ -346,6 +346,103 @@ def test_warnings_and_errors_stand_out(window) -> None:
     assert f'<span style="color:{warning}">Warning: the model is not closed' in stats
 
 
+def test_messages_show_hide_filter_and_clear(window) -> None:
+    """Ticks show or hide each level, the item list and the filter keep only some
+    messages, every other message is shaded and Clear removes those on show."""
+    from acoustic_spaces.gui.messages import LIMIT, row_shade
+
+    panel = window.message_panel
+    window.open_example(example_path("studio"))
+    panel.clear_shown()
+    assert window.messages.toPlainText() == "" and panel.entries == []
+    window.log("left-speaker is 2 m from mix-position")
+    window.log("right-speaker clips", "warning")
+    window.log("left-speakers is no name", "warning")
+    window.log("broken\nreally", "error")
+    assert [box.text() for box in panel.levels.values()] == [
+        "Info (1)",
+        "Warnings (2)",
+        "Errors (1)",
+    ]
+    # Every other message on a shaded row, all the lines of one alike.
+    shade = row_shade(window.messages)
+    backgrounds = []
+    block = window.messages.document().begin()
+    while block.isValid():
+        backgrounds.append(block.blockFormat().background())
+        block = block.next()
+    assert [b.style() == Qt.BrushStyle.NoBrush for b in backgrounds] == [
+        True,
+        False,
+        True,
+        False,
+        False,
+    ]
+    assert backgrounds[1].color() == backgrounds[3].color() == backgrounds[4].color() == shade
+    # Warnings hidden: the rest are shaded afresh from the top.
+    panel.levels["warning"].setChecked(False)
+    assert window.messages.toPlainText() == (
+        "left-speaker is 2 m from mix-position\nbroken\nreally"
+    )
+    assert window.messages.document().begin().next().blockFormat().background().color() == shade
+    panel.levels["warning"].setChecked(True)
+    # The items that messages name, as whole names, with how many do.
+    items = [panel.item.itemText(i) for i in range(panel.item.count())]
+    assert items == ["All items", "left-speaker (1)", "mix-position (1)", "right-speaker (1)"]
+    panel.item.setCurrentIndex(panel.item.findData("left-speaker"))
+    assert window.messages.toPlainText() == "left-speaker is 2 m from mix-position"
+    panel.item.setCurrentIndex(0)
+    panel.filter.setText("CLIPS")
+    assert window.messages.toPlainText() == "right-speaker clips"
+    # Clear removes the messages on show; the hidden ones stay.
+    panel.clear_button.click()
+    panel.filter.clear()
+    shown = window.messages.toPlainText()
+    assert "clips" not in shown and "broken" in shown and "left-speakers" in shown
+    assert panel.levels["warning"].text() == "Warnings (1)"
+    assert panel.item.findData("right-speaker") == -1
+    # A hidden message still shows in the status bar.
+    panel.levels["info"].setChecked(False)
+    window.log("hidden but said")
+    assert "hidden but said" not in window.messages.toPlainText()
+    assert window.statusBar().currentMessage() == "hidden but said"
+    # Past the limit, the oldest go.
+    for index in range(LIMIT + 201):
+        panel.add(f"message {index}", "error")
+    assert len(panel.entries) <= LIMIT + 200 and panel.entries[-1][0] == f"message {LIMIT + 200}"
+    assert window.messages.toPlainText().endswith(f"message {LIMIT + 200}")
+
+
+def test_background_task_says_what_runs(window, qapp) -> None:
+    """While a run goes on, the status bar says what runs, its step and its time, with
+    Cancel beside it; resting on the moving bar says so at length."""
+    window.open_example(example_path("studio"))
+    _quick(window.document)
+    activity = window.activity
+    assert activity.isHidden()
+    window.run_simulation()
+    assert activity.isVisible() and activity.cancel.defaultAction() is window.cancel_action
+    assert activity.text().startswith("Simulating Control room")
+    tip = activity.bar.toolTip()
+    assert tip.startswith("Simulating Control room") and "Shift+F5" in tip
+    assert activity.label.toolTip() == tip
+    _wait(qapp, lambda: window.job is None)
+    assert activity.isHidden()
+    # The steps reached the bar, and the messages, not the status bar's message.
+    assert "early reflections" in window.messages.toPlainText()
+    assert "Now: " in activity.bar.toolTip() and " s: " in activity.text()
+    assert "early reflections" not in window.statusBar().currentMessage()
+    activity.start("Mapping a hall…")
+    activity.step("map: early reflections at 40 points")
+    assert activity.text() == "Mapping a hall… 0 s: map: early reflections at 40 points"
+    assert activity.bar.toolTip().splitlines()[:3] == [
+        "Mapping a hall…",
+        "Now: map: early reflections at 40 points",
+        "Running for 0 s",
+    ]
+    activity.stop()
+
+
 def test_leaks_are_found_and_shown(window, monkeypatch) -> None:
     import acoustic_spaces.engine.leaks as leaks_module
 
@@ -485,7 +582,13 @@ def test_every_control_explains_itself(window) -> None:
         ("coverage", None),
     ):
         window.select(kind, key)
-    roots = [*window.inspector.pages.values(), window.results, window.map_panel, window.plan]
+    roots = [
+        *window.inspector.pages.values(),
+        window.results,
+        window.map_panel,
+        window.plan,
+        window.message_panel,
+    ]
     fields = (QAbstractSpinBox, QCheckBox, QComboBox, QListWidget, QPushButton, QSlider)
     missing = []
     for root in roots:

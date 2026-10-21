@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+**Editor**
+
+- While a run, a coverage map or a tuning goes on, the status bar says what runs, its
+  latest step and the time so far, with a **Cancel** button beside the moving bar;
+  resting the mouse on the bar says the same at length. The bar was small and silent
+  before, easy to miss on some desktops (KDE's, say).
+- **Messages** shades every other message, and its ticks show or hide the info, the
+  warnings and the errors, with how many there are of each. **Item** keeps only the
+  messages about one source, listener or material, a filter only those holding some
+  words, and **Clear** removes the messages on show.
+
 ## 3.2.3
 
 **Languages**
