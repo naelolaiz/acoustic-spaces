@@ -95,6 +95,37 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
+def _group_path(value: str | None) -> str | None:
+    """A group's names from the outermost in, joined with "/" and without spaces around
+    them."""
+    if value is None:
+        return None
+    parts = [part.strip() for part in value.split("/")]
+    if not all(parts):
+        raise ValueError(f"group {value!r} has an empty name between its '/'")
+    return "/".join(parts)
+
+
+def _group_field():
+    return Field(
+        default=None,
+        description=(
+            "the group it belongs to in the editor's scene tree; groups nest with '/' "
+            "(PA/Delays is the group Delays in the group PA)"
+        ),
+    )
+
+
+def _enabled_field():
+    return Field(
+        default=None,
+        description=(
+            "false leaves it out of simulations, maps and checks; it stays in the scene, "
+            "and the editor draws it faded"
+        ),
+    )
+
+
 def _per_band(name: str, value: list[float]) -> list[float]:
     if len(value) != len(OCTAVE_BANDS_HZ):
         raise ValueError(f"expected {len(OCTAVE_BANDS_HZ)} {name} values, got {len(value)}")
@@ -1359,6 +1390,8 @@ class Walk(_Model):
 
 class Source(_Model):
     name: str
+    group: str | None = _group_field()
+    enabled: bool | None = _enabled_field()
     position: Vector3
     orientation: Orientation = Field(default_factory=Orientation)
     directivity: PatternName | Literal["lambert"] | DirectivitySpec = Field(
@@ -1444,6 +1477,16 @@ class Source(_Model):
     @classmethod
     def _eq_per_band(cls, value: list[float] | None) -> list[float] | None:
         return None if value is None else _per_band_or_third("eq_db", value)
+
+    @field_validator("group")
+    @classmethod
+    def _group(cls, value: str | None) -> str | None:
+        return _group_path(value)
+
+    @property
+    def in_use(self) -> bool:
+        """Whether simulations and maps take it: not left out (``enabled: false``)."""
+        return self.enabled is not False
 
     @model_validator(mode="after")
     def _spectrum_of_a_total(self) -> Source:
@@ -1532,9 +1575,21 @@ class Source(_Model):
 
 class Listener(_Model):
     name: str
+    group: str | None = _group_field()
+    enabled: bool | None = _enabled_field()
     position: Vector3
     orientation: Orientation = Field(default_factory=Orientation)
     walk: Walk | None = Field(default=None, description="a path to walk, for a walkthrough")
+
+    @field_validator("group")
+    @classmethod
+    def _group(cls, value: str | None) -> str | None:
+        return _group_path(value)
+
+    @property
+    def in_use(self) -> bool:
+        """Whether simulations and maps take it: not left out (``enabled: false``)."""
+        return self.enabled is not False
 
 
 class Air(_Model):

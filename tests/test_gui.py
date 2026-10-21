@@ -268,6 +268,33 @@ def test_saving_an_example_copies_its_terrain_and_map(qapp, tmp_path: Path) -> N
     assert "file: hill.asc" in saved and "file: houses.geojson" in saved
 
 
+def test_using_and_hiding_sources_and_listeners(qapp) -> None:
+    """Ticks leave sources and listeners out in one step of the history; eyes hide them
+    in the views without changing the scene."""
+    document = Document(box_scene())
+    document.add_point("sources", (2.0, 2.0, 1.5))
+    document.add_point("sources", (3.0, 2.0, 1.5))
+    document.set_enabled("sources", [1, 2], False)
+    assert [s.in_use for s in document.scene.sources] == [True, False, False]
+    assert document.undo_text() == "leave out 2 sources"
+    document.set_enabled("sources", [0, 1], False)  # only the one in use changes
+    assert document.undo_text() == "leave out source"
+    document.undo()
+    document.set_enabled("sources", [1, 2], True)
+    assert document.undo_text() == "use 2 sources"
+    assert all("enabled" not in s for s in document.scene.to_data()["sources"])
+    document.set_enabled("listeners", [0], False)
+    assert document.undo_text() == "leave out listener"
+    assert document.scene.to_data()["listeners"][0]["enabled"] is False
+    saved = document.scene
+    document.set_hidden("sources", [1], True)
+    assert document.hidden == {("sources", "source-2")} and document.scene is saved
+    document.update_point("sources", 1, name="spare")
+    assert document.hidden == {("sources", "spare")}
+    document.set_hidden("sources", [0, 1], False)
+    assert not document.hidden
+
+
 def test_model_scene_puts_points_inside(qapp) -> None:
     scene = model_scene(EXAMPLES / "concert_hall" / "concert_hall.obj")
     room = Room.from_scene(scene)
@@ -3193,3 +3220,41 @@ def test_insertion_loss_list(window) -> None:
     window.open_example(example_path("shoebox"))
     window.select("simulation")
     assert page.insertion_group.isHidden()
+
+
+def test_scene_tree_groups_ticks_and_eyes(window, qapp) -> None:
+    """Sources and listeners sit in their groups; a tick leaves them out, an eye hides
+    them in the 3D view and the plan, and the form sets both."""
+    window.document.update_point("sources", 0, group="PA/Mains")
+    tree = window.tree
+
+    def entry(key):
+        return next(item for item in tree._items() if tree._keys[item.data(0, 256)] == key)
+
+    pa = entry(("group", ("sources", ("PA",))))
+    assert entry(("group", ("sources", ("PA", "Mains")))).parent() is pa
+    assert entry(("sources", 0)).parent().parent() is pa
+    assert pa.checkState(0) == Qt.CheckState.Checked
+    pa.setCheckState(0, Qt.CheckState.Unchecked)
+    qapp.processEvents()
+    assert not window.document.scene.sources[0].in_use
+    assert entry(("sources", 0)).checkState(0) == Qt.CheckState.Unchecked
+    window.undo()
+    assert window.document.scene.sources[0].in_use
+    name = window.document.scene.sources[0].name
+    tree.toggle_shown(entry(("sources", 0)))
+    qapp.processEvents()
+    assert window.document.hidden == {("sources", name)}
+    assert [kind for kind, _k, _item in window.plan.canvas._points()] == ["listeners"]
+    tree.toggle_shown(entry(("", "sources")))  # none shown: shows them all
+    qapp.processEvents()
+    assert not window.document.hidden
+    window.select("sources", 0)
+    page = window.inspector.pages["sources"]
+    assert page.group.currentText() == "PA/Mains" and page.in_use.isChecked()
+    page.group.setCurrentText("Monitors")
+    page._group()
+    assert window.document.scene.sources[0].group == "Monitors"
+    page.in_use.setChecked(False)
+    assert not window.document.scene.sources[0].in_use
+    assert window.document.undo_text() == "leave out source"

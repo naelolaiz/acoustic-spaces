@@ -24,7 +24,7 @@ from PySide6.QtCore import QObject, Signal
 from acoustic_spaces.directivity import array_files
 from acoustic_spaces.geometry import UNIT_SCALE, RoomMesh, extruded_mesh, points_inside
 from acoustic_spaces.geometry.outdoor import SKY
-from acoustic_spaces.i18n import _
+from acoustic_spaces.i18n import _, ngettext
 from acoustic_spaces.room import Room, matching_name
 from acoustic_spaces.scene import Scene
 from acoustic_spaces.scene.model import INDOOR_COHERENT_MAX_BAND_HZ, directivity_entries
@@ -296,6 +296,9 @@ class Document(QObject):
         self._undo: list[tuple[str, Scene]] = []
         self._redo: list[tuple[str, Scene]] = []
         self._saved = scene
+        #: The sources and listeners hidden in the 3D view and the plan, as (kind, name):
+        #: how the editor shows the scene, not part of it.
+        self.hidden: set[tuple[str, str]] = set()
 
     @classmethod
     def open(cls, path: str | Path) -> Document:
@@ -476,11 +479,55 @@ class Document(QObject):
 
     def update_point(self, kind: str, index: int, **fields) -> None:
         """Change fields of a source or listener (name, position, orientation...)."""
+        old = getattr(self.scene, kind)[index].name
 
         def change(data: dict) -> None:
             data[kind][index].update(fields)
 
         self.edit(_("change source") if kind == "sources" else _("change listener"), change)
+        if (kind, old) in self.hidden and fields.get("name", old) != old:
+            self.hidden.discard((kind, old))
+            self.hidden.add((kind, fields["name"]))
+
+    def set_enabled(self, kind: str, indices, enabled: bool) -> None:
+        """Use the sources or listeners (``kind`` is "sources" or "listeners") at
+        ``indices`` in simulations and maps, or leave them out (``enabled: false``), in
+        one step of the history."""
+        items = getattr(self.scene, kind)
+        changing = [k for k in indices if items[k].in_use != enabled]
+        if not changing:
+            return
+        count = len(changing)
+        if kind == "sources":
+            text = (
+                ngettext("use source", "use {count} sources", count)
+                if enabled
+                else ngettext("leave out source", "leave out {count} sources", count)
+            )
+        else:
+            text = (
+                ngettext("use listener", "use {count} listeners", count)
+                if enabled
+                else ngettext("leave out listener", "leave out {count} listeners", count)
+            )
+
+        def change(data: dict) -> None:
+            for k in changing:
+                if enabled:
+                    data[kind][k].pop("enabled", None)
+                else:
+                    data[kind][k]["enabled"] = False
+
+        self.edit(text.format(count=count), change)
+
+    def set_hidden(self, kind: str, indices, hidden: bool) -> None:
+        """Hide the sources or listeners at ``indices`` in the 3D view and the plan, or
+        show them again; this changes how the editor shows the scene, not the scene."""
+        names = {(kind, getattr(self.scene, kind)[k].name) for k in indices}
+        if hidden:
+            self.hidden |= names
+        else:
+            self.hidden -= names
 
     def remove_point(self, kind: str, index: int) -> None:
         source = kind == "sources"

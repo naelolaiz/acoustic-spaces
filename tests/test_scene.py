@@ -162,3 +162,31 @@ def test_nan_and_infinity_in_dimensions_are_rejected() -> None:
     data["materials"]["painted_concrete"] = {"absorption": [float("nan")] * 8}
     with pytest.raises(ValidationError, match="finite number"):
         Scene.model_validate(data)
+
+
+def test_sources_and_listeners_in_groups() -> None:
+    """Groups nest with "/"; a source or listener left out says so, and settings left
+    unset stay out of the file."""
+    data = {
+        "name": "groups",
+        "geometry": {"box": [8, 6, 3]},
+        "materials": {"wall": {"absorption": [0.1] * 8}},
+        "default_material": "wall",
+        "sources": [
+            {"name": "main", "group": " PA / Mains ", "position": [1, 1, 1.5]},
+            {"name": "spare", "position": [2, 1, 1.5], "enabled": False},
+        ],
+        "listeners": [{"name": "seat", "group": "Audience", "position": [5, 3, 1.2]}],
+    }
+    scene = Scene.model_validate(data)
+    main, spare = scene.sources
+    assert main.group == "PA/Mains" and main.in_use and main.enabled is None
+    assert spare.group is None and not spare.in_use
+    assert scene.listeners[0].group == "Audience" and scene.listeners[0].in_use
+    written = scene.to_data()
+    assert written["sources"][0]["group"] == "PA/Mains" and "enabled" not in written["sources"][0]
+    assert written["sources"][1]["enabled"] is False and "group" not in written["sources"][1]
+    for wrong in ("PA//Mains", "/PA", "PA/", " "):
+        data["sources"][0]["group"] = wrong
+        with pytest.raises(ValidationError, match="empty name"):
+            Scene.model_validate(data)

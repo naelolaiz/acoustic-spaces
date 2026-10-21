@@ -2812,6 +2812,38 @@ class PointPage(Page):
         )
         self.name.editingFinished.connect(self._name)
         form.addRow(_("Name"), self.name)
+        self.group = QComboBox()
+        self.group.setEditable(True)
+        self.group.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.group.lineEdit().setPlaceholderText(_("none"))
+        self.group.setToolTip(
+            _(
+                "The group the source belongs to in the scene tree, to show, hide, use or "
+                "leave out together; groups nest with / (PA/Delays is Delays in PA)"
+            )
+            if source
+            else _(
+                "The group the listener belongs to in the scene tree, to show, hide, use or "
+                "leave out together; groups nest with / (Stands/North is North in Stands)"
+            )
+        )
+        self.group.lineEdit().editingFinished.connect(self._group)
+        self.group.activated.connect(lambda _index: self._group())
+        form.addRow(_("Group"), self.group)
+        self.in_use = QCheckBox(_("Use in simulations"))
+        self.in_use.setToolTip(
+            _(
+                "Untick to leave the source out of simulations, maps and checks: it stays in "
+                "the scene, drawn faded. The tick in the scene tree does the same"
+            )
+            if source
+            else _(
+                "Untick to leave the listener out of simulations and checks: it stays in "
+                "the scene, drawn faded. The tick in the scene tree does the same"
+            )
+        )
+        self.in_use.toggled.connect(self._in_use)
+        form.addRow(self.in_use)
         self.position = [spin(-1e4, 1e4, 2, 0.1, "m") for _ in range(3)]
         tips = (
             (
@@ -3039,6 +3071,10 @@ class PointPage(Page):
             return
         item = self._item()
         self.name.setText(item.name)
+        self.group.clear()
+        self.group.addItems(sorted({other.group for other in items if other.group}))
+        self.group.setCurrentText(item.group or "")
+        self.in_use.setChecked(item.in_use)
         for box, value in zip(self.position, item.position, strict=True):
             box.setValue(value)
         o = item.orientation
@@ -3133,6 +3169,15 @@ class PointPage(Page):
         name = self.name.text().strip()
         if name and name != self._item().name:
             self._update(name=name)
+
+    def _group(self) -> None:
+        group = self.group.currentText().strip() or None
+        if group != self._item().group:
+            self._update(group=group)
+
+    def _in_use(self, on: bool) -> None:
+        if not self._loading:
+            self.run(lambda: self.document.set_enabled(self.kind, [self.key], on))
 
     def _position(self, axis: int, value: float) -> None:
         # One value at a time (the orientation too): the other boxes show theirs rounded,

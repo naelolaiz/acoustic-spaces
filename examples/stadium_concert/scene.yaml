@@ -18,7 +18,10 @@
 # crowd standing on the pitch and the one seated in the stands take up the sound and
 # scatter it (`audience: true`). Many listeners stand nearer the arrays than their
 # far-field patterns hold, so every array adds up its boxes one by one
-# (`near_field: true`).
+# (`near_field: true`). The sources and listeners sit in groups: the PA's mains,
+# subwoofers, fills and delays, the monitors, the stage, and the audience standing and
+# seated. The editor's scene tree shows or hides each group, and its tick uses it in
+# simulations or leaves it out.
 #
 #   python align.py
 #   python near_field.py
@@ -85,58 +88,68 @@ assignments:
   stage_roof: stage
 sources:
   - name: main_left
+    group: PA/Mains
     position: [-40, 19, 14]
     orientation: {yaw: 8}
     level_db: 134
     directivity: {file: main_array.yaml, near_field: true}
   - name: main_right
+    group: PA/Mains
     position: [-40, -19, 14]
     orientation: {yaw: -8}
     level_db: 134
     directivity: {file: main_array.yaml, near_field: true}
   - name: subs
+    group: PA/Subwoofers
     position: [-41, 0, 0.6]
     level_db: 134
     eq_db: [0, 0, -18, -40, -40, -40, -40, -40]
     delay_ms: 17
     directivity: {file: sub_array.yaml, near_field: true}
   - name: outfill_left
+    group: PA/Fills
     position: [-40, 27, 12]
     orientation: {yaw: 70, pitch: 2}
     level_db: 130
     delay_ms: 25
     directivity: {file: fill_array.yaml, near_field: true}
   - name: outfill_right
+    group: PA/Fills
     position: [-40, -27, 12]
     orientation: {yaw: -70, pitch: 2}
     level_db: 130
     delay_ms: 25
     directivity: {file: fill_array.yaml, near_field: true}
   - name: front_fill_left
+    group: PA/Fills
     position: [-42.3, 6, 2.3]
     orientation: {yaw: -10, pitch: -3}
     level_db: 116
     delay_ms: 33
     directivity: {file: wedge.csv}
   - name: front_fill_right
+    group: PA/Fills
     position: [-42.3, -6, 2.3]
     orientation: {yaw: 10, pitch: -3}
     level_db: 116
     delay_ms: 33
     directivity: {file: wedge.csv}
   - name: tower_left
+    group: PA/Delays
     position: [10, 15, 12]
     level_db: 132
     eq_db: [-24, -18, -9, -3, 0, 0, 0, 0]
     delay_ms: 152
     directivity: {file: tower_array.yaml, near_field: true}
   - name: tower_right
+    group: PA/Delays
     position: [10, -15, 12]
     level_db: 132
     eq_db: [-24, -18, -9, -3, 0, 0, 0, 0]
     delay_ms: 152
     directivity: {file: tower_array.yaml, near_field: true}
   - name: delay_north
+    group: PA/Delays
     position: [25, 49, 28.5]
     orientation: {yaw: 75, pitch: -12}
     level_db: 130
@@ -144,6 +157,7 @@ sources:
     delay_ms: 202
     directivity: {file: fill_array.yaml, near_field: true}
   - name: delay_south
+    group: PA/Delays
     position: [25, -49, 28.5]
     orientation: {yaw: -75, pitch: -12}
     level_db: 130
@@ -151,6 +165,7 @@ sources:
     delay_ms: 202
     directivity: {file: fill_array.yaml, near_field: true}
   - name: delay_east_left
+    group: PA/Delays
     position: [67.5, 20, 28.5]
     orientation: {yaw: 25, pitch: -12}
     level_db: 128
@@ -158,6 +173,7 @@ sources:
     delay_ms: 314
     directivity: {file: fill_array.yaml, near_field: true}
   - name: delay_east_right
+    group: PA/Delays
     position: [67.5, -20, 28.5]
     orientation: {yaw: -25, pitch: -12}
     level_db: 128
@@ -165,57 +181,73 @@ sources:
     delay_ms: 314
     directivity: {file: fill_array.yaml, near_field: true}
   - name: vocal_wedges
+    group: Monitors
     position: [-43.3, 0, 2.25]
     orientation: {yaw: 180, pitch: 45}
     level_db: 115
     directivity: {file: monitor_wedges.yaml, near_field: true}
   - name: drum_fill
+    group: Monitors
     position: [-54.5, 1.8, 2.6]
     orientation: {yaw: -50, pitch: 25}
     level_db: 115
     directivity: {file: wedge.csv}
   - name: side_fill_left
+    group: Monitors
     position: [-49, 15.5, 3]
     orientation: {yaw: -90}
     level_db: 122
     directivity: {file: fill_array.yaml, near_field: true}
   - name: side_fill_right
+    group: Monitors
     position: [-49, -15.5, 3]
     orientation: {yaw: 90}
     level_db: 122
     directivity: {file: fill_array.yaml, near_field: true}
 listeners:
   - name: singer
+    group: Stage
     position: [-44.8, 0, 3.7]
   - name: guitarist
+    group: Stage
     position: [-47, 8, 3.7]
   - name: drummer
+    group: Stage
     position: [-53, 0, 3.7]
   - name: pitch_front
+    group: Audience/Standing
     position: [-26, 0, 1.6]
     orientation: {yaw: 180}
   - name: mix_position
+    group: Audience/Standing
     position: [-5, 0, 1.6]
     orientation: {yaw: 180}
   - name: pitch_behind_towers
+    group: Audience/Standing
     position: [28, 10, 1.6]
     orientation: {yaw: -173}
   - name: pitch_back
+    group: Audience/Standing
     position: [50, -12, 1.6]
     orientation: {yaw: 173}
   - name: pitch_side
+    group: Audience/Standing
     position: [-15, -28, 1.6]
     orientation: {yaw: 134}
   - name: north_stand_near
+    group: Audience/Seated
     position: [-30, 58, 12.46]
     orientation: {yaw: -109}
   - name: north_stand_far
+    group: Audience/Seated
     position: [35, 66, 17.09]
     orientation: {yaw: -142}
   - name: north_stand_top
+    group: Audience/Seated
     position: [30, 78, 24.04]
     orientation: {yaw: -133}
   - name: east_stand
+    group: Audience/Seated
     position: [85, -20, 17.38]
     orientation: {yaw: 159}
 simulation:

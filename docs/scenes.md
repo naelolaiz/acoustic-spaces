@@ -567,6 +567,39 @@ surface) and a compressor (a point).
 
 ![Polar patterns of the per-band directivity above, from omni in the bass to a narrow pattern at 8 kHz](images/directivity.png)
 
+### Groups, and sources left out
+
+Sources and listeners can sit in groups, and can be left out of a run without being
+removed:
+
+```yaml
+sources:
+  - name: main_left
+    group: PA/Mains          # the group Mains in the group PA
+    position: [-40, 19, 14]
+  - name: vocal_wedges
+    group: Monitors
+    enabled: false           # left out of simulations, maps and checks
+    position: [-43.3, 0, 2.25]
+listeners:
+  - name: singer
+    group: Stage
+    position: [-44.8, 0, 3.7]
+```
+
+- `group` sorts the scene tree of the editor; groups nest with `/`, and a source and
+  a listener may share a group's name. It changes no result.
+- `enabled: false` leaves a source or listener out of `simulate`, `map`, `walk` (the
+  sources that do not walk) and the scene's checks, as if it were not there, but keeps
+  it in the scene; the others get the same responses as in a run of all, since seeds
+  follow the scene's order. Named on the command line (`--source`), it is simulated
+  all the same. `inspect` marks it "left out".
+- In the editor's scene tree each source, listener and group has a tick (in
+  simulations or left out, saved as `enabled: false`) and an eye that shows or hides
+  it in the 3D view and the plan. Hiding is how the editor shows the scene, not part
+  of it: it is not saved and changes no result. Sources and listeners left out are
+  drawn faded.
+
 ## Walks
 
 A listener or a point source can walk through the room, for

@@ -36,6 +36,13 @@ which frequencies each octave band holds.
   clicking it in the 3D view, shows its form under **Properties**. Every change is
   checked against the scene schema; a refused change says why under **Messages**, and
   every change can be undone.
+- Sources and listeners sit in their **groups** (the form's **Group** field; groups
+  nest with `/`, as PA/Delays). Each source, listener and group has a tick: unticked,
+  it is left out of simulations, maps and checks, stays in the scene drawn faded, and
+  is saved as `enabled: false` (the form's **Use in simulations** does the same). The
+  eye beside it hides it in the 3D view and the plan, or shows it again, without
+  changing the scene. See
+  [Groups, and sources left out](scenes.md#groups-and-sources-left-out).
 - **Place source** and **Place listener**, then click a surface: on a floor the new
   point stands at ear or mouth height, on a wall or ceiling it goes half a metre into
   the room. In the plan, the click places it above the floor there. Sources and

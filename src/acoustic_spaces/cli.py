@@ -90,6 +90,16 @@ def _load_room(path: str) -> Room | None:
     return None
 
 
+def _counted(items, noun: str) -> str:
+    """How many sources or listeners there are, and how many are left out."""
+    out = sum(not item.in_use for item in items)
+    return f"{len(items)} {noun}" + (f" ({out} left out)" if out else "")
+
+
+def _first_in_use(items) -> str:
+    return next(item.name for item in items if item.in_use)
+
+
 def _print_checks(room: Room) -> bool:
     """Print problems and warnings; return True when there are no problems."""
     for warning in room.warnings():
@@ -178,7 +188,7 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     scene = room.scene
     print(
         f"{scene.name}: {len(scene.materials)} materials, "
-        f"{len(scene.sources)} sources, {len(scene.listeners)} listeners, "
+        f"{_counted(scene.sources, 'sources')}, {_counted(scene.listeners, 'listeners')}, "
         f"{room.report.faces} triangles"
     )
     if args.leaks:
@@ -333,6 +343,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
             x, y, z = item.position
             print(
                 f"  {kind:<9}{item.name:<{width}}({x:.2f}, {y:.2f}, {z:.2f}){where}"
+                + ("" if item.in_use else "  left out")
                 + _extent_text(item)
                 + _walk_text(item)
                 + _ground_text(room, item)
@@ -765,8 +776,8 @@ def _cmd_export(args: argparse.Namespace) -> int:
         f"{len(scene.sources)} sources, {len(scene.listeners)} listeners"
     )
     if paths is not None:
-        source = args.source or scene.sources[0].name
-        listener = args.listener or scene.listeners[0].name
+        source = args.source or _first_in_use(scene.sources)
+        listener = args.listener or _first_in_use(scene.listeners)
         print(f"  {len(paths)} paths from {source} to {listener}: {_path_counts(paths)}")
     if particles is not None:
         seconds = args.slow_motion * float(particles.times[-1])

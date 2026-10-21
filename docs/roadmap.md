@@ -222,6 +222,9 @@ Sources:
 - [x] Coherent arrays added up element by element near their listeners
   (`near_field: true`): the direct sound, the reflections and the sound that reaches an
   edge, exact over each band and the pattern far away.
+- [x] Sources and listeners in groups, and left out of a run without being removed
+  (`group`, `enabled: false`); in the editor a tick and an eye per source, listener
+  and group.
 
 Examples:
 

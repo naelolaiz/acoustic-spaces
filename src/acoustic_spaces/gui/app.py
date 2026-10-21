@@ -232,6 +232,10 @@ class MainWindow(QMainWindow):
         self.activity = Activity(self.cancel_action)
         self.statusBar().insertPermanentWidget(2, self.activity)
         self.tree.selected.connect(lambda kind, key: self.select(kind, key, from_tree=True))
+        # After the click that changed them: the tree is filled anew.
+        queued = Qt.ConnectionType.QueuedConnection
+        self.tree.enabled_changed.connect(self._use_points, queued)
+        self.tree.shown_changed.connect(self._show_points, queued)
         self.viewport.picked.connect(self._picked)
         self.viewport.place.connect(self._place)
         self.viewport.moved.connect(self._move_point)
@@ -638,7 +642,7 @@ class MainWindow(QMainWindow):
     def _changed(self) -> None:
         if not self._valid(self.selection):
             self.selection = ("scene", None)
-        self.tree.rebuild(self.document.room, self.selection)
+        self.tree.rebuild(self.document.room, self.selection, self.document.hidden)
         self.inspector.show_item(*self.selection)
         self._reweight()
         self.results.mark_stale(self._stale(), reweighted=self._reweighted())
@@ -733,6 +737,22 @@ class MainWindow(QMainWindow):
     def _refused(self, message: str) -> None:
         self.log(_("Not changed: {reason}").format(reason=message), "error")
 
+    def _use_points(self, kind: str, indices: list[int], enabled: bool) -> None:
+        """A tick in the scene tree: use these sources or listeners in simulations, or
+        leave them out."""
+        try:
+            self.document.set_enabled(kind, indices, enabled)
+        except EditError as exc:
+            self._refused(str(exc))
+            self._changed()  # the ticks as they were
+
+    def _show_points(self, kind: str, indices: list[int], shown: bool) -> None:
+        """An eye in the scene tree: show these sources or listeners in the 3D view and
+        the plan, or hide them."""
+        self.document.set_hidden(kind, indices, not shown)
+        self.tree.rebuild(self.document.room, self.selection, self.document.hidden)
+        self._draw()
+
     # -- selection and the 3D view ------------------------------------------------
 
     def select(self, kind: str, key=None, *, from_tree: bool = False) -> None:
@@ -778,8 +798,11 @@ class MainWindow(QMainWindow):
         paths = None if response is None else response.early
         coverage = None if self._map_stale() else self.map_panel.shown_in_3d()
         leaks = self._leaks() if self.leaks_action.isChecked() else None
-        self.viewport.show_room(self.document.room, self.selection, paths, coverage, leaks)
-        self.plan.show_room(self.document.room, self.selection)
+        hidden = self.document.hidden
+        self.viewport.show_room(
+            self.document.room, self.selection, paths, coverage, leaks, hidden=hidden
+        )
+        self.plan.show_room(self.document.room, self.selection, hidden)
 
     def _leaks(self):
         """Where rays escape from the room, found again when its geometry, materials or
@@ -1261,7 +1284,11 @@ class MainWindow(QMainWindow):
             with busy():
                 if particles:
                     kind, key = self.selection
-                    source = room.scene.sources[key if kind == "sources" else 0].name
+                    sources = room.scene.sources
+                    if kind == "sources":
+                        source = sources[key].name
+                    else:  # the first one in use
+                        source = next((s.name for s in sources if s.in_use), sources[0].name)
                     traced = trace_particles(room, source, count=PARTICLE_COUNT)
                 paths = None if response is None else response.early
                 export_gltf(room, path, paths=paths, particles=traced)

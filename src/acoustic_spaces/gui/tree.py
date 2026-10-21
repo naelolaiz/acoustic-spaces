@@ -1,12 +1,23 @@
 """The scene as a tree: the room, its geometry and surfaces, materials, sources,
 listeners, simulation settings, outputs and the coverage map. Selecting an entry shows
-its form."""
+its form. Sources and listeners sit in their groups; each, and each group, has a tick
+that uses it in simulations or leaves it out, and an eye that shows or hides it in the
+3D view and the plan."""
 
 from __future__ import annotations
 
 import numpy as np
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QIcon, QPixmap
+from PySide6.QtCore import QPointF, Qt, Signal
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QIcon,
+    QPainter,
+    QPainterPath,
+    QPalette,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem
 
 from acoustic_spaces.gui.inspector import label_text
@@ -17,6 +28,8 @@ from acoustic_spaces.room import UNASSIGNED, Room
 from acoustic_spaces.viz import LISTENER_COLOUR, SOURCE_COLOUR
 
 ROLE = Qt.ItemDataRole.UserRole
+#: The column of the eyes that show or hide sources and listeners.
+EYE = 2
 #: The tip of each kind of entry, by (kind, key); a key of None stands for any.
 TIPS = {
     ("scene", None): N_("The scene: its name, default material and air"),
@@ -27,11 +40,25 @@ TIPS = {
     ("material", None): N_(
         "Select it to change its absorption, scattering and what it lets through"
     ),
-    ("", "sources"): N_("The sound sources; place more with Place source"),
-    ("sources", None): N_("Select it to change it; drag it in the 3D view or the plan to move it"),
-    ("", "listeners"): N_("The listening positions; place more with Place listener"),
+    ("", "sources"): N_(
+        "The sound sources; place more with Place source. Untick them to leave them all out "
+        "of simulations"
+    ),
+    ("sources", None): N_(
+        "Select it to change it; drag it in the 3D view or the plan to move it. Untick it to "
+        "leave it out of simulations and maps"
+    ),
+    ("", "listeners"): N_(
+        "The listening positions; place more with Place listener. Untick them to leave them "
+        "all out of simulations"
+    ),
     ("listeners", None): N_(
-        "Select it to change it; drag it in the 3D view or the plan to move it"
+        "Select it to change it; drag it in the 3D view or the plan to move it. Untick it to "
+        "leave it out of simulations and maps"
+    ),
+    ("group", None): N_(
+        "A group of the scene's sources or listeners (their Group field). Untick it to leave "
+        "them all out of simulations and maps"
     ),
     ("simulation", None): N_(
         "How the early reflections and the late reverberation are "
@@ -46,26 +73,61 @@ TIPS = {
 }
 
 
-def swatch(colour: str) -> QIcon:
+def swatch(colour: str, faded: bool = False) -> QIcon:
     pixmap = QPixmap(12, 12)
-    pixmap.fill(QColor(colour))
+    fill = QColor(colour)
+    if faded:
+        fill.setAlpha(70)
+    pixmap.fill(fill)
+    return QIcon(pixmap)
+
+
+def eye(colour: QColor, open_: bool) -> QIcon:
+    """An eye, open (shown) or struck through (hidden)."""
+    pixmap = QPixmap(16, 16)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(QPen(QBrush(colour), 1.3))
+    outline = QPainterPath()
+    outline.moveTo(1.5, 8.0)
+    outline.quadTo(8.0, 1.5, 14.5, 8.0)
+    outline.quadTo(8.0, 14.5, 1.5, 8.0)
+    painter.drawPath(outline)
+    painter.setBrush(QBrush(colour))
+    painter.drawEllipse(QPointF(8.0, 8.0), 2.2, 2.2)
+    if not open_:
+        painter.drawLine(QPointF(2.5, 13.5), QPointF(13.5, 2.5))
+    painter.end()
     return QIcon(pixmap)
 
 
 class SceneTree(QTreeWidget):
-    """Emits ``selected(kind, key)`` when the user picks an entry."""
+    """Emits ``selected(kind, key)`` when the user picks an entry,
+    ``enabled_changed(kind, indices, enabled)`` when they tick or untick sources or
+    listeners (``kind``), and ``shown_changed(kind, indices, shown)`` when they click an
+    eye."""
 
     selected = Signal(str, object)
+    enabled_changed = Signal(str, object, bool)
+    shown_changed = Signal(str, object, bool)
 
     def __init__(self) -> None:
         super().__init__()
-        self.setHeaderLabels([_("Scene"), ""])
-        self.setColumnCount(2)
+        self.setHeaderLabels([_("Scene"), "", ""])
+        self.setColumnCount(3)
+        self.headerItem().setToolTip(
+            EYE, _("Shows or hides a source, a listener or a group in the 3D view and the plan")
+        )
         self.setUniformRowHeights(True)
         self.itemSelectionChanged.connect(self._on_selection)
+        self.itemChanged.connect(self._on_changed)
         self._quiet = False
         #: (kind, key) of every entry; items store their index here.
         self._keys: list[tuple[str, object]] = []
+        #: The sources or listeners under an entry, by the entry's index: (kind, their
+        #: indices, whether any is shown).
+        self._points: dict[int, tuple[str, list[int], bool]] = {}
 
     def _item(self, parent, text: str, kind: str, key=None, detail: str = "", icon=None):
         item = QTreeWidgetItem(parent, [text, detail])
@@ -80,12 +142,20 @@ class SceneTree(QTreeWidget):
             item.setIcon(0, icon)
         return item
 
-    def rebuild(self, room: Room, selection: tuple[str, object] | None) -> None:
-        """Fill the tree from ``room`` (and its scene) and select ``selection``."""
+    def rebuild(
+        self,
+        room: Room,
+        selection: tuple[str, object] | None,
+        hidden: set[tuple[str, str]] = frozenset(),
+    ) -> None:
+        """Fill the tree from ``room`` (and its scene) and select ``selection``;
+        ``hidden`` holds the (kind, name) of the sources and listeners hidden in the
+        views."""
         scene = room.scene
         self._quiet = True
         self.clear()
         self._keys.clear()
+        self._points.clear()
         areas = room.area_by_material()
         face_areas = room.mesh.face_areas()
 
@@ -120,11 +190,7 @@ class SceneTree(QTreeWidget):
             ("sources", _("Sources"), SOURCE_COLOUR),
             ("listeners", _("Listeners"), LISTENER_COLOUR),
         ):
-            items = getattr(scene, kind)
-            group = self._item(top, title, "", kind, str(len(items)))
-            for index, item in enumerate(items):
-                where = point_text(np.asarray(item.position))
-                self._item(group, item.name, kind, index, f"({where})", swatch(colour))
+            self._points_of(kind, title, colour, top, getattr(scene, kind), hidden)
         simulation = scene.simulation
         self._item(
             top,
@@ -153,8 +219,100 @@ class SceneTree(QTreeWidget):
         self.expandAll()
         surfaces.setExpanded(len(materials) <= 12)
         self.resizeColumnToContents(0)
+        self.resizeColumnToContents(EYE)
         self.select(selection)
         self._quiet = False
+
+    def _points_of(self, kind: str, title: str, colour: str, top, items, hidden) -> None:
+        """The sources or listeners (``kind``) under ``top``, in their groups, with their
+        ticks and eyes."""
+        header = self._item(top, title, "", kind, str(len(items)))
+        folders = {(): header}
+        members: dict[tuple[str, ...], list[int]] = {(): []}
+        faded = self.palette().color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text)
+        for index, item in enumerate(items):
+            path = tuple(item.group.split("/")) if item.group else ()
+            for depth in range(1, len(path) + 1):
+                if path[:depth] not in folders:
+                    folders[path[:depth]] = self._item(
+                        folders[path[: depth - 1]], path[depth - 1], "group", (kind, path[:depth])
+                    )
+                    members[path[:depth]] = []
+            for depth in range(len(path) + 1):
+                members[path[:depth]].append(index)
+            where = point_text(np.asarray(item.position))
+            entry = self._item(
+                folders[path], item.name, kind, index, f"({where})", swatch(colour, not item.in_use)
+            )
+            if not item.in_use:
+                for column in range(2):
+                    entry.setForeground(column, QBrush(faded))
+        text = self.palette().color(QPalette.ColorRole.Text)
+        icons = {True: eye(text, True), False: eye(faded, False)}
+        for path, folder in folders.items():
+            if path:
+                folder.setText(1, str(len(members[path])))
+            self._mark(folder, kind, members[path], items, hidden, icons)
+        for entry in self._items_under(header):
+            key = self._keys[entry.data(0, ROLE)]
+            if key[0] == kind:
+                self._mark(entry, kind, [key[1]], items, hidden, icons)
+
+    def _mark(self, entry, kind: str, indices: list[int], items, hidden, icons) -> None:
+        """Give ``entry`` the tick and the eye of the points at ``indices``."""
+        if not indices:
+            return
+        used = sum(items[k].in_use for k in indices)
+        shown = any((kind, items[k].name) not in hidden for k in indices)
+        entry.setFlags(entry.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        state = (
+            Qt.CheckState.Checked
+            if used == len(indices)
+            else Qt.CheckState.Unchecked
+            if used == 0
+            else Qt.CheckState.PartiallyChecked
+        )
+        entry.setCheckState(0, state)
+        entry.setIcon(EYE, icons[shown])
+        entry.setToolTip(
+            EYE,
+            _("Hide it in the 3D view and the plan")
+            if shown
+            else _("Show it in the 3D view and the plan"),
+        )
+        self._points[entry.data(0, ROLE)] = (kind, list(indices), shown)
+
+    def _items_under(self, top):
+        stack = [top]
+        while stack:
+            item = stack.pop()
+            yield item
+            stack.extend(item.child(i) for i in range(item.childCount()))
+
+    def _on_changed(self, item: QTreeWidgetItem, column: int) -> None:
+        """A tick changed: use the points under it, or leave them out."""
+        if self._quiet or column != 0:
+            return
+        found = self._points.get(item.data(0, ROLE))
+        if found is not None:
+            kind, indices, _shown = found
+            self.enabled_changed.emit(kind, indices, item.checkState(0) != Qt.CheckState.Unchecked)
+
+    def toggle_shown(self, item: QTreeWidgetItem) -> None:
+        """Hide the points under ``item`` when any is shown, or show them all."""
+        found = self._points.get(item.data(0, ROLE))
+        if found is not None:
+            kind, indices, shown = found
+            self.shown_changed.emit(kind, indices, not shown)
+
+    def mousePressEvent(self, event) -> None:
+        item = self.itemAt(event.position().toPoint())
+        on_eye = self.columnAt(int(event.position().x())) == EYE
+        if item is not None and on_eye and event.button() == Qt.MouseButton.LeftButton:
+            self.toggle_shown(item)  # without selecting it
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
     def select(self, selection: tuple[str, object] | None) -> None:
         """Select the entry for ``selection`` without emitting ``selected``."""
@@ -189,4 +347,4 @@ class SceneTree(QTreeWidget):
         self.selected.emit(kind, key)
 
 
-__all__ = ["SceneTree", "swatch"]
+__all__ = ["EYE", "SceneTree", "eye", "swatch"]

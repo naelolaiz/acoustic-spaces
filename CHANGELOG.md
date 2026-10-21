@@ -523,6 +523,23 @@
   directivity. Without it nothing changes. See
   [Validation](docs/validation.md#checks-against-theory-on-every-change).
 
+**Groups, and sources left out**
+
+- Sources and listeners take a `group` (nested with `/`, as `PA/Delays`) and
+  `enabled: false`, which leaves them out of simulations, maps, walks' other sources
+  and the scene's checks while keeping them in the scene; the others get the same
+  responses as in a run of all. Named with `--source` or `--listener`, they are
+  simulated all the same; `inspect` marks them "left out". See
+  [Groups, and sources left out](docs/scenes.md#groups-and-sources-left-out).
+- The editor's scene tree shows sources and listeners in their groups. A tick on each
+  source, listener and group uses it in simulations or leaves it out, in one step of
+  the history; an eye hides it in the 3D view and the plan or shows it again, without
+  changing the scene. Sources and listeners left out are drawn faded. Their form has a
+  **Group** field and **Use in simulations**.
+- The `stadium_pa`, `concert_stage` and `stadium_concert` examples put their sources
+  and listeners in groups: the PA's mains, subwoofers, fills and delays, the monitors,
+  the stage, and the audience standing and seated.
+
 **Examples**
 
 - New examples of a concert's sound system, made of the same stage, arrays and boxes:

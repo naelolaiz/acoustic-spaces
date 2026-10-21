@@ -118,7 +118,7 @@ def trace_particles(
     scene = room.scene
     sources = {s.name: s for s in scene.sources}
     if source is None:
-        source = scene.sources[0].name
+        source = next((s.name for s in scene.sources if s.in_use), scene.sources[0].name)
     if source not in sources:
         raise ValueError(f"no source {source!r}; the scene has {', '.join(sources)}")
     if count < 1 or frames < 1 or duration <= 0:

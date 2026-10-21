@@ -319,3 +319,44 @@ def test_extended_sources_in_the_room() -> None:
         wave = _shoebox(line_m=1.0)
         wave.simulation.wave.enabled = True
         simulate(Room.from_scene(wave))
+
+
+def test_sources_and_listeners_left_out() -> None:
+    """A source or listener with ``enabled: false`` stays in the scene but is left out
+    of simulations, maps and checks; the others get what a run of all gives them."""
+    scene = _shoebox()
+    scene.simulation.late.method = "statistical"
+    scene.simulation.early.max_order = 1
+    source, listener = scene.sources[0], scene.listeners[0]
+    scene.sources.append(
+        source.model_copy(update={"name": "copy", "position": np.add(source.position, 0.5)})
+    )
+    scene.listeners.append(
+        listener.model_copy(update={"name": "other", "position": np.add(listener.position, -0.5)})
+    )
+    whole = simulate(Room.from_scene(scene))
+    together = coverage_map(Room.from_scene(scene), settings=Coverage(spacing=2.0))
+    scene.sources[1] = scene.sources[1].model_copy(update={"enabled": False})
+    scene.listeners[1] = scene.listeners[1].model_copy(update={"enabled": False})
+    room = Room.from_scene(scene)
+    part = simulate(room)
+    pair = (source.name, listener.name)
+    assert list(part.responses) == [pair]
+    np.testing.assert_array_equal(part[pair].early.energy, whole[pair].early.energy)
+    np.testing.assert_array_equal(part[pair].late, whole[pair].late)
+    # Asked for by name, a source left out is simulated all the same.
+    assert list(simulate(room, sources=["copy"]).responses) == [("copy", listener.name)]
+    alone = coverage_map(room, settings=Coverage(spacing=2.0))
+    assert list(alone.maps) == [source.name]
+    np.testing.assert_array_equal(
+        alone.get().values["spl"], together.get(source.name).values["spl"]
+    )
+    # A source left out is not checked: outside the room, it stops nothing.
+    scene.sources[1] = scene.sources[1].model_copy(update={"position": (100.0, 0.0, 0.0)})
+    assert Room.from_scene(scene).problems() == []
+    scene.sources[1] = scene.sources[1].model_copy(update={"enabled": None})
+    assert "outside the room" in "; ".join(Room.from_scene(scene).problems())
+    scene.sources[0] = scene.sources[0].model_copy(update={"enabled": False})
+    scene.sources[1] = scene.sources[1].model_copy(update={"enabled": False})
+    with pytest.raises(ValueError, match="every source is left out"):
+        simulate(Room.from_scene(scene))

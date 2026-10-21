@@ -255,6 +255,8 @@ class PlanCanvas(QWidget):
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.room: Room | None = None
+        #: (kind, name) of the sources and listeners hidden in the views.
+        self.hidden: set[tuple[str, str]] = frozenset()
         self.selection: tuple[str, object] = ("", None)
         self.snap_step = DEFAULT_SNAP
         self.drawing: list[np.ndarray] | None = None
@@ -277,11 +279,18 @@ class PlanCanvas(QWidget):
 
     # -- contents -------------------------------------------------------------------
 
-    def show_room(self, room: Room, selection: tuple[str, object] | None = None) -> None:
-        """Draw ``room`` with ``selection`` highlighted."""
+    def show_room(
+        self,
+        room: Room,
+        selection: tuple[str, object] | None = None,
+        hidden: set[tuple[str, str]] = frozenset(),
+    ) -> None:
+        """Draw ``room`` with ``selection`` highlighted, without the sources and
+        listeners in ``hidden`` ((kind, name) pairs)."""
         new_geometry = room.mesh is not self._mesh
         self.room = room
         self.selection = selection or ("", None)
+        self.hidden = hidden
         self.corners = plan_corners(room.scene)
         self._walls = wall_labels(room)
         self._materials = surface_materials(room)
@@ -360,13 +369,14 @@ class PlanCanvas(QWidget):
     # -- what is under the mouse ------------------------------------------------------
 
     def _points(self):
-        """(kind, index, item) of every source and listener."""
+        """(kind, index, item) of every source and listener shown."""
         if self.room is None:
             return []
         return [
             (kind, k, item)
             for kind in ("sources", "listeners")
             for k, item in enumerate(getattr(self.room.scene, kind))
+            if (kind, item.name) not in self.hidden
         ]
 
     def hit(self, position: QPointF) -> tuple | None:
@@ -877,11 +887,13 @@ class PlanCanvas(QWidget):
                 if chosen or drag == (group, k)
                 else (SOURCE_COLOUR if group == "sources" else LISTENER_COLOUR)
             )
+            # Left out of simulations: faded.
+            alpha = 255 if item.in_use or chosen else 90
             p = self.to_screen(position)
             if group == "sources" and item.extended:  # a line or surface, seen from above
                 corners = item.outline()[:, :2] + (position - np.asarray(item.position[:2]))
                 outline = QPolygonF([self.to_screen(c) for c in corners])
-                painter.setPen(QPen(_qcolor(colour, 200), 3))
+                painter.setPen(QPen(_qcolor(colour, min(alpha, 200)), 3))
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 if len(corners) > 2:
                     painter.drawPolygon(outline)
@@ -890,17 +902,17 @@ class PlanCanvas(QWidget):
             forward = np.asarray(item.orientation.forward()[:2], dtype=float)
             if np.linalg.norm(forward) > 0.2:
                 forward = forward / np.linalg.norm(forward) * 18
-                painter.setPen(QPen(QColor(colour), 2))
+                painter.setPen(QPen(_qcolor(colour, alpha), 2))
                 painter.drawLine(p, QPointF(p.x() + forward[0], p.y() - forward[1]))
             radius = 7.0 if chosen or self._hover == (group, k) else 5.5
-            painter.setPen(QPen(QColor(BACKGROUND[0]), 1.5))
-            painter.setBrush(QColor(colour))
+            painter.setPen(QPen(_qcolor(BACKGROUND[0], alpha), 1.5))
+            painter.setBrush(_qcolor(colour, alpha))
             painter.drawEllipse(p, radius, radius)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             text = item.name
             if drag == (group, k) and self._preview is not None:
                 text += f"  ({point_text(position[:2])})"
-            painter.setPen(QColor("#ffffff"))
+            painter.setPen(_qcolor("#ffffff", alpha))
             painter.drawText(QPointF(p.x() + radius + 4, p.y() - radius), text)
 
     def _paint_drawing(self, painter: QPainter) -> None:
@@ -1017,8 +1029,8 @@ class PlanView(QWidget):
         self.message = self.canvas.message
         self._state()
 
-    def show_room(self, room: Room, selection=None) -> None:
-        self.canvas.show_room(room, selection)
+    def show_room(self, room: Room, selection=None, hidden=frozenset()) -> None:
+        self.canvas.show_room(room, selection, hidden)
         self._state()
 
     def fit(self) -> None:

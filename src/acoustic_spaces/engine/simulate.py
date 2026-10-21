@@ -135,8 +135,13 @@ def _as_room(room: Room | Scene | str | Path) -> Room:
 
 
 def _pick(items, names, kind):
+    """The items named in ``names``, or with no names those in use: not left out with
+    ``enabled: false``."""
     if names is None:
-        return list(items)
+        used = [item for item in items if item.in_use]
+        if items and not used:
+            raise ValueError(f"every {kind} is left out (enabled: false)")
+        return used
     by_name = {item.name: item for item in items}
     missing = [n for n in names if n not in by_name]
     if missing:

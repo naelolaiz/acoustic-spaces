@@ -161,10 +161,13 @@ class Viewport(QWidget):
         paths=None,
         coverage=None,
         leaks=None,
+        hidden: set[tuple[str, str]] = frozenset(),
     ):
         """Draw ``room`` with ``selection`` highlighted and, if given, early ``paths``,
         a coverage map (``coverage`` is (CoverageMap, parameter, band)) and the
-        ``leaks`` from :func:`acoustic_spaces.engine.leaks.find_leaks`.
+        ``leaks`` from :func:`acoustic_spaces.engine.leaks.find_leaks`. The sources and
+        listeners in ``hidden`` ((kind, name) pairs) are left out; those left out of
+        simulations are drawn faded.
 
         The camera stays where it is, also when the room changes shape; only the first
         room gets the usual view (:meth:`reset_camera` gives it again)."""
@@ -216,11 +219,18 @@ class Viewport(QWidget):
         points, names = [], []
         for group, colour in (("sources", SOURCE_COLOUR), ("listeners", LISTENER_COLOUR)):
             for index, item in enumerate(getattr(room.scene, group)):
+                if (group, item.name) in hidden:
+                    continue
                 chosen = kind == group and key == index
                 scale = 1.6 if chosen else 1.0
+                # Left out of simulations: faded.
+                opacity = 1.0 if item.in_use or chosen else 0.3
                 sphere = pv.Sphere(radius=radius * scale, center=item.position)
                 actor = plotter.add_mesh(
-                    sphere, color=SELECTED_COLOUR if chosen else colour, render=False
+                    sphere,
+                    color=SELECTED_COLOUR if chosen else colour,
+                    opacity=opacity,
+                    render=False,
                 )
                 self._actors[_key(actor)] = (group, index)
                 self._markers.append(actor)
@@ -230,7 +240,7 @@ class Viewport(QWidget):
                     shape = plotter.add_mesh(
                         extent,
                         color=SELECTED_COLOUR if chosen else colour,
-                        opacity=0.6,
+                        opacity=0.6 * opacity,
                         render=False,
                     )
                     self._actors[_key(shape)] = (group, index)
@@ -245,7 +255,10 @@ class Viewport(QWidget):
                     )
                     parts.append(
                         plotter.add_mesh(
-                            arrow, color=SELECTED_COLOUR if chosen else colour, render=False
+                            arrow,
+                            color=SELECTED_COLOUR if chosen else colour,
+                            opacity=opacity,
+                            render=False,
                         )
                     )
                     if chosen:  # a short arrow to the top of the head shows the roll

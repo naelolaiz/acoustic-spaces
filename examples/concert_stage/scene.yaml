@@ -54,61 +54,74 @@ assignments:
   stage_roof: stage
 sources:
   - name: main_left
+    group: PA/Mains
     position: [-40, 19, 14]
     orientation: {yaw: 8}
     level_db: 134
     directivity: {file: main_array.yaml, near_field: true}
   - name: main_right
+    group: PA/Mains
     position: [-40, -19, 14]
     orientation: {yaw: -8}
     level_db: 134
     directivity: {file: main_array.yaml, near_field: true}
   - name: subs
+    group: PA/Subwoofers
     position: [-41, 0, 0.6]
     level_db: 134
     eq_db: [0, 0, -18, -40, -40, -40, -40, -40]
     delay_ms: 17
     directivity: {file: sub_array.yaml, near_field: true}
   - name: front_fill_left
+    group: PA/Fills
     position: [-42.3, 6, 2.3]
     orientation: {yaw: -10, pitch: -3}
     level_db: 116
     delay_ms: 33
     directivity: {file: wedge.csv}
   - name: front_fill_right
+    group: PA/Fills
     position: [-42.3, -6, 2.3]
     orientation: {yaw: 10, pitch: -3}
     level_db: 116
     delay_ms: 33
     directivity: {file: wedge.csv}
   - name: vocal_wedges
+    group: Monitors
     position: [-43.3, 0, 2.25]
     orientation: {yaw: 180, pitch: 45}
     level_db: 115
     directivity: {file: monitor_wedges.yaml, near_field: true}
   - name: drum_fill
+    group: Monitors
     position: [-54.5, 1.8, 2.6]
     orientation: {yaw: -50, pitch: 25}
     level_db: 115
     directivity: {file: wedge.csv}
   - name: side_fill_left
+    group: Monitors
     position: [-49, 15.5, 3]
     orientation: {yaw: -90}
     level_db: 122
     directivity: {file: fill_array.yaml, near_field: true}
   - name: side_fill_right
+    group: Monitors
     position: [-49, -15.5, 3]
     orientation: {yaw: 90}
     level_db: 122
     directivity: {file: fill_array.yaml, near_field: true}
 listeners:
   - name: singer
+    group: Stage
     position: [-44.8, 0, 3.7]
   - name: guitarist
+    group: Stage
     position: [-47, 8, 3.7]
   - name: drummer
+    group: Stage
     position: [-53, 0, 3.7]
   - name: mix_position
+    group: Audience/Standing
     position: [-5, 0, 1.6]
     orientation: {yaw: 180}
 simulation:

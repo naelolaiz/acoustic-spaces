@@ -1353,6 +1353,34 @@ msgid "change listener"
 msgstr "modificar receptor"
 
 #: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "use source"
+msgid_plural "use {count} sources"
+msgstr[0] "incloure font"
+msgstr[1] "incloure {count} fonts"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "leave out source"
+msgid_plural "leave out {count} sources"
+msgstr[0] "excloure font"
+msgstr[1] "excloure {count} fonts"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "use listener"
+msgid_plural "use {count} listeners"
+msgstr[0] "incloure receptor"
+msgstr[1] "incloure {count} receptors"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "leave out listener"
+msgid_plural "leave out {count} listeners"
+msgstr[0] "excloure receptor"
+msgstr[1] "excloure {count} receptors"
+
+#: acoustic_spaces/gui/document.py
 msgid "a scene needs at least one source"
 msgstr "una escena necessita almenys una font"
 
@@ -3432,6 +3460,50 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"The group the source belongs to in the scene tree, to show, hide, use or "
+"leave out together; groups nest with / (PA/Delays is Delays in PA)"
+msgstr ""
+"El grup de la font a l'arbre de l'escena, per mostrar-la, amagar-la, "
+"incloure-la o excloure-la amb les altres; els grups s'imbriquen amb / "
+"(PA/Delays és Delays dins de PA)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The group the listener belongs to in the scene tree, to show, hide, use or "
+"leave out together; groups nest with / (Stands/North is North in Stands)"
+msgstr ""
+"El grup del receptor a l'arbre de l'escena, per mostrar-lo, amagar-lo, "
+"incloure'l o excloure'l amb els altres; els grups s'imbriquen amb / "
+"(Stands/North és North dins de Stands)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Group"
+msgstr "Grup"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Use in simulations"
+msgstr "Incloure a les simulacions"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Untick to leave the source out of simulations, maps and checks: it stays in "
+"the scene, drawn faded. The tick in the scene tree does the same"
+msgstr ""
+"En desmarcar-la, la font queda fora de les simulacions, els mapes i les "
+"comprovacions: continua a l'escena, dibuixada atenuada. La casella de "
+"l'arbre de l'escena fa el mateix"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Untick to leave the listener out of simulations and checks: it stays in the "
+"scene, drawn faded. The tick in the scene tree does the same"
+msgstr ""
+"En desmarcar-lo, el receptor queda fora de les simulacions i les "
+"comprovacions: continua a l'escena, dibuixat atenuat. La casella de l'arbre "
+"de l'escena fa el mateix"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "Where the source is along x (m). Dragging it in the 3D view or the plan "
 "moves it too"
 msgstr ""
@@ -5391,19 +5463,36 @@ msgstr ""
 "passar"
 
 #: acoustic_spaces/gui/tree.py
-msgid "The sound sources; place more with Place source"
-msgstr "Les fonts sonores; se'n poden col·locar més amb Col·locar font"
+msgid ""
+"The sound sources; place more with Place source. Untick them to leave them "
+"all out of simulations"
+msgstr ""
+"Les fonts sonores; se'n poden col·locar més amb Col·locar font. En "
+"desmarcar-les, totes queden fora de les simulacions"
 
 #: acoustic_spaces/gui/tree.py
-msgid "Select it to change it; drag it in the 3D view or the plan to move it"
+msgid ""
+"Select it to change it; drag it in the 3D view or the plan to move it. "
+"Untick it to leave it out of simulations and maps"
 msgstr ""
 "Seleccionar-lo per modificar-lo; arrossegar-lo a la vista 3D o a la planta "
-"per moure'l"
+"per moure'l. En desmarcar-lo, queda fora de les simulacions i els mapes"
 
 #: acoustic_spaces/gui/tree.py
-msgid "The listening positions; place more with Place listener"
+msgid ""
+"The listening positions; place more with Place listener. Untick them to "
+"leave them all out of simulations"
 msgstr ""
-"Les posicions d'escolta; se'n poden col·locar més amb Col·locar receptor"
+"Les posicions d'escolta; se'n poden col·locar més amb Col·locar receptor. En "
+"desmarcar-les, totes queden fora de les simulacions"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"A group of the scene's sources or listeners (their Group field). Untick it "
+"to leave them all out of simulations and maps"
+msgstr ""
+"Un grup de fonts o receptors de l'escena (el seu camp Grup). En "
+"desmarcar-lo, tots queden fora de les simulacions i els mapes"
 
 #: acoustic_spaces/gui/tree.py
 msgid ""
@@ -5428,6 +5517,12 @@ msgid ""
 msgstr ""
 "On es col·loca el mapa de cobertura, el seu detall i el soroll de fons per a "
 "l'STI"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"Shows or hides a source, a listener or a group in the 3D view and the plan"
+msgstr ""
+"Mostra o amaga una font, un receptor o un grup a la vista 3D i a la planta"
 
 #: acoustic_spaces/gui/tree.py
 msgid "Geometry"
@@ -5476,6 +5571,14 @@ msgstr "{surfaces}, separació de {spacing:g} m"
 #, python-brace-format
 msgid "audience, {spacing:g} m apart"
 msgstr "públic, separació de {spacing:g} m"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Hide it in the 3D view and the plan"
+msgstr "Amagar-lo a la vista 3D i a la planta"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Show it in the 3D view and the plan"
+msgstr "Mostrar-lo a la vista 3D i a la planta"
 
 #: acoustic_spaces/gui/tune_dialog.py
 msgid "Make auto the default on this computer"
@@ -6409,20 +6512,23 @@ msgid ""
 "on the stands. The crowd standing on the pitch and the one seated in the "
 "stands take up the sound and scatter it (`audience: true`). Many listeners "
 "stand nearer the arrays than their far-field patterns hold, so every array "
-"adds up its boxes one by one (`near_field: true`).  python align.py python "
-"near_field.py python feedback.py python make_model.py  align.py prints when "
-"and how loud each loudspeaker arrives at each listener, and which would be "
-"heard as an echo: none, and each player hears their own monitor loudest. "
-"near_field.py prints how far each array's far-field pattern would be off at "
-"each listener: within 3.5 dB up to 2 kHz, but up to 10 dB at 4 and 8 kHz "
-"near the main arrays. feedback.py finds how much gain the singer's "
-"microphone allows before the loudspeakers that play it make it ring, at the "
-"mix position and at the singer's ears, and the frequencies where it rings "
-"first, then renders the loop below and above that gain. Its microphone is an "
-"ideal supercardioid and the reverberation's phases are random, so take the "
-"frequencies as an example of where such a stage rings. make_model.py writes "
-"the model and the arrays; their boxes are a generic box made up for this "
-"example, not any product's data."
+"adds up its boxes one by one (`near_field: true`). The sources and listeners "
+"sit in groups: the PA's mains, subwoofers, fills and delays, the monitors, "
+"the stage, and the audience standing and seated. The editor's scene tree "
+"shows or hides each group, and its tick uses it in simulations or leaves it "
+"out.  python align.py python near_field.py python feedback.py python "
+"make_model.py  align.py prints when and how loud each loudspeaker arrives at "
+"each listener, and which would be heard as an echo: none, and each player "
+"hears their own monitor loudest. near_field.py prints how far each array's "
+"far-field pattern would be off at each listener: within 3.5 dB up to 2 kHz, "
+"but up to 10 dB at 4 and 8 kHz near the main arrays. feedback.py finds how "
+"much gain the singer's microphone allows before the loudspeakers that play "
+"it make it ring, at the mix position and at the singer's ears, and the "
+"frequencies where it rings first, then renders the loop below and above that "
+"gain. Its microphone is an ideal supercardioid and the reverberation's "
+"phases are random, so take the frequencies as an example of where such a "
+"stage rings. make_model.py writes the model and the arrays; their boxes are "
+"a generic box made up for this example, not any product's data."
 msgstr ""
 "Un concert en un estadi de futbol, amb un sistema de so com els que pengen "
 "les gires i els monitors de l'escenari: stadium_pa i concert_stage junts. "
@@ -6451,21 +6557,24 @@ msgstr ""
 "graderies absorbeixen el so i el dispersen (`audience: true`). Molts "
 "receptors són més a prop dels conjunts del que valen els seus patrons de "
 "camp llunyà, així que cada conjunt suma les seves caixes una a una "
-"(`near_field: true`).  python align.py python near_field.py python "
-"feedback.py python make_model.py  align.py mostra quan i amb quin nivell "
-"arriba cada altaveu a cada receptor, i quin se sentiria com a eco: cap, i "
-"cada músic sent més fort el seu propi monitor. near_field.py mostra quant es "
-"desviaria el patró de camp llunyà de cada conjunt a cada receptor: menys de "
-"3,5 dB fins a 2 kHz, però fins a 10 dB a 4 i 8 kHz a prop dels conjunts "
-"principals. feedback.py calcula quant guany admet el micròfon del cantant "
-"abans que els altaveus que el reprodueixen el facin acoblar, a la posició de "
-"mescla i a les orelles del cantant, i les freqüències on s'acobla primer, i "
-"després genera l'àudio del llaç per sota i per sobre d'aquest guany. El seu "
-"micròfon és un supercardioide ideal i les fases de la reverberació són "
-"aleatòries, així que les freqüències són un exemple d'on s'acobla un "
-"escenari així. make_model.py escriu el model i els conjunts; les seves "
-"caixes són una caixa genèrica inventada per a aquest exemple, no dades de "
-"cap producte."
+"(`near_field: true`). Les fonts i els receptors són en grups: els "
+"principals, els subgreus, els reforços i els retards del PA, els monitors, "
+"l'escenari i el públic dret i assegut. L'arbre de l'escena de l'editor "
+"mostra o amaga cada grup, i la seva casella l'inclou a les simulacions o "
+"l'exclou.  python align.py python near_field.py python feedback.py python "
+"make_model.py  align.py mostra quan i amb quin nivell arriba cada altaveu a "
+"cada receptor, i quin se sentiria com a eco: cap, i cada músic sent més fort "
+"el seu propi monitor. near_field.py mostra quant es desviaria el patró de "
+"camp llunyà de cada conjunt a cada receptor: menys de 3,5 dB fins a 2 kHz, "
+"però fins a 10 dB a 4 i 8 kHz a prop dels conjunts principals. feedback.py "
+"calcula quant guany admet el micròfon del cantant abans que els altaveus que "
+"el reprodueixen el facin acoblar, a la posició de mescla i a les orelles del "
+"cantant, i les freqüències on s'acobla primer, i després genera l'àudio del "
+"llaç per sota i per sobre d'aquest guany. El seu micròfon és un "
+"supercardioide ideal i les fases de la reverberació són aleatòries, així que "
+"les freqüències són un exemple d'on s'acobla un escenari així. make_model.py "
+"escriu el model i els conjunts; les seves caixes són una caixa genèrica "
+"inventada per a aquest exemple, no dades de cap producte."
 
 #: examples/stadium_pa/scene.yaml
 msgctxt "example"

@@ -223,7 +223,8 @@ def simulate_walk(
     names = tuple(f"{item.name} #{k} @ {t:.2f} s" for k, t in enumerate(points.times))
     copies = []
     for k, (place, label) in enumerate(zip(points.positions, names, strict=True)):
-        update = {"name": label, "position": tuple(place), "walk": None}
+        # The walk is asked for by name: its steps are in use.
+        update = {"name": label, "position": tuple(place), "walk": None, "enabled": None}
         if points.yaws is not None:
             update["orientation"] = item.orientation.model_copy(update={"yaw": points.yaws[k]})
         copies.append(item.model_copy(update=update))
@@ -231,9 +232,9 @@ def simulate_walk(
     if kind == "listeners":
         update = {"listeners": copies}
     else:
-        listeners = scene.listeners
+        listeners = [lis for lis in scene.listeners if lis.in_use]
         if listener is not None:
-            listeners = [lis for lis in listeners if lis.name == listener]
+            listeners = [lis for lis in scene.listeners if lis.name == listener]
             if not listeners:
                 raise ValueError(f"no listener named {listener!r}")
         elif len(listeners) != 1:
