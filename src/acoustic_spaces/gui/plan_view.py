@@ -125,6 +125,10 @@ HINTS = {
         "The model's outline from above: drag sources and listeners. Draw room "
         "replaces the model with a floor plan."
     ),
+    "outdoor": N_(
+        "The scene from above: drag sources and listeners. The Geometry form's buttons "
+        "draw buildings, barriers, vegetation and zones. Shift: no snapping."
+    ),
     "room": N_(
         "Click the corners of the new room; close it on the first corner, with a "
         "double-click or Enter. Backspace takes a corner back, Esc stops."
@@ -290,8 +294,8 @@ class PlanCanvas(QWidget):
 
     @property
     def mode(self) -> str:
-        """What the plan is doing: "drawing", "placing", or the kind of room ("plan",
-        "box" or "file")."""
+        """What the plan is doing: "drawing", "placing", or the kind of scene ("plan",
+        "box", "file" or "outdoor")."""
         if self.drawing is not None:
             return "drawing"
         if self.placing is not None:
@@ -299,6 +303,8 @@ class PlanCanvas(QWidget):
         if self.room is None:
             return "file"
         geometry = self.room.scene.geometry
+        if geometry.ground is not None:
+            return "outdoor"
         return "plan" if geometry.floor_plan is not None else "box" if geometry.box else "file"
 
     def fit(self) -> None:

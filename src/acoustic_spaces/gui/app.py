@@ -304,7 +304,7 @@ class MainWindow(QMainWindow):
             _("Draw the floor plan of a new room, corner by corner"),
         )
         self.new_outdoor_action = a(
-            _("New &outdoor scene…"),
+            _("New o&utdoor scene…"),
             self.new_outdoor,
             None,
             _(

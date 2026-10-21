@@ -1063,7 +1063,12 @@ def test_outdoor_parts_in_the_document(qapp, tmp_path) -> None:
     assert document.scene.geometry.ground.extent is None
     assert document.room.outdoor.extent == (-100.0, -100.0, 100.0, 100.0)
     assert document.room.outdoor.ground_at([[0.0, 0.0]]).tolist() == [5.0]
-    assert document.undo_text() == "set terrain" and document.room.problems() == []
+    assert document.undo_text() == "set terrain"
+    # The source and the listener stood on the flat ground; the slope buries them (the
+    # ground is 3.75 and 6.25 m high there), and the editor says which.
+    problems = document.room.problems()
+    assert [p.split(" at ")[0] for p in problems] == ["source 'source'", "listener 'listener'"]
+    assert all("outside the open air: below the terrain" in p for p in problems)
     with pytest.raises(EditError):
         document.set_terrain(tmp_path / "nowhere.asc")
     assert document.scene.geometry.ground.terrain.file == hill.resolve()
@@ -1172,7 +1177,8 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
     barriers = window.document.scene.geometry.barriers
     assert len(barriers) == 1 and barriers[0].height == 3.0
     assert np.allclose(barriers[0].path, [(-30, 20), (30, 20)], atol=0.5)
-    assert canvas.mode == "plan" and canvas.purpose == "room"
+    assert canvas.mode == "outdoor" and canvas.purpose == "room"
+    assert "Geometry form's buttons" in window.plan.hint.text()
     assert "New barrier along 2 points, 3 m high" in window.messages.toPlainText()
 
     # Vegetation takes the shape chosen beside the button: a tree is one click.
@@ -1187,7 +1193,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
     qapp.processEvents()
     plants = window.document.scene.geometry.vegetation
     assert len(plants) == 1 and plants[0].kind == "tree" and plants[0].crown_diameter == 8.0
-    assert np.allclose(plants[0].tree, (40, -30), atol=0.5) and canvas.mode == "plan"
+    assert np.allclose(plants[0].tree, (40, -30), atol=0.5) and canvas.mode == "outdoor"
     assert "New tree 10 m high, its crown 8 m across from 2.5 m up" in window.messages.toPlainText()
     page.plant_shape.setCurrentIndex(page.plant_shape.findData("hedge"))
     page._add("vegetation")
@@ -1213,7 +1219,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
         )
     qapp.processEvents()
     zones = window.document.scene.geometry.ground.zones
-    assert len(zones) == 1 and len(zones[0].polygon) == 4 and canvas.mode == "plan"
+    assert len(zones) == 1 and len(zones[0].polygon) == 4 and canvas.mode == "outdoor"
     assert window.document.scene.geometry.ground.zone_names() == ["zone_1"]
     assert "New ground zone with 4 corners" in window.messages.toPlainText()
     assert page.zones.rowCount() == 1 and page.zones.item(0, 0).text() == "zone_1"
@@ -1231,7 +1237,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
     QTest.keyClick(canvas, Qt.Key.Key_Return)
     assert "Not a building yet:" in window.messages.toPlainText() and canvas.mode == "drawing"
     window._escape()
-    assert canvas.mode == "plan" and canvas.purpose == "room"
+    assert canvas.mode == "outdoor" and canvas.purpose == "room"
     assert len(window.document.scene.geometry.buildings) == 1
     page._add("barriers")
     QTest.mouseClick(
@@ -1245,7 +1251,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
     window.plan.draw.click()
     assert canvas.mode == "drawing" and canvas.purpose == "room"
     window.plan.draw.click()
-    assert canvas.mode == "plan"
+    assert canvas.mode == "outdoor"
 
     # A refused part is reported, not added.
     window.plan.canvas.part_drawn.emit("zone", [[-80, -80], [-40, -80], [-40, -40], [-80, -40]])
@@ -1469,7 +1475,7 @@ def test_ground_impedance_and_zones(window) -> None:
     assert page.reaction.isEnabled() and impedance().reaction is None
     page.table.item(1, 0).setText("0.40")  # the scattering is the material's own
     assert window.document.scene.materials["meadow"].scattering[0] == 0.4
-    assert impedance().model == "two_parameter"
+    assert impedance().model == "miki"
     page.ground.setChecked(False)  # the absorption stays, as values of its own
     material = window.document.scene.materials["meadow"]
     assert material.impedance is None and len(material.absorption) == 24
@@ -1592,7 +1598,7 @@ def test_weather_zones_form(window, qapp) -> None:
     assert "New weather zone with 4 corners" in window.messages.toPlainText()
     assert window.selection == ("scene", None)
     window.plan.cancel()  # the signal alone does not end the drawing
-    assert canvas.mode == "plan"
+    assert canvas.mode == "outdoor"
     assert [page.weather_zone.itemText(k) for k in range(2)] == ["the whole scene", "weather_1"]
     canvas.grab()  # the plan draws the zone, dotted, with its name
 

@@ -338,7 +338,7 @@ msgid "Draw the floor plan of a new room, corner by corner"
 msgstr "Dibujar la planta de un recinto nuevo, vértice a vértice"
 
 #: acoustic_spaces/gui/app.py
-msgid "New &outdoor scene…"
+msgid "New o&utdoor scene…"
 msgstr "Nueva escena al aire &libre…"
 
 #: acoustic_spaces/gui/app.py
@@ -4505,6 +4505,15 @@ msgid ""
 msgstr ""
 "El contorno del modelo visto desde arriba: arrastrar fuentes y receptores. "
 "Dibujar recinto sustituye el modelo por una planta."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"The scene from above: drag sources and listeners. The Geometry form's "
+"buttons draw buildings, barriers, vegetation and zones. Shift: no snapping."
+msgstr ""
+"La escena vista desde arriba: arrastrar fuentes y receptores. Los botones "
+"del formulario de Geometría dibujan edificios, pantallas, vegetación y "
+"zonas. Mayús: sin ajuste a la cuadrícula."
 
 #: acoustic_spaces/gui/plan_view.py
 msgid ""

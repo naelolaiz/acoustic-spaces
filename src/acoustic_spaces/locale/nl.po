@@ -334,8 +334,8 @@ msgid "Draw the floor plan of a new room, corner by corner"
 msgstr "De plattegrond van een nieuwe ruimte hoek voor hoek tekenen"
 
 #: acoustic_spaces/gui/app.py
-msgid "New &outdoor scene…"
-msgstr "Nieuwe &buitenscène…"
+msgid "New o&utdoor scene…"
+msgstr "Nieuwe b&uitenscène…"
 
 #: acoustic_spaces/gui/app.py
 msgid ""
@@ -4478,6 +4478,15 @@ msgid ""
 msgstr ""
 "De omtrek van het model van bovenaf: bronnen en ontvangers verslepen. Ruimte "
 "tekenen vervangt het model door een plattegrond."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"The scene from above: drag sources and listeners. The Geometry form's "
+"buttons draw buildings, barriers, vegetation and zones. Shift: no snapping."
+msgstr ""
+"De scène van bovenaf: bronnen en ontvangers verslepen. De knoppen van het "
+"formulier Geometrie tekenen gebouwen, geluidsschermen, vegetatie en zones. "
+"Shift: zonder uitlijnen."
 
 #: acoustic_spaces/gui/plan_view.py
 msgid ""
