@@ -217,6 +217,13 @@ Outdoor acoustics, in steps:
   presets within 0.04 dB on average (the narrow-angle one 0.11). Three to four times
   the work; without it nothing changes.
 
+Examples:
+
+- [x] A concert in a stadium with a sound system: main line arrays, subwoofers, fills,
+  delay towers and delays timed to them, stage monitors, the arrays' near field and the
+  singer's microphone's gain before feedback (`stadium_pa`), and the editor's examples
+  in groups.
+
 Unreleased:
 
 - [x] Editor: the background task in the status bar says what runs, with Cancel beside

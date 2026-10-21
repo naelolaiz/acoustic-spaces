@@ -11,7 +11,7 @@ They are the scenes in the repository's ``examples`` folder, which wheels carry 
     room = Room.from_yaml(example_path("concert_hall"))
 
 ``acoustic-spaces examples`` lists them, and ``--copy DIR`` copies them to a folder you
-can edit; the editor opens them from its File menu.
+can edit; the editor opens them from its File menu, in the groups of :data:`GROUPS`.
 """
 
 from __future__ import annotations
@@ -24,8 +24,28 @@ from pathlib import Path
 import yaml
 
 from acoustic_spaces.geometry.io import extra_for, missing_extra
+from acoustic_spaces.i18n import N_
 
 SCENE_FILE = "scene.yaml"
+
+#: The groups the examples are shown in, in order, each with its examples (folder names)
+#: from the simplest. The titles are English; the editor translates them.
+GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        N_("Rooms"),
+        ("shoebox", "room_modes", "studio", "listening_room", "apartment", "archway", "workshop"),
+    ),
+    (
+        N_("Halls and churches"),
+        ("lecture_hall", "concert_hall", "orchestra", "church", "gallery", "gallery_walk"),
+    ),
+    (N_("Sound systems"), ("town_hall_pa", "stadium_pa")),
+    (N_("Outdoors"), ("street", "roadside", "tree_belt", "hillside", "open_air_stage")),
+    (N_("Models from CAD and BIM files"), ("rehearsal_room", "bim_office", "leaky_classroom")),
+    (N_("Measurements and material libraries"), ("fitting", "material_libraries")),
+)
+#: The group of an example that :data:`GROUPS` leaves out.
+OTHER_GROUP = N_("Other examples")
 
 
 @dataclass(frozen=True)
@@ -40,6 +60,8 @@ class Example:
     path: Path
     #: Its model file, or None for a room built from dimensions.
     model: Path | None = None
+    #: The group it is shown in (English: see :data:`GROUPS`).
+    group: str = OTHER_GROUP
 
     @property
     def extra(self) -> str | None:
@@ -92,8 +114,27 @@ def list_examples() -> list[Example]:
                 description=_description(scene_file),
                 path=scene_file,
                 model=None if model is None else folder / model,
+                group=_GROUP_OF.get(folder.name, OTHER_GROUP),
             )
         )
+    return out
+
+
+_GROUP_OF = {name: group for group, names in GROUPS for name in names}
+
+
+def example_groups(examples: list[Example] | None = None) -> list[tuple[str, list[Example]]]:
+    """The examples (default: all) by group, in the order of :data:`GROUPS` and within a
+    group from the simplest; those it leaves out last, in :data:`OTHER_GROUP`. Groups
+    with no example are left out."""
+    examples = list_examples() if examples is None else examples
+    rank = {name: k for _, names in GROUPS for k, name in enumerate(names)}
+    order = [group for group, _ in GROUPS] + [OTHER_GROUP]
+    out = []
+    for group in order:
+        members = [e for e in examples if e.group == group]
+        if members:
+            out.append((group, sorted(members, key=lambda e: (rank.get(e.name, 0), e.name))))
     return out
 
 
@@ -127,4 +168,13 @@ def copy_examples(destination: str | Path, names: list[str] | None = None) -> li
     return copied
 
 
-__all__ = ["Example", "copy_examples", "example_path", "examples_dir", "list_examples"]
+__all__ = [
+    "GROUPS",
+    "OTHER_GROUP",
+    "Example",
+    "copy_examples",
+    "example_groups",
+    "example_path",
+    "examples_dir",
+    "list_examples",
+]

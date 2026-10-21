@@ -31,6 +31,7 @@ or surface source.
 
 from __future__ import annotations
 
+import functools
 import math
 from typing import TYPE_CHECKING
 
@@ -516,6 +517,17 @@ def _pressure(paths: EarlyReflections, point: int, cache: dict | None) -> EarlyP
     return cache[point]
 
 
+@functools.lru_cache(maxsize=8)
+def _band_filters(n_fft: int, rate: float, bands: int) -> np.ndarray:
+    """The analysis's band filters (:func:`~acoustic_spaces.parameters.band_filter_gains`),
+    kept for the next point: read-only."""
+    from acoustic_spaces.parameters import band_filter_gains
+
+    gains = band_filter_gains(n_fft, rate, bands)
+    gains.flags.writeable = False
+    return gains
+
+
 class EarlyPressure:
     """The early part of an impulse response at a low sample rate, as the echogram
     reads the coherent bands from it: as spectra from 0.2 s before emission, the
@@ -604,9 +616,7 @@ class EarlyPressure:
     def _filter(self, b, time_step, slots, origin, start):
         """Band b's analysis filter, which samples fall into the slots, their slots,
         and the factor that makes a squared sample energy (see :meth:`band`)."""
-        from acoustic_spaces.parameters import band_filter_gains
-
-        gain = band_filter_gains(self.n_fft, self.rate, self.bands)[b]
+        gain = _band_filters(self.n_fft, self.rate, self.bands)[b]
         time = np.arange(self.n_fft) / self.rate - self.lead  # where each interval begins
         time = np.maximum(time, origin if start is None else max(start, origin)) - origin
         slot = (time / time_step + 1e-9).astype(np.int64)

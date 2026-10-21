@@ -167,6 +167,34 @@ msgstr ""
 "livello a lungo termine con la penalizzazione di ogni periodo, ponderato A "
 "(L_den)"
 
+#: acoustic_spaces/examples.py
+msgid "Rooms"
+msgstr "Ambienti"
+
+#: acoustic_spaces/examples.py
+msgid "Halls and churches"
+msgstr "Sale e chiese"
+
+#: acoustic_spaces/examples.py
+msgid "Sound systems"
+msgstr "Impianti audio"
+
+#: acoustic_spaces/examples.py acoustic_spaces/gui/inspector.py
+msgid "Outdoors"
+msgstr "All'aperto"
+
+#: acoustic_spaces/examples.py
+msgid "Models from CAD and BIM files"
+msgstr "Modelli da file CAD e BIM"
+
+#: acoustic_spaces/examples.py
+msgid "Measurements and material libraries"
+msgstr "Misure e librerie di materiali"
+
+#: acoustic_spaces/examples.py
+msgid "Other examples"
+msgstr "Altri esempi"
+
 #. Translators: a background task such as "Simulating hall…", then how long it has run so far.
 #: acoustic_spaces/gui/activity.py
 #, python-brace-format
@@ -644,12 +672,6 @@ msgstr "&File"
 msgid "Open e&xample"
 msgstr "Apri esempi&o"
 
-#. Translators: {extra} is the name of an optional part of the installation (gui, ifc...); {hint} says how to install it.
-#: acoustic_spaces/gui/app.py
-#, python-brace-format
-msgid "Needs the {extra} extra: {hint}"
-msgstr "Richiede il componente aggiuntivo {extra}: {hint}"
-
 #: acoustic_spaces/gui/app.py
 msgid "&Edit"
 msgstr "&Modifica"
@@ -968,6 +990,12 @@ msgstr "Impossibile aprire {name}"
 #, python-brace-format
 msgid "Opened {path}"
 msgstr "Aperto {path}"
+
+#. Translators: {extra} is the name of an optional part of the installation (gui, ifc...); {hint} says how to install it.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Needs the {extra} extra: {hint}"
+msgstr "Richiede il componente aggiuntivo {extra}: {hint}"
 
 #: acoustic_spaces/gui/app.py
 msgid "Save scene"
@@ -2373,10 +2401,6 @@ msgstr "Asse verticale"
 #: acoustic_spaces/gui/inspector.py
 msgid "IFC room"
 msgstr "Ambiente IFC"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Outdoors"
-msgstr "All'aperto"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -6297,6 +6321,97 @@ msgstr ""
 "riflette tra le pareti decade lentamente: il T30 simulato è diverse volte "
 "superiore alle stime di Sabine ed Eyring di `inspect`, che presuppongono un "
 "campo diffuso."
+
+#: examples/stadium_pa/scene.yaml
+msgctxt "example"
+msgid "Stadium concert with a sound system"
+msgstr "Concerto in uno stadio con impianto audio"
+
+#: examples/stadium_pa/scene.yaml
+msgctxt "example"
+msgid ""
+"A concert in a football stadium, with a sound system as tours hang it and "
+"the stage's monitors. The stadium is a bowl of four stands under a ring of "
+"roof, open to the sky over the pitch; the stage stands at the west end, and "
+"the stand behind it is empty. Beside the stage hang two main line arrays of "
+"12 boxes curved in a J (coherent arrays), their top boxes aimed at the far "
+"end and their bottom ones at the crowd in front. A block of eight cardioid "
+"subwoofers under the middle of the stage front is delayed 17 ms so that it "
+"arrives with the main arrays at the mix position. Out-fills beside the main "
+"arrays cover the side stands near the stage, and front fills on the stage's "
+"lip the front rows between them. Two delay towers on the pitch, 50 m out, "
+"cover its back, and four delays hung under the roof's edge, aimed along the "
+"side and end stands, their far seats. Each fill and delay is timed to arrive "
+"at its seats 6 to 20 ms after the main arrays, so the sound still seems to "
+"come from the stage; the towers' and the delays' low bands are rolled off, "
+"where the main arrays and the subwoofers give enough. On stage a pair of "
+"wedges plays the singer's mix, a drum fill the drummer's and side fills the "
+"rest of the band's. Listeners stand where the singer, the drummer and a "
+"guitarist play, at the front, the middle, the side and the back of the "
+"pitch, and low, high and far on the stands. The crowd standing on the pitch "
+"and the one seated in the stands take up the sound and scatter it "
+"(`audience: true`).  acoustic-spaces map scene.yaml --parameter spl --plot "
+"spl.png python align.py python near_field.py python feedback.py python "
+"make_model.py  On the pitch from the mix position back, nine points of the "
+"map in ten get the same level within 2.5 dB (all bands together). The map "
+"takes about four minutes on 4 cores. align.py prints when and how loud each "
+"loudspeaker arrives at each listener, and which would be heard as an echo: "
+"none, and each player hears their own monitor loudest. The scene warns that "
+"some listeners stand nearer the arrays than their far-field patterns hold. "
+"near_field.py adds up each array's boxes one by one and prints how far its "
+"pattern is off there: within 4 dB up to 2 kHz, but up to 12 dB at 4 and 8 "
+"kHz near the main arrays and the side fills. feedback.py finds how much gain "
+"the singer's microphone allows before the loudspeakers that play it make it "
+"ring, at the mix position and at the singer's ears, and the frequencies "
+"where it rings first, then renders the loop below and above that gain. Its "
+"microphone is an ideal supercardioid and the reverberation's phases are "
+"random, so take the frequencies as an example of where such a stage rings. "
+"make_model.py writes the model and the arrays; their boxes are a generic box "
+"made up for this example, not any product's data."
+msgstr ""
+"Un concerto in uno stadio di calcio, con un impianto audio come quelli che "
+"appendono i tour e i monitor del palco. Lo stadio è una conca di quattro "
+"tribune sotto un anello di copertura, aperta al cielo sopra il campo; il "
+"palco è sul lato ovest, e la tribuna dietro è vuota. Ai lati del palco sono "
+"appesi due array lineari principali di 12 moduli curvati a J (array "
+"coerenti), con i moduli in alto puntati verso il lato opposto e quelli in "
+"basso verso il pubblico davanti. Un blocco di otto subwoofer cardioidi sotto "
+"il centro del fronte del palco è ritardato di 17 ms perché arrivi insieme "
+"agli array principali alla posizione di mixaggio. Degli out-fill accanto "
+"agli array principali coprono le tribune laterali vicine al palco, e dei "
+"front fill sul bordo del palco le prime file tra di essi. Due torri di "
+"ritardo sul campo, a 50 m, ne coprono la parte posteriore, e quattro ritardi "
+"appesi sotto il bordo della copertura, puntati lungo le tribune laterali e "
+"di fondo, i loro posti lontani. Ogni fill e ogni ritardo è regolato per "
+"arrivare ai suoi posti da 6 a 20 ms dopo gli array principali, così il suono "
+"sembra ancora provenire dal palco; le bande gravi delle torri e dei ritardi "
+"sono attenuate, dove gli array principali e i subwoofer sono sufficienti. "
+"Sul palco una coppia di monitor da terra (wedge) dà il mix del cantante, un "
+"drum fill quello del batterista e dei side fill quello del resto della band. "
+"Ci sono ricevitori dove suonano il cantante, il batterista e un chitarrista, "
+"davanti, al centro, di lato e in fondo al campo, e in basso, in alto e "
+"lontano sulle tribune. Il pubblico in piedi sul campo e quello seduto sulle "
+"tribune assorbono il suono e lo disperdono (`audience: true`).  "
+"acoustic-spaces map scene.yaml --parameter spl --plot spl.png python "
+"align.py python near_field.py python feedback.py python make_model.py  Sul "
+"campo, dalla posizione di mixaggio verso il fondo, nove punti della mappa su "
+"dieci ricevono lo stesso livello entro 2.5 dB (tutte le bande insieme). La "
+"mappa di copertura richiede circa quattro minuti su 4 core. align.py mostra "
+"quando e con quale livello arriva ogni altoparlante a ogni ricevitore, e "
+"quale si sentirebbe come eco: nessuno, e ogni musicista sente più forte il "
+"proprio monitor. La scena avverte che alcuni ricevitori sono più vicini agli "
+"array di quanto valgano i loro diagrammi di campo lontano. near_field.py "
+"somma uno a uno i moduli di ogni array e mostra di quanto il suo diagramma "
+"si discosta lì: entro 4 dB fino a 2 kHz, ma fino a 12 dB a 4 e 8 kHz vicino "
+"agli array principali e ai side fill. feedback.py calcola quanto guadagno "
+"consente il microfono del cantante prima che gli altoparlanti che lo "
+"riproducono lo facciano innescare, alla posizione di mixaggio e alle "
+"orecchie del cantante, e le frequenze dove innesca per prime, poi genera "
+"l'audio del loop sotto e sopra quel guadagno. Il suo microfono è un "
+"supercardioide ideale e le fasi del riverbero sono casuali, quindi le "
+"frequenze sono un esempio di dove innesca un palco simile. make_model.py "
+"scrive il modello e gli array; i loro moduli sono un modulo generico "
+"inventato per questo esempio, non dati di alcun prodotto."
 
 #: examples/street/scene.yaml
 msgctxt "example"

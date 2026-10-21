@@ -7,7 +7,13 @@ from conftest import skip_without_extra
 
 from acoustic_spaces.cli import main
 from acoustic_spaces.engine import simulate
-from acoustic_spaces.examples import copy_examples, example_path, list_examples
+from acoustic_spaces.examples import (
+    GROUPS,
+    copy_examples,
+    example_groups,
+    example_path,
+    list_examples,
+)
 from acoustic_spaces.room import Room
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
@@ -20,6 +26,17 @@ def test_every_example_folder_is_listed() -> None:
     for example in list_examples():
         assert example.title and example.description
         assert example.path.is_file()
+
+
+def test_every_example_is_in_a_group() -> None:
+    """The editor shows the examples by group: a new example needs its place in GROUPS,
+    which names only examples there are."""
+    listed = [name for _, names in GROUPS for name in names]
+    assert sorted(listed) == NAMES
+    groups = example_groups()
+    assert [group for group, _ in groups] == [group for group, _ in GROUPS]
+    assert [e.name for _, members in groups for e in members] == listed
+    assert example_groups([]) == []
 
 
 def test_example_path() -> None:
@@ -81,10 +98,16 @@ def test_examples_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     assert "no example named cathedral" in capsys.readouterr().err
 
 
+def _script(example: str, name: str):
+    """The script ``name``.py of an example, loaded as a module."""
+    spec = importlib.util.spec_from_file_location(name, EXAMPLES / example / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_listening_room_bass(capsys: pytest.CaptureFixture[str]) -> None:
-    spec = importlib.util.spec_from_file_location("bass", EXAMPLES / "listening_room" / "bass.py")
-    bass = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(bass)
+    bass = _script("listening_room", "bass")
     room = Room.from_yaml(example_path("listening_room"))
     # The early part at 63 Hz: the wall's reflection in phase against the wall, half a
     # period late a metre out; in energy the wall makes no difference.
@@ -95,3 +118,81 @@ def test_listening_room_bass(capsys: pytest.CaptureFixture[str]) -> None:
     assert abs(wall - out) < 1.0
     assert bass.main(["--rays", "300"]) == 0
     assert "in pressure up to 125 Hz" in capsys.readouterr().out
+
+
+def test_stadium_sound_system_is_aligned(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """What the stadium's description says of its sound system."""
+    align = _script("stadium_pa", "align")
+    seats = align.arrivals(Room.from_yaml(example_path("stadium_pa")), rays=30, seed=1)
+    time = {seat: {row.source: row.time_s for row in rows} for seat, rows in seats.items()}
+    # The subwoofers arrive with the main arrays at the mix position, and each fill or
+    # delay comes 5 to 20 ms after the main array it backs up, so that one hears the stage.
+    assert abs(time["mix_position"]["subs"] - time["mix_position"]["main_left"]) < 0.002
+    for seat, delay, array in (
+        ("pitch_front", "front_fill_left", "main_left"),
+        ("pitch_behind_towers", "tower_left", "main_left"),
+        ("north_stand_far", "delay_north", "main_left"),
+        ("north_stand_top", "delay_north", "main_left"),
+        ("east_stand", "delay_east_right", "main_right"),
+    ):
+        assert 0.005 < time[seat][delay] - time[seat][array] < 0.021, seat
+    # Nobody hears an echo.
+    assert not [(seat, row.source) for seat, rows in seats.items() for row in rows if row.echo]
+    # On stage each player hears their own monitor loudest.
+    for seat, monitor in (
+        ("singer", "vocal_wedges"),
+        ("drummer", "drum_fill"),
+        ("guitarist", "side_fill_left"),
+    ):
+        loudest = max(seats[seat], key=lambda row: align.total(row.direct[align.ECHO_BANDS]))
+        assert loudest.source == monitor, seat
+    monkeypatch.setattr(align, "arrivals", lambda room, rays=None: seats)
+    assert align.main([]) == 0
+    out = capsys.readouterr().out
+    assert "north_stand_far: " in out and "delay_north" in out and "  echo" not in out
+
+
+def test_stadium_near_field(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Up to 2 kHz the arrays' far-field patterns are within 4 dB of the exact sums of
+    their boxes at every listener, and the subwoofers' within 0.6 dB in their bands."""
+    near = _script("stadium_pa", "near_field")
+    found = near.differences(Room.from_yaml(example_path("stadium_pa")))
+    assert {"main_left", "subs", "vocal_wedges", "side_fill_left"} <= set(found)
+    for source, rows in found.items():
+        bands, most = (slice(0, 3), 0.6) if source == "subs" else (slice(0, 6), 4.0)
+        assert max(np.abs(db[bands]).max() for db in rows.values()) < most, source
+    monkeypatch.setattr(near, "differences", lambda room: found)
+    assert near.main([]) == 0
+    assert "main_left, far field above exact (dB)" in capsys.readouterr().out
+
+
+def test_stadium_feedback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The singer's microphone: its gain before feedback, where it rings, and a loop
+    that dies away below unity gain and grows above it."""
+    feedback = _script("stadium_pa", "feedback")
+    found = feedback.loop(Room.from_yaml(example_path("stadium_pa")), rays=30)
+    assert "vocal_wedges" in found["speakers"] and "subs" not in found["speakers"]
+    for where in ("mix", "ears"):
+        assert np.all(np.isfinite(found["pag"][where]))
+    # The system can lift the voice far more at the mix position than at the singer's
+    # ears, where the wedges are; the loop's peaks only take gain away.
+    assert np.all(found["pag"]["mix"] > found["pag"]["ears"] + 20.0)
+    assert np.all(found["peaks"] >= 0.0)
+    assert len(found["ring_hz"]) == 3
+    assert all(44.0 < f < 11_400.0 for f in found["ring_hz"])
+    quarter = feedback.RATE // 4
+    for gain, grows in ((-6.0, False), (3.0, True)):
+        out = feedback.render(found["response"], gain, seconds=1.0)
+        first, last = (np.sqrt(np.mean(part**2)) for part in (out[:quarter], out[-quarter:]))
+        assert (last > first) == grows, gain
+    monkeypatch.setattr(feedback, "loop", lambda room, rays=None: found)
+    monkeypatch.setattr(feedback, "RENDER_S", 0.5)
+    assert feedback.main(["--out", str(tmp_path / "loop.wav")]) == 0
+    assert "It rings first at" in capsys.readouterr().out
+    assert (tmp_path / "loop.wav").stat().st_size > 0

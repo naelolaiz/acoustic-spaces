@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (  # noqa: E402
 )
 
 from acoustic_spaces.audio import write_wav  # noqa: E402
-from acoustic_spaces.examples import example_path, list_examples  # noqa: E402
+from acoustic_spaces.examples import example_groups, example_path, list_examples  # noqa: E402
 from acoustic_spaces.geometry import RoomMesh  # noqa: E402
 from acoustic_spaces.gui.document import (  # noqa: E402
     NEW_PART_SIZES,
@@ -318,11 +318,13 @@ def test_simulation_job(qapp) -> None:
 
 
 def test_window_opens_every_example(window) -> None:
-    titles = [a.text() for a in window.examples_menu.actions()]
-    assert titles == [e.title for e in list_examples()]
+    groups = [action.menu() for action in window.examples_menu.actions()]
+    assert [menu.title() for menu in groups] == [group for group, _ in example_groups()]
+    actions = {action.text(): action for menu in groups for action in menu.actions()}
+    assert sorted(actions) == sorted(e.title for e in list_examples())
     for example in list_examples():
         if example.missing_extra:  # greyed out in the menu
-            action = window.examples_menu.actions()[titles.index(example.title)]
+            action = actions[example.title]
             assert not action.isEnabled() and example.missing_extra in action.statusTip()
             continue
         assert window.open_example(example.path)
@@ -2880,9 +2882,11 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
             win.select(kind, key)
         texts = []  # (what, text)
         for menu in win.menuBar().findChildren(QMenu):
-            if menu is win.examples_menu:  # the examples' own titles and descriptions
+            if menu is win.examples_menu:  # its entries are the groups' menus, below
                 continue
             texts.append(("menu", menu.title()))
+            if menu.parent() is win.examples_menu:  # the examples' own titles and descriptions
+                continue
             for action in menu.actions():
                 if not action.isSeparator() and menu is not win.language_menu:
                     texts.append(("menu entry", action.text()))
@@ -2939,6 +2943,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "añadir fuente",
                 "late_methods": ["trazado de rayos estocástico", "estadístico"],
                 "example": "Piso con una puerta",
+                "rooms": "Recintos",
             },
         ),
         (
@@ -2952,6 +2957,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "afegir font",
                 "late_methods": ["traçat de raigs estocàstic", "estadístic"],
                 "example": "Pis amb una porta",
+                "rooms": "Recintes",
             },
         ),
         (
@@ -2965,6 +2971,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "aggiungi sorgente",
                 "late_methods": ["tracciamento di raggi stocastico", "statistico"],
                 "example": "Appartamento con una porta",
+                "rooms": "Ambienti",
             },
         ),
         (
@@ -2978,6 +2985,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "Quelle hinzufügen",
                 "late_methods": ["stochastische Strahlenverfolgung", "statistisch"],
                 "example": "Wohnung mit einer Tür",
+                "rooms": "Räume",
             },
         ),
         (
@@ -2991,6 +2999,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "bron toevoegen",
                 "late_methods": ["stochastische straaltracering", "statistisch"],
                 "example": "Appartement met een deur",
+                "rooms": "Ruimtes",
             },
         ),
     ],
@@ -3012,7 +3021,9 @@ def test_the_editor_in_translation(qapp, english, monkeypatch, language, words) 
         page = win.inspector.pages["simulation"]
         assert [page.late_method.itemText(k) for k in range(2)] == words["late_methods"]
         assert page.late_method.itemData(0) == "stochastic_ray_tracing"
-        assert win.examples_menu.actions()[0].text().startswith(words["example"])
+        rooms = win.examples_menu.actions()[0].menu()
+        assert rooms.title() == words["rooms"]
+        assert any(action.text().startswith(words["example"]) for action in rooms.actions())
         # One shortcut letter per entry in each menu.
         for menu in win.menuBar().findChildren(QMenu):
             letters = [

@@ -167,6 +167,34 @@ msgstr ""
 "nivell a llarg termini amb la penalització de cada període, ponderat A "
 "(L_den)"
 
+#: acoustic_spaces/examples.py
+msgid "Rooms"
+msgstr "Recintes"
+
+#: acoustic_spaces/examples.py
+msgid "Halls and churches"
+msgstr "Sales i esglésies"
+
+#: acoustic_spaces/examples.py
+msgid "Sound systems"
+msgstr "Sistemes de so"
+
+#: acoustic_spaces/examples.py acoustic_spaces/gui/inspector.py
+msgid "Outdoors"
+msgstr "A l'aire lliure"
+
+#: acoustic_spaces/examples.py
+msgid "Models from CAD and BIM files"
+msgstr "Models de fitxers CAD i BIM"
+
+#: acoustic_spaces/examples.py
+msgid "Measurements and material libraries"
+msgstr "Mesures i biblioteques de materials"
+
+#: acoustic_spaces/examples.py
+msgid "Other examples"
+msgstr "Altres exemples"
+
 #. Translators: a background task such as "Simulating hall…", then how long it has run so far.
 #: acoustic_spaces/gui/activity.py
 #, python-brace-format
@@ -641,12 +669,6 @@ msgstr "&Fitxer"
 msgid "Open e&xample"
 msgstr "Obrir e&xemple"
 
-#. Translators: {extra} is the name of an optional part of the installation (gui, ifc...); {hint} says how to install it.
-#: acoustic_spaces/gui/app.py
-#, python-brace-format
-msgid "Needs the {extra} extra: {hint}"
-msgstr "Requereix l'extra {extra}: {hint}"
-
 #: acoustic_spaces/gui/app.py
 msgid "&Edit"
 msgstr "&Editar"
@@ -963,6 +985,12 @@ msgstr "No s'ha pogut obrir {name}"
 #, python-brace-format
 msgid "Opened {path}"
 msgstr "S'ha obert {path}"
+
+#. Translators: {extra} is the name of an optional part of the installation (gui, ifc...); {hint} says how to install it.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Needs the {extra} extra: {hint}"
+msgstr "Requereix l'extra {extra}: {hint}"
 
 #: acoustic_spaces/gui/app.py
 msgid "Save scene"
@@ -2362,10 +2390,6 @@ msgstr "Eix vertical"
 #: acoustic_spaces/gui/inspector.py
 msgid "IFC room"
 msgstr "Recinte IFC"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Outdoors"
-msgstr "A l'aire lliure"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -6264,6 +6288,99 @@ msgstr ""
 "les parets són dures i llises, de manera que el so que rebota entre elles "
 "s'atenua lentament: el T30 simulat és diverses vegades superior a les "
 "estimacions de Sabine i Eyring d'`inspect`, que assumeixen un camp difús."
+
+#: examples/stadium_pa/scene.yaml
+msgctxt "example"
+msgid "Stadium concert with a sound system"
+msgstr "Concert en un estadi amb sistema de so"
+
+#: examples/stadium_pa/scene.yaml
+msgctxt "example"
+msgid ""
+"A concert in a football stadium, with a sound system as tours hang it and "
+"the stage's monitors. The stadium is a bowl of four stands under a ring of "
+"roof, open to the sky over the pitch; the stage stands at the west end, and "
+"the stand behind it is empty. Beside the stage hang two main line arrays of "
+"12 boxes curved in a J (coherent arrays), their top boxes aimed at the far "
+"end and their bottom ones at the crowd in front. A block of eight cardioid "
+"subwoofers under the middle of the stage front is delayed 17 ms so that it "
+"arrives with the main arrays at the mix position. Out-fills beside the main "
+"arrays cover the side stands near the stage, and front fills on the stage's "
+"lip the front rows between them. Two delay towers on the pitch, 50 m out, "
+"cover its back, and four delays hung under the roof's edge, aimed along the "
+"side and end stands, their far seats. Each fill and delay is timed to arrive "
+"at its seats 6 to 20 ms after the main arrays, so the sound still seems to "
+"come from the stage; the towers' and the delays' low bands are rolled off, "
+"where the main arrays and the subwoofers give enough. On stage a pair of "
+"wedges plays the singer's mix, a drum fill the drummer's and side fills the "
+"rest of the band's. Listeners stand where the singer, the drummer and a "
+"guitarist play, at the front, the middle, the side and the back of the "
+"pitch, and low, high and far on the stands. The crowd standing on the pitch "
+"and the one seated in the stands take up the sound and scatter it "
+"(`audience: true`).  acoustic-spaces map scene.yaml --parameter spl --plot "
+"spl.png python align.py python near_field.py python feedback.py python "
+"make_model.py  On the pitch from the mix position back, nine points of the "
+"map in ten get the same level within 2.5 dB (all bands together). The map "
+"takes about four minutes on 4 cores. align.py prints when and how loud each "
+"loudspeaker arrives at each listener, and which would be heard as an echo: "
+"none, and each player hears their own monitor loudest. The scene warns that "
+"some listeners stand nearer the arrays than their far-field patterns hold. "
+"near_field.py adds up each array's boxes one by one and prints how far its "
+"pattern is off there: within 4 dB up to 2 kHz, but up to 12 dB at 4 and 8 "
+"kHz near the main arrays and the side fills. feedback.py finds how much gain "
+"the singer's microphone allows before the loudspeakers that play it make it "
+"ring, at the mix position and at the singer's ears, and the frequencies "
+"where it rings first, then renders the loop below and above that gain. Its "
+"microphone is an ideal supercardioid and the reverberation's phases are "
+"random, so take the frequencies as an example of where such a stage rings. "
+"make_model.py writes the model and the arrays; their boxes are a generic box "
+"made up for this example, not any product's data."
+msgstr ""
+"Un concert en un estadi de futbol, amb un sistema de so com els que pengen "
+"les gires i els monitors de l'escenari. L'estadi és un bol de quatre "
+"graderies sota un anell de coberta, obert al cel sobre el camp; l'escenari "
+"és al fons oest, i la graderia del darrere és buida. Als costats de "
+"l'escenari pengen dos conjunts lineals principals de 12 caixes corbats en J "
+"(conjunts coherents), amb les caixes de dalt apuntades al fons oposat i les "
+"de baix al públic del davant. Un bloc de vuit subgreus cardioides sota el "
+"centre del front de l'escenari està retardat 17 ms perquè arribi amb els "
+"conjunts principals a la posició de mescla. Uns reforços laterals "
+"(out-fills) al costat dels conjunts principals cobreixen les graderies "
+"laterals properes a l'escenari, i uns reforços frontals (front fills) a la "
+"vora de l'escenari les primeres files entre ells. Dues torres de retard al "
+"camp, a 50 m, en cobreixen la part del darrere, i quatre retards penjats "
+"sota la vora de la coberta, apuntats al llarg de les graderies laterals i de "
+"fons, els seus seients llunyans. Cada reforç i cada retard està ajustat "
+"perquè arribi als seus seients entre 6 i 20 ms després dels conjunts "
+"principals, de manera que el so continua semblant que ve de l'escenari; les "
+"bandes greus de les torres i dels retards estan atenuades, on els conjunts "
+"principals i els subgreus ja donen prou nivell. A l'escenari un parell de "
+"monitors de terra (falques) dona la mescla del cantant, un monitor de "
+"bateria (drum fill) la del bateria i uns side fills la de la resta del grup. "
+"Hi ha receptors on toquen el cantant, el bateria i un guitarrista, al "
+"davant, al centre, a un costat i al fons del camp, i a baix, a dalt i lluny "
+"a les graderies. El públic dret al camp i l'assegut a les graderies "
+"absorbeixen el so i el dispersen (`audience: true`).  acoustic-spaces map "
+"scene.yaml --parameter spl --plot spl.png python align.py python "
+"near_field.py python feedback.py python make_model.py  Al camp, des de la "
+"posició de mescla cap enrere, nou de cada deu punts del mapa reben el mateix "
+"nivell amb 2,5 dB de diferència com a màxim (totes les bandes juntes). El "
+"mapa de cobertura triga uns quatre minuts amb 4 nuclis. align.py mostra quan "
+"i amb quin nivell arriba cada altaveu a cada receptor, i quin se sentiria "
+"com a eco: cap, i cada músic sent més fort el seu propi monitor. L'escena "
+"avisa que alguns receptors són més a prop dels conjunts del que valen els "
+"seus patrons de camp llunyà. near_field.py suma una a una les caixes de cada "
+"conjunt i mostra quant s'hi desvia el seu patró: menys de 4 dB fins a 2 kHz, "
+"però fins a 12 dB a 4 i 8 kHz a prop dels conjunts principals i dels side "
+"fills. feedback.py calcula quant guany admet el micròfon del cantant abans "
+"que els altaveus que el reprodueixen el facin acoblar, a la posició de "
+"mescla i a les orelles del cantant, i les freqüències on s'acobla primer, i "
+"després genera l'àudio del llaç per sota i per sobre d'aquest guany. El seu "
+"micròfon és un supercardioide ideal i les fases de la reverberació són "
+"aleatòries, així que les freqüències són un exemple d'on s'acobla un "
+"escenari així. make_model.py escriu el model i els conjunts; les seves "
+"caixes són una caixa genèrica inventada per a aquest exemple, no dades de "
+"cap producte."
 
 #: examples/street/scene.yaml
 msgctxt "example"

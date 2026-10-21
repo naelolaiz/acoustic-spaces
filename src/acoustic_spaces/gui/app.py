@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 from acoustic_spaces import __version__, i18n
 from acoustic_spaces._extras import install_hint
 from acoustic_spaces.engine import ray_device, reweight, tuning
-from acoustic_spaces.examples import example_path, list_examples
+from acoustic_spaces.examples import example_groups, example_path, list_examples
 from acoustic_spaces.geometry import SUPPORTED_SUFFIXES, points_inside
 from acoustic_spaces.gui.activity import Activity
 from acoustic_spaces.gui.document import (
@@ -492,21 +492,12 @@ class MainWindow(QMainWindow):
             examples = list_examples()
         except FileNotFoundError:
             examples = []
-        for example in examples:
-            # The examples' titles and descriptions are in the catalogs (tools/catalog.py).
-            action = self.examples_menu.addAction(pgettext("example", example.title))
-            tip = pgettext("example", example.description).split(". ")[0]
-            if example.missing_extra:
-                # Opening it would only say how to install what reading its model needs.
-                action.setEnabled(False)
-                # Translators: {extra} is the name of an optional part of the
-                # installation (gui, ifc...); {hint} says how to install it.
-                tip = _("Needs the {extra} extra: {hint}").format(
-                    extra=example.missing_extra, hint=install_hint(example.missing_extra)
-                )
-            action.setStatusTip(tip)
-            action.setToolTip(tip)
-            action.triggered.connect(lambda *_, path=example.path: self.open_example(path))
+        for group, members in example_groups(examples):
+            # The groups' titles are marked in acoustic_spaces.examples.
+            submenu = self.examples_menu.addMenu(_(group))
+            submenu.setToolTipsVisible(True)
+            for example in members:
+                self._example_action(submenu, example)
         self.examples_menu.setEnabled(bool(examples))
         file.addSeparator()
         file.addActions([self.save_action, self.save_as_action, self.export_action])
@@ -1169,6 +1160,23 @@ class MainWindow(QMainWindow):
     def open_example(self, path: str | Path) -> bool:
         """Open a bundled example; saving it asks where to keep a copy."""
         return self.open_file(path, example=True)
+
+    def _example_action(self, menu, example) -> None:
+        """An example's entry in File > Open example."""
+        # The examples' titles and descriptions are in the catalogs (tools/catalog.py).
+        action = menu.addAction(pgettext("example", example.title))
+        tip = pgettext("example", example.description).split(". ")[0]
+        if example.missing_extra:
+            # Opening it would only say how to install what reading its model needs.
+            action.setEnabled(False)
+            # Translators: {extra} is the name of an optional part of the
+            # installation (gui, ifc...); {hint} says how to install it.
+            tip = _("Needs the {extra} extra: {hint}").format(
+                extra=example.missing_extra, hint=install_hint(example.missing_extra)
+            )
+        action.setStatusTip(tip)
+        action.setToolTip(tip)
+        action.triggered.connect(lambda *_, path=example.path: self.open_example(path))
 
     def save(self) -> bool:
         if self.document.path is None or self.from_example:

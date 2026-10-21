@@ -20,9 +20,10 @@ label, field, button or column header for a tip that says what it means, with it
 the rows of the Results table say what each parameter measures, and the band columns
 which frequencies each octave band holds.
 
-- **File > Open example** opens the bundled rooms. Saving one asks where to keep your
-  copy and takes its model file along; an example whose model needs an extra that is not
-  installed is greyed out, and its tip says how to install it. **New box room**, **New
+- **File > Open example** opens the bundled rooms, in the groups of
+  [Example scenes](examples.md). Saving one asks where to keep your copy and takes its
+  model file along; an example whose model needs an extra that is not installed is
+  greyed out, and its tip says how to install it. **New box room**, **New
   room from a floor plan**, **New from model file** (OBJ, STL, PLY, OFF, glTF, DXF,
   IFC, Collada or SketchUp) and **New outdoor scene** (a meadow 200 m across, to build
   on; see [Outdoor scenes](#outdoor-scenes)) start from scratch. For an IFC model, the

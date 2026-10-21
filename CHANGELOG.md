@@ -507,6 +507,28 @@
   reference on average (see
   [Validation](docs/validation.md#the-wide-angle-parabolic-equation)).
 
+**Examples**
+
+- New example: `stadium_pa`, a concert in a football stadium with a sound system as
+  tours hang it: two main line arrays of 12 boxes in a J, a block of eight cardioid
+  subwoofers timed to arrive with them at the mix position, out-fills for the side
+  stands, front fills, two delay towers on the pitch and four delays under the roof's
+  edge, each arriving 6 to 20 ms after the main arrays at its seats; and on stage the
+  monitors: wedges for the singer, a drum fill and side fills. Listeners stand on stage,
+  on the pitch and on the stands. `align.py` prints when and how loud each loudspeaker
+  arrives at each listener, and which would be heard as an echo (none);
+  `near_field.py` adds up the arrays' boxes one by one where the scene warns that a
+  listener is nearer than an array's far-field pattern holds, and prints how far the
+  pattern is off (within 4 dB up to 2 kHz); `feedback.py` finds how much gain the
+  singer's microphone allows before the loudspeakers make it ring, in each octave band
+  at the mix position and at the singer's ears, the frequencies where it rings first,
+  and renders the loop below and above that gain; `make_model.py` writes the model and
+  the arrays, of a generic box made up for the example.
+- The editor's File > **Open example** shows the examples in groups (rooms, halls and
+  churches, sound systems, outdoors, models from CAD and BIM files, measurements and
+  material libraries), and [Example scenes](docs/examples.md) lists them in the same
+  groups; `acoustic_spaces.examples.example_groups()` gives them by group.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its
@@ -535,6 +557,9 @@
   source, is unchanged. `parameters.json` lists each source's sound power
   (`sources`), which `auralize` reads; results written before it are mixed at one
   power, with a note.
+- Levels, parameters and maps of open scenes take about half the time: the band filters
+  that read the coherent bands were computed again for every band of every source and
+  listener, and are now kept. The results are the same to the last bit.
 - In wind and temperature gradients the impulse response had a notch where the
   parabolic equation's bands met the rays' (around 700 Hz, up to 3 dB deep; around
   2.8 kHz in the penumbra of a shadow), and the 500 Hz band of the level relative to

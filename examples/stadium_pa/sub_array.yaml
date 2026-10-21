@@ -1,0 +1,11 @@
+# Written by make_model.py: see there.
+element: cardioid
+elements:
+- position: [0.0, -1.05, -0.3]
+- position: [0.0, -0.35, -0.3]
+- position: [0.0, 0.35, -0.3]
+- position: [0.0, 1.05, -0.3]
+- position: [0.0, -1.05, 0.3]
+- position: [0.0, -0.35, 0.3]
+- position: [0.0, 0.35, 0.3]
+- position: [0.0, 1.05, 0.3]
