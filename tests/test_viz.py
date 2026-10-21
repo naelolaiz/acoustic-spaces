@@ -8,6 +8,7 @@ pv = pytest.importorskip("pyvista")
 from acoustic_spaces.room import Room  # noqa: E402
 from acoustic_spaces.viz import (  # noqa: E402
     balloon_polydata,
+    marker_sizes,
     plot_room,
     room_polydata,
     show_room,
@@ -30,6 +31,19 @@ def test_plot_room_adds_surfaces_and_markers() -> None:
     # three materials (surface + outline each), a source and a listener with its arrow
     assert len(plotter.renderer.actors) >= 3 * 2 + 3
     plotter.close()
+
+
+def test_markers_shrink_where_points_crowd() -> None:
+    # Two points a metre apart and one far away, in a model 100 m across.
+    radius, arrow = marker_sizes([[0, 0, 0], [1, 0, 0], [60, 0, 0]], 100.0)
+    assert radius.tolist() == pytest.approx([0.25, 0.25, 1.2])  # clear of each other
+    assert arrow.tolist() == pytest.approx([0.8, 0.8, 7.2])  # short of the other point
+    # On top of each other: a fifth of the size, and an arrow out of the sphere.
+    radius, arrow = marker_sizes([[0, 0, 0], [0, 0, 0]], 100.0)
+    assert radius.tolist() == pytest.approx([0.24, 0.24])
+    assert arrow.tolist() == pytest.approx([0.48, 0.48])
+    radius, arrow = marker_sizes([[0, 0, 0]], 100.0)
+    assert radius.tolist() == pytest.approx([1.2]) and arrow.tolist() == pytest.approx([7.2])
 
 
 def test_line_and_surface_sources_are_drawn() -> None:

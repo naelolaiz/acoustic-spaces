@@ -579,6 +579,11 @@
   warnings and the errors, with how many there are of each. **Item** keeps only the
   messages about one source, listener or material, a filter only those holding some
   words, and **Clear** removes the messages on show.
+- Sources and listeners that crowd get smaller markers and shorter arrows in the 3D
+  view, the plan and `show`, down to a fifth of the size: on the stadium's stage the
+  markers were 6 m wide and the arrows 19 m long, across the players and monitors.
+  Points far apart are drawn as before. In `show`, sources and listeners left out are
+  drawn faded too.
 
 **Fixes**
 

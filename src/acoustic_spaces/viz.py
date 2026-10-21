@@ -306,6 +306,32 @@ def extent_polydata(source, radius: float) -> pyvista.PolyData | None:
     return pv.PolyData(corners, faces=[4, 0, 1, 2, 3])
 
 
+def nearest_spacing(points) -> np.ndarray:
+    """The distance from each of ``points`` (rows of coordinates) to the nearest other
+    one: infinite for a point alone."""
+    points = np.asarray(points, dtype=float)
+    nearest = np.full(len(points), np.inf)
+    if len(points) < 2:
+        return nearest
+    for start in range(0, len(points), 256):  # a block of rows at a time
+        part = np.linalg.norm(points[start : start + 256, None] - points[None], axis=-1)
+        part[np.arange(len(part)), np.arange(start, start + len(part))] = np.inf
+        nearest[start : start + len(part)] = part.min(axis=1)
+    return nearest
+
+
+def marker_sizes(positions, size: float) -> tuple[np.ndarray, np.ndarray]:
+    """The radius of the marker of each source or listener at ``positions`` and the
+    length of its arrow, in a model ``size`` metres across: 1.2 % of the size and six
+    times that where the points are far apart; where they crowd, smaller, to keep clear
+    of the nearest point, down to a fifth of that radius and an arrow twice its own."""
+    points = np.asarray(positions, dtype=float).reshape(-1, 3)
+    full = max(0.012 * size, 0.05)
+    nearest = nearest_spacing(points)
+    radius = np.clip(0.25 * nearest, 0.2 * full, full)
+    return radius, np.clip(0.8 * nearest, 2 * radius, 6 * radius)
+
+
 def vegetation_polydata(shape) -> pyvista.PolyData:
     """The volume of a tree, a hedge or a belt of trees
     (:class:`~acoustic_spaces.geometry.outdoor.PlantShape`) as a closed surface: a lone
@@ -385,19 +411,22 @@ def plot_room(
 
     lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
     size = float(np.linalg.norm(hi - lo)) or 1.0
-    radius = max(0.012 * size, 0.05)
-    arrow = 6 * radius
+    sources, listeners = room.scene.sources, room.scene.listeners
+    radii, arrows = marker_sizes([item.position for item in [*sources, *listeners]], size)
 
     points, names = [], []
-    for source, directivity in zip(room.scene.sources, room.directivities, strict=True):
-        plotter.add_mesh(pv.Sphere(radius=radius, center=source.position), color=SOURCE_COLOUR)
+    for k, (source, directivity) in enumerate(zip(sources, room.directivities, strict=True)):
+        radius, arrow = radii[k], arrows[k]
+        opacity = 1.0 if source.in_use else 0.3  # left out of simulations: faded
+        sphere = pv.Sphere(radius=radius, center=source.position)
+        plotter.add_mesh(sphere, color=SOURCE_COLOUR, opacity=opacity)
         extent = extent_polydata(source, radius)
         if extent is not None:
-            plotter.add_mesh(extent, color=SOURCE_COLOUR, opacity=0.6)
+            plotter.add_mesh(extent, color=SOURCE_COLOUR, opacity=0.6 * opacity)
         if not directivity.omni:
             direction = source.orientation.forward()
             shape = pv.Arrow(start=source.position, direction=direction, scale=arrow)
-            plotter.add_mesh(shape, color=SOURCE_COLOUR)
+            plotter.add_mesh(shape, color=SOURCE_COLOUR, opacity=opacity)
             balloon = balloon_polydata(
                 directivity, source.position, source.orientation.rotation(), size=arrow
             )
@@ -406,17 +435,20 @@ def plot_room(
                 scalars="level",
                 cmap="magma",
                 clim=(-30, 0),
-                opacity=0.55,
+                opacity=0.55 * opacity,
                 show_scalar_bar=False,
             )
-        points.append(source.position)
+        points.append(np.add(source.position, [0.0, 0.0, 1.5 * radius]))
         names.append(source.name)
-    for listener in room.scene.listeners:
-        plotter.add_mesh(pv.Sphere(radius=radius, center=listener.position), color=LISTENER_COLOUR)
+    for k, listener in enumerate(listeners, len(sources)):
+        radius, arrow = radii[k], arrows[k]
+        opacity = 1.0 if listener.in_use else 0.3
+        sphere = pv.Sphere(radius=radius, center=listener.position)
+        plotter.add_mesh(sphere, color=LISTENER_COLOUR, opacity=opacity)
         direction = listener.orientation.forward()
         shape = pv.Arrow(start=listener.position, direction=direction, scale=arrow)
-        plotter.add_mesh(shape, color=LISTENER_COLOUR)
-        points.append(listener.position)
+        plotter.add_mesh(shape, color=LISTENER_COLOUR, opacity=opacity)
+        points.append(np.add(listener.position, [0.0, 0.0, 1.5 * radius]))
         names.append(listener.name)
     legend.append(["source", SOURCE_COLOUR])
     legend.append(["listener", LISTENER_COLOUR])
@@ -429,7 +461,7 @@ def plot_room(
 
     if show_labels and points:
         plotter.add_point_labels(
-            np.asarray(points, dtype=float) + [0.0, 0.0, 1.5 * radius],
+            np.asarray(points, dtype=float),
             names,
             font_size=14,
             text_color="white",
