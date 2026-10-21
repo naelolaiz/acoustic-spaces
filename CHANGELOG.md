@@ -507,6 +507,22 @@
   reference on average (see
   [Validation](docs/validation.md#the-wide-angle-parabolic-equation)).
 
+**Coherent arrays element by element**
+
+- `near_field: true` on a source's array (`directivity: {file: line_array.yaml,
+  near_field: true}`) adds up its elements' sound one by one wherever an early path
+  leaves it, each from where it is, with its own distance, direction, feed and pattern,
+  instead of sending out the array's far-field pattern from one point. Listeners nearer
+  than about the array's length squared over the wavelength hear its sound as it is
+  there: on axis a 3.75 m column loses about 3 dB per doubling of the distance up to
+  41 m at 1 kHz, as a line does, and 6 dB beyond. The direct sound, the reflections,
+  the ground's reflection and refracted rays outdoors, and the sound that reaches an
+  edge all take it; the late reverberation keeps the pattern. The room no longer warns
+  about such an array's near listeners, and the warning for the others names the
+  option. In the editor: "Add up the array's elements one by one" under the source's
+  directivity. Without it nothing changes. See
+  [Validation](docs/validation.md#checks-against-theory-on-every-change).
+
 **Examples**
 
 - New example: `stadium_pa`, a concert in a football stadium with a sound system as

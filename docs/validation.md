@@ -64,8 +64,9 @@ request and checks:
   in the shoebox a 3 m line as loud as a point source whose paths add in energy, as
   the line's uncorrelated points' do (within 0.6 dB at 2000 rays per
   band) and its T30 within 10 % of the point source's at 30,000 rays per band;
-- coherent arrays (their far-field patterns only: nearer than L² f / c the room's
-  warnings say so): a column of 8 omnidirectional elements 20 cm apart against the
+- coherent arrays (their far-field patterns; nearer than L² f / c the room's
+  warnings say so unless the array adds up its elements one by one, `near_field`): a
+  column of 8 omnidirectional elements 20 cm apart against the
   analytic sums of a line array, its directivity index within 0.05 dB in all 24
   third-octave bands (n² over the band mean of the pairs' sin(kr)/kr) and its vertical
   pattern within 0.3 dB of the band-averaged |sin(Nψ/2)/sin(ψ/2)|² wherever that is
@@ -73,6 +74,15 @@ request and checks:
   delays given element by element; two close elements in opposite polarity a dipole
   (4.77 dB); two cardioids splayed ±30 degrees their exact first-order sum; and in a
   simulation, levels ahead of and above a column that differ by its pattern exactly;
+- coherent arrays element by element (`near_field`): a steered column of 8 cardioids
+  3 m from its centre against the sum of its elements' pressures over 20,000
+  frequencies in each third-octave band, within 0.001 dB in all 24; 100 km away its
+  pattern's own weights (within 0.00001 dB); a 3.75 m column of 16 elements on axis
+  losing 2.8 dB per doubling of the distance at 1 kHz from 1 to 32 m, inside the 41 m
+  where its far field starts (3 dB for a line), and 6.02 dB from 128 m on (a point);
+  and in a simulation, levels 4 m ahead of and above a 1.4 m column that differ from
+  omni by the elements' sum there exactly, ahead 9.5 dB below its far-field pattern at
+  4 kHz, where the beam has not formed yet;
 - walls and openings: two 5 x 4 x 3 m rooms, 20 % absorbing, with a 12 m² partition
   between them reach the level behind it that diffuse-field theory gives,
   G = 10 log10(1600 π S τ / A²) with Eyring's absorption area A, within 0.4 dB at R =

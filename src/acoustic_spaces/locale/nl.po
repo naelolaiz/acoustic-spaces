@@ -3559,6 +3559,23 @@ msgstr ""
 "cardioïde"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Add up the array's elements one by one"
+msgstr "De elementen van de array een voor een optellen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"For a coherent array: add up its elements' sound one by one, each from where "
+"it is, in the direct sound and the reflections, rather than send out its "
+"far-field pattern from one point. For listeners nearer than about the "
+"array's length squared over the wavelength, which the scene warns about"
+msgstr ""
+"Voor een coherente array: telt het geluid van de elementen een voor een op, "
+"elk vanaf zijn eigen plek, in het directe geluid en de reflecties, in plaats "
+"van het verreveldpatroon vanuit één punt uit te zenden. Voor ontvangers "
+"dichterbij dan ongeveer de arraylengte in het kwadraat gedeeld door de "
+"golflengte, waarvoor de scène waarschuwt"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Show the pattern"
 msgstr "Richtingskarakteristiek tonen"
 

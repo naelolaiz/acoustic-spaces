@@ -217,6 +217,12 @@ Outdoor acoustics, in steps:
   presets within 0.04 dB on average (the narrow-angle one 0.11). Three to four times
   the work; without it nothing changes.
 
+Sources:
+
+- [x] Coherent arrays added up element by element near their listeners
+  (`near_field: true`): the direct sound, the reflections and the sound that reaches an
+  edge, exact over each band and the pattern far away.
+
 Examples:
 
 - [x] A concert in a stadium with a sound system: main line arrays, subwoofers, fills,

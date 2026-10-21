@@ -3582,6 +3582,23 @@ msgstr ""
 "dB para un cardioide"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Add up the array's elements one by one"
+msgstr "Sumar los elementos del array uno a uno"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"For a coherent array: add up its elements' sound one by one, each from where "
+"it is, in the direct sound and the reflections, rather than send out its "
+"far-field pattern from one point. For listeners nearer than about the "
+"array's length squared over the wavelength, which the scene warns about"
+msgstr ""
+"Para un array coherente: suma el sonido de sus elementos uno a uno, cada uno "
+"desde donde está, en el sonido directo y en las reflexiones, en lugar de "
+"emitir su diagrama de campo lejano desde un punto. Para receptores más cerca "
+"que aproximadamente la longitud del array al cuadrado dividida por la "
+"longitud de onda, de lo que avisa la escena"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Show the pattern"
 msgstr "Mostrar el diagrama"
 

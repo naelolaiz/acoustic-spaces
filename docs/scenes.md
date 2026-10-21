@@ -454,17 +454,33 @@ elements:
 - The result is the array's **far-field** pattern, a balloon like a measured one, so
   the source stays one point: right beyond about the array's length squared over the
   wavelength, L² f / c (16 m for a 2 m array at 1.4 kHz). Closer to a long array, its
-  sound spreads as a line's and its beam has not formed yet; a `line_m` source is the
-  better model there. The room's warnings name every listener nearer to an array than
-  that distance at 1 kHz: `validate`, `inspect`, `simulate` and `map` print them, and
-  the editor lists them under **Properties** when the scene itself is selected. Higher
-  up the far field starts farther still:
+  sound spreads as a line's and its beam has not formed yet. The room's warnings name
+  every listener nearer to an array than that distance at 1 kHz: `validate`,
+  `inspect`, `simulate` and `map` print them, and the editor lists them under
+  **Properties** when the scene itself is selected. Higher up the far field starts
+  farther still:
 
   | array length | far field from, at 1 kHz | at 4 kHz |
   |---|---|---|
   | 0.5 m | 0.7 m | 2.9 m |
   | 1 m | 2.9 m | 11.7 m |
   | 2 m | 11.7 m | 46.6 m |
+- `near_field: true` (next to `array` or `file`) adds up the elements' sound one by
+  one instead, each from where it is, with its own distance, direction, feed and
+  pattern, wherever an early path leaves the array: the direct sound and the
+  reflections (from the image of the listener the path unfolds to), the ground's
+  reflection and refracted rays outdoors, and the sound that reaches an edge or a crest
+  before it bends round it. It is exact over each band as the pattern is, becomes the
+  pattern far away, and the warnings leave the array out. The late reverberation
+  keeps the pattern, which carries the same power. In the editor it is "Add up the
+  array's elements one by one" under the source's directivity.
+
+  ```yaml
+  directivity: {file: line_array.yaml, near_field: true}
+  ```
+
+  A 3.75 m column loses about 3 dB per doubling of the distance on axis within its far
+  field's start, as a line does, and 6 dB beyond it, as a point does.
 - As for any source, `level_db` is the array's sound power in all; the pattern only
   says where it goes. A single element's array has the element's own pattern.
 - The tests check a column against the analytic sums of a line array (the

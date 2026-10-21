@@ -367,6 +367,8 @@ class Room:
         out = []
         c = self.speed_of_sound()
         for source in self.scene.sources:
+            if getattr(source.directivity, "near_field", None):
+                continue  # its elements add up one by one
             try:
                 length = array_length(source.directivity)
             except ValueError:
@@ -381,8 +383,8 @@ class Room:
                         f"listener {listener.name!r} is {distance:.1f} m from array "
                         f"{source.name!r} ({length:.2f} m long), whose far-field pattern "
                         f"holds from about {reach:.1f} m at {FAR_FIELD_HZ:g} Hz and farther "
-                        "at higher frequencies; this close, a line source (line_m) models "
-                        "it better"
+                        "at higher frequencies; near_field: true adds up its elements one by "
+                        "one"
                     )
         return out
 

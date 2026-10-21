@@ -194,6 +194,11 @@ def test_an_array_aims_its_sound(tmp_path: Path) -> None:
     expected = 10 * np.log10(pattern.energy([[1.0, 0, 0], np.divide(up, 4)]))
     np.testing.assert_allclose(ahead - omni_ahead, expected[0], atol=1e-6)
     np.testing.assert_allclose(above - omni_above, expected[1], atol=1e-6)
+    # Element by element, 4 m from an array 1.4 m long.
+    room, levels = run({"array": {"count": 8, "spacing_m": 0.2}, "near_field": True})
+    near = 10 * np.log10(room.directivity("s").near_energy([[4.0, 0, 0], up]))
+    np.testing.assert_allclose(np.subtract(levels, [omni_ahead, omni_above]), near, atol=1e-6)
+    assert np.abs(near - expected).max() > 0.5
     # A beam from 500 Hz up; above 1.7 kHz, where the 20 cm spacing is more than a
     # wavelength, grating lobes send some sound upwards too.
     assert np.all((ahead - above)[3:5] > 15) and np.all((ahead - above)[5:] > 8)
@@ -231,6 +236,56 @@ def test_listeners_near_an_array_are_warned_about(tmp_path: Path) -> None:
         assert message.startswith(f"listener 'near' is 2.0 m from array {source['name']!r}")
         assert "(1.05 m long)" in message and f"about {reach:.1f} m at 1000 Hz" in message
     assert warned("omni") == [] and warned({"array": {"count": 4, "spacing_m": 0.15}}) == []
+    # Added up element by element, the array holds near its listeners too.
+    assert warned({"file": "column.yaml", "near_field": True}) == []
+
+
+def test_an_array_adds_up_its_elements_near_it() -> None:
+    # near_field keeps the elements: their pressures add up where each path goes, each
+    # from its own position, exactly over each band, against a sum over 20000
+    # frequencies a band; far away they give the pattern's own weights.
+    spec = ArraySpec(element="cardioid", count=8, spacing_m=0.3, steer_deg=-5.0)
+    pattern = array_directivity(spec)
+    near = array_directivity(spec, near_field=True)
+    assert pattern.near is None and np.array_equal(near.table, pattern.table)
+    for direction in ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]):
+        np.testing.assert_allclose(
+            near.near_energy([np.multiply(direction, 1e5)]), pattern.energy([direction]), rtol=1e-4
+        )
+    point = np.array([3.0, 0.4, -0.5])
+    elements = spec.layout()
+    positions = np.array([e.position for e in elements])
+    aim = np.array([math.cos(math.radians(-5.0)), 0.0, math.sin(math.radians(-5.0))])
+    delays = (positions @ aim - (positions @ aim).min()) / C
+    spread = np.linalg.norm(point - positions, axis=1)
+    amplitude = (0.5 + 0.5 * (point - positions)[:, 0] / spread) / spread
+
+    def energy(f):
+        phase = np.exp(-2j * math.pi * f * (spread / C + delays))
+        return np.abs(np.sum(amplitude * phase)) ** 2
+
+    exact = [_band_mean(energy, b, 20000) for b in range(24)]
+    weights = near.near.weights([point])[0]
+    expected = np.multiply(exact, point @ point) * near.near.scale
+    np.testing.assert_allclose(10 * np.log10(weights / expected), 0.0, atol=1e-3)
+    # In octave bands, the mean of each octave's three thirds, as the pattern's are.
+    np.testing.assert_allclose(
+        near.in_bands("octave").near_energy([point])[0], weights.reshape(8, 3).mean(axis=1)
+    )
+    with pytest.raises(ValidationError, match="near_field is for coherent arrays"):
+        DirectivitySpec(pattern=["cardioid"] * 8, near_field=True)
+
+
+def test_a_line_array_spreads_as_a_line_near_it() -> None:
+    # 16 elements 25 cm apart, 3.75 m long, on axis: about 3 dB less per doubling of the
+    # distance within its far-field distance (41 m at 1 kHz), as a line source, and 6 dB
+    # beyond it, as a point.
+    column = array_directivity(ArraySpec(count=16, spacing_m=0.25), near_field=True)
+    distances = 2.0 ** np.arange(11)  # 1 to 1024 m
+    weights = column.in_bands("octave").near_energy(distances[:, None] * [[1.0, 0.0, 0.0]])
+    per_doubling = -np.diff(10 * np.log10(weights / distances[:, None] ** 2), axis=0)
+    assert np.mean(per_doubling[:5, 4]) == pytest.approx(3.0, abs=0.3)  # 1 to 32 m, 1 kHz
+    np.testing.assert_allclose(per_doubling[7:, 4], 6.02, atol=0.04)  # 128 to 1024 m
 
 
 def test_arrays_are_shown_in_octave_bands(

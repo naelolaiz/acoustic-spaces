@@ -1294,6 +1294,15 @@ class DirectivitySpec(_Model):
         ge=0,
         description="SOFA: the measurement to use (a note, say); None averages them all",
     )
+    near_field: bool | None = Field(
+        default=None,
+        description=(
+            "a coherent array: add up its elements' sound one by one, each from where it "
+            "is, in the direct sound and the reflections, rather than send out its "
+            "far-field pattern from one point; for listeners nearer than about its "
+            "length squared over the wavelength"
+        ),
+    )
 
     @field_validator("pattern")
     @classmethod
@@ -1313,6 +1322,12 @@ class DirectivitySpec(_Model):
             self.file is None or self.file.suffix.lower() != ".sofa"
         ):
             raise ValueError("measurement is for SOFA directivity files")
+        if (
+            self.near_field
+            and self.array is None
+            and (self.file is None or self.file.suffix.lower() not in (".yaml", ".yml"))
+        ):
+            raise ValueError("near_field is for coherent arrays: an array or a YAML file")
         return self
 
 

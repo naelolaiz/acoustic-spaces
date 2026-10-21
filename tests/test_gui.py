@@ -1843,6 +1843,7 @@ def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
     assert window.document.scene.sources[0].directivity.file == table
     assert box.currentText() == "file: speaker.csv"
     assert "Hz copied from the nearest octave" in page.directivity_index.text()
+    assert not page.near_field.isEnabled()  # for arrays only
 
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: ("", ""))
     box.activated.emit(box.findText(MEASURED))  # cancelled: nothing changes
@@ -1856,6 +1857,13 @@ def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
     box.activated.emit(box.findText(MEASURED))
     assert box.currentText() == "file: column.yaml"
     assert window.document.room.directivities[0].name == "array of 4 elements"
+    # Its elements added up one by one near it.
+    assert page.near_field.isEnabled() and not page.near_field.isChecked()
+    page.near_field.setChecked(True)
+    assert window.document.scene.sources[0].directivity.near_field
+    assert window.document.room.directivities[0].near is not None
+    window.undo()
+    assert not window.document.scene.sources[0].directivity.near_field
     window.document.update_point(
         "sources", 0, directivity={"array": {"count": 3, "spacing_m": 0.2}}
     )

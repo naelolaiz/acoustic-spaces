@@ -297,7 +297,9 @@ class CrestDiffraction:
         detours += [a["extra"] + b["extra"] for a, b in doubles]
         waves = self._merged(w, np.stack(rows), len(images[0])) * counted[:, None, None]
         departure = (chain[1] - chain[0]) / legs[0]
-        strength = source_weights(self.directivity, self.orientation, departure, bands)[0]
+        strength = source_weights(
+            self.directivity, self.orientation, departure, bands, distances=legs[:1]
+        )[0]
         amplitude = np.sqrt(weight * strength * np.exp(-self.air * distance) / (4.0 * np.pi))
         amplitude /= math.sqrt(float(np.prod(legs)) * distance)
         waves = waves * (wedge_prefactor(w["n"], k, 1.0) * amplitude[:, None])[None]
@@ -474,7 +476,9 @@ class CrestDiffraction:
                 * thin
             )
         departure = (chain[1] - chain[0]) / legs[0]
-        weight = source_weights(self.directivity, self.orientation, departure, bands)[0]
+        weight = source_weights(
+            self.directivity, self.orientation, departure, bands, distances=legs[:1]
+        )[0]
         amplitude = np.sqrt(weight * np.exp(-self.air * distance) / (4.0 * np.pi))
         amplitude /= math.sqrt(float(np.prod(legs)) * float(legs.sum()))
         strength *= 10.0 ** (-0.1 * near)
@@ -977,7 +981,10 @@ class CrestDiffraction:
         bands = model.absorption.shape[1]
         energy = share * np.exp(-self.air * distance) / (4.0 * np.pi * distance**2)
         departure = (at - source) / steps[0]
-        energy = energy * source_weights(self.directivity, self.orientation, departure, bands)[0]
+        aimed = source_weights(
+            self.directivity, self.orientation, departure, bands, distances=[distance]
+        )
+        energy = energy * aimed[0]
         energy = energy * np.mean(image["weight"] ** 2, axis=1)
         return EarlyReflections(
             order=np.ones(1, dtype=np.int64),

@@ -37,14 +37,19 @@ def source_weights(
     orientation: np.ndarray | None,
     directions: np.ndarray,
     bands: int = len(OCTAVE_BANDS_HZ),
+    distances: np.ndarray | None = None,
 ) -> np.ndarray:
     """Energy weights (n, bands) of a source's directivity for unit vectors (n, 3) in
     room coordinates; ``orientation`` has the source's forward, left and up axes as
-    columns (default: the room's). Without a directivity, ``bands`` ones."""
+    columns (default: the room's). Without a directivity, ``bands`` ones. With the
+    ``distances`` (n,) the sound travels that way (m), a coherent array with
+    ``near_field`` adds up its elements' sound there one by one."""
     directions = np.asarray(directions, dtype=float).reshape(-1, 3)
     if directivity is None:
         return np.ones((len(directions), bands))
     local = directions if orientation is None else directions @ np.asarray(orientation)
+    if distances is not None and getattr(directivity, "near", None) is not None:
+        return directivity.near_energy(local * np.asarray(distances, dtype=float).reshape(-1, 1))
     return directivity.energy(local)
 
 
@@ -69,7 +74,9 @@ def free_field_energy(
         distance = np.linalg.norm(delta, axis=1)
         safe = np.where(distance > 0.0, distance, 1.0)
         energy = np.exp(-np.outer(distance, air)) / (4.0 * np.pi * safe[:, None] ** 2)
-        energy *= source_weights(directivity, orientation, delta / safe[:, None], len(air))
+        energy *= source_weights(
+            directivity, orientation, delta / safe[:, None], len(air), distances=distance
+        )
         energy[distance <= 0.0] = np.nan
         out += energy
     return out / len(elements)

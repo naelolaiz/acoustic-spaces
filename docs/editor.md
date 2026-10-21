@@ -106,7 +106,8 @@ which frequencies each octave band holds.
   bands or the wave solver, leave the results marked out of date until the next run.
 - A source's form sets its **Shape** (a point, a line or a surface, with its length,
   height and spacing), its directivity (a pattern, a SOFA or CSV file of measured data,
-  or an array file), its sound power per band, its **Spectrum** (flat, or male or female
+  or an array file, whose elements **Add up the array's elements one by one** sums near
+  its listeners), its sound power per band, its **Spectrum** (flat, or male or female
   speech) and the **Gain**, **Equalizer** and **Delay** of its feed. It shows the
   directivity index per band, opens the polar patterns, and the selected source shows
   its balloon in the 3D view.

@@ -2907,6 +2907,16 @@ class PointPage(Page):
                 "directions, per octave band (dB): 0 dB for omni, about 5 dB for a cardioid"
             )
         )
+        self.near_field = QCheckBox(_("Add up the array's elements one by one"))
+        self.near_field.setToolTip(
+            _(
+                "For a coherent array: add up its elements' sound one by one, each from "
+                "where it is, in the direct sound and the reflections, rather than send out "
+                "its far-field pattern from one point. For listeners nearer than about the "
+                "array's length squared over the wavelength, which the scene warns about"
+            )
+        )
+        self.near_field.toggled.connect(self._near_field)
         self.pattern = QPushButton(_("Show the pattern"))
         self.pattern.setToolTip(
             _(
@@ -2996,6 +3006,7 @@ class PointPage(Page):
             form.addRow(self.elements)
             form.addRow(_("Directivity"), self.directivity)
             form.addRow(self.directivity_index)
+            form.addRow(self.near_field)
             form.addRow(self.pattern)
             form.addRow(_("Sound power"), self.level)
             form.addRow(_("Spectrum"), self.spectrum)
@@ -3048,6 +3059,13 @@ class PointPage(Page):
             )
             self.directivity.setToolTip(tip)
             self._form.labelForField(self.directivity).setToolTip(tip)
+            spec = item.directivity
+            array = not isinstance(spec, str) and (
+                spec.array is not None
+                or (spec.file is not None and spec.file.suffix.lower() in (".yaml", ".yml"))
+            )
+            self.near_field.setEnabled(array)
+            self.near_field.setChecked(bool(array and spec.near_field))
             directivity = self.document.room.directivities[self.key]
             index = directivity.in_bands("octave").index()
             values = numbers_text(index, ".1f")
@@ -3145,6 +3163,16 @@ class PointPage(Page):
                 self._update(directivity={"file": path})
             else:
                 self.reload()
+
+    def _near_field(self, on: bool) -> None:
+        if self._loading:
+            return
+        directivity = self.document.scene.to_data()["sources"][self.key]["directivity"]
+        if on:
+            directivity["near_field"] = True
+        else:
+            directivity.pop("near_field", None)
+        self._update(directivity=directivity)
 
     def show_pattern(self) -> None:
         """Open (or refresh) a window with the polar patterns of the source."""

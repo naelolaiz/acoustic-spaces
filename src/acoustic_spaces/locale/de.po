@@ -3568,6 +3568,23 @@ msgstr ""
 "pro Oktavband (dB): 0 dB für Kugel, etwa 5 dB für eine Niere"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Add up the array's elements one by one"
+msgstr "Die Elemente des Arrays einzeln aufsummieren"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"For a coherent array: add up its elements' sound one by one, each from where "
+"it is, in the direct sound and the reflections, rather than send out its "
+"far-field pattern from one point. For listeners nearer than about the "
+"array's length squared over the wavelength, which the scene warns about"
+msgstr ""
+"Für ein kohärentes Array: den Schall seiner Elemente einzeln aufsummieren, "
+"jedes von seinem Ort aus, im Direktschall und in den Reflexionen, statt sein "
+"Fernfeld-Muster von einem Punkt aus abzustrahlen. Für Empfänger, die näher "
+"sind als etwa die Arraylänge zum Quadrat geteilt durch die Wellenlänge, "
+"wovor die Szene warnt"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Show the pattern"
 msgstr "Richtcharakteristik anzeigen"
 

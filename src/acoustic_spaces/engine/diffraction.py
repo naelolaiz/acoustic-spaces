@@ -863,8 +863,9 @@ class EdgeDiffraction:
         first = np.where(before[:, None], c["bounce"], c["point"])
         departure = first - self.source
         departure /= np.maximum(np.linalg.norm(departure, axis=1), 1e-300)[:, None]
+        # A coherent array near the edge: its sound where it meets the edge.
         weight = source_weights(
-            self.directivity, self.orientation, departure, len(self.air)
+            self.directivity, self.orientation, departure, len(self.air), distances=r1
         )  # (C, B)
         amplitude = np.sqrt(weight * np.exp(-np.outer(distance, self.air)) / (4.0 * np.pi))
         amplitude /= np.sqrt(r1 * r2 * distance)[:, None]
@@ -1144,7 +1145,9 @@ class EdgeDiffraction:
         second *= np.where(graze.any(axis=1), 0.5, 1.0)[:, None, None, None]
 
         departure = (p1 - self.source) / r0[:, None]
-        weight = source_weights(self.directivity, self.orientation, departure, len(self.air))
+        weight = source_weights(
+            self.directivity, self.orientation, departure, len(self.air), distances=r0
+        )
         amplitude = np.sqrt(weight * np.exp(-np.outer(distance, self.air)) / (4.0 * np.pi))
         amplitude /= np.sqrt(r0 * r1 * (r0 + r1))[:, None]
         common = (

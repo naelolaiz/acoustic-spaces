@@ -577,7 +577,10 @@ class Refraction:
             # Each caustic delays the phase by a quarter period.
             spectrum *= (1j ** found.caustics[index])[:, None, None]
         departure = np.array([_departure(r[1]) for r in rows])
-        energy *= source_weights(self.directivity, self.orientation, departure, bands)
+        travelled = np.array([found.length[r[0]] for r in rows])
+        energy *= source_weights(
+            self.directivity, self.orientation, departure, bands, distances=travelled
+        )
         arrival = np.array([r[1][-2] - r[1][-1] for r in rows])
         arrival /= np.maximum(np.linalg.norm(arrival, axis=1), 1e-300)[:, None]
         # The ray's own direction at the listener rather than its last chord's.
@@ -792,7 +795,11 @@ class Refraction:
                         self.profile(key), self.zs, wave.height, wave.range, self.centres, start
                     )
         weight = source_weights(
-            self.directivity, self.orientation, wave.departure[None], self.bands
+            self.directivity,
+            self.orientation,
+            wave.departure[None],
+            self.bands,
+            distances=np.array([wave.distance]),
         )[0]
         energy = (
             excess

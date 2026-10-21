@@ -198,7 +198,12 @@ def terrain_paths(
     share, spectrum = reflection_factor(model, found, distance, source, listener, coherent)
     energy = share * np.exp(-air * distance) / (4.0 * np.pi * distance**2)
     departure = legs[0] / max(lengths[0], 1e-300)
-    energy = energy * source_weights(directivity, orientation, departure, bands)[0]
+    energy = (
+        energy
+        * source_weights(
+            directivity, orientation, departure, bands, distances=np.array([distance])
+        )[0]
+    )
     arrival = -legs[1] / max(lengths[1], 1e-300)
     reflected = EarlyReflections(
         order=np.ones(1, dtype=np.int64),

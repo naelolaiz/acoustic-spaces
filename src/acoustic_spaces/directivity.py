@@ -192,6 +192,9 @@ class Balloon(Directivity):
     table: np.ndarray = field(repr=False)
     name: str = ""
     extrapolated: tuple[int, ...] = ()
+    #: A coherent array's elements, for its sound added up element by element near it
+    #: (``near_field: true``); None reads every weight off the pattern.
+    near: NearField | None = field(default=None, repr=False, compare=False)
 
     @classmethod
     def from_measurements(
@@ -254,6 +257,17 @@ class Balloon(Directivity):
     def energy(self, directions) -> np.ndarray:
         return self._interpolate(directions)
 
+    def near_energy(self, points) -> np.ndarray:
+        """Energy weights (n, bands) at points (n, 3) in the source's frame: for an
+        array with ``near``, its elements added up from where each is; otherwise, and
+        far from the array alike, the pattern's weights towards the points."""
+        if self.near is None:
+            return self.energy(points)
+        weights = self.near.weights(points)
+        if self.table.shape[-1] == _BANDS:
+            weights = weights.reshape(len(weights), _BANDS, 3).mean(axis=-1)
+        return weights
+
     def native(self) -> tuple[np.ndarray, np.ndarray]:
         return np.ones(self.table.shape[-1]), np.ascontiguousarray(self.table, dtype=float)
 
@@ -265,7 +279,60 @@ class Balloon(Directivity):
             table = np.repeat(self.table, 3, axis=-1)
         else:
             table = self.table.reshape(*self.table.shape[:-1], -1, 3).mean(axis=-1)
-        return Balloon(table, self.name, self.extrapolated)
+        return Balloon(table, self.name, self.extrapolated, self.near)
+
+
+@dataclass(frozen=True, eq=False)
+class NearField:
+    """A coherent array's elements (see :func:`array_directivity`), to add up their
+    pressures at points near it, each from its own position with its own distance and
+    direction, rather than read the far-field pattern off one point."""
+
+    #: (elements, 3) positions in the source's frame (m).
+    positions: np.ndarray
+    #: (elements,) pressure gains, negative where the polarity is inverted.
+    gains: np.ndarray
+    #: (elements,) the feed's delays (s), steering included.
+    delays: np.ndarray
+    #: (elements, 3, 3) each element's forward, left and up axes as columns.
+    turns: np.ndarray
+    #: The elements' own pattern, in third-octave bands.
+    element: Directivity
+    speed_of_sound: float
+    #: (25,) the third-octave bands' edges (Hz).
+    edges: np.ndarray
+    #: (24,) one over the pattern's mean energy over the sphere in each third-octave
+    #: band, which scales it to the weights' average of 1; 0 where the band is silent.
+    scale: np.ndarray
+
+    def weights(self, points) -> np.ndarray:
+        """Energy weights (n, 24) at points (n, 3) in the source's frame, per
+        third-octave band, as the pattern's weights are: the elements' energy there,
+        averaged over each band (of a flat spectrum) exactly, times the squared distance
+        from the source's position. Far away they become the pattern's."""
+        points = np.asarray(points, dtype=float).reshape(-1, 3)
+        reach = np.linalg.norm(points, axis=1)
+        offsets = points[None] - self.positions[:, None]  # (elements, n, 3)
+        spread = np.maximum(np.linalg.norm(offsets, axis=2), 1e-9)
+        local = np.einsum("enk,ekj->enj", offsets / spread[..., None], self.turns)
+        amplitude = _amplitudes(self.element, local) * (self.gains[:, None] / spread)[..., None]
+        arrival = spread / self.speed_of_sound + self.delays[:, None]  # (elements, n)
+        first_of, second_of = np.triu_indices(len(self.positions))
+        twice = np.where(first_of == second_of, 1.0, 2.0)[:, None]
+        # How much sooner one element of each pair is heard than the other (s).
+        lag = arrival[first_of] - arrival[second_of]  # (pairs, n)
+        still = np.abs(lag) < 1e-15
+        energy = np.zeros((len(points), len(self.edges) - 1))
+        below = np.sin(2.0 * math.pi * self.edges[0] * lag)
+        for b in range(len(self.edges) - 1):
+            above = np.sin(2.0 * math.pi * self.edges[b + 1] * lag)
+            span = 2.0 * math.pi * (self.edges[b + 1] - self.edges[b]) * np.where(still, 1.0, lag)
+            mean_cos = np.where(still, 1.0, (above - below) / span)
+            pair = amplitude[first_of, :, b] * amplitude[second_of, :, b]
+            energy[:, b] = np.sum(twice * pair * mean_cos, axis=0)
+            below = above
+        weights = energy * (reach**2)[:, None] * self.scale
+        return np.where(self.scale > 0.0, weights, 1.0)
 
 
 # -- reading ----------------------------------------------------------------------------
@@ -443,17 +510,21 @@ def _positions_array(values: np.ndarray, dataset) -> np.ndarray:
 
 
 def read_directivity(
-    path: str | Path, measurement: int | None = None, speed_of_sound: float = SPEED_OF_SOUND
+    path: str | Path,
+    measurement: int | None = None,
+    speed_of_sound: float = SPEED_OF_SOUND,
+    near_field: bool = False,
 ) -> Balloon:
     """Measured directivity from a ``.sofa`` file or a CSV table, or an array's from a
-    YAML file (``.yaml`` or ``.yml``; see :func:`read_array`)."""
+    YAML file (``.yaml`` or ``.yml``; see :func:`read_array`), with its elements for
+    ``near_field``."""
     path = Path(path)
     if not path.exists():
         raise ValueError(f"directivity file not found: {path}")
     if path.suffix.lower() == ".sofa":
         return read_directivity_sofa(path, measurement)
     if path.suffix.lower() in (".yaml", ".yml"):
-        return array_directivity(read_array(path), speed_of_sound)
+        return array_directivity(read_array(path), speed_of_sound, near_field)
     return read_directivity_csv(path)
 
 
@@ -484,9 +555,13 @@ def _amplitudes(element: Directivity, local: np.ndarray) -> np.ndarray:
     return np.sqrt(flat).reshape(*local.shape[:2], -1)
 
 
-def array_directivity(spec, speed_of_sound: float = SPEED_OF_SOUND) -> Balloon:
+def array_directivity(
+    spec, speed_of_sound: float = SPEED_OF_SOUND, near_field: bool = False
+) -> Balloon:
     """The far-field pattern of a coherent array (an
-    :class:`~acoustic_spaces.scene.ArraySpec`), per third-octave band.
+    :class:`~acoustic_spaces.scene.ArraySpec`), per third-octave band; with
+    ``near_field``, it also keeps the elements (:class:`NearField`), whose sound the
+    early paths add up element by element.
 
     The elements' pressures add up with their phases: the path difference towards each
     direction, the feed's delays and the steering, the gains and polarities, and each
@@ -554,7 +629,14 @@ def array_directivity(spec, speed_of_sound: float = SPEED_OF_SOUND) -> Balloon:
             energy[first : first + len(chunk), b] = np.sum(weights * mean_cos, axis=1)
             below = above
     table = energy.reshape(len(elevation), len(azimuth), -1)
-    return Balloon.from_table(table, f"array of {len(elements)} elements")
+    balloon = Balloon.from_table(table, f"array of {len(elements)} elements")
+    if not near_field:
+        return balloon
+    # The mean that from_table scales the pattern by.
+    mean = Balloon(table)._interpolate(_sphere(8192)).mean(axis=0)
+    scale = np.where(mean > 0.0, 1.0 / np.where(mean > 0.0, mean, 1.0), 0.0)
+    near = NearField(positions, gains, delays, turns, element, c, edges, scale)
+    return Balloon(balloon.table, balloon.name, balloon.extrapolated, near)
 
 
 def lambert() -> Balloon:
@@ -604,10 +686,11 @@ def load_directivity(spec, speed_of_sound: float = SPEED_OF_SOUND) -> Directivit
         return lambert()
     if isinstance(spec, str):
         return FirstOrder.pattern(spec)
+    near_field = bool(getattr(spec, "near_field", None))
     if getattr(spec, "array", None) is not None:
-        return array_directivity(spec.array, speed_of_sound)
+        return array_directivity(spec.array, speed_of_sound, near_field)
     if getattr(spec, "file", None) is not None:
-        return read_directivity(spec.file, spec.measurement, speed_of_sound)
+        return read_directivity(spec.file, spec.measurement, speed_of_sound, near_field)
     values = [PATTERNS[v] if isinstance(v, str) else float(v) for v in spec.pattern]
     names = [v if isinstance(v, str) else f"a={float(v):g}" for v in spec.pattern]
     return FirstOrder(tuple(values), "per band: " + ", ".join(names))
@@ -621,6 +704,7 @@ __all__ = [
     "Balloon",
     "Directivity",
     "FirstOrder",
+    "NearField",
     "array_directivity",
     "array_length",
     "far_field_distance",
