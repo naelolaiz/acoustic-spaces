@@ -13,9 +13,10 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from test_native import _unit_cube, cube_with_seats
+from test_native import _stochastic_args, _unit_cube, cube_with_seats
 from test_tracer_reference import REFERENCE, reference_arguments
-from test_wave import STENCILS, _courant, _drive, _solver
+from test_vegetation import _big_box, _slab
+from test_wave import STENCILS, _courant, _drive, _solver, _speeds, _warming
 
 from acoustic_spaces import Room, _native
 from acoustic_spaces.engine import gpu, gpu_rays, gpu_tracer, late, ray_device
@@ -25,6 +26,7 @@ from acoustic_spaces.engine.wave import COURANT, LAYER_CELLS, LAYER_DAMPING, wav
 from acoustic_spaces.scene.model import WaveStage
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
+OPEN_AIR = Path(__file__).resolve().parent.parent / "examples" / "open_air_stage" / "scene.yaml"
 C = 343.0
 needs_gpu = pytest.mark.skipif(gpu.gpu_name() is None, reason="wgpu finds no GPU")
 
@@ -121,6 +123,106 @@ def test_wave_responses_on_the_gpu_match_the_cpu() -> None:
     )
     assert info["wave_gpu"] == 1.0
     assert gpu.gpu_name() in said[0]
+    a, b = cpu[0].signals, on_gpu[0].signals
+    assert np.abs(a - b).max() < 1e-5 * np.abs(a).max()
+
+
+@needs_gpu
+@STENCILS
+def test_gpu_steps_a_speed_of_sound_per_cell_as_the_cpu_does(stencil: int) -> None:
+    """A room whose speed of sound falls from the grid's at the ceiling to 0.6 of it at
+    the floor: the interior, the walls (with their branches) and the source take the
+    cells' scale as the CPU does."""
+    cell = 0.1
+    rate = C / (_courant(stencil) * cell)
+    fit = fit_admittance([0.1, 0.3, 0.6], 8, rate)
+
+    def make():
+        solver, _ = _solver(
+            (3.0, 2.2, 1.7),
+            lambda mesh: [0.02] * len(mesh.faces),
+            [0.8, 0.9, 0.7],
+            [[2.1, 1.3, 1.1], [1.0, 1.6, 0.4]],
+            cell=cell,
+            branches=[(0, fit), (3, fit)],
+            stencil=stencil,
+            speed=lambda centres: np.clip(0.6 + 0.4 * centres[:, 2] / 1.7, 0.6, 1.0),
+        )
+        return solver
+
+    assert make().layout()["scaled"][0] == 1
+    a, b = _runs(make, _drive(rate, cell, 1201), [0, 577, 1201])
+    assert np.abs(a).max() > 0.0
+    intel_mac = sys.platform == "darwin" and platform.machine() == "x86_64"
+    tolerance = 2e-3 if intel_mac else 3e-5
+    assert np.abs(a - b).max() < tolerance * np.abs(a).max()
+
+
+@needs_gpu
+def test_gpu_steps_the_matched_layer_with_a_speed_of_sound_per_cell_as_the_cpu_does() -> None:
+    """A plate in the open, the speed of sound half the grid's at the bottom of the grid
+    and all of it 2.5 m up: the matched layer's push takes each cell's scale as the CPU
+    does."""
+    h = 0.3
+    vertices = np.array([[0, 0, 0], [5, 0, 0], [5, 4, 0], [0, 4, 0]], float)
+    bvh = _native.Bvh(vertices, np.array([[0, 1, 2], [0, 2, 3]], np.int64))
+    source = np.array([2.0, 2.0, 1.5])
+    listeners = np.array([[4.0, 3.0, 1.2], [1.0, 1.0, 0.6]])
+    points = np.vstack([source, listeners])
+    low = np.minimum(vertices.min(0), points.min(0) - 2 * h) - h * (2.0 + LAYER_CELLS)
+    high = np.maximum(vertices.max(0), points.max(0) + 2 * h)
+    shape = np.ceil((high - low) / h).astype(int) + 2 + LAYER_CELLS
+    origin = low + np.array([0.0137, 0.0219, 0.0291]) * h
+
+    def speed(centres):
+        return np.clip(0.5 + 0.5 * (centres[:, 2] - low[2]) / 2.5, 0.5, 1.0)
+
+    def make():
+        return _native.WaveSolver(
+            bvh,
+            np.zeros(2, np.int64),
+            np.array([0.05]),
+            np.zeros((0, 3)),
+            np.zeros(0, np.int64),
+            origin,
+            h,
+            *map(int, shape),
+            source,
+            listeners,
+            layer=LAYER_CELLS,
+            layer_damping=LAYER_DAMPING,
+            speed=_speeds(speed, origin, h, shape),
+        )
+
+    solver = make()
+    assert solver.layer_cells > 0 and solver.layout()["scaled"][0] == 1
+    rate = C / (COURANT * h)
+    a, b = _runs(make, _drive(rate, h, 600), [0, 301, 600])
+    assert np.abs(a - b).max() < 1e-5 * np.abs(a).max()
+
+
+@needs_gpu
+def test_wave_responses_in_wind_and_temperature_run_on_the_gpu() -> None:
+    """Air warming with height (the speed of sound from 337 to 402 m/s): the GPU steps
+    the grid, with its speed of sound per cell, as the CPU does."""
+    room = _warming([[0, 10, 0], [60, 130, 0]])
+    model = TraceModel.from_room(room)
+    source = np.array([0.0, 0.0, 30.0])
+    listener = np.array([60.0, 0.0, 30.0])
+    common = {
+        "max_band_hz": 63,
+        "length_s": 0.25,
+        "sample_rate": 48_000,
+        "speed_of_sound": room.speed_of_sound(),
+    }
+    said: list[str] = []
+    cpu, _ = wave_responses(model, source, [listener], ["l"], **common)
+    on_gpu, info = wave_responses(
+        model, source, [listener], ["l"], device="gpu", say=said.append, **common
+    )
+    assert info["wave_gpu"] == 1.0
+    assert info["wave_speed_min_m_s"] == pytest.approx(337.3, abs=0.1)
+    assert gpu.gpu_name() in said[0] and "sound at 337 to 402 m/s" in said[0]
     a, b = cpu[0].signals, on_gpu[0].signals
     assert np.abs(a - b).max() < 1e-5 * np.abs(a).max()
 
@@ -368,6 +470,219 @@ def test_the_late_stage_traces_where_its_device_says() -> None:
         assert found.energy.sum() == pytest.approx(on_cpu.energy.sum(), rel=0.15)
 
 
+# -- outdoors: rays bent by the atmosphere, and through vegetation ------------------------
+
+
+def _profile(gradient: float, wind: float) -> dict:
+    """The tracer's bending arguments for an atmosphere whose speed of sound in still air
+    grows by ``gradient`` m/s per metre up to 100 m and stays put above, with a wind of
+    ``wind`` m/s 10 m up growing as the log of the height, blowing along x."""
+    z = np.array([0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 100.0, 1000.0])
+    still = 340.0 + gradient * np.minimum(z, 100.0)
+    speed = wind * np.log1p(z / 0.1) / np.log1p(10.0 / 0.1)
+    return {
+        "atmosphere": np.column_stack([z, still, speed]),
+        "wind_direction": np.array([1.0, 0.0]),
+        "ground": 0.0,
+        "chord_sagitta": 0.02,
+    }
+
+
+@needs_gpu
+@pytest.mark.parametrize("gradient, wind", [(0.3, 0.0), (-0.3, 0.0), (0.0, 6.0), (-0.1, 4.0)])
+def test_gpu_chords_follow_the_cpu_s(gradient: float, wind: float) -> None:
+    """One chord of each of 4000 rays from random places in random directions, half of
+    them leaving a plane they must not meet again: the GPU's chords turn where the
+    CPU's do, point the same way and stretch as far to a part in a thousand; and cut to
+    a common length, their ends and times are the CPU's to the millimetre."""
+    bending = _profile(gradient, wind)
+    rng = np.random.default_rng(3)
+    n = 4000
+    origins = rng.uniform([-50.0, -50.0, 0.0], [50.0, 50.0, 60.0], (n, 3))
+    directions = rng.normal(size=(n, 3))
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    budget = rng.uniform(1.0, 400.0, n)
+    away = np.zeros((n, 3))
+    away[n // 2 :] = rng.normal(size=(n - n // 2, 3))
+    away[n // 2 :] /= np.linalg.norm(away[n // 2 :], axis=1, keepdims=True)
+    on_cpu = _native.bent_chords(origins, directions, budget, away, *bending.values())
+    vertices, faces = _unit_cube()
+    tracer = gpu_tracer.GpuTracer(_native.Bvh(vertices * 200.0 - 100.0, faces))
+    on_gpu = tracer.bent_chords(origins, directions, budget, away, *bending.values())
+    ends, tangents, arcs, times, turned = on_cpu
+    assert arcs.max() > 300.0 and (gradient == 0.0 or turned[n // 2 :].any())
+    assert (on_gpu[4] == turned).all()
+    assert np.linalg.norm(on_gpu[1] - tangents, axis=1).max() < 1e-4
+    # A chord ends where its sagitta would grow past the tolerance, and that end moves
+    # a little with the rounding of the turn gathered along it (most where the wind
+    # shears hard just above the ground); so the arcs agree to a part in a thousand
+    # for all but a few, and along a common arc the two chords are the same curve.
+    stretch = np.abs(on_gpu[2] - arcs) / (1.0 + arcs)
+    assert np.quantile(stretch, 0.99) < 1e-3 and stretch.max() < 2e-2
+    common = 0.999 * np.minimum(on_gpu[2], arcs)
+    on_cpu = _native.bent_chords(origins, directions, common, away, *bending.values())
+    on_gpu = tracer.bent_chords(origins, directions, common, away, *bending.values())
+    assert np.allclose(on_cpu[2], common, rtol=0.0, atol=1e-6 + 1e-6 * common)
+    assert np.allclose(on_gpu[2], common, rtol=0.0, atol=1e-4 + 1e-6 * common)
+    assert np.linalg.norm(on_gpu[0] - on_cpu[0], axis=1).max() < 1e-3
+    assert np.abs(on_gpu[3] - on_cpu[3]).max() < 1e-5
+
+
+def _open_field(bands: int = 2, rays: int = 200_000, **kwargs) -> dict:
+    """The tracer's arguments for a field 400 m across under a sky 200 m up: the ground
+    reflects, the sides and the sky absorb all; a source 2 m up in the middle and
+    listeners 100 m off downwind, upwind and across the wind, and 60 m up."""
+    vertices, faces = _unit_cube()
+    bottom = np.all(vertices[faces][:, :, 2] == 0.0, axis=1)
+    absorption = np.ones((12, bands))
+    absorption[bottom] = 0.05
+    scattering = np.zeros((12, bands))
+    scattering[bottom] = 0.3
+    args = _stochastic_args(rays)
+    args.update(
+        bvh=_native.Bvh(vertices * (400.0, 400.0, 200.0) - (200.0, 200.0, 0.0), faces),
+        source=np.array([0.0, 0.0, 2.0]),
+        absorption=absorption,
+        scattering=scattering,
+        air=np.array([1e-4, 1e-3])[:bands],
+        receivers=np.array([[100.0, 0, 2], [-100.0, 0, 2], [0, 100.0, 2], [0, 0, 60.0]]),
+        receiver_radius=np.full(4, 8.0),
+        max_time=1.0,
+        time_step=5e-3,
+        diffuse_rain=True,
+    )
+    args.update(kwargs)
+    return args
+
+
+def _arrivals(energy: np.ndarray, time_step: float) -> np.ndarray:
+    """Per listener and band, the energy and the mean time it arrives at (s)."""
+    t = (np.arange(energy.shape[2]) + 0.5) * time_step
+    total = energy.sum(2)
+    return np.stack([total, (energy * t).sum(2) / np.maximum(total, 1e-300)], -1)
+
+
+@needs_gpu
+@pytest.mark.parametrize("gradient, wind", [(0.3, 0.0), (-0.3, 0.0), (-0.1, 6.0)])
+def test_gpu_tracer_bends_the_rays_as_the_cpu_does(gradient: float, wind: float) -> None:
+    """Sound bent down (a warmer sky, and downwind) reaches listeners 100 m off, and bent
+    up (a cooler sky, and upwind) leaves them in a shadow: the GPU's energy per listener
+    and band, and the mean time it arrives at, are the CPU's within the noise."""
+    values = _open_field() | _profile(gradient, wind)
+    on_cpu = _native.trace_stochastic(**values)
+    on_gpu = gpu_tracer.trace_stochastic(**values)
+    step = values["time_step"]
+    cpu, found = _arrivals(on_cpu[0], step), _arrivals(on_gpu[0], step)
+    assert np.all(cpu[..., 0] > 0.0)
+    np.testing.assert_allclose(found[..., 0], cpu[..., 0], rtol=0.06)
+    np.testing.assert_allclose(found[..., 1], cpu[..., 1], atol=4e-3)
+    # The rays that bend up out of the field leave it, and both count them.
+    assert on_gpu[3] == pytest.approx(on_cpu[3], rel=0.03)
+    # Their energy over time, which the weight window reads.
+    np.testing.assert_allclose(on_gpu[4], on_cpu[4], rtol=0.03, atol=1e-3 * on_cpu[4].max())
+
+
+def _crown(absorption, scattering, asymmetry) -> dict:
+    """A spheroid of foliage 30 m across and 20 m high, between the source and the first
+    listener of :func:`_big_box`."""
+    return {
+        "plants": np.array([[1, 0, 25.0, 0.0, 0.0, 15.0, 10.0, 0]], dtype=float),
+        "plant_outline": np.zeros((0, 2)),
+        "plant_absorption": np.atleast_2d(absorption).astype(float),
+        "plant_scattering": np.atleast_2d(scattering).astype(float),
+        "plant_asymmetry": np.atleast_2d(asymmetry).astype(float),
+        "plant_upright": np.array([0], dtype=np.uint8),
+    }
+
+
+@needs_gpu
+def test_gpu_tracer_loses_what_the_plants_absorb_as_the_cpu_does() -> None:
+    """A slab of absorbing plants 30 m thick, and a crown of them: the same rays on the
+    GPU with and without the plants (absorbing draws no random numbers), so Beer and
+    Lambert's law holds exactly, as on the CPU."""
+    rate = np.array([0.02, 0.05])
+    free = gpu_tracer.trace_stochastic(**_big_box(2, 50_000))[0].sum(axis=2)
+    slab = _slab(rate, [0, 0], [0, 0])
+    through = gpu_tracer.trace_stochastic(**_big_box(2, 50_000), **slab)[0].sum(axis=2)
+    assert through[0] / free[0] == pytest.approx(np.exp(-30 * rate), rel=3e-3)
+    np.testing.assert_allclose(through[1:], free[1:], rtol=1e-6)
+    crown = _crown(rate, [0, 0], [0, 0])
+    on_cpu = _native.trace_stochastic(**_big_box(2, 50_000), **crown)[0].sum(axis=2)
+    on_gpu = gpu_tracer.trace_stochastic(**_big_box(2, 50_000), **crown)[0].sum(axis=2)
+    assert 0.3 < on_cpu[0, 0] / free[0, 0] < 0.9
+    np.testing.assert_allclose(on_gpu, on_cpu, rtol=3e-3)
+
+
+@needs_gpu
+def test_gpu_tracer_scatters_in_foliage_and_stems_as_the_cpu_does() -> None:
+    """Foliage that scatters forward and rains straight to the listeners, and stems that
+    turn the rays sideways and rain what their next legs carry through the spheres: the
+    GPU's energy per listener and band is the CPU's within the noise."""
+    big = {"receiver_radius": np.full(3, 10.0), "diffuse_rain": True}
+    foliage = _slab([0.0, 0.01], [0.03, 0.02], [0.0, 0.6])
+    on_cpu = _native.trace_stochastic(**_big_box(2, 300_000, **big), **foliage)[0].sum(axis=2)
+    on_gpu = gpu_tracer.trace_stochastic(**_big_box(2, 300_000, **big), **foliage)[0].sum(axis=2)
+    np.testing.assert_allclose(on_gpu, on_cpu, rtol=0.03)
+    crown = _crown([0.0, 0.01], [0.03, 0.02], [0.0, 0.6])
+    on_cpu = _native.trace_stochastic(**_big_box(2, 300_000, **big), **crown)[0].sum(axis=2)
+    on_gpu = gpu_tracer.trace_stochastic(**_big_box(2, 300_000, **big), **crown)[0].sum(axis=2)
+    np.testing.assert_allclose(on_gpu, on_cpu, rtol=0.03)
+    stems = _slab([0.0], [0.03], [-0.3], True)
+    beside = {
+        "receivers": np.array([[0.0, 50.0, 0.0], [25.0, 30.0, 0.0]]),
+        "receiver_radius": np.array([10.0, 10.0]),
+        "diffuse_rain": True,
+    }
+    on_cpu = _native.trace_stochastic(**_big_box(1, 300_000, **beside), **stems)[0].sum(axis=2)
+    on_gpu = gpu_tracer.trace_stochastic(**_big_box(1, 300_000, **beside), **stems)[0].sum(axis=2)
+    np.testing.assert_allclose(on_gpu, on_cpu, rtol=0.03)
+    # Detector spheres alone, with the stems' scattering: the same within the noise.
+    spheres = {"receivers": beside["receivers"], "receiver_radius": beside["receiver_radius"]}
+    on_cpu = _native.trace_stochastic(**_big_box(1, 300_000, **spheres), **stems)[0].sum(axis=2)
+    on_gpu = gpu_tracer.trace_stochastic(**_big_box(1, 300_000, **spheres), **stems)[0].sum(axis=2)
+    np.testing.assert_allclose(on_gpu, on_cpu, rtol=0.03)
+
+
+@needs_gpu
+def test_gpu_tracer_bends_rays_through_plants_as_the_cpu_does() -> None:
+    """Both at once: a crown of scattering foliage in a field whose sound bends down."""
+    crown = _crown([0.0, 0.01], [0.03, 0.02], [0.0, 0.6])
+    crown["plants"][0, 2:5] = (50.0, 0.0, 10.0)
+    values = _open_field() | _profile(0.3, 0.0) | crown
+    on_cpu = _native.trace_stochastic(**values)
+    on_gpu = gpu_tracer.trace_stochastic(**values)
+    step = values["time_step"]
+    cpu, found = _arrivals(on_cpu[0], step), _arrivals(on_gpu[0], step)
+    np.testing.assert_allclose(found[..., 0], cpu[..., 0], rtol=0.06)
+    np.testing.assert_allclose(found[..., 1], cpu[..., 1], atol=4e-3)
+
+
+@needs_gpu
+def test_the_late_stage_traces_outdoor_scenes_on_the_gpu() -> None:
+    """The open-air stage in the wind: the GPU bends its late rays, and the result is
+    the CPU's within the noise."""
+    room = Room.from_yaml(OPEN_AIR)
+    model = TraceModel.from_room(room, room.scene.simulation)
+    source = np.array(room.scene.sources[0].position, float)
+    listeners = np.array([listener.position for listener in room.scene.listeners], float)
+    common = {
+        "rays": 8000,
+        "max_time": 1.0,
+        "time_step": 1e-3,
+        "speed_of_sound": room.speed_of_sound(),
+        "air": room.air_attenuation(model.bands),
+        "covered_order": 1,
+        "radius": 3.0,
+        "seed": 5,
+    }
+    on_cpu = late.stochastic_energy(model, source, listeners, **common)
+    assert on_cpu.plan == ray_device.Plan("cpu")
+    found = late.stochastic_energy(model, source, listeners, **common, device="gpu")
+    assert found.plan == ray_device.Plan("gpu") and found.traced_rays > 0
+    assert found.energy.sum() == pytest.approx(on_cpu.energy.sum(), rel=0.15)
+    np.testing.assert_allclose(found.energy.sum((1, 2)), on_cpu.energy.sum((1, 2)), rtol=0.25)
+
+
 @needs_gpu
 def test_the_late_stage_timing_script_runs(monkeypatch, capsys) -> None:
     script = Path(__file__).resolve().parent.parent / "validation" / "late_gpu.py"
@@ -385,6 +700,25 @@ def test_the_late_stage_timing_script_runs(monkeypatch, capsys) -> None:
     # much further.
     t30 = [float(row[7].rstrip("%")) for row in cells[1:]]
     assert t30[1] < max(3 * t30[0], 5.0)
+
+
+@needs_gpu
+def test_the_outdoor_timing_script_runs(monkeypatch, capsys) -> None:
+    script = Path(__file__).resolve().parent.parent / "validation" / "outdoor_gpu.py"
+    argv = ["outdoor_gpu.py", "--scenes", str(OPEN_AIR), "--rays", "2000", "--devices", "gpu"]
+    monkeypatch.setattr("sys.argv", argv)
+    runpy.run_path(str(script), run_name="__main__")
+    out = capsys.readouterr().out
+    assert "2,000 per band" in out
+    rows = [line for line in out.splitlines() if line.startswith("| open_air_stage")]
+    cells = [[cell.strip() for cell in row.strip("|").split("|")] for row in rows]
+    assert [row[3] for row in cells] == ["cpu", "cpu (next seed)", "gpu"]
+    assert [row[4] for row in cells] == ["the CPU", "the CPU", "the GPU"]
+    assert all(len(row) == 9 and row[6].endswith("x") for row in cells)
+    # Within the noise of 2,000 rays: as far from the CPU's as another seed is, or not
+    # much further.
+    level = [float(row[7]) for row in cells[1:]]
+    assert level[1] < max(3 * level[0], 1.0)
 
 
 @needs_gpu

@@ -68,6 +68,31 @@ def test_what_only_the_cpu_traces_stays_there(reference, machine) -> None:
     assert plan.device == "cpu" and "face groups" in plan.reason
 
 
+def test_the_open_sky_lets_sound_out_on_any_device() -> None:
+    """An outdoor scene's sky lets all sound through into no room, which keeps every
+    tracer's rays the same; a face into another room, or sound passing from a source
+    in no room, only the CPU follows."""
+    passes = gpu_tracer.passes_sound
+    through = np.array([[0.0, 0.0], [1.0, 1.0], [0.5, 0.2]])
+    assert not passes(np.zeros(0), np.zeros((0, 2)), -1)
+    assert not passes(through, np.array([[0, -1], [0, -1], [-1, 0]]), 0)
+    assert passes(through, np.array([[0, -1], [0, 1], [-1, 0]]), 0)
+    assert passes(through, np.array([[0, 1], [0, -1], [-1, 0]]), 0) is False
+    assert passes(through, np.array([[0, -1], [0, -1], [0, 0]]), 0)
+    assert passes(through, np.array([[0, -1], [0, -1], [-1, 0]]), -1)
+    assert passes(through, np.zeros((0, 2)), 0)
+    values = {
+        "atmosphere": None,
+        "transmission": through,
+        "face_room": np.array([[0, -1], [0, -1], [-1, 0]]),
+        "source_room": 0,
+        "groups": 0,
+    }
+    assert ray_device._unsupported(values) == ""
+    values["face_room"] = np.array([[0, -1], [0, 1], [-1, 0]])
+    assert "partitions" in ray_device._unsupported(values)
+
+
 @pytest.mark.parametrize(
     "cpu_rate, gpu_rate, threads, device",
     [

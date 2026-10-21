@@ -2,7 +2,8 @@
 
 :class:`GpuWaveSolver` takes a grid that the C++ solver
 (:class:`acoustic_spaces._native.WaveSolver`) has set up, with its air, boundaries,
-branches, matched layer, source and probes, and steps it with one WGSL compute shader on
+branches, matched layer, source and probes, and a speed of sound per cell where the
+grid has one (outdoors in wind and temperature), and steps it with one WGSL compute shader on
 any GPU that wgpu reaches: Vulkan (AMD, Intel, NVIDIA, and Mesa's software lavapipe),
 Metal or Direct3D 12. It needs the optional ``gpu`` extra (``pip install
 "acoustic-spaces[gpu]"``). Its arithmetic is the CPU's, in single precision, so the two
@@ -52,9 +53,13 @@ struct Grid {
     link_at: u32,
     offset_at: u32,
     wide: u32,
+    scaled: u32,
+    scale_at: u32,
+    layer_scale_at: u32,
     axial: f32,
     diagonal: f32,
     centre: f32,
+    total: f32,
 }
 
 struct Step {
@@ -89,14 +94,30 @@ fn interior(i: u32) {
     let sz = grid.sz;
     let sum = current[i - 1u] + current[i + 1u] + current[i - sy] + current[i + sy] +
               current[i - sz] + current[i + sz];
+    // With a speed of sound per cell, the cell's links weigh s times as much (the
+    // square of its speed over the grid's) and its centre 2 - total * s, as on the CPU.
+    var scaled = grid.scaled != 0u;
+    var s = 1.0;
+    if (scaled) {
+        s = number(grid.scale_at + i);
+    }
     if (grid.wide == 0u) {
-        next[i] = grid.axial * sum - next[i];
+        if (scaled) {
+            next[i] = (2.0 - grid.total * s) * current[i] + (s * grid.axial) * sum - next[i];
+        } else {
+            next[i] = grid.axial * sum - next[i];
+        }
         return;
     }
     let edges = current[i - 1u - sy] + current[i + 1u - sy] + current[i - 1u + sy] +
                 current[i + 1u + sy] + current[i - 1u - sz] + current[i + 1u - sz] +
                 current[i - 1u + sz] + current[i + 1u + sz] + current[i - sy - sz] +
                 current[i + sy - sz] + current[i - sy + sz] + current[i + sy + sz];
+    if (scaled) {
+        next[i] = (2.0 - grid.total * s) * current[i] + (s * grid.axial) * sum +
+                  (s * grid.diagonal) * edges - next[i];
+        return;
+    }
     next[i] = grid.centre * current[i] + grid.axial * sum + grid.diagonal * edges - next[i];
 }
 
@@ -138,6 +159,11 @@ fn layer(k: u32) {
     var strides = array<u32, 3>(1u, grid.sy, grid.sz);
     var starts = array<u32, 3>(0u, grid.nx + 1u, grid.nx + grid.ny + 2u);
     let s = grid.layer_state_at + 9u * k;
+    // With a speed of sound per cell, the cell's push weighs its scale, as on the CPU.
+    var scale = 1.0;
+    if (grid.scaled != 0u) {
+        scale = number(grid.layer_scale_at + k);
+    }
     var total = 0.0;
     for (var axis = 0u; axis < 3u; axis++) {
         let stride = strides[axis];
@@ -149,7 +175,10 @@ fn layer(k: u32) {
                     number(c + 7u) * (current[i + stride] - current[i]);
         state[s + 3u + 2u * axis] = below;
         state[s + 4u + 2u * axis] = above;
-        let part = number(c) * state[s + axis] - number(c + 1u) * (above - below);
+        var part = number(c) * state[s + axis] - number(c + 1u) * (above - below);
+        if (grid.scaled != 0u) {
+            part = number(c) * state[s + axis] - (number(c + 1u) * scale) * (above - below);
+        }
         state[s + axis] = part;
         total += part;
     }
@@ -363,6 +392,8 @@ def _tables(layout: dict[str, np.ndarray]) -> tuple[np.ndarray, dict[str, int]]:
         "probe_cells_at": probes.reshape(-1),
         "link_at": link_table.reshape(-1),
         "offset_at": offsets,
+        "scale_at": _words(layout["scale"]),
+        "layer_scale_at": _words(layout["layer_scale"]),
     }
     offsets, at = {}, 0
     for name, words in parts.items():
@@ -382,8 +413,6 @@ class GpuWaveSolver:
         wgpu = _wgpu()
         self._device = device = _device()
         layout = solver.layout()
-        if int(layout["scaled"][0]):
-            raise ValueError("a grid whose speed of sound changes is stepped on the CPU only")
         nx, ny, nz = (int(v) for v in layout["shape"])
         n = nx * ny * nz
         table, offsets = _tables(layout)
@@ -391,8 +420,8 @@ class GpuWaveSolver:
         branches = len(layout["state_branch"])
         layers = len(layout["layer_cells"])
         weights = layout["weights"]
-        grid = np.zeros(24, np.uint32)
-        grid[:19] = [
+        grid = np.zeros(28, np.uint32)
+        grid[:22] = [
             n,
             nx,
             nx * ny,
@@ -412,9 +441,14 @@ class GpuWaveSolver:
             offsets["link_at"],
             offsets["offset_at"],
             int(layout["stencil"][0]) == 19,
+            int(layout["scaled"][0]),
+            offsets["scale_at"],
+            offsets["layer_scale_at"],
         ]
         diagonal = weights[6] if len(weights) > 6 else 0.0
-        grid[19:22] = _words(np.array([weights[0], diagonal, layout["centre"][0]]))
+        grid[22:26] = _words(
+            np.array([weights[0], diagonal, layout["centre"][0], layout["total"][0]])
+        )
         threads = n + len(layout["special"]) + layers + self._probes
         groups = -(-threads // _GROUP)
         self._groups = (min(groups, _MAX_GROUPS), -(-groups // _MAX_GROUPS))

@@ -420,8 +420,10 @@ is an arc of a circle, so its travel time and its length are exact.
   2 cm from them, reflect where they meet a surface, and leave the scene once they are
   bent up out of it. The energy they rain onto listeners goes straight, in the time of
   the heights it crosses, and does not reach a listener in the shadow of where it
-  leaves. These rays run on the CPU: `simulation.late.device: gpu` or `auto` falls back
-  to it, and says so.
+  leaves. The CPU and the GPU trace these rays alike (`simulation.late.device`): the
+  GPU follows the same chords, in single precision, and what reaches each listener in
+  each band, and when, agrees within the noise of the ray count (see
+  [Validation](validation.md#outdoor-scenes-on-the-gpu)).
 - **The wave solver** (`simulation.wave`) steps the sound field itself in its bands, with
   a speed of sound that changes from cell to cell: at each cell's height, the still
   air's plus the wind's component along the horizontal from the source, as above, so
@@ -430,8 +432,8 @@ is an arc of a circle, so its travel time and its length are exact.
   more cells and steps than in still air in the `windy` preset. Over grass, 50 to 200
   m from the source, in the 63 and 125 Hz bands, it is within 0.7 dB of the parabolic
   equation, 0.2 dB on average (see [Validation](validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
-  It runs on the CPU: `simulation.wave.device: gpu` or `auto` falls back to it, and
-  says so. The run's details give the slowest and the fastest speed of sound on the
+  It runs on the CPU or on the GPU alike (`simulation.wave.device`), the two agreeing
+  to rounding. The run's details give the slowest and the fastest speed of sound on the
   grid (`wave_speed_min_m_s`, `wave_speed_max_m_s`).
 - **The animation's particles** and **the drawn paths** (`view --paths`, the Blender
   export) curve as the sound does.
@@ -654,8 +656,9 @@ high bands mostly onwards.
   what it meets, so each keeps its own expectation. Against a separate particle
   simulation through a slab of foliage or stems, the tracer agrees within its noise,
   a few tenths of a percent (see
-  [Validation](validation.md#vegetation-against-a-particle-simulation)). Rays through
-  vegetation are traced on the CPU: the GPU devices fall back to it.
+  [Validation](validation.md#vegetation-against-a-particle-simulation)). The CPU and
+  the GPU trace rays through vegetation alike; only vegetation of more than 16 media
+  (kinds of foliage and stems in one scene) is traced on the CPU, which the run says.
 - **Coverage maps** take the same: the early paths' loss and the late rays'.
 - **The wave solver's bands** leave vegetation out: at their low frequencies foliage
   takes little (0.02 to 0.03 dB per metre in the `dense` preset).
@@ -803,11 +806,11 @@ The wave solver takes the wind as the rays and the parabolic equation do, as a s
 sound that the wind's component along the horizontal from the source changes, not as
 air that flows (the linearised Euler equations): sound that a building sends back
 towards the source travels at the speed of sound going away from it. It leaves out
-vegetation and the eddies, and in wind and temperature runs on the CPU only.
+vegetation and the eddies.
 
 Vegetation is volumes filled evenly: a lone tree's trunk is left out, the foliage's
 attenuation is given, not derived from its leaves' size and density, and stems stand
-upright at random. The rays through it are traced on the CPU only.
+upright at random.
 
 The wind, the temperature and the eddies are the same over the whole scene, and the
 eddies are as strong at every height as near the ground. The ground reacts locally: its

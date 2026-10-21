@@ -468,6 +468,8 @@ def test_coverage_maps_through_vegetation() -> None:
     assert np.all(level[x > 80] < -2) and np.all(np.abs(level[x < 30]) < 0.5)
 
 
-def test_the_gpu_leaves_vegetation_to_the_cpu() -> None:
-    reason = _unsupported({"plants": np.zeros((1, 8)), "transmission": np.zeros(0), "groups": 0})
-    assert reason == "sound through vegetation is traced on the CPU"
+def test_the_gpu_traces_vegetation_of_a_few_media() -> None:
+    values = {"plants": np.zeros((1, 8)), "transmission": np.zeros(0), "groups": 0}
+    assert _unsupported(values | {"plant_upright": np.zeros(16, np.uint8)}) == ""
+    reason = _unsupported(values | {"plant_upright": np.zeros(17, np.uint8)})
+    assert reason == "vegetation of more than 16 media is traced on the CPU"

@@ -105,13 +105,11 @@ Outdoor acoustics, in steps:
   random eddies.
 - [x] O5 Vegetation: belts of trees, hedges and lone trees as volumes of foliage and
   stems that absorb and scatter sound, along the early paths and the late rays; checked
-  against a separate particle simulation. Their late rays are traced on the CPU; the
-  GPU devices may follow.
+  against a separate particle simulation.
 - [x] O6 The wave solver in wind and temperature: a speed of sound per cell (the
   effective one along the horizontal from the source) in the grid, its walls, its source
-  and its matched layer; checked against the parabolic equation at 63 and 125 Hz. It
-  runs on the CPU; the GPU may follow, and the flow itself (the linearised Euler
-  equations) stays out.
+  and its matched layer; checked against the parabolic equation at 63 and 125 Hz. The
+  flow itself (the linearised Euler equations) stays out.
 - [x] O7 Outdoor results: the level relative to free field and the insertion loss of
   buildings, barriers and vegetation (a second run without them), at listeners and on
   maps, in the report, on the command line and in the editor; checked against the
@@ -158,6 +156,14 @@ Outdoor acoustics, in steps:
   wide-angle parabolic equation would carry that); whole scenes within 0.11 dB per band
   to 1 km in every case. The comparison found and fixed a notch at the join of the
   parabolic equation's bands and the rays' (see the changelog).
+- [x] O12 Outdoor scenes on the GPU: the GPU traces the rays bent by wind and
+  temperature through the same chords as the CPU (ray for ray: the same turns and the
+  same curve to the millimetre, in single precision without trigonometry), the rays
+  through vegetation (foliage and stems, up to 16 media) and the open sky, and steps the
+  wave solver's grid with its speed of sound per cell; `simulation.late.device` and
+  `simulation.wave.device: gpu`, `both` and `auto` take outdoor scenes now. What
+  reaches each listener in each band, and when, agrees within the noise of the ray
+  count (`validation/outdoor_gpu.py`).
 - [ ] A wide-angle parabolic equation (split-step Padé) for gradients that bend sound
   through large angles over several kilometres, where the narrow-angle one strays.
 

@@ -46,8 +46,8 @@ octave bands replace the ray-traced ones.
   equations) is left out: sound that turns back towards the source, off a building,
   keeps the speed of sound of sound going away from it.
 - The grid is laid out on the CPU and stepped there, or with ``device`` on a GPU,
-  through WebGPU (:mod:`acoustic_spaces.engine.gpu`); the two agree to rounding. In
-  wind and temperature it is stepped on the CPU, whatever the setting.
+  through WebGPU (:mod:`acoustic_spaces.engine.gpu`); the two agree to rounding, in
+  wind and temperature too.
 
 The levels follow the ray tracer's convention: in free field, the direct sound at r
 metres is an impulse of height 1 / r.
@@ -578,10 +578,7 @@ def wave_responses(
     on_gpu = use_gpu(device, steps)
     where = f" on {gpu_name()}" if on_gpu else ""
     if extremes is not None:
-        where = f", sound at {extremes[0]:.0f} to {extremes[1]:.0f} m/s"
-        if on_gpu:
-            where += ", on the CPU: wind and temperature are not stepped on a GPU yet"
-            on_gpu = False
+        where += f", sound at {extremes[0]:.0f} to {extremes[1]:.0f} m/s"
     say(
         f"{label}: wave solver, {name} ({solver.air_cells:,} cells of {100 * h:.0f} cm, "
         f"{steps:,} steps{where})"

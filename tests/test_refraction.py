@@ -305,11 +305,11 @@ def test_uniform_rows_trace_the_late_rays_as_straight_ones(monkeypatch) -> None:
         np.testing.assert_allclose(bent[key].late, straight[key].late, rtol=1e-9, atol=0.0)
 
 
-def test_bent_late_rays_stay_on_the_cpu() -> None:
+def test_bent_late_rays_are_traced_on_any_device() -> None:
     from acoustic_spaces.engine.ray_device import _unsupported
 
     values = {"atmosphere": np.zeros((2, 3)), "transmission": np.zeros(0), "groups": 0}
-    assert _unsupported(values) == "rays bent by the atmosphere are traced on the CPU"
+    assert _unsupported(values) == ""
 
 
 def test_particles_bend_and_stay_put_in_still_air() -> None:

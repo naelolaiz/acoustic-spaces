@@ -371,7 +371,7 @@ simulation:
   in which sound bends), the speed of sound changes from cell to cell: the still air's
   at the cell's height, plus the wind's component along the horizontal from the source.
   The grid is then fine enough for the slowest sound and steps in time for the fastest,
-  and runs on the CPU (see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)).
+  on the CPU or on the GPU alike (see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)).
 - The listener records the pressure and its gradient, so the low end keeps its
   direction in Ambisonics, binaural and loudspeaker outputs (to first order).
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177
@@ -468,7 +468,9 @@ simulation:
 - `cpu`: the compiled core, on `performance.threads`, as before.
 - `gpu`: one compute shader traces what the CPU does (detector spheres and rain, both
   kinds of scattering, the scattering of a surface's size, air absorption, the early
-  stage's paths left out, arrival directions and the weight window). Rays start where
+  stage's paths left out, arrival directions, the weight window, and outdoors the rays
+  bent by [wind and temperature](outdoor.md#wind-and-temperature), those through
+  [vegetation](outdoor.md#vegetation) and the open sky). Rays start where
   the CPU's do, then draw random numbers of their own, in single precision, so the two
   agree statistically, not ray for ray. The tests trace main's stored runs on the GPU
   and check that they land within the spread of the CPU's own results over seeds.
@@ -533,12 +535,11 @@ acoustic-spaces info                            # the default, and what auto tak
   *default* (or leave the tune window's second check box ticked for the open scene) to
   let them follow the default.
 
-Sound through partitions and openings, the face groups of material calibration,
-coverage maps, the rays bent by [wind and temperature](outdoor.md#wind-and-temperature)
-outdoors and those through [vegetation](outdoor.md#vegetation) are traced on the CPU
-whatever the setting, and so are runs whose results
-the GPU's buffers cannot hold (many listeners and arrival directions over a long
-response). `simulate --late-device` overrides the setting; the editor's Simulation page
+Sound through partitions and openings (an outdoor scene's sky, which lets sound out
+into no room, is not one), the face groups of material calibration, coverage maps and
+vegetation of more than 16 media are traced on the CPU whatever the setting, and so are
+runs whose results the GPU's buffers cannot hold (many listeners and arrival directions
+over a long response). `simulate --late-device` overrides the setting; the editor's Simulation page
 has it as "Run on" under Late reverberation. When it is not `cpu`, the progress messages
 say where the rays went and why
 (`talker: late rays traced on the CPU (no hardware GPU)`).
@@ -553,7 +554,11 @@ runs of such a scene differ in the late tail, within the noise of the ray count.
 
 `python validation/late_gpu.py` times the late stage on each device in BRAS's two rooms
 and two example halls, and shows how far T30, EDT and C80 come out from the CPU's next
-to how far a second CPU run with the next seed does. `python validation/rays_gpu.py`
+to how far a second CPU run with the next seed does; `python validation/outdoor_gpu.py`
+does the same for the outdoor examples (the stage in the wind, the tree belt and the
+hillside), with the late sound's level and centre time per listener and band. The GPU's
+chords through the atmosphere are tested against the CPU's ray for ray: the same turns,
+the same curve to the millimetre. `python validation/rays_gpu.py`
 times the ray searches alone, the face a ray meets next and whether a listener can see
 a reflection, and checks that the GPU finds the CPU's faces. The GPU works in single
 precision, so its boxes and triangles are widened slightly to keep rays from slipping

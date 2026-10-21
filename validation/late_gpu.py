@@ -104,7 +104,7 @@ def _warm_up(room: Room) -> None:
     """Starts the GPU and compiles the tracer's shader for the scene's band count."""
     model = TraceModel.from_room(room, room.scene.simulation)
     gpu._device()
-    gpu_tracer._pipeline(len(model.bands))
+    gpu_tracer._pipelines(len(model.bands))
 
 
 def main() -> None:

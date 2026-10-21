@@ -70,9 +70,9 @@
   comes from a Green's function parabolic equation over the grounds' impedances, with
   Greene's starting field: within 0.25 dB of the exact solution in still air over grass
   and harder grounds. It runs on `simulation.performance.threads`.
-- The late rays follow their arcs through the layers (on the CPU: the GPU devices fall
-  back to it); the animation's particles, `view --paths` and the Blender export curve
-  too. The direct sound's time in the results is the bent path's.
+- The late rays follow their arcs through the layers; the animation's particles,
+  `view --paths` and the Blender export curve too. The direct sound's time in the
+  results is the bent path's.
 - The editor's scene page has a **Wind and temperature** group with **Show the
   profile**; `inspect` describes the atmosphere and the speed of sound at a few
   heights; `acoustic_spaces.viz.plot_atmosphere` draws it.
@@ -128,8 +128,7 @@
   keeping the slope, with what the next leg carries through each listener's sphere
   averaged over the turns; in several bands at once each band keeps its own
   expectation. The rain from every reflection loses what the plants take on its way.
-  Coverage maps take both. Late rays through vegetation are traced on the CPU (the GPU
-  devices fall back to it); the wave solver's bands leave vegetation out.
+  Coverage maps take both. The wave solver's bands leave vegetation out.
 - The editor's **Outdoors** group lists the vegetation (its shape, what fills it, its
   heights, and **Remove**); the 3D view, `view` and the Blender export draw it in
   see-through green, coverage maps outline it, and `inspect` gives what sound loses per
@@ -150,9 +149,8 @@
   by the square of its speed over the grid's, its walls by that speed (their admittance
   is relative to the local rho c) and the source by its square, and so does the matched
   layer. The flow itself (the linearised Euler equations) stays out.
-- In wind and temperature the wave solver runs on the CPU (`simulation.wave.device:
-  gpu` or `auto` falls back to it, and says so). The run's details give the slowest and
-  the fastest speed of sound on the grid (`wave_speed_min_m_s`, `wave_speed_max_m_s`).
+- The run's details give the slowest and the fastest speed of sound on the grid
+  (`wave_speed_min_m_s`, `wave_speed_max_m_s`).
 - New validation: `validation/wave_outdoor.py`, the 63 and 125 Hz bands over grass, 50
   to 200 m from the source, in still air, downwind and upwind, on a sunny day and on a
   clear night, against the parabolic equation: within 0.7 dB at 63 Hz and 0.4 dB at
@@ -315,6 +313,24 @@
   through the band filters within 0.04 dB to 200 m. The comparison found the notch at
   the join of the parabolic equation's bands and the rays' fixed below; see
   [Validation](docs/validation.md#outdoor-sound-in-wind-against-a-fast-field-program).
+
+**Outdoor scenes on the GPU**
+
+- The GPU traces outdoor scenes as the CPU does, so `simulation.late.device: gpu`,
+  `both` and `auto` take them now, where they fell back to the CPU: the rays bent by
+  wind and temperature follow the same chords through the layers (the same turns and
+  the same curve to the millimetre, ray for ray, worked in single precision without
+  trigonometry, whose rounding on a GPU would move the chords' ends); the rays through
+  vegetation meet the same foliage and stems, scatter and lose energy the same way, and
+  carry the same per-band weights; the open sky lets them out (a surface into no room,
+  which only the CPU took before); and the ray count is told from the chords it needs.
+  Vegetation of more than 16 media stays on the CPU, which the run says. What reaches
+  each listener in each band, and when, agrees with the CPU's within the noise of the
+  ray count: `validation/outdoor_gpu.py` compares the two on the outdoor examples
+  (see [Validation](docs/validation.md#outdoor-scenes-on-the-gpu)).
+- The wave solver in wind and temperature steps its grid on the GPU too
+  (`simulation.wave.device: gpu`, `both` and `auto`), with the speed of sound per cell,
+  in its walls, its source and its matched layer, agreeing with the CPU to rounding.
 
 **Editor**
 

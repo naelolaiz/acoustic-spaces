@@ -482,7 +482,10 @@ public:
         put("stencil", std::vector<std::size_t>{stencil_});
         put("weights", std::vector<float>(weight_.begin(), weight_.begin() + directions_));
         put("centre", std::vector<float>{centre_});
+        put("total", std::vector<float>{total_});
         put("scaled", std::vector<std::size_t>{scale_.empty() ? 0u : 1u});
+        put("scale", scale_);
+        put("layer_scale", layer_scale_);
         put("types", type_);
         put("special", special_);
         put("link_start", link_start_);

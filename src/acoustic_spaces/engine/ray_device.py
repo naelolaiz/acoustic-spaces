@@ -16,10 +16,12 @@
   (:func:`set_trial`, ``--no-device-trial``), ``auto`` takes the choice kept for the
   nearest length, or the CPU when there is none.
 
-What only the CPU traces (rays bent by an outdoor atmosphere, sound through
-vegetation, partitions and openings, the face groups of material calibration) runs
-there, whatever the setting, and so does a run the GPU declines once it has it (one
-whose results its buffers cannot hold): the plan :func:`trace` returns says so.
+What only the CPU traces (sound through partitions and openings, the face groups of
+material calibration, vegetation of more media than the GPU keeps) runs there, whatever
+the setting, and so does a run the GPU declines once it has it (one whose results its
+buffers cannot hold, or a ray through more volumes of vegetation at once than its
+tables hold): the plan :func:`trace` returns says so. Outdoors the GPU bends the rays
+in the atmosphere and takes them through vegetation as the CPU does.
 
 The two agree statistically, not ray for ray (the GPU works in single precision and
 draws its own random numbers). With ``cpu`` a run gives the same result every time,
@@ -89,11 +91,13 @@ class Plan:
 
 def _unsupported(values: dict) -> str:
     """Why only the CPU can trace this run, or ''."""
-    if values.get("atmosphere") is not None:
-        return "rays bent by the atmosphere are traced on the CPU"
-    if values.get("plants") is not None:
-        return "sound through vegetation is traced on the CPU"
-    if np.asarray(values["transmission"]).size:
+    from acoustic_spaces.engine.gpu_tracer import MAX_MEDIA, passes_sound
+
+    upright = values.get("plant_upright")
+    if values.get("plants") is not None and upright is not None and len(upright) > MAX_MEDIA:
+        return f"vegetation of more than {MAX_MEDIA} media is traced on the CPU"
+    rooms, source_room = values.get("face_room", ()), values.get("source_room", -1)
+    if passes_sound(values["transmission"], rooms, source_room):
         return "sound through partitions and openings is traced on the CPU"
     if values["groups"]:
         return "face groups (material calibration) are traced on the CPU"

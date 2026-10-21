@@ -177,7 +177,10 @@ request and checks:
   paths, and every kind of late run on the CPU to single precision, so a change that
   moves a result is seen; the same runs traced on a GPU (in CI, Mesa's software Vulkan
   driver) land within the spread of the CPU's own results over seeds, and the GPU's ray
-  searches find the CPU's faces;
+  searches find the CPU's faces; outdoors the GPU's chords through the atmosphere are
+  the CPU's ray for ray, and what its rays bent by the weather or scattered by plants
+  bring to each listener agrees within the noise (see
+  [Outdoor scenes on the GPU](#outdoor-scenes-on-the-gpu));
 - the leak finder: a closed model keeps every ray; a box without its ceiling reports
   one gap of 30 m² (6 x 5 m) with every ray through it, at the ceiling's height; the
   example classroom's two holes, the missing window pane in the east wall (3.6 m², 3.0 x
@@ -1563,6 +1566,74 @@ a building): the model builds in 3.9 s, its 8 diffracting edges (the building's)
 beyond the triangles it adds, and the early sound the profile and the string over it,
 once per listener.
 
+## Outdoor scenes on the GPU
+
+The GPU tracer (`simulation.late.device: gpu`, `both` or `auto`) follows the rays bent by
+[wind and temperature](outdoor.md#wind-and-temperature), takes them through
+[vegetation](outdoor.md#vegetation) and lets them out through the open sky, as the CPU's
+does; the wave solver on the GPU steps its grid with the speed of sound per cell. The
+tests check each against the CPU, and `validation/outdoor_gpu.py` compares whole runs of
+the outdoor examples.
+
+**Chords, ray for ray.** The GPU works in single precision, and its sines, cosines and
+arc tangents are only guaranteed to about 11 bits, which moved a few percent of the
+chords' ends by metres in a first port: the chords are therefore stepped without
+trigonometry (the ray's direction kept as a cosine and sine pair, the turn over a step
+summed as a series). 4,000 rays from random places in random directions, half of them
+leaving a plane they must not meet again, in four atmospheres (sound speed rising or
+falling 0.3/s to 100 m up, a wind of 6 m/s, and a wind of 4 m/s with the speed falling
+0.1/s): the GPU's chords turn back where
+the CPU's do (every one), point the same way at their ends to 3e-5, and stretch as far
+to a part in 5,000 for 99 % of them (the rest end where the chord's tolerance is met a
+little sooner or later as the turn gathered along it rounds, by up to 1.2 % where the
+wind shears hard just above the ground). Cut to a common length, the two chords are the
+same curve: ends within 0.32 mm and times within 4e-6 s, over 400 m.
+
+**Energy and time.** In a field 400 m across under a 200 m sky, 200,000 rays per run,
+listeners 100 m off downwind, upwind, across the wind and 60 m up: the energy per
+listener and band and the mean time it arrives at, the rays bent up out of the field
+and the energy over time the weight window reads, agree with the CPU's within the
+noise of the ray count, in a warmer sky (sound bent down), a cooler one (bent up) and
+a wind with a cooler sky. Through a crown of foliage and a stand of stems, the energy
+each band loses, the energy scattered on and where it goes, with and without an
+atmosphere, agree the same way; a tree belt of 17 media is declined with its reason
+and traced on the CPU.
+
+**Whole runs.** `validation/outdoor_gpu.py` simulates the outdoor examples with their own
+settings once per device and once more on the CPU with the next seed, and compares the
+late sound's level per band and its centre time at every listener (the mean absolute
+difference over listeners and bands); the next seed shows how much the ray count's noise
+alone moves them:
+
+| Scene | Faces | Rays | Device | Late (s) | Level diff (dB) | Centre time diff (ms) |
+|---|---:|---:|---|---:|---:|---:|
+| open_air_stage | 12 | 50,000 | cpu, next seed | 0.59 | 4.21 | 6.0 |
+| open_air_stage | 12 | 50,000 | gpu | 20.21 | 0.02 | 0.2 |
+| tree_belt | 30 | 200,000 | cpu, next seed | 1.12 | 1.20 | 22.3 |
+| tree_belt | 30 | 200,000 | gpu | 33.30 | 1.29 | 13.0 |
+| hillside | 3,730 | 50,000 | cpu, next seed | 0.34 | 1.16 | 0.8 |
+| hillside | 3,730 | 50,000 | gpu | 11.49 | 1.88 | 1.6 |
+
+On SwiftShader, a software Vulkan driver on the container's 4 cores (the CPU runs took
+0.4 to 1.0 s), which shows that the two agree, not how fast a GPU is; `python
+validation/outdoor_gpu.py` times your own. The tree belt's rays through its foliage and
+stems come out as far from the CPU's as the next seed's do. The stage in the wind
+agrees to 0.02 dB: its late sound is the rain of a flat ground, which 50,000 rays sum
+closely, while the next seed also redraws the eddies, which move the levels in the
+wind's shadow by several dB on their own (the GPU run shares the CPU's eddies). On the
+hillside the late sound at the listener on the slope is a handful of rays, so the mean
+difference between CPU seeds ranges from 0.3 to 2.3 dB over six of them, and the GPU's
+two seeds fall inside that range against every one (0.2 to 2.1 dB); the listener in
+the shadow gets no late rays at all, and the one on the crest the same level from every
+run within 0.02 dB.
+
+**The wave solver in wind.** The GPU steps the tests' grids with a speed of sound that
+grows with height, bending the sound as the rays do, to within 3e-5 of the largest
+pressure of the CPU's (single-precision rounding; 2e-3 on Intel Macs, whose GPU drifts
+further), its matched layer within 1e-5, and the 63 and 125 Hz bands of a scene whose
+sound speed rises from 337 m/s at the ground to 402 m/s at the top of the grid within
+1e-5, the two naming the same slowest and fastest speed of sound.
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -1824,8 +1895,8 @@ its peak (single precision).
   listening tests.
 - **Speed on a hardware GPU.** CI checks the wave solver's and the late stage's GPU
   paths on Mesa's software Vulkan driver, which shows that they agree with the CPU, not
-  how fast they are; `validation/wave_gpu.py` and `validation/late_gpu.py` time them on
-  your own GPU.
+  how fast they are; `validation/wave_gpu.py`, `validation/late_gpu.py` and
+  `validation/outdoor_gpu.py` time them on your own GPU.
 
 ## Reproducing
 
@@ -1848,6 +1919,7 @@ python validation/ffp.py --json ffp.json
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
+python validation/outdoor_gpu.py   # the outdoor examples on each device: levels and centre times
 python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
 python validation/bras_validation.py --json bras.json --plots docs/validation
 python validation/bras_validation.py --materials initial --plots docs/validation
