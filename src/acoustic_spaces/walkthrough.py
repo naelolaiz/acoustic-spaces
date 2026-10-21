@@ -32,7 +32,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from acoustic_spaces.engine.simulate import SimulationResult, simulate
-from acoustic_spaces.render import _as_2d, convolve, resample
+from acoustic_spaces.render import _as_2d, convolve, power_gains, resample
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene.model import Simulation as SimulationSettings
 
@@ -270,6 +270,14 @@ def crossfade_weights(times, t, crossfade_s: float = CROSSFADE_S) -> np.ndarray:
     )
 
 
+def _sound_powers(walk: WalkResponses) -> dict[str, float]:
+    """Sound power (dB re 1 pW) of each source of the walk's simulation, a walking source
+    under its own name rather than its places'."""
+    places = set(walk.names) if walk.kind == "sources" else set()
+    sources = walk.result.room.scene.sources
+    return {walk.name if s.name in places else s.name: s.sound_power_db for s in sources}
+
+
 def render_walk(
     walk: WalkResponses,
     signals: Mapping[str, np.ndarray | tuple[np.ndarray, float]],
@@ -278,10 +286,13 @@ def render_walk(
     crossfade_s: float = CROSSFADE_S,
     sample_rate: int | None = None,
     seed: int | None = None,
+    equal_power: bool = False,
 ) -> np.ndarray:
     """``signals`` (source names to a signal at ``sample_rate``, or a (signal, rate)
     pair) played along the walk, as (samples, channels) in format ``fmt`` (default
-    mono) at ``sample_rate`` (default: the simulation's)."""
+    mono) at ``sample_rate`` (default: the simulation's). As in
+    :func:`~acoustic_spaces.render.auralize`, each signal is scaled by its source's
+    sound power against the loudest one's, unless ``equal_power``."""
     from acoustic_spaces.spatial import Mono
 
     if not signals:
@@ -304,10 +315,11 @@ def render_walk(
     unknown = sorted(set(signals) - sources)
     if unknown:
         raise ValueError(f"no source {unknown[0]!r}; the walk has {', '.join(sorted(sources))}")
+    gains = {} if equal_power else power_gains(_sound_powers(walk), signals)
     dry = {}
     for source, value in signals.items():
         signal, signal_rate = value if isinstance(value, tuple) else (value, rate)
-        mono = _as_2d(signal, f"signal of {source!r}").mean(axis=1)
+        mono = _as_2d(signal, f"signal of {source!r}").mean(axis=1) * gains.get(source, 1.0)
         dry[source] = resample(mono, signal_rate, rate)
 
     cache: dict[tuple[str, str], np.ndarray] = {}

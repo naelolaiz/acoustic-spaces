@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from acoustic_spaces.render import Convolver, auralize, convolve, play, resample
-from acoustic_spaces.spatial import Binaural, Loudspeakers
+from acoustic_spaces.render import Convolver, auralize, convolve, play, power_gains, resample
+from acoustic_spaces.spatial import Binaural, Loudspeakers, Mono
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
 
@@ -163,6 +163,30 @@ def test_auralize_places_each_source(result) -> None:
         auralize(result, {"piano": click})
     with pytest.raises(ValueError, match="no signals"):
         auralize(result, {})
+
+
+def test_auralize_keeps_the_sources_power(two_sources) -> None:
+    fs = two_sources.settings.sample_rate
+    click = np.zeros(100)
+    click[10] = 1.0
+    talker = two_sources["talker", "seat-a"].spatial_impulse_response(Mono(), fs)
+    radio = two_sources["radio", "seat-a"].spatial_impulse_response(Mono(), fs)
+    n = max(len(talker), len(radio))
+    expected = np.zeros((n + 99, 1))
+    expected[10 : 10 + len(talker)] += talker
+    expected[10 : 10 + len(radio)] += 0.1 * radio  # 20 dB less sound power
+    mix = auralize(two_sources, {"talker": click, "radio": click})
+    np.testing.assert_allclose(mix, expected, atol=1e-12)
+    # Alone, or all at one power, a source plays as its response is.
+    alone = auralize(two_sources, {"radio": click})
+    np.testing.assert_allclose(alone[10 : 10 + len(radio)], radio, atol=1e-12)
+    same = auralize(two_sources, {"talker": click, "radio": click}, equal_power=True)
+    expected[10 : 10 + len(radio)] += 0.9 * radio
+    np.testing.assert_allclose(same, expected, atol=1e-12)
+    assert power_gains({"a": 100.0, "b": 94.0}, ["a", "b", "c"]) == pytest.approx(
+        {"a": 1.0, "b": 10 ** (-6 / 20)}
+    )
+    assert power_gains(two_sources.room.scene.sources, ["radio"]) == {"radio": 1.0}
 
 
 def test_play_runs_a_signal_through_the_response(fake_sounddevice) -> None:

@@ -58,6 +58,30 @@ def english(monkeypatch, tmp_path):
     i18n.set_language(None)
 
 
+@pytest.fixture(scope="session")
+def two_sources(tmp_path_factory):
+    """The shoebox with a second source, 20 dB less powerful than the talker."""
+    from pathlib import Path
+
+    import yaml
+
+    from acoustic_spaces.engine import simulate
+    from acoustic_spaces.room import Room
+
+    shoebox = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
+    scene = yaml.safe_load(shoebox.read_text(encoding="utf-8"))
+    scene["geometry"]["file"] = str(shoebox.parent / scene["geometry"]["file"])
+    scene["sources"][0]["level_db"] = 94.0
+    scene["sources"].append({"name": "radio", "position": [3.0, 2.0, 1.0], "level_db": 74.0})
+    path = tmp_path_factory.mktemp("two") / "scene.yaml"
+    path.write_text(yaml.safe_dump(scene), encoding="utf-8")
+    room = Room.from_yaml(path)
+    settings = room.scene.simulation.model_copy(deep=True)
+    settings.late.rays = 1_000
+    settings.ir_length_s = 0.3
+    return simulate(room, settings=settings)
+
+
 @pytest.fixture
 def fake_sounddevice(monkeypatch):
     """A stand-in for the sounddevice module: streams play into ``played``."""

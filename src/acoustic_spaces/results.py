@@ -87,6 +87,11 @@ def write_results(
         "peak": peak * gain,
         "settings": result.settings.model_dump(mode="json"),
         "details": result.details,
+        # What auralize needs to mix the sources at their power: the responses are per
+        # unit of it.
+        "sources": {
+            source.name: {"sound_power_db": source.sound_power_db} for source in scene.sources
+        },
         "responses": [],
     }
     for (source, listener), response in result.responses.items():

@@ -42,6 +42,10 @@ def test_sound_power_per_band() -> None:
     given = [80.0, 82, 84, 86, 88, 90, 92, 94]
     fed = _source(level_db=given, gain_db=3.0, eq_db=[0, 0, 0, -6, 0, 0, 0, 0])
     np.testing.assert_allclose(fed.power_db(), np.add(given, [3, 3, 3, -3, 3, 3, 3, 3]))
+    # The power in all leaves the feed out: the responses carry it.
+    assert speech.sound_power_db == 70.0 and _source(gain_db=6.0).sound_power_db == 94.0
+    in_all = 10 * math.log10(np.sum(10 ** (np.array(given) / 10)))
+    assert fed.sound_power_db == pytest.approx(in_all)
     # Third octaves split an octave's power, and keep its gain.
     third = fed.power_db("third_octave")
     assert third.shape == (24,)

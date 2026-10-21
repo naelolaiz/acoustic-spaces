@@ -144,6 +144,19 @@ def resample(signal: np.ndarray, rate_in: float, rate_out: float) -> np.ndarray:
     return out[:, 0] if x.ndim == 1 else out
 
 
+def power_gains(sources, names) -> dict[str, float]:
+    """Amplitude gain of each source in ``names`` for its sound power: 1 for the loudest
+    of them, 10^(-ΔL/20) for one ΔL dB below it. ``sources`` are scene sources, or a
+    mapping of name to sound power level (dB re 1 pW); names it lacks get no gain."""
+    if not isinstance(sources, Mapping):
+        sources = {source.name: source.sound_power_db for source in sources}
+    levels = {name: float(sources[name]) for name in names if name in sources}
+    if not levels:
+        return {}
+    loudest = max(levels.values())
+    return {name: 10.0 ** ((level - loudest) / 20.0) for name, level in levels.items()}
+
+
 def auralize(
     result: SimulationResult,
     signals: Mapping[str, np.ndarray | tuple[np.ndarray, float]],
@@ -152,6 +165,7 @@ def auralize(
     *,
     sample_rate: int | None = None,
     seed: int | None = None,
+    equal_power: bool = False,
 ) -> np.ndarray:
     """Every source in ``signals`` playing its signal, heard at ``listener``.
 
@@ -160,7 +174,11 @@ def auralize(
     down, as sources are points. ``fmt`` is a format of :mod:`acoustic_spaces.spatial`
     (default mono); ``listener`` may be left out when the result has one listener.
     Returns (samples, channels) at ``sample_rate`` (default: the simulation's), with the
-    sources at the levels the simulation gives them.
+    sources at the levels the simulation gives them: the responses carry each source's
+    feed (gain, equalizer, delay) but are per unit of sound power, so each signal is
+    scaled by its source's sound power (``level_db``) against the loudest source's in
+    ``signals`` (:func:`power_gains`). ``equal_power`` leaves that out, as if every
+    source had the loudest one's power.
     """
     from acoustic_spaces.spatial import Mono
 
@@ -174,12 +192,13 @@ def auralize(
     if not signals:
         raise ValueError("no signals to auralize")
     mix = np.zeros((0, fmt.channels))
+    gains = {} if equal_power else power_gains(result.room.scene.sources, signals)
     for source, value in signals.items():
         if (source, listener) not in result.responses:
             sources = sorted({s for s, lis in result.responses if lis == listener})
             raise ValueError(f"no response from {source!r} at {listener!r}; sources: {sources}")
         signal, rate = value if isinstance(value, tuple) else (value, sample_rate)
-        dry = _as_2d(signal, f"signal of {source!r}").mean(axis=1)
+        dry = _as_2d(signal, f"signal of {source!r}").mean(axis=1) * gains.get(source, 1.0)
         dry = resample(dry, rate, sample_rate)
         ir = result[source, listener].spatial_impulse_response(fmt, sample_rate, seed)
         wet = convolve(dry, ir)
@@ -352,4 +371,4 @@ def play(
     return Playback(state["frames"], state["xruns"], state["load"])
 
 
-__all__ = ["Convolver", "Playback", "auralize", "convolve", "play", "resample"]
+__all__ = ["Convolver", "Playback", "auralize", "convolve", "play", "power_gains", "resample"]
