@@ -234,11 +234,6 @@ def test_example_scenes_are_ready_to_simulate(scene: Path) -> None:
         assert "not closed" in warning and "validate --leaks" in warning
         return
     warnings = room.warnings()
-    if scene.parent.name == "stadium_pa":
-        # The players and the front of the pitch are nearer the arrays than their
-        # far-field patterns hold, as at any concert; near_field.py measures how far off.
-        assert warnings and all("whose far-field pattern holds" in w for w in warnings)
-        warnings = []
     assert warnings == []
     assert room.report.closed and room.report.normals_inward
 

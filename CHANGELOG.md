@@ -525,21 +525,28 @@
 
 **Examples**
 
-- New example: `stadium_pa`, a concert in a football stadium with a sound system as
-  tours hang it: two main line arrays of 12 boxes in a J, a block of eight cardioid
-  subwoofers timed to arrive with them at the mix position, out-fills for the side
-  stands, front fills, two delay towers on the pitch and four delays under the roof's
-  edge, each arriving 6 to 20 ms after the main arrays at its seats; and on stage the
-  monitors: wedges for the singer, a drum fill and side fills. Listeners stand on stage,
-  on the pitch and on the stands. `align.py` prints when and how loud each loudspeaker
-  arrives at each listener, and which would be heard as an echo (none);
-  `near_field.py` adds up the arrays' boxes one by one where the scene warns that a
-  listener is nearer than an array's far-field pattern holds, and prints how far the
-  pattern is off (within 4 dB up to 2 kHz); `feedback.py` finds how much gain the
-  singer's microphone allows before the loudspeakers make it ring, in each octave band
-  at the mix position and at the singer's ears, the frequencies where it rings first,
-  and renders the loop below and above that gain; `make_model.py` writes the model and
-  the arrays, of a generic box made up for the example.
+- New examples of a concert's sound system, made of the same stage, arrays and boxes:
+  - `stadium_pa`, a football stadium's sound system as tours hang it: two main line
+    arrays of 12 boxes in a J, a block of eight cardioid subwoofers timed to arrive
+    with them at the mix position, out-fills for the side stands, front fills, two
+    delay towers on the pitch and four delays under the roof's edge, each arriving 6 to
+    20 ms after the main arrays at its seats. Listeners stand on the pitch and on the
+    stands. `align.py` prints when and how loud each loudspeaker arrives at each
+    listener, and which would be heard as an echo (none).
+  - `concert_stage`, the stage alone on open ground with its monitors (wedges for the
+    singer, a drum fill and side fills), the main arrays, the subwoofers and the front
+    fills; the players and the mix position listen. Each player hears their own
+    monitor loudest. `feedback.py` finds how much gain the singer's microphone allows
+    before the loudspeakers make it ring, in each octave band at the mix position and
+    at the singer's ears, the frequencies where it rings first, and renders the loop
+    below and above that gain.
+  - `stadium_concert`, the two together.
+
+  Every array adds up its boxes one by one (`near_field: true`); `near_field.py` prints
+  how far the arrays' far-field patterns would be off at each listener (within 3.5 dB
+  up to 2 kHz, up to 10 dB at 4 and 8 kHz), skipping the bands a source's filter cuts.
+  `make_model.py`, the same in the three, writes each one's model and arrays, of a
+  generic box made up for the examples.
 - The editor's File > **Open example** shows the examples in groups (rooms, halls and
   churches, sound systems, outdoors, models from CAD and BIM files, measurements and
   material libraries), and [Example scenes](docs/examples.md) lists them in the same

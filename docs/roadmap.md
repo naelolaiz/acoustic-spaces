@@ -226,9 +226,10 @@ Sources:
 Examples:
 
 - [x] A concert in a stadium with a sound system: main line arrays, subwoofers, fills,
-  delay towers and delays timed to them, stage monitors, the arrays' near field and the
-  singer's microphone's gain before feedback (`stadium_pa`), and the editor's examples
-  in groups.
+  delay towers and delays timed to them (`stadium_pa`); the stage's monitors and the
+  singer's microphone's gain before feedback (`concert_stage`); both together
+  (`stadium_concert`); every array added up box by box near its listeners; and the
+  editor's examples in groups.
 
 Unreleased:
 

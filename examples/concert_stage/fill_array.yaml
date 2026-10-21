@@ -1,0 +1,11 @@
+# Written by make_model.py: see there.
+element: {file: box.csv}
+elements:
+- position: [0.0582, 0.0, 0.6239]
+  orientation: {pitch: 0.0}
+- position: [0.0582, 0.0, 0.2039]
+  orientation: {pitch: -8.0}
+- position: [-0.0003, 0.0, -0.212]
+  orientation: {pitch: -16.0}
+- position: [-0.1161, 0.0, -0.6158]
+  orientation: {pitch: -24.0}

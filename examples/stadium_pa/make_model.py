@@ -1,4 +1,7 @@
-"""Writes stadium.obj, the model of this example, and its loudspeaker arrays.
+"""Writes this example's model and its loudspeakers' arrays and patterns: the stadium
+with its stage (stadium.obj) or the stage alone on open ground (stage.obj), whichever
+this folder's scene.yaml names, and the array files and patterns its sources use. The
+three stadium examples (stadium_pa, concert_stage and stadium_concert) share it.
 
 A football stadium seen as a bowl: a pitch of 105 x 68 m with 8 m of grass round it and
 a wall 2 m high, then stands on all four sides that rise at 30 degrees, 38 m deep, to
@@ -234,28 +237,45 @@ def _subs() -> dict:
     return {"element": "cardioid", "elements": elements}
 
 
-def _write_arrays() -> None:
-    folder = Path(__file__).parent
+def _write_arrays(folder: Path, used: set[str]) -> None:
+    """Write the array files and patterns among ``used`` (file names), and the patterns
+    those arrays name."""
     arrays = {name: _line_array(*layout) for name, layout in ARRAYS.items()}
     arrays["sub_array"] = _subs()
     wedges = [{"position": [0.0, side * WEDGE_SPACING / 2, 0.0]} for side in (1, -1)]
     arrays["monitor_wedges"] = {"element": {"file": "wedge.csv"}, "elements": wedges}
-    _write_balloon(folder / "box.csv", "line-array box", _box_levels)
-    _write_balloon(folder / "wedge.csv", "monitor wedge", _wedge_levels)
+    needed = set(used)
     for name, data in arrays.items():
+        if f"{name}.yaml" not in used:
+            continue
+        if isinstance(data["element"], dict):
+            needed.add(data["element"]["file"])
         body = yaml.safe_dump(data, sort_keys=False, default_flow_style=None, width=88)
         text = f"# Written by make_model.py: see there.\n{body}"
         (folder / f"{name}.yaml").write_text(text, encoding="utf-8")
+    if "box.csv" in needed:
+        _write_balloon(folder / "box.csv", "line-array box", _box_levels)
+    if "wedge.csv" in needed:
+        _write_balloon(folder / "wedge.csv", "monitor wedge", _wedge_levels)
 
 
 def main() -> None:
+    folder = Path(__file__).parent
+    scene = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
+    model = scene["geometry"]["file"]
+    surfaces = _surfaces()
+    if model == "stage.obj":
+        surfaces = [s for s in surfaces if s[0].startswith("stage_")]
+        title = "A concert stage on open ground (make_model.py)."
+    else:
+        title = "A football stadium with a concert stage at its west end (make_model.py)."
     lines = [
-        "# A football stadium with a concert stage at its west end (make_model.py).",
+        f"# {title}",
         "# Metres, +z up, origin at the centre spot; normals face the audience's air.",
     ]
     vertices: list[tuple[float, float, float]] = []
     groups = []
-    for name, quads, toward, away in _surfaces():
+    for name, quads, toward, away in surfaces:
         faces = []
         for quad in quads:
             corners = _facing(quad, toward, away)
@@ -267,8 +287,13 @@ def main() -> None:
     lines += [f"v {x:g} {y:g} {z:g}" for x, y, z in vertices]
     for name, faces in groups:
         lines += ["", f"g {name}", *faces]
-    Path(__file__).with_name("stadium.obj").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    _write_arrays()
+    (folder / model).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    used = {
+        source["directivity"]["file"]
+        for source in scene["sources"]
+        if isinstance(source.get("directivity"), dict) and "file" in source["directivity"]
+    }
+    _write_arrays(folder, used)
 
 
 if __name__ == "__main__":

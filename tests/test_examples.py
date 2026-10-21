@@ -160,7 +160,16 @@ def test_stadium_sound_system_is_aligned(
         assert 0.005 < time[seat][delay] - time[seat][array] < 0.021, seat
     # Nobody hears an echo.
     assert not [(seat, row.source) for seat, rows in seats.items() for row in rows if row.echo]
-    # On stage each player hears their own monitor loudest.
+    monkeypatch.setattr(align, "arrivals", lambda room, rays=None: seats)
+    assert align.main([]) == 0
+    out = capsys.readouterr().out
+    assert "north_stand_far: " in out and "delay_north" in out and "  echo" not in out
+
+
+def test_each_player_hears_their_own_monitor_loudest() -> None:
+    align = _script("concert_stage", "align")
+    seats = align.arrivals(Room.from_yaml(example_path("concert_stage")), rays=30, seed=1)
+    assert not [(seat, row.source) for seat, rows in seats.items() for row in rows if row.echo]
     for seat, monitor in (
         ("singer", "vocal_wedges"),
         ("drummer", "drum_fill"),
@@ -168,26 +177,68 @@ def test_stadium_sound_system_is_aligned(
     ):
         loudest = max(seats[seat], key=lambda row: align.total(row.direct[align.ECHO_BANDS]))
         assert loudest.source == monitor, seat
-    monkeypatch.setattr(align, "arrivals", lambda room, rays=None: seats)
-    assert align.main([]) == 0
-    out = capsys.readouterr().out
-    assert "north_stand_far: " in out and "delay_north" in out and "  echo" not in out
 
 
-def test_stadium_near_field(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    ("example", "low_db", "high_db"), [("stadium_pa", 3.5, 10.5), ("concert_stage", 3.0, 8.0)]
+)
+def test_stadium_arrays_near_their_listeners(
+    example: str,
+    low_db: float,
+    high_db: float,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Up to 2 kHz the arrays' far-field patterns are within 4 dB of the exact sums of
-    their boxes at every listener, and the subwoofers' within 0.6 dB in their bands."""
-    near = _script("stadium_pa", "near_field")
-    found = near.differences(Room.from_yaml(example_path("stadium_pa")))
-    assert {"main_left", "subs", "vocal_wedges", "side_fill_left"} <= set(found)
-    for source, rows in found.items():
-        bands, most = (slice(0, 3), 0.6) if source == "subs" else (slice(0, 6), 4.0)
-        assert max(np.abs(db[bands]).max() for db in rows.values()) < most, source
+    """As the descriptions say: the arrays' far-field patterns would be off by a few dB
+    at the listeners up to 2 kHz but by much more at 4 and 8 kHz, which the arrays avoid
+    by adding up their boxes one by one; the subwoofers' within 0.6 dB in their bands,
+    and the bands their filter leaves out are not counted."""
+    near = _script(example, "near_field")
+    found = near.differences(Room.from_yaml(example_path(example)))
+    assert {"main_left", "subs"} <= set(found)
+    arrays = np.array([db for s, rows in found.items() if s != "subs" for db in rows.values()])
+    low, high = np.abs(arrays[:, :6]).max(), np.abs(arrays[:, 6:]).max()
+    assert 1.0 < low < low_db and high_db - 3.0 < high < high_db
+    assert max(np.abs(db[:2]).max() for db in found["subs"].values()) < 0.6
+    assert all(np.isnan(db[3:]).all() for db in found["subs"].values())
     monkeypatch.setattr(near, "differences", lambda room: found)
     assert near.main([]) == 0
-    assert "main_left, far field above exact (dB)" in capsys.readouterr().out
+    assert "main_left, far field above the elements added up (dB)" in capsys.readouterr().out
+
+
+def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
+    """stadium_concert is stadium_pa and concert_stage together, and the three share their
+    scripts, their arrays and make_model.py, which writes each one's files as they are."""
+    folders = [EXAMPLES / name for name in ("stadium_pa", "concert_stage", "stadium_concert")]
+    for name in ("align.py", "near_field.py", "make_model.py", "feedback.py", "box.csv"):
+        copies = {(f / name).read_bytes() for f in folders if (f / name).exists()}
+        assert len(copies) == 1, name
+
+    def entries(folder: Path, kind: str) -> dict:
+        data = Scene.from_yaml(folder / "scene.yaml").to_data()[kind]
+        for entry in data:
+            if isinstance(entry.get("directivity"), dict):
+                entry["directivity"]["file"] = Path(entry["directivity"]["file"]).name
+        return {entry["name"]: entry for entry in data}
+
+    for kind in ("sources", "listeners"):
+        whole = entries(folders[2], kind)
+        parts = {**entries(folders[0], kind), **entries(folders[1], kind)}
+        assert whole == parts, kind
+    for folder in folders:
+        copy = tmp_path / folder.name
+        copy.mkdir()
+        for name in ("scene.yaml", "make_model.py"):
+            (copy / name).write_bytes((folder / name).read_bytes())
+        spec = importlib.util.spec_from_file_location("make_model", copy / "make_model.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.main()  # writes next to itself, into the copy
+        written = sorted(p.name for p in copy.iterdir() if p.suffix in (".obj", ".csv", ".yaml"))
+        kept = sorted(p.name for p in folder.iterdir() if p.suffix in (".obj", ".csv", ".yaml"))
+        assert written == kept, folder.name
+        for name in written:
+            assert (copy / name).read_bytes() == (folder / name).read_bytes(), name
 
 
 def test_stadium_feedback(
@@ -195,8 +246,8 @@ def test_stadium_feedback(
 ) -> None:
     """The singer's microphone: its gain before feedback, where it rings, and a loop
     that dies away below unity gain and grows above it."""
-    feedback = _script("stadium_pa", "feedback")
-    found = feedback.loop(Room.from_yaml(example_path("stadium_pa")), rays=30)
+    feedback = _script("concert_stage", "feedback")
+    found = feedback.loop(Room.from_yaml(example_path("concert_stage")), rays=30)
     assert "vocal_wedges" in found["speakers"] and "subs" not in found["speakers"]
     for where in ("mix", "ears"):
         assert np.all(np.isfinite(found["pag"][where]))
