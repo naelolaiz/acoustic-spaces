@@ -31,6 +31,14 @@ C = 343.0
 needs_gpu = pytest.mark.skipif(gpu.gpu_name() is None, reason="wgpu finds no GPU")
 
 
+def _tolerance(software: float, hardware: float) -> float:
+    """The share of the peak a GPU's pressures may stray from the CPU's: a software
+    renderer rounds much as the CPU does, a hardware GPU less so (its fused multiply-adds
+    and divisions round otherwise), and GitHub's Intel Mac runners stray the most."""
+    intel_mac = sys.platform == "darwin" and platform.machine() == "x86_64"
+    return hardware if intel_mac or gpu.hardware_gpu() else software
+
+
 def _runs(make, signal, parts):
     """The probes' pressures from a CPU solver and from a GPU one on the same grid, both
     run in the pieces of ``signal`` that ``parts`` bounds."""
@@ -67,12 +75,10 @@ def test_gpu_steps_a_room_with_resonant_walls_as_the_cpu_does(stencil: int) -> N
     assert np.abs(a).max() > 0.0
     # GPUs round differently from the CPU: in this nearly closed room the slow drift the
     # walls' branches leave picks that up, by the end 1.1e-5 of the peak on Apple's GPU
-    # and 7.9e-4 on the GPU of GitHub's Intel Mac runners (the same on every run there),
-    # which alone get the wider margin. A field swapped the wrong way between runs would
-    # differ by far more than either.
-    intel_mac = sys.platform == "darwin" and platform.machine() == "x86_64"
-    tolerance = 2e-3 if intel_mac else 3e-5
-    assert np.abs(a - b).max() < tolerance * np.abs(a).max()
+    # and 7.9e-4 on an AMD Radeon 680M and on the GPU of GitHub's Intel Mac runners (the
+    # same on every run), so hardware GPUs get the wider margin. A field swapped the
+    # wrong way between runs would differ by far more than either.
+    assert np.abs(a - b).max() < _tolerance(3e-5, 2e-3) * np.abs(a).max()
 
 
 @needs_gpu
@@ -106,7 +112,7 @@ def test_gpu_steps_the_matched_layer_round_an_open_model_as_the_cpu_does() -> No
     assert make().layer_cells > 0
     rate = C / (COURANT * h)
     a, b = _runs(make, _drive(rate, h, 600), [0, 301, 600])
-    assert np.abs(a - b).max() < 1e-5 * np.abs(a).max()
+    assert np.abs(a - b).max() < _tolerance(1e-5, 1e-4) * np.abs(a).max()
 
 
 @needs_gpu
@@ -124,7 +130,7 @@ def test_wave_responses_on_the_gpu_match_the_cpu() -> None:
     assert info["wave_gpu"] == 1.0
     assert gpu.gpu_name() in said[0]
     a, b = cpu[0].signals, on_gpu[0].signals
-    assert np.abs(a - b).max() < 1e-5 * np.abs(a).max()
+    assert np.abs(a - b).max() < _tolerance(1e-5, 1e-4) * np.abs(a).max()
 
 
 @needs_gpu
@@ -153,9 +159,7 @@ def test_gpu_steps_a_speed_of_sound_per_cell_as_the_cpu_does(stencil: int) -> No
     assert make().layout()["scaled"][0] == 1
     a, b = _runs(make, _drive(rate, cell, 1201), [0, 577, 1201])
     assert np.abs(a).max() > 0.0
-    intel_mac = sys.platform == "darwin" and platform.machine() == "x86_64"
-    tolerance = 2e-3 if intel_mac else 3e-5
-    assert np.abs(a - b).max() < tolerance * np.abs(a).max()
+    assert np.abs(a - b).max() < _tolerance(3e-5, 2e-3) * np.abs(a).max()
 
 
 @needs_gpu
@@ -198,7 +202,7 @@ def test_gpu_steps_the_matched_layer_with_a_speed_of_sound_per_cell_as_the_cpu_d
     assert solver.layer_cells > 0 and solver.layout()["scaled"][0] == 1
     rate = C / (COURANT * h)
     a, b = _runs(make, _drive(rate, h, 600), [0, 301, 600])
-    assert np.abs(a - b).max() < 1e-5 * np.abs(a).max()
+    assert np.abs(a - b).max() < _tolerance(1e-5, 1e-4) * np.abs(a).max()
 
 
 @needs_gpu
@@ -224,7 +228,45 @@ def test_wave_responses_in_wind_and_temperature_run_on_the_gpu() -> None:
     assert info["wave_speed_min_m_s"] == pytest.approx(337.3, abs=0.1)
     assert gpu.gpu_name() in said[0] and "sound at 337 to 402 m/s" in said[0]
     a, b = cpu[0].signals, on_gpu[0].signals
-    assert np.abs(a - b).max() < 1e-5 * np.abs(a).max()
+    assert np.abs(a - b).max() < _tolerance(1e-5, 1e-4) * np.abs(a).max()
+
+
+@needs_gpu
+def test_gpu_steps_in_submissions_short_enough_for_the_gpus_watchdog(monkeypatch) -> None:
+    """A big grid's steps go to the GPU a few at a time, since a GPU whose job runs too
+    long (10 s on Linux's amdgpu) is reset and loses every step after; the pieces step
+    the grid exactly as one long submission does."""
+    cell = 0.1
+    rate = C / (_courant(7) * cell)
+
+    def make():
+        solver, _ = _solver(
+            (3.0, 2.2, 1.7),
+            lambda mesh: [0.02] * len(mesh.faces),
+            [0.8, 0.9, 0.7],
+            [[2.1, 1.3, 1.1], [1.0, 1.6, 0.4]],
+            cell=cell,
+        )
+        return solver
+
+    signal = _drive(rate, cell, 700)
+    solvers = gpu.GpuWaveSolver(make()), gpu.GpuWaveSolver(make())
+    queue = type(solvers[0]._device.queue)
+    submit = queue.submit
+    submits: list[int] = []
+
+    def counted(self, buffers):
+        submits.append(1)
+        return submit(self, buffers)
+
+    monkeypatch.setattr(queue, "submit", counted)
+    whole = solvers[0].run(signal)
+    once = len(submits)
+    monkeypatch.setattr(gpu, "_SUBMIT_CELL_STEPS", 37 * solvers[1]._cells)
+    split = solvers[1].run(signal)
+    # 700 steps: a batch of 512 and one of 188, sent whole or 37 steps at a time.
+    assert len(submits) - once == once + -(-512 // 37) + -(-188 // 37) - 2
+    np.testing.assert_array_equal(split, whole)
 
 
 def test_the_device_setting_picks_the_cpu_or_the_gpu(monkeypatch) -> None:

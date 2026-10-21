@@ -526,6 +526,12 @@
 - `second_order` diffraction printed a floating-point overflow warning where two
   edges meet at a corner and the shortest path over both runs through it. The path is
   still turned down, as it was, and the warning is gone.
+- On a hardware GPU the wave solver could stop partway through a long run on a big
+  grid: it sent up to 512 steps in one submission, and a GPU whose work runs longer
+  than its watchdog allows (10 s on Linux's amdgpu, reached on an AMD Radeon 680M with
+  two million cells) is reset, losing every step after it and failing the GPU runs
+  that follow. The steps now go in submissions of about a second's work each, which
+  step the grid exactly as one long submission did.
 
 ## 3.2.3
 

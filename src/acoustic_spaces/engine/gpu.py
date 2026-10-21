@@ -29,6 +29,9 @@ Device = Literal["cpu", "gpu", "auto"]
 #: Threads per workgroup, and time steps per command buffer.
 _GROUP = 256
 _BATCH = 512
+#: Cell updates per submission: about a second's work on an integrated GPU, well inside
+#: the watchdog that resets a GPU whose job runs too long (10 s on Linux's amdgpu).
+_SUBMIT_CELL_STEPS = 2**26
 #: Workgroups per dispatch dimension WebGPU always allows.
 _MAX_GROUPS = 65535
 
@@ -449,6 +452,7 @@ class GpuWaveSolver:
         grid[22:26] = _words(
             np.array([weights[0], diagonal, layout["centre"][0], layout["total"][0]])
         )
+        self._cells = n
         threads = n + len(layout["special"]) + layers + self._probes
         groups = -(-threads // _GROUP)
         self._groups = (min(groups, _MAX_GROUPS), -(-groups // _MAX_GROUPS))
@@ -538,6 +542,9 @@ class GpuWaveSolver:
         first, second = self._fields
         groups = (bind(first, second), bind(second, first))
         words = self._stride // 4
+        # The steps go in submissions of bounded work: a GPU's watchdog resets it when
+        # one runs too long, and every step after is lost.
+        per_submit = max(1, min(_BATCH, _SUBMIT_CELL_STEPS // self._cells))
         for begin in range(0, steps, _BATCH):
             count = min(_BATCH, steps - begin)
             index = np.arange(begin, begin + count, dtype=np.uint32)
@@ -546,14 +553,15 @@ class GpuWaveSolver:
             entries[:, 1] = (self._done + index) & 1
             entries[:, 2] = _words(signal[begin : begin + count])
             queue.write_buffer(self._steps, 0, entries)
-            encoder = device.create_command_encoder()
-            compute = encoder.begin_compute_pass()
-            compute.set_pipeline(self._pipeline)
-            for k in range(count):
-                compute.set_bind_group(0, groups[entries[k, 1]], [k * self._stride])
-                compute.dispatch_workgroups(*self._groups)
-            compute.end()
-            queue.submit([encoder.finish()])
+            for start in range(0, count, per_submit):
+                encoder = device.create_command_encoder()
+                compute = encoder.begin_compute_pass()
+                compute.set_pipeline(self._pipeline)
+                for k in range(start, min(start + per_submit, count)):
+                    compute.set_bind_group(0, groups[entries[k, 1]], [k * self._stride])
+                    compute.dispatch_workgroups(*self._groups)
+                compute.end()
+                queue.submit([encoder.finish()])
         self._done += steps
         recorded = np.frombuffer(queue.read_buffer(out), np.float32)[: steps * self._probes]
         return recorded.reshape(steps, self._probes).T.astype(np.float64)
