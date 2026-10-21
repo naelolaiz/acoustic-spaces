@@ -481,6 +481,32 @@
   against testing every pair (see
   [Validation](docs/validation.md#edge-diffraction-in-whole-cities)).
 
+**Wide-angle parabolic equation**
+
+- `simulation.early.parabolic_equation: wide_angle` (`simulate` and `map`
+  `--parabolic-equation wide_angle`, **Parabolic equation** on the editor's Simulation
+  page, for an outdoor scene in wind or temperature gradients) gives the bands the
+  parabolic equation gives outdoors (up to 500 Hz, and in a shadow up to 2 kHz) from a
+  wide-angle parabolic equation, `acoustic_spaces.engine.wide_angle`: the split-step
+  Padé method of Collins' RAM, the one-way operator as a rational function of ten
+  terms in steps of three wavelengths, fourth-order differences in height with the
+  ground's impedance as the boundary, and the operator's own starting field, its
+  tridiagonal solves in native code. It carries sound that a gradient reaching hundreds
+  of metres up bends back at up to 45 degrees, through air whose speed of sound is far
+  from the ground's, where the narrow-angle equation strays over a few kilometres. It
+  takes three to four times the work; left out (`narrow_angle`, the default), nothing
+  changes.
+- Checked by `validation/benchmark_1995.py` against the fast field program: within
+  0.11 dB at the benchmark's pure tones from 10 Hz to 1 kHz and 100 m to 10 km wherever
+  the sound is within 40 dB of free field, where the narrow-angle equation strays by 3
+  to 20 dB beyond 1 to 2 km; in the weather presets within 0.04 dB on average at the
+  bands' centres and 0.02 dB over the bands (the narrow-angle one 0.11 and 0.08 dB);
+  whole scenes of the benchmark's cases 2 and 3 within 0.03 dB per band to 2 km, where
+  the narrow-angle equation is 0.5 to 0.8 dB off at 2 km downwind. Through weather
+  zones `validation/weather_zones.py` finds it within 0.09 dB of the Crank-Nicholson
+  reference on average (see
+  [Validation](docs/validation.md#the-wide-angle-parabolic-equation)).
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

@@ -300,6 +300,7 @@ def early_paths(
             coherent=coherent,
             max_order=order,
             threads=threads,
+            wide_angle=cfg.parabolic_equation == "wide_angle",
         )
         if refraction is not None:
             paths = refraction.apply(target[None], [straight], [paths], np.array([cutoff]))[0]
@@ -559,6 +560,7 @@ def simulate(
             coherent=coherent,
             max_order=early_cfg.max_order,
             threads=threads,
+            wide_angle=early_cfg.parabolic_equation == "wide_angle",
         )
         if refraction is not None:
             say(f"{label}: paths bent by the wind and the temperature")

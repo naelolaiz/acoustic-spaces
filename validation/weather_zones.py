@@ -17,7 +17,9 @@ wind, the weather changing 150 m from the source:
   parabolic equation over open ground. In still air the Crank-Nicholson equation is
   first checked against the exact solution, and in wind without zones against the
   engine's parabolic equation, which the fast field program validated
-  (``benchmark_1995.py``).
+  (``benchmark_1995.py``). The engine's wide-angle parabolic equation
+  (``simulation.early.parabolic_equation: wide_angle``) is marched through the zones
+  too, against the same reference.
 - The mean profile along the way, which the early paths take (each weather weighted by
   the length of the way under it, the wind's component along the way with it), against
   the weathers in turn: the engine's parabolic equation through that mean profile
@@ -42,6 +44,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from acoustic_spaces.engine import wide_angle  # noqa: E402
 from acoustic_spaces.engine.diffraction import band_frequencies  # noqa: E402
 from acoustic_spaces.engine.parabolic import march  # noqa: E402
 from acoustic_spaces.engine.weather import Weather  # noqa: E402
@@ -229,10 +232,11 @@ def exact_still(f: float, ranges) -> np.ndarray:
     return np.array(out, dtype=complex)
 
 
-def gfpe(f: float, speed_at, ranges) -> np.ndarray:
-    """The engine's parabolic equation through the weathers along +x."""
+def gfpe(f: float, speed_at, ranges, solver=march) -> np.ndarray:
+    """The engine's parabolic equation through the weathers along +x (``solver``: its
+    march, or the wide-angle equation's)."""
     z = complex(impedance(f))
-    return march(
+    return solver(
         [f],
         speed_at(0.0),
         lambda r: z,
@@ -276,26 +280,39 @@ def check_parabolic(tones=TONES, ranges=RANGES) -> dict:
                 f"{'':34}" + "".join(f"{v:+9.2f}" for v in cn - reference) + "  cnpe - " + against
             )
     print()
-    misses = []
+    misses, wide_misses = [], []
     for name, atmosphere in CASES.items():
         weather = weather_of(atmosphere)
         speed_at = weather.along(np.zeros(2), np.array([1.0, 0.0]), ranges.max())
         for f in tones:
             engine = free_field_db(gfpe(f, speed_at, ranges), ranges)
+            wide = free_field_db(gfpe(f, speed_at, ranges, wide_angle.march), ranges)
             cn = free_field_db(
                 cnpe(f, speed_at, complex(impedance(f)), ZS, ranges, ZR, TOP_M), ranges
             )
             miss = engine - cn
             misses.extend(miss.tolist())
+            wide_misses.extend((wide - cn).tolist())
             label = f"{name}, {f:g} Hz"
-            out[label] = {"cnpe_db": cn.tolist(), "engine_minus_cnpe_db": miss.tolist()}
+            out[label] = {
+                "cnpe_db": cn.tolist(),
+                "engine_minus_cnpe_db": miss.tolist(),
+                "wide_minus_cnpe_db": (wide - cn).tolist(),
+            }
             print(f"{label:34}" + "".join(f"{v:9.2f}" for v in cn) + "  cnpe")
             print(f"{'':34}" + "".join(f"{v:+9.2f}" for v in miss) + "  engine - cnpe")
-    misses = np.abs(misses)
-    out["summary"] = {"mean_abs_db": float(misses.mean()), "max_abs_db": float(misses.max())}
+            print(f"{'':34}" + "".join(f"{v:+9.2f}" for v in wide - cn) + "  wide - cnpe")
+    misses, wide_misses = np.abs(misses), np.abs(wide_misses)
+    out["summary"] = {
+        "mean_abs_db": float(misses.mean()),
+        "max_abs_db": float(misses.max()),
+        "wide_mean_abs_db": float(wide_misses.mean()),
+        "wide_max_abs_db": float(wide_misses.max()),
+    }
     print(
         f"\nengine - cnpe over the zones: {misses.mean():.2f} dB on average, {misses.max():.2f} "
-        f"at most ({time.time() - start:.0f} s)\n"
+        f"at most; the wide-angle equation {wide_misses.mean():.2f} on average, "
+        f"{wide_misses.max():.2f} at most ({time.time() - start:.0f} s)\n"
     )
     return out
 

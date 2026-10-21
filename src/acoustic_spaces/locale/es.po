@@ -1527,6 +1527,14 @@ msgid "both sides"
 msgstr "ambos lados"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "narrow angle"
+msgstr "ángulo estrecho"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "wide angle"
+msgstr "ángulo amplio"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "stochastic_ray_tracing"
 msgstr "trazado de rayos estocástico"
 
@@ -3820,6 +3828,21 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Outdoors in wind or temperature gradients, the parabolic equation that gives "
+"the sound over the open ground in the low bands and in the shadows: narrow "
+"angle (for the gradients near the ground that the weather has) or wide angle "
+"(also for gradients reaching hundreds of metres up, which bend sound back at "
+"steep angles over kilometres; several times the work)"
+msgstr ""
+"Al aire libre con gradientes de viento o de temperatura, la ecuación "
+"parabólica que da el sonido sobre el terreno abierto en las bandas graves y "
+"en las zonas de sombra: ángulo estrecho (para los gradientes junto al "
+"terreno que trae el tiempo) o ángulo amplio (también para gradientes que "
+"llegan a cientos de metros de altura, que devuelven el sonido con ángulos "
+"pronunciados a lo largo de kilómetros; varias veces más trabajo)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
 "bands take their place when it runs up to this band or higher. Up to 500 Hz "
@@ -3851,6 +3874,10 @@ msgstr "Difracción"
 #: acoustic_spaces/gui/inspector.py
 msgid "Reflections over an edge"
 msgstr "Reflexiones sobre una arista"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Parabolic equation"
+msgstr "Ecuación parabólica"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "In pressure up to"

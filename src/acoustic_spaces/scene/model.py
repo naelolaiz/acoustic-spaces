@@ -2154,6 +2154,17 @@ class EarlyStage(_Model):
             "four paths over a barrier on the ground)"
         ),
     )
+    parabolic_equation: Literal["narrow_angle", "wide_angle"] = Field(
+        default="narrow_angle",
+        description=(
+            "outdoors in wind or temperature gradients, the parabolic equation that gives "
+            "the sound over the open ground in the low bands and in the shadows: "
+            "narrow_angle (the Green's function one: within 0.1 dB to 1 km in the gradients "
+            "near the ground that make the weather's shadows and focusing) or wide_angle "
+            "(split-step Padé: also sound that a gradient reaching hundreds of metres up "
+            "bends back at up to 40 degrees, over many kilometres; several times the work)"
+        ),
+    )
     coherent_max_band_hz: Literal[63, 125, 250, 500, 1000, 2000, 4000, 8000] | None = Field(
         default=125,
         description=(

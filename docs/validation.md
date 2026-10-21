@@ -1413,47 +1413,65 @@ with turbulence, is not run: the benchmark's eddies have a Gaussian spectrum, th
 engine's a von Kármán one, checked in
 [Turbulence](#turbulence-against-a-parabolic-equation-through-random-eddies).
 
-First the engine's parabolic equation alone (`acoustic_spaces.engine.parabolic`, the
-Green's function parabolic equation of Gilbert and Di, which gives the engine's sound
-over the open ground in the bands up to 500 Hz and in a shadow up to 2 kHz), at the
-benchmark's pure tones: the program's level re free field and the parabolic equation's
-difference from it (`-`: deeper than -60 dB):
+First the engine's parabolic equations alone, at the benchmark's pure tones: the
+narrow-angle one (`acoustic_spaces.engine.parabolic`, the Green's function parabolic
+equation of Gilbert and Di, the default, which gives the engine's sound over the open
+ground in the bands up to 500 Hz and in a shadow up to 2 kHz) and the wide-angle one
+(`acoustic_spaces.engine.wide_angle`, see
+[The wide-angle parabolic equation](#the-wide-angle-parabolic-equation)); the program's
+level re free field and each equation's difference from it (`-`: deeper than -60 dB):
 
 | | 100 m | 200 m | 500 m | 1 km | 2 km | 5 km | 10 km | |
 |---|---|---|---|---|---|---|---|---|
 | case 1, still air, 10 Hz | 6.00 | 6.02 | 6.04 | 6.06 | 6.08 | 6.12 | 6.12 | ffp, dB |
-| | +0.04 | +0.01 | -0.03 | -0.03 | -0.04 | -0.04 | -0.01 | pe - ffp |
+| | +0.04 | +0.01 | -0.03 | -0.03 | -0.04 | -0.04 | -0.01 | narrow - ffp |
+| | -0.02 | -0.00 | +0.00 | +0.00 | +0.00 | -0.00 | +0.03 | wide - ffp |
 | case 1, still air, 100 Hz | 4.26 | 3.72 | 2.27 | -0.11 | -4.88 | -16.72 | -24.77 | ffp, dB |
-| | -0.03 | -0.02 | -0.00 | +0.02 | +0.02 | -0.05 | -0.10 | pe - ffp |
+| | -0.03 | -0.02 | -0.00 | +0.02 | +0.02 | -0.05 | -0.10 | narrow - ffp |
+| | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | -0.00 | -0.04 | wide - ffp |
 | case 1, still air, 1000 Hz | 0.72 | -3.88 | -11.14 | -16.96 | -22.88 | -30.78 | -36.78 | ffp, dB |
-| | -0.03 | -0.04 | -0.05 | -0.05 | -0.05 | -0.05 | -0.05 | pe - ffp |
+| | -0.03 | -0.04 | -0.05 | -0.05 | -0.05 | -0.05 | -0.05 | narrow - ffp |
+| | -0.00 | -0.00 | -0.00 | +0.00 | -0.00 | +0.00 | +0.01 | wide - ffp |
 | case 2, downward refraction 0.1/s, 10 Hz | 6.23 | 6.67 | 8.62 | 13.02 | 13.84 | 20.29 | 24.28 | ffp, dB |
-| | -0.20 | -0.27 | -0.38 | -0.45 | +0.14 | -6.47 | -2.10 | pe - ffp |
+| | -0.20 | -0.27 | -0.38 | -0.45 | +0.14 | -6.47 | -2.10 | narrow - ffp |
+| | -0.02 | -0.00 | +0.00 | +0.00 | -0.01 | -0.01 | +0.03 | wide - ffp |
 | case 2, downward refraction 0.1/s, 100 Hz | 4.60 | 4.84 | 5.51 | 2.81 | 8.72 | 3.92 | 11.89 | ffp, dB |
-| | -0.04 | -0.04 | -0.01 | -0.03 | -0.02 | +5.52 | -19.77 | pe - ffp |
+| | -0.04 | -0.04 | -0.01 | -0.03 | -0.02 | +5.52 | -19.77 | narrow - ffp |
+| | +0.00 | +0.00 | -0.00 | -0.00 | -0.01 | -0.02 | -0.01 | wide - ffp |
 | case 2, downward refraction 0.1/s, 1000 Hz | 2.13 | 1.71 | 8.30 | 9.25 | 5.31 | -2.51 | -10.13 | ffp, dB |
-| | -0.04 | -0.04 | -0.04 | +0.32 | -10.92 | +3.40 | -0.58 | pe - ffp |
+| | -0.04 | -0.04 | -0.04 | +0.32 | -10.92 | +3.40 | -0.58 | narrow - ffp |
+| | -0.00 | -0.00 | -0.00 | -0.00 | -0.01 | -0.05 | -0.11 | wide - ffp |
 | case 3, upward refraction 0.1/s, 10 Hz | 5.77 | 5.35 | 3.40 | -1.29 | -13.32 | -41.23 | -77.99 | ffp, dB |
-| | +0.28 | +0.21 | +0.21 | +0.47 | -0.06 | -9.08 | - | pe - ffp |
+| | +0.28 | +0.21 | +0.21 | +0.47 | -0.06 | -9.08 | - | narrow - ffp |
+| | -0.02 | -0.00 | -0.00 | -0.01 | -0.01 | +0.28 | - | wide - ffp |
 | case 3, upward refraction 0.1/s, 100 Hz | 3.88 | 2.40 | -3.54 | -16.07 | -44.04 | -64.00 | -98.16 | ffp, dB |
-| | -0.02 | -0.01 | +0.01 | +0.04 | -0.12 | - | - | pe - ffp |
+| | -0.02 | -0.01 | +0.01 | +0.04 | -0.12 | - | - | narrow - ffp |
+| | -0.00 | -0.00 | -0.01 | -0.01 | -0.05 | - | - | wide - ffp |
 | case 3, upward refraction 0.1/s, 1000 Hz | -1.08 | -12.11 | -52.50 | -92.86 | -98.39 | -94.54 | -121.03 | ffp, dB |
-| | -0.05 | -0.04 | +7.79 | - | - | - | - | pe - ffp |
+| | -0.05 | -0.04 | +7.79 | - | - | - | - | narrow - ffp |
+| | -0.00 | -0.00 | -0.02 | - | - | - | - | wide - ffp |
 | 0.1/s up to 100 m, 10 Hz | 6.23 | 6.68 | 8.55 | 13.37 | 15.64 | 18.42 | 18.27 | ffp, dB |
-| | -0.20 | -0.24 | -0.33 | -0.49 | -0.34 | -0.38 | -0.49 | pe - ffp |
+| | -0.20 | -0.24 | -0.33 | -0.49 | -0.34 | -0.38 | -0.49 | narrow - ffp |
+| | -0.02 | -0.00 | +0.00 | +0.00 | -0.00 | -0.00 | -0.01 | wide - ffp |
 | 0.1/s up to 100 m, 100 Hz | 4.60 | 4.84 | 5.51 | 2.80 | -13.83 | -2.11 | -10.57 | ffp, dB |
-| | -0.04 | -0.04 | -0.02 | +0.04 | +3.22 | -0.19 | -3.12 | pe - ffp |
+| | -0.04 | -0.04 | -0.02 | +0.04 | +3.22 | -0.19 | -3.12 | narrow - ffp |
+| | +0.00 | +0.00 | -0.00 | -0.00 | +0.02 | -0.00 | +0.00 | wide - ffp |
 | 0.1/s up to 100 m, 1000 Hz | 2.13 | 1.71 | 8.30 | 9.25 | 0.48 | -21.83 | -47.12 | ffp, dB |
-| | -0.04 | -0.04 | -0.04 | +0.33 | +1.23 | -1.93 | +11.32 | pe - ffp |
+| | -0.04 | -0.04 | -0.04 | +0.33 | +1.23 | -1.93 | +11.32 | narrow - ffp |
+| | -0.00 | -0.00 | -0.00 | -0.00 | -0.00 | -0.00 | +0.02 | wide - ffp |
 | -0.1/s up to 100 m, 10 Hz | 5.78 | 5.35 | 3.28 | -0.47 | -9.92 | -44.43 | -69.88 | ffp, dB |
-| | +0.28 | +0.24 | +0.32 | +0.28 | +0.22 | +1.42 | - | pe - ffp |
+| | +0.28 | +0.24 | +0.32 | +0.28 | +0.22 | +1.42 | - | narrow - ffp |
+| | -0.02 | -0.00 | -0.00 | -0.01 | -0.01 | -0.41 | - | wide - ffp |
 | -0.1/s up to 100 m, 100 Hz | 3.88 | 2.40 | -3.53 | -16.14 | -45.75 | -102.87 | -98.15 | ffp, dB |
-| | -0.02 | -0.01 | -0.02 | +0.10 | -5.79 | - | - | pe - ffp |
+| | -0.02 | -0.01 | -0.02 | +0.10 | -5.79 | - | - | narrow - ffp |
+| | -0.00 | -0.00 | -0.01 | -0.02 | +0.07 | - | - | wide - ffp |
 | -0.1/s up to 100 m, 1000 Hz | -1.08 | -12.11 | -52.51 | -64.37 | -98.31 | -125.03 | -121.03 | ffp, dB |
-| | -0.04 | -0.05 | +0.33 | - | - | - | - | pe - ffp |
+| | -0.04 | -0.05 | +0.33 | - | - | - | - | narrow - ffp |
+| | -0.00 | -0.00 | -0.01 | - | - | - | - | wide - ffp |
 
-In still air the two agree within 0.05 dB to 5 km and 0.1 dB at 10 km; at 10 Hz, below
-the engine's lowest band, the parabolic equation is 0.2 to 0.5 dB off in every case. In
+In still air the narrow-angle equation and the program agree within 0.05 dB to 5 km and
+0.1 dB at 10 km; at 10 Hz, below the engine's lowest band, the narrow-angle equation is
+0.2 to 0.5 dB off in every case. In
 wind the agreement holds as far as the sound reaches the listener at the flat angles a
 parabolic equation carries. With the gradient stopping 100 m up, which turns back only
 the sound within 14 degrees of the horizontal, the parabolic equation is within 0.05 dB
@@ -1473,7 +1491,10 @@ at a pure tone where several bent paths interfere, and upwind it comes out 8 dB 
 loud at 1 kHz 500 m into the shadow (0.3 dB with the gradient stopping at 100 m). Such
 profiles are beyond any weather; the engine's atmosphere is meant for the gradients
 near the ground that make the shadows and the focusing in practice, and within a few
-kilometres of the source.
+kilometres of the source. The wide-angle equation carries both: within 0.05 dB of the
+program in every case, at every tone and to 10 km, wherever the sound is within 40 dB
+of free field, but for 0.11 dB at 1 kHz 10 km downwind; deeper in the shadow within
+0.07 dB at 100 Hz and 1 kHz, and 0.3 to 0.4 dB at 10 Hz 5 km upwind, 41 to 44 dB down.
 
 Then whole scenes, each case as an outdoor scene: the gradient as a measured
 atmosphere (`atmosphere.table`) with the wind along the line of the listeners, the air
@@ -1617,6 +1638,169 @@ bands counted against its reading. Each band of the response now keeps its own
 spectrum into the crossovers, and a path that carries nothing in a band is left out
 of that band's reading; rooms change by under a hundred-thousandth of the response's
 peak, and the still-air tables above by up to 0.2 dB in one cell.
+
+## The wide-angle parabolic equation
+
+With `simulation.early.parabolic_equation: wide_angle` (`--parabolic-equation
+wide_angle`, **Parabolic equation** in the editor) the bands the parabolic equation
+gives outdoors in wind or temperature gradients (see
+[Wind and temperature](outdoor.md#wind-and-temperature)) come from
+`acoustic_spaces.engine.wide_angle` instead of the narrow-angle default: the
+split-step Padé parabolic equation of Collins (J. Acoust. Soc. Am. 93, 1993, 1736, as
+in his program RAM). It marches the field with the one-way operator of the Helmholtz
+equation, exact at every angle in air that does not change along the way, written as a
+rational function of ten terms that never amplifies the waves that do not propagate
+(RAM's stability constraint), in steps of three wavelengths; the heights are finite
+differences of fourth order, twenty points per wavelength, with the ground's impedance
+as the lower boundary, also to fourth order, and the field starts as the operator has
+it (Collins' self-starter, J. Acoust. Soc. Am. 92, 1992, 2069). The ten tridiagonal
+solves of each step run in native code, the frequencies of a band on the run's
+threads.
+
+`tests/test_wide_angle.py` checks each part on every change: one step against the
+exact exponential of the operator, within 10⁻⁷ for sound up to 45 degrees from the
+horizontal and 10⁻¹³ within 18 degrees of it; that it damps the waves that do not
+propagate; the starting field's rational function within 10⁻⁸ of its own; the native
+solves against dense ones, and on any number of threads bit for bit; in still air the
+complex pressure over grass within 0.5 % (0.04 dB, 0.3 degrees) of the exact solution
+at 125 and 500 Hz; the field 45 degrees up within 0.15 dB of the exact one, where the
+narrow-angle equation's starting field falls 1 dB short; and the benchmark's case 2 at
+100 Hz within 0.05 dB of the fast field program to 5 km, where the narrow-angle
+equation is 6 dB off.
+
+**The benchmark.** At the 1995 benchmark's pure tones (the table in
+[Outdoor sound in wind](#outdoor-sound-in-wind-against-a-fast-field-program)) the
+wide-angle equation is within 0.05 dB of the fast field program in every case, from
+10 Hz to 1 kHz and from 100 m to 10 km, wherever the sound is within 40 dB of free
+field, but for 0.11 dB at 1 kHz 10 km downwind; deeper in the shadow it is within
+0.07 dB at 100 Hz and 1 kHz, and 0.3 to 0.4 dB at 10 Hz 5 km upwind, 41 to 44 dB down.
+With the benchmark's gradients going on to a kilometre up, where the narrow-angle
+equation strays by 3 to 20 dB beyond 1 to 2 km downwind and by 8 dB 500 m into the
+shadow upwind at 1 kHz, the wide-angle one stays within 0.11 dB.
+
+**The weather presets.** The gradients the engine is meant for change fastest near the
+ground. Both equations against the fast field program in the presets: a source 2 m and
+a listener 1.5 m up over the benchmark's ground, at 20 °C, 50 to 300 m apart, the
+level re free field (dB) and each equation's difference from it at the octave bands'
+centre tones:
+
+| | 50 m | 100 m | 200 m | 300 m | |
+|---|---|---|---|---|---|
+| `windy`, downwind, 63 Hz | 6.14 | 6.91 | 8.24 | 9.32 | ffp, dB |
+| | -0.19 | -0.19 | -0.16 | -0.18 | narrow - ffp |
+| | +0.02 | +0.04 | +0.05 | +0.06 | wide - ffp |
+| `windy`, downwind, 125 Hz | 4.76 | 5.33 | 5.66 | 4.67 | ffp, dB |
+| | +0.10 | +0.10 | -0.02 | -0.11 | narrow - ffp |
+| | +0.00 | +0.00 | -0.02 | -0.07 | wide - ffp |
+| `windy`, downwind, 250 Hz | -2.27 | -6.77 | -26.18 | -22.74 | ffp, dB |
+| | -0.16 | -0.27 | -0.04 | -0.42 | narrow - ffp |
+| | -0.07 | -0.15 | -0.05 | -0.18 | wide - ffp |
+| `windy`, downwind, 500 Hz | -6.43 | -6.84 | -3.53 | 0.20 | ffp, dB |
+| | -0.07 | -0.05 | +0.06 | +0.06 | narrow - ffp |
+| | +0.03 | +0.03 | +0.04 | +0.04 | wide - ffp |
+| `windy`, upwind, 63 Hz | 4.86 | 3.93 | 1.91 | -0.24 | ffp, dB |
+| | +0.19 | +0.10 | -0.07 | -0.17 | narrow - ffp |
+| | -0.03 | -0.05 | -0.09 | -0.12 | wide - ffp |
+| `windy`, upwind, 125 Hz | 3.41 | 1.58 | -2.42 | -6.73 | ffp, dB |
+| | -0.23 | -0.31 | -0.37 | -0.48 | narrow - ffp |
+| | -0.01 | -0.03 | -0.07 | -0.12 | wide - ffp |
+| `windy`, upwind, 250 Hz | -0.29 | -4.13 | -12.53 | -21.73 | ffp, dB |
+| | -0.05 | -0.10 | -0.20 | -0.30 | narrow - ffp |
+| | +0.02 | +0.01 | -0.01 | -0.05 | wide - ffp |
+| `windy`, upwind, 500 Hz | -6.16 | -14.45 | -33.95 | -56.97 | ffp, dB |
+| | -0.16 | -0.16 | -0.14 | -0.12 | narrow - ffp |
+| | +0.05 | +0.06 | +0.05 | +0.02 | wide - ffp |
+| `sunny_day`, 63 Hz | 5.32 | 5.02 | 4.36 | 3.66 | ffp, dB |
+| | +0.07 | +0.05 | +0.02 | +0.00 | narrow - ffp |
+| | -0.01 | -0.01 | -0.02 | -0.03 | wide - ffp |
+| `sunny_day`, 125 Hz | 3.96 | 3.18 | 1.57 | -0.03 | ffp, dB |
+| | -0.08 | -0.09 | -0.07 | -0.08 | narrow - ffp |
+| | -0.00 | -0.01 | -0.01 | -0.02 | wide - ffp |
+| `sunny_day`, 250 Hz | -0.47 | -3.15 | -8.20 | -12.70 | ffp, dB |
+| | -0.02 | -0.02 | +0.01 | +0.02 | narrow - ffp |
+| | +0.01 | +0.02 | +0.02 | +0.03 | wide - ffp |
+| `sunny_day`, 500 Hz | -7.51 | -13.17 | -22.26 | -30.27 | ffp, dB |
+| | -0.09 | -0.10 | -0.10 | -0.09 | narrow - ffp |
+| | +0.01 | +0.02 | +0.02 | +0.03 | wide - ffp |
+| `clear_night`, 63 Hz | 5.73 | 5.97 | 6.41 | 6.78 | ffp, dB |
+| | -0.05 | -0.04 | -0.01 | -0.00 | narrow - ffp |
+| | +0.01 | +0.01 | +0.02 | +0.02 | wide - ffp |
+| `clear_night`, 125 Hz | 4.39 | 4.37 | 4.18 | 3.78 | ffp, dB |
+| | +0.02 | +0.03 | +0.03 | +0.03 | narrow - ffp |
+| | +0.00 | +0.00 | +0.01 | +0.00 | wide - ffp |
+| `clear_night`, 250 Hz | -1.06 | -3.81 | -10.28 | -17.94 | ffp, dB |
+| | -0.07 | -0.07 | -0.13 | -0.28 | narrow - ffp |
+| | -0.02 | -0.03 | -0.07 | -0.13 | wide - ffp |
+| `clear_night`, 500 Hz | -8.15 | -11.48 | -13.57 | -13.55 | ffp, dB |
+| | -0.08 | -0.07 | -0.04 | -0.04 | narrow - ffp |
+| | -0.00 | -0.00 | -0.00 | +0.00 | wide - ffp |
+
+The narrow-angle equation is within 0.11 dB of the program on average and 0.48 dB at
+most (125 Hz, 300 m upwind in `windy`), the wide-angle one within 0.04 dB on average
+and 0.18 dB at most. Over each band as the engine reads it, the mean energy over its
+eight frequencies, the narrow-angle equation is within 0.08 dB on average and 0.38 dB
+at most, the wide-angle one within 0.02 dB and 0.12 dB. In the weather near the
+ground both hold, so the narrow-angle equation stays the default. In the
+`open_air_stage` example the two equations differ by 0.15 dB at most, and the run
+takes 13 s instead of 4 on four cores.
+
+**Whole scenes.** The benchmark's cases 2 and 3 as whole scenes again (see
+[Outdoor sound in wind](#outdoor-sound-in-wind-against-a-fast-field-program)), with
+`parabolic_equation: wide_angle`:
+
+**case 2, downward refraction 0.1/s**
+
+| distance | 63 | 125 | 250 | 500 | 1k | |
+|---|---|---|---|---|---|---|
+| 100 m | 5.55 | 3.42 | -2.27 | -5.22 | 2.55 | ffp, dB |
+| | +0.00 | +0.00 | -0.00 | -0.00 | +0.04 | engine - ffp |
+| | +0.05 | +0.11 | +0.00 | -0.61 | +0.04 | through the filters |
+| 200 m | 6.21 | 2.97 | -5.67 | -6.00 | 2.28 | ffp, dB |
+| | +0.00 | +0.00 | -0.00 | -0.00 | -0.23 | engine - ffp |
+| | +0.07 | +0.13 | -0.22 | -0.62 | -0.23 | through the filters |
+| 500 m | 9.03 | 1.29 | -2.98 | -2.74 | 5.07 | ffp, dB |
+| | +0.00 | -0.00 | -0.00 | -0.00 | -1.78 | engine - ffp |
+| | +0.15 | -0.15 | -0.06 | -0.76 | -1.78 | through the filters |
+| 1 km | 6.79 | 1.37 | 1.43 | 1.55 | 6.63 | ffp, dB |
+| | -0.00 | +0.00 | -0.00 | -0.00 | +0.48 | engine - ffp |
+| | -0.25 | -0.10 | +0.16 | -0.08 | +0.48 | through the filters |
+| 2 km | 5.93 | 5.97 | -0.51 | 4.14 | 4.18 | ffp, dB |
+| | -0.01 | -0.00 | -0.00 | -0.00 | -0.77 | engine - ffp |
+| | -0.31 | +0.27 | -0.79 | +0.29 | -0.77 | through the filters |
+
+**case 3, upward refraction 0.1/s**
+
+| distance | 63 | 125 | 250 | 500 | 1k | |
+|---|---|---|---|---|---|---|
+| 100 m | 4.78 | 2.82 | -2.44 | -7.68 | -0.30 | ffp, dB |
+| | -0.00 | -0.00 | +0.00 | +0.00 | -0.17 | engine - ffp |
+| | +0.04 | +0.10 | +0.04 | -0.54 | -0.17 | through the filters |
+| 200 m | 3.72 | 0.85 | -7.14 | -16.62 | -11.46 | ffp, dB |
+| | -0.00 | -0.00 | +0.00 | +0.00 | -0.00 | engine - ffp |
+| | +0.06 | +0.12 | -0.08 | -0.45 | -0.00 | through the filters |
+| 500 m | -0.84 | -6.20 | -20.67 | -44.90 | -52.70 | ffp, dB |
+| | -0.01 | -0.01 | -0.00 | +0.01 | +0.00 | engine - ffp |
+| | +0.08 | +0.08 | -0.86 | -2.22 | +0.00 | through the filters |
+| 1 km | -10.83 | -19.87 | -43.44 | -90.90 | -100.23 | ffp, dB |
+| | -0.01 | -0.01 | +0.01 | - | - | engine - ffp |
+| | +0.06 | -0.14 | -3.41 | - | - | through the filters |
+| 2 km | -33.35 | -48.82 | -78.33 | -88.90 | -94.67 | ffp, dB |
+| | -0.03 | -0.03 | - | - | - | engine - ffp |
+| | -0.15 | -0.96 | - | - | - | through the filters |
+
+In the bands the parabolic equation gives, the engine's levels are within 0.03 dB of
+the program's band averages to 2 km, downwind and upwind, where with the narrow-angle
+equation they are 0.5 to 0.8 dB off at 2 km downwind; upwind, in the shadow, where the
+parabolic equation gives the 1 kHz band too, within 0.01 dB to 500 m, 53 dB down. The
+1 kHz band downwind comes from the rays and does not change.
+
+Each band of the wide-angle equation marches a grid of twenty points per wavelength of
+its highest frequency in steps of three wavelengths, ten tridiagonal solves a step,
+where the narrow-angle one takes a pair of Fourier transforms a step on a grid half as
+fine, in steps of five wavelengths: three to four times the work, all of it in the
+bands the parabolic equation gives. Neither equation is checked against measurements
+in strong refraction, and neither is combined with a terrain yet (see
+[Outdoor scenes](outdoor.md#what-is-not-modelled-yet)).
 
 ## Terrain against closed forms and the exact wedge
 
@@ -1826,35 +2010,41 @@ s/m²), and the weather changes 150 m from the source:
 
 **The parabolic equation through the zones.** The engine's parabolic equation marches
 through the zones, changing its speed of sound where its path crosses a border. The
-level re free field (dB) in pure tones, and in brackets the engine's difference from
-the reference:
+level re free field (dB) in pure tones, and in brackets the difference from the
+reference of the engine's narrow-angle parabolic equation, its default, and then of
+its wide-angle one (see
+[The wide-angle parabolic equation](#the-wide-angle-parabolic-equation)):
 
 | case, tone | 100 m | 200 m | 400 m | 800 m |
 |---|---|---|---|---|
-| shelter downwind, 63 Hz | 6.67 (-0.22) | 7.14 (-0.10) | 6.65 (-0.08) | 5.49 (-0.08) |
-| shelter downwind, 125 Hz | 3.16 (+0.09) | 0.97 (+0.14) | -4.63 (+0.04) | -15.71 (-0.22) |
-| shelter downwind, 250 Hz | -21.10 (-0.34) | -22.24 (-0.17) | -25.09 (-0.24) | -28.48 (-0.38) |
-| shelter downwind, 500 Hz | -4.54 (+0.01) | -4.37 (+0.13) | -7.94 (+0.10) | -9.24 (+0.08) |
-| gust downwind, 63 Hz | 5.50 (-0.02) | 6.09 (-0.14) | 7.35 (-0.14) | 4.00 (-0.35) |
-| gust downwind, 125 Hz | 2.41 (+0.02) | 1.11 (-0.04) | -7.70 (+0.17) | -12.62 (+0.03) |
-| gust downwind, 250 Hz | -10.56 (-0.04) | -25.63 (-0.53) | -23.87 (+0.39) | -17.53 (+0.18) |
-| gust downwind, 500 Hz | -10.77 (-0.07) | -11.59 (-0.12) | -2.05 (-0.02) | 1.88 (-0.36) |
-| shelter upwind, 63 Hz | 3.77 (+0.16) | 2.59 (+0.01) | 1.97 (+0.02) | 0.45 (+0.02) |
-| shelter upwind, 125 Hz | 0.53 (-0.16) | -2.60 (-0.26) | -5.98 (-0.23) | -12.88 (-0.20) |
-| shelter upwind, 250 Hz | -8.22 (-0.01) | -17.69 (+0.08) | -29.33 (+0.07) | -39.75 (-0.12) |
-| shelter upwind, 500 Hz | -17.84 (+0.04) | -35.34 (+0.02) | -47.37 (-0.09) | -61.17 (-0.14) |
-| inversion past a lake shore, 63 Hz | 5.36 (+0.00) | 5.43 (-0.03) | 5.71 (-0.01) | 5.08 (-0.02) |
-| inversion past a lake shore, 125 Hz | 2.29 (+0.01) | 0.69 (-0.00) | -3.31 (+0.05) | -16.52 (-0.12) |
-| inversion past a lake shore, 250 Hz | -10.04 (-0.02) | -20.50 (-0.19) | -27.08 (-0.01) | -26.87 (-0.02) |
-| inversion past a lake shore, 500 Hz | -11.44 (-0.07) | -15.67 (-0.11) | -14.45 (-0.11) | -8.31 (-0.07) |
-| cool water downwind, 63 Hz | 6.67 (-0.22) | 7.70 (-0.23) | 8.43 (-0.21) | 4.36 (-0.42) |
-| cool water downwind, 125 Hz | 3.16 (+0.09) | 1.03 (+0.18) | -14.52 (+0.73) | -15.33 (+0.22) |
-| cool water downwind, 250 Hz | -21.10 (-0.34) | -24.13 (-0.18) | -21.07 (+0.17) | -15.33 (-0.01) |
-| cool water downwind, 500 Hz | -4.54 (+0.01) | -0.95 (-0.07) | 3.66 (+0.01) | 0.89 (-1.19) |
+| shelter downwind, 63 Hz | 6.67 (-0.22, -0.07) | 7.14 (-0.10, -0.08) | 6.65 (-0.08, -0.06) | 5.49 (-0.08, -0.04) |
+| shelter downwind, 125 Hz | 3.16 (+0.09, +0.03) | 0.97 (+0.14, +0.03) | -4.63 (+0.04, +0.06) | -15.71 (-0.22, +0.07) |
+| shelter downwind, 250 Hz | -21.10 (-0.34, -0.02) | -22.24 (-0.17, +0.00) | -25.09 (-0.24, +0.02) | -28.48 (-0.38, -0.03) |
+| shelter downwind, 500 Hz | -4.54 (+0.01, -0.01) | -4.37 (+0.13, +0.03) | -7.94 (+0.10, +0.08) | -9.24 (+0.08, +0.10) |
+| gust downwind, 63 Hz | 5.50 (-0.02, -0.04) | 6.09 (-0.14, -0.04) | 7.35 (-0.14, -0.08) | 4.00 (-0.35, -0.11) |
+| gust downwind, 125 Hz | 2.41 (+0.02, +0.02) | 1.11 (-0.04, +0.02) | -7.70 (+0.17, -0.09) | -12.62 (+0.03, +0.03) |
+| gust downwind, 250 Hz | -10.56 (-0.04, +0.03) | -25.63 (-0.53, -0.09) | -23.87 (+0.39, +0.07) | -17.53 (+0.18, +0.02) |
+| gust downwind, 500 Hz | -10.77 (-0.07, -0.01) | -11.59 (-0.12, +0.05) | -2.05 (-0.02, +0.05) | 1.88 (-0.36, -0.36) |
+| shelter upwind, 63 Hz | 3.77 (+0.16, +0.05) | 2.59 (+0.01, +0.08) | 1.97 (+0.02, +0.05) | 0.45 (+0.02, +0.02) |
+| shelter upwind, 125 Hz | 0.53 (-0.16, +0.07) | -2.60 (-0.26, +0.12) | -5.98 (-0.23, +0.09) | -12.88 (-0.20, +0.06) |
+| shelter upwind, 250 Hz | -8.22 (-0.01, +0.07) | -17.69 (+0.08, +0.14) | -29.33 (+0.07, +0.12) | -39.75 (-0.12, -0.07) |
+| shelter upwind, 500 Hz | -17.84 (+0.04, +0.20) | -35.34 (+0.02, +0.45) | -47.37 (-0.09, +0.48) | -61.17 (-0.14, +0.42) |
+| inversion past a lake shore, 63 Hz | 5.36 (+0.00, -0.04) | 5.43 (-0.03, -0.04) | 5.71 (-0.01, -0.06) | 5.08 (-0.02, -0.07) |
+| inversion past a lake shore, 125 Hz | 2.29 (+0.01, +0.02) | 0.69 (-0.00, +0.02) | -3.31 (+0.05, +0.01) | -16.52 (-0.12, -0.01) |
+| inversion past a lake shore, 250 Hz | -10.04 (-0.02, +0.03) | -20.50 (-0.19, -0.00) | -27.08 (-0.01, +0.00) | -26.87 (-0.02, +0.05) |
+| inversion past a lake shore, 500 Hz | -11.44 (-0.07, -0.00) | -15.67 (-0.11, +0.01) | -14.45 (-0.11, +0.01) | -8.31 (-0.07, +0.03) |
+| cool water downwind, 63 Hz | 6.67 (-0.22, -0.07) | 7.70 (-0.23, -0.05) | 8.43 (-0.21, -0.05) | 4.36 (-0.42, -0.03) |
+| cool water downwind, 125 Hz | 3.16 (+0.09, +0.03) | 1.03 (+0.18, +0.10) | -14.52 (+0.73, +0.32) | -15.33 (+0.22, +0.18) |
+| cool water downwind, 250 Hz | -21.10 (-0.34, -0.02) | -24.13 (-0.18, +0.06) | -21.07 (+0.17, +0.07) | -15.33 (-0.01, -0.04) |
+| cool water downwind, 500 Hz | -4.54 (+0.01, -0.01) | -0.95 (-0.07, +0.04) | 3.66 (+0.01, -0.03) | 0.89 (-1.19, -1.20) |
 
 The engine is within 0.15 dB of the reference on average and 1.19 dB at most, at 500
 Hz 800 m out over the cool water, where the two equations already part by 1.4 dB in
-the uniform wind; the zones themselves add nothing to that. The shelter downwind
+the uniform wind; the zones themselves add nothing to that. The wide-angle equation
+is within 0.09 dB on average and 1.20 dB at most, at the same point, where the
+engine's two equations agree within 0.01 dB and the reference, a narrow-angle
+equation with a Gaussian starter, is the one that parts; elsewhere it is within
+0.5 dB, the most 47 dB down in the upwind shadow at 500 Hz. The shelter downwind
 bends the sound down over the first 150 m and then lets it spread, 13 dB less than
 the uniform wind at 250 Hz 800 m out and 10 dB less at 500 Hz, where the wind would
 bring the sound back to the ground; the gust turns still air's ground dip into the
@@ -1871,19 +2061,19 @@ field through the zones, and in brackets the mean profile's difference from it:
 
 | case, band | 200 m | 400 m | 800 m |
 |---|---|---|---|
-| shelter downwind, 500 Hz | -1.35 (+0.51) | -5.21 (+3.33) | -6.13 (+4.22) |
+| shelter downwind, 500 Hz | -4.54 (+0.01, -0.01) | -4.37 (+0.13, +0.03) | -7.94 (+0.10, +0.08) | -9.24 (+0.08, +0.10) |
 | shelter downwind, 1 kHz | 3.11 (+1.38) | 3.87 (-0.72) | 4.06 (+1.75) |
 | shelter downwind, 2 kHz | 3.45 (+1.84) | 1.96 (+3.60) | 0.33 (+6.57) |
-| gust downwind, 500 Hz | -9.12 (+0.72) | -0.49 (+3.32) | -0.93 (+1.97) |
+| gust downwind, 500 Hz | -10.77 (-0.07, -0.01) | -11.59 (-0.12, +0.05) | -2.05 (-0.02, +0.05) | 1.88 (-0.36, -0.36) |
 | gust downwind, 1 kHz | 3.22 (+1.28) | 2.24 (+1.25) | -0.88 (-2.71) |
 | gust downwind, 2 kHz | 1.75 (+3.78) | -0.30 (+3.55) | -0.33 (-1.23) |
 | shelter upwind, 500 Hz | -34.56 (+1.97) | -46.14 | -58.52 |
 | shelter upwind, 1 kHz | -62.73 | -77.33 | -89.45 |
 | shelter upwind, 2 kHz | -58.80 | -79.26 | -96.83 |
-| inversion past a lake shore, 500 Hz | -13.92 (+0.29) | -11.21 (-0.02) | -4.08 (+1.21) |
+| inversion past a lake shore, 500 Hz | -11.44 (-0.07, -0.00) | -15.67 (-0.11, +0.01) | -14.45 (-0.11, +0.01) | -8.31 (-0.07, +0.03) |
 | inversion past a lake shore, 1 kHz | 1.91 (+2.02) | 5.98 (+2.05) | 3.63 (+3.32) |
 | inversion past a lake shore, 2 kHz | 3.67 (-0.13) | 5.80 (+1.65) | 4.04 (+2.48) |
-| cool water downwind, 500 Hz | 1.99 (+0.08) | 0.97 (+0.29) | 1.21 (-0.02) |
+| cool water downwind, 500 Hz | -4.54 (+0.01, -0.01) | -0.95 (-0.07, +0.04) | 3.66 (+0.01, -0.03) | 0.89 (-1.19, -1.20) |
 | cool water downwind, 1 kHz | 3.47 (-0.06) | -0.66 (-0.01) | -2.39 (-0.10) |
 | cool water downwind, 2 kHz | 3.11 (+0.18) | 1.89 (-0.34) | -1.10 (-0.11) |
 
@@ -2327,8 +2517,10 @@ its peak (single precision).
   matter most, are compared with a fast field program on the 1995 benchmark cases (see
   [Outdoor sound in wind](#outdoor-sound-in-wind-against-a-fast-field-program)), not
   with measurements; the benchmark's gradients that go on to a kilometre up bend sound
-  through angles the engine's parabolic equation does not carry, so beyond 1 to 2 km
-  its pure tones stray there, though the bands it reports hold to 2 km. Weather that
+  through angles the engine's default, narrow-angle parabolic equation does not carry,
+  so beyond 1 to 2 km its pure tones stray there, though the bands it reports hold to
+  2 km, and the wide-angle one carries them (see
+  [The wide-angle parabolic equation](#the-wide-angle-parabolic-equation)). Weather that
   changes over the scene is checked against a parabolic equation marched through the
   zones, not against measurements, and a zone's border is a step (see
   [Weather zones](#weather-zones-against-a-crank-nicholson-parabolic-equation)).

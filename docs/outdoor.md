@@ -476,6 +476,22 @@ is an arc of a circle, so its travel time and its length are exact.
   beyond 1 to 2 km its pure tones stray there by 3 to 20 dB, though the bands a scene
   reports hold to 2 km (see
   [Validation](validation.md#outdoor-sound-in-wind-against-a-fast-field-program)).
+- **The wide-angle parabolic equation** takes its place with
+  `simulation.early.parabolic_equation: wide_angle` (`--parabolic-equation wide_angle`
+  for one run of `simulate` or `map`, **Parabolic equation** in the editor). The
+  default, `narrow_angle`, takes the refraction as a phase shift at each step, which
+  holds for sound within some 15 degrees of the horizontal and a speed of sound close to
+  the ground's. The wide-angle one (split-step Padé, as in Collins' RAM) marches the
+  field with the exact one-way operator, written as a rational function of ten terms,
+  on finite differences of fourth order in height, with the ground's impedance as its
+  boundary and a starting field of the operator's own; it carries sound at up to 45
+  degrees from the horizontal through air of any speed. On the benchmark's gradients
+  going on to a kilometre up it is within 0.11 dB of the fast field program to 10 km
+  (0.4 dB at 10 Hz 44 dB deep in a shadow) where the narrow-angle one strays by 3 to
+  20 dB, and in the weather presets within 0.02 dB per band on average where the
+  narrow-angle one is within 0.08 dB (see
+  [Validation](validation.md#the-wide-angle-parabolic-equation)). It takes three
+  to four times the work, all of it in the bands the parabolic equation gives.
 - **Off façades and barriers** the paths bend the same way, in the vertical plane the
   reflections fold them into, with the wind's mean component over their legs. A path
   that would pass over the wall, or through something on the way, is left out.
@@ -1025,8 +1041,9 @@ share makes room in the others, in proportion, so that each period's shares add 
 gives its share to the others. The periods are set in the scene file, and the form
 names them.
 On the simulation page, **In pressure up to** goes up to 8000 Hz in an outdoor
-scene, and the wave solver's **Wind** takes the wind as an effective speed of sound or
-as moving air. The 3D view and the export to Blender leave the sky out (the 3D view keeps its
+scene, the wave solver's **Wind** takes the wind as an effective speed of sound or
+as moving air, and **Parabolic equation** picks the narrow-angle or the wide-angle one
+in wind or temperature gradients. The 3D view and the export to Blender leave the sky out (the 3D view keeps its
 edges, to show where the ground ends), and the status bar gives the ground's area
 instead of a reverberation time. **Draw room** replaces an outdoor scene with a floor
 plan after asking, and brings **In pressure up to** back to a room's default when it

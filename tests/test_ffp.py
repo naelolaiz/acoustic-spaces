@@ -103,6 +103,9 @@ def test_the_benchmark_scene_carries_the_case_s_atmosphere() -> None:
     )
     np.testing.assert_allclose(speed, [343.0, 243.0, 243.0], atol=1e-9)
     assert benchmark_1995.scene_of(0.0, 1000.0, [100.0]).atmosphere is None
+    assert scene.simulation.early.parabolic_equation == "narrow_angle"
+    wide = benchmark_1995.scene_of(0.1, 1000.0, [100.0], "wide_angle")
+    assert wide.simulation.early.parabolic_equation == "wide_angle"
 
 
 def test_the_benchmark_reads_the_program_through_the_engine_s_filters() -> None:

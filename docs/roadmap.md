@@ -152,8 +152,8 @@ Outdoor acoustics, in steps:
   and 1000 Hz to 10 km through the engine's parabolic equation and as whole scenes per
   band. The parabolic equation is within 0.1 dB of the program to 1 km and within 3 dB
   to 10 km with the gradient stopping 100 m up, as the weather's do, and parts from it
-  beyond 1 to 2 km with the benchmark's gradient going on to a kilometre up (a
-  wide-angle parabolic equation would carry that); whole scenes within 0.11 dB per band
+  beyond 1 to 2 km with the benchmark's gradient going on to a kilometre up (O21's
+  wide-angle parabolic equation carries that); whole scenes within 0.11 dB per band
   to 1 km in every case. The comparison found and fixed a notch at the join of the
   parabolic equation's bands and the rays' (see the changelog).
 - [x] O12 Outdoor scenes on the GPU: the GPU traces the rays bent by wind and
@@ -207,8 +207,15 @@ Outdoor acoustics, in steps:
   that no path can use before it traces a ray, on every core, with the same results:
   900 buildings simulate in about 2 s on four cores instead of 81 s, and 3,600 in
   about 22 s, where 1,600 ran out of memory (`validation/city_speed.py`).
-- [ ] A wide-angle parabolic equation (split-step Padé) for gradients that bend sound
-  through large angles over several kilometres, where the narrow-angle one strays.
+- [x] O21 A wide-angle parabolic equation: `simulation.early.parabolic_equation:
+  wide_angle` gives the bands the parabolic equation gives from the split-step Padé
+  method (Collins' RAM: ten terms, steps of three wavelengths, fourth-order differences
+  in height, its own starting field), for gradients that bend sound through large
+  angles over several kilometres. On the 1995 benchmark it is within 0.11 dB of the
+  fast field program from 10 Hz to 1 kHz and to 10 km wherever the sound is within
+  40 dB of free field, where the narrow-angle one strays by 3 to 20 dB; in the weather
+  presets within 0.04 dB on average (the narrow-angle one 0.11). Three to four times
+  the work; without it nothing changes.
 
 Unreleased:
 

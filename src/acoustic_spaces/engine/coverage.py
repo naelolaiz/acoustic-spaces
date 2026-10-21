@@ -727,6 +727,7 @@ def _trace_part(
         coherent=coherent,
         max_order=sim.early.max_order,
         threads=threads,
+        wide_angle=sim.early.parabolic_equation == "wide_angle",
     )
     if refraction is not None:
         say(f"{label}: paths bent by the wind and the temperature")

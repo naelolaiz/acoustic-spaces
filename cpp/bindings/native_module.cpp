@@ -25,6 +25,7 @@
 #include "acoustic_spaces/edge_cull.hpp"
 #include "acoustic_spaces/fdtd.hpp"
 #include "acoustic_spaces/fft.hpp"
+#include "acoustic_spaces/rational_steps.hpp"
 #include "acoustic_spaces/ray_tracer.hpp"
 
 namespace nb = nanobind;
@@ -242,6 +243,34 @@ nb::tuple reaching_pairs(Points starts, Points ends, Points normals, InArray off
                                  tolerance, slack, threads);
     }
     return pairs_to_numpy(std::move(out));
+}
+
+using ComplexDiagonals =
+    nb::ndarray<const std::complex<double>, nb::ndim<3>, nb::c_contig, nb::device::cpu>;
+using ComplexRows =
+    nb::ndarray<const std::complex<double>, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+using ComplexField = nb::ndarray<std::complex<double>, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+
+void rational_steps_init(as::RationalSteps *self, ComplexDiagonals m, ComplexDiagonals l,
+                         ComplexRows a, ComplexRows b, std::size_t threads) {
+    const std::size_t rows = m.shape(0), points = m.shape(2), terms = a.shape(1);
+    if (m.shape(1) != 3 || l.shape(0) != rows || l.shape(1) != 3 || l.shape(2) != points) {
+        throw std::invalid_argument("RationalSteps: m and l are (rows, 3, points) diagonals");
+    }
+    if (a.shape(0) != rows || b.shape(0) != rows || b.shape(1) != terms) {
+        throw std::invalid_argument("RationalSteps: a and b are (rows, terms)");
+    }
+    nb::gil_scoped_release release;
+    new (self) as::RationalSteps(rows, points, terms, m.data(), l.data(), a.data(), b.data(),
+                                 threads);
+}
+
+void rational_steps_apply(const as::RationalSteps &steps, ComplexField psi, std::size_t threads) {
+    if (psi.shape(0) != steps.rows() || psi.shape(1) != steps.points()) {
+        throw std::invalid_argument("RationalSteps.apply: psi is (rows, points)");
+    }
+    nb::gil_scoped_release release;
+    steps.apply(psi.data(), threads);
 }
 
 nb::dict bvh_layout(const as::Bvh &bvh) {
@@ -810,6 +839,20 @@ NB_MODULE(_native, m) {
           nb::arg("index"), nb::arg("amplitudes"), nb::arg("kernels"),
           "Adds amplitudes[i] * kernels[index[i]] (channels x taps) at sample positions[i]; "
           "returns (channels, length).");
+
+    nb::class_<as::RationalSteps>(
+        m, "RationalSteps",
+        "The range steps of the wide-angle parabolic equation: psi <- prod_j (M + b_j L)^-1 "
+        "(M + a_j L) psi for each row, M and L tridiagonal, each M + b_j L factored once.")
+        .def("__init__", &rational_steps_init, nb::arg("m"), nb::arg("l"), nb::arg("a"),
+             nb::arg("b"), nb::arg("threads") = 1,
+             "m, l: (rows, 3, points) complex diagonals, lower (first unused), centre and "
+             "upper (last unused); a, b: (rows, terms) complex.")
+        .def("apply", &rational_steps_apply, nb::arg("psi").noconvert(), nb::arg("threads") = 1,
+             "One step on psi (rows, points), complex128 and C-contiguous, in place.")
+        .def_prop_ro("rows", &as::RationalSteps::rows)
+        .def_prop_ro("points", &as::RationalSteps::points)
+        .def_prop_ro("terms", &as::RationalSteps::terms);
 
     nb::class_<as::Bvh>(m, "Bvh", "Bounding volume hierarchy over a triangle mesh.")
         .def(

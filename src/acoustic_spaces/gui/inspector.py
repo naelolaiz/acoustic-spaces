@@ -99,6 +99,7 @@ DIFFRACTION = [
     ("second_order", N_("second_order")),
 ]
 DIFFRACTION_REFLECTIONS = [("one_side", N_("one side")), ("both_sides", N_("both sides"))]
+PARABOLIC_EQUATIONS = [("narrow_angle", N_("narrow angle")), ("wide_angle", N_("wide angle"))]
 LATE_METHODS = [
     ("stochastic_ray_tracing", N_("stochastic_ray_tracing")),
     ("statistical", N_("statistical")),
@@ -3262,6 +3263,17 @@ class SimulationPage(Page):
                 "barrier and again behind it: all four paths over a barrier on the ground)"
             )
         )
+        self.parabolic_equation = QComboBox()
+        _fill(self.parabolic_equation, PARABOLIC_EQUATIONS)
+        self.parabolic_equation.setToolTip(
+            _(
+                "Outdoors in wind or temperature gradients, the parabolic equation that gives "
+                "the sound over the open ground in the low bands and in the shadows: narrow "
+                "angle (for the gradients near the ground that the weather has) or wide angle "
+                "(also for gradients reaching hundreds of metres up, which bend sound back at "
+                "steep angles over kilometres; several times the work)"
+            )
+        )
         self.coherent = QComboBox()
         _fill(self.coherent, [(None, N_("none"))] + [(f, str(f)) for f in COHERENT_BANDS_HZ])
         self.coherent.setToolTip(
@@ -3277,6 +3289,7 @@ class SimulationPage(Page):
         early_form.addRow(_("Rays"), self.early_rays)
         early_form.addRow(_("Diffraction"), self.diffraction)
         early_form.addRow(_("Reflections over an edge"), self.diffraction_reflections)
+        early_form.addRow(_("Parabolic equation"), self.parabolic_equation)
         early_form.addRow(_("In pressure up to"), self.coherent)
         layout.addWidget(early)
 
@@ -3522,6 +3535,7 @@ class SimulationPage(Page):
             (self.early_method, "early.method"),
             (self.diffraction, "early.diffraction"),
             (self.diffraction_reflections, "early.diffraction_reflections"),
+            (self.parabolic_equation, "early.parabolic_equation"),
             (self.late_method, "late.method"),
             (self.reception, "late.reception"),
             (self.scattering_method, "scattering.method"),
@@ -3579,6 +3593,12 @@ class SimulationPage(Page):
         )
         coherent = s.early.coherent_max_band_hz
         outdoor = self.document.scene.geometry.ground is not None
+        _choose(self.parabolic_equation, s.early.parabolic_equation)
+        # The parabolic equation runs outdoors in wind or temperature gradients only.
+        atmosphere = self.document.scene.atmosphere
+        self.parabolic_equation.setEnabled(
+            outdoor and atmosphere is not None and not atmosphere.still
+        )
         for row in range(self.coherent.count()):  # the bands above 500 Hz are outdoors only
             value = self.coherent.itemData(row)
             if value is not None and value > INDOOR_COHERENT_MAX_BAND_HZ:

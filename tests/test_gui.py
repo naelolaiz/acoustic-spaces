@@ -1516,6 +1516,25 @@ def test_ground_impedance_and_zones(window) -> None:
     assert simulation.coherent.model().item(simulation.coherent.findData(500)).isEnabled()
 
 
+def test_parabolic_equation_choice(window) -> None:
+    """Outdoors in wind the simulation page picks the narrow-angle or the wide-angle
+    parabolic equation; in still air and in a room there is none to pick."""
+    window.open_example(example_path("open_air_stage"))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    assert page.parabolic_equation.isEnabled()
+    assert page.parabolic_equation.currentText() == "narrow angle"
+    page.parabolic_equation.setCurrentIndex(page.parabolic_equation.findData("wide_angle"))
+    assert window.document.scene.simulation.early.parabolic_equation == "wide_angle"
+    window.document.edit("still air", lambda data: data.pop("atmosphere"))
+    window.select("simulation")
+    assert not page.parabolic_equation.isEnabled()
+    window.open_example(example_path("shoebox"))
+    window.select("simulation")
+    assert not page.parabolic_equation.isEnabled()
+    assert page.parabolic_equation.currentData() == "narrow_angle"
+
+
 def test_wind_and_temperature_form(window) -> None:
     window.open_example(example_path("open_air_stage"))
     window.select("scene", None)

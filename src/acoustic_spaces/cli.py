@@ -46,6 +46,8 @@ MAP_PARAMETER_NAMES = (
 DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
 #: Where a diffracted path may reflect (scene.model.EarlyStage.diffraction_reflections).
 DIFFRACTION_REFLECTIONS = ("one_side", "both_sides")
+#: The parabolic equations outdoors (scene.model.EarlyStage.parabolic_equation).
+PARABOLIC_EQUATIONS = ("narrow_angle", "wide_angle")
 #: Highest octave bands the wave solver can compute (engine.wave.WAVE_BANDS_HZ).
 WAVE_BANDS_HZ = (63, 125, 250, 500)
 #: Choices for the highest band the early paths add in pressure in
@@ -936,6 +938,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
                 "early.diffraction_reflections",
                 args.diffraction_reflections,
             ),
+            "--parabolic-equation": ("early.parabolic_equation", args.parabolic_equation),
             "--wave": ("wave.enabled", args.wave),
             "--wave-band": ("wave.max_band_hz", args.wave_band),
             "--wave-device": ("wave.device", args.wave_device),
@@ -1131,6 +1134,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
                 "early.diffraction_reflections",
                 args.diffraction_reflections,
             ),
+            "--parabolic-equation": ("early.parabolic_equation", args.parabolic_equation),
             "--length": ("ir_length_s", args.length),
             "--without": ("insertion_loss_of", args.without),
             **_performance_options(args),
@@ -2345,6 +2349,13 @@ def build_parser() -> argparse.ArgumentParser:
         "edge may reflect on one side of it or on both",
     )
     simulate.add_argument(
+        "--parabolic-equation",
+        choices=PARABOLIC_EQUATIONS,
+        help="override simulation.early.parabolic_equation: outdoors in wind or temperature "
+        "gradients, the narrow-angle parabolic equation or the wide-angle one, for "
+        "gradients reaching hundreds of metres up over kilometres",
+    )
+    simulate.add_argument(
         "--coherent-band",
         choices=COHERENT_BANDS,
         metavar="HZ",
@@ -2435,6 +2446,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--diffraction-reflections",
         choices=DIFFRACTION_REFLECTIONS,
         help="override simulation.early.diffraction_reflections",
+    )
+    coverage.add_argument(
+        "--parabolic-equation",
+        choices=PARABOLIC_EQUATIONS,
+        help="override simulation.early.parabolic_equation",
     )
     coverage.add_argument(
         "--coherent-band",

@@ -50,10 +50,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from acoustic_spaces.engine import parabolic, wide_angle
 from acoustic_spaces.engine.coherent import ground_factors, reflection_phases
 from acoustic_spaces.engine.early import _EDGE_TOLERANCE, EarlyReflections, _face_at
 from acoustic_spaces.engine.model import TraceModel, _ground_faces, source_weights
-from acoustic_spaces.engine.parabolic import footprint, march
 from acoustic_spaces.engine.refraction import CHORD_SAGITTA_M, Profile, Rays, _sine, node_heights
 from acoustic_spaces.engine.shadow import equivalent_radius, shadow_start
 from acoustic_spaces.engine.turbulence import Eddies
@@ -132,7 +132,8 @@ class _Wave:
 class Refraction:
     """Bends the early paths of the source at ``source`` in an outdoor scene's
     atmosphere (not still), running the parabolic equation on ``threads`` threads (0:
-    every core)."""
+    every core): the wide-angle one (:mod:`~acoustic_spaces.engine.wide_angle`) with
+    ``wide_angle``."""
 
     def __init__(
         self,
@@ -146,6 +147,7 @@ class Refraction:
         coherent: int = 0,
         max_order: int = 1,
         threads: int = 0,
+        wide_angle: bool = False,
     ) -> None:
         from acoustic_spaces.engine.diffraction import band_frequencies
 
@@ -185,6 +187,7 @@ class Refraction:
         self._admittances: dict[int, np.ndarray] = {}
         self._lock = threading.Lock()
         self.threads = int(threads) or os.cpu_count() or 1
+        self.wide_angle = bool(wide_angle)
         self._starts: dict[tuple, float | None] = {}
         self.eddies = Eddies.of(model, self.c)
 
@@ -714,6 +717,9 @@ class Refraction:
                 if needing:
                     runs.append((speed, speed_at, face_at, band, needing, top))
 
+        solver = wide_angle if self.wide_angle else parabolic
+        share = 1
+
         def run(job) -> np.ndarray:
             speed, speed_at, face_at, band, needing, top = job
 
@@ -724,7 +730,9 @@ class Refraction:
 
             ranges = np.array([m.range for m in needing])
             heights = np.array([m.height for m in needing])
-            return march(
+            # The wide-angle equation's frequencies share the threads the runs leave.
+            more = {"threads": share} if self.wide_angle else {}
+            return solver.march(
                 self.frequencies[band],
                 speed,
                 impedance,
@@ -733,13 +741,16 @@ class Refraction:
                 heights,
                 top,
                 speed_at=speed_at,
+                **more,
             )
 
         # The runs side by side, as many as the threads and the memory allow.
         biggest = max(
-            (footprint(self.frequencies[job[3]], self.c, job[5]) for job in runs), default=0
+            (solver.footprint(self.frequencies[job[3]], self.c, job[5]) for job in runs),
+            default=0,
         )
         workers = min(self.threads, len(runs), max(1, WAVE_MEMORY_BYTES // max(biggest, 1)))
+        share = max(1, self.threads // max(workers, 1))
         if workers > 1:
             with ThreadPoolExecutor(workers) as pool:
                 results = list(pool.map(run, runs))
