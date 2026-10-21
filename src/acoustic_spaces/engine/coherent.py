@@ -233,23 +233,40 @@ def _surface_factors(model, faces, cosines, rows, distance, spherical, f) -> np.
     return out
 
 
-def shapes(spectrum: np.ndarray, bands: int, f: np.ndarray) -> np.ndarray:
-    """(n, len(f)) the spectra (n, count, M) of :attr:`EarlyReflections.spectrum` at
-    frequencies ``f`` (Hz): magnitude and unwrapped phase interpolated linearly in log
-    frequency between the samples, and held beyond the first and the last."""
+def shaped(
+    spectrum: np.ndarray, bands: int, f: np.ndarray, amplitude: np.ndarray, gains: np.ndarray
+) -> np.ndarray:
+    """(n, len(f)) the coherent bands' amplitudes (n, count) through the synthesis's
+    band ``gains`` (count, len(f)) at frequencies ``f`` (Hz), each band's times the
+    shape its spectra (n, count, M, :attr:`EarlyReflections.spectrum`) give it: the
+    magnitude and the unwrapped phase interpolated linearly in log frequency between
+    the band's own samples and held beyond them. A band so carries its own sound into
+    the crossovers with its neighbours, not theirs: outdoors a path's bands below the
+    parabolic equation's top band hold the whole sound over the ground and those above
+    it the path's own, and a shape drawn across that edge would notch the sum."""
     n, count, per_band = spectrum.shape
-    samples = np.log2(sample_frequencies(bands, count).reshape(-1))
-    flat = spectrum.reshape(n, -1)
-    if len(samples) == 1:
-        return np.repeat(flat, len(f), axis=1)
-    x = np.log2(np.clip(np.asarray(f, dtype=float), 2.0 ** samples[0], 2.0 ** samples[-1]))
-    j = np.clip(np.searchsorted(samples, x, side="right") - 1, 0, len(samples) - 2)
-    w = (x - samples[j]) / (samples[j + 1] - samples[j])
-    magnitude = np.abs(flat)
-    phase = np.unwrap(np.angle(flat), axis=1)
-    level = magnitude[:, j] * (1.0 - w) + magnitude[:, j + 1] * w
-    angle = phase[:, j] * (1.0 - w) + phase[:, j + 1] * w
-    return level * np.exp(1j * angle)
+    samples = np.log2(sample_frequencies(bands, count))  # (count, M)
+    x = np.log2(np.maximum(np.asarray(f, dtype=float), 1e-6))
+    out = np.zeros((n, len(f)), dtype=complex)
+    for b in range(count):
+        support = np.flatnonzero(gains[b] > 0.0)
+        if len(support) == 0:
+            continue
+        lo, hi = int(support[0]), int(support[-1]) + 1
+        own = spectrum[:, b]
+        if per_band == 1:
+            shape = np.repeat(own, hi - lo, axis=1)
+        else:
+            xs = np.clip(x[lo:hi], samples[b, 0], samples[b, -1])
+            j = np.clip(np.searchsorted(samples[b], xs, side="right") - 1, 0, per_band - 2)
+            w = (xs - samples[b, j]) / (samples[b, j + 1] - samples[b, j])
+            magnitude = np.abs(own)
+            phase = np.unwrap(np.angle(own), axis=1)
+            level = magnitude[:, j] * (1.0 - w) + magnitude[:, j + 1] * w
+            angle = phase[:, j] * (1.0 - w) + phase[:, j + 1] * w
+            shape = level * np.exp(1j * angle)
+        out[:, lo:hi] += (amplitude[:, b, None] * gains[b, lo:hi]) * shape
+    return out
 
 
 def held_phase(paths: EarlyReflections) -> np.ndarray:
@@ -270,14 +287,15 @@ def amplitude_spectra(
     """(n, len(f)) each path's pressure at frequencies ``f`` relative to its delay, as
     the impulse response has it: its amplitude in each band through the synthesis's
     band ``gains`` (bands, len(f)) at those frequencies, in the coherent bands times its
-    spectrum's shape and above them times its :func:`held_phase`; with
-    ``only_coherent``, the coherent bands alone."""
+    spectrum's shape in that band (:func:`shaped`) and above them times its
+    :func:`held_phase`; with ``only_coherent``, the coherent bands alone."""
     bands = paths.energy.shape[1]
     count = paths.coherent_bands
     amplitude = np.sqrt(synthesis.ENERGY_TO_IR * paths.energy)
-    low = amplitude[:, :count] @ gains[:count]
     if count:
-        low = low * shapes(paths.spectrum, bands, f)
+        low = shaped(paths.spectrum, bands, f, amplitude[:, :count], gains[:count])
+    else:
+        low = np.zeros((len(paths), len(f)), dtype=complex)
     if not only_coherent:
         low = low + (amplitude[:, count:] @ gains[count:]) * held_phase(paths)[:, None]
     lagged = lag_phase(paths, f)
@@ -523,13 +541,30 @@ class EarlyPressure:
         if self._wander is not None:
             self._each = np.zeros((len(paths), len(f)), dtype=complex)
             self._weights = np.asarray(weights, dtype=float)
+        # A path that carries nothing in a band is left out of that band's reading:
+        # what its neighbouring bands' filters let into this one would otherwise count
+        # against the paths that do carry it (outdoors, where the parabolic equation's
+        # bands sit on one path of a family and the others are silent in them).
+        self._silent = paths.energy[:, : self.count] <= 0.0  # (n, count)
+        partly = [
+            b
+            for b in range(self.count)
+            if self._silent[:, b].any() and not self._silent[:, b].all()
+        ]
+        self._spectra_of = {b: np.zeros_like(self.spectra) for b in partly}
+        self._alone_of = {b: np.zeros(len(f)) for b in partly}
         for start in range(0, len(paths), _CHUNK):
             part = slice(start, start + _CHUNK)
             spectra = amplitude_spectra(paths[part], f, gains)
-            self._alone += np.sum(np.abs(spectra) ** 2, axis=0)
+            squared = np.abs(spectra) ** 2
+            self._alone += np.sum(squared, axis=0)
             shift = paths.delay_s[part] + self.lead - 0.5 / self.rate
             spectra *= np.exp(-2j * np.pi * np.outer(shift, f))
             self.spectra += weights[part].T @ spectra
+            for b in partly:
+                heard = ~self._silent[part, b]
+                self._alone_of[b] += np.sum(squared[heard], axis=0)
+                self._spectra_of[b] += np.asarray(weights[part])[heard].T @ spectra[heard]
             if self._wander is not None:
                 self._each[part] = spectra
 
@@ -550,7 +585,8 @@ class EarlyPressure:
         direct sound, counts as arriving with it, as in the analysis of a measured
         response."""
         gain, keep, slot, scale = self._filter(b, time_step, slots, origin, start)
-        pressure = np.fft.irfft(gain * self.spectra, self.n_fft, axis=1)[:, keep]
+        spectra = self._spectra_of.get(b, self.spectra)
+        pressure = np.fft.irfft(gain * spectra, self.n_fft, axis=1)[:, keep]
         return pressure, slot, scale
 
     def _filter(self, b, time_step, slots, origin, start):
@@ -565,7 +601,7 @@ class EarlyPressure:
         keep = slot < slots
         weights = np.full(len(gain), 2.0)
         weights[0] = weights[-1] = 1.0
-        alone = float(np.sum(weights * gain**2 * self._alone)) / self.n_fft
+        alone = float(np.sum(weights * gain**2 * self._alone_of.get(b, self._alone))) / self.n_fft
         scale = float(self._energy[b]) / alone if alone > 0.0 else 0.0
         return gain, keep, slot[keep], scale
 
@@ -576,6 +612,7 @@ class EarlyPressure:
 
         gain, keep, slot, scale = self._filter(b, time_step, slots, origin, start)
         signals = np.fft.irfft(gain * self._each, self.n_fft, axis=1)[:, keep]
+        signals[self._silent[:, b]] = 0.0
         f = band_frequencies(bands=resolution_of(self.bands))[0][b]
         together = self._wander.coherence(f).mean(axis=2)
         plain = self._weights[:, 0]
@@ -631,7 +668,7 @@ __all__ = [
     "pair_energy",
     "reflection_phases",
     "sample_frequencies",
-    "shapes",
+    "shaped",
     "signal",
     "total_energy",
 ]

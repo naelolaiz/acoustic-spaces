@@ -325,3 +325,28 @@ def test_particles_bend_and_stay_put_in_still_air() -> None:
     )
     assert np.all(np.isfinite(windy.positions)) and np.all(np.isfinite(windy.energy))
     assert not np.allclose(windy.positions, still.positions)
+
+
+def test_the_parabolic_equation_s_bands_read_back_as_computed() -> None:
+    """Downwind, the bands the parabolic equation gives sit on one path of the family
+    and the others are silent in them: the level relative to free field in those bands
+    is the parabolic equation's, the silent paths' higher bands leaking nothing in."""
+    windy = {
+        "table": [[0.0, 19.6, 0.0], [100.0, 19.6, 10.0], [1000.0, 19.6, 10.0]],
+        "wind": {"direction_deg": 0.0},
+    }
+    data = field(windy, ((100.0, 0.0, 1.0),)).model_dump()
+    data["materials"]["lawn"]["scattering"] = 0.0  # no late sound off the ground
+    result = simulate(Room.from_scene(Scene.model_validate(data)))
+    response = result["s", "l0"]
+    early = response.early
+    wave_bands = 4  # 63 to 500 Hz
+    carrying = np.flatnonzero(early.energy[:, :wave_bands].sum(axis=1) > 0.0)
+    assert len(carrying) == 1 and len(early) > 1
+    silent = np.flatnonzero(early.energy[:, :wave_bands].sum(axis=1) == 0.0)
+    assert np.all(early.energy[silent, wave_bands:] > 0.0)  # the rays' bands are theirs
+    computed = 10.0 * np.log10(
+        early.energy[carrying[0], :wave_bands] / response.free_field[:wave_bands]
+    )
+    read = response.relative_to_free_field()[:wave_bands]
+    np.testing.assert_allclose(read, computed, atol=0.02)

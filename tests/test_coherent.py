@@ -191,3 +191,31 @@ def test_without_coherent_bands_paths_add_in_energy() -> None:
     data["sources"][0].update(line_m=2.0, spacing_m=1.0)
     line = simulate(Room.from_scene(Scene.model_validate(data)))["s", "l"]
     assert line.coherent_bands == 0 and line.early.spectrum is None
+
+
+def test_each_band_keeps_its_own_shape_into_the_crossovers() -> None:
+    """A path whose spectrum stands for different sound in two neighbouring bands (as
+    the parabolic equation's bands do outdoors): in the crossover between them each
+    band's amplitude takes its own band's shape, not a blend of the two."""
+    from acoustic_spaces import synthesis
+    from acoustic_spaces.engine.coherent import shaped
+
+    n_fft, rate = 1 << 12, 8000.0
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+    gains = synthesis.band_gains(n_fft, rate, 8)[:2]
+    spectrum = np.ones((1, 2, 8), dtype=complex)
+    spectrum[0, 0] = 2.0j  # the lower band: twice as loud, a quarter turn ahead
+    amplitude = np.array([[3.0, 5.0]])
+    out = shaped(spectrum, 8, f, amplitude, gains)[0]
+    expected = amplitude[0, 0] * gains[0] * 2.0j + amplitude[0, 1] * gains[1]
+    np.testing.assert_allclose(out, expected, atol=1e-12)
+    # Both bands are at work in the crossover around their edge, 88 Hz.
+    middle = np.argmin(np.abs(f - 88.0))
+    assert gains[0, middle] > 0.2 and gains[1, middle] > 0.2
+    # A smooth spectrum across the bands is interpolated within each band as before.
+    smooth = np.exp(1j * np.linspace(0.0, 0.5, 16)).reshape(1, 2, 8)
+    out = shaped(smooth, 8, f, np.ones((1, 2)), gains)[0]
+    samples = sample_frequencies(8, 2)
+    inside = (f > samples[0, 0]) & (f < samples[0, -1]) & (gains[1] == 0.0)
+    phase = np.interp(np.log2(f[inside]), np.log2(samples[0]), np.linspace(0.0, 0.5, 16)[:8])
+    np.testing.assert_allclose(np.angle(out[inside]), phase, atol=1e-12)

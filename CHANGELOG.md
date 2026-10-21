@@ -322,6 +322,20 @@
   source, is unchanged. `parameters.json` lists each source's sound power
   (`sources`), which `auralize` reads; results written before it are mixed at one
   power, with a note.
+- In wind and temperature gradients the impulse response had a notch where the
+  parabolic equation's bands met the rays' (around 700 Hz, up to 3 dB deep; around
+  2.8 kHz in the penumbra of a shadow), and the 500 Hz band of the level relative to
+  free field came out 0.5 to 1.2 dB too low: the join between the two blended their
+  spectra, which stand for different sound (the whole field over the ground on one
+  path, each ray's own on the others), and the silent paths' higher bands counted
+  against the band's reading. Each band of the response now keeps its own spectrum
+  into the crossovers, and a path that carries nothing in a band is left out of that
+  band's reading. The bands the parabolic equation gives now read back as computed,
+  and the response follows the fast field program across the join within 0.3 dB. The
+  same join in still air changes outdoor responses by less than 0.01 dB (one cell of
+  the barrier tables by 0.2 dB, the ground dip at 250 Hz 200 m out) and rooms by
+  under 0.0001 dB (the crossovers between the lowest bands' filters are drawn band by
+  band, a difference of a hundred-thousandth of the peak).
 
 ## 3.2.3
 

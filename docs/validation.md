@@ -820,9 +820,9 @@ loss over the bands. Each pair is at 535 m / 845 m, in dB:
 | 4 | cross/downwind | 20.6 / 26.3 | 21.3 / 26.9 | 23.1 / 28.6 | 2.0 / 2.7 | 2.3 / 2.6 |
 | 5 | cross/upwind | 21.0 / 26.6 | 21.0 / 25.9 | 23.0 / 28.3 | 1.9 / 2.5 | 2.0 / 2.3 |
 | 6 | cross/upwind | 20.6 / 25.7 | 20.9 / 26.0 | 22.9 / 28.2 | 1.7 / 2.8 | 2.4 / 2.7 |
-| 7 | light upwind | 21.9 / 26.2 | 20.7 / 24.9 | 22.7 / 27.8 | 2.0 / 2.2 | 2.2 / 2.2 |
+| 7 | light upwind | 21.9 / 26.2 | 20.7 / 24.9 | 22.7 / 27.7 | 2.0 / 2.2 | 2.2 / 2.2 |
 | 8 | light upwind | 22.2 / 27.0 | 20.5 / 25.1 | 22.7 / 27.9 | 2.2 / 2.2 | 2.3 / 2.1 |
-| 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 22.0 / 27.9 | 3.2 / 8.3 | 2.0 / 2.6 |
+| 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 22.0 / 27.8 | 3.2 / 8.3 | 2.0 / 2.6 |
 | 10 | strong upwind | 23.1 / 27.2 | 19.9 / 50.0 | 22.1 / 27.9 | 3.1 / 7.7 | 2.0 / 2.5 |
 
 In the eight cases of light winds, this package is about as close to the measurements
@@ -1123,24 +1123,24 @@ interference over the band exactly, and the row repeats the one above it). First
 | listener | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
 |---|---|---|---|---|---|---|---|---|---|
 | 2 m behind | 14.21 | 11.15 | 23.60 | 10.22 | 19.58 | 22.62 | 24.84 | 28.15 | exact, dB |
-| | -0.59 | +0.23 | -2.10 | +0.42 | +0.01 | +0.00 | +0.04 | +0.15 | engine - exact |
-| | -0.04 | -0.06 | -0.05 | +0.02 | +0.01 | +0.00 | +0.04 | +0.15 | through the filters |
+| | -0.57 | +0.23 | -2.11 | +0.38 | +0.01 | +0.00 | +0.04 | +0.15 | engine - exact |
+| | -0.02 | -0.06 | -0.06 | -0.02 | +0.01 | +0.00 | +0.04 | +0.15 | through the filters |
 | | +0.00 | +0.00 | +0.00 | +0.01 | -0.01 | -0.00 | -0.01 | -0.01 | without the barrier |
 | 10 m behind | 6.31 | 13.90 | 25.19 | 14.78 | 9.06 | 22.29 | 22.66 | 25.94 | exact, dB |
-| | +0.05 | -0.10 | -2.24 | -0.06 | +0.01 | +0.00 | +0.04 | +0.07 | engine - exact |
-| | -0.04 | -0.13 | -0.05 | -0.05 | +0.01 | +0.00 | +0.04 | +0.07 | through the filters |
+| | +0.05 | -0.05 | -2.22 | -0.05 | +0.01 | +0.00 | +0.04 | +0.07 | engine - exact |
+| | -0.04 | -0.08 | -0.03 | -0.04 | +0.01 | +0.00 | +0.04 | +0.07 | through the filters |
 | | +0.00 | +0.00 | +0.00 | +0.01 | +0.00 | -0.00 | +0.00 | -0.02 | without the barrier |
 | 40 m behind | 4.41 | 8.42 | 18.06 | 18.55 | 18.19 | 15.47 | 21.19 | 24.47 | exact, dB |
-| | +0.03 | +0.06 | -0.54 | +0.16 | +0.00 | +0.01 | +0.00 | +0.05 | engine - exact |
-| | -0.04 | -0.08 | -0.10 | -0.08 | +0.00 | +0.01 | +0.00 | +0.05 | through the filters |
+| | +0.03 | +0.08 | -0.51 | +0.18 | +0.00 | +0.01 | +0.00 | +0.05 | engine - exact |
+| | -0.04 | -0.07 | -0.07 | -0.06 | +0.00 | +0.01 | +0.00 | +0.05 | through the filters |
 | | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.01 | -0.01 | -0.01 | without the barrier |
 | 90 m behind | 4.17 | 7.93 | 16.66 | 12.67 | 20.67 | 24.87 | 16.25 | 23.53 | exact, dB |
-| | +0.03 | +0.06 | -0.63 | +0.27 | +0.01 | +0.01 | +0.02 | +0.06 | engine - exact |
-| | -0.04 | -0.08 | -0.09 | -0.01 | +0.01 | +0.01 | +0.02 | +0.06 | through the filters |
+| | +0.03 | +0.08 | -0.60 | +0.25 | +0.01 | +0.01 | +0.02 | +0.06 | engine - exact |
+| | -0.04 | -0.07 | -0.06 | -0.04 | +0.01 | +0.01 | +0.02 | +0.06 | through the filters |
 | | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.01 | -0.01 | without the barrier |
 
 Read alike, the engine is within 0.15 dB of the exact solution at every listener and
-band (0.13 dB up to 500 Hz, 0.15 dB at 8 kHz, 0.07 dB elsewhere), and without the
+band (0.08 dB up to 500 Hz, 0.15 dB at 8 kHz, 0.04 dB elsewhere), and without the
 barrier (the direct sound and its reflection, added in pressure) within 0.02 dB. The
 2 dB at 250 Hz near the barrier is what the band filters let in from the bands beside
 a deep interference dip, as a measured response read through the same filters would
@@ -1152,14 +1152,14 @@ sound over it, is left out:
 
 | listener | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
 |---|---|---|---|---|---|---|---|---|---|
-| 2 m behind | -2.33 | +1.48 | -3.93 | +0.90 | +0.34 | +0.30 | +0.51 | +0.54 | engine - exact |
-| | -1.78 | +1.19 | -1.88 | +0.50 | +0.34 | +0.30 | +0.51 | +0.54 | through the filters |
-| 10 m behind | +0.92 | -1.69 | -5.00 | +0.86 | +0.53 | +0.43 | +0.65 | +0.54 | engine - exact |
-| | +0.83 | -1.72 | -2.81 | +0.87 | +0.53 | +0.43 | +0.65 | +0.54 | through the filters |
-| 40 m behind | +1.70 | +0.70 | -2.72 | +1.81 | +0.41 | +0.27 | +0.71 | +0.61 | engine - exact |
-| | +1.64 | +0.56 | -2.29 | +1.57 | +0.41 | +0.27 | +0.71 | +0.61 | through the filters |
-| 90 m behind | +1.85 | +1.04 | -2.43 | +1.77 | -0.52 | -0.74 | +0.77 | +0.67 | engine - exact |
-| | +1.78 | +0.90 | -1.89 | +1.48 | -0.52 | -0.74 | +0.77 | +0.67 | through the filters |
+| 2 m behind | -2.31 | +1.46 | -3.87 | +0.89 | +0.34 | +0.30 | +0.51 | +0.54 | engine - exact |
+| | -1.77 | +1.17 | -1.81 | +0.49 | +0.34 | +0.30 | +0.51 | +0.54 | through the filters |
+| 10 m behind | +0.92 | -1.66 | -5.03 | +0.88 | +0.53 | +0.43 | +0.65 | +0.54 | engine - exact |
+| | +0.83 | -1.69 | -2.84 | +0.89 | +0.53 | +0.43 | +0.65 | +0.54 | through the filters |
+| 40 m behind | +1.70 | +0.71 | -2.69 | +1.78 | +0.41 | +0.27 | +0.71 | +0.61 | engine - exact |
+| | +1.64 | +0.56 | -2.26 | +1.53 | +0.41 | +0.27 | +0.71 | +0.61 | through the filters |
+| 90 m behind | +1.85 | +1.05 | -2.42 | +1.74 | -0.52 | -0.74 | +0.77 | +0.67 | engine - exact |
+| | +1.78 | +0.91 | -1.88 | +1.46 | -0.52 | -0.74 | +0.77 | +0.67 | through the filters |
 
 Without that path the insertion loss comes out 0.3 to 0.8 dB too high from 1 kHz up,
 and in the bands below, where the four paths interfere, up to 3 dB off either way.
@@ -1175,15 +1175,15 @@ band:
 | distance | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
 |---|---|---|---|---|---|---|---|---|---|
 | 10 m | 5.27 | 3.74 | -1.23 | -1.55 | 1.43 | 0.27 | 1.10 | 0.85 | exact, dB |
-| | -0.04 | -0.10 | -0.04 | +0.41 | -0.01 | -0.00 | -0.01 | -0.01 | engine - exact |
+| | -0.04 | -0.11 | -0.06 | +0.44 | -0.01 | -0.00 | -0.01 | -0.01 | engine - exact |
 | 50 m | 5.52 | 3.58 | -3.02 | -11.16 | -2.05 | 3.84 | 2.74 | 2.43 | exact, dB |
-| | -0.06 | -0.14 | -0.01 | +0.82 | +0.00 | -0.00 | -0.00 | -0.00 | engine - exact |
+| | -0.07 | -0.15 | -0.03 | +0.85 | +0.00 | -0.00 | -0.00 | -0.00 | engine - exact |
 | 200 m | 5.31 | 1.10 | -13.10 | -22.37 | -12.89 | -5.56 | 0.52 | 4.91 | exact, dB |
-| | -0.13 | -0.09 | +1.07 | +0.70 | +0.00 | +0.00 | -0.00 | -0.00 | engine - exact |
+| | -0.15 | -0.10 | +0.87 | +0.72 | +0.00 | +0.00 | -0.00 | -0.00 | engine - exact |
 
 From 1 kHz up the engine averages each pair of paths' interference over the band
 exactly and agrees within 0.01 dB; in the bands up to 500 Hz it reads the early paths
-through band filters, whose skirts fill the ground dip by up to about 1 dB, as in the
+through band filters, whose skirts fill the ground dip by up to about 0.9 dB, as in the
 ground's own check above. Both results are checked against theory, not against
 measurements of a barrier or a ground.
 
