@@ -13,6 +13,12 @@
   messages about one source, listener or material, a filter only those holding some
   words, and **Clear** removes the messages on show.
 
+**Fixes**
+
+- A reflection right where the sound came from, on a surface over about 100 m across,
+  printed an overflow warning (an error under `-W error`). The results were right and
+  stay the same.
+
 ## 3.2.3
 
 **Languages**

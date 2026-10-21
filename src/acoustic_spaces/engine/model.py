@@ -295,9 +295,11 @@ def size_scattering(
     # c d, never 0: a reflection right where the last one was (a corner) is specular.
     reach = np.maximum(speed_of_sound * np.asarray(distance, float), 1e-300)[:, None]
     f = np.asarray(frequencies, float)
-    specular = np.minimum(1.0, f * 2.0 * across[:, None] ** 2 / reach) * np.minimum(
-        1.0, f * 2.0 * np.asarray(length, float)[:, None] ** 2 / reach
-    )
+    # Over a large surface (a stadium's ground) that floor overflows to inf: still 1.
+    with np.errstate(over="ignore"):
+        specular = np.minimum(1.0, f * 2.0 * across[:, None] ** 2 / reach) * np.minimum(
+            1.0, f * 2.0 * np.asarray(length, float)[:, None] ** 2 / reach
+        )
     return 1.0 - (1.0 - scattering) * specular
 
 
