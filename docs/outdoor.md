@@ -401,7 +401,13 @@ is an arc of a circle, so its travel time and its length are exact.
   horizontal or flatter; nearer, the atmosphere has had little room to bend it, and the
   rays give it. In still air the parabolic equation is within 0.25 dB of the exact
   solution over grass and harder grounds (see
-  [Validation](validation.md#ground-reflection-against-the-exact-solution)).
+  [Validation](validation.md#ground-reflection-against-the-exact-solution)). In wind,
+  against a fast field program on the 1995 benchmark cases, it is within 0.1 dB to 1 km
+  and within 3 dB to 10 km when the wind stops growing 100 m up, as it does; a gradient
+  that goes on to a kilometre up bends sound back at angles it does not carry, and
+  beyond 1 to 2 km its pure tones stray there by 3 to 20 dB, though the bands a scene
+  reports hold to 2 km (see
+  [Validation](validation.md#outdoor-sound-in-wind-against-a-fast-field-program)).
 - **Off façades and barriers** the paths bend the same way, in the vertical plane the
   reflections fold them into, with the wind's mean component over their legs. A path
   that would pass over the wall, or through something on the way, is left out.

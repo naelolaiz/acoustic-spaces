@@ -294,6 +294,28 @@
 - A saved scene refers to its terrain and map by paths relative to the scene file, like
   its model file.
 
+**Validation against a fast field program**
+
+- `validation/ffp.py`: a fast field program for sound over a flat ground through a
+  layered atmosphere, written apart from the engine: the exact solution of the vertical
+  problem through layers of constant sound speed under a Hankel transform, with its own
+  Bessel functions, so it needs nothing but numpy. In still air it is within 0.001 dB of
+  the exact solution for a locally reacting ground from 10 Hz to 1 kHz and 100 m to 10
+  km, and its layers are converged.
+- `validation/benchmark_1995.py`: the benchmark cases for outdoor sound propagation
+  models (Attenborough and others, 1995): a source 5 m and a listener 1 m over a ground
+  of flow resistivity 200 kPa s/m², 100 m to 10 km apart, in still air and in sound
+  speed gradients of 0.1/s down and up, and the same gradients stopping 100 m up (the
+  weather there is), at 10, 100 and 1000 Hz through the engine's parabolic equation and,
+  as whole scenes, per octave band from 63 Hz to 1 kHz, against the program read as the
+  engine reads its bands. The parabolic equation is within 0.1 dB of the program to 1 km
+  and within 3 dB to 10 km with the gradient stopping 100 m up, as the weather's do, and
+  parts from it beyond 1 to 2 km with the benchmark's gradient going on to a kilometre
+  up; whole scenes are within 0.11 dB per band to 1 km in every case, in still air read
+  through the band filters within 0.04 dB to 200 m. The comparison found the notch at
+  the join of the parabolic equation's bands and the rays' fixed below; see
+  [Validation](docs/validation.md#outdoor-sound-in-wind-against-a-fast-field-program).
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

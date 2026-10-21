@@ -147,6 +147,19 @@ Outdoor acoustics, in steps:
   from a file and the buildings of a map (asking which properties hold their heights
   and names), each with a button to remove it; the plan shows the vegetation and the
   zones. Saved scenes refer to their terrain and map by relative paths.
+- [x] O11 A fast field program and the 1995 benchmark cases: `validation/ffp.py`, the
+  exact solution through layers of constant sound speed, within 0.001 dB of the exact
+  ground solution in still air, and `validation/benchmark_1995.py`, the benchmark's
+  still air and 0.1/s gradients down and up, and the same stopping 100 m up, at 10, 100
+  and 1000 Hz to 10 km through the engine's parabolic equation and as whole scenes per
+  band. The parabolic equation is within 0.1 dB of the program to 1 km and within 3 dB
+  to 10 km with the gradient stopping 100 m up, as the weather's do, and parts from it
+  beyond 1 to 2 km with the benchmark's gradient going on to a kilometre up (a
+  wide-angle parabolic equation would carry that); whole scenes within 0.11 dB per band
+  to 1 km in every case. The comparison found and fixed a notch at the join of the
+  parabolic equation's bands and the rays' (see the changelog).
+- [ ] A wide-angle parabolic equation (split-step Padé) for gradients that bend sound
+  through large angles over several kilometres, where the narrow-angle one strays.
 
 Unreleased:
 

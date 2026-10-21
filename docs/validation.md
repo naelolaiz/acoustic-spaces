@@ -1187,6 +1187,270 @@ through band filters, whose skirts fill the ground dip by up to about 0.9 dB, as
 ground's own check above. Both results are checked against theory, not against
 measurements of a barrier or a ground.
 
+## Outdoor sound in wind against a fast field program
+
+`validation/ffp.py` is a fast field program for sound over a flat ground through a
+layered atmosphere, the kind of model the benchmark cases for outdoor sound of
+Attenborough and others (J. Acoust. Soc. Am. 97, 1995, 173-191) were solved with,
+written apart from the engine to check its parabolic equation in wind and temperature.
+It writes the sound field as an integral over the horizontal wavenumber and, for each
+wavenumber, solves the vertical problem exactly through a stack of layers in each of
+which the speed of sound is constant: the atmosphere as a staircase of layers a quarter
+wavelength thick, 1 m at most, halving sixteen times towards the ground, the source,
+the listener and the top; the ground an impedance boundary; and above the top, 1000 m
+up, where the engine's atmosphere stops changing, homogeneous air that sends nothing
+back. The integral follows a contour dipped into the complex plane past the poles near
+the real axis, with the Bessel function evaluated exactly rather than by its far-field
+form, so the field is right at 100 m as at 10 km. Its Bessel functions are its own (a
+power series up to an argument of 17 and the Hankel expansion beyond, 2 × 10⁻¹⁰ apart
+where they meet and 2 × 10⁻⁸ off tabulated integrals), so the script needs nothing but
+numpy.
+
+In still air it is checked against the exact solution for a source over a locally
+reacting ground ([Ground reflection](#ground-reflection-against-the-exact-solution)),
+the source 5 m and the listener 1 m up, the level over the free field's:
+
+| | 100 m | 300 m | 1 km | 3 km | 10 km | |
+|---|---|---|---|---|---|---|
+| 10 Hz, rigid | 6.02 | 6.02 | 6.02 | 6.02 | 6.02 | exact, dB |
+| | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | ffp - exact |
+| 10 Hz, grass | 6.04 | 6.12 | 6.26 | 6.43 | 6.51 | exact, dB |
+| | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | ffp - exact |
+| 100 Hz, rigid | 5.98 | 6.02 | 6.02 | 6.02 | 6.02 | exact, dB |
+| | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | ffp - exact |
+| 100 Hz, grass | 3.12 | 0.72 | -7.95 | -23.91 | -35.29 | exact, dB |
+| | 0.000 | 0.000 | 0.000 | 0.000 | -0.001 | ffp - exact |
+| 1000 Hz, rigid | 1.72 | 5.61 | 5.98 | 6.02 | 6.02 | exact, dB |
+| | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | ffp - exact |
+| 1000 Hz, grass | 1.30 | -6.58 | -16.61 | -26.04 | -36.46 | exact, dB |
+| | 0.000 | 0.000 | 0.000 | 0.000 | -0.001 | ffp - exact |
+
+It agrees to 0.001 dB from 10 Hz to 1 kHz and from 100 m to 10 km, over a rigid ground
+and over grass. With the speed of sound rising 0.1 m/s per metre of height, halving its
+layers changes the level by 0.006 dB at most (100 Hz and 1 kHz, 1 and 10 km out), so the
+staircase is converged. In a deep shadow its layers scatter a little sound: the field
+has a floor near -60 dB re free field, lower with thinner layers, so nothing is compared
+below -60 dB, where nothing is heard anyway.
+
+`validation/benchmark_1995.py` runs the benchmark's cases 1 to 3 through the program
+and the engine: a source 5 m and a listener 1 m over a ground of flow resistivity
+200 kPa s/m² (Delany and Bazley's impedance), 100 m to 10 km apart, in still air
+(case 1), with the speed of sound rising 0.1 m/s per metre of height (case 2, downward
+refraction: downwind or under an inversion) and falling as much (case 3, upward
+refraction: upwind or over sun-warmed ground). The benchmark's gradients go on without
+end; the engine's atmosphere stops changing 1000 m up, 100 m/s off the ground's speed,
+and the program follows it there. Such a gradient over a kilometre of height is beyond
+any weather, so two more cases stop it 100 m up, 10 m/s more or less than at the
+ground, as a strong wind blows: the weather the engine is meant for. Case 4, case 3
+with turbulence, is not run: the benchmark's eddies have a Gaussian spectrum, the
+engine's a von Kármán one, checked in
+[Turbulence](#turbulence-against-a-parabolic-equation-through-random-eddies).
+
+First the engine's parabolic equation alone (`acoustic_spaces.engine.parabolic`, the
+Green's function parabolic equation of Gilbert and Di, which gives the engine's sound
+over the open ground in the bands up to 500 Hz and in a shadow up to 2 kHz), at the
+benchmark's pure tones: the program's level re free field and the parabolic equation's
+difference from it (`-`: deeper than -60 dB):
+
+| | 100 m | 200 m | 500 m | 1 km | 2 km | 5 km | 10 km | |
+|---|---|---|---|---|---|---|---|---|
+| case 1, still air, 10 Hz | 6.00 | 6.02 | 6.04 | 6.06 | 6.08 | 6.12 | 6.12 | ffp, dB |
+| | +0.04 | +0.01 | -0.03 | -0.03 | -0.04 | -0.04 | -0.01 | pe - ffp |
+| case 1, still air, 100 Hz | 4.26 | 3.72 | 2.27 | -0.11 | -4.88 | -16.72 | -24.77 | ffp, dB |
+| | -0.03 | -0.02 | -0.00 | +0.02 | +0.02 | -0.05 | -0.10 | pe - ffp |
+| case 1, still air, 1000 Hz | 0.72 | -3.88 | -11.14 | -16.96 | -22.88 | -30.78 | -36.78 | ffp, dB |
+| | -0.03 | -0.04 | -0.05 | -0.05 | -0.05 | -0.05 | -0.05 | pe - ffp |
+| case 2, downward refraction 0.1/s, 10 Hz | 6.23 | 6.67 | 8.62 | 13.02 | 13.84 | 20.29 | 24.28 | ffp, dB |
+| | -0.20 | -0.27 | -0.38 | -0.45 | +0.14 | -6.47 | -2.10 | pe - ffp |
+| case 2, downward refraction 0.1/s, 100 Hz | 4.60 | 4.84 | 5.51 | 2.81 | 8.72 | 3.92 | 11.89 | ffp, dB |
+| | -0.04 | -0.04 | -0.01 | -0.03 | -0.02 | +5.52 | -19.77 | pe - ffp |
+| case 2, downward refraction 0.1/s, 1000 Hz | 2.13 | 1.71 | 8.30 | 9.25 | 5.31 | -2.51 | -10.13 | ffp, dB |
+| | -0.04 | -0.04 | -0.04 | +0.32 | -10.92 | +3.40 | -0.58 | pe - ffp |
+| case 3, upward refraction 0.1/s, 10 Hz | 5.77 | 5.35 | 3.40 | -1.29 | -13.32 | -41.23 | -77.99 | ffp, dB |
+| | +0.28 | +0.21 | +0.21 | +0.47 | -0.06 | -9.08 | - | pe - ffp |
+| case 3, upward refraction 0.1/s, 100 Hz | 3.88 | 2.40 | -3.54 | -16.07 | -44.04 | -64.00 | -98.16 | ffp, dB |
+| | -0.02 | -0.01 | +0.01 | +0.04 | -0.12 | - | - | pe - ffp |
+| case 3, upward refraction 0.1/s, 1000 Hz | -1.08 | -12.11 | -52.50 | -92.86 | -98.39 | -94.54 | -121.03 | ffp, dB |
+| | -0.05 | -0.04 | +7.79 | - | - | - | - | pe - ffp |
+| 0.1/s up to 100 m, 10 Hz | 6.23 | 6.68 | 8.55 | 13.37 | 15.64 | 18.42 | 18.27 | ffp, dB |
+| | -0.20 | -0.24 | -0.33 | -0.49 | -0.34 | -0.38 | -0.49 | pe - ffp |
+| 0.1/s up to 100 m, 100 Hz | 4.60 | 4.84 | 5.51 | 2.80 | -13.83 | -2.11 | -10.57 | ffp, dB |
+| | -0.04 | -0.04 | -0.02 | +0.04 | +3.22 | -0.19 | -3.12 | pe - ffp |
+| 0.1/s up to 100 m, 1000 Hz | 2.13 | 1.71 | 8.30 | 9.25 | 0.48 | -21.83 | -47.12 | ffp, dB |
+| | -0.04 | -0.04 | -0.04 | +0.33 | +1.23 | -1.93 | +11.32 | pe - ffp |
+| -0.1/s up to 100 m, 10 Hz | 5.78 | 5.35 | 3.28 | -0.47 | -9.92 | -44.43 | -69.88 | ffp, dB |
+| | +0.28 | +0.24 | +0.32 | +0.28 | +0.22 | +1.42 | - | pe - ffp |
+| -0.1/s up to 100 m, 100 Hz | 3.88 | 2.40 | -3.53 | -16.14 | -45.75 | -102.87 | -98.15 | ffp, dB |
+| | -0.02 | -0.01 | -0.02 | +0.10 | -5.79 | - | - | pe - ffp |
+| -0.1/s up to 100 m, 1000 Hz | -1.08 | -12.11 | -52.51 | -64.37 | -98.31 | -125.03 | -121.03 | ffp, dB |
+| | -0.04 | -0.05 | +0.33 | - | - | - | - | pe - ffp |
+
+In still air the two agree within 0.05 dB to 5 km and 0.1 dB at 10 km; at 10 Hz, below
+the engine's lowest band, the parabolic equation is 0.2 to 0.5 dB off in every case. In
+wind the agreement holds as far as the sound reaches the listener at the flat angles a
+parabolic equation carries. With the gradient stopping 100 m up, which turns back only
+the sound within 14 degrees of the horizontal, the parabolic equation is within 0.05 dB
+at 100 Hz and 0.35 dB at 1 kHz up to 1 km downwind, 1 to 3 dB at 2 km, where the bent
+paths interfere and the two place a dip a little apart, within 2 dB at 5 km, and 3 dB
+at 10 km at 100 Hz (11 dB at 1 kHz, 47 dB down, a band the engine's rays give
+downwind anyway). Upwind, in the shadow, it is within 0.1 dB until the sound is 20 dB
+down and strays by 6 dB (100 Hz, 2 km, 46 dB down) to 8 dB (1 kHz, 500 m, 52 dB down)
+deeper in, below where the eddies keep a shadow in practice (see
+[Turbulence](outdoor.md#turbulence)). With the benchmark's gradient going on to 1000 m,
+sound that has risen hundreds of metres comes back down at 17 degrees and more, and
+upwind the speed of sound a kilometre up is 100 m/s below the ground's, an index of
+refraction of 1.4; the parabolic equation, a narrow-angle one that marches the field
+out along the ground and takes the refraction as a phase shift at each step, carries
+neither: downwind the two part beyond 1 km at 1 kHz and 2 km at 100 Hz, by 3 to 20 dB
+at a pure tone where several bent paths interfere, and upwind it comes out 8 dB too
+loud at 1 kHz 500 m into the shadow (0.3 dB with the gradient stopping at 100 m). Such
+profiles are beyond any weather; the engine's atmosphere is meant for the gradients
+near the ground that make the shadows and the focusing in practice, and within a few
+kilometres of the source.
+
+Then whole scenes, each case as an outdoor scene: the gradient as a measured
+atmosphere (`atmosphere.table`) with the wind along the line of the listeners, the air
+at 19.6 °C (343 m/s at the ground) and 50 % humidity, and the engine's defaults
+otherwise (the early paths as image sources up to one reflection, 200 late rays). The
+level relative to free field the engine reports per octave band from 63 Hz to 1 kHz
+([Outdoor scenes](outdoor.md#results-outdoors)) against the program averaged over the
+band as the engine reads it (eight frequencies per band; 24 at 1 kHz, where the rays
+average the paths' interference exactly), and in the bands up to 500 Hz also against the
+program read through the engine's band filters, as the barrier check above is (*through
+the filters*). The engine's rays carry the air's absorption along their own paths and the
+program runs without it, a difference of the path lengths only, under 0.01 dB here:
+
+**case 1, still air**
+
+| distance | 63 | 125 | 250 | 500 | 1k | |
+|---|---|---|---|---|---|---|
+| 100 m | 5.17 | 3.15 | -2.31 | -6.43 | 1.37 | ffp, dB |
+| | -0.05 | -0.11 | -0.03 | +0.59 | -0.00 | engine - ffp |
+| | +0.00 | -0.01 | -0.01 | -0.00 | -0.00 | through the filters |
+| 200 m | 5.01 | 2.07 | -6.18 | -11.08 | -2.96 | ffp, dB |
+| | -0.08 | -0.14 | +0.17 | +0.54 | -0.00 | engine - ffp |
+| | -0.02 | -0.01 | +0.03 | -0.03 | -0.00 | through the filters |
+| 500 m | 4.58 | -0.53 | -14.60 | -18.32 | -10.16 | ffp, dB |
+| | -0.14 | -0.04 | +0.93 | +0.44 | -0.00 | engine - ffp |
+| | -0.04 | +0.05 | +0.16 | -0.11 | -0.00 | through the filters |
+| 1 km | 3.85 | -3.98 | -22.32 | -24.12 | -15.97 | ffp, dB |
+| | -0.15 | +0.20 | +1.47 | +0.31 | -0.00 | engine - ffp |
+| | -0.02 | +0.12 | +0.32 | -0.23 | -0.00 | through the filters |
+| 2 km | 2.41 | -9.47 | -28.84 | -30.03 | -21.90 | ffp, dB |
+| | -0.10 | +0.81 | +1.30 | +0.11 | -0.00 | engine - ffp |
+| | +0.04 | +0.27 | +0.53 | -0.42 | -0.00 | through the filters |
+
+**case 2, downward refraction 0.1/s**
+
+| distance | 63 | 125 | 250 | 500 | 1k | |
+|---|---|---|---|---|---|---|
+| 100 m | 5.55 | 3.42 | -2.27 | -5.22 | 2.55 | ffp, dB |
+| | -0.05 | -0.05 | -0.04 | -0.07 | +0.04 | engine - ffp |
+| | +0.00 | +0.06 | -0.04 | -0.68 | +0.04 | through the filters |
+| 200 m | 6.21 | 2.97 | -5.67 | -6.00 | 2.28 | ffp, dB |
+| | -0.04 | -0.04 | -0.05 | -0.07 | -0.23 | engine - ffp |
+| | +0.03 | +0.09 | -0.27 | -0.69 | -0.23 | through the filters |
+| 500 m | 9.03 | 1.29 | -2.98 | -2.74 | 5.07 | ffp, dB |
+| | -0.03 | -0.04 | -0.06 | -0.05 | -1.78 | engine - ffp |
+| | +0.12 | -0.19 | -0.12 | -0.82 | -1.78 | through the filters |
+| 1 km | 6.79 | 1.37 | 1.43 | 1.55 | 6.63 | ffp, dB |
+| | +0.03 | -0.05 | -0.04 | -0.11 | +0.48 | engine - ffp |
+| | -0.22 | -0.15 | +0.12 | -0.19 | +0.48 | through the filters |
+| 2 km | 5.93 | 5.97 | -0.51 | 4.14 | 4.18 | ffp, dB |
+| | -0.02 | +0.07 | -0.53 | -0.75 | -0.77 | engine - ffp |
+| | -0.32 | +0.34 | -1.32 | -0.45 | -0.77 | through the filters |
+
+**case 3, upward refraction 0.1/s**
+
+| distance | 63 | 125 | 250 | 500 | 1k | |
+|---|---|---|---|---|---|---|
+| 100 m | 4.78 | 2.82 | -2.44 | -7.68 | -0.30 | ffp, dB |
+| | -0.01 | -0.02 | -0.09 | -0.06 | -0.17 | engine - ffp |
+| | +0.04 | +0.08 | -0.04 | -0.60 | -0.17 | through the filters |
+| 200 m | 3.72 | 0.85 | -7.14 | -16.62 | -11.46 | ffp, dB |
+| | -0.01 | -0.02 | -0.02 | -0.07 | -0.05 | engine - ffp |
+| | +0.05 | +0.11 | -0.11 | -0.53 | -0.05 | through the filters |
+| 500 m | -0.84 | -6.20 | -20.67 | -44.90 | -52.70 | ffp, dB |
+| | -0.01 | -0.00 | -0.02 | -0.10 | -0.07 | engine - ffp |
+| | +0.08 | +0.08 | -0.88 | -2.33 | -0.07 | through the filters |
+| 1 km | -10.83 | -19.87 | -43.44 | -90.90 | -100.23 | ffp, dB |
+| | -0.01 | +0.01 | +0.02 | - | - | engine - ffp |
+| | +0.06 | -0.12 | -3.41 | - | - | through the filters |
+| 2 km | -33.35 | -48.82 | -78.33 | -88.90 | -94.67 | ffp, dB |
+| | +0.01 | +0.02 | - | - | - | engine - ffp |
+| | -0.11 | -0.91 | - | - | - | through the filters |
+
+**0.1/s up to 100 m**
+
+| distance | 63 | 125 | 250 | 500 | 1k | |
+|---|---|---|---|---|---|---|
+| 100 m | 5.55 | 3.42 | -2.27 | -5.22 | 2.55 | ffp, dB |
+| | -0.05 | -0.05 | -0.04 | -0.06 | +0.04 | engine - ffp |
+| | +0.00 | +0.06 | -0.04 | -0.68 | +0.04 | through the filters |
+| 200 m | 6.21 | 2.97 | -5.67 | -6.00 | 2.28 | ffp, dB |
+| | -0.04 | -0.04 | -0.05 | -0.07 | -0.23 | engine - ffp |
+| | +0.03 | +0.09 | -0.27 | -0.69 | -0.23 | through the filters |
+| 500 m | 9.03 | 1.29 | -2.98 | -2.74 | 5.07 | ffp, dB |
+| | -0.03 | -0.03 | -0.06 | -0.05 | -1.78 | engine - ffp |
+| | +0.12 | -0.18 | -0.12 | -0.82 | -1.78 | through the filters |
+| 1 km | 6.74 | 1.38 | 1.43 | 1.55 | 6.63 | ffp, dB |
+| | +0.04 | -0.04 | -0.04 | -0.11 | +0.48 | engine - ffp |
+| | -0.21 | -0.14 | +0.13 | -0.19 | +0.48 | through the filters |
+| 2 km | 3.80 | -1.16 | -2.85 | -5.93 | 1.15 | ffp, dB |
+| | -0.07 | +0.01 | -0.09 | +0.44 | -0.97 | engine - ffp |
+| | -0.42 | -0.16 | -0.00 | -0.46 | -0.97 | through the filters |
+
+**-0.1/s up to 100 m**
+
+| distance | 63 | 125 | 250 | 500 | 1k | |
+|---|---|---|---|---|---|---|
+| 100 m | 4.78 | 2.82 | -2.44 | -7.68 | -0.30 | ffp, dB |
+| | -0.02 | -0.02 | -0.03 | -0.07 | -0.17 | engine - ffp |
+| | +0.03 | +0.08 | +0.01 | -0.60 | -0.17 | through the filters |
+| 200 m | 3.72 | 0.85 | -7.14 | -16.62 | -11.46 | ffp, dB |
+| | -0.01 | -0.02 | -0.03 | -0.08 | -0.05 | engine - ffp |
+| | +0.05 | +0.11 | -0.12 | -0.53 | -0.05 | through the filters |
+| 500 m | -0.84 | -6.20 | -20.66 | -44.81 | -52.68 | ffp, dB |
+| | -0.01 | -0.00 | -0.04 | -0.21 | -0.11 | engine - ffp |
+| | +0.08 | +0.08 | -0.89 | -2.40 | -0.11 | through the filters |
+| 1 km | -10.87 | -19.88 | -43.62 | -66.43 | -66.91 | ffp, dB |
+| | -0.02 | -0.09 | +1.46 | - | - | engine - ffp |
+| | +0.03 | -0.23 | -1.96 | - | - | through the filters |
+| 2 km | -31.61 | -43.55 | -69.69 | -91.23 | -98.25 | ffp, dB |
+| | +0.01 | +0.11 | - | - | - | engine - ffp |
+| | +0.14 | +0.23 | - | - | - | through the filters |
+
+In still air the early paths are image sources read through the band filters, and the
+row *through the filters* is the one to compare: the engine is within 0.04 dB of the program up
+to 200 m and within 0.3 dB at 1 km, 0.5 dB at 2 km, where the ground dip at 250 Hz is
+29 dB deep and the engine's reflection factor is an approximation (see
+[Ground reflection](#ground-reflection-against-the-exact-solution)); from 1 kHz up,
+where the rays average the paths' interference over the band exactly, within
+0.005 dB. In wind the bands up to 500 Hz come from the parabolic equation, whose band
+levels are the averages over its eight frequencies, and the engine reports them as
+computed, so there the plain average is the row to read: within 0.11 dB to 1 km in
+every case, downwind as upwind, and at 2 km downwind 0.5 to 0.8 dB with the gradient
+going on to 1000 m, where the pure tones above show the parabolic equation itself
+parting from the program, and 0.1 (0.4 at 500 Hz) with it stopping at 100 m. Upwind
+the engine follows the program into the shadow within 0.1 dB to 500 m and 45 dB below
+free field, and within 1.5 dB at 1 km with the gradient stopping at 100 m (250 Hz,
+44 dB down, where the pure tones above show the parabolic equation straying deep in
+the shadow); the comparison stops 60 dB down. The 1 kHz band comes from the rays: within
+0.5 dB but for 1.8 dB at 500 m downwind, under a caustic (the rays' own check allows
+1.5 dB there, see [Outdoor scenes](outdoor.md#how-the-simulation-bends-sound)), and
+1 dB at 2 km, where the bent paths crowd.
+
+This comparison found two faults at the join between the parabolic equation's bands
+and the rays', fixed in the same change (see the changelog): the response had a notch
+up to 3 dB deep around 700 Hz (around 2.8 kHz in the penumbra of a shadow), as the
+join blended spectra that stand for different sound, the whole field over the ground
+on one path and each ray's own on the others, and the 500 Hz band of the level
+relative to free field came out 0.5 to 1.2 dB too low, as the silent paths' higher
+bands counted against its reading. Each band of the response now keeps its own
+spectrum into the crossovers, and a path that carries nothing in a band is left out
+of that band's reading; rooms change by under a hundred-thousandth of the response's
+peak, and the still-air tables above by up to 0.2 dB in one cell.
+
 ## Terrain against closed forms and the exact wedge
 
 `validation/terrain.py` checks sound over a terrain (`geometry.ground.terrain`, see
@@ -1536,7 +1800,11 @@ its peak (single precision).
   which has no exact solution, is an engineering model; wind and temperature gradients
   cannot be combined with a terrain yet (see
   [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)), and strong ones, where they
-  matter most, have not been compared with measurements.
+  matter most, are compared with a fast field program on the 1995 benchmark cases (see
+  [Outdoor sound in wind](#outdoor-sound-in-wind-against-a-fast-field-program)), not
+  with measurements; the benchmark's gradients that go on to a kilometre up bend sound
+  through angles the engine's parabolic equation does not carry, so beyond 1 to 2 km
+  its pure tones stray there, though the bands it reports hold to 2 km.
   Vegetation is checked against a particle simulation of the same model, not against
   measurements through trees; its foliage takes ISO 9613-2's rates, which the
   standard gives for depths of 20 to 200 m, or leaves as thin rigid discs, whose
@@ -1576,6 +1844,8 @@ python validation/leaves.py --json leaves.json
 python validation/wave_outdoor.py --json wave_outdoor.json
 python validation/insertion_loss.py --json insertion_loss.json
 python validation/terrain.py --json terrain.json
+python validation/ffp.py --json ffp.json
+python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
@@ -1590,7 +1860,8 @@ wave solver's checks about 3.5 minutes (both stencils), the ground's about 7.5 (
 them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5
 (3 with turbulence), the turbulence's about 7, the vegetation's about 6, the wave
 solver's outdoors about 18, the outdoor results' about 3, the terrain's about 4.5, the
-leaves' about 2 and each BRAS
+leaves' about 2, the fast field program's about 4, the benchmark's about 55 (much
+longer with `--far`) and each BRAS
 run about 30 minutes (85 in third-octave bands, or half that per room with
 `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
