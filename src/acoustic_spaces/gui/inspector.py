@@ -852,8 +852,13 @@ class ScenePage(Page):
         self.apply(_("change air"), lambda data: data.setdefault("air", {}).update({field: value}))
 
     def _weather_zone_chosen(self) -> None:
+        # Showing another zone's or class's weather fills the form: that edits nothing.
         if not self._loading:
-            self._load_weather(self.document.scene)
+            self._loading = True
+            try:
+                self._load_weather(self.document.scene)
+            finally:
+                self._loading = False
 
     def _weather(self) -> None:
         if self.weather.currentIndex() < 0:
@@ -921,7 +926,11 @@ class ScenePage(Page):
         if choice is None:
             return
         kind, chosen = choice
-        scene_c = self.document.scene.air.temperature_c
+        scene = self.document.scene
+        scene_c = scene.air.temperature_c
+        entry = (scene.atmosphere.zones if kind == "zone" else scene.long_term.classes)[chosen]
+        if (scene_c if entry.temperature_c is None else entry.temperature_c) == value:
+            return
 
         def change(data: dict) -> None:
             zone = _entries(data, kind)[chosen]
