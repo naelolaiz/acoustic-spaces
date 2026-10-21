@@ -149,6 +149,8 @@ Rotating sound fields, and decoding them to the ears:
 
 ```{eval-rst}
 .. automodule:: acoustic_spaces.walkthrough
+
+.. automodule:: acoustic_spaces.doppler
 ```
 
 ## Head tracking

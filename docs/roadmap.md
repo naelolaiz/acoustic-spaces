@@ -192,6 +192,11 @@ Outdoor acoustics, in steps:
   the long-term level and L_den (or L_R) at every listener and map point. Checked
   against the formulas and ISO 9613-2's meteorological correction
   (`validation/long_term.py`); set in the editor. Without it nothing changes.
+- [x] O17 Moving sources and Doppler: `walk.doppler` plays each early path through a
+  delay that changes as the source or the listener goes, and `pass_by` gives L_Amax,
+  the sound exposure level and L_Aeq (`walkthrough --levels`). Checked against the
+  exact field of a passing source over a rigid ground (`validation/doppler.py`).
+  Without it nothing changes.
 - [ ] A wide-angle parabolic equation (split-step Padé) for gradients that bend sound
   through large angles over several kilometres, where the narrow-angle one strays.
 

@@ -225,7 +225,9 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
   is a sphere, which tells left from right but hardly front from behind (it has no
   outer ears), so the guide behind sounds much as one ahead would; a measured HRTF
   (`--hrtf`) tells them apart.
-- There is no Doppler shift: at walking speed it is under half a percent.
+- At walking speed the Doppler shift is under half a percent (8 cents), and the
+  crossfades leave it out. A car, a train or an aircraft takes `doppler: true` in its
+  walk (see [Moving sources and Doppler](#moving-sources-and-doppler)).
 
 From Python:
 
@@ -239,6 +241,70 @@ room = Room.from_yaml("scene.yaml")
 walk = simulate_walk(room)  # the only listener or source with a walk
 sound = render_walk(walk, {"guide": (speech, 44_100)}, Binaural())  # (samples, 2)
 animate_walk(room, walk, "walk.gif")
+```
+
+### Moving sources and Doppler
+
+A source that passes quickly, a car, a train or an aircraft, drops in pitch as it goes
+by, and so does a source that a listener passes quickly. With `doppler: true` in its
+[walk](scenes.md#walks), the walker's early sound follows it:
+
+```yaml
+sources:
+  - name: car
+    position: [-60.0, 0.0, 0.5]
+    power_db: 94
+    walk: {to: [[60.0, 0.0, 0.5]], speed_m_s: 25, face_forward: false, doppler: true}
+```
+
+```sh
+acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass.wav --levels pass.csv
+```
+
+- Each early path (the direct sound, each reflection, the sound bent round each edge)
+  is followed from place to place and played through a delay that changes smoothly as
+  the walker goes: a cubic curve through the path's delay at each place, read through a
+  windowed sinc that cuts off below the Nyquist frequency as the pitch rises, so that
+  nothing aliases. A walking source is heard at the retarded time, when the sound it
+  sent from each place arrives; a walking listener hears what reaches it at each place.
+  So each path shifts in pitch as its own length changes: the ground's reflection
+  shifts a little differently from the direct sound, and their interference sweeps as
+  it does by a road. Each path keeps its filter (the ground's, the air's, a barrier's,
+  the ears' in binaural), which changes from one place to the next as before, and in
+  turbulence the eddies drift past as in any walkthrough.
+- The late part is crossfaded from place to place as without Doppler, its pitch
+  unshifted; outdoors it is far below the early sound.
+- Against the exact field of a source passing 10 m from a listener over a hard ground,
+  the sound is within 45 dB of it at 30 m/s, with places 1 m apart, and its level
+  within 0.04 dB at every moment; a train at 80 m/s is within 38 dB and 0.42 dB at
+  4 kHz. Crossfading from place to place instead misses the level by 4 to 11 dB at
+  times, where the two paths interfere (see
+  [Validation](validation.md#moving-sources-against-the-exact-field)). The places
+  should be no more than 1 m apart (the default `--step` is 25 cm): 2 m apart the
+  sound is within 38 dB of the field, 4 m apart only within 18 dB.
+- The source is quasi-static: its sound power and directivity are those of a source
+  standing at each place. A moving source's convective amplification, which makes it
+  louder ahead of it and quieter behind, is left out: the most it adds ahead is 0.8 dB
+  at 30 m/s and 2 dB at 70 m/s.
+- The walker must go slower than sound, and the wave solver's bands do not follow a
+  walk with Doppler: with `simulation.wave.enabled` it stops with an error.
+
+The **pass-by levels** come with it: the walkthrough of a walk with Doppler prints the
+listener's L_Amax and when it is reached, the sound exposure level (SEL) and L_Aeq over
+the pass-by, and `--levels CSV` (for any walk) saves the level over time, A-weighted
+and in each octave band. Each is the level of the source's sound power at a place, as
+`simulate` gives it, at the time its sound arrives, so its maximum and its exposure are
+those of noise mapping's quasi-static source. Through the walk's sound over grass,
+each band's energy came within 0.25 dB of them, 0.8 dB in the band of the ground's dip,
+the same difference as between a response's band levels and its impulse response
+filtered into bands at a place standing still.
+
+```python
+from acoustic_spaces.walkthrough import pass_by
+
+walk = simulate_walk(room)  # the car, with doppler: true
+sound = render_walk(walk, {"car": (engine, 48_000)})
+passing = pass_by(walk)  # passing.max_a, .exposure_a, .equivalent_a, .levels_a
 ```
 
 ### Head tracking

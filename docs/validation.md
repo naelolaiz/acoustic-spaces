@@ -1885,6 +1885,86 @@ not of accuracy: the standard's correction is an empirical fit, and the engine's
 from each class's physics, which the sections above check against a fast field
 program and parabolic equations.
 
+## Moving sources against the exact field
+
+`validation/doppler.py` checks walks with Doppler (see
+[Moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)). A source
+passes a listener 10 m from its line, from 60 m before it to 60 m past, 1 m up with the
+listener 1.5 m up, over a rigid ground, at 30 m/s (a car) and 80 m/s (a train), and a
+listener passes a source the same way at 30 m/s; the places are 1 m apart. Here the
+field is known exactly: the direct sound and the image source's, each heard at its
+retarded time (for a moving source the time t_e it left at, t = t_e + R(t_e) / c; for a
+moving listener t - R(t) / c), over the distance then, with the air's absorption, for
+a source that keeps its sound as it moves (quasi-static, as the engine's). Pure tones
+through the engine are compared with it sample by sample (the waveform's error, the
+energy of the difference relative to the field's) and in 20 ms windows (the level's
+error, mean and most), away from the walk's ends:
+
+| case | tone | waveform | level | without Doppler: waveform | level |
+|---|---|---|---|---|---|
+| car, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | 2.0 dB | 2.02 / 6.59 dB |
+| | 1 kHz | -54.0 dB | 0.003 / 0.029 dB | 2.4 dB | 1.41 / 6.16 dB |
+| | 4 kHz | -45.4 dB | 0.003 / 0.032 dB | 2.5 dB | 1.63 / 6.98 dB |
+| train, 80 m/s | 250 Hz | -46.4 dB | 0.007 / 0.024 dB | 2.2 dB | 2.22 / 4.84 dB |
+| | 1 kHz | -46.7 dB | 0.012 / 0.032 dB | 2.3 dB | 1.95 / 4.24 dB |
+| | 4 kHz | -38.7 dB | 0.081 / 0.415 dB | 2.5 dB | 2.68 / 10.88 dB |
+| passing listener, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | -2.4 dB | 2.01 / 6.05 dB |
+| | 1 kHz | -54.2 dB | 0.003 / 0.019 dB | 1.1 dB | 1.29 / 5.79 dB |
+| | 4 kHz | -45.5 dB | 0.003 / 0.019 dB | 2.4 dB | 1.53 / 6.11 dB |
+
+With Doppler the sound follows the field to within 39 dB and its level to within 0.42
+dB, the most for the train at 4 kHz, where its two paths cancel for a moment. The same
+walks crossfaded from place to place, as without Doppler, keep each place's pitch, so
+their phase jumps from place to place: the waveform has nothing in common with the
+field's (an error of 0 dB or more) and the level misses by 4 to 11 dB at times.
+
+**The places.** The car at 1 kHz with its places further apart:
+
+| places apart | waveform | level |
+|---|---|---|
+| 0.25 m | -57.1 dB | 0.001 / 0.016 dB |
+| 1 m | -54.0 dB | 0.003 / 0.029 dB |
+| 2 m | -38.5 dB | 0.008 / 0.055 dB |
+| 4 m | -18.3 dB | 0.037 / 0.289 dB |
+
+The delays are curves through the places, so the further apart the places, the more
+they stray between them; up to 1 m they hardly do.
+
+**The levels.** White noise through the car's walk over grass (Miki's impedance, 200
+kPa s/m²), 16 noises up to 18 kHz: the energy of the sound in each octave band over the
+pass-by, relative to the source's, against the noise through each place's own impulse
+response for the time its sound is heard (Doppler moves the sound in time and pitch but
+keeps its energy), and against the sound exposure level `pass_by` gives from the
+places' band levels:
+
+| band | rendered | responses | pass-by | early part alone: rendered | responses |
+|---|---|---|---|---|---|
+| 63 Hz | -25.88 | -25.90 | -26.13 | -25.90 | -25.92 |
+| 125 Hz | -27.58 | -27.55 | -27.70 | -27.62 | -27.64 |
+| 250 Hz | -32.16 | -32.10 | -32.30 | -32.31 | -32.31 |
+| 500 Hz | -34.85 | -34.92 | -34.05 | -34.98 | -34.91 |
+| 1 kHz | -29.52 | -29.53 | -29.64 | -29.56 | -29.59 |
+| 2 kHz | -30.18 | -30.19 | -30.28 | -30.21 | -30.23 |
+| 4 kHz | -30.76 | -30.77 | -30.68 | -30.78 | -30.79 |
+| 8 kHz | -31.81 | -31.81 | -31.85 | -31.82 | -31.82 |
+
+The sound keeps the energy of the responses to within 0.07 dB in every band, with its
+late part and without. The late part is crossfaded as in any walk, drawn from one random
+sequence for every place; the responses here are drawn from the same one, as otherwise
+their late parts' chance correlation with the early sound would differ by up to 0.25
+dB in a band. The pass-by's band levels are within 0.25 dB of the sound, 0.8 dB in the
+500 Hz band, where the ground's dip falls: the same difference as between a place's
+band levels and its impulse response filtered into bands. For a car at 30 m/s over
+this grass with 94 dB of sound power, the listener has L_Amax 61.4 dB(A) 2.03 s into
+the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A) over 4 s.
+
+**What it leaves out.** The engine's source is quasi-static, as the field it is
+compared with: a moving source's convective amplification (louder ahead of it by up to
+0.8 dB at 30 m/s and 2 dB at 70 m/s, as much quieter behind) is left out, and so is the
+Doppler shift of the late part, which is crossfaded. Binaural walks are checked
+against the convolution with a response when the walker stands still (to within 45 dB
+at each ear in the tests), not against a moving head's exact field.
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -2134,6 +2214,10 @@ its peak (single precision).
   ISO 9613-2's meteorological correction, not against long-term measurements, and are
   only as good as the weather classes and shares given to them (see
   [Levels over a long term](#levels-over-a-long-term)).
+  Moving sources are checked against the exact field of a quasi-static source over a
+  rigid ground, not against measured pass-bys, and leave out the convective
+  amplification of a moving source (see
+  [Moving sources](#moving-sources-against-the-exact-field)).
   Vegetation is checked against a particle simulation of the same model, not against
   measurements through trees; its foliage takes ISO 9613-2's rates, which the
   standard gives for depths of 20 to 200 m, or leaves as thin rigid discs, whose
@@ -2178,6 +2262,7 @@ python validation/ffp.py --json ffp.json
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
 python validation/long_term.py --json long_term.json
+python validation/doppler.py --json doppler.json
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/outdoor_gpu.py   # the outdoor examples on each device: levels and centre times
@@ -2195,7 +2280,7 @@ them the wave solver's, 2 the parabolic equation's), the outdoor measurements' a
 solver's outdoors about 18, the outdoor results' about 3, the terrain's about 4.5, the
 leaves' about 2, the fast field program's about 4, the benchmark's about 55 (much
 longer with `--far`), the weather zones' about 9 (2 the parabolic equation's, 7 the
-mean profile's), the long term's about 0.5 and each BRAS
+mean profile's), the long term's about 0.5, the moving sources' about 3 and each BRAS
 run about 30 minutes (85 in third-octave bands, or half that per room with
 `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it

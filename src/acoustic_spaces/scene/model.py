@@ -1333,6 +1333,13 @@ class Walk(_Model):
         default=90.0,
         description="how fast it turns through a corner facing forward (degrees per second)",
     )
+    doppler: bool = Field(
+        default=False,
+        description=(
+            "the early sound through delays that change as it goes, so its pitch shifts "
+            "(Doppler): for vehicles and aircraft; false crossfades from place to place"
+        ),
+    )
 
 
 class Source(_Model):

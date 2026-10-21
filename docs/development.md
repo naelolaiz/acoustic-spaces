@@ -28,6 +28,7 @@ src/acoustic_spaces/   Python package
   compare.py           simulated against measured parameters, in JNDs (ISO 3382-1)
   calibration.py       absorption fitted to measured parameters (`calibrate`)
   walkthrough.py       listeners and sources heard as they walk through the room
+  doppler.py           walks with Doppler: each early path through a changing delay
   audio.py             WAV files
   viz.py               3D view, reflection paths, particle animations, response plots
   gltf.py              export to glTF (.glb) for Blender: room, paths, particle animation

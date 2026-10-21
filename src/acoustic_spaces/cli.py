@@ -497,7 +497,8 @@ def _walk_text(item) -> str:
     length = sum(math.dist(a, b) for a, b in zip(corners, corners[1:], strict=False))
     x, y, z = item.walk.to[-1]
     seconds = length / item.walk.speed_m_s
-    return f"  walks {length:.1f} m to ({x:.2f}, {y:.2f}, {z:.2f}) in {seconds:.1f} s"
+    text = f"  walks {length:.1f} m to ({x:.2f}, {y:.2f}, {z:.2f}) in {seconds:.1f} s"
+    return text + (" with Doppler" if item.walk.doppler else "")
 
 
 def _directivity_text(directivity) -> str:
@@ -1864,7 +1865,7 @@ def _cmd_auralize(args: argparse.Namespace) -> int:
 
 def _cmd_walkthrough(args: argparse.Namespace) -> int:
     from acoustic_spaces.spatial import from_output
-    from acoustic_spaces.walkthrough import render_walk, simulate_walk
+    from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
 
     room = _load_room(args.scene)
     if room is None or not _print_checks(room):
@@ -1928,6 +1929,20 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
         f"{len(walk.names)} places, {late}",
         file=sys.stderr,
     )
+    if walk.doppler or args.levels:
+        heard = (
+            sorted({s for s, _ in walk.result.responses}) if walk.kind == "listeners" else [None]
+        )
+        passes = [pass_by(walk, source) for source in heard]
+        for passing in passes:
+            print(_pass_by_text(passing))
+        if args.levels:
+            try:
+                _write_pass_by(Path(args.levels), passes)
+            except OSError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+            print(f"saved {args.levels}")
     mask = fmt.channel_mask() if hasattr(fmt, "channel_mask") else None
     _write_wet(Path(args.out), wet, rate, mask, args.normalize)
     if args.video:
@@ -1948,6 +1963,30 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
             + (", with the sound" if with_sound else "")
         )
     return 0
+
+
+def _pass_by_text(passing) -> str:
+    """'car at kerb: L_Amax 78.3 dB(A) at 2.33 s, SEL 81.0 dB(A), L_Aeq 75.2 dB(A)
+    over 4.0 s'."""
+    return (
+        f"{passing.source} at {passing.listener}: L_Amax {passing.max_a:.1f} dB(A) at "
+        f"{passing.max_time:.2f} s, SEL {passing.exposure_a:.1f} dB(A), L_Aeq "
+        f"{passing.equivalent_a:.1f} dB(A) over {passing.duration_s:.1f} s"
+    )
+
+
+def _write_pass_by(path: Path, passes) -> None:
+    """The levels over time of each pass-by (:class:`~acoustic_spaces.walkthrough.PassBy`)
+    as CSV: source, listener, time, the A-weighted level and the octave bands'."""
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+
+    bands = ",".join(f"L_{f}Hz_dB" for f in OCTAVE_BANDS_HZ)
+    lines = [f"source,listener,time_s,L_A_dB,{bands}"]
+    for passing in passes:
+        for t, a, row in zip(passing.times, passing.levels_a, passing.levels, strict=True):
+            values = ",".join(f"{v:.2f}" for v in row)
+            lines.append(f"{passing.source},{passing.listener},{t:.4f},{a:.2f},{values}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _cmd_play(args: argparse.Namespace) -> int:
@@ -2635,6 +2674,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="also save the walk as a .gif, or an .mp4 with the sound in it (viz extra)",
     )
     walkthrough.add_argument("--fps", type=int, default=25, help="video frames per second")
+    walkthrough.add_argument(
+        "--levels",
+        metavar="CSV",
+        help="also save the level over time at the listener (dB(A) and per octave band), "
+        "with the source standing at each place; a walk with Doppler prints its L_Amax, "
+        "SEL and L_Aeq either way",
+    )
     walkthrough.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")
     walkthrough.add_argument("--equal-power", action="store_true", help=EQUAL_POWER_HELP)
     walkthrough.set_defaults(func=_cmd_walkthrough)

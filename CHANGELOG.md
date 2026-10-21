@@ -426,6 +426,26 @@
   **Long-term level** row and the run details each period's and class's levels and
   the rating level; maps offer both new parameters.
 
+**Moving sources and Doppler**
+
+- A walk with `doppler: true` (a car, a train, an aircraft, or a listener passing
+  quickly) follows each early path from place to place and plays it through a delay
+  that changes as the walker goes, read through a windowed sinc, so each path's pitch
+  shifts as its length changes; its filters change from place to place as before, in
+  turbulence the eddies drift past and binaural takes the ears' filters. The late part
+  is crossfaded as before. A walk without it renders as before, bit for bit.
+- Checked by `validation/doppler.py` against the exact field of a source passing over
+  a rigid ground: within 45 dB at 30 m/s and 38 dB at 80 m/s, and the level within
+  0.42 dB at every moment, where crossfading misses it by up to 11 dB; over grass the
+  sound keeps the energy of the places' responses within 0.07 dB in every band (see
+  [Validation](docs/validation.md#moving-sources-against-the-exact-field)).
+- Pass-by levels: `acoustic_spaces.walkthrough.pass_by` gives the level at the
+  listener over time (A-weighted and per octave band, the source standing at each
+  place), its maximum, the sound exposure level and L_Aeq; the walkthrough of a walk
+  with Doppler prints them, `walkthrough --levels CSV` saves the levels of any walk,
+  and `inspect` says which walks have Doppler. Faster than sound or with the wave
+  solver's bands, a walk with Doppler stops with an error.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

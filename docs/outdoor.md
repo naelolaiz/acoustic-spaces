@@ -941,6 +941,17 @@ classes favourable to propagation to the long-term level follows ISO 9613-2's wi
 0.8 dB, with a C_0 of 3.4 dB, inside the standard's 0 to 5 dB (see
 [Validation](validation.md#levels-over-a-long-term)).
 
+## Passing vehicles
+
+A car, a train or an aircraft is a source with a [walk](scenes.md#walks) and `doppler:
+true`: `walkthrough` plays it past the listener with its pitch shifting along each
+path, and prints the listener's L_Amax, sound exposure level and L_Aeq over the
+pass-by; `--levels pass.csv` saves the level over time, A-weighted and per octave
+band (see [Moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)).
+Over a hard ground, the sound is within 45 dB of the exact field at 30 m/s (see
+[Validation](validation.md#moving-sources-against-the-exact-field)). A walking
+listener passes standing sources the same way.
+
 ## In the editor
 
 **File > New outdoor scene** starts one: a flat meadow 200 m across, with a source and
