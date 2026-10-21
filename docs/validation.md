@@ -912,6 +912,58 @@ At these points, without the eddies the shadow sinks 49 to 68 dB below the free 
 from 500 Hz; through them it stays 11 to 26 dB below, and the engine follows within 3 dB.
 Only these heights and these two profiles were checked.
 
+**Eddies weaker with height.** `--profile` runs both checks with the structure
+parameters given 2 m up (`height_m`, see [Turbulence](outdoor.md#turbulence)) and
+falling as z^(-2/3): each field is scaled in height by the square root of that, rising
+right down to the roughness length 5 cm above the ground, where it is 12 times as
+strong as at 2 m, while the engine takes Cn² no nearer the ground than the eddies'
+outer scale, 10 m (0.34 of the value at 2 m). The ground dip, mean (largest) absolute
+difference in dB, with a third column for the engine taking Cn² at each pair's mean
+height right down to the ground instead:
+
+| ground | source / listener (m) | engine | Markov alone | engine, Cn² down to the ground |
+|---|---|---:|---:|---:|
+| grass | 2 / 1.5 | 1.26 (8.0) | 2.56 (12.2) | 2.34 (9.9) |
+| grass | 5 / 1.5 | 0.89 (5.9) | 1.38 (6.4) | 1.15 (6.1) |
+| loose soil | 1 / 1 | 0.90 (4.9) | 3.18 (14.3) | 2.50 (9.1) |
+| gravel | 2 / 1.5 | 1.79 (8.3) | 2.16 (9.4) | 2.49 (10.5) |
+| grass | 10 / 2 | 0.71 (4.2) | 0.81 (3.8) | 0.62 (2.9) |
+| asphalt | 10 / 2 | 1.58 (11.3) | 1.38 (8.7) | 1.17 (9.2) |
+| asphalt | 5 / 1.5 | 1.60 (10.3) | 1.52 (8.6) | 1.45 (7.0) |
+| compacted soil | 3 / 3 | 1.10 (4.0) | 1.48 (8.0) | 1.37 (6.7) |
+
+Over the five soft grounds the engine is 1.1 dB off on average (0.9 with eddies
+the same at every height, 1.8 taking Cn² down to the ground), over the three
+hard ones 1.4 (0.9 and 1.3). The field's thin layer of stronger
+eddies near the ground hardly tells in the parabolic equation: fields scaled only above
+2 m and fields scaled only below it fill the dip within 2 dB of the fields weakened
+above and strengthened below, and of the same fields the same at every height,
+respectively, because the waves average over the layer, which is thinner than their
+Fresnel zone, and both the direct sound and its reflection cross it alike; what parts
+them is the eddies over the Fresnel zone's height, most of it above the paths. Cn² at
+the greater of a pair's mean height and the Fresnel zone's half-width, sqrt(lambda L /
+4), does as well (1.1 dB over all the cases against 1.2 at the outer scale); the engine
+keeps the outer scale, one rule for the coherence, the scattering and the shaking alike.
+Into the shadows, with the same profile:
+
+| atmosphere | shadow from | `moderate` eddies | `strong` eddies |
+|---|---:|---:|---:|
+| sunny day | 56 m | 1.3 dB (4.2) | 1.7 dB (5.8) |
+| windy, upwind | 31 m | 1.9 dB (8.7) | 2.9 dB (12.2) |
+
+Deep in the shadow the eddies that scatter and shake sound in are those over the
+limiting rays, tens of metres up, where the profile leaves a third to a seventh of the
+strength at 2 m: the parabolic equation's level through these eddies is 4 to 10 dB
+(sunny day) and up to 6 dB (upwind) below that through eddies the same at every height
+at the farthest points from 500 Hz, and the engine follows within 1.3 to 2.9 dB on
+average (2.8 to 3.3 with Cn² at the geometric mean of the source's and the listener's
+heights right down to the ground). Its largest misses are at the nearest points upwind
+at 2 kHz, where the field's strong layer at the ground brings the parabolic equation
+back within 4 dB of the free field with the `strong` eddies (11 with eddies the same at
+every height) while the engine, stopping at the outer scale, stays 16 below: near the
+shadow's edge the shaking does feel the eddies right at the ground, and the engine is
+low there.
+
 ## Vegetation against a particle simulation
 
 `validation/vegetation.py` checks the late rays through vegetation against a particle
@@ -1910,6 +1962,7 @@ python validation/ground_reflection.py --wave --parabolic --json ground.json
 python validation/outdoor_propagation.py --json outdoor.json --plots docs/validation
 python validation/outdoor_propagation.py --turbulence moderate
 python validation/turbulence.py --json turbulence.json
+python validation/turbulence.py --profile --json turbulence_profile.json
 python validation/vegetation.py --json vegetation.json
 python validation/leaves.py --json leaves.json
 python validation/wave_outdoor.py --json wave_outdoor.json

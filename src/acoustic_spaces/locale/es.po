@@ -1860,6 +1860,33 @@ msgstr ""
 "rápido que fluctúa el sonido"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "the same at every height"
+msgstr "igual a todas las alturas"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The height above the ground the eddies' strength holds at (where it was "
+"measured or estimated, usually 2 m), from which they weaken with height; "
+"nearer the ground than the eddies' size they are taken as at that height. 0: "
+"the same strength at every height"
+msgstr ""
+"La altura sobre el suelo a la que vale la intensidad de los remolinos (donde "
+"se midió o estimó, normalmente 2 m), desde la que se debilitan con la "
+"altura; más cerca del suelo que el tamaño de los remolinos se toman como a "
+"esa altura. 0: la misma intensidad a todas las alturas"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How fast the eddies weaken with height: the power of the height over the "
+"eddies' height that their strength falls by. 0.67 (two thirds) in a neutral "
+"or stable surface layer, the usual; up to 1.33 in strong sunshine"
+msgstr ""
+"Con qué rapidez se debilitan los remolinos con la altura: la potencia de la "
+"altura sobre la altura de los remolinos con la que cae su intensidad. 0,67 "
+"(dos tercios) en una capa superficial neutra o estable, lo habitual; hasta "
+"1,33 con sol fuerte"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Eddies"
 msgstr "Turbulencia"
 
@@ -1874,6 +1901,14 @@ msgstr "Turbulencia del viento"
 #: acoustic_spaces/gui/inspector.py
 msgid "Eddy size"
 msgstr "Tamaño de los remolinos"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies' height"
+msgstr "Altura de la turbulencia"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weaker with height"
+msgstr "Más débil con la altura"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

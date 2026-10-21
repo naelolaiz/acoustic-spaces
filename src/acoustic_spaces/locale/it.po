@@ -1848,6 +1848,33 @@ msgstr ""
 "quanto in fretta fluttua il suono"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "the same at every height"
+msgstr "uguale a ogni altezza"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The height above the ground the eddies' strength holds at (where it was "
+"measured or estimated, usually 2 m), from which they weaken with height; "
+"nearer the ground than the eddies' size they are taken as at that height. 0: "
+"the same strength at every height"
+msgstr ""
+"L'altezza dal suolo a cui vale l'intensità dei vortici (dove è stata "
+"misurata o stimata, di solito 2 m), da cui si indeboliscono con l'altezza; "
+"più vicino al suolo della dimensione dei vortici si prendono come a "
+"quell'altezza. 0: la stessa intensità a ogni altezza"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How fast the eddies weaken with height: the power of the height over the "
+"eddies' height that their strength falls by. 0.67 (two thirds) in a neutral "
+"or stable surface layer, the usual; up to 1.33 in strong sunshine"
+msgstr ""
+"Quanto in fretta i vortici si indeboliscono con l'altezza: la potenza "
+"dell'altezza sull'altezza dei vortici con cui cala la loro intensità. 0,67 "
+"(due terzi) in uno strato superficiale neutro o stabile, il caso comune; "
+"fino a 1,33 con sole forte"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Eddies"
 msgstr "Turbolenza"
 
@@ -1862,6 +1889,14 @@ msgstr "Turbolenza del vento"
 #: acoustic_spaces/gui/inspector.py
 msgid "Eddy size"
 msgstr "Dimensione dei vortici"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies' height"
+msgstr "Altezza della turbolenza"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weaker with height"
+msgstr "Più debole con l'altezza"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

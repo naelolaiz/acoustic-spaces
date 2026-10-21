@@ -440,16 +440,38 @@ class ScenePage(Page):
                 "flickers"
             )
         )
+        self.eddy_height = spin(0, 100, 1, 0.5, "m")
+        self.eddy_height.setSpecialValueText(_("the same at every height"))
+        self.eddy_height.setToolTip(
+            _(
+                "The height above the ground the eddies' strength holds at (where it was "
+                "measured or estimated, usually 2 m), from which they weaken with height; "
+                "nearer the ground than the eddies' size they are taken as at that height. "
+                "0: the same strength at every height"
+            )
+        )
+        self.eddy_falloff = spin(0, 2, 2, 0.1)
+        self.eddy_falloff.setToolTip(
+            _(
+                "How fast the eddies weaken with height: the power of the height over the "
+                "eddies' height that their strength falls by. 0.67 (two thirds) in a neutral "
+                "or stable surface layer, the usual; up to 1.33 in strong sunshine"
+            )
+        )
         for box, field in (
             (self.temperature_eddies, "temperature_structure"),
             (self.wind_eddies, "wind_structure"),
             (self.eddy_size, "outer_scale_m"),
+            (self.eddy_falloff, "falloff"),
         ):
             box.valueChanged.connect(lambda value, f=field: self._eddy(f, value))
+        self.eddy_height.valueChanged.connect(lambda value: self._eddy("height_m", value or None))
         form.addRow(_("Eddies"), self.eddies)
         form.addRow(_("Temperature eddies"), self.temperature_eddies)
         form.addRow(_("Wind eddies"), self.wind_eddies)
         form.addRow(_("Eddy size"), self.eddy_size)
+        form.addRow(_("Eddies' height"), self.eddy_height)
+        form.addRow(_("Weaker with height"), self.eddy_falloff)
         self.table = QLabel()
         self.table.setWordWrap(True)
         self.table.setToolTip(
@@ -488,6 +510,8 @@ class ScenePage(Page):
         self.temperature_eddies.setValue(eddies.temperature_structure)
         self.wind_eddies.setValue(eddies.wind_structure)
         self.eddy_size.setValue(eddies.outer_scale_m)
+        self.eddy_height.setValue(eddies.height_m or 0.0)
+        self.eddy_falloff.setValue(eddies.falloff)
         wind = shown.wind or Wind()
         self.wind_speed.setValue(wind.speed_m_s)
         self.wind_direction.setValue(wind.direction_deg % 360.0)
@@ -650,9 +674,11 @@ class ScenePage(Page):
                 atmosphere["turbulence"] = _eddies_written_out(old)
             else:
                 atmosphere["turbulence"] = {"preset": value}
-                # Their size is the place's, not the weather's: it stays.
-                if isinstance(old, dict) and "outer_scale_m" in old:
-                    atmosphere["turbulence"]["outer_scale_m"] = old["outer_scale_m"]
+                # Their size is the place's, not the weather's, and their height the
+                # measurement's: they stay.
+                for kept in ("outer_scale_m", "height_m", "falloff"):
+                    if isinstance(old, dict) and kept in old:
+                        atmosphere["turbulence"][kept] = old[kept]
             # Still air without eddies is no atmosphere (the scene writes the defaults out).
             if atmosphere and atmosphere != Atmosphere().model_dump(mode="json", exclude_none=True):
                 data["atmosphere"] = atmosphere

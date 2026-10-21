@@ -1,6 +1,6 @@
 """Check the engine's turbulence against a parabolic equation through turbulent air.
 
-    python validation/turbulence.py [--realisations N] [--json results.json]
+    python validation/turbulence.py [--realisations N] [--profile] [--json results.json]
 
 The reference is the engine's own parabolic equation (:mod:`acoustic_spaces.engine.
 parabolic`, checked against the exact solution in ``ground_reflection.py``) marched
@@ -32,6 +32,14 @@ integrated over the step. The outer scale L is 10 m. Two checks:
 Levels are in dB over the free field. Both checks fitted the engine's constants
 (:data:`~acoustic_spaces.engine.turbulence.GROUND_K_RHO` and the shadow's), so they show
 how well those fits hold over the cases, not an independent test.
+
+With ``--profile`` the eddies weaken with height as the engine's ``height_m`` and
+``falloff`` have it (the presets' strength at 2 m, falling as z^(-2/3)): each
+realisation's field is scaled in height by the square root of that, strengthening right
+down to the roughness length 5 cm above the ground, while the engine takes Cn² no nearer
+the ground than the outer scale (:meth:`~acoustic_spaces.engine.turbulence.Eddies.
+strength`). Those fits were made with eddies the same at every height, so this shows how
+they carry over.
 """
 
 from __future__ import annotations
@@ -54,6 +62,11 @@ from acoustic_spaces.scene.model import TURBULENCE_PRESETS
 SPEED_OF_SOUND = 343.0
 GROUND_C = 15.0
 OUTER_SCALE_M = 10.0
+#: The profile of ``--profile``: the strength holds at this height (m) and falls with
+#: height by this power; the field keeps it as at the roughness length below that.
+PROFILE_HEIGHT_M = 2.0
+PROFILE_FALLOFF = 2.0 / 3.0
+PROFILE_FLOOR_M = 0.05
 #: The field's grid (m): along the ground and in height, fine enough for the angles the
 #: parabolic equation takes.
 FIELD_DX = 0.5
@@ -89,9 +102,26 @@ def cn2_of(preset: str) -> float:
     )
 
 
-def realisation(length: float, height: float, cn2: float, scale: float, rng) -> np.ndarray:
+def make_eddies(cn2: float, c: float, profile: bool) -> Eddies:
+    """The engine's eddies, the same at every height or weakening with it."""
+    if not profile:
+        return Eddies(cn2, OUTER_SCALE_M, c)
+    return Eddies(cn2, OUTER_SCALE_M, c, height_m=PROFILE_HEIGHT_M, falloff=PROFILE_FALLOFF)
+
+
+def field_strength(z: np.ndarray) -> np.ndarray:
+    """Cn² over its value at :data:`PROFILE_HEIGHT_M` in the field of ``--profile``:
+    falling as z^-:data:`PROFILE_FALLOFF`, as at :data:`PROFILE_FLOOR_M` below it."""
+    return (np.maximum(z, PROFILE_FLOOR_M) / PROFILE_HEIGHT_M) ** -PROFILE_FALLOFF
+
+
+def realisation(
+    length: float, height: float, cn2: float, scale: float, rng, eddies: Eddies | None = None
+) -> np.ndarray:
     """(nx, nz) a field mu on the grid FIELD_DX x FIELD_DZ from 0 to ``length`` and
-    ``height`` (m), periodic over twice each (so that its ends do not meet)."""
+    ``height`` (m), periodic over twice each (so that its ends do not meet); scaled in
+    height by the square root of :func:`field_strength` when ``eddies`` weaken with
+    height."""
     nx = 1 << int(math.ceil(math.log2(2.0 * length / FIELD_DX)))
     nz = 1 << int(math.ceil(math.log2(2.0 * height / FIELD_DZ)))
     kx = 2.0 * math.pi * np.fft.fftfreq(nx, FIELD_DX)
@@ -101,7 +131,10 @@ def realisation(length: float, height: float, cn2: float, scale: float, rng) -> 
     amplitude = np.sqrt(spectrum * (2.0 * math.pi) ** 2 / (nx * FIELD_DX * nz * FIELD_DZ))
     noise = rng.standard_normal((nx, nz)) + 1j * rng.standard_normal((nx, nz))
     mu = np.fft.ifft2(amplitude * noise).real * nx * nz
-    return mu[: int(length / FIELD_DX) + 2, : int(height / FIELD_DZ) + 2]
+    mu = mu[: int(length / FIELD_DX) + 2, : int(height / FIELD_DZ) + 2]
+    if eddies is not None and eddies.height_m is not None:
+        mu = mu * np.sqrt(field_strength(np.arange(mu.shape[1]) * FIELD_DZ))[None, :]
+    return mu
 
 
 def screens(mu: np.ndarray):
@@ -141,22 +174,23 @@ def _db(x) -> float:
     return 10.0 * math.log10(max(float(x), 1e-30))
 
 
-def check_coherence(realisations: int, seed: int = 21) -> dict:
+def check_coherence(realisations: int, seed: int = 21, profile: bool = False) -> dict:
     """The coherence check: per case, the mean and largest |difference| (dB) of the
     engine's and of the Markov approximation's level from the parabolic equation's."""
     preset = "strong"
     cn2 = cn2_of(preset)
-    eddies = Eddies(cn2, OUTER_SCALE_M, SPEED_OF_SOUND)
+    eddies = make_eddies(cn2, SPEED_OF_SOUND, profile)
     ranges = np.array(COHERENCE_RANGES)
     still = lambda z: np.full(np.shape(z), SPEED_OF_SOUND)  # noqa: E731
     out = {}
-    print(f"coherence ({preset}, Cn² {cn2:.3g} m^-2/3, {realisations} realisations)")
+    how = f", weakening with height from {PROFILE_HEIGHT_M:g} m up" if profile else ""
+    print(f"coherence ({preset}, Cn² {cn2:.3g} m^-2/3{how}, {realisations} realisations)")
     for zs, zr, ground in COHERENCE_CASES:
         sigma = PRESETS[ground][0]
         top = max(40.0, 3.0 * max(zs, zr) + 20.0)
         rng = np.random.default_rng(seed)
         fields = [
-            realisation(ranges.max() + 10.0, top + 5.0, cn2, OUTER_SCALE_M, rng)
+            realisation(ranges.max() + 10.0, top + 5.0, cn2, OUTER_SCALE_M, rng, eddies)
             for _ in range(realisations)
         ]
         engine, markov = [], []
@@ -202,7 +236,7 @@ def check_coherence(realisations: int, seed: int = 21) -> dict:
     return out
 
 
-def check_shadow(realisations: int, seed: int = 31) -> dict:
+def check_shadow(realisations: int, seed: int = 31, profile: bool = False) -> dict:
     """The shadow check: per atmosphere and preset, the levels deep in the shadow (dB
     over the free field) of the parabolic equation without and with the eddies, and of
     the engine."""
@@ -210,18 +244,19 @@ def check_shadow(realisations: int, seed: int = 31) -> dict:
     sigma = PRESETS["grass"][0]
     top = 120.0
     out = {}
-    print(f"shadows ({realisations} realisations)")
+    how = f", weakening with height from {PROFILE_HEIGHT_M:g} m up" if profile else ""
+    print(f"shadows ({realisations} realisations{how})")
     for name, towards in SHADOW_CASES:
         atmosphere = Atmosphere.model_validate({"preset": name})
-        profile = Profile.of(atmosphere, GROUND_C, towards)
-        start = shadow_start(profile, zs, zr)
+        weather = Profile.of(atmosphere, GROUND_C, towards)
+        start = shadow_start(weather, zs, zr)
         ranges = np.array([share * start for share in SHADOW_SHARES])
         ranges = ranges[ranges <= 1000.0]
-        c0 = float(profile.c[0])
+        c0 = float(weather.c[0])
         plain = {
             f: march(
                 [f],
-                profile.speed,
+                weather.speed,
                 _impedance(f, sigma, c0),
                 zs,
                 ranges,
@@ -232,15 +267,15 @@ def check_shadow(realisations: int, seed: int = 31) -> dict:
         }
         for preset in ("moderate", "strong"):
             cn2 = cn2_of(preset)
-            eddies = Eddies(cn2, OUTER_SCALE_M, c0)
+            eddies = make_eddies(cn2, c0, profile)
             rng = np.random.default_rng(seed)
             energy = {f: np.zeros(len(ranges)) for f in SHADOW_FREQUENCIES}
             for _ in range(realisations):
-                mu = realisation(ranges.max() + 10.0, top + 5.0, cn2, OUTER_SCALE_M, rng)
+                mu = realisation(ranges.max() + 10.0, top + 5.0, cn2, OUTER_SCALE_M, rng, eddies)
                 for f in SHADOW_FREQUENCIES:
                     p = march(
                         [f],
-                        profile.speed,
+                        weather.speed,
                         _impedance(f, sigma, c0),
                         zs,
                         ranges,
@@ -256,7 +291,7 @@ def check_shadow(realisations: int, seed: int = 31) -> dict:
                         continue
                     d2 = r**2 + (zs - zr) ** 2
                     still = abs(plain[f][i]) ** 2 * d2
-                    added = float(eddies.scattered(profile, zs, zr, r, [f], start)[0])
+                    added = float(eddies.scattered(weather, zs, zr, r, [f], start)[0])
                     rows.append(
                         {
                             "f": f,
@@ -285,14 +320,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--realisations", type=int, default=16)
     parser.add_argument("--only", choices=["coherence", "shadow"], help="run one check")
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help=f"eddies weakening with height from {PROFILE_HEIGHT_M:g} m up",
+    )
     parser.add_argument("--json", help="write the results to this JSON file")
     args = parser.parse_args(argv)
     start = time.time()
-    results = {}
+    results = {"profile": bool(args.profile)}
     if args.only in (None, "coherence"):
-        results["coherence"] = check_coherence(args.realisations)
+        results["coherence"] = check_coherence(args.realisations, profile=args.profile)
     if args.only in (None, "shadow"):
-        results["shadow"] = check_shadow(args.realisations)
+        results["shadow"] = check_shadow(args.realisations, profile=args.profile)
     print(f"({time.time() - start:.0f} s)")
     if args.json:
         with open(args.json, "w") as handle:

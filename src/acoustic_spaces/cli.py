@@ -370,9 +370,16 @@ def _atmosphere_lines(atmosphere, ground_c: float, outdoor) -> list[str]:
     turbulence = atmosphere.turbulence
     if turbulence is not None and not turbulence.calm:
         name = f"{turbulence.preset}, " if turbulence.preset else ""
+        profile = ""
+        if turbulence.height_m is not None:
+            profile = (
+                f" at {turbulence.height_m:g} m, weakening with height as "
+                f"z^-{turbulence.falloff:.2g}"
+            )
         eddies.append(
             f"eddies: {name}C_T² {turbulence.temperature_structure:g} K² m^-2/3, C_v² "
-            f"{turbulence.wind_structure:g} m^4/3 s^-2, {turbulence.outer_scale_m:g} m across"
+            f"{turbulence.wind_structure:g} m^4/3 s^-2{profile}, {turbulence.outer_scale_m:g} m "
+            "across"
         )
     if atmosphere.still:
         parts.append("still air: sound goes in straight lines")

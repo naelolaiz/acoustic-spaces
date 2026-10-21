@@ -164,6 +164,14 @@ Outdoor acoustics, in steps:
   `simulation.wave.device: gpu`, `both` and `auto` take outdoor scenes now. What
   reaches each listener in each band, and when, agrees within the noise of the ray
   count (`validation/outdoor_gpu.py`).
+- [x] O13 Eddies weaker with height: `turbulence.height_m` (the height the structure
+  parameters hold at) and `falloff` (2/3 by default, the surface layer's; up to 4/3 in
+  strong sunshine) make the eddies weaken with height from that height up, no nearer
+  the ground than their outer scale, in the coherence of each pair of paths (Cn² at
+  their mean height), the scattering into shadows and the shaking of the refraction; on
+  the command line's `inspect` and in the editor. Checked against the parabolic
+  equation through eddies strengthening right down to the ground
+  (`validation/turbulence.py --profile`). Without `height_m` nothing changes.
 - [ ] A wide-angle parabolic equation (split-step Padé) for gradients that bend sound
   through large angles over several kilometres, where the narrow-angle one strays.
 

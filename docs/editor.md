@@ -195,7 +195,9 @@ The plan draws the vegetation in dashed green and the zones in their materials'
 colours; the 3D view draws the vegetation in see-through green and leaves the sky out
 but for its edges, which show where the ground ends. The scene's own entry then has a
 **Wind and temperature** group: the weather, the wind and the temperature over the
-ground, their **Eddies** (see [Turbulence](outdoor.md#turbulence)), and **Show the
+ground, their **Eddies** with their strength, size, **Eddies' height** (the height the
+strength holds at; 0: the same at every height) and **Weaker with height** (see
+[Turbulence](outdoor.md#turbulence)), and **Show the
 profile**, a plot of them and of the speed of sound (see
 [Wind and temperature](outdoor.md#wind-and-temperature)). **Draw room** replaces an
 outdoor scene with a floor plan, after asking.

@@ -1582,6 +1582,24 @@ class Turbulence(_Model):
         le=1000.0,
         description="the size of the largest eddies (m): some metres near the ground",
     )
+    height_m: PositiveFloat | None = Field(
+        default=None,
+        le=100.0,
+        description=(
+            "the height (m) the structure parameters hold at, from which the eddies "
+            "weaken with height as (z / height_m)^-falloff, taken no nearer the ground "
+            "than outer_scale_m; None: the same at every height"
+        ),
+    )
+    falloff: float = Field(
+        default=2.0 / 3.0,
+        ge=0.0,
+        le=2.0,
+        description=(
+            "how fast the eddies weaken with height, the power of z / height_m they fall "
+            "by: 2/3 in a neutral or stable surface layer, up to 4/3 in strong sunshine"
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod

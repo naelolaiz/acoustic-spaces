@@ -332,6 +332,28 @@
   (`simulation.wave.device: gpu`, `both` and `auto`), with the speed of sound per cell,
   in its walls, its source and its matched layer, agreeing with the CPU to rounding.
 
+**Eddies weaker with height**
+
+- `atmosphere.turbulence.height_m` says the height above the ground the structure
+  parameters C_T² and C_v² hold at (where they were measured or estimated, usually 2 m):
+  from it the eddies weaken with height as (z / `height_m`)^-`falloff`, taken no nearer
+  the ground than their outer scale. `falloff` is 2/3 by default, as the surface
+  layer's structure parameters fall in neutral and stable air (Monin-Obukhov
+  similarity), up to 4/3 for the temperature's in strong sunshine. Without `height_m`
+  the eddies are the same at every height, as before: results do not change.
+- The coherence of each pair of early paths takes Cn² at the mean height of the two
+  points along them, so paths aloft part slower; the sound scattered into a shadow takes
+  Cn² at the height it scatters at, and the shaking of the refraction near the ground
+  Cn² at the geometric mean of the source's and the listener's heights.
+  `validation/turbulence.py --profile` marches the parabolic equation through eddies
+  strengthening right down to the ground: the ground dip comes out within 1.1 dB on
+  average over the soft grounds and 1.4 over the hard ones, the shadows within 1.3 to
+  2.9 dB; the thin layer of stronger eddies at the ground does not tell there, which is
+  why the engine stops at the outer scale (see
+  [Validation](docs/validation.md#turbulence-against-a-parabolic-equation-through-random-eddies)).
+- `inspect` names the height and the fall-off; the editor's Wind and temperature group
+  has **Eddies' height** (0: the same at every height) and **Weaker with height**.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

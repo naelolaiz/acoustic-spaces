@@ -43,6 +43,20 @@ draws those delays: in each band, the symmetric square root of the delays' centr
 matrix (classical multidimensional scaling, exact as G is a variogram) times normal
 variables shared by the bands.
 
+The eddies may weaken with height (``height_m``, ``falloff``): Cn² at a height z is its
+value at ``height_m`` times (z / height_m)^-falloff, as the surface layer's structure
+parameters go, C_T² and C_v² both as z^(-2/3) in neutral and stable air and C_T² as
+z^(-4/3) in free convection (Monin-Obukhov similarity; Wyngaard, Izumi and Collins
+1971). Nearer the ground than the eddies' outer scale the engine takes Cn² at the outer
+scale (:meth:`Eddies.strength`): the eddies that part two paths or scatter sound are as
+big as that and reach that high, and the parabolic equation through a field that keeps
+strengthening right down to the ground shows the thin layer of stronger eddies there
+does not tell (the waves average over it; see ``validation/turbulence.py --profile``).
+Two paths' D_ij then takes Cn² at the mean height of the two points a distance rho apart
+(the eddies between them), the single scattering Cn² at the scattering height, and the
+shaking Cn² at the geometric mean of the source's and the listener's heights, where the
+refraction is stirred.
+
 Into a shadow of upward refraction the eddies scatter sound (:meth:`Eddies.scattered`):
 once, from the air that the source and the listener both see over the shadow's edge
 (the Born approximation, the scattering cross-section 2 pi k^4 Phi(2 k sin(theta / 2))
@@ -293,6 +307,12 @@ class Eddies:
     #: The eddies' speed (m/s) that carries them past: the time a moment lasts is the
     #: outer scale over it.
     drift_m_s: float = 1.0
+    #: The height (m above the ground) ``cn2`` holds at, from which the eddies weaken
+    #: with height as (z / height_m)^-falloff; None: the same at every height.
+    height_m: float | None = None
+    falloff: float = 2.0 / 3.0
+    #: The ground's height (z) in the scene's coordinates.
+    ground: float = 0.0
 
     @classmethod
     def of(cls, model, speed_of_sound: float) -> Eddies | None:
@@ -321,7 +341,19 @@ class Eddies:
             speed_of_sound,
             _ground_faces(room),
             max(float(wind), 1.0),
+            turbulence.height_m,
+            turbulence.falloff,
+            float(room.outdoor.ground),
         )
+
+    def strength(self, height) -> np.ndarray:
+        """Cn² at ``height`` (m above the ground) over :attr:`cn2`: 1 everywhere when the
+        eddies are the same at every height, else (max(z, outer_scale_m) /
+        height_m)^-falloff: no nearer the ground than the eddies' outer scale."""
+        height = np.asarray(height, dtype=float)
+        if self.height_m is None:
+            return np.ones_like(height)
+        return (np.maximum(height, self.outer_scale_m) / self.height_m) ** -self.falloff
 
     # -- coherence ---------------------------------------------------------------------
 
@@ -352,11 +384,17 @@ class Eddies:
                 samples[i, :, axis] = np.interp(at, along, corners[:, axis])
         variance = np.zeros((n, n))
         largest = np.zeros((n, n))
+        heights = samples[:, :, 2] - self.ground
         for start in range(0, n, _ROWS):
             rows = slice(start, start + _ROWS)
             apart = np.linalg.norm(samples[rows, None] - samples[None], axis=3)
             mean = 0.5 * (lengths[rows, None] + lengths[None])
-            variance[rows] = mean * (self.structure(apart) @ weights)
+            growth = self.structure(apart)
+            if self.height_m is not None:
+                # The eddies between the two points: Cn² at their mean height (no nearer
+                # the ground than the outer scale, see strength()).
+                growth = growth * self.strength(0.5 * (heights[rows, None] + heights[None]))
+            variance[rows] = mean * (growth @ weights)
             largest[rows] = apart.max(axis=2)
         return variance / self.speed_of_sound**2, largest
 
@@ -396,7 +434,8 @@ class Eddies:
 
     @property
     def speed_spread(self) -> float:
-        """The eddies' rms speed of sound (m/s)."""
+        """The eddies' rms speed of sound (m/s), at :attr:`height_m` when they weaken
+        with height."""
         return self.speed_of_sound * math.sqrt(
             _VARIANCE * self.cn2 * self.outer_scale_m ** (2.0 / 3.0)
         )
@@ -463,7 +502,7 @@ class Eddies:
         d2 = np.hypot(reach - x, zz - zr)
         area = (width / _ALONG * dz)[:, None] / (d1 * d2 * (d1 + d2))  # (heights, along)
         q = 2.0 * k[:, None, None] * np.sin(0.5 * theta)[None]
-        spectrum = SPECTRUM_CONSTANT * _PLANE * self.cn2
+        spectrum = SPECTRUM_CONSTANT * _PLANE * self.cn2 * self.strength(z)[:, None]
         spectrum = spectrum * (q**2 + 1.0 / self.outer_scale_m**2) ** (-4.0 / 3.0)
         total = np.sum(spectrum * area[None], axis=(1, 2))
         return reach**2 * 2.0 * math.pi * k**3 * total
@@ -478,7 +517,8 @@ class Eddies:
         fall = float(profile.c[0] - profile.speed(np.array([height]))[0])
         if fall <= 0.0 or start <= 0.0:
             return np.zeros(len(centres))
-        share = SHAKEN_SHARE * (self.speed_spread / fall) ** 2
+        spread = self.speed_spread * math.sqrt(float(self.strength(height)))
+        share = SHAKEN_SHARE * (spread / fall) ** 2
         radius = equivalent_radius(start, max(zs, 0.0), max(zr, 0.0))
         k = 2.0 * math.pi * centres / float(profile.c[0])
         scale = (radius / (2.0 * k**2)) ** (1.0 / 3.0)

@@ -1838,6 +1838,33 @@ msgstr ""
 "fluctua el so"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "the same at every height"
+msgstr "igual a totes les altures"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The height above the ground the eddies' strength holds at (where it was "
+"measured or estimated, usually 2 m), from which they weaken with height; "
+"nearer the ground than the eddies' size they are taken as at that height. 0: "
+"the same strength at every height"
+msgstr ""
+"L'alçada sobre el terra a la qual val la intensitat dels remolins (on es va "
+"mesurar o estimar, normalment 2 m), des de la qual s'afebleixen amb "
+"l'alçada; més a prop del terra que la mida dels remolins es prenen com a "
+"aquella alçada. 0: la mateixa intensitat a totes les alçades"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How fast the eddies weaken with height: the power of the height over the "
+"eddies' height that their strength falls by. 0.67 (two thirds) in a neutral "
+"or stable surface layer, the usual; up to 1.33 in strong sunshine"
+msgstr ""
+"Amb quina rapidesa s'afebleixen els remolins amb l'altura: la potència de "
+"l'altura sobre l'altura dels remolins amb què cau la seva intensitat. 0,67 "
+"(dos terços) en una capa superficial neutra o estable, l'habitual; fins a "
+"1,33 amb sol fort"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Eddies"
 msgstr "Turbulència"
 
@@ -1852,6 +1879,14 @@ msgstr "Turbulència del vent"
 #: acoustic_spaces/gui/inspector.py
 msgid "Eddy size"
 msgstr "Mida dels remolins"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies' height"
+msgstr "Altura de la turbulència"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weaker with height"
+msgstr "Més feble amb l'altura"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

@@ -105,7 +105,8 @@ the ground dip, scatter sound into shadows and make it flicker (see
 atmosphere:
   preset: windy                 # neutral, windy, sunny_day or clear_night
   wind: {speed_m_s: 8, direction_deg: 90}   # 8 m/s 10 m up, blowing towards +y
-  turbulence: moderate          # weak, moderate or strong, or its structure parameters
+  turbulence: moderate          # weak, moderate or strong, or its structure parameters;
+                                # {preset: moderate, height_m: 2}: weaker with height
 ```
 
 ### BIM models (IFC)

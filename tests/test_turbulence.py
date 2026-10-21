@@ -59,6 +59,13 @@ def test_presets_and_their_fields() -> None:
         Turbulence.model_validate({"preset": "stronk"})
     with pytest.raises(ValidationError):
         Turbulence.model_validate({"wind_structure": -1})
+    # Weaker with height: the strength holds at a height and falls by a power.
+    assert moderate.height_m is None and moderate.falloff == pytest.approx(2.0 / 3.0)
+    tall = Turbulence.model_validate({"preset": "moderate", "height_m": 2, "falloff": 1.2})
+    assert tall.height_m == 2.0 and tall.falloff == 1.2 and tall.wind_structure == 0.12
+    for bad in ({"height_m": 0}, {"height_m": 200}, {"falloff": -0.1}, {"falloff": 3}):
+        with pytest.raises(ValidationError):
+            Turbulence.model_validate({"preset": "weak", **bad})
 
 
 @pytest.mark.parametrize(
@@ -67,6 +74,7 @@ def test_presets_and_their_fields() -> None:
         {"turbulence": "weak"},
         {"preset": "windy", "turbulence": {"preset": "strong", "outer_scale_m": 4}},
         {"turbulence": {"temperature_structure": 0.02, "wind_structure": 0.0}},
+        {"turbulence": {"preset": "moderate", "height_m": 2.0, "falloff": 1.0}},
     ],
 )
 def test_turbulence_is_written_as_it_reads(atmosphere) -> None:
@@ -226,6 +234,100 @@ def test_an_impulse_response_is_a_moment_of_the_eddies() -> None:
     )
 
 
+# -- weaker with height ----------------------------------------------------------------
+
+
+def test_the_eddies_strength_falls_with_height_from_the_outer_scale_up() -> None:
+    same = eddies()
+    assert np.array_equal(same.strength([0.0, 1.0, 50.0]), [1.0, 1.0, 1.0])
+    tall = dataclasses.replace(same, height_m=2.0, falloff=2.0 / 3.0)
+    z = np.array([0.0, 0.05, 0.5, 2.0, 10.0, 16.0, 160.0])
+    # No nearer the ground than the outer scale (10 m).
+    expected = (np.maximum(z, 10.0) / 2.0) ** (-2.0 / 3.0)
+    np.testing.assert_allclose(tall.strength(z), expected)
+    assert tall.strength(0.0) == tall.strength(2.0) == tall.strength(10.0) < 1.0
+    assert tall.strength(16.0) == pytest.approx(0.25)
+    assert tall.strength(160.0) == pytest.approx(0.25 * 10.0 ** (-2.0 / 3.0))
+    steep = dataclasses.replace(tall, falloff=4.0 / 3.0)
+    assert steep.strength(16.0) == pytest.approx(1.0 / 16.0)
+    # Given at the outer scale or above, the strength holds down to the ground.
+    aloft = dataclasses.replace(same, height_m=10.0)
+    np.testing.assert_allclose(aloft.strength([0.0, 1.0, 10.0]), 1.0)
+    assert aloft.strength(80.0) == pytest.approx(0.25)
+    # The scene's fields reach the engine, with the ground's height.
+    scene = in_turbulence({"preset": "strong", "height_m": 3.0, "falloff": 1.0})
+    found = Eddies.of(TraceModel.from_room(Room.from_scene(scene)), C)
+    assert found.height_m == 3.0 and found.falloff == 1.0 and found.ground == 0.0
+    assert found.strength(6.0) == found.strength(10.0) == pytest.approx(0.3)
+    assert found.strength(30.0) == pytest.approx(0.1)
+
+
+def test_paths_near_the_ground_take_the_eddies_at_the_outer_scale_and_aloft_weaker() -> None:
+    """Two paths 1 to 2 m up: with the strength given 10 m up (the outer scale) they
+    part exactly as with eddies the same at every height, with it given 0.5 m up through
+    eddies (10 / 0.5)^(-2/3) as strong; paths aloft take Cn² at their height."""
+    same = eddies(1e-5)
+    points = [
+        np.array([[0.0, 0.0, 2.0], [150.0, 0.0, 1.5]]),
+        np.array([[0.0, 0.0, 2.0], [150.0 * 2.0 / 3.5, 0.0, 0.0], [150.0, 0.0, 1.5]]),
+    ]
+    plain = same.variances(points)
+    at_outer = dataclasses.replace(same, height_m=10.0).variances(points)
+    below = dataclasses.replace(same, height_m=0.5).variances(points)
+    np.testing.assert_allclose(at_outer, plain, rtol=1e-12)
+    np.testing.assert_allclose(below, plain * 20.0 ** (-2.0 / 3.0), rtol=1e-12)
+    # Two level paths at one height above the outer scale take exactly the strength at
+    # that height.
+    level = [
+        np.array([[0.0, 0.0, 40.0], [100.0, 0.0, 40.0]]),
+        np.array([[0.0, 0.0, 40.0], [100.0, 1.0, 40.0]]),
+    ]
+    tall = dataclasses.replace(same, height_m=20.0)
+    np.testing.assert_allclose(
+        tall.variances(level)[0, 1], same.variances(level)[0, 1] * 2.0 ** (-2.0 / 3.0), rtol=1e-12
+    )
+    # The ground's height counts from the scene's coordinates.
+    raised = dataclasses.replace(tall, ground=20.0)
+    np.testing.assert_allclose(
+        raised.variances(level)[0, 1], same.variances(level)[0, 1], rtol=1e-12
+    )
+
+
+def test_eddies_weaker_with_height_scatter_less_into_a_high_shadow() -> None:
+    z = node_heights(None)
+    upward = Profile(z, 340.0 - 0.1 * z)
+    same = eddies(1e-7)
+    centres = np.array([250.0, 1000.0, 4000.0])
+    plain = same.scattered(upward, 2.0, 1.5, 300.0, centres, 60.0)
+    low = dataclasses.replace(same, height_m=0.5).scattered(upward, 2.0, 1.5, 300.0, centres, 60.0)
+    high = dataclasses.replace(same, height_m=20.0).scattered(
+        upward, 2.0, 1.5, 300.0, centres, 60.0
+    )
+    assert np.all(low > 0.0) and high.max() < 1.0
+    assert np.all(low < plain) and np.all(plain < high)
+    # The single scattering alone, from the air both see (from a metre or two up to tens
+    # of metres), takes the eddies up there: weaker than at half a metre.
+    single = same._single(upward, 2.0, 1.5, 300.0, centres)
+    weaker = dataclasses.replace(same, height_m=0.5)._single(upward, 2.0, 1.5, 300.0, centres)
+    assert np.all(weaker < single)
+
+
+def test_eddies_the_same_at_every_height_are_as_before() -> None:
+    listeners = ((150.0, 0.0, 1.5), (-120.0, 0.0, 1.5))
+    windy = {"preset": "windy"}
+    plain = simulate(Room.from_scene(in_turbulence("strong", windy, listeners=listeners)))
+    given = {"preset": "strong", "falloff": 1.0}  # a fall-off without a height: no profile
+    again = simulate(Room.from_scene(in_turbulence(given, windy, listeners=listeners)))
+    weaker = {"preset": "strong", "height_m": 2.0}
+    tall = simulate(Room.from_scene(in_turbulence(weaker, windy, listeners=listeners)))
+    for key in plain.responses:
+        assert np.array_equal(plain[key].early.wander.variance, again[key].early.wander.variance)
+        assert np.array_equal(plain[key].energy(), again[key].energy())
+        # With a height, the lit listener's paths part differently and the one in the
+        # shadow gets different scattered sound.
+        assert not np.array_equal(plain[key].energy(), tall[key].energy())
+
+
 def test_eddies_scatter_sound_into_a_shadow() -> None:
     listeners = ((-150.0, 0.0, 1.5), (80.0, 0.0, 1.5))
     windy = {"preset": "windy"}
@@ -333,3 +435,7 @@ def test_inspect_names_the_eddies(tmp_path, capsys) -> None:
     out = capsys.readouterr().out
     assert "still air: sound goes in straight lines" in out
     assert "eddies: moderate, C_T² 0.008 K² m^-2/3, C_v² 0.12 m^4/3 s^-2, 10 m across" in out
+    in_turbulence({"preset": "moderate", "height_m": 2.0}).to_yaml(path)
+    assert main(["inspect", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "C_v² 0.12 m^4/3 s^-2 at 2 m, weakening with height as z^-0.67, 10 m across" in out

@@ -478,6 +478,7 @@ atmosphere:
   preset: windy
   turbulence: moderate          # weak, moderate or strong; or the values themselves:
   # turbulence: {temperature_structure: 0.008, wind_structure: 0.12, outer_scale_m: 10}
+  # turbulence: {preset: moderate, height_m: 2}   # the strength at 2 m, weaker higher up
 ```
 
 `turbulence` goes in the `atmosphere`, also in still air (`atmosphere: {turbulence:
@@ -489,6 +490,8 @@ strong}`). Its fields:
 | `temperature_structure` | the temperature's structure parameter C_T² (K² m^-2/3): about 0.001 to 1 near the ground, the most in sunshine |
 | `wind_structure` | the wind's structure parameter C_v² (m^4/3 s^-2): about 0.01 to 1 near the ground, the more the stronger the wind |
 | `outer_scale_m` | the size of the largest eddies (m, 10 by default): some metres near the ground |
+| `height_m` | the height above the ground (m) the structure parameters hold at, from which the eddies weaken with height as (z / `height_m`)^-`falloff`, taken no nearer the ground than `outer_scale_m`; none by default: the same at every height |
+| `falloff` | how fast they weaken with height, the power of z / `height_m` (2/3 by default): 2/3 in a neutral or stable surface layer, up to 4/3 in strong sunshine |
 
 | preset | C_T² | C_v² | weather |
 |---|---:|---:|---|
@@ -496,10 +499,19 @@ strong}`). Its fields:
 | `moderate` | 0.008 | 0.12 | a breeze and some sun |
 | `strong` | 0.08 | 0.5 | a strong wind or a hot sun |
 
-These are indicative: the eddies are strongest near the ground and weaken with height,
-and they are taken here as the same at every height, at the strength near the
-ground. Without `turbulence`, or with both structure parameters 0, the results are
-those without eddies, bit for bit.
+These are indicative, for the strength near the ground, and are taken as the same at
+every height unless `height_m` is given. Real eddies are strongest near the ground and
+weaken with height: in the surface layer the structure parameters fall as z^(-2/3) in
+neutral and stable air (the wind's always, the temperature's as z^(-4/3) when the sun
+drives the air; Monin-Obukhov similarity, Wyngaard, Izumi and Collins 1971). With
+`height_m` the values hold at that height, where they were measured or estimated
+(usually 2 m), and fall above it by that power; nearer the ground than the eddies'
+outer scale the engine takes them as at the outer scale (with `height_m` 2 m and the
+default 10 m, 0.34 of the given values up to 10 m, then falling), because eddies that
+size reach that high and the thin layer of stronger ones right at the ground does not
+tell in the parabolic equation (see [Validation](validation.md#turbulence-against-a-parabolic-equation-through-random-eddies)).
+Without `turbulence`, or with both structure parameters 0, the results are those
+without eddies, bit for bit; without `height_m` they are those of earlier versions.
 
 ### How the simulation takes eddies into account
 
@@ -519,6 +531,18 @@ C_v² / c0² (Ostashev and Wilson 2015).
   within about 1 dB of the parabolic equation's on average over eight grounds and
   heights (see [Validation](validation.md#turbulence-against-a-parabolic-equation-through-random-eddies)).
   The echogram, the parameters and the coverage maps take this average.
+- **Eddies weaker with height** (`height_m`) enter where each pair of paths runs: the
+  phase difference two paths gather over a stretch grows with Cn² at the mean height of
+  the two points there, so paths aloft part slower than with eddies the same everywhere;
+  the sound scattered into a shadow takes Cn² at the height it scatters at, and the
+  shaking of the refraction Cn² at the geometric mean of the source's and the listener's
+  heights; all of them no nearer the ground than the eddies' outer scale. Against the
+  parabolic equation through eddies strengthening right down to the ground, the ground
+  dip is within 1.1 dB on average over the soft grounds and 1.4 over the hard ones (0.9
+  and 0.9 with eddies the same at every height) and the shadows within 1.3 to 2.9 dB
+  (0.7 to 1.2); taking Cn² at the mean height itself, right down to the ground, would
+  put the dip 1.8 dB off (see
+  [Validation](validation.md#turbulence-against-a-parabolic-equation-through-random-eddies)).
 - **In the parabolic equation's bands** (in wind or temperature gradients, see
   [How the simulation bends sound](#how-the-simulation-bends-sound)) the eddies blur its
   sound towards the rays' added in energy, by the rays' coherence factors.
@@ -813,7 +837,7 @@ attenuation is given, not derived from its leaves' size and density, and stems s
 upright at random.
 
 The wind, the temperature and the eddies are the same over the whole scene, and the
-eddies are as strong at every height as near the ground. The ground reacts locally: its
+eddies' largest size is the same at every height. The ground reacts locally: its
 impedance does not change with the angle sound meets it at, which holds for grass, soil
 and snow, though less for a thick layer of very soft snow.
 

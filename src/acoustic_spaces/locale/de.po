@@ -1857,6 +1857,33 @@ msgstr ""
 "wie schnell der Schall schwankt"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "the same at every height"
+msgstr "in jeder Höhe gleich"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The height above the ground the eddies' strength holds at (where it was "
+"measured or estimated, usually 2 m), from which they weaken with height; "
+"nearer the ground than the eddies' size they are taken as at that height. 0: "
+"the same strength at every height"
+msgstr ""
+"Die Höhe über dem Boden, für die die Stärke der Wirbel gilt (wo sie gemessen "
+"oder geschätzt wurde, meist 2 m), ab der sie mit der Höhe abnehmen; näher am "
+"Boden als die Größe der Wirbel gelten sie wie in dieser Höhe. 0: dieselbe "
+"Stärke in jeder Höhe"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How fast the eddies weaken with height: the power of the height over the "
+"eddies' height that their strength falls by. 0.67 (two thirds) in a neutral "
+"or stable surface layer, the usual; up to 1.33 in strong sunshine"
+msgstr ""
+"Wie schnell die Wirbel mit der Höhe schwächer werden: die Potenz der Höhe "
+"über der Höhe der Wirbel, mit der ihre Stärke abnimmt. 0,67 (zwei Drittel) "
+"in einer neutralen oder stabilen Bodenschicht, der Regelfall; bis 1,33 bei "
+"starker Sonne"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Eddies"
 msgstr "Turbulenz"
 
@@ -1871,6 +1898,14 @@ msgstr "Turbulenz des Windes"
 #: acoustic_spaces/gui/inspector.py
 msgid "Eddy size"
 msgstr "Wirbelgröße"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies' height"
+msgstr "Höhe der Turbulenz"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weaker with height"
+msgstr "Schwächer mit der Höhe"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

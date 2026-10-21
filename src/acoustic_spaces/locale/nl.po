@@ -1847,6 +1847,33 @@ msgstr ""
 "bepaalt hoe snel het geluid schommelt"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "the same at every height"
+msgstr "op elke hoogte gelijk"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The height above the ground the eddies' strength holds at (where it was "
+"measured or estimated, usually 2 m), from which they weaken with height; "
+"nearer the ground than the eddies' size they are taken as at that height. 0: "
+"the same strength at every height"
+msgstr ""
+"De hoogte boven de grond waarvoor de sterkte van de wervels geldt (waar die "
+"gemeten of geschat is, meestal 2 m), vanwaar ze met de hoogte afnemen; "
+"dichter bij de grond dan de grootte van de wervels gelden ze als op die "
+"hoogte. 0: dezelfde sterkte op elke hoogte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How fast the eddies weaken with height: the power of the height over the "
+"eddies' height that their strength falls by. 0.67 (two thirds) in a neutral "
+"or stable surface layer, the usual; up to 1.33 in strong sunshine"
+msgstr ""
+"Hoe snel de wervelingen zwakker worden met de hoogte: de macht van de hoogte "
+"over de hoogte van de wervelingen waarmee hun sterkte afneemt. 0,67 (twee "
+"derde) in een neutrale of stabiele grenslaag, het gewone geval; tot 1,33 bij "
+"felle zon"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Eddies"
 msgstr "Turbulentie"
 
@@ -1861,6 +1888,14 @@ msgstr "Turbulentie van de wind"
 #: acoustic_spaces/gui/inspector.py
 msgid "Eddy size"
 msgstr "Grootte van de wervelingen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies' height"
+msgstr "Hoogte van de turbulentie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weaker with height"
+msgstr "Zwakker met de hoogte"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
