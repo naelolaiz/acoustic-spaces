@@ -711,6 +711,14 @@ class Source(_Model):
         eq = np.zeros(len(OCTAVE_BANDS_HZ)) if self.eq_db is None else self.eq_db
         return self.gain_db + gain_levels(eq, bands)
 
+    @property
+    def sound_power_db(self) -> float:
+        """Sound power level in all (dB re 1 pW) that ``level_db`` gives, summed over its
+        bands when given per band, without the feed's gain."""
+        if isinstance(self.level_db, list):
+            return 10.0 * math.log10(float(np.sum(10.0 ** (np.asarray(self.level_db) / 10.0))))
+        return float(self.level_db)
+
     def power_db(self, bands: Resolution = "octave") -> np.ndarray:
         """Sound power level per band (dB re 1 pW), the feed's gain included: an octave's
         power is split evenly between its third octaves."""

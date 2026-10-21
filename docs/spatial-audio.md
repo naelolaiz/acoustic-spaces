@@ -62,9 +62,15 @@ acoustic-spaces play results/talker__seat-a.binaural.wav --live      # microphon
 `convolve` takes any response WAV, with any number of channels; `auralize` reads a
 `simulate` folder and mixes every source's own signal as heard at one `--listener`, in
 one of the formats it wrote (`mono`, `binaural`, `ambix3`, `5.0`, ...), keeping the
-levels the simulation gives each source. A binaural output through a SOFA file is
-written as `binaural-<file name>` (`talker__seat-a.binaural-kemar.wav` for
-`kemar.sofa`), so that it and the spherical head's can be written together; `--format
+levels the simulation gives each source. The responses carry each source's feed
+(`gain_db`, `eq_db`, `delay_ms`) but are per unit of sound power, so each signal is
+scaled by its source's `level_db` against the loudest one's in the mix (from the sound
+powers `parameters.json` lists): a front fill 18 dB below the main loudspeakers plays
+18 dB softer, each signal taken at the same level. `--equal-power` mixes them as if all
+had the loudest one's power; results written by an older version, which lack the
+powers, are mixed that way, with a note. `walkthrough` does the same. A binaural
+output through a SOFA file is written as `binaural-<file name>`
+(`talker__seat-a.binaural-kemar.wav` for `kemar.sofa`), so that it and the spherical head's can be written together; `--format
 binaural` finds it when it is the only binaural one. Dry signals are mixed down to
 mono, as sources are points, and resampled to the response's rate. The results are
 32-bit float WAV files; `--normalize` scales them to a -1 dBFS peak.

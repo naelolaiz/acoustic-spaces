@@ -638,6 +638,10 @@ def _outputs(room: Room, args: argparse.Namespace) -> list:
 
 
 THREADS_HELP = "worker threads (default: the scene's simulation.performance.threads; 0: every core)"
+EQUAL_POWER_HELP = (
+    "mix the signals as if every source had the loudest one's sound power (by default "
+    "each is scaled by its level_db)"
+)
 
 
 def _threads(value: str) -> int:
@@ -1528,7 +1532,7 @@ def _cmd_auralize(args: argparse.Namespace) -> int:
     import numpy as np
 
     from acoustic_spaces.audio import channel_mask, read_wav
-    from acoustic_spaces.render import convolve
+    from acoustic_spaces.render import convolve, power_gains
 
     try:
         listener, files = _simulated_irs(Path(args.results), args.listener, args.format)
@@ -1539,12 +1543,26 @@ def _cmd_auralize(args: argparse.Namespace) -> int:
         missing = [name for name, _, _ in pairs if name not in files]
         if missing:
             raise ValueError(f"no source {missing[0]!r}; the results have {', '.join(files)}")
+        gains = {}
+        if not args.equal_power:
+            report = json.loads((Path(args.results) / "parameters.json").read_text("utf-8"))
+            powers = {
+                name: entry["sound_power_db"] for name, entry in report.get("sources", {}).items()
+            }
+            if len(pairs) > 1 and any(name not in powers for name, _, _ in pairs):
+                print(
+                    "note: the results do not give every source's sound power (written by an "
+                    "older version), so those sources play at the loudest one's; simulate "
+                    "again for the scene's balance",
+                    file=sys.stderr,
+                )
+            gains = power_gains(powers, [name for name, _, _ in pairs])
         mix, rate, mask = None, None, None
         for name, _, wav in pairs:
             ir, ir_rate = read_wav(files[name])
             if rate is None:
                 rate, mask = ir_rate, channel_mask(files[name])
-            wet = convolve(_read_dry(wav, rate), ir)
+            wet = convolve(_read_dry(wav, rate) * gains.get(name, 1.0), ir)
             if mix is None:
                 mix = np.zeros((0, wet.shape[1]))
             if len(wet) > len(mix):
@@ -1609,7 +1627,9 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
             threads=args.threads,
             progress=lambda message: print(message, file=sys.stderr),
         )
-        wet = render_walk(walk, signals, fmt, crossfade_s=args.crossfade * 1e-3)
+        wet = render_walk(
+            walk, signals, fmt, crossfade_s=args.crossfade * 1e-3, equal_power=args.equal_power
+        )
     except (OSError, ValueError, ImportError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -2250,6 +2270,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     auralize.add_argument("--out", required=True, help="WAV file for the result")
     auralize.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")
+    auralize.add_argument("--equal-power", action="store_true", help=EQUAL_POWER_HELP)
     auralize.set_defaults(func=_cmd_auralize)
 
     walkthrough = sub.add_parser(
@@ -2315,6 +2336,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     walkthrough.add_argument("--fps", type=int, default=25, help="video frames per second")
     walkthrough.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")
+    walkthrough.add_argument("--equal-power", action="store_true", help=EQUAL_POWER_HELP)
     walkthrough.set_defaults(func=_cmd_walkthrough)
 
     play = sub.add_parser(

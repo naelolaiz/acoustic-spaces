@@ -430,7 +430,9 @@ sources:
 - `gain_db` and `eq_db` are the gain and equalizer of the source's feed. Both act on
   the sound power and on the impulse responses, so a mix made with `auralize` hears
   them. G stays the room's: it is measured against the same source, fed the same way,
-  in free field.
+  in free field. The impulse responses are per unit of sound power, and `auralize`
+  scales each source's signal by its `level_db` against the loudest source's, so a
+  mix keeps the balance between sources of different power too.
 - `delay_ms` delays everything the source sends. Its impulse responses start that much
   later, and in the coverage map of all sources together its sound arrives that much
   later, as when delay loudspeakers are aligned with a stage.

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -222,7 +223,7 @@ def test_places_less_than_10_ms_apart_have_names_of_their_own() -> None:
 def test_a_walking_source_is_heard_at_a_listener() -> None:
     sources = [
         {"name": "w", "position": [1.0, 1.0, 1.5], "walk": {"to": [[3.0, 1.0, 1.5]]}},
-        {"name": "still", "position": [7.0, 5.0, 1.5]},
+        {"name": "still", "position": [7.0, 5.0, 1.5], "level_db": 100.0},
     ]
     listeners = [{"name": "l", "position": [4, 4, 1.2]}, {"name": "m", "position": [6, 2, 1.2]}]
     room = Room.from_scene(_scene(sources=sources, listeners=listeners))
@@ -236,6 +237,10 @@ def test_a_walking_source_is_heard_at_a_listener() -> None:
     }
     out = render_walk(walked, {"w": np.ones(100), "still": np.ones(100)})
     assert out.shape[1] == 1 and np.isfinite(out).all()
+    # The walker (94 dB, under its own name at every place) plays 6 dB below "still".
+    alone = {"w": np.ones(100), "still": np.zeros(100)}
+    equal = render_walk(walked, alone, equal_power=True)
+    np.testing.assert_allclose(render_walk(walked, alone), 10.0 ** (-6.0 / 20.0) * equal)
     with pytest.raises(ValueError, match="no source 'x'"):
         render_walk(walked, {"x": np.ones(10)})
 
@@ -280,6 +285,10 @@ class _Settings:
 class _Result:
     responses: dict
     settings: _Settings = field(default_factory=_Settings)
+    # No scene sources: every signal plays at the one power.
+    room: SimpleNamespace = field(
+        default_factory=lambda: SimpleNamespace(scene=SimpleNamespace(sources=[]))
+    )
 
     def __getitem__(self, key):
         return self.responses[key]

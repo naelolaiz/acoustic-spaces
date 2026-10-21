@@ -70,3 +70,41 @@ def test_a_binaural_output_through_a_sofa_file(
     assert main([*args, "--format", "binaural", "--out", str(mix)]) == 0
     assert "talker__seat-a.binaural-kemar.wav" in capsys.readouterr().err
     assert read_wav(mix)[0].shape[1] == 2
+
+
+def test_auralize_mixes_the_sources_at_their_power(
+    two_sources, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The report gives each source's sound power, as the responses are per unit of it.
+    report = write_results(two_sources, tmp_path / "out", [Mono()])
+    assert report["sources"] == {
+        "talker": {"sound_power_db": 94.0},
+        "radio": {"sound_power_db": 74.0},
+    }
+    click = np.zeros((4800, 1))
+    click[0] = 0.5
+    write_wav(tmp_path / "dry.wav", click, 48_000)
+    talker = read_wav(tmp_path / "out" / "talker__seat-a.wav")[0]
+    radio = read_wav(tmp_path / "out" / "radio__seat-a.wav")[0]
+    n = max(len(talker), len(radio))
+    expected = np.zeros((n + 4799, 1))
+    expected[: len(talker)] += 0.5 * talker
+    expected[: len(radio)] += 0.05 * radio  # 20 dB less power
+
+    def mix(*extra: str) -> np.ndarray:
+        signals = [f"{name}={tmp_path / 'dry.wav'}" for name in ("talker", "radio")]
+        out = tmp_path / "mix.wav"
+        assert main(["auralize", str(tmp_path / "out"), *signals, "--out", str(out), *extra]) == 0
+        return read_wav(out)[0]
+
+    np.testing.assert_allclose(mix(), expected, atol=1e-6)
+    expected[: len(radio)] += 0.45 * radio
+    np.testing.assert_allclose(mix("--equal-power"), expected, atol=1e-6)
+    # Results written before the report gave the powers mix at one power, and say so.
+    path = tmp_path / "out" / REPORT_FILE
+    old = json.loads(path.read_text(encoding="utf-8"))
+    del old["sources"]
+    path.write_text(json.dumps(old), encoding="utf-8")
+    capsys.readouterr()
+    np.testing.assert_allclose(mix(), expected, atol=1e-6)
+    assert "simulate again" in capsys.readouterr().err

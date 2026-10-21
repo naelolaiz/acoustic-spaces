@@ -20,6 +20,16 @@
 - A reflection right where the sound came from, on a surface over about 100 m across,
   printed an overflow warning (an error under `-W error`). The results were right and
   stay the same.
+- `auralize` and `walkthrough` (and `render.auralize` and `walkthrough.render_walk`)
+  mix the sources at their sound power. The impulse responses carry each source's feed
+  (gain, equalizer, delay) but are per unit of sound power, and the mix played every
+  source as if it had the same `level_db`: in a sound system with fills 18 dB below
+  its main loudspeakers, the fills came out 18 dB too loud. Each signal is now scaled
+  by its source's `level_db` against the loudest one's in the mix; `--equal-power`
+  (`equal_power=True`) keeps the old mix. A mix of sources of one power, or of one
+  source, is unchanged. `parameters.json` lists each source's sound power
+  (`sources`), which `auralize` reads; results written before it are mixed at one
+  power, with a note.
 
 ## 3.2.3
 
