@@ -1572,6 +1572,122 @@ TURBULENCE_PRESETS: dict[str, dict] = {
 }
 
 
+def _check_table_rows(table) -> None:
+    heights = [row[0] for row in table]
+    if len(heights) < 2 or heights[0] < 0.0 or np.any(np.diff(heights) <= 0.0):
+        raise ValueError("an atmosphere table has two rows or more, by height from the ground up")
+    if any(row[2] < 0.0 for row in table):
+        raise ValueError("an atmosphere table's wind speeds are not negative")
+
+
+def _check_preset(preset: str) -> None:
+    if preset not in ATMOSPHERE_PRESETS:
+        close = difflib.get_close_matches(str(preset), list(ATMOSPHERE_PRESETS), n=1)
+        hint = f"; did you mean {close[0]}?" if close else ""
+        raise ValueError(
+            f"no atmosphere preset named {preset!r}{hint} (the presets are "
+            f"{', '.join(ATMOSPHERE_PRESETS)})"
+        )
+
+
+class ZoneWind(_Model):
+    """The wind over a weather zone: what it gives replaces the atmosphere's wind, and
+    what it leaves out (None) stays the atmosphere's."""
+
+    speed_m_s: float | None = Field(
+        default=None, ge=0.0, le=40.0, description="speed at height_m (m/s); None: the atmosphere's"
+    )
+    direction_deg: float | None = Field(
+        default=None,
+        description=(
+            "the way it blows to, in degrees counterclockwise from +x seen from above; "
+            "None: the atmosphere's"
+        ),
+    )
+    height_m: PositiveFloat | None = Field(
+        default=None, description="the height the speed is at (m); None: the atmosphere's"
+    )
+    profile: Literal["log", "linear", "constant"] | None = Field(
+        default=None, description="log, linear or constant; None: the atmosphere's"
+    )
+
+
+class WeatherZone(_Model):
+    """A part of the scene over which the weather differs: the wind slowed in the lee of
+    buildings or over a wood, a sea breeze over the water, an inversion over a lake. A
+    polygon on the ground, in the geometry's units; where zones overlap the first wins,
+    and outside every zone the atmosphere's own weather holds. A ``preset`` gives the
+    zone that weather whole, its wind blowing the atmosphere's way unless the zone says
+    otherwise; without one, a field left out stays the atmosphere's, and a wind given
+    keeps the atmosphere's direction, height and profile where it leaves them out. A
+    zone that gives the temperature's gradient or log term drops the atmosphere's
+    table, and one that gives a table drops them. The eddies are the atmosphere's."""
+
+    name: str | None = Field(default=None, description="None: weather_1, weather_2...")
+    polygon: list[tuple[float, float]] = Field(
+        min_length=3, description="(x, y) corners of the zone, in order"
+    )
+    preset: str | None = Field(
+        default=None,
+        description="a weather of its own to start from: " + ", ".join(ATMOSPHERE_PRESETS),
+    )
+    wind: ZoneWind | None = Field(
+        default=None,
+        description=(
+            "the wind over the zone, what it gives replacing the atmosphere's; None: the "
+            "atmosphere's (none with a preset)"
+        ),
+    )
+    temperature_gradient_k_m: float | None = Field(
+        default=None,
+        ge=-0.2,
+        le=0.2,
+        description=(
+            "how the temperature changes per metre of height (K/m); None: the atmosphere's"
+        ),
+    )
+    temperature_log_k: float | None = Field(
+        default=None,
+        ge=-5.0,
+        le=5.0,
+        description=(
+            "a change of temperature fastest near the ground, in K times ln(1 + z / "
+            "roughness_m); None: the atmosphere's"
+        ),
+    )
+    roughness_m: PositiveFloat | None = Field(
+        default=None,
+        le=2.0,
+        description="the ground's roughness length (m) in the zone; None: the atmosphere's",
+    )
+    table: list[tuple[float, float, float]] | None = Field(
+        default=None,
+        description=(
+            "a measured profile over the zone in place of the formulas: [height above the "
+            "ground (m), temperature (°C), wind speed (m/s)] rows, by height"
+        ),
+    )
+    temperature_c: float | None = Field(
+        default=None,
+        ge=-20.0,
+        le=50.0,
+        description="the temperature at the ground in the zone (°C); None: the scene's air's",
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> WeatherZone:
+        if self.preset is not None:
+            _check_preset(self.preset)
+        if self.table is not None:
+            _check_table_rows(self.table)
+            if self.temperature_gradient_k_m is not None or self.temperature_log_k is not None:
+                raise ValueError(
+                    "give a weather zone a table or the temperature's gradient and log "
+                    "terms, not both"
+                )
+        return self
+
+
 class Turbulence(_Model):
     """The eddies of the wind and of the temperature, which make sound outdoors flicker:
     the paths of one sound that take different ways stop adding in step (the ground dip
@@ -1693,19 +1809,20 @@ class Atmosphere(_Model):
         default=None,
         description="the eddies of the wind and of the temperature; None: none",
     )
+    zones: list[WeatherZone] | None = Field(
+        default=None,
+        description=(
+            "parts of the scene with weather of their own (the wind slowed in the lee of "
+            "buildings, a breeze over the water); outside them the weather above holds"
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod
     def _from_preset(cls, data):
         if isinstance(data, dict) and data.get("preset") is not None:
             preset = data["preset"]
-            if preset not in ATMOSPHERE_PRESETS:
-                close = difflib.get_close_matches(str(preset), list(ATMOSPHERE_PRESETS), n=1)
-                hint = f"; did you mean {close[0]}?" if close else ""
-                raise ValueError(
-                    f"no atmosphere preset named {preset!r}{hint} (the presets are "
-                    f"{', '.join(ATMOSPHERE_PRESETS)})"
-                )
+            _check_preset(preset)
             given = dict(data)
             data = {**ATMOSPHERE_PRESETS[preset], **given}
             if isinstance(given.get("wind"), dict) and "wind" in ATMOSPHERE_PRESETS[preset]:
@@ -1722,14 +1839,68 @@ class Atmosphere(_Model):
             raise ValueError(
                 "give the atmosphere a table or the temperature's gradient and log terms, not both"
             )
-        heights = [row[0] for row in self.table]
-        if len(heights) < 2 or heights[0] < 0.0 or np.any(np.diff(heights) <= 0.0):
-            raise ValueError(
-                "an atmosphere table has two rows or more, by height from the ground up"
-            )
-        if any(row[2] < 0.0 for row in self.table):
-            raise ValueError("an atmosphere table's wind speeds are not negative")
+        _check_table_rows(self.table)
         return self
+
+    def zone_names(self) -> list[str]:
+        """The weather zones' names, ``weather_<n>`` for those without one."""
+        return [z.name or f"weather_{k + 1}" for k, z in enumerate(self.zones or [])]
+
+    def weathers(self) -> list[Atmosphere]:
+        """The atmosphere's own weather (first) and each zone's, as an atmosphere each,
+        without zones or eddies: a zone's preset gives it that weather whole, and its
+        other fields replace the atmosphere's (see :class:`WeatherZone`)."""
+        own = self.model_copy(update={"zones": None, "turbulence": None})
+        return [own, *(self._resolved(zone) for zone in self.zones or [])]
+
+    def _resolved(self, zone: WeatherZone) -> Atmosphere:
+        base = None if self.wind is None else self.wind.model_dump()
+        if zone.preset is not None:
+            values: dict = {
+                "preset": zone.preset,
+                "wind": None,
+                "temperature_gradient_k_m": 0.0,
+                "temperature_log_k": 0.0,
+                "table": None,
+                **{
+                    k: (dict(v) if isinstance(v, dict) else v)
+                    for k, v in ATMOSPHERE_PRESETS[zone.preset].items()
+                },
+            }
+            if isinstance(values["wind"], dict) and base is not None:
+                # The preset's wind blows the atmosphere's way, at its height.
+                values["wind"] = {**base, **values["wind"]}
+        else:
+            values = {
+                "wind": base,
+                "temperature_gradient_k_m": self.temperature_gradient_k_m,
+                "temperature_log_k": self.temperature_log_k,
+                "table": self.table,
+            }
+        values["roughness_m"] = self.roughness_m
+        if zone.wind is not None:
+            given = {k: v for k, v in zone.wind.model_dump().items() if v is not None}
+            start = values["wind"] if isinstance(values["wind"], dict) else base or {}
+            values["wind"] = {**start, **given}
+        for name in ("temperature_gradient_k_m", "temperature_log_k", "roughness_m"):
+            if getattr(zone, name) is not None:
+                values[name] = getattr(zone, name)
+        if zone.table is not None:
+            values["table"] = zone.table
+        elif zone.temperature_gradient_k_m is not None or zone.temperature_log_k is not None:
+            values["table"] = None
+        if values["table"] is not None:
+            values["temperature_gradient_k_m"] = values["temperature_log_k"] = 0.0
+        return Atmosphere(**values)
+
+    def ground_temperatures(self, ground_c: float) -> list[float]:
+        """The temperature at the ground (°C) under the atmosphere's own weather
+        (``ground_c``, the scene's) and in each zone, in :meth:`weathers` order."""
+        zones = self.zones or []
+        return [
+            ground_c,
+            *(ground_c if z.temperature_c is None else z.temperature_c for z in zones),
+        ]
 
     def to_wind(self) -> np.ndarray:
         """(2,) the unit vector the wind blows along."""
@@ -1781,7 +1952,10 @@ class Atmosphere(_Model):
 
     @property
     def still(self) -> bool:
-        """Whether sound goes in straight lines: no wind and one temperature."""
+        """Whether sound goes in straight lines: no wind and one temperature, over the
+        whole scene (the zones too)."""
+        if self.zones:
+            return all(w.still for w in self.weathers())
         if self.table is not None:
             rows = np.asarray(self.table, dtype=float)
             return bool(np.all(rows[:, 1] == rows[0, 1]) and np.all(rows[:, 2] == 0.0))

@@ -179,6 +179,14 @@ Outdoor acoustics, in steps:
   grazing incidence, the wave solver locally. Checked against the fast field program
   with the ground's reflection at every angle (`validation/ground_reflection.py
   --extended`). Not with `two_parameter`; `local` by default, as before.
+- [x] O15 Weather that changes over the scene: `atmosphere.zones`, polygons in the plan
+  with weather of their own (the lee of buildings, a lake under an inversion, a warm
+  car park), taking what they leave out from the scene's; the parabolic equation and
+  the wave solver go through them, the early paths over the mean profile along their
+  way and the late rays through the mean over the scene. Checked against a
+  Crank-Nicholson parabolic equation marched through the zones
+  (`validation/weather_zones.py`); drawn and set in the editor. Without zones nothing
+  changes.
 - [ ] A wide-angle parabolic equation (split-step Padé) for gradients that bend sound
   through large angles over several kilometres, where the narrow-angle one strays.
 

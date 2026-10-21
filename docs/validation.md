@@ -1727,6 +1727,107 @@ further), its matched layer within 1e-5, and the 63 and 125 Hz bands of a scene 
 sound speed rises from 337 m/s at the ground to 402 m/s at the top of the grid within
 1e-5, the two naming the same slowest and fastest speed of sound.
 
+## Weather zones against a Crank-Nicholson parabolic equation
+
+`validation/weather_zones.py` checks the engine where the weather changes on the way
+(see [Weather zones](outdoor.md#weather-zones)). The reference is a Crank-Nicholson
+parabolic equation written for the script (Salomons, *Computational atmospheric
+acoustics*, appendix G): a narrow-angle equation marched in steps of a quarter
+wavelength on a grid of a tenth of a wavelength, with the ground's impedance as its
+lower boundary, a Gaussian starter and an absorbing layer at the top, which takes the
+speed of sound of whichever zone each step lies in. The script first checks the
+reference itself: against the exact solution for the reflection off grass in still air
+it is within 0.17 dB at 63 to 500 Hz out to 800 m, and against the engine's own
+parabolic equation in the `windy` preset over the whole way it is within 0.5 dB to 400
+m, and 1.4 dB at 500 Hz 800 m out, where the two equations' starters and absorbing
+layers part.
+
+The source is 2 m high and the listener 1.5 m, over grass (flow resistivity 200 kPa
+s/m²), and the weather changes 150 m from the source:
+
+| case | from the source | past 150 m |
+|---|---|---|
+| shelter downwind | `windy` (5 m/s 10 m up, towards the listener) | 0.5 m/s |
+| gust downwind | 0.5 m/s | 5 m/s |
+| shelter upwind | 5 m/s towards the source | 0.5 m/s |
+| inversion past a lake shore | `neutral` (still air) | `clear_night` (air warming with height) |
+| cool water downwind | `windy` | from 100 to 300 m the ground at 12 °C instead of 20 |
+
+**The parabolic equation through the zones.** The engine's parabolic equation marches
+through the zones, changing its speed of sound where its path crosses a border. The
+level re free field (dB) in pure tones, and in brackets the engine's difference from
+the reference:
+
+| case, tone | 100 m | 200 m | 400 m | 800 m |
+|---|---|---|---|---|
+| shelter downwind, 63 Hz | 6.67 (-0.22) | 7.14 (-0.10) | 6.65 (-0.08) | 5.49 (-0.08) |
+| shelter downwind, 125 Hz | 3.16 (+0.09) | 0.97 (+0.14) | -4.63 (+0.04) | -15.71 (-0.22) |
+| shelter downwind, 250 Hz | -21.10 (-0.34) | -22.24 (-0.17) | -25.09 (-0.24) | -28.48 (-0.38) |
+| shelter downwind, 500 Hz | -4.54 (+0.01) | -4.37 (+0.13) | -7.94 (+0.10) | -9.24 (+0.08) |
+| gust downwind, 63 Hz | 5.50 (-0.02) | 6.09 (-0.14) | 7.35 (-0.14) | 4.00 (-0.35) |
+| gust downwind, 125 Hz | 2.41 (+0.02) | 1.11 (-0.04) | -7.70 (+0.17) | -12.62 (+0.03) |
+| gust downwind, 250 Hz | -10.56 (-0.04) | -25.63 (-0.53) | -23.87 (+0.39) | -17.53 (+0.18) |
+| gust downwind, 500 Hz | -10.77 (-0.07) | -11.59 (-0.12) | -2.05 (-0.02) | 1.88 (-0.36) |
+| shelter upwind, 63 Hz | 3.77 (+0.16) | 2.59 (+0.01) | 1.97 (+0.02) | 0.45 (+0.02) |
+| shelter upwind, 125 Hz | 0.53 (-0.16) | -2.60 (-0.26) | -5.98 (-0.23) | -12.88 (-0.20) |
+| shelter upwind, 250 Hz | -8.22 (-0.01) | -17.69 (+0.08) | -29.33 (+0.07) | -39.75 (-0.12) |
+| shelter upwind, 500 Hz | -17.84 (+0.04) | -35.34 (+0.02) | -47.37 (-0.09) | -61.17 (-0.14) |
+| inversion past a lake shore, 63 Hz | 5.36 (+0.00) | 5.43 (-0.03) | 5.71 (-0.01) | 5.08 (-0.02) |
+| inversion past a lake shore, 125 Hz | 2.29 (+0.01) | 0.69 (-0.00) | -3.31 (+0.05) | -16.52 (-0.12) |
+| inversion past a lake shore, 250 Hz | -10.04 (-0.02) | -20.50 (-0.19) | -27.08 (-0.01) | -26.87 (-0.02) |
+| inversion past a lake shore, 500 Hz | -11.44 (-0.07) | -15.67 (-0.11) | -14.45 (-0.11) | -8.31 (-0.07) |
+| cool water downwind, 63 Hz | 6.67 (-0.22) | 7.70 (-0.23) | 8.43 (-0.21) | 4.36 (-0.42) |
+| cool water downwind, 125 Hz | 3.16 (+0.09) | 1.03 (+0.18) | -14.52 (+0.73) | -15.33 (+0.22) |
+| cool water downwind, 250 Hz | -21.10 (-0.34) | -24.13 (-0.18) | -21.07 (+0.17) | -15.33 (-0.01) |
+| cool water downwind, 500 Hz | -4.54 (+0.01) | -0.95 (-0.07) | 3.66 (+0.01) | 0.89 (-1.19) |
+
+The engine is within 0.15 dB of the reference on average and 1.19 dB at most, at 500
+Hz 800 m out over the cool water, where the two equations already part by 1.4 dB in
+the uniform wind; the zones themselves add nothing to that. The shelter downwind
+bends the sound down over the first 150 m and then lets it spread, 13 dB less than
+the uniform wind at 250 Hz 800 m out and 10 dB less at 500 Hz, where the wind would
+bring the sound back to the ground; the gust turns still air's ground dip into the
+wind's pattern past the border; the inversion past the shore carries 20 dB more than
+still air at 500 Hz 800 m out; and the cool water deepens the 125 Hz dip 400 m out by
+1.5 dB.
+
+**The mean profile along the way.** The early paths bend through one profile, the mean
+along their way, each zone's weighted by the length of the way over it. The parabolic
+equation through that mean profile against the parabolic equation through the zones,
+in the bands the rays give (500 Hz, 1 kHz and 2 kHz, averaged over the band's
+frequencies), from 200 m on (nearer, the way lies under one weather); the level re free
+field through the zones, and in brackets the mean profile's difference from it:
+
+| case, band | 200 m | 400 m | 800 m |
+|---|---|---|---|
+| shelter downwind, 500 Hz | -1.35 (+0.51) | -5.21 (+3.33) | -6.13 (+4.22) |
+| shelter downwind, 1 kHz | 3.11 (+1.38) | 3.87 (-0.72) | 4.06 (+1.75) |
+| shelter downwind, 2 kHz | 3.45 (+1.84) | 1.96 (+3.60) | 0.33 (+6.57) |
+| gust downwind, 500 Hz | -9.12 (+0.72) | -0.49 (+3.32) | -0.93 (+1.97) |
+| gust downwind, 1 kHz | 3.22 (+1.28) | 2.24 (+1.25) | -0.88 (-2.71) |
+| gust downwind, 2 kHz | 1.75 (+3.78) | -0.30 (+3.55) | -0.33 (-1.23) |
+| shelter upwind, 500 Hz | -34.56 (+1.97) | -46.14 | -58.52 |
+| shelter upwind, 1 kHz | -62.73 | -77.33 | -89.45 |
+| shelter upwind, 2 kHz | -58.80 | -79.26 | -96.83 |
+| inversion past a lake shore, 500 Hz | -13.92 (+0.29) | -11.21 (-0.02) | -4.08 (+1.21) |
+| inversion past a lake shore, 1 kHz | 1.91 (+2.02) | 5.98 (+2.05) | 3.63 (+3.32) |
+| inversion past a lake shore, 2 kHz | 3.67 (-0.13) | 5.80 (+1.65) | 4.04 (+2.48) |
+| cool water downwind, 500 Hz | 1.99 (+0.08) | 0.97 (+0.29) | 1.21 (-0.02) |
+| cool water downwind, 1 kHz | 3.47 (-0.06) | -0.66 (-0.01) | -2.39 (-0.10) |
+| cool water downwind, 2 kHz | 3.11 (+0.18) | 1.89 (-0.34) | -1.10 (-0.11) |
+
+Over the 37 points above -40 dB re free field the mean profile is within 1.6 dB on
+average and 6.6 dB at most; the 8 points deeper in the upwind shadow are left out, as
+sound there is inaudible next to any other and the parabolic equation itself is at
+the floor of its absorbing layer. Where only the temperature changes on the way (the
+cool water) the mean profile is within 0.3 dB. Where the wind changes it gives 1 to 4
+dB more sound, 6.6 at most at 2 kHz 800 m downwind of the shelter: one profile cannot
+both bend the sound down over the first 150 m and let it go straight after, so it
+bends it a little the whole way and keeps the ground's reflection in step with the
+direct sound further out. That is the cost of the equivalent profile the standards
+take (Nord2000, Harmonoise), and the reason the bands up to 500 Hz, and up to 2 kHz in
+a shadow, come from the parabolic equation, which goes through the zones.
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -1968,7 +2069,10 @@ its peak (single precision).
   [Outdoor sound in wind](#outdoor-sound-in-wind-against-a-fast-field-program)), not
   with measurements; the benchmark's gradients that go on to a kilometre up bend sound
   through angles the engine's parabolic equation does not carry, so beyond 1 to 2 km
-  its pure tones stray there, though the bands it reports hold to 2 km.
+  its pure tones stray there, though the bands it reports hold to 2 km. Weather that
+  changes over the scene is checked against a parabolic equation marched through the
+  zones, not against measurements, and a zone's border is a step (see
+  [Weather zones](#weather-zones-against-a-crank-nicholson-parabolic-equation)).
   Vegetation is checked against a particle simulation of the same model, not against
   measurements through trees; its foliage takes ISO 9613-2's rates, which the
   standard gives for depths of 20 to 200 m, or leaves as thin rigid discs, whose
@@ -2011,6 +2115,7 @@ python validation/insertion_loss.py --json insertion_loss.json
 python validation/terrain.py --json terrain.json
 python validation/ffp.py --json ffp.json
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
+python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/outdoor_gpu.py   # the outdoor examples on each device: levels and centre times
@@ -2027,7 +2132,8 @@ them the wave solver's, 2 the parabolic equation's), the outdoor measurements' a
 (3 with turbulence), the turbulence's about 7, the vegetation's about 6, the wave
 solver's outdoors about 18, the outdoor results' about 3, the terrain's about 4.5, the
 leaves' about 2, the fast field program's about 4, the benchmark's about 55 (much
-longer with `--far`) and each BRAS
+longer with `--far`), the weather zones' about 9 (2 the parabolic equation's, 7 the
+mean profile's) and each BRAS
 run about 30 minutes (85 in third-octave bands, or half that per room with
 `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it

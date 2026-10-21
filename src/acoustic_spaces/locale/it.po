@@ -239,6 +239,15 @@ msgstr ""
 "Nuova zona del terreno con {count} vertici; assegnare un materiale proprio "
 "alla sua superficie nell'albero della scena."
 
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New weather zone with {count} corners; choose it under Weather of in the "
+"scene's entry to give it wind and temperature of its own."
+msgstr ""
+"Nuova zona meteorologica con {count} vertici; sceglierla in Tempo di, nella "
+"voce della scena, per darle vento e temperatura propri."
+
 #. Translators: {patterns} is the list of model file patterns, such as *.obj *.dxf.
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -1335,6 +1344,10 @@ msgstr "aggiungi vegetazione"
 msgid "add zone"
 msgstr "aggiungi zona"
 
+#: acoustic_spaces/gui/document.py
+msgid "add weather zone"
+msgstr "aggiungi zona meteorologica"
+
 #: acoustic_spaces/gui/document.py acoustic_spaces/gui/inspector.py
 msgid "change ground"
 msgstr "modifica terreno"
@@ -1698,12 +1711,31 @@ msgstr "Vento e temperatura"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Whose weather the fields below show and change: the whole scene's, or a "
+"weather zone's, a part of the scene with wind and temperature of its own "
+"(the lee of buildings, where the wind drops; a lake, over which the air lies "
+"cooler), drawn in the plan. Outside the zones the scene's weather holds, and "
+"the eddies are the scene's everywhere"
+msgstr ""
+"Di chi è il tempo che i campi qui sotto mostrano e cambiano: di tutta la "
+"scena o di una zona meteorologica, una parte della scena con vento e "
+"temperatura propri (il sottovento degli edifici, dove il vento cala; un "
+"lago, sul quale l'aria è più fresca), disegnata nella pianta. Fuori dalle "
+"zone vale il tempo della scena, e la turbolenza è quella della scena ovunque"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weather of"
+msgstr "Tempo di"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "The weather, which bends sound outdoors: (none) or neutral, still air and "
 "sound in straight lines; windy, 5 m/s 10 m up, bending sound down downwind "
 "and up upwind; sunny_day, air cooling with height, bending sound up into a "
 "shadow a few hundred metres away; clear_night, air warming with height, "
 "bending sound down; custom, the values below. Changing one of them makes the "
-"weather custom. The air temperature above is the ground's"
+"weather custom. The air temperature above is the ground's. For a weather "
+"zone, (none) is the scene's weather unchanged"
 msgstr ""
 "Il tempo, che curva il suono all'aperto: (nessuno) o neutro, aria calma e "
 "suono in linea retta; ventoso, 5 m/s a 10 m d'altezza, che curva il suono "
@@ -1712,7 +1744,8 @@ msgstr ""
 "a qualche centinaio di metri; notte serena, aria che si riscalda con "
 "l'altezza, che curva il suono verso il basso; personalizzato, i valori qui "
 "sotto. Cambiarne uno rende il tempo personalizzato. La temperatura dell'aria "
-"qui sopra è quella del terreno"
+"qui sopra è quella del terreno. Per una zona meteorologica, (nessuno) è il "
+"tempo della scena invariato"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Weather"
@@ -1802,6 +1835,45 @@ msgstr "Temperatura vicino al terreno"
 #: acoustic_spaces/gui/inspector.py
 msgid "Roughness"
 msgstr "Rugosità"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The temperature at the ground in the weather zone (°C), where it differs "
+"from the scene's air temperature: cooler over water, warmer over a car park"
+msgstr ""
+"La temperatura al suolo nella zona meteorologica (°C), dove differisce dalla "
+"temperatura dell'aria della scena: più fresca sull'acqua, più calda su un "
+"parcheggio"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground temperature"
+msgstr "Temperatura del terreno"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add weather zone"
+msgstr "Aggiungi zona meteorologica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw a part of the scene with weather of its own in the plan, corner by "
+"corner, and close it on the first corner; then choose it under Weather of "
+"and give it its wind and temperature"
+msgstr ""
+"Disegnare nella pianta una parte della scena con tempo proprio, vertice per "
+"vertice, e chiuderla sul primo; poi sceglierla in Tempo di e darle il suo "
+"vento e la sua temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove weather zone"
+msgstr "Rimuovi zona meteorologica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the weather zone chosen under Weather of: the scene's weather holds "
+"there"
+msgstr ""
+"Rimuovere la zona meteorologica scelta in Tempo di: lì vale il tempo della "
+"scena"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -1928,6 +2000,14 @@ msgstr ""
 "sopra il terreno: trasversale al vento, sottovento e controvento"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "the whole scene"
+msgstr "tutta la scena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "as the whole scene"
+msgstr "come tutta la scena"
+
+#: acoustic_spaces/gui/inspector.py
 #, python-brace-format
 msgid "Measured profile at {count} height, from the scene file"
 msgid_plural "Measured profile at {count} heights, from the scene file"
@@ -1989,6 +2069,14 @@ msgstr "modifica aria"
 #: acoustic_spaces/gui/inspector.py
 msgid "change the weather"
 msgstr "modifica il tempo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather zone"
+msgstr "cambia la zona meteorologica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove weather zone"
+msgstr "rimuovi zona meteorologica"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change the eddies"
@@ -4357,6 +4445,11 @@ msgid "Not a zone yet: {problem}"
 msgstr "La zona non è ancora valida: {problem}"
 
 #: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a weather zone yet: {problem}"
+msgstr "La zona meteorologica non è ancora valida: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
 msgid "Not a barrier yet: it needs two points at least"
 msgstr "La barriera non è ancora valida: servono almeno due punti"
 
@@ -4442,6 +4535,15 @@ msgid ""
 msgstr ""
 "Fare clic sui vertici della zona del terreno; chiuderla sul primo vertice, "
 "con un doppio clic o Invio. Backspace rimuove l'ultimo vertice, Esc "
+"interrompe."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the new weather zone; close it on the first corner, "
+"with a double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"Fare clic sui vertici della nuova zona meteorologica; chiuderla sul primo "
+"vertice, con un doppio clic o Invio. Backspace rimuove l'ultimo vertice, Esc "
 "interrompe."
 
 #: acoustic_spaces/gui/plan_view.py

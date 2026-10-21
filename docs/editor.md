@@ -199,8 +199,14 @@ ground, their **Eddies** with their strength, size, **Eddies' height** (the heig
 strength holds at; 0: the same at every height) and **Weaker with height** (see
 [Turbulence](outdoor.md#turbulence)), and **Show the
 profile**, a plot of them and of the speed of sound (see
-[Wind and temperature](outdoor.md#wind-and-temperature)). **Draw room** replaces an
-outdoor scene with a floor plan, after asking.
+[Wind and temperature](outdoor.md#wind-and-temperature)). **Weather of** chooses whose
+weather the fields show and change, the whole scene's or a
+[weather zone](outdoor.md#weather-zones)'s: **Add weather zone** draws one in the plan
+like a zone, dotted in sky blue with its name, and **Remove weather zone** drops the
+chosen one. A zone's weather starts as the scene's, its fields are those it changes,
+(none) under **Weather** leaves the scene's weather unchanged there, and **Ground
+temperature** gives the ground in the zone a temperature of its own. **Draw room**
+replaces an outdoor scene with a floor plan, after asking.
 
 ## Exporting to Blender
 

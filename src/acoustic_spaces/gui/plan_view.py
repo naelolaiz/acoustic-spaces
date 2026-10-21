@@ -47,7 +47,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from acoustic_spaces.geometry import plan_problem
+from acoustic_spaces.geometry import UNIT_SCALE, plan_problem
 from acoustic_spaces.gui.document import (
     LISTENER_HEIGHT,
     NEW_PART_SIZES,
@@ -91,12 +91,13 @@ GRID_PIXELS = 60
 MARGIN_PIXELS = 40
 #: Colour of a floor plan that cannot be (walls that cross).
 INVALID_COLOUR = "#ef476f"
+WEATHER_COLOUR = "#4cc9f0"
 #: What a drawing is for: a room's floor plan, or outdoors a building's footprint, a
 #: barrier's path, a belt of trees' footprint, a hedge's path, where a lone tree stands
 #: or a ground zone's outline; those that close into a polygon, and those that are a
 #: path from end to end.
-PURPOSES = ("room", "building", "barrier", "belt", "hedge", "tree", "zone")
-CLOSED = frozenset({"room", "building", "belt", "zone"})
+PURPOSES = ("room", "building", "barrier", "belt", "hedge", "tree", "zone", "weather")
+CLOSED = frozenset({"room", "building", "belt", "zone", "weather"})
 PATHS = frozenset({"barrier", "hedge"})
 GRID_COLOURS = ("#1d1e25", "#2b2d37", "#4a4d5a")  # minor, major, axes
 
@@ -106,6 +107,7 @@ NOT_YET = {
     "building": N_("Not a building yet: {problem}"),
     "belt": N_("Not a belt of trees yet: {problem}"),
     "zone": N_("Not a zone yet: {problem}"),
+    "weather": N_("Not a weather zone yet: {problem}"),
     "barrier": N_("Not a barrier yet: it needs two points at least"),
     "hedge": N_("Not a hedge yet: it needs two points at least"),
 }
@@ -146,6 +148,10 @@ HINTS = {
     "tree": N_("Click where the tree stands; Esc cancels."),
     "zone": N_(
         "Click the corners of the ground zone; close it on the first corner, with a "
+        "double-click or Enter. Backspace takes a corner back, Esc stops."
+    ),
+    "weather": N_(
+        "Click the corners of the new weather zone; close it on the first corner, with a "
         "double-click or Enter. Backspace takes a corner back, Esc stops."
     ),
     "sources": N_("Click where the new source goes; Esc cancels."),
@@ -819,6 +825,19 @@ class PlanCanvas(QWidget):
             painter.setBrush(_qcolor(colour, 40))
             painter.drawPolygon(outline)
             self._label(painter, outline.boundingRect().center(), name, colour)
+        atmosphere = self.room.scene.atmosphere
+        if atmosphere is not None and atmosphere.zones:
+            # The weather zones, dotted in sky blue.
+            scale = UNIT_SCALE[self.room.scene.geometry.units or "m"]
+            pen = QPen(_qcolor(WEATHER_COLOUR, 220), 1.5)
+            pen.setStyle(Qt.PenStyle.DotLine)
+            painter.setPen(pen)
+            painter.setBrush(_qcolor(WEATHER_COLOUR, 20))
+            names = atmosphere.zone_names()
+            for name, zone in zip(names, atmosphere.zones, strict=True):
+                outline = QPolygonF([self.to_screen(scale * np.asarray(c)) for c in zone.polygon])
+                painter.drawPolygon(outline)
+                self._label(painter, outline.boundingRect().center(), name, WEATHER_COLOUR)
         pen = QPen(_qcolor(VEGETATION_COLOUR, 220), 1.5)
         pen.setStyle(Qt.PenStyle.DashLine)
         painter.setPen(pen)

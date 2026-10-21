@@ -306,63 +306,118 @@ class _Weather:
     """The effective speed of sound over an outdoor scene's grid, from the source at
     ``source``: the still air's at each height above the ground (``ground``, its
     temperature ``ground_c`` °C), plus the wind's component along the horizontal from
-    the source (none straight above it)."""
+    the source (none straight above it). Where the weather changes from place to place
+    (``zones``, a :class:`~acoustic_spaces.engine.weather.Weather`), each cell takes
+    the weather it stands over."""
 
-    def __init__(self, atmosphere, ground_c: float, ground: float, source: np.ndarray):
+    def __init__(self, atmosphere, ground_c: float, ground: float, source: np.ndarray, zones=None):
         self.atmosphere = atmosphere
         self.ground_c = ground_c
         self.ground = ground
         self.source = np.asarray(source, dtype=float)
         self.wind = atmosphere.to_wind()
+        self.zones = zones
+        if zones is not None:
+            self.weathers = zones.atmosphere.weathers()
+            self.grounds = zones.atmosphere.ground_temperatures(ground_c)
+            self.winds = zones.towards  # (K, 2)
 
     @classmethod
     def of(cls, model, source: np.ndarray) -> _Weather | None:
         """The weather of ``model``'s scene, or None where the speed of sound is the
         same everywhere: indoors, or outdoors in still air."""
+        from acoustic_spaces.engine.weather import Weather
+
         atmosphere = getattr(model.room.scene, "atmosphere", None)
         if model.room.outdoor is None or atmosphere is None or atmosphere.still:
             return None
-        return cls(atmosphere, float(model.room.scene.air.temperature_c), model.ground, source)
+        zones = Weather.of(model) if atmosphere.zones else None
+        return cls(
+            atmosphere, float(model.room.scene.air.temperature_c), model.ground, source, zones
+        )
 
-    def _profiles(self, z: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def _profiles(self, z: np.ndarray, k: int | None = None) -> tuple[np.ndarray, np.ndarray]:
         """The still air's speed of sound and the wind's speed at heights z (m, in the
-        room's coordinates)."""
+        room's coordinates), of the atmosphere's own weather or of weather ``k``."""
         height = np.asarray(z, dtype=float) - self.ground
-        still = np.asarray(self.atmosphere.sound_speed(height, self.ground_c), dtype=float)
-        return still, np.asarray(self.atmosphere.wind_speed(height), dtype=float)
+        if k is None:
+            still = np.asarray(self.atmosphere.sound_speed(height, self.ground_c), dtype=float)
+            return still, np.asarray(self.atmosphere.wind_speed(height), dtype=float)
+        weather = self.weathers[k]
+        still = np.asarray(weather.sound_speed(height, self.grounds[k]), dtype=float)
+        return still, np.asarray(weather.wind_speed(height), dtype=float)
 
-    def _along(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
-        """The cosine between the wind and the horizontal from the source to (x, y)."""
+    def _along(self, x: np.ndarray, y: np.ndarray, wind=None) -> np.ndarray:
+        """The cosine between the wind (``wind`` (2,), or the atmosphere's own) and the
+        horizontal from the source to (x, y)."""
+        wind = self.wind if wind is None else wind
         dx, dy = x - self.source[0], y - self.source[1]
         distance = np.hypot(dx, dy)
-        along = self.wind[0] * dx + self.wind[1] * dy
+        along = wind[0] * dx + wind[1] * dy
         return np.divide(along, distance, out=np.zeros_like(along), where=distance > 0)
 
     def at(self, points: np.ndarray) -> np.ndarray:
         """The speed of sound (m/s) at ``points`` (n, 3)."""
         points = np.asarray(points, dtype=float).reshape(-1, 3)
-        still, wind = self._profiles(points[:, 2])
-        return still + wind * self._along(points[:, 0], points[:, 1])
+        if self.zones is None:
+            still, wind = self._profiles(points[:, 2])
+            return still + wind * self._along(points[:, 0], points[:, 1])
+        out = np.zeros(len(points))
+        zone = self.zones.zone_at(points[:, :2])
+        for k in np.unique(zone).tolist():
+            rows = zone == k
+            still, wind = self._profiles(points[rows, 2], k)
+            along = self._along(points[rows, 0], points[rows, 1], self.winds[k])
+            out[rows] = still + wind * along
+        return out
 
     def _grid(self, origin: np.ndarray, h: float, shape) -> tuple:
         centres = [origin[a] + (np.arange(shape[a]) + 0.5) * h for a in range(3)]
-        still, wind = self._profiles(centres[2])
-        along = self._along(centres[0][None, :], centres[1][:, None])  # (ny, nx)
-        return still, wind, along
+        if self.zones is None:
+            still, wind = self._profiles(centres[2])
+            along = self._along(centres[0][None, :], centres[1][:, None])  # (ny, nx)
+            return still, wind, along, None
+        # Each weather's profiles and cosines, and which holds over each column.
+        profiles = [self._profiles(centres[2], k) for k in range(len(self.weathers))]
+        still = np.array([p[0] for p in profiles])  # (K, nz)
+        wind = np.array([p[1] for p in profiles])  # (K, nz)
+        along = np.array(
+            [
+                self._along(centres[0][None, :], centres[1][:, None], self.winds[k])
+                for k in range(len(self.weathers))
+            ]
+        )  # (K, ny, nx)
+        x, y = np.meshgrid(centres[0], centres[1])  # (ny, nx)
+        zone = self.zones.zone_at(np.column_stack([x.ravel(), y.ravel()])).reshape(x.shape)
+        return still, wind, along, zone
 
     def extremes(self, origin: np.ndarray, h: float, shape) -> tuple[float, float]:
         """The slowest and the fastest speed of sound over the grid's cells."""
-        still, wind, along = self._grid(origin, h, shape)
-        ends = wind[:, None] * np.array([along.min(), along.max()])[None, :]
-        return float((still + ends.min(axis=1)).min()), float((still + ends.max(axis=1)).max())
+        still, wind, along, zone = self._grid(origin, h, shape)
+        if zone is None:
+            ends = wind[:, None] * np.array([along.min(), along.max()])[None, :]
+            return float((still + ends.min(axis=1)).min()), float((still + ends.max(axis=1)).max())
+        low, high = np.inf, -np.inf
+        for k in np.unique(zone).tolist():
+            cosines = along[k][zone == k]
+            ends = wind[k][:, None] * np.array([cosines.min(), cosines.max()])[None, :]
+            low = min(low, float((still[k] + ends.min(axis=1)).min()))
+            high = max(high, float((still[k] + ends.max(axis=1)).max()))
+        return low, high
 
     def ratios(self, origin: np.ndarray, h: float, shape, speed: float) -> np.ndarray:
         """(nx ny nz,) float32, x fastest: each cell's speed of sound over ``speed``,
         the grid's (at most 1)."""
-        still, wind, along = self._grid(origin, h, shape)
+        still, wind, along, zone = self._grid(origin, h, shape)
         out = np.empty((int(shape[2]), int(shape[1]), int(shape[0])), np.float32)
-        for z in range(len(still)):  # a layer at a time, to keep the memory down
-            out[z] = np.minimum((still[z] + wind[z] * along) / speed, 1.0)
+        if zone is None:
+            for z in range(len(still)):  # a layer at a time, to keep the memory down
+                out[z] = np.minimum((still[z] + wind[z] * along) / speed, 1.0)
+            return out.reshape(-1)
+        iy, ix = np.indices(zone.shape)
+        cosines = along[zone, iy, ix]  # (ny, nx) each column's cosine to its own wind
+        for z in range(still.shape[1]):
+            out[z] = np.minimum((still[zone, z] + wind[zone, z] * cosines) / speed, 1.0)
         return out.reshape(-1)
 
 

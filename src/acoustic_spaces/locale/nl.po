@@ -238,6 +238,15 @@ msgstr ""
 "Nieuwe grondzone met {count} hoeken; geef het vlak ervan een eigen materiaal "
 "in de scèneboom."
 
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New weather zone with {count} corners; choose it under Weather of in the "
+"scene's entry to give it wind and temperature of its own."
+msgstr ""
+"Nieuwe weerzone met {count} hoeken; kies die onder Weer van in het onderdeel "
+"van de scène om haar een eigen wind en temperatuur te geven."
+
 #. Translators: {patterns} is the list of model file patterns, such as *.obj *.dxf.
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -1336,6 +1345,10 @@ msgstr "vegetatie toevoegen"
 msgid "add zone"
 msgstr "zone toevoegen"
 
+#: acoustic_spaces/gui/document.py
+msgid "add weather zone"
+msgstr "weerzone toevoegen"
+
 #: acoustic_spaces/gui/document.py acoustic_spaces/gui/inspector.py
 msgid "change ground"
 msgstr "grond wijzigen"
@@ -1697,12 +1710,31 @@ msgstr "Wind en temperatuur"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Whose weather the fields below show and change: the whole scene's, or a "
+"weather zone's, a part of the scene with wind and temperature of its own "
+"(the lee of buildings, where the wind drops; a lake, over which the air lies "
+"cooler), drawn in the plan. Outside the zones the scene's weather holds, and "
+"the eddies are the scene's everywhere"
+msgstr ""
+"Wiens weer de velden hieronder tonen en wijzigen: dat van de hele scène, of "
+"dat van een weerzone, een deel van de scène met een eigen wind en "
+"temperatuur (de luwte van gebouwen, waar de wind wegvalt; een meer, "
+"waarboven de lucht koeler is), getekend in de plattegrond. Buiten de zones "
+"geldt het weer van de scène, en de turbulentie is overal die van de scène"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weather of"
+msgstr "Weer van"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "The weather, which bends sound outdoors: (none) or neutral, still air and "
 "sound in straight lines; windy, 5 m/s 10 m up, bending sound down downwind "
 "and up upwind; sunny_day, air cooling with height, bending sound up into a "
 "shadow a few hundred metres away; clear_night, air warming with height, "
 "bending sound down; custom, the values below. Changing one of them makes the "
-"weather custom. The air temperature above is the ground's"
+"weather custom. The air temperature above is the ground's. For a weather "
+"zone, (none) is the scene's weather unchanged"
 msgstr ""
 "Het weer, dat geluid buiten afbuigt: (geen) of neutraal, stilstaande lucht "
 "en geluid in rechte lijnen; winderig, 5 m/s op 10 m hoogte, buigt geluid met "
@@ -1710,7 +1742,8 @@ msgstr ""
 "hoogte afkoelt, buigt geluid omhoog, een schaduw in op een paar honderd "
 "meter; heldere nacht, lucht die met de hoogte warmer wordt, buigt geluid "
 "omlaag; aangepast, de waarden hieronder. Een daarvan wijzigen maakt het weer "
-"aangepast. De luchttemperatuur hierboven is die aan de grond"
+"aangepast. De luchttemperatuur hierboven is die aan de grond. Bij een "
+"weerzone is (geen) het ongewijzigde weer van de scène"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Weather"
@@ -1800,6 +1833,45 @@ msgstr "Temperatuur bij de grond"
 #: acoustic_spaces/gui/inspector.py
 msgid "Roughness"
 msgstr "Ruwheid"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The temperature at the ground in the weather zone (°C), where it differs "
+"from the scene's air temperature: cooler over water, warmer over a car park"
+msgstr ""
+"De temperatuur aan de grond in de weerzone (°C), waar die afwijkt van de "
+"luchttemperatuur van de scène: koeler boven water, warmer boven een "
+"parkeerterrein"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground temperature"
+msgstr "Grondtemperatuur"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add weather zone"
+msgstr "Weerzone toevoegen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw a part of the scene with weather of its own in the plan, corner by "
+"corner, and close it on the first corner; then choose it under Weather of "
+"and give it its wind and temperature"
+msgstr ""
+"Een deel van de scène met eigen weer in de plattegrond hoek voor hoek "
+"tekenen en bij de eerste hoek sluiten; kies het daarna onder Weer van en "
+"geef het zijn wind en temperatuur"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove weather zone"
+msgstr "Weerzone verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the weather zone chosen under Weather of: the scene's weather holds "
+"there"
+msgstr ""
+"De onder Weer van gekozen weerzone verwijderen: daar geldt het weer van de "
+"scène"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -1928,6 +2000,14 @@ msgstr ""
 "grond: dwars op de wind, met de wind mee en tegen de wind in"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "the whole scene"
+msgstr "de hele scène"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "as the whole scene"
+msgstr "als de hele scène"
+
+#: acoustic_spaces/gui/inspector.py
 #, python-brace-format
 msgid "Measured profile at {count} height, from the scene file"
 msgid_plural "Measured profile at {count} heights, from the scene file"
@@ -1988,6 +2068,14 @@ msgstr "luchtinstellingen wijzigen"
 #: acoustic_spaces/gui/inspector.py
 msgid "change the weather"
 msgstr "weer wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather zone"
+msgstr "weerzone wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove weather zone"
+msgstr "weerzone verwijderen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change the eddies"
@@ -4355,6 +4443,11 @@ msgid "Not a zone yet: {problem}"
 msgstr "Nog geen geldige zone: {problem}"
 
 #: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a weather zone yet: {problem}"
+msgstr "Nog geen geldige weerzone: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
 msgid "Not a barrier yet: it needs two points at least"
 msgstr "Nog geen geldig geluidsscherm: het heeft minstens twee punten nodig"
 
@@ -4441,6 +4534,14 @@ msgid ""
 msgstr ""
 "De hoeken van de grondzone aanklikken; sluiten bij de eerste hoek, met een "
 "dubbelklik of Enter. Backspace verwijdert de laatste hoek, Esc stopt."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the new weather zone; close it on the first corner, "
+"with a double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"De hoeken van de nieuwe weerzone aanklikken; sluiten bij de eerste hoek, met "
+"een dubbelklik of Enter. Backspace verwijdert de laatste hoek, Esc stopt."
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "Click where the new source goes; Esc cancels."

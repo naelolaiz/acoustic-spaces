@@ -584,6 +584,19 @@ class Document(QObject):
         )
         return len(self.scene.geometry.ground.zones) - 1
 
+    def add_weather_zone(self, polygon) -> int:
+        """Add a weather zone with these corners (m) to an outdoor scene; it keeps the
+        scene's weather until given wind or temperature of its own. Returns its index."""
+        entry = _in_units({"polygon": polygon}, UNIT_SCALE[self.scene.geometry.units or "m"])
+
+        def change(data: dict) -> None:
+            atmosphere = data.get("atmosphere") or {}
+            atmosphere.setdefault("zones", []).append(entry)
+            data["atmosphere"] = atmosphere
+
+        self.edit(_("add weather zone"), change)
+        return len(self.scene.atmosphere.zones) - 1
+
     def set_extent(self, extent) -> None:
         """Set where the ground of an outdoor scene ends: ``[[x_min, y_min], [x_max,
         y_max]]`` in the geometry's units, or None for the margin round what stands on

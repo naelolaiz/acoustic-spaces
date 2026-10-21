@@ -350,3 +350,232 @@ def test_the_parabolic_equation_s_bands_read_back_as_computed() -> None:
     )
     read = response.relative_to_free_field()[:wave_bands]
     np.testing.assert_allclose(read, computed, atol=0.02)
+
+
+# -- weather zones -----------------------------------------------------------------------
+
+
+def zoned(zones, atmosphere=None, listeners=((300.0, 0.0, 1.5), (-300.0, 0.0, 1.5))) -> Scene:
+    """A windy field with weather zones, listeners 300 m downwind and upwind."""
+    data = field({"preset": "windy", **(atmosphere or {}), "zones": zones}, listeners).model_dump(
+        mode="json", exclude_none=True
+    )
+    data["geometry"]["ground"]["extent"] = [[-400.0, -50.0], [400.0, 50.0]]
+    return Scene.model_validate(data)
+
+
+#: A zone over the downwind half of the field.
+DOWNWIND_HALF = [[100.0, -100.0], [500.0, -100.0], [500.0, 100.0], [100.0, 100.0]]
+
+
+def test_a_weather_zone_takes_the_atmosphere_s_weather_but_for_what_it_gives() -> None:
+    atmosphere = Atmosphere(
+        wind={"speed_m_s": 5.0, "direction_deg": 90.0},
+        temperature_log_k=0.3,
+        zones=[
+            {"name": "lee", "polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 1.0}},
+            {"polygon": DOWNWIND_HALF, "preset": "sunny_day"},
+            {"polygon": DOWNWIND_HALF, "preset": "windy", "temperature_c": 12.0},
+            {"polygon": DOWNWIND_HALF, "preset": "neutral"},
+            {"polygon": DOWNWIND_HALF, "table": [[0.0, 10.0, 0.0], [10.0, 12.0, 3.0]]},
+            {"polygon": DOWNWIND_HALF, "temperature_gradient_k_m": -0.01},
+        ],
+    )
+    own, lee, sunny, windy, neutral, table, gradient = atmosphere.weathers()
+    assert own.zones is None and own.wind.speed_m_s == 5.0 and own.temperature_log_k == 0.3
+    # Fields left out stay the atmosphere's: the wind's direction, the log term.
+    assert lee.wind.speed_m_s == 1.0 and lee.wind.direction_deg == 90.0
+    assert lee.temperature_log_k == 0.3 and lee.roughness_m == 0.05
+    # A preset is a weather whole, its wind blowing the atmosphere's way.
+    assert sunny.wind is None and sunny.temperature_log_k == -0.5
+    assert windy.wind.speed_m_s == 5.0 and windy.wind.direction_deg == 90.0
+    assert windy.temperature_log_k == 0.0 and neutral.still
+    # A table replaces the formulas and keeps the atmosphere's wind direction; a
+    # gradient drops the table.
+    assert table.table is not None and table.temperature_log_k == 0.0
+    assert table.wind.direction_deg == 90.0
+    assert gradient.table is None and gradient.temperature_gradient_k_m == -0.01
+    assert gradient.temperature_log_k == 0.3
+    assert atmosphere.ground_temperatures(20.0) == [20.0, 20.0, 20.0, 12.0, 20.0, 20.0, 20.0]
+    assert atmosphere.zone_names() == ["lee"] + [f"weather_{k}" for k in range(2, 7)]
+    assert not atmosphere.still
+    # Still air with a windy zone is not still; a zone that gives nothing changes nothing.
+    assert not Atmosphere(zones=[{"polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 2}}]).still
+    assert Atmosphere(zones=[{"polygon": DOWNWIND_HALF}]).still
+    # Written and read back, a zone keeps what it gives and nothing more.
+    data = atmosphere.model_dump(mode="json", exclude_none=True)
+    assert data["zones"][0] == {"name": "lee", "polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 1.0}}
+    assert Atmosphere.model_validate(data) == atmosphere
+    with pytest.raises(ValidationError, match="did you mean windy"):
+        Atmosphere(zones=[{"polygon": DOWNWIND_HALF, "preset": "wind"}])
+    with pytest.raises(ValidationError, match="not both"):
+        Atmosphere(
+            zones=[
+                {
+                    "polygon": DOWNWIND_HALF,
+                    "table": [[0.0, 10.0, 0.0], [10.0, 12.0, 3.0]],
+                    "temperature_log_k": 0.2,
+                }
+            ]
+        )
+    with pytest.raises(ValidationError, match="not modelled yet"):
+        data = field(
+            {"preset": "neutral", "zones": [{"polygon": DOWNWIND_HALF, "preset": "windy"}]}
+        )
+        data = data.model_dump(mode="json", exclude_none=True)
+        data["geometry"]["ground"]["terrain"] = {"heights": [[0, 1], [1, 2]], "spacing": 300}
+        Scene.model_validate(data)
+
+
+def test_the_weathers_along_a_way_and_their_mean() -> None:
+    from acoustic_spaces.engine.weather import Weather
+
+    atmosphere = Atmosphere(
+        preset="windy",
+        zones=[{"name": "lee", "polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 1.0}}],
+    )
+    weather = Weather(atmosphere, 20.0, (-400.0, -50.0, 400.0, 50.0))
+    assert len(weather) == 2 and weather.zoned
+    assert weather.zone_at([[0.0, 0.0], [200.0, 10.0], [450.0, 0.0]]).tolist() == [0, 1, 0]
+    # A way 300 m downwind: a third under the atmosphere's wind, two thirds in the lee.
+    a, b = weather.shares([[0.0, 0.0], [300.0, 0.0]])
+    np.testing.assert_allclose(a, [1 / 3, 2 / 3], atol=0.01)
+    np.testing.assert_allclose(b, [1 / 3, 2 / 3], atol=0.01)  # both winds blow along it
+    profile = weather.profile(a, b)
+    expected = (a[0] * weather.still[0] + a[1] * weather.still[1]) + (
+        b[0] * weather.wind[0] + b[1] * weather.wind[1]
+    )
+    np.testing.assert_allclose(profile.c, expected)
+    assert profile.speed(10.0) == pytest.approx(343.2 + 5.0 / 3 + 1.0 * 2 / 3, abs=0.3)
+    # Across the wind the wind's share is nothing; a way of no length takes its point.
+    a, b = weather.shares([[200.0, -40.0], [200.0, 40.0]])
+    np.testing.assert_allclose(a, [0.0, 1.0]) and np.testing.assert_allclose(b, [0.0, 0.0])
+    a, _ = weather.shares([[200.0, 0.0]])
+    assert a.tolist() == [0.0, 1.0]
+    # The weather at each distance along a direction, the same object within a zone.
+    speed_at = weather.along(np.zeros(2), np.array([1.0, 0.0]), 300.0)
+    assert speed_at(50.0) is speed_at(99.0) and speed_at(150.0) is speed_at(299.0)
+    assert speed_at(50.0) is not speed_at(150.0)
+    assert speed_at(50.0)(np.array([10.0]))[0] > speed_at(150.0)(np.array([10.0]))[0]
+    # The mean weather over the ground: the lee covers three eighths of it.
+    rows, towards = weather.mean_rows()
+    np.testing.assert_allclose(towards, [1.0, 0.0])
+    assert np.interp(10.0, rows[:, 0], rows[:, 2]) == pytest.approx(
+        5.0 * 5 / 8 + 1.0 * 3 / 8, abs=0.05
+    )
+    with pytest.raises(ValueError, match="weather zone 'lee'"):
+        Weather(
+            Atmosphere(zones=[{"name": "lee", "polygon": [[0, 0], [1, 1], [1, 0], [0, 1]]}]),
+            20.0,
+            (-400.0, -50.0, 400.0, 50.0),
+        )
+
+
+def test_the_parabolic_equation_marches_through_the_weathers() -> None:
+    from acoustic_spaces.engine.weather import Weather
+
+    f, ranges, heights = [125.0], np.array([100.0, 200.0, 300.0]), np.full(3, 1.5)
+    z = np.conj(surface_impedance(np.array(125.0), 200.0))
+    atmosphere = Atmosphere(preset="windy")
+    weather = Weather(atmosphere, 20.0, (-400.0, -50.0, 400.0, 50.0))
+    speed_at = weather.along(np.zeros(2), np.array([1.0, 0.0]), 300.0)
+    plain = march(f, speed_at(0.0), lambda r: z, 2.0, ranges, heights, 60.0)
+    # One weather all the way: the same march, bit for bit.
+    same = march(f, speed_at(0.0), lambda r: z, 2.0, ranges, heights, 60.0, speed_at=speed_at)
+    assert np.array_equal(plain, same)
+    # The wind dropping 150 m out tells from there on, and not before.
+    lee = Atmosphere(preset="windy", zones=[{"polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 0.5}}])
+    lee = lee.model_copy(
+        update={
+            "zones": [
+                lee.zones[0].model_copy(
+                    update={
+                        "polygon": [
+                            (150.0, -100.0),
+                            (500.0, -100.0),
+                            (500.0, 100.0),
+                            (150.0, 100.0),
+                        ]
+                    }
+                )
+            ]
+        }
+    )
+    along = Weather(lee, 20.0, (-400.0, -50.0, 400.0, 50.0)).along(
+        np.zeros(2), np.array([1.0, 0.0]), 300.0
+    )
+    bent = march(f, along(0.0), lambda r: z, 2.0, ranges, heights, 60.0, speed_at=along)
+    assert np.array_equal(bent[:, 0], plain[:, 0])
+    assert not np.array_equal(bent[:, 1], plain[:, 1])
+    assert abs(20 * math.log10(abs(bent[0, 2] / plain[0, 2]))) > 0.5
+
+
+def test_weather_zones_in_a_scene() -> None:
+    from acoustic_spaces.engine.model import TraceModel
+    from acoustic_spaces.engine.refracted import bending
+    from acoustic_spaces.engine.wave import _Weather
+
+    plain = simulate(Room.from_scene(zoned(None)))
+    # A zone that restates the weather changes nothing worth the name.
+    same = simulate(
+        Room.from_scene(zoned([{"polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 5.0}}]))
+    )
+    for name in ("l0", "l1"):
+        a, b = plain["s", name].energy(), same["s", name].energy()
+        np.testing.assert_allclose(10 * np.log10(b.sum(axis=1) / a.sum(axis=1)), 0.0, atol=1e-6)
+    # The wind dropping over the downwind half tells downwind; upwind nothing crosses it.
+    room = Room.from_scene(zoned([{"polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 0.5}}]))
+    lee = simulate(room)
+    down = 10 * np.log10(
+        lee["s", "l0"].energy().sum(axis=1) / plain["s", "l0"].energy().sum(axis=1)
+    )
+    assert np.any(np.abs(down) > 0.5)
+    assert np.array_equal(lee["s", "l1"].energy(), plain["s", "l1"].energy())
+    assert lee["s", "l0"].direct_delay_s > plain["s", "l0"].direct_delay_s  # less wind: later
+    # The late rays take the mean weather over the ground, by area (the lee: 3/8 of it).
+    model = TraceModel.from_room(room)
+    rows = bending(model)["atmosphere"]
+    at_10 = np.interp(10.0, rows[:, 0], rows[:, 2])
+    assert at_10 == pytest.approx(5.0 * 5 / 8 + 0.5 * 3 / 8, abs=0.05)
+    assert np.interp(
+        10.0,
+        *bending(TraceModel.from_room(Room.from_scene(zoned(None))))["atmosphere"][:, [0, 2]].T,
+    ) == pytest.approx(5.0, abs=0.01)
+    # The wave solver's cells take the weather they stand over.
+    weather = _Weather.of(model, np.array([0.0, 0.0, 2.0]))
+    origin, h, shape = np.array([-10.0, -5.0, 0.0]), 10.0, (30, 1, 2)
+    ratios = weather.ratios(origin, h, shape, 400.0).reshape(2, 1, 30)
+    plain_weather = _Weather.of(
+        TraceModel.from_room(Room.from_scene(zoned(None))), np.array([0.0, 0.0, 2.0])
+    )
+    plain_ratios = plain_weather.ratios(origin, h, shape, 400.0).reshape(2, 1, 30)
+    xs = origin[0] + (np.arange(30) + 0.5) * h
+    inside = xs > 100.0
+    np.testing.assert_allclose(ratios[:, :, ~inside], plain_ratios[:, :, ~inside])
+    assert np.all(ratios[1, 0, inside] < plain_ratios[1, 0, inside])  # 15 m up, less wind
+    low, high = weather.extremes(origin, h, shape)
+    assert (
+        low <= plain_weather.extremes(origin, h, shape)[0] + 1e-9
+        and high <= plain_weather.extremes(origin, h, shape)[1] + 1e-9
+    )
+    at = weather.at(np.array([[200.0, 0.0, 15.0], [-200.0, 0.0, 15.0]]))
+    assert (
+        at[0] < plain_weather.at(np.array([[200.0, 0.0, 15.0]]))[0]
+        and at[1] == plain_weather.at(np.array([[-200.0, 0.0, 15.0]]))[0]
+    )
+
+
+def test_inspect_names_the_weather_zones(tmp_path, capsys) -> None:
+    from acoustic_spaces.cli import main
+
+    path = tmp_path / "scene.yaml"
+    zoned(
+        [
+            {"name": "lee", "polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 1.0}},
+            {"polygon": DOWNWIND_HALF, "preset": "neutral", "temperature_c": 12.0},
+        ]
+    ).to_yaml(path)
+    assert main(["inspect", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert "weather zone lee (4 corners): wind 1 m/s 10 m up (log); blowing towards 0 deg" in out
+    assert "weather zone weather_2 (4 corners): neutral weather; still air; ground at 12 °C" in out

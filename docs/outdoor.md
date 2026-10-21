@@ -378,9 +378,51 @@ a room with an atmosphere stops with an error. Its fields:
 
 The scene's `air.temperature_c` is the temperature at the ground (a table gives its
 own). The wind and the temperature depend on the height only, the same over the whole
-scene: this suits open ground better than streets, where buildings shelter the wind and
-channel it. See [`examples/open_air_stage/scene.yaml`](https://github.com/naelolaiz/acoustic-spaces/blob/main/examples/open_air_stage/scene.yaml):
+scene unless [weather zones](#weather-zones) say otherwise: this suits open ground
+better than streets, where buildings shelter the wind and channel it. See
+[`examples/open_air_stage/scene.yaml`](https://github.com/naelolaiz/acoustic-spaces/blob/main/examples/open_air_stage/scene.yaml):
 a stage heard 100 and 300 m away across a park, downwind and upwind.
+
+### Weather zones
+
+The weather is not the same everywhere: the wind drops in the lee of a row of
+buildings or a wood, the air lies cooler over a lake and warmer over a car park, and a
+sea breeze blows along the shore and dies away inland. `atmosphere.zones` draws parts
+of the scene with weather of their own:
+
+```yaml
+atmosphere:
+  preset: windy                      # 5 m/s 10 m up, blowing towards +x
+  zones:
+    - name: lee                      # behind the warehouses the wind drops
+      polygon: [[120, -60], [300, -60], [300, 60], [120, 60]]
+      wind: {speed_m_s: 1}
+    - name: lake                     # cooler air over the water, under an inversion
+      polygon: [[300, -200], [600, -200], [600, 200], [300, 200]]
+      preset: clear_night
+      temperature_c: 12
+```
+
+A zone is a polygon in the plan, in the geometry's units, with a `name` (numbered
+when left out) and any of the atmosphere's fields: `preset`, `wind` (its
+`speed_m_s`, `direction_deg`, `height_m` and `profile`), `temperature_gradient_k_m`,
+`temperature_log_k`, `roughness_m` and `table`, and `temperature_c`, the temperature
+at the ground there. What a zone leaves out it takes from the scene's atmosphere: a
+zone with `wind: {speed_m_s: 1}` alone has the scene's wind slowed to 1 m/s, blowing
+the scene's way, with the scene's temperature profile and roughness. A `preset` in a
+zone starts from that preset instead, its wind blowing the scene's way unless the zone
+gives `direction_deg`, and the zone's other fields change it; a zone's `table` replaces
+the formulas, and a zone's gradient or log term drops the scene's table. Outside the
+zones the scene's weather holds, and where zones overlap the first wins. The eddies
+(`turbulence`) are the scene's everywhere. A zone that restates the scene's weather
+changes nothing but rounding. `inspect` names each zone, its corners and its weather;
+in the editor, **Weather of** chooses between the scene's weather and each zone's, and
+**Add weather zone** draws one in the plan (see [In the editor](#in-the-editor)).
+
+A zone's border is a step: the wind does not die away gradually into the lee. How
+each stage of the simulation takes the zones is described below; the parabolic
+equation and the wave solver go through them, and the early paths, whose arcs need one
+profile, take the mean along their way.
 
 ### How the simulation bends sound
 
@@ -448,6 +490,22 @@ is an arc of a circle, so its travel time and its length are exact.
   It runs on the CPU or on the GPU alike (`simulation.wave.device`), the two agreeing
   to rounding. The run's details give the slowest and the fastest speed of sound on the
   grid (`wave_speed_min_m_s`, `wave_speed_max_m_s`).
+- **Through weather zones** the parabolic equation marches zone by zone, changing its
+  speed of sound where its path crosses a border, and the wave solver takes each cell's
+  zone. The early paths, whose arcs need one profile, take the mean profile along their
+  way, each zone's weighted by the length of the way over it (the equivalent profile
+  of Nord2000 and Harmonoise), with the wind's component along the way from each
+  zone's own direction; so do the paths off façades and barriers, over their legs. The
+  late rays bend through the mean weather over the scene's extent, each zone's
+  weighted by its area. Against a Crank-Nicholson parabolic equation marched through
+  the zones, the engine's parabolic equation is within 0.15 dB on average and 1.2 dB
+  at most to 800 m, over shelter and gusts downwind and upwind, an inversion past a
+  lake shore and cool water downwind. The mean profile, at the bands the rays give,
+  is within 0.3 dB where only the temperature changes on the way, and gives 1 to 4 dB
+  more sound where the wind changes, 6.6 at most at 2 kHz 800 m downwind of a shelter:
+  one profile cannot both bend the sound down over the first 150 m and let it go
+  straight after, the cost of the equivalent profile the standards take (see
+  [Validation](validation.md#weather-zones-against-a-crank-nicholson-parabolic-equation)).
 - **The animation's particles** and **the drawn paths** (`view --paths`, the Blender
   export) curve as the sound does.
 
@@ -827,6 +885,12 @@ preset or custom), with the temperature's and the wind's structure parameters an
 size of the largest eddies; they stay as the weather changes. A measured profile is set in the scene file, and
 **Remove the measured profile** drops it; **Show the profile** plots the temperature,
 the wind and the speed of sound over the ground, across the wind, downwind and upwind.
+**Weather of** chooses whose weather the fields show and change, the whole scene's or
+a [weather zone](#weather-zones)'s: **Add weather zone** draws one in the plan, corner
+by corner, like a zone, **Remove weather zone** drops the chosen one, and a zone has a
+**Ground temperature** of its own; (none) under **Weather** leaves the scene's weather
+unchanged in a zone, and the zone's fields are those it changes. The plan draws the
+weather zones dotted in sky blue, with their names.
 On the simulation page, **In pressure up to** goes up to 8000 Hz in an outdoor
 scene. The 3D view and the export to Blender leave the sky out (the 3D view keeps its
 edges, to show where the ground ends), and the status bar gives the ground's area
@@ -849,8 +913,11 @@ Vegetation is volumes filled evenly: a lone tree's trunk is left out, the foliag
 attenuation is given, not derived from its leaves' size and density, and stems stand
 upright at random.
 
-The wind, the temperature and the eddies are the same over the whole scene, and the
-eddies' largest size is the same at every height. The ground reacts locally unless
+The eddies are the same over the whole scene (weather zones change the wind and the
+temperature, not the eddies), and the eddies' largest size is the same at every
+height. A weather zone's border is a step, and the early paths take one mean profile
+along their way, so a wind that changes on the way tells on them by a few decibels in
+the bands the rays give (see [Weather zones](#weather-zones)). The ground reacts locally unless
 `reaction: extended` says otherwise, and the wave solver's ground always does: one
 impedance for every angle, which holds for grass, soil and snow, less for very soft
 snow and thin layers.

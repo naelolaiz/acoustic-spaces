@@ -98,6 +98,10 @@ DRAWN = {
         "New ground zone with {count} corners; give its surface a material of its own in "
         "the scene tree."
     ),
+    "weather": N_(
+        "New weather zone with {count} corners; choose it under Weather of in the scene's "
+        "entry to give it wind and temperature of its own."
+    ),
 }
 # Translators: {patterns} is the list of model file patterns, such as *.obj *.dxf.
 MODEL_FILTER = N_("Models ({patterns})")
@@ -900,8 +904,8 @@ class MainWindow(QMainWindow):
         self.plan.start_drawing()
 
     def start_drawing(self, purpose: str) -> None:
-        """Draw a building, a barrier, vegetation or a ground zone (one of the plan
-        view's purposes) in the plan view."""
+        """Draw a building, a barrier, vegetation, a ground zone or a weather zone (one
+        of the plan view's purposes) in the plan view."""
         self.views.setCurrentWidget(self.plan)
         self.plan.start_drawing(purpose)
 
@@ -922,12 +926,14 @@ class MainWindow(QMainWindow):
                 self.document.add_part("vegetation", {"tree": points[0], **sizes})
             elif purpose == "zone":
                 self.document.add_zone(points)
+            elif purpose == "weather":
+                self.document.add_weather_zone(points)
             else:  # pragma: no cover - the plan view draws nothing else
                 return
         except EditError as exc:
             self._refused(str(exc))
             return
-        self.select("geometry")
+        self.select("scene" if purpose == "weather" else "geometry")
         self.log(fmt(_(DRAWN[purpose]), count=len(points), **sizes))
 
     def _drawn(self, corners: list) -> None:

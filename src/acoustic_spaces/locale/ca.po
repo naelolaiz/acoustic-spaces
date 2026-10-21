@@ -238,6 +238,15 @@ msgstr ""
 "Zona del terreny nova amb {count} vèrtexs; assigneu un material propi a la "
 "seva superfície a l'arbre de l'escena."
 
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New weather zone with {count} corners; choose it under Weather of in the "
+"scene's entry to give it wind and temperature of its own."
+msgstr ""
+"Zona meteorològica nova amb {count} vèrtexs; trieu-la a Temps de, a "
+"l'entrada de l'escena, per donar-li vent i temperatura propis."
+
 #. Translators: {patterns} is the list of model file patterns, such as *.obj *.dxf.
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -1329,6 +1338,10 @@ msgstr "afegir vegetació"
 msgid "add zone"
 msgstr "afegir zona"
 
+#: acoustic_spaces/gui/document.py
+msgid "add weather zone"
+msgstr "afegir zona meteorològica"
+
 #: acoustic_spaces/gui/document.py acoustic_spaces/gui/inspector.py
 msgid "change ground"
 msgstr "canviar el terreny"
@@ -1690,12 +1703,31 @@ msgstr "Vent i temperatura"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Whose weather the fields below show and change: the whole scene's, or a "
+"weather zone's, a part of the scene with wind and temperature of its own "
+"(the lee of buildings, where the wind drops; a lake, over which the air lies "
+"cooler), drawn in the plan. Outside the zones the scene's weather holds, and "
+"the eddies are the scene's everywhere"
+msgstr ""
+"De qui és el temps que els camps de sota mostren i canvien: de tota l'escena "
+"o d'una zona meteorològica, una part de l'escena amb vent i temperatura "
+"propis (el sotavent dels edificis, on el vent amaina; un llac, sobre el qual "
+"l'aire és més fred), dibuixada a la planta. Fora de les zones regeix el "
+"temps de l'escena, i la turbulència és la de l'escena a tot arreu"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weather of"
+msgstr "Temps de"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "The weather, which bends sound outdoors: (none) or neutral, still air and "
 "sound in straight lines; windy, 5 m/s 10 m up, bending sound down downwind "
 "and up upwind; sunny_day, air cooling with height, bending sound up into a "
 "shadow a few hundred metres away; clear_night, air warming with height, "
 "bending sound down; custom, the values below. Changing one of them makes the "
-"weather custom. The air temperature above is the ground's"
+"weather custom. The air temperature above is the ground's. For a weather "
+"zone, (none) is the scene's weather unchanged"
 msgstr ""
 "El temps, que corba el so a l'aire lliure: (cap) o neutre, aire en calma i "
 "so en línia recta; ventós, 5 m/s a 10 m d'alçada, que corba el so cap avall "
@@ -1703,7 +1735,8 @@ msgstr ""
 "amb l'alçada, que corba el so cap amunt, cap a una ombra a uns centenars de "
 "metres; nit serena, aire que s'escalfa amb l'alçada, que corba el so cap "
 "avall; personalitzat, els valors de sota. Canviar-ne un fa el temps "
-"personalitzat. La temperatura de l'aire de dalt és la del terreny"
+"personalitzat. La temperatura de l'aire de dalt és la del terreny. En una "
+"zona meteorològica, (cap) és el temps de l'escena sense canvis"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Weather"
@@ -1792,6 +1825,45 @@ msgstr "Temperatura a prop del terreny"
 #: acoustic_spaces/gui/inspector.py
 msgid "Roughness"
 msgstr "Rugositat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The temperature at the ground in the weather zone (°C), where it differs "
+"from the scene's air temperature: cooler over water, warmer over a car park"
+msgstr ""
+"La temperatura del terreny a la zona meteorològica (°C), quan difereix de la "
+"temperatura de l'aire de l'escena: més freda sobre l'aigua, més càlida sobre "
+"un aparcament"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground temperature"
+msgstr "Temperatura del terreny"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add weather zone"
+msgstr "Afegir zona meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw a part of the scene with weather of its own in the plan, corner by "
+"corner, and close it on the first corner; then choose it under Weather of "
+"and give it its wind and temperature"
+msgstr ""
+"Dibuixar a la planta una part de l'escena amb temps propi, vèrtex a vèrtex, "
+"i tancar-la al primer; després trieu-la a Temps de i doneu-li el seu vent i "
+"la seva temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove weather zone"
+msgstr "Eliminar zona meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the weather zone chosen under Weather of: the scene's weather holds "
+"there"
+msgstr ""
+"Eliminar la zona meteorològica triada a Temps de: allà regeix el temps de "
+"l'escena"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -1918,6 +1990,14 @@ msgstr ""
 "terreny: transversal al vent, a favor del vent i contra el vent"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "the whole scene"
+msgstr "tota l'escena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "as the whole scene"
+msgstr "com tota l'escena"
+
+#: acoustic_spaces/gui/inspector.py
 #, python-brace-format
 msgid "Measured profile at {count} height, from the scene file"
 msgid_plural "Measured profile at {count} heights, from the scene file"
@@ -1979,6 +2059,14 @@ msgstr "modificar l'aire"
 #: acoustic_spaces/gui/inspector.py
 msgid "change the weather"
 msgstr "modificar el temps"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather zone"
+msgstr "canviar la zona meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove weather zone"
+msgstr "eliminar zona meteorològica"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change the eddies"
@@ -4328,6 +4416,11 @@ msgid "Not a zone yet: {problem}"
 msgstr "Encara no és una zona: {problem}"
 
 #: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a weather zone yet: {problem}"
+msgstr "Encara no és una zona meteorològica: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
 msgid "Not a barrier yet: it needs two points at least"
 msgstr "Encara no és una pantalla: necessita dos punts com a mínim"
 
@@ -4412,6 +4505,14 @@ msgid ""
 msgstr ""
 "Fer clic als vèrtexs de la zona del terreny; tancar-la al primer vèrtex, amb "
 "doble clic o Retorn. Retrocés desfà un vèrtex, Esc atura."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the new weather zone; close it on the first corner, "
+"with a double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"Fer clic als vèrtexs de la zona meteorològica nova; tancar-la al primer "
+"vèrtex, amb doble clic o Retorn. Retrocés desfà un vèrtex, Esc atura."
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "Click where the new source goes; Esc cancels."

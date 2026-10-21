@@ -351,9 +351,8 @@ def _polygon_area(polygon) -> float:
     )
 
 
-def _atmosphere_lines(atmosphere, ground_c: float, outdoor) -> list[str]:
-    """An outdoor scene's wind and temperature, and the speed of sound they give at a few
-    heights up to the sky."""
+def _weather_parts(atmosphere) -> list[str]:
+    """A weather in words: its preset, its wind and its temperature profile."""
     parts = [f"{atmosphere.preset} weather"] if atmosphere.preset else []
     wind = atmosphere.wind
     if atmosphere.table is not None:
@@ -366,6 +365,35 @@ def _atmosphere_lines(atmosphere, ground_c: float, outdoor) -> list[str]:
                 f"temperature {atmosphere.temperature_gradient_k_m:+g} K/m "
                 f"{atmosphere.temperature_log_k:+g} K ln(1 + z / {atmosphere.roughness_m:g} m)"
             )
+    return parts
+
+
+def _zone_lines(atmosphere, ground_c: float) -> list[str]:
+    """The weather zones: each one's weather as the engine resolves it, and where its
+    wind blows and its ground's temperature differ from the scene's."""
+    lines = []
+    weathers = atmosphere.weathers()
+    grounds = atmosphere.ground_temperatures(ground_c)
+    names = atmosphere.zone_names()
+    for k, (name, zone) in enumerate(zip(names, atmosphere.zones or [], strict=True), start=1):
+        weather = weathers[k]
+        parts = _weather_parts(weather)
+        if weather.still:
+            parts.append("still air")
+        elif weather.wind is not None and weather.wind.speed_m_s > 0.0:
+            parts.append(f"blowing towards {weather.wind.direction_deg:g} deg from +x")
+        if zone.temperature_c is not None:
+            parts.append(f"ground at {grounds[k]:g} °C")
+        corners = len(zone.polygon)
+        lines.append(f"  weather zone {name} ({corners} corners): " + "; ".join(parts))
+    return lines
+
+
+def _atmosphere_lines(atmosphere, ground_c: float, outdoor) -> list[str]:
+    """An outdoor scene's wind and temperature, and the speed of sound they give at a few
+    heights up to the sky."""
+    parts = _weather_parts(atmosphere)
+    wind = atmosphere.wind
     eddies = []
     turbulence = atmosphere.turbulence
     if turbulence is not None and not turbulence.calm:
@@ -381,9 +409,10 @@ def _atmosphere_lines(atmosphere, ground_c: float, outdoor) -> list[str]:
             f"{turbulence.wind_structure:g} m^4/3 s^-2{profile}, {turbulence.outer_scale_m:g} m "
             "across"
         )
+    zones = _zone_lines(atmosphere, ground_c)
     if atmosphere.still:
         parts.append("still air: sound goes in straight lines")
-        return ["atmosphere: " + "; ".join(parts), *eddies]
+        return ["atmosphere: " + "; ".join(parts), *eddies, *zones]
     if atmosphere.table is not None:
         windy = any(row[2] > 0.0 for row in atmosphere.table)
     else:
@@ -391,7 +420,9 @@ def _atmosphere_lines(atmosphere, ground_c: float, outdoor) -> list[str]:
     if windy:
         direction = wind.direction_deg if wind is not None else 0.0
         parts.append(f"blowing towards {direction:g} deg from +x")
-    lines = ["atmosphere: " + "; ".join(parts), *eddies]
+    elif zones and atmosphere.weathers()[0].still:
+        parts.append("still air outside the zones")
+    lines = ["atmosphere: " + "; ".join(parts), *eddies, *zones]
     top = outdoor.sky - outdoor.ground
     heights = [h for h in (0.0, 2.0, 10.0, 50.0, 200.0) if h <= top]
     width = 22

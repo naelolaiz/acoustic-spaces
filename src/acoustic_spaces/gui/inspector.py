@@ -321,6 +321,18 @@ class ScenePage(Page):
         """Outdoors: the wind and the temperature over the ground, which bend sound."""
         self.weather_group = QGroupBox(_("Wind and temperature"))
         form = QFormLayout(self.weather_group)
+        self.weather_zone = QComboBox()
+        self.weather_zone.setToolTip(
+            _(
+                "Whose weather the fields below show and change: the whole scene's, or a "
+                "weather zone's, a part of the scene with wind and temperature of its own "
+                "(the lee of buildings, where the wind drops; a lake, over which the air "
+                "lies cooler), drawn in the plan. Outside the zones the scene's weather "
+                "holds, and the eddies are the scene's everywhere"
+            )
+        )
+        self.weather_zone.currentIndexChanged.connect(self._weather_zone_chosen)
+        form.addRow(_("Weather of"), self.weather_zone)
         self.weather = QComboBox()
         _fill(self.weather, WEATHERS)
         self.weather.setToolTip(
@@ -330,7 +342,8 @@ class ScenePage(Page):
                 "and up upwind; sunny_day, air cooling with height, bending sound up into a "
                 "shadow a few hundred metres away; clear_night, air warming with height, "
                 "bending sound down; custom, the values below. Changing one of them makes "
-                "the weather custom. The air temperature above is the ground's"
+                "the weather custom. The air temperature above is the ground's. For a "
+                "weather zone, (none) is the scene's weather unchanged"
             )
         )
         self.weather.currentIndexChanged.connect(self._weather)
@@ -405,6 +418,34 @@ class ScenePage(Page):
         form.addRow(_("Temperature gradient"), self.gradient)
         form.addRow(_("Temperature near the ground"), self.log_term)
         form.addRow(_("Roughness"), self.roughness)
+        self.zone_temperature = spin(-20, 50, 1, 0.5, "°C")
+        self.zone_temperature.setToolTip(
+            _(
+                "The temperature at the ground in the weather zone (°C), where it differs "
+                "from the scene's air temperature: cooler over water, warmer over a car park"
+            )
+        )
+        self.zone_temperature.valueChanged.connect(self._zone_temperature)
+        form.addRow(_("Ground temperature"), self.zone_temperature)
+        zone_buttons = QHBoxLayout()
+        self.add_weather_zone = QPushButton(_("Add weather zone"))
+        self.add_weather_zone.setToolTip(
+            _(
+                "Draw a part of the scene with weather of its own in the plan, corner by "
+                "corner, and close it on the first corner; then choose it under Weather of "
+                "and give it its wind and temperature"
+            )
+        )
+        self.add_weather_zone.clicked.connect(lambda _checked=False: self.draw.emit("weather"))
+        self.remove_weather_zone = QPushButton(_("Remove weather zone"))
+        self.remove_weather_zone.setToolTip(
+            _("Remove the weather zone chosen under Weather of: the scene's weather holds there")
+        )
+        self.remove_weather_zone.clicked.connect(self._remove_weather_zone)
+        zone_buttons.addWidget(self.add_weather_zone)
+        zone_buttons.addWidget(self.remove_weather_zone)
+        zone_buttons.addStretch(1)
+        form.addRow(zone_buttons)
         self.eddies = QComboBox()
         _fill(self.eddies, EDDIES)
         self.eddies.setToolTip(
@@ -500,12 +541,50 @@ class ScenePage(Page):
         self._weather_form = form
         return self.weather_group
 
+    def _weather_zone_index(self) -> int | None:
+        """The weather zone the form shows, or None for the whole scene's weather."""
+        value = self.weather_zone.currentData()
+        return None if value is None else int(value)
+
     def _load_weather(self, scene) -> None:
         atmosphere = scene.atmosphere
-        _choose(self.weather, _weather_of(atmosphere))
+        # The zones to choose from, keeping the choice while the zone is still there.
+        names = [] if atmosphere is None else atmosphere.zone_names()
+        chosen = self._weather_zone_index()
+        self.weather_zone.blockSignals(True)
+        self.weather_zone.clear()
+        self.weather_zone.addItem(_("the whole scene"), None)
+        for k, name in enumerate(names):
+            self.weather_zone.addItem(name, k)
+        if chosen is not None and chosen < len(names):
+            self.weather_zone.setCurrentIndex(chosen + 1)
+        self.weather_zone.blockSignals(False)
+        chosen = self._weather_zone_index()
+        self.remove_weather_zone.setEnabled(chosen is not None)
+        self.weather.setItemText(0, _("(none)") if chosen is None else _("as the whole scene"))
         shown = atmosphere or Atmosphere()
         eddies = shown.turbulence
+        if chosen is None:
+            _choose(self.weather, _weather_of(atmosphere))
+        else:
+            zone = atmosphere.zones[chosen]
+            _choose(self.weather, _zone_weather_of(zone))
+            shown = atmosphere.weathers()[chosen + 1]
+            self.zone_temperature.setValue(
+                scene.air.temperature_c if zone.temperature_c is None else zone.temperature_c
+            )
+        self._weather_form.setRowVisible(self.zone_temperature, chosen is not None)
         _choose(self.eddies, None if eddies is None else eddies.preset or "custom")
+        # The eddies are the scene's everywhere.
+        for box in (
+            self.eddies,
+            self.temperature_eddies,
+            self.wind_eddies,
+            self.eddy_size,
+            self.eddy_height,
+            self.eddy_falloff,
+        ):
+            box.setEnabled(chosen is None)
         eddies = eddies or Turbulence()
         self.temperature_eddies.setValue(eddies.temperature_structure)
         self.wind_eddies.setValue(eddies.wind_structure)
@@ -631,11 +710,22 @@ class ScenePage(Page):
     def _air(self, field: str, value: float) -> None:
         self.apply(_("change air"), lambda data: data.setdefault("air", {}).update({field: value}))
 
+    def _weather_zone_chosen(self) -> None:
+        if not self._loading:
+            self._load_weather(self.document.scene)
+
     def _weather(self) -> None:
         if self.weather.currentIndex() < 0:
             return
         value = self.weather.currentData()
-        if value == _weather_of(self.document.scene.atmosphere):
+        chosen = self._weather_zone_index()
+        atmosphere = self.document.scene.atmosphere
+        if chosen is not None:
+            if value == _zone_weather_of(atmosphere.zones[chosen]):
+                return
+            self._zone_weather(chosen, value)
+            return
+        if value == _weather_of(atmosphere):
             return
 
         def change(data: dict) -> None:
@@ -650,11 +740,63 @@ class ScenePage(Page):
                 wind = old.get("wind")
                 if isinstance(wind, dict) and "direction_deg" in wind:
                     data["atmosphere"]["wind"] = {"direction_deg": wind["direction_deg"]}
-            # So do the eddies.
-            if old.get("turbulence") is not None:
-                data.setdefault("atmosphere", {})["turbulence"] = old["turbulence"]
+            # So do the eddies, and the weather zones.
+            for kept in ("turbulence", "zones"):
+                if old.get(kept) is not None:
+                    data.setdefault("atmosphere", {})[kept] = old[kept]
 
         self.apply(_("change the weather"), change)
+
+    def _zone_weather(self, chosen: int, value) -> None:
+        """The weather of zone ``chosen``: None, the scene's unchanged; a preset; or
+        custom, the values it shows written out."""
+
+        def change(data: dict) -> None:
+            zones = data["atmosphere"]["zones"]
+            old = zones[chosen]
+            kept = {k: old[k] for k in ("name", "polygon", "temperature_c") if k in old}
+            if value is None:
+                zones[chosen] = kept
+            elif value == "custom":
+                zones[chosen] = {**kept, **_zone_written_out(old)}
+            else:
+                zones[chosen] = {**kept, "preset": value}
+                wind = old.get("wind")
+                if isinstance(wind, dict) and "direction_deg" in wind:
+                    zones[chosen]["wind"] = {"direction_deg": wind["direction_deg"]}
+
+        self.apply(_("change the weather"), change)
+
+    def _zone_temperature(self, value: float) -> None:
+        chosen = self._weather_zone_index()
+        if chosen is None:
+            return
+        scene_c = self.document.scene.air.temperature_c
+
+        def change(data: dict) -> None:
+            zone = data["atmosphere"]["zones"][chosen]
+            if value == scene_c:
+                zone.pop("temperature_c", None)
+            else:
+                zone["temperature_c"] = value
+
+        self.apply(_("change the weather zone"), change)
+
+    def _remove_weather_zone(self) -> None:
+        chosen = self._weather_zone_index()
+        if chosen is None:
+            return
+
+        def change(data: dict) -> None:
+            atmosphere = data["atmosphere"]
+            atmosphere["zones"].pop(chosen)
+            if not atmosphere["zones"]:
+                del atmosphere["zones"]
+            if atmosphere == Atmosphere().model_dump(mode="json", exclude_none=True):
+                del data["atmosphere"]
+
+        self.weather_zone.setCurrentIndex(0)
+        self.apply(_("remove weather zone"), change)
 
     def _eddies(self) -> None:
         if self.eddies.currentIndex() < 0:
@@ -697,26 +839,35 @@ class ScenePage(Page):
 
         self.apply(_("change the eddies"), change)
 
+    def _weather_data(self, data: dict) -> dict:
+        """The scene-file entry the wind and temperature fields change, its preset
+        written out: the atmosphere's, or the chosen weather zone's."""
+        chosen = self._weather_zone_index()
+        if chosen is None:
+            data["atmosphere"] = _written_out(data.get("atmosphere") or {})
+            return data["atmosphere"]
+        zones = data["atmosphere"]["zones"]
+        zones[chosen] = _zone_written_out(zones[chosen])
+        return zones[chosen]
+
     def _atmosphere(self, field: str, value) -> None:
         def change(data: dict) -> None:
-            data["atmosphere"] = _written_out(data.get("atmosphere") or {})
-            data["atmosphere"][field] = value
+            self._weather_data(data)[field] = value
 
         self.apply(_("change the wind and temperature"), change)
 
     def _wind(self, field: str, value) -> None:
         def change(data: dict) -> None:
-            atmosphere = _written_out(data.get("atmosphere") or {})
-            if not isinstance(atmosphere.get("wind"), dict):
-                atmosphere["wind"] = {}
-            atmosphere["wind"][field] = value
-            data["atmosphere"] = atmosphere
+            weather = self._weather_data(data)
+            if not isinstance(weather.get("wind"), dict):
+                weather["wind"] = {}
+            weather["wind"][field] = value
 
         self.apply(_("change the wind and temperature"), change)
 
     def _drop_table(self) -> None:
         def change(data: dict) -> None:
-            atmosphere = _written_out(data.get("atmosphere") or {})
+            atmosphere = self._weather_data(data)
             atmosphere.pop("table", None)
             data["atmosphere"] = atmosphere
 
@@ -731,7 +882,13 @@ class ScenePage(Page):
 
         scene, outdoor = self.document.scene, self.document.room.outdoor
         top = 100.0 if outdoor is None else max(outdoor.sky - outdoor.ground, 1.0)
-        figure = plot_atmosphere(scene.atmosphere or Atmosphere(), scene.air.temperature_c, top=top)
+        atmosphere, ground_c = scene.atmosphere or Atmosphere(), scene.air.temperature_c
+        chosen = self._weather_zone_index()
+        if chosen is not None:
+            # The zone's weather, as the engine resolves it.
+            atmosphere = scene.atmosphere.weathers()[chosen + 1]
+            ground_c = scene.atmosphere.ground_temperatures(ground_c)[chosen + 1]
+        figure = plot_atmosphere(atmosphere, ground_c, top=top)
         if self.profile_window is None:
             self.profile_window = QWidget(self, Qt.WindowType.Window)
             QVBoxLayout(self.profile_window)
@@ -765,6 +922,37 @@ def _eddies_written_out(eddies) -> dict:
     eddies = {"preset": eddies} if isinstance(eddies, str) else copy.deepcopy(eddies)
     preset = eddies.pop("preset", None)
     return {**TURBULENCE_PRESETS.get(preset, {}), **eddies}
+
+
+def _zone_weather_of(zone) -> str | None:
+    """The weather the form shows for a weather zone: none (the scene's unchanged), a
+    preset or custom."""
+    if zone.preset is not None:
+        return zone.preset
+    fields = ("wind", "temperature_gradient_k_m", "temperature_log_k", "roughness_m", "table")
+    return "custom" if any(getattr(zone, f) is not None for f in fields) else None
+
+
+def _zone_written_out(zone: dict) -> dict:
+    """A copy of a weather zone's scene-file data with its preset's values written out in
+    place of its name (no wind, one temperature, the preset's fields over them), so that
+    changing one of them keeps the others."""
+    zone = copy.deepcopy(zone)
+    preset = zone.pop("preset", None)
+    if preset not in ATMOSPHERE_PRESETS:
+        return zone
+    values = {
+        "wind": {"speed_m_s": 0.0},
+        "temperature_gradient_k_m": 0.0,
+        "temperature_log_k": 0.0,
+        **copy.deepcopy(ATMOSPHERE_PRESETS[preset]),
+    }
+    if zone.get("table") is not None:
+        values.pop("temperature_gradient_k_m", None)
+        values.pop("temperature_log_k", None)
+    if isinstance(zone.get("wind"), dict):
+        values["wind"] = {**values["wind"], **zone["wind"]}
+    return {**values, **{k: v for k, v in zone.items() if k != "wind"}}
 
 
 def _written_out(atmosphere: dict) -> dict:

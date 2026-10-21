@@ -31,6 +31,11 @@ it does over the octave below.
 
 The late stage's rays bend too: the compiled tracer follows each one along its arcs
 through the layers, in chords (:func:`bending` gives it the atmosphere).
+
+Where the weather changes from place to place (the atmosphere's ``zones``,
+:mod:`~acoustic_spaces.engine.weather`), the rays take the mean profile along their
+way, the parabolic equation marches through each weather in turn, and the late rays
+take the mean weather over the ground.
 """
 
 from __future__ import annotations
@@ -52,6 +57,7 @@ from acoustic_spaces.engine.parabolic import footprint, march
 from acoustic_spaces.engine.refraction import CHORD_SAGITTA_M, Profile, Rays, _sine, node_heights
 from acoustic_spaces.engine.shadow import equivalent_radius, shadow_start
 from acoustic_spaces.engine.turbulence import Eddies
+from acoustic_spaces.engine.weather import Weather
 
 #: Bands up to this one (centre, Hz) take the sound over the open ground from the
 #: parabolic equation.
@@ -79,6 +85,9 @@ WAVE_TOP_SLOPE = 0.15
 AZIMUTH_STEP_DEG = 1.0
 #: The parabolic equation's runs go side by side in at most this much memory (bytes).
 WAVE_MEMORY_BYTES = 1 << 30
+#: With weather zones, the weathers' shares along a way are rounded to this, so that
+#: ways alike share their rays (a share of 0.005 of a 5 m/s wind is 0.025 m/s).
+MIX_STEP = 0.005
 #: The grounds along the parabolic equation's way are looked up this often (m).
 GROUND_STEP_M = 0.25
 #: The most times a curved path bounces off the ground.
@@ -104,7 +113,8 @@ class _Wave:
     """A listener's request for the parabolic equation."""
 
     listener: int
-    key: tuple
+    key: tuple  # the runs it shares: the profile's key, or the direction with weather zones
+    mix: object  # the key of the profile of the rays along its way
     direction: np.ndarray  # (2,) along the ground towards the listener
     range: float
     height: float
@@ -164,6 +174,12 @@ class Refraction:
         self.windy = bool(np.any(self._wind_speed != 0.0))
         self.wind = self.atmosphere.to_wind()
         self.zones = room.outdoor is not None and bool(room.outdoor.zones)
+        # The weather where it changes from place to place; None where it is one.
+        self.weather = Weather.of(model) if self.atmosphere.zones else None
+        self.zoned = self.weather is not None
+        if self.zoned:
+            self._nodes = self.weather.nodes
+            self.windy = self.windy or bool(np.any(self.weather.wind != 0.0))
         self._weather = (self.atmosphere.model_dump_json(), self.ground_c)
         self._profiles: dict[float, Profile] = {}
         self._admittances: dict[int, np.ndarray] = {}
@@ -186,9 +202,24 @@ class Refraction:
     def _towards(self, direction: np.ndarray) -> float:
         return self._key(float(np.dot(self.wind, direction)))
 
-    def profile(self, key: float) -> Profile:
+    def _mix(self, corners) -> tuple:
+        """With weather zones, the key of the mean profile along the horizontal polyline
+        ``corners`` (m + 1, 2): the weathers' shares of its length and of the wind's
+        component along it (:meth:`~acoustic_spaces.engine.weather.Weather.shares`),
+        rounded so that ways alike share their rays."""
+        a, b = self.weather.shares(np.asarray(corners, dtype=float))
+        return (tuple(np.round(a / MIX_STEP) * MIX_STEP), tuple(np.round(b / MIX_STEP) * MIX_STEP))
+
+    def profile(self, key) -> Profile:
+        """The profile of ``key``: the wind's cosine to the way (:meth:`_key`), or with
+        weather zones the mix of the weathers along it (:meth:`_mix`)."""
         if key not in self._profiles:
-            self._profiles[key] = Profile(self._nodes, self._still_speed + key * self._wind_speed)
+            if isinstance(key, tuple):
+                self._profiles[key] = self.weather.profile(np.array(key[0]), np.array(key[1]))
+            else:
+                self._profiles[key] = Profile(
+                    self._nodes, self._still_speed + key * self._wind_speed
+                )
         return self._profiles[key]
 
     def rays(self, key: float) -> Rays:
@@ -277,7 +308,7 @@ class Refraction:
 
     def _open_ground(self, k, listener, towards, reach, zr, straight, paths, rows, ratio, cutoff):
         """The paths over the open ground, and the parabolic equation's request."""
-        key = self._towards(towards)
+        key = self._mix([self.source[:2], listener[:2]]) if self.zoned else self._towards(towards)
         rays = self.rays(key)
         cap = MAX_GROUND_BOUNCES if self.max_order >= 1 else 0
         found = rays.eigenrays(zr, reach, cap, max_time=cutoff)
@@ -314,12 +345,13 @@ class Refraction:
             WAVE_TOP_SLOPE * reach,
         )
         azimuth = None
-        if self.zones:
+        if self.zones or self.zoned:
             angle = math.degrees(math.atan2(towards[1], towards[0]))
             azimuth = round(angle / AZIMUTH_STEP_DEG) * AZIMUTH_STEP_DEG % 360.0
         return family, _Wave(
             listener=k,
-            key=(key, azimuth),
+            key=(None if self.zoned else key, azimuth),
+            mix=key,
             direction=towards,
             range=reach,
             height=zr,
@@ -353,7 +385,10 @@ class Refraction:
         if reach <= 1e-6 or np.any(lengths <= 1e-9):
             return paths[np.array(rows)]
         # The wind's component along each leg, weighed by the leg's length.
-        key = self._key(float(self.wind @ legs.sum(axis=0)) / reach)
+        if self.zoned:
+            key = self._mix(corners)
+        else:
+            key = self._key(float(self.wind @ legs.sum(axis=0)) / reach)
         rays = self.rays(key)
         allowed = self.max_order - len(planes)
         cap = MAX_GROUND_BOUNCES if allowed >= 1 else 0
@@ -586,9 +621,12 @@ class Refraction:
         across = float(np.linalg.norm(delta[:2]))
         za = max(float(a[2]) - self.ground, 0.0)
         zb = max(float(b[2]) - self.ground, 0.0)
-        key = self._towards(delta[:2] / across) if across > 1e-9 else 0.0
-        if across <= 1e-9 and self.windy:
-            key = 0.0
+        if self.zoned:
+            key = self._mix([a[:2], b[:2]]) if across > 1e-9 else self._mix([a[:2]])
+        else:
+            key = self._towards(delta[:2] / across) if across > 1e-9 else 0.0
+            if across <= 1e-9 and self.windy:
+                key = 0.0
         profile = self.profile(key)
         heights = za + (zb - za) * (np.arange(16) + 0.5) / 16.0
         shift = distance * float(np.mean(1.0 / profile.speed(heights))) - distance / self.c
@@ -662,15 +700,22 @@ class Refraction:
             else:
                 angle = math.radians(azimuth)
                 direction = np.array([math.cos(angle), math.sin(angle)])
-            face_at = self._grounds_along(direction, max(m.range for m in members))
+            reach = max(m.range for m in members)
+            face_at = self._grounds_along(direction, reach)
+            if self.zoned:
+                speed_at = self.weather.along(self.source[:2], direction, reach)
+                speed = speed_at(0.0)
+            else:
+                speed_at = None
+                speed = self.profile(key).speed
             top = max(m.top for m in members)
             for band in range(self.bands):
                 needing = [m for m in members if m.bands[band]]
                 if needing:
-                    runs.append((self.profile(key), face_at, band, needing, top))
+                    runs.append((speed, speed_at, face_at, band, needing, top))
 
         def run(job) -> np.ndarray:
-            profile, face_at, band, needing, top = job
+            speed, speed_at, face_at, band, needing, top = job
 
             def impedance(r):
                 beta = self._admittance(face_at(r))[band]
@@ -680,12 +725,19 @@ class Refraction:
             ranges = np.array([m.range for m in needing])
             heights = np.array([m.height for m in needing])
             return march(
-                self.frequencies[band], profile.speed, impedance, self.zs, ranges, heights, top
+                self.frequencies[band],
+                speed,
+                impedance,
+                self.zs,
+                ranges,
+                heights,
+                top,
+                speed_at=speed_at,
             )
 
         # The runs side by side, as many as the threads and the memory allow.
         biggest = max(
-            (footprint(self.frequencies[job[2]], self.c, job[4]) for job in runs), default=0
+            (footprint(self.frequencies[job[3]], self.c, job[5]) for job in runs), default=0
         )
         workers = min(self.threads, len(runs), max(1, WAVE_MEMORY_BYTES // max(biggest, 1)))
         if workers > 1:
@@ -694,7 +746,7 @@ class Refraction:
         else:
             results = [run(job) for job in runs]
         pressure = {id(m): np.zeros(self.frequencies.shape, dtype=complex) for m in requests}
-        for (_, _, band, needing, _), values in zip(runs, results, strict=True):
+        for (_, _, _, band, needing, _), values in zip(runs, results, strict=True):
             for m, value in zip(needing, values.T, strict=True):
                 # Time as exp(j omega t), as the early paths have it.
                 pressure[id(m)][band] = np.conj(value)
@@ -722,7 +774,7 @@ class Refraction:
             bands = np.ones(self.bands, dtype=bool)
             if self.eddies is not None:
                 # What the eddies scatter into the shadow.
-                key = wave.key[0]
+                key = wave.mix
                 start = self._start(key, self.zs, wave.height)
                 if start is not None:
                     excess += self.eddies.scattered(
@@ -874,13 +926,18 @@ def bending(model: TraceModel) -> dict:
     atmosphere = getattr(scene, "atmosphere", None)
     if model.room.outdoor is None or atmosphere is None or atmosphere.still:
         return {}
-    z = node_heights(atmosphere)
-    ground_c = float(scene.air.temperature_c)
-    rows = np.column_stack([z, atmosphere.sound_speed(z, ground_c), atmosphere.wind_speed(z)])
+    if atmosphere.zones:
+        # The late rays sweep the whole scene: the mean weather over it, by area.
+        rows, towards = Weather.of(model).mean_rows()
+    else:
+        z = node_heights(atmosphere)
+        ground_c = float(scene.air.temperature_c)
+        rows = np.column_stack([z, atmosphere.sound_speed(z, ground_c), atmosphere.wind_speed(z)])
+        towards = atmosphere.to_wind()
     rows = rows[_thinned(rows, LATE_SPEED_TOLERANCE)]
     return {
         "atmosphere": np.ascontiguousarray(rows, dtype=np.float64),
-        "wind_direction": np.ascontiguousarray(atmosphere.to_wind(), dtype=np.float64),
+        "wind_direction": np.ascontiguousarray(towards, dtype=np.float64),
         "ground": float(model.ground),
         "chord_sagitta": CHORD_SAGITTA_M,
     }

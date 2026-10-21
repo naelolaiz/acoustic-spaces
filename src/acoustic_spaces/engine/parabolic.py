@@ -69,6 +69,7 @@ def march(
     heights: np.ndarray,
     top: float,
     screen=None,
+    speed_at=None,
 ) -> np.ndarray:
     """(F, n) the complex pressure at ``frequencies`` (F,) Hz (time as exp(-i omega t),
     free field exp(ikR) / R) at the points ``ranges`` (n,, m along the ground from the
@@ -79,7 +80,10 @@ def march(
     The absorbing layer starts at height ``top``. ``screen(r, dr, z)``, when given,
     returns the fluctuation of the index of refraction integrated over the step from r to
     r + dr at heights z (m): a turbulent phase screen, half of whose phase each half step
-    takes (for validation, :mod:`validation.turbulence`)."""
+    takes (for validation, :mod:`validation.turbulence`). ``speed_at(r)``, when given,
+    returns the speed function that holds at range r (the same object wherever the
+    weather is the same), ``speed`` being the one at the source: each step takes the
+    profile of its own middle, the reference wavenumber staying the source's."""
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
@@ -104,6 +108,7 @@ def march(
     r = 0.0
     tilted = np.zeros((len(f), 2 * n), dtype=complex)
     steps: dict[float, tuple] = {}
+    current = speed
 
     def stepping(dr: float):
         # The phase screen's half step and the propagator over dr (most steps are full).
@@ -132,6 +137,13 @@ def march(
             if not np.array_equal(value, key):
                 here = _Ground(value, ka, kz, z, width)
                 key = here.key
+            if speed_at is not None:
+                there = speed_at(r + 0.5 * dr)
+                if there is not current:
+                    current = there
+                    k = 2.0 * math.pi * f[:, None] / np.asarray(current(z), dtype=float)[None, :]
+                    delta = (k - ka[:, None]) + 1j * LAYER_STRENGTH * depth**2
+                    steps.clear()
             half, propagate = stepping(dr)
             if screen is not None:
                 half = half * np.exp(0.5j * ka[:, None] * screen(r, dr, z)[None, :])

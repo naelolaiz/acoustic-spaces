@@ -1565,6 +1565,88 @@ def test_wind_and_temperature_form(window) -> None:
     assert page.weather_group.isHidden()
 
 
+def test_weather_zones_form(window, qapp) -> None:
+    window.open_example(example_path("open_air_stage"))
+    window.select("scene", None)
+    page = window.inspector.pages["scene"]
+    form = page._weather_form
+    canvas = _plan(window, qapp)
+
+    def atmosphere():
+        return window.document.scene.atmosphere
+
+    # The form shows the scene's weather; Add weather zone draws a zone in the plan.
+    assert page.weather_zone.count() == 1 and page.weather_zone.currentData() is None
+    assert not page.remove_weather_zone.isEnabled()
+    assert not form.isRowVisible(page.zone_temperature)
+    window.views.setCurrentWidget(window.viewport)
+    page.add_weather_zone.click()
+    assert window.views.currentWidget() is window.plan
+    assert canvas.mode == "drawing" and canvas.purpose == "weather"
+    assert "weather zone" in window.plan.hint.text()
+    window.plan.canvas.part_drawn.emit("weather", [[20, -40], [80, -40], [80, 40], [20, 40]])
+    zones = atmosphere().zones
+    assert len(zones) == 1 and zones[0].polygon == [(20, -40), (80, -40), (80, 40), (20, 40)]
+    assert zones[0].preset is None and zones[0].wind is None and zones[0].temperature_c is None
+    assert atmosphere().preset == "windy" and atmosphere().wind.speed_m_s == 5.0
+    assert "New weather zone with 4 corners" in window.messages.toPlainText()
+    assert window.selection == ("scene", None)
+    window.plan.cancel()  # the signal alone does not end the drawing
+    assert canvas.mode == "plan"
+    assert [page.weather_zone.itemText(k) for k in range(2)] == ["the whole scene", "weather_1"]
+    canvas.grab()  # the plan draws the zone, dotted, with its name
+
+    # Choosing the zone shows its weather, the scene's unchanged; the eddies are the
+    # scene's everywhere, so their fields are greyed out.
+    page.weather_zone.setCurrentIndex(1)
+    assert page.weather.currentData() is None and page.weather.itemText(0) == "as the whole scene"
+    assert page.wind_speed.value() == 5.0 and page.remove_weather_zone.isEnabled()
+    assert form.isRowVisible(page.zone_temperature)
+    assert page.zone_temperature.value() == window.document.scene.air.temperature_c
+    assert not page.eddies.isEnabled() and not page.wind_eddies.isEnabled()
+
+    # A value of its own changes the zone only; what it leaves out stays the scene's.
+    page.wind_speed.setValue(1.0)
+    zone = atmosphere().zones[0]
+    assert zone.wind.speed_m_s == 1.0 and zone.wind.direction_deg is None
+    assert zone.preset is None and atmosphere().wind.speed_m_s == 5.0
+    assert page.weather.currentData() == "custom" and page.wind_speed.value() == 1.0
+    assert atmosphere().weathers()[1].wind.speed_m_s == 1.0
+    page.zone_temperature.setValue(12.0)
+    assert atmosphere().zones[0].temperature_c == 12.0
+    assert window.document.scene.air.temperature_c != 12.0
+    # A preset of its own starts the zone from that preset: an inversion in still air.
+    page.weather.setCurrentIndex(page.weather.findData("clear_night"))
+    zone = atmosphere().zones[0]
+    assert zone.preset == "clear_night" and zone.wind is None and zone.temperature_c == 12.0
+    assert page.wind_speed.value() == 0.0 and page.log_term.value() == 0.5
+    assert atmosphere().weathers()[1].temperature_log_k == 0.5
+    page.show_profile()  # the zone's weather, as the engine resolves it
+    assert page.profile_window.isVisible()
+    page.profile_window.close()
+    # Back to the scene's weather in the zone, then back to the scene's temperature.
+    page.weather.setCurrentIndex(0)
+    zone = atmosphere().zones[0]
+    assert zone.preset is None and zone.wind is None and zone.temperature_c == 12.0
+    page.zone_temperature.setValue(window.document.scene.air.temperature_c)
+    assert atmosphere().zones[0].temperature_c is None
+    # The whole scene's fields are its own, with the zone kept.
+    page.weather_zone.setCurrentIndex(0)
+    assert page.weather.currentData() == "windy" and page.eddies.isEnabled()
+    assert page.weather.itemText(0) == "(none)" and not form.isRowVisible(page.zone_temperature)
+    page.weather.setCurrentIndex(page.weather.findData("sunny_day"))
+    assert atmosphere().preset == "sunny_day" and len(atmosphere().zones) == 1
+
+    # Remove weather zone drops the chosen one; the scene's weather holds there again.
+    page.weather_zone.setCurrentIndex(1)
+    page.remove_weather_zone.click()
+    assert atmosphere().zones is None and atmosphere().preset == "sunny_day"
+    assert page.weather_zone.count() == 1 and page.weather_zone.currentData() is None
+    assert not page.remove_weather_zone.isEnabled() and page.eddies.isEnabled()
+    window.document.undo()
+    assert len(atmosphere().zones) == 1 and page.weather_zone.count() == 2
+
+
 def test_model_units_default_to_the_file(window) -> None:
     window.open_example(example_path("shoebox"))  # its scene says units: m
     window.select("geometry", None)

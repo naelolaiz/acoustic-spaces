@@ -370,6 +370,34 @@
   [Validation](docs/validation.md#ground-reflection-against-the-exact-solution)).
 - `inspect` names the reaction; the editor's Ground impedance group has **Reaction**.
 
+**Weather zones**
+
+- `atmosphere.zones` draws parts of the scene with weather of their own, as polygons in
+  the plan: the lee of buildings or a wood, where the wind drops; a lake, over which
+  the air lies cooler under an inversion; a car park, warmer. A zone gives any of the
+  atmosphere's fields (`preset`, `wind`, the temperature's gradient and log terms,
+  `roughness_m`, `table`) and `temperature_c`, the temperature at the ground there;
+  what it leaves out it takes from the scene's atmosphere. Outside the zones the
+  scene's weather holds, the first zone wins where two overlap, and the eddies are the
+  scene's everywhere. Without zones nothing changes: results are as before, bit for
+  bit.
+- The parabolic equation marches through the zones, changing its speed of sound where
+  its path crosses a border, and the wave solver takes each cell's zone; the early
+  paths bend through the mean profile along their way, each zone's weighted by the
+  length of the way over it (the equivalent profile of Nord2000 and Harmonoise), and
+  the late rays through the mean weather over the scene's extent, each zone's weighted
+  by its area. Checked against a Crank-Nicholson parabolic equation marched through
+  the zones (`validation/weather_zones.py`): the engine's parabolic equation is within
+  0.15 dB on average and 1.2 dB at most to 800 m over shelter and gusts downwind and
+  upwind, an inversion past a lake shore and cool water downwind; the mean profile
+  within 0.3 dB where only the temperature changes on the way, and 1 to 4 dB, 6.6 at
+  most, where the wind changes (see
+  [Validation](docs/validation.md#weather-zones-against-a-crank-nicholson-parabolic-equation)).
+- `inspect` names each zone, its corners and its weather. The editor's Wind and
+  temperature group has **Weather of** (the whole scene, or a zone), **Add weather
+  zone**, which draws one in the plan, **Remove weather zone** and a zone's **Ground
+  temperature**; the plan draws the zones dotted in sky blue, with their names.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its
