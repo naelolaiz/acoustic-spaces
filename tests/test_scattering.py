@@ -93,8 +93,9 @@ def test_size_scattering_follows_christensen_and_rindel() -> None:
     # Met at 60 degrees, the panel looks half as wide: f_w is four times as high.
     oblique = scattering(1.0, 2.0, 10.0, 0.5)
     assert np.all(oblique >= small) and oblique[0, 5] > small[0, 5]
-    # Right where the sound comes from (a corner): specular.
+    # Right where the sound comes from (a corner): specular, on a stadium's ground too.
     np.testing.assert_allclose(scattering(1.0, 2.0, 0.0, 1.0), own)
+    np.testing.assert_allclose(scattering(200.0, 300.0, 0.0, 1.0), own)
 
 
 def test_early_reflections_carry_the_scattering_of_the_surfaces_size() -> None:

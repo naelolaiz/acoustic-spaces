@@ -13,6 +13,14 @@
   messages about one source, listener or material, a filter only those holding some
   words, and **Clear** removes the messages on show.
 
+**Fixes**
+
+- A coverage map in the 3D view (and in `show`) hid the sources and listeners: they
+  stand at listening height, half under its tiles. The map is now see-through.
+- A reflection right where the sound came from, on a surface over about 100 m across,
+  printed an overflow warning (an error under `-W error`). The results were right and
+  stay the same.
+
 ## 3.2.3
 
 **Languages**

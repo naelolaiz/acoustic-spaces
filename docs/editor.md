@@ -72,7 +72,8 @@ which frequencies each octave band holds.
 - **Simulation > Run coverage map** (F6) maps every source over the audience area (see
   [Coverage maps](coverage-maps.md#coverage-maps)). The **Coverage map** panel shows any parameter
   and band from above, for one source or all of them together, and **Map in 3D** lays
-  it over the room; **Save** writes the picture or every map as JSON. The scene tree's
+  it over the room, see-through so that the sources and listeners stay in sight;
+  **Save** writes the picture or every map as JSON. The scene tree's
   **Coverage map** entry sets the surfaces, height, spacing, rays and background noise.
 
   ![The editor with the lecture hall example and its speech transmission index map laid over the room](images/editor_map.png)
