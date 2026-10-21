@@ -98,6 +98,25 @@ def write_results(
     }
     if result.removed:
         report["removed"] = list(result.removed)
+    long_term = result.long_term
+    if long_term is not None:
+        report["long_term"] = {
+            "classes": list(long_term.classes),
+            "shares": {
+                name: {
+                    period: round(float(share), 6)
+                    for period, share in zip(long_term.periods, row, strict=True)
+                }
+                for name, row in zip(long_term.classes, long_term.shares, strict=True)
+            },
+            "periods": [
+                {"name": name, "hours": float(hours), "penalty_db": float(penalty)}
+                for name, hours, penalty in zip(
+                    long_term.periods, long_term.hours, long_term.penalties, strict=True
+                )
+            ],
+            "rating": long_term.rating,
+        }
     for (source, listener), response in result.responses.items():
         stem = response_stem(source, listener)
         written = []
@@ -146,6 +165,8 @@ def write_results(
             entry["insertion_loss_a_db"] = _plain(
                 iso3382.a_weighted(spl + loss) - iso3382.a_weighted(spl)
             )
+        if long_term is not None and (source, listener) in long_term.levels:
+            entry["long_term"] = _long_term_entry(long_term, (source, listener))
         if plots:
             try:
                 from acoustic_spaces.viz import plot_directions, plot_response
@@ -160,6 +181,35 @@ def write_results(
         report["responses"].append(entry)
     (out / REPORT_FILE).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
+
+
+def _long_term_entry(long_term, key) -> dict:
+    """The levels over a long term at one (source, listener), for the report: the
+    long-term level, the rating level, and those in each period and each weather class,
+    per octave band and A-weighted."""
+
+    def levels(bands, a) -> dict:
+        return {"spl_db": [_plain(v) for v in bands], "spl_a_db": _plain(a)}
+
+    entry = {
+        **levels(long_term.levels[key], long_term.levels_a[key]),
+        "rating_level_db": _plain(long_term.rating_level[key]),
+        "rating": long_term.rating,
+        "periods": {
+            name: levels(long_term.period_levels[key][k], long_term.period_a[key][k])
+            for k, name in enumerate(long_term.periods)
+        },
+        "classes": {
+            name: levels(long_term.class_levels[key][k], long_term.class_a[key][k])
+            for k, name in enumerate(long_term.classes)
+        },
+    }
+    for what in ("re_free_field", "insertion_loss"):
+        bands = getattr(long_term, what).get(key)
+        if bands is not None:
+            entry[f"{what}_db"] = [_plain(v) for v in bands]
+            entry[f"{what}_a_db"] = _plain(getattr(long_term, f"{what}_a")[key])
+    return entry
 
 
 def _plain(value: float) -> float | None:

@@ -50,7 +50,7 @@ import functools
 import math
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
 import numpy as np
 import yaml
@@ -1612,21 +1612,18 @@ class ZoneWind(_Model):
     )
 
 
-class WeatherZone(_Model):
-    """A part of the scene over which the weather differs: the wind slowed in the lee of
-    buildings or over a wood, a sea breeze over the water, an inversion over a lake. A
-    polygon on the ground, in the geometry's units; where zones overlap the first wins,
-    and outside every zone the atmosphere's own weather holds. A ``preset`` gives the
-    zone that weather whole, its wind blowing the atmosphere's way unless the zone says
-    otherwise; without one, a field left out stays the atmosphere's, and a wind given
-    keeps the atmosphere's direction, height and profile where it leaves them out. A
-    zone that gives the temperature's gradient or log term drops the atmosphere's
-    table, and one that gives a table drops them. The eddies are the atmosphere's."""
+class _WeatherOverride(_Model):
+    """A weather given over the atmosphere's: what it gives replaces the atmosphere's,
+    what it leaves out stays. A ``preset`` gives that weather whole, its wind blowing
+    the atmosphere's way unless said otherwise; without one, a wind given keeps the
+    atmosphere's direction, height and profile where it leaves them out. Giving the
+    temperature's gradient or log term drops the atmosphere's table, and giving a table
+    drops them."""
 
-    name: str | None = Field(default=None, description="None: weather_1, weather_2...")
-    polygon: list[tuple[float, float]] = Field(
-        min_length=3, description="(x, y) corners of the zone, in order"
-    )
+    #: What it is called in error messages.
+    _what: ClassVar[str] = "weather"
+
+    name: str | None = Field(default=None, description="None: numbered by its place")
     preset: str | None = Field(
         default=None,
         description="a weather of its own to start from: " + ", ".join(ATMOSPHERE_PRESETS),
@@ -1634,8 +1631,8 @@ class WeatherZone(_Model):
     wind: ZoneWind | None = Field(
         default=None,
         description=(
-            "the wind over the zone, what it gives replacing the atmosphere's; None: the "
-            "atmosphere's (none with a preset)"
+            "the wind, what it gives replacing the atmosphere's; None: the atmosphere's "
+            "(none with a preset)"
         ),
     )
     temperature_gradient_k_m: float | None = Field(
@@ -1658,34 +1655,50 @@ class WeatherZone(_Model):
     roughness_m: PositiveFloat | None = Field(
         default=None,
         le=2.0,
-        description="the ground's roughness length (m) in the zone; None: the atmosphere's",
+        description="the ground's roughness length (m); None: the atmosphere's",
     )
     table: list[tuple[float, float, float]] | None = Field(
         default=None,
         description=(
-            "a measured profile over the zone in place of the formulas: [height above the "
-            "ground (m), temperature (°C), wind speed (m/s)] rows, by height"
+            "a measured profile in place of the formulas: [height above the ground (m), "
+            "temperature (°C), wind speed (m/s)] rows, by height"
         ),
     )
     temperature_c: float | None = Field(
         default=None,
         ge=-20.0,
         le=50.0,
-        description="the temperature at the ground in the zone (°C); None: the scene's air's",
+        description="the temperature at the ground (°C); None: the scene's air's",
     )
 
     @model_validator(mode="after")
-    def _check(self) -> WeatherZone:
+    def _check(self) -> _WeatherOverride:
         if self.preset is not None:
             _check_preset(self.preset)
         if self.table is not None:
             _check_table_rows(self.table)
             if self.temperature_gradient_k_m is not None or self.temperature_log_k is not None:
                 raise ValueError(
-                    "give a weather zone a table or the temperature's gradient and log "
+                    f"give a {self._what} a table or the temperature's gradient and log "
                     "terms, not both"
                 )
         return self
+
+
+class WeatherZone(_WeatherOverride):
+    """A part of the scene over which the weather differs: the wind slowed in the lee of
+    buildings or over a wood, a sea breeze over the water, an inversion over a lake. A
+    polygon on the ground, in the geometry's units; where zones overlap the first wins,
+    and outside every zone the atmosphere's own weather holds. Its weather is given
+    over the atmosphere's (see :class:`_WeatherOverride`); the eddies are the
+    atmosphere's."""
+
+    _what: ClassVar[str] = "weather zone"
+
+    name: str | None = Field(default=None, description="None: weather_1, weather_2...")
+    polygon: list[tuple[float, float]] = Field(
+        min_length=3, description="(x, y) corners of the zone, in order"
+    )
 
 
 class Turbulence(_Model):
@@ -1761,6 +1774,134 @@ class Turbulence(_Model):
     def calm(self) -> bool:
         """Whether there are no eddies at all."""
         return self.temperature_structure == 0.0 and self.wind_structure == 0.0
+
+
+class WeatherClass(_WeatherOverride):
+    """A weather that holds for a share of the time, for the levels over a long term
+    (:class:`LongTerm`): downwind, upwind, a clear night's inversion... Its weather is
+    given over the scene's atmosphere's (see :class:`_WeatherOverride`), the eddies
+    too, and the scene's weather zones hold in every class."""
+
+    _what: ClassVar[str] = "weather class"
+
+    name: str | None = Field(default=None, description="None: class_1, class_2...")
+    share: float | dict[str, float] = Field(
+        description=(
+            "the share of the time this weather holds (0 to 1): one share for every "
+            "period, or one per period by name; over the classes the shares of each "
+            "period add up to 1"
+        )
+    )
+    turbulence: Turbulence | None = Field(
+        default=None, description="the eddies in this weather; None: the atmosphere's"
+    )
+
+    @field_validator("share")
+    @classmethod
+    def _check_share(cls, share):
+        values = share.values() if isinstance(share, dict) else [share]
+        if any(not 0.0 <= v <= 1.0 for v in values):
+            raise ValueError("a weather class's share of the time is between 0 and 1")
+        return share
+
+
+class Period(_Model):
+    """A part of the day the rating level over a long term is taken over: its hours and
+    the penalty added to its level in the rating (5 dB in the evening and 10 dB at night
+    for L_den)."""
+
+    name: str = Field(min_length=1)
+    hours: PositiveFloat = Field(le=24.0, description="how many hours a day it lasts")
+    penalty_db: float = Field(
+        default=0.0, ge=0.0, le=20.0, description="added to its level in the rating"
+    )
+
+
+DEFAULT_PERIODS: tuple[dict, ...] = (
+    {"name": "day", "hours": 12.0},
+    {"name": "evening", "hours": 4.0, "penalty_db": 5.0},
+    {"name": "night", "hours": 8.0, "penalty_db": 10.0},
+)
+
+
+class LongTerm(_Model):
+    """The levels over a long term, outdoors: the weather changes from day to day, and
+    the level over a year is the energy mean of the levels in each weather, weighted by
+    the share of the time it holds (ISO 1996-2, CNOSSOS-EU, Nord2000). The scene is run
+    once in each weather class, and the results give the level in each class, in each
+    period of the day (the classes' levels, each by its share in that period) and the
+    rating level over the day (the periods' levels, each by its hours, with its penalty:
+    L_den with the default periods)."""
+
+    periods: list[Period] | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "the parts of the day; None: day 12 h, evening 4 h +5 dB, night 8 h +10 dB (L_den)"
+        ),
+    )
+    classes: list[WeatherClass] = Field(
+        min_length=1, description="the weathers, each with its share of the time"
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> LongTerm:
+        names = self.period_names()
+        twice = sorted({n for n in names if names.count(n) > 1})
+        if twice:
+            raise ValueError(f"long_term.periods names {twice[0]!r} twice")
+        classes = self.class_names()
+        twice = sorted({n for n in classes if classes.count(n) > 1})
+        if twice:
+            raise ValueError(f"long_term.classes names {twice[0]!r} twice")
+        for name, given in zip(classes, self.classes, strict=True):
+            if isinstance(given.share, dict):
+                unknown = sorted(set(given.share) - set(names))
+                if unknown:
+                    raise ValueError(
+                        f"weather class {name!r} gives a share for {unknown[0]!r}, which is "
+                        f"no period (they are: {', '.join(names)})"
+                    )
+        shares = self.shares()
+        for k, period in enumerate(names):
+            total = float(shares[:, k].sum())
+            if abs(total - 1.0) > 1e-3:
+                raise ValueError(
+                    f"the weather classes' shares of the {period} add up to {total:g}, not 1"
+                )
+        return self
+
+    def class_names(self) -> list[str]:
+        """The classes' names, ``class_<n>`` for those without one."""
+        return [c.name or f"class_{k + 1}" for k, c in enumerate(self.classes)]
+
+    def period_list(self) -> list[Period]:
+        """The periods of the day, L_den's when none are given."""
+        if self.periods is not None:
+            return list(self.periods)
+        return [Period(**p) for p in DEFAULT_PERIODS]
+
+    def period_names(self) -> list[str]:
+        return [p.name for p in self.period_list()]
+
+    def shares(self) -> np.ndarray:
+        """(classes, periods) the share of each period's time each class holds; a class
+        that gives no share for a period, in a mapping, holds none of it."""
+        periods = self.period_list()
+        out = np.zeros((len(self.classes), len(periods)))
+        for row, given in enumerate(self.classes):
+            for col, period in enumerate(periods):
+                share = given.share
+                out[row, col] = share.get(period.name, 0.0) if isinstance(share, dict) else share
+        return out
+
+    def hours(self) -> np.ndarray:
+        """(periods,) how many hours a day each period lasts."""
+        return np.array([p.hours for p in self.period_list()], dtype=float)
+
+    def penalties(self) -> np.ndarray:
+        """(periods,) the penalty added to each period's level in the rating (dB)."""
+        return np.array([p.penalty_db for p in self.period_list()], dtype=float)
 
 
 class Atmosphere(_Model):
@@ -1853,7 +1994,19 @@ class Atmosphere(_Model):
         own = self.model_copy(update={"zones": None, "turbulence": None})
         return [own, *(self._resolved(zone) for zone in self.zones or [])]
 
-    def _resolved(self, zone: WeatherZone) -> Atmosphere:
+    def under(self, given: WeatherClass) -> Atmosphere:
+        """This atmosphere in a weather class: the class's weather over its own (see
+        :class:`_WeatherOverride`), the class's eddies or its own, and its zones."""
+        values = self._values(given)
+        values["turbulence"] = given.turbulence if given.turbulence is not None else self.turbulence
+        values["zones"] = self.zones
+        return Atmosphere(**values)
+
+    def _resolved(self, zone: _WeatherOverride) -> Atmosphere:
+        return Atmosphere(**self._values(zone))
+
+    def _values(self, zone: _WeatherOverride) -> dict:
+        """The fields of this atmosphere's weather with ``zone``'s given over it."""
         base = None if self.wind is None else self.wind.model_dump()
         if zone.preset is not None:
             values: dict = {
@@ -1891,7 +2044,7 @@ class Atmosphere(_Model):
             values["table"] = None
         if values["table"] is not None:
             values["temperature_gradient_k_m"] = values["temperature_log_k"] = 0.0
-        return Atmosphere(**values)
+        return values
 
     def ground_temperatures(self, ground_c: float) -> list[float]:
         """The temperature at the ground (°C) under the atmosphere's own weather
@@ -2303,6 +2456,13 @@ class Scene(_Model):
     coverage: Coverage | None = Field(
         default=None, description="coverage map settings (map command); None uses the defaults"
     )
+    long_term: LongTerm | None = Field(
+        default=None,
+        description=(
+            "outdoors: the weather classes and the periods of the day the levels over a "
+            "long term are rated over (L_den); the scene is run once in each class"
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_references(self) -> Scene:
@@ -2346,6 +2506,8 @@ class Scene(_Model):
         duplicates = sorted({n for n in names if names.count(n) > 1})
         if duplicates:
             raise ValueError(f"source and listener names must be unique: {', '.join(duplicates)}")
+        if self.long_term is not None and self.geometry.ground is None:
+            raise ValueError("long_term is for outdoor scenes (geometry.ground)")
         removed = self.simulation.insertion_loss_of
         if removed is not None:
             if self.geometry.ground is None:
@@ -2365,6 +2527,18 @@ class Scene(_Model):
             if twice:
                 raise ValueError(f"simulation.insertion_loss_of names {twice[0]!r} twice")
         return self
+
+    def under(self, given: WeatherClass) -> Scene:
+        """This outdoor scene in a weather class: its atmosphere under the class's weather
+        (:meth:`Atmosphere.under`), the air at the class's ground temperature when it
+        gives one, and without ``long_term``."""
+        data = self.to_data()
+        atmosphere = self.atmosphere or Atmosphere()
+        data["atmosphere"] = atmosphere.under(given).model_dump(mode="json", exclude_none=True)
+        if given.temperature_c is not None:
+            data.setdefault("air", {})["temperature_c"] = given.temperature_c
+        data.pop("long_term", None)
+        return Scene.model_validate(data)
 
     def without(self, names: Sequence[str]) -> Scene:
         """This outdoor scene without the buildings, barriers and vegetation of these

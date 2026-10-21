@@ -8,6 +8,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -29,6 +30,9 @@ from acoustic_spaces.room import Room
 from acoustic_spaces.scene import Scene
 from acoustic_spaces.scene.model import Simulation as SimulationSettings
 from acoustic_spaces.spatial.directions import fibonacci_sphere
+
+if TYPE_CHECKING:
+    from acoustic_spaces.engine.long_term import LongTermLevels
 
 #: Slot width of the late energy (s).
 TIME_STEP = 1e-3
@@ -54,6 +58,10 @@ class SimulationResult:
     #: the level with them. Empty otherwise.
     removed: tuple[str, ...] = ()
     insertion_loss: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)
+    #: The levels over a long term, when the scene has weather classes (``long_term``;
+    #: :func:`~acoustic_spaces.engine.long_term.simulate`): the responses are the scene's
+    #: own weather's, this holds each class's run and the levels combined. None otherwise.
+    long_term: LongTermLevels | None = None
 
     def parameters(self) -> dict[tuple[str, str], RoomParameters]:
         """ISO 3382-1 parameters of every response."""

@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 from PySide6.QtCore import QThread, Signal
 
-from acoustic_spaces.engine.insertion import coverage_map, simulate
+from acoustic_spaces.engine.long_term import coverage_map, simulate
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene.model import Simulation
 
@@ -23,7 +23,8 @@ class Cancelled(Exception):
 class SimulationJob(QThread):
     """Runs :func:`acoustic_spaces.engine.simulate` on a room in a worker thread, and
     again without what ``simulation.insertion_loss_of`` names, for its insertion loss
-    (:mod:`acoustic_spaces.engine.insertion`)."""
+    (:mod:`acoustic_spaces.engine.insertion`), and in each weather class of the scene's
+    ``long_term`` (:mod:`acoustic_spaces.engine.long_term`)."""
 
     #: What it runs, for messages.
     kind = "simulation"
@@ -81,7 +82,8 @@ class SimulationJob(QThread):
 
 
 class MapJob(SimulationJob):
-    """Runs :func:`acoustic_spaces.engine.coverage_map` (also for an insertion loss);
+    """Runs :func:`acoustic_spaces.engine.coverage_map` (also for an insertion loss and
+    in weather classes);
     ``done`` carries the :class:`~acoustic_spaces.engine.CoverageResult`."""
 
     kind = "coverage map"

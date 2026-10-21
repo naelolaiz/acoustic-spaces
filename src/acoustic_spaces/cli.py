@@ -39,6 +39,8 @@ MAP_PARAMETER_NAMES = (
     "re_free_field",
     "insertion_loss",
     "insertion_loss_a",
+    "long_term",
+    "rating_level",
 )
 #: Edge diffraction settings (engine.diffraction.DIFFRACTION_MODES).
 DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
@@ -260,6 +262,9 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         if scene.atmosphere is not None:
             for line in _atmosphere_lines(scene.atmosphere, scene.air.temperature_c, room.outdoor):
                 print(f"  {line}")
+        if scene.long_term is not None:
+            for line in _long_term_lines(scene):
+                print(f"  {line}")
 
     width = max([len(n) for n in room.material_names] + [12]) + 2
     print("\nmaterials (absorption per octave band, area)")
@@ -386,6 +391,41 @@ def _zone_lines(atmosphere, ground_c: float) -> list[str]:
             parts.append(f"ground at {grounds[k]:g} °C")
         corners = len(zone.polygon)
         lines.append(f"  weather zone {name} ({corners} corners): " + "; ".join(parts))
+    return lines
+
+
+def _long_term_lines(scene) -> list[str]:
+    """The weather classes of the levels over a long term, each with its share of the
+    time and its weather as the engine resolves it, and the periods of the day."""
+    from acoustic_spaces.engine.long_term import rating_name
+    from acoustic_spaces.scene.model import Atmosphere
+
+    spec = scene.long_term
+    periods = spec.period_list()
+    hours, penalties = spec.hours(), spec.penalties()
+    rating = rating_name(spec.period_names(), hours, penalties)
+    days = ", ".join(
+        f"{p.name} {p.hours:g} h" + (f" +{p.penalty_db:g} dB" if p.penalty_db else "")
+        for p in periods
+    )
+    count = len(spec.classes)
+    lines = [f"long term: {count} weather class{'es' if count != 1 else ''} over {days} ({rating})"]
+    atmosphere = scene.atmosphere or Atmosphere()
+    shares = spec.shares()
+    for k, (name, given) in enumerate(zip(spec.class_names(), spec.classes, strict=True)):
+        weather = atmosphere.under(given)
+        parts = _weather_parts(weather)
+        if weather.still:
+            parts.append("still air")
+        elif weather.wind is not None and weather.wind.speed_m_s > 0.0:
+            parts.append(f"blowing towards {weather.wind.direction_deg:g} deg from +x")
+        if given.temperature_c is not None:
+            parts.append(f"ground at {given.temperature_c:g} °C")
+        if max(shares[k]) > min(shares[k]):
+            share = ", ".join(f"{p.name} {100 * shares[k, j]:g} %" for j, p in enumerate(periods))
+        else:
+            share = f"{100 * shares[k, 0]:g} % of the time"
+        lines.append(f"  weather class {name} ({share}): " + "; ".join(parts))
     return lines
 
 
@@ -876,7 +916,7 @@ def _add_without_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def _cmd_simulate(args: argparse.Namespace) -> int:
-    from acoustic_spaces.engine.insertion import simulate
+    from acoustic_spaces.engine.long_term import simulate
     from acoustic_spaces.results import REPORT_FILE, write_results
     from acoustic_spaces.spatial import from_output
 
@@ -990,8 +1030,9 @@ def _level_text(entry: dict) -> str:
 
 
 def _outdoor_lines(entry: dict, removed) -> list[str]:
-    """Outdoors: the level relative to free field, and the insertion loss of what the run
-    was also made without, each A-weighted and per octave band."""
+    """Outdoors: the level relative to free field, the insertion loss of what the run
+    was also made without, each A-weighted and per octave band, and the levels over a
+    long term when the scene has weather classes."""
     lines = []
     for key, what in (
         ("re_free_field", "re free field"),
@@ -1001,6 +1042,31 @@ def _outdoor_lines(entry: dict, removed) -> list[str]:
             bands = " ".join(_number(v, "+.1f") for v in entry[f"{key}_db"])
             total = _number(entry[f"{key}_a_db"], "+.1f")
             lines.append(f"{what} {total} dB(A); per octave band, dB: {bands}")
+    long_term = entry.get("long_term")
+    if long_term:
+        periods = ", ".join(
+            f"{name} {_number(v['spl_a_db'], '.1f')}" for name, v in long_term["periods"].items()
+        )
+        classes = ", ".join(
+            f"{name} {_number(v['spl_a_db'], '.1f')}" for name, v in long_term["classes"].items()
+        )
+        bands = " ".join(_number(v, ".1f") for v in long_term["spl_db"])
+        rating = _number(long_term["rating_level_db"], ".1f")
+        lines.append(
+            f"long term {long_term['rating']} {rating} dB(A); "
+            f"{periods} dB(A); in the weather classes {classes} dB(A)"
+        )
+        lines.append(
+            f"long term {_number(long_term['spl_a_db'], '.1f')} dB(A); per octave band, dB: {bands}"
+        )
+        for key, what in (
+            ("re_free_field", "long term re free field"),
+            ("insertion_loss", f"long term insertion loss of {', '.join(removed)}"),
+        ):
+            if f"{key}_db" in long_term:
+                bands = " ".join(_number(v, "+.1f") for v in long_term[f"{key}_db"])
+                total = _number(long_term[f"{key}_a_db"], "+.1f")
+                lines.append(f"{what} {total} dB(A); per octave band, dB: {bands}")
     return lines
 
 
@@ -1044,7 +1110,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
     import numpy as np
 
     from acoustic_spaces.engine.coverage import MAP_PARAMETERS
-    from acoustic_spaces.engine.insertion import coverage_map
+    from acoustic_spaces.engine.long_term import coverage_map
     from acoustic_spaces.scene import Coverage
 
     room = _load_room(args.scene)

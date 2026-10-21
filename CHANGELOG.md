@@ -398,6 +398,34 @@
   zone**, which draws one in the plan, **Remove weather zone** and a zone's **Ground
   temperature**; the plan draws the zones dotted in sky blue, with their names.
 
+**Levels over a long term**
+
+- `long_term` gives weather classes and their shares of the time, and the scene is
+  run in each: noise maps and assessments give the level over a year, in which each
+  weather counts for the share of the time it holds (ISO 1996-2, CNOSSOS-EU,
+  Nord2000). A class takes any of a weather zone's fields over the scene's weather
+  and may have eddies of its own; its `share` is one number or one per period of the
+  day. The periods are L_den's by default (day 12 hours, evening 4 with 5 dB, night 8
+  with 10 dB); `long_term.periods` gives others. Every run shares the seed, and a
+  class whose weather is the scene's takes the scene's run. Without `long_term`
+  nothing changes: results are as before, bit for bit.
+- At every listener and map point, per octave band and A-weighted: the level in each
+  class, in each period (the energy mean of the classes by their shares), the
+  long-term level (the energy mean of the periods by their hours), the rating level
+  (L_den, or L_R with other periods), and the long-term level relative to free field
+  and insertion loss. `simulate` prints them, `parameters.json` has them in a
+  `long_term` entry per response, maps gain `long_term` and `rating_level`, and
+  `inspect` lists the classes and periods. Checked by `validation/long_term.py`: the
+  combination agrees with the formulas worked from each class's run to rounding, and
+  the correction from the classes favourable to propagation to the long-term level
+  follows ISO 9613-2's C_met within 0.8 dB, with a C_0 of 3.4 dB (see
+  [Validation](docs/validation.md#levels-over-a-long-term)).
+- The editor's **Weather of** lists weather classes as well as zones, with **Add
+  weather class**, **Remove weather class** and each class's **Share of the time** per
+  period (the other classes make room in proportion); the results panel gains a
+  **Long-term level** row and the run details each period's and class's levels and
+  the rating level; maps offer both new parameters.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

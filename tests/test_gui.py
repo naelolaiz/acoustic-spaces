@@ -1653,6 +1653,125 @@ def test_weather_zones_form(window, qapp) -> None:
     assert len(atmosphere().zones) == 1 and page.weather_zone.count() == 2
 
 
+def test_weather_classes_form(window, qapp) -> None:
+    window.open_example(example_path("open_air_stage"))
+    window.select("scene", None)
+    page = window.inspector.pages["scene"]
+    form = page._weather_form
+    document = window.document
+
+    def long_term():
+        return document.scene.long_term
+
+    # Without classes the form shows no shares or periods.
+    assert long_term() is None and not page.remove_weather_class.isEnabled()
+    assert not form.isRowVisible(page.class_shares) and not form.isRowVisible(page.periods)
+
+    # The first class holds all the time in the scene's weather, and the form shows it.
+    page.add_weather_class.click()
+    assert [c.name for c in long_term().classes] == ["class_1"]
+    assert long_term().classes[0].share == 1.0 and document.undo_text() == "add weather class"
+    assert page.weather_zone.currentData() == "class:0"
+    assert page.weather_zone.currentText() == "weather class class_1"
+    assert page.remove_weather_class.isEnabled() and form.isRowVisible(page.class_shares)
+    assert page.periods.text() == (
+        "Levels over a long term: 1 weather class over day 12 h, evening 4 h +5 dB, "
+        "night 8 h +10 dB (L_den)"
+    )
+    shares = page.class_shares
+    assert [shares.horizontalHeaderItem(k).text() for k in range(3)] == ["day", "evening", "night"]
+    assert [shares.item(0, k).text() for k in range(3)] == ["100", "100", "100"]
+    assert not shares.item(0, 0).flags() & Qt.ItemFlag.ItemIsEditable  # the only class
+    assert page.weather.currentData() is None and page.weather.itemText(0) == "as the whole scene"
+    assert page.wind_speed.value() == 5.0  # the scene's weather
+    assert page.eddies.isEnabled() and page.eddies.itemText(0) == "as the whole scene"
+    assert page.eddies.currentData() is None and form.isRowVisible(page.zone_temperature)
+
+    # A second class: a clear night's inversion, for 60 % of the night.
+    page.add_weather_class.click()
+    assert page.weather_zone.currentData() == "class:1" and long_term().classes[1].share == 0.0
+    page.weather.setCurrentIndex(page.weather.findData("clear_night"))
+    assert long_term().classes[1].preset == "clear_night"
+    assert page.log_term.value() == 0.5 and page.wind_speed.value() == 0.0
+    assert document.scene.atmosphere.preset == "windy"  # the scene's weather stays
+    page.class_shares.item(0, 2).setText("60")
+    assert long_term().shares().tolist() == [[1.0, 1.0, 0.4], [0.0, 0.0, 0.6]]
+    assert long_term().classes[1].share == {"day": 0.0, "evening": 0.0, "night": 0.6}
+    assert page.class_shares.item(0, 2).text() == "60"
+    # Its own eddies, and the ground's temperature on such a night.
+    page.eddies.setCurrentIndex(page.eddies.findData("weak"))
+    assert long_term().classes[1].turbulence.preset == "weak"
+    assert document.scene.atmosphere.turbulence.preset == "moderate"
+    page.zone_temperature.setValue(8.0)
+    assert long_term().classes[1].temperature_c == 8.0
+    assert document.undo_text() == "change the weather class"
+    page.show_profile()  # the class's weather, as the engine resolves it
+    assert page.profile_window.isVisible()
+    page.profile_window.close()
+
+    # The whole scene's form keeps its own eddies and shows the periods.
+    page.weather_zone.setCurrentIndex(0)
+    assert page.eddies.itemText(0) == "(none)" and page.eddies.currentData() == "moderate"
+    assert not form.isRowVisible(page.class_shares) and form.isRowVisible(page.periods)
+    assert "2 weather classes" in page.periods.text()
+
+    # Removing a class gives its share to the others.
+    page.weather_zone.setCurrentIndex(page.weather_zone.findData("class:0"))
+    page.remove_weather_class.click()
+    assert [c.name for c in long_term().classes] == ["class_2"]
+    assert long_term().classes[0].share == 1.0 and page.weather_zone.currentData() is None
+    document.undo()
+    assert len(long_term().classes) == 2
+    # A floor plan drawn over the scene leaves the outdoors and its classes behind.
+    document.draw_floor_plan([[-10, -10], [10, -10], [10, 10], [-10, 10]], height=5.0)
+    assert document.scene.long_term is None and document.scene.atmosphere is None
+
+
+def test_a_run_over_a_long_term(window, qapp) -> None:
+    from acoustic_spaces.gui.results_view import ROWS
+    from acoustic_spaces.scene import Scene
+
+    scene = Scene.model_validate(
+        {
+            "geometry": {"ground": {"extent": [[-40, -40], [40, 40]], "sky": 20}},
+            "materials": {"field": {"impedance": "grass", "scattering": 0.0}},
+            "default_material": "field",
+            "sources": [{"name": "s", "position": [0, 0, 1.0]}],
+            "listeners": [{"name": "l", "position": [20, 0, 1.5]}],
+            "atmosphere": {"preset": "windy"},
+            "simulation": {
+                "ir_length_s": 0.3,
+                "seed": 2,
+                "early": {"method": "image_sources", "max_order": 1},
+                "late": {"rays": 500},
+            },
+            "long_term": {
+                "classes": [
+                    {"name": "downwind", "share": 0.6},
+                    {"name": "upwind", "share": 0.4, "wind": {"direction_deg": 180}},
+                ]
+            },
+        }
+    )
+    window._attach(Document(scene))
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    result = window.result
+    assert result is not None and result.long_term is not None
+    results = window.results
+    row = [name for name, _label, _template in ROWS].index("long_term")
+    assert not results.table.isRowHidden(row) and results.table.item(row, 4).text() != "–"
+    text = results.details.toPlainText()
+    assert "Levels over a long term in 2 weather classes (downwind, upwind), rated as L_den" in text
+    assert "s -> l: L_den" in text and "in the weather classes downwind" in text
+    # The map gains the long-term level and the rating level.
+    document = window.document
+    document.edit("coarse map", lambda d: d.update(coverage={"spacing": 20.0, "rays": 100}))
+    window.run_map()
+    _wait(qapp, lambda: window.job is None)
+    assert {"long_term", "rating_level"} <= set(window.coverage.parameters())
+
+
 def test_model_units_default_to_the_file(window) -> None:
     window.open_example(example_path("shoebox"))  # its scene says units: m
     window.select("geometry", None)

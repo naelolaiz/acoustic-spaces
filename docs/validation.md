@@ -1828,6 +1828,63 @@ direct sound further out. That is the cost of the equivalent profile the standar
 take (Nord2000, Harmonoise), and the reason the bands up to 500 Hz, and up to 2 kHz in
 a shadow, come from the parabolic equation, which goes through the zones.
 
+## Levels over a long term
+
+`validation/long_term.py` checks how the engine combines weather classes and the
+periods of the day (see [Levels over a long term](outdoor.md#levels-over-a-long-term)).
+The scene is a source 1 m over grass (Miki's impedance, 200 kPa s/m²) with the same
+sound power in every octave band, and listeners 1.5 m up from 50 to 800 m away along
+the wind, in four weather classes with shares of the day, the evening and the night as
+a weather statistic might give them:
+
+| class | weather | day | evening | night |
+|---|---|---|---|---|
+| downwind | `windy` (5 m/s 10 m up, towards the listeners) | 30 % | 25 % | 15 % |
+| upwind | `windy`, towards the source | 30 % | 25 % | 15 % |
+| still | `neutral` (still air) | 40 % | 30 % | 20 % |
+| inversion | `clear_night` (air warming with height) | 0 % | 20 % | 50 % |
+
+The downwind class is the scene's own weather, so the four classes take four runs,
+about 20 s together. The level in each class, each period (12, 4 and 8 hours), over
+the long term and L_den (5 dB in the evening, 10 at night), in dB(A):
+
+| | downwind | upwind | still | inversion | day | evening | night | long term | L_den |
+|---|---|---|---|---|---|---|---|---|---|
+| 50 m | 46.5 | 36.6 | 47.4 | 47.7 | 45.6 | 46.1 | 46.8 | 46.1 | 53.0 |
+| 100 m | 43.1 | 21.6 | 38.9 | 40.6 | 39.7 | 39.9 | 40.2 | 39.9 | 46.5 |
+| 200 m | 33.6 | 10.5 | 26.3 | 36.1 | 29.3 | 31.8 | 33.9 | 31.8 | 39.8 |
+| 400 m | 22.2 | -2.8 | 12.0 | 28.5 | 17.5 | 22.7 | 25.8 | 22.7 | 31.4 |
+| 800 m | 12.2 | -20.2 | -1.6 | 17.7 | 7.2 | 12.0 | 15.0 | 12.0 | 20.7 |
+
+**The arithmetic.** The script works the period levels, the long-term levels and L_den
+out again from each class's own run: the energy mean over the classes by their shares
+(ISO 1996-2, CNOSSOS-EU), over the periods by their hours, and L_den by Directive
+2002/49/EC. The engine agrees with it to rounding (0.0 dB at most).
+
+**The meteorological correction.** ISO 9613-2 predicts the level in conditions
+favourable to propagation, downwind or under a moderate ground-based inversion such as
+clear nights bring, and takes the long-term level from it as L_LT = L_DW - C_met, with
+C_met = C_0 (1 - 10 (h_s + h_r) / d_p) beyond d_p = 10 (h_s + h_r) and 0 nearer, where
+C_0 lies between 0 and 5 dB by the local weather statistics. The engine's C_met is the
+A-weighted level in the favourable classes (downwind and the inversion, combined by
+their shares of the whole day) less the long-term level. With C_0 fitted to it at 3.38
+dB, within the standard's range:
+
+| distance | engine | ISO 9613-2 | difference |
+|---|---|---|---|
+| 50 m | 0.94 | 1.69 | -0.76 |
+| 100 m | 2.25 | 2.54 | -0.29 |
+| 200 m | 3.13 | 2.96 | +0.17 |
+| 400 m | 3.43 | 3.17 | +0.26 |
+| 800 m | 3.49 | 3.28 | +0.21 |
+
+The engine's correction follows the standard's shape within 0.76 dB, the most at 50 m,
+where the standard's formula is only a step past d_p = 25 m and the ground's own
+pattern still differs from one weather to the next. This is a check of plausibility,
+not of accuracy: the standard's correction is an empirical fit, and the engine's comes
+from each class's physics, which the sections above check against a fast field
+program and parabolic equations.
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -2073,6 +2130,10 @@ its peak (single precision).
   changes over the scene is checked against a parabolic equation marched through the
   zones, not against measurements, and a zone's border is a step (see
   [Weather zones](#weather-zones-against-a-crank-nicholson-parabolic-equation)).
+  Levels over a long term are checked against the formulas they come from and against
+  ISO 9613-2's meteorological correction, not against long-term measurements, and are
+  only as good as the weather classes and shares given to them (see
+  [Levels over a long term](#levels-over-a-long-term)).
   Vegetation is checked against a particle simulation of the same model, not against
   measurements through trees; its foliage takes ISO 9613-2's rates, which the
   standard gives for depths of 20 to 200 m, or leaves as thin rigid discs, whose
@@ -2116,6 +2177,7 @@ python validation/terrain.py --json terrain.json
 python validation/ffp.py --json ffp.json
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
+python validation/long_term.py --json long_term.json
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/outdoor_gpu.py   # the outdoor examples on each device: levels and centre times
@@ -2133,7 +2195,7 @@ them the wave solver's, 2 the parabolic equation's), the outdoor measurements' a
 solver's outdoors about 18, the outdoor results' about 3, the terrain's about 4.5, the
 leaves' about 2, the fast field program's about 4, the benchmark's about 55 (much
 longer with `--far`), the weather zones' about 9 (2 the parabolic equation's, 7 the
-mean profile's) and each BRAS
+mean profile's), the long term's about 0.5 and each BRAS
 run about 30 minutes (85 in third-octave bands, or half that per room with
 `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it

@@ -44,9 +44,10 @@ from acoustic_spaces.parameters import MORE_PARAMETERS, PARAMETERS
 PLOT_SIZE = (720, 480)
 #: Rows of the parameter table: name, label, number format. After the first eight comes
 #: the sound pressure level at the source's sound power; the rest show only where the
-#: response gives them: outdoors the level relative to free field and the insertion loss
-#: of what the run was also made without, then those of ISO 3382-1 that need directions
-#: (stage support needs a listener near the source).
+#: response gives them: outdoors the level relative to free field, the insertion loss of
+#: what the run was also made without and the level over a long term (weather classes),
+#: then those of ISO 3382-1 that need directions (stage support needs a listener near
+#: the source).
 ROWS = [
     ("edt", N_("EDT (s)"), "{:.2f}"),
     ("t20", N_("T20 (s)"), "{:.2f}"),
@@ -59,6 +60,7 @@ ROWS = [
     ("spl", N_("SPL (dB)"), "{:.1f}"),
     ("re_free_field", N_("Re free field (dB)"), "{:.1f}"),
     ("insertion_loss", N_("Insertion loss (dB)"), "{:.1f}"),
+    ("long_term", N_("Long-term level (dB)"), "{:.1f}"),
     ("lf", N_("LF"), "{:.2f}"),
     ("lfc", N_("LFC"), "{:.2f}"),
     ("lj", N_("LJ (dB)"), "{:.1f}"),
@@ -70,9 +72,9 @@ ROWS = [
 ]
 assert {row[0] for row in ROWS[:8]} == set(PARAMETERS)
 #: The outdoor rows, right after the sound pressure level.
-OUTDOOR_ROWS = ("re_free_field", "insertion_loss")
-assert {row[0] for row in ROWS[9:11]} == set(OUTDOOR_ROWS)
-assert {row[0] for row in ROWS[11:]} <= set(MORE_PARAMETERS)
+OUTDOOR_ROWS = ("re_free_field", "insertion_loss", "long_term")
+assert {row[0] for row in ROWS[9:12]} == set(OUTDOOR_ROWS)
+assert {row[0] for row in ROWS[12:]} <= set(MORE_PARAMETERS)
 #: What each row of the parameter table means, for its tip.
 ROW_TIPS = {
     "edt": N_(
@@ -115,6 +117,12 @@ ROW_TIPS = {
         "names: the level here without them less the level with them. Positive where they "
         "shield the listener"
     ),
+    "long_term": N_(
+        "Level over a long term (dB), outdoors: the energy mean of the levels in the "
+        "scene's weather classes, each by its share of the time, over the periods of the "
+        "day. The Run details tab gives the rating level (L_den) and the level of each "
+        "period and each class"
+    ),
     "lf": N_(
         "Early lateral energy fraction (0 to 1): the share of the early sound (5 to "
         "80 ms) that comes from the sides, which makes the source sound wider"
@@ -153,6 +161,34 @@ ROW_TIPS = {
 assert set(ROW_TIPS) == {row[0] for row in ROWS}
 #: How often the head controls show the latest orientation (ms).
 HEAD_REFRESH_MS = 100
+
+
+def _long_term_line(long_term, key) -> str:
+    """One pair's levels over a long term, A-weighted: the rating level, the long-term
+    level, and the level in each period and in each weather class."""
+    periods = ", ".join(
+        fmt("{name} {level:.1f}", name=name, level=level)
+        for name, level in zip(long_term.periods, long_term.period_a[key], strict=True)
+    )
+    classes = ", ".join(
+        fmt("{name} {level:.1f}", name=name, level=level)
+        for name, level in zip(long_term.classes, long_term.class_a[key], strict=True)
+    )
+    return fmt(
+        # Translators: {rating} is the rating level's symbol (L_den); {periods} and
+        # {classes} are names from the scene file, each with its level.
+        _(
+            "{source} -> {listener}: {rating} {rated:.1f} dB(A), long-term level "
+            "{level:.1f} dB(A); {periods} dB(A); in the weather classes {classes} dB(A)"
+        ),
+        source=key[0],
+        listener=key[1],
+        rating=long_term.rating,
+        rated=long_term.rating_level[key],
+        level=long_term.levels_a[key],
+        periods=periods,
+        classes=classes,
+    )
 
 
 class HeadControls(QWidget):
@@ -518,6 +554,9 @@ class ResultsPanel(QWidget):
                 values = response.relative_to_free_field()
             elif name == "insertion_loss":
                 values = self.result.insertion_loss.get(self.pair(), nan)
+            elif name == "long_term":
+                long_term = self.result.long_term
+                values = nan if long_term is None else long_term.levels.get(self.pair(), nan)
             else:
                 values = getattr(parameters, name) * (1e3 if name == "ts" else 1.0)
             tip = _(ROW_TIPS[name])
@@ -550,6 +589,23 @@ class ResultsPanel(QWidget):
                     names=", ".join(removed),
                 )
             )
+        long_term = self.result.long_term
+        if long_term is not None:
+            count = len(long_term.classes)
+            lines.append(
+                fmt(
+                    ngettext(
+                        "Levels over a long term in {count} weather class ({names}), "
+                        "rated as {rating}",
+                        "Levels over a long term in {count} weather classes ({names}), "
+                        "rated as {rating}",
+                        count,
+                    ),
+                    count=count,
+                    names=", ".join(long_term.classes),
+                    rating=long_term.rating,
+                )
+            )
         for (source, listener), response in self.result.responses.items():
             diffracted = int(response.early.diffracted.sum())
             count = len(response.early)
@@ -575,6 +631,8 @@ class ResultsPanel(QWidget):
                     count,
                 )
             lines.append(fmt(text, **values))
+            if long_term is not None and (source, listener) in long_term.levels:
+                lines.append(_long_term_line(long_term, (source, listener)))
         self.details.setPlainText("\n".join(lines))
 
     def _replace_canvas(self, holder: QScrollArea, figure) -> None:

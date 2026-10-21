@@ -187,6 +187,11 @@ Outdoor acoustics, in steps:
   Crank-Nicholson parabolic equation marched through the zones
   (`validation/weather_zones.py`); drawn and set in the editor. Without zones nothing
   changes.
+- [x] O16 Levels over a long term: `long_term` runs the scene in weather classes with
+  their shares of the day, the evening and the night, and gives each period's level,
+  the long-term level and L_den (or L_R) at every listener and map point. Checked
+  against the formulas and ISO 9613-2's meteorological correction
+  (`validation/long_term.py`); set in the editor. Without it nothing changes.
 - [ ] A wide-angle parabolic equation (split-step Padé) for gradients that bend sound
   through large angles over several kilometres, where the narrow-angle one strays.
 

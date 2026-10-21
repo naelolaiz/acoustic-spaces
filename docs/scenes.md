@@ -112,6 +112,21 @@ atmosphere:
     - {name: lee, polygon: [[120, -60], [300, -60], [300, 60], [120, 60]], wind: {speed_m_s: 1}}
 ```
 
+`long_term` runs an outdoor scene in several weather classes, each holding for a share
+of the day, the evening and the night, for the level over a long term and L_den (see
+[Levels over a long term](outdoor.md#levels-over-a-long-term)):
+
+```yaml
+long_term:
+  classes:                      # a class takes the scene's weather where it says nothing
+    - {name: downwind, share: {day: 0.4, evening: 0.3, night: 0.2}}
+    - {name: upwind, wind: {direction_deg: 180}, share: {day: 0.3, evening: 0.2, night: 0.1}}
+    - {name: inversion, preset: clear_night, share: {day: 0, evening: 0.3, night: 0.6}}
+    - {name: still, preset: neutral, share: {day: 0.3, evening: 0.2, night: 0.1}}
+  # periods: [{name: day, hours: 12}, {name: evening, hours: 4, penalty_db: 5},
+  #           {name: night, hours: 8, penalty_db: 10}]   # the default, L_den
+```
+
 ### BIM models (IFC)
 
 IFC files from Revit, ArchiCAD, Vectorworks or any other BIM program are read with the

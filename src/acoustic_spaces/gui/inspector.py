@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces.engine import tuning
+from acoustic_spaces.engine.long_term import rating_name
 from acoustic_spaces.geometry import UNIT_SCALE
 from acoustic_spaces.geometry.io import SUPPORTED_SUFFIXES, ifc_spaces
 from acoustic_spaces.geometry.terrain import footprint_properties
@@ -61,6 +62,7 @@ from acoustic_spaces.scene.model import (
     LAYOUT_NAMES,
     TURBULENCE_PRESETS,
     Atmosphere,
+    LongTerm,
     Turbulence,
     Wind,
 )
@@ -324,11 +326,13 @@ class ScenePage(Page):
         self.weather_zone = QComboBox()
         self.weather_zone.setToolTip(
             _(
-                "Whose weather the fields below show and change: the whole scene's, or a "
+                "Whose weather the fields below show and change: the whole scene's; a "
                 "weather zone's, a part of the scene with wind and temperature of its own "
                 "(the lee of buildings, where the wind drops; a lake, over which the air "
-                "lies cooler), drawn in the plan. Outside the zones the scene's weather "
-                "holds, and the eddies are the scene's everywhere"
+                "lies cooler), drawn in the plan; or a weather class's, a weather that holds "
+                "for a share of the time, for the levels over a long term (L_den). Outside "
+                "the zones the scene's weather holds, and the eddies are the scene's "
+                "everywhere but in a weather class, which may have its own"
             )
         )
         self.weather_zone.currentIndexChanged.connect(self._weather_zone_chosen)
@@ -421,8 +425,9 @@ class ScenePage(Page):
         self.zone_temperature = spin(-20, 50, 1, 0.5, "°C")
         self.zone_temperature.setToolTip(
             _(
-                "The temperature at the ground in the weather zone (°C), where it differs "
-                "from the scene's air temperature: cooler over water, warmer over a car park"
+                "The temperature at the ground in the weather zone or class (°C), where it "
+                "differs from the scene's air temperature: cooler over water, warmer over a "
+                "car park, colder on a winter night"
             )
         )
         self.zone_temperature.valueChanged.connect(self._zone_temperature)
@@ -446,6 +451,55 @@ class ScenePage(Page):
         zone_buttons.addWidget(self.remove_weather_zone)
         zone_buttons.addStretch(1)
         form.addRow(zone_buttons)
+        self.class_shares = QTableWidget(1, 3)
+        self.class_shares.verticalHeader().hide()
+        self.class_shares.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.class_shares.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.class_shares.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.class_shares.setToolTip(
+            _(
+                "The share of each period of the day this weather class holds (%), from "
+                "weather statistics of the place: the inversions of a clear night come at "
+                "night, a strong sun by day. In each period the classes' shares add up to "
+                "100 %: changing one makes room in the others, in proportion"
+            )
+        )
+        self.class_shares.itemChanged.connect(self._class_share)
+        form.addRow(_("Share of the time"), self.class_shares)
+        self.periods = QLabel()
+        self.periods.setWordWrap(True)
+        self.periods.setToolTip(
+            _(
+                "The periods of the day the levels over a long term are rated over, with "
+                "their hours and the penalty each adds to its level: by default the day, the "
+                "evening and the night of L_den. Other periods are set in the scene file "
+                "(long_term.periods)"
+            )
+        )
+        form.addRow(self.periods)
+        class_buttons = QHBoxLayout()
+        self.add_weather_class = QPushButton(_("Add weather class"))
+        self.add_weather_class.setToolTip(
+            _(
+                "Add a weather that holds for a share of the time, for the levels over a long "
+                "term (L_den): the first holds all the time in the scene's weather, the next "
+                "ones none of it until given their share. A run then runs the scene in each "
+                "class and combines them"
+            )
+        )
+        self.add_weather_class.clicked.connect(self._add_weather_class)
+        self.remove_weather_class = QPushButton(_("Remove weather class"))
+        self.remove_weather_class.setToolTip(
+            _(
+                "Remove the weather class chosen under Weather of: the others take its share "
+                "of the time, in proportion"
+            )
+        )
+        self.remove_weather_class.clicked.connect(self._remove_weather_class)
+        class_buttons.addWidget(self.add_weather_class)
+        class_buttons.addWidget(self.remove_weather_class)
+        class_buttons.addStretch(1)
+        form.addRow(class_buttons)
         self.eddies = QComboBox()
         _fill(self.eddies, EDDIES)
         self.eddies.setToolTip(
@@ -541,41 +595,69 @@ class ScenePage(Page):
         self._weather_form = form
         return self.weather_group
 
-    def _weather_zone_index(self) -> int | None:
-        """The weather zone the form shows, or None for the whole scene's weather."""
+    def _weather_choice(self) -> tuple[str, int] | None:
+        """Whose weather the form shows: None for the whole scene's, ("zone", k) for a
+        weather zone's and ("class", k) for a weather class's."""
         value = self.weather_zone.currentData()
-        return None if value is None else int(value)
+        if value is None:
+            return None
+        kind, k = str(value).split(":")
+        return kind, int(k)
+
+    def _weather_zone_index(self) -> int | None:
+        """The weather zone the form shows, if it shows one."""
+        choice = self._weather_choice()
+        return choice[1] if choice is not None and choice[0] == "zone" else None
+
+    def _weather_class_index(self) -> int | None:
+        """The weather class the form shows, if it shows one."""
+        choice = self._weather_choice()
+        return choice[1] if choice is not None and choice[0] == "class" else None
 
     def _load_weather(self, scene) -> None:
-        atmosphere = scene.atmosphere
-        # The zones to choose from, keeping the choice while the zone is still there.
-        names = [] if atmosphere is None else atmosphere.zone_names()
-        chosen = self._weather_zone_index()
+        atmosphere, spec = scene.atmosphere, scene.long_term
+        # The zones and classes to choose from, keeping the choice while it is still there.
+        zones = [] if atmosphere is None else atmosphere.zone_names()
+        classes = [] if spec is None else spec.class_names()
+        choice = self._weather_choice()
         self.weather_zone.blockSignals(True)
         self.weather_zone.clear()
         self.weather_zone.addItem(_("the whole scene"), None)
-        for k, name in enumerate(names):
-            self.weather_zone.addItem(name, k)
-        if chosen is not None and chosen < len(names):
-            self.weather_zone.setCurrentIndex(chosen + 1)
+        for k, name in enumerate(zones):
+            self.weather_zone.addItem(name, f"zone:{k}")
+        for k, name in enumerate(classes):
+            # Translators: {name} is a weather class's name from the scene file.
+            self.weather_zone.addItem(_("weather class {name}").format(name=name), f"class:{k}")
+        if choice is not None:
+            found = self.weather_zone.findData(f"{choice[0]}:{choice[1]}")
+            self.weather_zone.setCurrentIndex(max(found, 0))
         self.weather_zone.blockSignals(False)
-        chosen = self._weather_zone_index()
-        self.remove_weather_zone.setEnabled(chosen is not None)
-        self.weather.setItemText(0, _("(none)") if chosen is None else _("as the whole scene"))
+        zone, given = self._weather_zone_index(), self._weather_class_index()
+        whole = zone is None and given is None
+        self.remove_weather_zone.setEnabled(zone is not None)
+        self.remove_weather_class.setEnabled(given is not None)
+        self.weather.setItemText(0, _("(none)") if whole else _("as the whole scene"))
+        self.eddies.setItemText(0, _("(none)") if given is None else _("as the whole scene"))
         shown = atmosphere or Atmosphere()
-        eddies = shown.turbulence
-        if chosen is None:
+        own_eddies = shown.turbulence
+        eddies = own_eddies
+        if zone is not None:
+            entry = atmosphere.zones[zone]
+            shown = atmosphere.weathers()[zone + 1]
+        elif given is not None:
+            entry = spec.classes[given]
+            shown = shown.under(entry)
+            eddies = entry.turbulence  # None: the scene's
+        if whole:
             _choose(self.weather, _weather_of(atmosphere))
         else:
-            zone = atmosphere.zones[chosen]
-            _choose(self.weather, _zone_weather_of(zone))
-            shown = atmosphere.weathers()[chosen + 1]
+            _choose(self.weather, _zone_weather_of(entry))
             self.zone_temperature.setValue(
-                scene.air.temperature_c if zone.temperature_c is None else zone.temperature_c
+                scene.air.temperature_c if entry.temperature_c is None else entry.temperature_c
             )
-        self._weather_form.setRowVisible(self.zone_temperature, chosen is not None)
+        self._weather_form.setRowVisible(self.zone_temperature, not whole)
         _choose(self.eddies, None if eddies is None else eddies.preset or "custom")
-        # The eddies are the scene's everywhere.
+        # The eddies are the scene's everywhere, and a weather class's while it holds.
         for box in (
             self.eddies,
             self.temperature_eddies,
@@ -584,8 +666,8 @@ class ScenePage(Page):
             self.eddy_height,
             self.eddy_falloff,
         ):
-            box.setEnabled(chosen is None)
-        eddies = eddies or Turbulence()
+            box.setEnabled(zone is None)
+        eddies = eddies or own_eddies or Turbulence()
         self.temperature_eddies.setValue(eddies.temperature_structure)
         self.wind_eddies.setValue(eddies.wind_structure)
         self.eddy_size.setValue(eddies.outer_scale_m)
@@ -621,8 +703,66 @@ class ScenePage(Page):
             )
         self._weather_form.setRowVisible(self.table, measured)
         self._weather_form.setRowVisible(self.drop_table, measured)
+        self._load_long_term(spec, given)
         if self.profile_window is not None and self.profile_window.isVisible():
             self.show_profile()
+
+    def _load_long_term(self, spec: LongTerm | None, given: int | None) -> None:
+        """The periods of the day, and the chosen weather class's share of each."""
+        self._weather_form.setRowVisible(self.periods, spec is not None)
+        self._weather_form.setRowVisible(self.class_shares, given is not None)
+        if spec is None:
+            return
+        periods = spec.period_list()
+        parts = [
+            # Translators: {name} is a period of the day from the scene file (day, evening,
+            # night), {hours} how long it lasts and {penalty} what its level gets added.
+            fmt(
+                _("{name} {hours:g} h +{penalty:g} dB"),
+                name=p.name,
+                hours=p.hours,
+                penalty=p.penalty_db,
+            )
+            if p.penalty_db
+            else fmt(_("{name} {hours:g} h"), name=p.name, hours=p.hours)
+            for p in periods
+        ]
+        count = len(spec.classes)
+        rating = rating_name(spec.period_names(), spec.hours(), spec.penalties())
+        self.periods.setText(
+            fmt(
+                ngettext(
+                    "Levels over a long term: {count} weather class over {periods} ({rating})",
+                    "Levels over a long term: {count} weather classes over {periods} ({rating})",
+                    count,
+                ),
+                count=count,
+                periods=", ".join(parts),
+                rating=rating,
+            )
+        )
+        if given is None:
+            return
+        table = self.class_shares
+        table.blockSignals(True)
+        table.setColumnCount(len(periods))
+        table.setHorizontalHeaderLabels([p.name for p in periods])
+        shares = spec.shares()
+        for col, period in enumerate(periods):
+            table.horizontalHeaderItem(col).setToolTip(
+                # Translators: {period} is a period of the day from the scene file (day,
+                # evening, night).
+                _("The share of the {period} this weather class holds (%)").format(
+                    period=period.name
+                )
+            )
+            item = QTableWidgetItem(number(100.0 * shares[given, col], ".4g"))
+            if count == 1:  # the only class holds all the time
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            table.setItem(0, col, item)
+        table.blockSignals(False)
+        header = table.horizontalHeader().sizeHint().height()
+        table.setFixedHeight(header + table.rowHeight(0) + 2 * table.frameWidth())
 
     def load(self) -> None:
         scene, room = self.document.scene, self.document.room
@@ -719,11 +859,18 @@ class ScenePage(Page):
             return
         value = self.weather.currentData()
         chosen = self._weather_zone_index()
-        atmosphere = self.document.scene.atmosphere
+        given = self._weather_class_index()
+        scene = self.document.scene
+        atmosphere = scene.atmosphere
         if chosen is not None:
             if value == _zone_weather_of(atmosphere.zones[chosen]):
                 return
             self._zone_weather(chosen, value)
+            return
+        if given is not None:
+            if value == _zone_weather_of(scene.long_term.classes[given]):
+                return
+            self._zone_weather(given, value, kind="class")
             return
         if value == _weather_of(atmosphere):
             return
@@ -747,14 +894,15 @@ class ScenePage(Page):
 
         self.apply(_("change the weather"), change)
 
-    def _zone_weather(self, chosen: int, value) -> None:
-        """The weather of zone ``chosen``: None, the scene's unchanged; a preset; or
-        custom, the values it shows written out."""
+    def _zone_weather(self, chosen: int, value, kind: str = "zone") -> None:
+        """The weather of zone (or ``kind`` "class": weather class) ``chosen``: None, the
+        scene's unchanged; a preset; or custom, the values it shows written out."""
+        held = ("name", "polygon", "share", "temperature_c", "turbulence")
 
         def change(data: dict) -> None:
-            zones = data["atmosphere"]["zones"]
+            zones = _entries(data, kind)
             old = zones[chosen]
-            kept = {k: old[k] for k in ("name", "polygon", "temperature_c") if k in old}
+            kept = {k: old[k] for k in held if k in old}
             if value is None:
                 zones[chosen] = kept
             elif value == "custom":
@@ -768,19 +916,82 @@ class ScenePage(Page):
         self.apply(_("change the weather"), change)
 
     def _zone_temperature(self, value: float) -> None:
-        chosen = self._weather_zone_index()
-        if chosen is None:
+        choice = self._weather_choice()
+        if choice is None:
             return
+        kind, chosen = choice
         scene_c = self.document.scene.air.temperature_c
 
         def change(data: dict) -> None:
-            zone = data["atmosphere"]["zones"][chosen]
+            zone = _entries(data, kind)[chosen]
             if value == scene_c:
                 zone.pop("temperature_c", None)
             else:
                 zone["temperature_c"] = value
 
-        self.apply(_("change the weather zone"), change)
+        if kind == "zone":
+            self.apply(_("change the weather zone"), change)
+        else:
+            self.apply(_("change the weather class"), change)
+
+    def _add_weather_class(self) -> None:
+        """A weather class in the scene's weather: the first for all the time, the next
+        ones for none of it until given a share. The form then shows it."""
+        spec = self.document.scene.long_term
+        names = [] if spec is None else spec.class_names()
+        name = unique_class_name(names)
+
+        def change(data: dict) -> None:
+            if spec is None:
+                data["long_term"] = {"classes": [{"name": name, "share": 1.0}]}
+            else:
+                data["long_term"]["classes"].append({"name": name, "share": 0.0})
+
+        if self.apply(_("add weather class"), change):
+            self.weather_zone.setCurrentIndex(self.weather_zone.findData(f"class:{len(names)}"))
+
+    def _remove_weather_class(self) -> None:
+        given = self._weather_class_index()
+        spec = self.document.scene.long_term
+        if given is None or spec is None:
+            return
+        shares = np.delete(spec.shares(), given, axis=0)
+        periods = spec.period_names()
+
+        def change(data: dict) -> None:
+            classes = data["long_term"]["classes"]
+            classes.pop(given)
+            if not classes:
+                del data["long_term"]
+                return
+            _write_shares(classes, _balanced(shares), periods)
+
+        self.weather_zone.setCurrentIndex(0)
+        self.apply(_("remove weather class"), change)
+
+    def _class_share(self, item: QTableWidgetItem) -> None:
+        """A weather class's share of one period: the other classes make room for it,
+        each in proportion to its own share (equally if none has any)."""
+        given = self._weather_class_index()
+        spec = self.document.scene.long_term
+        if given is None or spec is None or self._loading or len(spec.classes) < 2:
+            return
+        try:
+            value = parse_number(item.text()) / 100.0
+        except ValueError:
+            self.failed.emit(_("a share of the time is a number from 0 to 100 %"))
+            self.reload()
+            return
+        shares = spec.shares()
+        period = item.column()
+        shares[given, period] = min(max(value, 0.0), 1.0)
+        shares[:, period] = _balanced(shares, keep=given)[:, period]
+        periods = spec.period_names()
+
+        def change(data: dict) -> None:
+            _write_shares(data["long_term"]["classes"], shares, periods)
+
+        self.apply(_("change the weather class"), change)
 
     def _remove_weather_zone(self) -> None:
         chosen = self._weather_zone_index()
@@ -802,9 +1013,16 @@ class ScenePage(Page):
         if self.eddies.currentIndex() < 0:
             return
         value = self.eddies.currentData()
-        atmosphere = self.document.scene.atmosphere
-        eddies = None if atmosphere is None else atmosphere.turbulence
+        scene = self.document.scene
+        given = self._weather_class_index()
+        if given is not None:
+            eddies = scene.long_term.classes[given].turbulence
+        else:
+            eddies = None if scene.atmosphere is None else scene.atmosphere.turbulence
         if value == (None if eddies is None else eddies.preset or "custom"):
+            return
+        if given is not None:
+            self._class_eddies(given, value)
             return
 
         def change(data: dict) -> None:
@@ -829,8 +1047,44 @@ class ScenePage(Page):
 
         self.apply(_("change the eddies"), change)
 
-    def _eddy(self, field: str, value) -> None:
+    def _class_eddies(self, given: int, value) -> None:
+        """The eddies of weather class ``given``: None, the scene's; a preset, keeping
+        their size and height; or custom, the values the form shows written out."""
+
         def change(data: dict) -> None:
+            entry = data["long_term"]["classes"][given]
+            old = entry.get("turbulence")
+            if value is None:
+                entry.pop("turbulence", None)
+            elif value == "custom":
+                if old is None:  # the scene's eddies, written out as the class's own
+                    atmosphere = self.document.scene.atmosphere
+                    eddies = None if atmosphere is None else atmosphere.turbulence
+                    if eddies is not None:
+                        old = eddies.model_dump(mode="json", exclude_none=True)
+                entry["turbulence"] = _eddies_written_out(old)
+            else:
+                entry["turbulence"] = {"preset": value}
+                for kept in ("outer_scale_m", "height_m", "falloff"):
+                    if isinstance(old, dict) and kept in old:
+                        entry["turbulence"][kept] = old[kept]
+
+        self.apply(_("change the eddies"), change)
+
+    def _eddy(self, field: str, value) -> None:
+        given = self._weather_class_index()
+
+        def change(data: dict) -> None:
+            if given is not None:
+                # The class's own eddies, starting from the scene's when it has none.
+                entry = data["long_term"]["classes"][given]
+                old = entry.get("turbulence")
+                if old is None:
+                    old = (data.get("atmosphere") or {}).get("turbulence")
+                eddies = _eddies_written_out(old)
+                eddies[field] = value
+                entry["turbulence"] = eddies
+                return
             atmosphere = data.get("atmosphere") or {}
             eddies = _eddies_written_out(atmosphere.get("turbulence"))
             eddies[field] = value
@@ -841,14 +1095,15 @@ class ScenePage(Page):
 
     def _weather_data(self, data: dict) -> dict:
         """The scene-file entry the wind and temperature fields change, its preset
-        written out: the atmosphere's, or the chosen weather zone's."""
-        chosen = self._weather_zone_index()
-        if chosen is None:
+        written out: the atmosphere's, or the chosen weather zone's or class's."""
+        choice = self._weather_choice()
+        if choice is None:
             data["atmosphere"] = _written_out(data.get("atmosphere") or {})
             return data["atmosphere"]
-        zones = data["atmosphere"]["zones"]
-        zones[chosen] = _zone_written_out(zones[chosen])
-        return zones[chosen]
+        kind, chosen = choice
+        entries = _entries(data, kind)
+        entries[chosen] = _zone_written_out(entries[chosen])
+        return entries[chosen]
 
     def _atmosphere(self, field: str, value) -> None:
         def change(data: dict) -> None:
@@ -867,9 +1122,7 @@ class ScenePage(Page):
 
     def _drop_table(self) -> None:
         def change(data: dict) -> None:
-            atmosphere = self._weather_data(data)
-            atmosphere.pop("table", None)
-            data["atmosphere"] = atmosphere
+            self._weather_data(data).pop("table", None)
 
         self.apply(_("remove the measured profile"), change)
 
@@ -883,11 +1136,16 @@ class ScenePage(Page):
         scene, outdoor = self.document.scene, self.document.room.outdoor
         top = 100.0 if outdoor is None else max(outdoor.sky - outdoor.ground, 1.0)
         atmosphere, ground_c = scene.atmosphere or Atmosphere(), scene.air.temperature_c
-        chosen = self._weather_zone_index()
+        chosen, given = self._weather_zone_index(), self._weather_class_index()
         if chosen is not None:
             # The zone's weather, as the engine resolves it.
             atmosphere = scene.atmosphere.weathers()[chosen + 1]
             ground_c = scene.atmosphere.ground_temperatures(ground_c)[chosen + 1]
+        elif given is not None:
+            entry = scene.long_term.classes[given]
+            atmosphere = atmosphere.under(entry)
+            if entry.temperature_c is not None:
+                ground_c = entry.temperature_c
         figure = plot_atmosphere(atmosphere, ground_c, top=top)
         if self.profile_window is None:
             self.profile_window = QWidget(self, Qt.WindowType.Window)
@@ -922,6 +1180,47 @@ def _eddies_written_out(eddies) -> dict:
     eddies = {"preset": eddies} if isinstance(eddies, str) else copy.deepcopy(eddies)
     preset = eddies.pop("preset", None)
     return {**TURBULENCE_PRESETS.get(preset, {}), **eddies}
+
+
+def _entries(data: dict, kind: str) -> list[dict]:
+    """The scene file's weather zones ("zone") or weather classes ("class")."""
+    return data["atmosphere"]["zones"] if kind == "zone" else data["long_term"]["classes"]
+
+
+def unique_class_name(names) -> str:
+    """A name for a new weather class: ``class_<n>``, n from one more than the count of
+    ``names`` up, the first not among them."""
+    taken = set(names)
+    n = len(taken) + 1
+    while f"class_{n}" in taken:
+        n += 1
+    return f"class_{n}"
+
+
+def _balanced(shares, keep: int | None = None) -> np.ndarray:
+    """``shares`` (classes, periods) made to add up to 1 in each period: the classes but
+    ``keep`` scaled in proportion to their shares (equally where none has any)."""
+    shares = np.array(shares, dtype=float)
+    others = [k for k in range(len(shares)) if k != keep]
+    for period in range(shares.shape[1]):
+        room = 1.0 if keep is None else 1.0 - shares[keep, period]
+        total = shares[others, period].sum()
+        if total > 0.0:
+            shares[others, period] *= room / total
+        elif others:
+            shares[others, period] = room / len(others)
+    return shares
+
+
+def _write_shares(classes: list[dict], shares, periods: list[str]) -> None:
+    """Each class's share in the scene file: one number when it is the same in every
+    period, else one per period."""
+    for entry, row in zip(classes, np.round(shares, 6), strict=True):
+        values = [float(v) for v in row]
+        if max(values) - min(values) < 1e-9:
+            entry["share"] = values[0]
+        else:
+            entry["share"] = dict(zip(periods, values, strict=True))
 
 
 def _zone_weather_of(zone) -> str | None:

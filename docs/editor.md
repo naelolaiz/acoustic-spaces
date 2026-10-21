@@ -81,8 +81,9 @@ which frequencies each octave band holds.
   ![The editor with the lecture hall example and its speech transmission index map laid over the room](images/editor_map.png)
 
 - **Simulation > Run** (F5) works in the background. The **Results** panel shows the
-  ISO 3382-1 parameters (outdoors also the level relative to free field and the
-  insertion loss, see [Results outdoors](outdoor.md#results-outdoors)), the echogram
+  ISO 3382-1 parameters (outdoors also the level relative to free field, the insertion
+  loss and the level over a long term, see [Results outdoors](outdoor.md#results-outdoors)
+  and [Levels over a long term](outdoor.md#levels-over-a-long-term)), the echogram
   and decay curves and the arrival directions of any source and listener, and draws
   their reflection paths in the room. **Export**
   writes the same files as `simulate`; **Listen** plays a dry WAV file through the
@@ -205,8 +206,17 @@ weather the fields show and change, the whole scene's or a
 like a zone, dotted in sky blue with its name, and **Remove weather zone** drops the
 chosen one. A zone's weather starts as the scene's, its fields are those it changes,
 (none) under **Weather** leaves the scene's weather unchanged there, and **Ground
-temperature** gives the ground in the zone a temperature of its own. **Draw room**
-replaces an outdoor scene with a floor plan, after asking.
+temperature** gives the ground in the zone a temperature of its own. **Add weather
+class** adds a [weather class](outdoor.md#levels-over-a-long-term), a weather that
+holds for a share of the time, for the levels over a long term and L_den: **Weather
+of** then shows it, with its **Share of the time** in each period of the day (the
+other classes make room, in proportion, when one changes), its ground temperature and,
+under **Eddies**, eddies of its own if it has them. The first class holds all the time
+in the scene's weather, the next ones none of it until given a share, and **Remove
+weather class** gives the chosen one's share to the others. A run then runs the scene
+in every class, and the Results panel adds the row **Long-term level** and, under
+**Run details**, the rating level and the level in each period and each class. **Draw
+room** replaces an outdoor scene with a floor plan, after asking.
 
 ## Exporting to Blender
 

@@ -857,6 +857,90 @@ the Biot-Tolstoy-Medwin solution over an absorbing ground, the level over grass 
 0.15 dB of the exact ground reflection outside the band-filtered dip (see
 [Validation](validation.md#outdoor-results-against-exact-solutions)).
 
+## Levels over a long term
+
+The weather changes from day to day, and so does the level a road or a wind farm makes
+a kilometre away: noise maps and assessments give the level over a long term, a year,
+in which each weather counts for the share of the time it holds (ISO 1996-2,
+CNOSSOS-EU, Nord2000). `long_term` gives the weather classes and their shares:
+
+```yaml
+atmosphere:
+  preset: windy                       # 5 m/s 10 m up, towards the listeners
+long_term:
+  classes:
+    - name: downwind                  # the scene's own weather
+      share: {day: 0.3, evening: 0.25, night: 0.15}
+    - name: upwind
+      wind: {direction_deg: 180}
+      share: {day: 0.3, evening: 0.25, night: 0.15}
+    - name: still
+      preset: neutral
+      share: {day: 0.4, evening: 0.3, night: 0.2}
+    - name: inversion                 # clear nights: the air warms with height
+      preset: clear_night
+      temperature_c: 8
+      turbulence: weak
+      share: {day: 0, evening: 0.2, night: 0.5}
+```
+
+A class has a `name` (`class_1`, `class_2` and so on when left out), its `share` of the
+time, and any of a weather zone's fields over the scene's weather: `preset`, `wind`, the
+temperature's gradient and log term, `roughness_m`, `table` and `temperature_c`, the
+ground's temperature. They resolve as a zone's do (see [Weather zones](#weather-zones)),
+and a class without them is the scene's own weather. A class may also have
+`turbulence`, eddies of its own in place of the scene's: weak on a clear night, strong
+in the sun. The weather zones hold in every class. `share` is one number for the whole
+day, or one per period of the day, and in each period the classes' shares add up to 1.
+
+The periods are by default the day (12 hours), the evening (4 hours, 5 dB added) and
+the night (8 hours, 10 dB added) of L_den (Directive 2002/49/EC); `long_term.periods`
+gives others, each with its `name`, `hours` and `penalty_db`:
+
+```yaml
+long_term:
+  periods:                            # 15 hours of day, 9 of night with 10 dB (L_dn)
+    - {name: day, hours: 15}
+    - {name: night, hours: 9, penalty_db: 10}
+  classes:
+    - {name: downwind, share: {day: 0.5, night: 0.3}}
+    - {name: inversion, preset: clear_night, share: {day: 0.5, night: 0.7}}
+```
+
+The scene is run as it is, for its impulse responses, and once in each class, all with
+the same seed so that every run traces the same rays; a class whose weather is the
+scene's own takes the scene's run, so n classes cost at most n + 1 runs. Then, at every
+listener and every map point, per octave band and A-weighted:
+
+- the level in each class;
+- the level in each period: the energy mean of the classes' levels, each by its share
+  of that period, L = 10 lg Σ p_k 10^(L_k/10);
+- the **long-term level**: the energy mean of the periods' levels by their hours;
+- the **rating level**: each period's A-weighted level with its penalty added, averaged
+  by the hours. With the default periods it is L_den,
+  10 lg ((12·10^(L_day/10) + 4·10^((L_evening + 5)/10) + 8·10^((L_night + 10)/10)) / 24);
+  with others, L_R, a whole-day rating level as ISO 1996-1 defines it.
+
+The long-term level relative to free field, and the long-term insertion loss of what
+`insertion_loss_of` names (taken in every class), come with them. `simulate` prints
+them. `parameters.json` has a `long_term` block (the classes, their shares and the
+periods), and each response a `long_term` entry with `spl_db`, `spl_a_db`,
+`rating_level_db` and `rating` (L_den or L_R), the levels of each period and each
+class, and `re_free_field_db` and `insertion_loss_db` with their A-weighted values.
+Maps gain the parameters `long_term` (dB per band) and `rating_level` (dB(A)).
+`inspect` lists the classes with their shares and weathers, and the periods. From
+Python, `acoustic_spaces.engine.long_term.simulate` and `coverage_map` take
+`long_term=` to run classes the scene does not give, and `Scene.under(weather_class)`
+is the scene in one class. In the editor, weather classes are added and changed under
+**Weather of** (see [In the editor](#in-the-editor)).
+
+The level in each class is as accurate as the simulation in that weather (see [How the
+simulation bends sound](#how-the-simulation-bends-sound)). The combination is the
+standards' formula, exact to rounding; over grass, the correction it gives from the
+classes favourable to propagation to the long-term level follows ISO 9613-2's within
+0.8 dB, with a C_0 of 3.4 dB, inside the standard's 0 to 5 dB (see
+[Validation](validation.md#levels-over-a-long-term)).
+
 ## In the editor
 
 **File > New outdoor scene** starts one: a flat meadow 200 m across, with a source and
@@ -890,7 +974,15 @@ a [weather zone](#weather-zones)'s: **Add weather zone** draws one in the plan, 
 by corner, like a zone, **Remove weather zone** drops the chosen one, and a zone has a
 **Ground temperature** of its own; (none) under **Weather** leaves the scene's weather
 unchanged in a zone, and the zone's fields are those it changes. The plan draws the
-weather zones dotted in sky blue, with their names.
+weather zones dotted in sky blue, with their names. **Add weather class** adds a
+[weather class](#levels-over-a-long-term), which **Weather of** then shows: the first
+holds all the time in the scene's weather, the next ones none of it until given their
+share in the **Share of the time** table, one cell per period; changing one class's
+share makes room in the others, in proportion, so that each period's shares add up to
+100 %. A class has its own **Ground temperature** and may have eddies of its own (under
+**Eddies**, (none) is the scene's). **Remove weather class** drops the chosen one and
+gives its share to the others. The periods are set in the scene file, and the form
+names them.
 On the simulation page, **In pressure up to** goes up to 8000 Hz in an outdoor
 scene. The 3D view and the export to Blender leave the sky out (the 3D view keeps its
 edges, to show where the ground ends), and the status bar gives the ground's area
@@ -899,7 +991,8 @@ plan after asking, and brings **In pressure up to** back to a room's default whe
 was above 500 Hz. The **Simulation** entry of an outdoor scene with buildings,
 barriers or vegetation has an **Insertion loss** list, where ticking them runs the
 scene again without them (see [Results outdoors](#results-outdoors)), and the Results
-panel has the rows **Re free field** and **Insertion loss**.
+panel has the rows **Re free field**, **Insertion loss** and **Long-term level**,
+with the rating level and each period's and class's level under **Run details**.
 
 ## What is not modelled yet
 
@@ -912,6 +1005,14 @@ vegetation and the eddies.
 Vegetation is volumes filled evenly: a lone tree's trunk is left out, the foliage's
 attenuation is given, not derived from its leaves' size and density, and stems stand
 upright at random.
+
+Sound bent over the top of a barrier or a roof keeps straight legs in any weather, its
+level falling only past the start of a refraction shadow: the wind and the temperature
+do not change how much a barrier screens, though downwind and under an inversion it
+screens less in practice (ISO 9613-2 and CNOSSOS-EU take that as a path curved over
+the edge). Behind a barrier, then, the weather classes of a [long-term
+level](#levels-over-a-long-term) differ only by the sound that does not pass over its
+edge, the late sound above all.
 
 The eddies are the same over the whole scene (weather zones change the wind and the
 temperature, not the eddies), and the eddies' largest size is the same at every

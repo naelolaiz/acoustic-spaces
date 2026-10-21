@@ -137,13 +137,15 @@ def coverage_map(
     sources: Sequence[str] | None = None,
     threads: int | None = None,
     progress: Callable[[str], None] | None = None,
+    grid: coverage_stage.MapGrid | None = None,
 ) -> coverage_stage.CoverageResult:
     """:func:`~acoustic_spaces.engine.coverage.coverage_map`, and the insertion loss of
     the buildings, barriers and vegetation named in ``without`` (default:
     ``simulation.insertion_loss_of``) at every map point: each map gains
     ``insertion_loss`` (dB per octave band) and ``insertion_loss_a`` (dB(A), for the
     sources' sound power), the level without them less the level with them. Both runs
-    share the map's points, those of the scene as it is."""
+    share the map's points, those of the scene as it is (or ``grid``, as
+    :func:`~acoustic_spaces.engine.coverage.coverage_map` takes it)."""
     room = _as_room(room)
     simulation = simulation or room.scene.simulation
     names = _names(room, simulation, without)
@@ -156,6 +158,7 @@ def coverage_map(
             sources=sources,
             threads=threads,
             progress=progress,
+            grid=grid,
         )
     say = progress or (lambda _: None)
     started = time.perf_counter()
@@ -168,6 +171,7 @@ def coverage_map(
         sources=sources,
         threads=threads,
         progress=progress,
+        grid=grid,
     )
     say(f"Insertion loss: the map without {', '.join(names)}")
     without_parts = run(

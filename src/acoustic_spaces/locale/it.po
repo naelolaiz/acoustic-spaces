@@ -145,6 +145,28 @@ msgstr ""
 "perdita per inserzione ponderata A degli edifici, delle barriere acustiche o "
 "della vegetazione"
 
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Long-term level (dB)"
+msgstr "Livello a lungo termine (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"level over a long term, outdoors: the mean over the weather classes and the "
+"day"
+msgstr ""
+"livello a lungo termine, all'aperto: la media sulle classi meteorologiche e "
+"sul giorno"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Rating level (dB(A))"
+msgstr "Livello di valutazione (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "level over a long term with each period's penalty, A-weighted (L_den)"
+msgstr ""
+"livello a lungo termine con la penalizzazione di ogni periodo, ponderato A "
+"(L_den)"
+
 #. Translators: a background task such as "Simulating hall…", then how long it has run so far.
 #: acoustic_spaces/gui/activity.py
 #, python-brace-format
@@ -1711,17 +1733,22 @@ msgstr "Vento e temperatura"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"Whose weather the fields below show and change: the whole scene's, or a "
-"weather zone's, a part of the scene with wind and temperature of its own "
-"(the lee of buildings, where the wind drops; a lake, over which the air lies "
-"cooler), drawn in the plan. Outside the zones the scene's weather holds, and "
-"the eddies are the scene's everywhere"
+"Whose weather the fields below show and change: the whole scene's; a weather "
+"zone's, a part of the scene with wind and temperature of its own (the lee of "
+"buildings, where the wind drops; a lake, over which the air lies cooler), "
+"drawn in the plan; or a weather class's, a weather that holds for a share of "
+"the time, for the levels over a long term (L_den). Outside the zones the "
+"scene's weather holds, and the eddies are the scene's everywhere but in a "
+"weather class, which may have its own"
 msgstr ""
 "Di chi è il tempo che i campi qui sotto mostrano e cambiano: di tutta la "
-"scena o di una zona meteorologica, una parte della scena con vento e "
+"scena; di una zona meteorologica, una parte della scena con vento e "
 "temperatura propri (il sottovento degli edifici, dove il vento cala; un "
-"lago, sul quale l'aria è più fresca), disegnata nella pianta. Fuori dalle "
-"zone vale il tempo della scena, e la turbolenza è quella della scena ovunque"
+"lago, sul quale l'aria è più fresca), disegnata nella pianta; o di una "
+"classe meteorologica, un tempo che vale per una quota del tempo, per i "
+"livelli a lungo termine (L_den). Fuori dalle zone vale il tempo della scena, "
+"e la turbolenza è quella della scena ovunque tranne che in una classe "
+"meteorologica, che può avere la propria"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Weather of"
@@ -1838,12 +1865,13 @@ msgstr "Rugosità"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"The temperature at the ground in the weather zone (°C), where it differs "
-"from the scene's air temperature: cooler over water, warmer over a car park"
+"The temperature at the ground in the weather zone or class (°C), where it "
+"differs from the scene's air temperature: cooler over water, warmer over a "
+"car park, colder on a winter night"
 msgstr ""
-"La temperatura al suolo nella zona meteorologica (°C), dove differisce dalla "
-"temperatura dell'aria della scena: più fresca sull'acqua, più calda su un "
-"parcheggio"
+"La temperatura al suolo nella zona o classe meteorologica (°C), dove "
+"differisce dalla temperatura dell'aria della scena: più fresca sull'acqua, "
+"più calda su un parcheggio, più fredda in una notte d'inverno"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Ground temperature"
@@ -1874,6 +1902,63 @@ msgid ""
 msgstr ""
 "Rimuovere la zona meteorologica scelta in Tempo di: lì vale il tempo della "
 "scena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The share of each period of the day this weather class holds (%), from "
+"weather statistics of the place: the inversions of a clear night come at "
+"night, a strong sun by day. In each period the classes' shares add up to 100 "
+"%: changing one makes room in the others, in proportion"
+msgstr ""
+"La quota di ogni periodo del giorno in cui vale questa classe meteorologica "
+"(%), dalla statistica meteorologica del luogo: le inversioni di una notte "
+"serena arrivano di notte, un sole forte di giorno. In ogni periodo le quote "
+"delle classi sommano a 100 %: cambiarne una fa spazio nelle altre, in "
+"proporzione"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Share of the time"
+msgstr "Quota del tempo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The periods of the day the levels over a long term are rated over, with "
+"their hours and the penalty each adds to its level: by default the day, the "
+"evening and the night of L_den. Other periods are set in the scene file "
+"(long_term.periods)"
+msgstr ""
+"I periodi del giorno sui quali si valutano i livelli a lungo termine, con le "
+"loro ore e la penalizzazione che ciascuno aggiunge al proprio livello: per "
+"impostazione predefinita il giorno, la sera e la notte di L_den. Altri "
+"periodi si impostano nel file della scena (long_term.periods)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add weather class"
+msgstr "Aggiungi classe meteorologica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Add a weather that holds for a share of the time, for the levels over a long "
+"term (L_den): the first holds all the time in the scene's weather, the next "
+"ones none of it until given their share. A run then runs the scene in each "
+"class and combines them"
+msgstr ""
+"Aggiungere un tempo che vale per una quota del tempo, per i livelli a lungo "
+"termine (L_den): la prima vale per tutto il tempo con il tempo della scena, "
+"le successive per niente finché non ricevono la loro quota. Un calcolo "
+"esegue poi la scena in ogni classe e le combina"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove weather class"
+msgstr "Rimuovi classe meteorologica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the weather class chosen under Weather of: the others take its share "
+"of the time, in proportion"
+msgstr ""
+"Rimuovere la classe meteorologica scelta in Tempo di: le altre si dividono "
+"la sua quota del tempo, in proporzione"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2003,6 +2088,12 @@ msgstr ""
 msgid "the whole scene"
 msgstr "tutta la scena"
 
+#. Translators: {name} is a weather class's name from the scene file.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "weather class {name}"
+msgstr "classe meteorologica {name}"
+
 #: acoustic_spaces/gui/inspector.py
 msgid "as the whole scene"
 msgstr "come tutta la scena"
@@ -2013,6 +2104,35 @@ msgid "Measured profile at {count} height, from the scene file"
 msgid_plural "Measured profile at {count} heights, from the scene file"
 msgstr[0] "Profilo misurato a {count} altezza, dal file della scena"
 msgstr[1] "Profilo misurato a {count} altezze, dal file della scena"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} {hours:g} h +{penalty:g} dB"
+msgstr "{name} {hours:g} h +{penalty:g} dB"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} {hours:g} h"
+msgstr "{name} {hours:g} h"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Levels over a long term: {count} weather class over {periods} ({rating})"
+msgid_plural ""
+"Levels over a long term: {count} weather classes over {periods} ({rating})"
+msgstr[0] ""
+"Livelli a lungo termine: {count} classe meteorologica su {periods} ({rating})"
+msgstr[1] ""
+"Livelli a lungo termine: {count} classi meteorologiche su {periods} "
+"({rating})"
+
+#. Translators: {period} is a period of the day from the scene file (day, evening, night).
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "The share of the {period} this weather class holds (%)"
+msgstr ""
+"La quota del periodo {period} in cui vale questa classe meteorologica (%)"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -2073,6 +2193,22 @@ msgstr "modifica il tempo"
 #: acoustic_spaces/gui/inspector.py
 msgid "change the weather zone"
 msgstr "cambia la zona meteorologica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather class"
+msgstr "cambia la classe meteorologica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "add weather class"
+msgstr "aggiungi classe meteorologica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove weather class"
+msgstr "rimuovi classe meteorologica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a share of the time is a number from 0 to 100 %"
+msgstr "una quota del tempo è un numero da 0 a 100 %"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "remove weather zone"
@@ -4763,6 +4899,18 @@ msgstr ""
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
+"Level over a long term (dB), outdoors: the energy mean of the levels in the "
+"scene's weather classes, each by its share of the time, over the periods of "
+"the day. The Run details tab gives the rating level (L_den) and the level of "
+"each period and each class"
+msgstr ""
+"Livello a lungo termine (dB), all'aperto: la media energetica dei livelli "
+"nelle classi meteorologiche della scena, ciascuna secondo la sua quota del "
+"tempo, sui periodi del giorno. La scheda Dettagli del calcolo dà il livello "
+"di valutazione (L_den) e il livello di ogni periodo e di ogni classe"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
 "Early lateral energy fraction (0 to 1): the share of the early sound (5 to "
 "80 ms) that comes from the sides, which makes the source sound wider"
 msgstr ""
@@ -4834,6 +4982,17 @@ msgstr ""
 "T30 (s) di un microfono a otto rivolto verso l'alto dal ricevitore. "
 "Superiore al T30 quando il suono continua a riflettersi tra pavimento e "
 "soffitto"
+
+#. Translators: {rating} is the rating level's symbol (L_den); {periods} and {classes} are names from the scene file, each with its level.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"{source} -> {listener}: {rating} {rated:.1f} dB(A), long-term level "
+"{level:.1f} dB(A); {periods} dB(A); in the weather classes {classes} dB(A)"
+msgstr ""
+"{source} -> {listener}: {rating} {rated:.1f} dB(A), livello a lungo termine "
+"{level:.1f} dB(A); {periods} dB(A); nelle classi meteorologiche {classes} "
+"dB(A)"
 
 #: acoustic_spaces/gui/results_view.py
 msgid "Turn the head (degrees): left is positive"
@@ -5078,6 +5237,20 @@ msgstr[0] ""
 msgstr[1] ""
 "Perdita per inserzione di {names}: la scena è stata calcolata anche senza "
 "queste parti"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"Levels over a long term in {count} weather class ({names}), rated as {rating}"
+msgid_plural ""
+"Levels over a long term in {count} weather classes ({names}), rated as "
+"{rating}"
+msgstr[0] ""
+"Livelli a lungo termine in {count} classe meteorologica ({names}), valutati "
+"come {rating}"
+msgstr[1] ""
+"Livelli a lungo termine in {count} classi meteorologiche ({names}), valutati "
+"come {rating}"
 
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format

@@ -128,17 +128,34 @@ MAP_PARAMETERS: dict[str, MapParameter] = {
         1.0,
         "{:.1f}",
     ),
+    "long_term": MapParameter(
+        N_("Long-term level (dB)"),
+        N_("level over a long term, outdoors: the mean over the weather classes and the day"),
+        True,
+        1.0,
+        "{:.1f}",
+    ),
+    "rating_level": MapParameter(
+        N_("Rating level (dB(A))"),
+        N_("level over a long term with each period's penalty, A-weighted (L_den)"),
+        False,
+        1.0,
+        "{:.1f}",
+    ),
 }
-#: The map parameters of an outdoor scene alone, and those of a map also run without some
-#: of its buildings, barriers or vegetation (``simulation.insertion_loss_of``).
+#: The map parameters of an outdoor scene alone, those of a map also run without some of
+#: its buildings, barriers or vegetation (``simulation.insertion_loss_of``), and those of
+#: a map run in weather classes (``long_term``).
 OUTDOOR_MAP_PARAMETERS = ("re_free_field",)
 INSERTION_LOSS_MAP_PARAMETERS = ("insertion_loss", "insertion_loss_a")
-#: The parameters of every map; an outdoor map, and one also run without some of its
-#: buildings, barriers or vegetation, have the others as well.
+LONG_TERM_MAP_PARAMETERS = ("long_term", "rating_level")
+#: The parameters of every map; an outdoor map, one also run without some of its
+#: buildings, barriers or vegetation, and one run in weather classes have the others as
+#: well.
 ROOM_MAP_PARAMETERS = tuple(
     name
     for name in MAP_PARAMETERS
-    if name not in OUTDOOR_MAP_PARAMETERS + INSERTION_LOSS_MAP_PARAMETERS
+    if name not in OUTDOOR_MAP_PARAMETERS + INSERTION_LOSS_MAP_PARAMETERS + LONG_TERM_MAP_PARAMETERS
 )
 
 
@@ -399,9 +416,10 @@ class CoverageMap:
 
     def parameters(self) -> list[str]:
         """The parameters the map has, in the order of :data:`MAP_PARAMETERS`: those of
-        :data:`OUTDOOR_MAP_PARAMETERS` outdoors only, and those of
+        :data:`OUTDOOR_MAP_PARAMETERS` outdoors only, those of
         :data:`INSERTION_LOSS_MAP_PARAMETERS` when the map was also run without some of
-        the scene's buildings, barriers or vegetation."""
+        the scene's buildings, barriers or vegetation, and those of
+        :data:`LONG_TERM_MAP_PARAMETERS` when it was run in weather classes."""
         return [name for name in MAP_PARAMETERS if name in self.values]
 
     def value(self, name: str, band: int | None = None) -> np.ndarray:
