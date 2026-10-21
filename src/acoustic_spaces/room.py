@@ -315,9 +315,10 @@ class Room:
             for item, ok in zip(items, inside, strict=True):
                 where = "reaches" if getattr(item, "extended", False) else "is"
                 if not ok and self.outdoor is not None:
+                    ground = "the ground" if self.outdoor.terrain is None else "the terrain"
                     out.append(
                         f"{kind} {item.name!r} at {list(item.position)} {where} outside the "
-                        "open air: below the ground, above the sky or past the edge of the "
+                        f"open air: below {ground}, above the sky or past the edge of the "
                         "ground (geometry.ground's extent, margin and sky)"
                     )
                 elif not ok:
@@ -357,6 +358,8 @@ class Room:
         for key in self.unused_assignments:
             out.append(f"assignment {key!r} matches no name in the geometry")
         out.extend(self._near_arrays())
+        if self.outdoor is not None:
+            out.extend(self.scene.geometry.footprint_notes())
         return out
 
     def _near_arrays(self) -> list[str]:

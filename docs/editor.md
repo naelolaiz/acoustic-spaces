@@ -161,8 +161,11 @@ room every corner is a handle:
 The **Geometry** entry of an [outdoor scene](outdoor.md) has an **Outdoors** group
 instead: the ground's height, the margin and the sky, and the buildings, barriers and
 [vegetation](outdoor.md#vegetation) with their heights, which can be changed or removed
-(the vegetation's table also gives each one's shape and what fills it). The 3D view
-draws the vegetation in see-through green. The scene's own entry then has a
+(the vegetation's table also gives each one's shape and what fills it); a
+[terrain](outdoor.md#terrain) is described under the ground's fields, and the buildings
+of a [map file](outdoor.md#buildings-from-a-map) stand in the buildings table, where
+**Remove** leaves one out of the file. The 3D view draws the vegetation in see-through
+green. The scene's own entry then has a
 **Wind and temperature** group: the weather, the wind and the temperature over the
 ground, their **Eddies** (see [Turbulence](outdoor.md#turbulence)), and **Show the
 profile**, a plot of them and of the speed of sound (see

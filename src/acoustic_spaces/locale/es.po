@@ -2001,19 +2001,23 @@ msgid "Outdoors"
 msgstr "Al aire libre"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "The height (z) of the flat ground, in the units the title shows"
-msgstr "La altura (z) del terreno llano, en las unidades que indica el título"
+msgid ""
+"The height (z) of the flat ground, or added to the terrain's heights, in the "
+"units the title shows"
+msgstr ""
+"La altura (z) del terreno llano, o sumada a las alturas del relieve, en las "
+"unidades que indica el título"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "How far the ground reaches past the buildings, barriers and model, unless "
-"its extent is set, and how high the sky is over the highest of them, unless "
-"the sky is set; in the units the title shows"
+"its extent is set or a terrain sets its size, and how high the sky is over "
+"the highest of them, unless the sky is set; in the units the title shows"
 msgstr ""
 "Hasta dónde llega el terreno más allá de los edificios, las pantallas y el "
-"modelo, salvo que se fije su extensión, y a qué altura queda el cielo sobre "
-"el más alto de ellos, salvo que se fije el cielo; en las unidades que indica "
-"el título"
+"modelo, salvo que se fije su extensión o un relieve fije su tamaño, y a qué "
+"altura queda el cielo sobre el más alto de ellos, salvo que se fije el "
+"cielo; en las unidades que indica el título"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2044,6 +2048,15 @@ msgid ""
 msgstr ""
 "Dónde acaba el terreno: más allá, el sonido sale de la escena como si el "
 "terreno siguiera"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The terrain the ground follows (set in the scene file): its heights on a "
+"grid, from a file or given, sampled over the ground's extent"
+msgstr ""
+"El relieve que sigue el terreno (fijado en el archivo de escena): sus "
+"alturas en una cuadrícula, de un archivo o dadas, muestreadas sobre la "
+"extensión del terreno"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Buildings"
@@ -2299,6 +2312,16 @@ msgstr ""
 "encima"
 
 #: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Terrain: {points} points, z from {low} to {high} m, grid {spacing} m"
+msgstr ""
+"Relieve: {points} puntos, z de {low} a {high} m, cuadrícula de {spacing} m"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "From the buildings file, which sets its footprint and height"
+msgstr "Del archivo de edificios, que fija su planta y su altura"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "remove zone"
 msgstr "eliminar zona"
 
@@ -2309,6 +2332,10 @@ msgstr "cambiar terreno"
 #: acoustic_spaces/gui/inspector.py
 msgid "a height is one number"
 msgstr "una altura es un solo número"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "leave out building"
+msgstr "omitir edificio"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "remove building"
@@ -5168,6 +5195,34 @@ msgstr ""
 "través de ellas con un fundido de cada una a la siguiente, y puede guardar "
 "el recorrido como vídeo: la voz del guía pasa de directa y clara al sonido "
 "que rodea la esquina."
+
+#: examples/hillside/scene.yaml
+msgctxt "example"
+msgid "Yard behind a hill"
+msgstr "Patio tras una colina"
+
+#: examples/hillside/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a works yard at the foot of a hill, heard 160 m away in the hill's "
+"shadow, on the slope that faces the yard and on the crest. The ground is a "
+"terrain, a grid of heights read from hill.asc (make_terrain.py writes it), "
+"and the two houses by the listener in the shadow come from a map, "
+"houses.geojson. The sound bends over the crest to the listener behind it, "
+"which takes 10 dB off the lowest band and nearly 40 dB off the highest, and "
+"reflects off the mean plane of the slope to the listener facing the yard, as "
+"off flat ground; the listener on the crest sees the yard just over the "
+"hill's shoulder."
+msgstr ""
+"Al aire libre: un patio de obras al pie de una colina, escuchado a 160 m en "
+"la sombra de la colina, en la ladera que mira al patio y en la cresta. El "
+"suelo es un terreno, una malla de alturas leída de hill.asc (make_terrain.py "
+"lo escribe), y las dos casas junto al receptor en la sombra vienen de un "
+"mapa, houses.geojson. El sonido se dobla sobre la cresta hasta el receptor "
+"que está detrás, lo que quita 10 dB a la banda más grave y casi 40 dB a la "
+"más aguda, y se refleja en el plano medio de la ladera hacia el receptor que "
+"mira al patio, como en suelo llano; el receptor en la cresta ve el patio "
+"justo por encima del hombro de la colina."
 
 #: examples/leaky_classroom/scene.yaml
 msgctxt "example"

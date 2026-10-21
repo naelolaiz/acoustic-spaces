@@ -69,7 +69,7 @@ from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.coherent import ground_factors, reflection_phases
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
-from acoustic_spaces.geometry.outdoor import on_ground
+from acoustic_spaces.geometry.outdoor import ON_GROUND_M, on_ground
 from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, Resolution, band_centres
 
 #: Faces that bend away from each other by less than this (degrees) make no
@@ -407,7 +407,15 @@ def _outdoors(model: TraceModel, part) -> np.ndarray:
     of it, and an edge between two of them is an outside corner when the side ``part``
     takes as open (``normal``) is the side a face points to."""
     p0, p1, normal, face0, face1 = part[0], part[1], part[4], part[6], part[7]
-    grounded = on_ground(p0, model.ground) & on_ground(p1, model.ground)
+    layout = model.room.outdoor
+    if layout.terrain is None:
+        grounded = on_ground(p0, model.ground) & on_ground(p1, model.ground)
+    else:
+        # Edges at or below the terrain are buried in it, its own ridges included: the
+        # sound over the terrain's crests is :mod:`acoustic_spaces.engine.crests`'s.
+        grounded = (p0[:, 2] <= layout.ground_at(p0) + ON_GROUND_M) & (
+            p1[:, 2] <= layout.ground_at(p1) + ON_GROUND_M
+        )
     building = model.room.building_faces()
     out = model.room.mesh.face_normals()[face0]
     inside = building[face0] & building[face1] & (np.einsum("ij,ij->i", out, normal) < 0.0)
@@ -1471,15 +1479,16 @@ def _match(queries, query_order, images, orders, index, tolerance, chunk: int = 
     return out
 
 
-def _first_solid(model: TraceModel, start, direction, length, ignore):
+def _first_solid(model: TraceModel, start, direction, length, ignore, through=None):
     """How far along each ray from ``start`` the first face within ``length`` that is not
-    an opening lies, and that face, or -1."""
+    an opening (nor one of ``through``, a mask over the faces) lies, and that face, or
+    -1."""
     n = len(start)
     face = np.full(n, -1, dtype=np.int64)
     at = np.zeros(n)
     travelled = np.zeros(n)
     skip = np.broadcast_to(np.asarray(ignore, dtype=np.int64), (n,)).copy()
-    transparent = model.transparent
+    transparent = model.transparent if through is None else model.transparent | through
     alive = np.arange(n)
     for _ in range(MAX_CROSSINGS + 1):
         if len(alive) == 0:
@@ -1501,12 +1510,13 @@ def _first_solid(model: TraceModel, start, direction, length, ignore):
     return at, face
 
 
-def _clear(model: TraceModel, start: np.ndarray, end: np.ndarray) -> np.ndarray:
-    """Whether nothing but openings lies between each start and end point."""
+def _clear(model: TraceModel, start: np.ndarray, end: np.ndarray, through=None) -> np.ndarray:
+    """Whether nothing but openings (and the faces of ``through``, a mask over the
+    faces) lies between each start and end point."""
     delta = end - start
     length = np.linalg.norm(delta, axis=1)
     direction = delta / np.maximum(length, 1e-300)[:, None]
-    _, face = _first_solid(model, start, direction, length * (1.0 - 1e-9), -1)
+    _, face = _first_solid(model, start, direction, length * (1.0 - 1e-9), -1, through)
     return face < 0
 
 

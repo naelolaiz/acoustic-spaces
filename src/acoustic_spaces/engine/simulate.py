@@ -16,6 +16,7 @@ from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine import tuning
 from acoustic_spaces.engine import wave as wave_stage
 from acoustic_spaces.engine.coherent import band_count
+from acoustic_spaces.engine.crests import CrestDiffraction
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel, free_field_energy
@@ -162,25 +163,51 @@ class _Edges:
     ) -> EdgeDiffraction | None:
         """Diffraction of the sound of source ``name`` at ``source``, coherent in the
         lowest ``coherent`` bands, with paths that reflect on both sides of an edge when
-        ``both_sides``; None when off."""
+        ``both_sides``, and the sound over the crests of a terrain; None when off or
+        when there is nothing to bend over."""
         if mode == "none":
             return None
         if self._edges is None:
             self._edges = find_edges(self.model)
-        if len(self._edges) == 0:
+        settings = {
+            "speed_of_sound": room.speed_of_sound(),
+            "air": room.air_attenuation(self.model.bands),
+            "directivity": room.directivity(name, self.model.bands),
+            "orientation": orientation,
+            "coherent": coherent,
+        }
+        at_edges = None
+        if len(self._edges):
+            at_edges = EdgeDiffraction(
+                self.model,
+                source,
+                mode=mode,
+                edges=self._edges,
+                both_sides=both_sides,
+                **settings,
+            )
+        crests = CrestDiffraction.of(self.model, source, **settings)
+        if at_edges is None and crests is None:
             return None
-        return EdgeDiffraction(
-            self.model,
-            source,
-            speed_of_sound=room.speed_of_sound(),
-            air=room.air_attenuation(self.model.bands),
-            directivity=room.directivity(name, self.model.bands),
-            orientation=orientation,
-            mode=mode,
-            edges=self._edges,
-            coherent=coherent,
-            both_sides=both_sides,
-        )
+        return _Diffraction(self._edges, at_edges, crests)
+
+
+@dataclass
+class _Diffraction:
+    """The diffraction at the model's edges and over the terrain's crests, in turn."""
+
+    edges: Edges
+    at_edges: EdgeDiffraction | None
+    crests: CrestDiffraction | None
+
+    def apply(
+        self, listener: np.ndarray, paths: early_stage.EarlyReflections, max_delay_s: float
+    ) -> early_stage.EarlyReflections:
+        if self.at_edges is not None:
+            paths = self.at_edges.apply(listener, paths, max_delay_s)
+        if self.crests is not None:
+            paths = self.crests.apply(listener, paths, max_delay_s)
+        return paths
 
 
 def early_paths(

@@ -127,6 +127,18 @@ Outdoor acoustics, in steps:
   closed forms at both ends and a wall's boundary-layer absorption, the late rays
   through such leaves against the particle simulation, and a wood of them compared
   with ISO 9613-2's dense-foliage table. Presets and measured rates stay as they were.
+- [x] O9 Terrain and buildings from a map: `ground.terrain` (heights on a grid from an
+  Esri ASCII grid, x y z points or the scene, `ground.map_origin`) and
+  `geometry.buildings_file` (GeoJSON footprints raised to a property's height, named,
+  some left out); buildings, barriers, vegetation and zones stand on the terrain. The
+  early sound reflects off the mean plane of the ground's profile (the standards'
+  ground reflection) and bends over the crests the line of sight cuts through, one UTD
+  wedge per crest with both slopes' reflections in its terms, the equivalent edge and
+  thick-screen factor for a rounded top, and the nearest crest's wave in sight, so the
+  level is continuous across the edge of a hill's shadow; the late rays bounce off the
+  triangles. A ridge is within 0.2 dB of the exact wedge to 4 kHz, a flat terrain and a
+  slope give the flat ground's and the image's paths, a smooth hill is within about a
+  decibel of the thin screen's attenuation. Scenes without a terrain are unchanged.
 
 Unreleased:
 

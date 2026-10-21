@@ -1984,20 +1984,23 @@ msgid "Outdoors"
 msgstr "Buiten"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "The height (z) of the flat ground, in the units the title shows"
+msgid ""
+"The height (z) of the flat ground, or added to the terrain's heights, in the "
+"units the title shows"
 msgstr ""
-"De hoogte (z) van de vlakke grond, in de eenheden die in de titel staan"
+"De hoogte (z) van de vlakke grond, of opgeteld bij de hoogtes van het "
+"reliëf, in de eenheden die in de titel staan"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "How far the ground reaches past the buildings, barriers and model, unless "
-"its extent is set, and how high the sky is over the highest of them, unless "
-"the sky is set; in the units the title shows"
+"its extent is set or a terrain sets its size, and how high the sky is over "
+"the highest of them, unless the sky is set; in the units the title shows"
 msgstr ""
 "Hoe ver de grond voorbij de gebouwen, geluidsschermen en het model reikt, "
-"tenzij de omvang ervan is ingesteld, en hoe hoog de hemel boven de hoogste "
-"ervan ligt, tenzij de hemel is ingesteld; in de eenheden die in de titel "
-"staan"
+"tenzij de omvang ervan is ingesteld of een reliëf de grootte bepaalt, en hoe "
+"hoog de hemel boven de hoogste ervan ligt, tenzij de hemel is ingesteld; in "
+"de eenheden die in de titel staan"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2028,6 +2031,15 @@ msgid ""
 msgstr ""
 "Waar de grond eindigt: daarbuiten verlaat het geluid de scène alsof de grond "
 "doorliep"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The terrain the ground follows (set in the scene file): its heights on a "
+"grid, from a file or given, sampled over the ground's extent"
+msgstr ""
+"Het reliëf dat de grond volgt (ingesteld in het scènebestand): de hoogtes "
+"ervan op een raster, uit een bestand of opgegeven, bemonsterd over de omvang "
+"van de grond"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Buildings"
@@ -2284,6 +2296,15 @@ msgstr ""
 "Grond van ({x0:g}, {y0:g}) tot ({x1:g}, {y1:g}) m, hemel {sky:g} m erboven"
 
 #: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Terrain: {points} points, z from {low} to {high} m, grid {spacing} m"
+msgstr "Reliëf: {points} punten, z van {low} tot {high} m, raster {spacing} m"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "From the buildings file, which sets its footprint and height"
+msgstr "Uit het gebouwenbestand, dat de plattegrond en de hoogte bepaalt"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "remove zone"
 msgstr "zone verwijderen"
 
@@ -2294,6 +2315,10 @@ msgstr "grond wijzigen"
 #: acoustic_spaces/gui/inspector.py
 msgid "a height is one number"
 msgstr "een hoogte is één getal"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "leave out building"
+msgstr "gebouw weglaten"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "remove building"
@@ -5134,6 +5159,34 @@ msgstr ""
 "met overvloeien van de ene naar de volgende. De rondgang kan ook als video "
 "worden opgeslagen: de stem van de gids gaat van direct en helder naar geluid "
 "dat om de hoek buigt."
+
+#: examples/hillside/scene.yaml
+msgctxt "example"
+msgid "Yard behind a hill"
+msgstr "Werf achter een heuvel"
+
+#: examples/hillside/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a works yard at the foot of a hill, heard 160 m away in the hill's "
+"shadow, on the slope that faces the yard and on the crest. The ground is a "
+"terrain, a grid of heights read from hill.asc (make_terrain.py writes it), "
+"and the two houses by the listener in the shadow come from a map, "
+"houses.geojson. The sound bends over the crest to the listener behind it, "
+"which takes 10 dB off the lowest band and nearly 40 dB off the highest, and "
+"reflects off the mean plane of the slope to the listener facing the yard, as "
+"off flat ground; the listener on the crest sees the yard just over the "
+"hill's shoulder."
+msgstr ""
+"Buiten: een werf aan de voet van een heuvel, gehoord op 160 m in de schaduw "
+"van de heuvel, op de helling die naar de werf kijkt en op de top. De grond "
+"is een terrein, een hoogteraster gelezen uit hill.asc (make_terrain.py "
+"schrijft het), en de twee huizen bij de ontvanger in de schaduw komen van "
+"een kaart, houses.geojson. Het geluid buigt over de top naar de ontvanger "
+"erachter, wat 10 dB van de laagste band en bijna 40 dB van de hoogste "
+"afhaalt, en weerkaatst op het gemiddelde vlak van de helling naar de "
+"ontvanger die naar de werf kijkt, als op vlakke grond; de ontvanger op de "
+"top ziet de werf net over de schouder van de heuvel."
 
 #: examples/leaky_classroom/scene.yaml
 msgctxt "example"

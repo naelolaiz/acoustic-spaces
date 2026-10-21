@@ -1,0 +1,44 @@
+# Outdoors: a works yard at the foot of a hill, heard 160 m away in the hill's shadow,
+# on the slope that faces the yard and on the crest. The ground is a terrain, a grid of
+# heights read from hill.asc (make_terrain.py writes it), and the two houses by the
+# listener in the shadow come from a map, houses.geojson. The sound bends over the crest
+# to the listener behind it, which takes 10 dB off the lowest band and nearly 40 dB off
+# the highest, and reflects off the mean plane of the slope to the listener facing the
+# yard, as off flat ground; the listener on the crest sees the yard just over the hill's
+# shoulder.
+name: Yard behind a hill
+geometry:
+  ground:
+    terrain: {file: hill.asc}
+    sky: 60
+  buildings_file: {file: houses.geojson, height: height}
+materials:
+  meadow:
+    impedance: grass
+  rendered:
+    absorption: [0.02, 0.02, 0.03, 0.03, 0.04, 0.05, 0.05, 0.05]
+    scattering: 0.1
+assignments:
+  ground: meadow
+  east_house: rendered
+  west_house: rendered
+sources:
+  - name: yard
+    position: [0, -80, 1.1]
+    level_db: 100
+listeners:
+  - name: in_shadow
+    position: [0, 80, 1.6]
+    orientation: {yaw: -90}
+  - name: on_slope
+    position: [0, -35, 8.9]
+    orientation: {yaw: -90}
+  - name: on_crest
+    position: [0, 0, 21.5]
+    orientation: {yaw: -90}
+simulation:
+  early: {method: image_sources, max_order: 1, diffraction: direct}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 0.6
+outputs:
+  - mono

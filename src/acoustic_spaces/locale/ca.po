@@ -1975,18 +1975,22 @@ msgid "Outdoors"
 msgstr "A l'aire lliure"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "The height (z) of the flat ground, in the units the title shows"
-msgstr "L'alçada (z) del terreny pla, en les unitats del títol"
+msgid ""
+"The height (z) of the flat ground, or added to the terrain's heights, in the "
+"units the title shows"
+msgstr ""
+"L'alçada (z) del terreny pla, o sumada a les alçades del relleu, en les "
+"unitats del títol"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "How far the ground reaches past the buildings, barriers and model, unless "
-"its extent is set, and how high the sky is over the highest of them, unless "
-"the sky is set; in the units the title shows"
+"its extent is set or a terrain sets its size, and how high the sky is over "
+"the highest of them, unless the sky is set; in the units the title shows"
 msgstr ""
 "Fins on arriba el terreny més enllà dels edificis, les pantalles i el model, "
-"si no se'n fixa l'extensió, i a quina alçada queda el cel sobre el més alt, "
-"si no es fixa el cel; en les unitats del títol"
+"si no se'n fixa l'extensió o un relleu en fixa la mida, i a quina alçada "
+"queda el cel sobre el més alt, si no es fixa el cel; en les unitats del títol"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2017,6 +2021,15 @@ msgid ""
 msgstr ""
 "On acaba el terreny: més enllà, el so surt de l'escena com si el terreny "
 "continués"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The terrain the ground follows (set in the scene file): its heights on a "
+"grid, from a file or given, sampled over the ground's extent"
+msgstr ""
+"El relleu que segueix el terreny (fixat al fitxer d'escena): les seves "
+"alçades en una quadrícula, d'un fitxer o donades, mostrejades sobre "
+"l'extensió del terreny"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Buildings"
@@ -2263,6 +2276,16 @@ msgstr ""
 "Terreny de ({x0:g}, {y0:g}) a ({x1:g}, {y1:g}) m, cel a {sky:g} m per sobre"
 
 #: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Terrain: {points} points, z from {low} to {high} m, grid {spacing} m"
+msgstr ""
+"Relleu: {points} punts, z de {low} a {high} m, quadrícula de {spacing} m"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "From the buildings file, which sets its footprint and height"
+msgstr "Del fitxer d'edificis, que en fixa la planta i l'alçada"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "remove zone"
 msgstr "eliminar zona"
 
@@ -2273,6 +2296,10 @@ msgstr "canviar el terreny"
 #: acoustic_spaces/gui/inspector.py
 msgid "a height is one number"
 msgstr "una alçada és un sol nombre"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "leave out building"
+msgstr "ometre edifici"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "remove building"
@@ -5115,6 +5142,34 @@ msgstr ""
 "(la part tardana cada 2 m) i hi reprodueix un enregistrament amb una fosa "
 "encreuada entre respostes, i pot desar el recorregut com a vídeo: la veu del "
 "guia passa de directa i clara al so que es corba al voltant del vèrtex."
+
+#: examples/hillside/scene.yaml
+msgctxt "example"
+msgid "Yard behind a hill"
+msgstr "Pati darrere d'un turó"
+
+#: examples/hillside/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a works yard at the foot of a hill, heard 160 m away in the hill's "
+"shadow, on the slope that faces the yard and on the crest. The ground is a "
+"terrain, a grid of heights read from hill.asc (make_terrain.py writes it), "
+"and the two houses by the listener in the shadow come from a map, "
+"houses.geojson. The sound bends over the crest to the listener behind it, "
+"which takes 10 dB off the lowest band and nearly 40 dB off the highest, and "
+"reflects off the mean plane of the slope to the listener facing the yard, as "
+"off flat ground; the listener on the crest sees the yard just over the "
+"hill's shoulder."
+msgstr ""
+"A l'aire lliure: un pati d'obres al peu d'un turó, sentit a 160 m a l'ombra "
+"del turó, al vessant que mira al pati i a la carena. El terra és un terreny, "
+"una malla d'alçades llegida de hill.asc (make_terrain.py l'escriu), i les "
+"dues cases al costat del receptor a l'ombra vénen d'un mapa, houses.geojson. "
+"El so es doblega sobre la carena fins al receptor que hi ha al darrere, cosa "
+"que treu 10 dB a la banda més greu i gairebé 40 dB a la més aguda, i es "
+"reflecteix al pla mitjà del vessant cap al receptor que mira al pati, com en "
+"terra pla; el receptor a la carena veu el pati just per sobre de l'espatlla "
+"del turó."
 
 #: examples/leaky_classroom/scene.yaml
 msgctxt "example"

@@ -1,4 +1,4 @@
-"""Outdoor scenes: flat ground under an open sky, with buildings and barriers on it.
+"""Outdoor scenes: ground under an open sky, with buildings and barriers on it.
 
 The ground, four walls of sky round its edge and the sky overhead close a box, so the
 open air is a room like any other: its volume is known, sources and listeners are
@@ -29,22 +29,39 @@ diffract nothing, so the ground reads as endless.
   cut to the ground's extent, that may touch but not overlap. The ground is then split
   into strips at the zones' corners and each strip into pieces between the zones' edges,
   so that its faces meet edge to edge and the box stays closed.
+- A terrain (``ground.terrain``, a :class:`~acoustic_spaces.geometry.terrain.HeightGrid`)
+  replaces the flat ground by the grid sampled over the extent (given, or the whole
+  grid: the terrain sets the ground's size, not the margin) and triangulated, the sky
+  walls rising from its edge (:func:`terrain_box`); the zones take the triangles whose
+  centres lie in them. Buildings and barriers are sunk a little below the lowest ground
+  under them, so that they stand on the terrain however it runs: a building's roof lies
+  its height over the terrain's mean height at its footprint's corners, a barrier's top
+  follows the terrain along its path, and vegetation stands on the terrain under its
+  middle. The model file's objects are taken as they are. Edges buried in the terrain
+  do not diffract, nor do its own ridges, which bend too little at each grid line: the
+  sound over its crests is :mod:`acoustic_spaces.engine.crests`'s.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
 
 from acoustic_spaces.geometry.builders import extruded_mesh, plan_problem
 from acoustic_spaces.geometry.mesh import RoomMesh
+from acoustic_spaces.geometry.terrain import HeightGrid
+from acoustic_spaces.geometry.triangulate import triangulate_polygon
 
 #: The surface names of the ground and of the sky round and over it.
 GROUND = "ground"
 SKY = "sky"
 #: Points this close (m) to the ground's height lie on it.
 ON_GROUND_M = 0.01
+#: Coordinates farther than this (m) from the origin lose precision in the mesh:
+#: a map's coordinates need ``ground.map_origin`` near the scene.
+FAR_M = 1e5
 
 
 @dataclass(frozen=True, eq=False)
@@ -53,7 +70,7 @@ class Layout:
 
     #: (x_min, y_min, x_max, y_max) of the ground.
     extent: tuple[float, float, float, float]
-    #: Height (z) of the ground.
+    #: Height (z) of the ground; with a terrain, of its lowest point over the extent.
     ground: float
     #: Height (z) of the sky.
     sky: float
@@ -63,6 +80,15 @@ class Layout:
     zones: tuple[tuple[str, np.ndarray], ...] = ()
     #: The volumes of the scene's vegetation, in ``geometry.vegetation`` order.
     vegetation: tuple[PlantShape, ...] = ()
+    #: The terrain's surface as the mesh has it, in metres; None for flat ground.
+    terrain: TerrainSurface | None = None
+
+    def ground_at(self, points: np.ndarray) -> np.ndarray:
+        """(n,) the ground's height under each point (n, 2 or 3)."""
+        points = np.atleast_2d(np.asarray(points, dtype=float))
+        if self.terrain is None:
+            return np.full(len(points), self.ground)
+        return self.terrain.height_at(points)
 
     def zone_at(self, points: np.ndarray) -> np.ndarray:
         """(n,) the index of the zone each point (n, 2 or 3) lies in, or -1."""
@@ -91,7 +117,7 @@ class Layout:
         out[np.arange(n)[:, None], np.arange(bands)[None, :], here[:, None]] = 1.0
         if not self.zones or n == 0:
             return out
-        centre, axes = _fresnel_ellipses(before, at, after, self.ground, wavelength)
+        centre, axes = _fresnel_ellipses(before, at, after, self.ground_at(at), wavelength)
         # Only ellipses that reach the edge of a zone are shared between grounds.
         edges = [(p, np.roll(p, -1, axis=0)) for _, p in self.zones]
         start = np.vstack([a for a, _ in edges])
@@ -117,9 +143,10 @@ class Layout:
         """The building each point (n, 3) lies in, or None."""
         points = np.atleast_2d(np.asarray(points, dtype=float))
         out: list[str | None] = [None] * len(points)
+        ground = self.ground_at(points)
         for name, footprint, roof in self.buildings:
             inside = in_polygon(points[:, :2], footprint) & (points[:, 2] < roof)
-            inside &= points[:, 2] > self.ground
+            inside &= points[:, 2] > ground
             for k in np.flatnonzero(inside).tolist():
                 out[k] = out[k] or name
         return out
@@ -128,6 +155,121 @@ class Layout:
 #: The Fresnel zone of a reflection off the ground: where a path through the ground is at
 #: most this many wavelengths longer than the reflected one (the first Fresnel zone).
 FRESNEL_PATH_DIFFERENCE = 0.5
+
+
+@dataclass(frozen=True, eq=False)
+class TerrainSurface:
+    """The ground of a terrain as the scene's mesh has it: the grid sampled at its own
+    spacing over the extent (a little finer where the extent is not a whole number of
+    cells across), each cell cut into two triangles along the diagonal that bends
+    less. Heights between the nodes are those of the triangles, so what stands on the
+    ground meets the mesh exactly."""
+
+    #: The grid it was sampled from, in metres with the ground's height added.
+    grid: HeightGrid
+    extent: tuple[float, float, float, float]
+    #: (nx + 1,) and (ny + 1,) the nodes' x and y.
+    xs: np.ndarray
+    ys: np.ndarray
+    #: (ny + 1, nx + 1) the nodes' heights.
+    z: np.ndarray
+    #: (ny, nx) whether a cell is cut from its (i, j) corner to its (i + 1, j + 1) one;
+    #: otherwise from (i + 1, j) to (i, j + 1).
+    first: np.ndarray
+
+    @classmethod
+    def of(cls, grid: HeightGrid, extent) -> TerrainSurface:
+        x0, y0, x1, y1 = extent
+        d = grid.spacing
+        nx = max(1, int(math.ceil((x1 - x0) / d - 1e-9)))
+        ny = max(1, int(math.ceil((y1 - y0) / d - 1e-9)))
+        xs = x0 + (x1 - x0) * np.arange(nx + 1) / nx
+        ys = y0 + (y1 - y0) * np.arange(ny + 1) / ny
+        gx, gy = np.meshgrid(xs, ys, indexing="xy")
+        z = grid.height_at(np.column_stack([gx.ravel(), gy.ravel()])).reshape(ny + 1, nx + 1)
+        first = np.abs(z[:-1, :-1] - z[1:, 1:]) <= np.abs(z[:-1, 1:] - z[1:, :-1])
+        return cls(grid, tuple(float(v) for v in extent), xs, ys, z, first)
+
+    @property
+    def nx(self) -> int:
+        return len(self.xs) - 1
+
+    @property
+    def ny(self) -> int:
+        return len(self.ys) - 1
+
+    @property
+    def lowest(self) -> float:
+        return float(self.z.min())
+
+    @property
+    def highest(self) -> float:
+        return float(self.z.max())
+
+    def _cell(self, points: np.ndarray):
+        """The cell (i, j) under each point (n, 2) and where in it (u, v in [0, 1]);
+        past the edge, the nearest cell's edge."""
+        x0, y0, x1, y1 = self.extent
+        nx, ny = self.nx, self.ny
+        u = np.clip((points[:, 0] - x0) / (x1 - x0) * nx, 0.0, nx)
+        v = np.clip((points[:, 1] - y0) / (y1 - y0) * ny, 0.0, ny)
+        i = np.minimum(np.floor(u).astype(np.int64), nx - 1)
+        j = np.minimum(np.floor(v).astype(np.int64), ny - 1)
+        return i, j, u - i, v - j
+
+    def height_at(self, points) -> np.ndarray:
+        """(n,) the surface's height at each point (n, 2 or 3)."""
+        points = np.atleast_2d(np.asarray(points, dtype=float))[:, :2]
+        i, j, u, v = self._cell(points)
+        z = self.z
+        za, zb, zc, ze = z[j, i], z[j, i + 1], z[j + 1, i + 1], z[j + 1, i]
+        first = self.first[j, i]
+        lower = np.where(first, u >= v, u + v <= 1.0)  # the triangle at the (i, j) corner
+        along_first = np.where(
+            lower, za + (zb - za) * u + (zc - zb) * v, za + (zc - ze) * u + (ze - za) * v
+        )
+        along_second = np.where(
+            lower,
+            za + (zb - za) * u + (ze - za) * v,
+            zc + (zb - zc) * (1.0 - v) + (ze - zc) * (1.0 - u),
+        )
+        return np.where(first, along_first, along_second)
+
+    def profile(self, a, b) -> np.ndarray:
+        """(k, 3) the surface along the line from ``a`` to ``b`` (2,): its corners at
+        every edge of a triangle it crosses, so that the line between them lies on the
+        surface."""
+        a, b = np.asarray(a, dtype=float)[:2], np.asarray(b, dtype=float)[:2]
+        x0, y0, x1, y1 = self.extent
+        nx, ny = self.nx, self.ny
+        d = b - a
+        ts = [np.array([0.0, 1.0])]
+        for lines, start, end in ((self.xs, a[0], d[0]), (self.ys, a[1], d[1])):
+            if abs(end) > 1e-12:
+                ts.append((lines - start) / end)
+        ts = np.unique(np.clip(np.concatenate(ts), 0.0, 1.0))
+        # The cells between the crossings, and where the line crosses their diagonals.
+        size, corner = np.array([x1 - x0, y1 - y0]), np.array([x0, y0])
+        mid = (a + (0.5 * (ts[:-1] + ts[1:]))[:, None] * d - corner) / size * [nx, ny]
+        i = np.clip(np.floor(mid[:, 0]).astype(int), 0, nx - 1)
+        j = np.clip(np.floor(mid[:, 1]).astype(int), 0, ny - 1)
+        ua, du = (a - corner) / size * [nx, ny], d / size * [nx, ny]
+        # Along the line u = ua + t du: the diagonal u - i = v - j, or u - i + v - j = 1.
+        first = self.first[j, i]
+        rate = np.where(first, du[0] - du[1], du[0] + du[1])
+        start = np.where(first, (ua[0] - i) - (ua[1] - j), (ua[0] - i) + (ua[1] - j) - 1.0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            crossing = -start / rate
+        inside = (np.abs(rate) > 1e-12) & (crossing > ts[:-1]) & (crossing < ts[1:])
+        ts = np.unique(np.concatenate([ts, crossing[inside]]))
+        points = a + ts[:, None] * d
+        return np.column_stack([points, self.height_at(points)])
+
+    def describe(self) -> str:
+        return (
+            f"{self.nx + 1} x {self.ny + 1} points, from z = {self.lowest:g} to "
+            f"{self.highest:g} m (grid {self.grid.spacing:g} m)"
+        )
 
 
 @dataclass(frozen=True, eq=False)
@@ -192,12 +334,24 @@ def strip(path, width: float) -> np.ndarray:
     return np.vstack([path + side, (path - side)[::-1]])
 
 
-def vegetation_shapes(geometry, scale: float = 1.0) -> tuple[PlantShape, ...]:
+def vegetation_shapes(
+    geometry, scale: float = 1.0, terrain: TerrainSurface | None = None
+) -> tuple[PlantShape, ...]:
     """The volumes of ``geometry.vegetation`` (a scene's :class:`Geometry`), in metres
-    (``scale``: the geometry's units in metres) over its ground."""
-    ground = scale * geometry.ground.height
+    (``scale``: the geometry's units in metres) over its ground, or over ``terrain``
+    (in metres) under each one's middle."""
+    flat = scale * geometry.ground.height
     shapes = []
     for name, plant in zip(geometry.vegetation_names(), geometry.vegetation or [], strict=True):
+        ground = flat
+        if terrain is not None:
+            if plant.kind == "tree":
+                middle = np.array([[scale * v for v in plant.tree]])
+            elif plant.kind == "hedge":
+                middle = (scale * np.asarray(plant.path, dtype=float)).mean(axis=0)[None]
+            else:
+                middle = (scale * np.asarray(plant.footprint, dtype=float)).mean(axis=0)[None]
+            ground = float(terrain.height_at(middle)[0])
         low, high = ground + scale * plant.base, ground + scale * plant.height
         if plant.kind == "tree":
             x, y = (scale * v for v in plant.tree)
@@ -234,15 +388,16 @@ def _sunflower(count: int) -> np.ndarray:
 _DISK = _sunflower(96)
 
 
-def _fresnel_ellipses(before, at, after, ground: float, wavelength):
-    """The Fresnel zones of reflections off the ground at height ``ground`` (see
-    :meth:`Layout.fresnel_shares`): (n, bands, 2) their centres and (n, bands, 2, 2) the
-    maps from the unit disk onto them (their semi-axes as columns).
+def _fresnel_ellipses(before, at, after, ground, wavelength):
+    """The Fresnel zones of reflections off the ground at height ``ground`` ((n,), under
+    each reflection; see :meth:`Layout.fresnel_shares`): (n, bands, 2) their centres and
+    (n, bands, 2, 2) the maps from the unit disk onto them (their semi-axes as columns).
 
     The zone is where the ground cuts the ellipsoid of points whose distances to the
     image of ``before`` and to ``after`` add up to the reflected path's length L plus
     the path difference d: semi-axes a = (L + d) / 2 along the line between those foci
     and b = sqrt(d (2 L + d)) / 2 across it."""
+    ground = np.asarray(ground, dtype=float)
     image = before.copy()
     image[:, 2] = 2.0 * ground - image[:, 2]
     axis = after - image
@@ -303,8 +458,9 @@ def _footprint_problem(name: str, footprint: np.ndarray) -> str | None:
 
 
 def building_mesh(name: str, footprint, height: float, ground: float) -> RoomMesh:
-    """A building on the ground at height ``ground``: its ``footprint`` (n, 2) raised by
-    ``height``, walls and a flat roof, open underneath; faces point out of it."""
+    """A building on flat ground at height ``ground``: its ``footprint`` (n, 2) raised
+    by ``height``, walls and a flat roof, open underneath; faces point out of it (on a
+    terrain, see :func:`building_on_terrain`)."""
     footprint = np.asarray(footprint, dtype=float)
     problem = _footprint_problem(name, footprint)
     if problem is not None:
@@ -320,8 +476,8 @@ def building_mesh(name: str, footprint, height: float, ground: float) -> RoomMes
 
 
 def barrier_mesh(name: str, path, height: float, ground: float) -> RoomMesh:
-    """A thin screen from the ground at height ``ground`` up by ``height``, along
-    ``path`` (n, 2)."""
+    """A thin screen from flat ground at height ``ground`` up by ``height``, along
+    ``path`` (n, 2) (on a terrain, see :func:`barrier_on_terrain`)."""
     path = np.asarray(path, dtype=float)
     lengths = np.linalg.norm(np.diff(path, axis=0), axis=1)
     if np.any(lengths <= 1e-9 * max(float(np.ptp(path, axis=0).max()), 1.0)):
@@ -451,6 +607,136 @@ def ground_box(
     return RoomMesh(np.array(vertices), np.array(faces), np.array(labels), names)
 
 
+def terrain_box(
+    surface: TerrainSurface, sky: float, zones: tuple[tuple[str, np.ndarray], ...] = ()
+) -> RoomMesh:
+    """The terrain ``surface`` closed by the sky up to ``sky``; faces point into the
+    air. The sky's walls rise from the ground's edge. ``zones`` (see
+    :func:`ground_box`) take the triangles whose centres lie in them."""
+    nx, ny = surface.nx, surface.ny
+    gx, gy = np.meshgrid(surface.xs, surface.ys, indexing="xy")
+    nodes = np.column_stack([gx.ravel(), gy.ravel()])
+    z = surface.z.ravel()
+    vertices = [np.column_stack([nodes, z])]
+
+    def node(i, j):
+        return j * (nx + 1) + i
+
+    i, j = np.meshgrid(np.arange(nx), np.arange(ny), indexing="xy")
+    i, j = i.ravel(), j.ravel()
+    a, b, c, e = node(i, j), node(i + 1, j), node(i + 1, j + 1), node(i, j + 1)
+    first = surface.first[j, i]
+    cells = np.where(
+        first[:, None, None],
+        np.stack([np.stack([a, b, c], axis=1), np.stack([a, c, e], axis=1)], axis=1),
+        np.stack([np.stack([a, b, e], axis=1), np.stack([b, c, e], axis=1)], axis=1),
+    )  # (cells, 2, 3), counter-clockwise seen from above: normals point up
+    faces = cells.reshape(-1, 3)
+    labels = np.zeros(len(faces), dtype=np.int64)
+    if zones:
+        centres = vertices[0][faces][:, :, :2].mean(axis=1)
+        part = Layout(surface.extent, 0.0, sky, zones=zones).zone_at(centres)
+        labels = np.where(part >= 0, 2 + part, 0)
+    faces = [faces]
+    labels = [labels]
+
+    # The sky: a wall over each edge of the ground's rim, and a lid.
+    rim = np.array(
+        [node(k, 0) for k in range(nx + 1)]
+        + [node(nx, k) for k in range(1, ny + 1)]
+        + [node(k, ny) for k in range(nx - 1, -1, -1)]
+        + [node(0, k) for k in range(ny - 1, 0, -1)]
+    )
+    top = len(vertices[0]) + np.arange(len(rim))
+    vertices.append(np.column_stack([nodes[rim], np.full(len(rim), sky)]))
+    after = np.roll(np.arange(len(rim)), -1)
+    # The rim runs counter-clockwise seen from above, so a wall wound from one rim
+    # point up and on to the next faces into the box.
+    walls = np.concatenate(
+        [
+            np.stack([rim, top[after], rim[after]], axis=1),
+            np.stack([rim, top, top[after]], axis=1),
+        ]
+    )
+    faces.append(walls)
+    labels.append(np.ones(len(walls), dtype=np.int64))
+    corners = top[[0, nx, nx + ny, 2 * nx + ny]]
+    lid = np.array([[corners[0], corners[2], corners[1]], [corners[0], corners[3], corners[2]]])
+    faces.append(lid)
+    labels.append(np.ones(2, dtype=np.int64))
+    names = [(GROUND,), (SKY,), *[(name, "zones", GROUND) for name, _ in zones]]
+    return RoomMesh(np.vstack(vertices), np.vstack(faces), np.concatenate(labels), names)
+
+
+def building_on_terrain(name: str, footprint, height: float, surface: TerrainSurface) -> RoomMesh:
+    """A building standing on a terrain: its ``footprint`` (n, 2) raised to a flat roof
+    ``height`` over the terrain's mean height at its corners, each wall's foot following
+    the surface. Surfaces as :func:`building_mesh` names them; faces point out."""
+    footprint = np.asarray(footprint, dtype=float)
+    problem = _footprint_problem(name, footprint)
+    if problem is not None:
+        raise ValueError(problem)
+    roof = float(surface.height_at(footprint).mean()) + height
+    n = len(footprint)
+    outward = 1.0 if _signed_area(footprint) > 0.0 else -1.0
+    vertices: list[np.ndarray] = []
+    faces, face_labels = [], []
+    labels = [(f"{name}_roof", name, "roofs", "buildings")]
+    base = 0
+    top = np.column_stack([footprint, np.full(n, roof)])
+    for a, b, c in triangulate_polygon(top):
+        faces.append(_facing(top, (a, b, c), (0.0, 0.0, 1.0)))
+        face_labels.append(0)
+    vertices.append(top)
+    base += n
+    for k in range(n):
+        p, q = footprint[k], footprint[(k + 1) % n]
+        foot = surface.profile(p, q)
+        if foot[:, 2].max() > roof - ON_GROUND_M:
+            raise ValueError(
+                f"building {name!r}: the terrain under it rises to z = {foot[:, 2].max():g} m, "
+                f"above its roof at z = {roof:g} m (its height over the terrain's mean "
+                "height at its corners); raise it"
+            )
+        polygon = np.vstack([foot, [[*q, roof], [*p, roof]]])
+        along = q - p
+        normal = (outward * along[1], -outward * along[0], 0.0)
+        labels.append((f"{name}_wall_{k + 1}", f"{name}_walls", name, "walls", "buildings"))
+        for a, b, c in triangulate_polygon(polygon):
+            faces.append(_facing(polygon, (base + a, base + b, base + c), normal, offset=base))
+            face_labels.append(len(labels) - 1)
+        vertices.append(polygon)
+        base += len(polygon)
+    return RoomMesh(np.vstack(vertices), np.array(faces), np.array(face_labels), labels)
+
+
+def barrier_on_terrain(name: str, path, height: float, surface: TerrainSurface) -> RoomMesh:
+    """A thin screen standing on a terrain along ``path`` (n, 2), ``height`` over it
+    all along, its foot following the surface."""
+    path = np.asarray(path, dtype=float)
+    lengths = np.linalg.norm(np.diff(path, axis=0), axis=1)
+    if np.any(lengths <= 1e-9 * max(float(np.ptp(path, axis=0).max()), 1.0)):
+        k = int(np.argmax(lengths <= 1e-9 * max(float(np.ptp(path, axis=0).max()), 1.0)))
+        raise ValueError(f"barrier {name!r}: points {k + 1} and {k + 2} are in one place")
+    foot = [surface.profile(path[0], path[1])]
+    for a, b in zip(path[1:-1], path[2:], strict=True):
+        foot.append(surface.profile(a, b)[1:])
+    bottom = np.vstack(foot)
+    n = len(bottom)
+    top = bottom + [0.0, 0.0, height]
+    faces = []
+    for i in range(n - 1):
+        faces += [(i, i + 1, n + i + 1), (i, n + i + 1, n + i)]
+    return RoomMesh(
+        np.vstack([bottom, top]), np.array(faces), np.zeros(len(faces)), [(name, "barriers")]
+    )
+
+
+def _signed_area(polygon: np.ndarray) -> float:
+    x, y = polygon[:, 0], polygon[:, 1]
+    return 0.5 * float(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y))
+
+
 def _merged(values: np.ndarray, tolerance: float) -> np.ndarray:
     """The sorted values, those within ``tolerance`` of the one before them left out."""
     values = np.sort(np.asarray(values, dtype=float))
@@ -473,9 +759,10 @@ def _zip_chains(first, second, first_at, second_at) -> list[tuple[int, int, int]
     return out
 
 
-def _facing(vertices, triangle, towards) -> tuple[int, int, int]:
-    """``triangle`` wound so that its normal points ``towards``."""
-    a, b, c = (np.asarray(vertices[k]) for k in triangle)
+def _facing(vertices, triangle, towards, offset: int = 0) -> tuple[int, int, int]:
+    """``triangle`` wound so that its normal points ``towards``; its indices are into
+    ``vertices`` from ``offset`` on."""
+    a, b, c = (np.asarray(vertices[k - offset]) for k in triangle)
     if np.cross(b - a, c - a) @ np.asarray(towards) < 0.0:
         return (triangle[0], triangle[2], triangle[1])
     return tuple(triangle)
@@ -526,14 +813,9 @@ def clip_polygon(polygon: np.ndarray, extent) -> np.ndarray | None:
     tolerance = 1e-9 * max(x1 - x0, y1 - y0)
     keep = np.linalg.norm(clipped - np.roll(clipped, 1, axis=0), axis=1) > tolerance
     clipped = clipped[keep]
-    if len(clipped) < 3 or abs(_area(clipped)) <= tolerance * max(x1 - x0, y1 - y0):
+    if len(clipped) < 3 or abs(_signed_area(clipped)) <= tolerance * max(x1 - x0, y1 - y0):
         return None
     return clipped
-
-
-def _area(polygon: np.ndarray) -> float:
-    x, y = polygon[:, 0], polygon[:, 1]
-    return 0.5 * float(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y))
 
 
 def _overlap(a: np.ndarray, b: np.ndarray) -> bool:
@@ -560,8 +842,6 @@ def _cross(p, q, r, t) -> bool:
 
 def _inner_point(polygon: np.ndarray) -> np.ndarray:
     """(1, 2) a point inside the simple ``polygon``: the middle of one of its triangles."""
-    from acoustic_spaces.geometry.triangulate import triangulate_polygon
-
     flat = np.column_stack([polygon, np.zeros(len(polygon))])
     a, b, c = triangulate_polygon(flat)[0]
     return ((polygon[a] + polygon[b] + polygon[c]) / 3.0)[None]
@@ -573,9 +853,13 @@ def outdoor_mesh(geometry, objects: RoomMesh | None = None, scale: float = 1.0):
     metres; ``scale`` the geometry's units in metres."""
     spec = geometry.ground
     ground = scale * spec.height
+    grid = spec.height_grid()
+    if grid is not None:
+        return _terrain_mesh(geometry, objects, scale, grid.scaled(scale, ground))
     parts: list[tuple[str, RoomMesh | None]] = []
     buildings = []
-    for name, building in zip(geometry.building_names(), geometry.buildings or [], strict=True):
+    for building in geometry.all_buildings():
+        name = building.name
         footprint = scale * np.asarray(building.footprint, dtype=float)
         mesh = building_mesh(name, footprint, scale * building.height, ground)
         parts.append((f"building {name!r}", mesh))
@@ -629,6 +913,88 @@ def outdoor_mesh(geometry, objects: RoomMesh | None = None, scale: float = 1.0):
     return mesh, Layout(extent, float(ground), float(sky), tuple(buildings), zones, plants)
 
 
+def _terrain_mesh(geometry, objects: RoomMesh | None, scale: float, grid: HeightGrid):
+    """:func:`outdoor_mesh` over a terrain (``grid``, in metres with the ground's
+    height added): the ground is the grid over the extent, which lies inside the grid
+    (given, or the whole grid)."""
+    spec = geometry.ground
+    tx0, ty0, tx1, ty1 = grid.extent
+    if max(abs(v) for v in grid.extent) > FAR_M:
+        raise ValueError(
+            f"the terrain's coordinates reach {max(abs(v) for v in grid.extent) / 1000:.0f} "
+            "km from the origin, too far for the geometry's precision: set ground.map_origin "
+            "to a point of the map near the scene"
+        )
+    # What stands on the ground, seen from above, before anything is built.
+    footprints = [
+        (f"building {b.name!r}", scale * np.asarray(b.footprint, dtype=float))
+        for b in geometry.all_buildings()
+    ]
+    footprints += [
+        (f"barrier {name!r}", scale * np.asarray(barrier.path, dtype=float))
+        for name, barrier in zip(geometry.barrier_names(), geometry.barriers or [], strict=True)
+    ]
+    if objects is not None:
+        footprints.append(("the model file", objects.vertices[np.unique(objects.faces)][:, :2]))
+    if spec.extent is not None:
+        (x0, y0), (x1, y1) = (scale * np.asarray(corner, dtype=float) for corner in spec.extent)
+        if x0 < tx0 or y0 < ty0 or x1 > tx1 or y1 > ty1:
+            raise ValueError(
+                f"the ground's extent reaches past the terrain, which runs from ({tx0:g}, "
+                f"{ty0:g}) to ({tx1:g}, {ty1:g}) m"
+            )
+    else:
+        x0, y0, x1, y1 = tx0, ty0, tx1, ty1
+    for what, corners in footprints:
+        lo, hi = corners.min(axis=0), corners.max(axis=0)
+        if lo[0] <= x0 or lo[1] <= y0 or hi[0] >= x1 or hi[1] >= y1:
+            raise ValueError(
+                f"{what} reaches past the edge of the ground (its extent, or the terrain's)"
+            )
+    extent = (float(x0), float(y0), float(x1), float(y1))
+    surface = TerrainSurface.of(grid, extent)
+
+    parts: list[tuple[str, RoomMesh | None]] = []
+    buildings = []
+    for building in geometry.all_buildings():
+        name = building.name
+        footprint = scale * np.asarray(building.footprint, dtype=float)
+        mesh = building_on_terrain(name, footprint, scale * building.height, surface)
+        parts.append((f"building {name!r}", mesh))
+        buildings.append((name, footprint, float(mesh.vertices[:, 2].max())))
+    for name, barrier in zip(geometry.barrier_names(), geometry.barriers or [], strict=True):
+        path = scale * np.asarray(barrier.path, dtype=float)
+        mesh = barrier_on_terrain(name, path, scale * barrier.height, surface)
+        parts.append((f"barrier {name!r}", mesh))
+    if objects is not None:
+        if objects.vertices[np.unique(objects.faces)][:, 2].min() < surface.lowest - ON_GROUND_M:
+            raise ValueError(
+                f"the model file reaches below the terrain's lowest point (z = "
+                f"{surface.lowest:g} m)"
+            )
+        parts.append(("the model file", objects))
+    plants = vegetation_shapes(geometry, scale, surface) if geometry.vegetation else ()
+    parts += [(f"{p.kind} {p.name!r}", None) for p in plants]
+    points = [mesh.vertices[np.unique(mesh.faces)] for _, mesh in parts if mesh is not None]
+    points += [p.corners() for p in plants]
+    top = max([float(p[:, 2].max()) for p in points] + [surface.highest])
+    ground = surface.lowest
+    sky = surface.highest + scale * spec.sky if spec.sky is not None else top + scale * spec.margin
+    if sky <= top:
+        raise ValueError(
+            f"the sky ({sky - surface.highest:g} m above the terrain's top) is below the top "
+            f"of the scene ({top - surface.highest:g} m above it): raise geometry.ground.sky"
+        )
+    zones = zone_polygons(geometry, extent, scale)
+    mesh = RoomMesh.concatenate(
+        [terrain_box(surface, sky, zones), *[m for _, m in parts if m is not None]]
+    )
+    layout = Layout(
+        extent, float(ground), float(sky), tuple(buildings), zones, plants, terrain=surface
+    )
+    return mesh, layout
+
+
 def on_ground(points: np.ndarray, ground: float) -> np.ndarray:
     """Whether each point (..., 3) lies on the ground at height ``ground``."""
     return np.abs(np.asarray(points)[..., 2] - ground) <= ON_GROUND_M
@@ -639,13 +1005,17 @@ __all__ = [
     "ON_GROUND_M",
     "SKY",
     "Layout",
+    "TerrainSurface",
     "barrier_mesh",
+    "barrier_on_terrain",
     "building_mesh",
+    "building_on_terrain",
     "clip_polygon",
     "ground_box",
     "in_polygon",
     "on_ground",
     "outdoor_mesh",
     "standing",
+    "terrain_box",
     "zone_polygons",
 ]

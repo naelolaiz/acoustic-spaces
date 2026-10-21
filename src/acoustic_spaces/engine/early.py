@@ -54,7 +54,9 @@ class EarlyReflections:
     points: list[np.ndarray] = field(default_factory=list)  # every corner, source first
     faces: list[np.ndarray] = field(default_factory=list)  # faces hit, source side first
     #: (n,) the edge a path bends over (an index of the model's diffracting edges, see
-    #: :func:`~acoustic_spaces.engine.diffraction.find_edges`), or -1 for specular paths.
+    #: :func:`~acoustic_spaces.engine.diffraction.find_edges`), -1 for specular paths,
+    #: or -2 for a path over the crests of the terrain
+    #: (:mod:`~acoustic_spaces.engine.crests`).
     edge: np.ndarray | None = None
     #: (n,) how many surfaces that let sound through a path passes, openings aside.
     crossings: np.ndarray | None = None
@@ -150,8 +152,8 @@ class EarlyReflections:
 
     @property
     def diffracted(self) -> np.ndarray:
-        """(n,) True for paths that bend over an edge."""
-        return self.edge >= 0
+        """(n,) True for paths that bend over an edge or the terrain's crests."""
+        return self.edge != -1
 
     @classmethod
     def empty(cls, bands: int) -> EarlyReflections:
@@ -468,7 +470,23 @@ def find_paths(
                 spectrum=spectrum,
             )
         )
-    return EarlyReflections.concatenate(parts, bands)
+    found = EarlyReflections.concatenate(parts, bands)
+    if model.room.outdoor is not None and model.room.outdoor.terrain is not None:
+        from acoustic_spaces.engine.terrain import terrain_paths
+
+        found = terrain_paths(
+            model,
+            found,
+            source,
+            listener,
+            speed_of_sound=speed_of_sound,
+            air=air,
+            max_delay_s=max_delay_s,
+            directivity=directivity,
+            orientation=orientation,
+            coherent=coherent,
+        )
+    return found
 
 
 def _towards_plane(model, start, direction, length, ignore, plane, trace, tolerance):

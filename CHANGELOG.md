@@ -229,6 +229,51 @@
 - The `dense` preset, `none` and measured `attenuation` give the same results as
   before, bit for bit.
 
+**Terrain and buildings from a map**
+
+- `ground.terrain` makes the ground uneven: its heights on a square grid, from an Esri
+  ASCII grid or a table of x y z points (`file`; `gdal_translate -of AAIGrid` turns a
+  GeoTIFF into the first) or given in the scene (`heights`, `origin`, `spacing`),
+  bilinear between the nodes; `ground.map_origin` is subtracted from a map's
+  coordinates, and `ground.height` added to the heights. The scene's ground is the grid
+  sampled over its extent (the whole grid unless an extent is set) and cut into
+  triangles, with the sky walls rising from its edge; buildings, barriers and
+  vegetation stand on it however it runs, and ground zones take its triangles. Files in
+  degrees of longitude and latitude are refused. `inspect` describes the terrain and
+  gives each source's and listener's height over the ground.
+- `geometry.buildings_file` adds the buildings of a GeoJSON file: `Polygon` and
+  `MultiPolygon` footprints raised to the height a property gives (`height`,
+  `default_height`), named by a property (`name`), some left out (`without`); holes are
+  built over and reported. The editor lists them after the scene's own buildings and
+  removes one into `without`.
+- Over a terrain the early sound reflects once off the mean plane of the ground's
+  profile between the source and the listener (CNOSSOS-EU's and Nord2000's ground
+  reflection, with the ground's reflection factor under the reflection point), not off
+  the terrain's facets (`engine.terrain`), and bends over the crests the line of sight
+  cuts through (`engine.crests`): the string pulled taut over the profile, one wedge of
+  the uniform theory of diffraction per crest with the ground's reflections off the
+  profile's segments on both sides in its terms, Fresnel-zone weighted as in Nord2000
+  (a term of the wedge's coefficient near the crest, a path of its own far from it),
+  the equivalent edge of a flat or rounded top with ISO 9613-2's thick-screen
+  factor over the ground within an eighth of a wavelength of the string (nothing for a
+  ridge), and in sight the nearest crest's wave with the transition at its boundaries
+  and the reflection off the slope before it, so that the level is continuous across
+  the edge of a hill's shadow and ripples in the lit zone as the exact field does. The
+  late rays bounce off the terrain's triangles. Edges buried in a terrain do not
+  diffract.
+- New validation: `validation/terrain.py`, a flat terrain against the flat ground (the
+  same paths to rounding), a plane slope against the image source in the tilted plane,
+  a ridge against the exact solution for the wedge (within 0.2 dB in every band), a
+  smooth hill against the thin screen's attenuation (Maekawa's formula over a soft
+  ground, ISO 9613-2's over a rigid one, where the flanks' reflections add)
+  and the level's steps as a listener climbs out of its shadow, and the cost of a
+  terrain 2 km across (see [Validation](docs/validation.md#terrain-against-closed-forms-and-the-exact-wedge)).
+- New example: `hillside`, a works yard at the foot of a hill heard in the hill's
+  shadow, on its slope and on its crest, over a terrain from a grid of heights with two
+  houses from a map.
+- Scenes without a terrain or a buildings file give the same results as before, bit
+  for bit.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

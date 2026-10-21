@@ -230,6 +230,11 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
             f"  outdoors: ground at z = {room.outdoor.ground:g} m from ({x0:g}, {y0:g}) to "
             f"({x1:g}, {y1:g}) m, sky at z = {room.outdoor.sky:g} m"
         )
+        if room.outdoor.terrain is not None:
+            print(f"  terrain: {room.outdoor.terrain.describe()}")
+        if scene.geometry.buildings_file is not None:
+            count = len(scene.geometry.file_buildings())
+            print(f"  buildings from {scene.geometry.buildings_file.file.name}: {count}")
         if room.outdoor.zones:
             zones = ", ".join(
                 f"{name} ({abs(_polygon_area(polygon)):.0f} m2)"
@@ -323,9 +328,18 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
                 f"  {kind:<9}{item.name:<{width}}({x:.2f}, {y:.2f}, {z:.2f}){where}"
                 + _extent_text(item)
                 + _walk_text(item)
+                + _ground_text(room, item)
             )
     print()
     return 0 if _print_checks(room) else 1
+
+
+def _ground_text(room, item) -> str:
+    """How high a source or listener stands over a terrain."""
+    if room.outdoor is None or room.outdoor.terrain is None:
+        return ""
+    height = float(item.position[2] - room.outdoor.ground_at([item.position])[0])
+    return f"  {height:.2f} m over the ground"
 
 
 def _polygon_area(polygon) -> float:

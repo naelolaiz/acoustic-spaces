@@ -82,6 +82,19 @@ geometry:
     - {name: hedge, path: [[30, 24], [50, 24]], width: 1.5, height: 2}
 ```
 
+The ground can be a terrain, its heights on a grid from a file or given in the scene
+(`ground.terrain`), and the buildings can come from a GeoJSON map
+(`geometry.buildings_file`); see [Terrain](outdoor.md#terrain) and
+[Buildings from a map](outdoor.md#buildings-from-a-map):
+
+```yaml
+geometry:
+  ground:
+    terrain: {file: hills.asc}      # or {heights: [[...], ...], spacing: 10}
+    map_origin: [552000, 5806000]   # subtracted from the map files' coordinates
+  buildings_file: {file: town.geojson, height: height, default_height: 9}
+```
+
 Outdoors, `atmosphere` sets the wind and the temperature over the ground, which bend
 sound down or up, into shadow zones (see
 [Wind and temperature](outdoor.md#wind-and-temperature)), and their eddies, which blur

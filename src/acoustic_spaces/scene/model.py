@@ -46,6 +46,7 @@ folder.
 from __future__ import annotations
 
 import difflib
+import functools
 import math
 from collections.abc import Sequence
 from pathlib import Path
@@ -190,23 +191,128 @@ class GroundZone(_Model):
     )
 
 
-class Ground(_Model):
-    """Flat ground under an open sky: it makes the scene an outdoor one (see
-    :mod:`acoustic_spaces.geometry.outdoor`). Lengths are in the geometry's units."""
+class Terrain(_Model):
+    """Uneven ground: its heights on a square grid, from a file or given here (see
+    :mod:`acoustic_spaces.geometry.terrain`). Between the grid's nodes the ground is
+    bilinear, past its edge it goes on at the height of the edge, and the scene's ground
+    is the grid sampled over the ground's extent, so the extent must lie inside the
+    grid. Lengths are in the geometry's units."""
 
-    height: float = Field(default=0.0, description="height (z) of the ground")
+    file: Path | None = Field(
+        default=None,
+        description=(
+            "an Esri ASCII grid (.asc) or x y z points on a regular grid (.xyz, .txt, .csv); "
+            "ground.map_origin is subtracted from its coordinates"
+        ),
+    )
+    heights: list[list[float]] | None = Field(
+        default=None,
+        description=(
+            "the heights row by row: each row along x from origin's x, the rows along y "
+            "from origin's y, spacing apart"
+        ),
+    )
+    origin: tuple[float, float] = Field(
+        default=(0.0, 0.0), description="heights: (x, y) of the first height of the first row"
+    )
+    spacing: PositiveFloat | None = Field(
+        default=None, description="heights: the distance between neighbouring heights"
+    )
+
+    @field_validator("file")
+    @classmethod
+    def _resolve_file(cls, value: Path | None, info: ValidationInfo) -> Path | None:
+        return None if value is None else _resolve_path(value, info)
+
+    @model_validator(mode="after")
+    def _one_source(self) -> Terrain:
+        if (self.file is None) == (self.heights is None):
+            raise ValueError("terrain takes a file or heights, one of them")
+        if self.heights is not None:
+            if self.spacing is None:
+                raise ValueError("terrain heights need their spacing")
+            rows = self.heights
+            if len(rows) < 2 or any(len(row) != len(rows[0]) for row in rows) or len(rows[0]) < 2:
+                raise ValueError(
+                    "terrain heights are at least two rows of at least two values, all the "
+                    "rows as long as the first"
+                )
+        elif self.spacing is not None or tuple(self.origin) != (0.0, 0.0):
+            raise ValueError("a terrain file has its own spacing and origin; leave them out")
+        return self
+
+
+class BuildingFile(_Model):
+    """Buildings from a map: a GeoJSON file whose ``Polygon`` and ``MultiPolygon``
+    features are footprints (see :mod:`acoustic_spaces.geometry.terrain`), each raised
+    to the height a property gives. Its coordinates are in the geometry's units on a
+    plane (not longitude and latitude), and ``ground.map_origin`` is subtracted from
+    them."""
+
+    file: Path = Field(description="a GeoJSON file of building footprints")
+    height: str | PositiveFloat = Field(
+        default="height",
+        description="the property that holds each building's height, or one height for all",
+    )
+    default_height: PositiveFloat | None = Field(
+        default=None, description="the height of buildings whose property is missing"
+    )
+    name: str = Field(
+        default="name",
+        description="the property that holds each building's name; without it, building_<n>",
+    )
+    without: list[str] | None = Field(
+        default=None, description="buildings of the file left out, by name"
+    )
+
+    @field_validator("file")
+    @classmethod
+    def _resolve_file(cls, value: Path, info: ValidationInfo) -> Path:
+        return _resolve_path(value, info)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> BuildingFile:
+        if not isinstance(self.height, str) and self.default_height is not None:
+            raise ValueError("default_height goes with a height property; one height is given")
+        if isinstance(self.height, str) and not self.height:
+            raise ValueError("height names the property that holds the height, or is a number")
+        if not self.name:
+            raise ValueError("name names the property that holds the name")
+        return self
+
+
+class Ground(_Model):
+    """Flat ground under an open sky, or a terrain, which makes the scene an outdoor one
+    (see :mod:`acoustic_spaces.geometry.outdoor`). Lengths are in the geometry's
+    units."""
+
+    height: float = Field(
+        default=0.0,
+        description="height (z) of the flat ground; with a terrain, added to its heights",
+    )
+    terrain: Terrain | None = Field(
+        default=None, description="uneven ground: heights on a grid, from a file or given"
+    )
+    map_origin: tuple[float, float] | None = Field(
+        default=None,
+        description=(
+            "the point of the map files' coordinates (the terrain's and the buildings "
+            "file's) that becomes the scene's (0, 0): subtracted from them"
+        ),
+    )
     extent: tuple[tuple[float, float], tuple[float, float]] | None = Field(
         default=None,
         description=(
             "[[x_min, y_min], [x_max, y_max]] of the ground; None: the buildings, barriers "
-            "and model file, with margin round them"
+            "and model file, with margin round them, or the whole terrain"
         ),
     )
     margin: PositiveFloat = Field(
         default=30.0,
         description=(
-            "ground round the buildings, barriers and model file when extent is left out, "
-            "and sky above the highest of them when sky is"
+            "ground round the buildings, barriers and model file when extent is left out "
+            "(a terrain sets the ground's size itself), and sky above the highest of them "
+            "when sky is"
         ),
     )
     sky: PositiveFloat | None = Field(
@@ -234,6 +340,51 @@ class Ground(_Model):
                     "ground extent is [[x_min, y_min], [x_max, y_max]], each min < max"
                 )
         return self
+
+    def height_grid(self):
+        """The terrain as a :class:`~acoustic_spaces.geometry.terrain.HeightGrid` in the
+        geometry's units, ``map_origin`` subtracted and ``height`` not yet added; None
+        for flat ground."""
+        from acoustic_spaces.geometry.terrain import HeightGrid
+
+        if self.terrain is None:
+            return None
+        if self.terrain.file is not None:
+            grid = _height_grid_file(self.terrain.file)
+        else:
+            try:
+                grid = HeightGrid(self.terrain.origin, self.terrain.spacing, self.terrain.heights)
+            except ValueError as exc:
+                raise ValueError(f"terrain: {exc}") from None
+            return grid
+        if self.map_origin is not None:
+            grid = grid.shifted(-self.map_origin[0], -self.map_origin[1])
+        return grid
+
+
+def _height_grid_file(path: Path):
+    """The grid in a terrain file, read once per version of the file."""
+    try:
+        stat = path.stat()
+    except OSError:
+        raise ValueError(f"terrain file {path} cannot be read") from None
+    return _cached_height_grid(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=8)
+def _cached_height_grid(path: str, mtime_ns: int, size: int):
+    from acoustic_spaces.geometry.terrain import read_height_grid
+
+    return read_height_grid(path)
+
+
+@functools.lru_cache(maxsize=8)
+def _cached_footprints(
+    path: str, mtime_ns: int, size: int, height: str | float, name: str, default: float | None
+) -> tuple:
+    from acoustic_spaces.geometry.terrain import read_footprints
+
+    return tuple(read_footprints(path, height, name, default))
 
 
 class Building(_Model):
@@ -515,10 +666,13 @@ class Geometry(_Model):
     )
 
     ground: Ground | None = Field(
-        default=None, description="flat ground under an open sky: an outdoor scene"
+        default=None, description="ground (flat, or a terrain) under an open sky: an outdoor scene"
     )
     buildings: list[Building] | None = Field(
         default=None, description="outdoors: buildings standing on the ground"
+    )
+    buildings_file: BuildingFile | None = Field(
+        default=None, description="outdoors: buildings from a map (GeoJSON footprints)"
     )
     barriers: list[Barrier] | None = Field(
         default=None, description="outdoors: thin screens standing on the ground"
@@ -536,7 +690,7 @@ class Geometry(_Model):
     def _one_kind(self) -> Geometry:
         if self.ground is not None:
             return self._outdoor()
-        if self.buildings is not None or self.barriers is not None:
+        if self.buildings is not None or self.barriers is not None or self.buildings_file:
             raise ValueError("buildings and barriers stand on the ground: add geometry.ground")
         if self.vegetation is not None:
             raise ValueError("vegetation stands on the ground: add geometry.ground")
@@ -557,8 +711,16 @@ class Geometry(_Model):
             )
         if self.space is not None:
             raise ValueError("space picks a room of an IFC file; outdoors, leave it out")
-        if self.ground.extent is None and not (
-            self.file or self.buildings or self.barriers or self.vegetation
+        if (
+            self.ground.extent is None
+            and self.ground.terrain is None
+            and not (
+                self.file
+                or self.buildings
+                or self.buildings_file
+                or self.barriers
+                or self.vegetation
+            )
         ):
             raise ValueError(
                 "with no buildings, barriers, vegetation or model file, the ground needs an "
@@ -568,6 +730,15 @@ class Geometry(_Model):
         repeated = sorted({n for n in plants if plants.count(n) > 1})
         if repeated:
             raise ValueError(f"vegetation names must be unique: {', '.join(repeated)}")
+        if self.buildings_file is not None:
+            # Read now, so that a file that cannot be read is reported with the scene.
+            found = {b.name for b in self.file_buildings(len(self.buildings or []), all=True)}
+            missing = [n for n in self.buildings_file.without or [] if n not in found]
+            if missing:
+                raise ValueError(
+                    f"buildings_file.without names {missing[0]!r}, which the file has no "
+                    "building of"
+                )
         names = self.building_names() + self.barrier_names() + self.ground.zone_names()
         reserved = sorted(set(names) & set(OUTDOOR_NAMES))
         if reserved:
@@ -580,8 +751,74 @@ class Geometry(_Model):
         return self
 
     def building_names(self) -> list[str]:
-        """The buildings' names, ``building_<n>`` for those without one."""
-        return [b.name or f"building_{k + 1}" for k, b in enumerate(self.buildings or [])]
+        """The buildings' names, ``building_<n>`` for those without one: the scene's own
+        buildings, then the buildings file's."""
+        return [b.name for b in self.all_buildings()]
+
+    def all_buildings(self) -> list[Building]:
+        """The scene's own ``buildings``, then those of ``buildings_file``, every one
+        named (``building_<n>`` for those without a name)."""
+        own = [
+            b if b.name else b.model_copy(update={"name": f"building_{k + 1}"})
+            for k, b in enumerate(self.buildings or [])
+        ]
+        return own + self.file_buildings(len(own))
+
+    def _footprints(self) -> tuple:
+        """The buildings file's footprints, in the file's units and coordinates."""
+        spec = self.buildings_file
+        try:
+            stat = spec.file.stat()
+        except OSError:
+            raise ValueError(f"buildings file {spec.file} cannot be read") from None
+        try:
+            return _cached_footprints(
+                str(spec.file),
+                stat.st_mtime_ns,
+                stat.st_size,
+                spec.height,
+                spec.name,
+                spec.default_height,
+            )
+        except ValueError as exc:
+            raise ValueError(f"buildings file: {exc}") from None
+
+    def file_buildings(self, first: int = 0, all: bool = False) -> list[Building]:
+        """The buildings of ``buildings_file`` as :class:`Building` objects, in the
+        geometry's units with ``ground.map_origin`` subtracted, named ``building_<n>``
+        from ``first + 1`` where the file gives no name, and those in ``without`` left
+        out (kept with ``all``)."""
+        spec = self.buildings_file
+        if spec is None:
+            return []
+        dx, dy = (0.0, 0.0) if self.ground.map_origin is None else self.ground.map_origin
+        left_out = set() if all else set(spec.without or [])
+        out = []
+        unnamed = first
+        for footprint in self._footprints():
+            name = footprint.name
+            if not name:
+                unnamed += 1
+                name = f"building_{unnamed}"
+            if name in left_out:
+                continue
+            corners = [(float(x - dx), float(y - dy)) for x, y in footprint.footprint]
+            out.append(Building(name=name, footprint=corners, height=footprint.height))
+        return out
+
+    def footprint_notes(self) -> list[str]:
+        """What is worth knowing about the buildings file: footprints with holes, which
+        are built over."""
+        if self.buildings_file is None:
+            return []
+        holed = [f.name or "an unnamed building" for f in self._footprints() if f.holes]
+        if not holed:
+            return []
+        listed = ", ".join(holed[:5]) + (", ..." if len(holed) > 5 else "")
+        return [
+            f"{len(holed)} footprints of the buildings file have holes (courtyards), which "
+            f"are built over: {listed}"
+        ]
 
     def barrier_names(self) -> list[str]:
         """The barriers' names, ``barrier_<n>`` for those without one."""
@@ -599,8 +836,10 @@ class Geometry(_Model):
     def describe(self) -> str:
         if self.ground is not None:
             parts = ["outdoors"]
+            if self.ground.terrain is not None:
+                parts.append("terrain")
             for count, one, many in (
-                (len(self.buildings or []), "building", "buildings"),
+                (len(self.buildings or []) + len(self.file_buildings()), "building", "buildings"),
                 (len(self.barriers or []), "barrier", "barriers"),
                 *(
                     (sum(v.kind == kind for v in self.vegetation or []), kind, f"{kind}s")
@@ -1860,6 +2099,17 @@ class Scene(_Model):
             # band (the ground dip), and the paths are few.
             if "coherent_max_band_hz" not in early.model_fields_set:
                 early.coherent_max_band_hz = OUTDOOR_COHERENT_MAX_BAND_HZ
+            if (
+                self.geometry.ground.terrain is not None
+                and self.atmosphere is not None
+                and not self.atmosphere.still
+            ):
+                raise ValueError(
+                    "wind and temperature profiles over a terrain are not modelled yet: the "
+                    "bent paths, the parabolic equation and the wave solver's weather take "
+                    "the ground as flat; leave the atmosphere out (or keep only its "
+                    "turbulence) with a terrain"
+                )
         elif self.atmosphere is not None:
             raise ValueError(
                 "atmosphere is for outdoor scenes (geometry.ground): in a room the air is "
@@ -1910,8 +2160,9 @@ class Scene(_Model):
             raise ValueError(f"no building, barrier or vegetation is named {unknown[0]!r}")
         data = self.to_data()
         geometry = data["geometry"]
+        own = len(self.geometry.buildings or [])
         for kind, kept in (
-            ("buildings", self.geometry.building_names()),
+            ("buildings", self.geometry.building_names()[:own]),
             ("barriers", self.geometry.barrier_names()),
             ("vegetation", self.geometry.vegetation_names()),
         ):
@@ -1922,6 +2173,10 @@ class Scene(_Model):
             ]
             if not geometry[kind]:
                 del geometry[kind]
+        from_file = [b.name for b in self.geometry.file_buildings(own) if b.name in names]
+        if from_file:
+            spec = geometry["buildings_file"]
+            spec["without"] = [*(spec.get("without") or []), *from_file]
         data["simulation"].pop("insertion_loss_of", None)
         return Scene.model_validate(data)
 

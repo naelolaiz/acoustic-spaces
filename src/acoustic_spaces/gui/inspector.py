@@ -868,15 +868,18 @@ class GeometryPage(Page):
         ground_form = QFormLayout()
         self.ground_height = spin(-LARGEST, LARGEST, 2, 0.5)
         self.ground_height.setToolTip(
-            _("The height (z) of the flat ground, in the units the title shows")
+            _(
+                "The height (z) of the flat ground, or added to the terrain's heights, in "
+                "the units the title shows"
+            )
         )
         self.ground_height.valueChanged.connect(lambda value: self._ground("height", value))
         self.margin = spin(0.1, LARGEST, 1, 5.0)
         self.margin.setToolTip(
             _(
                 "How far the ground reaches past the buildings, barriers and model, unless "
-                "its extent is set, and how high the sky is over the highest of them, "
-                "unless the sky is set; in the units the title shows"
+                "its extent is set or a terrain sets its size, and how high the sky is over "
+                "the highest of them, unless the sky is set; in the units the title shows"
             )
         )
         self.margin.valueChanged.connect(lambda value: self._ground("margin", value))
@@ -901,6 +904,15 @@ class GeometryPage(Page):
             _("Where the ground ends: past it, sound leaves the scene as if the ground went on")
         )
         ground_layout.addWidget(self.extent)
+        self.terrain = QLabel()
+        self.terrain.setWordWrap(True)
+        self.terrain.setToolTip(
+            _(
+                "The terrain the ground follows (set in the scene file): its heights on a "
+                "grid, from a file or given, sampled over the ground's extent"
+            )
+        )
+        ground_layout.addWidget(self.terrain)
         self.parts = {}
         for kind, title, columns, tips, remove_text in (
             (
@@ -1176,8 +1188,21 @@ class GeometryPage(Page):
                     sky=room.outdoor.sky - room.outdoor.ground,
                 )
             )
+        terrain = room.outdoor.terrain if room.outdoor is not None else None
+        self.terrain.setVisible(terrain is not None)
+        if terrain is not None:
+            self.terrain.setText(
+                fmt(
+                    _("Terrain: {points} points, z from {low} to {high} m, grid {spacing} m"),
+                    points=f"{terrain.nx + 1} × {terrain.ny + 1}",
+                    low=number(terrain.lowest),
+                    high=number(terrain.highest),
+                    spacing=number(terrain.grid.spacing),
+                )
+            )
+        own = len(geometry.buildings or [])
         for kind, names, items in (
-            ("buildings", geometry.building_names(), geometry.buildings or []),
+            ("buildings", geometry.building_names(), geometry.all_buildings()),
             ("barriers", geometry.barrier_names(), geometry.barriers or []),
             ("vegetation", geometry.vegetation_names(), geometry.vegetation or []),
         ):
@@ -1189,11 +1214,16 @@ class GeometryPage(Page):
                     rest = (_plant_shape(item), _plant_fill(item))
                 else:
                     rest = (str(len(item.footprint if kind == "buildings" else item.path)),)
+                from_file = kind == "buildings" and row >= own
                 for col, text in enumerate((name, number(item.height), *rest)):
                     cell = QTableWidgetItem(text)
                     cell.setToolTip(table.horizontalHeaderItem(col).toolTip())
-                    if col != 1:
+                    if col != 1 or from_file:
                         cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    if from_file:
+                        cell.setToolTip(
+                            _("From the buildings file, which sets its footprint and height")
+                        )
                     table.setItem(row, col, cell)
             table.blockSignals(False)
         zones = ground.zones or []
@@ -1248,6 +1278,26 @@ class GeometryPage(Page):
         if not self.parts[kind].rowCount():
             return
         row = self.parts[kind].currentRow()
+        geometry = self.document.scene.geometry
+        if kind == "buildings" and geometry.buildings_file is not None:
+            names = geometry.building_names()
+            index = row if 0 <= row < len(names) else len(names) - 1
+            if index >= len(geometry.buildings or []):
+                # A building from the file: left out there, by name.
+                name = names[index]
+
+                def leave_out(data: dict) -> None:
+                    spec = data["geometry"]["buildings_file"]
+                    spec["without"] = [*(spec.get("without") or []), name]
+                    settings = data["simulation"]
+                    kept = [n for n in settings.get("insertion_loss_of") or [] if n != name]
+                    if kept:
+                        settings["insertion_loss_of"] = kept
+                    else:
+                        settings.pop("insertion_loss_of", None)
+
+                self.apply(_("leave out building"), leave_out)
+                return
 
         def change(data: dict) -> None:
             items = data["geometry"][kind]

@@ -385,12 +385,14 @@ class TraceModel:
 
 
 def _ground_faces(room: Room) -> np.ndarray:
-    """(F,) the faces of an outdoor scene's ground: those lying on it (the model file's
-    are left out, see :func:`~acoustic_spaces.geometry.outdoor.standing`)."""
-    from acoustic_spaces.geometry.outdoor import ON_GROUND_M
+    """(F,) the faces of an outdoor scene's ground, flat or a terrain: those built as
+    the ground, its zones included (the model file's faces lying on flat ground are
+    left out of the mesh, see :func:`~acoustic_spaces.geometry.outdoor.standing`)."""
+    from acoustic_spaces.geometry.outdoor import GROUND
 
-    corners = room.mesh.vertices[room.mesh.faces][:, :, 2]  # (F, 3)
-    return np.all(np.abs(corners - room.outdoor.ground) <= ON_GROUND_M, axis=1)
+    mesh = room.mesh
+    ground = np.array([GROUND in label for label in mesh.labels] or [False], dtype=bool)
+    return ground[mesh.face_labels]
 
 
 def _ground_parts(room: Room) -> tuple[np.ndarray, np.ndarray]:

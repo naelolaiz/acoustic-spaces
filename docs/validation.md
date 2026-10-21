@@ -246,7 +246,19 @@ request and checks:
   band-filtered dip at 500 Hz), and over an absorbing ground that of free field; a
   barrier's insertion loss the level relative to free field with its sign turned,
   with a reflection back on the source's side that of its image source; the two runs
-  sharing their seed, and maps giving the same at their points.
+  sharing their seed, and maps giving the same at their points;
+- a terrain: heights read between the grid's nodes bilinearly and past its edge as the
+  edge's, from ESRI ASCII grids (north row first) and XYZ points in any order; a flat
+  terrain giving the flat ground's early paths to the bit and a plane slope the
+  reflection off the image source in it; the sound over a ridge the exact wedge's (UTD
+  against the Biot-Tolstoy-Medwin solution, within 0.1 dB over the source's and the
+  listener's slopes); a smooth hill's crest bending the sound, the level continuous
+  as a listener climbs out of its shadow, over two hills each crest bending it in turn,
+  a plane slope screening nothing and a building on the string stopping the path;
+  buildings, barriers and vegetation standing on the terrain, zones taking its
+  triangles, the extent keeping to it, coverage maps and insertion losses following
+  it, footprints read from GeoJSON polygons and multipolygons, their holes built over
+  and said so, and `inspect` describing the terrain and the heights over the ground.
 
 ## Cross-check against pyroomacoustics
 
@@ -1175,6 +1187,118 @@ through band filters, whose skirts fill the ground dip by up to about 1 dB, as i
 ground's own check above. Both results are checked against theory, not against
 measurements of a barrier or a ground.
 
+## Terrain against closed forms and the exact wedge
+
+`validation/terrain.py` checks sound over a terrain (`geometry.ground.terrain`, see
+[Outdoor scenes](outdoor.md#terrain)) against closed forms and the exact solution for a
+wedge, and times it on a large one. The early sound reflects off the mean plane of the
+ground and bends over its crests as the uniform theory of diffraction has it, wedge after
+wedge, with the ground's reflections off the profile's segments on both sides of each
+crest among its terms; the late rays bounce off the terrain's triangles. Levels are in dB
+re the direct sound in free field over the same distance, the early paths added in
+pressure in every band and the air's attenuation taken off each path over its own length.
+
+**A flat terrain** (every height alike, 101 × 101 points 10 m apart) against the flat
+ground: the direct sound and the one reflection have the same distances to the bit and
+energies within 2e-16, and whole runs (20,000 rays, the same seed) the same level relative
+to free field in every band, the two models differing only in how the ground is cut into
+triangles.
+
+**A plane sloping up 20 %** against the image source in the tilted plane: the reflected
+path's distance is the image's to 2e-9 m and its energy within 1e-15 straight up the
+slope, and within 2 mm and 7e-5 with the listener 160 m aside, where the ground also
+tilts across the profile, which the mean plane, level across it as the standards have
+it, leaves out.
+
+**A ridge**, two slopes of 0.6 meeting at 241.9 degrees, with the source on one slope and
+the listener in its shadow on the other, against the Biot-Tolstoy-Medwin solution for the
+rigid wedge ([Edge diffraction](#edge-diffraction-against-the-exact-solution)), per
+octave band; the engine's path is the wedge of the string pulled taut over the profile,
+with the reflections off both slopes in its four terms:
+
+| source, listener (m over the slopes) | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
+|---|---|---|---|---|---|---|---|---|---|
+| 2.0 at 30 m before, 1.5 at 30 m behind | -11.27 | -14.21 | -17.21 | -20.22 | -23.23 | -26.23 | -29.19 | -32.26 | exact, dB |
+| | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | -0.00 | -0.06 | +0.00 | engine - exact |
+| 1.0 at 40 m before, 4.0 at 60 m behind | -13.31 | -16.28 | -19.28 | -22.29 | -25.30 | -28.11 | -31.50 | -34.26 | exact, dB |
+| | -0.00 | +0.00 | +0.00 | +0.00 | +0.00 | -0.21 | +0.18 | -0.07 | engine - exact |
+| 3.0 at 20 m before, 1.5 at 40 m behind, 30 m aside | -9.82 | -12.73 | -15.72 | -18.72 | -21.73 | -24.77 | -27.73 | -30.73 | exact, dB |
+| | +0.10 | +0.09 | +0.09 | +0.09 | +0.09 | +0.12 | +0.07 | +0.06 | engine - exact |
+
+The engine agrees within 0.1 dB up to 1 kHz and 0.21 dB above, where the two slopes'
+reflections interfere with the direct wave within a band: a ridge sampled on a grid is
+the exact wedge, because the wedge sits at the crest with no width, its faces are the
+slopes and the uniform theory's four terms are the exact solution's away from its
+boundaries. The third pair is oblique, 30 m aside of the plane through the source and
+the crest.
+
+**A smooth hill**, 12 m high with a Gaussian profile 25 m wide at half its height, the
+source and the listener 1.5 m up 40 m before and behind its crest, 2.71 m of path
+difference over it. A rounded crest has no exact solution, so the sound over it is
+compared with the engineering formulas the standards use for the same path
+difference: over a soft ground (absorption 0.999), Maekawa's thin screen without
+ground reflections (10 lg(3 + 20 N), ISO 9613-2 with C₂ = 40), and over a rigid
+ground, ISO 9613-2's figure with C₂ = 20 (10 lg(3 + 10 N)), which stands for the
+reflections off a typical ground:
+
+| | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
+|---|---|---|---|---|---|---|---|---|---|
+| soft ground | -11.94 | -14.49 | -17.37 | -20.57 | -23.59 | -26.55 | -29.57 | -32.57 | engine, dB |
+| | -13.60 | -16.28 | -19.14 | -22.07 | -25.04 | -28.03 | -31.03 | -34.03 | thin screen, 10 lg(3 + 20 N) |
+| | +1.66 | +1.79 | +1.76 | +1.49 | +1.45 | +1.48 | +1.46 | +1.46 | engine - thin screen |
+| rigid ground | -6.81 | -14.34 | -16.72 | -14.98 | -19.67 | -23.28 | -25.45 | -28.60 | engine, dB |
+| | -11.12 | -13.57 | -16.28 | -19.14 | -22.07 | -25.04 | -28.03 | -31.03 | ISO 9613-2, 10 lg(3 + 10 N) |
+| | +4.32 | -0.77 | -0.43 | +4.16 | +2.40 | +1.76 | +2.57 | +2.43 | engine - ISO |
+
+Over the soft ground the engine lets 1.4 to 1.8 dB more over the hill than the thin
+screen, evenly across the bands: the crest is the wedge of the hill's chords, open
+wider than a half-plane, which bends more sound into its shadow. Over the rigid ground
+the reflections off both flanks join the direct wave, each by way of the ground near
+its foot, about 0.85 m longer than the straight line to the crest: in phase at 63 Hz
+(5.1 dB more than over the soft ground, 4.3 above the standard's typical ground),
+against it at 125 and 250 Hz, where that extra path is near half a wavelength (the
+ground dip: 0.2 to 0.7 dB more than over the soft ground, a little below the
+standard's figure), and from 500 Hz up 3.3 to 5.6 dB more than over the soft ground
+(1.8 to 4.2 above the standard), where the waves no longer interfere alike across a
+band and add in energy: 6 dB for four of a size, less because the reflected ones come
+from images deeper in the shadow. The standard's figure stands for a ground that
+reflects less than a rigid one. Both are engineering comparisons, not exact solutions.
+
+**Climbing out of the shadow** behind the same hill over the rigid ground, from 1.5 to
+29.5 m up in steps of 0.5 m, the level changes by at most 0.6 dB a step at 63 Hz and
+3.0 dB at 8 kHz, where the edge of the shadow is sharpest (the line of sight clears the
+hill from 23.2 m up), and never falls by more than 1.8 dB a step, in the ground's
+interference and the lit zone's ripples:
+
+| up (m) | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k |
+|---|---|---|---|---|---|---|---|---|
+| 1.5 | -6.81 | -14.34 | -16.72 | -14.98 | -19.67 | -23.28 | -25.45 | -28.60 |
+| 4.0 | -9.64 | -14.02 | -16.65 | -16.40 | -19.95 | -23.27 | -25.98 | -29.13 |
+| 6.5 | -9.86 | -11.74 | -15.29 | -15.95 | -19.10 | -22.40 | -25.13 | -28.20 |
+| 9.0 | -8.00 | -11.19 | -14.31 | -15.17 | -18.31 | -21.72 | -24.51 | -27.59 |
+| 11.5 | -6.44 | -10.57 | -13.44 | -14.17 | -17.38 | -20.80 | -23.59 | -26.66 |
+| 14.0 | -5.21 | -9.91 | -12.21 | -12.93 | -16.04 | -19.42 | -22.22 | -25.29 |
+| 16.5 | -4.36 | -8.72 | -10.61 | -11.22 | -14.06 | -17.34 | -20.11 | -23.17 |
+| 19.0 | -3.66 | -7.49 | -8.57 | -8.92 | -11.12 | -13.96 | -16.55 | -19.52 |
+| 21.5 | -2.85 | -6.24 | -6.14 | -6.06 | -6.95 | -8.40 | -9.65 | -11.44 |
+| 24.0 | -2.05 | -5.02 | -3.53 | -2.94 | -2.20 | -1.46 | +0.32 | +1.17 |
+| 26.5 | -1.18 | -3.93 | -1.16 | -0.31 | +0.85 | +0.96 | +0.93 | +0.55 |
+| 29.0 | -0.37 | -3.25 | +0.79 | +0.79 | +0.24 | +0.99 | +0.46 | +0.90 |
+
+At 63 Hz the level first falls as the listener rises, from -6.8 dB at 1.5 m to -9.9 at
+6.5 m: the reflection off the ground behind the hill, in phase with the wave over the
+crest at the ground, lags it more the higher the listener. From there every band rises
+through the edge of the shadow, 12 dB in the 2.5 m round the line of sight at 8 kHz,
+to within 1 dB of free field above it, where the direct sound, the ground's reflection
+and the crest's wave ripple together.
+
+**Cost.** Rolling hills 2 km across on a 20 m grid (10,000 cells, 21,233 triangles with
+a building): the model builds in 3.9 s, its 8 diffracting edges (the building's) are found in
+0.1 s, the early path over the hills in 0.3 s and a whole run with 20,000 rays takes
+0.6 s, on four cores of the test container. The terrain costs the late rays nothing
+beyond the triangles it adds, and the early sound the profile and the string over it,
+once per listener.
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -1405,9 +1529,14 @@ its peak (single precision).
   fine).
 - **Outdoor propagation** is checked against geometry, closed forms, the exact solution
   for the reflection off a ground and one set of measurements, a wind turbine up to 845
-  m away in light winds. The ground is flat (see
-  [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)); strong winds and temperature
-  gradients, where they matter most, have not been compared with measurements.
+  m away in light winds. A terrain is checked against the exact solution for a wedge,
+  the flat ground, the image source in a slope and the thin screen's closed forms, not
+  against measurements over hills (see
+  [Terrain](#terrain-against-closed-forms-and-the-exact-wedge)), and a rounded crest,
+  which has no exact solution, is an engineering model; wind and temperature gradients
+  cannot be combined with a terrain yet (see
+  [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)), and strong ones, where they
+  matter most, have not been compared with measurements.
   Vegetation is checked against a particle simulation of the same model, not against
   measurements through trees; its foliage takes ISO 9613-2's rates, which the
   standard gives for depths of 20 to 200 m, or leaves as thin rigid discs, whose
@@ -1446,6 +1575,7 @@ python validation/vegetation.py --json vegetation.json
 python validation/leaves.py --json leaves.json
 python validation/wave_outdoor.py --json wave_outdoor.json
 python validation/insertion_loss.py --json insertion_loss.json
+python validation/terrain.py --json terrain.json
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
@@ -1459,7 +1589,8 @@ The cross-check takes about 20 minutes on 4 cores, the benchmark about 2 minutes
 wave solver's checks about 3.5 minutes (both stencils), the ground's about 7.5 (1.5 of
 them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5
 (3 with turbulence), the turbulence's about 7, the vegetation's about 6, the wave
-solver's outdoors about 18, the outdoor results' about 3, the leaves' about 2 and each BRAS
+solver's outdoors about 18, the outdoor results' about 3, the terrain's about 4.5, the
+leaves' about 2 and each BRAS
 run about 30 minutes (85 in third-octave bands, or half that per room with
 `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it

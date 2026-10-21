@@ -56,6 +56,104 @@ can have materials of their own: a road, a lawn, a car park (see
 
 The ground and the sky are the surfaces `ground` and `sky`.
 
+## Terrain
+
+The ground need not be flat: `ground.terrain` gives its heights on a square grid, from
+a file or in the scene, and everything stands on it.
+
+```yaml
+geometry:
+  ground:
+    terrain: {file: hills.asc}        # an Esri ASCII grid, or x y z points on a grid
+    map_origin: [552000, 5806000]     # the map's point that becomes the scene's (0, 0)
+    sky: 60
+```
+
+- `terrain.file` is an Esri ASCII grid (`.asc`, what GIS tools write and
+  `gdal_translate -of AAIGrid` makes of a GeoTIFF or any other raster) or a table of
+  `x y z` points on a regular grid (`.xyz`, `.txt` or `.csv`). Its coordinates must be
+  in the geometry's units on a plane (a projected system such as UTM), not degrees of
+  longitude and latitude; `ground.map_origin` is subtracted from them, so that the
+  scene's coordinates stay small, and from a buildings file's (see
+  [Buildings from a map](#buildings-from-a-map)).
+- `terrain.heights` gives the heights in the scene instead: rows of values, each row
+  along x from `origin`, the rows along y, `spacing` apart.
+- `ground.height` is added to the terrain's heights.
+
+Between the grid's nodes the ground is bilinear; past the grid's edge it goes on at the
+height of the edge. The scene's ground is the grid sampled over the ground's extent and
+cut into triangles: the whole grid unless `extent` is set, which must then lie inside
+it (the terrain sets the ground's size, not the margin). The sky is `sky` over the
+terrain's highest point, or `margin` over the highest building, barrier or object.
+Ground zones take the triangles whose centres lie in them. Buildings and barriers stand
+on the terrain however it runs: a building's walls go down a little below the lowest
+ground under them and its roof lies its height over the terrain's mean height at the
+footprint's corners; a barrier's top follows the terrain along its path; vegetation
+stands on the terrain under its middle. The model file's objects are taken as they are,
+and one that reaches below the terrain's lowest point is refused. A terrain with wind or
+temperature gradients is not supported yet: the scene is refused.
+
+`acoustic-spaces inspect` describes the terrain (its points, its heights and its grid)
+and gives each source's and listener's height over the ground under it. Coverage maps
+follow the terrain: their points stand at the map's height over the ground under them.
+
+### How the simulation takes the terrain into account
+
+- **The late rays** bounce off the terrain's triangles as off any surface.
+- **The early paths** do not reflect off its triangles: a facet a few metres across
+  would send a 5 m wave back as a plain does, and as a listener moves the reflections
+  off neighbouring facets would come and go in jumps. In sight of the source the ground
+  reflects once instead, off the **mean plane** of the terrain's profile between the
+  source and the listener, as the outdoor standards (CNOSSOS-EU, Nord2000) have it: the
+  plane through the least-squares line of the profile, level across it, with the
+  reflection factor of the ground under the reflection point (its material, or the
+  grounds of the zones its Fresnel zone covers, as on flat ground). Over a plain or a
+  plane slope that is the ground itself, and the reflection is the one flat ground
+  gives.
+- **Crests** between the source and the listener bend the sound over them. The ground's
+  profile in the vertical plane between the two is drawn, and the string pulled taut
+  over it from one to the other bends at the crests in the way: each is a wedge whose
+  faces run from it down to the ground under its neighbours on the string (the
+  source's foot, the listener's or the next crest), so a ridge of two slopes is the
+  wedge it is and a rounded hill the wedge of its chords. The sound over them is the
+  uniform theory of diffraction's, wedge after wedge: the direct wave over each edge
+  and the ground's reflections before and after it, off the profile's segments between
+  the crest and its neighbours on the string, each weighted by the share of its
+  Fresnel zone the segment holds (Nord2000's Fresnel-zone weights, so that at low
+  frequencies they add up to the one reflection off the side's mean plane and at high
+  ones the segments that mirror the sound to the edge carry it all), with the ground's
+  reflection factor (the spherical wave's over a ground with an impedance). Near the
+  crest a reflection is a term of the wedge's coefficient, as in the exact solution;
+  far from it, a path of its own, as in the four-path model of a barrier, and the
+  uniform theory's transition over its extra path bridges the two. Where the string
+  runs along the ground over a flat or rounded top, the wedge sits where the string's
+  two legs onto it would
+  meet above it (the equivalent edge of a thick screen), and the crest screens more the
+  wider it is, by ISO 9613-2's factor for a thick screen (up to 4.8 dB more at the
+  highest bands): its width is the ground within an eighth of a wavelength of the
+  string, less what a sharp wedge would have, so a ridge has none and a rounded hill a
+  few metres at the highest bands. The path over the crests arrives from the last crest
+  after the string's length, with the air's attenuation over it.
+- **In sight of the source**, the crest the ground comes nearest the line of sight
+  still diffracts: its wedge's waves are added to the direct sound and to the
+  reflection off the slope before it (where the listener sees the source in that
+  slope), with the uniform theory's transition at each boundary, so the level is
+  continuous across the edge of a hill's shadow and ripples in the lit zone as the
+  exact field does. The mean plane's reflection takes over from the slope's as the
+  crest drops below the line of sight, by half the longest wavelength of path
+  difference.
+- Buildings, barriers or model objects standing on the string stop the path: the sound
+  bent over a hill and a building in turn is not modelled. Edges buried in the terrain
+  do not diffract, nor do its own ridges, which bend too little at each grid line: the
+  sound over the crests takes their place.
+
+A ridge agrees with the exact solution for the wedge within 0.2 dB, a flat terrain and
+a plane slope with the flat ground and the image source, and a smooth hill over a soft
+ground lets 1.4 to 1.8 dB more over its crest than the thin screen's attenuation (see
+[Validation](validation.md#terrain-against-closed-forms-and-the-exact-wedge)); a
+rounded crest, which the sound creeps over, has no exact solution, and is an
+engineering model here as in the standards.
+
 ## Buildings and barriers
 
 A building is its `footprint` (corners in order, as a floor plan) raised to its
@@ -86,6 +184,32 @@ where you can.
 Sources and listeners must stand in the open air: above the ground, under the sky,
 inside the extent and not inside one of the `buildings`; `validate` and the editor say
 which one is not.
+
+## Buildings from a map
+
+`geometry.buildings_file` adds the buildings of a GeoJSON file (`.geojson` or `.json`)
+to the scene's own: each `Polygon` feature, and each part of a `MultiPolygon`, is a
+building with its outer ring as the footprint and its height in a property.
+
+```yaml
+geometry:
+  ground:
+    map_origin: [552000, 5806000]
+  buildings_file:
+    file: town.geojson
+    height: height          # the property with each building's height, or one height for all
+    default_height: 9       # for buildings whose property is missing
+    name: name              # the property with each building's name; else building_<n>
+    without: [old_mill]     # buildings of the file to leave out, by name
+```
+
+The coordinates must be in the geometry's units on a plane (a projected system such as
+UTM); a file in degrees of longitude and latitude is refused, with a note to project
+it. `ground.map_origin` is subtracted from them, as from a terrain's. Holes in a
+footprint (courtyards) are built over, and the report says which footprints had them.
+The file's buildings come after the scene's own in the lists, in `inspect` and in the
+editor's buildings table, where **Remove** leaves one out (it goes into `without`), and
+they count for insertion losses like any other building.
 
 ## Ground impedance
 
@@ -567,6 +691,9 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
 - **The wave solver** sees the sky as an opening and puts a matched layer round the
   grid, as for any open model, and in wind and temperature takes a speed of sound per
   cell (see [How the simulation bends sound](#how-the-simulation-bends-sound)).
+- **A terrain** reflects the early sound off the mean plane of its profile and bends
+  it over its crests, and the late rays off its triangles (see
+  [How the simulation takes the terrain into account](#how-the-simulation-takes-the-terrain-into-account)).
 - **Air** absorbs per band as indoors (ISO 9613-1, from `air`), along every path.
 - **Wind and temperature** bend the paths and the rays (see
   [Wind and temperature](#wind-and-temperature)), and their eddies blur the paths'
@@ -631,8 +758,11 @@ the Biot-Tolstoy-Medwin solution over an absorbing ground, the level over grass 
 The **Geometry** entry of an outdoor scene has an **Outdoors** group: the ground's height,
 the margin and the sky, where the ground ends, the buildings, barriers and vegetation
 with their heights, which can be changed or removed (the vegetation's table also gives
-each one's shape and what fills it), and the ground zones, which can be removed.
-Footprints, paths, trees and the zones' outlines are set in the scene file. A material's page
+each one's shape and what fills it), and the ground zones, which can be removed. A
+terrain is described under the ground's fields (its points, heights and grid), and the
+buildings of a map file stand in the buildings table after the scene's own, where
+**Remove** leaves one out of the file. Footprints, paths, trees, the zones' outlines,
+the terrain and the map file are set in the scene file. A material's page
 has a **Ground impedance** group: tick it to make the material a ground (grass to
 start with), then pick the ground, the model, a flow resistivity of your own, a layer's
 thickness or the porosity rate. Unticked, the material keeps the absorption the
@@ -667,10 +797,19 @@ attenuation is given, not derived from its leaves' size and density, and stems s
 upright at random. The rays through it are traced on the CPU only.
 
 The wind, the temperature and the eddies are the same over the whole scene, and the
-eddies are as strong at every height as near the ground. The
-ground is flat and reacts locally: its impedance does not
-change with the angle sound meets it at, which holds for grass, soil and snow, though
-less for a thick layer of very soft snow.
+eddies are as strong at every height as near the ground. The ground reacts locally: its
+impedance does not change with the angle sound meets it at, which holds for grass, soil
+and snow, though less for a thick layer of very soft snow.
+
+Over a terrain the early sound reflects off the mean plane of the ground's profile, not
+off its facets, so a listener high over rolling ground gets one reflection where the
+real ground glistens with many, and a valley between the source and the listener
+reflects as its mean plane does, not as a bowl. A rounded crest is a wedge of its
+chords with a thick screen's extra screening, an engineering model as in the standards,
+where a ridge is exact. Sound bent over a hill and a building in turn is left out, and
+a terrain cannot be combined with wind or temperature gradients yet. The editor shows a
+terrain and the buildings of a map but does not draw either: they are set in the scene
+file.
 
 Sound that reflects off the ground both before and after bending over an edge (two
 reflections and a diffraction) is left out unless
