@@ -231,8 +231,8 @@ Examples:
   (`stadium_concert`); every array added up box by box near its listeners; and the
   editor's examples in groups.
 
-Unreleased:
+Editor:
 
-- [x] Editor: the background task in the status bar says what runs, with Cancel beside
+- [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.

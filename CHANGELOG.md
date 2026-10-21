@@ -554,8 +554,8 @@
 
 **Editor**
 
-- While a run, a coverage map or a tuning goes on, the status bar says what runs, its
-  latest step and the time so far, with a **Cancel** button beside the moving bar;
+- While a run, a coverage map, a tuning or an export goes on, the status bar says what
+  runs, its latest step and the time so far, with a **Cancel** button beside the bar;
   resting the mouse on the bar says the same at length. The bar was small and silent
   before, easy to miss on some desktops (KDE's, say).
 - **Messages** shades every other message, and its ticks show or hide the info, the

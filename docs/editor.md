@@ -124,9 +124,9 @@ which frequencies each octave band holds.
   one source, listener or material (the list holds those that messages name, with how
   many do), and the filter keeps only those holding some words. **Clear** removes the
   messages on show and keeps those hidden.
-- While a run, a coverage map or a tuning goes on, the status bar says what runs, what
-  it does now and for how long, beside a moving bar and a **Cancel** button; resting
-  the mouse on the bar says so at length.
+- While a run, a coverage map, a tuning or an export goes on, the status bar says what
+  runs, what it does now and for how long, beside a moving bar and a **Cancel**
+  button; resting the mouse on the bar says so at length.
 - When a run, a coverage map or a tuning ends while another window is in front, the
   editor's entry in the taskbar flashes (on macOS, its Dock icon bounces). Nothing pops
   up: the results come to the front and **Messages** says how it went.
