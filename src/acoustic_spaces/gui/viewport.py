@@ -223,7 +223,11 @@ class Viewport(QWidget):
             if (group, item.name) not in hidden
         ]
         # Smaller where they crowd, such as players and monitors on a stadium's stage.
-        radii, arrows = marker_sizes([item.position for *_, item in shown], size)
+        radii, arrows = marker_sizes(
+            [item.position for *_, item in shown],
+            size,
+            [item.orientation.forward() for *_, item in shown],
+        )
         points, names = [], []
         for (group, colour, index, item), radius, arrow in zip(shown, radii, arrows, strict=True):
             chosen = kind == group and key == index

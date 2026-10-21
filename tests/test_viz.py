@@ -34,16 +34,19 @@ def test_plot_room_adds_surfaces_and_markers() -> None:
 
 
 def test_markers_shrink_where_points_crowd() -> None:
-    # Two points a metre apart and one far away, in a model 100 m across.
+    # In a model 100 m across, markers are 1.2 m in radius and arrows 7.2 m long.
     radius, arrow = marker_sizes([[0, 0, 0], [1, 0, 0], [60, 0, 0]], 100.0)
-    assert radius.tolist() == pytest.approx([0.25, 0.25, 1.2])  # clear of each other
-    assert arrow.tolist() == pytest.approx([0.8, 0.8, 7.2])  # short of the other point
-    # On top of each other: a fifth of the size, and an arrow out of the sphere.
-    radius, arrow = marker_sizes([[0, 0, 0], [0, 0, 0]], 100.0)
+    assert radius.tolist() == pytest.approx([0.45, 0.45, 1.2])  # a metre apart: apart
+    assert arrow.tolist() == pytest.approx([2.7, 2.7, 7.2])
+    # On top of each other: a fifth of the size.
+    radius, _arrow = marker_sizes([[0, 0, 0], [0, 0, 0]], 100.0)
     assert radius.tolist() == pytest.approx([0.24, 0.24])
-    assert arrow.tolist() == pytest.approx([0.48, 0.48])
-    radius, arrow = marker_sizes([[0, 0, 0]], 100.0)
-    assert radius.tolist() == pytest.approx([1.2]) and arrow.tolist() == pytest.approx([7.2])
+    # Points 3 m and more apart keep the full size; an arrow stops short of a marker
+    # ahead of it, not of one beside it.
+    points = [[0, 0, 0], [5, 0, 0], [0, 3, 0]]
+    radius, arrow = marker_sizes(points, 100.0, [[1, 0, 0], [0, 0, 1], [1, 0, 0]])
+    assert radius.tolist() == pytest.approx([1.2, 1.2, 1.2])
+    assert arrow.tolist() == pytest.approx([0.9 * (5 - 1.2), 7.2, 7.2])
 
 
 def test_line_and_surface_sources_are_drawn() -> None:

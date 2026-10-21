@@ -44,8 +44,9 @@ which frequencies each octave band holds.
   changing the scene. See
   [Groups, and sources left out](scenes.md#groups-and-sources-left-out).
 - In the 3D view and the plan, sources and listeners that crowd, such as the players
-  and monitors on a stadium's stage, get smaller markers and shorter arrows, so each
-  stays clear of the nearest; hiding a group gives the rest their size back.
+  and monitors on a stadium's stage, get smaller markers where they would overlap, and
+  an arrow stops short of a marker ahead of it; everything else keeps its size, and
+  hiding a group gives the rest their size back.
 - **Place source** and **Place listener**, then click a surface: on a floor the new
   point stands at ear or mouth height, on a wall or ceiling it goes half a metre into
   the room. In the plan, the click places it above the floor there. Sources and

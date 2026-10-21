@@ -320,16 +320,40 @@ def nearest_spacing(points) -> np.ndarray:
     return nearest
 
 
-def marker_sizes(positions, size: float) -> tuple[np.ndarray, np.ndarray]:
+def clear_lengths(points, directions, radius, length) -> np.ndarray:
+    """The length of the arrow from each of ``points`` along its unit row of
+    ``directions`` (zeros for none): ``length``, cut short where the arrow would run into
+    the marker (of ``radius``) of another point ahead of it, but no shorter than twice
+    its own marker's radius."""
+    points = np.asarray(points, dtype=float)
+    directions = np.asarray(directions, dtype=float)
+    radius = np.broadcast_to(np.asarray(radius, dtype=float), len(points))
+    length = np.broadcast_to(np.asarray(length, dtype=float), len(points)).copy()
+    for start in range(0, len(points), 256):  # a block of arrows at a time
+        rows = slice(start, start + 256)
+        ahead = points[None] - points[rows, None]  # from each arrow's start to every point
+        along = np.einsum("bnd,bd->bn", ahead, directions[rows])
+        aside = np.linalg.norm(ahead - along[..., None] * directions[rows, None], axis=-1)
+        reach = length[rows, None]
+        # The tip is a tenth of the arrow's length in radius.
+        hit = (along > 0) & (aside < radius + 0.1 * reach) & (along - radius < reach)
+        stop = np.where(hit, along - radius, np.inf).min(axis=1)
+        length[rows] = np.minimum(length[rows], np.maximum(0.9 * stop, 2 * radius[rows]))
+    return length
+
+
+def marker_sizes(positions, size: float, directions=None) -> tuple[np.ndarray, np.ndarray]:
     """The radius of the marker of each source or listener at ``positions`` and the
-    length of its arrow, in a model ``size`` metres across: 1.2 % of the size and six
-    times that where the points are far apart; where they crowd, smaller, to keep clear
-    of the nearest point, down to a fifth of that radius and an arrow twice its own."""
+    length of its arrow along its unit row of ``directions``, in a model ``size`` metres
+    across: 1.2 % of the size and six times that, as long as the markers keep apart and
+    the arrows clear of the markers ahead of them. Where they crowd, smaller, down to a
+    fifth of that radius and an arrow twice its own."""
     points = np.asarray(positions, dtype=float).reshape(-1, 3)
     full = max(0.012 * size, 0.05)
-    nearest = nearest_spacing(points)
-    radius = np.clip(0.25 * nearest, 0.2 * full, full)
-    return radius, np.clip(0.8 * nearest, 2 * radius, 6 * radius)
+    radius = np.clip(0.45 * nearest_spacing(points), 0.2 * full, full)
+    if directions is None:
+        return radius, 6 * radius
+    return radius, clear_lengths(points, np.reshape(directions, (-1, 3)), radius, 6 * radius)
 
 
 def vegetation_polydata(shape) -> pyvista.PolyData:
@@ -412,7 +436,12 @@ def plot_room(
     lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
     size = float(np.linalg.norm(hi - lo)) or 1.0
     sources, listeners = room.scene.sources, room.scene.listeners
-    radii, arrows = marker_sizes([item.position for item in [*sources, *listeners]], size)
+    everything = [*sources, *listeners]
+    radii, arrows = marker_sizes(
+        [item.position for item in everything],
+        size,
+        [item.orientation.forward() for item in everything],
+    )
 
     points, names = [], []
     for k, (source, directivity) in enumerate(zip(sources, room.directivities, strict=True)):

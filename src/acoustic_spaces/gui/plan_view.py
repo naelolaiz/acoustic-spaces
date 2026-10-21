@@ -67,6 +67,7 @@ from acoustic_spaces.viz import (
     LISTENER_COLOUR,
     SOURCE_COLOUR,
     VEGETATION_COLOUR,
+    clear_lengths,
     nearest_spacing,
 )
 
@@ -884,9 +885,17 @@ class PlanCanvas(QWidget):
             if drag == (group, k) and self._preview is not None:
                 position = self._preview
             shown.append((group, k, item, position, self.to_screen(position)))
-        # Smaller markers and shorter arrows where the points crowd on the screen.
-        spacing = nearest_spacing([(p.x(), p.y()) for *_, p in shown])
-        for (group, k, item, position, p), apart in zip(shown, spacing, strict=True):
+        # Smaller markers where they would overlap on the screen, and arrows that stop
+        # short of a marker ahead.
+        screen = np.array([(p.x(), p.y()) for *_, p in shown]).reshape(-1, 2)
+        radii = np.clip(0.45 * nearest_spacing(screen), 3.5, 5.5)
+        aims = np.zeros_like(screen)
+        for row, entry in enumerate(shown):
+            forward = np.asarray(entry[2].orientation.forward()[:2], dtype=float) * [1.0, -1.0]
+            if np.linalg.norm(forward) > 0.2:  # drawn: not pointing up or down
+                aims[row] = forward / np.linalg.norm(forward)
+        arrows = clear_lengths(screen, aims, radii, 18.0)
+        for (group, k, item, position, p), size, arrow in zip(shown, radii, arrows, strict=True):
             chosen = kind == group and key == k
             colour = (
                 SELECTED_COLOUR
@@ -906,10 +915,10 @@ class PlanCanvas(QWidget):
                     painter.drawPolyline(outline)
             forward = np.asarray(item.orientation.forward()[:2], dtype=float)
             if np.linalg.norm(forward) > 0.2:
-                forward = forward / np.linalg.norm(forward) * min(max(0.8 * apart, 9.0), 18.0)
+                forward = forward / np.linalg.norm(forward) * arrow
                 painter.setPen(QPen(_qcolor(colour, alpha), 2))
                 painter.drawLine(p, QPointF(p.x() + forward[0], p.y() - forward[1]))
-            radius = 7.0 if chosen or self._hover == (group, k) else min(max(0.4 * apart, 3.5), 5.5)
+            radius = 7.0 if chosen or self._hover == (group, k) else size
             painter.setPen(QPen(_qcolor(BACKGROUND[0], alpha), 1.5))
             painter.setBrush(_qcolor(colour, alpha))
             painter.drawEllipse(p, radius, radius)
