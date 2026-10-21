@@ -239,5 +239,5 @@ Editor:
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.
-- [x] Smaller markers where sources and listeners would overlap, and arrows that stop
-  short of a marker ahead, in the 3D view and the plan.
+- [x] Markers sized from the spacing of the sources and listeners, smaller where they
+  would overlap, and arrows that stop short of a marker ahead.

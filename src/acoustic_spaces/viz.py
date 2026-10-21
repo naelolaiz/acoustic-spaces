@@ -345,12 +345,16 @@ def clear_lengths(points, directions, radius, length) -> np.ndarray:
 def marker_sizes(positions, size: float, directions=None) -> tuple[np.ndarray, np.ndarray]:
     """The radius of the marker of each source or listener at ``positions`` and the
     length of its arrow along its unit row of ``directions``, in a model ``size`` metres
-    across: 1.2 % of the size and six times that, as long as the markers keep apart and
-    the arrows clear of the markers ahead of them. Where they crowd, smaller, down to a
-    fifth of that radius and an arrow twice its own."""
+    across, from how far apart the points are: a fifth of their usual spacing (the
+    median distance to the nearest one), from 1.2 % to 2.5 % of the model's size, and an
+    arrow six times that. Where points crowd, their markers shrink so as not to overlap,
+    down to a fifth, and an arrow stops short of a marker ahead of it."""
     points = np.asarray(positions, dtype=float).reshape(-1, 3)
-    full = max(0.012 * size, 0.05)
-    radius = np.clip(0.45 * nearest_spacing(points), 0.2 * full, full)
+    nearest = nearest_spacing(points)
+    apart = nearest[np.isfinite(nearest)]
+    usual = float(np.median(apart)) if len(apart) else np.inf
+    full = max(float(np.clip(0.2 * usual, 0.012 * size, 0.025 * size)), 0.05)
+    radius = np.clip(0.45 * nearest, 0.2 * full, full)
     if directions is None:
         return radius, 6 * radius
     return radius, clear_lengths(points, np.reshape(directions, (-1, 3)), radius, 6 * radius)

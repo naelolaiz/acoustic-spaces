@@ -43,10 +43,11 @@ which frequencies each octave band holds.
   eye beside it hides it in the 3D view and the plan, or shows it again, without
   changing the scene. See
   [Groups, and sources left out](scenes.md#groups-and-sources-left-out).
-- In the 3D view and the plan, sources and listeners that crowd, such as the players
-  and monitors on a stadium's stage, get smaller markers where they would overlap, and
-  an arrow stops short of a marker ahead of it; everything else keeps its size, and
-  hiding a group gives the rest their size back.
+- The markers of sources and listeners in the 3D view take their size from the
+  scene: a fifth of the usual spacing between them, from 1.2 % to 2.5 % of the model's
+  size. Where they crowd, such as the players and monitors on a stadium's stage, they
+  get smaller rather than overlap, in the plan too, and an arrow stops short of a
+  marker ahead of it; hiding a group gives the rest their size back.
 - **Place source** and **Place listener**, then click a surface: on a floor the new
   point stands at ear or mouth height, on a wall or ceiling it goes half a metre into
   the room. In the plan, the click places it above the floor there. Sources and

@@ -579,11 +579,13 @@
   warnings and the errors, with how many there are of each. **Item** keeps only the
   messages about one source, listener or material, a filter only those holding some
   words, and **Clear** removes the messages on show.
-- In the 3D view, the plan and `show`, markers of sources and listeners that would
-  overlap get smaller, down to a fifth of the size, and an arrow that would run into a
-  marker ahead of it stops short: on the stadium's stage the markers were 6 m wide and
-  the arrows 19 m long, across the players and monitors. Everything else is drawn as
-  before. In `show`, sources and listeners left out are drawn faded too.
+- The markers of sources and listeners in the 3D view and `show` take their size from
+  the scene: a fifth of the usual spacing between the points, from 1.2 % to 2.5 % of
+  the model's size (it was 1.2 % always), so in most rooms they are twice as large.
+  Where they would overlap they get smaller, down to a fifth, and an arrow that would
+  run into a marker ahead of it stops short, in the plan too: on the stadium's stage
+  the markers were 6 m wide and the arrows 19 m long, across the players and monitors.
+  In `show`, sources and listeners left out are drawn faded too.
 
 **Fixes**
 

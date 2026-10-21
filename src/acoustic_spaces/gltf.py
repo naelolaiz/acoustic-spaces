@@ -123,7 +123,8 @@ def _arrow(length: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _marker_radius(room: Room) -> float:
-    """Radius of the source and listener spheres, as the editor's 3D view draws them."""
+    """Radius of the source and listener spheres: 1.2 % of the model's size, the least
+    the editor's 3D view gives them where they do not crowd."""
     lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
     size = float(np.linalg.norm(hi - lo)) or 1.0
     return max(0.012 * size, 0.05)
