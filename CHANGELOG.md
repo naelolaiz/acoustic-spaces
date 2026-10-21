@@ -446,6 +446,25 @@
   and `inspect` says which walks have Doppler. Faster than sound or with the wave
   solver's bands, a walk with Doppler stops with an error.
 
+**Moving air in the wave solver**
+
+- `simulation.wave.wind: moving` (`simulate --wave-wind moving`, **Wind** on the
+  editor's Simulation page) makes the wave solver's air move with the wind instead of
+  changing its speed of sound: each cell keeps the still air's speed of sound, and
+  before each step the pressure is carried along with the wind (fourth-order
+  differences, a third-order Runge-Kutta method). Sound goes at c + v downwind and
+  c - v upwind whichever way it turned, so a façade's echo against the wind comes when
+  it should. It costs three to four times as much, on the CPU (asked for the GPU, the
+  run says so and stays on the CPU); the run's details say `wave_moving_air`. Left
+  out (`effective`, the default), and in still air, nothing changes.
+- Checked by `validation/wave_wind.py` against the exact field in a uniform wind of 15
+  m/s: within 0.05 dB and 0.1 ms in every direction, where the effective speed of
+  sound is up to 0.9 dB off, and a façade's echo within 0.02 ms of ray theory's,
+  where the effective speed of sound brings it 10.6 ms early; in the `windy` preset
+  over grass within 0.34 dB of the parabolic equation, 0.13 dB on average, where the
+  effective speed of sound is within 0.69 dB (see
+  [Validation](docs/validation.md#moving-air-in-the-wave-solver)).
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

@@ -332,6 +332,7 @@ simulation:
     max_band_hz: 125           # the highest band it computes: 63, 125 (default), 250 or 500
     points_per_wavelength: 8   # grid cells per wavelength at the top of that band
     scheme: auto               # the grid's stencil: auto (default), isotropic or standard
+    wind: effective            # outdoors: effective (default) speed of sound, or moving air
     device: cpu                # where it steps the grid: cpu, gpu or auto; left out: this
                                # computer's default (cpu unless tune made it auto)
 ```
@@ -372,6 +373,9 @@ simulation:
   at the cell's height, plus the wind's component along the horizontal from the source.
   The grid is then fine enough for the slowest sound and steps in time for the fastest,
   on the CPU or on the GPU alike (see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)).
+  With `wind: moving` (`simulate --wave-wind moving`) the air moves instead, so that
+  sound a building sends back towards the source goes against the wind; it costs three
+  to four times as much and runs on the CPU.
 - The listener records the pressure and its gradient, so the low end keeps its
   direction in Ambisonics, binaural and loudspeaker outputs (to first order).
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177

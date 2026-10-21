@@ -55,7 +55,8 @@ which frequencies each octave band holds.
   pressure up to**; the late part's method, rays per band,
   reception, ray splitting and **Run on** (*default*: this computer's default, the CPU
   unless the tune window made it *auto*; or the CPU, a GPU, both, or *auto*); the
-  scattering model; the wave solver, its highest band and where it runs; **Performance** (CPU
+  scattering model; the wave solver, its highest band, how it takes the wind outdoors
+  (**Wind**: an effective speed of sound or moving air) and where it runs; **Performance** (CPU
   threads and the ray search tree); and, under **Response**, the length, the sample
   rate, octave or third-octave **Bands**, the early-to-late transition and the seed.
   The scene's own entry sets the air's temperature, humidity and pressure, and shows

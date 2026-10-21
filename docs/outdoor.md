@@ -490,6 +490,23 @@ is an arc of a circle, so its travel time and its length are exact.
   It runs on the CPU or on the GPU alike (`simulation.wave.device`), the two agreeing
   to rounding. The run's details give the slowest and the fastest speed of sound on the
   grid (`wave_speed_min_m_s`, `wave_speed_max_m_s`).
+- **Moving air in the wave solver.** The effective speed of sound gives each cell one
+  speed, whichever way the sound crosses it: sound that a façade downwind sends back
+  towards the source goes at the speed of sound going away from it. With
+  `simulation.wave.wind: moving` (`simulate --wave-wind moving`, or **Wind** on the
+  editor's Simulation page) the air moves instead: each cell keeps the still air's
+  speed of sound, and the wind carries the sound along with it, so that sound goes at
+  c + v downwind and c − v upwind, whichever way it turned. In a uniform wind of 15
+  m/s it is within 0.05 dB and 0.1 ms of the exact solution in every direction, where
+  the effective speed of sound is up to 0.9 dB off; the echo of a façade 40 m
+  downwind comes within 0.02 ms of ray theory's, where the effective speed of sound
+  brings it 10.6 ms early; in the `windy` preset over grass it is within 0.34 dB of the
+  parabolic equation, where the effective speed of sound is within 0.69 dB (see
+  [Validation](validation.md#moving-air-in-the-wave-solver)).
+  It costs three to four times as much as the effective speed of sound, on the CPU only
+  (asked for the GPU, it says so and stays on the CPU), and the run's details say
+  `wave_moving_air`. Its grid is fine enough for sound going against the fastest wind
+  in the slowest air.
 - **Through weather zones** the parabolic equation marches zone by zone, changing its
   speed of sound where its path crosses a border, and the wave solver takes each cell's
   zone. The early paths, whose arcs need one profile, take the mean profile along their
@@ -995,7 +1012,8 @@ share makes room in the others, in proportion, so that each period's shares add 
 gives its share to the others. The periods are set in the scene file, and the form
 names them.
 On the simulation page, **In pressure up to** goes up to 8000 Hz in an outdoor
-scene. The 3D view and the export to Blender leave the sky out (the 3D view keeps its
+scene, and the wave solver's **Wind** takes the wind as an effective speed of sound or
+as moving air. The 3D view and the export to Blender leave the sky out (the 3D view keeps its
 edges, to show where the ground ends), and the status bar gives the ground's area
 instead of a reverberation time. **Draw room** replaces an outdoor scene with a floor
 plan after asking, and brings **In pressure up to** back to a room's default when it
@@ -1007,11 +1025,16 @@ with the rating level and each period's and class's level under **Run details**.
 
 ## What is not modelled yet
 
-The wave solver takes the wind as the rays and the parabolic equation do, as a speed of
-sound that the wind's component along the horizontal from the source changes, not as
-air that flows (the linearised Euler equations): sound that a building sends back
-towards the source travels at the speed of sound going away from it. It leaves out
-vegetation and the eddies.
+The wave solver's moving air (`simulation.wave.wind: moving`) runs on the CPU only,
+and leaves out the term of the linearised Euler equations that the wind's change with
+height puts on the air's own motion, about |dv/dz| / ω of the rest (under 0.3 % at 63
+Hz a metre above the ground in the `windy` preset). Its wind is the weather's profile
+everywhere, as for the rays: no flow is computed round buildings, so the wind blows into
+a façade as over open ground and a building's lee is as windy as the open. By default
+it takes the wind as
+the rays and the parabolic equation do, as an effective speed of sound, so sound that
+a building sends back towards the source travels at the speed of sound going away from
+it. It leaves out vegetation and the eddies.
 
 Vegetation is volumes filled evenly: a lone tree's trunk is left out, the foliage's
 attenuation is given, not derived from its leaves' size and density, and stems stand

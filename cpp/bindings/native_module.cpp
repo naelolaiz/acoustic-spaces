@@ -634,7 +634,8 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
                       double cell, std::size_t nx, std::size_t ny, std::size_t nz,
                       InArray source, Points probes, double edge_admittance, std::size_t layer,
                       double layer_damping, std::size_t threads, std::size_t stencil,
-                      std::optional<Speeds> speed) {
+                      std::optional<Speeds> speed, std::optional<Speeds> flow_x,
+                      std::optional<Speeds> flow_y) {
     if (face_material.shape(0) != bvh.face_count()) {
         throw std::invalid_argument("WaveSolver: one material per face");
     }
@@ -645,6 +646,12 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
     if (speed && speed->shape(0) != nx * ny * nz) {
         throw std::invalid_argument("WaveSolver: one speed per cell of the grid");
     }
+    if (flow_x.has_value() != flow_y.has_value()) {
+        throw std::invalid_argument("WaveSolver: flow_x and flow_y go together");
+    }
+    if (flow_x && (flow_x->shape(0) != nx * ny * nz || flow_y->shape(0) != nx * ny * nz)) {
+        throw std::invalid_argument("WaveSolver: one shift of the air per cell of the grid");
+    }
     const std::vector<as::Vec3> probe_points = points(probes);
     const as::Vec3 o = vec3(origin, "origin"), s = vec3(source, "source");
     {
@@ -652,7 +659,9 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
         new (self) as::WaveSolver(bvh, face_material.data(), beta.data(), beta.shape(0),
                                   branches.data(), branch_material.data(), count, o, cell, nx, ny,
                                   nz, s, probe_points, edge_admittance, layer, layer_damping,
-                                  threads, stencil, speed ? speed->data() : nullptr);
+                                  threads, stencil, speed ? speed->data() : nullptr,
+                                  flow_x ? flow_x->data() : nullptr,
+                                  flow_y ? flow_y->data() : nullptr);
     }
 }
 
@@ -761,17 +770,21 @@ NB_MODULE(_native, m) {
              nb::arg("cell"), nb::arg("nx"), nb::arg("ny"), nb::arg("nz"), nb::arg("source"),
              nb::arg("probes"), nb::arg("edge_admittance") = 1.0, nb::arg("layer") = 0,
              nb::arg("layer_damping") = 0.0, nb::arg("threads") = 0, nb::arg("stencil") = 7,
-             nb::arg("speed").none() = nb::none(),
+             nb::arg("speed").none() = nb::none(), nb::arg("flow_x").none() = nb::none(),
+             nb::arg("flow_y").none() = nb::none(),
              "face_material: each face's material; beta: each material's constant admittance; "
              "branches (n, 3): m, r and q of each mass-resistance-stiffness branch, of "
              "branch_material; layer: cells of matched layer inside the grid's edge; "
              "stencil: 7 or 19 points; speed (nx ny nz,) float32, x fastest: each cell's "
-             "speed of sound over the grid's, in (0, 1], or None for the same everywhere.")
+             "speed of sound over the grid's, in (0, 1], or None for the same everywhere; "
+             "flow_x, flow_y (nx ny nz,) float32: the air's velocity in cells per step, "
+             "each under half, or None for still air.")
         .def_prop_ro("air_cells", &as::WaveSolver::air_cells)
         .def_prop_ro("boundary_cells", &as::WaveSolver::boundary_cells)
         .def_prop_ro("branch_states", &as::WaveSolver::branch_states)
         .def_prop_ro("layer_cells", &as::WaveSolver::layer_cells)
         .def_prop_ro("open", &as::WaveSolver::open)
+        .def_prop_ro("flowing", &as::WaveSolver::flowing)
         .def_prop_ro("stencil", &as::WaveSolver::stencil)
         .def_prop_ro("threads", &as::WaveSolver::threads)
         .def("probe_found", &as::WaveSolver::probe_found, nb::arg("probe"))

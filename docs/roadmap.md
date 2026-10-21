@@ -109,7 +109,7 @@ Outdoor acoustics, in steps:
 - [x] O6 The wave solver in wind and temperature: a speed of sound per cell (the
   effective one along the horizontal from the source) in the grid, its walls, its source
   and its matched layer; checked against the parabolic equation at 63 and 125 Hz. The
-  flow itself (the linearised Euler equations) stays out.
+  flow itself (the linearised Euler equations) stays out (O18 adds moving air).
 - [x] O7 Outdoor results: the level relative to free field and the insertion loss of
   buildings, barriers and vegetation (a second run without them), at listeners and on
   maps, in the report, on the command line and in the editor; checked against the
@@ -197,6 +197,12 @@ Outdoor acoustics, in steps:
   the sound exposure level and L_Aeq (`walkthrough --levels`). Checked against the
   exact field of a passing source over a rigid ground (`validation/doppler.py`).
   Without it nothing changes.
+- [x] O18 Moving air in the wave solver: `simulation.wave.wind: moving` carries the
+  sound along with the wind before each step, so sound a building sends back goes
+  against the wind. Checked against the exact field in a uniform wind, a façade's echo
+  against ray theory and the parabolic equation in the `windy` preset
+  (`validation/wave_wind.py`). Runs on the CPU; the wind's shear term on the air's
+  motion stays out. Without it nothing changes.
 - [ ] A wide-angle parabolic equation (split-step Padé) for gradients that bend sound
   through large angles over several kilometres, where the narrow-angle one strays.
 

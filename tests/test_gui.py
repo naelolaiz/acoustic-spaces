@@ -1500,9 +1500,19 @@ def test_ground_impedance_and_zones(window) -> None:
     assert simulation.coherent.currentText() == "8000"
     top = simulation.coherent.findData(8000)
     assert simulation.coherent.model().item(top).isEnabled()
+    # The wave solver takes the wind outdoors, as an effective speed of sound or as air
+    # that moves.
+    assert not simulation.wave_wind.isEnabled()
+    simulation.wave.setChecked(True)
+    assert simulation.wave_wind.isEnabled()
+    assert simulation.wave_wind.currentData() == "effective"
+    simulation.wave_wind.setCurrentIndex(simulation.wave_wind.findData("moving"))
+    assert window.document.scene.simulation.wave.wind == "moving"
     window.open_example(example_path("shoebox"))
     window.select("simulation")
     assert not simulation.coherent.model().item(top).isEnabled()
+    simulation.wave.setChecked(True)
+    assert not simulation.wave_wind.isEnabled()
     assert simulation.coherent.model().item(simulation.coherent.findData(500)).isEnabled()
 
 

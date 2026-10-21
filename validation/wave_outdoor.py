@@ -78,9 +78,9 @@ def scene(weather: str, band: int) -> Room:
     return Room.from_scene(Scene.model_validate(data))
 
 
-def wave_levels(room: Room, band: int) -> tuple[dict[str, float], dict]:
+def wave_levels(room: Room, band: int, wind: str = "effective") -> tuple[dict[str, float], dict]:
     """The wave solver's level (dB over the free field) at each listener in ``band``,
-    and the run's details."""
+    and the run's details; ``wind`` as ``simulation.wave.wind``."""
     model = TraceModel.from_room(room)
     distances = GRIDS[band][0]
     listeners = room.scene.listeners
@@ -95,6 +95,7 @@ def wave_levels(room: Room, band: int) -> tuple[dict[str, float], dict]:
         sample_rate=SAMPLE_RATE,
         speed_of_sound=room.speed_of_sound(),
         say=lambda line: print(line, file=sys.stderr, flush=True),
+        wind=wind,
     )
     slices = _slices(band)
     out = {}

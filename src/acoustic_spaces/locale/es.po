@@ -1560,6 +1560,14 @@ msgid "auto"
 msgstr "auto"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "effective speed of sound"
+msgstr "velocidad del sonido efectiva"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "moving air"
+msgstr "aire en movimiento"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "vector"
 msgstr "vectorial"
 
@@ -4020,8 +4028,25 @@ msgstr ""
 "duración del cálculo"
 
 #: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors, how it takes the wind: as a speed of sound that the wind along the "
+"way from the source changes, as the rays do, or as air that moves, so that "
+"sound going against the wind is slower whichever way it turned, off a "
+"building too (three to four times the work, on the CPU)"
+msgstr ""
+"Al aire libre, cómo tiene en cuenta el viento: como una velocidad del sonido "
+"que el viento cambia a lo largo del camino desde la fuente, como hacen los "
+"rayos, o como aire que se mueve, de modo que el sonido que va contra el "
+"viento es más lento hacia dondequiera que haya girado, también al volver de "
+"un edificio (de tres a cuatro veces el trabajo, en la CPU)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Up to band (Hz)"
 msgstr "Hasta la banda (Hz)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind"
+msgstr "Viento"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Performance"

@@ -42,12 +42,24 @@ octave bands replace the ray-traced ones.
   component along the horizontal from the source, the effective speed of sound the rays
   and the parabolic equation take (:mod:`acoustic_spaces.engine.refraction`). The grid
   is then fine enough for the slowest sound and steps in time for the fastest, so it
-  costs a little more than in still air. The flow itself (the linearised Euler
-  equations) is left out: sound that turns back towards the source, off a building,
-  keeps the speed of sound of sound going away from it.
+  costs a little more than in still air. Sound that turns back towards the source, off
+  a building, keeps the speed of sound of sound going away from it.
+- With ``wind="moving"`` the air moves instead: each cell keeps the still air's speed
+  of sound, and before each step both of the leapfrog's pressure levels are carried
+  along with the wind, dq/dt = -v . grad q (fourth-order central differences, second
+  order or upwind next to a face, the strong-stability-preserving Runge-Kutta method
+  of third order); the still air's step follows, its boundaries, the matched layer and
+  the source fixed to the ground. In the air's own frame that is the still air's step
+  exactly, so a uniform wind gives the convected wave equation: downwind sound at
+  c + v, upwind at c - v whichever way it turned. Where the wind changes, the term
+  of the linearised Euler equations that the wind's shear puts on the air's velocity is
+  left out, about |dv/dz| / omega of the rest. The air moves no more than half a cell a
+  step, and the matched layer's air is still. It costs three to four times the
+  effective speed of sound's run, and runs on the CPU (asked for the GPU, it says so and stays
+  there).
 - The grid is laid out on the CPU and stepped there, or with ``device`` on a GPU,
   through WebGPU (:mod:`acoustic_spaces.engine.gpu`); the two agree to rounding, in
-  wind and temperature too.
+  wind and temperature too (with the effective speed of sound).
 
 The levels follow the ray tracer's convention: in free field, the direct sound at r
 metres is an impulse of height 1 / r.
@@ -81,6 +93,8 @@ COURANT = 1.0 / math.sqrt(3.0)
 ISOTROPIC_COURANT = math.sqrt(0.75)
 #: Which stencil steps the grid (see :func:`wave_responses`).
 Scheme = Literal["auto", "standard", "isotropic"]
+#: How the wave solver takes the wind (see :func:`wave_responses`).
+WindModel = Literal["effective", "moving"]
 #: The stencils' points, and their Courant numbers, by scheme.
 STENCILS = {"standard": (7, COURANT), "isotropic": (19, ISOTROPIC_COURANT)}
 #: Grids with more cells than this are refused (about 20 bytes each).
@@ -420,6 +434,60 @@ class _Weather:
             out[z] = np.minimum((still[zone, z] + wind[zone, z] * cosines) / speed, 1.0)
         return out.reshape(-1)
 
+    # Moving air (``simulation.wave.wind: moving``): the still air's speed of sound in
+    # each cell, and the wind as the air's own motion.
+
+    def _still_grid(self, origin: np.ndarray, h: float, shape) -> tuple:
+        """The still air's speed of sound (nz,) or (K, nz), the wind's speed the same
+        way, each weather's wind direction (K, 2) and the weather over each column
+        (ny, nx), or None and the atmosphere's own direction."""
+        z = origin[2] + (np.arange(shape[2]) + 0.5) * h
+        if self.zones is None:
+            still, wind = self._profiles(z)
+            return still, wind, self.wind[None, :], None
+        profiles = [self._profiles(z, k) for k in range(len(self.weathers))]
+        centres = [origin[a] + (np.arange(shape[a]) + 0.5) * h for a in range(2)]
+        x, y = np.meshgrid(centres[0], centres[1])
+        zone = self.zones.zone_at(np.column_stack([x.ravel(), y.ravel()])).reshape(x.shape)
+        still = np.array([q[0] for q in profiles])
+        wind = np.array([q[1] for q in profiles])
+        return still, wind, np.asarray(self.winds, dtype=float), zone
+
+    def still_at(self, point: np.ndarray) -> float:
+        """The still air's speed of sound (m/s) at ``point`` (3,)."""
+        point = np.asarray(point, dtype=float).reshape(3)
+        k = None if self.zones is None else int(self.zones.zone_at(point[None, :2])[0])
+        return float(self._profiles(point[2:3], k)[0][0])
+
+    def moving_extremes(self, origin: np.ndarray, h: float, shape) -> tuple[float, float, float]:
+        """The slowest and the fastest still air's speed of sound over the grid's
+        cells, and the wind's fastest speed (m/s)."""
+        still, wind, _, zone = self._still_grid(origin, h, shape)
+        if zone is not None:
+            used = np.unique(zone)
+            still, wind = still[used], wind[used]
+        return float(still.min()), float(still.max()), float(np.abs(wind).max())
+
+    def moving_fields(self, origin: np.ndarray, h: float, shape, speed: float, shift: float):
+        """(nx ny nz,) float32 each, x fastest: each cell's still air's speed of sound
+        over ``speed`` (the grid's, at most 1), and the air's velocity along x and y in
+        cells per step (the wind's speed times ``shift``, a step over a cell)."""
+        still, wind, towards, zone = self._still_grid(origin, h, shape)
+        nz, ny, nx = int(shape[2]), int(shape[1]), int(shape[0])
+        speeds = np.empty((nz, ny, nx), np.float32)
+        fx = np.empty((nz, ny, nx), np.float32)
+        fy = np.empty((nz, ny, nx), np.float32)
+        for z in range(nz):  # a layer at a time, to keep the memory down
+            if zone is None:
+                speeds[z] = min(still[z] / speed, 1.0)
+                fx[z] = wind[z] * towards[0, 0] * shift
+                fy[z] = wind[z] * towards[0, 1] * shift
+            else:
+                speeds[z] = np.minimum(still[zone, z] / speed, 1.0)
+                fx[z] = wind[zone, z] * towards[zone, 0] * shift
+                fy[z] = wind[zone, z] * towards[zone, 1] * shift
+        return speeds.reshape(-1), fx.reshape(-1), fy.reshape(-1)
+
 
 def _probe_points(listener: np.ndarray, cell: float) -> np.ndarray:
     """The listener and a point one cell to either side along each axis."""
@@ -474,13 +542,16 @@ def wave_responses(
     scheme: Scheme = "auto",
     say: Callable[[str], None] | None = None,
     label: str = "",
+    wind: WindModel = "effective",
 ) -> tuple[list[WaveResponse], dict[str, float]]:
     """The wave bands of the responses from ``source`` to each of ``listeners`` in the
     room of ``model`` (a :class:`~acoustic_spaces.engine.model.TraceModel`), and run
     details. ``device`` says where the grid is stepped (see :mod:`.gpu`); ``scheme``
     which stencil steps it: ``"isotropic"`` (19 points), ``"standard"`` (7 points) or
     ``"auto"``, the isotropic one but round an open model, where only the standard one
-    has the matched layer."""
+    has the matched layer. ``wind`` says how it takes the wind outdoors: ``"effective"``,
+    as a speed of sound changed by the wind's component along the horizontal from the
+    source, or ``"moving"``, as air that moves (see the module's notes)."""
     from acoustic_spaces import _native
 
     say = say or (lambda _: None)
@@ -520,6 +591,14 @@ def wave_responses(
         rows, face_material = np.unique(coefficients, axis=0, return_inverse=True)
 
     weather = _Weather.of(model, source)
+    moving = False
+    if weather is not None and wind == "moving":
+        # The wind blows somewhere over the scene (temperature alone needs no moving air).
+        heights = model.room.mesh.vertices[:, 2]
+        top = max(float(heights.max()), float(points[:, 2].max())) + 100.0
+        z = np.linspace(model.ground, top, 512)
+        weathers = weather.weathers if weather.zones is not None else [weather.atmosphere]
+        moving = any(np.any(np.asarray(w.wind_speed(z - model.ground)) != 0.0) for w in weathers)
 
     def layout(courant: float, layer: int, speed: float, per_wavelength: float):
         """The grid for the stencil's ``courant``, with ``layer`` cells of matched
@@ -541,9 +620,26 @@ def wave_responses(
         """The solver, grid, fits and probes for the stencil, with ``layer`` cells of
         matched layer."""
         size, courant = STENCILS[stencil]
-        speeds, extremes = None, None
+        speeds, extremes, flow = None, None, (None, None)
         if weather is None:
             grid, origin, shape = layout(courant, layer, speed_of_sound, points_per_wavelength)
+        elif moving:
+            # Fine enough for sound going against the fastest wind in the slowest air, in
+            # time steps for the fastest still air (the air's motion is carried apart).
+            slowest = fastest = float(weather.at(source)[0])
+            for _ in range(8):
+                grid, origin, shape = layout(
+                    courant, layer, fastest, points_per_wavelength * fastest / slowest
+                )
+                low, high, top = weather.moving_extremes(origin, grid.cell, shape)
+                if low - top >= slowest and high <= fastest:
+                    break
+                slowest, fastest = min(slowest, low - top), max(fastest, high)
+            step = courant * grid.cell * grid.rate
+            speeds, *flow = weather.moving_fields(
+                origin, grid.cell, shape, step, 1.0 / (grid.cell * grid.rate)
+            )
+            extremes = (low - top, high + top)
         else:
             # Fine enough for the slowest sound and in time steps for the fastest, over
             # the grid those give (which grows a little as its cells shrink).
@@ -596,6 +692,7 @@ def wave_responses(
             threads,
             size,
             speeds,
+            *flow,
         )
         return solver, grid, fits, probes, courant, extremes
 
@@ -630,10 +727,16 @@ def wave_responses(
             )
         raise ValueError(f"listener {missing[0]!r} is not in the air of the wave grid")
     name = f"{centres[0]} Hz" if bands == 1 else f"{centres[0]}-{centres[bands - 1]} Hz"
-    on_gpu = use_gpu(device, steps)
+    # The GPU steps still air only: moving air stays on the CPU.
+    gpu_wanted = use_gpu(device, steps)
+    on_gpu = gpu_wanted and not solver.flowing
     where = f" on {gpu_name()}" if on_gpu else ""
     if extremes is not None:
         where += f", sound at {extremes[0]:.0f} to {extremes[1]:.0f} m/s"
+    if solver.flowing:
+        where += ", the air moving" + (
+            " (on the CPU: the GPU steps still air)" if gpu_wanted else ""
+        )
     say(
         f"{label}: wave solver, {name} ({solver.air_cells:,} cells of {100 * h:.0f} cm, "
         f"{steps:,} steps{where})"
@@ -660,6 +763,8 @@ def wave_responses(
         info["wave_gpu"] = 1.0
     if extremes is not None:
         info["wave_speed_min_m_s"], info["wave_speed_max_m_s"] = extremes
+    if solver.flowing:
+        info["wave_moving_air"] = 1.0
     # How far the fitted surfaces' absorption is from the materials', at worst.
     used = np.unique(face_material)
     wanted = np.minimum(rows[used], MAX_ABSORPTION)
@@ -671,7 +776,9 @@ def wave_responses(
         part = slice(7 * i, 7 * i + 7)
         local = courant  # the Courant number at the listener
         if weather is not None:
-            local *= float(weather.at(listeners[i])[0]) / (courant * h * grid.rate)
+            # In moving air the still air's (the wind's share of the gradient is left out).
+            here = weather.still_at(listeners[i]) if moving else weather.at(listeners[i])[0]
+            local *= float(here) / (courant * h * grid.rate)
         signals = _first_order(run[part], found[part], listener, local)
         responses.append(WaveResponse(grid.rate, signals, bands, h, total))
     return responses, info
@@ -699,6 +806,7 @@ __all__ = [
     "STENCILS",
     "WAVE_BANDS_HZ",
     "Scheme",
+    "WindModel",
     "Admittance",
     "BandGrid",
     "WaveResponse",

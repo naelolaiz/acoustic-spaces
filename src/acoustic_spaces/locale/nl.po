@@ -1549,6 +1549,14 @@ msgid "auto"
 msgstr "automatisch"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "effective speed of sound"
+msgstr "effectieve geluidssnelheid"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "moving air"
+msgstr "bewegende lucht"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "vector"
 msgstr "vectorgebaseerd"
 
@@ -3994,8 +4002,25 @@ msgstr ""
 "optimaliseren… de CPU sneller vond voor de responsduur"
 
 #: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors, how it takes the wind: as a speed of sound that the wind along the "
+"way from the source changes, as the rays do, or as air that moves, so that "
+"sound going against the wind is slower whichever way it turned, off a "
+"building too (three to four times the work, on the CPU)"
+msgstr ""
+"Buiten, hoe hij de wind meeneemt: als een geluidssnelheid die de wind langs "
+"de weg vanaf de bron verandert, zoals de stralen doen, of als lucht die "
+"beweegt, zodat geluid tegen de wind in langzamer gaat, welke kant het ook op "
+"is gedraaid, ook terug van een gebouw (drie tot vier keer zoveel werk, op de "
+"CPU)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Up to band (Hz)"
 msgstr "Tot band (Hz)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind"
+msgstr "Wind"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Performance"

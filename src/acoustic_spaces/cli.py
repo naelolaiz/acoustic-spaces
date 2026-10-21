@@ -939,6 +939,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "--wave": ("wave.enabled", args.wave),
             "--wave-band": ("wave.max_band_hz", args.wave_band),
             "--wave-device": ("wave.device", args.wave_device),
+            "--wave-wind": ("wave.wind", args.wave_wind),
             "--late-device": ("late.device", args.late_device),
             "--length": ("ir_length_s", args.length),
             "--sample-rate": ("sample_rate", args.sample_rate),
@@ -2368,6 +2369,13 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("cpu", "gpu", "auto"),
         help="override simulation.wave.device: step the wave solver's grid on the CPU, on "
         "a GPU (with the gpu extra) or on a hardware GPU when there is one",
+    )
+    simulate.add_argument(
+        "--wave-wind",
+        choices=("effective", "moving"),
+        help="override simulation.wave.wind: outdoors, the wave solver takes the wind as an "
+        "effective speed of sound or as air that moves (three to four times the work, on the "
+        "CPU)",
     )
     simulate.add_argument(
         "--late-device",

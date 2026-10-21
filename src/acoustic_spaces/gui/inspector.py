@@ -117,6 +117,7 @@ LATE_DEVICES = [
     ("auto", N_("auto")),
 ]
 WAVE_DEVICES = [(None, N_("default")), ("cpu", "cpu"), ("gpu", "gpu"), ("auto", N_("auto"))]
+WAVE_WINDS = [("effective", N_("effective speed of sound")), ("moving", N_("moving air"))]
 SCATTERING_METHODS = [("vector", N_("vector")), ("random", N_("random"))]
 RAY_TREES = [("sah", "sah"), ("median", N_("median"))]
 BANDS = [("octave", N_("octave")), ("third_octave", N_("third_octave"))]
@@ -3386,8 +3387,19 @@ class SimulationPage(Page):
                 "Tune CPU and GPU… found the CPU faster for the run's length"
             )
         )
+        self.wave_wind = QComboBox()
+        _fill(self.wave_wind, WAVE_WINDS)
+        self.wave_wind.setToolTip(
+            _(
+                "Outdoors, how it takes the wind: as a speed of sound that the wind along the "
+                "way from the source changes, as the rays do, or as air that moves, so that "
+                "sound going against the wind is slower whichever way it turned, off a "
+                "building too (three to four times the work, on the CPU)"
+            )
+        )
         wave_form.addRow(self.wave)
         wave_form.addRow(_("Up to band (Hz)"), self.wave_band)
+        wave_form.addRow(_("Wind"), self.wave_wind)
         wave_form.addRow(_("Run on"), self.wave_device)
         layout.addWidget(wave)
 
@@ -3506,6 +3518,7 @@ class SimulationPage(Page):
             (self.scattering_method, "scattering.method"),
             (self.ray_tree, "performance.ray_tree"),
             (self.bands, "bands"),
+            (self.wave_wind, "wave.wind"),
         ):
             combo.currentIndexChanged.connect(
                 lambda index, combo=combo, key=key: self._set(key, combo.itemData(index))
@@ -3577,6 +3590,8 @@ class SimulationPage(Page):
         self.wave_band.setEnabled(s.wave.enabled)
         _set_device(self.wave_device, s.wave.device)
         self.wave_device.setEnabled(s.wave.enabled)
+        _choose(self.wave_wind, s.wave.wind)
+        self.wave_wind.setEnabled(s.wave.enabled and outdoor)  # wind blows outdoors only
         self.threads.setValue(s.performance.threads)
         _choose(self.ray_tree, s.performance.ray_tree)
         self.length.setValue(s.ir_length_s)

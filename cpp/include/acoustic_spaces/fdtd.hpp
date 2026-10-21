@@ -74,6 +74,24 @@
 // rho c, and a cut link's term is its weight over 2 L, L the local Courant number r times
 // the grid's), the source by s, and in the matched layer the pressure's update from the
 // velocities by s. With every r 1 the scheme is the one above, to the bit.
+//
+// The air may move (outdoors, in the wind): each cell's horizontal velocity, as shifts
+// along x and y in cells per step. Before each step both of the scheme's pressures, the
+// current one and the one before, are carried along with the air for a step, d q / d t =
+// -v . grad q, and then the still air's step follows. In air moving as a whole this is
+// the still air's scheme in the frame of the air, exactly but for the carrying: the
+// wave equation of a uniformly moving medium, (d/dt + v . grad)^2 p = c^2 lap p, whose
+// sound goes at c + v downwind and c - v upwind whichever way it turned on its way.
+// Where the wind changes with height, the layers of air slide over one another; the
+// coupling of the sound with the wind's shear, (u . grad) v in the linearised Euler
+// equations, is left out (in a stratified wind it is a share of about |dv/dz| / omega of
+// the wind's effect). The carrying is the strong-stability-preserving Runge-Kutta
+// method of third order over the gradient's central differences, of fourth order where
+// two cells either side are air, second where one is; next to a face, the upwind
+// difference where the wind blows into it, none where it blows out of it. Over its
+// small steps (|v| T / h is under 0.1 for wind) it loses a little of the shortest
+// waves and no more, so the scheme stays stable. The surfaces' branch velocities, the
+// source and the probes stay where they are, and the matched layer's air is still.
 
 #pragma once
 
@@ -215,7 +233,8 @@ public:
                std::size_t ny, std::size_t nz, const Vec3 &source,
                const std::vector<Vec3> &probes, double edge_admittance, std::size_t layer,
                double layer_damping, std::size_t threads, std::size_t stencil = 7,
-               const float *speed = nullptr)
+               const float *speed = nullptr, const float *flow_x = nullptr,
+               const float *flow_y = nullptr)
         : origin_(origin), cell_(cell), nx_(nx), ny_(ny), nz_(nz), sy_(nx), sz_(nx * ny),
           layer_(layer), stencil_(stencil) {
         if (stencil != 7 && stencil != 19) {
@@ -461,6 +480,10 @@ public:
         u1_.assign(n, 0.0f);
         w0_.assign(state_branch_.size(), 0.0f);
         w1_.assign(state_branch_.size(), 0.0f);
+        if ((flow_x == nullptr) != (flow_y == nullptr)) {
+            throw std::invalid_argument("the air's motion needs both of its components");
+        }
+        if (flow_x != nullptr) set_up_flow(cut, flow_x, flow_y);
         threads_ = std::max<std::size_t>(1, std::min(threads_, air_ / 20000 + 1));
     }
 
@@ -469,6 +492,7 @@ public:
     std::size_t branch_states() const { return state_branch_.size(); }
     std::size_t layer_cells() const { return layer_cells_.size(); }
     bool open() const { return open_; }
+    bool flowing() const { return !flow_mask_.empty(); }
     std::size_t probes() const { return probe_cells_.size(); }
     bool probe_found(std::size_t p) const { return !probe_cells_.at(p).empty(); }
     std::size_t stencil() const { return stencil_; }
@@ -502,6 +526,9 @@ public:
         put("branch_before", branch_before_);
         put("branch_gain", branch_gain_);
         put("layer_cells", layer_cells_);
+        put("flow_x", flow_x_);
+        put("flow_y", flow_y_);
+        put("flow_mask", flow_mask_);
         // Per axis, the centres' then the faces' coefficients (see layer_coefficients).
         static const char *const keep[6] = {"keep_x", "keep_face_x", "keep_y",
                                             "keep_face_y", "keep_z", "keep_face_z"};
@@ -562,8 +589,15 @@ public:
             const float total = total_;
             float *a = u0, *b = u1;  // a: the previous step, then the next; b: the current
             float *wa = w0, *wb = w1;  // branch velocities, the same way
+            const bool flowing = !flow_mask_.empty();
             for (std::size_t step = 0; step < steps; ++step) {
                 if (t == 0) record(b, step, steps, out);
+                if (flowing) {
+                    // Both pressures carried along with the air (b's last pass waits for
+                    // two barriers, by when thread 0 has recorded it).
+                    carry(b, ib, ie, barrier);
+                    carry(a, ib, ie, barrier);
+                }
                 for (std::size_t r = first_run; r < runs && run_begin[r] < ie; ++r) {
                     const std::size_t lo = std::max(run_begin[r], ib);
                     const std::size_t hi = std::min(run_end[r], ie);
@@ -618,6 +652,8 @@ public:
     }
 
     void reset() {
+        std::fill(flow_t1_.begin(), flow_t1_.end(), 0.0f);
+        std::fill(flow_t2_.begin(), flow_t2_.end(), 0.0f);
         std::fill(u0_.begin(), u0_.end(), 0.0f);
         std::fill(u1_.begin(), u1_.end(), 0.0f);
         std::fill(w0_.begin(), w0_.end(), 0.0f);
@@ -667,6 +703,96 @@ private:
         for (int k = 0; k < directions_; ++k) total += exact_[k];
         centre_ = static_cast<float>(2.0 - total);
         total_ = static_cast<float>(total);
+    }
+
+    // Moving air: each cell's shifts along x and y (cells per step; none in the matched
+    // layer or out of the air), and which of its neighbours along them the gradient may
+    // take: bits 0 to 3 for x (the one below, above, two below, two above), 4 to 7 for y.
+    void set_up_flow(const std::vector<std::uint16_t> &cut, const float *fx, const float *fy) {
+        const std::size_t n = nx_ * ny_ * nz_;
+        flow_x_.assign(n, 0.0f);
+        flow_y_.assign(n, 0.0f);
+        flow_mask_.assign(n, 0);
+        std::vector<std::uint8_t> near(n, 0);  // bits 0 to 3: the neighbour along -x, +x, -y, +y
+        auto moving = [&](std::size_t i) { return type_[i] == kInterior || type_[i] == kSpecial; };
+        for (std::size_t i = 0; i < n; ++i) {
+            if (!moving(i)) continue;
+            if (!(std::isfinite(fx[i]) && std::isfinite(fy[i]) && std::abs(fx[i]) < 0.5f &&
+                  std::abs(fy[i]) < 0.5f)) {
+                throw std::invalid_argument("the air must move less than half a cell per step");
+            }
+            flow_x_[i] = fx[i];
+            flow_y_[i] = fy[i];
+            for (int k = 0; k < 4; ++k) {
+                const std::size_t j = neighbour(i, k);
+                if (!blocked(cut, i, k) && type_[j] != kSolid) near[i] |= std::uint8_t(1u << k);
+            }
+        }
+        for (std::size_t i = 0; i < n; ++i) {
+            if (!moving(i)) continue;
+            unsigned m = 0;
+            for (int axis = 0; axis < 2; ++axis) {
+                const int lo = 2 * axis, hi = 2 * axis + 1;
+                const unsigned shift = 4u * static_cast<unsigned>(axis);
+                const bool below = near[i] & (1u << lo), above = near[i] & (1u << hi);
+                if (below) m |= 1u << shift;
+                if (above) m |= 2u << shift;
+                if (below && (near[neighbour(i, lo)] & (1u << lo))) m |= 4u << shift;
+                if (above && (near[neighbour(i, hi)] & (1u << hi))) m |= 8u << shift;
+            }
+            flow_mask_[i] = static_cast<std::uint8_t>(m);
+        }
+        flow_t1_.assign(n, 0.0f);
+        flow_t2_.assign(n, 0.0f);
+    }
+
+    // q's change along an axis (stride s) at cell i, over a cell, from its neighbours
+    // m allows (bits as in set_up_flow, shifted down to the axis): fourth-order central
+    // differences, second order, or next to a face the upwind difference for a shift
+    // into it and none for one out of it.
+    static float gradient(const float *q, std::size_t i, std::size_t s, unsigned m, float shift) {
+        const bool below = m & 1u, above = m & 2u;
+        if (below && above) {
+            if ((m & 12u) == 12u) {
+                return (8.0f * (q[i + s] - q[i - s]) - (q[i + 2 * s] - q[i - 2 * s])) *
+                       (1.0f / 12.0f);
+            }
+            return 0.5f * (q[i + s] - q[i - s]);
+        }
+        if (shift > 0.0f) return below ? q[i] - q[i - s] : 0.0f;
+        return above ? q[i + s] - q[i] : 0.0f;
+    }
+
+    // -v . grad q at cell i, over a step.
+    float carried(const float *q, std::size_t i) const {
+        const float sx = flow_x_[i], sy = flow_y_[i];
+        const unsigned m = flow_mask_[i];
+        return -(sx * gradient(q, i, 1, m & 15u, sx) + sy * gradient(q, i, sy_, m >> 4, sy));
+    }
+
+    // Carries q (cells ib to ie on this thread) along with the air for a step: the
+    // strong-stability-preserving Runge-Kutta method of third order, through the two
+    // stages' fields; cells the air does not move keep their values, to the bit.
+    void carry(float *q, std::size_t ib, std::size_t ie, StepBarrier &barrier) {
+        float *t1 = flow_t1_.data(), *t2 = flow_t2_.data();
+        const std::uint8_t *type = type_.data();
+        const float *fx = flow_x_.data(), *fy = flow_y_.data();
+        auto still = [&](std::size_t i) { return fx[i] == 0.0f && fy[i] == 0.0f; };
+        for (std::size_t i = ib; i < ie; ++i) {
+            if (type[i] == kSolid) continue;
+            t1[i] = still(i) ? q[i] : q[i] + carried(q, i);
+        }
+        barrier.wait();
+        for (std::size_t i = ib; i < ie; ++i) {
+            if (type[i] == kSolid) continue;
+            t2[i] = still(i) ? q[i] : 0.75f * q[i] + 0.25f * (t1[i] + carried(t1, i));
+        }
+        barrier.wait();
+        for (std::size_t i = ib; i < ie; ++i) {
+            if (type[i] == kSolid || still(i)) continue;
+            q[i] = (1.0f / 3.0f) * q[i] + (2.0f / 3.0f) * (t2[i] + carried(t2, i));
+        }
+        barrier.wait();
     }
 
     // Cell i's s: the square of its speed of sound over the grid's (1 without a field).
@@ -968,6 +1094,10 @@ private:
     std::vector<std::vector<double>> probe_weights_;
     std::vector<std::size_t> run_begin_, run_end_;
     std::vector<float> u0_, u1_;
+    // Moving air: each cell's shifts and gradient neighbours (see set_up_flow), and the
+    // carrying's two stages; all empty in still air.
+    std::vector<float> flow_x_, flow_y_, flow_t1_, flow_t2_;
+    std::vector<std::uint8_t> flow_mask_;
 };
 
 }  // namespace acoustic_spaces

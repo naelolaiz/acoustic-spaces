@@ -441,7 +441,7 @@ def test_simulate_with_the_wave_solver(tmp_path: Path, capsys: pytest.CaptureFix
 
     out = tmp_path / "out"
     args = ["simulate", str(SHOEBOX), "--out", str(out), "--rays", "1000", "--length", "0.4"]
-    wave = ["--wave", "--wave-band", "125", "--wave-device", "auto"]
+    wave = ["--wave", "--wave-band", "125", "--wave-device", "auto", "--wave-wind", "moving"]
     assert main([*args, *wave, "--output", "ambisonics:1"]) == 0
     captured = capsys.readouterr()
     assert "talker -> seat-a: direct sound at" in captured.out
@@ -453,9 +453,11 @@ def test_simulate_with_the_wave_solver(tmp_path: Path, capsys: pytest.CaptureFix
         "max_band_hz": 125,
         "points_per_wavelength": 8.0,
         "scheme": "auto",
+        "wind": "moving",
         "device": "auto",
     }
     assert report["details"]["talker"]["wave_stencil"] == 19
+    assert "wave_moving_air" not in report["details"]["talker"]  # no wind in a room
     assert report["details"]["talker"]["wave_cells"] > 0
     assert main([*args, "--no-wave"]) == 0
     assert "wave solver" not in capsys.readouterr().out

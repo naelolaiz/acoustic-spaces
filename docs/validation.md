@@ -1175,7 +1175,78 @@ lowest cells, and comes closer on a finer grid: downwind at 50 m, 63 Hz, 0.44 dB
 wavelength and 0.21 dB at 12 (in a narrower scene). Neither the deep shadow upwind (it
 starts a few hundred metres away at these heights) nor reflections off buildings, where
 the effective speed of sound along the horizontal from the source stands in for the
-flow, were checked.
+flow, were checked (moving air is, [below](#moving-air-in-the-wave-solver)).
+
+## Moving air in the wave solver
+
+`validation/wave_wind.py` checks the wave solver's moving air (`simulation.wave.wind:
+moving`, see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound))
+against exact solutions, and the effective speed of sound beside it, in the 63 Hz band
+(40 to 90 Hz, its edges a third of an octave wide) from a grid for that band.
+
+**Free field in a uniform wind.** A wind of 15 m/s over a rigid ground, the source 2 m
+up, listeners 1.5 m up 30 m away downwind, upwind, across the wind and at 45 degrees
+to it. In a uniform wind each path (the direct sound and the ground's image) is the
+convected Green's function, an impulse of height 1 / R* at (R* - M x) / (c (1 - M²)),
+R* = √(x² + (1 - M²)(y² + z²)), x along the wind. The grid's own dispersion puts the
+still air's sound 0.61 ms late along the grid's axes at 30 m (0.15 ms at 45 degrees),
+its level within 0.4 dB of the exact one, and is the same with and without wind, so
+each windy run is compared with the still air's run on the same grid, moved by the
+exact change of its arrival and scaled by R / R*. Level and arrival over the arrival
+(30 ms before to 50 ms after), and the waveform's error:
+
+| 15 m/s, 30 m | downwind | upwind | across | 45 degrees |
+|---|---|---|---|---|
+| level, effective / moving (dB) | -0.90 / +0.02 | +0.79 / -0.04 | -0.28 / -0.00 | -0.75 / +0.00 |
+| arrival, effective / moving (ms) | -0.03 / -0.07 | +0.03 / +0.09 | -0.15 / +0.00 | -0.04 / +0.00 |
+| waveform's error, effective / moving (dB) | -19.8 / -30.1 | -20.1 / -28.0 | -22.9 / -65.1 | -21.4 / -45.0 |
+
+Moving air is within 0.05 dB and 0.1 ms of the exact solution in every direction. The
+effective speed of sound gets the arrival about right but not the level, up to 0.9 dB
+off: a speed of sound that changes with the bearing is not a moving medium.
+
+**A façade downwind.** A rigid building 40 m downwind of the source, its façade across
+the wind, 30 m high and 50 m wide, and a listener 10 m upwind of the source, both 2 m
+up: the façade sends the sound back against the wind. Ray theory in a uniform wind
+gives its arrival (a ray goes at c n + v for its wave normal n; off the façade the wave
+keeps its frequency and its wavenumber along the façade), 1.78 ms later than in still
+air. Against the still air's run on the same grid:
+
+| Façade echo | later than in still air | off by |
+|---|---|---|
+| exact (ray theory) | +1.78 ms | |
+| effective speed of sound | -8.81 ms | -10.58 ms |
+| moving air | +1.80 ms | +0.02 ms |
+
+The effective speed of sound sends the echo back at the speed of sound going away from
+the source, 80 v / (c² - v²) = 10.2 ms too soon over its 40 m back to the source;
+moving air gets it within 0.02 ms. The wind is the uniform profile everywhere, the
+building included: the check is of the sound in moving air, not of the flow round a
+building, which the engine does not compute.
+
+**A wind that grows with height.** The `windy` preset (5 m/s 10 m up, logarithmic) over
+grass, downwind and upwind, the scene of [the check above](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation),
+against the parabolic equation with the effective speed of sound, which holds at
+these grazing angles. Levels in dB over the free field, wave solver / parabolic
+equation:
+
+| 63 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up | 200 m, 1.5 m up | 200 m, 5 m up |
+|---|---|---|---|---|---|---|
+| downwind, parabolic equation | +5.7 | +4.4 | +6.3 | +4.9 | +7.2 | +5.4 |
+| downwind, effective | +5.2 | +3.9 | +5.8 | +4.3 | +7.0 | +5.0 |
+| downwind, moving | +5.7 | +4.4 | +6.3 | +4.7 | +7.5 | +5.3 |
+| upwind, parabolic equation | +4.6 | +4.3 | +3.8 | +3.4 | +1.8 | +1.6 |
+| upwind, effective | +4.4 | +4.0 | +3.5 | +3.4 | +1.7 | +1.6 |
+| upwind, moving | +4.5 | +4.2 | +3.5 | +3.4 | +1.9 | +1.5 |
+
+Moving air is within 0.34 dB of the parabolic equation, 0.13 dB on average; the
+effective speed of sound within 0.69 dB, 0.31 dB on average. Downwind, where the
+effective speed of sound comes out about 0.5 dB low at 50 and 100 m, moving air is
+within 0.05 dB on the same grid.
+
+Moving air takes three to four times as long as the effective speed of sound: 23 s
+against 7 s in the free field (3.2 million cells), 47 s against 15 s with the façade
+(6 million) and 5 to 6 minutes against 1.5 with the preset (23 million), on 4 cores.
 
 ## Outdoor results against exact solutions
 
@@ -2227,7 +2298,10 @@ its peak (single precision).
   dimensions, with the source and the listener near the ground, not against
   measurements; how much the sound flickers over time is not checked against either.
   The wave solver in wind and temperature is checked against the parabolic equation
-  over open ground up to 200 m, not against measurements, nor round buildings.
+  over open ground up to 200 m, not against measurements, nor round buildings; its
+  moving air against the exact field in a uniform wind and a façade's echo against
+  ray theory, with the wind the weather's profile everywhere, not the flow round a
+  building (see [Moving air](#moving-air-in-the-wave-solver)).
   The level relative to free field and a barrier's insertion loss are checked against
   exact solutions, not against measurements; the path reflected both before and after
   a barrier is checked over a rigid ground only, and the sound that goes over a
@@ -2256,6 +2330,7 @@ python validation/turbulence.py --profile --json turbulence_profile.json
 python validation/vegetation.py --json vegetation.json
 python validation/leaves.py --json leaves.json
 python validation/wave_outdoor.py --json wave_outdoor.json
+python validation/wave_wind.py --json wave_wind.json   # --skip-profiles: no parabolic equation
 python validation/insertion_loss.py --json insertion_loss.json
 python validation/terrain.py --json terrain.json
 python validation/ffp.py --json ffp.json

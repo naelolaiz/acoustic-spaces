@@ -695,6 +695,7 @@ def simulate(
                 scheme=settings.wave.scheme,
                 say=say,
                 label=source.name,
+                wind=settings.wave.wind,
             )
             info.update(wave_info)
             info["wave_s"] = time.perf_counter() - started
