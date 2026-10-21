@@ -215,7 +215,19 @@ def _surface_factors(model, faces, cosines, rows, distance, spherical, f) -> np.
     out = np.empty((len(faces), *f.shape), dtype=complex)
     own = model.impedance_faces(faces)
     if own.any():
-        admittance = model.admittance[model.face_impedance[faces[own]]]  # (r, bands, M)
+        which = model.face_impedance[faces[own]]
+        admittance = model.admittance[which]  # (r, bands, M)
+        extended = model.impedance_extended[which]
+        if extended.any():
+            # The extended reaction: the admittance each path meets at its own angle.
+            admittance = admittance.copy()
+            c = model.room.speed_of_sound()
+            angles = cos[own]
+            for k in np.unique(which[extended]):
+                at = np.flatnonzero(extended & (which == k))
+                admittance[at] = model.impedances[k].admittance(
+                    f[None], c, cosine=angles[at, None, None]
+                )
         if spherical:
             k = 2.0 * np.pi * f / model.room.speed_of_sound()
             length = np.asarray(distance, dtype=float)[own, None, None]

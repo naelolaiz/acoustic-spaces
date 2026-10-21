@@ -1873,6 +1873,10 @@ _GROUND_MODELS = (
     ("delany_bazley", N_("Delany-Bazley")),
     ("two_parameter", N_("two-parameter")),
 )
+_REACTIONS = (
+    ("local", N_("local: the same at every angle")),
+    ("extended", N_("extended: changes with the angle")),
+)
 
 
 def _without_transmission(fields: dict) -> dict:
@@ -1995,11 +1999,25 @@ class MaterialPage(Page):
             _("Two-parameter model: how fast the ground's porosity falls with depth")
         )
         self.porosity.valueChanged.connect(lambda _value: self._set_impedance())
+        self.reaction = QComboBox()
+        _fill(self.reaction, _REACTIONS)
+        self.reaction.setToolTip(
+            _(
+                "How the ground reacts to sound meeting it at an angle: locally, with the "
+                "same impedance at every angle (the usual model, right for grass and "
+                "harder grounds); or extended, sound also travelling sideways inside it, so "
+                "the impedance a reflection meets changes with its angle, which tells for "
+                "soft snow, moss, forest floors and thin layers. Not with the two-parameter "
+                "model"
+            )
+        )
+        self.reaction.activated.connect(lambda _index: self._set_impedance())
         ground_form.addRow(_("Ground"), self.ground_kind)
         ground_form.addRow(_("Model"), self.ground_model)
         ground_form.addRow(_("Flow resistivity"), self.flow)
         ground_form.addRow(_("Layer thickness"), self.thickness)
         ground_form.addRow(_("Porosity rate"), self.porosity)
+        ground_form.addRow(_("Reaction"), self.reaction)
         layout.addWidget(self.ground)
         self.table = QTableWidget(len(_MATERIAL_ROWS), len(OCTAVE_BANDS_HZ))
         self.table.setHorizontalHeaderLabels(BAND_LABELS)
@@ -2069,6 +2087,7 @@ class MaterialPage(Page):
             self.flow.setValue(impedance.resistivity)
             self.thickness.setValue(impedance.thickness or 0.0)
             self.porosity.setValue(impedance.porosity_rate or 0.0)
+            _choose(self.reaction, impedance.reaction or "local")
             for col in range(len(labels)):  # the impedance gives the absorption
                 item = self.table.item(0, col)
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -2080,11 +2099,13 @@ class MaterialPage(Page):
             self.flow.setValue(PRESETS["grass"][0])
             self.thickness.setValue(0.0)
             self.porosity.setValue(0.0)
+            _choose(self.reaction, "local")
         # Set after the group's tick, which enables its controls again when ticked.
         self.flow.setEnabled(impedance is not None and impedance.preset is None)
         two = impedance is not None and impedance.model == "two_parameter"
         self.thickness.setEnabled(impedance is not None and not two)
         self.porosity.setEnabled(two)
+        self.reaction.setEnabled(impedance is not None and not two)
         # Translators: {source} is where the coefficients come from, as the material
         # database (in English) or the scene file says it.
         if impedance is not None:
@@ -2147,8 +2168,11 @@ class MaterialPage(Page):
             out["model"] = model
         if model == "two_parameter":
             out["porosity_rate"] = self.porosity.value()
-        elif self.thickness.value() > 0.0:
-            out["thickness"] = self.thickness.value()
+        else:
+            if self.thickness.value() > 0.0:
+                out["thickness"] = self.thickness.value()
+            if self.reaction.currentData() == "extended":
+                out["reaction"] = "extended"
         return out
 
     def _set_impedance(self) -> None:

@@ -172,6 +172,13 @@ Outdoor acoustics, in steps:
   the command line's `inspect` and in the editor. Checked against the parabolic
   equation through eddies strengthening right down to the ground
   (`validation/turbulence.py --profile`). Without `height_m` nothing changes.
+- [x] O14 Grounds of extended reaction: `impedance.reaction: extended` gives each
+  reflection the impedance of its own angle (sound travelling sideways inside the
+  ground, Attenborough's models), which tells for soft snow, moss, forest floors and
+  thin layers; the early paths at each reflection's angle, the parabolic equation at
+  grazing incidence, the wave solver locally. Checked against the fast field program
+  with the ground's reflection at every angle (`validation/ground_reflection.py
+  --extended`). Not with `two_parameter`; `local` by default, as before.
 - [ ] A wide-angle parabolic equation (split-step Padé) for gradients that bend sound
   through large angles over several kilometres, where the narrow-angle one strays.
 

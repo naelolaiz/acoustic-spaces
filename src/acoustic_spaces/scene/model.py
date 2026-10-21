@@ -897,6 +897,15 @@ class Impedance(_Model):
     thickness: PositiveFloat | None = Field(
         default=None, description="m: a layer of the ground on a hard backing"
     )
+    reaction: Literal["local", "extended"] | None = Field(
+        default=None,
+        description=(
+            "local (the default): the impedance is the same at every angle; extended: "
+            "sound also travels sideways in the ground, so the impedance a reflection "
+            "meets changes with its angle (soft snow, moss, thin layers; not "
+            "two_parameter)"
+        ),
+    )
 
     @model_validator(mode="after")
     def _complete(self) -> Impedance:
@@ -920,6 +929,10 @@ class Impedance(_Model):
                 )
         elif self.porosity_rate is not None:
             raise ValueError("porosity_rate is for the two_parameter model")
+        if self.model == "two_parameter" and self.reaction == "extended":
+            raise ValueError(
+                "the two_parameter model reacts locally: it has no index for the extended reaction"
+            )
         return self
 
     @property
@@ -929,9 +942,16 @@ class Impedance(_Model):
             return float(self.flow_resistivity)
         return GROUND_PRESETS[self.preset][0]
 
-    def admittance(self, f, speed_of_sound: float = 343.0) -> np.ndarray:
+    @property
+    def extended(self) -> bool:
+        """Whether the impedance changes with the angle of incidence."""
+        return self.reaction == "extended"
+
+    def admittance(self, f, speed_of_sound: float = 343.0, cosine=None) -> np.ndarray:
         """The normalised admittance (1 / impedance) at frequencies ``f`` (Hz), in the
-        engine's sign convention, e^(jωt)."""
+        engine's sign convention, e^(jωt): with the extended reaction, the one met at
+        the incidence ``cosine`` (broadcasting with ``f``; 1 by default, normal
+        incidence); with the local, the same at every angle."""
         return 1.0 / surface_impedance(
             f,
             self.resistivity,
@@ -939,6 +959,7 @@ class Impedance(_Model):
             porosity_rate=self.porosity_rate or 0.0,
             thickness=self.thickness,
             speed_of_sound=speed_of_sound,
+            cosine=cosine if self.extended else None,
         )
 
     def describe(self) -> str:
@@ -950,6 +971,8 @@ class Impedance(_Model):
             words.append(f"{self.porosity_rate:g}/m")
         if self.thickness is not None:
             words.append(f"{self.thickness:g} m thick")
+        if self.extended:
+            words.append("extended reaction")
         return f"{model[self.model]}: " + ", ".join(words)
 
 

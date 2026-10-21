@@ -1457,9 +1457,16 @@ def test_ground_impedance_and_zones(window) -> None:
     assert impedance().flow_resistivity == 300.0
     page.thickness.setValue(0.1)
     assert impedance().thickness == 0.1
-    choose(page.ground_model, "two_parameter")
+    assert page.reaction.currentData() == "local" and impedance().reaction is None
+    choose(page.reaction, "extended")
+    assert impedance().reaction == "extended" and impedance().thickness == 0.1
+    choose(page.ground_model, "two_parameter")  # reacts locally: no reaction, no thickness
     assert impedance().model == "two_parameter" and impedance().thickness is None
+    assert impedance().reaction is None
     assert page.porosity.isEnabled() and not page.thickness.isEnabled()
+    assert not page.reaction.isEnabled()
+    choose(page.ground_model, "miki")  # back to a model with an index: local again
+    assert page.reaction.isEnabled() and impedance().reaction is None
     page.table.item(1, 0).setText("0.40")  # the scattering is the material's own
     assert window.document.scene.materials["meadow"].scattering[0] == 0.4
     assert impedance().model == "two_parameter"

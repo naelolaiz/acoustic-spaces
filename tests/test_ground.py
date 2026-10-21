@@ -134,6 +134,105 @@ def test_spherical_reflection_against_the_exact_solution(sigma, thickness) -> No
         assert 20 * math.log10(level[0] / level[1]) == pytest.approx(0.0, abs=0.4)
 
 
+# -- extended reaction ------------------------------------------------------------------
+
+
+def test_extended_reaction_changes_the_impedance_with_the_angle() -> None:
+    f = np.array([125.0, 500.0, 2000.0])
+    for sigma, thickness in ((12.5, None), (12.5, 0.1), (200.0, None)):
+        local = surface_impedance(f, sigma, thickness=thickness)
+        # At normal incidence the extended reaction is the local one.
+        normal = surface_impedance(f, sigma, thickness=thickness, cosine=1.0)
+        np.testing.assert_allclose(normal, local, rtol=1e-12)
+        # Towards grazing incidence it departs, by Zc n / sqrt(n² - sin²), and stays
+        # passive.
+        grazing = surface_impedance(f, sigma, thickness=thickness, cosine=0.0)
+        z, n = characteristic(f, sigma)
+        expected = z * n / np.sqrt(n * n - 1.0)
+        if thickness is not None:
+            expected = expected / np.tanh(1j * 2 * np.pi * f / C * np.sqrt(n * n - 1.0) * thickness)
+        np.testing.assert_allclose(grazing, expected, rtol=1e-12)
+        assert np.all(grazing.real > 0.0)
+    # Soft snow departs by a few per cent at grazing incidence, grass hardly at all.
+    for sigma, least, most in ((12.5, 0.02, 0.5), (200.0, 0.0, 0.05)):
+        local = surface_impedance(f, sigma)
+        grazing = surface_impedance(f, sigma, cosine=0.0)
+        change = np.abs(grazing / local - 1.0)
+        assert least <= change.max() <= most, (sigma, change)
+    # The cosine broadcasts with the frequencies.
+    many = surface_impedance(f[None, :], 12.5, cosine=np.array([[0.0], [0.5], [1.0]]))
+    assert many.shape == (3, 3) and np.allclose(many[2], surface_impedance(f, 12.5))
+    with pytest.raises(ValueError, match="reacts locally"):
+        surface_impedance(f, 100.0, "two_parameter", porosity_rate=20.0, cosine=0.5)
+
+
+def test_extended_reaction_against_the_exact_solution() -> None:
+    """The exact field over a ground of extended reaction (the fast field program with
+    the plane wave's reflection at every angle) against Q with the impedance at the
+    reflection's angle, where Q with the locally reacting impedance is off."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
+    import ffp
+    from ground_reflection import extended_impedance
+
+    still = lambda z: np.full(np.shape(z), C)  # noqa: E731
+    r, zs, zr = 20.0, 1.0, 1.5
+    r1, r2 = math.hypot(r, zs - zr), math.hypot(r, zs + zr)
+    cosine = (zs + zr) / r2
+    worst = {"at_angle": 0.0, "local": 0.0}
+    for f in (78.7, 99.2, 1587.4):
+        k = 2 * math.pi * f / C
+        exact = ffp.pressure(f, still, zs, [r], zr, extended_impedance(f, 12.5, 0.1), top=35.0)[0]
+        level = 20 * math.log10(abs(exact) * r1)
+        for key, cos in (("at_angle", cosine), ("local", None)):
+            z = complex(surface_impedance(np.array(f), 12.5, thickness=0.1, cosine=cos))
+            q = complex(spherical_reflection(1.0 / z, cosine, k, r2))
+            got = 20 * math.log10(
+                abs(np.exp(-1j * k * r1) / r1 + q * np.exp(-1j * k * r2) / r2) * r1
+            )
+            worst[key] = max(worst[key], abs(got - level))
+    assert worst["at_angle"] < 0.2 and worst["local"] > 0.35, worst
+
+
+def test_a_ground_of_extended_reaction_in_a_scene() -> None:
+    snow = {"impedance": {"preset": "snow", "thickness": 0.1}}
+    extended = {"impedance": {"preset": "snow", "thickness": 0.1, "reaction": "extended"}}
+    explicit = {"impedance": {"preset": "snow", "thickness": 0.1, "reaction": "local"}}
+    far = {"source": (0, 0, 1.0), "listener": (100, 0, 1.5)}
+    plain, same, angled = (
+        early_level(ground_scene(g, extent=120, **far)) for g in (snow, explicit, extended)
+    )
+    # Local by default, written as given; the extended reaction reflects differently.
+    np.testing.assert_array_equal(plain, same)
+    assert np.max(np.abs(angled - plain)) > 0.5
+    scene = ground_scene(extended, extent=120, **far)
+    assert scene.to_data()["materials"]["field"]["impedance"]["reaction"] == "extended"
+    assert (
+        "reaction"
+        not in ground_scene(snow, extent=120, **far).to_data()["materials"]["field"]["impedance"]
+    )
+    assert "extended reaction" in scene.materials["field"].impedance.describe()
+    # The trace model holds the admittance at normal and at grazing incidence apart.
+    model = TraceModel.from_room(Room.from_scene(scene))
+    assert model.impedance_extended.tolist() == [True]
+    assert not np.allclose(model.grazing_admittance, model.admittance)
+    local_model = TraceModel.from_room(Room.from_scene(ground_scene(snow, extent=120, **far)))
+    assert local_model.impedance_extended.tolist() == [False]
+    assert np.array_equal(local_model.grazing_admittance, local_model.admittance)
+    with pytest.raises(ValidationError, match="reacts locally"):
+        Material.model_validate(
+            {
+                "impedance": {
+                    "flow_resistivity": 100,
+                    "model": "two_parameter",
+                    "porosity_rate": 20,
+                    "reaction": "extended",
+                }
+            }
+        )
+
+
 # -- materials --------------------------------------------------------------------
 
 

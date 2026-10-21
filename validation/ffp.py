@@ -140,7 +140,8 @@ def pressure(
     ``zr`` (n, or one; m) from a source ``zs`` m up, in air of effective speed of
     sound ``speed(z)`` (m/s, an array function of the height) up to ``top`` and the
     same above, over a ground of normalised impedance ``impedance`` (time as
-    exp(-i omega t); None: rigid), the air absorbing ``absorption_db_per_m``. The
+    exp(-i omega t); None: rigid; a function of the horizontal wavenumber for a ground
+    of extended reaction), the air absorbing ``absorption_db_per_m``. The
     layers are ``layer`` m thick (default: a quarter wavelength, at most 1 m). No
     listener may be at the source's height: the transform's tail is set by the
     nearest."""
@@ -235,7 +236,7 @@ def _depth_solution(kr, k_layers, k_top, thickness, i_lower, i_upper, k0, impeda
     if impedance is None:
         gamma = np.ones_like(kr)
     else:
-        y = -1j * k0 / impedance
+        y = -1j * k0 / (impedance(kr) if callable(impedance) else impedance)
         gamma = (1j * q_here + y) / (1j * q_here - y)
     kept = []  # gamma at the bottom of each layer between the listener and the source
     for j in range(i_upper):

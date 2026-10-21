@@ -16,6 +16,17 @@ Miki's and Delany and Bazley's models give a ground as deep as it likes; with a
 rock), whose impedance is Zc coth(j kc d). :data:`PRESETS` are the eight ground classes
 of Nord2000, A to H, with their flow resistivities, for Miki's model.
 
+Those are the impedances of a locally reacting ground, met at normal incidence. In a
+porous ground sound also travels sideways (extended reaction): a wave meeting the ground
+at an angle theta from the normal goes on into it at the angle Snell's law gives, sin
+theta_t = sin theta / n with n = kc / k the ground's complex index, and the surface
+impedance it meets is Zc / cos theta_t = Zc n / sqrt(n² - sin² theta), for a layer (Zc
+n / sqrt(n² - sin² theta)) coth(j k d sqrt(n² - sin² theta)) (Attenborough 1985; Li,
+Attenborough and Heap 1998). With a large index (grass and harder grounds) that is the
+normal incidence's at every angle; it tells for soft snow, moss and forest floors, whose
+index is a few, and for thin layers. :func:`surface_impedance` gives it at an incidence
+``cosine``; the two-parameter model, with no index, reacts locally.
+
 Impedances here are normalised by the air's (rho c) and in the engine's sign convention,
 e^(jωt), a delay of tau being e^(-j 2π f tau); the outdoor literature mostly writes
 e^(-iωt), whose impedances are the complex conjugates of these.
@@ -79,20 +90,34 @@ def surface_impedance(
     porosity_rate: float = 0.0,
     thickness: float | None = None,
     speed_of_sound: float = 343.0,
+    cosine=None,
 ) -> np.ndarray:
     """The normalised surface impedance of a ground at frequencies ``f`` (Hz): of
     ``flow_resistivity`` (kPa s/m²) by ``model``; with ``two_parameter``, that of an
     effective flow resistivity and a rate of change of porosity ``porosity_rate`` (1/m);
-    with a ``thickness`` (m, not for ``two_parameter``), a layer on a hard backing."""
+    with a ``thickness`` (m, not for ``two_parameter``), a layer on a hard backing. At
+    normal incidence, a locally reacting ground's, unless the incidence ``cosine`` is
+    given (broadcasting with ``f``; not for ``two_parameter``): then the extended
+    reaction's at that angle, Zc n / sqrt(n² - sin² theta) and the layer's with it (see
+    the module)."""
     f = np.asarray(f, dtype=float)
     if model == "two_parameter":
         if thickness is not None:
             raise ValueError(
                 "the two-parameter model has no thickness: its porosity falls with depth"
             )
+        if cosine is not None:
+            raise ValueError("the two-parameter model reacts locally: it has no index")
         sigma = 1000.0 * float(flow_resistivity)  # Pa s/m²
         return 0.436 * (1.0 - 1.0j) * np.sqrt(sigma / f) - 19.48j * float(porosity_rate) / f
     z, k = characteristic(f, flow_resistivity, model)
+    if cosine is not None:
+        # Into the ground at Snell's angle: n cos theta_t = sqrt(n² - sin² theta), the
+        # root that decays downwards (Im < 0, as k's), the principal one.
+        sine2 = 1.0 - np.asarray(cosine, dtype=complex) ** 2
+        down = np.sqrt(k * k - sine2)
+        z = z * k / down
+        k = down
     if thickness is None:
         return z
     wavenumber = 2.0 * np.pi * f / float(speed_of_sound) * k

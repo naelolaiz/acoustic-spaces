@@ -145,8 +145,17 @@ class TraceModel:
     face_impedance: np.ndarray | None = None
     #: (K, bands, M) the normalised admittance of each material with an impedance at the
     #: frequencies the early paths are evaluated at
-    #: (:func:`~acoustic_spaces.engine.diffraction.band_frequencies`).
+    #: (:func:`~acoustic_spaces.engine.diffraction.band_frequencies`), at normal
+    #: incidence (a locally reacting ground's at every angle).
     admittance: np.ndarray | None = None
+    #: (K, bands, M) the same at grazing incidence, which differs for grounds of
+    #: extended reaction (``impedance.reaction``), for the parabolic equation.
+    grazing_admittance: np.ndarray | None = None
+    #: (K,) whether each material with an impedance reacts extendedly: its admittance
+    #: changes with the angle of incidence, and ``impedances[k]`` gives it.
+    impedance_extended: np.ndarray | None = None
+    #: The materials' impedances (:class:`~acoustic_spaces.scene.Impedance`), row by row.
+    impedances: tuple = ()
     #: (F,) for an outdoor scene whose ground has zones (``geometry.ground.zones``), the
     #: part of the ground each face of it lies in (0 outside the zones, then each zone),
     #: whose reflections share their Fresnel zone with the parts round them; -1 for the
@@ -192,8 +201,9 @@ class TraceModel:
         coefficients = [materials[n].coefficients(simulation.bands) for n in room.material_names]
         absorption = np.array([a for a, _ in coefficients])
         scattering = np.array([s for _, s in coefficients])
-        face_impedance = admittance = None
+        face_impedance = admittance = grazing = extended = None
         impedances = [materials[n].impedance for n in room.material_names]
+        given: tuple = ()
         if any(i is not None for i in impedances):
             from acoustic_spaces.engine.diffraction import band_frequencies
 
@@ -202,9 +212,14 @@ class TraceModel:
             row = np.full(len(impedances), -1, dtype=np.int64)
             row[rows] = np.arange(len(rows))
             face_impedance = row[room.face_materials]
-            admittance = np.array(
-                [impedances[k].admittance(f, room.speed_of_sound()) for k in rows]
-            )
+            given = tuple(impedances[k] for k in rows)
+            admittance = np.array([i.admittance(f, room.speed_of_sound()) for i in given])
+            extended = np.array([i.extended for i in given], dtype=bool)
+            grazing = admittance
+            if extended.any():
+                grazing = np.array(
+                    [i.admittance(f, room.speed_of_sound(), cosine=0.0) for i in given]
+                )
         ground_part = part_face = None
         if room.outdoor is not None and room.outdoor.zones:
             ground_part, part_face = _ground_parts(room)
@@ -237,6 +252,9 @@ class TraceModel:
             ground=None if room.outdoor is None else room.outdoor.ground,
             face_impedance=face_impedance,
             admittance=admittance,
+            grazing_admittance=grazing,
+            impedance_extended=extended,
+            impedances=given,
             ground_part=ground_part,
             part_face=part_face,
             plants=_plants(room, simulation.bands),

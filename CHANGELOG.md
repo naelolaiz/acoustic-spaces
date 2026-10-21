@@ -354,6 +354,22 @@
 - `inspect` names the height and the fall-off; the editor's Wind and temperature group
   has **Eddies' height** (0: the same at every height) and **Weaker with height**.
 
+**Grounds of extended reaction**
+
+- `impedance.reaction: extended` lets sound travel sideways inside a porous ground, so
+  that each reflection meets the impedance of its own angle, Zc n / sqrt(n² - sin² θ)
+  with n the ground's complex index (and the layer's with it), as Attenborough's models
+  have it. It tells for soft snow, moss, forest floors and thin layers: a layer of snow
+  10 cm deep on ice reflects up to 3.7 dB differently 20 m away, fresh snow 1.0 dB,
+  grass 0.1 dB. The early paths take it at each reflection's angle, within 0.4 dB of the
+  exact field, the fast field program's with the ground's reflection at every angle (1.5
+  dB over the snow layer at 20 m, where the locally reacting impedance is off by up to
+  6.4); the parabolic equation takes it at grazing incidence, within 0.4 dB (1.1 over
+  the layer). The default, `local`, is as before: results do not change. Not with
+  `two_parameter`, which has no index; the wave solver's ground reacts locally (see
+  [Validation](docs/validation.md#ground-reflection-against-the-exact-solution)).
+- `inspect` names the reaction; the editor's Ground impedance group has **Reaction**.
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its

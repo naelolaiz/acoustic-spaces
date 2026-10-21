@@ -224,6 +224,8 @@ materials:
     impedance: {flow_resistivity: 150, model: delany_bazley}
   snow_on_ice:
     impedance: {preset: snow, thickness: 0.1} # a layer 10 cm thick on a hard backing
+  powder:
+    impedance: {flow_resistivity: 5, reaction: extended}  # the impedance changes with the angle
   pasture:
     impedance: {model: two_parameter, flow_resistivity: 100, porosity_rate: 20}
 assignments:
@@ -238,6 +240,17 @@ assignments:
   and soil better than one parameter does.
 - `thickness` (m) makes the ground a layer of that thickness on a hard backing: snow on
   frozen ground, a thin soil over rock. Not with `two_parameter`.
+- `reaction` is how the ground meets sound at an angle: `local` (the default), the same
+  impedance at every angle, right for grass and harder grounds; or `extended`, sound
+  also travelling sideways inside the ground, so that a reflection meets the impedance
+  of its own angle, Zc n / sqrt(n² - sin² θ) with n the ground's complex index (and the
+  layer's with it; Attenborough 1985), which tells for soft snow, moss, forest floors
+  and thin layers: a layer of snow 10 cm deep on ice reflects up to 3.7 dB differently
+  20 m away, fresh snow 1.0 dB, grass 0.1 dB. The early paths take it at each
+  reflection's angle and the parabolic equation at grazing incidence; the wave solver,
+  whose ground is one impedance for all angles, reacts locally. Not with
+  `two_parameter`, which has no index (see
+  [Validation](validation.md#ground-reflection-against-the-exact-solution)).
 - The presets are the ground classes of Nord2000, with their flow resistivities. Real
   grounds spread over a factor of two or more round them.
 
@@ -837,9 +850,10 @@ attenuation is given, not derived from its leaves' size and density, and stems s
 upright at random.
 
 The wind, the temperature and the eddies are the same over the whole scene, and the
-eddies' largest size is the same at every height. The ground reacts locally: its
-impedance does not change with the angle sound meets it at, which holds for grass, soil
-and snow, though less for a thick layer of very soft snow.
+eddies' largest size is the same at every height. The ground reacts locally unless
+`reaction: extended` says otherwise, and the wave solver's ground always does: one
+impedance for every angle, which holds for grass, soil and snow, less for very soft
+snow and thin layers.
 
 Over a terrain the early sound reflects off the mean plane of the ground's profile, not
 off its facets, so a listener high over rolling ground gets one reflection where the

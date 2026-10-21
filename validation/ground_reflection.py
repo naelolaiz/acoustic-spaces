@@ -31,7 +31,15 @@ of that integral (see :mod:`acoustic_spaces.materials.ground`). The checks:
   ground in wind and temperature gradients (:mod:`acoustic_spaces.engine.parabolic`),
   here in still air: the level over the same grounds at the third-octave centres from
   63 Hz to 2 kHz, from a source 1 m high at 25, 100 and 400 m and from one 119 m high
-  (as a wind turbine's hub) at 178, 535 and 845 m, 1.5 and 1.7 m up.
+  (as a wind turbine's hub) at 178, 535 and 845 m, 1.5 and 1.7 m up;
+- with ``--extended``, grounds of extended reaction (``impedance.reaction``), whose
+  impedance changes with the angle of incidence: the exact field from the fast field
+  program (:mod:`validation.ffp`, in still air, with the plane wave's reflection at each
+  horizontal wavenumber) against the engine's Q with the impedance at the reflection's
+  angle, and against Q with the locally reacting impedance, which shows how much the
+  extended reaction tells, over fresh snow, snow, a layer of snow on ice, a forest floor
+  and grass at 20 and 100 m; and the parabolic equation, which takes the impedance at
+  grazing incidence, at 100 and 400 m.
 """
 
 from __future__ import annotations
@@ -43,6 +51,8 @@ import sys
 import time
 
 import numpy as np
+
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
 
 from acoustic_spaces.materials.ground import PRESETS, spherical_reflection, surface_impedance
 
@@ -292,19 +302,131 @@ def check_parabolic() -> dict:
     return out
 
 
+#: The grounds of extended reaction: name, flow resistivity (kPa s/m²) and thickness (m).
+EXTENDED_GROUNDS = (
+    ("fresh snow (5)", 5.0, None),
+    ("snow (12.5)", PRESETS["snow"][0], None),
+    ("snow 10 cm on ice (12.5)", PRESETS["snow"][0], 0.1),
+    ("forest floor (31.5)", PRESETS["forest_floor"][0], None),
+    ("grass (200)", PRESETS["grass"][0], None),
+)
+EXTENDED_GEOMETRIES = ((20.0, 1.0, 1.5), (100.0, 1.0, 1.5))
+#: Third-octave centres from 50 Hz to 2 kHz for the fast field program.
+EXTENDED_FREQUENCIES = 1000.0 * 2.0 ** (np.arange(-13, 4) / 3.0)
+EXTENDED_PE_RANGES = (100.0, 400.0)
+
+
+def extended_impedance(f: float, sigma: float, thickness: float | None):
+    """The impedance of a ground of extended reaction as a function of the horizontal
+    wavenumber, for :func:`ffp.pressure` (time as exp(-i omega t))."""
+    k0 = 2.0 * math.pi * f / SPEED_OF_SOUND
+
+    def impedance(kr):
+        cosine = np.sqrt(1.0 - (kr / k0) ** 2 + 0j)  # only its square enters
+        z = surface_impedance(np.array(f), sigma, thickness=thickness, cosine=np.conj(cosine))
+        return np.conj(z)
+
+    return impedance
+
+
+def check_extended() -> dict:
+    """Grounds of extended reaction: the exact field (fast field program) against Q
+    with the impedance at the reflection's angle and against Q with the locally reacting
+    impedance; and the parabolic equation with the impedance at grazing incidence."""
+    import ffp
+
+    from acoustic_spaces.engine.parabolic import march
+
+    print("Extended reaction: the largest difference in the field's level over the free")
+    print("field's from the fast field program through the ground's plane-wave reflection")
+    print("at every angle, 50 Hz to 2 kHz, outside dips more than 20 dB deep (dB)\n")
+    print(f"{'':26}" + "".join(f"{f'{r:g} m':>26}" for r, _, _ in EXTENDED_GEOMETRIES))
+    print(f"{'':26}" + "  Q at angle   Q local  ext tells" * len(EXTENDED_GEOMETRIES))
+    start = time.time()
+    still = lambda z: np.full(np.shape(z), SPEED_OF_SOUND)  # noqa: E731
+    out: dict = {"q": {}, "parabolic": {}}
+    for name, sigma, thickness in EXTENDED_GROUNDS:
+        row = []
+        for r, zs, zr in EXTENDED_GEOMETRIES:
+            r1, r2 = math.hypot(r, zs - zr), math.hypot(r, zs + zr)
+            cosine = (zs + zr) / r2
+            worst = {"at_angle": 0.0, "local": 0.0, "tells": 0.0}
+            for f in EXTENDED_FREQUENCIES:
+                k = 2.0 * math.pi * f / SPEED_OF_SOUND
+                top = max(zs, zr) + 30.0
+                exact = ffp.pressure(
+                    f, still, zs, [r], zr, extended_impedance(f, sigma, thickness), top=top
+                )[0]
+                level = 20.0 * math.log10(abs(exact) * r1)
+                if level < -20.0:
+                    continue
+                z_local = complex(surface_impedance(np.array(f), sigma, thickness=thickness))
+                z_angle = complex(
+                    surface_impedance(np.array(f), sigma, thickness=thickness, cosine=cosine)
+                )
+                local = ffp.pressure(f, still, zs, [r], zr, np.conj(z_local), top=top)[0]
+                for key, z in (("at_angle", z_angle), ("local", z_local)):
+                    q = complex(spherical_reflection(1.0 / z, cosine, k, r2))
+                    miss = abs(20.0 * math.log10(abs(field(q, k, r1, r2))) - level)
+                    worst[key] = max(worst[key], miss)
+                worst["tells"] = max(
+                    worst["tells"], abs(20.0 * math.log10(abs(local) * r1) - level)
+                )
+            row.append({f"{key}_db": value for key, value in worst.items()})
+        out["q"][name] = row
+        cells = "".join(
+            f"{c['at_angle_db']:12.2f}{c['local_db']:10.2f}{c['tells_db']:11.2f}" for c in row
+        )
+        print(f"{name:26}{cells}")
+    print("\nThe parabolic equation with the impedance at grazing incidence, 63 Hz to 2 kHz,")
+    print("the source 1 m and the listener 1.5 m high:\n")
+    zs, zr = 1.0, 1.5
+    ranges = np.array(EXTENDED_PE_RANGES)
+    top = max(1.5 * zs, zs + 20.0, 0.15 * ranges.max())
+    print(f"{'':26}" + "".join(f"{f'{r:g} m':>10}" for r in ranges))
+    for name, sigma, thickness in EXTENDED_GROUNDS:
+        worst = np.zeros(len(ranges))
+        for f in PE_FREQUENCIES:
+            z = complex(surface_impedance(np.array(f), sigma, thickness=thickness, cosine=0.0))
+            pressure = march(
+                [f], still, lambda r, z=z: np.conj(z), zs, ranges, np.full(len(ranges), zr), top
+            )[0]
+            exact = ffp.pressure(
+                f, still, zs, ranges, zr, extended_impedance(f, sigma, thickness), top=top + 5.0
+            )
+            for i, r in enumerate(ranges):
+                r1 = math.hypot(r, zs - zr)
+                level = 20.0 * math.log10(abs(exact[i]) * r1)
+                if level < -20.0:
+                    continue
+                worst[i] = max(worst[i], abs(20.0 * math.log10(abs(pressure[i]) * r1) - level))
+        out["parabolic"][name] = dict(
+            zip((f"{r:g} m" for r in ranges), worst.tolist(), strict=True)
+        )
+        print(f"{name:26}" + "".join(f"{w:10.2f}" for w in worst))
+    print(f"\n({time.time() - start:.0f} s)\n")
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--wave", action="store_true", help="also check the wave solver")
     parser.add_argument(
         "--parabolic", action="store_true", help="also check the parabolic equation"
     )
+    parser.add_argument(
+        "--extended", action="store_true", help="also check grounds of extended reaction"
+    )
+    parser.add_argument("--only", action="store_true", help="only the checks asked for")
     parser.add_argument("--json", help="write the results to this file")
     args = parser.parse_args(argv)
-    results = {"q": check_q(), "engine": check_engine()}
+    results = {} if args.only else {"q": check_q(), "engine": check_engine()}
     if args.wave:
         results["wave"] = check_wave()
     if args.parabolic:
         results["parabolic"] = check_parabolic()
+    if args.extended:
+        results["extended"] = check_extended()
     if args.json:
         with open(args.json, "w", encoding="utf-8") as out:
             json.dump(results, out, indent=1)

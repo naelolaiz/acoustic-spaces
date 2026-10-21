@@ -2949,6 +2949,14 @@ msgid "two-parameter"
 msgstr "Zwei-Parameter"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "local: the same at every angle"
+msgstr "lokal: dieselbe in jedem Winkel"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "extended: changes with the angle"
+msgstr "ausgedehnt: ändert sich mit dem Winkel"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The material's name; renaming it renames it in the assignments and the "
 "default material too"
@@ -3067,6 +3075,21 @@ msgstr ""
 "abnimmt"
 
 #: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the ground reacts to sound meeting it at an angle: locally, with the "
+"same impedance at every angle (the usual model, right for grass and harder "
+"grounds); or extended, sound also travelling sideways inside it, so the "
+"impedance a reflection meets changes with its angle, which tells for soft "
+"snow, moss, forest floors and thin layers. Not with the two-parameter model"
+msgstr ""
+"Wie der Boden auf schräg auftreffenden Schall reagiert: lokal, mit derselben "
+"Impedanz in jedem Winkel (das übliche Modell, richtig für Gras und härtere "
+"Böden); oder ausgedehnt, wobei der Schall auch seitwärts in ihm läuft, "
+"sodass die Impedanz, die eine Reflexion trifft, sich mit ihrem Winkel "
+"ändert, was bei weichem Schnee, Moos, Waldböden und dünnen Schichten zählt. "
+"Nicht mit dem Zwei-Parameter-Modell"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Ground"
 msgstr "Boden"
 
@@ -3085,6 +3108,10 @@ msgstr "Schichtdicke"
 #: acoustic_spaces/gui/inspector.py
 msgid "Porosity rate"
 msgstr "Porositätsabnahme"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Reaction"
+msgstr "Reaktion"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Where the coefficients come from"

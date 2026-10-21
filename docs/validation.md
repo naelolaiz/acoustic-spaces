@@ -744,6 +744,47 @@ centres from 50 Hz to 5 kHz (in brackets, in dips more than 20 dB deep):
 Q is furthest off over the thin layer of snow, the most reactive of these grounds, and
 by more than half a decibel only in its deepest dips.
 
+**Extended reaction.** `--extended` checks grounds whose impedance changes with the
+angle of incidence (`impedance.reaction: extended`, see
+[Ground impedance](outdoor.md#ground-impedance)): sound also travels sideways inside
+them, and a plane wave meeting them at the angle θ from the normal meets the impedance
+Zc n / sqrt(n² - sin² θ), n the ground's complex index, and for a layer on a hard
+backing that times coth(j k d sqrt(n² - sin² θ)). The exact field of a point source over
+such a ground is the Sommerfeld integral with that reflection at every horizontal
+wavenumber, which the fast field program (`validation/ffp.py`, exact in still air, see
+[Outdoor sound in wind against a fast field program](#outdoor-sound-in-wind-against-a-fast-field-program))
+integrates. The engine reflects with Q taking the impedance at the reflection's own
+angle; the table gives the largest difference in level from the exact field at the
+third-octave centres from 50 Hz to 2 kHz, outside dips more than 20 dB deep, for that
+and for Q with the locally reacting impedance, and how much the extended reaction tells
+(the exact fields of the two reactions apart), the source 1 m and the listener 1.5 m
+high:
+
+| ground (flow resistivity, kPa s/m²) | 20 m: Q at the angle | Q local | reaction tells | 100 m: Q at the angle | Q local | reaction tells |
+|---|---:|---:|---:|---:|---:|---:|
+| fresh snow (5) | 0.44 | 0.94 | 0.96 | 0.11 | 0.65 | 0.66 |
+| snow (12.5) | 0.22 | 0.59 | 0.59 | 0.13 | 0.39 | 0.38 |
+| snow 10 cm deep on ice (12.5) | 1.46 | 6.36 | 3.74 | 0.37 | 2.05 | 2.45 |
+| forest floor (31.5) | 0.14 | 0.35 | 0.35 | 0.09 | 0.29 | 0.29 |
+| grass (200) | 0.06 | 0.09 | 0.10 | 0.04 | 0.09 | 0.11 |
+
+The extended reaction tells by a tenth of a decibel over grass, by a third to one
+decibel over snow and forest floors and by 2.5 to 4 dB over the thin layer of snow,
+and Q with the impedance at the angle follows it to within half a decibel but over
+the layer, where it still misses the exact field by 1.5 dB at 20 m: Q is the
+locally reacting plane's spherical wave with the impedance swapped in, and the ground
+wave over a layer of extended reaction is not quite that (Li, Attenborough and Heap
+1998). The parabolic equation, which takes the impedance at grazing incidence,
+against the same exact field at 63 Hz to 2 kHz:
+
+| ground | 100 m | 400 m |
+|---|---:|---:|
+| fresh snow (5) | 0.06 | 0.05 |
+| snow (12.5) | 0.35 | 0.05 |
+| snow 10 cm deep on ice (12.5) | 0.84 | 1.05 |
+| forest floor (31.5) | 0.37 | 0.27 |
+| grass (200) | 0.12 | 0.16 |
+
 The engine's early part over grass (image sources to first order, the direct sound and
 its reflection added in pressure, as outdoors by default) against the exact solution,
 whose energy is averaged over each octave band, as the engine reads a band:
@@ -1958,7 +1999,7 @@ python validation/pyroomacoustics_crosscheck.py --json results.json --plots docs
 python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
 python validation/edge_diffraction.py --json diffraction.json
-python validation/ground_reflection.py --wave --parabolic --json ground.json
+python validation/ground_reflection.py --wave --parabolic --extended --json ground.json
 python validation/outdoor_propagation.py --json outdoor.json --plots docs/validation
 python validation/outdoor_propagation.py --turbulence moderate
 python validation/turbulence.py --json turbulence.json

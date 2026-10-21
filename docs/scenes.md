@@ -199,7 +199,8 @@ Each entry in `materials` takes coefficients from one of:
 - `absorption: [...]` with eight octave values or 24 third-octave values, which also
   overrides a preset or file;
 - `impedance:` a porous ground's impedance (`grass`, `snow`, `asphalt`... or a flow
-  resistivity), which gives the absorption and reflects as a ground does (see
+  resistivity; `reaction: extended` for one whose impedance changes with the angle),
+  which gives the absorption and reflects as a ground does (see
   [Ground impedance](outdoor.md#ground-impedance)).
 
 `scattering` is a number, eight or 24 values, or the id of a built-in scattering entry.

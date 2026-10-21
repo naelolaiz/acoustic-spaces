@@ -615,12 +615,13 @@ class Refraction:
     # -- the parabolic equation --------------------------------------------------------
 
     def _admittance(self, face: int) -> np.ndarray:
-        """(bands, M) the normalised admittance (time as exp(j omega t)) of ``face``."""
+        """(bands, M) the normalised admittance (time as exp(j omega t)) of ``face``: an
+        impedance's at grazing incidence (which differs with the extended reaction)."""
         with self._lock:
             if face not in self._admittances:
                 model = self.model
                 if model.impedance_faces(np.array([face]))[0]:
-                    value = model.admittance[model.face_impedance[face]]
+                    value = model.grazing_admittance[model.face_impedance[face]]
                 else:
                     from acoustic_spaces.engine.impedance import fit_admittance
 
