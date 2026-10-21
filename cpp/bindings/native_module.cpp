@@ -22,6 +22,7 @@
 #include "acoustic_spaces/bvh.hpp"
 #include "acoustic_spaces/convolver.hpp"
 #include "acoustic_spaces/direct_convolution.hpp"
+#include "acoustic_spaces/edge_cull.hpp"
 #include "acoustic_spaces/fdtd.hpp"
 #include "acoustic_spaces/fft.hpp"
 #include "acoustic_spaces/ray_tracer.hpp"
@@ -167,6 +168,80 @@ nb::ndarray<nb::numpy, bool> occluded(const as::Bvh &bvh, Points origins, Points
     // NumPy reads the 0 and 1 bytes as its bools.
     const std::size_t shape[1] = {n};
     return nb::ndarray<nb::numpy, bool>(reinterpret_cast<bool *>(owned->data()), 1, shape, owner);
+}
+
+std::vector<as::CullPlane> cull_planes(const Points &normals, const InArray &offsets,
+                                       const Points &low, const Points &high,
+                                       const InArray &spread) {
+    const std::size_t count = normals.shape(0);
+    if (offsets.shape(0) != count || low.shape(0) != count || high.shape(0) != count ||
+        spread.shape(0) != count) {
+        throw std::invalid_argument("an offset, a box and a spread per plane");
+    }
+    std::vector<as::CullPlane> planes(count);
+    for (std::size_t j = 0; j < count; ++j) {
+        planes[j].normal = {normals(j, 0), normals(j, 1), normals(j, 2)};
+        planes[j].offset = offsets(j);
+        planes[j].low = {low(j, 0), low(j, 1), low(j, 2)};
+        planes[j].high = {high(j, 0), high(j, 1), high(j, 2)};
+        planes[j].spread = spread(j);
+    }
+    return planes;
+}
+
+nb::tuple pairs_to_numpy(as::Pairs &&out) {
+    const std::size_t n = out.first.size();
+    return nb::make_tuple(to_numpy(std::move(out.first), {n}),
+                          to_numpy(std::move(out.second), {n}));
+}
+
+nb::tuple reflecting_pairs(Points starts, Points ends, Points normals, InArray offsets,
+                           Points low, Points high, InArray spread, InArray end, double offset,
+                           double grazing, std::size_t threads) {
+    if (ends.shape(0) != starts.shape(0)) {
+        throw std::invalid_argument("reflecting_pairs: one end per start of an edge");
+    }
+    const std::vector<as::Vec3> a = points(starts), b = points(ends);
+    const std::vector<as::CullPlane> planes = cull_planes(normals, offsets, low, high, spread);
+    const as::Vec3 e = vec3(end, "end");
+    as::Pairs out;
+    {
+        nb::gil_scoped_release release;
+        out = as::reflecting_pairs(a, b, planes, e, offset, grazing, threads);
+    }
+    return pairs_to_numpy(std::move(out));
+}
+
+nb::tuple reaching_pairs(Points starts, Points ends, Points normals, InArray offsets,
+                         Points low, Points high, InArray spread, InArray end, double offset,
+                         double grazing, Indices row_edge, InArray t_s, InArray rho_s,
+                         double max_distance, double tolerance, double slack,
+                         std::size_t threads) {
+    if (ends.shape(0) != starts.shape(0)) {
+        throw std::invalid_argument("reaching_pairs: one end per start of an edge");
+    }
+    const std::size_t rows = row_edge.shape(0);
+    if (t_s.shape(0) != rows || rho_s.shape(0) != rows) {
+        throw std::invalid_argument("reaching_pairs: a position and a distance per row");
+    }
+    std::vector<std::int64_t> edge(row_edge.data(), row_edge.data() + rows);
+    for (const std::int64_t i : edge) {
+        if (i < 0 || static_cast<std::size_t>(i) >= starts.shape(0)) {
+            throw std::invalid_argument("reaching_pairs: row_edge out of range");
+        }
+    }
+    const std::vector<as::Vec3> a = points(starts), b = points(ends);
+    const std::vector<as::CullPlane> planes = cull_planes(normals, offsets, low, high, spread);
+    const as::Vec3 e = vec3(end, "end");
+    const std::vector<double> ts(t_s.data(), t_s.data() + rows);
+    const std::vector<double> rs(rho_s.data(), rho_s.data() + rows);
+    as::Pairs out;
+    {
+        nb::gil_scoped_release release;
+        out = as::reaching_pairs(a, b, planes, e, offset, grazing, edge, ts, rs, max_distance,
+                                 tolerance, slack, threads);
+    }
+    return pairs_to_numpy(std::move(out));
 }
 
 nb::dict bvh_layout(const as::Bvh &bvh) {
@@ -795,6 +870,28 @@ NB_MODULE(_native, m) {
         .def("layout", &wave_layout,
              "The grid's layout as arrays (see WaveSolver::layout in fdtd.hpp), for "
              "stepping it elsewhere.");
+
+    m.def("reflecting_pairs", &reflecting_pairs, nb::arg("starts"), nb::arg("ends"),
+          nb::arg("normals"), nb::arg("offsets"), nb::arg("low"), nb::arg("high"),
+          nb::arg("spread"), nb::arg("end"), nb::arg("offset"), nb::arg("grazing"),
+          nb::arg("threads"),
+          "The pairs of an edge (starts to ends, n x 3) and a plane (normals, m x 3, and "
+          "offsets) that a path from the edge to end can reflect off, by edge and then plane: "
+          "(edge rows[k], plane columns[k]). low and high (m x 3) box each plane's faces "
+          "that are not openings, spread (m) is how far those faces stray from the plane; "
+          "the ray tests start within offset of the edge, and pairs whose rays meet the "
+          "plane at a cosine below grazing are all kept. threads 0: all cores.");
+
+    m.def("reaching_pairs", &reaching_pairs, nb::arg("starts"), nb::arg("ends"),
+          nb::arg("normals"), nb::arg("offsets"), nb::arg("low"), nb::arg("high"),
+          nb::arg("spread"), nb::arg("end"), nb::arg("offset"), nb::arg("grazing"),
+          nb::arg("row_edge"), nb::arg("t_s"), nb::arg("rho_s"), nb::arg("max_distance"),
+          nb::arg("tolerance"), nb::arg("slack"), nb::arg("threads"),
+          "For rows of an edge (row_edge) with a source side at t_s along it and rho_s from "
+          "it, the planes reflecting_pairs keeps whose image of end makes a path over the "
+          "edge that touches it and is no longer than max_distance, to within slack, with "
+          "the image more than tolerance / 2 off the edge's line: (rows[k], plane "
+          "columns[k]), by row and then plane. Other arguments as for reflecting_pairs.");
 
     m.def("specular_sequences", &specular_sequences, nb::arg("bvh"), nb::arg("source"),
           nb::arg("rays"), nb::arg("max_order"), nb::arg("threads"), nb::arg("passing"),

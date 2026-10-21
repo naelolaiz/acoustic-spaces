@@ -2036,6 +2036,57 @@ Doppler shift of the late part, which is crossfaded. Binaural walks are checked
 against the convolution with a response when the walker stands still (to within 45 dB
 at each ear in the tests), not against a moving head's exact field.
 
+## Edge diffraction in whole cities
+
+Edge diffraction looks, for the source and for each listener, at every pair of an edge
+and a plane they face, for a path that reflects off the plane before or after bending
+over the edge. In a city the edges and the planes both grow with the buildings, so the
+pairs grow with their square: 900 buildings made 20 million pairs per listener, and the
+engine ran out of memory from about 1,600 buildings. Most pairs cannot carry a path.
+The ray tests start just off the edge and head for the mirror image of the source or
+listener in the plane, so a ray from an edge behind the plane never reaches it, and one
+from the rest of the edge meets the plane where the image casts the edge's shadow on
+it, to within a margin that the ray's slant sets. Where that shadow misses the box
+round the plane's faces, no reflection can happen, and the engine leaves the pair out
+before tracing a ray. For a listener's images it also leaves out the paths that would
+touch the edge's line beyond its ends or arrive too late. Pairs whose rays graze the
+plane, or whose image lies too near it for the margin to hold, are all kept. The exact
+tests then run on what is left, as before, so the results do not change.
+
+`validation/city_speed.py` builds cities of n by n blocks 32 m apart, each a building
+of random size (12 to 20 m a side) and height (6 to 30 m), with grass in the streets.
+A source stands in a street crossing in the middle, 1 m up, and two listeners stand 3
+and 5 blocks off. The simulation is the outdoor default: early reflections to the third
+order, the direct sound and first-order reflections bending over the edges, and 50,000
+rays per band for the late part. Times are on 4 cores of a cloud machine:
+
+| Buildings | Faces | Edges | Build (s) | Simulation (s) | Of it diffraction (s) | Pairs tested | Peak memory | Before (s) |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 1,012 | 800 | 0.2 | 0.7 | 0.1 | 8.5 % | 0.2 GB | 1.3 |
+| 400 | 4,012 | 3,200 | 0.7 | 1.2 | 0.5 | 4.3 % | 0.2 GB | 15.1 |
+| 900 | 9,012 | 7,200 | 1.9 | 2.3 | 1.3 | 2.9 % | 0.2 GB | 81.1 (7.1 GB) |
+| 1,600 | 16,012 | 12,800 | 4.2 | 4.4 | 3.3 | 2.7 % | 0.4 GB | out of 14 GB |
+| 3,600 | 36,012 | 28,800 | 10.0 | 22.2 | 20.5 | 3.3 % | 1.6 GB | |
+
+"Before" is the same run with every pair tested, as in earlier versions. The tested
+share stays near 3 %: the shadow of a wall facing the source covers a wedge of the city
+that widens away from it, and only the ray tests tell whether other buildings hide the
+wall. The work therefore still grows with the square of the buildings, and a few
+thousand buildings take tens of seconds per source. Tens of thousands need the map cut
+down to the area round the sources and listeners, or `diffraction: direct`, whose cost
+grows with the edges alone.
+
+**Exactness.** The script's check runs a city of 4 by 4 blocks with the buildings
+turned at random angles and paths that reflect on both sides of an edge. It runs two
+sources, one in a street and one over the roofs, to two listeners, once as the engine
+runs, on one thread and on every core, and once with every pair tested. Every path, its
+energy and its spectrum come out the same bit for bit; the early paths took 0.2 s
+instead of 2.5 s. The same comparison over every example and three test cities, 468
+source and listener pairs with paths reflecting on one side and on both sides of an
+edge, and over two edges, found no difference. The tests check the culling against
+rays traced from random edges to a tilted rectangle of faces, at grazing angles, for
+faces that stray from their plane and for planes with only openings.
+
 ## Wave-based solver
 
 `validation/wave_solver.py` checks the wave solver against theory: closed forms where
@@ -2338,6 +2389,7 @@ python validation/benchmark_1995.py --json benchmark.json   # --far: whole scene
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
 python validation/long_term.py --json long_term.json
 python validation/doppler.py --json doppler.json
+python validation/city_speed.py --json city_speed.json   # --sizes 10 20 30 40 60
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/outdoor_gpu.py   # the outdoor examples on each device: levels and centre times
@@ -2355,7 +2407,7 @@ them the wave solver's, 2 the parabolic equation's), the outdoor measurements' a
 solver's outdoors about 18, the outdoor results' about 3, the terrain's about 4.5, the
 leaves' about 2, the fast field program's about 4, the benchmark's about 55 (much
 longer with `--far`), the weather zones' about 9 (2 the parabolic equation's, 7 the
-mean profile's), the long term's about 0.5, the moving sources' about 3 and each BRAS
+mean profile's), the long term's about 0.5, the moving sources' about 3, the cities' about 1 (2 with `--sizes 10 20 30 40 60`) and each BRAS
 run about 30 minutes (85 in third-octave bands, or half that per room with
 `--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it

@@ -610,3 +610,279 @@ def test_both_sides_in_a_room() -> None:
     if kept is not None:
         assert len(kept) == len(one)
         np.testing.assert_allclose(np.sort(kept.delay_s), np.sort(one.delay_s))
+
+
+# -- many buildings: only the reflections that can happen are tested --------------------
+
+
+def _town(seed: int = 7, both_sides: bool = True) -> Room:
+    """Nine buildings at odd angles on a grass ground, two sources and two listeners
+    among them at different heights."""
+    rng = np.random.default_rng(seed)
+    buildings = []
+    for i in range(3):
+        for j in range(3):
+            centre = np.array([i * 30.0, j * 30.0]) + rng.uniform(-4.0, 4.0, 2)
+            w, d, a = rng.uniform(8.0, 18.0), rng.uniform(8.0, 18.0), rng.uniform(0.0, np.pi)
+            corners = np.array([[-w, -d], [w, -d], [w, d], [-w, d]]) / 2.0
+            turn = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
+            buildings.append(
+                {
+                    "name": f"b{i}{j}",
+                    "footprint": (corners @ turn.T + centre).tolist(),
+                    "height": float(rng.uniform(5.0, 25.0)),
+                }
+            )
+    early = {"diffraction": "first_order"}
+    if both_sides:
+        early["diffraction_reflections"] = "both_sides"
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"ground": {"margin": 15.0}, "buildings": buildings},
+                "materials": {
+                    "lawn": {"impedance": "grass"},
+                    "wall": {"absorption": [0.05] * 8},
+                },
+                "assignments": {"ground": "lawn", "buildings": "wall"},
+                "sources": [
+                    {"name": "s1", "position": [15.0, 15.0, 1.0]},
+                    {"name": "s2", "position": [44.0, 16.0, 30.0]},
+                ],
+                "listeners": [
+                    {"name": "l1", "position": [-8.0, 45.0, 1.5]},
+                    {"name": "l2", "position": [46.0, 47.0, 12.0]},
+                ],
+                "simulation": {"seed": 1, "ir_length_s": 0.6, "early": early},
+            }
+        )
+    )
+
+
+def _all_reflecting(model, edges, bounds, end, planes, among, offset, threads=0):
+    rows, cols = np.nonzero(np.ones((len(among), len(planes)), dtype=bool))
+    return rows.astype(np.int64), cols.astype(np.int64)
+
+
+def _all_reaching(model, edges, bounds, end, planes, among, sides, *rest):
+    rows, cols = np.nonzero(np.ones((len(sides[0]), len(planes)), dtype=bool))
+    return rows.astype(np.int64), cols.astype(np.int64)
+
+
+def _same_paths(a, b) -> None:
+    import dataclasses
+
+    for field in dataclasses.fields(a):
+        x, y = getattr(a, field.name), getattr(b, field.name)
+        if isinstance(x, np.ndarray) or isinstance(y, np.ndarray):
+            assert x is not None and y is not None, field.name
+            assert x.shape == y.shape and np.array_equal(x, y, equal_nan=True), field.name
+
+
+@pytest.mark.parametrize("both_sides", [False, True])
+def test_culled_pairs_leave_the_paths_bit_identical(monkeypatch, both_sides: bool) -> None:
+    """Testing only the pairs of an edge and a plane that a reflection between them can
+    take changes nothing: every path, its energy and its spectrum come out bit for bit
+    as when every pair goes through the ray tests."""
+    from acoustic_spaces.engine import diffraction
+
+    room = _town(both_sides=both_sides)
+    kept, tried = [0], [0]
+    culled, reaching = diffraction._reflecting_pairs, diffraction._reaching_pairs
+
+    def counting(model, edges, bounds, end, planes, among, offset, threads=0):
+        rows, cols = culled(model, edges, bounds, end, planes, among, offset, threads)
+        kept[0] += len(rows)
+        tried[0] += len(among) * len(planes)
+        return rows, cols
+
+    found = 0
+    for source in ("s1", "s2"):
+        for listener in ("l1", "l2"):
+            monkeypatch.setattr(diffraction, "_reflecting_pairs", counting)
+            fast = early_paths(room, source, listener, threads=1)
+            many = early_paths(room, source, listener, threads=3)
+            monkeypatch.setattr(diffraction, "_reflecting_pairs", _all_reflecting)
+            monkeypatch.setattr(diffraction, "_reaching_pairs", _all_reaching)
+            slow = early_paths(room, source, listener, threads=1)
+            monkeypatch.setattr(diffraction, "_reaching_pairs", reaching)
+            _same_paths(fast, slow)
+            _same_paths(many, slow)
+            found += int((fast.diffracted & (fast.order > 0)).sum())
+    assert found > 0  # paths that reflect on the way over an edge are there
+    assert kept[0] < 0.5 * tried[0]  # and most pairs were never tested
+
+
+def _plane(normal, offset, low, high, spread=0.0):
+    return (
+        np.array([normal], float),
+        np.array([offset], float),
+        np.array([low], float),
+        np.array([high], float),
+        np.array([spread], float),
+    )
+
+
+def _kept(starts, ends, plane, end, offset=1e-6, threads=0) -> list[int]:
+    from acoustic_spaces import _native
+
+    rows, cols = _native.reflecting_pairs(
+        np.array(starts, float),
+        np.array(ends, float),
+        *plane,
+        np.array(end, float),
+        offset,
+        0.01,
+        threads,
+    )
+    assert (cols == 0).all()
+    return rows.tolist()
+
+
+def test_an_edge_is_kept_where_its_shadow_falls_on_the_faces() -> None:
+    """The ground's faces from (0, 0) to (10, 10), the listener 2 m over them: an edge
+    whose shadow, cast from the listener's image, falls on them is kept; one whose
+    shadow falls past them, one under the ground and one standing up out of it beside
+    them are not; a post that rises far enough for its shadow to reach them is."""
+    ground = _plane([0, 0, 1], 0.0, [0, 0, 0], [10, 10, 0])
+    end = [5.0, 5.0, 2.0]
+    starts = [
+        [4.0, 5.0, 3.0],  # over the faces
+        [100.0, 5.0, 1.0],  # its shadow falls at x = 68
+        [4.0, 5.0, -1.0],  # under the ground
+        [50.0, 5.0, -5.0],  # a post through the ground, its shadow from x = 18 to 50
+        [12.0, 5.0, -5.0],  # a post whose top's shadow falls at x = 5.6
+    ]
+    ends = [[6.0, 5.0, 3.0], [102.0, 5.0, 1.0], [6.0, 5.0, -1.0], [50, 5, 5], [12, 5, 20]]
+    assert _kept(starts, ends, ground, end) == [0, 4]
+    assert _kept(starts, ends, ground, end, threads=1) == [0, 4]
+
+
+def test_edges_are_kept_where_the_bounds_do_not_hold() -> None:
+    """Rays that graze the plane, faces that stray from it, an image too near it and a
+    plane of openings: kept where a reflection cannot be ruled out, never otherwise."""
+    end = [5.0, 5.0, 0.002]
+    far_edge = ([3000.0, 5.0, 0.5], [3002.0, 5.0, 0.5])  # its shadow falls at x = 17
+    ground = _plane([0, 0, 1], 0.0, [0, 0, 0], [10, 10, 0])
+    assert _kept([far_edge[0]], [far_edge[1]], ground, end) == [0]  # grazing
+    # The edge lies 1 mm under the plane, its faces stray 2 mm from it.
+    under = ([4.0, 5.0, -0.001], [6.0, 5.0, -0.001])
+    assert _kept([under[0]], [under[1]], ground, [5, 5, 2]) == []
+    strayed = _plane([0, 0, 1], 0.0, [0, 0, -0.002], [10, 10, 0.002], spread=0.002)
+    assert _kept([under[0]], [under[1]], strayed, [5, 5, 2]) == [0]
+    # The listener's image lies within reach of the edge's offset: nothing is ruled out.
+    assert _kept([[100.0, 5.0, 1.0]], [[102.0, 5.0, 1.0]], ground, [5, 5, 1e-7]) == [0]
+    # A plane with only openings has an empty box: no reflection off it.
+    empty = _plane([0, 0, 1], 0.0, [np.inf] * 3, [-np.inf] * 3)
+    assert _kept([[4.0, 5.0, 3.0]], [[6.0, 5.0, 3.0]], empty, [5, 5, 2]) == []
+
+
+def test_culling_is_a_superset_of_rays_that_meet_the_faces() -> None:
+    """Random edges and a tilted rectangle of faces: every edge from which a ray (started
+    within the offset of a point of the edge, towards the end's image) meets the
+    rectangle is kept."""
+    rng = np.random.default_rng(3)
+    normal = np.array([0.3, -0.2, 1.0])
+    normal /= np.linalg.norm(normal)
+    u = np.cross(normal, [1.0, 0.0, 0.0])
+    u /= np.linalg.norm(u)
+    v = np.cross(normal, u)
+    centre = np.array([2.0, 1.0, 0.5])
+    corners = centre + np.array([[a, b] for a in (-3, 3) for b in (-2, 2)]) @ np.array([u, v])
+    plane = _plane(normal, normal @ centre, corners.min(0), corners.max(0))
+    offset = 1e-3
+    for trial in range(40):
+        end = centre + normal * rng.uniform(0.5, 5.0) + rng.normal(0, 3, 3) * [1, 1, 0]
+        end += normal * max(0.0, 0.5 - (end - centre) @ normal)
+        image = end - 2.0 * ((end - centre) @ normal) * normal
+        starts = rng.uniform(-15, 15, (60, 3))
+        ends = starts + rng.normal(0, 6, (60, 3))
+        kept = set(_kept(starts, ends, plane, end, offset=offset))
+        for i in range(60):
+            t = rng.uniform(0, 1, (200, 1))
+            jitter = rng.normal(0, 1, (200, 3))
+            jitter *= offset * rng.uniform(0, 1, (200, 1)) / np.linalg.norm(jitter, axis=1)[:, None]
+            start = starts[i] + t * (ends[i] - starts[i]) + jitter
+            gap = (start - centre) @ normal
+            towards = image - start
+            s = gap / np.maximum((-towards) @ normal, 1e-300)
+            meets = (gap > 0) & (s > 0) & (s <= 1)
+            point = start + s[:, None] * towards - centre
+            inside = (np.abs(point @ u) <= 3) & (np.abs(point @ v) <= 2)
+            if (meets & inside).any():
+                assert i in kept, (trial, i)
+
+
+def test_reaching_pairs_keep_every_path_that_touches_its_edge_in_time() -> None:
+    """The native filter of the listener's images takes every pair the exact tests do
+    (the touch on the edge, the length, the distance from the edge's line) and checks its
+    arguments."""
+    from acoustic_spaces import _native
+    from acoustic_spaces.engine.diffraction import _reach
+
+    rng = np.random.default_rng(11)
+    starts = rng.uniform(-20, 20, (30, 3))
+    ends = starts + rng.normal(0, 8, (30, 3))
+    count = 25
+    normals = rng.normal(0, 1, (count, 3))
+    normals /= np.linalg.norm(normals, axis=1)[:, None]
+    offsets = rng.uniform(-30, 30, count)
+    low, high = np.full((count, 3), -1e3), np.full((count, 3), 1e3)
+    spread = np.zeros(count)
+    listener = np.array([1.0, 2.0, 3.0])
+    row_edge = rng.integers(0, 30, 80)
+    t_s, rho_s = rng.uniform(-5, 15, 80), rng.uniform(0.5, 20, 80)
+    max_distance, tolerance = 60.0, 1e-6
+    args = (starts, ends, normals, offsets, low, high, spread, listener, 1e-6, 0.01)
+    rows, cols = _native.reaching_pairs(
+        *args, row_edge, t_s, rho_s, max_distance, tolerance, 1e-6, 0
+    )
+    got = set(zip(rows.tolist(), cols.tolist(), strict=True))
+    edges_kept, planes_kept = _native.reflecting_pairs(*args, 0)
+    for e, j in zip(edges_kept.tolist(), planes_kept.tolist(), strict=True):
+        distance = normals[j] @ listener - offsets[j]
+        image = listener - 2 * distance * normals[j]
+        direction = (ends[e] - starts[e]) / np.linalg.norm(ends[e] - starts[e])
+        length = np.linalg.norm(ends[e] - starts[e])
+        t_r = (image - starts[e]) @ direction
+        rho_r = np.linalg.norm(image - starts[e] - t_r * direction)
+        for r in np.flatnonzero(row_edge == e):
+            ok, *_ = _reach(
+                2,
+                length,
+                t_s[r : r + 1],
+                rho_s[r : r + 1],
+                np.array([t_r]),
+                np.array([rho_r]),
+                1.0,
+                max_distance,
+            )
+            if ok[0] and rho_r > tolerance:
+                assert (int(r), j) in got
+    assert len(got) > 0
+    with pytest.raises(ValueError, match="row_edge"):
+        _native.reaching_pairs(
+            *args, np.array([30]), t_s[:1], rho_s[:1], max_distance, tolerance, 1e-6, 0
+        )
+    with pytest.raises(ValueError, match="per plane"):
+        _native.reflecting_pairs(
+            starts, ends, normals, offsets[:3], low, high, spread, listener, 1e-6, 0.01, 0
+        )
+
+
+def test_lines_that_meet_turn_the_path_down_quietly() -> None:
+    """Two edges that meet at a building's corner draw the shortest path over both to
+    that corner, where its curvature is beyond the largest number: the path is turned
+    down without a floating-point warning (the suite runs with warnings as errors)."""
+    from acoustic_spaces.engine.diffraction import _shortest
+
+    corner = [50.914045212647316, 33.62486697879731]
+    t1, t2, ok = _shortest(
+        np.array([[*corner, 0.0]]),
+        np.array([[0.0, 0.0, 1.0]]),
+        np.array([[*corner, 16.799833860212203]]),
+        np.array([[0.9977720124720059, -0.06671589861167475, 0.0]]),
+        np.array([92.28183640888345, 90.9684650549119, 2.874150844495204]),
+        np.array([60.35877251148018, 42.57767948755837, 21.341134114627412]),
+    )
+    assert not ok[0] and np.isfinite(t1[0]) and np.isfinite(t2[0])

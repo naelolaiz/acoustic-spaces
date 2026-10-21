@@ -168,11 +168,12 @@ class _Edges:
         orientation: np.ndarray,
         coherent: int = 0,
         both_sides: bool = False,
+        threads: int = 0,
     ) -> EdgeDiffraction | None:
         """Diffraction of the sound of source ``name`` at ``source``, coherent in the
         lowest ``coherent`` bands, with paths that reflect on both sides of an edge when
-        ``both_sides``, and the sound over the crests of a terrain; None when off or
-        when there is nothing to bend over."""
+        ``both_sides``, and the sound over the crests of a terrain, on ``threads``
+        threads (0: every core); None when off or when there is nothing to bend over."""
         if mode == "none":
             return None
         if self._edges is None:
@@ -192,6 +193,7 @@ class _Edges:
                 mode=mode,
                 edges=self._edges,
                 both_sides=both_sides,
+                threads=threads,
                 **settings,
             )
         crests = CrestDiffraction.of(self.model, source, **settings)
@@ -284,6 +286,7 @@ def early_paths(
             orientation,
             coherent,
             both_sides=cfg.diffraction_reflections == "both_sides",
+            threads=threads,
         )
         if found is not None:
             paths = found.apply(target, paths, cutoff)
@@ -536,6 +539,7 @@ def simulate(
             orientation,
             coherent,
             both_sides=early_cfg.diffraction_reflections == "both_sides",
+            threads=threads,
         )
         if diffraction is not None:
             say(f"{label}: edge diffraction ({early_cfg.diffraction})")

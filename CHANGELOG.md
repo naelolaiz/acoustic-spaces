@@ -465,6 +465,22 @@
   effective speed of sound is within 0.69 dB (see
   [Validation](docs/validation.md#moving-air-in-the-wave-solver)).
 
+**Whole cities**
+
+- Edge diffraction skips the pairs of an edge and a plane that no path reflecting
+  between them can use, before it traces any ray: the edges behind the plane, and those
+  whose shadow, cast on the plane from the source's or the listener's image, misses the
+  plane's faces. For the listener's images it also skips the paths that would touch the
+  edge's line beyond its ends or arrive too late. The exact tests run on the rest as
+  before, in native code on `simulation.performance.threads` threads, so the results
+  are the same bit for bit. A city of 900 buildings simulates in 2.3 s on four cores
+  instead of 81 s and 7.1 GB, 1,600 buildings, which ran out of 14 GB, in 4.4 s, and
+  3,600 in 22 s. The work still grows with the square of the buildings, as about 3 %
+  of the pairs can carry a path as far as geometry alone tells.
+- `validation/city_speed.py` times cities of growing size and checks the results
+  against testing every pair (see
+  [Validation](docs/validation.md#edge-diffraction-in-whole-cities)).
+
 **Editor**
 
 - While a run, a coverage map or a tuning goes on, the status bar says what runs, its
@@ -507,6 +523,9 @@
   the barrier tables by 0.2 dB, the ground dip at 250 Hz 200 m out) and rooms by
   under 0.0001 dB (the crossovers between the lowest bands' filters are drawn band by
   band, a difference of a hundred-thousandth of the peak).
+- `second_order` diffraction printed a floating-point overflow warning where two
+  edges meet at a corner and the shortest path over both runs through it. The path is
+  still turned down, as it was, and the warning is gone.
 
 ## 3.2.3
 

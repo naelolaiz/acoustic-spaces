@@ -96,6 +96,9 @@ _OFFSET = 1e-6
 #: Angles (radians) this close to a shadow or reflection boundary count as on it; which
 #: side is then decided by whether the specular path was found.
 _ON_BOUNDARY = 1e-9
+#: Below this cosine to a plane's normal (0.6 degrees from grazing) a path is never
+#: culled for missing that plane's faces (see :func:`_reflecting_pairs`).
+_CULL_GRAZING = 0.01
 
 
 # -- the transition function --------------------------------------------------------
@@ -307,12 +310,21 @@ class Edges:
         half = 0.5 * np.pi * self.wedge[:, None]
         return np.cos(half) * self.along + np.sin(half) * self.normal
 
+    def _across(self, index: np.ndarray, points: np.ndarray):
+        v = points - self.start[index]
+        t = np.einsum("ij,ij->i", v, self.direction[index])
+        return t, v - t[:, None] * self.direction[index]
+
+    def distances(self, index: np.ndarray, points: np.ndarray):
+        """Position along edge ``index`` of each point and distance from it, as
+        :meth:`frame` has them."""
+        t, w = self._across(index, points)
+        return t, np.linalg.norm(w, axis=1)
+
     def frame(self, index: np.ndarray, points: np.ndarray):
         """Position along edge ``index`` of each point, distance from it and angle around
         it from face 0, and whether the point lies in the open side of the wedge."""
-        v = points - self.start[index]
-        t = np.einsum("ij,ij->i", v, self.direction[index])
-        w = v - t[:, None] * self.direction[index]
+        t, w = self._across(index, points)
         rho = np.linalg.norm(w, axis=1)
         phi = np.arctan2(
             np.einsum("ij,ij->i", w, self.normal[index]),
@@ -503,7 +515,8 @@ class EdgeDiffraction:
     on the way reflect with the phase of their reflection factors, and the diffracted
     paths carry their pressure (``EarlyReflections.spectrum``) to add to the specular
     paths in pressure (:mod:`~acoustic_spaces.engine.coherent`) instead of through cross
-    terms.
+    terms. Only the pairs of an edge and a plane that a reflection between them can take
+    are tested (:func:`_reflecting_pairs`, on ``threads`` threads, 0 for every core).
     """
 
     def __init__(
@@ -519,6 +532,7 @@ class EdgeDiffraction:
         edges: Edges | None = None,
         coherent: int = 0,
         both_sides: bool = False,
+        threads: int = 0,
     ) -> None:
         if mode not in DIFFRACTION_MODES[1:]:
             raise ValueError(f"unknown diffraction mode {mode!r}")
@@ -533,6 +547,7 @@ class EdgeDiffraction:
         self.reflections = mode != "direct"
         self.both_sides = bool(both_sides) and self.reflections
         self.two_edges = mode == "second_order"
+        self.threads = int(threads)
         self._edge_pair_cache: np.ndarray | None = None
         self.size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
         frequencies, self.slice_hz = band_frequencies(bands=model.bands)
@@ -545,7 +560,13 @@ class EdgeDiffraction:
         self.source_points = np.vstack(
             [self.source, model.mirror(np.broadcast_to(self.source, (len(planes), 3)), planes)]
         )
-        edge, side = self._pairs(len(self.source_planes))
+        # Only the source's images that a path from each edge can reflect towards.
+        self._bounds = _plane_bounds(model) if self.reflections else None
+        rows, cols = self._reflecting(self.source, planes, np.arange(len(self.edges)))
+        edge = np.concatenate([np.arange(len(self.edges)), rows])
+        side = np.concatenate([np.zeros(len(self.edges), np.int64), cols + 1])
+        order = np.lexsort((side, edge))
+        edge, side = edge[order], side[order]
         t, rho, phi, inside = self.edges.frame(edge, self.source_points[side])
         keep = inside & (rho > _TOLERANCE * self.size)
         keep &= self.source_planes[side] != self.edges.plane[edge, 0]
@@ -603,10 +624,37 @@ class EdgeDiffraction:
         distance = self.model.plane_normal @ point - self.model.plane_offset
         return np.flatnonzero(self.model.in_front(distance, _TOLERANCE * self.size))
 
-    def _pairs(self, sides: int) -> tuple[np.ndarray, np.ndarray]:
-        edge = np.repeat(np.arange(len(self.edges)), sides)
-        side = np.tile(np.arange(sides), len(self.edges))
-        return edge, side
+    def _reaching(self, listener, planes, row_edge, t_s, rho_s, max_delay_s):
+        """For source sides on edges ``row_edge`` at ``t_s``, ``rho_s``, the images of
+        ``listener`` in ``planes`` that a path from the edge can reflect towards and whose
+        path over the edge may touch it within ``max_delay_s`` (:func:`_reaching_pairs`):
+        rows and columns, by row and then plane."""
+        if len(planes) == 0 or len(row_edge) == 0:
+            return np.zeros(0, np.int64), np.zeros(0, np.int64)
+        used = np.unique(row_edge)
+        return _reaching_pairs(
+            self.model,
+            self.edges,
+            self._bounds,
+            listener,
+            planes,
+            used,
+            (np.searchsorted(used, row_edge), t_s, rho_s),
+            self.speed_of_sound * max_delay_s,
+            _TOLERANCE * self.size,
+            _OFFSET * self.size,
+            self.threads,
+        )
+
+    def _reflecting(self, end: np.ndarray, planes: np.ndarray, among: np.ndarray):
+        """The pairs of an edge of ``among`` and a plane of ``planes`` that a path from
+        the edge to ``end`` can reflect off, as rows into both (:func:`_reflecting_pairs`)."""
+        if len(planes) == 0:
+            return np.zeros(0, np.int64), np.zeros(0, np.int64)
+        offset = _OFFSET * self.size
+        return _reflecting_pairs(
+            self.model, self.edges, self._bounds, end, planes, among, offset, self.threads
+        )
 
     def apply(
         self, listener: np.ndarray, paths: EarlyReflections, max_delay_s: float
@@ -645,101 +693,98 @@ class EdgeDiffraction:
         # after it (``plane``), 3 both (``plane`` before, ``plane2`` after).
         planes = self._facing(listener) if self.reflections else np.zeros(0, np.int64)
         all_edges = np.arange(len(edges))
+        c = self.speed_of_sound
         t_l, rho_l, phi_l, in_l = edges.frame(all_edges, np.broadcast_to(listener, (len(edges), 3)))
-        ok = in_l[edge] & (rho_l[edge] > tolerance)
+        # Each part keeps the rows whose path touches the edge within max_delay_s:
+        # (edge, source side, listener side, plane, kind, plane2, phi_s, phi_r, rho_s,
+        # t_k, r1, r2).
+        rows = np.flatnonzero(in_l[edge] & (rho_l[edge] > tolerance))
+        e = edge[rows]
+        kind = np.where(self.source_planes[side[rows]] >= 0, 1, 0)
+        ok, t_k, r1, r2 = _reach(
+            kind, edges.length[e], t_s[rows], rho_s[rows], t_l[e], rho_l[e], c, max_delay_s
+        )
+        rows, e = rows[ok], e[ok]
         parts = [
             (
-                edge[ok],
-                self.source_points[side[ok]],
-                np.broadcast_to(listener, (int(ok.sum()), 3)),
-                self.source_planes[side[ok]],
-                np.where(self.source_planes[side[ok]] >= 0, 1, 0),
-                t_s[ok],
-                rho_s[ok],
-                phi_s[ok],
-                t_l[edge[ok]],
-                rho_l[edge[ok]],
-                phi_l[edge[ok]],
-                np.full(int(ok.sum()), -1, dtype=np.int64),
+                e,
+                self.source_points[side[rows]],
+                np.broadcast_to(listener, (len(rows), 3)),
+                self.source_planes[side[rows]],
+                kind[ok],
+                np.full(len(rows), -1, dtype=np.int64),
+                phi_s[rows],
+                phi_l[e],
+                rho_s[rows],
+                t_k[ok],
+                r1[ok],
+                r2[ok],
             )
         ]
         if len(planes):
-            direct = self.source_planes[side] < 0
-            e0, ts0, rs0, ps0 = edge[direct], t_s[direct], rho_s[direct], phi_s[direct]
             images = self.model.mirror(np.broadcast_to(listener, (len(planes), 3)), planes)
-            pe = np.repeat(e0, len(planes))
-            pp = np.tile(np.arange(len(planes)), len(e0))
-            t_i, rho_i, phi_i, in_i = edges.frame(pe, images[pp])
-            plane = planes[pp]
-            ok = in_i & (rho_i > tolerance)
-            ok &= (plane != edges.plane[pe, 0]) & (plane != edges.plane[pe, 1])
-            reps = np.repeat(np.arange(len(e0)), len(planes))[ok]
-            parts.append(
-                (
-                    pe[ok],
-                    np.broadcast_to(self.source, (int(ok.sum()), 3)),
-                    images[pp[ok]],
-                    plane[ok],
-                    np.full(int(ok.sum()), 2),
-                    ts0[reps],
-                    rs0[reps],
-                    ps0[reps],
-                    t_i[ok],
-                    rho_i[ok],
-                    phi_i[ok],
-                    np.full(int(ok.sum()), -1, dtype=np.int64),
-                )
-            )
+            # Images of the listener for the source itself (kind 2) and, with both_sides,
+            # for the source's images too (kind 3, a reflection on each side): those that
+            # a path from the edge can reflect towards and that may touch the edge in time.
+            groups = [(2, np.flatnonzero(self.source_planes[side] < 0))]
             if self.both_sides:
-                # The source's images to the listener's: a reflection on each side.
-                imaged = self.source_planes[side] >= 0
-                e1, s1 = edge[imaged], side[imaged]
-                ts1, rs1, ps1 = t_s[imaged], rho_s[imaged], phi_s[imaged]
-                pe = np.repeat(e1, len(planes))
-                ps = np.repeat(np.arange(len(e1)), len(planes))
-                pp = np.tile(np.arange(len(planes)), len(e1))
-                t_i, rho_i, phi_i, in_i = edges.frame(pe, images[pp])
-                plane_l = planes[pp]
-                ok = in_i & (rho_i > tolerance)
-                ok &= (plane_l != edges.plane[pe, 0]) & (plane_l != edges.plane[pe, 1])
-                rows = ps[ok]
+                groups.append((3, np.flatnonzero(self.source_planes[side] >= 0)))
+            at = np.concatenate([g[1] for g in groups])
+            found, cols = self._reaching(
+                listener, planes, edge[at], t_s[at], rho_s[at], max_delay_s
+            )
+            split = np.searchsorted(found, np.cumsum([len(g[1]) for g in groups]))
+            for (image_kind, _), reps, pp in zip(
+                groups, np.split(found, split[:-1]), np.split(cols, split[:-1]), strict=True
+            ):
+                rows = at[reps]
+                pe = edge[rows]
+                plane = planes[pp]
+                t_i, rho_i = edges.distances(pe, images[pp])
+                ok = (rho_i > tolerance) & (plane != edges.plane[pe, 0])
+                ok &= plane != edges.plane[pe, 1]
+                reach, t_k, r1, r2 = _reach(
+                    image_kind,
+                    edges.length[pe],
+                    t_s[rows],
+                    rho_s[rows],
+                    t_i,
+                    rho_i,
+                    c,
+                    max_delay_s,
+                )
+                sel = np.flatnonzero(ok & reach)
+                _, _, phi_i, in_i = edges.frame(pe[sel], images[pp[sel]])
+                sel, phi_i = sel[in_i], phi_i[in_i]
+                rows = rows[sel]
+                n = len(sel)
+                if image_kind == 2:
+                    src = np.broadcast_to(self.source, (n, 3))
+                    before, after = plane[sel], np.full(n, -1, dtype=np.int64)
+                else:
+                    src = self.source_points[side[rows]]
+                    before, after = self.source_planes[side[rows]], plane[sel]
                 parts.append(
                     (
-                        pe[ok],
-                        self.source_points[s1[rows]],
-                        images[pp[ok]],
-                        self.source_planes[s1[rows]],
-                        np.full(int(ok.sum()), 3),
-                        ts1[rows],
-                        rs1[rows],
-                        ps1[rows],
-                        t_i[ok],
-                        rho_i[ok],
-                        phi_i[ok],
-                        plane_l[ok],
+                        pe[sel],
+                        src,
+                        images[pp[sel]],
+                        before,
+                        np.full(n, image_kind),
+                        after,
+                        phi_s[rows],
+                        phi_i,
+                        rho_s[rows],
+                        t_k[sel],
+                        r1[sel],
+                        r2[sel],
                     )
                 )
-        (edge, src, rcv, plane, kind, t_s, rho_s, phi_s, t_r, rho_r, phi_r, plane2) = (
+        (edge, src, rcv, plane, kind, plane2, phi_s, phi_r, rho_s, t_k, r1, r2) = (
             np.concatenate([p[i] for p in parts]) for i in range(12)
         )
-
-        # The point on the edge where the path makes equal angles with it on both sides.
-        t_k = t_s + (t_r - t_s) * rho_s / (rho_s + rho_r)
-        r1 = np.hypot(rho_s, t_k - t_s)
-        r2 = np.hypot(rho_r, t_r - t_k)
-        # At an end of the edge that lies in the plane, the path reflecting there before
-        # the edge and the one reflecting after it are the same path: only the first
-        # counts at the start of the edge, only the second at its end.
-        length = edges.length[edge]
-        ok = np.where(kind == 2, (t_k > 0.0) & (t_k <= length), (t_k >= 0.0) & (t_k < length))
-        ok &= (kind != 3) | ((t_k > 0.0) & (t_k < length))  # at an end, one of those two
-        ok &= (r1 + r2) / self.speed_of_sound <= max_delay_s
-        if not ok.any():
+        if len(edge) == 0:
             return None
-        sel = np.flatnonzero(ok)
-        edge, src, rcv, plane, kind = edge[sel], src[sel], rcv[sel], plane[sel], kind[sel]
-        t_k, r1, r2, plane2 = t_k[sel], r1[sel], r2[sel], plane2[sel]
-        phi_s, phi_r, rho_s = phi_s[sel], phi_r[sel], rho_s[sel]
         point = edges.start[edge] + t_k[:, None] * edges.direction[edge]
 
         # Unobstructed, with the reflection on the expected plane before or after the
@@ -1440,12 +1485,15 @@ def _shortest(a, d1, b, d2, source, listener, iterations: int = 50):
         u1, v1 = np.einsum("ij,ij->i", d1, u) / r0, np.einsum("ij,ij->i", d1, v) / r1
         v2, w2 = np.einsum("ij,ij->i", d2, v) / r1, np.einsum("ij,ij->i", d2, w) / r2
         g1, g2 = u1 - v1, v2 - w2
-        h11 = (1.0 - u1**2) / r0 + (1.0 - v1**2) / r1
-        h22 = (1.0 - v2**2) / r1 + (1.0 - w2**2) / r2
-        h12 = -(cross - v1 * v2) / r1
-        det = h11 * h22 - h12**2
-        solve = det > 1e-12 * np.maximum(h11 * h22, 1e-300)
-        with np.errstate(divide="ignore", invalid="ignore"):
+        # Lines that meet draw the path to where they meet, and the curvature there
+        # grows without bound (beyond the largest number: no step is solved for, and the
+        # path, with no length between the lines, is turned down).
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            h11 = (1.0 - u1**2) / r0 + (1.0 - v1**2) / r1
+            h22 = (1.0 - v2**2) / r1 + (1.0 - w2**2) / r2
+            h12 = -(cross - v1 * v2) / r1
+            det = h11 * h22 - h12**2
+            solve = det > 1e-12 * np.maximum(h11 * h22, 1e-300)
             s1 = np.where(solve, -(h22 * g1 - h12 * g2) / det, -g1 / np.maximum(h11, 1e-12))
             s2 = np.where(solve, -(h11 * g2 - h12 * g1) / det, -g2 / np.maximum(h22, 1e-12))
         now = r0 + r1 + r2
@@ -1477,6 +1525,135 @@ def _match(queries, query_order, images, orders, index, tolerance, chunk: int = 
         hit = d[np.arange(len(q)), best] <= tolerance
         out[begin : begin + chunk] = np.where(hit, index[best], -1)
     return out
+
+
+def _plane_bounds(model: TraceModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(P, 3) the lowest and highest corner of the box round each plane's faces that are
+    not openings, where a reflection off the plane can be (empty boxes, lowest above
+    highest, for planes of openings only), and (P,) how far those faces' corners stray
+    from the plane at most (faces join a plane within a tolerance)."""
+    count = model.plane_count
+    low = np.full((count, 3), np.inf)
+    high = np.full((count, 3), -np.inf)
+    spread = np.zeros(count)
+    solid = np.flatnonzero(~model.transparent)
+    corners = np.asarray(model.room.mesh.vertices, dtype=float)[model.room.mesh.faces[solid]]
+    corners = corners.reshape(-1, 3)
+    plane = np.repeat(model.face_plane[solid], 3)
+    np.minimum.at(low, plane, corners)
+    np.maximum.at(high, plane, corners)
+    along = np.einsum("ij,ij->i", corners, model.plane_normal[plane])
+    np.maximum.at(spread, plane, np.abs(along - model.plane_offset[plane]))
+    return low, high, spread
+
+
+def _reflecting_pairs(
+    model: TraceModel,
+    edges: Edges,
+    bounds: tuple[np.ndarray, np.ndarray, np.ndarray],
+    end: np.ndarray,
+    planes: np.ndarray,
+    among: np.ndarray,
+    offset: float,
+    threads: int = 0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """The pairs of an edge of ``among`` and a plane of ``planes`` (which ``end`` lies in
+    front of) for which a path from the edge to ``end`` can reflect off one of the
+    plane's faces, as rows into ``among`` and ``planes``, by edge and then plane: the
+    others cannot, and the ray tests of :func:`_reflect` would turn them down.
+
+    The rays start within ``offset`` of a point of the edge (twice that by a very short
+    edge), as :meth:`EdgeDiffraction._combos` starts them, and head for ``end``'s image.
+    One that starts behind the plane (on the far side from ``end``, beyond where its
+    faces stray from it) does not reach it. One from the rest of the edge meets the plane
+    at the shadow of its starting point cast from the image, which lies between the
+    shadows of the ends of that part of the edge, to within ``4 offset`` plus twice the
+    faces' stray, times one plus one over the smaller of the cosines of the rays from
+    the image to those ends to the plane's normal: the reflection can only be on a face
+    whose box takes in some of that stretch. Pairs whose rays graze the plane, or whose
+    image lies too near it for those bounds, are all kept (the native
+    ``reflecting_pairs`` does the work)."""
+    from acoustic_spaces import _native
+
+    if len(among) == 0 or len(planes) == 0:
+        return np.zeros(0, np.int64), np.zeros(0, np.int64)
+    low, high, spread = (np.ascontiguousarray(b[planes]) for b in bounds)
+    rows, cols = _native.reflecting_pairs(
+        np.ascontiguousarray(edges.start[among]),
+        np.ascontiguousarray(edges.end[among]),
+        np.ascontiguousarray(model.plane_normal[planes], dtype=float),
+        np.ascontiguousarray(model.plane_offset[planes], dtype=float),
+        low,
+        high,
+        spread,
+        np.asarray(end, dtype=float),
+        float(offset),
+        _CULL_GRAZING,
+        int(threads),
+    )
+    return np.asarray(rows, np.int64), np.asarray(cols, np.int64)
+
+
+def _reaching_pairs(
+    model: TraceModel,
+    edges: Edges,
+    bounds: tuple[np.ndarray, np.ndarray, np.ndarray],
+    end: np.ndarray,
+    planes: np.ndarray,
+    among: np.ndarray,
+    sides: tuple[np.ndarray, np.ndarray, np.ndarray],
+    max_distance: float,
+    tolerance: float,
+    offset: float,
+    threads: int = 0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """For source sides ``sides`` (rows of an edge of ``among``, the position along it and
+    the distance from it), the planes of ``planes`` that :func:`_reflecting_pairs` keeps
+    for the edge and whose image of ``end`` makes a path over the edge that touches it
+    (:func:`_reach`) no further than ``max_distance``, by a little more than the
+    exact tests, with the image more than half ``tolerance`` off the edge's line: rows
+    into ``sides`` and into ``planes``, by row and then plane."""
+    from acoustic_spaces import _native
+
+    low, high, spread = (np.ascontiguousarray(b[planes]) for b in bounds)
+    row_edge, t_s, rho_s = sides
+    rows, cols = _native.reaching_pairs(
+        np.ascontiguousarray(edges.start[among]),
+        np.ascontiguousarray(edges.end[among]),
+        np.ascontiguousarray(model.plane_normal[planes], dtype=float),
+        np.ascontiguousarray(model.plane_offset[planes], dtype=float),
+        low,
+        high,
+        spread,
+        np.asarray(end, dtype=float),
+        float(offset),
+        _CULL_GRAZING,
+        np.ascontiguousarray(row_edge, dtype=np.int64),
+        np.ascontiguousarray(t_s, dtype=float),
+        np.ascontiguousarray(rho_s, dtype=float),
+        float(max_distance),
+        float(tolerance),
+        float(offset),
+        int(threads),
+    )
+    return np.asarray(rows, np.int64), np.asarray(cols, np.int64)
+
+
+def _reach(kind, length, t_s, rho_s, t_r, rho_r, speed_of_sound, max_delay_s):
+    """Where along the edge a path from a source side at ``t_s``, ``rho_s`` to a listener
+    side at ``t_r``, ``rho_r`` makes equal angles with it on both sides, the lengths on
+    either side, and whether that point lies on the edge and the path ends by
+    ``max_delay_s``."""
+    t_k = t_s + (t_r - t_s) * rho_s / (rho_s + rho_r)
+    r1 = np.hypot(rho_s, t_k - t_s)
+    r2 = np.hypot(rho_r, t_r - t_k)
+    # At an end of the edge that lies in the plane, the path reflecting there before the
+    # edge and the one reflecting after it are the same path: only the first counts at
+    # the start of the edge, only the second at its end.
+    ok = np.where(kind == 2, (t_k > 0.0) & (t_k <= length), (t_k >= 0.0) & (t_k < length))
+    ok &= (kind != 3) | ((t_k > 0.0) & (t_k < length))  # at an end, one of those two
+    ok &= (r1 + r2) / speed_of_sound <= max_delay_s
+    return ok, t_k, r1, r2
 
 
 def _first_solid(model: TraceModel, start, direction, length, ignore, through=None):

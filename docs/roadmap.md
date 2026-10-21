@@ -203,6 +203,10 @@ Outdoor acoustics, in steps:
   against ray theory and the parabolic equation in the `windy` preset
   (`validation/wave_wind.py`). Runs on the CPU; the wind's shear term on the air's
   motion stays out. Without it nothing changes.
+- [x] O19 Whole cities: edge diffraction skips the pairs of an edge and a wall or roof
+  that no path can use before it traces a ray, on every core, with the same results:
+  900 buildings simulate in about 2 s on four cores instead of 81 s, and 3,600 in
+  about 22 s, where 1,600 ran out of memory (`validation/city_speed.py`).
 - [ ] A wide-angle parabolic equation (split-step Padé) for gradients that bend sound
   through large angles over several kilometres, where the narrow-angle one strays.
 

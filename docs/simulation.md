@@ -260,6 +260,15 @@ about 17 ms per source and listener. `second_order` costs more, as it looks at p
 edges: in a hall with 16 edges, the early stage takes 170 ms per source and listener
 with it, 120 ms with `first_order` and 90 ms without diffraction.
 
+Paths that reflect before or after an edge pair every edge with every plane the source
+or the listener faces, which in a whole city grows with the square of the buildings.
+Most of those pairs cannot carry a path, because the plane's faces lie nowhere near
+where a ray from the edge would meet the plane: the engine leaves them out before it
+traces a ray, on `simulation.performance.threads` threads, and the results are the
+same bit for bit. A city of 900 buildings simulates in about 2 s on four cores, and
+3,600 in about 22 s (see [Outdoor scenes](outdoor.md#buildings-from-a-map) and the
+[validation report](validation.md#edge-diffraction-in-whole-cities)).
+
 ## Low frequencies: early reflections in pressure
 
 At low frequencies reflections that arrive a few milliseconds apart do not add in
