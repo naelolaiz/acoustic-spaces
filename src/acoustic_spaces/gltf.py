@@ -3,10 +3,11 @@
 The file holds the room, one object per surface name with a see-through material per
 scene material (its absorption and scattering per octave band as extras, which Blender
 shows as custom properties), an outdoor scene's trees, hedges and belts of trees as
-see-through green volumes, and the sources and listeners turned the way they face,
-with an arrow along the aim. It can also hold early reflection paths as lines, one
-object per order, and sound particles as an animation in slow motion: by default
-100 ms of sound play over 4 s. Blender opens it with File > Import > glTF 2.0.
+see-through green volumes and its wind as the 3D view draws it, and the sources and
+listeners turned the way they face, with an arrow along the aim. It can also hold
+early reflection paths as lines, one object per order, and sound particles as an
+animation in slow motion: by default 100 ms of sound play over 4 s. Blender opens it
+with File > Import > glTF 2.0.
 
 Scenes are Z-up and glTF is Y-up: a point (x, y, z) is written as (x, z, -y), which
 the importer turns back.
@@ -29,7 +30,9 @@ from acoustic_spaces.viz import (
     MATERIAL_COLOURS,
     SOURCE_COLOUR,
     VEGETATION_COLOUR,
+    WIND_COLOUR,
     path_groups,
+    wind_drawing,
 )
 
 if TYPE_CHECKING:
@@ -44,6 +47,8 @@ SLOW_MOTION = 40.0
 SURFACE_ALPHA = 0.4
 #: Opacity of the vegetation's volumes.
 VEGETATION_ALPHA = 0.3
+#: Opacity of the wind's arrows and of the weather zones' walls, as in the 3D view.
+WIND_ALPHA, ZONE_ALPHA = 0.85, 0.12
 UNASSIGNED_GREY = "#9e9e9e"
 PARTICLE_COLOUR = "#ffd166"
 
@@ -120,6 +125,34 @@ def _arrow(length: float) -> tuple[np.ndarray, np.ndarray]:
     """An arrow along +x from the origin, shaped as the 3D view draws them."""
     shaft, tip, head = 0.05 * length, 0.1 * length, 0.75 * length
     return _lathe([(0.0, 0.0), (0.0, shaft), (head, shaft), (head, tip), (length, 0.0)], 16)
+
+
+def _arrows(starts, vectors, radius: float) -> tuple[np.ndarray, np.ndarray]:
+    """Arrows from each of ``starts`` (n, 3) along and as long as its row of ``vectors``,
+    as one surface, shaped as the 3D view draws the wind's: tips ``radius`` metres in
+    radius (less on an arrow too short for them)."""
+    vertices, triangles, count = [], [], 0
+    for start, vector in zip(starts, vectors, strict=True):
+        length = float(np.linalg.norm(vector))
+        if length <= 0.0:
+            continue
+        tip = min(radius, 0.2 * length)
+        head = length - min(0.35 * length, 2.5 * tip)
+        shape, faces = _lathe(
+            [(0.0, 0.0), (0.0, 0.4 * tip), (head, 0.4 * tip), (head, tip), (length, 0.0)], 12
+        )
+        along = vector / length
+        side = np.cross([0.0, 0.0, 1.0], along)
+        if np.linalg.norm(side) < 1e-9:
+            side = np.array([0.0, 1.0, 0.0])
+        side /= np.linalg.norm(side)
+        turn = np.column_stack([along, side, np.cross(along, side)])
+        vertices.append(shape @ turn.T + start)
+        triangles.append(faces + count)
+        count += len(shape)
+    if not vertices:
+        return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.int64)
+    return np.vstack(vertices), np.vstack(triangles)
 
 
 def _marker_radius(room: Room) -> float:
@@ -300,6 +333,53 @@ def _add_vegetation(doc: _Document, room: Room) -> None:
         doc.node(shape.name, group, mesh=index, extras={"kind": shape.kind})
 
 
+def _add_wind(doc: _Document, room: Room, field: bool, profile: bool) -> None:
+    """Outdoors, the wind as the 3D view draws it, under a node named with the scene's
+    wind ("wind 5.0 m/s at 10 m"): the arrows over the ground (``field``), each weather
+    zone as see-through walls named with its weather, and a mast with the wind's profile
+    in each weather where it blows (``profile``), its pole and curve as lines. Blender
+    shows no labels: the names and the custom properties carry the speeds."""
+    drawing = wind_drawing(room, field=field, profile=profile)
+    if drawing is None or not (drawing.walls or len(drawing.starts) or drawing.masts):
+        return
+    group = doc.node(drawing.key or "wind")
+    if drawing.walls:
+        material = doc.material("weather zone", WIND_COLOUR, ZONE_ALPHA)
+        zones = doc.node("weather zones", group)
+        for k, floor, top, text in drawing.walls:
+            n = len(floor)
+            j = np.arange(n)
+            later = (j + 1) % n
+            walls = np.vstack(
+                [np.column_stack([j, later, n + later]), np.column_stack([j, n + later, n + j])]
+            )
+            mesh = doc.mesh(text, np.vstack([floor, top]), walls, material)
+            doc.node(text, zones, mesh=mesh, extras={"weather_zone": k})
+    shown = doc.material("wind", WIND_COLOUR, WIND_ALPHA)
+    if len(drawing.starts):
+        arrows = _arrows(drawing.starts, drawing.vectors, drawing.radius)
+        doc.node("wind arrows", group, mesh=doc.mesh("wind arrows", *arrows, shown))
+    if drawing.masts:
+        pole = doc.material("wind mast", "#ffffff", glow=True)
+        line = doc.material("wind profile", WIND_COLOUR, glow=True)
+    for mast in drawing.masts:
+        extras = {
+            "heights_m": [round(float(h), 3) for h in mast.heights],
+            "wind_m_s": [round(float(v), 3) for v in mast.speeds],
+        }
+        title = "profile" if mast.zone is None else f"profile in {mast.zone}"
+        node = doc.node(f"{title}: {mast.label[1]}", group, extras=extras)
+        ends = np.array([mast.base, mast.base + [0.0, 0.0, mast.top]])
+        poles = doc.mesh("pole", ends, np.array([[0, 1]]), pole, mode=_LINES)
+        doc.node(f"{title} pole", node, mesh=poles)
+        steps = np.arange(len(mast.curve) - 1)
+        lines = np.column_stack([steps, steps + 1])
+        curve = doc.mesh("curve", mast.curve, lines, line, mode=_LINES)
+        doc.node(f"{title} curve", node, mesh=curve)
+        arrows = _arrows(mast.starts, mast.vectors, mast.radius)
+        doc.node(f"{title} arrows", node, mesh=doc.mesh("arrows", *arrows, shown))
+
+
 def _add_points(doc: _Document, room: Room, radius: float) -> None:
     """Sources and listeners as spheres turned the way they face, with an arrow along
     the aim (for listeners, and for sources that are not omnidirectional)."""
@@ -434,8 +514,13 @@ def export_gltf(
     particles: Particles | None = None,
     slow_motion: float = SLOW_MOTION,
     db_range: float = 60.0,
+    wind: bool = True,
+    wind_profile: bool = True,
 ) -> None:
     """Write ``room`` with its sources and listeners to ``path`` as glTF 2.0 (``.glb``).
+
+    Outdoors, ``wind`` adds the wind's arrows and the weather zones and
+    ``wind_profile`` the masts of its profile, as the 3D view draws them.
 
     ``paths`` (from :func:`acoustic_spaces.engine.early_paths` or a response's
     ``early``) adds the early reflection paths, coloured by order as in the 3D view.
@@ -451,6 +536,8 @@ def export_gltf(
     radius = _marker_radius(room)
     _add_room(doc, room)
     _add_vegetation(doc, room)
+    if wind or wind_profile:
+        _add_wind(doc, room, wind, wind_profile)
     _add_points(doc, room, radius)
     if paths is not None and len(paths):
         _add_paths(doc, paths)

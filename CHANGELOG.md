@@ -597,7 +597,9 @@
   wind profile** stands a mast in the 3D view in each weather where the wind blows, with
   arrows up it and a curve: how the wind grows with height over the ground. The scene
   tree's new **Wind** entry has an eye for each and lists the weather zones, which
-  show their weather in the scene's form when selected. Before, only the **Show the
+  show their weather in the scene's form when selected. The export to Blender (`export`
+  and the editor's) holds the same arrows, zones and masts, named with their speeds;
+  `export_gltf(wind=, wind_profile=)` leaves them out. Before, only the **Show the
   profile** plot showed the wind, and nothing showed a weather zone's.
 - **File > Export particle animation to Blender** asks how much of the sound to animate,
   how slowly and how many particles, as `export --duration --slow-motion --count` do;

@@ -405,7 +405,9 @@ the sources and listeners, and none stand inside a building taller than them. In
 editor, **View > Show wind profile** also stands a mast in each weather where the wind
 blows, the scene's and each zone's: arrows at heights evenly up to the wind's height
 and a curve through the wind at every height between, how it grows from the still air
-at the ground; **Show the profile** plots the same in numbers.
+at the ground; **Show the profile** plots the same in numbers. The export to Blender
+holds the same arrows, zones and masts (see
+[Exporting to Blender](editor.md#exporting-to-blender)).
 
 ### Weather zones
 

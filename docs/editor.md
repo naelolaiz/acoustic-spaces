@@ -265,6 +265,13 @@ the scene's (+z up, metres).
   per octave band. Sources (red) and listeners (blue) are spheres turned the way they
   face, with an arrow along the aim. Outdoors, each tree, hedge or belt of trees is a
   see-through green object under `vegetation`, and the sky is left out.
+- Outdoors with wind or temperature, the wind is drawn as in the 3D view, under an
+  object named with the scene's wind (`wind 2.5 m/s at 10 m`): `wind arrows`, the
+  weather zones as see-through walls named with their weather (`lake: 3.5 m/s,
+  17.0 °C`), and a mast per weather where the wind blows (`profile in lake: 3.0 m/s at
+  2 m`), its pole and curve as lines and its arrows, with the heights and speeds as
+  custom properties. Blender has no labels: the names carry them. The editor exports
+  what **View > Show wind** and **Show wind profile** show.
 - `--paths` adds the early reflection paths from `--source` to `--listener` up to
   `--max-order`, as long after the direct sound as a simulation keeps them
   (`transition_ms`, or the mixing time with the statistical late method, see
@@ -278,4 +285,6 @@ the scene's (+z up, metres).
   **Sound to animate**, **Slow motion** and **Particles**. Outdoors it starts with sound
   enough to reach the farthest listener (a tenth more than the direct sound takes,
   rounded up to 100 ms), slowed down to last about the default's 4 s: 1900 ms at 2.1×
-  for the `lakeside_concert` example's village 568 m away.
+  for the `lakeside_concert` example's village 568 m away. Outdoors most particles soon
+  leave through the open sky and fly on straight. Blender draws a dashed line from each
+  particle to the object that holds them; **Overlays > Relationship Lines** hides them.

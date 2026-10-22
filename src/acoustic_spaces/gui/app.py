@@ -1355,7 +1355,15 @@ class MainWindow(QMainWindow):
                         room, source.name, count=settings.count, duration=settings.duration / 1e3
                     )
                 paths = None if response is None else response.early
-                export_gltf(room, path, paths=paths, particles=traced, slow_motion=slow)
+                export_gltf(
+                    room,
+                    path,
+                    paths=paths,
+                    particles=traced,
+                    slow_motion=slow,
+                    wind=self.wind_action.isChecked(),
+                    wind_profile=self.wind_profile_action.isChecked(),
+                )
         except (OSError, ValueError) as exc:
             self._error(_("Could not export"), str(exc))
             return False
