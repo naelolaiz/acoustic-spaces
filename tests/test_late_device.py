@@ -69,23 +69,22 @@ def test_what_only_the_cpu_traces_stays_there(reference, machine) -> None:
     assert plan.device == "cpu" and "face groups" in plan.reason
 
 
-def test_direct3d_12_leaves_bent_rays_and_vegetation_to_the_cpu(
+def test_direct3d_12_leaves_bent_rays_through_vegetation_to_the_cpu(
     reference, machine, monkeypatch
 ) -> None:
-    """On Direct3D 12 the GPU tracer's bent rays and vegetation disagreed with the CPU's,
-    so a run with either goes to the CPU there, saying why; other runs, and other
-    backends, keep the GPU."""
+    """Direct3D 12's shader compiler takes more than an hour over the GPU tracer with
+    both rays bent by the air and vegetation, so a run with both goes to the CPU there,
+    saying why; a run with either alone, and other backends, keep the GPU."""
     values = _arguments(reference, "vector")
     bent = {"atmosphere": np.array([[0.0, 343.0, 0.0], [10.0, 344.0, 1.0]])}
     plants = {"plants": np.zeros((1, 8)), "plant_upright": np.zeros(1, np.uint8)}
     for backend, declined in [("Vulkan", False), ("D3D12", True)]:
         adapter = SimpleNamespace(info={"backend_type": backend})
         monkeypatch.setattr(gpu, "_adapter", lambda adapter=adapter: adapter)
-        assert ray_device.choose("gpu", values) == ray_device.Plan("gpu")
-        for extra in (bent, plants, bent | plants):
-            plan = ray_device.choose("gpu", values | extra)
-            assert (plan.device == "cpu" and "Direct3D 12" in plan.reason) == declined
-        assert gpu_tracer.outdoors_declined(False, False) == ""
+        for extra in ({}, bent, plants):
+            assert ray_device.choose("gpu", values | extra) == ray_device.Plan("gpu")
+        plan = ray_device.choose("gpu", values | bent | plants)
+        assert (plan.device == "cpu" and "Direct3D 12" in plan.reason) == declined
 
 
 def test_the_open_sky_lets_sound_out_on_any_device() -> None:

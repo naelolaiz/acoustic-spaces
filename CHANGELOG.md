@@ -329,9 +329,11 @@
   ray count: `validation/outdoor_gpu.py` compares the two on the outdoor examples
   (see [Validation](docs/validation.md#outdoor-scenes-on-the-gpu)). The shader is
   compiled with only what a scene has of the outdoors, so rooms compile as fast as
-  before. On Direct3D 12 (Windows) bent rays and vegetation stay on the CPU, which the
-  run says: there the GPU's results for them disagreed with the CPU's, by 7 to 34 % on
-  the software GPU of Windows CI.
+  before. On Windows, Direct3D 12's shader compiler (FXC) compiles the GPU's shaders
+  without its optimizer, which got the vegetation wrong (the driver optimizes them
+  anyway, and they compile as fast); there a scene with both bent rays and vegetation
+  stays on the CPU, which the run says, as FXC takes more than an hour over the tracer
+  with both.
 - The wave solver in wind and temperature steps its grid on the GPU too
   (`simulation.wave.device: gpu`, `both` and `auto`), with the speed of sound per cell,
   in its walls, its source and its matched layer, agreeing with the CPU to rounding.
@@ -672,6 +674,10 @@
 - The native code no longer fuses multiplies and adds that the source keeps apart, as
   Apple's compiler did by default on Apple silicon: results there now round as on the
   other platforms, last bits included.
+- On Windows with Python 3.10 every GPU run printed four warnings that Vulkan lacked an
+  extension (`Unable to find extension: VK_KHR_surface`...): wgpu 0.31, the last for
+  Python 3.10, warns of each one on a computer without a Vulkan driver, where Direct3D
+  12 does the work. They said nothing to a user and are left out now.
 
 ## 3.2.3
 

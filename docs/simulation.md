@@ -491,10 +491,10 @@ simulation:
   agree statistically, not ray for ray. The tests trace main's stored runs on the GPU
   and check that they land within the spread of the CPU's own results over seeds. The
   shader is compiled once per session with only what the scene has of the outdoors
-  (bent rays, vegetation), in seconds. On Direct3D 12 (Windows) the GPU leaves rays
-  bent by the air and rays through vegetation to the CPU, which the run says: there its
-  results for them disagreed with the CPU's, by 7 to 34 % on the software GPU of
-  Windows CI.
+  (bent rays, vegetation), in seconds. On Direct3D 12 (Windows) its compiler (FXC)
+  takes a minute or two over either, without its optimizer, which got the vegetation
+  wrong; it would take more than an hour over both, so the GPU leaves a scene with rays
+  bent by the air and vegetation to the CPU there, which the run says.
 - `both`: the CPU (on all its threads but one, which keeps the GPU busy) and the GPU
   share the rays, each taking the next part as soon as it is done with the last, so the
   faster one traces more (if the GPU declines a part at run time, the CPU traces it and

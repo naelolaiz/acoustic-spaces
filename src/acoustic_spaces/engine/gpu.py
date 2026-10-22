@@ -18,6 +18,8 @@ next, and so do the two sets of branch velocities, by the step's parity.
 from __future__ import annotations
 
 import functools
+import logging
+import sys
 from typing import Literal
 
 import numpy as np
@@ -235,14 +237,38 @@ def _wgpu(what: str = "the wave solver"):
     return wgpu
 
 
+def _not_a_vulkan_setup_note(record: logging.LogRecord) -> bool:
+    """Whether wgpu's log ``record`` is anything but a note on setting up Vulkan: one of
+    the Vulkan loader's, or the line after it naming the Vulkan instance it is about, or
+    wgpu's own on an extension the computer's Vulkan lacks (all of them, with no Vulkan
+    driver; wgpu 0.31, the last for Python 3.10, warns of each)."""
+    message = record.getMessage()
+    return not (
+        "[Loader Message" in message
+        or message.startswith("\tobjects: (type: INSTANCE,")
+        or message.startswith("Unable to find extension: ")
+    )
+
+
 def _primary_backends() -> None:
     """Have wgpu use Vulkan, Metal or Direct3D 12 only, never its OpenGL backend: setting
     that up through EGL aborts the whole process (a Rust panic Python cannot catch) when
-    the editor's 3D view already holds an OpenGL context."""
+    the editor's 3D view already holds an OpenGL context. On Windows, Direct3D 12's
+    shader compiler (FXC) also goes without its optimizer (wgpu's debug flag), which
+    miscompiled the ray tracer's vegetation: rays scattered in it came out where they
+    had started. The driver optimizes the shader anyway, and the compile takes no
+    longer. (Only flags every wgpu from 0.31 on knows: an unknown one sets nothing.)
+    The debug flag also has wgpu pass on the Vulkan loader's notes, such as finding no
+    driver on a computer with Direct3D 12 only, and wgpu 0.31 warns of every extension
+    such a computer's Vulkan lacks: they say nothing to a user, and are left out of
+    wgpu's log."""
+    flags = ["Debug"] if sys.platform == "win32" else ["Default"]
+    if sys.platform == "win32":
+        logging.getLogger("wgpu").addFilter(_not_a_vulkan_setup_note)
     try:
         from wgpu.backends.wgpu_native.extras import set_instance_extras
 
-        set_instance_extras(backends=["Primary"])
+        set_instance_extras(backends=["Primary"], flags=flags)
     except (ImportError, KeyError, RuntimeError):  # another backend, or set up already
         pass
 

@@ -1949,13 +1949,20 @@ same curve: ends within 0.32 mm and times within 4e-6 s, over 400 m.
 
 **Energy and time.** In a field 400 m across under a 200 m sky, 200,000 rays per run,
 listeners 100 m off downwind, upwind, across the wind and 60 m up: the energy per
-listener and band and the mean time it arrives at, the rays bent up out of the field
-and the energy over time the weight window reads, agree with the CPU's within the
-noise of the ray count, in a warmer sky (sound bent down), a cooler one (bent up) and
-a wind with a cooler sky. Through a crown of foliage and a stand of stems, the energy
-each band loses, the energy scattered on and where it goes, with and without an
-atmosphere, agree the same way; a tree belt of 17 media is declined with its reason
-and traced on the CPU.
+listener and band and the mean time it arrives at, the rays bent up out of the field and
+the energy over time the weight window reads, agree with the CPU's within the noise of
+the ray count, in a warmer sky (sound bent down), a cooler one (bent up) and a wind with
+a cooler sky. The energy over time is compared as what is left of it from each 10 ms
+window on: in single precision a ray bent over many chords and bounces arrives a little
+sooner or later now and then, and its energy lands in the next window (on every GPU, and
+more on Direct3D 12's software GPU in Windows CI). With only mirror reflections in the
+warmer sky, one window held 7 % less than the CPU's and the next 4 % more (15 % and 8 %
+on Direct3D 12), while what is left from each window on agreed to 0.1 % (0.2 % on
+Direct3D 12) wherever it was at least a hundredth of the whole: a shift the weight
+window, rounded to quarter octaves, cannot tell. Through a crown of foliage and a stand
+of stems, the energy each band loses, the energy scattered on and where it goes, with
+and without an atmosphere, agree the same way; a tree belt of 17 media is declined with
+its reason and traced on the CPU.
 
 **Whole runs.** `validation/outdoor_gpu.py` simulates the outdoor examples with their own
 settings once per device and once more on the CPU with the next seed, and compares the
