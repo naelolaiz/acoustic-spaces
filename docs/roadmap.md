@@ -164,9 +164,15 @@ Outdoor acoustics, in steps:
   `simulation.wave.device: gpu`, `both` and `auto` take outdoor scenes now. What
   reaches each listener in each band, and when, agrees within the noise of the ray
   count (`validation/outdoor_gpu.py`).
-- [ ] Bent rays and vegetation on the GPU on Direct3D 12 (Windows): there the tracer's
-  results for them disagreed with the CPU's (by 7 to 34 % on the software GPU of
-  Windows CI), so the CPU traces them for now.
+- [x] Bent rays and vegetation on the GPU on Direct3D 12 (Windows): the shader
+  compiler's (FXC's) optimizer got the vegetation wrong, so it goes without it on
+  Windows; and Windows CI's software GPU (WARP) lost what the bent rays' code wrote
+  after returning early from a function, which it no longer does. Each now agrees with
+  the CPU there as on other GPUs (see
+  [Validation](validation.md#outdoor-scenes-on-the-gpu)).
+- [ ] Bent rays through vegetation on the GPU on Direct3D 12: FXC takes more than an
+  hour over the tracer with both, so the CPU traces a scene with both there; the newer
+  compiler (DXC) hung over the tracer's shaders in Windows CI.
 - [x] O13 Eddies weaker with height: `turbulence.height_m` (the height the structure
   parameters hold at) and `falloff` (2/3 by default, the surface layer's; up to 4/3 in
   strong sunshine) make the eddies weaken with height from that height up, no nearer

@@ -773,39 +773,40 @@ fn bent_step(limit: f32, arc: f32, turn: f32, use_away: bool) -> Piece {
             }
         }
     }
-    if (!(s > 0.0)) {
-        return piece;
-    }
-    var phi = kappa * s;
-    var at_new = turned_down(bent.ct, bent.st, phi);
-    if (piece.boundary) {
-        phi = turn_between(bent.ct, bent.st, ct_end, st_end);
-        at_new = vec2<f32>(ct_end, st_end);
-    }
-    let chord = s * sinc_small(0.5 * phi);
-    let mean = turned_down(bent.ct, bent.st, 0.5 * phi);
-    let flat = chord * mean.x;
-    let rise = chord * mean.y;
-    var z_end = bent.z + rise;
-    if (piece.boundary) {
-        z_end = select(bent.lo, bent.hi, next > bent.layer);
-    }
-    // The travel time by Simpson's rule (the speed is linear in height in a layer).
-    var mid = 0.5 * (bent.z + z_end);
-    if (kappa != 0.0) {
-        let quarter = turned_down(bent.ct, bent.st, 0.25 * phi);
-        mid = bent.z + 0.5 * s * sinc_small(0.25 * phi) * quarter.y;
-    }
-    piece.length = s;
-    piece.time = s / 6.0 * (1.0 / bent_speed_in(bent.z) + 4.0 / bent_speed_in(mid) +
-                            1.0 / bent_speed_in(z_end));
-    piece.turn = abs(phi);
-    bent.pos += vec3<f32>(flat * bent.ex, flat * bent.ey, rise);
-    bent.ct = at_new.x;
-    bent.st = at_new.y;
-    bent.z = z_end;
-    if (piece.boundary) {
-        bent_enter(next);
+    // (One return, at the end: after an early one, Direct3D 12's software GPU, WARP,
+    // gave every chord of a bent ray no travel time.)
+    if (s > 0.0) {
+        var phi = kappa * s;
+        var at_new = turned_down(bent.ct, bent.st, phi);
+        if (piece.boundary) {
+            phi = turn_between(bent.ct, bent.st, ct_end, st_end);
+            at_new = vec2<f32>(ct_end, st_end);
+        }
+        let chord = s * sinc_small(0.5 * phi);
+        let mean = turned_down(bent.ct, bent.st, 0.5 * phi);
+        let flat = chord * mean.x;
+        let rise = chord * mean.y;
+        var z_end = bent.z + rise;
+        if (piece.boundary) {
+            z_end = select(bent.lo, bent.hi, next > bent.layer);
+        }
+        // The travel time by Simpson's rule (the speed is linear in height in a layer).
+        var mid = 0.5 * (bent.z + z_end);
+        if (kappa != 0.0) {
+            let quarter = turned_down(bent.ct, bent.st, 0.25 * phi);
+            mid = bent.z + 0.5 * s * sinc_small(0.25 * phi) * quarter.y;
+        }
+        piece.length = s;
+        piece.time = s / 6.0 * (1.0 / bent_speed_in(bent.z) + 4.0 / bent_speed_in(mid) +
+                                1.0 / bent_speed_in(z_end));
+        piece.turn = abs(phi);
+        bent.pos += vec3<f32>(flat * bent.ex, flat * bent.ey, rise);
+        bent.ct = at_new.x;
+        bent.st = at_new.y;
+        bent.z = z_end;
+        if (piece.boundary) {
+            bent_enter(next);
+        }
     }
     return piece;
 }
@@ -1641,10 +1642,23 @@ fn straight_leg() -> u32 {
 }
 
 // A leg of the ray bent by the atmosphere, chord by chord, to the first face it meets
-// (1), to where it scatters in the plants (2), or to its end (0).
+// (1), to where it scatters in the plants (2), or to its end (0). (One way out of the
+// loop, and what the leg ends at done after it: Direct3D 12's software GPU, WARP, ran
+// none of a branch that returned from inside the loop, though the leg returned its
+// number.)
 fn bent_leg() -> u32 {
     bent_init(ray.pos, ray.dir);
     leg_metres = 0.0;
+    var went = 0u;
+    // The chord the leg ends on, from where it starts, and how far along it.
+    var end_start = vec3<f32>(0.0);
+    var end_along = vec3<f32>(0.0);
+    var end_t = 0.0;
+    var end_rate = 0.0;
+    var end_stretch = 0.0;
+    var end_arc = 0.0;
+    var end_bent = bent;
+    var end_away = false;
     while (ray.travelled < run.max_length) {
         let before = bent;
         let use_away = ray.leaving != 0u;
@@ -1684,33 +1698,31 @@ fn bent_leg() -> u32 {
                 detectors(chord.start, along, segment, rate, ray_path, stretch, tracked);
             }
             if (scatter_at < FAR) {
-                // It scatters in the plants, going the ray's way there.
-                ray.travelled += rate * segment;
-                ray_path += stretch * segment;
-                ray.pos = chord.start + along * segment;
-                bent = before;
-                bent_chord(chord.arc * segment / len, use_away);
-                ray.dir = bent_direction();
+                went = 2u;
+                end_t = segment;
                 leg_scatter_at = scatter_at;
-                return 2u;
-            }
-            if (tracked) {
-                track_weight(segment);
-                for (var b = 0u; b < BANDS; b++) {
-                    energy[b] *= weights[b];
+            } else {
+                if (tracked) {
+                    track_weight(segment);
+                    for (var b = 0u; b < BANDS; b++) {
+                        energy[b] *= weights[b];
+                    }
+                }
+                if (found) {
+                    went = 1u;
+                    end_t = met.t;
+                    leg_hit = met;
                 }
             }
-            if (found) {
-                ray.travelled += rate * met.t;
-                ray_path += stretch * met.t;
-                leg_metres += stretch * met.t;
-                ray.pos = chord.start + along * met.t;
-                // The ray's own direction where it meets the face.
-                bent = before;
-                bent_chord(chord.arc * met.t / len, use_away);
-                ray.dir = bent_direction();
-                leg_hit = met;
-                return 1u;
+            if (went != 0u) {
+                end_start = chord.start;
+                end_along = along;
+                end_rate = rate;
+                end_stretch = stretch;
+                end_arc = chord.arc * end_t / len;
+                end_bent = before;
+                end_away = use_away;
+                break;
             }
         }
         ray.travelled += run.c * chord.time;
@@ -1729,8 +1741,21 @@ fn bent_leg() -> u32 {
             break;
         }
     }
-    escaped();
-    return 0u;
+    if (went == 0u) {
+        escaped();
+        return 0u;
+    }
+    // Where it meets the face, or scatters in the plants, going the ray's way there.
+    ray.travelled += end_rate * end_t;
+    ray_path += end_stretch * end_t;
+    if (went == 1u) {
+        leg_metres += end_stretch * end_t;
+    }
+    ray.pos = end_start + end_along * end_t;
+    bent = end_bent;
+    bent_chord(end_arc, end_away);
+    ray.dir = bent_direction();
+    return went;
 }
 
 // The weight window after a reflection or a scattering in window `window`: splits the
@@ -2641,13 +2666,14 @@ class GpuTracer:
 
 
 def outdoors_declined(bending: bool, plants: bool) -> str:
-    """Why this computer's GPU leaves a run's rays bent by the air (``bending``) or
-    through vegetation (``plants``) to the CPU, or ''. On Direct3D 12 the tracer's
-    results for them disagreed with the CPU's by 7 to 34 % (on WARP, the software GPU
-    of Windows CI), so they are traced on the CPU there."""
-    adapter = gpu._adapter() if bending or plants else None
+    """Why this computer's GPU leaves a run's rays bent by the air (``bending``) through
+    vegetation (``plants``) to the CPU, or ''. Direct3D 12's shader compiler (FXC) takes
+    minutes over the tracer with either, but more than an hour with both (25 minutes
+    with its optimizer, which miscompiles the vegetation: see gpu._primary_backends), so
+    the CPU traces those there."""
+    adapter = gpu._adapter() if bending and plants else None
     if adapter is not None and adapter.info["backend_type"] == "D3D12":
-        return "rays bent by the air or through vegetation are traced on the CPU on Direct3D 12"
+        return "rays bent by the air through vegetation are traced on the CPU on Direct3D 12"
     return ""
 
 
