@@ -165,8 +165,10 @@ const SPECULAR_RAIN: u32 = 2u;
 const VECTOR: u32 = 4u;
 const SIZES: u32 = 8u;
 const SPLITTING: u32 = 16u;
-const ATMOSPHERE: u32 = 32u;
-const PLANTS: u32 = 64u;
+// Zero in a shader built without them (__FEATURES__ is the flags it has), which leaves
+// out their code: Direct3D 12's default compiler (FXC) takes minutes over all of it.
+const ATMOSPHERE: u32 = 32u & __FEATURES__u;
+const PLANTS: u32 = 64u & __FEATURES__u;
 // Most pieces of arc in one chord, cuts of a segment through one prism's outline,
 // media and volumes along one piece of a ray.
 const MAX_PIECES: u32 = 1024u;
@@ -944,6 +946,7 @@ fn shape_pieces(s: u32, p: vec3<f32>, d: vec3<f32>, len: f32) {
         return;
     }
     var n = 1u;
+    var lost = false;
     cut[0] = ta;
     let first = shape_word(s, 4u);
     let count = shape_word(s, 5u);
@@ -962,9 +965,14 @@ fn shape_pieces(s: u32, p: vec3<f32>, d: vec3<f32>, len: f32) {
                 cut[n] = t;
                 n++;
             } else {
-                atomicAdd(&tallies[5], 1u);
+                lost = true;
             }
         }
+    }
+    // Counted out of the loop: FXC fails on an atomic in that branch ("flattened side
+    // effect").
+    if (lost) {
+        atomicStore(&tallies[5], 1u);
     }
     cut[n] = tb;
     n++;
@@ -1046,6 +1054,7 @@ fn track_build(p: vec3<f32>, d: vec3<f32>, len: f32) -> bool {
     n_spans = 0u;
     track_d = d;
     track_len = len;
+    var lost = false;
     for (var s = 0u; s < run.shapes; s++) {
         shape_pieces(s, p, d, len);
         let m = shape_word(s, 1u);
@@ -1056,9 +1065,12 @@ fn track_build(p: vec3<f32>, d: vec3<f32>, len: f32) -> bool {
                 span_medium[n_spans] = m;
                 n_spans++;
             } else {
-                atomicAdd(&tallies[5], 1u);
+                lost = true;
             }
         }
+    }
+    if (lost) {
+        atomicStore(&tallies[5], 1u);  // out of the loop, as in shape_pieces
     }
     if (n_spans == 0u) {
         return false;
@@ -1863,7 +1875,8 @@ fn advance(n_in: u32) -> bool {
     if (went == 0u) {
         return false;
     }
-    if (went == 2u) {
+    // PLANTS first: a shader built without plants leaves out their code.
+    if (PLANTS != 0u && went == 2u) {
         return scatter_in_plants(n_in);
     }
     let hit = leg_hit;
@@ -2207,18 +2220,21 @@ def _bindings():
 
 
 @functools.lru_cache(maxsize=8)
-def _pipelines(bands: int):
-    """The shader for rays of ``bands`` bands, compiled once per session: the tracer and
-    the chord test."""
+def _module(bands: int, features: int):
+    """The shader for rays of ``bands`` bands, with the code for ``features`` (of
+    ``_ATMOSPHERE`` and ``_PLANTS``) only."""
+    code = _SHADER.replace("__BANDS__", str(bands)).replace("__FEATURES__", str(features))
+    return gpu._device().create_shader_module(code=code)
+
+
+@functools.lru_cache(maxsize=8)
+def _pipeline(entry: str, bands: int, features: int):
+    """The shader's kernel ``entry`` (the tracer, "main", or the chord test, "chords")
+    as :func:`_module` builds it, compiled once per session."""
     device = gpu._device()
-    code = _SHADER.replace("__BANDS__", str(bands))
-    module = device.create_shader_module(code=code)
     layout = device.create_pipeline_layout(bind_group_layouts=[_bindings()])
-    return tuple(
-        device.create_compute_pipeline(
-            layout=layout, compute={"module": module, "entry_point": entry}
-        )
-        for entry in ("main", "chords")
+    return device.create_compute_pipeline(
+        layout=layout, compute={"module": _module(bands, features), "entry_point": entry}
     )
 
 
@@ -2427,7 +2443,6 @@ class GpuTracer:
                 for i, b in enumerate(buffers)
             ],
         )
-        pipeline = _pipelines(bands)[0]
         r_min = float(radius.min(initial=1.0))
         settings = {
             "receivers": n_rec,
@@ -2478,6 +2493,7 @@ class GpuTracer:
             **in_air,
             **greenery,
         }
+        pipeline = _pipeline("main", bands, settings["flags"] & (_ATMOSPHERE | _PLANTS))
         halves = (0, most * record)
         kept = spawned = spawn_from = fresh_from = rounds = 0
         counters = np.zeros(_COUNTERS, np.uint32)
@@ -2601,7 +2617,7 @@ class GpuTracer:
             device.queue.write_buffer(self._uniform, 0, _uniform(settings))
             encoder = device.create_command_encoder()
             compute = encoder.begin_compute_pass()
-            compute.set_pipeline(_pipelines(1)[1])
+            compute.set_pipeline(_pipeline("chords", 1, _ATMOSPHERE))
             compute.set_bind_group(0, group)
             compute.dispatch_workgroups(*_groups(n))
             compute.end()

@@ -327,7 +327,10 @@
   Vegetation of more than 16 media stays on the CPU, which the run says. What reaches
   each listener in each band, and when, agrees with the CPU's within the noise of the
   ray count: `validation/outdoor_gpu.py` compares the two on the outdoor examples
-  (see [Validation](docs/validation.md#outdoor-scenes-on-the-gpu)).
+  (see [Validation](docs/validation.md#outdoor-scenes-on-the-gpu)). The shader is
+  compiled with only what a scene has of the outdoors, so rooms compile as fast as
+  before; on Windows, Direct3D 12's compiler takes up to a few minutes, once per
+  session, for bent rays through vegetation.
 - The wave solver in wind and temperature steps its grid on the GPU too
   (`simulation.wave.device: gpu`, `both` and `auto`), with the speed of sound per cell,
   in its walls, its source and its matched layer, agreeing with the CPU to rounding.

@@ -489,7 +489,11 @@ simulation:
   [vegetation](outdoor.md#vegetation) and the open sky). Rays start where
   the CPU's do, then draw random numbers of their own, in single precision, so the two
   agree statistically, not ray for ray. The tests trace main's stored runs on the GPU
-  and check that they land within the spread of the CPU's own results over seeds.
+  and check that they land within the spread of the CPU's own results over seeds. The
+  shader is compiled once per session with only what the scene has of the outdoors
+  (bent rays, vegetation): in seconds for a room, but on Windows, Direct3D 12's
+  compiler takes about half a minute for bent rays and up to a few minutes for bent
+  rays through vegetation.
 - `both`: the CPU (on all its threads but one, which keeps the GPU busy) and the GPU
   share the rays, each taking the next part as soon as it is done with the last, so the
   faster one traces more (if the GPU declines a part at run time, the CPU traces it and

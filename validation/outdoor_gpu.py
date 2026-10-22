@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 from acoustic_spaces import Room, simulate
-from acoustic_spaces.engine import gpu, gpu_tracer, ray_device
+from acoustic_spaces.engine import gpu, ray_device
 from acoustic_spaces.engine.model import TraceModel
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -109,10 +109,9 @@ def _differences(found: tuple, cpu: tuple) -> tuple[str, str]:
 
 
 def _warm_up(room: Room) -> None:
-    """Starts the GPU and compiles the tracer's shader for the scene's band count."""
-    model = TraceModel.from_room(room, room.scene.simulation)
-    gpu._device()
-    gpu_tracer._pipelines(len(model.bands))
+    """Starts the GPU and compiles the tracer's shader as the scene needs it (for its
+    bands, and what it has of the outdoors), in a run of a few rays."""
+    _run(room, "gpu", 256)
 
 
 def main() -> None:
