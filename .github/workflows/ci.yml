@@ -46,7 +46,11 @@ jobs:
       - name: Build and install
         run: python -m pip install ".[test,sketchup,gpu,ifc]"
       - name: Test
-        timeout-minutes: 30  # a hung GPU test would otherwise hold the runner for 6 hours
+        # A hung GPU test would otherwise hold the runner for 6 hours. Windows needs the
+        # most: its software GPU (WARP) runs the shaders that Direct3D 12's compiler
+        # builds without its optimizer (see gpu._primary_backends) slowly: over 30
+        # minutes on Python 3.10.
+        timeout-minutes: 45
         run: python -m pytest -q -W error
       - name: Smoke-test the command line
         shell: bash  # stops at the first failing command on every platform
