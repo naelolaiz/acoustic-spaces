@@ -1,5 +1,6 @@
 import argparse
 import importlib.util
+import json
 import re
 from fnmatch import fnmatch
 from pathlib import Path
@@ -8,6 +9,7 @@ import numpy as np
 import pytest
 from conftest import skip_without_extra
 
+from acoustic_spaces.audio import write_wav
 from acoustic_spaces.cli import main
 from acoustic_spaces.engine import simulate
 from acoustic_spaces.examples import (
@@ -345,3 +347,51 @@ def test_church_demo_tunes_and_times_a_take() -> None:
         assert abs(cents - 0.4 * errors[k]) < 2.0, (k, cents)
         checked += 1
     assert checked >= 10
+
+
+def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
+    """stadium_demo.py puts the band on the stadium's stage, in a group of its own, and
+    gives the sound system the master's channels as the audience sees them: the arrays
+    on its left (-y; the scene's *_right, named from the stage) the left channel."""
+    demo = _script("stadium_concert", "stadium_demo")
+    folder = copy_examples(tmp_path, ["stadium_concert"])[0].parent
+    args = _demo_args(source=folder / "scene.yaml", scene=folder / "scene_band.yaml")
+    args.results = folder / "results_band"
+    demo.band(args)
+    demo.band(argparse.Namespace(**vars(args) | {"source": args.scene}))  # once only
+    room = Room.from_yaml(args.scene)
+    assert room.problems() == []
+    sources = {source.name: source for source in room.scene.sources}
+    assert [name for name in sources if name in demo.BAND] == list(demo.BAND)
+    assert {sources[name].group for name in demo.BAND} == {"Band"}
+    scene = demo.scene_of(args)
+    roles = {source["name"]: demo.role(source) for source in scene["sources"]}
+    assert roles["main_right"] == "left" and roles["main_left"] == "right"
+    assert roles["subs"] == "mono" and roles["vocal_wedges"] == "singer"
+    assert roles["drum_fill"] == "drummer" and roles["side_fill_left"] == "stage"
+    assert all(roles[name] == name for name in demo.BAND)
+    stems = {name.split("Stem_")[1] for name in demo.STEMS}
+    for mix in (demo.SINGER_MIX, demo.DRUMMER_MIX, demo.STAGE_MIX, *demo.BAND_MIX.values()):
+        assert set(mix) <= stems
+    # The cuts shift each mix by its loudest arrival: here the delay 30 ms after the
+    # main array, which plays 3 dB quieter but reaches the seat 8 dB louder.
+    results = tmp_path / "results"
+    results.mkdir()
+    responses = []
+    for name, delay_s, amplitude in (("main_right", 0.35, 0.4), ("delay_east_right", 0.38, 1.0)):
+        response = np.zeros((48_000, 2))
+        response[int(delay_s * 48_000)] = amplitude
+        write_wav(results / f"{name}__east_stand.wav", response, 48_000)
+        outputs = [{"format": "binaural", "wav": f"{name}__east_stand.wav"}]
+        responses.append({"source": name, "listener": "east_stand", "outputs": outputs})
+    (results / "parameters.json").write_text(json.dumps({"responses": responses}), "utf-8")
+    table = {"sources": {"main_right": {"gain_db": 0.0}, "delay_east_right": {"gain_db": -3.0}}}
+    arrival = demo.arrival_s(argparse.Namespace(results=results), "east_stand", table)
+    assert arrival == pytest.approx(0.38, abs=0.002)
+    # The tour moves on phrase boundaries and leaves out listeners without a mix.
+    work = tmp_path / "demo"
+    (work / "feeds").mkdir(parents=True)
+    (work / "feeds" / "feeds.json").write_text('{"length_s": 264.0}', encoding="utf-8")
+    tour = demo.tour_of(argparse.Namespace(tour=None, work=work), {"mix_position", "singer"})
+    assert [name for name, _, _ in tour] == ["mix_position", "singer", "mix_position"]
+    assert tour[1][1] == pytest.approx(2 * demo.PHRASE_S) and tour[-1][2] == 264.0
