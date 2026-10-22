@@ -80,9 +80,14 @@ acoustic-spaces walkthrough examples/gallery/scene.yaml guide=speech.wav --out w
 acoustic-spaces demo my_room/scene.yaml                # each source plays its signal: a video of every listener
 acoustic-spaces examples                               # the bundled rooms, and where they are
 acoustic-spaces hrtf                                   # free HRTF sets to download, with their licences
+acoustic-spaces pack examples/hillside/scene.yaml hillside.zip  # one zip to run elsewhere
 acoustic-spaces tune --default auto                    # with the gpu extra: run on the fastest device here
 python -m pytest                                       # the test suite
 ```
+
+`pack` puts a scene and every file it names in one zip, which every command that reads
+a scene takes in its place, to run on a server or a cloud job: see
+[Running on another computer](remote.md).
 
 Errors start with `error:` and warnings with `warning:`, in red and yellow in a
 terminal (`NO_COLOR=1` turns colours off).

@@ -314,6 +314,10 @@ msgstr "Modellen ({patterns})"
 msgid "glTF binary (*.glb)"
 msgstr "Binair glTF (*.glb)"
 
+#: acoustic_spaces/gui/app.py
+msgid "Pack (*.zip)"
+msgstr "Pakket (*.zip)"
+
 #. Translators: two file types of a save dialog, kept apart by ;; (keep it).
 #: acoustic_spaces/gui/app.py
 msgid "PNG picture (*.png);;JSON, every map (*.json)"
@@ -466,6 +470,19 @@ msgstr ""
 "Geluidsdeeltjes van de geselecteerde bron (of de eerste) als glTF-animatie "
 "exporteren: zoveel van het geluid, zo langzaam en zoveel deeltjes als je "
 "kiest"
+
+#: acoustic_spaces/gui/app.py
+msgid "Pac&k for another computer…"
+msgstr "&Inpakken voor een andere computer…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Put the scene and every file it names in one zip file, to run on a server or "
+"a cloud job as acoustic-spaces pack does; nothing is uploaded"
+msgstr ""
+"Zet de scène en elk bestand dat ze noemt in één zipbestand, om te berekenen "
+"op een server of in een cloudtaak, zoals acoustic-spaces pack; er wordt "
+"niets geüpload"
 
 #: acoustic_spaces/gui/app.py
 msgid "&Quit"
@@ -1205,6 +1222,34 @@ msgstr[1] ""
 msgid "Wrote {path}: the room. In Blender: File > Import > glTF 2.0."
 msgstr ""
 "{path} geschreven: de ruimte. In Blender: Bestand > Importeren > glTF 2.0."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot pack: {problems}"
+msgstr "Kan niet inpakken: {problems}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Pack for another computer"
+msgstr "Inpakken voor een andere computer"
+
+#: acoustic_spaces/gui/app.py
+msgid "Could not pack"
+msgstr "Kan niet inpakken"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"Wrote {path}: the scene and the {count} file it names. On the other "
+"computer: acoustic-spaces simulate {name} --out results"
+msgid_plural ""
+"Wrote {path}: the scene and the {count} files it names. On the other "
+"computer: acoustic-spaces simulate {name} --out results"
+msgstr[0] ""
+"{path} geschreven: de scène en het {count} bestand dat ze noemt. Op de "
+"andere computer: acoustic-spaces simulate {name} --out results"
+msgstr[1] ""
+"{path} geschreven: de scène en de {count} bestanden die ze noemt. Op de "
+"andere computer: acoustic-spaces simulate {name} --out results"
 
 #. Translators: an error's title, then what went wrong.
 #: acoustic_spaces/gui/app.py

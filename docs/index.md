@@ -18,6 +18,7 @@ coverage-maps
 spatial-audio
 demos
 measurements
+remote
 validation
 api
 roadmap

@@ -48,7 +48,7 @@ from __future__ import annotations
 import difflib
 import functools
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal
 
@@ -2757,35 +2757,20 @@ class Scene(_Model):
             key.casefold() == SKY for key in self.assignments
         )
 
+    def yaml_text(self, file_name: Callable[[str], str]) -> str:
+        """The scene file's text, with each file it names written as ``file_name(file)``."""
+        data = self.to_data()
+        _map_files(data, file_name)
+        return yaml.safe_dump(data, sort_keys=False)
+
     def to_yaml(self, path: str | Path) -> None:
         """Write the scene file. Paths to files under its folder are written relative to
         it, so the folder can move; others stay absolute."""
         path = Path(path)
-        data = self.to_data()
         base = path.resolve().parent
-        geometry = data["geometry"]
-        if "file" in geometry:
-            geometry["file"] = _portable(geometry["file"], base)
-        terrain = geometry.get("ground", {}).get("terrain", {})
-        if "file" in terrain:
-            terrain["file"] = _portable(terrain["file"], base)
-        if "file" in geometry.get("buildings_file", {}):
-            geometry["buildings_file"]["file"] = _portable(geometry["buildings_file"]["file"], base)
-        for material in data["materials"].values():
-            if "file" in material:
-                material["file"] = _portable(material["file"], base)
-        for output in data["outputs"]:
-            if "hrtf" in output:
-                output["hrtf"] = _portable(output["hrtf"], base)
-        for source in data["sources"]:
-            if "signal" in source:
-                source["signal"] = _portable(source["signal"], base)
-            # An inline array's element may have a file of its own.
-            for spec in directivity_entries(source.get("directivity")):
-                if "file" in spec:
-                    spec["file"] = _portable(spec["file"], base)
+        text = self.yaml_text(lambda file: _portable(file, base))
         with path.open("w", encoding="utf-8") as fh:
-            yaml.safe_dump(data, fh, sort_keys=False)
+            fh.write(text)
 
     def files(self) -> list[Path]:
         """The files the scene uses, each once: its model, terrain and map of buildings,
@@ -2817,6 +2802,25 @@ def directivity_entries(spec) -> list[dict]:
         entries.append(spec)
         spec = (spec.get("array") or {}).get("element")
     return entries
+
+
+def _map_files(data: dict, change: Callable[[str], str]) -> None:
+    """Replace each file that scene data (:meth:`Scene.to_data`) names by ``change(file)``."""
+    geometry = data["geometry"]
+    places = [
+        (geometry, "file"),
+        (geometry.get("ground", {}).get("terrain", {}), "file"),
+        (geometry.get("buildings_file", {}), "file"),
+    ]
+    places += [(material, "file") for material in data["materials"].values()]
+    for source in data["sources"]:
+        # An inline array's element may have a file of its own.
+        places += [(spec, "file") for spec in directivity_entries(source.get("directivity"))]
+        places.append((source, "signal"))
+    places += [(output, "hrtf") for output in data["outputs"]]
+    for holder, key in places:
+        if key in holder:
+            holder[key] = change(holder[key])
 
 
 def _portable(file: str, base: Path) -> str:

@@ -3066,6 +3066,26 @@ def test_particle_export_settings(window, monkeypatch, tmp_path: Path) -> None:
     assert (dialog.duration, dialog.slow_motion) == (100, 40)
 
 
+def test_pack_for_another_computer(window, monkeypatch, tmp_path: Path) -> None:
+    import zipfile
+
+    from PySide6.QtWidgets import QFileDialog
+
+    window.open_example(example_path("hillside"))
+    target = tmp_path / "yard"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    window.pack_action.trigger()
+    with zipfile.ZipFile(tmp_path / "yard.zip") as archive:
+        names = set(archive.namelist())
+    assert names == {"scene.yaml", "pack.json", "hill.asc", "houses.geojson"}
+    assert window.messages.toPlainText().splitlines()[-1] == (
+        f"Wrote {target}.zip: the scene and the 2 files it names. On the other computer: "
+        "acoustic-spaces simulate yard.zip --out results"
+    )
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: ("", ""))
+    assert not window.pack_scene()
+
+
 def test_runs_of_a_scene_no_longer_open_are_dropped(window, qapp) -> None:
     for run in (window.run_simulation, window.run_map):
         window.open_example(example_path("shoebox"))

@@ -315,6 +315,10 @@ msgstr "Models ({patterns})"
 msgid "glTF binary (*.glb)"
 msgstr "glTF binari (*.glb)"
 
+#: acoustic_spaces/gui/app.py
+msgid "Pack (*.zip)"
+msgstr "Paquet (*.zip)"
+
 #. Translators: two file types of a save dialog, kept apart by ;; (keep it).
 #: acoustic_spaces/gui/app.py
 msgid "PNG picture (*.png);;JSON, every map (*.json)"
@@ -463,6 +467,19 @@ msgid ""
 msgstr ""
 "Partícules sonores de la font seleccionada (o de la primera) com a animació "
 "glTF: tant so, tan a poc a poc i tantes partícules com trieu"
+
+#: acoustic_spaces/gui/app.py
+msgid "Pac&k for another computer…"
+msgstr "Empa&quetar per a un altre ordinador…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Put the scene and every file it names in one zip file, to run on a server or "
+"a cloud job as acoustic-spaces pack does; nothing is uploaded"
+msgstr ""
+"Reuneix l'escena i tots els fitxers que esmenta en un sol fitxer zip, per "
+"calcular-la en un servidor o en una feina al núvol, com fa acoustic-spaces "
+"pack; no es puja res"
 
 #: acoustic_spaces/gui/app.py
 msgid "&Quit"
@@ -1195,6 +1212,34 @@ msgstr[1] ""
 #, python-brace-format
 msgid "Wrote {path}: the room. In Blender: File > Import > glTF 2.0."
 msgstr "S'ha escrit {path}: el recinte. A Blender: File > Import > glTF 2.0."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot pack: {problems}"
+msgstr "No es pot empaquetar: {problems}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Pack for another computer"
+msgstr "Empaquetar per a un altre ordinador"
+
+#: acoustic_spaces/gui/app.py
+msgid "Could not pack"
+msgstr "No s'ha pogut empaquetar"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"Wrote {path}: the scene and the {count} file it names. On the other "
+"computer: acoustic-spaces simulate {name} --out results"
+msgid_plural ""
+"Wrote {path}: the scene and the {count} files it names. On the other "
+"computer: acoustic-spaces simulate {name} --out results"
+msgstr[0] ""
+"S'ha escrit {path}: l'escena i el {count} fitxer que esmenta. A l'altre "
+"ordinador: acoustic-spaces simulate {name} --out results"
+msgstr[1] ""
+"S'ha escrit {path}: l'escena i els {count} fitxers que esmenta. A l'altre "
+"ordinador: acoustic-spaces simulate {name} --out results"
 
 #. Translators: an error's title, then what went wrong.
 #: acoustic_spaces/gui/app.py
