@@ -121,7 +121,16 @@ def surface_impedance(
     if thickness is None:
         return z
     wavenumber = 2.0 * np.pi * f / float(speed_of_sound) * k
-    return z / np.tanh(1.0j * wavenumber * float(thickness))
+    return z * _coth(1.0j * wavenumber * float(thickness))
+
+
+def _coth(x) -> np.ndarray:
+    """coth x of complex x. Where the real part is large (a deep layer) it is 1 or -1 to
+    double precision, and NumPy's tanh can overflow on the way there (it does on
+    Windows)."""
+    x = np.asarray(x, dtype=complex)
+    deep = np.abs(x.real) > 20.0
+    return np.where(deep, np.sign(x.real), 1.0 / np.tanh(np.where(deep, 1.0, x)))
 
 
 def spherical_reflection(
