@@ -2,6 +2,7 @@
 paths through them and scatter some of it on."""
 
 import math
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -10,7 +11,7 @@ from test_native import _stochastic_args, _unit_cube
 from test_refraction import field
 
 from acoustic_spaces import Room, Scene, simulate
-from acoustic_spaces.engine import early_paths
+from acoustic_spaces.engine import early_paths, gpu
 from acoustic_spaces.engine.coverage import coverage_map
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.ray_device import _unsupported
@@ -468,7 +469,9 @@ def test_coverage_maps_through_vegetation() -> None:
     assert np.all(level[x > 80] < -2) and np.all(np.abs(level[x < 30]) < 0.5)
 
 
-def test_the_gpu_traces_vegetation_of_a_few_media() -> None:
+def test_the_gpu_traces_vegetation_of_a_few_media(monkeypatch) -> None:
+    # Any GPU but Direct3D 12's, which leaves vegetation to the CPU (test_late_device.py).
+    monkeypatch.setattr(gpu, "_adapter", lambda: SimpleNamespace(info={"backend_type": "Vulkan"}))
     values = {"plants": np.zeros((1, 8)), "transmission": np.zeros(0), "groups": 0}
     assert _unsupported(values | {"plant_upright": np.zeros(16, np.uint8)}) == ""
     reason = _unsupported(values | {"plant_upright": np.zeros(17, np.uint8)})

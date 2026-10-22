@@ -2,6 +2,7 @@
 
 import importlib
 import math
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -305,9 +306,12 @@ def test_uniform_rows_trace_the_late_rays_as_straight_ones(monkeypatch) -> None:
         np.testing.assert_allclose(bent[key].late, straight[key].late, rtol=1e-9, atol=0.0)
 
 
-def test_bent_late_rays_are_traced_on_any_device() -> None:
+def test_bent_late_rays_are_traced_on_any_device(monkeypatch) -> None:
+    from acoustic_spaces.engine import gpu
     from acoustic_spaces.engine.ray_device import _unsupported
 
+    # Any GPU but Direct3D 12's, which leaves them to the CPU (test_late_device.py).
+    monkeypatch.setattr(gpu, "_adapter", lambda: SimpleNamespace(info={"backend_type": "Vulkan"}))
     values = {"atmosphere": np.zeros((2, 3)), "transmission": np.zeros(0), "groups": 0}
     assert _unsupported(values) == ""
 

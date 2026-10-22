@@ -2634,6 +2634,17 @@ class GpuTracer:
         )
 
 
+def outdoors_declined(bending: bool, plants: bool) -> str:
+    """Why this computer's GPU leaves a run's rays bent by the air (``bending``) or
+    through vegetation (``plants``) to the CPU, or ''. On Direct3D 12 the tracer's
+    results for them disagreed with the CPU's by 7 to 34 % (on WARP, the software GPU
+    of Windows CI), so they are traced on the CPU there."""
+    adapter = gpu._adapter() if bending or plants else None
+    if adapter is not None and adapter.info["backend_type"] == "D3D12":
+        return "rays bent by the air or through vegetation are traced on the CPU on Direct3D 12"
+    return ""
+
+
 def passes_sound(transmission, face_room, source_room) -> bool:
     """Whether a run's ``transmission`` lets sound through some face into a room, which
     only the CPU tracer follows. The open sky of an outdoor scene lets all sound out of
@@ -2729,6 +2740,10 @@ def trace_stochastic(
         int(first_ray),
         int(seed),
     )
+    bending = _atmosphere_rows(atmosphere, wind_direction)
+    declined = outdoors_declined(bending is not None, plants is not None)
+    if declined:
+        raise Unsupported(declined)
     on_gpu = tracer(bvh)
     energy, directional, escaped, ray_energy, reflections, traced = on_gpu.trace(
         source=source,
@@ -2759,7 +2774,7 @@ def trace_stochastic(
         split_ratio=float(split_ratio),
         max_split=int(max_split),
         max_family=int(max_family),
-        bending=_atmosphere_rows(atmosphere, wind_direction),
+        bending=bending,
         ground=float(ground),
         chord_sagitta=float(chord_sagitta),
         plants=_plant_tables(

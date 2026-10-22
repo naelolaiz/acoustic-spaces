@@ -507,7 +507,8 @@ is an arc of a circle, so its travel time and its length are exact.
   leaves. The CPU and the GPU trace these rays alike (`simulation.late.device`): the
   GPU follows the same chords, in single precision, and what reaches each listener in
   each band, and when, agrees within the noise of the ray count (see
-  [Validation](validation.md#outdoor-scenes-on-the-gpu)).
+  [Validation](validation.md#outdoor-scenes-on-the-gpu)). On Direct3D 12 (Windows) the
+  CPU traces them, which the run says.
 - **The wave solver** (`simulation.wave`) steps the sound field itself in its bands, with
   a speed of sound that changes from cell to cell: at each cell's height, the still
   air's plus the wind's component along the horizontal from the source, as above, so
@@ -798,8 +799,9 @@ high bands mostly onwards.
   simulation through a slab of foliage or stems, the tracer agrees within its noise,
   a few tenths of a percent (see
   [Validation](validation.md#vegetation-against-a-particle-simulation)). The CPU and
-  the GPU trace rays through vegetation alike; only vegetation of more than 16 media
-  (kinds of foliage and stems in one scene) is traced on the CPU, which the run says.
+  the GPU trace rays through vegetation alike; vegetation of more than 16 media (kinds
+  of foliage and stems in one scene), and any vegetation on Direct3D 12 (Windows), is
+  traced on the CPU, which the run says.
 - **Coverage maps** take the same: the early paths' loss and the late rays'.
 - **The wave solver's bands** leave vegetation out: at their low frequencies foliage
   takes little (0.02 to 0.03 dB per metre in the `dense` preset).

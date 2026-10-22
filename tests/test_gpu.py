@@ -597,6 +597,16 @@ def _open_field(bands: int = 2, rays: int = 200_000, **kwargs) -> dict:
     return args
 
 
+def _outdoors(**values):
+    """The GPU's trace of a run whose rays the air bends or that has vegetation; None on
+    Direct3D 12, which leaves those to the CPU, having checked that it says so."""
+    if gpu_tracer.outdoors_declined(True, True):
+        with pytest.raises(gpu_tracer.Unsupported, match="Direct3D 12"):
+            gpu_tracer.trace_stochastic(**values)
+        return None
+    return gpu_tracer.trace_stochastic(**values)
+
+
 def _arrivals(energy: np.ndarray, time_step: float) -> np.ndarray:
     """Per listener and band, the energy and the mean time it arrives at (s)."""
     t = (np.arange(energy.shape[2]) + 0.5) * time_step
@@ -611,8 +621,10 @@ def test_gpu_tracer_bends_the_rays_as_the_cpu_does(gradient: float, wind: float)
     up (a cooler sky, and upwind) leaves them in a shadow: the GPU's energy per listener
     and band, and the mean time it arrives at, are the CPU's within the noise."""
     values = _open_field() | _profile(gradient, wind)
+    on_gpu = _outdoors(**values)
+    if on_gpu is None:
+        return
     on_cpu = _native.trace_stochastic(**values)
-    on_gpu = gpu_tracer.trace_stochastic(**values)
     step = values["time_step"]
     cpu, found = _arrivals(on_cpu[0], step), _arrivals(on_gpu[0], step)
     assert np.all(cpu[..., 0] > 0.0)
@@ -643,9 +655,12 @@ def test_gpu_tracer_loses_what_the_plants_absorb_as_the_cpu_does() -> None:
     GPU with and without the plants (absorbing draws no random numbers), so Beer and
     Lambert's law holds exactly, as on the CPU."""
     rate = np.array([0.02, 0.05])
-    free = gpu_tracer.trace_stochastic(**_big_box(2, 50_000))[0].sum(axis=2)
     slab = _slab(rate, [0, 0], [0, 0])
-    through = gpu_tracer.trace_stochastic(**_big_box(2, 50_000), **slab)[0].sum(axis=2)
+    through = _outdoors(**_big_box(2, 50_000), **slab)
+    if through is None:
+        return
+    through = through[0].sum(axis=2)
+    free = gpu_tracer.trace_stochastic(**_big_box(2, 50_000))[0].sum(axis=2)
     assert through[0] / free[0] == pytest.approx(np.exp(-30 * rate), rel=3e-3)
     np.testing.assert_allclose(through[1:], free[1:], rtol=1e-6)
     crown = _crown(rate, [0, 0], [0, 0])
@@ -662,9 +677,11 @@ def test_gpu_tracer_scatters_in_foliage_and_stems_as_the_cpu_does() -> None:
     GPU's energy per listener and band is the CPU's within the noise."""
     big = {"receiver_radius": np.full(3, 10.0), "diffuse_rain": True}
     foliage = _slab([0.0, 0.01], [0.03, 0.02], [0.0, 0.6])
+    on_gpu = _outdoors(**_big_box(2, 300_000, **big), **foliage)
+    if on_gpu is None:
+        return
     on_cpu = _native.trace_stochastic(**_big_box(2, 300_000, **big), **foliage)[0].sum(axis=2)
-    on_gpu = gpu_tracer.trace_stochastic(**_big_box(2, 300_000, **big), **foliage)[0].sum(axis=2)
-    np.testing.assert_allclose(on_gpu, on_cpu, rtol=0.03)
+    np.testing.assert_allclose(on_gpu[0].sum(axis=2), on_cpu, rtol=0.03)
     crown = _crown([0.0, 0.01], [0.03, 0.02], [0.0, 0.6])
     on_cpu = _native.trace_stochastic(**_big_box(2, 300_000, **big), **crown)[0].sum(axis=2)
     on_gpu = gpu_tracer.trace_stochastic(**_big_box(2, 300_000, **big), **crown)[0].sum(axis=2)
@@ -691,8 +708,10 @@ def test_gpu_tracer_bends_rays_through_plants_as_the_cpu_does() -> None:
     crown = _crown([0.0, 0.01], [0.03, 0.02], [0.0, 0.6])
     crown["plants"][0, 2:5] = (50.0, 0.0, 10.0)
     values = _open_field() | _profile(0.3, 0.0) | crown
+    on_gpu = _outdoors(**values)
+    if on_gpu is None:
+        return
     on_cpu = _native.trace_stochastic(**values)
-    on_gpu = gpu_tracer.trace_stochastic(**values)
     step = values["time_step"]
     cpu, found = _arrivals(on_cpu[0], step), _arrivals(on_gpu[0], step)
     np.testing.assert_allclose(found[..., 0], cpu[..., 0], rtol=0.06)
@@ -702,7 +721,7 @@ def test_gpu_tracer_bends_rays_through_plants_as_the_cpu_does() -> None:
 @needs_gpu
 def test_the_late_stage_traces_outdoor_scenes_on_the_gpu() -> None:
     """The open-air stage in the wind: the GPU bends its late rays, and the result is
-    the CPU's within the noise."""
+    the CPU's within the noise; on Direct3D 12 the CPU traces them, and says why."""
     room = Room.from_yaml(OPEN_AIR)
     model = TraceModel.from_room(room, room.scene.simulation)
     source = np.array(room.scene.sources[0].position, float)
@@ -720,7 +739,10 @@ def test_the_late_stage_traces_outdoor_scenes_on_the_gpu() -> None:
     on_cpu = late.stochastic_energy(model, source, listeners, **common)
     assert on_cpu.plan == ray_device.Plan("cpu")
     found = late.stochastic_energy(model, source, listeners, **common, device="gpu")
-    assert found.plan == ray_device.Plan("gpu") and found.traced_rays > 0
+    declined = gpu_tracer.outdoors_declined(True, True)
+    expected = ray_device.Plan("cpu", reason=declined) if declined else ray_device.Plan("gpu")
+    assert found.plan == expected
+    assert found.traced_rays > 0
     assert found.energy.sum() == pytest.approx(on_cpu.energy.sum(), rel=0.15)
     np.testing.assert_allclose(found.energy.sum((1, 2)), on_cpu.energy.sum((1, 2)), rtol=0.25)
 
@@ -755,7 +777,9 @@ def test_the_outdoor_timing_script_runs(monkeypatch, capsys) -> None:
     rows = [line for line in out.splitlines() if line.startswith("| open_air_stage")]
     cells = [[cell.strip() for cell in row.strip("|").split("|")] for row in rows]
     assert [row[3] for row in cells] == ["cpu", "cpu (next seed)", "gpu"]
-    assert [row[4] for row in cells] == ["the CPU", "the CPU", "the GPU"]
+    declined = gpu_tracer.outdoors_declined(True, True)
+    on_gpu = f"the CPU ({declined})" if declined else "the GPU"
+    assert [row[4] for row in cells] == ["the CPU", "the CPU", on_gpu]
     assert all(len(row) == 9 and row[6].endswith("x") for row in cells)
     # Within the noise of 2,000 rays: as far from the CPU's as another seed is, or not
     # much further.

@@ -91,11 +91,16 @@ class Plan:
 
 def _unsupported(values: dict) -> str:
     """Why only the CPU can trace this run, or ''."""
-    from acoustic_spaces.engine.gpu_tracer import MAX_MEDIA, passes_sound
+    from acoustic_spaces.engine.gpu_tracer import MAX_MEDIA, outdoors_declined, passes_sound
 
     upright = values.get("plant_upright")
     if values.get("plants") is not None and upright is not None and len(upright) > MAX_MEDIA:
         return f"vegetation of more than {MAX_MEDIA} media is traced on the CPU"
+    atmosphere = values.get("atmosphere")
+    bending = atmosphere is not None and len(atmosphere) > 0
+    declined = outdoors_declined(bending, values.get("plants") is not None)
+    if declined:
+        return declined
     rooms, source_room = values.get("face_room", ()), values.get("source_room", -1)
     if passes_sound(values["transmission"], rooms, source_room):
         return "sound through partitions and openings is traced on the CPU"
