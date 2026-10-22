@@ -584,7 +584,8 @@
   gain for all and makes a video that tours them (with ffmpeg and Pillow).
 - [Demos](docs/demos.md) gathers the three, with where each recording comes from, its
   licence and the credit a shared render needs; the orchestra's section moved there from
-  [spatial audio and listening](docs/spatial-audio.md).
+  [spatial audio and listening](docs/spatial-audio.md). The README and that page link the
+  [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8) of the three videos.
 
 **Editor**
 

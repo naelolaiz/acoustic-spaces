@@ -12,7 +12,8 @@ with the scene. The recordings do not: they are other people's work under their 
 licences, named below with each demo, and the church and stadium scripts download them
 from where their authors publish them. The videos need [ffmpeg](https://ffmpeg.org) on
 the PATH and the pictures Pillow (the `viz` extra brings it). The mixes are binaural:
-use headphones.
+use headphones. The videos of the three demos are in one
+[playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8).
 
 ## An orchestra in the concert hall
 
