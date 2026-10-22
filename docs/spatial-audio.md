@@ -114,7 +114,7 @@ These anechoic recordings are free to download, and each one tests something dif
   Böhm, Ackermann and Weinzierl; CC BY 4.0; WAV, 32-bit float, 48 kHz): movements
   1, 2 and 4 of a full orchestra, 61 mono tracks per movement (zips of 590 to 740 MB),
   for `auralize` with one source per instrument on a stage, as in the
-  [`orchestra` example](#an-orchestra-in-the-concert-hall).
+  [`orchestra` example](demos.md#an-orchestra-in-the-concert-hall).
 - **Speech**: Cicero's [3rd Catiline Oration](https://doi.org/10.14279/depositonce-8536)
   in Italian, Latin and German, and Demosthenes' [1st Olynthic
   Oration](https://doi.org/10.14279/depositonce-8537) in German (TU Berlin; CC BY-NC-SA
@@ -149,32 +149,12 @@ for n in range(4):
 A unit impulse at the response's rate checks the convolution itself: `convolve` gives
 the response back to float precision.
 
-### An orchestra in the concert hall
+### Demos
 
-[![Beethoven 8 in a virtual concert hall: the orchestra on the stage of the concert hall and a seat in the middle of the stalls, with the first reflections from a violin to it](images/orchestra_video.png)](https://www.youtube.com/watch?v=c0-5F-iNhIE)
-
-[The video](https://www.youtube.com/watch?v=c0-5F-iNhIE) plays the first movement of the
-Beethoven recording above as heard from the middle of the stalls of the concert hall
-example, binaurally (use headphones). Each of the 61 tracks is one source on the stage,
-in German seating: violins on both sides of the conductor, the winds and brass on
-risers, every player facing the conductor with a directivity that narrows above 1 kHz,
-horn bells pointing back. The `orchestra` example is that scene, with four seats from
-the conductor's podium to the back of the hall, and the scripts that made the video:
-
-```sh
-acoustic-spaces examples --copy . orchestra && cd orchestra
-unzip movement1.zip -d movement1  # from https://doi.org/10.14279/depositonce-6729.2
-acoustic-spaces simulate scene.yaml --out results
-bash auralize.sh results movement1/anechoic stalls-middle binaural
-python make_images.py --seat stalls-middle --movement 1  # cover, seating, thumbnail
-bash make_video.sh beethoven8_movement1_stalls-middle.binaural.wav  # needs ffmpeg
-```
-
-`auralize.sh` maps each source to its track and calls `auralize`; the mix is
-normalized to -1 dBFS. All sources have the same power, so the balance between the
-instruments is the recording's own. `make_images.py` draws the pictures with Pillow
-(`viz` extra) and `make_video.sh` puts a scrolling spectrogram of the mix under the
-cover. Movements 2 and 4 work the same way.
+Three [demos](demos.md) mix dry recordings through example scenes and make a video that
+tours their listeners, with the scripts that do it: an orchestra in the concert hall
+(the Beethoven recording above), a choir and an organ in the church, and a band with its
+sound system and monitors in the stadium.
 
 ### Walkthroughs
 
