@@ -237,12 +237,16 @@ def _wgpu(what: str = "the wave solver"):
     return wgpu
 
 
-def _not_the_vulkan_loader(record: logging.LogRecord) -> bool:
-    """Whether wgpu's log ``record`` is anything but a note of the Vulkan loader's, or the
-    line after it naming the Vulkan instance it is about."""
+def _not_a_vulkan_setup_note(record: logging.LogRecord) -> bool:
+    """Whether wgpu's log ``record`` is anything but a note on setting up Vulkan: one of
+    the Vulkan loader's, or the line after it naming the Vulkan instance it is about, or
+    wgpu's own on an extension the computer's Vulkan lacks (all of them, with no Vulkan
+    driver; wgpu 0.31, the last for Python 3.10, warns of each)."""
     message = record.getMessage()
-    return "[Loader Message" not in message and not message.startswith(
-        "\tobjects: (type: INSTANCE,"
+    return not (
+        "[Loader Message" in message
+        or message.startswith("\tobjects: (type: INSTANCE,")
+        or message.startswith("Unable to find extension: ")
     )
 
 
@@ -255,11 +259,12 @@ def _primary_backends() -> None:
     had started. The driver optimizes the shader anyway, and the compile takes no
     longer. (Only flags every wgpu from 0.31 on knows: an unknown one sets nothing.)
     The debug flag also has wgpu pass on the Vulkan loader's notes, such as finding no
-    driver on a computer with Direct3D 12 only, which say nothing to a user: those are
-    left out of wgpu's log."""
+    driver on a computer with Direct3D 12 only, and wgpu 0.31 warns of every extension
+    such a computer's Vulkan lacks: they say nothing to a user, and are left out of
+    wgpu's log."""
     flags = ["Debug"] if sys.platform == "win32" else ["Default"]
     if sys.platform == "win32":
-        logging.getLogger("wgpu").addFilter(_not_the_vulkan_loader)
+        logging.getLogger("wgpu").addFilter(_not_a_vulkan_setup_note)
     try:
         from wgpu.backends.wgpu_native.extras import set_instance_extras
 

@@ -660,6 +660,10 @@
 - The native code no longer fuses multiplies and adds that the source keeps apart, as
   Apple's compiler did by default on Apple silicon: results there now round as on the
   other platforms, last bits included.
+- On Windows with Python 3.10 every GPU run printed four warnings that Vulkan lacked an
+  extension (`Unable to find extension: VK_KHR_surface`...): wgpu 0.31, the last for
+  Python 3.10, warns of each one on a computer without a Vulkan driver, where Direct3D
+  12 does the work. They said nothing to a user and are left out now.
 
 ## 3.2.3
 

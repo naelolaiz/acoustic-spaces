@@ -305,10 +305,11 @@ def test_wgpu_leaves_its_opengl_backend_out(monkeypatch) -> None:
     gpu._primary_backends()  # wgpu keeps the instance it has
 
 
-def test_wgpu_keeps_the_vulkan_loader_quiet_on_windows(monkeypatch) -> None:
+def test_wgpu_keeps_the_vulkan_setup_quiet_on_windows(monkeypatch) -> None:
     """With wgpu's debug flag (Windows) the Vulkan loader's notes, such as finding no
-    driver on a computer with Direct3D 12 only, would be printed: they are left out of
-    wgpu's log, and its own warnings are not."""
+    driver on a computer with Direct3D 12 only, would be printed, and wgpu 0.31 warns of
+    each extension such a computer's Vulkan lacks: they are left out of wgpu's log, and
+    its other warnings are not."""
     extras = types.ModuleType("wgpu.backends.wgpu_native.extras")
     extras.set_instance_extras = lambda backends, flags: None
     for name in ("wgpu", "wgpu.backends", "wgpu.backends.wgpu_native"):
@@ -319,7 +320,7 @@ def test_wgpu_keeps_the_vulkan_loader_quiet_on_windows(monkeypatch) -> None:
     monkeypatch.setattr(sys, "platform", "win32")
     gpu._primary_backends()
     gpu._primary_backends()  # once is enough
-    assert log.filters == [gpu._not_the_vulkan_loader]
+    assert log.filters == [gpu._not_a_vulkan_setup_note]
 
     def record(message: str) -> logging.LogRecord:
         return log.makeRecord("wgpu", logging.WARNING, __file__, 0, message, None, None)
@@ -327,6 +328,7 @@ def test_wgpu_keeps_the_vulkan_loader_quiet_on_windows(monkeypatch) -> None:
     loader = "GENERAL [Loader Message (0x0)]\n\tvkCreateInstance: Found no drivers!"
     assert not log.filter(record(loader))
     assert not log.filter(record("\tobjects: (type: INSTANCE, hndl: 0x2defba30, name: ?)"))
+    assert not log.filter(record("Unable to find extension: VK_KHR_surface"))
     assert log.filter(record("Expected wgpu-native version 25 but got 24."))
 
 
