@@ -45,6 +45,7 @@ highest, under the absorbing layer of the lowest; the steps run compiled
 
 from __future__ import annotations
 
+import functools
 import math
 
 import numpy as np
@@ -159,13 +160,17 @@ def march(
     return out
 
 
+@functools.lru_cache(maxsize=4096)
 def rational(
     sigma: float, terms: int, alpha: float = 0.0, nu: int = 0
 ) -> tuple[np.ndarray, np.ndarray]:
-    """(a, b), each (terms,): the product of (1 + a_j X) / (1 + b_j X) that approximates
-    (1 - X)^(2 nu) (1 + X)^alpha exp(i sigma (sqrt(1 + X) - 1)) about X = 0 (a Padé
-    approximant of order ``terms`` over ``terms``), its numerator vanishing at
-    :data:`STABILITY_X`."""
+    """(a, b), each (terms,), read-only: the product of (1 + a_j X) / (1 + b_j X) that
+    approximates (1 - X)^(2 nu) (1 + X)^alpha exp(i sigma (sqrt(1 + X) - 1)) about X = 0
+    (a Padé approximant of order ``terms`` over ``terms``), its numerator vanishing at
+    :data:`STABILITY_X`. Kept for the session: the same arguments give the same factors
+    to the bit, which the linear algebra library alone does not promise (on an Intel
+    Mac, two identical marches differed in their last bits), so a march repeated, or on
+    other threads, gives the same field."""
     count = 2 * terms
     c = _series(sigma, count, alpha, nu)
     # f(X) times the denominator less the numerator vanishes to the order 2 terms; the
@@ -184,7 +189,10 @@ def rational(
     solved = np.linalg.solve(system, right)
     numerator = np.concatenate([[1.0], solved[:terms]])
     denominator = np.concatenate([[1.0], solved[terms:]])
-    return -1.0 / np.roots(numerator[::-1]), -1.0 / np.roots(denominator[::-1])
+    a, b = -1.0 / np.roots(numerator[::-1]), -1.0 / np.roots(denominator[::-1])
+    a.setflags(write=False)
+    b.setflags(write=False)
+    return a, b
 
 
 def _series(sigma: float, order: int, alpha: float, nu: int) -> np.ndarray:
