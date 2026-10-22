@@ -11,6 +11,7 @@ from acoustic_spaces.directivity import (
     Balloon,
     FirstOrder,
     _sphere,
+    array_files,
     load_directivity,
     read_directivity,
     read_directivity_csv,
@@ -267,6 +268,35 @@ def test_an_inline_array_saves_its_element_file_relative(tmp_path: Path) -> None
     assert room.scene.sources[0].directivity.array.element.file == (
         tmp_path / "moved" / "speaker.csv"
     )
+
+
+def test_a_scene_lists_the_files_its_arrays_name(tmp_path: Path) -> None:
+    """An array's element can be an array in a YAML file, which names its element's file
+    relative to itself. The scene lists every file once, and saves those in its own
+    entries relative to its folder."""
+    folder = tmp_path / "scene"
+    (folder / "arrays").mkdir(parents=True)
+    _write_csv(folder / "arrays" / "box.csv", FirstOrder.pattern("cardioid"), OCTAVE_BANDS_HZ)
+    column = {"element": {"file": "box.csv"}, "count": 3, "spacing_m": 0.4}
+    (folder / "arrays" / "column.yaml").write_text(yaml.safe_dump(column), encoding="utf-8")
+    data = _shoebox(directivity={"file": "arrays/column.yaml"})
+    second = {**data["sources"][0], "name": "second", "position": [2.0, 2.0, 1.5]}
+    pair = {"element": {"file": "arrays/column.yaml"}, "count": 2, "spacing_m": 1.0}
+    second["directivity"] = {"array": pair}
+    data["sources"].append(second)
+    (folder / "scene.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
+    scene = Scene.from_yaml(folder / "scene.yaml")
+    model, *arrays = scene.files()
+    assert model.name == "shoebox.obj"
+    assert arrays == [folder / "arrays" / "column.yaml", folder / "arrays" / "box.csv"]
+    scene.to_yaml(folder / "copy.yaml")
+    saved = yaml.safe_load((folder / "copy.yaml").read_text(encoding="utf-8"))
+    assert saved["sources"][1]["directivity"]["array"]["element"] == {"file": "arrays/column.yaml"}
+    # An array file that names itself is listed once.
+    (folder / "loop.yaml").write_text(
+        "element: {file: loop.yaml}\ncount: 2\nspacing_m: 1\n", encoding="utf-8"
+    )
+    assert array_files(folder / "loop.yaml") == [folder / "loop.yaml"]
 
 
 # -- simulation ----------------------------------------------------------------------

@@ -34,6 +34,7 @@ from acoustic_spaces.geometry import (
     load_mesh,
 )
 from acoustic_spaces.geometry.cells import MeshCells, cell_of
+from acoustic_spaces.geometry.outdoor import SKY, Layout, outdoor_mesh
 from acoustic_spaces.materials.bands import Resolution, band_centres
 from acoustic_spaces.scene import Scene
 
@@ -124,6 +125,9 @@ class Room:
     #: cells inside the walls' shell), the cells they lie in, with those that surfaces
     #: letting sound through join to them. Empty when the mesh is not closed.
     air_cells: np.ndarray
+    #: Where the ground and the sky lie in an outdoor scene (``geometry.ground``); None
+    #: for a room.
+    outdoor: Layout | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> Room:
@@ -138,11 +142,19 @@ class Room:
         materials or positions), and so are directivities read from the same settings.
         """
         geometry = scene.geometry
+        outdoor = None
         if reuse is not None and reuse.scene.geometry == geometry:
-            mesh, report = reuse.mesh, reuse.report
+            mesh, report, outdoor = reuse.mesh, reuse.report, reuse.outdoor
         else:
             scale = UNIT_SCALE[geometry.units or "m"]
-            if geometry.file is not None:
+            if geometry.ground is not None:
+                objects = None
+                if geometry.file is not None:
+                    objects = load_mesh(
+                        geometry.file, units=geometry.units, up_axis=geometry.up_axis
+                    )
+                raw, outdoor = outdoor_mesh(geometry, objects, scale)
+            elif geometry.file is not None:
                 raw = load_mesh(
                     geometry.file,
                     units=geometry.units,
@@ -182,7 +194,12 @@ class Room:
             enclosed = np.flatnonzero(cells.enclosed)
             found = cell_of(mesh.vertices, mesh.faces, cells, points, enclosed)
             where = np.where(found >= 0, enclosed[np.maximum(found, 0)], -1)
-            air = _air_cells(cells, where, face_materials, scene, material_names)
+            # Sources and listeners left out (enabled: false) make no cell a room.
+            used = np.repeat(
+                [s.in_use for s in scene.sources] + [lis.in_use for lis in scene.listeners],
+                [len(e) for e in elements] + [1] * len(scene.listeners),
+            ).astype(bool)
+            air = _air_cells(cells, where[used], face_materials, scene, material_names)
             inside = np.isin(where, air) & (where >= 0)
             count = sum(len(e) for e in elements)
             # A line or surface source is inside when all its point sources are.
@@ -221,6 +238,7 @@ class Room:
             unused_assignments=unused,
             directivities=directivities,
             air_cells=air,
+            outdoor=outdoor,
         )
 
     def directivity(self, source: str, bands: Resolution = "octave") -> Directivity:
@@ -241,6 +259,28 @@ class Room:
         """Centre frequencies (Hz) of the bands the scene's simulation runs in."""
         return band_centres(self.bands)
 
+    def sky_faces(self) -> np.ndarray:
+        """(F,) the faces of an outdoor scene's open sky (all False for a room)."""
+        if self.outdoor is None:
+            return np.zeros(len(self.mesh.faces), dtype=bool)
+        sky = np.array([label == (SKY,) for label in self.mesh.labels] or [False], dtype=bool)
+        return sky[self.mesh.face_labels]
+
+    def building_faces(self) -> np.ndarray:
+        """(F,) the faces of an outdoor scene's buildings (``geometry.buildings``)."""
+        if self.outdoor is None:
+            return np.zeros(len(self.mesh.faces), dtype=bool)
+        built = np.array(
+            [bool(label) and label[-1] == "buildings" for label in self.mesh.labels] or [False],
+            dtype=bool,
+        )
+        return built[self.mesh.face_labels]
+
+    def shown_faces(self) -> np.ndarray:
+        """(F,) the faces worth drawing: all but an outdoor scene's sky, which would hide
+        the rest."""
+        return ~self.sky_faces()
+
     # -- checks -------------------------------------------------------------------
 
     def unassigned_labels(self) -> dict[str, float]:
@@ -253,7 +293,8 @@ class Room:
         return out
 
     def problems(self) -> list[str]:
-        """Issues that would make a simulation wrong; fix these first."""
+        """Issues that would make a simulation wrong; fix these first. Sources and
+        listeners left out (``enabled: false``) are not checked."""
         out = []
         unassigned = self.unassigned_labels()
         if unassigned:
@@ -262,20 +303,40 @@ class Room:
                 f"surfaces without a material: {listed}; "
                 "add them to assignments or set default_material"
             )
-        for kind, items, inside in (
+        for kind, every, every_inside in (
             ("source", self.scene.sources, self.sources_inside),
             ("listener", self.scene.listeners, self.listeners_inside),
         ):
+            items = [item for item in every if item.in_use]
+            inside = None
+            if every_inside is not None:
+                inside = [ok for item, ok in zip(every, every_inside, strict=True) if item.in_use]
+            if self.outdoor is not None:
+                for item in items:
+                    points = item.elements() if kind == "source" else [item.position]
+                    building = next((b for b in self.outdoor.building_at(points) if b), None)
+                    if building is not None:
+                        out.append(
+                            f"{kind} {item.name!r} at {list(item.position)} is inside building "
+                            f"{building!r}"
+                        )
             if inside is None:
                 continue
             for item, ok in zip(items, inside, strict=True):
-                if not ok:
-                    where = "reaches" if getattr(item, "extended", False) else "is"
+                where = "reaches" if getattr(item, "extended", False) else "is"
+                if not ok and self.outdoor is not None:
+                    ground = "the ground" if self.outdoor.terrain is None else "the terrain"
+                    out.append(
+                        f"{kind} {item.name!r} at {list(item.position)} {where} outside the "
+                        f"open air: below {ground}, above the sky or past the edge of the "
+                        "ground (geometry.ground's extent, margin and sky)"
+                    )
+                elif not ok:
                     out.append(
                         f"{kind} {item.name!r} at {list(item.position)} {where} outside the room"
                     )
-        for listener in self.scene.listeners:
-            for source in self.scene.sources:
+        for listener in self._used("listeners"):
+            for source in self._used("sources"):
                 gap = np.linalg.norm(source.elements() - np.asarray(listener.position), axis=1)
                 if gap.min() < MIN_SOURCE_DISTANCE_M:
                     out.append(
@@ -286,8 +347,13 @@ class Room:
                     )
         return out
 
+    def _used(self, kind: str) -> list:
+        """The scene's sources or listeners (``kind``) in use: not left out."""
+        return [item for item in getattr(self.scene, kind) if item.in_use]
+
     def warnings(self) -> list[str]:
-        """Things worth a look that do not stop a simulation."""
+        """Things worth a look that do not stop a simulation; about the sources and
+        listeners in use."""
         r = self.report
         out = []
         if not r.closed:
@@ -307,13 +373,17 @@ class Room:
         for key in self.unused_assignments:
             out.append(f"assignment {key!r} matches no name in the geometry")
         out.extend(self._near_arrays())
+        if self.outdoor is not None:
+            out.extend(self.scene.geometry.footprint_notes())
         return out
 
     def _near_arrays(self) -> list[str]:
         """Listeners too close to a coherent array for its far-field pattern."""
         out = []
         c = self.speed_of_sound()
-        for source in self.scene.sources:
+        for source in self._used("sources"):
+            if getattr(source.directivity, "near_field", None):
+                continue  # its elements add up one by one
             try:
                 length = array_length(source.directivity)
             except ValueError:
@@ -321,22 +391,23 @@ class Room:
             if not length:
                 continue
             reach = far_field_distance(length, FAR_FIELD_HZ, c)
-            for listener in self.scene.listeners:
+            for listener in self._used("listeners"):
                 distance = float(np.linalg.norm(np.subtract(listener.position, source.position)))
                 if distance < reach:
                     out.append(
                         f"listener {listener.name!r} is {distance:.1f} m from array "
                         f"{source.name!r} ({length:.2f} m long), whose far-field pattern "
                         f"holds from about {reach:.1f} m at {FAR_FIELD_HZ:g} Hz and farther "
-                        "at higher frequencies; this close, a line source (line_m) models "
-                        "it better"
+                        "at higher frequencies; near_field: true adds up its elements one by "
+                        "one"
                     )
         return out
 
     def _unreachable(self) -> list[str]:
         """Listeners in a room that no sound of a source can reach: no surface between
         their rooms lets sound through."""
-        if len(self.air_cells) < 2 or not self.scene.listeners or not self.scene.sources:
+        sources, listeners = self._used("sources"), self._used("listeners")
+        if len(self.air_cells) < 2 or not listeners or not sources:
             return []
         through = self.face_transmission()
         links = np.zeros((0, 2), dtype=np.int64)
@@ -348,12 +419,12 @@ class Room:
         joined[links[:, 0], links[:, 1]] = joined[links[:, 1], links[:, 0]] = True
         for _ in range(len(self.air_cells)):
             joined = (joined.astype(int) @ joined.astype(int)) > 0
-        listener_rooms = self.room_of([lis.position for lis in self.scene.listeners])
+        listener_rooms = self.room_of([lis.position for lis in listeners])
         out = []
-        for source in self.scene.sources:
+        for source in sources:
             rooms = np.unique(self.room_of(source.elements()))
             rooms = rooms[rooms >= 0]
-            for listener, room in zip(self.scene.listeners, listener_rooms, strict=True):
+            for listener, room in zip(listeners, listener_rooms, strict=True):
                 if room >= 0 and len(rooms) and not joined[rooms, room].any():
                     out.append(
                         f"listener {listener.name!r} is in another room than source "

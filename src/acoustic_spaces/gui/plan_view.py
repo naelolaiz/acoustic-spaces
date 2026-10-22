@@ -1,11 +1,18 @@
 """The plan: the room seen from above, to draw floor plans, move their corners and move
-sources and listeners by dragging.
+sources and listeners by dragging; outdoors, to draw buildings, barriers, vegetation
+and ground zones on the ground.
 
 Floor plan and box rooms show their corners as handles. Dragging one moves it (a box
 becomes a floor plan with the same walls), double-clicking a wall adds a corner there,
 and the right-click menu removes one. *Draw room* starts a new floor plan: click its
 corners in turn and close it on the first one, with a double-click or with Enter.
 Rooms from model files show their outline, and a drawn room replaces the model.
+
+Outdoors the plan shows the buildings' and barriers' outlines, the vegetation in dashed
+green and the ground zones in their materials' colours, and the Geometry form's buttons
+draw new ones: a building's, a belt of trees' or a zone's outline closes like a floor
+plan, a barrier's or a hedge's path ends with a double-click or Enter, and a tree
+stands where the next click lands.
 
 Sources and listeners move by dragging and keep their height above the floor. Corners
 and points snap to the grid; Shift moves them freely. A click selects what is under the
@@ -40,9 +47,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from acoustic_spaces.geometry import plan_problem
+from acoustic_spaces.geometry import UNIT_SCALE, plan_problem
 from acoustic_spaces.gui.document import (
     LISTENER_HEIGHT,
+    NEW_PART_SIZES,
     SOURCE_HEIGHT,
     follow_floor,
     plan_corners,
@@ -53,7 +61,15 @@ from acoustic_spaces.gui.tips import label_for, share_tips
 from acoustic_spaces.gui.viewport import SELECTED_COLOUR, material_colour, surface_materials
 from acoustic_spaces.i18n import N_, _
 from acoustic_spaces.room import Room
-from acoustic_spaces.viz import BACKGROUND, EDGE_COLOUR, LISTENER_COLOUR, SOURCE_COLOUR
+from acoustic_spaces.viz import (
+    BACKGROUND,
+    EDGE_COLOUR,
+    LISTENER_COLOUR,
+    SOURCE_COLOUR,
+    VEGETATION_COLOUR,
+    clear_lengths,
+    nearest_spacing,
+)
 
 #: Grid steps the corners and points snap to (label, metres; 0 is off).
 SNAP_STEPS = (
@@ -77,7 +93,26 @@ GRID_PIXELS = 60
 MARGIN_PIXELS = 40
 #: Colour of a floor plan that cannot be (walls that cross).
 INVALID_COLOUR = "#ef476f"
+WEATHER_COLOUR = "#4cc9f0"
+#: What a drawing is for: a room's floor plan, or outdoors a building's footprint, a
+#: barrier's path, a belt of trees' footprint, a hedge's path, where a lone tree stands
+#: or a ground zone's outline; those that close into a polygon, and those that are a
+#: path from end to end.
+PURPOSES = ("room", "building", "barrier", "belt", "hedge", "tree", "zone", "weather")
+CLOSED = frozenset({"room", "building", "belt", "zone", "weather"})
+PATHS = frozenset({"barrier", "hedge"})
 GRID_COLOURS = ("#1d1e25", "#2b2d37", "#4a4d5a")  # minor, major, axes
+
+#: Why a drawing cannot be finished yet, by purpose ({problem} for an outline's).
+NOT_YET = {
+    "room": N_("Not a room yet: {problem}"),
+    "building": N_("Not a building yet: {problem}"),
+    "belt": N_("Not a belt of trees yet: {problem}"),
+    "zone": N_("Not a zone yet: {problem}"),
+    "weather": N_("Not a weather zone yet: {problem}"),
+    "barrier": N_("Not a barrier yet: it needs two points at least"),
+    "hedge": N_("Not a hedge yet: it needs two points at least"),
+}
 
 HINTS = {
     "plan": N_(
@@ -92,8 +127,37 @@ HINTS = {
         "The model's outline from above: drag sources and listeners. Draw room "
         "replaces the model with a floor plan."
     ),
-    "drawing": N_(
+    "outdoor": N_(
+        "The scene from above: drag sources and listeners. The Geometry form's buttons "
+        "draw buildings, barriers, vegetation and zones. Shift: no snapping."
+    ),
+    "room": N_(
         "Click the corners of the new room; close it on the first corner, with a "
+        "double-click or Enter. Backspace takes a corner back, Esc stops."
+    ),
+    "building": N_(
+        "Click the corners of the new building's footprint; close it on the first "
+        "corner, with a double-click or Enter. Backspace takes a corner back, Esc stops."
+    ),
+    "barrier": N_(
+        "Click the points along the new barrier, end to end; finish with a double-click "
+        "or Enter. Backspace takes a point back, Esc stops."
+    ),
+    "belt": N_(
+        "Click the corners of the belt of trees; close it on the first corner, with a "
+        "double-click or Enter. Backspace takes a corner back, Esc stops."
+    ),
+    "hedge": N_(
+        "Click the points along the hedge, end to end; finish with a double-click or "
+        "Enter. Backspace takes a point back, Esc stops."
+    ),
+    "tree": N_("Click where the tree stands; Esc cancels."),
+    "zone": N_(
+        "Click the corners of the ground zone; close it on the first corner, with a "
+        "double-click or Enter. Backspace takes a corner back, Esc stops."
+    ),
+    "weather": N_(
+        "Click the corners of the new weather zone; close it on the first corner, with a "
         "double-click or Enter. Backspace takes a corner back, Esc stops."
     ),
     "sources": N_("Click where the new source goes; Esc cancels."),
@@ -177,6 +241,9 @@ class PlanCanvas(QWidget):
     moved = Signal(str, int, tuple)
     #: A new floor plan was drawn: its corners (m).
     drawn = Signal(list)
+    #: An outdoor part was drawn: what for (one of :data:`PURPOSES` but "room") and its
+    #: corners or points (m; one point for a tree).
+    part_drawn = Signal(str, list)
     #: Put a new source or listener here (m).
     place = Signal(str, tuple)
     #: Something to tell the user (a refused drag, a drawing that crosses itself).
@@ -190,9 +257,12 @@ class PlanCanvas(QWidget):
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.room: Room | None = None
+        #: (kind, name) of the sources and listeners hidden in the views.
+        self.hidden: set[tuple[str, str]] = frozenset()
         self.selection: tuple[str, object] = ("", None)
         self.snap_step = DEFAULT_SNAP
         self.drawing: list[np.ndarray] | None = None
+        self.purpose: str = "room"
         self.placing: str | None = None
         self.cursor_position: np.ndarray | None = None
         self.corners: np.ndarray | None = None
@@ -211,11 +281,18 @@ class PlanCanvas(QWidget):
 
     # -- contents -------------------------------------------------------------------
 
-    def show_room(self, room: Room, selection: tuple[str, object] | None = None) -> None:
-        """Draw ``room`` with ``selection`` highlighted."""
+    def show_room(
+        self,
+        room: Room,
+        selection: tuple[str, object] | None = None,
+        hidden: set[tuple[str, str]] = frozenset(),
+    ) -> None:
+        """Draw ``room`` with ``selection`` highlighted, without the sources and
+        listeners in ``hidden`` ((kind, name) pairs)."""
         new_geometry = room.mesh is not self._mesh
         self.room = room
         self.selection = selection or ("", None)
+        self.hidden = hidden
         self.corners = plan_corners(room.scene)
         self._walls = wall_labels(room)
         self._materials = surface_materials(room)
@@ -228,8 +305,8 @@ class PlanCanvas(QWidget):
 
     @property
     def mode(self) -> str:
-        """What the plan is doing: "drawing", "placing", or the kind of room ("plan",
-        "box" or "file")."""
+        """What the plan is doing: "drawing", "placing", or the kind of scene ("plan",
+        "box", "file" or "outdoor")."""
         if self.drawing is not None:
             return "drawing"
         if self.placing is not None:
@@ -237,6 +314,8 @@ class PlanCanvas(QWidget):
         if self.room is None:
             return "file"
         geometry = self.room.scene.geometry
+        if geometry.ground is not None:
+            return "outdoor"
         return "plan" if geometry.floor_plan is not None else "box" if geometry.box else "file"
 
     def fit(self) -> None:
@@ -292,13 +371,14 @@ class PlanCanvas(QWidget):
     # -- what is under the mouse ------------------------------------------------------
 
     def _points(self):
-        """(kind, index, item) of every source and listener."""
+        """(kind, index, item) of every source and listener shown."""
         if self.room is None:
             return []
         return [
             (kind, k, item)
             for kind in ("sources", "listeners")
             for k, item in enumerate(getattr(self.room.scene, kind))
+            if (kind, item.name) not in self.hidden
         ]
 
     def hit(self, position: QPointF) -> tuple | None:
@@ -344,10 +424,14 @@ class PlanCanvas(QWidget):
 
     # -- drawing a room and placing points --------------------------------------------
 
-    def start_drawing(self) -> None:
-        """Start drawing a new floor plan, corner by corner."""
+    def start_drawing(self, purpose: str = "room") -> None:
+        """Start drawing a new floor plan, corner by corner, or outdoors one of the
+        other :data:`PURPOSES`."""
+        if purpose not in PURPOSES:
+            raise ValueError(f"nothing to draw for {purpose!r}")
         self.placing = None
         self.drawing = []
+        self.purpose = purpose
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.setFocus()
         self.state_changed.emit()
@@ -357,6 +441,7 @@ class PlanCanvas(QWidget):
         """Stop drawing, placing or dragging; True if there was something to stop."""
         busy = self.drawing is not None or self.placing is not None or self._drag is not None
         self.drawing = self.placing = None
+        self.purpose = "room"
         self._drag = self._preview = self._press = None
         self.unsetCursor()
         self.state_changed.emit()
@@ -364,18 +449,21 @@ class PlanCanvas(QWidget):
         return busy
 
     def add_drawn_corner(self, point) -> None:
-        """Add a corner to the room being drawn; a click on the first corner closes it."""
+        """Add a corner to the outline being drawn (a click on the first corner closes
+        it), a point to the path, or the tree's place, which finishes it."""
         if self.drawing is None:
             return
         point = np.asarray(point, dtype=float)
-        if len(self.drawing) >= 3 and self._pixels(self.drawing[0], self.to_screen(point)) <= (
-            HANDLE_PIXELS
-        ):
+        closing = self.purpose in CLOSED and len(self.drawing) >= 3
+        if closing and self._pixels(self.drawing[0], self.to_screen(point)) <= HANDLE_PIXELS:
             self.finish_drawing()
             return
         if self.drawing and np.allclose(point, self.drawing[-1]):
             return
         self.drawing.append(point)
+        if self.purpose == "tree":
+            self.finish_drawing()
+            return
         self.update()
 
     def undo_drawn_corner(self) -> None:
@@ -384,19 +472,31 @@ class PlanCanvas(QWidget):
             self.update()
 
     def finish_drawing(self) -> bool:
-        """Close the room being drawn and emit it; False (and a message) if it cannot be
-        a floor plan, and drawing goes on."""
+        """Close the outline being drawn, or end the path, and emit it; False (and a
+        message) if it cannot be one yet, and drawing goes on."""
         if self.drawing is None:
             return False
+        purpose = self.purpose
         corners = np.array(self.drawing, dtype=float).reshape(-1, 2)
-        problem = plan_problem(corners)
-        if problem is not None:
-            self.message.emit(_("Not a room yet: {problem}").format(problem=problem))
+        if purpose in CLOSED:
+            problem = plan_problem(corners)
+            if problem is not None:
+                self.message.emit(_(NOT_YET[purpose]).format(problem=problem))
+                return False
+        elif purpose in PATHS and len(corners) < 2:
+            self.message.emit(_(NOT_YET[purpose]))
+            return False
+        elif purpose == "tree" and len(corners) < 1:
             return False
         self.drawing = None
+        self.purpose = "room"
         self.unsetCursor()
         self.state_changed.emit()
-        self.drawn.emit([[float(x), float(y)] for x, y in corners])
+        points = [[float(x), float(y)] for x, y in corners]
+        if purpose == "room":
+            self.drawn.emit(points)
+        else:
+            self.part_drawn.emit(purpose, points)
         return True
 
     def start_placing(self, kind: str | None) -> None:
@@ -620,6 +720,8 @@ class PlanCanvas(QWidget):
                 self._paint_plan(painter)
             else:
                 self._paint_outline(painter)
+            if self.room.outdoor is not None:
+                self._paint_outdoors(painter)
             self._paint_points(painter)
         if self.drawing is not None:
             self._paint_drawing(painter)
@@ -725,6 +827,51 @@ class PlanCanvas(QWidget):
         painter.setPen(QPen(QColor(SELECTED_COLOUR), 2))
         painter.drawPath(chosen)
 
+    def _paint_outdoors(self, painter: QPainter) -> None:
+        """The ground zones in their materials' colours, and the vegetation in dashed
+        green: a belt's or a hedge's outline, a tree's crown."""
+        outdoor = self.room.outdoor
+        labels = {label[0]: k for k, label in enumerate(self.room.mesh.labels)}
+        font = painter.font()
+        painter.setFont(font)
+        for name, polygon in outdoor.zones:
+            if len(polygon) < 3:
+                continue
+            colour = self._material_of(labels.get(name, -1))
+            outline = QPolygonF([self.to_screen(c) for c in polygon])
+            painter.setPen(QPen(_qcolor(colour, 160), 1.5))
+            painter.setBrush(_qcolor(colour, 40))
+            painter.drawPolygon(outline)
+            self._label(painter, outline.boundingRect().center(), name, colour)
+        atmosphere = self.room.scene.atmosphere
+        if atmosphere is not None and atmosphere.zones:
+            # The weather zones, dotted in sky blue.
+            scale = UNIT_SCALE[self.room.scene.geometry.units or "m"]
+            pen = QPen(_qcolor(WEATHER_COLOUR, 220), 1.5)
+            pen.setStyle(Qt.PenStyle.DotLine)
+            painter.setPen(pen)
+            painter.setBrush(_qcolor(WEATHER_COLOUR, 20))
+            names = atmosphere.zone_names()
+            for name, zone in zip(names, atmosphere.zones, strict=True):
+                outline = QPolygonF([self.to_screen(scale * np.asarray(c)) for c in zone.polygon])
+                painter.drawPolygon(outline)
+                self._label(painter, outline.boundingRect().center(), name, WEATHER_COLOUR)
+        pen = QPen(_qcolor(VEGETATION_COLOUR, 220), 1.5)
+        pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        painter.setBrush(_qcolor(VEGETATION_COLOUR, 30))
+        for shape in outdoor.vegetation:
+            if shape.outline is not None:
+                outline = QPolygonF([self.to_screen(c) for c in shape.outline])
+                painter.drawPolygon(outline)
+                at = outline.boundingRect().center()
+            else:
+                at = self.to_screen(shape.centre[:2])
+                radius = shape.radius * self._scale
+                painter.drawEllipse(at, radius, radius)
+            self._label(painter, at, shape.name, VEGETATION_COLOUR)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
     def _paint_points(self, painter: QPainter) -> None:
         kind, key = self.selection
         drag = (
@@ -732,21 +879,35 @@ class PlanCanvas(QWidget):
             if self._drag is not None and self._drag[0] in ("sources", "listeners")
             else None
         )
+        shown = []
         for group, k, item in self._points():
-            chosen = kind == group and key == k
             position = np.asarray(item.position[:2], dtype=float)
             if drag == (group, k) and self._preview is not None:
                 position = self._preview
+            shown.append((group, k, item, position, self.to_screen(position)))
+        # Smaller markers where they would overlap on the screen, and arrows that stop
+        # short of a marker ahead.
+        screen = np.array([(p.x(), p.y()) for *_, p in shown]).reshape(-1, 2)
+        radii = np.clip(0.45 * nearest_spacing(screen), 3.5, 5.5)
+        aims = np.zeros_like(screen)
+        for row, entry in enumerate(shown):
+            forward = np.asarray(entry[2].orientation.forward()[:2], dtype=float) * [1.0, -1.0]
+            if np.linalg.norm(forward) > 0.2:  # drawn: not pointing up or down
+                aims[row] = forward / np.linalg.norm(forward)
+        arrows = clear_lengths(screen, aims, radii, 18.0)
+        for (group, k, item, position, p), size, arrow in zip(shown, radii, arrows, strict=True):
+            chosen = kind == group and key == k
             colour = (
                 SELECTED_COLOUR
                 if chosen or drag == (group, k)
                 else (SOURCE_COLOUR if group == "sources" else LISTENER_COLOUR)
             )
-            p = self.to_screen(position)
+            # Left out of simulations: faded.
+            alpha = 255 if item.in_use or chosen else 90
             if group == "sources" and item.extended:  # a line or surface, seen from above
                 corners = item.outline()[:, :2] + (position - np.asarray(item.position[:2]))
                 outline = QPolygonF([self.to_screen(c) for c in corners])
-                painter.setPen(QPen(_qcolor(colour, 200), 3))
+                painter.setPen(QPen(_qcolor(colour, min(alpha, 200)), 3))
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 if len(corners) > 2:
                     painter.drawPolygon(outline)
@@ -754,18 +915,18 @@ class PlanCanvas(QWidget):
                     painter.drawPolyline(outline)
             forward = np.asarray(item.orientation.forward()[:2], dtype=float)
             if np.linalg.norm(forward) > 0.2:
-                forward = forward / np.linalg.norm(forward) * 18
-                painter.setPen(QPen(QColor(colour), 2))
+                forward = forward / np.linalg.norm(forward) * arrow
+                painter.setPen(QPen(_qcolor(colour, alpha), 2))
                 painter.drawLine(p, QPointF(p.x() + forward[0], p.y() - forward[1]))
-            radius = 7.0 if chosen or self._hover == (group, k) else 5.5
-            painter.setPen(QPen(QColor(BACKGROUND[0]), 1.5))
-            painter.setBrush(QColor(colour))
+            radius = 7.0 if chosen or self._hover == (group, k) else size
+            painter.setPen(QPen(_qcolor(BACKGROUND[0], alpha), 1.5))
+            painter.setBrush(_qcolor(colour, alpha))
             painter.drawEllipse(p, radius, radius)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             text = item.name
             if drag == (group, k) and self._preview is not None:
                 text += f"  ({point_text(position[:2])})"
-            painter.setPen(QColor("#ffffff"))
+            painter.setPen(_qcolor("#ffffff", alpha))
             painter.drawText(QPointF(p.x() + radius + 4, p.y() - radius), text)
 
     def _paint_drawing(self, painter: QPainter) -> None:
@@ -775,6 +936,15 @@ class PlanCanvas(QWidget):
             hover = self.to_screen(snap(self.cursor_position, self.snap_step))
         pen = QPen(QColor(SELECTED_COLOUR), 2)
         painter.setPen(pen)
+        if self.purpose == "tree":
+            if hover is not None:  # the crown the tree would have there
+                radius = 0.5 * NEW_PART_SIZES["tree"]["crown_diameter"] * self._scale
+                pen.setStyle(Qt.PenStyle.DashLine)
+                painter.setPen(pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawEllipse(hover, radius, radius)
+            return
+        closed = self.purpose in CLOSED
         for a, b in zip(points, points[1:], strict=False):
             painter.drawLine(a, b)
         if points and hover is not None:
@@ -788,12 +958,12 @@ class PlanCanvas(QWidget):
                 fmt(_("{length:.2f} m"), length=length),
                 "#ffffff",
             )
-            if len(points) >= 2:
+            if closed and len(points) >= 2:
                 pen.setStyle(Qt.PenStyle.DashLine)
                 painter.setPen(pen)
                 painter.drawLine(hover, points[0])
         for k, p in enumerate(points):
-            closing = k == 0 and len(points) >= 3
+            closing = closed and k == 0 and len(points) >= 3
             size = 6 if closing else 3.5
             painter.setPen(QPen(QColor(BACKGROUND[0]), 1))
             painter.setBrush(QColor(SELECTED_COLOUR if closing else "#ffffff"))
@@ -825,7 +995,12 @@ class PlanView(QWidget):
         bar.setContentsMargins(4, 4, 4, 0)
         self.draw = QPushButton(_("Draw room"))
         self.draw.setCheckable(True)
-        self.draw.setToolTip(_("Draw a new floor plan, corner by corner; it replaces the room"))
+        self.draw.setToolTip(
+            _(
+                "Draw a new floor plan, corner by corner; it replaces the room. Buildings, "
+                "barriers, vegetation and ground zones are drawn from the Geometry form"
+            )
+        )
         self.snap = QComboBox()
         for label, step in SNAP_STEPS:
             self.snap.addItem(_(label) if step == 0 else label, step)
@@ -863,19 +1038,20 @@ class PlanView(QWidget):
         self.corners_changed = self.canvas.corners_changed
         self.moved = self.canvas.moved
         self.drawn = self.canvas.drawn
+        self.part_drawn = self.canvas.part_drawn
         self.place = self.canvas.place
         self.message = self.canvas.message
         self._state()
 
-    def show_room(self, room: Room, selection=None) -> None:
-        self.canvas.show_room(room, selection)
+    def show_room(self, room: Room, selection=None, hidden=frozenset()) -> None:
+        self.canvas.show_room(room, selection, hidden)
         self._state()
 
     def fit(self) -> None:
         self.canvas.fit()
 
-    def start_drawing(self) -> None:
-        self.canvas.start_drawing()
+    def start_drawing(self, purpose: str = "room") -> None:
+        self.canvas.start_drawing(purpose)
 
     def start_placing(self, kind: str | None) -> None:
         self.canvas.start_placing(kind)
@@ -884,7 +1060,7 @@ class PlanView(QWidget):
         return self.canvas.cancel()
 
     def _draw_toggled(self, on: bool) -> None:
-        if on and self.canvas.drawing is None:
+        if on and (self.canvas.drawing is None or self.canvas.purpose != "room"):
             self.canvas.start_drawing()
         elif not on and self.canvas.drawing is not None:
             self.canvas.cancel()
@@ -892,11 +1068,15 @@ class PlanView(QWidget):
     def _state(self) -> None:
         canvas = self.canvas
         mode = canvas.mode
-        text = _(HINTS[canvas.placing if mode == "placing" else mode])
+        if mode == "drawing":
+            key = canvas.purpose
+        else:
+            key = canvas.placing if mode == "placing" else mode
+        text = _(HINTS[key])
         self.hint.setText(text)
         self.hint.setToolTip(text)  # in full, should the bar cut it short
         self.draw.blockSignals(True)
-        self.draw.setChecked(canvas.drawing is not None)
+        self.draw.setChecked(canvas.drawing is not None and canvas.purpose == "room")
         self.draw.blockSignals(False)
         where = canvas.cursor_position
         self.where.setText(
@@ -905,7 +1085,10 @@ class PlanView(QWidget):
 
 
 __all__ = [
+    "CLOSED",
     "DEFAULT_SNAP",
+    "PATHS",
+    "PURPOSES",
     "SNAP_STEPS",
     "PlanCanvas",
     "PlanView",

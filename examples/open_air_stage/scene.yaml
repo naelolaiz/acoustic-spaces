@@ -1,0 +1,43 @@
+# Outdoors: a stage's loudspeakers 5 m up, heard 100 and 300 m away across a park on a
+# windy evening, downwind and upwind. The wind, 5 m/s 10 m up, grows with height, so
+# sound going with it travels faster higher up and bends down towards the ground, and
+# sound going against it bends up, over the listeners' heads. Downwind the sound comes
+# sooner, and louder in the low bands; 300 m upwind the listeners are in its shadow,
+# where only what bends round its edge and what the wind's eddies scatter into it
+# arrive: there the bands from 1 kHz up are some 19 dB below those downwind, where
+# without the eddies they would be 60 dB below. The eddies also make the sound flicker
+# as they drift past. Remove the atmosphere to hear the same park in still air.
+name: Open-air stage in the wind
+geometry:
+  ground:
+    extent: [[-320, -40], [320, 40]]
+    sky: 30
+materials:
+  lawn:
+    impedance: grass
+assignments:
+  ground: lawn
+atmosphere:
+  preset: windy
+  wind: {direction_deg: 0}
+  turbulence: moderate
+sources:
+  - name: stage
+    position: [0, 0, 5]
+    level_db: 120
+listeners:
+  - name: downwind_100m
+    position: [100, 0, 1.5]
+    orientation: {yaw: 180}
+  - name: downwind_300m
+    position: [300, 0, 1.5]
+    orientation: {yaw: 180}
+  - name: upwind_100m
+    position: [-100, 0, 1.5]
+  - name: upwind_300m
+    position: [-300, 0, 1.5]
+simulation:
+  early: {method: image_sources, max_order: 1, diffraction: none}
+  late: {method: stochastic_ray_tracing}
+outputs:
+  - mono

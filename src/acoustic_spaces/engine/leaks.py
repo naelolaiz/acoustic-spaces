@@ -174,6 +174,8 @@ def find_leaks(
 
     points, owner = [], []
     for k, source in enumerate(room.scene.sources):
+        if not source.in_use:
+            continue
         elements = source.elements()
         points.extend(elements)
         owner.extend([k] * len(elements))

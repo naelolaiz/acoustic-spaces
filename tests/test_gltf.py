@@ -323,3 +323,29 @@ def test_trimesh_reads_the_file(tmp_path: Path) -> None:
     bounds = np.vstack([scene.geometry[scene.graph[name][1]].bounds for name in surfaces])
     np.testing.assert_allclose(bounds.min(axis=0), [0.0, 0.0, -6.0], atol=1e-6)
     np.testing.assert_allclose(bounds.max(axis=0), [8.0, 3.0, 0.0], atol=1e-6)
+
+
+def test_vegetation_volumes(tmp_path: Path) -> None:
+    room = Room.from_yaml(SHOEBOX.parent.parent / "tree_belt" / "scene.yaml")
+    out = tmp_path / "trees.glb"
+    export_gltf(room, out)
+    doc, binary = read_glb(out)
+    check_layout(doc, binary)
+    volumes = children_of(doc, "vegetation")
+    assert [node["name"] for node in volumes] == ["wood", "oak"]
+    assert [node["extras"]["kind"] for node in volumes] == ["belt", "tree"]
+    for node, shape in zip(volumes, room.outdoor.vegetation, strict=True):
+        primitive = doc["meshes"][node["mesh"]]["primitives"][0]
+        material = doc["materials"][primitive["material"]]
+        assert material["name"] == "vegetation" and material["alphaMode"] == "BLEND"
+        corners = array(doc, binary, primitive["attributes"]["POSITION"])
+        if shape.outline is None:
+            low = np.subtract(shape.centre, [shape.radius, shape.radius, shape.half_height])
+            high = np.add(shape.centre, [shape.radius, shape.radius, shape.half_height])
+        else:
+            outline = np.asarray(shape.outline)
+            low = [*outline.min(axis=0), shape.low]
+            high = [*outline.max(axis=0), shape.high]
+        (x0, y0, z0), (x1, y1, z1) = low, high
+        np.testing.assert_allclose(corners.min(axis=0), [x0, z0, -y1], atol=1e-5)
+        np.testing.assert_allclose(corners.max(axis=0), [x1, z1, -y0], atol=1e-5)

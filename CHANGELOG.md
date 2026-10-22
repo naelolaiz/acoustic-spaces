@@ -2,16 +2,594 @@
 
 ## Unreleased
 
+**Outdoor scenes**
+
+- `geometry.ground` makes a scene outdoors: a flat ground under an open sky, which lets
+  all sound out, with `buildings` (footprints raised to a height, open underneath),
+  `barriers` (thin screens along a path) and a model file's objects standing on it. The
+  ground reaches `margin` past them or over a set `extent`, and the sky lies `sky` over
+  it or `margin` over the highest of them. Surfaces are named after each building
+  (`<name>_roof`, `<name>_wall_1`...) and by kind (`walls`, `roofs`, `buildings`,
+  `barriers`, `ground`, `sky`).
+- Nothing reflects off the sky, no edge of the sky or on the ground diffracts and the
+  ground's size scatters nothing, so the ground reads as endless; the inside corners of
+  buildings do not diffract either.
+- Sources and listeners inside a building, below the ground, above the sky or past the
+  ground's edge are reported as problems.
+- Outdoors, `ir_length_s` counts from the latest direct sound, so far listeners are not
+  cut off; the statistical late method, which needs a diffuse field, stops with an
+  error; coverage maps cover the ground and leave out points inside buildings.
+- The editor's **Geometry** form has an **Outdoors** group (ground height, margin, sky,
+  buildings' and barriers' heights); the 3D view, the plots and the Blender export leave
+  the sky out; `inspect` and the status bar describe the ground instead of a
+  reverberation time.
+- New example: `street`, traffic in a street between two buildings, heard on the
+  pavement, on a balcony and in a garden behind a noise barrier.
+- Rooms are unchanged: indoor scenes give the same results, bit for bit.
+
+**Ground impedance**
+
+- A material's `impedance` makes it a porous ground: a Nord2000 ground class (`snow`,
+  `forest_floor`, `loose_soil`, `grass`, `compacted_soil`, `gravel`, `asphalt`, `water`)
+  or a flow resistivity, by Miki's model (the default), Delany and Bazley's or the
+  two-parameter model, optionally as a layer on a hard backing. Its absorption is its
+  random-incidence absorption, in third-octave bands.
+- Reflections off it take the spherical wave's reflection factor (Weyl-van der Pol),
+  with the phase and the ground wave near grazing incidence that make the ground dip:
+  within 0.05 dB of the exact solution over grass and harder grounds, 0.2 dB over snow
+  and 0.4 dB over a layer of snow 10 cm thick, outside dips more than 20 dB deep.
+- Ground zones (`geometry.ground.zones`): parts of the ground with materials of their
+  own, such as a road across a meadow. A reflection near where two grounds meet takes
+  each one's factor, weighted by the share of its Fresnel zone each covers, band by band.
+- Outdoors the early paths add in pressure in every band by default
+  (`coherent_max_band_hz: 8000`; a room takes 500 at most), and the paths of each point
+  of a line or surface source add in pressure, the points in energy.
+- The wave solver fits a ground to its impedance itself, phase and all, with branches
+  without mass: within 0.12 dB of the exact solution over grass from 40 to 315 Hz.
+- The editor's material page has a **Ground impedance** group; the **Outdoors** group
+  lists the ground zones; **In pressure up to** goes up to 8000 Hz outdoors. `inspect`
+  shows each material's impedance and the zones; `--coherent-band` takes 1000 to 8000
+  outdoors. `calibrate` leaves materials with an impedance alone.
+- New example: `roadside`, traffic on a road between a meadow and a paved yard, with the
+  ground dip over the grass. New validation: `validation/ground_reflection.py`.
+
+**Wind and temperature**
+
+- `atmosphere` (outdoor scenes): the wind and the temperature over the ground, which
+  bend sound down (downwind, a clear night) or up into shadow zones (upwind, a sunny
+  day). Presets `neutral`, `windy`, `sunny_day` and `clear_night`; the wind's speed,
+  direction, height and log, linear or constant profile; a temperature gradient and a
+  log term near the ground; the ground's roughness; or a measured table of heights,
+  temperatures and wind speeds.
+- The direct sound and the reflections off the open ground are the eigenrays of the
+  effective speed of sound, curved paths with exact travel times, levels from the ray
+  tubes' spreading (capped at caustics) and the phase lost at each caustic: several
+  downwind, none in a shadow. Paths off façades bend in their unfolded plane; paths
+  over edges fall into the shadow as a creeping wave.
+- Below 500 Hz, and up to 2 kHz in and near a shadow, the sound over the open ground
+  comes from a Green's function parabolic equation over the grounds' impedances, with
+  Greene's starting field: within 0.25 dB of the exact solution in still air over grass
+  and harder grounds. It runs on `simulation.performance.threads`.
+- The late rays follow their arcs through the layers; the animation's particles,
+  `view --paths` and the Blender export curve too. The direct sound's time in the
+  results is the bent path's.
+- The editor's scene page has a **Wind and temperature** group with **Show the
+  profile**; `inspect` describes the atmosphere and the speed of sound at a few
+  heights; `acoustic_spaces.viz.plot_atmosphere` draws it.
+- New example: `open_air_stage`, a stage heard 100 and 300 m away across a park,
+  downwind and upwind in a 5 m/s wind. New validation:
+  `validation/outdoor_propagation.py`, a wind turbine heard 178 to 845 m away (the
+  Hannover data, downloaded on first use): 1.7 to 2.7 dB per band on average in light
+  winds, as close as the authors' own model.
+- Scenes without an atmosphere, or with one in which sound goes straight, give the same
+  results as before, bit for bit.
+
+**Turbulence**
+
+- `atmosphere.turbulence`: the eddies of the wind and of the temperature, by their
+  structure parameters C_T² and C_v² and the size of the largest eddies, with a von
+  Kármán spectrum; presets `weak`, `moderate` and `strong`. Also in still air.
+- Each two early paths of a sound add in pressure with their coherence factor, from the
+  Markov approximation along both, reduced for paths that differ only by reflections
+  off the ground as a parabolic equation marched through random eddies has it: the
+  ground dip fills in at long distances and high frequencies, within about 1 dB of that
+  parabolic equation on average over eight grounds and heights. The echogram, the
+  parameters and the coverage maps take this average; in the parabolic equation's bands
+  the eddies blur its sound towards the rays' added in energy.
+- Eddies scatter sound into the shadows of the wind and of the temperature: once from
+  the air over the shadow's edge (the Born approximation), and at high frequencies by
+  shaking the refraction near the ground: within about 1 dB of a parabolic equation
+  through random eddies on average. 300 m upwind in the `windy` preset the bands from
+  1 kHz up are about 19 dB below those downwind with moderate eddies, 60 without.
+- An impulse response is one moment of the eddies (drawn with the seed), each path
+  delayed band by band; `auralize`, the editor's **Listen** and `walkthrough` go through
+  a new moment every sixteenth of the time the eddies take to drift past (at most 20
+  times a second), crossfaded, so the sound flickers.
+- The editor's **Wind and temperature** group has **Eddies** (none, a preset or custom)
+  with the structure parameters and the eddies' size; `inspect` describes them.
+- The `open_air_stage` example has moderate eddies. New validation:
+  `validation/turbulence.py`, against a parabolic equation through random eddies;
+  `validation/outdoor_propagation.py --turbulence` adds eddies to the Hannover cases.
+- Scenes without turbulence give the same results as before, bit for bit.
+
+**Vegetation**
+
+- `geometry.vegetation` (outdoor scenes): belts of trees and woods (a footprint raised
+  to a height), hedges (a path of a width, mitred at its bends) and lone trees (a
+  spheroid crown), which sound passes through. Each holds foliage, ISO 9613-2's `dense`
+  preset (the default, all absorbed) or an attenuation per band with an albedo and a
+  mean cosine of scattering, and stems, upright rigid cylinders by their number per m²
+  and their diameter, which scatter by the exact series and only sound's horizontal
+  share. Overlapping volumes add up, and a volume may run past the ground's edge.
+- The early paths lose what the plants take along each leg (Beer-Lambert), the
+  parabolic equation's sound what its direct path loses. The late rays absorb along
+  their way and scatter in the plants at random: foliage by Henyey and Greenstein's
+  phase function, with its share sent straight to each listener, stems sideways,
+  keeping the slope, with what the next leg carries through each listener's sphere
+  averaged over the turns; in several bands at once each band keeps its own
+  expectation. The rain from every reflection loses what the plants take on its way.
+  Coverage maps take both. The wave solver's bands leave vegetation out.
+- The editor's **Outdoors** group lists the vegetation (its shape, what fills it, its
+  heights, and **Remove**); the 3D view, `view` and the Blender export draw it in
+  see-through green, coverage maps outline it, and `inspect` gives what sound loses per
+  metre through each.
+- New example: `tree_belt`, traffic on a road heard behind a belt of trees and across an
+  open meadow. New validation: `validation/vegetation.py`, the late rays against a
+  separate particle simulation through a slab of foliage or stems: within a few tenths
+  of a percent.
+- Scenes without vegetation give the same results as before, bit for bit.
+
+**The wave solver in wind and temperature**
+
+- Outdoors, in an atmosphere whose wind or temperature changes with height, the wave
+  solver's speed of sound changes from cell to cell: the still air's at each cell's
+  height, plus the wind's component along the horizontal from the source, the effective
+  speed of sound the rays and the parabolic equation take. The grid is fine enough for
+  the slowest sound and steps in time for the fastest; each cell weighs its neighbours
+  by the square of its speed over the grid's, its walls by that speed (their admittance
+  is relative to the local rho c) and the source by its square, and so does the matched
+  layer. The flow itself (the linearised Euler equations) stays out.
+- The run's details give the slowest and the fastest speed of sound on the grid
+  (`wave_speed_min_m_s`, `wave_speed_max_m_s`).
+- New validation: `validation/wave_outdoor.py`, the 63 and 125 Hz bands over grass, 50
+  to 200 m from the source, in still air, downwind and upwind, on a sunny day and on a
+  clear night, against the parabolic equation: within 0.7 dB at 63 Hz and 0.4 dB at
+  125 Hz, 0.2 dB on average.
+- Indoors, and outdoors in still air, the wave solver gives the same results as before,
+  bit for bit.
+
+**Outdoor results**
+
+- Outdoors, every response and map point gives its level relative to free field, per
+  octave band and A-weighted: how much louder the source is there than the same source
+  as far away in free field, with the same air; with the sign turned, the excess
+  attenuation. `simulate` prints it, `parameters.json` holds it (`re_free_field_db`,
+  `re_free_field_a_db`), maps have the parameter `re_free_field` and the editor's
+  Results panel the row **Re free field**.
+- `simulation.insertion_loss_of` names buildings, barriers or vegetation (`--without`
+  on the command line, for `simulate` and `map`; an **Insertion loss** list on the
+  editor's Simulation page): the scene is run again without them, with the same seed,
+  and the results carry their insertion loss at every listener (`insertion_loss_db`,
+  `insertion_loss_a_db`) and map point (`insertion_loss`, `insertion_loss_a`), the
+  level without them less the level with them; the report says what was left out
+  (`removed`). `Scene.without(names)` is the scene without them, and
+  `acoustic_spaces.engine.insertion` runs both.
+- Outdoors, G of a response that holds no decay to read (an open field, a lone
+  barrier) is that of the energy it holds instead of undefined, and so are the levels
+  and the STI that take it; the other parameters stay undefined. Indoors nothing
+  changes.
+- New validation: `validation/insertion_loss.py`, a barrier's insertion loss against
+  the exact solution for a half-plane (within 0.07 dB over an absorbing ground) and the
+  level over grass against the exact solution for a ground (within 0.15 dB, up to 1.1
+  dB in the ground dip below 1 kHz, which the band filters fill), and a barrier over a
+  rigid ground against the four paths over it (below).
+- Scenes without `insertion_loss_of` give the same results as before, bit for bit,
+  except that G outdoors is now defined where it was not.
+
+**Reflections on both sides of an edge**
+
+- `simulation.early.diffraction_reflections: both_sides` (`--diffraction-reflections`
+  for `simulate` and `map`; **Reflections over an edge** on the editor's Simulation
+  page) lets a diffracted path reflect both before and after the edge: off the ground
+  on the way to a barrier and again behind it, the fourth of the four paths over a
+  barrier on the ground, which carries a quarter of the sound over it on a hard ground.
+  Its reflections take the materials' coefficients and phases as any other path's, and
+  it counts as a diffracted path of order 2 (its two reflections) where paths are
+  drawn, exported and reported.
+- Validation (`validation/insertion_loss.py`): a barrier on a rigid ground against the
+  four paths by the exact solution, the exact solution read through the engine's own
+  band filters below 1 kHz: within 0.15 dB at every listener and band with
+  `both_sides`; with `one_side` the insertion loss is 0.3 to 0.8 dB too high from 1 kHz
+  up and up to 3 dB off below.
+- `one_side` stays the default, so existing scenes give the same results, bit for bit.
+
+**Foliage from the leaves' size and density**
+
+- `foliage: {leaf_area_per_m3: F, leaf_width: a}` on a vegetation volume gives its
+  leaves instead of a preset or measured rates: their area (one side's) per cubic
+  metre and their width, the diameter of a disc of a leaf's area. The engine works out
+  what they take in each band from thin rigid discs turned every way alike
+  (`engine.vegetation.disc_scattering`, `leaves_medium`): a dipole, from the air a
+  small disc holds back, 16 (kr)⁴ / (81 π²) of its area; twice the mean projected area
+  of a large one, half the forward shadow and half reflected every way alike; the two
+  bridged smoothly in between. They absorb in the viscous and thermal boundary layers
+  on their faces (`leaf_absorption`, Morse and Ingard's rigid wall), a few per mille of
+  their area. The scattered share and its mean cosine per band replace `albedo` and
+  `asymmetry`. The editor's vegetation list and `inspect` show such leaves; the late
+  rays, the early paths and coverage maps take them as any other foliage.
+- New validation: `validation/leaves.py`, the disc's cross-section against its closed
+  forms at both ends, the absorption against the wall's in closed form, and a wood of
+  leaves 50 m deep compared with ISO 9613-2's dense-foliage table: leaves 5 cm wide at
+  0.1 m² per m³ take about what the table gives at 4 kHz (3 to 3.5 dB against 4.5),
+  more at 8 kHz and next to nothing below 1 kHz, where the table's 1 to 3 dB are not
+  what leaves scatter. `validation/vegetation.py` runs the late rays through such
+  leaves against its particle simulation too.
+- The `dense` preset, `none` and measured `attenuation` give the same results as
+  before, bit for bit.
+
+**Terrain and buildings from a map**
+
+- `ground.terrain` makes the ground uneven: its heights on a square grid, from an Esri
+  ASCII grid or a table of x y z points (`file`; `gdal_translate -of AAIGrid` turns a
+  GeoTIFF into the first) or given in the scene (`heights`, `origin`, `spacing`),
+  bilinear between the nodes; `ground.map_origin` is subtracted from a map's
+  coordinates, and `ground.height` added to the heights. The scene's ground is the grid
+  sampled over its extent (the whole grid unless an extent is set) and cut into
+  triangles, with the sky walls rising from its edge; buildings, barriers and
+  vegetation stand on it however it runs, and ground zones take its triangles. Files in
+  degrees of longitude and latitude are refused. `inspect` describes the terrain and
+  gives each source's and listener's height over the ground.
+- `geometry.buildings_file` adds the buildings of a GeoJSON file: `Polygon` and
+  `MultiPolygon` footprints raised to the height a property gives (`height`,
+  `default_height`), named by a property (`name`), some left out (`without`); holes are
+  built over and reported. The editor lists them after the scene's own buildings and
+  removes one into `without`.
+- Over a terrain the early sound reflects once off the mean plane of the ground's
+  profile between the source and the listener (CNOSSOS-EU's and Nord2000's ground
+  reflection, with the ground's reflection factor under the reflection point), not off
+  the terrain's facets (`engine.terrain`), and bends over the crests the line of sight
+  cuts through (`engine.crests`): the string pulled taut over the profile, one wedge of
+  the uniform theory of diffraction per crest with the ground's reflections off the
+  profile's segments on both sides in its terms, Fresnel-zone weighted as in Nord2000
+  (a term of the wedge's coefficient near the crest, a path of its own far from it),
+  the equivalent edge of a flat or rounded top with ISO 9613-2's thick-screen
+  factor over the ground within an eighth of a wavelength of the string (nothing for a
+  ridge), and in sight the nearest crest's wave with the transition at its boundaries
+  and the reflection off the slope before it, so that the level is continuous across
+  the edge of a hill's shadow and ripples in the lit zone as the exact field does. The
+  late rays bounce off the terrain's triangles. Edges buried in a terrain do not
+  diffract.
+- New validation: `validation/terrain.py`, a flat terrain against the flat ground (the
+  same paths to rounding), a plane slope against the image source in the tilted plane,
+  a ridge against the exact solution for the wedge (within 0.2 dB in every band), a
+  smooth hill against the thin screen's attenuation (Maekawa's formula over a soft
+  ground, ISO 9613-2's over a rigid one, where the flanks' reflections add)
+  and the level's steps as a listener climbs out of its shadow, and the cost of a
+  terrain 2 km across (see [Validation](docs/validation.md#terrain-against-closed-forms-and-the-exact-wedge)).
+- New example: `hillside`, a works yard at the foot of a hill heard in the hill's
+  shadow, on its slope and on its crest, over a terrain from a grid of heights with two
+  houses from a map.
+- Scenes without a terrain or a buildings file give the same results as before, bit
+  for bit.
+
+**Outdoor scenes in the editor**
+
+- **File > New outdoor scene** starts a flat meadow 200 m across under an open sky,
+  with a source and a listener 50 m apart, to build on.
+- The **Geometry** form's **Outdoors** group draws new parts in the plan view: **Add
+  building**, **Add zone** and a belt of trees as outlines closed on their first corner,
+  **Add barrier** and a hedge as paths ended with Enter or a double-click, and a lone
+  tree with one click; each takes the usual sizes (a building 10 m high, a barrier 3 m,
+  a belt 12 m, a hedge 2 m high and 1.5 m wide, a tree's crown 8 m across from 2.5 to
+  10 m up, dense foliage) to change afterwards, and **Remove** takes it out again. The
+  plan shows the vegetation in dashed green and the zones in their materials' colours.
+- The ground's **Extent** is set in the form (or left to the margin), **Terrain from a
+  file** and **Remove terrain** set and drop a terrain, and **Buildings from a map**
+  adds a GeoJSON file's buildings after asking which of its properties hold their
+  heights (or one height for all) and their names, with **Remove the map's buildings**
+  to drop the file; `acoustic_spaces.geometry.terrain.footprint_properties` reads what
+  a file offers.
+- A saved scene refers to its terrain and map by paths relative to the scene file, like
+  its model file.
+
+**Validation against a fast field program**
+
+- `validation/ffp.py`: a fast field program for sound over a flat ground through a
+  layered atmosphere, written apart from the engine: the exact solution of the vertical
+  problem through layers of constant sound speed under a Hankel transform, with its own
+  Bessel functions, so it needs nothing but numpy. In still air it is within 0.001 dB of
+  the exact solution for a locally reacting ground from 10 Hz to 1 kHz and 100 m to 10
+  km, and its layers are converged.
+- `validation/benchmark_1995.py`: the benchmark cases for outdoor sound propagation
+  models (Attenborough and others, 1995): a source 5 m and a listener 1 m over a ground
+  of flow resistivity 200 kPa s/m², 100 m to 10 km apart, in still air and in sound
+  speed gradients of 0.1/s down and up, and the same gradients stopping 100 m up (the
+  weather there is), at 10, 100 and 1000 Hz through the engine's parabolic equation and,
+  as whole scenes, per octave band from 63 Hz to 1 kHz, against the program read as the
+  engine reads its bands. The parabolic equation is within 0.1 dB of the program to 1 km
+  and within 3 dB to 10 km with the gradient stopping 100 m up, as the weather's do, and
+  parts from it beyond 1 to 2 km with the benchmark's gradient going on to a kilometre
+  up; whole scenes are within 0.11 dB per band to 1 km in every case, in still air read
+  through the band filters within 0.04 dB to 200 m. The comparison found the notch at
+  the join of the parabolic equation's bands and the rays' fixed below; see
+  [Validation](docs/validation.md#outdoor-sound-in-wind-against-a-fast-field-program).
+
+**Outdoor scenes on the GPU**
+
+- The GPU traces outdoor scenes as the CPU does, so `simulation.late.device: gpu`,
+  `both` and `auto` take them now, where they fell back to the CPU: the rays bent by
+  wind and temperature follow the same chords through the layers (the same turns and
+  the same curve to the millimetre, ray for ray, worked in single precision without
+  trigonometry, whose rounding on a GPU would move the chords' ends); the rays through
+  vegetation meet the same foliage and stems, scatter and lose energy the same way, and
+  carry the same per-band weights; the open sky lets them out (a surface into no room,
+  which only the CPU took before); and the ray count is told from the chords it needs.
+  Vegetation of more than 16 media stays on the CPU, which the run says. What reaches
+  each listener in each band, and when, agrees with the CPU's within the noise of the
+  ray count: `validation/outdoor_gpu.py` compares the two on the outdoor examples
+  (see [Validation](docs/validation.md#outdoor-scenes-on-the-gpu)). The shader is
+  compiled with only what a scene has of the outdoors, so rooms compile as fast as
+  before. On Direct3D 12 (Windows) bent rays and vegetation stay on the CPU, which the
+  run says: there the GPU's results for them disagreed with the CPU's, by 7 to 34 % on
+  the software GPU of Windows CI.
+- The wave solver in wind and temperature steps its grid on the GPU too
+  (`simulation.wave.device: gpu`, `both` and `auto`), with the speed of sound per cell,
+  in its walls, its source and its matched layer, agreeing with the CPU to rounding.
+
+**Eddies weaker with height**
+
+- `atmosphere.turbulence.height_m` says the height above the ground the structure
+  parameters C_T² and C_v² hold at (where they were measured or estimated, usually 2 m):
+  from it the eddies weaken with height as (z / `height_m`)^-`falloff`, taken no nearer
+  the ground than their outer scale. `falloff` is 2/3 by default, as the surface
+  layer's structure parameters fall in neutral and stable air (Monin-Obukhov
+  similarity), up to 4/3 for the temperature's in strong sunshine. Without `height_m`
+  the eddies are the same at every height, as before: results do not change.
+- The coherence of each pair of early paths takes Cn² at the mean height of the two
+  points along them, so paths aloft part slower; the sound scattered into a shadow takes
+  Cn² at the height it scatters at, and the shaking of the refraction near the ground
+  Cn² at the geometric mean of the source's and the listener's heights.
+  `validation/turbulence.py --profile` marches the parabolic equation through eddies
+  strengthening right down to the ground: the ground dip comes out within 1.1 dB on
+  average over the soft grounds and 1.4 over the hard ones, the shadows within 1.3 to
+  2.9 dB; the thin layer of stronger eddies at the ground does not tell there, which is
+  why the engine stops at the outer scale (see
+  [Validation](docs/validation.md#turbulence-against-a-parabolic-equation-through-random-eddies)).
+- `inspect` names the height and the fall-off; the editor's Wind and temperature group
+  has **Eddies' height** (0: the same at every height) and **Weaker with height**.
+
+**Grounds of extended reaction**
+
+- `impedance.reaction: extended` lets sound travel sideways inside a porous ground, so
+  that each reflection meets the impedance of its own angle, Zc n / sqrt(n² - sin² θ)
+  with n the ground's complex index (and the layer's with it), as Attenborough's models
+  have it. It tells for soft snow, moss, forest floors and thin layers: a layer of snow
+  10 cm deep on ice reflects up to 3.7 dB differently 20 m away, fresh snow 1.0 dB,
+  grass 0.1 dB. The early paths take it at each reflection's angle, within 0.4 dB of the
+  exact field, the fast field program's with the ground's reflection at every angle (1.5
+  dB over the snow layer at 20 m, where the locally reacting impedance is off by up to
+  6.4); the parabolic equation takes it at grazing incidence, within 0.4 dB (1.1 over
+  the layer). The default, `local`, is as before: results do not change. Not with
+  `two_parameter`, which has no index; the wave solver's ground reacts locally (see
+  [Validation](docs/validation.md#ground-reflection-against-the-exact-solution)).
+- `inspect` names the reaction; the editor's Ground impedance group has **Reaction**.
+
+**Weather zones**
+
+- `atmosphere.zones` draws parts of the scene with weather of their own, as polygons in
+  the plan: the lee of buildings or a wood, where the wind drops; a lake, over which
+  the air lies cooler under an inversion; a car park, warmer. A zone gives any of the
+  atmosphere's fields (`preset`, `wind`, the temperature's gradient and log terms,
+  `roughness_m`, `table`) and `temperature_c`, the temperature at the ground there;
+  what it leaves out it takes from the scene's atmosphere. Outside the zones the
+  scene's weather holds, the first zone wins where two overlap, and the eddies are the
+  scene's everywhere. Without zones nothing changes: results are as before, bit for
+  bit.
+- The parabolic equation marches through the zones, changing its speed of sound where
+  its path crosses a border, and the wave solver takes each cell's zone; the early
+  paths bend through the mean profile along their way, each zone's weighted by the
+  length of the way over it (the equivalent profile of Nord2000 and Harmonoise), and
+  the late rays through the mean weather over the scene's extent, each zone's weighted
+  by its area. Checked against a Crank-Nicholson parabolic equation marched through
+  the zones (`validation/weather_zones.py`): the engine's parabolic equation is within
+  0.15 dB on average and 1.2 dB at most to 800 m over shelter and gusts downwind and
+  upwind, an inversion past a lake shore and cool water downwind; the mean profile
+  within 0.3 dB where only the temperature changes on the way, and 1 to 4 dB, 6.6 at
+  most, where the wind changes (see
+  [Validation](docs/validation.md#weather-zones-against-a-crank-nicholson-parabolic-equation)).
+- `inspect` names each zone, its corners and its weather. The editor's Wind and
+  temperature group has **Weather of** (the whole scene, or a zone), **Add weather
+  zone**, which draws one in the plan, **Remove weather zone** and a zone's **Ground
+  temperature**; the plan draws the zones dotted in sky blue, with their names.
+
+**Levels over a long term**
+
+- `long_term` gives weather classes and their shares of the time, and the scene is
+  run in each: noise maps and assessments give the level over a year, in which each
+  weather counts for the share of the time it holds (ISO 1996-2, CNOSSOS-EU,
+  Nord2000). A class takes any of a weather zone's fields over the scene's weather
+  and may have eddies of its own; its `share` is one number or one per period of the
+  day. The periods are L_den's by default (day 12 hours, evening 4 with 5 dB, night 8
+  with 10 dB); `long_term.periods` gives others. Every run shares the seed, and a
+  class whose weather is the scene's takes the scene's run. Without `long_term`
+  nothing changes: results are as before, bit for bit.
+- At every listener and map point, per octave band and A-weighted: the level in each
+  class, in each period (the energy mean of the classes by their shares), the
+  long-term level (the energy mean of the periods by their hours), the rating level
+  (L_den, or L_R with other periods), and the long-term level relative to free field
+  and insertion loss. `simulate` prints them, `parameters.json` has them in a
+  `long_term` entry per response, maps gain `long_term` and `rating_level`, and
+  `inspect` lists the classes and periods. Checked by `validation/long_term.py`: the
+  combination agrees with the formulas worked from each class's run to rounding, and
+  the correction from the classes favourable to propagation to the long-term level
+  follows ISO 9613-2's C_met within 0.8 dB, with a C_0 of 3.4 dB (see
+  [Validation](docs/validation.md#levels-over-a-long-term)).
+- The editor's **Weather of** lists weather classes as well as zones, with **Add
+  weather class**, **Remove weather class** and each class's **Share of the time** per
+  period (the other classes make room in proportion); the results panel gains a
+  **Long-term level** row and the run details each period's and class's levels and
+  the rating level; maps offer both new parameters.
+
+**Moving sources and Doppler**
+
+- A walk with `doppler: true` (a car, a train, an aircraft, or a listener passing
+  quickly) follows each early path from place to place and plays it through a delay
+  that changes as the walker goes, read through a windowed sinc, so each path's pitch
+  shifts as its length changes; its filters change from place to place as before, in
+  turbulence the eddies drift past and binaural takes the ears' filters. The late part
+  is crossfaded as before. A walk without it renders as before, bit for bit.
+- Checked by `validation/doppler.py` against the exact field of a source passing over
+  a rigid ground: within 45 dB at 30 m/s and 38 dB at 80 m/s, and the level within
+  0.42 dB at every moment, where crossfading misses it by up to 11 dB; over grass the
+  sound keeps the energy of the places' responses within 0.07 dB in every band (see
+  [Validation](docs/validation.md#moving-sources-against-the-exact-field)).
+- Pass-by levels: `acoustic_spaces.walkthrough.pass_by` gives the level at the
+  listener over time (A-weighted and per octave band, the source standing at each
+  place), its maximum, the sound exposure level and L_Aeq; the walkthrough of a walk
+  with Doppler prints them, `walkthrough --levels CSV` saves the levels of any walk,
+  and `inspect` says which walks have Doppler. Faster than sound or with the wave
+  solver's bands, a walk with Doppler stops with an error.
+
+**Moving air in the wave solver**
+
+- `simulation.wave.wind: moving` (`simulate --wave-wind moving`, **Wind** on the
+  editor's Simulation page) makes the wave solver's air move with the wind instead of
+  changing its speed of sound: each cell keeps the still air's speed of sound, and
+  before each step the pressure is carried along with the wind (fourth-order
+  differences, a third-order Runge-Kutta method). Sound goes at c + v downwind and
+  c - v upwind whichever way it turned, so a façade's echo against the wind comes when
+  it should. It costs three to four times as much, on the CPU (asked for the GPU, the
+  run says so and stays on the CPU); the run's details say `wave_moving_air`. Left
+  out (`effective`, the default), and in still air, nothing changes.
+- Checked by `validation/wave_wind.py` against the exact field in a uniform wind of 15
+  m/s: within 0.05 dB and 0.1 ms in every direction, where the effective speed of
+  sound is up to 0.9 dB off, and a façade's echo within 0.02 ms of ray theory's,
+  where the effective speed of sound brings it 10.6 ms early; in the `windy` preset
+  over grass within 0.34 dB of the parabolic equation, 0.13 dB on average, where the
+  effective speed of sound is within 0.69 dB (see
+  [Validation](docs/validation.md#moving-air-in-the-wave-solver)).
+
+**Whole cities**
+
+- Edge diffraction skips the pairs of an edge and a plane that no path reflecting
+  between them can use, before it traces any ray: the edges behind the plane, and those
+  whose shadow, cast on the plane from the source's or the listener's image, misses the
+  plane's faces. For the listener's images it also skips the paths that would touch the
+  edge's line beyond its ends or arrive too late. The exact tests run on the rest as
+  before, in native code on `simulation.performance.threads` threads, so the results
+  are the same bit for bit. A city of 900 buildings simulates in 2.3 s on four cores
+  instead of 81 s and 7.1 GB, 1,600 buildings, which ran out of 14 GB, in 4.4 s, and
+  3,600 in 22 s. The work still grows with the square of the buildings, as about 3 %
+  of the pairs can carry a path as far as geometry alone tells.
+- `validation/city_speed.py` times cities of growing size and checks the results
+  against testing every pair (see
+  [Validation](docs/validation.md#edge-diffraction-in-whole-cities)).
+
+**Wide-angle parabolic equation**
+
+- `simulation.early.parabolic_equation: wide_angle` (`simulate` and `map`
+  `--parabolic-equation wide_angle`, **Parabolic equation** on the editor's Simulation
+  page, for an outdoor scene in wind or temperature gradients) gives the bands the
+  parabolic equation gives outdoors (up to 500 Hz, and in a shadow up to 2 kHz) from a
+  wide-angle parabolic equation, `acoustic_spaces.engine.wide_angle`: the split-step
+  Padé method of Collins' RAM, the one-way operator as a rational function of ten
+  terms in steps of three wavelengths, fourth-order differences in height with the
+  ground's impedance as the boundary, and the operator's own starting field, its
+  tridiagonal solves in native code. It carries sound that a gradient reaching hundreds
+  of metres up bends back at up to 45 degrees, through air whose speed of sound is far
+  from the ground's, where the narrow-angle equation strays over a few kilometres. It
+  takes three to four times the work; left out (`narrow_angle`, the default), nothing
+  changes.
+- Checked by `validation/benchmark_1995.py` against the fast field program: within
+  0.11 dB at the benchmark's pure tones from 10 Hz to 1 kHz and 100 m to 10 km wherever
+  the sound is within 40 dB of free field, where the narrow-angle equation strays by 3
+  to 20 dB beyond 1 to 2 km; in the weather presets within 0.04 dB on average at the
+  bands' centres and 0.02 dB over the bands (the narrow-angle one 0.11 and 0.08 dB);
+  whole scenes of the benchmark's cases 2 and 3 within 0.03 dB per band to 2 km, where
+  the narrow-angle equation is 0.5 to 0.8 dB off at 2 km downwind. Through weather
+  zones `validation/weather_zones.py` finds it within 0.09 dB of the Crank-Nicholson
+  reference on average (see
+  [Validation](docs/validation.md#the-wide-angle-parabolic-equation)).
+
+**Coherent arrays element by element**
+
+- `near_field: true` on a source's array (`directivity: {file: line_array.yaml,
+  near_field: true}`) adds up its elements' sound one by one wherever an early path
+  leaves it, each from where it is, with its own distance, direction, feed and pattern,
+  instead of sending out the array's far-field pattern from one point. Listeners nearer
+  than about the array's length squared over the wavelength hear its sound as it is
+  there: on axis a 3.75 m column loses about 3 dB per doubling of the distance up to
+  41 m at 1 kHz, as a line does, and 6 dB beyond. The direct sound, the reflections,
+  the ground's reflection and refracted rays outdoors, and the sound that reaches an
+  edge all take it; the late reverberation keeps the pattern. The room no longer warns
+  about such an array's near listeners, and the warning for the others names the
+  option. In the editor: "Add up the array's elements one by one" under the source's
+  directivity. Without it nothing changes. See
+  [Validation](docs/validation.md#checks-against-theory-on-every-change).
+
+**Groups, and sources left out**
+
+- Sources and listeners take a `group` (nested with `/`, as `PA/Delays`) and
+  `enabled: false`, which leaves them out of simulations, maps, walks' other sources
+  and the scene's checks while keeping them in the scene; the others get the same
+  responses as in a run of all. Named with `--source` or `--listener`, they are
+  simulated all the same; `inspect` marks them "left out". See
+  [Groups, and sources left out](docs/scenes.md#groups-and-sources-left-out).
+- The editor's scene tree shows sources and listeners in their groups. A tick on each
+  source, listener and group uses it in simulations or leaves it out, in one step of
+  the history; an eye hides it in the 3D view and the plan or shows it again, without
+  changing the scene. Sources and listeners left out are drawn faded. Their form has a
+  **Group** field and **Use in simulations**.
+- The `stadium_pa`, `concert_stage` and `stadium_concert` examples put their sources
+  and listeners in groups: the PA's mains, subwoofers, fills and delays, the monitors,
+  the stage, and the audience standing and seated.
+
+**Examples**
+
+- New examples of a concert's sound system, made of the same stage, arrays and boxes:
+  - `stadium_pa`, a football stadium's sound system as tours hang it: two main line
+    arrays of 12 boxes in a J, a block of eight cardioid subwoofers timed to arrive
+    with them at the mix position, out-fills for the side stands, front fills, two
+    delay towers on the pitch and four delays under the roof's edge, each arriving 6 to
+    20 ms after the main arrays at its seats. Listeners stand on the pitch and on the
+    stands. `align.py` prints when and how loud each loudspeaker arrives at each
+    listener, and which would be heard as an echo (none).
+  - `concert_stage`, the stage alone on open ground with its monitors (wedges for the
+    singer, a drum fill and side fills), the main arrays, the subwoofers and the front
+    fills; the players and the mix position listen. Each player hears their own
+    monitor loudest. `feedback.py` finds how much gain the singer's microphone allows
+    before the loudspeakers make it ring, in each octave band at the mix position and
+    at the singer's ears, the frequencies where it rings first, and renders the loop
+    below and above that gain.
+  - `stadium_concert`, the two together.
+
+  Every array adds up its boxes one by one (`near_field: true`); `near_field.py` prints
+  how far the arrays' far-field patterns would be off at each listener (within 3.5 dB
+  up to 2 kHz, up to 10 dB at 4 and 8 kHz), skipping the bands a source's filter cuts.
+  `make_model.py`, the same in the three, writes each one's model and arrays, of a
+  generic box made up for the examples.
+- The editor's File > **Open example** shows the examples in groups (rooms, halls and
+  churches, sound systems, outdoors, models from CAD and BIM files, measurements and
+  material libraries), and [Example scenes](docs/examples.md) lists them in the same
+  groups; `acoustic_spaces.examples.example_groups()` gives them by group.
+
 **Editor**
 
-- While a run, a coverage map or a tuning goes on, the status bar says what runs, its
-  latest step and the time so far, with a **Cancel** button beside the moving bar;
+- While a run, a coverage map, a tuning or an export goes on, the status bar says what
+  runs, its latest step and the time so far, with a **Cancel** button beside the bar;
   resting the mouse on the bar says the same at length. The bar was small and silent
   before, easy to miss on some desktops (KDE's, say).
 - **Messages** shades every other message, and its ticks show or hide the info, the
   warnings and the errors, with how many there are of each. **Item** keeps only the
   messages about one source, listener or material, a filter only those holding some
   words, and **Clear** removes the messages on show.
+- The markers of sources and listeners in the 3D view and `show` take their size from
+  the scene: a fifth of the usual spacing between the points, from 1.2 % to 2.5 % of
+  the model's size (it was 1.2 % always), so in most rooms they are twice as large.
+  Where they would overlap they get smaller, down to a fifth, and an arrow that would
+  run into a marker ahead of it stops short, in the plan too: on the stadium's stage
+  the markers were 6 m wide and the arrows 19 m long, across the players and monitors.
+  In `show`, sources and listeners left out are drawn faded too.
 
 **Fixes**
 
@@ -30,6 +608,56 @@
   source, is unchanged. `parameters.json` lists each source's sound power
   (`sources`), which `auralize` reads; results written before it are mixed at one
   power, with a note.
+- Levels, parameters and maps of open scenes take about half the time: the band filters
+  that read the coherent bands were computed again for every band of every source and
+  listener, and are now kept. The results are the same to the last bit.
+- In wind and temperature gradients the impulse response had a notch where the
+  parabolic equation's bands met the rays' (around 700 Hz, up to 3 dB deep; around
+  2.8 kHz in the penumbra of a shadow), and the 500 Hz band of the level relative to
+  free field came out 0.5 to 1.2 dB too low: the join between the two blended their
+  spectra, which stand for different sound (the whole field over the ground on one
+  path, each ray's own on the others), and the silent paths' higher bands counted
+  against the band's reading. Each band of the response now keeps its own spectrum
+  into the crossovers, and a path that carries nothing in a band is left out of that
+  band's reading. The bands the parabolic equation gives now read back as computed,
+  and the response follows the fast field program across the join within 0.3 dB. The
+  same join in still air changes outdoor responses by less than 0.01 dB (one cell of
+  the barrier tables by 0.2 dB, the ground dip at 250 Hz 200 m out) and rooms by
+  under 0.0001 dB (the crossovers between the lowest bands' filters are drawn band by
+  band, a difference of a hundred-thousandth of the peak).
+- Saving an example elsewhere from the editor failed for the stadium ("directivity file
+  not found: .../box.csv"): an array's YAML file names its element's pattern beside
+  itself, and only the array file was copied. The files an array file names now go
+  along with it (or, when one lies outside the example's folder, the scene keeps using
+  the original array file), and a save that fails leaves no copies behind. Saving the
+  hillside example also took its terrain and map of buildings along but kept pointing
+  at the originals; it now uses the copies. `Scene.files()` lists every file a scene
+  uses, the ones its array files name included. Saving also kept the window busy for
+  seconds (Not Responding), adding up the arrays again from the copies; the copies
+  hold the same bytes, so what was loaded stays: the stadium now saves in under a tenth
+  of a second.
+- The editor stopped answering while it exported a big run's results (Not Responding
+  for over a minute with the stadium's 204 responses): the export ran in the window's
+  own thread. It now runs in the background, with progress in the messages and
+  **Cancel**, and `write_results` (and so `simulate --out`) renders and reads the
+  responses on `simulation.performance.threads` (every core by default): the stadium's
+  export takes 47 s instead of 81 s on 4 cores. The files and the report are the same
+  to the last bit.
+- Wheels left out the hillside example's terrain (`.asc`) and map of buildings
+  (`.geojson`), so the installed example could not load. A test now checks that every
+  file the examples use is installed.
+- `second_order` diffraction printed a floating-point overflow warning where two
+  edges meet at a corner and the shortest path over both runs through it. The path is
+  still turned down, as it was, and the warning is gone.
+- On a hardware GPU the wave solver could stop partway through a long run on a big
+  grid: it sent up to 512 steps in one submission, and a GPU whose work runs longer
+  than its watchdog allows (10 s on Linux's amdgpu, reached on an AMD Radeon 680M with
+  two million cells) is reset, losing every step after it and failing the GPU runs
+  that follow. The steps now go in submissions of about a second's work each, which
+  step the grid exactly as one long submission did.
+- The native code no longer fuses multiplies and adds that the source keeps apart, as
+  Apple's compiler did by default on Apple silicon: results there now round as on the
+  other platforms, last bits included.
 
 ## 3.2.3
 

@@ -5,9 +5,11 @@ import pytest
 
 pv = pytest.importorskip("pyvista")
 
+from acoustic_spaces.examples import list_examples  # noqa: E402
 from acoustic_spaces.room import Room  # noqa: E402
 from acoustic_spaces.viz import (  # noqa: E402
     balloon_polydata,
+    marker_sizes,
     plot_room,
     room_polydata,
     show_room,
@@ -30,6 +32,42 @@ def test_plot_room_adds_surfaces_and_markers() -> None:
     # three materials (surface + outline each), a source and a listener with its arrow
     assert len(plotter.renderer.actors) >= 3 * 2 + 3
     plotter.close()
+
+
+@pytest.mark.parametrize(
+    "example",
+    [e for e in list_examples() if not e.missing_extra],
+    ids=lambda example: example.name,
+)
+def test_every_example_is_drawn(example) -> None:
+    # tree_belt's lone oak: a round crown, with no edges to outline.
+    plotter = pv.Plotter(off_screen=True)
+    plot_room(Room.from_yaml(example.path), plotter)
+    assert plotter.renderer.actors
+    plotter.close()
+
+
+def test_markers_shrink_where_points_crowd() -> None:
+    # In a model 100 m across, markers are at least 1.2 m in radius and arrows 7.2 m
+    # long, unless they crowd.
+    radius, arrow = marker_sizes([[0, 0, 0], [1, 0, 0], [60, 0, 0]], 100.0)
+    assert radius.tolist() == pytest.approx([0.45, 0.45, 1.2])  # a metre apart: not touching
+    assert arrow.tolist() == pytest.approx([2.7, 2.7, 7.2])
+    # On top of each other: a fifth of the size.
+    radius, _arrow = marker_sizes([[0, 0, 0], [0, 0, 0]], 100.0)
+    assert radius.tolist() == pytest.approx([0.24, 0.24])
+    # Points 3 m and more apart are not shrunk; an arrow stops short of a marker ahead
+    # of it, not of one beside it.
+    points = [[0, 0, 0], [5, 0, 0], [0, 3, 0]]
+    radius, arrow = marker_sizes(points, 100.0, [[1, 0, 0], [0, 0, 1], [1, 0, 0]])
+    assert radius.tolist() == pytest.approx([1.2, 1.2, 1.2])
+    assert arrow.tolist() == pytest.approx([0.9 * (5 - 1.2), 7.2, 7.2])
+    # Far apart, a fifth of their spacing, up to 2.5 % of the model's size.
+    radius, arrow = marker_sizes([[0, 0, 0], [10, 0, 0]], 100.0)
+    assert radius.tolist() == pytest.approx([2.0, 2.0])
+    radius, arrow = marker_sizes([[0, 0, 0], [50, 0, 0]], 100.0)
+    assert radius.tolist() == pytest.approx([2.5, 2.5])
+    assert arrow.tolist() == pytest.approx([15, 15])
 
 
 def test_line_and_surface_sources_are_drawn() -> None:

@@ -1,0 +1,131 @@
+# A concert stage on open ground with its monitors: the stage of the stadium examples,
+# alone. On stage a pair of wedges plays the singer's mix, a drum fill the drummer's and
+# side fills the rest of the band's. Beside the stage hang the two main line arrays of
+# 12 boxes curved in a J (coherent arrays), with a block of eight cardioid subwoofers
+# under the middle of the stage front, delayed 17 ms, and front fills on its lip, so the
+# players also hear what spills back from them. Listeners stand where the singer, the
+# drummer and a guitarist play, and at the mix position 37 m out, in a standing crowd
+# (`audience: true`). The players stand a few metres from the arrays, much nearer than
+# their far-field patterns hold, so every array adds up its boxes one by one
+# (`near_field: true`).
+#
+#   python align.py
+#   python feedback.py
+#   python near_field.py
+#   python make_model.py
+#
+# align.py prints when and how loud each loudspeaker arrives at each listener: each
+# player hears their own monitor loudest, and nobody an echo.
+# feedback.py finds how much gain the singer's microphone allows before the loudspeakers
+# that play it make it ring, at the mix position and at the singer's ears, and the
+# frequencies where it rings first, then renders the loop below and above that gain.
+# Its microphone is an ideal supercardioid and the reverberation's phases are random,
+# so take the frequencies as an example of where such a stage rings.
+# near_field.py prints how far each array's far-field pattern would be off at each
+# listener: within 3 dB up to 2 kHz, but up to 8 dB at 4 and 8 kHz, the side fill's at
+# the guitarist.
+# make_model.py writes the model and the arrays; their boxes are a generic box made up
+# for this example, not any product's data.
+name: Concert stage with monitors
+geometry:
+  file: stage.obj
+  ground:
+    extent: [[-75, -40], [10, 40]]
+    sky: 30
+    zones:
+      - name: audience
+        polygon: [[-38, -34], [0, -34], [0, 34], [-38, 34]]
+materials:
+  grass:
+    impedance: grass
+  standing_crowd:
+    preset: audience_2_m2
+    scattering: 0.7
+    audience: true
+  stage:
+    preset: wooden_lining
+    scattering: 0.2
+assignments:
+  ground: grass
+  audience: standing_crowd
+  stage_floor: stage
+  stage_deck: stage
+  stage_back: stage
+  stage_roof: stage
+sources:
+  - name: main_left
+    group: PA/Mains
+    position: [-40, 19, 14]
+    orientation: {yaw: 8}
+    level_db: 134
+    directivity: {file: main_array.yaml, near_field: true}
+  - name: main_right
+    group: PA/Mains
+    position: [-40, -19, 14]
+    orientation: {yaw: -8}
+    level_db: 134
+    directivity: {file: main_array.yaml, near_field: true}
+  - name: subs
+    group: PA/Subwoofers
+    position: [-41, 0, 0.6]
+    level_db: 134
+    eq_db: [0, 0, -18, -40, -40, -40, -40, -40]
+    delay_ms: 17
+    directivity: {file: sub_array.yaml, near_field: true}
+  - name: front_fill_left
+    group: PA/Fills
+    position: [-42.3, 6, 2.3]
+    orientation: {yaw: -10, pitch: -3}
+    level_db: 116
+    delay_ms: 33
+    directivity: {file: wedge.csv}
+  - name: front_fill_right
+    group: PA/Fills
+    position: [-42.3, -6, 2.3]
+    orientation: {yaw: 10, pitch: -3}
+    level_db: 116
+    delay_ms: 33
+    directivity: {file: wedge.csv}
+  - name: vocal_wedges
+    group: Monitors
+    position: [-43.3, 0, 2.25]
+    orientation: {yaw: 180, pitch: 45}
+    level_db: 115
+    directivity: {file: monitor_wedges.yaml, near_field: true}
+  - name: drum_fill
+    group: Monitors
+    position: [-54.5, 1.8, 2.6]
+    orientation: {yaw: -50, pitch: 25}
+    level_db: 115
+    directivity: {file: wedge.csv}
+  - name: side_fill_left
+    group: Monitors
+    position: [-49, 15.5, 3]
+    orientation: {yaw: -90}
+    level_db: 122
+    directivity: {file: fill_array.yaml, near_field: true}
+  - name: side_fill_right
+    group: Monitors
+    position: [-49, -15.5, 3]
+    orientation: {yaw: 90}
+    level_db: 122
+    directivity: {file: fill_array.yaml, near_field: true}
+listeners:
+  - name: singer
+    group: Stage
+    position: [-44.8, 0, 3.7]
+  - name: guitarist
+    group: Stage
+    position: [-47, 8, 3.7]
+  - name: drummer
+    group: Stage
+    position: [-53, 0, 3.7]
+  - name: mix_position
+    group: Audience/Standing
+    position: [-5, 0, 1.6]
+    orientation: {yaw: 180}
+simulation:
+  early: {method: image_sources, max_order: 2, diffraction: none}
+  late: {method: stochastic_ray_tracing}
+outputs:
+  - mono

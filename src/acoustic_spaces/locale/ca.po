@@ -111,6 +111,90 @@ msgstr "STI"
 msgid "speech transmission index"
 msgstr "índex de transmissió de la parla"
 
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Re free field (dB)"
+msgstr "Re camp lliure (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"level relative to free field, outdoors: the excess attenuation with its sign "
+"turned"
+msgstr ""
+"nivell respecte del camp lliure, a l'aire lliure: l'atenuació en excés amb "
+"el signe canviat"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Insertion loss (dB)"
+msgstr "Pèrdua per inserció (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"insertion loss of the buildings, barriers or vegetation the map was also run "
+"without"
+msgstr ""
+"pèrdua per inserció dels edificis, pantalles acústiques o vegetació sense "
+"els quals també s'ha calculat el mapa"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Insertion loss (dB(A))"
+msgstr "Pèrdua per inserció (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "A-weighted insertion loss of the buildings, barriers or vegetation"
+msgstr ""
+"pèrdua per inserció ponderada A dels edificis, pantalles acústiques o "
+"vegetació"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Long-term level (dB)"
+msgstr "Nivell a llarg termini (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"level over a long term, outdoors: the mean over the weather classes and the "
+"day"
+msgstr ""
+"nivell a llarg termini, a l'aire lliure: la mitjana sobre les classes "
+"meteorològiques i el dia"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Rating level (dB(A))"
+msgstr "Nivell d'avaluació (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "level over a long term with each period's penalty, A-weighted (L_den)"
+msgstr ""
+"nivell a llarg termini amb la penalització de cada període, ponderat A "
+"(L_den)"
+
+#: acoustic_spaces/examples.py
+msgid "Rooms"
+msgstr "Recintes"
+
+#: acoustic_spaces/examples.py
+msgid "Halls and churches"
+msgstr "Sales i esglésies"
+
+#: acoustic_spaces/examples.py
+msgid "Sound systems"
+msgstr "Sistemes de so"
+
+#: acoustic_spaces/examples.py acoustic_spaces/gui/inspector.py
+msgid "Outdoors"
+msgstr "A l'aire lliure"
+
+#: acoustic_spaces/examples.py
+msgid "Models from CAD and BIM files"
+msgstr "Models de fitxers CAD i BIM"
+
+#: acoustic_spaces/examples.py
+msgid "Measurements and material libraries"
+msgstr "Mesures i biblioteques de materials"
+
+#: acoustic_spaces/examples.py
+msgid "Other examples"
+msgstr "Altres exemples"
+
 #. Translators: a background task such as "Simulating hall…", then how long it has run so far.
 #: acoustic_spaces/gui/activity.py
 #, python-brace-format
@@ -145,6 +229,73 @@ msgstr "Editor d'Acoustic Spaces"
 #: acoustic_spaces/gui/app.py
 msgid "Scenes (*.yaml *.yml)"
 msgstr "Escenes (*.yaml *.yml)"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New building with {count} corners, {height:g} m high; change its height "
+"under Geometry."
+msgstr ""
+"Edifici nou amb {count} vèrtexs, de {height:g} m d'alçada; l'alçada es "
+"canvia a Geometria."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New barrier along {count} points, {height:g} m high; change its height under "
+"Geometry."
+msgstr ""
+"Pantalla nova amb {count} punts, de {height:g} m d'alçada; l'alçada es "
+"canvia a Geometria."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New belt of trees with {count} corners, {height:g} m high, with dense "
+"foliage; change its height under Geometry and the rest in the scene file."
+msgstr ""
+"Franja d'arbres nova amb {count} vèrtexs, de {height:g} m d'alçada, amb "
+"fullatge dens; l'alçada es canvia a Geometria i la resta al fitxer d'escena."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New hedge along {count} points, {width:g} m wide and {height:g} m high, with "
+"dense foliage; change its height under Geometry and the rest in the scene "
+"file."
+msgstr ""
+"Tanca nova amb {count} punts, de {width:g} m d'amplada i {height:g} m "
+"d'alçada, amb fullatge dens; l'alçada es canvia a Geometria i la resta al "
+"fitxer d'escena."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New tree {height:g} m high, its crown {crown_diameter:g} m across from "
+"{base:g} m up, with dense foliage; change its height under Geometry and the "
+"rest in the scene file."
+msgstr ""
+"Arbre nou de {height:g} m d'alçada, amb la capçada de {crown_diameter:g} m "
+"de diàmetre des de {base:g} m d'alt i fullatge dens; l'alçada es canvia a "
+"Geometria i la resta al fitxer d'escena."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New ground zone with {count} corners; give its surface a material of its own "
+"in the scene tree."
+msgstr ""
+"Zona del terreny nova amb {count} vèrtexs; assigneu un material propi a la "
+"seva superfície a l'arbre de l'escena."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New weather zone with {count} corners; choose it under Weather of in the "
+"scene's entry to give it wind and temperature of its own."
+msgstr ""
+"Zona meteorològica nova amb {count} vèrtexs; trieu-la a Temps de, a "
+"l'entrada de l'escena, per donar-li vent i temperatura propis."
 
 #. Translators: {patterns} is the list of model file patterns, such as *.obj *.dxf.
 #: acoustic_spaces/gui/app.py
@@ -231,6 +382,19 @@ msgstr "Nou recinte des d'una &planta…"
 #: acoustic_spaces/gui/app.py
 msgid "Draw the floor plan of a new room, corner by corner"
 msgstr "Dibuixar la planta d'un recinte nou, vèrtex a vèrtex"
+
+#: acoustic_spaces/gui/app.py
+msgid "New o&utdoor scene…"
+msgstr "Nova escena a l'aire &lliure…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Start a new scene on open ground, to draw buildings, barriers, vegetation "
+"and ground zones on, or to set a terrain and buildings from a map"
+msgstr ""
+"Començar una escena nova sobre terreny obert, per dibuixar-hi edificis, "
+"pantalles acústiques, vegetació i zones del terreny, o per posar-hi un "
+"relleu i edificis des d'un mapa"
 
 #: acoustic_spaces/gui/app.py
 msgid "&Open…"
@@ -505,12 +669,6 @@ msgstr "&Fitxer"
 msgid "Open e&xample"
 msgstr "Obrir e&xemple"
 
-#. Translators: {extra} is the name of an optional part of the installation (gui, ifc...); {hint} says how to install it.
-#: acoustic_spaces/gui/app.py
-#, python-brace-format
-msgid "Needs the {extra} extra: {hint}"
-msgstr "Requereix l'extra {extra}: {hint}"
-
 #: acoustic_spaces/gui/app.py
 msgid "&Edit"
 msgstr "&Editar"
@@ -619,6 +777,12 @@ msgstr "Refer {edit}"
 #: acoustic_spaces/gui/app.py
 msgid "Nothing to redo"
 msgstr "Res a refer"
+
+#. Translators: the status bar's summary of an outdoor scene.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "outdoors, {area:,.0f} m² of ground"
+msgstr "a l'aire lliure, {area:,.0f} m² de terreny"
 
 #. Translators: the status bar's summary of the room: its volume and its reverberation time at one band, such as "1 kHz".
 #: acoustic_spaces/gui/app.py
@@ -736,6 +900,16 @@ msgstr ""
 "materials a les superfícies del model ja no correspondran a cap superfície."
 
 #: acoustic_spaces/gui/app.py
+msgid ""
+"Replace the outdoor scene (its ground, buildings, barriers and model file) "
+"with the drawn floor plan? Material assignments to their surfaces will no "
+"longer match anything."
+msgstr ""
+"Substituir l'escena a l'aire lliure (el terreny, els edificis, les pantalles "
+"acústiques i el fitxer de model) per la planta dibuixada? Les assignacions "
+"de materials a les seves superfícies ja no correspondran a cap superfície."
+
+#: acoustic_spaces/gui/app.py
 msgid "Add material"
 msgstr "Afegir material"
 
@@ -764,6 +938,17 @@ msgstr "L'escena té canvis sense desar. Desar-los?"
 #: acoustic_spaces/gui/app.py
 msgid "New box room; change its size under Geometry."
 msgstr "Recinte rectangular nou; les dimensions es canvien a Geometria."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New outdoor scene: a meadow {size:g} m across. Draw buildings, barriers, "
+"vegetation and ground zones from the Geometry form, or set a terrain and "
+"buildings from a map there."
+msgstr ""
+"Escena a l'aire lliure nova: un prat de {size:g} m de costat. Dibuixeu "
+"edificis, pantalles acústiques, vegetació i zones del terreny des del "
+"formulari de Geometria, o poseu-hi un relleu i edificis des d'un mapa."
 
 #: acoustic_spaces/gui/app.py
 msgid "New room: click its corners in the plan, and close it on the first one."
@@ -800,6 +985,12 @@ msgstr "No s'ha pogut obrir {name}"
 #, python-brace-format
 msgid "Opened {path}"
 msgstr "S'ha obert {path}"
+
+#. Translators: {extra} is the name of an optional part of the installation (gui, ifc...); {hint} says how to install it.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Needs the {extra} extra: {hint}"
+msgstr "Requereix l'extra {extra}: {hint}"
 
 #: acoustic_spaces/gui/app.py
 msgid "Save scene"
@@ -991,6 +1182,10 @@ msgid "Tuning cancelled."
 msgstr "Ajust cancel·lat."
 
 #: acoustic_spaces/gui/app.py
+msgid "Export cancelled."
+msgstr "Exportació cancel·lada."
+
+#: acoustic_spaces/gui/app.py
 msgid "Simulation cancelled."
 msgstr "Simulació cancel·lada."
 
@@ -1000,8 +1195,17 @@ msgstr ""
 "Encara no hi ha res per exportar: cal executar primer la simulació (F5)."
 
 #: acoustic_spaces/gui/app.py
+msgid "Wait for the current run to end, then export."
+msgstr "Cal esperar que acabi el càlcul en curs per exportar."
+
+#: acoustic_spaces/gui/app.py
 msgid "Folder for the impulse responses"
 msgstr "Carpeta per a les respostes impulsionals"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Exporting the impulse responses to {folder}…"
+msgstr "Exportant les respostes impulsionals a {folder}…"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -1149,6 +1353,34 @@ msgid "change listener"
 msgstr "modificar receptor"
 
 #: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "use source"
+msgid_plural "use {count} sources"
+msgstr[0] "incloure font"
+msgstr[1] "incloure {count} fonts"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "leave out source"
+msgid_plural "leave out {count} sources"
+msgstr[0] "excloure font"
+msgstr[1] "excloure {count} fonts"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "use listener"
+msgid_plural "use {count} listeners"
+msgstr[0] "incloure receptor"
+msgstr[1] "incloure {count} receptors"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "leave out listener"
+msgid_plural "leave out {count} listeners"
+msgstr[0] "excloure receptor"
+msgstr[1] "excloure {count} receptors"
+
+#: acoustic_spaces/gui/document.py
 msgid "a scene needs at least one source"
 msgstr "una escena necessita almenys una font"
 
@@ -1165,6 +1397,10 @@ msgid "remove listener"
 msgstr "eliminar receptor"
 
 #: acoustic_spaces/gui/document.py
+msgid "the scene is outdoors: draw a floor plan to replace it"
+msgstr "l'escena és a l'aire lliure: cal dibuixar una planta per substituir-la"
+
+#: acoustic_spaces/gui/document.py
 msgid "the room is a model file: draw a floor plan to replace it"
 msgstr ""
 "el recinte és un fitxer de model: cal dibuixar una planta per substituir-lo"
@@ -1176,6 +1412,46 @@ msgstr "modificar planta"
 #: acoustic_spaces/gui/document.py
 msgid "draw floor plan"
 msgstr "dibuixar planta"
+
+#: acoustic_spaces/gui/document.py
+msgid "add building"
+msgstr "afegir edifici"
+
+#: acoustic_spaces/gui/document.py
+msgid "add barrier"
+msgstr "afegir pantalla"
+
+#: acoustic_spaces/gui/document.py
+msgid "add vegetation"
+msgstr "afegir vegetació"
+
+#: acoustic_spaces/gui/document.py
+msgid "add zone"
+msgstr "afegir zona"
+
+#: acoustic_spaces/gui/document.py
+msgid "add weather zone"
+msgstr "afegir zona meteorològica"
+
+#: acoustic_spaces/gui/document.py acoustic_spaces/gui/inspector.py
+msgid "change ground"
+msgstr "canviar el terreny"
+
+#: acoustic_spaces/gui/document.py
+msgid "set terrain"
+msgstr "posar relleu"
+
+#: acoustic_spaces/gui/document.py
+msgid "remove terrain"
+msgstr "eliminar relleu"
+
+#: acoustic_spaces/gui/document.py
+msgid "add buildings from a map"
+msgstr "afegir edificis des d'un mapa"
+
+#: acoustic_spaces/gui/document.py
+msgid "remove the map's buildings"
+msgstr "eliminar els edificis del mapa"
 
 #: acoustic_spaces/gui/document.py
 #, python-brace-format
@@ -1294,6 +1570,22 @@ msgid "second_order"
 msgstr "segon ordre"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "one side"
+msgstr "un costat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "both sides"
+msgstr "tots dos costats"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "narrow angle"
+msgstr "angle estret"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "wide angle"
+msgstr "angle ampli"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "stochastic_ray_tracing"
 msgstr "traçat de raigs estocàstic"
 
@@ -1321,9 +1613,18 @@ msgstr "per defecte"
 msgid "both"
 msgstr "tots dos"
 
+#. Translators: the sky's height when it is not set: worked out from the scene.
 #: acoustic_spaces/gui/inspector.py
 msgid "auto"
 msgstr "automàtic"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "effective speed of sound"
+msgstr "velocitat del so efectiva"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "moving air"
+msgstr "aire en moviment"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "vector"
@@ -1344,6 +1645,54 @@ msgstr "octava"
 #: acoustic_spaces/gui/inspector.py
 msgid "third_octave"
 msgstr "terç d'octava"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "(none)"
+msgstr "(cap)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "neutral"
+msgstr "neutre"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "windy"
+msgstr "ventós"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "sunny_day"
+msgstr "dia assolellat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "clear_night"
+msgstr "nit serena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "custom"
+msgstr "personalitzat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "log"
+msgstr "logarítmic"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "linear"
+msgstr "lineal"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "constant"
+msgstr "constant"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "weak"
+msgstr "feble"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "moderate"
+msgstr "moderada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "strong"
+msgstr "forta"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Measured data or an array from a file…"
@@ -1456,8 +1805,409 @@ msgstr ""
 "l'aire). Un càlcul dona el resultat complet"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "(none)"
-msgstr "(cap)"
+msgid "Wind and temperature"
+msgstr "Vent i temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Whose weather the fields below show and change: the whole scene's; a weather "
+"zone's, a part of the scene with wind and temperature of its own (the lee of "
+"buildings, where the wind drops; a lake, over which the air lies cooler), "
+"drawn in the plan; or a weather class's, a weather that holds for a share of "
+"the time, for the levels over a long term (L_den). Outside the zones the "
+"scene's weather holds, and the eddies are the scene's everywhere but in a "
+"weather class, which may have its own"
+msgstr ""
+"De qui és el temps que els camps de sota mostren i canvien: de tota "
+"l'escena; d'una zona meteorològica, una part de l'escena amb vent i "
+"temperatura propis (el sotavent dels edificis, on el vent amaina; un llac, "
+"sobre el qual l'aire és més fred), dibuixada a la planta; o d'una classe "
+"meteorològica, un temps que regeix durant una part del temps, per als "
+"nivells a llarg termini (L_den). Fora de les zones regeix el temps de "
+"l'escena, i la turbulència és la de l'escena a tot arreu tret d'una classe "
+"meteorològica, que en pot tenir una de pròpia"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weather of"
+msgstr "Temps de"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The weather, which bends sound outdoors: (none) or neutral, still air and "
+"sound in straight lines; windy, 5 m/s 10 m up, bending sound down downwind "
+"and up upwind; sunny_day, air cooling with height, bending sound up into a "
+"shadow a few hundred metres away; clear_night, air warming with height, "
+"bending sound down; custom, the values below. Changing one of them makes the "
+"weather custom. The air temperature above is the ground's. For a weather "
+"zone, (none) is the scene's weather unchanged"
+msgstr ""
+"El temps, que corba el so a l'aire lliure: (cap) o neutre, aire en calma i "
+"so en línia recta; ventós, 5 m/s a 10 m d'alçada, que corba el so cap avall "
+"a favor del vent i cap amunt en contra; dia assolellat, aire que es refreda "
+"amb l'alçada, que corba el so cap amunt, cap a una ombra a uns centenars de "
+"metres; nit serena, aire que s'escalfa amb l'alçada, que corba el so cap "
+"avall; personalitzat, els valors de sota. Canviar-ne un fa el temps "
+"personalitzat. La temperatura de l'aire de dalt és la del terreny. En una "
+"zona meteorològica, (cap) és el temps de l'escena sense canvis"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weather"
+msgstr "Temps"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The wind's speed at the height below (m/s): sound goes faster with the wind "
+"and slower against it"
+msgstr ""
+"La velocitat del vent a l'alçada de sota (m/s): el so va més de pressa a "
+"favor del vent i més a poc a poc en contra"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The way the wind blows to, in degrees counterclockwise from +x seen from "
+"above (0: along +x, 90: along +y)"
+msgstr ""
+"Cap on bufa el vent, en graus en sentit antihorari des de +x vist des de "
+"dalt (0: al llarg de +x, 90: al llarg de +y)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The height above the ground the wind's speed is at (m)"
+msgstr "L'alçada sobre el terreny a la qual es dona la velocitat del vent (m)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the wind's speed grows with height: log, with the logarithm of the "
+"height over the roughness, the usual profile; linear, in proportion to the "
+"height; constant, the same at every height"
+msgstr ""
+"Com creix la velocitat del vent amb l'alçada: logarítmic, amb el logaritme "
+"de l'alçada sobre la rugositat, el perfil habitual; lineal, en proporció a "
+"l'alçada; constant, la mateixa a qualsevol alçada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the temperature changes per metre of height (K/m): -0.0098 in air "
+"stirred by the sun, positive in an inversion. Sound goes faster in warmer "
+"air and bends away from it"
+msgstr ""
+"Com canvia la temperatura per metre d'alçada (K/m): -0,0098 en aire remogut "
+"pel sol, positiu en una inversió. El so va més de pressa en l'aire més "
+"calent i es corba allunyant-se'n"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A change of temperature fastest near the ground (K, times ln(1 + height / "
+"roughness)): negative on a sunny day, positive on a clear night"
+msgstr ""
+"Un canvi de temperatura més ràpid a prop del terreny (K, per ln(1 + alçada / "
+"rugositat)): negatiu en un dia assolellat, positiu en una nit serena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The ground's roughness length (m), for the log profiles: 0.01 to 0.1 over "
+"grass, up to 1 among buildings and trees"
+msgstr ""
+"La longitud de rugositat del terreny (m), per als perfils logarítmics: de "
+"0,01 a 0,1 sobre herba, fins a 1 entre edificis i arbres"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind speed"
+msgstr "Velocitat del vent"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind direction"
+msgstr "Direcció del vent"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind height"
+msgstr "Alçada del vent"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind profile"
+msgstr "Perfil del vent"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature gradient"
+msgstr "Gradient de temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature near the ground"
+msgstr "Temperatura a prop del terreny"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Roughness"
+msgstr "Rugositat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The temperature at the ground in the weather zone or class (°C), where it "
+"differs from the scene's air temperature: cooler over water, warmer over a "
+"car park, colder on a winter night"
+msgstr ""
+"La temperatura del terreny a la zona o classe meteorològica (°C), quan "
+"difereix de la temperatura de l'aire de l'escena: més freda sobre l'aigua, "
+"més càlida sobre un aparcament, més freda en una nit d'hivern"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground temperature"
+msgstr "Temperatura del terreny"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add weather zone"
+msgstr "Afegir zona meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw a part of the scene with weather of its own in the plan, corner by "
+"corner, and close it on the first corner; then choose it under Weather of "
+"and give it its wind and temperature"
+msgstr ""
+"Dibuixar a la planta una part de l'escena amb temps propi, vèrtex a vèrtex, "
+"i tancar-la al primer; després trieu-la a Temps de i doneu-li el seu vent i "
+"la seva temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove weather zone"
+msgstr "Eliminar zona meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the weather zone chosen under Weather of: the scene's weather holds "
+"there"
+msgstr ""
+"Eliminar la zona meteorològica triada a Temps de: allà regeix el temps de "
+"l'escena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The share of each period of the day this weather class holds (%), from "
+"weather statistics of the place: the inversions of a clear night come at "
+"night, a strong sun by day. In each period the classes' shares add up to 100 "
+"%: changing one makes room in the others, in proportion"
+msgstr ""
+"La part de cada període del dia en què regeix aquesta classe meteorològica "
+"(%), segons l'estadística meteorològica del lloc: les inversions d'una nit "
+"serena arriben de nit, un sol fort de dia. En cada període les parts de les "
+"classes sumen 100 %: canviar-ne una fa lloc a les altres, en proporció"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Share of the time"
+msgstr "Part del temps"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The periods of the day the levels over a long term are rated over, with "
+"their hours and the penalty each adds to its level: by default the day, the "
+"evening and the night of L_den. Other periods are set in the scene file "
+"(long_term.periods)"
+msgstr ""
+"Els períodes del dia sobre els quals s'avaluen els nivells a llarg termini, "
+"amb les seves hores i la penalització que cadascun suma al seu nivell: per "
+"defecte el dia, el vespre i la nit de L_den. Altres períodes es fixen al "
+"fitxer d'escena (long_term.periods)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add weather class"
+msgstr "Afegir classe meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Add a weather that holds for a share of the time, for the levels over a long "
+"term (L_den): the first holds all the time in the scene's weather, the next "
+"ones none of it until given their share. A run then runs the scene in each "
+"class and combines them"
+msgstr ""
+"Afegir un temps que regeix durant una part del temps, per als nivells a "
+"llarg termini (L_den): la primera regeix tot el temps amb el temps de "
+"l'escena, les següents gens fins que reben la seva part. Un càlcul executa "
+"llavors l'escena en cada classe i les combina"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove weather class"
+msgstr "Eliminar classe meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the weather class chosen under Weather of: the others take its share "
+"of the time, in proportion"
+msgstr ""
+"Eliminar la classe meteorològica triada a Temps de: les altres es "
+"reparteixen la seva part del temps, en proporció"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The eddies of the wind and of the temperature, which make sound outdoors "
+"flicker: the direct sound and its reflections stop adding in step (the dip "
+"of the ground fills in), sound is scattered into shadow zones, and renders "
+"and walkthroughs change as the eddies drift past. (none): steady air; weak, "
+"overcast with a light wind; moderate, a breeze and some sun; strong, a "
+"strong wind or a hot sun; custom, the values below"
+msgstr ""
+"Els remolins del vent i de la temperatura, que fan fluctuar el so a l'aire "
+"lliure: el so directe i les seves reflexions deixen de sumar-se en fase (la "
+"depressió del terreny s'omple), el so es dispersa cap a les zones d'ombra, i "
+"les escoltes i els recorreguts canvien a mesura que passen els remolins. "
+"(cap): aire estable; feble, ennuvolat amb un vent lleuger; moderada, una "
+"brisa i una mica de sol; forta, un vent fort o un sol intens; personalitzat, "
+"els valors de sota"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the temperature's eddies are: its structure parameter C_T² (K² "
+"m^-2/3), about 0.001 to 1 near the ground, the most in sunshine"
+msgstr ""
+"La intensitat dels remolins de la temperatura: el seu paràmetre d'estructura "
+"C_T² (K² m^-2/3), d'uns 0,001 a 1 prop del terra, el més gran amb sol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the wind's eddies are: its structure parameter C_v² (m^4/3 s^-2), "
+"about 0.01 to 1 near the ground, the more the stronger the wind"
+msgstr ""
+"La intensitat dels remolins del vent: el seu paràmetre d'estructura C_v² "
+"(m^4/3 s^-2), d'uns 0,01 a 1 prop del terra, tant més gran com més fort és "
+"el vent"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The size of the largest eddies (m), some metres near the ground: they take "
+"this long to drift past at the wind's speed, which sets how fast the sound "
+"flickers"
+msgstr ""
+"La mida dels remolins més grans (m), uns quants metres prop del terra: "
+"triguen això a passar a la velocitat del vent, cosa que fixa com de ràpid "
+"fluctua el so"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "the same at every height"
+msgstr "igual a totes les altures"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The height above the ground the eddies' strength holds at (where it was "
+"measured or estimated, usually 2 m), from which they weaken with height; "
+"nearer the ground than the eddies' size they are taken as at that height. 0: "
+"the same strength at every height"
+msgstr ""
+"L'alçada sobre el terra a la qual val la intensitat dels remolins (on es va "
+"mesurar o estimar, normalment 2 m), des de la qual s'afebleixen amb "
+"l'alçada; més a prop del terra que la mida dels remolins es prenen com a "
+"aquella alçada. 0: la mateixa intensitat a totes les alçades"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How fast the eddies weaken with height: the power of the height over the "
+"eddies' height that their strength falls by. 0.67 (two thirds) in a neutral "
+"or stable surface layer, the usual; up to 1.33 in strong sunshine"
+msgstr ""
+"Amb quina rapidesa s'afebleixen els remolins amb l'altura: la potència de "
+"l'altura sobre l'altura dels remolins amb què cau la seva intensitat. 0,67 "
+"(dos terços) en una capa superficial neutra o estable, l'habitual; fins a "
+"1,33 amb sol fort"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies"
+msgstr "Turbulència"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature eddies"
+msgstr "Turbulència de la temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind eddies"
+msgstr "Turbulència del vent"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddy size"
+msgstr "Mida dels remolins"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies' height"
+msgstr "Altura de la turbulència"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weaker with height"
+msgstr "Més feble amb l'altura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A measured profile from the scene file: the temperature and the wind's speed "
+"come from it, in straight lines between its heights"
+msgstr ""
+"Un perfil mesurat del fitxer d'escena: la temperatura i la velocitat del "
+"vent en surten, en línia recta entre les seves alçades"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the measured profile"
+msgstr "Treure el perfil mesurat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Use the values above in place of the measured profile of the scene file"
+msgstr ""
+"Fer servir els valors de dalt en lloc del perfil mesurat del fitxer d'escena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Show the profile"
+msgstr "Mostrar el perfil"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Open a plot of the temperature, the wind and the speed of sound over the "
+"ground: across the wind, downwind and upwind"
+msgstr ""
+"Obrir un gràfic de la temperatura, el vent i la velocitat del so sobre el "
+"terreny: transversal al vent, a favor del vent i contra el vent"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "the whole scene"
+msgstr "tota l'escena"
+
+#. Translators: {name} is a weather class's name from the scene file.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "weather class {name}"
+msgstr "classe meteorològica {name}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "as the whole scene"
+msgstr "com tota l'escena"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Measured profile at {count} height, from the scene file"
+msgid_plural "Measured profile at {count} heights, from the scene file"
+msgstr[0] "Perfil mesurat a {count} alçada, del fitxer d'escena"
+msgstr[1] "Perfil mesurat a {count} alçades, del fitxer d'escena"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} {hours:g} h +{penalty:g} dB"
+msgstr "{name} {hours:g} h +{penalty:g} dB"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} {hours:g} h"
+msgstr "{name} {hours:g} h"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Levels over a long term: {count} weather class over {periods} ({rating})"
+msgid_plural ""
+"Levels over a long term: {count} weather classes over {periods} ({rating})"
+msgstr[0] ""
+"Nivells a llarg termini: {count} classe meteorològica sobre {periods} "
+"({rating})"
+msgstr[1] ""
+"Nivells a llarg termini: {count} classes meteorològiques sobre {periods} "
+"({rating})"
+
+#. Translators: {period} is a period of the day from the scene file (day, evening, night).
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "The share of the {period} this weather class holds (%)"
+msgstr ""
+"La part del període {period} en què regeix aquesta classe meteorològica (%)"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -1510,6 +2260,51 @@ msgstr "canviar el material per defecte"
 #: acoustic_spaces/gui/inspector.py
 msgid "change air"
 msgstr "modificar l'aire"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather"
+msgstr "modificar el temps"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather zone"
+msgstr "canviar la zona meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather class"
+msgstr "canviar la classe meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "add weather class"
+msgstr "afegir classe meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove weather class"
+msgstr "eliminar classe meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a share of the time is a number from 0 to 100 %"
+msgstr "una part del temps és un nombre de 0 a 100 %"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove weather zone"
+msgstr "eliminar zona meteorològica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the eddies"
+msgstr "canviar la turbulència"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the wind and temperature"
+msgstr "modificar el vent i la temperatura"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove the measured profile"
+msgstr "treure el perfil mesurat"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Wind and temperature of {name}"
+msgstr "Vent i temperatura de {name}"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Box"
@@ -1639,6 +2434,370 @@ msgstr "Recinte IFC"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"The height (z) of the flat ground, or added to the terrain's heights, in the "
+"units the title shows"
+msgstr ""
+"L'alçada (z) del terreny pla, o sumada a les alçades del relleu, en les "
+"unitats del títol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How far the ground reaches past the buildings, barriers and model, unless "
+"its extent is set or a terrain sets its size, and how high the sky is over "
+"the highest of them, unless the sky is set; in the units the title shows"
+msgstr ""
+"Fins on arriba el terreny més enllà dels edificis, les pantalles i el model, "
+"si no se'n fixa l'extensió o un relleu en fixa la mida, i a quina alçada "
+"queda el cel sobre el més alt, si no es fixa el cel; en les unitats del títol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How high the open sky lies over the ground, in the units the title shows; "
+"auto: the margin over the highest building, barrier or model part. Sound "
+"that reaches the sky leaves the scene"
+msgstr ""
+"A quina alçada queda el cel obert sobre el terreny, en les unitats del "
+"títol; automàtic: el marge sobre l'edifici, la pantalla o la part del model "
+"més alta. El so que arriba al cel surt de l'escena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground height"
+msgstr "Alçada del terreny"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Margin"
+msgstr "Marge"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Sky"
+msgstr "Cel"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Extent"
+msgstr "Extensió"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the ground ends, from its south-west corner (x, y) to its north-east "
+"one, in the units the title shows; off: the margin round the buildings, "
+"barriers and model, or the whole terrain. Past the ground's edge, sound "
+"leaves the scene as if the ground went on"
+msgstr ""
+"On acaba el terreny, de la cantonada sud-oest (x, y) a la nord-est, en les "
+"unitats del títol; desactivat: el marge al voltant dels edificis, les "
+"pantalles i el model, o el relleu sencer. Més enllà de la vora del terreny, "
+"el so surt de l'escena com si el terreny continués"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "x where the ground starts (its west edge)"
+msgstr "x on comença el terreny (la vora oest)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "y where the ground starts (its south edge)"
+msgstr "y on comença el terreny (la vora sud)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "x where the ground ends (its east edge)"
+msgstr "x on acaba el terreny (la vora est)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "y where the ground ends (its north edge)"
+msgstr "y on acaba el terreny (la vora nord)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the ground ends: past it, sound leaves the scene as if the ground went "
+"on"
+msgstr ""
+"On acaba el terreny: més enllà, el so surt de l'escena com si el terreny "
+"continués"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The terrain the ground follows: its heights on a grid, from a file or given "
+"in the scene file, sampled over the ground's extent"
+msgstr ""
+"El relleu que segueix el terreny: les seves alçades en una quadrícula, d'un "
+"fitxer o donades al fitxer d'escena, mostrejades sobre l'extensió del terreny"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Terrain from a file…"
+msgstr "Relleu des d'un fitxer…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Make the ground follow the heights in a file: an Esri ASCII grid (.asc) or x "
+"y z points on a regular grid (.xyz, .txt, .csv), in the units the title "
+"shows. The terrain sets the ground's size, unless an extent inside it is set"
+msgstr ""
+"Fer que el terreny segueixi les alçades d'un fitxer: una quadrícula Esri "
+"ASCII (.asc) o punts x y z en una quadrícula regular (.xyz, .txt, .csv), en "
+"les unitats del títol. El relleu fixa la mida del terreny, llevat que se'n "
+"fixi una extensió a dins"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove terrain"
+msgstr "Eliminar relleu"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Flatten the ground again, at the ground height, with the margin round the "
+"parts"
+msgstr ""
+"Tornar a aplanar el terreny, a l'alçada del terreny, amb el marge al voltant "
+"dels elements"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Buildings"
+msgstr "Edificis"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Corners"
+msgstr "Vèrtexs"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The building's name; its surfaces are named after it"
+msgstr "El nom de l'edifici; les seves superfícies porten el seu nom"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high the building is, ground to roof, in the units the title shows"
+msgstr ""
+"L'alçada de l'edifici, del terreny a la coberta, en les unitats del títol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many corners the building's footprint has (as drawn in the plan)"
+msgstr ""
+"Quants vèrtexs té la petjada de l'edifici (tal com s'ha dibuixat a la planta)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected building, or the last one when none is selected"
+msgstr ""
+"Eliminar l'edifici seleccionat o l'últim si no n'hi ha cap de seleccionat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add building"
+msgstr "Afegir edifici"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Draw a building's footprint in the plan, corner by corner, and close it on "
+"the first corner; it rises {height:g} m from the ground, to change in the "
+"table"
+msgstr ""
+"Dibuixar la petjada d'un edifici a la planta, vèrtex a vèrtex, i tancar-la "
+"al primer; s'alça {height:g} m sobre el terreny, a canviar a la taula"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove building"
+msgstr "Eliminar edifici"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Barriers"
+msgstr "Pantalles acústiques"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Points"
+msgstr "Punts"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The barrier's name, which its surfaces carry"
+msgstr "El nom de la pantalla, que porten les seves superfícies"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high the barrier is over the ground, in the units the title shows"
+msgstr "L'alçada de la pantalla sobre el terreny, en les unitats del títol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many points the barrier's path has (as drawn in the plan)"
+msgstr ""
+"Quants punts té el traçat de la pantalla (tal com s'ha dibuixat a la planta)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected barrier, or the last one when none is selected"
+msgstr ""
+"Eliminar la pantalla seleccionada o l'última si no n'hi ha cap de "
+"seleccionada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add barrier"
+msgstr "Afegir pantalla"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Draw a barrier's path in the plan, point by point, and finish it with Enter "
+"or a double click; it stands {height:g} m high, to change in the table"
+msgstr ""
+"Dibuixar el traçat d'una pantalla a la planta, punt a punt, i acabar-lo amb "
+"Retorn o doble clic; fa {height:g} m d'alçada, a canviar a la taula"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove barrier"
+msgstr "Eliminar pantalla"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Vegetation"
+msgstr "Vegetació"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Shape"
+msgstr "Forma"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Plants"
+msgstr "Plantes"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The name of the tree, hedge or belt of trees: no surface, a volume that "
+"sound passes through, losing some of itself"
+msgstr ""
+"El nom de l'arbre, la tanca o la franja d'arbres: no és una superfície, sinó "
+"un volum que el so travessa, perdent-ne una part"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high its top is over the ground, in the units the title shows"
+msgstr ""
+"L'alçada de la seva part superior sobre el terreny, en les unitats del títol"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A belt of trees (a footprint raised from the ground), a hedge (a path of a "
+"width) or a lone tree's crown, as drawn in the plan"
+msgstr ""
+"Una franja d'arbres (una petjada elevada des del terreny), una tanca (un "
+"traçat amb una amplada) o la capçada d'un arbre aïllat, tal com s'ha "
+"dibuixat a la planta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"What fills it: foliage, which takes so many dB per metre from sound passing "
+"through, or leaves by their area and width, which work that out for "
+"themselves; and stems, which scatter it sideways"
+msgstr ""
+"Què l'omple: fullatge, que resta tants dB per metre al so que el travessa, o "
+"fulles per la seva àrea i amplada, que ho calculen per si mateixes; i tiges, "
+"que el dispersen cap als costats"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected vegetation, or the last one when none is selected"
+msgstr ""
+"Eliminar la vegetació seleccionada o l'última si no n'hi ha cap de "
+"seleccionada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add vegetation"
+msgstr "Afegir vegetació"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw the shape chosen beside in the plan: a belt's footprint closed on its "
+"first corner, a hedge's path finished with Enter, or a tree's place with one "
+"click; dense foliage, its height to change in the table and the rest in the "
+"scene file"
+msgstr ""
+"Dibuixar a la planta la forma triada al costat: la petjada d'una franja "
+"tancada al primer vèrtex, el traçat d'una tanca acabat amb Retorn, o el lloc "
+"d'un arbre amb un clic; fullatge dens, l'alçada es canvia a la taula i la "
+"resta al fitxer d'escena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove vegetation"
+msgstr "Eliminar vegetació"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"What to draw next: a belt of trees (its footprint, corner by corner), a "
+"hedge (its path, point by point, {width:g} m wide) or a lone tree (one "
+"click, its crown {crown:g} m across)"
+msgstr ""
+"Què dibuixar a continuació: una franja d'arbres (la petjada, vèrtex a "
+"vèrtex), una tanca (el traçat, punt a punt, de {width:g} m d'amplada) o un "
+"arbre aïllat (un clic, amb la capçada de {crown:g} m de diàmetre)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The map the buildings marked 'from the buildings file' come from: a GeoJSON "
+"file of footprints, each raised to the height a property of it gives (or one "
+"height for all) and named by another"
+msgstr ""
+"El mapa d'on vénen els edificis marcats com a «del fitxer d'edificis»: un "
+"fitxer GeoJSON de petjades, cadascuna elevada fins a l'alçada que dóna una "
+"de les seves propietats (o una mateixa alçada per a totes) i amb el nom "
+"d'una altra"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Buildings from a map…"
+msgstr "Edificis des d'un mapa…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Add the buildings of a GeoJSON file of footprints, on a plane in the units "
+"the title shows (not longitude and latitude), each as high as a property of "
+"it says; they join the ones drawn here"
+msgstr ""
+"Afegir els edificis d'un fitxer GeoJSON de petjades, en un pla en les "
+"unitats del títol (no longitud i latitud), cadascun tan alt com digui una de "
+"les seves propietats; se sumen als dibuixats aquí"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the map's buildings"
+msgstr "Eliminar els edificis del mapa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Drop the map and every building that came from it; the buildings drawn here "
+"stay"
+msgstr ""
+"Treure el mapa i tots els edificis que en venien; els edificis dibuixats "
+"aquí es queden"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground zones"
+msgstr "Zones del terreny"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The zone's name: a part of the ground (a road, a lawn) whose surfaces carry "
+"it, to give it a material of its own"
+msgstr ""
+"El nom de la zona: una part del terreny (una carretera, una gespa) les "
+"superfícies de la qual el porten, per donar-li un material propi"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many corners the zone's outline has (as drawn in the plan)"
+msgstr ""
+"Quants vèrtexs té el contorn de la zona (tal com s'ha dibuixat a la planta)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove zone"
+msgstr "Eliminar zona"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the selected ground zone, or the last one when none is selected: its "
+"part of the ground takes the ground's material"
+msgstr ""
+"Eliminar la zona del terreny seleccionada o l'última si no n'hi ha cap de "
+"seleccionada: la seva part del terreny pren el material del terreny"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add zone"
+msgstr "Afegir zona"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw a part of the ground in the plan, corner by corner, and close it on the "
+"first corner; then give its surface a material of its own in the scene tree"
+msgstr ""
+"Dibuixar una part del terreny a la planta, vèrtex a vèrtex, i tancar-la al "
+"primer; després assigneu un material propi a la seva superfície a l'arbre de "
+"l'escena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "A closed model has no gaps: each edge joins two faces. The volume and the "
 "reverberation estimates need one; View > Show leaks finds the gaps"
 msgstr ""
@@ -1660,6 +2819,11 @@ msgstr "Recinte rectangular ({units})"
 #, python-brace-format
 msgid "Floor plan ({units})"
 msgstr "Planta ({units})"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Outdoors ({units})"
+msgstr "A l'aire lliure ({units})"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -1725,6 +2889,177 @@ msgstr "canviar les unitats"
 #: acoustic_spaces/gui/inspector.py
 msgid "change up axis"
 msgstr "canviar l'eix vertical"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Ground from ({x0:g}, {y0:g}) to ({x1:g}, {y1:g}) m, sky {sky:g} m over it"
+msgstr ""
+"Terreny de ({x0:g}, {y0:g}) a ({x1:g}, {y1:g}) m, cel a {sky:g} m per sobre"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "height from {property}"
+msgstr "alçada segons {property}"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{height} high"
+msgstr "{height} d'alçada"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Map {name}: {count} building, {height}"
+msgid_plural "Map {name}: {count} buildings, {height}"
+msgstr[0] "Mapa {name}: {count} edifici, {height}"
+msgstr[1] "Mapa {name}: {count} edificis, {height}"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Terrain: {points} points, z from {low} to {high} m, grid {spacing} m"
+msgstr ""
+"Relleu: {points} punts, z de {low} a {high} m, quadrícula de {spacing} m"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "From the buildings file, which sets its footprint and height"
+msgstr "Del fitxer d'edificis, que en fixa la planta i l'alçada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Terrain"
+msgstr "Relleu"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Height grids (*.asc *.xyz *.txt *.csv);;All files (*)"
+msgstr "Quadrícules d'alçades (*.asc *.xyz *.txt *.csv);;Tots els fitxers (*)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Buildings from a map"
+msgstr "Edificis des d'un mapa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "GeoJSON (*.geojson *.json);;All files (*)"
+msgstr "GeoJSON (*.geojson *.json);;Tots els fitxers (*)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} holds no building footprints"
+msgstr "{name} no conté petjades d'edificis"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove zone"
+msgstr "eliminar zona"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a height is one number"
+msgstr "una alçada és un sol nombre"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "leave out building"
+msgstr "ometre edifici"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove building"
+msgstr "eliminar edifici"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove barrier"
+msgstr "eliminar pantalla"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove vegetation"
+msgstr "eliminar vegetació"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "belt of trees"
+msgstr "franja d'arbres"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "hedge"
+msgstr "tanca"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "lone tree"
+msgstr "arbre aïllat"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} holds {count} building. How high is it, and what is it called?"
+msgid_plural ""
+"{name} holds {count} buildings. How high are they, and what are they called?"
+msgstr[0] "{name} conté {count} edifici. Quina alçada té i com es diu?"
+msgstr[1] "{name} conté {count} edificis. Quina alçada tenen i com es diuen?"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The property of each building that holds its height (one that holds a number "
+"in every building that has it), or one height for all of them"
+msgstr ""
+"La propietat de cada edifici que en conté l'alçada (una que conté un nombre "
+"a tots els edificis que la tenen), o una mateixa alçada per a tots"
+
+#. Translators: the choice of one height for every building of the map.
+#: acoustic_spaces/gui/inspector.py
+msgid "the same for all"
+msgstr "la mateixa per a tots"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The height of every building, or of those whose property is missing, in the "
+"geometry's units"
+msgstr ""
+"L'alçada de tots els edificis, o dels que no tenen la propietat, en les "
+"unitats de la geometria"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The property that names each building, or numbered names for all of them"
+msgstr "La propietat que dóna nom a cada edifici, o noms numerats per a tots"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "building_1, building_2, …"
+msgstr "building_1, building_2, …"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Height of all"
+msgstr "Alçada de tots"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Height when missing"
+msgstr "Alçada si falta"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "belt, {count} corners"
+msgstr "franja, {count} vèrtexs"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "hedge {width} wide, {count} points"
+msgstr "tanca de {width} d'amplada, {count} punts"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "tree, crown {diameter} across"
+msgstr "arbre, capçada de {diameter} de diàmetre"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "dense foliage"
+msgstr "fullatge dens"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "leaves {area} m²/m³, {width} m wide"
+msgstr "fulles {area} m²/m³, {width} m d'ample"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "foliage {values} dB/m"
+msgstr "fullatge {values} dB/m"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count} stems/m², {diameter} m across"
+msgstr "{count} troncs/m², {diameter} m de diàmetre"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -1838,6 +3173,62 @@ msgid "everything (an opening)"
 msgstr "tot (una obertura)"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "snow"
+msgstr "neu"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "forest floor"
+msgstr "sòl de bosc"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "loose soil"
+msgstr "sòl solt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grass"
+msgstr "herba"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "compacted soil"
+msgstr "sòl compactat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "gravel"
+msgstr "grava"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "asphalt"
+msgstr "asfalt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "water"
+msgstr "aigua"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "flow resistivity below"
+msgstr "resistivitat al flux indicada a sota"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Miki"
+msgstr "Miki"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Delany-Bazley"
+msgstr "Delany-Bazley"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "two-parameter"
+msgstr "dos paràmetres"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "local: the same at every angle"
+msgstr "local: la mateixa a tots els angles"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "extended: changes with the angle"
+msgstr "estesa: canvia amb l'angle"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The material's name; renaming it renames it in the assignments and the "
 "default material too"
@@ -1888,6 +3279,112 @@ msgstr ""
 "(incidència rasant; ajust de Jurkiewicz et al., 2025)"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Ground impedance"
+msgstr "Impedància del terreny"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Ticked, the material is a porous ground (grass, soil, snow, gravel, "
+"asphalt): its absorption and its reflection come from its impedance, with "
+"the phase and the ground wave that make the dip over the ground outdoors. "
+"Unticked, the absorption is as given"
+msgstr ""
+"Activat, el material és un terreny porós (herba, terra, neu, grava, asfalt): "
+"la seva absorció i la seva reflexió surten de la seva impedància, amb la "
+"fase i l'ona de superfície que creen la caiguda de nivell sobre el terreny a "
+"l'aire lliure. Desactivat, l'absorció és la indicada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The kind of ground: the ground classes of Nord2000, from snow (softest) to "
+"water and dense concrete (hardest), each with its flow resistivity; or a "
+"flow resistivity of your own"
+msgstr ""
+"El tipus de terreny: les classes de terreny de Nord2000, de la neu (el més "
+"tou) a l'aigua i el formigó dens (els més durs), cadascuna amb la seva "
+"resistivitat al flux; o una resistivitat al flux pròpia"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the impedance follows from the flow resistivity: Miki (passive at every "
+"frequency, the default), Delany-Bazley (as most of the literature quotes "
+"it), or two-parameter (a porosity that falls with depth, which fits measured "
+"grass and soil better)"
+msgstr ""
+"Com s'obté la impedància a partir de la resistivitat al flux: Miki (passiu a "
+"qualsevol freqüència, el predeterminat), Delany-Bazley (tal com el cita la "
+"major part de la bibliografia) o dos paràmetres (una porositat que "
+"disminueix amb la profunditat, que s'ajusta millor a l'herba i la terra "
+"mesurades)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How hard it is to push air through the ground: about 10 to 30 kPa s/m² for "
+"snow, 200 for grass, 2000 for gravel, 20000 and more for asphalt"
+msgstr ""
+"Com costa fer passar aire a través del terreny: uns 10 a 30 kPa s/m² per a "
+"la neu, 200 per a l'herba, 2000 per a la grava, 20000 o més per a l'asfalt"
+
+#. Translators: a ground layer with no thickness set: as deep as it likes.
+#: acoustic_spaces/gui/inspector.py
+msgid "deep"
+msgstr "profund"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A layer of the ground this thick on a hard backing (snow on frozen ground, a "
+"thin soil over rock); deep: as deep as it likes"
+msgstr ""
+"Una capa de terreny d'aquest gruix sobre un fons rígid (neu sobre sòl "
+"glaçat, una capa fina de terra sobre roca); profund: sense límit de "
+"profunditat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Two-parameter model: how fast the ground's porosity falls with depth"
+msgstr ""
+"Model de dos paràmetres: com de ràpid disminueix la porositat del terreny "
+"amb la profunditat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the ground reacts to sound meeting it at an angle: locally, with the "
+"same impedance at every angle (the usual model, right for grass and harder "
+"grounds); or extended, sound also travelling sideways inside it, so the "
+"impedance a reflection meets changes with its angle, which tells for soft "
+"snow, moss, forest floors and thin layers. Not with the two-parameter model"
+msgstr ""
+"Com reacciona el terra al so que hi arriba amb un angle: localment, amb la "
+"mateixa impedància a tots els angles (el model habitual, correcte per a "
+"herba i terres més durs); o de manera estesa, amb el so viatjant també de "
+"costat dins seu, de manera que la impedància que troba una reflexió canvia "
+"amb el seu angle, cosa que compta en neu tova, molsa, terres de bosc i capes "
+"fines. No amb el model de dos paràmetres"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground"
+msgstr "Terreny"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Model"
+msgstr "Model"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Flow resistivity"
+msgstr "Resistivitat al flux"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Layer thickness"
+msgstr "Gruix de la capa"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Porosity rate"
+msgstr "Caiguda de la porositat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Reaction"
+msgstr "Reacció"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Where the coefficients come from"
 msgstr "D'on provenen els coeficients"
 
@@ -1906,6 +3403,10 @@ msgid ""
 msgstr ""
 "Eliminar aquest material i les assignacions que el fan servir; les seves "
 "superfícies prenen el material per defecte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Source: the ground's impedance"
+msgstr "Font: la impedància del terreny"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -1956,6 +3457,50 @@ msgstr ""
 msgid "The listener's name, as the results and the exported files show it"
 msgstr ""
 "El nom del receptor, tal com apareix als resultats i als fitxers exportats"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The group the source belongs to in the scene tree, to show, hide, use or "
+"leave out together; groups nest with / (PA/Delays is Delays in PA)"
+msgstr ""
+"El grup de la font a l'arbre de l'escena, per mostrar-la, amagar-la, "
+"incloure-la o excloure-la amb les altres; els grups s'imbriquen amb / "
+"(PA/Delays és Delays dins de PA)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The group the listener belongs to in the scene tree, to show, hide, use or "
+"leave out together; groups nest with / (Stands/North is North in Stands)"
+msgstr ""
+"El grup del receptor a l'arbre de l'escena, per mostrar-lo, amagar-lo, "
+"incloure'l o excloure'l amb els altres; els grups s'imbriquen amb / "
+"(Stands/North és North dins de Stands)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Group"
+msgstr "Grup"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Use in simulations"
+msgstr "Incloure a les simulacions"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Untick to leave the source out of simulations, maps and checks: it stays in "
+"the scene, drawn faded. The tick in the scene tree does the same"
+msgstr ""
+"En desmarcar-la, la font queda fora de les simulacions, els mapes i les "
+"comprovacions: continua a l'escena, dibuixada atenuada. La casella de "
+"l'arbre de l'escena fa el mateix"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Untick to leave the listener out of simulations and checks: it stays in the "
+"scene, drawn faded. The tick in the scene tree does the same"
+msgstr ""
+"En desmarcar-lo, el receptor queda fora de les simulacions i les "
+"comprovacions: continua a l'escena, dibuixat atenuat. La casella de l'arbre "
+"de l'escena fa el mateix"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2079,6 +3624,23 @@ msgstr ""
 "dB per a cardioide"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Add up the array's elements one by one"
+msgstr "Sumar els elements del conjunt de fonts un a un"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"For a coherent array: add up its elements' sound one by one, each from where "
+"it is, in the direct sound and the reflections, rather than send out its "
+"far-field pattern from one point. For listeners nearer than about the "
+"array's length squared over the wavelength, which the scene warns about"
+msgstr ""
+"Per a un conjunt de fonts coherent: suma el so dels seus elements un a un, "
+"cadascun des d'on és, en el so directe i en les reflexions, en lloc d'emetre "
+"el seu diagrama de camp llunyà des d'un punt. Per a receptors més a prop que "
+"aproximadament la longitud del conjunt al quadrat dividida per la longitud "
+"d'ona, de la qual cosa avisa l'escena"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Show the pattern"
 msgstr "Mostrar el patró"
 
@@ -2167,10 +3729,6 @@ msgid ""
 msgstr ""
 "La línia o superfície es compon d'aquestes fonts puntuals; es reparteixen la "
 "potència acústica"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Shape"
-msgstr "Forma"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Length"
@@ -2336,14 +3894,45 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Where a path over one edge may reflect: on one side of the edge, before or "
+"after it (off the ground on the way to a barrier, or off a façade behind "
+"it), or on both sides, before and after (off the ground on the way to a "
+"barrier and again behind it: all four paths over a barrier on the ground)"
+msgstr ""
+"On es pot reflectir un camí que passa per sobre d'una aresta: a un costat de "
+"l'aresta, abans o després (al terreny de camí a una pantalla acústica, o en "
+"una façana al darrere), o a tots dos costats, abans i després (al terreny de "
+"camí a una pantalla i de nou al darrere: els quatre camins per sobre d'una "
+"pantalla al terreny)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors in wind or temperature gradients, the parabolic equation that gives "
+"the sound over the open ground in the low bands and in the shadows: narrow "
+"angle (for the gradients near the ground that the weather has) or wide angle "
+"(also for gradients reaching hundreds of metres up, which bend sound back at "
+"steep angles over kilometres; several times the work)"
+msgstr ""
+"A l'aire lliure amb gradients de vent o de temperatura, l'equació parabòlica "
+"que dona el so sobre el terreny obert a les bandes greus i a les zones "
+"d'ombra: angle estret (per als gradients prop del terreny que porta el "
+"temps) o angle ampli (també per a gradients que arriben a centenars de "
+"metres d'alçada, que tornen el so amb angles pronunciats al llarg de "
+"quilòmetres; unes quantes vegades més feina)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
-"bands take their place when it runs up to this band or higher"
+"bands take their place when it runs up to this band or higher. Up to 500 Hz "
+"in a room; outdoors, where the paths are few, up to 8000 Hz, the default "
+"there"
 msgstr ""
 "La banda d'octava més alta (Hz) en què les trajectòries inicials se sumen en "
 "pressió, amb la fase de cada reflexió, en lloc d'energia; les bandes del "
 "mètode ondulatori les substitueixen quan arriba fins a aquesta banda o més "
-"amunt"
+"amunt. Fins a 500 Hz en una sala; a l'aire lliure, on les trajectòries són "
+"poques, fins a 8000 Hz, el valor predeterminat allà"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Method"
@@ -2360,6 +3949,14 @@ msgstr "Raigs"
 #: acoustic_spaces/gui/inspector.py
 msgid "Diffraction"
 msgstr "Difracció"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Reflections over an edge"
+msgstr "Reflexions sobre una aresta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Parabolic equation"
+msgstr "Equació parabòlica"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "In pressure up to"
@@ -2538,8 +4135,25 @@ msgstr ""
 "hagi trobat la CPU més ràpida per a la durada del càlcul"
 
 #: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors, how it takes the wind: as a speed of sound that the wind along the "
+"way from the source changes, as the rays do, or as air that moves, so that "
+"sound going against the wind is slower whichever way it turned, off a "
+"building too (three to four times the work, on the CPU)"
+msgstr ""
+"A l'aire lliure, com té en compte el vent: com una velocitat del so que el "
+"vent canvia al llarg del camí des de la font, com fan els raigs, o com aire "
+"que es mou, de manera que el so que va contra el vent és més lent cap on "
+"sigui que hagi girat, també en tornar d'un edifici (de tres a quatre vegades "
+"la feina, a la CPU)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Up to band (Hz)"
 msgstr "Fins a la banda (Hz)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind"
+msgstr "Vent"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Performance"
@@ -2667,6 +4281,32 @@ msgstr "Transició de primeres reflexions a reverberació tardana"
 #: acoustic_spaces/gui/inspector.py
 msgid "Seed"
 msgstr "Llavor"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Insertion loss"
+msgstr "Pèrdua per inserció"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors: tick buildings, barriers or vegetation to run the scene, and the "
+"map, again without them. The results and the map then give their insertion "
+"loss, the level without them less the level with them; each run takes twice "
+"as long"
+msgstr ""
+"A l'aire lliure: marqueu edificis, pantalles acústiques o vegetació per "
+"calcular l'escena, i el mapa, de nou sense ells. Els resultats i el mapa "
+"donen llavors la seva pèrdua per inserció, el nivell sense ells menys el "
+"nivell amb ells; cada càlcul triga el doble"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Ticked, the run is also made without {name}, for its insertion loss"
+msgstr ""
+"Marcat, el càlcul també es fa sense {name}, per a la seva pèrdua per inserció"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the insertion loss"
+msgstr "canviar la pèrdua per inserció"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change simulation settings"
@@ -3070,6 +4710,39 @@ msgid "Off"
 msgstr "Desactivat"
 
 #: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a room yet: {problem}"
+msgstr "Encara no és un recinte: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a building yet: {problem}"
+msgstr "Encara no és un edifici: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a belt of trees yet: {problem}"
+msgstr "Encara no és una franja d'arbres: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a zone yet: {problem}"
+msgstr "Encara no és una zona: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a weather zone yet: {problem}"
+msgstr "Encara no és una zona meteorològica: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Not a barrier yet: it needs two points at least"
+msgstr "Encara no és una pantalla: necessita dos punts com a mínim"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Not a hedge yet: it needs two points at least"
+msgstr "Encara no és una tanca: necessita dos punts com a mínim"
+
+#: acoustic_spaces/gui/plan_view.py
 msgid ""
 "Drag corners, sources and listeners; double-click a wall to add a corner; "
 "right-click for more. Shift: no snapping."
@@ -3096,11 +4769,73 @@ msgstr ""
 
 #: acoustic_spaces/gui/plan_view.py
 msgid ""
+"The scene from above: drag sources and listeners. The Geometry form's "
+"buttons draw buildings, barriers, vegetation and zones. Shift: no snapping."
+msgstr ""
+"L'escena vista des de dalt: arrossegar fonts i receptors. Els botons del "
+"formulari de Geometria dibuixen edificis, pantalles, vegetació i zones. Maj: "
+"sense ajust a la quadrícula."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
 "Click the corners of the new room; close it on the first corner, with a "
 "double-click or Enter. Backspace takes a corner back, Esc stops."
 msgstr ""
 "Fer clic als vèrtexs del recinte nou; tancar-lo al primer vèrtex, amb doble "
 "clic o Retorn. Retrocés desfà un vèrtex, Esc atura."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the new building's footprint; close it on the first "
+"corner, with a double-click or Enter. Backspace takes a corner back, Esc "
+"stops."
+msgstr ""
+"Fer clic als vèrtexs de la petjada de l'edifici nou; tancar-la al primer "
+"vèrtex, amb doble clic o Retorn. Retrocés desfà un vèrtex, Esc atura."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the points along the new barrier, end to end; finish with a "
+"double-click or Enter. Backspace takes a point back, Esc stops."
+msgstr ""
+"Fer clic als punts de la pantalla nova, d'un extrem a l'altre; acabar amb "
+"doble clic o Retorn. Retrocés desfà un punt, Esc atura."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the belt of trees; close it on the first corner, with a "
+"double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"Fer clic als vèrtexs de la franja d'arbres; tancar-la al primer vèrtex, amb "
+"doble clic o Retorn. Retrocés desfà un vèrtex, Esc atura."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the points along the hedge, end to end; finish with a double-click or "
+"Enter. Backspace takes a point back, Esc stops."
+msgstr ""
+"Fer clic als punts de la tanca, d'un extrem a l'altre; acabar amb doble clic "
+"o Retorn. Retrocés desfà un punt, Esc atura."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Click where the tree stands; Esc cancels."
+msgstr "Fer clic on hi ha l'arbre; Esc cancel·la."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the ground zone; close it on the first corner, with a "
+"double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"Fer clic als vèrtexs de la zona del terreny; tancar-la al primer vèrtex, amb "
+"doble clic o Retorn. Retrocés desfà un vèrtex, Esc atura."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the new weather zone; close it on the first corner, "
+"with a double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"Fer clic als vèrtexs de la zona meteorològica nova; tancar-la al primer "
+"vèrtex, amb doble clic o Retorn. Retrocés desfà un vèrtex, Esc atura."
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "Click where the new source goes; Esc cancels."
@@ -3109,11 +4844,6 @@ msgstr "Fer clic on va la font nova; Esc cancel·la."
 #: acoustic_spaces/gui/plan_view.py
 msgid "Click where the new listener goes; Esc cancels."
 msgstr "Fer clic on va el receptor nou; Esc cancel·la."
-
-#: acoustic_spaces/gui/plan_view.py
-#, python-brace-format
-msgid "Not a room yet: {problem}"
-msgstr "Encara no és un recinte: {problem}"
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "A floor plan needs at least three corners."
@@ -3150,8 +4880,13 @@ msgid "Draw room"
 msgstr "Dibuixar recinte"
 
 #: acoustic_spaces/gui/plan_view.py
-msgid "Draw a new floor plan, corner by corner; it replaces the room"
-msgstr "Dibuixar una planta nova, vèrtex a vèrtex; substitueix el recinte"
+msgid ""
+"Draw a new floor plan, corner by corner; it replaces the room. Buildings, "
+"barriers, vegetation and ground zones are drawn from the Geometry form"
+msgstr ""
+"Dibuixar una planta nova, vèrtex a vèrtex; substitueix el recinte. Els "
+"edificis, les pantalles, la vegetació i les zones del terreny es dibuixen "
+"des del formulari de Geometria"
 
 #: acoustic_spaces/gui/plan_view.py
 msgid ""
@@ -3287,6 +5022,42 @@ msgstr ""
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
+"Level relative to free field (dB), outdoors: how much louder the source is "
+"here than the same source as far away in free field, with the same air. The "
+"ground, the weather, buildings, barriers and vegetation make the difference; "
+"negative, it is their excess attenuation"
+msgstr ""
+"Nivell respecte del camp lliure (dB), a l'aire lliure: quant més fort sona "
+"la font aquí que la mateixa font a la mateixa distància en camp lliure, amb "
+"el mateix aire. La diferència la fan el terreny, el temps, els edificis, les "
+"pantalles acústiques i la vegetació; en negatiu, és la seva atenuació en "
+"excés"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Insertion loss (dB) of the buildings, barriers or vegetation the simulation "
+"page names: the level here without them less the level with them. Positive "
+"where they shield the listener"
+msgstr ""
+"Pèrdua per inserció (dB) dels edificis, pantalles acústiques o vegetació que "
+"indica la pàgina de simulació: el nivell aquí sense ells menys el nivell amb "
+"ells. Positiva on protegeixen el receptor"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Level over a long term (dB), outdoors: the energy mean of the levels in the "
+"scene's weather classes, each by its share of the time, over the periods of "
+"the day. The Run details tab gives the rating level (L_den) and the level of "
+"each period and each class"
+msgstr ""
+"Nivell a llarg termini (dB), a l'aire lliure: la mitjana energètica dels "
+"nivells en les classes meteorològiques de l'escena, cadascuna segons la seva "
+"part del temps, sobre els períodes del dia. La pestanya Detalls del càlcul "
+"dona el nivell d'avaluació (L_den) i el nivell de cada període i de cada "
+"classe"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
 "Early lateral energy fraction (0 to 1): the share of the early sound (5 to "
 "80 ms) that comes from the sides, which makes the source sound wider"
 msgstr ""
@@ -3356,6 +5127,17 @@ msgid ""
 msgstr ""
 "T30 (s) d'un micròfon de figura de vuit orientat amunt des del receptor. "
 "Superior a T30 quan el so continua rebotant entre el terra i el sostre"
+
+#. Translators: {rating} is the rating level's symbol (L_den); {periods} and {classes} are names from the scene file, each with its level.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"{source} -> {listener}: {rating} {rated:.1f} dB(A), long-term level "
+"{level:.1f} dB(A); {periods} dB(A); in the weather classes {classes} dB(A)"
+msgstr ""
+"{source} -> {listener}: {rating} {rated:.1f} dB(A), nivell a llarg termini "
+"{level:.1f} dB(A); {periods} dB(A); en les classes meteorològiques {classes} "
+"dB(A)"
 
 #: acoustic_spaces/gui/results_view.py
 msgid "Turn the head (degrees): left is positive"
@@ -3589,6 +5371,31 @@ msgstr "{tip}. No està definit per a aquesta resposta"
 
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format
+msgid "Insertion loss of {names}: the scene was also run without it"
+msgid_plural "Insertion loss of {names}: the scene was also run without them"
+msgstr[0] ""
+"Pèrdua per inserció de {names}: l'escena també s'ha calculat sense aquesta "
+"part"
+msgstr[1] ""
+"Pèrdua per inserció de {names}: l'escena també s'ha calculat sense aquestes "
+"parts"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"Levels over a long term in {count} weather class ({names}), rated as {rating}"
+msgid_plural ""
+"Levels over a long term in {count} weather classes ({names}), rated as "
+"{rating}"
+msgstr[0] ""
+"Nivells a llarg termini en {count} classe meteorològica ({names}), avaluats "
+"com a {rating}"
+msgstr[1] ""
+"Nivells a llarg termini en {count} classes meteorològiques ({names}), "
+"avaluats com a {rating}"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
 msgid ""
 "{source} -> {listener}: direct sound at {delay:.1f} ms, {count} early path "
 "({diffracted} diffracted)"
@@ -3656,19 +5463,36 @@ msgstr ""
 "passar"
 
 #: acoustic_spaces/gui/tree.py
-msgid "The sound sources; place more with Place source"
-msgstr "Les fonts sonores; se'n poden col·locar més amb Col·locar font"
+msgid ""
+"The sound sources; place more with Place source. Untick them to leave them "
+"all out of simulations"
+msgstr ""
+"Les fonts sonores; se'n poden col·locar més amb Col·locar font. En "
+"desmarcar-les, totes queden fora de les simulacions"
 
 #: acoustic_spaces/gui/tree.py
-msgid "Select it to change it; drag it in the 3D view or the plan to move it"
+msgid ""
+"Select it to change it; drag it in the 3D view or the plan to move it. "
+"Untick it to leave it out of simulations and maps"
 msgstr ""
 "Seleccionar-lo per modificar-lo; arrossegar-lo a la vista 3D o a la planta "
-"per moure'l"
+"per moure'l. En desmarcar-lo, queda fora de les simulacions i els mapes"
 
 #: acoustic_spaces/gui/tree.py
-msgid "The listening positions; place more with Place listener"
+msgid ""
+"The listening positions; place more with Place listener. Untick them to "
+"leave them all out of simulations"
 msgstr ""
-"Les posicions d'escolta; se'n poden col·locar més amb Col·locar receptor"
+"Les posicions d'escolta; se'n poden col·locar més amb Col·locar receptor. En "
+"desmarcar-les, totes queden fora de les simulacions"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"A group of the scene's sources or listeners (their Group field). Untick it "
+"to leave them all out of simulations and maps"
+msgstr ""
+"Un grup de fonts o receptors de l'escena (el seu camp Grup). En "
+"desmarcar-lo, tots queden fora de les simulacions i els mapes"
 
 #: acoustic_spaces/gui/tree.py
 msgid ""
@@ -3693,6 +5517,12 @@ msgid ""
 msgstr ""
 "On es col·loca el mapa de cobertura, el seu detall i el soroll de fons per a "
 "l'STI"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"Shows or hides a source, a listener or a group in the 3D view and the plan"
+msgstr ""
+"Mostra o amaga una font, un receptor o un grup a la vista 3D i a la planta"
 
 #: acoustic_spaces/gui/tree.py
 msgid "Geometry"
@@ -3741,6 +5571,14 @@ msgstr "{surfaces}, separació de {spacing:g} m"
 #, python-brace-format
 msgid "audience, {spacing:g} m apart"
 msgstr "públic, separació de {spacing:g} m"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Hide it in the 3D view and the plan"
+msgstr "Amagar-lo a la vista 3D i a la planta"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Show it in the 3D view and the plan"
+msgstr "Mostrar-lo a la vista 3D i a la planta"
 
 #: acoustic_spaces/gui/tune_dialog.py
 msgid "Make auto the default on this computer"
@@ -3878,6 +5716,10 @@ msgid "gap {number}: {share:.1f} %"
 msgstr "buit {number}: {share:.1f} %"
 
 #: acoustic_spaces/viz.py
+msgid "vegetation"
+msgstr "vegetació"
+
+#: acoustic_spaces/viz.py
 msgid "reflections"
 msgstr "reflexions"
 
@@ -4008,6 +5850,42 @@ msgstr ""
 "{name}\n"
 "dB respecte de la direcció més forta; índex de directivitat {index:.1f} dB a "
 "1 kHz"
+
+#: acoustic_spaces/viz.py
+msgid "temperature (°C)"
+msgstr "temperatura (°C)"
+
+#: acoustic_spaces/viz.py
+msgid "height above the ground (m)"
+msgstr "alçada sobre el terreny (m)"
+
+#: acoustic_spaces/viz.py
+msgid "wind speed (m/s)"
+msgstr "velocitat del vent (m/s)"
+
+#: acoustic_spaces/viz.py
+msgid "across the wind"
+msgstr "transversal al vent"
+
+#: acoustic_spaces/viz.py
+msgid "downwind"
+msgstr "a favor del vent"
+
+#: acoustic_spaces/viz.py
+msgid "upwind"
+msgstr "contra el vent"
+
+#: acoustic_spaces/viz.py
+msgid "speed of sound (m/s)"
+msgstr "velocitat del so (m/s)"
+
+#: acoustic_spaces/viz.py
+msgid "Still air: sound goes in straight lines"
+msgstr "Aire en calma: el so va en línia recta"
+
+#: acoustic_spaces/viz.py
+msgid "Sound bends towards where the speed of sound is lower"
+msgstr "El so es corba cap on la velocitat del so és més baixa"
 
 #: acoustic_spaces/viz.py
 msgid "broadband, 1 ms windows"
@@ -4165,6 +6043,66 @@ msgstr ""
 "escenari elevat, butaques entapissades, parets laterals difusores i un "
 "sostre amb cassetons. Dues fonts a l'escenari i tres seients a la platea."
 
+#: examples/concert_stage/scene.yaml
+msgctxt "example"
+msgid "Concert stage with monitors"
+msgstr "Escenari de concert amb monitors"
+
+#: examples/concert_stage/scene.yaml
+msgctxt "example"
+msgid ""
+"A concert stage on open ground with its monitors: the stage of the stadium "
+"examples, alone. On stage a pair of wedges plays the singer's mix, a drum "
+"fill the drummer's and side fills the rest of the band's. Beside the stage "
+"hang the two main line arrays of 12 boxes curved in a J (coherent arrays), "
+"with a block of eight cardioid subwoofers under the middle of the stage "
+"front, delayed 17 ms, and front fills on its lip, so the players also hear "
+"what spills back from them. Listeners stand where the singer, the drummer "
+"and a guitarist play, and at the mix position 37 m out, in a standing crowd "
+"(`audience: true`). The players stand a few metres from the arrays, much "
+"nearer than their far-field patterns hold, so every array adds up its boxes "
+"one by one (`near_field: true`).  python align.py python feedback.py python "
+"near_field.py python make_model.py  align.py prints when and how loud each "
+"loudspeaker arrives at each listener: each player hears their own monitor "
+"loudest, and nobody an echo. feedback.py finds how much gain the singer's "
+"microphone allows before the loudspeakers that play it make it ring, at the "
+"mix position and at the singer's ears, and the frequencies where it rings "
+"first, then renders the loop below and above that gain. Its microphone is an "
+"ideal supercardioid and the reverberation's phases are random, so take the "
+"frequencies as an example of where such a stage rings. near_field.py prints "
+"how far each array's far-field pattern would be off at each listener: within "
+"3 dB up to 2 kHz, but up to 8 dB at 4 and 8 kHz, the side fill's at the "
+"guitarist. make_model.py writes the model and the arrays; their boxes are a "
+"generic box made up for this example, not any product's data."
+msgstr ""
+"Un escenari de concert en camp obert amb els seus monitors: l'escenari dels "
+"exemples de l'estadi, sol. A l'escenari un parell de monitors de terra "
+"(falques) dona la mescla del cantant, un monitor de bateria (drum fill) la "
+"del bateria i uns side fills la de la resta del grup. Als costats de "
+"l'escenari pengen els dos conjunts lineals principals de 12 caixes corbats "
+"en J (conjunts coherents), amb un bloc de vuit subgreus cardioides sota el "
+"centre del front de l'escenari, retardat 17 ms, i reforços frontals (front "
+"fills) a la seva vora, així que els músics també senten el que se n'escapa "
+"cap enrere. Hi ha receptors on toquen el cantant, el bateria i un "
+"guitarrista, i a la posició de mescla, a 37 m, entre el públic dret "
+"(`audience: true`). Els músics són a pocs metres dels conjunts, molt més a "
+"prop del que valen els seus patrons de camp llunyà, així que cada conjunt "
+"suma les seves caixes una a una (`near_field: true`).  python align.py "
+"python feedback.py python near_field.py python make_model.py  align.py "
+"mostra quan i amb quin nivell arriba cada altaveu a cada receptor: cada "
+"músic sent més fort el seu propi monitor, i ningú no sent cap eco. "
+"feedback.py calcula quant guany admet el micròfon del cantant abans que els "
+"altaveus que el reprodueixen el facin acoblar, a la posició de mescla i a "
+"les orelles del cantant, i les freqüències on s'acobla primer, i després "
+"genera l'àudio del llaç per sota i per sobre d'aquest guany. El seu micròfon "
+"és un supercardioide ideal i les fases de la reverberació són aleatòries, "
+"així que les freqüències són un exemple d'on s'acobla un escenari així. "
+"near_field.py mostra quant es desviaria el patró de camp llunyà de cada "
+"conjunt a cada receptor: menys de 3 dB fins a 2 kHz, però fins a 8 dB a 4 i "
+"8 kHz, el del side fill al guitarrista. make_model.py escriu el model i els "
+"conjunts; les seves caixes són una caixa genèrica inventada per a aquest "
+"exemple, no dades de cap producte."
+
 #: examples/fitting/scene.yaml
 msgctxt "example"
 msgid "Seminar room as designed (10 x 7 x 3 m)"
@@ -4267,6 +6205,34 @@ msgstr ""
 "encreuada entre respostes, i pot desar el recorregut com a vídeo: la veu del "
 "guia passa de directa i clara al so que es corba al voltant del vèrtex."
 
+#: examples/hillside/scene.yaml
+msgctxt "example"
+msgid "Yard behind a hill"
+msgstr "Pati darrere d'un turó"
+
+#: examples/hillside/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a works yard at the foot of a hill, heard 160 m away in the hill's "
+"shadow, on the slope that faces the yard and on the crest. The ground is a "
+"terrain, a grid of heights read from hill.asc (make_terrain.py writes it), "
+"and the two houses by the listener in the shadow come from a map, "
+"houses.geojson. The sound bends over the crest to the listener behind it, "
+"which takes 10 dB off the lowest band and nearly 40 dB off the highest, and "
+"reflects off the mean plane of the slope to the listener facing the yard, as "
+"off flat ground; the listener on the crest sees the yard just over the "
+"hill's shoulder."
+msgstr ""
+"A l'aire lliure: un pati d'obres al peu d'un turó, sentit a 160 m a l'ombra "
+"del turó, al vessant que mira al pati i a la carena. El terra és un terreny, "
+"una malla d'alçades llegida de hill.asc (make_terrain.py l'escriu), i les "
+"dues cases al costat del receptor a l'ombra vénen d'un mapa, houses.geojson. "
+"El so es doblega sobre la carena fins al receptor que hi ha al darrere, cosa "
+"que treu 10 dB a la banda més greu i gairebé 40 dB a la més aguda, i es "
+"reflecteix al pla mitjà del vessant cap al receptor que mira al pati, com en "
+"terra pla; el receptor a la carena veu el pati just per sobre de l'espatlla "
+"del turó."
+
 #: examples/leaky_classroom/scene.yaml
 msgctxt "example"
 msgid "Leaky classroom (a model with two holes)"
@@ -4357,6 +6323,38 @@ msgstr ""
 "una biblioteca. Els valors són propis d'aquest exemple, no els de cap dels "
 "dos programes."
 
+#: examples/open_air_stage/scene.yaml
+msgctxt "example"
+msgid "Open-air stage in the wind"
+msgstr "Escenari a l'aire lliure amb vent"
+
+#: examples/open_air_stage/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a stage's loudspeakers 5 m up, heard 100 and 300 m away across a "
+"park on a windy evening, downwind and upwind. The wind, 5 m/s 10 m up, grows "
+"with height, so sound going with it travels faster higher up and bends down "
+"towards the ground, and sound going against it bends up, over the listeners' "
+"heads. Downwind the sound comes sooner, and louder in the low bands; 300 m "
+"upwind the listeners are in its shadow, where only what bends round its edge "
+"and what the wind's eddies scatter into it arrive: there the bands from 1 "
+"kHz up are some 19 dB below those downwind, where without the eddies they "
+"would be 60 dB below. The eddies also make the sound flicker as they drift "
+"past. Remove the atmosphere to hear the same park in still air."
+msgstr ""
+"A l'aire lliure: els altaveus d'un escenari a 5 m d'alçada, escoltats a 100 "
+"i 300 m a través d'un parc en un vespre de vent, a favor i en contra del "
+"vent. El vent, de 5 m/s a 10 m d'alçada, creix amb l'alçada, de manera que "
+"el so que va amb ell viatja més ràpid més amunt i es corba cap al terra, i "
+"el que va en contra es corba cap amunt, per sobre dels caps dels oients. A "
+"favor del vent el so arriba abans, i més fort a les bandes greus; a 300 m en "
+"contra del vent els oients són a la seva ombra, on només arriba el que es "
+"corba al voltant de la seva vora i el que els remolins del vent hi "
+"dispersen: allà les bandes des d'1 kHz queden uns 19 dB per sota de les de a "
+"favor del vent, quan sense els remolins quedarien 60 dB per sota. Els "
+"remolins també fan fluctuar el so a mesura que passen. Traieu l'atmosfera "
+"per escoltar el mateix parc amb l'aire en calma."
+
 #: examples/orchestra/scene.yaml
 msgctxt "example"
 msgid "Beethoven 8 orchestra (concert hall, 61 sources)"
@@ -4398,6 +6396,33 @@ msgstr ""
 "reben el nom del material i de la geometria, i les assignacions comparen "
 "noms sense distingir majúscules i minúscules: Brick_Rough de SketchUp és "
 "brick_rough."
+
+#: examples/roadside/scene.yaml
+msgctxt "example"
+msgid "Road across a meadow"
+msgstr "Carretera al costat d'un prat"
+
+#: examples/roadside/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: traffic on a road between a meadow and a paved yard, heard 7.5, 25 "
+"and 50 m away over the grass, and 25 m away over the yard. Over soft ground "
+"the sound that reflects off it arrives out of step with the direct sound at "
+"a few hundred hertz and takes some of it away (the ground dip); over the "
+"hard yard the two add up there instead, and the dip comes higher up, near 2 "
+"kHz. The meadow, the road and the yard are parts of the ground, each with "
+"its impedance; a reflection near where two meet takes some of each, as much "
+"as each covers of its Fresnel zone."
+msgstr ""
+"A l'aire lliure: trànsit en una carretera entre un prat i un pati "
+"pavimentat, escoltat a 7,5, 25 i 50 m sobre l'herba, i a 25 m sobre el pati. "
+"Sobre un terreny tou, el so que s'hi reflecteix arriba desfasat respecte al "
+"so directe a uns quants centenars d'hertzs i n'hi treu una part (la caiguda "
+"per efecte del terreny); sobre el pati dur, en canvi, tots dos s'hi sumen, i "
+"la caiguda apareix més amunt, prop de 2 kHz. El prat, la carretera i el pati "
+"són parts del terreny, cadascuna amb la seva impedància; una reflexió prop "
+"d'on dues es troben pren una mica de cadascuna, tant com cadascuna cobreix "
+"de la seva zona de Fresnel."
 
 #: examples/room_modes/scene.yaml
 msgctxt "example"
@@ -4456,6 +6481,204 @@ msgstr ""
 "les parets són dures i llises, de manera que el so que rebota entre elles "
 "s'atenua lentament: el T30 simulat és diverses vegades superior a les "
 "estimacions de Sabine i Eyring d'`inspect`, que assumeixen un camp difús."
+
+#: examples/stadium_concert/scene.yaml
+msgctxt "example"
+msgid "Stadium concert with sound system and monitors"
+msgstr "Concert en un estadi amb sistema de so i monitors"
+
+#: examples/stadium_concert/scene.yaml
+msgctxt "example"
+msgid ""
+"A concert in a football stadium, with a sound system as tours hang it and "
+"the stage's monitors: stadium_pa and concert_stage together. The stadium is "
+"a bowl of four stands under a ring of roof, open to the sky over the pitch; "
+"the stage stands at the west end, and the stand behind it is empty. Beside "
+"the stage hang two main line arrays of 12 boxes curved in a J (coherent "
+"arrays), their top boxes aimed at the far end and their bottom ones at the "
+"crowd in front. A block of eight cardioid subwoofers under the middle of the "
+"stage front is delayed 17 ms so that it arrives with the main arrays at the "
+"mix position. Out-fills beside the main arrays cover the side stands near "
+"the stage, and front fills on the stage's lip the front rows between them. "
+"Two delay towers on the pitch, 50 m out, cover its back, and four delays "
+"hung under the roof's edge, aimed along the side and end stands, their far "
+"seats. Each fill and delay is timed to arrive at its seats 6 to 20 ms after "
+"the main arrays, so the sound still seems to come from the stage; the "
+"towers' and the delays' low bands are rolled off, where the main arrays and "
+"the subwoofers give enough. On stage a pair of wedges plays the singer's "
+"mix, a drum fill the drummer's and side fills the rest of the band's. "
+"Listeners stand where the singer, the drummer and a guitarist play, at the "
+"front, the middle, the side and the back of the pitch, and low, high and far "
+"on the stands. The crowd standing on the pitch and the one seated in the "
+"stands take up the sound and scatter it (`audience: true`). Many listeners "
+"stand nearer the arrays than their far-field patterns hold, so every array "
+"adds up its boxes one by one (`near_field: true`). The sources and listeners "
+"sit in groups: the PA's mains, subwoofers, fills and delays, the monitors, "
+"the stage, and the audience standing and seated. The editor's scene tree "
+"shows or hides each group, and its tick uses it in simulations or leaves it "
+"out.  python align.py python near_field.py python feedback.py python "
+"make_model.py  align.py prints when and how loud each loudspeaker arrives at "
+"each listener, and which would be heard as an echo: none, and each player "
+"hears their own monitor loudest. near_field.py prints how far each array's "
+"far-field pattern would be off at each listener: within 3.5 dB up to 2 kHz, "
+"but up to 10 dB at 4 and 8 kHz near the main arrays. feedback.py finds how "
+"much gain the singer's microphone allows before the loudspeakers that play "
+"it make it ring, at the mix position and at the singer's ears, and the "
+"frequencies where it rings first, then renders the loop below and above that "
+"gain. Its microphone is an ideal supercardioid and the reverberation's "
+"phases are random, so take the frequencies as an example of where such a "
+"stage rings. make_model.py writes the model and the arrays; their boxes are "
+"a generic box made up for this example, not any product's data."
+msgstr ""
+"Un concert en un estadi de futbol, amb un sistema de so com els que pengen "
+"les gires i els monitors de l'escenari: stadium_pa i concert_stage junts. "
+"L'estadi és un bol de quatre graderies sota un anell de coberta, obert al "
+"cel sobre el camp; l'escenari és al fons oest, i la graderia del darrere és "
+"buida. Als costats de l'escenari pengen dos conjunts lineals principals de "
+"12 caixes corbats en J (conjunts coherents), amb les caixes de dalt "
+"apuntades al fons oposat i les de baix al públic del davant. Un bloc de vuit "
+"subgreus cardioides sota el centre del front de l'escenari està retardat 17 "
+"ms perquè arribi amb els conjunts principals a la posició de mescla. Uns "
+"reforços laterals (out-fills) al costat dels conjunts principals cobreixen "
+"les graderies laterals properes a l'escenari, i uns reforços frontals (front "
+"fills) a la vora de l'escenari les primeres files entre ells. Dues torres de "
+"retard al camp, a 50 m, en cobreixen la part del darrere, i quatre retards "
+"penjats sota la vora de la coberta, apuntats al llarg de les graderies "
+"laterals i de fons, els seus seients llunyans. Cada reforç i cada retard "
+"està ajustat perquè arribi als seus seients entre 6 i 20 ms després dels "
+"conjunts principals, de manera que el so continua semblant que ve de "
+"l'escenari; les bandes greus de les torres i dels retards estan atenuades, "
+"on els conjunts principals i els subgreus ja donen prou nivell. A l'escenari "
+"un parell de monitors de terra (falques) dona la mescla del cantant, un "
+"monitor de bateria (drum fill) la del bateria i uns side fills la de la "
+"resta del grup. Hi ha receptors on toquen el cantant, el bateria i un "
+"guitarrista, al davant, al centre, a un costat i al fons del camp, i a baix, "
+"a dalt i lluny a les graderies. El públic dret al camp i l'assegut a les "
+"graderies absorbeixen el so i el dispersen (`audience: true`). Molts "
+"receptors són més a prop dels conjunts del que valen els seus patrons de "
+"camp llunyà, així que cada conjunt suma les seves caixes una a una "
+"(`near_field: true`). Les fonts i els receptors són en grups: els "
+"principals, els subgreus, els reforços i els retards del PA, els monitors, "
+"l'escenari i el públic dret i assegut. L'arbre de l'escena de l'editor "
+"mostra o amaga cada grup, i la seva casella l'inclou a les simulacions o "
+"l'exclou.  python align.py python near_field.py python feedback.py python "
+"make_model.py  align.py mostra quan i amb quin nivell arriba cada altaveu a "
+"cada receptor, i quin se sentiria com a eco: cap, i cada músic sent més fort "
+"el seu propi monitor. near_field.py mostra quant es desviaria el patró de "
+"camp llunyà de cada conjunt a cada receptor: menys de 3,5 dB fins a 2 kHz, "
+"però fins a 10 dB a 4 i 8 kHz a prop dels conjunts principals. feedback.py "
+"calcula quant guany admet el micròfon del cantant abans que els altaveus que "
+"el reprodueixen el facin acoblar, a la posició de mescla i a les orelles del "
+"cantant, i les freqüències on s'acobla primer, i després genera l'àudio del "
+"llaç per sota i per sobre d'aquest guany. El seu micròfon és un "
+"supercardioide ideal i les fases de la reverberació són aleatòries, així que "
+"les freqüències són un exemple d'on s'acobla un escenari així. make_model.py "
+"escriu el model i els conjunts; les seves caixes són una caixa genèrica "
+"inventada per a aquest exemple, no dades de cap producte."
+
+#: examples/stadium_pa/scene.yaml
+msgctxt "example"
+msgid "Stadium sound system"
+msgstr "Sistema de so d'un estadi"
+
+#: examples/stadium_pa/scene.yaml
+msgctxt "example"
+msgid ""
+"A football stadium's sound system for a concert, as tours hang it: the PA "
+"alone, for the crowd (the stage's monitors are in concert_stage, and both "
+"together in stadium_concert). The stadium is a bowl of four stands under a "
+"ring of roof, open to the sky over the pitch; the stage stands at the west "
+"end, and the stand behind it is empty. Beside the stage hang two main line "
+"arrays of 12 boxes curved in a J (coherent arrays), their top boxes aimed at "
+"the far end and their bottom ones at the crowd in front. A block of eight "
+"cardioid subwoofers under the middle of the stage front is delayed 17 ms so "
+"that it arrives with the main arrays at the mix position. Out-fills beside "
+"the main arrays cover the side stands near the stage, and front fills on the "
+"stage's lip the front rows between them. Two delay towers on the pitch, 50 m "
+"out, cover its back, and four delays hung under the roof's edge, aimed along "
+"the side and end stands, their far seats. Each fill and delay is timed to "
+"arrive at its seats 6 to 20 ms after the main arrays, so the sound still "
+"seems to come from the stage; the towers' and the delays' low bands are "
+"rolled off, where the main arrays and the subwoofers give enough. Listeners "
+"stand at the front, the middle, the side and the back of the pitch, and low, "
+"high and far on the stands. The crowd standing on the pitch and the one "
+"seated in the stands take up the sound and scatter it (`audience: true`). "
+"Many listeners stand nearer the arrays than their far-field patterns hold, "
+"so every array adds up its boxes one by one (`near_field: true`).  "
+"acoustic-spaces map scene.yaml --parameter spl --plot spl.png python "
+"align.py python near_field.py python make_model.py  On the pitch from the "
+"mix position back, nine points of the map in ten get the same level within "
+"2.5 dB (all bands together). The map takes under four minutes on 4 cores. "
+"align.py prints when and how loud each loudspeaker arrives at each listener, "
+"and which would be heard as an echo: none. near_field.py prints how far each "
+"array's far-field pattern would be off at each listener: within 3.5 dB up to "
+"2 kHz, but up to 10 dB at 4 and 8 kHz near the main arrays. make_model.py "
+"writes the model and the arrays; their boxes are a generic box made up for "
+"this example, not any product's data."
+msgstr ""
+"El sistema de so d'un estadi de futbol per a un concert, com els que pengen "
+"les gires: només el PA, per al públic (els monitors de l'escenari són a "
+"concert_stage, i tots dos junts a stadium_concert). L'estadi és un bol de "
+"quatre graderies sota un anell de coberta, obert al cel sobre el camp; "
+"l'escenari és al fons oest, i la graderia del darrere és buida. Als costats "
+"de l'escenari pengen dos conjunts lineals principals de 12 caixes corbats en "
+"J (conjunts coherents), amb les caixes de dalt apuntades al fons oposat i "
+"les de baix al públic del davant. Un bloc de vuit subgreus cardioides sota "
+"el centre del front de l'escenari està retardat 17 ms perquè arribi amb els "
+"conjunts principals a la posició de mescla. Uns reforços laterals "
+"(out-fills) al costat dels conjunts principals cobreixen les graderies "
+"laterals properes a l'escenari, i uns reforços frontals (front fills) a la "
+"vora de l'escenari les primeres files entre ells. Dues torres de retard al "
+"camp, a 50 m, en cobreixen la part del darrere, i quatre retards penjats "
+"sota la vora de la coberta, apuntats al llarg de les graderies laterals i de "
+"fons, els seus seients llunyans. Cada reforç i cada retard està ajustat "
+"perquè arribi als seus seients entre 6 i 20 ms després dels conjunts "
+"principals, de manera que el so continua semblant que ve de l'escenari; les "
+"bandes greus de les torres i dels retards estan atenuades, on els conjunts "
+"principals i els subgreus ja donen prou nivell. Hi ha receptors al davant, "
+"al centre, a un costat i al fons del camp, i a baix, a dalt i lluny a les "
+"graderies. El públic dret al camp i l'assegut a les graderies absorbeixen el "
+"so i el dispersen (`audience: true`). Molts receptors són més a prop dels "
+"conjunts del que valen els seus patrons de camp llunyà, així que cada "
+"conjunt suma les seves caixes una a una (`near_field: true`).  "
+"acoustic-spaces map scene.yaml --parameter spl --plot spl.png python "
+"align.py python near_field.py python make_model.py  Al camp, des de la "
+"posició de mescla cap enrere, nou de cada deu punts del mapa reben el mateix "
+"nivell amb 2,5 dB de diferència com a màxim (totes les bandes juntes). El "
+"mapa de cobertura triga menys de quatre minuts amb 4 nuclis. align.py mostra "
+"quan i amb quin nivell arriba cada altaveu a cada receptor, i quin se "
+"sentiria com a eco: cap. near_field.py mostra quant es desviaria el patró de "
+"camp llunyà de cada conjunt a cada receptor: menys de 3,5 dB fins a 2 kHz, "
+"però fins a 10 dB a 4 i 8 kHz a prop dels conjunts principals. make_model.py "
+"escriu el model i els conjunts; les seves caixes són una caixa genèrica "
+"inventada per a aquest exemple, no dades de cap producte."
+
+#: examples/street/scene.yaml
+msgctxt "example"
+msgid "Street with a noise barrier"
+msgstr "Carrer amb pantalla acústica"
+
+#: examples/street/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a street 12 m wide between a row of houses 9 m high and an office "
+"block 15 m high, with traffic along it (a line source 30 m long). Past the "
+"end of the houses a noise barrier 3 m high shields a garden. The scene is "
+"the ground and the open sky over it: sound that reaches the sky leaves, and "
+"the ground reaches 30 m past the buildings, then goes on as if it never "
+"ended. One listener stands on the pavement, one on a balcony of the office "
+"block, one in the garden, where the traffic comes over the top of the "
+"barrier and round its ends: `first_order` diffraction follows it."
+msgstr ""
+"A l'aire lliure: un carrer de 12 m d'amplada entre una filera de cases de 9 "
+"m d'alçada i un bloc d'oficines de 15 m, amb trànsit al llarg (una font "
+"lineal de 30 m). Passat el final de les cases, una pantalla acústica de 3 m "
+"d'alçada protegeix un jardí. L'escena és el terreny i el cel obert al "
+"damunt: el so que arriba al cel surt de l'escena, i el terreny s'estén 30 m "
+"més enllà dels edificis i després continua com si no s'acabés mai. Un "
+"receptor és a la vorera, un altre en un balcó del bloc d'oficines i un altre "
+"al jardí, on el trànsit arriba per sobre de la pantalla i pels seus extrems: "
+"la difracció `first_order` el segueix."
 
 #: examples/studio/scene.yaml
 msgctxt "example"
@@ -4520,6 +6743,35 @@ msgstr ""
 "retard només compensa on el so directe de les columnes s'ha afeblit. "
 "`inspect` enumera la potència acústica de cada font amb el seu senyal "
 "d'entrada."
+
+#: examples/tree_belt/scene.yaml
+msgctxt "example"
+msgid "Road behind a belt of trees"
+msgstr "Carretera darrere d'una franja d'arbres"
+
+#: examples/tree_belt/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: traffic on a road heard from two gardens in front of a row of "
+"houses, 55 m away over grass: one behind a belt of trees 30 m deep, the "
+"other across an open meadow. The belt's foliage takes ISO 9613-2's "
+"dense-foliage rates from the sound passing through it (up to 0.12 dB per "
+"metre at 8 kHz) and its trunks scatter some of it aside, into the late "
+"sound; a lone oak stands by the open garden. Trees cut less than a wall "
+"would: up to about 8 dB in the highest bands, under 1 dB at the lowest. "
+"Behind them much of the sound comes scattered, with the late rays, so the "
+"scene traces more of them than the default."
+msgstr ""
+"A l'aire lliure: trànsit en una carretera escoltat des de dos jardins davant "
+"d'una filera de cases, a 55 m sobre l'herba: un darrere d'una franja "
+"d'arbres de 30 m de fons i l'altre a l'altra banda d'un prat obert. El "
+"fullatge de la franja treu al so que la travessa els valors de fullatge dens "
+"de la ISO 9613-2 (fins a 0,12 dB per metre a 8 kHz) i els seus troncs en "
+"dispersen una part cap als costats, cap al so tardà; un roure aïllat s'alça "
+"al costat del jardí obert. Els arbres atenuen menys que un mur: fins a uns 8 "
+"dB a les bandes més altes i menys d'1 dB a la més baixa. Darrere d'ells bona "
+"part del so arriba dispersat, amb els raigs tardans, per això l'escena traça "
+"més raigs dels que s'usen per defecte."
 
 #: examples/workshop/scene.yaml
 msgctxt "example"

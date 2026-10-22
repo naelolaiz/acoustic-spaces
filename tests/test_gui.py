@@ -1,6 +1,7 @@
 """The editor. Runs on Qt's off-screen platform unless QT_QPA_PLATFORM says otherwise;
 with a display (or Xvfb) the 3D view tests run too."""
 
+import json
 import os
 import re
 import socket
@@ -19,19 +20,30 @@ pytest.importorskip("pyvistaqt")
 from PySide6.QtCore import QPoint, QPointF, Qt  # noqa: E402
 from PySide6.QtGui import QWheelEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QLabel, QMenu, QMessageBox, QToolBar  # noqa: E402
+from PySide6.QtWidgets import (  # noqa: E402
+    QApplication,
+    QDialog,
+    QLabel,
+    QMenu,
+    QMessageBox,
+    QToolBar,
+)
 
 from acoustic_spaces.audio import write_wav  # noqa: E402
-from acoustic_spaces.examples import example_path, list_examples  # noqa: E402
+from acoustic_spaces.examples import example_groups, example_path, list_examples  # noqa: E402
 from acoustic_spaces.geometry import RoomMesh  # noqa: E402
 from acoustic_spaces.gui.document import (  # noqa: E402
+    NEW_PART_SIZES,
     Document,
     EditError,
+    _in_units,
     box_scene,
     floor_height,
     follow_floor,
     model_scene,
+    outdoor_scene,
     plan_corners,
+    referenced_files,
     unique_name,
 )
 from acoustic_spaces.gui.levels import level_colour  # noqa: E402
@@ -40,6 +52,7 @@ from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # 
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
 from acoustic_spaces.gui.worker import MapJob, SimulationJob  # noqa: E402
 from acoustic_spaces.room import Room  # noqa: E402
+from acoustic_spaces.scene import Scene  # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 
@@ -180,6 +193,108 @@ def test_saving_copies_the_element_file_of_an_inline_array(qapp, tmp_path: Path)
     assert element.file == (tmp_path / "new" / "speaker.csv").resolve()
 
 
+def _speaker_csv(path: Path) -> None:
+    bands = ", ".join(f"{f} Hz" for f in (125, 250, 500, 1000, 2000, 4000, 8000))
+    rows = [f"{az}, {el}" + ", 0" * 7 for el in range(-90, 91, 10) for az in range(0, 360, 10)]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join([f"azimuth, elevation, {bands}", *rows]), encoding="utf-8")
+
+
+def test_saving_copies_the_files_an_array_file_names(qapp, tmp_path: Path) -> None:
+    """An array's YAML file names its element's file relative to itself: both move, or
+    neither does."""
+    old = tmp_path / "old"
+    _speaker_csv(old / "arrays" / "box.csv")
+    column = "element: {file: box.csv}\ncount: 2\nspacing_m: 0.4\n"
+    (old / "arrays" / "column.yaml").write_text(column, encoding="utf-8")
+    _speaker_csv(tmp_path / "shared" / "box.csv")
+    outside = "element: {file: ../../shared/box.csv}\ncount: 2\nspacing_m: 0.4\n"
+    (old / "arrays" / "outside.yaml").write_text(outside, encoding="utf-8")
+    document = Document(box_scene(), old / "scene.yaml")
+    document.edit(
+        "arrays",
+        lambda data: data["sources"][0].update(directivity={"file": "arrays/column.yaml"}),
+    )
+    loaded = document.room
+    document.save(tmp_path / "new" / "scene.yaml", copy_files=True)
+    assert (tmp_path / "new" / "arrays" / "box.csv").is_file()
+    # The copies hold the same bytes: what was loaded from them is kept, not read again.
+    assert document.room.directivities[0] is loaded.directivities[0]
+    assert document.room.mesh is loaded.mesh
+    assert "file: arrays/column.yaml" in (tmp_path / "new" / "scene.yaml").read_text()
+    assert (
+        document.scene.sources[0].directivity.file
+        == (tmp_path / "new" / "arrays" / "column.yaml").resolve()
+    )
+    # An element's file outside the scene's folder stays where it is, and so does the
+    # array file that names it.
+    document = Document(box_scene(), old / "scene.yaml")
+    document.edit(
+        "arrays",
+        lambda data: data["sources"][0].update(directivity={"file": "arrays/outside.yaml"}),
+    )
+    (tmp_path / "other").mkdir()  # as the editor makes it before saving
+    document.save(tmp_path / "other" / "scene.yaml", copy_files=True)
+    assert not (tmp_path / "other" / "arrays").exists()
+    assert document.scene.sources[0].directivity.file == old / "arrays" / "outside.yaml"
+    assert Room.from_yaml(tmp_path / "other" / "scene.yaml").problems() == []
+
+
+def test_a_failed_save_of_an_example_leaves_no_copies(
+    qapp, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    document = Document.open(example_path("concert_hall"))
+    scene = document.scene
+
+    def broken(*args, **kwargs):
+        raise ValueError("cannot read it")
+
+    monkeypatch.setattr(Scene, "model_validate", broken)
+    with pytest.raises(ValueError, match="cannot read it"):
+        document.save(tmp_path / "hall" / "deeper" / "scene.yaml", copy_files=True)
+    assert not (tmp_path / "hall").exists()
+    assert document.scene is scene
+
+
+def test_saving_an_example_copies_its_terrain_and_map(qapp, tmp_path: Path) -> None:
+    document = Document.open(example_path("hillside"))
+    loaded = document.room
+    document.save(tmp_path / "hill" / "scene.yaml", copy_files=True)
+    assert document.room.mesh is loaded.mesh  # the terrain is not read again
+    geometry = document.scene.geometry
+    assert geometry.ground.terrain.file == (tmp_path / "hill" / "hill.asc").resolve()
+    assert geometry.buildings_file.file == (tmp_path / "hill" / "houses.geojson").resolve()
+    saved = (tmp_path / "hill" / "scene.yaml").read_text(encoding="utf-8")
+    assert "file: hill.asc" in saved and "file: houses.geojson" in saved
+
+
+def test_using_and_hiding_sources_and_listeners(qapp) -> None:
+    """Ticks leave sources and listeners out in one step of the history; eyes hide them
+    in the views without changing the scene."""
+    document = Document(box_scene())
+    document.add_point("sources", (2.0, 2.0, 1.5))
+    document.add_point("sources", (3.0, 2.0, 1.5))
+    document.set_enabled("sources", [1, 2], False)
+    assert [s.in_use for s in document.scene.sources] == [True, False, False]
+    assert document.undo_text() == "leave out 2 sources"
+    document.set_enabled("sources", [0, 1], False)  # only the one in use changes
+    assert document.undo_text() == "leave out source"
+    document.undo()
+    document.set_enabled("sources", [1, 2], True)
+    assert document.undo_text() == "use 2 sources"
+    assert all("enabled" not in s for s in document.scene.to_data()["sources"])
+    document.set_enabled("listeners", [0], False)
+    assert document.undo_text() == "leave out listener"
+    assert document.scene.to_data()["listeners"][0]["enabled"] is False
+    saved = document.scene
+    document.set_hidden("sources", [1], True)
+    assert document.hidden == {("sources", "source-2")} and document.scene is saved
+    document.update_point("sources", 1, name="spare")
+    assert document.hidden == {("sources", "spare")}
+    document.set_hidden("sources", [0, 1], False)
+    assert not document.hidden
+
+
 def test_model_scene_puts_points_inside(qapp) -> None:
     scene = model_scene(EXAMPLES / "concert_hall" / "concert_hall.obj")
     room = Room.from_scene(scene)
@@ -306,11 +421,13 @@ def test_simulation_job(qapp) -> None:
 
 
 def test_window_opens_every_example(window) -> None:
-    titles = [a.text() for a in window.examples_menu.actions()]
-    assert titles == [e.title for e in list_examples()]
+    groups = [action.menu() for action in window.examples_menu.actions()]
+    assert [menu.title() for menu in groups] == [group for group, _ in example_groups()]
+    actions = {action.text(): action for menu in groups for action in menu.actions()}
+    assert sorted(actions) == sorted(e.title for e in list_examples())
     for example in list_examples():
         if example.missing_extra:  # greyed out in the menu
-            action = window.examples_menu.actions()[titles.index(example.title)]
+            action = actions[example.title]
             assert not action.isEnabled() and example.missing_extra in action.statusTip()
             continue
         assert window.open_example(example.path)
@@ -503,10 +620,21 @@ def test_selection_and_forms(window) -> None:
     window.inspector.pages["simulation"].late_rays.setValue(1234)
     assert window.document.scene.simulation.late.rays == 1234
     assert window.inspector.pages["simulation"].diffraction.currentText() == "first_order"
+    page = window.inspector.pages["simulation"]
+    assert page.diffraction_reflections.currentText() == "one side"
+    assert page.diffraction_reflections.isEnabled()
+    page.diffraction_reflections.setCurrentText("both sides")
+    assert window.document.scene.simulation.early.diffraction_reflections == "both_sides"
     window.inspector.pages["simulation"].diffraction.setCurrentText("direct")
     assert window.document.scene.simulation.early.diffraction == "direct"
     assert window.document.scene.simulation.late.rays == 1234
-    page = window.inspector.pages["simulation"]
+    # Only diffraction with reflections has paths that reflect on both sides of an edge.
+    assert not page.diffraction_reflections.isEnabled()
+    page.diffraction.setCurrentText("second_order")
+    assert page.diffraction_reflections.isEnabled()
+    page.diffraction_reflections.setCurrentText("one side")
+    page.diffraction.setCurrentText("direct")
+    assert window.document.scene.simulation.early.diffraction_reflections == "one_side"
     assert page.coherent.currentText() == "125"
     page.coherent.setCurrentText("none")
     assert window.document.scene.simulation.early.coherent_max_band_hz is None
@@ -809,7 +937,6 @@ def test_a_surface_takes_a_material_of_its_own(window) -> None:
 
 
 def test_outputs_form_keeps_a_custom_loudspeaker_layout(window) -> None:
-    from acoustic_spaces.scene import Scene
 
     data = box_scene().model_dump(mode="json", exclude_none=True)
     custom = {"format": "loudspeakers", "speakers": [{"name": "L", "azimuth": 30}]}
@@ -877,7 +1004,6 @@ def test_scene_form_keeps_the_humidity_to_a_tenth(window) -> None:
 
 
 def test_geometry_form_shows_the_room_units(window) -> None:
-    from acoustic_spaces.scene import Scene
 
     window.select("geometry", None)
     page = window.inspector.pages["geometry"]
@@ -909,6 +1035,872 @@ def test_an_ifc_model_picks_its_room(window) -> None:
     window.open_example(example_path("shoebox"))
     window.select("geometry", None)
     assert not page.file_form.isRowVisible(page.space)
+
+
+def test_outdoor_geometry_form(window, monkeypatch) -> None:
+    window.open_example(example_path("street"))
+    window.select("geometry", None)
+    page = window.inspector.pages["geometry"]
+    assert not page.ground_group.isHidden() and page.box_group.isHidden()
+    assert page.ground_group.title() == "Outdoors (m)"
+    assert page.sky.text() == "auto" and page.margin.value() == 30
+    buildings = page.parts["buildings"]
+    assert buildings.rowCount() == 2
+    assert [buildings.item(0, c).text() for c in range(3)] == ["houses", "9", "4"]
+    buildings.item(0, 1).setText("12")
+    assert window.document.scene.geometry.buildings[0].height == 12.0
+    page.sky.setValue(60.0)
+    assert window.document.scene.geometry.ground.sky == 60.0
+    assert window.document.room.outdoor.sky == 60.0
+    page.sky.setValue(0.0)  # auto again
+    assert window.document.scene.geometry.ground.sky is None
+    page.parts["barriers"].setCurrentCell(0, 0)
+    page._remove_part("barriers")
+    assert window.document.scene.geometry.barriers is None
+    assert page.parts["barriers"].rowCount() == 0
+    page._remove_part("barriers")  # nothing left to remove
+    # Drawing a room over the scene asks first, and the sky is no default material.
+    asked = []
+    monkeypatch.setattr(window, "confirm_replace_outdoors", lambda: asked.append(1) or False)
+    window.plan.canvas.drawn.emit([[0, 0], [10, 0], [10, 8], [0, 8]])
+    assert asked and window.document.scene.geometry.ground is not None
+    monkeypatch.setattr(window, "confirm_replace_outdoors", lambda: True)
+    window.plan.canvas.drawn.emit([[0, 0], [10, 0], [10, 8], [0, 8]])
+    assert window.document.scene.geometry.floor_plan is not None
+    assert window.document.scene.default_material == "asphalt"
+    assert page.ground_group.isHidden()
+    # Outdoors the early paths were in pressure up to 8 kHz; a room takes its default.
+    assert window.document.scene.simulation.early.coherent_max_band_hz == 125
+
+
+def test_vegetation_table(window) -> None:
+    window.open_example(example_path("tree_belt"))
+    window.select("geometry", None)
+    page = window.inspector.pages["geometry"]
+    plants = page.parts["vegetation"]
+    assert plants.rowCount() == 2 and plants.columnCount() == 4
+    assert [plants.item(0, c).text() for c in range(4)] == [
+        "wood",
+        "15",
+        "belt, 4 corners",
+        "dense foliage, 0.08 stems/m², 0.3 m across",
+    ]
+    assert plants.item(1, 2).text() == "tree, crown 10 across"
+    plants.item(0, 1).setText("18")
+    assert window.document.scene.geometry.vegetation[0].height == 18.0
+    assert window.document.room.outdoor.vegetation[0].high == 18.0
+    plants.setCurrentCell(1, 0)
+    page._remove_part("vegetation")
+    assert [v.name for v in window.document.scene.geometry.vegetation] == ["wood"]
+    page._remove_part("vegetation")
+    assert window.document.scene.geometry.vegetation is None and plants.rowCount() == 0
+    window.open_example(example_path("street"))
+    assert page.parts["vegetation"].rowCount() == 0
+
+
+def test_outdoor_parts_in_the_document(qapp, tmp_path) -> None:
+    from acoustic_spaces.geometry.terrain import HeightGrid, write_asc
+
+    document = Document(outdoor_scene())
+    scene = document.scene
+    assert scene.geometry.ground.extent == ((-100.0, -100.0), (100.0, 100.0))
+    assert scene.sources[0].position == (-25.0, 0.0, 1.5)
+    assert scene.listeners[0].position[0] == 25.0 and scene.listeners[0].orientation.yaw == 180.0
+    assert scene.materials["meadow"].impedance.preset == "grass"
+    assert document.room.problems() == [] and document.room.outdoor is not None
+
+    # Parts and zones are added with their corners in metres; the names follow.
+    assert (
+        document.add_part("buildings", {"footprint": [[0, 0], [20, 0], [20, 15]], "height": 10})
+        == 0
+    )
+    assert document.undo_text() == "add building"
+    building = document.scene.geometry.buildings[0]
+    assert building.footprint == [(0.0, 0.0), (20.0, 0.0), (20.0, 15.0)] and building.height == 10
+    assert document.add_part("barriers", {"path": [[-30, 20], [30, 20]], "height": 3}) == 0
+    assert document.undo_text() == "add barrier" and document.room.problems() == []
+    assert any("building_1_walls" in label for label in document.room.mesh.labels)
+
+    # The extent, in the geometry's units; None leaves the margin to decide.
+    document.set_extent([[-50, -60], [70, 80]])
+    assert document.scene.geometry.ground.extent == ((-50.0, -60.0), (70.0, 80.0))
+    assert document.room.outdoor.extent == (-50.0, -60.0, 70.0, 80.0)
+    with pytest.raises(EditError, match="min < max"):
+        document.set_extent([[50, 0], [-50, 10]])
+    document.set_extent(None)
+    assert document.scene.geometry.ground.extent is None
+    assert document.room.outdoor.extent == (-60.0, -30.0, 60.0, 50.0)  # the parts, 30 m round
+    assert document.undo_text() == "change ground"
+
+    assert document.add_part("vegetation", {"tree": [40, -30], **NEW_PART_SIZES["tree"]}) == 0
+    assert (
+        document.add_part("vegetation", {"path": [[0, 40], [50, 40]], **NEW_PART_SIZES["hedge"]})
+        == 1
+    )
+    plants = document.scene.geometry.vegetation
+    assert (
+        plants[0].tree == (40.0, -30.0)
+        and plants[0].crown_diameter == 8.0
+        and plants[0].base == 2.5
+    )
+    assert plants[1].width == 1.5 and plants[1].height == 2.0
+    assert document.add_zone([[-80, -80], [-40, -80], [-40, -40], [-80, -40]]) == 0
+    assert document.scene.geometry.ground.zone_names() == ["zone_1"]
+    assert document.undo_text() == "add zone" and document.room.problems() == []
+    with pytest.raises(EditError, match="cross"):
+        document.add_part("buildings", {"footprint": [[0, 0], [4, 4], [4, 0], [0, 4]], "height": 5})
+    assert len(document.scene.geometry.buildings) == 1
+    with pytest.raises(EditError):
+        document.add_part("vegetation", {"tree": [0, 0], "height": 1.0, "base": 2.0})
+    document.undo()
+    assert document.scene.geometry.ground.zones is None
+
+    # A terrain from a file sets the ground's size; an extent goes with it.
+    document.set_extent([[-60, -60], [60, 60]])
+    assert document.room.outdoor.extent == (-60.0, -60.0, 60.0, 60.0)
+    hill = tmp_path / "hill.asc"
+    rows = [[0.5 * i for i in range(21)] for _ in range(21)]  # a slope up along x, 10 m high
+    write_asc(hill, HeightGrid((-100.0, -100.0), 10.0, rows))
+    document.set_terrain(hill)
+    assert document.scene.geometry.ground.terrain.file == hill.resolve()
+    assert document.scene.geometry.ground.extent is None
+    assert document.room.outdoor.extent == (-100.0, -100.0, 100.0, 100.0)
+    assert document.room.outdoor.ground_at([[0.0, 0.0]]).tolist() == [5.0]
+    assert document.undo_text() == "set terrain"
+    # The source and the listener stood on the flat ground; the slope buries them (the
+    # ground is 3.75 and 6.25 m high there), and the editor says which.
+    problems = document.room.problems()
+    assert [p.split(" at ")[0] for p in problems] == ["source 'source'", "listener 'listener'"]
+    assert all("outside the open air: below the terrain" in p for p in problems)
+    with pytest.raises(EditError):
+        document.set_terrain(tmp_path / "nowhere.asc")
+    assert document.scene.geometry.ground.terrain.file == hill.resolve()
+
+    # Buildings from a map join the drawn ones, and leave with the map.
+    town = tmp_path / "town.geojson"
+    town.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "properties": {"name": "hall", "height": 9},
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[[-60, -60], [-50, -60], [-50, -50], [-60, -50]]],
+                        },
+                    },
+                    {
+                        "type": "Feature",
+                        "properties": {"name": "shed"},
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[[60, 60], [66, 60], [66, 66], [60, 66]]],
+                        },
+                    },
+                ],
+            }
+        )
+    )
+    document.set_buildings_file(town, default_height=4.0)
+    assert document.scene.geometry.building_names() == ["building_1", "hall", "shed"]
+    assert [b.height for b in document.scene.geometry.all_buildings()] == [10.0, 9.0, 4.0]
+    assert referenced_files(document.scene) == [hill.resolve(), town.resolve()]
+    document.edit(
+        "loss", lambda d: d["simulation"].update(insertion_loss_of=["hall", "building_1"])
+    )
+    document.set_buildings_file(None)
+    assert document.scene.geometry.buildings_file is None
+    assert document.scene.simulation.insertion_loss_of == ["building_1"]
+    assert document.undo_text() == "remove the map's buildings"
+    document.set_buildings_file(town, height=6.0, name="name")
+    assert [b.height for b in document.scene.geometry.all_buildings()] == [10.0, 6.0, 6.0]
+    document.set_terrain(None)
+    assert document.scene.geometry.ground.terrain is None and document.room.problems() == []
+
+    # Drawn in metres, kept in the geometry's units.
+    assert _in_units({"footprint": [[1, 2], [3, 4]], "height": 5, "name": "a"}, 0.01) == {
+        "footprint": [[100.0, 200.0], [300.0, 400.0]],
+        "height": 500.0,
+        "name": "a",
+    }
+    assert _in_units({"tree": [1.5, -2], "crown_diameter": 8, "base": 2.5, "height": 10}, 0.5) == {
+        "tree": [3.0, -4.0],
+        "crown_diameter": 16.0,
+        "base": 5.0,
+        "height": 20.0,
+    }
+    assert _in_units({"path": [[0, 0], [1, 0]], "width": 1.5, "height": 2}, 1.0) == {
+        "path": [[0.0, 0.0], [1.0, 0.0]],
+        "width": 1.5,
+        "height": 2.0,
+    }
+
+
+def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
+    window.new_outdoor()
+    assert window.document.scene.geometry.ground is not None and not window.document.modified
+    assert window.selection == ("geometry", None)
+    assert "New outdoor scene: a meadow 200 m across" in window.messages.toPlainText()
+    page = window.inspector.pages["geometry"]
+    assert not page.ground_group.isHidden() and page.ground_group.title() == "Outdoors (m)"
+    assert page.extent.text().startswith("Ground from (-100, -100) to (100, 100) m")
+    canvas = _plan(window, qapp)
+
+    # The Geometry form's buttons start a drawing of their kind in the plan view.
+    window.views.setCurrentWidget(window.viewport)
+    page._add("buildings")
+    assert window.views.currentWidget() is window.plan
+    assert canvas.mode == "drawing" and canvas.purpose == "building"
+    assert not window.plan.draw.isChecked() and "footprint" in window.plan.hint.text()
+    window.plan.canvas.part_drawn.emit("building", [[0, 0], [20, 0], [20, 15], [0, 15]])
+    buildings = window.document.scene.geometry.buildings
+    assert len(buildings) == 1 and buildings[0].height == 10.0
+    assert buildings[0].footprint == [(0.0, 0.0), (20.0, 0.0), (20.0, 15.0), (0.0, 15.0)]
+    assert "New building with 4 corners, 10 m high" in window.messages.toPlainText()
+    assert page.parts["buildings"].rowCount() == 1 and window.selection == ("geometry", None)
+    assert [page.parts["buildings"].item(0, c).text() for c in range(3)] == [
+        "building_1",
+        "10",
+        "4",
+    ]
+
+    # A barrier is clicked point by point and finished with Enter.
+    page._add("barriers")
+    assert canvas.purpose == "barrier" and "end to end" in window.plan.hint.text()
+    for point in [(-30, 20), (30, 20)]:
+        QTest.mouseClick(
+            canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, point)
+        )
+        QTest.mouseMove(canvas, _at(canvas, (0, 30)))
+    canvas.grab()  # the path so far, with the length of the next stretch
+    QTest.keyClick(canvas, Qt.Key.Key_Return)
+    qapp.processEvents()
+    barriers = window.document.scene.geometry.barriers
+    assert len(barriers) == 1 and barriers[0].height == 3.0
+    assert np.allclose(barriers[0].path, [(-30, 20), (30, 20)], atol=0.5)
+    assert canvas.mode == "outdoor" and canvas.purpose == "room"
+    assert "Geometry form's buttons" in window.plan.hint.text()
+    assert "New barrier along 2 points, 3 m high" in window.messages.toPlainText()
+
+    # Vegetation takes the shape chosen beside the button: a tree is one click.
+    page.plant_shape.setCurrentIndex(page.plant_shape.findData("tree"))
+    page._add("vegetation")
+    assert canvas.purpose == "tree"
+    QTest.mouseMove(canvas, _at(canvas, (40, -30)))
+    canvas.grab()  # the crown follows the cursor
+    QTest.mouseClick(
+        canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (40, -30))
+    )
+    qapp.processEvents()
+    plants = window.document.scene.geometry.vegetation
+    assert len(plants) == 1 and plants[0].kind == "tree" and plants[0].crown_diameter == 8.0
+    assert np.allclose(plants[0].tree, (40, -30), atol=0.5) and canvas.mode == "outdoor"
+    assert "New tree 10 m high, its crown 8 m across from 2.5 m up" in window.messages.toPlainText()
+    page.plant_shape.setCurrentIndex(page.plant_shape.findData("hedge"))
+    page._add("vegetation")
+    assert canvas.purpose == "hedge"
+    window.plan.canvas.part_drawn.emit("hedge", [[0, 40], [50, 40], [50, 60]])
+    plants = window.document.scene.geometry.vegetation
+    assert plants[1].kind == "hedge" and plants[1].width == 1.5 and plants[1].height == 2.0
+    page.plant_shape.setCurrentIndex(page.plant_shape.findData("belt"))
+    page._add("vegetation")
+    assert canvas.purpose == "belt"
+    window.plan.canvas.part_drawn.emit("belt", [[-90, 50], [-60, 50], [-60, 90], [-90, 90]])
+    plants = window.document.scene.geometry.vegetation
+    assert plants[2].kind == "belt" and plants[2].height == 12.0
+    assert page.parts["vegetation"].rowCount() == 3
+    assert page.parts["vegetation"].item(2, 2).text() == "belt, 4 corners"
+
+    # A zone, drawn and closed on its first corner, takes the ground's material.
+    page._add("zone")
+    assert canvas.purpose == "zone" and "zone" in window.plan.hint.text()
+    for point in [(-80, -80), (-40, -80), (-40, -40), (-80, -40), (-80, -80)]:
+        QTest.mouseClick(
+            canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, point)
+        )
+    qapp.processEvents()
+    zones = window.document.scene.geometry.ground.zones
+    assert len(zones) == 1 and len(zones[0].polygon) == 4 and canvas.mode == "outdoor"
+    assert window.document.scene.geometry.ground.zone_names() == ["zone_1"]
+    assert "New ground zone with 4 corners" in window.messages.toPlainText()
+    assert page.zones.rowCount() == 1 and page.zones.item(0, 0).text() == "zone_1"
+    assert window.document.room.problems() == []
+    canvas.grab()  # zones and vegetation drawn in the plan
+    window.document.set_extent(None)
+    canvas.grab()
+
+    # What cannot be a building yet says so and goes on; Esc stops it.
+    page._add("buildings")
+    for point in [(0, -50), (20, -30), (20, -50), (0, -30)]:
+        QTest.mouseClick(
+            canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, point)
+        )
+    QTest.keyClick(canvas, Qt.Key.Key_Return)
+    assert "Not a building yet:" in window.messages.toPlainText() and canvas.mode == "drawing"
+    window._escape()
+    assert canvas.mode == "outdoor" and canvas.purpose == "room"
+    assert len(window.document.scene.geometry.buildings) == 1
+    page._add("barriers")
+    QTest.mouseClick(
+        canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (0, -50))
+    )
+    QTest.keyClick(canvas, Qt.Key.Key_Return)
+    assert "Not a barrier yet: it needs two points" in window.messages.toPlainText()
+    window._escape()
+    # The Draw room button draws a room, whatever was being drawn before.
+    page._add("zone")
+    window.plan.draw.click()
+    assert canvas.mode == "drawing" and canvas.purpose == "room"
+    window.plan.draw.click()
+    assert canvas.mode == "outdoor"
+
+    # A refused part is reported, not added.
+    window.plan.canvas.part_drawn.emit("zone", [[-80, -80], [-40, -80], [-40, -40], [-80, -40]])
+    assert "Not changed:" in window.messages.toPlainText()  # overlaps the first zone
+    assert len(window.document.scene.geometry.ground.zones) == 1
+
+    # The removals, and undo all the way back to the meadow.
+    page._remove_part("vegetation")
+    assert len(window.document.scene.geometry.vegetation) == 2
+    page._remove_zone()
+    assert window.document.scene.geometry.ground.zones is None
+    while window.document.undo_text() is not None:
+        window.document.undo()
+    geometry = window.document.scene.geometry
+    assert geometry.buildings is None and geometry.barriers is None and geometry.vegetation is None
+
+
+def test_outdoor_extent_terrain_and_map_controls(window, qapp, tmp_path, monkeypatch) -> None:
+    import acoustic_spaces.gui.inspector as inspector
+    from acoustic_spaces.geometry.terrain import HeightGrid, write_asc
+    from acoustic_spaces.gui.inspector import MapDialog
+
+    window.new_outdoor()
+    page = window.inspector.pages["geometry"]
+    document = window.document
+    assert page.extent_set.isChecked()  # a new scene sets its extent
+    assert [box.value() for box in page.extent_spins] == [-100.0, -100.0, 100.0, 100.0]
+    page.extent_spins[2].setValue(150.0)
+    assert document.scene.geometry.ground.extent == ((-100.0, -100.0), (150.0, 100.0))
+    assert document.room.outdoor.extent == (-100.0, -100.0, 150.0, 100.0)
+    page.extent_set.setChecked(False)  # nothing stands on the ground to go round
+    assert "Not changed: " in window.messages.toPlainText() and "needs an extent" in (
+        window.messages.toPlainText()
+    )
+    assert page.extent_set.isChecked() and document.scene.geometry.ground.extent is not None
+    document.add_part(
+        "buildings", {"footprint": [[-20, -10], [20, -10], [20, 10], [-20, 10]], "height": 10}
+    )
+    page.extent_set.setChecked(False)
+    assert document.scene.geometry.ground.extent is None
+    assert not page.extent_spins[0].isEnabled()
+    assert page.extent.text().startswith("Ground from (-50, -40) to (50, 40) m")  # 30 m round
+    assert [box.value() for box in page.extent_spins] == [-50.0, -40.0, 50.0, 40.0]
+    page.extent_set.setChecked(True)  # takes the extent as it stands
+    assert document.scene.geometry.ground.extent == ((-50.0, -40.0), (50.0, 40.0))
+    assert page.extent_spins[0].isEnabled()
+    page.extent_spins[0].setValue(60.0)  # west of east: refused, and the form reloads
+    assert "min < max" in window.messages.toPlainText()
+    assert page.extent_spins[0].value() == -50.0
+    assert document.scene.geometry.ground.extent == ((-50.0, -40.0), (50.0, 40.0))
+
+    # A terrain from a file, through the file dialog.
+    hill = tmp_path / "hill.asc"
+    rows = [[0.5 * i for i in range(21)] for _ in range(21)]
+    write_asc(hill, HeightGrid((-100.0, -100.0), 10.0, rows))
+    chosen = [str(hill)]
+    monkeypatch.setattr(
+        inspector.QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (chosen[0], ""))
+    )
+    assert page.remove_terrain.isHidden() and page.terrain.isHidden()
+    page.terrain_button.click()
+    assert document.scene.geometry.ground.terrain.file == hill.resolve()
+    assert document.scene.geometry.ground.extent is None
+    assert not page.remove_terrain.isHidden() and not page.terrain.isHidden()
+    assert page.terrain.text() == "Terrain: 21 × 21 points, z from 0 to 10 m, grid 10 m"
+    assert document.room.outdoor.extent == (-100.0, -100.0, 100.0, 100.0)
+    assert not page.extent_set.isChecked()
+    assert [box.value() for box in page.extent_spins] == [-100.0, -100.0, 100.0, 100.0]
+    chosen[0] = ""  # cancelled
+    page.terrain_button.click()
+    assert document.scene.geometry.ground.terrain is not None
+    page.remove_terrain.click()
+    assert document.scene.geometry.ground.terrain is None and page.remove_terrain.isHidden()
+
+    # Buildings from a map: the file dialog, then how to read its heights and names.
+    town = tmp_path / "town.geojson"
+    town.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "properties": {"name": "hall", "height": 9, "floors": 3},
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[[-60, -60], [-50, -60], [-50, -50], [-60, -50]]],
+                        },
+                    },
+                    {
+                        "type": "Feature",
+                        "properties": {"name": "shed", "floors": 1},
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[[60, 60], [66, 60], [66, 66], [60, 66]]],
+                        },
+                    },
+                ],
+            }
+        )
+    )
+    dialogs = []
+
+    def accept(dialog) -> int:
+        dialogs.append(dialog)
+        return int(QDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(MapDialog, "exec", accept)
+    chosen[0] = str(town)
+    assert page.remove_map.isHidden() and page.map_label.isHidden()
+    page.map_button.click()
+    dialog = dialogs[-1]
+    assert dialog.height.currentData() == "height" and dialog.name.currentData() == "name"
+    assert [dialog.height.itemText(k) for k in range(dialog.height.count())] == [
+        "height",
+        "floors",
+        "the same for all",
+    ]
+    assert dialog.metres_label.text() == "Height when missing" and dialog.metres.value() == 10.0
+    spec = document.scene.geometry.buildings_file
+    assert spec.file == town.resolve() and spec.height == "height" and spec.default_height == 10.0
+    assert document.scene.geometry.building_names() == ["building_1", "hall", "shed"]
+    assert [b.height for b in document.scene.geometry.all_buildings()] == [10.0, 9.0, 10.0]
+    assert page.map_label.text() == "Map town.geojson: 2 buildings, height from height"
+    assert not page.remove_map.isHidden() and page.parts["buildings"].rowCount() == 3
+    assert page.parts["buildings"].item(0, 1).flags() & Qt.ItemFlag.ItemIsEditable
+    assert page.parts["buildings"].item(1, 1).toolTip().startswith("From the buildings file")
+    assert not page.parts["buildings"].item(1, 1).flags() & Qt.ItemFlag.ItemIsEditable
+    # One of its buildings left out, by name; the map stays.
+    page.parts["buildings"].setCurrentCell(2, 0)
+    page._remove_part("buildings")
+    assert document.scene.geometry.buildings_file.without == ["shed"]
+    assert document.scene.geometry.building_names() == ["building_1", "hall"]
+    page.remove_map.click()
+    assert document.scene.geometry.buildings_file is None
+    assert page.parts["buildings"].rowCount() == 1 and page.remove_map.isHidden()
+
+    # The same height for every building, and numbered names.
+    def same_for_all(dialog) -> int:
+        dialog.height.setCurrentIndex(dialog.height.count() - 1)
+        assert dialog.metres_label.text() == "Height of all"
+        dialog.metres.setValue(6.5)
+        dialog.name.setCurrentIndex(dialog.name.count() - 1)
+        return int(QDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(MapDialog, "exec", same_for_all)
+    page.map_button.click()
+    spec = document.scene.geometry.buildings_file
+    assert spec.height == 6.5 and spec.default_height is None and spec.name == "name"
+    assert page.map_label.text() == "Map town.geojson: 2 buildings, 6.5 high"
+    monkeypatch.setattr(MapDialog, "exec", lambda dialog: int(QDialog.DialogCode.Rejected))
+    page.map_button.click()
+    assert document.scene.geometry.buildings_file.height == 6.5  # cancelled: as it was
+
+    # A file without footprints, or no GeoJSON at all, is refused with a message.
+    empty = tmp_path / "empty.geojson"
+    empty.write_text(json.dumps({"type": "FeatureCollection", "features": []}))
+    chosen[0] = str(empty)
+    page.map_button.click()
+    assert (
+        "Not changed: empty.geojson holds no building footprints" in window.messages.toPlainText()
+    )
+    (tmp_path / "point.geojson").write_text(json.dumps({"type": "Point", "coordinates": [0, 0]}))
+    chosen[0] = str(tmp_path / "point.geojson")
+    page.map_button.click()
+    assert "not GeoJSON buildings" in window.messages.toPlainText()
+    assert document.scene.geometry.buildings_file.height == 6.5
+
+    # The dialog on its own: a map whose properties hold no numbers offers one height.
+    dialog = MapDialog(window, "plain.geojson", 1, {"name": "text", "use": "text"})
+    assert dialog.height.currentData() is None and dialog.height.count() == 1
+    assert dialog.choice() == {"name": "name", "height": 10.0}
+    dialog.name.setCurrentIndex(dialog.name.findData("use"))
+    assert dialog.choice() == {"name": "use", "height": 10.0}
+    dialog.deleteLater()
+
+    # Saved next to its files, the scene refers to them by name.
+    document.set_terrain(hill)
+    document.save(tmp_path / "scene.yaml")
+    text = (tmp_path / "scene.yaml").read_text(encoding="utf-8")
+    assert "file: hill.asc" in text and "file: town.geojson" in text and str(tmp_path) not in text
+
+
+def test_ground_impedance_and_zones(window) -> None:
+    from PySide6.QtCore import Qt
+
+    window.open_example(example_path("roadside"))
+    window.select("material", "meadow")
+    page = window.inspector.pages["material"]
+    assert page.ground.isChecked() and page.ground_kind.currentData() == "grass"
+    assert not page.preset.isEnabled() and not page.passing.isEnabled()
+    assert not page.flow.isEnabled() and page.flow.value() == 200.0
+    assert not page.table.item(0, 0).flags() & Qt.ItemFlag.ItemIsEditable
+    assert page.source.text() == "Source: the ground's impedance"
+
+    def choose(combo, value) -> None:
+        combo.setCurrentIndex(combo.findData(value))
+        combo.activated.emit(combo.currentIndex())
+
+    def impedance():
+        return window.document.scene.materials["meadow"].impedance
+
+    choose(page.ground_kind, "snow")
+    assert impedance().preset == "snow"
+    choose(page.ground_kind, "")  # a flow resistivity of its own, the preset's to start
+    assert impedance().preset is None and impedance().flow_resistivity == 12.5
+    assert page.flow.isEnabled()
+    page.flow.setValue(300.0)
+    assert impedance().flow_resistivity == 300.0
+    page.thickness.setValue(0.1)
+    assert impedance().thickness == 0.1
+    assert page.reaction.currentData() == "local" and impedance().reaction is None
+    choose(page.reaction, "extended")
+    assert impedance().reaction == "extended" and impedance().thickness == 0.1
+    choose(page.ground_model, "two_parameter")  # reacts locally: no reaction, no thickness
+    assert impedance().model == "two_parameter" and impedance().thickness is None
+    assert impedance().reaction is None
+    assert page.porosity.isEnabled() and not page.thickness.isEnabled()
+    assert not page.reaction.isEnabled()
+    choose(page.ground_model, "miki")  # back to a model with an index: local again
+    assert page.reaction.isEnabled() and impedance().reaction is None
+    page.table.item(1, 0).setText("0.40")  # the scattering is the material's own
+    assert window.document.scene.materials["meadow"].scattering[0] == 0.4
+    assert impedance().model == "miki"
+    page.ground.setChecked(False)  # the absorption stays, as values of its own
+    material = window.document.scene.materials["meadow"]
+    assert material.impedance is None and len(material.absorption) == 24
+    assert page.preset.isEnabled() and material.source == "edited from a ground impedance"
+    page.ground.setChecked(True)
+    assert impedance() is not None and impedance().flow_resistivity == 300.0
+
+    window.select("geometry", None)
+    geometry = window.inspector.pages["geometry"]
+    assert geometry.zones.rowCount() == 2
+    assert [geometry.zones.item(0, c).text() for c in range(2)] == ["road", "4"]
+    geometry.zones.setCurrentCell(1, 0)
+    geometry._remove_zone()
+    assert [z.name for z in window.document.scene.geometry.ground.zones] == ["road"]
+    geometry._remove_zone()
+    assert window.document.scene.geometry.ground.zones is None
+    assert geometry.zones.rowCount() == 0
+
+    # In pressure up to 8 kHz outdoors; up to 500 Hz in a room.
+    window.select("simulation")
+    simulation = window.inspector.pages["simulation"]
+    assert simulation.coherent.currentText() == "8000"
+    top = simulation.coherent.findData(8000)
+    assert simulation.coherent.model().item(top).isEnabled()
+    # The wave solver takes the wind outdoors, as an effective speed of sound or as air
+    # that moves.
+    assert not simulation.wave_wind.isEnabled()
+    simulation.wave.setChecked(True)
+    assert simulation.wave_wind.isEnabled()
+    assert simulation.wave_wind.currentData() == "effective"
+    simulation.wave_wind.setCurrentIndex(simulation.wave_wind.findData("moving"))
+    assert window.document.scene.simulation.wave.wind == "moving"
+    window.open_example(example_path("shoebox"))
+    window.select("simulation")
+    assert not simulation.coherent.model().item(top).isEnabled()
+    simulation.wave.setChecked(True)
+    assert not simulation.wave_wind.isEnabled()
+    assert simulation.coherent.model().item(simulation.coherent.findData(500)).isEnabled()
+
+
+def test_parabolic_equation_choice(window) -> None:
+    """Outdoors in wind the simulation page picks the narrow-angle or the wide-angle
+    parabolic equation; in still air and in a room there is none to pick."""
+    window.open_example(example_path("open_air_stage"))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    assert page.parabolic_equation.isEnabled()
+    assert page.parabolic_equation.currentText() == "narrow angle"
+    page.parabolic_equation.setCurrentIndex(page.parabolic_equation.findData("wide_angle"))
+    assert window.document.scene.simulation.early.parabolic_equation == "wide_angle"
+    window.document.edit("still air", lambda data: data.pop("atmosphere"))
+    window.select("simulation")
+    assert not page.parabolic_equation.isEnabled()
+    window.open_example(example_path("shoebox"))
+    window.select("simulation")
+    assert not page.parabolic_equation.isEnabled()
+    assert page.parabolic_equation.currentData() == "narrow_angle"
+
+
+def test_wind_and_temperature_form(window) -> None:
+    window.open_example(example_path("open_air_stage"))
+    window.select("scene", None)
+    page = window.inspector.pages["scene"]
+    assert not page.weather_group.isHidden()
+    assert page.weather.currentData() == "windy" and page.wind_speed.value() == 5.0
+
+    def atmosphere():
+        return window.document.scene.atmosphere
+
+    page.wind_speed.setValue(8.0)  # a value of its own makes the weather custom
+    assert atmosphere().preset is None and atmosphere().wind.speed_m_s == 8.0
+    assert page.weather.currentData() == "custom"
+    page.wind_direction.setValue(90.0)
+    assert atmosphere().wind.direction_deg == 90.0 and atmosphere().wind.speed_m_s == 8.0
+    # Another weather keeps the way the wind blows.
+    page.weather.setCurrentIndex(page.weather.findData("sunny_day"))
+    assert atmosphere().preset == "sunny_day" and atmosphere().wind.direction_deg == 90.0
+    page.gradient.setValue(-0.02)
+    assert atmosphere().preset is None and atmosphere().temperature_log_k == -0.5
+    assert atmosphere().temperature_gradient_k_m == -0.02
+    # The eddies: a preset, then a value of their own; they stay as the weather changes.
+    page.eddies.setCurrentIndex(page.eddies.findData("moderate"))
+    assert atmosphere().turbulence.preset == "moderate" and page.wind_eddies.value() == 0.12
+    page.wind_eddies.setValue(0.3)
+    eddies = atmosphere().turbulence
+    assert eddies.preset is None and eddies.wind_structure == 0.3
+    assert eddies.temperature_structure == 0.008 and page.eddies.currentData() == "custom"
+    page.weather.setCurrentIndex(page.weather.findData("windy"))
+    assert atmosphere().preset == "windy" and atmosphere().turbulence.wind_structure == 0.3
+    page.weather.setCurrentIndex(0)  # (none): still air, still with its eddies
+    assert atmosphere().still and atmosphere().turbulence.wind_structure == 0.3
+    assert page.weather.currentData() is None and page.wind_speed.value() == 0.0
+    # Weaker with height: a height (0 is none) and a fall-off, kept through a preset.
+    assert atmosphere().turbulence.height_m is None and page.eddy_height.value() == 0.0
+    page.eddy_height.setValue(2.0)
+    assert atmosphere().turbulence.height_m == 2.0
+    page.eddy_falloff.setValue(1.0)
+    assert atmosphere().turbulence.falloff == 1.0
+    page.eddies.setCurrentIndex(page.eddies.findData("strong"))
+    eddies = atmosphere().turbulence
+    assert eddies.preset == "strong" and eddies.height_m == 2.0 and eddies.falloff == 1.0
+    page.eddy_height.setValue(0.0)
+    assert atmosphere().turbulence.height_m is None and page.eddies.currentData() == "custom"
+    page.eddies.setCurrentIndex(0)
+    assert atmosphere() is None and page.eddies.currentData() is None
+    # A measured profile comes from the scene file; the form can drop it.
+    window.document.edit(
+        "measured", lambda data: data.update(atmosphere={"table": [[0, 15, 0], [10, 14, 3]]})
+    )
+    form = page._weather_form
+    assert form.isRowVisible(page.drop_table) and not page.wind_speed.isEnabled()
+    assert page.table.text() == "Measured profile at 2 heights, from the scene file"
+    page.wind_direction.setValue(180.0)  # the table's wind blows that way
+    assert atmosphere().table is not None and atmosphere().wind.direction_deg == 180.0
+    page.drop_table.click()
+    assert atmosphere().table is None and not form.isRowVisible(page.drop_table)
+    page.show_profile()
+    assert page.profile_window.isVisible()
+    page.profile_window.close()
+    window.open_example(example_path("shoebox"))
+    window.select("scene", None)
+    assert page.weather_group.isHidden()
+
+
+def test_weather_zones_form(window, qapp) -> None:
+    window.open_example(example_path("open_air_stage"))
+    window.select("scene", None)
+    page = window.inspector.pages["scene"]
+    form = page._weather_form
+    canvas = _plan(window, qapp)
+
+    def atmosphere():
+        return window.document.scene.atmosphere
+
+    # The form shows the scene's weather; Add weather zone draws a zone in the plan.
+    assert page.weather_zone.count() == 1 and page.weather_zone.currentData() is None
+    assert not page.remove_weather_zone.isEnabled()
+    assert not form.isRowVisible(page.zone_temperature)
+    window.views.setCurrentWidget(window.viewport)
+    page.add_weather_zone.click()
+    assert window.views.currentWidget() is window.plan
+    assert canvas.mode == "drawing" and canvas.purpose == "weather"
+    assert "weather zone" in window.plan.hint.text()
+    window.plan.canvas.part_drawn.emit("weather", [[20, -40], [80, -40], [80, 40], [20, 40]])
+    zones = atmosphere().zones
+    assert len(zones) == 1 and zones[0].polygon == [(20, -40), (80, -40), (80, 40), (20, 40)]
+    assert zones[0].preset is None and zones[0].wind is None and zones[0].temperature_c is None
+    assert atmosphere().preset == "windy" and atmosphere().wind.speed_m_s == 5.0
+    assert "New weather zone with 4 corners" in window.messages.toPlainText()
+    assert window.selection == ("scene", None)
+    window.plan.cancel()  # the signal alone does not end the drawing
+    assert canvas.mode == "outdoor"
+    assert [page.weather_zone.itemText(k) for k in range(2)] == ["the whole scene", "weather_1"]
+    canvas.grab()  # the plan draws the zone, dotted, with its name
+
+    # Choosing the zone shows its weather, the scene's unchanged; the eddies are the
+    # scene's everywhere, so their fields are greyed out.
+    page.weather_zone.setCurrentIndex(1)
+    assert page.weather.currentData() is None and page.weather.itemText(0) == "as the whole scene"
+    assert page.wind_speed.value() == 5.0 and page.remove_weather_zone.isEnabled()
+    assert form.isRowVisible(page.zone_temperature)
+    assert page.zone_temperature.value() == window.document.scene.air.temperature_c
+    assert not page.eddies.isEnabled() and not page.wind_eddies.isEnabled()
+
+    # A value of its own changes the zone only; what it leaves out stays the scene's.
+    page.wind_speed.setValue(1.0)
+    zone = atmosphere().zones[0]
+    assert zone.wind.speed_m_s == 1.0 and zone.wind.direction_deg is None
+    assert zone.preset is None and atmosphere().wind.speed_m_s == 5.0
+    assert page.weather.currentData() == "custom" and page.wind_speed.value() == 1.0
+    assert atmosphere().weathers()[1].wind.speed_m_s == 1.0
+    page.zone_temperature.setValue(12.0)
+    assert atmosphere().zones[0].temperature_c == 12.0
+    assert window.document.scene.air.temperature_c != 12.0
+    # A preset of its own starts the zone from that preset: an inversion in still air.
+    page.weather.setCurrentIndex(page.weather.findData("clear_night"))
+    zone = atmosphere().zones[0]
+    assert zone.preset == "clear_night" and zone.wind is None and zone.temperature_c == 12.0
+    assert page.wind_speed.value() == 0.0 and page.log_term.value() == 0.5
+    assert atmosphere().weathers()[1].temperature_log_k == 0.5
+    page.show_profile()  # the zone's weather, as the engine resolves it
+    assert page.profile_window.isVisible()
+    page.profile_window.close()
+    # Back to the scene's weather in the zone, then back to the scene's temperature.
+    page.weather.setCurrentIndex(0)
+    zone = atmosphere().zones[0]
+    assert zone.preset is None and zone.wind is None and zone.temperature_c == 12.0
+    page.zone_temperature.setValue(window.document.scene.air.temperature_c)
+    assert atmosphere().zones[0].temperature_c is None
+    # The whole scene's fields are its own, with the zone kept.
+    page.weather_zone.setCurrentIndex(0)
+    assert page.weather.currentData() == "windy" and page.eddies.isEnabled()
+    assert page.weather.itemText(0) == "(none)" and not form.isRowVisible(page.zone_temperature)
+    page.weather.setCurrentIndex(page.weather.findData("sunny_day"))
+    assert atmosphere().preset == "sunny_day" and len(atmosphere().zones) == 1
+
+    # Remove weather zone drops the chosen one; the scene's weather holds there again.
+    page.weather_zone.setCurrentIndex(1)
+    page.remove_weather_zone.click()
+    assert atmosphere().zones is None and atmosphere().preset == "sunny_day"
+    assert page.weather_zone.count() == 1 and page.weather_zone.currentData() is None
+    assert not page.remove_weather_zone.isEnabled() and page.eddies.isEnabled()
+    window.document.undo()
+    assert len(atmosphere().zones) == 1 and page.weather_zone.count() == 2
+
+
+def test_weather_classes_form(window, qapp) -> None:
+    window.open_example(example_path("open_air_stage"))
+    window.select("scene", None)
+    page = window.inspector.pages["scene"]
+    form = page._weather_form
+    document = window.document
+
+    def long_term():
+        return document.scene.long_term
+
+    # Without classes the form shows no shares or periods.
+    assert long_term() is None and not page.remove_weather_class.isEnabled()
+    assert not form.isRowVisible(page.class_shares) and not form.isRowVisible(page.periods)
+
+    # The first class holds all the time in the scene's weather, and the form shows it.
+    page.add_weather_class.click()
+    assert [c.name for c in long_term().classes] == ["class_1"]
+    assert long_term().classes[0].share == 1.0 and document.undo_text() == "add weather class"
+    assert page.weather_zone.currentData() == "class:0"
+    assert page.weather_zone.currentText() == "weather class class_1"
+    assert page.remove_weather_class.isEnabled() and form.isRowVisible(page.class_shares)
+    assert page.periods.text() == (
+        "Levels over a long term: 1 weather class over day 12 h, evening 4 h +5 dB, "
+        "night 8 h +10 dB (L_den)"
+    )
+    shares = page.class_shares
+    assert [shares.horizontalHeaderItem(k).text() for k in range(3)] == ["day", "evening", "night"]
+    assert [shares.item(0, k).text() for k in range(3)] == ["100", "100", "100"]
+    assert not shares.item(0, 0).flags() & Qt.ItemFlag.ItemIsEditable  # the only class
+    assert page.weather.currentData() is None and page.weather.itemText(0) == "as the whole scene"
+    assert page.wind_speed.value() == 5.0  # the scene's weather
+    assert page.eddies.isEnabled() and page.eddies.itemText(0) == "as the whole scene"
+    assert page.eddies.currentData() is None and form.isRowVisible(page.zone_temperature)
+
+    # A second class: a clear night's inversion, for 60 % of the night.
+    page.add_weather_class.click()
+    assert page.weather_zone.currentData() == "class:1" and long_term().classes[1].share == 0.0
+    page.weather.setCurrentIndex(page.weather.findData("clear_night"))
+    assert long_term().classes[1].preset == "clear_night"
+    assert page.log_term.value() == 0.5 and page.wind_speed.value() == 0.0
+    assert document.scene.atmosphere.preset == "windy"  # the scene's weather stays
+    page.class_shares.item(0, 2).setText("60")
+    assert long_term().shares().tolist() == [[1.0, 1.0, 0.4], [0.0, 0.0, 0.6]]
+    assert long_term().classes[1].share == {"day": 0.0, "evening": 0.0, "night": 0.6}
+    assert page.class_shares.item(0, 2).text() == "60"
+    # Its own eddies, and the ground's temperature on such a night.
+    page.eddies.setCurrentIndex(page.eddies.findData("weak"))
+    assert long_term().classes[1].turbulence.preset == "weak"
+    assert document.scene.atmosphere.turbulence.preset == "moderate"
+    page.zone_temperature.setValue(8.0)
+    assert long_term().classes[1].temperature_c == 8.0
+    assert document.undo_text() == "change the weather class"
+    page.show_profile()  # the class's weather, as the engine resolves it
+    assert page.profile_window.isVisible()
+    page.profile_window.close()
+
+    # The whole scene's form keeps its own eddies and shows the periods.
+    page.weather_zone.setCurrentIndex(0)
+    assert page.eddies.itemText(0) == "(none)" and page.eddies.currentData() == "moderate"
+    assert not form.isRowVisible(page.class_shares) and form.isRowVisible(page.periods)
+    assert "2 weather classes" in page.periods.text()
+
+    # Removing a class gives its share to the others.
+    page.weather_zone.setCurrentIndex(page.weather_zone.findData("class:0"))
+    page.remove_weather_class.click()
+    assert [c.name for c in long_term().classes] == ["class_2"]
+    assert long_term().classes[0].share == 1.0 and page.weather_zone.currentData() is None
+    document.undo()
+    assert len(long_term().classes) == 2
+    # A floor plan drawn over the scene leaves the outdoors and its classes behind.
+    document.draw_floor_plan([[-10, -10], [10, -10], [10, 10], [-10, 10]], height=5.0)
+    assert document.scene.long_term is None and document.scene.atmosphere is None
+
+
+def test_a_run_over_a_long_term(window, qapp) -> None:
+    from acoustic_spaces.gui.results_view import ROWS
+
+    scene = Scene.model_validate(
+        {
+            "geometry": {"ground": {"extent": [[-40, -40], [40, 40]], "sky": 20}},
+            "materials": {"field": {"impedance": "grass", "scattering": 0.0}},
+            "default_material": "field",
+            "sources": [{"name": "s", "position": [0, 0, 1.0]}],
+            "listeners": [{"name": "l", "position": [20, 0, 1.5]}],
+            "atmosphere": {"preset": "windy"},
+            "simulation": {
+                "ir_length_s": 0.3,
+                "seed": 2,
+                "early": {"method": "image_sources", "max_order": 1},
+                "late": {"rays": 500},
+            },
+            "long_term": {
+                "classes": [
+                    {"name": "downwind", "share": 0.6},
+                    {"name": "upwind", "share": 0.4, "wind": {"direction_deg": 180}},
+                ]
+            },
+        }
+    )
+    window._attach(Document(scene))
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    result = window.result
+    assert result is not None and result.long_term is not None
+    results = window.results
+    row = [name for name, _label, _template in ROWS].index("long_term")
+    assert not results.table.isRowHidden(row) and results.table.item(row, 4).text() != "–"
+    text = results.details.toPlainText()
+    assert "Levels over a long term in 2 weather classes (downwind, upwind), rated as L_den" in text
+    assert "s -> l: L_den" in text and "in the weather classes downwind" in text
+    # The map gains the long-term level and the rating level.
+    document = window.document
+    document.edit("coarse map", lambda d: d.update(coverage={"spacing": 20.0, "rays": 100}))
+    window.run_map()
+    _wait(qapp, lambda: window.job is None)
+    assert {"long_term", "rating_level"} <= set(window.coverage.parameters())
 
 
 def test_model_units_default_to_the_file(window) -> None:
@@ -951,6 +1943,7 @@ def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
     assert window.document.scene.sources[0].directivity.file == table
     assert box.currentText() == "file: speaker.csv"
     assert "Hz copied from the nearest octave" in page.directivity_index.text()
+    assert not page.near_field.isEnabled()  # for arrays only
 
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: ("", ""))
     box.activated.emit(box.findText(MEASURED))  # cancelled: nothing changes
@@ -964,6 +1957,13 @@ def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
     box.activated.emit(box.findText(MEASURED))
     assert box.currentText() == "file: column.yaml"
     assert window.document.room.directivities[0].name == "array of 4 elements"
+    # Its elements added up one by one near it.
+    assert page.near_field.isEnabled() and not page.near_field.isChecked()
+    page.near_field.setChecked(True)
+    assert window.document.scene.sources[0].directivity.near_field
+    assert window.document.room.directivities[0].near is not None
+    window.undo()
+    assert not window.document.scene.sources[0].directivity.near_field
     window.document.update_point(
         "sources", 0, directivity={"array": {"count": 3, "spacing_m": 0.2}}
     )
@@ -1066,8 +2066,12 @@ def test_run_export_and_listen(window, qapp, tmp_path: Path, fake_sounddevice, m
     results.paths.setChecked(True)
     assert window.paths_action.isChecked()
 
-    report = window.write_results(tmp_path / "out")
-    assert report is not None and (tmp_path / "out" / "parameters.json").is_file()
+    # The export runs in the background, so the window keeps answering.
+    window.write_results(tmp_path / "out")
+    assert window.job is not None and not window.run_action.isEnabled()
+    _wait(qapp, lambda: window.job is None)
+    assert (tmp_path / "out" / "parameters.json").is_file()
+    assert "impulse response files and parameters.json" in window.messages.toPlainText()
     from PySide6.QtWidgets import QFileDialog
 
     glb = tmp_path / "studio.glb"
@@ -1990,9 +2994,11 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
             win.select(kind, key)
         texts = []  # (what, text)
         for menu in win.menuBar().findChildren(QMenu):
-            if menu is win.examples_menu:  # the examples' own titles and descriptions
+            if menu is win.examples_menu:  # its entries are the groups' menus, below
                 continue
             texts.append(("menu", menu.title()))
+            if menu.parent() is win.examples_menu:  # the examples' own titles and descriptions
+                continue
             for action in menu.actions():
                 if not action.isSeparator() and menu is not win.language_menu:
                     texts.append(("menu entry", action.text()))
@@ -2049,6 +3055,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "añadir fuente",
                 "late_methods": ["trazado de rayos estocástico", "estadístico"],
                 "example": "Piso con una puerta",
+                "rooms": "Recintos",
             },
         ),
         (
@@ -2062,6 +3069,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "afegir font",
                 "late_methods": ["traçat de raigs estocàstic", "estadístic"],
                 "example": "Pis amb una porta",
+                "rooms": "Recintes",
             },
         ),
         (
@@ -2075,6 +3083,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "aggiungi sorgente",
                 "late_methods": ["tracciamento di raggi stocastico", "statistico"],
                 "example": "Appartamento con una porta",
+                "rooms": "Ambienti",
             },
         ),
         (
@@ -2088,6 +3097,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "Quelle hinzufügen",
                 "late_methods": ["stochastische Strahlenverfolgung", "statistisch"],
                 "example": "Wohnung mit einer Tür",
+                "rooms": "Räume",
             },
         ),
         (
@@ -2101,6 +3111,7 @@ def test_every_text_of_the_editor_is_translatable(qapp, english, monkeypatch) ->
                 "add_source": "bron toevoegen",
                 "late_methods": ["stochastische straaltracering", "statistisch"],
                 "example": "Appartement met een deur",
+                "rooms": "Ruimtes",
             },
         ),
     ],
@@ -2122,7 +3133,9 @@ def test_the_editor_in_translation(qapp, english, monkeypatch, language, words) 
         page = win.inspector.pages["simulation"]
         assert [page.late_method.itemText(k) for k in range(2)] == words["late_methods"]
         assert page.late_method.itemData(0) == "stochastic_ray_tracing"
-        assert win.examples_menu.actions()[0].text().startswith(words["example"])
+        rooms = win.examples_menu.actions()[0].menu()
+        assert rooms.title() == words["rooms"]
+        assert any(action.text().startswith(words["example"]) for action in rooms.actions())
         # One shortcut letter per entry in each menu.
         for menu in win.menuBar().findChildren(QMenu):
             letters = [
@@ -2163,3 +3176,85 @@ def test_numbers_follow_the_regional_settings(qapp) -> None:
         assert parse_numbers("1.5, -2 3") == [1.5, -2.0, 3.0]
     finally:
         QLocale.setDefault(before)
+
+
+def test_insertion_loss_list(window) -> None:
+    """The simulation page of an outdoor scene lists its buildings, barriers and
+    vegetation to tick for their insertion loss; a part removed from the geometry page
+    leaves the choice; a room has nothing to tick."""
+    window.open_example(example_path("street"))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    assert not page.insertion_group.isHidden()
+
+    def listed():
+        return [page.insertion.item(r).text() for r in range(page.insertion.count())]
+
+    def ticked():
+        return [
+            page.insertion.item(r).text()
+            for r in range(page.insertion.count())
+            if page.insertion.item(r).checkState() == Qt.CheckState.Checked
+        ]
+
+    names = listed()
+    assert names == window.document.scene.geometry.part_names()
+    assert names == ["houses", "offices", "noise_barrier"]
+    assert ticked() == [] and window.document.scene.simulation.insertion_loss_of is None
+    page.insertion.item(names.index("noise_barrier")).setCheckState(Qt.CheckState.Checked)
+    assert window.document.scene.simulation.insertion_loss_of == ["noise_barrier"]
+    page.insertion.item(0).setCheckState(Qt.CheckState.Checked)
+    assert window.document.scene.simulation.insertion_loss_of == ["houses", "noise_barrier"]
+    window.select("simulation")  # loaded again, the ticks are the scene's
+    assert ticked() == ["houses", "noise_barrier"]
+    # Removing the barrier on the geometry page drops it from the choice.
+    window.select("geometry", None)
+    geometry = window.inspector.pages["geometry"]
+    geometry.parts["barriers"].setCurrentCell(0, 0)
+    geometry._remove_part("barriers")
+    assert window.document.scene.simulation.insertion_loss_of == ["houses"]
+    window.select("simulation")
+    assert listed() == ["houses", "offices"] and ticked() == ["houses"]
+    page.insertion.item(0).setCheckState(Qt.CheckState.Unchecked)
+    assert window.document.scene.simulation.insertion_loss_of is None
+    window.open_example(example_path("shoebox"))
+    window.select("simulation")
+    assert page.insertion_group.isHidden()
+
+
+def test_scene_tree_groups_ticks_and_eyes(window, qapp) -> None:
+    """Sources and listeners sit in their groups; a tick leaves them out, an eye hides
+    them in the 3D view and the plan, and the form sets both."""
+    window.document.update_point("sources", 0, group="PA/Mains")
+    tree = window.tree
+
+    def entry(key):
+        return next(item for item in tree._items() if tree._keys[item.data(0, 256)] == key)
+
+    pa = entry(("group", ("sources", ("PA",))))
+    assert entry(("group", ("sources", ("PA", "Mains")))).parent() is pa
+    assert entry(("sources", 0)).parent().parent() is pa
+    assert pa.checkState(0) == Qt.CheckState.Checked
+    pa.setCheckState(0, Qt.CheckState.Unchecked)
+    qapp.processEvents()
+    assert not window.document.scene.sources[0].in_use
+    assert entry(("sources", 0)).checkState(0) == Qt.CheckState.Unchecked
+    window.undo()
+    assert window.document.scene.sources[0].in_use
+    name = window.document.scene.sources[0].name
+    tree.toggle_shown(entry(("sources", 0)))
+    qapp.processEvents()
+    assert window.document.hidden == {("sources", name)}
+    assert [kind for kind, _k, _item in window.plan.canvas._points()] == ["listeners"]
+    tree.toggle_shown(entry(("", "sources")))  # none shown: shows them all
+    qapp.processEvents()
+    assert not window.document.hidden
+    window.select("sources", 0)
+    page = window.inspector.pages["sources"]
+    assert page.group.currentText() == "PA/Mains" and page.in_use.isChecked()
+    page.group.setCurrentText("Monitors")
+    page._group()
+    assert window.document.scene.sources[0].group == "Monitors"
+    page.in_use.setChecked(False)
+    assert not window.document.scene.sources[0].in_use
+    assert window.document.undo_text() == "leave out source"

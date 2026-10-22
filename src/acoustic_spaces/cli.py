@@ -24,14 +24,38 @@ from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
 #: What the map command can plot (the keys of engine.coverage.MAP_PARAMETERS).
-MAP_PARAMETER_NAMES = ("spl", "spl_a", "g", "c50", "c80", "d50", "edt", "t20", "t30", "ts", "sti")
+MAP_PARAMETER_NAMES = (
+    "spl",
+    "spl_a",
+    "g",
+    "c50",
+    "c80",
+    "d50",
+    "edt",
+    "t20",
+    "t30",
+    "ts",
+    "sti",
+    "re_free_field",
+    "insertion_loss",
+    "insertion_loss_a",
+    "long_term",
+    "rating_level",
+)
 #: Edge diffraction settings (engine.diffraction.DIFFRACTION_MODES).
 DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
+#: Where a diffracted path may reflect (scene.model.EarlyStage.diffraction_reflections).
+DIFFRACTION_REFLECTIONS = ("one_side", "both_sides")
+#: The parabolic equations outdoors (scene.model.EarlyStage.parabolic_equation).
+PARABOLIC_EQUATIONS = ("narrow_angle", "wide_angle")
 #: Highest octave bands the wave solver can compute (engine.wave.WAVE_BANDS_HZ).
 WAVE_BANDS_HZ = (63, 125, 250, 500)
 #: Choices for the highest band the early paths add in pressure in
 #: (scene.model.EarlyStage.coherent_max_band_hz).
-COHERENT_BANDS = ("none", "63", "125", "250", "500")
+COHERENT_BANDS = ("none", "63", "125", "250", "500", "1000", "2000", "4000", "8000")
+#: The highest of them in a room; those above are for outdoor scenes
+#: (scene.model.INDOOR_COHERENT_MAX_BAND_HZ).
+INDOOR_COHERENT_MAX_BAND_HZ = 500
 #: Rays the leak finder traces by default (engine.leaks.RAYS).
 LEAK_RAYS = 5000
 #: Walkthrough defaults (walkthrough.STEP_M, LATE_STEP_M and CROSSFADE_S).
@@ -64,6 +88,16 @@ def _load_room(path: str) -> Room | None:
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
     return None
+
+
+def _counted(items, noun: str) -> str:
+    """How many sources or listeners there are, and how many are left out."""
+    out = sum(not item.in_use for item in items)
+    return f"{len(items)} {noun}" + (f" ({out} left out)" if out else "")
+
+
+def _first_in_use(items) -> str:
+    return next(item.name for item in items if item.in_use)
 
 
 def _print_checks(room: Room) -> bool:
@@ -154,7 +188,7 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     scene = room.scene
     print(
         f"{scene.name}: {len(scene.materials)} materials, "
-        f"{len(scene.sources)} sources, {len(scene.listeners)} listeners, "
+        f"{_counted(scene.sources, 'sources')}, {_counted(scene.listeners, 'listeners')}, "
         f"{room.report.faces} triangles"
     )
     if args.leaks:
@@ -204,6 +238,45 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         # The air is not what the report counts as the rooms (walls drawn as a closed
         # shell inside another): the reverberation times below are of this volume.
         print(f"  air volume {room.volume_m3:.2f} m3 (where the sources and listeners stand)")
+    if room.outdoor is not None:
+        x0, y0, x1, y1 = room.outdoor.extent
+        print(
+            f"  outdoors: ground at z = {room.outdoor.ground:g} m from ({x0:g}, {y0:g}) to "
+            f"({x1:g}, {y1:g}) m, sky at z = {room.outdoor.sky:g} m"
+        )
+        if room.outdoor.terrain is not None:
+            print(f"  terrain: {room.outdoor.terrain.describe()}")
+        if scene.geometry.buildings_file is not None:
+            count = len(scene.geometry.file_buildings())
+            print(f"  buildings from {scene.geometry.buildings_file.file.name}: {count}")
+        if room.outdoor.zones:
+            zones = ", ".join(
+                f"{name} ({abs(_polygon_area(polygon)):.0f} m2)"
+                for name, polygon in room.outdoor.zones
+            )
+            print(f"  ground zones: {zones}")
+        if room.outdoor.vegetation:
+            from acoustic_spaces.engine.vegetation import DB_PER_NEPER, Plants
+
+            plants = Plants.of(room, "octave", room.speed_of_sound())
+            loss = [[0.0] * plants.bands for _shape in plants.shapes]
+            for shape, medium in plants.fills:
+                extinction = plants.media[medium].extinction * DB_PER_NEPER
+                loss[shape] = [a + float(b) for a, b in zip(loss[shape], extinction, strict=True)]
+            for shape, plant, row in zip(
+                plants.shapes, scene.geometry.vegetation, loss, strict=True
+            ):
+                rates = "/".join(f"{v:.2g}" for v in row)
+                print(
+                    f"  {shape.kind} {shape.name}: {plant.describe()}, {shape.low:g} to "
+                    f"{shape.high:g} m high; sound through it loses {rates} dB/m"
+                )
+        if scene.atmosphere is not None:
+            for line in _atmosphere_lines(scene.atmosphere, scene.air.temperature_c, room.outdoor):
+                print(f"  {line}")
+        if scene.long_term is not None:
+            for line in _long_term_lines(scene):
+                print(f"  {line}")
 
     width = max([len(n) for n in room.material_names] + [12]) + 2
     print("\nmaterials (absorption per octave band, area)")
@@ -216,9 +289,14 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         if passing is not None:
             reduction = [max(0.0, -10.0 * math.log10(t)) if t > 0 else math.inf for t in passing]
             print(_band_row("  R (dB)", reduction, width, "6.1f") + "  sound reduction")
+        if material.impedance is not None:
+            print(
+                f"  impedance ({material.impedance.describe()}): the absorption above is "
+                "at random incidence; reflections are a ground's spherical wave"
+            )
         if material.audience:
             print("  audience seating: sound arriving low over it is attenuated (500 Hz-2 kHz)")
-        if len(material.absorption) > len(absorption):
+        if len(material.absorption) > len(absorption) and material.impedance is None:
             print("  third-octave data, shown as octave averages")
         if material.source:
             print(f"  {material.source}")
@@ -243,7 +321,8 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         if feed:
             print(f"  {feed}")
 
-    if room.volume_m3 is not None:
+    # Outdoors there is no diffuse field for a reverberation time.
+    if room.volume_m3 is not None and room.outdoor is None:
         print("\nstatistical reverberation time (s), without air absorption")
         print(_band_header("", width))
         times = {}
@@ -264,11 +343,151 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
             x, y, z = item.position
             print(
                 f"  {kind:<9}{item.name:<{width}}({x:.2f}, {y:.2f}, {z:.2f}){where}"
+                + ("" if item.in_use else "  left out")
                 + _extent_text(item)
                 + _walk_text(item)
+                + _ground_text(room, item)
             )
     print()
     return 0 if _print_checks(room) else 1
+
+
+def _ground_text(room, item) -> str:
+    """How high a source or listener stands over a terrain."""
+    if room.outdoor is None or room.outdoor.terrain is None:
+        return ""
+    height = float(item.position[2] - room.outdoor.ground_at([item.position])[0])
+    return f"  {height:.2f} m over the ground"
+
+
+def _polygon_area(polygon) -> float:
+    """The signed area of a polygon (n, 2)."""
+    points = [(float(x), float(y)) for x, y in polygon]
+    return 0.5 * sum(
+        x0 * y1 - x1 * y0
+        for (x0, y0), (x1, y1) in zip(points, points[1:] + points[:1], strict=True)
+    )
+
+
+def _weather_parts(atmosphere) -> list[str]:
+    """A weather in words: its preset, its wind and its temperature profile."""
+    parts = [f"{atmosphere.preset} weather"] if atmosphere.preset else []
+    wind = atmosphere.wind
+    if atmosphere.table is not None:
+        parts.append(f"measured profile at {len(atmosphere.table)} heights")
+    else:
+        if wind is not None and wind.speed_m_s > 0.0:
+            parts.append(f"wind {wind.speed_m_s:g} m/s {wind.height_m:g} m up ({wind.profile})")
+        if atmosphere.temperature_gradient_k_m or atmosphere.temperature_log_k:
+            parts.append(
+                f"temperature {atmosphere.temperature_gradient_k_m:+g} K/m "
+                f"{atmosphere.temperature_log_k:+g} K ln(1 + z / {atmosphere.roughness_m:g} m)"
+            )
+    return parts
+
+
+def _zone_lines(atmosphere, ground_c: float) -> list[str]:
+    """The weather zones: each one's weather as the engine resolves it, and where its
+    wind blows and its ground's temperature differ from the scene's."""
+    lines = []
+    weathers = atmosphere.weathers()
+    grounds = atmosphere.ground_temperatures(ground_c)
+    names = atmosphere.zone_names()
+    for k, (name, zone) in enumerate(zip(names, atmosphere.zones or [], strict=True), start=1):
+        weather = weathers[k]
+        parts = _weather_parts(weather)
+        if weather.still:
+            parts.append("still air")
+        elif weather.wind is not None and weather.wind.speed_m_s > 0.0:
+            parts.append(f"blowing towards {weather.wind.direction_deg:g} deg from +x")
+        if zone.temperature_c is not None:
+            parts.append(f"ground at {grounds[k]:g} °C")
+        corners = len(zone.polygon)
+        lines.append(f"  weather zone {name} ({corners} corners): " + "; ".join(parts))
+    return lines
+
+
+def _long_term_lines(scene) -> list[str]:
+    """The weather classes of the levels over a long term, each with its share of the
+    time and its weather as the engine resolves it, and the periods of the day."""
+    from acoustic_spaces.engine.long_term import rating_name
+    from acoustic_spaces.scene.model import Atmosphere
+
+    spec = scene.long_term
+    periods = spec.period_list()
+    hours, penalties = spec.hours(), spec.penalties()
+    rating = rating_name(spec.period_names(), hours, penalties)
+    days = ", ".join(
+        f"{p.name} {p.hours:g} h" + (f" +{p.penalty_db:g} dB" if p.penalty_db else "")
+        for p in periods
+    )
+    count = len(spec.classes)
+    lines = [f"long term: {count} weather class{'es' if count != 1 else ''} over {days} ({rating})"]
+    atmosphere = scene.atmosphere or Atmosphere()
+    shares = spec.shares()
+    for k, (name, given) in enumerate(zip(spec.class_names(), spec.classes, strict=True)):
+        weather = atmosphere.under(given)
+        parts = _weather_parts(weather)
+        if weather.still:
+            parts.append("still air")
+        elif weather.wind is not None and weather.wind.speed_m_s > 0.0:
+            parts.append(f"blowing towards {weather.wind.direction_deg:g} deg from +x")
+        if given.temperature_c is not None:
+            parts.append(f"ground at {given.temperature_c:g} °C")
+        if max(shares[k]) > min(shares[k]):
+            share = ", ".join(f"{p.name} {100 * shares[k, j]:g} %" for j, p in enumerate(periods))
+        else:
+            share = f"{100 * shares[k, 0]:g} % of the time"
+        lines.append(f"  weather class {name} ({share}): " + "; ".join(parts))
+    return lines
+
+
+def _atmosphere_lines(atmosphere, ground_c: float, outdoor) -> list[str]:
+    """An outdoor scene's wind and temperature, and the speed of sound they give at a few
+    heights up to the sky."""
+    parts = _weather_parts(atmosphere)
+    wind = atmosphere.wind
+    eddies = []
+    turbulence = atmosphere.turbulence
+    if turbulence is not None and not turbulence.calm:
+        name = f"{turbulence.preset}, " if turbulence.preset else ""
+        profile = ""
+        if turbulence.height_m is not None:
+            profile = (
+                f" at {turbulence.height_m:g} m, weakening with height as "
+                f"z^-{turbulence.falloff:.2g}"
+            )
+        eddies.append(
+            f"eddies: {name}C_T² {turbulence.temperature_structure:g} K² m^-2/3, C_v² "
+            f"{turbulence.wind_structure:g} m^4/3 s^-2{profile}, {turbulence.outer_scale_m:g} m "
+            "across"
+        )
+    zones = _zone_lines(atmosphere, ground_c)
+    if atmosphere.still:
+        parts.append("still air: sound goes in straight lines")
+        return ["atmosphere: " + "; ".join(parts), *eddies, *zones]
+    if atmosphere.table is not None:
+        windy = any(row[2] > 0.0 for row in atmosphere.table)
+    else:
+        windy = wind is not None and wind.speed_m_s > 0.0
+    if windy:
+        direction = wind.direction_deg if wind is not None else 0.0
+        parts.append(f"blowing towards {direction:g} deg from +x")
+    elif zones and atmosphere.weathers()[0].still:
+        parts.append("still air outside the zones")
+    lines = ["atmosphere: " + "; ".join(parts), *eddies, *zones]
+    top = outdoor.sky - outdoor.ground
+    heights = [h for h in (0.0, 2.0, 10.0, 50.0, 200.0) if h <= top]
+    width = 22
+    lines.append(f"{'speed of sound m/s at':<{width}}" + "".join(f"{h:>7g} m" for h in heights))
+    rows = [("across the wind" if windy else "in every direction", None)]
+    if windy:
+        along = atmosphere.to_wind()
+        rows += [("downwind", along), ("upwind", -along)]
+    for name, towards in rows:
+        speeds = atmosphere.sound_speed(heights, ground_c, towards)
+        lines.append(f"  {name:<{width - 2}}" + "".join(f"{c:9.1f}" for c in speeds))
+    return lines
 
 
 def _extent_text(item) -> str:
@@ -291,7 +510,8 @@ def _walk_text(item) -> str:
     length = sum(math.dist(a, b) for a, b in zip(corners, corners[1:], strict=False))
     x, y, z = item.walk.to[-1]
     seconds = length / item.walk.speed_m_s
-    return f"  walks {length:.1f} m to ({x:.2f}, {y:.2f}, {z:.2f}) in {seconds:.1f} s"
+    text = f"  walks {length:.1f} m to ({x:.2f}, {y:.2f}, {z:.2f}) in {seconds:.1f} s"
+    return text + (" with Doppler" if item.walk.doppler else "")
 
 
 def _directivity_text(directivity) -> str:
@@ -556,8 +776,8 @@ def _cmd_export(args: argparse.Namespace) -> int:
         f"{len(scene.sources)} sources, {len(scene.listeners)} listeners"
     )
     if paths is not None:
-        source = args.source or scene.sources[0].name
-        listener = args.listener or scene.listeners[0].name
+        source = args.source or _first_in_use(scene.sources)
+        listener = args.listener or _first_in_use(scene.listeners)
         print(f"  {len(paths)} paths from {source} to {listener}: {_path_counts(paths)}")
     if particles is not None:
         seconds = args.slow_motion * float(particles.times[-1])
@@ -569,12 +789,20 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
-def _with_coherent(settings, choice: str | None):
+def _with_coherent(settings, choice: str | None, outdoor: bool = False):
     """``settings`` (``scene.simulation``) with the highest band the early paths add in
-    pressure in, as ``--coherent-band`` gives it (None: as they are)."""
+    pressure in, as ``--coherent-band`` gives it (None: as they are); bands above
+    500 Hz only in an ``outdoor`` scene (else an error is printed and None returned)."""
     if settings is None or choice is None:
         return settings
     band = None if choice == "none" else int(choice)
+    if not outdoor and (band or 0) > INDOOR_COHERENT_MAX_BAND_HZ:
+        print(
+            f"error: --coherent-band: goes up to {INDOOR_COHERENT_MAX_BAND_HZ} Hz in a room, "
+            "whose early paths are many; higher bands are for outdoor scenes",
+            file=sys.stderr,
+        )
+        return None
     early = settings.early.model_copy(update={"coherent_max_band_hz": band})
     return settings.model_copy(update={"early": early})
 
@@ -691,8 +919,18 @@ def _add_trial_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(TRIAL_FLAG, action="store_true", help=TRIAL_HELP)
 
 
+def _add_without_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--without",
+        nargs="+",
+        metavar="NAME",
+        help="override simulation.insertion_loss_of: outdoors, run the scene again without "
+        "these buildings, barriers or vegetation and give their insertion loss",
+    )
+
+
 def _cmd_simulate(args: argparse.Namespace) -> int:
-    from acoustic_spaces.engine import simulate
+    from acoustic_spaces.engine.long_term import simulate
     from acoustic_spaces.results import REPORT_FILE, write_results
     from acoustic_spaces.spatial import from_output
 
@@ -707,16 +945,23 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "--rays": ("late.rays", args.rays),
             "--max-order": ("early.max_order", args.max_order),
             "--diffraction": ("early.diffraction", args.diffraction),
+            "--diffraction-reflections": (
+                "early.diffraction_reflections",
+                args.diffraction_reflections,
+            ),
+            "--parabolic-equation": ("early.parabolic_equation", args.parabolic_equation),
             "--wave": ("wave.enabled", args.wave),
             "--wave-band": ("wave.max_band_hz", args.wave_band),
             "--wave-device": ("wave.device", args.wave_device),
+            "--wave-wind": ("wave.wind", args.wave_wind),
             "--late-device": ("late.device", args.late_device),
             "--length": ("ir_length_s", args.length),
             "--sample-rate": ("sample_rate", args.sample_rate),
+            "--without": ("insertion_loss_of", args.without),
             **_performance_options(args),
         },
     )
-    settings = _with_coherent(settings, args.coherent_band)
+    settings = _with_coherent(settings, args.coherent_band, room.outdoor is not None)
     if settings is None:
         return 1
     try:
@@ -765,6 +1010,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         )
         print(RoomParameters.from_dict(entry["parameters"]).table())
         print(_level_text(entry))
+        for line in _outdoor_lines(entry, result.removed):
+            print(line)
         print(_speech_text(entry["speech"], entry["echo"]))
     files = sum(len(entry["outputs"]) for entry in report["responses"])
     print(f"\nwrote {files} impulse response files and {REPORT_FILE} to {out}")
@@ -796,6 +1043,47 @@ def _level_text(entry: dict) -> str:
     """One line: the A-weighted sound pressure level and that of each octave band."""
     bands = " ".join(_number(v, ".1f") for v in entry["spl_db"])
     return f"SPL {_number(entry['spl_a_db'], '.1f')} dB(A); per octave band, dB: {bands}"
+
+
+def _outdoor_lines(entry: dict, removed) -> list[str]:
+    """Outdoors: the level relative to free field, the insertion loss of what the run
+    was also made without, each A-weighted and per octave band, and the levels over a
+    long term when the scene has weather classes."""
+    lines = []
+    for key, what in (
+        ("re_free_field", "re free field"),
+        ("insertion_loss", f"insertion loss of {', '.join(removed)}"),
+    ):
+        if f"{key}_db" in entry:
+            bands = " ".join(_number(v, "+.1f") for v in entry[f"{key}_db"])
+            total = _number(entry[f"{key}_a_db"], "+.1f")
+            lines.append(f"{what} {total} dB(A); per octave band, dB: {bands}")
+    long_term = entry.get("long_term")
+    if long_term:
+        periods = ", ".join(
+            f"{name} {_number(v['spl_a_db'], '.1f')}" for name, v in long_term["periods"].items()
+        )
+        classes = ", ".join(
+            f"{name} {_number(v['spl_a_db'], '.1f')}" for name, v in long_term["classes"].items()
+        )
+        bands = " ".join(_number(v, ".1f") for v in long_term["spl_db"])
+        rating = _number(long_term["rating_level_db"], ".1f")
+        lines.append(
+            f"long term {long_term['rating']} {rating} dB(A); "
+            f"{periods} dB(A); in the weather classes {classes} dB(A)"
+        )
+        lines.append(
+            f"long term {_number(long_term['spl_a_db'], '.1f')} dB(A); per octave band, dB: {bands}"
+        )
+        for key, what in (
+            ("re_free_field", "long term re free field"),
+            ("insertion_loss", f"long term insertion loss of {', '.join(removed)}"),
+        ):
+            if f"{key}_db" in long_term:
+                bands = " ".join(_number(v, "+.1f") for v in long_term[f"{key}_db"])
+                total = _number(long_term[f"{key}_a_db"], "+.1f")
+                lines.append(f"{what} {total} dB(A); per octave band, dB: {bands}")
+    return lines
 
 
 def _number(value, fmt: str = ".2f") -> str:
@@ -837,8 +1125,8 @@ def _early_text(paths) -> str:
 def _cmd_map(args: argparse.Namespace) -> int:
     import numpy as np
 
-    from acoustic_spaces.engine import coverage_map
     from acoustic_spaces.engine.coverage import MAP_PARAMETERS
+    from acoustic_spaces.engine.long_term import coverage_map
     from acoustic_spaces.scene import Coverage
 
     room = _load_room(args.scene)
@@ -853,11 +1141,17 @@ def _cmd_map(args: argparse.Namespace) -> int:
             "--seed": ("seed", args.seed),
             "--max-order": ("early.max_order", args.max_order),
             "--diffraction": ("early.diffraction", args.diffraction),
+            "--diffraction-reflections": (
+                "early.diffraction_reflections",
+                args.diffraction_reflections,
+            ),
+            "--parabolic-equation": ("early.parabolic_equation", args.parabolic_equation),
             "--length": ("ir_length_s", args.length),
+            "--without": ("insertion_loss_of", args.without),
             **_performance_options(args),
         },
     )
-    simulation = _with_coherent(simulation, args.coherent_band)
+    simulation = _with_coherent(simulation, args.coherent_band, room.outdoor is not None)
     noise = args.noise[0] if args.noise is not None and len(args.noise) == 1 else args.noise
     settings = _override(
         scene.coverage or Coverage(),
@@ -893,17 +1187,26 @@ def _cmd_map(args: argparse.Namespace) -> int:
     )
     for chosen in [*result.maps.values(), *([result.combined] if result.combined else [])]:
         print(f"\n{chosen.source} (bands: {band_text})")
-        print(f"{'':<14}{'min':>8}{'median':>8}{'max':>8}")
-        for name, info in MAP_PARAMETERS.items():
+        width = max(14, *(len(MAP_PARAMETERS[name].label) + 2 for name in chosen.parameters()))
+        print(f"{'':<{width}}{'min':>8}{'median':>8}{'max':>8}")
+        for name in chosen.parameters():
+            info = MAP_PARAMETERS[name]
             values = chosen.value(name, band if info.per_band else None)
             finite = values[np.isfinite(values)]
             if len(finite) == 0:
                 row = ["-"] * 3
             else:
                 row = [info.text(float(v)) for v in (finite.min(), np.median(finite), finite.max())]
-            print(f"{info.label:<14}" + "".join(f"{cell:>8}" for cell in row))
+            print(f"{info.label:<{width}}" + "".join(f"{cell:>8}" for cell in row))
 
     shown = result.get(args.source)
+    if (args.plot or args.screenshot) and args.parameter not in shown.parameters():
+        print(
+            f"error: --parameter {args.parameter}: this map has none; it has "
+            f"{', '.join(shown.parameters())}",
+            file=sys.stderr,
+        )
+        return 1
     if args.json:
         path = Path(args.json)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1578,7 +1881,7 @@ def _cmd_auralize(args: argparse.Namespace) -> int:
 
 def _cmd_walkthrough(args: argparse.Namespace) -> int:
     from acoustic_spaces.spatial import from_output
-    from acoustic_spaces.walkthrough import render_walk, simulate_walk
+    from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
 
     room = _load_room(args.scene)
     if room is None or not _print_checks(room):
@@ -1642,6 +1945,20 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
         f"{len(walk.names)} places, {late}",
         file=sys.stderr,
     )
+    if walk.doppler or args.levels:
+        heard = (
+            sorted({s for s, _ in walk.result.responses}) if walk.kind == "listeners" else [None]
+        )
+        passes = [pass_by(walk, source) for source in heard]
+        for passing in passes:
+            print(_pass_by_text(passing))
+        if args.levels:
+            try:
+                _write_pass_by(Path(args.levels), passes)
+            except OSError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+            print(f"saved {args.levels}")
     mask = fmt.channel_mask() if hasattr(fmt, "channel_mask") else None
     _write_wet(Path(args.out), wet, rate, mask, args.normalize)
     if args.video:
@@ -1662,6 +1979,30 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
             + (", with the sound" if with_sound else "")
         )
     return 0
+
+
+def _pass_by_text(passing) -> str:
+    """'car at kerb: L_Amax 78.3 dB(A) at 2.33 s, SEL 81.0 dB(A), L_Aeq 75.2 dB(A)
+    over 4.0 s'."""
+    return (
+        f"{passing.source} at {passing.listener}: L_Amax {passing.max_a:.1f} dB(A) at "
+        f"{passing.max_time:.2f} s, SEL {passing.exposure_a:.1f} dB(A), L_Aeq "
+        f"{passing.equivalent_a:.1f} dB(A) over {passing.duration_s:.1f} s"
+    )
+
+
+def _write_pass_by(path: Path, passes) -> None:
+    """The levels over time of each pass-by (:class:`~acoustic_spaces.walkthrough.PassBy`)
+    as CSV: source, listener, time, the A-weighted level and the octave bands'."""
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+
+    bands = ",".join(f"L_{f}Hz_dB" for f in OCTAVE_BANDS_HZ)
+    lines = [f"source,listener,time_s,L_A_dB,{bands}"]
+    for passing in passes:
+        for t, a, row in zip(passing.times, passing.levels_a, passing.levels, strict=True):
+            values = ",".join(f"{v:.2f}" for v in row)
+            lines.append(f"{passing.source},{passing.listener},{t:.4f},{a:.2f},{values}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _cmd_play(args: argparse.Namespace) -> int:
@@ -2013,11 +2354,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--diffraction", choices=DIFFRACTION_MODES, help="override simulation.early.diffraction"
     )
     simulate.add_argument(
+        "--diffraction-reflections",
+        choices=DIFFRACTION_REFLECTIONS,
+        help="override simulation.early.diffraction_reflections: whether a path over an "
+        "edge may reflect on one side of it or on both",
+    )
+    simulate.add_argument(
+        "--parabolic-equation",
+        choices=PARABOLIC_EQUATIONS,
+        help="override simulation.early.parabolic_equation: outdoors in wind or temperature "
+        "gradients, the narrow-angle parabolic equation or the wide-angle one, for "
+        "gradients reaching hundreds of metres up over kilometres",
+    )
+    simulate.add_argument(
         "--coherent-band",
         choices=COHERENT_BANDS,
         metavar="HZ",
         help="override simulation.early.coherent_max_band_hz: the highest octave band in "
-        "which the early paths add in pressure (63, 125, 250, 500 or none)",
+        "which the early paths add in pressure (63 to 500, outdoors up to 8000, or none)",
     )
     simulate.add_argument(
         "--wave",
@@ -2037,6 +2391,13 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("cpu", "gpu", "auto"),
         help="override simulation.wave.device: step the wave solver's grid on the CPU, on "
         "a GPU (with the gpu extra) or on a hardware GPU when there is one",
+    )
+    simulate.add_argument(
+        "--wave-wind",
+        choices=("effective", "moving"),
+        help="override simulation.wave.wind: outdoors, the wave solver takes the wind as an "
+        "effective speed of sound or as air that moves (three to four times the work, on the "
+        "CPU)",
     )
     simulate.add_argument(
         "--late-device",
@@ -2063,6 +2424,7 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument(
         "--plot", action="store_true", help="save echogram and decay plots (needs viz extra)"
     )
+    _add_without_argument(simulate)
     simulate.set_defaults(func=_cmd_simulate)
 
     coverage = sub.add_parser(
@@ -2092,10 +2454,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--diffraction", choices=DIFFRACTION_MODES, help="override simulation.early.diffraction"
     )
     coverage.add_argument(
+        "--diffraction-reflections",
+        choices=DIFFRACTION_REFLECTIONS,
+        help="override simulation.early.diffraction_reflections",
+    )
+    coverage.add_argument(
+        "--parabolic-equation",
+        choices=PARABOLIC_EQUATIONS,
+        help="override simulation.early.parabolic_equation",
+    )
+    coverage.add_argument(
         "--coherent-band",
         choices=COHERENT_BANDS,
         metavar="HZ",
-        help="override simulation.early.coherent_max_band_hz (63, 125, 250, 500 or none)",
+        help="override simulation.early.coherent_max_band_hz (63 to 500, outdoors up to "
+        "8000, or none)",
     )
     coverage.add_argument("--length", type=float, help="override simulation.ir_length_s")
     _add_performance_arguments(coverage)
@@ -2115,6 +2488,7 @@ def build_parser() -> argparse.ArgumentParser:
     coverage.add_argument("--plot", metavar="PNG", help="save the map seen from above")
     coverage.add_argument("--screenshot", metavar="PNG", help="save the map in the 3D view")
     coverage.add_argument("--json", metavar="FILE", help="write every map as JSON")
+    _add_without_argument(coverage)
     coverage.set_defaults(func=_cmd_map)
 
     sweep = sub.add_parser("sweep", help="write an exponential sweep excitation (WAV and JSON)")
@@ -2335,6 +2709,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="also save the walk as a .gif, or an .mp4 with the sound in it (viz extra)",
     )
     walkthrough.add_argument("--fps", type=int, default=25, help="video frames per second")
+    walkthrough.add_argument(
+        "--levels",
+        metavar="CSV",
+        help="also save the level over time at the listener (dB(A) and per octave band), "
+        "with the source standing at each place; a walk with Doppler prints its L_Amax, "
+        "SEL and L_Aeq either way",
+    )
     walkthrough.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")
     walkthrough.add_argument("--equal-power", action="store_true", help=EQUAL_POWER_HELP)
     walkthrough.set_defaults(func=_cmd_walkthrough)

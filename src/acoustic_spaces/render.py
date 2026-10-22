@@ -6,6 +6,10 @@
   through a 48 kHz response.
 - :func:`auralize`: the sources of a simulation each playing their own signal, heard at
   one listener in a spatial format (mono, binaural, Ambisonics, loudspeakers), summed.
+  Outdoors in turbulence the early paths change as the eddies drift past: the signal
+  goes through a new moment of them every :data:`MOMENTS_PER_CORRELATION`-th of their
+  correlation time (at most every :data:`MOMENT_MIN_S`), crossfaded, so the sound
+  flickers as it does in gusty air.
 - :class:`Convolver`: the compiled real-time convolver, block by block. It divides the
   response into partitions that grow along it, from the block size up to 8192 frames,
   and multiplies in the frequency domain, so the only latency is the block itself;
@@ -17,6 +21,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import threading
 import time
@@ -42,6 +47,13 @@ _RESAMPLE_BETA = 9.0
 _MAX_PHASES = 4096
 #: Output samples resampled at once when the rates have no short ratio.
 _RESAMPLE_CHUNK = 1 << 15
+#: In turbulence, the moments of the eddies a signal goes through: this many per
+#: correlation time, and at most one every MOMENT_MIN_S seconds.
+MOMENTS_PER_CORRELATION = 16
+MOMENT_MIN_S = 0.05
+#: An early part's impulse response is cut where what follows holds less than this
+#: share of its energy.
+_EARLY_TAIL = 1e-12
 
 
 def _pow2(n: int) -> int:
@@ -200,12 +212,100 @@ def auralize(
         signal, rate = value if isinstance(value, tuple) else (value, sample_rate)
         dry = _as_2d(signal, f"signal of {source!r}").mean(axis=1) * gains.get(source, 1.0)
         dry = resample(dry, rate, sample_rate)
-        ir = result[source, listener].spatial_impulse_response(fmt, sample_rate, seed)
-        wet = convolve(dry, ir)
+        response = result[source, listener]
+        if flickers(response):
+            n = int(math.ceil(response.length_s * sample_rate))
+            gusts = gusts_for(response, (len(dry) + n) / sample_rate, seed)
+            wet = through_eddies(dry, response, fmt, sample_rate, seed, gusts, 0, len(dry) + n - 1)
+        else:
+            ir = response.spatial_impulse_response(fmt, sample_rate, seed)
+            wet = convolve(dry, ir)
         if len(wet) > len(mix):
             mix = np.concatenate([mix, np.zeros((len(wet) - len(mix), fmt.channels))])
         mix[: len(wet)] += wet
     return mix
+
+
+def flickers(response) -> bool:
+    """Whether ``response``'s early paths change as eddies drift past (outdoors in
+    turbulence, without the wave solver's bands). Anything without early paths does
+    not."""
+    early = getattr(response, "early", None)
+    return getattr(early, "wander", None) is not None and getattr(response, "wave", None) is None
+
+
+def gusts_for(response, duration_s: float, seed: int | None = None):
+    """The eddies' moments (:class:`~acoustic_spaces.engine.turbulence.Gusts`) for
+    ``duration_s`` seconds of sound through ``response``'s turbulence, drawn with
+    ``seed`` (default the response's)."""
+    from acoustic_spaces.engine.turbulence import Gusts
+
+    correlation = response.early.wander.correlation_s
+    step = max(correlation / MOMENTS_PER_CORRELATION, MOMENT_MIN_S)
+    count = int(math.ceil(duration_s / step)) + 2
+    return Gusts(correlation, step, count, response.seed if seed is None else seed)
+
+
+def _early_at(response, fmt, sample_rate: int, seed, gusts, moment: int) -> np.ndarray:
+    """The impulse response (samples, channels) of ``response``'s early paths alone at
+    moment ``moment`` of ``gusts``, cut where it has rung out."""
+    early = response.early
+    roots = early.wander_roots()
+    paths = early.at_moment(roots, gusts.draws(roots, early.point, moment))
+    alone = dataclasses.replace(response, early=paths, late=np.zeros_like(response.late))
+    ir = alone.spatial_impulse_response(fmt, sample_rate, seed)
+    tail = np.cumsum((ir**2).sum(axis=1)[::-1])[::-1]
+    kept = np.flatnonzero(tail > _EARLY_TAIL * max(float(tail[0]), 1e-300))
+    return ir[: int(kept[-1]) + 1 if len(kept) else 1]
+
+
+def through_eddies(
+    dry: np.ndarray, response, fmt, sample_rate: int, seed, gusts, begin: int, end: int
+) -> np.ndarray:
+    """(end - begin, channels) samples ``begin`` to ``end`` of the mono ``dry`` signal
+    played through ``response`` in ``fmt``, its early paths at the moments of the
+    eddies ``gusts`` has, each crossfaded into the next (raised cosines), its late part
+    as it is."""
+    from acoustic_spaces.engine.early import EarlyReflections
+
+    rate = float(sample_rate)
+    out = np.zeros((end - begin, fmt.channels))
+    quiet = dataclasses.replace(response, early=EarlyReflections.empty(response.late.shape[0]))
+    _add_window(out, dry, quiet.spatial_impulse_response(fmt, sample_rate, seed), begin, end, None)
+    step = gusts.step_s
+    first = max(int(math.floor(begin / rate / step)) - 1, 0)
+    last = min(int(math.ceil(end / rate / step)) + 1, gusts.count - 1)
+    for j in range(first, last + 1):
+        lo = 0 if j == 0 else int(math.floor((j - 1) * step * rate))
+        hi = end if j == gusts.count - 1 else int(math.ceil((j + 1) * step * rate)) + 1
+        lo, hi = max(lo, begin), min(hi, end)
+        if lo >= hi:
+            continue
+        t = np.arange(lo, hi) / rate - j * step
+        weight = 0.5 + 0.5 * np.cos(np.pi * np.clip(t / step, -1.0, 1.0))
+        if j == 0:
+            weight[t < 0] = 1.0
+        if j == gusts.count - 1:
+            weight[t > 0] = 1.0
+        ir = _early_at(response, fmt, sample_rate, seed, gusts, j)
+        _add_window(out, dry, ir, lo, hi, weight, begin)
+    return out
+
+
+def _add_window(out, dry, ir, lo: int, hi: int, weight, origin: int | None = None) -> None:
+    """Adds samples ``lo`` to ``hi`` of ``dry`` convolved with ``ir``, times ``weight``
+    (or 1), to ``out``, whose first sample is sample ``origin`` (default ``lo``)."""
+    origin = lo if origin is None else origin
+    first = max(lo - len(ir) + 1, 0)
+    piece = dry[first:hi]
+    if len(piece) == 0:
+        return
+    wet = convolve(piece, ir)[lo - first : hi - first]
+    if wet.ndim == 1:
+        wet = wet[:, None]
+    if weight is not None:
+        wet = wet * weight[: len(wet), None]
+    out[lo - origin : lo - origin + len(wet)] += wet
 
 
 class Convolver:

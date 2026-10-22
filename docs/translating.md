@@ -156,6 +156,11 @@ Glossary:
 | results, messages | resultados, mensajes | the editor's panels |
 | command line | línea de comandos | |
 | warning, error (message levels) | aviso, error | |
+| outdoors, outdoor scene | al aire libre, escena al aire libre | |
+| ground, sky | terreno, cielo | *terreno*, not *suelo*, which is a room's floor |
+| building, roof, footprint | edificio, cubierta, huella | |
+| barrier (noise barrier) | pantalla acústica, pantalla | |
+| margin, extent | margen, extensión | |
 
 ## Catalan
 
@@ -202,6 +207,9 @@ Glossary:
 | playback, head tracking | reproducció, seguiment del cap |
 | gain, delay, equalizer | guany, retard, equalitzador |
 | results, messages, warning | resultats, missatges, avís |
+| outdoors, ground, sky | a l'aire lliure, terreny, cel |
+| building, roof, footprint | edifici, coberta, petjada |
+| barrier, margin, extent | pantalla acústica, marge, extensió |
 
 ## Italian
 
@@ -251,6 +259,9 @@ Glossary:
 | gain, delay, equalizer | guadagno, ritardo, equalizzatore |
 | yaw, pitch, roll | imbardata, beccheggio, rollio |
 | results, messages, warning | risultati, messaggi, avviso |
+| outdoors, ground, sky | all'aperto, terreno, cielo |
+| building, roof, footprint | edificio, copertura, impronta |
+| barrier, margin, extent | barriera acustica, margine, estensione |
 
 ## German
 
@@ -302,6 +313,10 @@ Glossary:
 | gain, delay, equalizer | Verstärkung, Verzögerung, Equalizer |
 | yaw, pitch, roll | Gierwinkel, Nickwinkel, Rollwinkel |
 | results, messages, warning | Ergebnisse, Meldungen, Warnung |
+| outdoors, ground, sky | im Freien, Gelände, Himmel |
+| building, roof, footprint | Gebäude, Dach, Grundfläche |
+| barrier, noise barrier | Schallschirm, Lärmschutzwand |
+| margin, extent | Rand, Ausdehnung |
 
 ## Dutch
 
@@ -353,3 +368,6 @@ Glossary:
 | gain, delay, equalizer | versterking, vertraging, equalizer |
 | yaw, pitch, roll | gierhoek, stamphoek, rolhoek |
 | results, messages, warning | resultaten, meldingen, waarschuwing |
+| outdoors, ground, sky | buiten, grond, hemel |
+| building, roof, footprint | gebouw, dak, grondvlak |
+| barrier, margin, extent | geluidsscherm, marge, omvang |

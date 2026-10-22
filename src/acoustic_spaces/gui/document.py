@@ -9,6 +9,8 @@ reason. Undo and redo step through whole scenes, which are small.
 
 from __future__ import annotations
 
+import contextlib
+import dataclasses
 import filecmp
 import re
 import shutil
@@ -19,10 +21,13 @@ import numpy as np
 from pydantic import ValidationError
 from PySide6.QtCore import QObject, Signal
 
+from acoustic_spaces.directivity import array_files
 from acoustic_spaces.geometry import UNIT_SCALE, RoomMesh, extruded_mesh, points_inside
-from acoustic_spaces.i18n import _
+from acoustic_spaces.geometry.outdoor import SKY
+from acoustic_spaces.i18n import _, ngettext
 from acoustic_spaces.room import Room, matching_name
 from acoustic_spaces.scene import Scene
+from acoustic_spaces.scene.model import INDOOR_COHERENT_MAX_BAND_HZ, directivity_entries
 
 #: Heights above a floor for new sources and listeners (m): a talker, a seated ear.
 SOURCE_HEIGHT = 1.5
@@ -31,6 +36,18 @@ LISTENER_HEIGHT = 1.2
 HISTORY = 200
 #: Height of a drawn room when the scene had none to keep (m).
 DRAWN_HEIGHT = 3.0
+#: The ground of a new outdoor scene, metres across.
+NEW_GROUND_SIZE = 200.0
+#: Sizes (m) of the parts drawn in the plan of an outdoor scene, to change afterwards:
+#: a building's height, a barrier's, a belt of trees', a hedge's height and width, and
+#: a lone tree's height, where its crown starts and how wide it is.
+NEW_PART_SIZES = {
+    "building": {"height": 10.0},
+    "barrier": {"height": 3.0},
+    "belt": {"height": 12.0},
+    "hedge": {"height": 2.0, "width": 1.5},
+    "tree": {"height": 10.0, "base": 2.5, "crown_diameter": 8.0},
+}
 #: A dragged source or listener keeps its height above the floor while the floor under
 #: it rises or falls by at most this much (m) from one place to the next (a raked
 #: floor); past a bigger step (a balcony edge) it keeps its height instead.
@@ -74,6 +91,28 @@ def box_scene(size: tuple[float, float, float] = (8.0, 6.0, 3.0)) -> Scene:
                 {
                     "name": "listener",
                     "position": [length * 0.7, width * 0.5, LISTENER_HEIGHT],
+                    "orientation": {"yaw": 180.0},
+                }
+            ],
+        }
+    )
+
+
+def outdoor_scene(size: float = NEW_GROUND_SIZE) -> Scene:
+    """A new outdoor scene: a flat meadow ``size`` m across under an open sky, with a
+    source and a listener 50 m apart in the middle of it, facing each other."""
+    half = size / 2.0
+    return Scene.model_validate(
+        {
+            "name": "untitled",
+            "geometry": {"ground": {"extent": [[-half, -half], [half, half]]}},
+            "materials": {"meadow": {"impedance": "grass"}},
+            "default_material": "meadow",
+            "sources": [{"name": "source", "position": [-25.0, 0.0, SOURCE_HEIGHT]}],
+            "listeners": [
+                {
+                    "name": "listener",
+                    "position": [25.0, 0.0, LISTENER_HEIGHT],
                     "orientation": {"yaw": 180.0},
                 }
             ],
@@ -209,19 +248,26 @@ def _free_spots(plan: np.ndarray, mesh: RoomMesh, height: float, count: int) -> 
 
 
 def referenced_files(scene: Scene) -> list[Path]:
-    """The files ``scene`` uses: its model, material tables, source directivities (an
-    inline array's element's too) and HRTFs."""
-    files = [scene.geometry.file] if scene.geometry.file is not None else []
-    files += [m.file for m in scene.materials.values() if m.file is not None]
-    specs = [s.directivity for s in scene.sources if not isinstance(s.directivity, str)]
-    specs += [
-        d.array.element
-        for d in specs
-        if d.array is not None and not isinstance(d.array.element, str)
-    ]
-    files += [d.file for d in specs if d.file is not None]
-    files += [o.hrtf for o in scene.outputs if o.hrtf is not None]
-    return [Path(f) for f in files]
+    """The files ``scene`` uses (:meth:`~acoustic_spaces.scene.Scene.files`): its model,
+    terrain and map of buildings, material tables, source directivities (with the files
+    an array names for its element) and HRTFs."""
+    return scene.files()
+
+
+def _in_units(item: dict, scale: float) -> dict:
+    """``item``, a building's, barrier's, vegetation's or zone's scene entry with its
+    corners, points and sizes in metres, with them in the geometry's units (``scale``
+    metres each)."""
+    out = dict(item)
+    for key in ("footprint", "path", "polygon"):
+        if key in out:
+            out[key] = [_rounded(np.asarray(p, dtype=float) / scale) for p in out[key]]
+    if "tree" in out:
+        out["tree"] = _rounded(np.asarray(out["tree"], dtype=float) / scale)
+    for key in ("height", "base", "width", "crown_diameter"):
+        if key in out:
+            out[key] = round(float(out[key]) / scale, DECIMALS)
+    return out
 
 
 def unique_name(stem: str, taken: set[str]) -> str:
@@ -250,6 +296,9 @@ class Document(QObject):
         self._undo: list[tuple[str, Scene]] = []
         self._redo: list[tuple[str, Scene]] = []
         self._saved = scene
+        #: The sources and listeners hidden in the 3D view and the plan, as (kind, name):
+        #: how the editor shows the scene, not part of it.
+        self.hidden: set[tuple[str, str]] = set()
 
     @classmethod
     def open(cls, path: str | Path) -> Document:
@@ -341,7 +390,7 @@ class Document(QObject):
         old = self.base_dir.resolve()
         if folder == old:
             return
-        moved: dict[str, str] = {}
+        copies: dict[Path, Path] = {}
         for file in referenced_files(self.scene):
             try:
                 relative = file.resolve().relative_to(old)
@@ -350,32 +399,65 @@ class Document(QObject):
             copy = folder / relative
             if copy.exists() and not filecmp.cmp(file, copy, shallow=False):
                 continue
-            copy.parent.mkdir(parents=True, exist_ok=True)
-            if not copy.exists():
-                shutil.copy2(file, copy)
-            moved[str(file)] = str(copy)
-        if not moved:
+            copies[file] = copy
+        # An array's YAML file names its element's file relative to itself: it moves only
+        # along with every file it names, or its copy would look for them in vain.
+        while True:
+            moving = {file.resolve() for file in copies}
+            stays = [f for f in copies if any(n.resolve() not in moving for n in array_files(f))]
+            if not stays:
+                break
+            for file in stays:
+                del copies[file]
+        if not copies:
             return
+        made: list[Path] = []
+        folders: list[Path] = []
+        try:
+            for file, copy in copies.items():
+                if copy.exists():
+                    continue
+                folders += [p for p in (copy.parent, *copy.parent.parents) if not p.exists()]
+                copy.parent.mkdir(parents=True, exist_ok=True)
+                made.append(copy)
+                shutil.copy2(file, copy)
+            self._use_copies({str(file): str(copy) for file, copy in copies.items()}, folder)
+        except Exception:
+            # A save that fails leaves nothing behind in the new folder.
+            for copy in made:
+                copy.unlink(missing_ok=True)
+            for made_folder in sorted(folders, key=lambda p: len(p.parts), reverse=True):
+                with contextlib.suppress(OSError):
+                    made_folder.rmdir()
+            raise
+
+    def _use_copies(self, moved: dict[str, str], folder: Path) -> None:
+        """Point the scene at the copies of its files (``moved``, original to copy) in
+        ``folder``."""
         data = self.scene.to_data()
         if data["geometry"].get("file") in moved:
             data["geometry"]["file"] = moved[data["geometry"]["file"]]
+        terrain = data["geometry"].get("ground", {}).get("terrain", {})
+        if terrain.get("file") in moved:
+            terrain["file"] = moved[terrain["file"]]
+        buildings = data["geometry"].get("buildings_file", {})
+        if buildings.get("file") in moved:
+            buildings["file"] = moved[buildings["file"]]
         for material in data["materials"].values():
             if material.get("file") in moved:
                 material["file"] = moved[material["file"]]
         for source in data["sources"]:
-            directivity = source.get("directivity")
-            if not isinstance(directivity, dict):
-                continue
-            element = directivity.get("array", {}).get("element")
-            for spec in (directivity, element):
-                if isinstance(spec, dict) and spec.get("file") in moved:
+            for spec in directivity_entries(source.get("directivity")):
+                if spec.get("file") in moved:
                     spec["file"] = moved[spec["file"]]
         for output in data["outputs"]:
             if output.get("hrtf") in moved:
                 output["hrtf"] = moved[output["hrtf"]]
         scene = Scene.model_validate(data, context={"base_dir": folder})
-        # The same scene with other copies of its files: no undo step.
-        self.scene, self.room = scene, Room.from_scene(scene, reuse=self.room)
+        # The same scene with other copies of its files: no undo step. The copies hold
+        # the same bytes, so the loaded geometry and directivities stay (an array's take
+        # seconds to add up again).
+        self.scene, self.room = scene, dataclasses.replace(self.room, scene=scene)
         self.changed.emit()
 
     # -- common edits -----------------------------------------------------------------
@@ -397,11 +479,55 @@ class Document(QObject):
 
     def update_point(self, kind: str, index: int, **fields) -> None:
         """Change fields of a source or listener (name, position, orientation...)."""
+        old = getattr(self.scene, kind)[index].name
 
         def change(data: dict) -> None:
             data[kind][index].update(fields)
 
         self.edit(_("change source") if kind == "sources" else _("change listener"), change)
+        if (kind, old) in self.hidden and fields.get("name", old) != old:
+            self.hidden.discard((kind, old))
+            self.hidden.add((kind, fields["name"]))
+
+    def set_enabled(self, kind: str, indices, enabled: bool) -> None:
+        """Use the sources or listeners (``kind`` is "sources" or "listeners") at
+        ``indices`` in simulations and maps, or leave them out (``enabled: false``), in
+        one step of the history."""
+        items = getattr(self.scene, kind)
+        changing = [k for k in indices if items[k].in_use != enabled]
+        if not changing:
+            return
+        count = len(changing)
+        if kind == "sources":
+            text = (
+                ngettext("use source", "use {count} sources", count)
+                if enabled
+                else ngettext("leave out source", "leave out {count} sources", count)
+            )
+        else:
+            text = (
+                ngettext("use listener", "use {count} listeners", count)
+                if enabled
+                else ngettext("leave out listener", "leave out {count} listeners", count)
+            )
+
+        def change(data: dict) -> None:
+            for k in changing:
+                if enabled:
+                    data[kind][k].pop("enabled", None)
+                else:
+                    data[kind][k]["enabled"] = False
+
+        self.edit(text.format(count=count), change)
+
+    def set_hidden(self, kind: str, indices, hidden: bool) -> None:
+        """Hide the sources or listeners at ``indices`` in the 3D view and the plan, or
+        show them again; this changes how the editor shows the scene, not the scene."""
+        names = {(kind, getattr(self.scene, kind)[k].name) for k in indices}
+        if hidden:
+            self.hidden |= names
+        else:
+            self.hidden -= names
 
     def remove_point(self, kind: str, index: int) -> None:
         source = kind == "sources"
@@ -418,6 +544,8 @@ class Document(QObject):
         """New corners (m, seen from above) for a floor plan room. A box becomes a floor
         plan with the same walls, so its material assignments still apply."""
         geometry = self.scene.geometry
+        if geometry.ground is not None:
+            raise EditError(_("the scene is outdoors: draw a floor plan to replace it"))
         if geometry.file is not None:
             raise EditError(_("the room is a model file: draw a floor plan to replace it"))
         scale = UNIT_SCALE[geometry.units or "m"]
@@ -476,10 +604,22 @@ class Document(QObject):
             matching_name(label, names) is None for label in mesh.labels
         ):
             areas = self.room.area_by_material()
+            if self.room.outdoor is not None:
+                areas.pop(SKY, None)  # an opening: walls of it would let everything out
             default = max(areas, key=areas.get) if areas else next(iter(self.scene.materials))
 
         def change(data: dict) -> None:
             data["geometry"] = {"floor_plan": plan, "height": height}
+            # Outdoors the early paths may add in pressure in every band; a room's take
+            # the default.
+            early = data.get("simulation", {}).get("early", {})
+            if (early.get("coherent_max_band_hz") or 0) > INDOOR_COHERENT_MAX_BAND_HZ:
+                del early["coherent_max_band_hz"]
+            # The wind and temperature, the weather classes, and the insertion loss of
+            # buildings, barriers and vegetation, are for outdoor scenes.
+            data.pop("atmosphere", None)
+            data.pop("long_term", None)
+            data.get("simulation", {}).pop("insertion_loss_of", None)
             for (kind, k), position in moved.items():
                 data[kind][k]["position"] = position
             if default is not None:
@@ -487,6 +627,108 @@ class Document(QObject):
 
         self.edit(_("draw floor plan"), change)
         return [getattr(self.scene, kind)[k].name for kind, k in moved]
+
+    # -- outdoors -------------------------------------------------------------------
+
+    def add_part(self, kind: str, item: dict) -> int:
+        """Add a building, a barrier or vegetation (``kind`` "buildings", "barriers" or
+        "vegetation") to an outdoor scene: ``item`` is its scene entry with its corners,
+        points and sizes in metres, which go into the geometry's units. Returns its
+        index."""
+        what = {
+            "buildings": _("add building"),
+            "barriers": _("add barrier"),
+            "vegetation": _("add vegetation"),
+        }
+        entry = _in_units(item, UNIT_SCALE[self.scene.geometry.units or "m"])
+        self.edit(what[kind], lambda data: data["geometry"].setdefault(kind, []).append(entry))
+        return len(getattr(self.scene.geometry, kind)) - 1
+
+    def add_zone(self, polygon) -> int:
+        """Add a ground zone with these corners (m) to an outdoor scene; it takes the
+        ground's material until one is assigned to it. Returns its index."""
+        entry = _in_units({"polygon": polygon}, UNIT_SCALE[self.scene.geometry.units or "m"])
+        self.edit(
+            _("add zone"),
+            lambda data: data["geometry"]["ground"].setdefault("zones", []).append(entry),
+        )
+        return len(self.scene.geometry.ground.zones) - 1
+
+    def add_weather_zone(self, polygon) -> int:
+        """Add a weather zone with these corners (m) to an outdoor scene; it keeps the
+        scene's weather until given wind or temperature of its own. Returns its index."""
+        entry = _in_units({"polygon": polygon}, UNIT_SCALE[self.scene.geometry.units or "m"])
+
+        def change(data: dict) -> None:
+            atmosphere = data.get("atmosphere") or {}
+            atmosphere.setdefault("zones", []).append(entry)
+            data["atmosphere"] = atmosphere
+
+        self.edit(_("add weather zone"), change)
+        return len(self.scene.atmosphere.zones) - 1
+
+    def set_extent(self, extent) -> None:
+        """Set where the ground of an outdoor scene ends: ``[[x_min, y_min], [x_max,
+        y_max]]`` in the geometry's units, or None for the margin round what stands on
+        it (or the whole terrain)."""
+
+        def change(data: dict) -> None:
+            ground = data["geometry"]["ground"]
+            if extent is None:
+                ground.pop("extent", None)
+            else:
+                ground["extent"] = [_rounded(corner) for corner in extent]
+
+        self.edit(_("change ground"), change)
+
+    def set_terrain(self, path: str | Path | None) -> None:
+        """Make the ground of an outdoor scene follow the heights in ``path`` (an Esri
+        ASCII grid, or x y z points on a grid), or flat again with None. A terrain sets
+        the ground's size, so a set extent goes with it."""
+
+        def change(data: dict) -> None:
+            ground = data["geometry"]["ground"]
+            if path is None:
+                ground.pop("terrain", None)
+            else:
+                ground["terrain"] = {"file": str(Path(path).resolve())}
+                ground.pop("extent", None)
+
+        self.edit(_("set terrain") if path is not None else _("remove terrain"), change)
+
+    def set_buildings_file(
+        self,
+        path: str | Path | None,
+        height: str | float = "height",
+        name: str = "name",
+        default_height: float | None = None,
+    ) -> None:
+        """Add the buildings of the GeoJSON file ``path`` to an outdoor scene, each as
+        high as its property ``height`` says (or that height for all of them, and
+        ``default_height`` where the property is missing) and named by its property
+        ``name``; None drops the file and its buildings."""
+        geometry = self.scene.geometry
+        gone = set(geometry.building_names()[len(geometry.buildings or []) :])
+
+        def change(data: dict) -> None:
+            if path is None:
+                data["geometry"].pop("buildings_file", None)
+                settings = data["simulation"]
+                kept = [n for n in settings.get("insertion_loss_of") or [] if n not in gone]
+                if kept:
+                    settings["insertion_loss_of"] = kept
+                else:
+                    settings.pop("insertion_loss_of", None)
+                return
+            spec = {"file": str(Path(path).resolve()), "height": height, "name": name}
+            if default_height is not None:
+                spec["default_height"] = default_height
+            data["geometry"]["buildings_file"] = spec
+
+        self.edit(
+            _("add buildings from a map") if path is not None else _("remove the map's buildings"),
+            change,
+        )
 
     def assign(self, surface: str, material: str | None) -> None:
         """Give the surfaces named ``surface`` a material (None removes the assignment)."""
@@ -580,6 +822,8 @@ __all__ = [
     "DRAWN_HEIGHT",
     "FOLLOW_STEP",
     "LISTENER_HEIGHT",
+    "NEW_GROUND_SIZE",
+    "NEW_PART_SIZES",
     "SOURCE_HEIGHT",
     "Document",
     "EditError",
@@ -587,6 +831,7 @@ __all__ = [
     "floor_height",
     "follow_floor",
     "model_scene",
+    "outdoor_scene",
     "plan_corners",
     "referenced_files",
     "room_height",

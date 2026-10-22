@@ -40,7 +40,7 @@ import numpy as np
 from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.compare import JND
 from acoustic_spaces.engine import reweight
-from acoustic_spaces.engine.coherent import EarlyPressure
+from acoustic_spaces.engine.coherent import EarlyPressure, filtered_bands
 from acoustic_spaces.engine.late import MAX_GROUPS
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.simulate import _as_room, simulate
@@ -232,7 +232,7 @@ class _Band:
         every = reweight.path_counts(early, face_group, groups)
         counts = every[keep]
         pressure = None
-        if band < response.coherent_bands and len(early):
+        if band < filtered_bands(early) and len(early):
             # Paths that reflect alike re-weight alike: their pressure is summed once.
             alike, label = np.unique(every, axis=0, return_inverse=True)
             weights = np.zeros((len(early), len(alike)))
@@ -308,8 +308,13 @@ def _lowest(room: Room, materials: Sequence[str], low: float) -> np.ndarray:
 def _default_materials(room: Room) -> list[str]:
     used = sorted(set(np.asarray(room.face_materials)[np.asarray(room.face_materials) >= 0]))
     names = [room.material_names[k] for k in used]
-    # Openings reflect nothing: there is nothing to fit.
-    return [n for n in names if min(room.scene.materials[n].coefficients("octave")[0]) < 1.0]
+    # Openings reflect nothing: there is nothing to fit; an impedance gives its own.
+    materials = room.scene.materials
+    return [
+        n
+        for n in names
+        if min(materials[n].coefficients("octave")[0]) < 1.0 and materials[n].impedance is None
+    ]
 
 
 def jacobian_of(function, x: np.ndarray, lowest: np.ndarray, upper: np.ndarray) -> np.ndarray:
@@ -415,6 +420,8 @@ def calibrate(
         raise ValueError("calibration works in octave bands: set simulation bands to octave")
     if sim.wave.enabled:
         raise ValueError("calibration re-weights rays; switch the wave solver off for it")
+    if room.outdoor is not None:
+        raise ValueError("calibration fits a room's absorption to how it decays; not outdoors")
     # The re-weighted echogram has no directions: no LF, LFC, IACC or directional decay times.
     fitted = [n for n in JND if n in iso3382.PARAMETERS]
     unknown = [n for n in parameters if n not in fitted]
@@ -447,6 +454,12 @@ def calibrate(
             "name the ones to fit"
         )
     reweight.face_groups(room, materials)  # each known, and named once
+    grounds = [m for m in materials if scene.materials[m].impedance is not None]
+    if grounds:
+        raise ValueError(
+            f"{', '.join(grounds)} take their absorption from an impedance; calibration "
+            "fits absorption coefficients"
+        )
     on_faces = {room.material_names[k] for k in np.unique(room.face_materials) if k >= 0}
     unused = [m for m in materials if m not in on_faces]
     if unused:

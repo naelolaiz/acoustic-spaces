@@ -14,6 +14,7 @@ from acoustic_spaces.engine.impedance import (
     random_incidence_absorption,
 )
 from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.engine.refraction import Profile, Rays
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.wave import (
     COURANT,
@@ -24,6 +25,7 @@ from acoustic_spaces.engine.wave import (
     WAVE_BANDS_HZ,
     WaveResponse,
     _first_order,
+    _probe_points,
     absorption_of_impedance,
     admittance,
     band_grid,
@@ -33,6 +35,7 @@ from acoustic_spaces.engine.wave import (
     wave_responses,
 )
 from acoustic_spaces.geometry import box_mesh
+from acoustic_spaces.scene.model import WaveStage
 from acoustic_spaces.spatial import Ambisonics, Binaural, Loudspeakers, Mono
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
@@ -43,11 +46,24 @@ FS = 48_000
 STENCILS = pytest.mark.parametrize("stencil", [7, 19])
 
 
-def _solver(size, admittances, source, probes, cell=0.1, mesh=None, branches=None, stencil=7):
+def _solver(
+    size,
+    admittances,
+    source,
+    probes,
+    cell=0.1,
+    mesh=None,
+    branches=None,
+    stencil=7,
+    speed=None,
+    flow=None,
+):
     """A wave solver in a box from (0, 0, 0) to ``size`` (or in ``mesh``, within it), laid
     out as wave_responses does, and its sample rate. ``admittances(mesh)`` gives each
     face's constant admittance, each face its own material; ``branches``, a list of
-    (face, Admittance), adds the branches of those admittances."""
+    (face, Admittance), adds the branches of those admittances; ``speed(centres)`` gives
+    the cells' speed of sound over the grid's, from their centres (n, 3), and
+    ``flow(centres)`` the air's motion along x and y (cells per step)."""
     mesh = box_mesh(size) if mesh is None else mesh
     bvh = _native.Bvh(mesh.vertices, mesh.faces)
     origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
@@ -72,8 +88,36 @@ def _solver(size, admittances, source, probes, cell=0.1, mesh=None, branches=Non
         np.asarray(probes, dtype=float).reshape(-1, 3),
         threads=1,
         stencil=stencil,
+        speed=_speeds(speed, origin, cell, shape),
+        **_flows(flow, origin, cell, shape),
     )
     return solver, rate
+
+
+def _centres(origin, cell, shape) -> np.ndarray:
+    """The centres (n, 3) of a grid's cells, x fastest."""
+    x, y, z = (origin[a] + (np.arange(shape[a]) + 0.5) * cell for a in range(3))
+    zz, yy, xx = np.meshgrid(z, y, x, indexing="ij")
+    return np.column_stack([xx.reshape(-1), yy.reshape(-1), zz.reshape(-1)])
+
+
+def _speeds(speed, origin, cell, shape):
+    """The ratios ``speed(centres)`` of the cells of a grid, as the solver takes them."""
+    if speed is None:
+        return None
+    return np.ascontiguousarray(speed(_centres(origin, cell, shape)), dtype=np.float32)
+
+
+def _flows(flow, origin, cell, shape) -> dict:
+    """The solver's arguments for the air's motion ``flow(centres)`` (cells per step
+    along x and y), none for still air."""
+    if flow is None:
+        return {}
+    fx, fy = flow(_centres(origin, cell, shape))
+    return {
+        "flow_x": np.ascontiguousarray(fx, dtype=np.float32),
+        "flow_y": np.ascontiguousarray(fy, dtype=np.float32),
+    }
 
 
 def _courant(stencil: int) -> float:
@@ -755,12 +799,27 @@ def test_duct_end_reflects_as_its_frequency_dependent_admittance_says(stencil: i
     assert measured[np.argmin(np.abs(f - 100))] < 0.25 < measured[np.argmin(np.abs(f - 40))]
 
 
-def _plate(h: float, pad: int, layer: int, seconds: float, damping: float = LAYER_DAMPING):
+def _plate(
+    h: float,
+    pad: int,
+    layer: int,
+    seconds: float,
+    damping: float = LAYER_DAMPING,
+    speed=None,
+    flow=None,
+    block: bool = False,
+):
     """The pressure at three points round a rigid 8 x 6 m plate in the open, with
     ``pad`` more cells round the grid than wave_responses gives it and ``layer`` cells
-    of matched layer."""
+    of matched layer; ``speed`` and ``flow`` as for :func:`_solver`; ``block`` stands a
+    rigid block 0.8 x 3 x 2 m on the plate, across x from 4.6 m."""
     vertices = np.array([[0, 0, 0], [8, 0, 0], [8, 6, 0], [0, 6, 0]], float)
-    bvh = _native.Bvh(vertices, np.array([[0, 1, 2], [0, 2, 3]], np.int64))
+    faces = np.array([[0, 1, 2], [0, 2, 3]], np.int64)
+    if block:
+        solid = box_mesh((0.8, 3.0, 2.0))
+        faces = np.vstack([faces, solid.faces + len(vertices)])
+        vertices = np.vstack([vertices, solid.vertices + [4.6, 1.5, 0.0]])
+    bvh = _native.Bvh(vertices, faces)
     source = np.array([2.0, 2.0, 1.5])
     listeners = np.array([[6.0, 4.0, 1.2], [4.0, 3.0, 3.0], [7.5, 1.0, 0.5]])
     points = np.vstack([source, listeners])
@@ -770,7 +829,7 @@ def _plate(h: float, pad: int, layer: int, seconds: float, damping: float = LAYE
     shape = np.ceil((high - origin) / h).astype(int) + 2 + pad
     solver = _native.WaveSolver(
         bvh,
-        np.zeros(2, np.int64),
+        np.zeros(len(faces), np.int64),
         np.zeros(1),
         np.zeros((0, 3)),
         np.zeros(0, np.int64),
@@ -781,6 +840,8 @@ def _plate(h: float, pad: int, layer: int, seconds: float, damping: float = LAYE
         listeners,
         layer=layer,
         layer_damping=damping,
+        speed=_speeds(speed, origin, h, shape),
+        **_flows(flow, origin, h, shape),
     )
     rate = C / (COURANT * h)
     return solver.run(_drive(rate, h, int(seconds * rate))), solver, rate
@@ -866,3 +927,382 @@ def test_wave_solver_checks_its_boundaries() -> None:
             probes,
             layer=3,
         )
+
+
+# -- a speed of sound per cell (outdoors, in wind and temperature) ------------------------
+
+
+@STENCILS
+def test_one_speed_of_sound_everywhere_changes_nothing(stencil: int) -> None:
+    # Every cell at the grid's speed: the run is the one without a speed per cell, to the
+    # bit, walls with frequency-dependent admittances included.
+    fit = fit_admittance([0.1, 0.3, 0.5, 0.6], 8, C / (_courant(stencil) * 0.1))
+
+    def run(speed):
+        solver, rate = _solver(
+            (2.0, 1.6, 1.3),
+            lambda mesh: [0.05] * len(mesh.faces),
+            [0.5, 0.6, 0.7],
+            [[1.5, 1.1, 0.4], [0.3, 0.3, 0.3]],
+            branches=[(0, fit)],
+            stencil=stencil,
+            speed=speed,
+        )
+        return solver.run(_drive(rate, 0.1, 800))
+
+    assert np.array_equal(run(lambda centres: np.ones(len(centres))), run(None))
+
+
+def test_a_slower_speed_of_sound_arrives_later_as_loud() -> None:
+    # 0.8 times the grid's speed in every cell: the sound arrives 1.25 times later, as
+    # loud (the source's strength follows its cell's speed: 1 / r either way), and its
+    # velocity, from the Courant number at the listener, keeps its size next to the
+    # pressure. 2 m away in a large room, its walls' sound well after the direct sound's.
+    def run(ratio):
+        solver, rate = _solver(
+            (12.0, 12.0, 12.0),
+            lambda mesh: [1.0] * len(mesh.faces),
+            [5.0, 6.0, 6.0],
+            _probe_points(np.array([7.0, 6.0, 6.0]), 0.1),
+            speed=None if ratio == 1.0 else lambda centres: np.full(len(centres), ratio),
+        )
+        field = _first_order(
+            solver.run(_drive(rate, 0.1, int(0.03 * rate))), [True] * 7, "l", COURANT * ratio
+        )
+        signal, delay = source_signal(rate, 0.1)
+        arrival = 2.0 / (C * ratio) * rate + delay
+        n, half = np.arange(len(field)), 0.012 * rate
+        window = np.where(
+            abs(n - arrival) < half, 0.5 + 0.5 * np.cos(np.pi * (n - arrival) / half), 0
+        )
+        n_fft = 1 << 13
+        f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+        impulse = np.fft.rfft(signal / (4 * math.pi * COURANT**2 / 0.1), n_fft)
+        pressure, velocity = (
+            np.abs(np.fft.rfft(window * field[:, k], n_fft) / impulse)[(f > 80) & (f < 300)]
+            for k in (0, 1)
+        )
+        peak = int(np.argmax(np.abs(field[:, 0])))
+        return (peak - delay) / rate, 2.0 * pressure.mean(), velocity.mean() / pressure.mean()
+
+    fast, slow = run(1.0), run(0.8)
+    assert slow[0] / fast[0] == pytest.approx(1.25, rel=0.01)
+    assert fast[1] == pytest.approx(1.0, abs=0.05) and slow[1] == pytest.approx(fast[1], rel=0.03)
+    assert slow[2] == pytest.approx(fast[2], rel=0.03)
+
+
+def test_matched_layer_stays_stable_with_a_speed_of_sound_per_cell() -> None:
+    ones = lambda centres: np.ones(len(centres))  # noqa: E731
+    same, _, _ = _plate(0.5, LAYER_CELLS, LAYER_CELLS, 0.5, speed=ones)
+    assert np.array_equal(same, _plate(0.5, LAYER_CELLS, LAYER_CELLS, 0.5)[0])
+
+    # Half the grid's speed at the bottom and all of it from 2 m up, and a fifth slower
+    # on one side: still no growth over 9,500 steps.
+    def speed(centres):
+        rising = np.clip(0.5 + 0.25 * (centres[:, 2] + 3.0) / 2.5, 0.5, 1.0)
+        return rising * np.where(centres[:, 0] < 4.0, 0.8, 1.0)
+
+    pressure, _, rate = _plate(0.5, LAYER_CELLS, LAYER_CELLS, 8.0, speed=speed)
+    tenth = pressure.shape[1] // 10
+    levels = [np.mean(pressure[:, k * tenth : (k + 1) * tenth] ** 2) for k in range(10)]
+    assert max(levels[6:]) < 1e-11 * levels[0]
+
+
+def _warming(table) -> Room:
+    """Rigid ground, the source and the listener 30 m up and 60 m apart, in still air
+    whose temperature changes with height as ``table`` (rows of height, °C, wind)."""
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"ground": {"extent": [[-8, -8], [68, 8]], "sky": 60}},
+                "materials": {"hard": {"absorption": [0.01] * 8, "scattering": 0.0}},
+                "assignments": {"ground": "hard"},
+                "atmosphere": {"table": table},
+                "sources": [{"name": "s", "position": [0, 0, 30]}],
+                "listeners": [{"name": "l", "position": [60, 0, 30]}],
+            }
+        )
+    )
+
+
+def test_a_speed_of_sound_that_grows_with_height_bends_the_sound_as_the_rays_do() -> None:
+    # Air warming from 10 to 130 °C over 60 m (the speed of sound from 337 to 402 m/s)
+    # bends the sound down, and cooling as much bends it up: the direct sound arrives
+    # from 5 degrees above or below, as the eigenrays do (the 7-point stencil, slower
+    # along the grid's axes, bends it some 5 % more).
+    elevations = []
+    for table in ([[0, 10, 0], [60, 130, 0]], [[0, 130, 0], [60, 10, 0]]):
+        room = _warming(table)
+        atmosphere = room.scene.atmosphere
+        (wave,), info = wave_responses(
+            TraceModel.from_room(room),
+            np.array([0.0, 0.0, 30.0]),
+            [[60.0, 0.0, 30.0]],
+            ["l"],
+            max_band_hz=63,
+            length_s=0.25,
+            sample_rate=FS,
+            speed_of_sound=room.speed_of_sound(),
+        )
+        assert info["wave_speed_min_m_s"] == pytest.approx(337.3, abs=0.1)
+        assert info["wave_speed_max_m_s"] == pytest.approx(402.5, abs=0.1)
+        assert "wave_gpu" not in info
+        rays = Rays(Profile.of(atmosphere, room.scene.air.temperature_c), 30.0)
+        eigenrays = rays.eigenrays(30.0, 60.0, 0)
+        assert len(eigenrays) == 1
+        # The direct sound, 30 to 130 Hz, round its time along the eigenray (the ground's
+        # reflection comes 50 ms after it).
+        n = len(wave.signals)
+        f = np.fft.rfftfreq(4 * n, 1.0 / wave.rate)
+        gain = np.clip((f - 30) / 15, 0, 1) * np.clip((130 - f) / 30, 0, 1)
+        field = np.fft.irfft(
+            np.fft.rfft(wave.signals, 4 * n, axis=0) * gain[:, None], 4 * n, axis=0
+        )
+        arrival = int(round(eigenrays.time[0] * wave.rate))
+        w, x, y, z = field[arrival - int(0.008 * wave.rate) : arrival + int(0.008 * wave.rate)].T
+        intensity = np.array([w @ x, w @ y, w @ z])  # towards where the sound comes from
+        elevation = math.degrees(math.atan2(intensity[2], math.hypot(*intensity[:2])))
+        elevations.append(elevation)
+        assert elevation == pytest.approx(-math.degrees(eigenrays.arrival[0]), rel=0.12)
+    assert elevations[0] > 4.5 and elevations[1] < -4.5
+
+
+# -- moving air (simulation.wave.wind: moving) --------------------------------------------
+
+
+@STENCILS
+def test_air_that_moves_nowhere_changes_nothing(stencil: int) -> None:
+    # Moving air whose every cell is still: the run is the still air's, to the bit, walls
+    # with frequency-dependent admittances included.
+    fit = fit_admittance([0.1, 0.3, 0.5, 0.6], 8, C / (_courant(stencil) * 0.1))
+
+    def run(flow):
+        solver, rate = _solver(
+            (2.0, 1.6, 1.3),
+            lambda mesh: [0.05] * len(mesh.faces),
+            [0.5, 0.6, 0.7],
+            [[1.5, 1.1, 0.4], [0.3, 0.3, 0.3]],
+            branches=[(0, fit)],
+            stencil=stencil,
+            flow=flow,
+        )
+        assert solver.flowing == (flow is not None)
+        return solver.run(_drive(rate, 0.1, 800))
+
+    still = lambda centres: (np.zeros(len(centres)), np.zeros(len(centres)))  # noqa: E731
+    assert np.array_equal(run(still), run(None))
+
+
+def _band_gain(n: int, rate: float, band) -> np.ndarray:
+    """A pass band from band[0] to band[1] (Hz), its edges ramps 10 and 30 Hz wide, at the
+    frequencies of an rfft of n points."""
+    f = np.fft.rfftfreq(n, 1.0 / rate)
+    return np.clip((f - band[0]) / 10, 0, 1) * np.clip((band[1] - f) / 30, 0, 1)
+
+
+def _band_lag(a: np.ndarray, b: np.ndarray, rate: float, band=(40.0, 150.0)) -> float:
+    """How much later a is than b (s) in ``band``, from the peak of their correlation
+    interpolated 64 times finer."""
+    n = 1 << int(math.ceil(math.log2(2 * len(a))))
+    gain = _band_gain(n, rate, band)
+    spectrum = np.fft.rfft(a, n) * np.conj(np.fft.rfft(b, n)) * gain**2
+    xc = np.fft.irfft(spectrum, 64 * n)
+    k = int(np.argmax(xc))
+    return (k if k < 32 * n else k - 64 * n) / (64.0 * rate)
+
+
+def _band_db(a: np.ndarray, b: np.ndarray, rate: float, band=(40.0, 150.0)) -> float:
+    """How much louder a is than b (dB) in ``band``."""
+    n = 1 << int(math.ceil(math.log2(2 * len(a))))
+    gain = _band_gain(n, rate, band)
+    energy = [np.sum(np.abs(np.fft.rfft(x, n) * gain) ** 2) for x in (a, b)]
+    return 10.0 * math.log10(energy[0] / energy[1])
+
+
+def test_moving_air_carries_the_sound_downwind() -> None:
+    # Air moving along +x at a tenth of the speed of sound: 6 m downwind the sound comes
+    # 6 / (c + v) after it leaves, 6 m upwind 6 / (c - v), as loud as in still air (on
+    # the wind's axis the convected Green's function is 1 / r either way); across the
+    # wind it comes 6 / (c sqrt(1 - M^2)) after, louder by 1 / sqrt(1 - M^2). Against
+    # the still air's run, whose grid disperses alike, in the band the grid is for.
+    mach = 0.1
+
+    def run(flow):
+        solver, rate = _solver(
+            (20.0, 20.0, 20.0),
+            lambda mesh: [1.0] * len(mesh.faces),
+            [10.0, 10.0, 10.0],
+            [[16.0, 10.0, 10.0], [4.0, 10.0, 10.0], [10.0, 16.0, 10.0]],
+            cell=0.2,
+            flow=flow,
+        )
+        return solver.run(_drive(rate, 0.2, int(0.04 * rate))), rate
+
+    still, rate = run(None)
+    shift = mach * COURANT  # cells per step
+    moving, _ = run(lambda centres: (np.full(len(centres), shift), np.zeros(len(centres))))
+    beta = math.sqrt(1.0 - mach**2)
+    expected = [
+        6.0 / (C * (1 + mach)) - 6.0 / C,
+        6.0 / (C * (1 - mach)) - 6.0 / C,
+        6.0 / (C * beta) - 6.0 / C,
+    ]
+    louder = [0.0, 0.0, -20.0 * math.log10(beta)]
+    for k, want in enumerate(expected):
+        assert _band_lag(moving[k], still[k], rate) == pytest.approx(want, abs=1.5e-5)
+        assert _band_db(moving[k], still[k], rate) == pytest.approx(louder[k], abs=0.05)
+
+
+def test_moving_air_stays_stable_round_walls_and_in_the_matched_layer() -> None:
+    # A wind that grows with height and turns, blowing into a block's face and over a
+    # plate in the open: no growth over 9,500 steps, the sound gone into the matched
+    # layer down to single precision's rounding.
+    def flow(centres):
+        rising = np.clip((centres[:, 2] + 0.5) / 3.0, 0.0, 1.0)
+        return 0.06 * rising, 0.03 * rising * np.sign(centres[:, 1] - 3.0)
+
+    pressure, solver, _ = _plate(0.5, LAYER_CELLS, LAYER_CELLS, 8.0, flow=flow, block=True)
+    assert solver.flowing and solver.layer_cells > 0
+    tenth = pressure.shape[1] // 10
+    levels = [np.mean(pressure[:, k * tenth : (k + 1) * tenth] ** 2) for k in range(10)]
+    assert max(levels[6:]) < 1e-11 * levels[0]
+
+
+def test_wave_solver_checks_the_air_s_motion() -> None:
+    mesh = box_mesh((2.0, 2.0, 2.0))
+    bvh = _native.Bvh(mesh.vertices, mesh.faces)
+    shape = (26, 26, 26)
+    cells = shape[0] * shape[1] * shape[2]
+
+    def make(**flow):
+        return _native.WaveSolver(
+            bvh,
+            np.zeros(len(mesh.faces), np.int64),
+            np.zeros(1),
+            np.zeros((0, 3)),
+            np.zeros(0, np.int64),
+            np.array([-0.2, -0.2, -0.2]),
+            0.1,
+            *shape,
+            np.array([1.0, 1.0, 1.0]),
+            np.array([[1.2, 1.1, 0.9]]),
+            **flow,
+        )
+
+    still = np.zeros(cells, np.float32)
+    assert make(flow_x=still, flow_y=still).flowing and not make().flowing
+    with pytest.raises(ValueError, match="go together"):
+        make(flow_x=still)
+    with pytest.raises(ValueError, match="one shift of the air per cell"):
+        make(flow_x=still[:-1], flow_y=still[:-1])
+    for fast in (0.5, -0.5, np.nan):
+        flow = still.copy()
+        flow[13 + shape[0] * (13 + shape[1] * 13)] = fast  # the room's middle
+        with pytest.raises(ValueError, match="less than half a cell per step"):
+            make(flow_x=flow, flow_y=still)
+    # Outside the air (here the corner, out of the room) the air's motion is not read.
+    flow = still.copy()
+    flow[0] = 0.9
+    assert make(flow_x=still, flow_y=flow).flowing
+
+
+def _windy_ground(wind: float, model: str, temperature=None) -> Room:
+    """Rigid ground, the source 1.5 m up and listeners 6 m downwind and upwind of it, in
+    a uniform wind ``wind`` (m/s) along +x taken as ``model``; ``temperature``, a table
+    of heights and °C, for still air warming with height."""
+    data = {
+        "geometry": {"ground": {"extent": [[-10, -6], [10, 6]], "sky": 5}},
+        "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+        "default_material": "hard",
+        "sources": [{"name": "s", "position": [0, 0, 1.5]}],
+        "listeners": [
+            {"name": "down", "position": [6, 0, 1.5]},
+            {"name": "up", "position": [-6, 0, 1.5]},
+        ],
+        "simulation": {"wave": {"enabled": True, "max_band_hz": 63, "wind": model}},
+    }
+    if wind:
+        data["atmosphere"] = {
+            "wind": {"speed_m_s": wind, "direction_deg": 0.0, "profile": "constant"}
+        }
+    if temperature is not None:
+        data["atmosphere"] = {"table": [[z, t, 0.0] for z, t in temperature]}
+    return Room.from_scene(Scene.model_validate(data))
+
+
+def _windy_run(room: Room, wind: str, per_wavelength: float = 8.0, device="cpu"):
+    said = []
+    responses, info = wave_responses(
+        TraceModel.from_room(room),
+        np.array([0.0, 0.0, 1.5]),
+        np.array([listener.position for listener in room.scene.listeners], dtype=float),
+        [listener.name for listener in room.scene.listeners],
+        max_band_hz=63,
+        length_s=0.06,
+        sample_rate=FS,
+        speed_of_sound=room.speed_of_sound(),
+        points_per_wavelength=per_wavelength,
+        wind=wind,
+        device=device,
+        say=said.append,
+        label="s",
+    )
+    return responses, info, said
+
+
+def test_still_air_takes_no_moving_air() -> None:
+    # Without wind (or with temperature alone) the air does not move: the moving model's
+    # run is the effective one's, to the bit.
+    for room_of in (
+        lambda model: _windy_ground(0.0, model),
+        lambda model: _windy_ground(0.0, model, temperature=[[0, 25], [20, 15]]),
+    ):
+        effective, info, _ = _windy_run(room_of("effective"), "effective")
+        moving, moving_info, said = _windy_run(room_of("moving"), "moving")
+        assert "wave_moving_air" not in moving_info and "the air moving" not in said[0]
+        for a, b in zip(effective, moving, strict=True):
+            assert a.rate == b.rate and np.array_equal(a.signals, b.signals)
+
+
+def test_wave_responses_carry_the_sound_with_the_wind() -> None:
+    # A uniform wind of 15 m/s along +x over rigid ground: against the still air's run
+    # on the same grid (as fine as sound against the wind needs), the moving air's sound
+    # arrives 6 / (c + v) - 6 / c sooner downwind and 6 / (c - v) - 6 / c later upwind.
+    still_room = _windy_ground(0.0, "effective")
+    c = still_room.speed_of_sound()
+    still, _, _ = _windy_run(still_room, "effective", 8.0 * c / (c - 15.0))
+    moving, info, said = _windy_run(_windy_ground(15.0, "moving"), "moving")
+    assert info["wave_moving_air"] == 1.0
+    assert info["wave_cells"] > 0 and "the air moving" in said[0]
+    assert info["wave_speed_min_m_s"] == pytest.approx(c - 15.0, abs=0.01)
+    assert info["wave_speed_max_m_s"] == pytest.approx(c + 15.0, abs=0.01)
+    for a, b, want in zip(
+        moving, still, (6.0 / (c + 15.0) - 6.0 / c, 6.0 / (c - 15.0) - 6.0 / c), strict=True
+    ):
+        assert a.rate == b.rate and a.cell == b.cell
+        lag = _band_lag(a.signals[:, 0], b.signals[:, 0], a.rate, band=(40.0, 90.0))
+        assert lag == pytest.approx(want, abs=2.5e-5)
+        louder = _band_db(a.signals[:, 0], b.signals[:, 0], a.rate, band=(40.0, 90.0))
+        assert louder == pytest.approx(0.0, abs=0.1)
+
+
+def test_moving_air_stays_on_the_cpu(monkeypatch) -> None:
+    # The GPU steps still air only: asked for it (here as if there were one), moving air
+    # says so and runs on the CPU, as it does there.
+    from acoustic_spaces.engine import wave as wave_module
+
+    room = _windy_ground(15.0, "moving")
+    cpu, _, _ = _windy_run(room, "moving")
+    monkeypatch.setattr(wave_module, "use_gpu", lambda device, steps=None: True)
+    asked, info, said = _windy_run(room, "moving", device="gpu")
+    assert "wave_gpu" not in info and info["wave_moving_air"] == 1.0
+    assert "the air moving (on the CPU: the GPU steps still air)" in said[0]
+    for a, b in zip(cpu, asked, strict=True):
+        assert np.array_equal(a.signals, b.signals)
+
+
+def test_the_wave_stage_takes_its_wind_model() -> None:
+    assert WaveStage().wind == "effective"
+    assert _windy_ground(15.0, "moving").scene.simulation.wave.wind == "moving"
+    with pytest.raises(ValueError, match="wind"):
+        WaveStage.model_validate({"wind": "sideways"})

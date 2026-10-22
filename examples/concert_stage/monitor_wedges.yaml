@@ -1,0 +1,5 @@
+# Written by make_model.py: see there.
+element: {file: wedge.csv}
+elements:
+- position: [0.0, 0.45, 0.0]
+- position: [0.0, -0.45, 0.0]

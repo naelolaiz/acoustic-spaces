@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from acoustic_spaces.engine.coverage import MAP_PARAMETERS
+from acoustic_spaces.engine.coverage import MAP_PARAMETERS, ROOM_MAP_PARAMETERS
 from acoustic_spaces.gui.inspector import BAND_LABELS
 from acoustic_spaces.gui.numbers import number_text
 from acoustic_spaces.gui.results_view import PLOT_SIZE
@@ -27,6 +27,7 @@ from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 
 #: The source list entry for all sources playing together.
 ALL_SOURCES = N_("All sources")
+ROOM_PARAMETERS = list(ROOM_MAP_PARAMETERS)
 
 
 class MapPanel(QWidget):
@@ -51,12 +52,8 @@ class MapPanel(QWidget):
         self.parameter.setToolTip(
             _("The room parameter the map shows; rest on an entry in the list for its meaning")
         )
-        for name, info in MAP_PARAMETERS.items():
-            self.parameter.addItem(_(info.label), name)
-            self.parameter.setItemData(
-                self.parameter.count() - 1, _(info.description), Qt.ItemDataRole.ToolTipRole
-            )
-        self.parameter.setCurrentIndex(list(MAP_PARAMETERS).index("sti"))
+        self._parameters(ROOM_PARAMETERS)
+        self.parameter.setCurrentIndex(ROOM_PARAMETERS.index("sti"))
         self.band = QComboBox()
         self.band.addItems(BAND_LABELS)
         self.band.setCurrentIndex(OCTAVE_BANDS_HZ.index(1000))
@@ -123,8 +120,27 @@ class MapPanel(QWidget):
             if shown is not None and self.source.findData(shown) >= 0:
                 self.source.setCurrentIndex(self.source.findData(shown))
         self.source.blockSignals(False)
+        # An outdoor map has more parameters; the one on show stays when it has it.
+        names = ROOM_PARAMETERS if result is None else result.parameters()
+        current = self.name()
+        self.parameter.blockSignals(True)
+        self._parameters(names)
+        self.parameter.setCurrentIndex(
+            names.index(current) if current in names else names.index("sti")
+        )
+        self.parameter.blockSignals(False)
         self._note("" if result is not None else _("Run the coverage map (F6) to see it here."))
         self._shown()
+
+    def _parameters(self, names: list[str]) -> None:
+        """List these parameters (keys of ``MAP_PARAMETERS``), each with its meaning."""
+        self.parameter.clear()
+        for name in names:
+            info = MAP_PARAMETERS[name]
+            self.parameter.addItem(_(info.label), name)
+            self.parameter.setItemData(
+                self.parameter.count() - 1, _(info.description), Qt.ItemDataRole.ToolTipRole
+            )
 
     def mark_stale(self, stale: bool) -> None:
         """Say whether the scene changed since the map was computed."""

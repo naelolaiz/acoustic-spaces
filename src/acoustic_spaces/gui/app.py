@@ -41,16 +41,19 @@ from PySide6.QtWidgets import (
 from acoustic_spaces import __version__, i18n
 from acoustic_spaces._extras import install_hint
 from acoustic_spaces.engine import ray_device, reweight, tuning
-from acoustic_spaces.examples import example_path, list_examples
+from acoustic_spaces.examples import example_groups, example_path, list_examples
 from acoustic_spaces.geometry import SUPPORTED_SUFFIXES, points_inside
 from acoustic_spaces.gui.activity import Activity
 from acoustic_spaces.gui.document import (
     LISTENER_HEIGHT,
+    NEW_GROUND_SIZE,
+    NEW_PART_SIZES,
     SOURCE_HEIGHT,
     Document,
     EditError,
     box_scene,
     model_scene,
+    outdoor_scene,
 )
 from acoustic_spaces.gui.inspector import BAND_LABELS, Inspector, label_text
 from acoustic_spaces.gui.levels import rich_lines
@@ -62,13 +65,44 @@ from acoustic_spaces.gui.results_view import ResultsPanel
 from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.tune_dialog import TuneDialog
 from acoustic_spaces.gui.viewport import Viewport
-from acoustic_spaces.gui.worker import MapJob, SimulationJob, TuneJob
+from acoustic_spaces.gui.worker import ExportJob, MapJob, SimulationJob, TuneJob
 from acoustic_spaces.i18n import N_, _, ngettext, pgettext
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
 TITLE = N_("Acoustic Spaces editor")
 SCENE_FILTER = N_("Scenes (*.yaml *.yml)")
+#: What the messages say of a part drawn in the plan, by the plan view's purpose;
+#: {count} its corners or points and the rest its sizes (:data:`NEW_PART_SIZES`).
+DRAWN = {
+    "building": N_(
+        "New building with {count} corners, {height:g} m high; change its height under Geometry."
+    ),
+    "barrier": N_(
+        "New barrier along {count} points, {height:g} m high; change its height under Geometry."
+    ),
+    "belt": N_(
+        "New belt of trees with {count} corners, {height:g} m high, with dense foliage; "
+        "change its height under Geometry and the rest in the scene file."
+    ),
+    "hedge": N_(
+        "New hedge along {count} points, {width:g} m wide and {height:g} m high, with "
+        "dense foliage; change its height under Geometry and the rest in the scene file."
+    ),
+    "tree": N_(
+        "New tree {height:g} m high, its crown {crown_diameter:g} m across from {base:g} m "
+        "up, with dense foliage; change its height under Geometry and the rest in the "
+        "scene file."
+    ),
+    "zone": N_(
+        "New ground zone with {count} corners; give its surface a material of its own in "
+        "the scene tree."
+    ),
+    "weather": N_(
+        "New weather zone with {count} corners; choose it under Weather of in the scene's "
+        "entry to give it wind and temperature of its own."
+    ),
+}
 # Translators: {patterns} is the list of model file patterns, such as *.obj *.dxf.
 MODEL_FILTER = N_("Models ({patterns})")
 MODEL_PATTERNS = " ".join("*" + s for s in SUPPORTED_SUFFIXES)
@@ -102,6 +136,7 @@ class MainWindow(QMainWindow):
         #: result, scene, face groups and their materials; None when it cannot be.
         self._traced = None
         self._job_groups = None
+        self._export_folder, self._export_stale = None, False
         #: The room the leaks on show were found in, and the leaks; None before any.
         self._found_leaks = None
         self.coverage = None
@@ -197,6 +232,10 @@ class MainWindow(QMainWindow):
         self.activity = Activity(self.cancel_action)
         self.statusBar().insertPermanentWidget(2, self.activity)
         self.tree.selected.connect(lambda kind, key: self.select(kind, key, from_tree=True))
+        # After the click that changed them: the tree is filled anew.
+        queued = Qt.ConnectionType.QueuedConnection
+        self.tree.enabled_changed.connect(self._use_points, queued)
+        self.tree.shown_changed.connect(self._show_points, queued)
         self.viewport.picked.connect(self._picked)
         self.viewport.place.connect(self._place)
         self.viewport.moved.connect(self._move_point)
@@ -205,9 +244,11 @@ class MainWindow(QMainWindow):
         self.plan.moved.connect(self._move_point)
         self.plan.corners_changed.connect(self._set_corners)
         self.plan.drawn.connect(self._drawn)
+        self.plan.part_drawn.connect(self._part_drawn)
         self.plan.message.connect(self.log)
         self.inspector.failed.connect(self._refused)
         self.inspector.select.connect(self.select)
+        self.inspector.draw.connect(self.start_drawing)
         self.results.pair_changed.connect(lambda *_: self._draw())
         self.results.paths_toggled.connect(self._paths_toggled)
         self.results.export_requested.connect(self.export_results)
@@ -266,6 +307,15 @@ class MainWindow(QMainWindow):
             self.new_floor_plan,
             None,
             _("Draw the floor plan of a new room, corner by corner"),
+        )
+        self.new_outdoor_action = a(
+            _("New o&utdoor scene…"),
+            self.new_outdoor,
+            None,
+            _(
+                "Start a new scene on open ground, to draw buildings, barriers, vegetation "
+                "and ground zones on, or to set a terrain and buildings from a map"
+            ),
         )
         self.open_action = a(
             _("&Open…"), self.open_dialog, keys.Open, _("Open a scene file (YAML)")
@@ -434,28 +484,25 @@ class MainWindow(QMainWindow):
         bar = self.menuBar()
         file = bar.addMenu(_("&File"))
         file.addActions(
-            [self.new_action, self.new_plan_action, self.new_model_action, self.open_action]
+            [
+                self.new_action,
+                self.new_plan_action,
+                self.new_model_action,
+                self.new_outdoor_action,
+                self.open_action,
+            ]
         )
         self.examples_menu = file.addMenu(_("Open e&xample"))
         try:
             examples = list_examples()
         except FileNotFoundError:
             examples = []
-        for example in examples:
-            # The examples' titles and descriptions are in the catalogs (tools/catalog.py).
-            action = self.examples_menu.addAction(pgettext("example", example.title))
-            tip = pgettext("example", example.description).split(". ")[0]
-            if example.missing_extra:
-                # Opening it would only say how to install what reading its model needs.
-                action.setEnabled(False)
-                # Translators: {extra} is the name of an optional part of the
-                # installation (gui, ifc...); {hint} says how to install it.
-                tip = _("Needs the {extra} extra: {hint}").format(
-                    extra=example.missing_extra, hint=install_hint(example.missing_extra)
-                )
-            action.setStatusTip(tip)
-            action.setToolTip(tip)
-            action.triggered.connect(lambda *_, path=example.path: self.open_example(path))
+        for group, members in example_groups(examples):
+            # The groups' titles are marked in acoustic_spaces.examples.
+            submenu = self.examples_menu.addMenu(_(group))
+            submenu.setToolTipsVisible(True)
+            for example in members:
+                self._example_action(submenu, example)
         self.examples_menu.setEnabled(bool(examples))
         file.addSeparator()
         file.addActions([self.save_action, self.save_as_action, self.export_action])
@@ -595,7 +642,7 @@ class MainWindow(QMainWindow):
     def _changed(self) -> None:
         if not self._valid(self.selection):
             self.selection = ("scene", None)
-        self.tree.rebuild(self.document.room, self.selection)
+        self.tree.rebuild(self.document.room, self.selection, self.document.hidden)
         self.inspector.show_item(*self.selection)
         self._reweight()
         self.results.mark_stale(self._stale(), reweighted=self._reweighted())
@@ -640,7 +687,11 @@ class MainWindow(QMainWindow):
 
     def _summary(self) -> None:
         room = self.document.room
-        if room.volume_m3:
+        if room.outdoor is not None:
+            x0, y0, x1, y1 = room.outdoor.extent
+            # Translators: the status bar's summary of an outdoor scene.
+            text = fmt(_("outdoors, {area:,.0f} m² of ground"), area=(x1 - x0) * (y1 - y0))
+        elif room.volume_m3:
             k = OCTAVE_BANDS_HZ.index(1000)
             rt = room.reverberation_time("eyring", air_absorption=True)[k]
             text = fmt(
@@ -685,6 +736,22 @@ class MainWindow(QMainWindow):
 
     def _refused(self, message: str) -> None:
         self.log(_("Not changed: {reason}").format(reason=message), "error")
+
+    def _use_points(self, kind: str, indices: list[int], enabled: bool) -> None:
+        """A tick in the scene tree: use these sources or listeners in simulations, or
+        leave them out."""
+        try:
+            self.document.set_enabled(kind, indices, enabled)
+        except EditError as exc:
+            self._refused(str(exc))
+            self._changed()  # the ticks as they were
+
+    def _show_points(self, kind: str, indices: list[int], shown: bool) -> None:
+        """An eye in the scene tree: show these sources or listeners in the 3D view and
+        the plan, or hide them."""
+        self.document.set_hidden(kind, indices, not shown)
+        self.tree.rebuild(self.document.room, self.selection, self.document.hidden)
+        self._draw()
 
     # -- selection and the 3D view ------------------------------------------------
 
@@ -731,8 +798,11 @@ class MainWindow(QMainWindow):
         paths = None if response is None else response.early
         coverage = None if self._map_stale() else self.map_panel.shown_in_3d()
         leaks = self._leaks() if self.leaks_action.isChecked() else None
-        self.viewport.show_room(self.document.room, self.selection, paths, coverage, leaks)
-        self.plan.show_room(self.document.room, self.selection)
+        hidden = self.document.hidden
+        self.viewport.show_room(
+            self.document.room, self.selection, paths, coverage, leaks, hidden=hidden
+        )
+        self.plan.show_room(self.document.room, self.selection, hidden)
 
     def _leaks(self):
         """Where rays escape from the room, found again when its geometry, materials or
@@ -848,8 +918,45 @@ class MainWindow(QMainWindow):
         self.views.setCurrentWidget(self.plan)
         self.plan.start_drawing()
 
+    def start_drawing(self, purpose: str) -> None:
+        """Draw a building, a barrier, vegetation, a ground zone or a weather zone (one
+        of the plan view's purposes) in the plan view."""
+        self.views.setCurrentWidget(self.plan)
+        self.plan.start_drawing(purpose)
+
+    def _part_drawn(self, purpose: str, points: list) -> None:
+        """A building, barrier, vegetation or zone drawn in the plan: into the scene,
+        with the usual sizes (:data:`NEW_PART_SIZES`), to change under Geometry."""
+        sizes = NEW_PART_SIZES.get(purpose, {})
+        try:
+            if purpose == "building":
+                self.document.add_part("buildings", {"footprint": points, **sizes})
+            elif purpose == "barrier":
+                self.document.add_part("barriers", {"path": points, **sizes})
+            elif purpose == "belt":
+                self.document.add_part("vegetation", {"footprint": points, **sizes})
+            elif purpose == "hedge":
+                self.document.add_part("vegetation", {"path": points, **sizes})
+            elif purpose == "tree":
+                self.document.add_part("vegetation", {"tree": points[0], **sizes})
+            elif purpose == "zone":
+                self.document.add_zone(points)
+            elif purpose == "weather":
+                self.document.add_weather_zone(points)
+            else:  # pragma: no cover - the plan view draws nothing else
+                return
+        except EditError as exc:
+            self._refused(str(exc))
+            return
+        self.select("scene" if purpose == "weather" else "geometry")
+        self.log(fmt(_(DRAWN[purpose]), count=len(points), **sizes))
+
     def _drawn(self, corners: list) -> None:
-        if self.document.scene.geometry.file is not None and not self.confirm_replace_model():
+        geometry = self.document.scene.geometry
+        if geometry.ground is not None:
+            if not self.confirm_replace_outdoors():
+                return
+        elif geometry.file is not None and not self.confirm_replace_model():
             return
         default = self.document.scene.default_material
         try:
@@ -892,6 +999,19 @@ class MainWindow(QMainWindow):
             _(
                 "Replace the model file with the drawn floor plan? Material assignments to the "
                 "model's surfaces will no longer match anything."
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
+    def confirm_replace_outdoors(self) -> bool:
+        answer = QMessageBox.question(
+            self,
+            _(TITLE),
+            _(
+                "Replace the outdoor scene (its ground, buildings, barriers and model file) with "
+                "the drawn floor plan? Material assignments to their surfaces will no longer "
+                "match anything."
             ),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
@@ -993,6 +1113,25 @@ class MainWindow(QMainWindow):
         self._attach(Document(box_scene()))
         self.log(_("New box room; change its size under Geometry."))
 
+    def new_outdoor(self) -> None:
+        """A new outdoor scene: open ground to draw buildings, barriers and vegetation
+        on, or to set a terrain and buildings from a map."""
+        if not self._discard_ok():
+            return
+        self.from_example = False
+        self._attach(Document(outdoor_scene()))
+        self.select("geometry")
+        self.log(
+            fmt(
+                _(
+                    "New outdoor scene: a meadow {size:g} m across. Draw buildings, barriers, "
+                    "vegetation and ground zones from the Geometry form, or set a terrain "
+                    "and buildings from a map there."
+                ),
+                size=NEW_GROUND_SIZE,
+            )
+        )
+
     def new_floor_plan(self) -> None:
         """A new room whose floor plan the user draws in the plan view."""
         if not self._discard_ok():
@@ -1045,6 +1184,23 @@ class MainWindow(QMainWindow):
     def open_example(self, path: str | Path) -> bool:
         """Open a bundled example; saving it asks where to keep a copy."""
         return self.open_file(path, example=True)
+
+    def _example_action(self, menu, example) -> None:
+        """An example's entry in File > Open example."""
+        # The examples' titles and descriptions are in the catalogs (tools/catalog.py).
+        action = menu.addAction(pgettext("example", example.title))
+        tip = pgettext("example", example.description).split(". ")[0]
+        if example.missing_extra:
+            # Opening it would only say how to install what reading its model needs.
+            action.setEnabled(False)
+            # Translators: {extra} is the name of an optional part of the
+            # installation (gui, ifc...); {hint} says how to install it.
+            tip = _("Needs the {extra} extra: {hint}").format(
+                extra=example.missing_extra, hint=install_hint(example.missing_extra)
+            )
+        action.setStatusTip(tip)
+        action.setToolTip(tip)
+        action.triggered.connect(lambda *_, path=example.path: self.open_example(path))
 
     def save(self) -> bool:
         if self.document.path is None or self.from_example:
@@ -1128,7 +1284,11 @@ class MainWindow(QMainWindow):
             with busy():
                 if particles:
                     kind, key = self.selection
-                    source = room.scene.sources[key if kind == "sources" else 0].name
+                    sources = room.scene.sources
+                    if kind == "sources":
+                        source = sources[key].name
+                    else:  # the first one in use
+                        source = next((s.name for s in sources if s.in_use), sources[0].name)
                     traced = trace_particles(room, source, count=PARTICLE_COUNT)
                 paths = None if response is None else response.early
                 export_gltf(room, path, paths=paths, particles=traced)
@@ -1384,6 +1544,9 @@ class MainWindow(QMainWindow):
         return self.job.kind if self.job is not None else "simulation"
 
     def _failed(self, message: str) -> None:
+        if self._job_kind() == "export":
+            self._error(_("Could not export"), message)
+            return
         text = {
             "coverage map": _("The coverage map failed: {reason}"),
             "tuning": _("The tuning failed: {reason}"),
@@ -1396,6 +1559,7 @@ class MainWindow(QMainWindow):
             {
                 "coverage map": _("Coverage map cancelled."),
                 "tuning": _("Tuning cancelled."),
+                "export": _("Export cancelled."),
             }.get(self._job_kind(), _("Simulation cancelled."))
         )
 
@@ -1420,26 +1584,33 @@ class MainWindow(QMainWindow):
         if self.result is None:
             self.log(_("Nothing to export yet: run the simulation (F5) first."))
             return
+        if self.job is not None:
+            self.log(_("Wait for the current run to end, then export."))
+            return
         folder = QFileDialog.getExistingDirectory(self, _("Folder for the impulse responses"))
         if folder:
             self.write_results(folder)
 
-    def write_results(self, folder: str | Path) -> dict | None:
-        from acoustic_spaces.results import REPORT_FILE, write_results
+    def write_results(self, folder: str | Path) -> None:
+        """Write the last run's responses into ``folder`` in the background; the messages
+        say when it is done."""
+        if self.job is not None or self.result is None:
+            return
+        job = ExportJob(self.result, Path(folder))
+        job.done.connect(self._exported)
+        self._export_folder, self._export_stale = folder, self._stale()
+        self._start(job, _("Exporting the impulse responses to {folder}…").format(folder=folder))
 
-        try:
-            with busy():
-                report = write_results(self.result, folder, progress=self.log)
-        except (OSError, ValueError, ImportError) as exc:
-            self._error(_("Could not export"), str(exc))
-            return None
+    def _exported(self, report: dict) -> None:
+        from acoustic_spaces.results import REPORT_FILE
+
         files = sum(len(r["outputs"]) for r in report["responses"])
         self.log(
             ngettext(
                 "Wrote {count} impulse response file and {report} to {folder}",
                 "Wrote {count} impulse response files and {report} to {folder}",
                 files,
-            ).format(count=files, report=REPORT_FILE, folder=folder)
+            ).format(count=files, report=REPORT_FILE, folder=self._export_folder)
         )
         if report["peak"] > 1.0:
             self.log(
@@ -1448,9 +1619,8 @@ class MainWindow(QMainWindow):
                     "to a source); scale them before playing them back."
                 )
             )
-        if self._stale():
+        if self._export_stale:
             self.log(_("These results are from before the latest changes to the scene."), "warning")
-        return report
 
     def save_map(self) -> None:
         if self.coverage is None:

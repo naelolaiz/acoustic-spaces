@@ -13,9 +13,13 @@ from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, Resolution, exact_c
 EXACT_OCTAVE_HZ = tuple(1000.0 * 10.0 ** (0.3 * k) for k in range(-4, 4))
 
 
+#: Speed of sound in air at 0 °C (m/s).
+SOUND_SPEED_0C = 331.3
+
+
 def speed_of_sound(temperature_c: float) -> float:
     """Speed of sound in air (m/s) at the given temperature."""
-    return 331.3 * math.sqrt(1.0 + temperature_c / 273.15)
+    return SOUND_SPEED_0C * math.sqrt(1.0 + temperature_c / 273.15)
 
 
 def absorption_db_per_m(

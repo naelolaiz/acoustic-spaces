@@ -8,6 +8,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -16,16 +17,22 @@ from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine import tuning
 from acoustic_spaces.engine import wave as wave_stage
 from acoustic_spaces.engine.coherent import band_count
+from acoustic_spaces.engine.crests import CrestDiffraction
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
 from acoustic_spaces.engine.grazing import apply_grazing
-from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.engine.model import TraceModel, free_field_energy
+from acoustic_spaces.engine.refracted import direct_times, refraction_for
 from acoustic_spaces.engine.response import Response
+from acoustic_spaces.engine.turbulence import Eddies
 from acoustic_spaces.geometry import distance_to_surface
 from acoustic_spaces.parameters import RoomParameters
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene import Scene
 from acoustic_spaces.scene.model import Simulation as SimulationSettings
 from acoustic_spaces.spatial.directions import fibonacci_sphere
+
+if TYPE_CHECKING:
+    from acoustic_spaces.engine.long_term import LongTermLevels
 
 #: Slot width of the late energy (s).
 TIME_STEP = 1e-3
@@ -45,6 +52,16 @@ class SimulationResult:
     responses: dict[tuple[str, str], Response]
     #: Per source: rays, escaped rays, receiver radius, seed and timings.
     details: dict[str, dict[str, float]] = field(default_factory=dict)
+    #: The buildings, barriers and vegetation of an outdoor scene that it was also run
+    #: without (:func:`~acoustic_spaces.engine.insertion.simulate`), and their insertion
+    #: loss per (source, listener) in each octave band (dB): the level without them less
+    #: the level with them. Empty otherwise.
+    removed: tuple[str, ...] = ()
+    insertion_loss: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)
+    #: The levels over a long term, when the scene has weather classes (``long_term``;
+    #: :func:`~acoustic_spaces.engine.long_term.simulate`): the responses are the scene's
+    #: own weather's, this holds each class's run and the levels combined. None otherwise.
+    long_term: LongTermLevels | None = None
 
     def parameters(self) -> dict[tuple[str, str], RoomParameters]:
         """ISO 3382-1 parameters of every response."""
@@ -65,6 +82,33 @@ def _towards(source: np.ndarray, listener: np.ndarray) -> np.ndarray | None:
     d = np.asarray(source, dtype=float) - np.asarray(listener, dtype=float)
     length = float(np.linalg.norm(d))
     return d / length if length > 0 else None
+
+
+def response_length(room: Room, length_s: float, starts, ends) -> float:
+    """How long responses last (s): ``length_s`` (``simulation.ir_length_s``). Outdoors,
+    where sources and listeners can lie hundreds of metres apart, ``length_s`` counts
+    from the latest direct sound, from any of ``starts`` (n, 3) to any of ``ends``
+    (m, 3), so no response is cut off before its sound arrives."""
+    if room.outdoor is None:
+        return length_s
+    starts = np.atleast_2d(np.asarray(starts, dtype=float))
+    ends = np.atleast_2d(np.asarray(ends, dtype=float))
+    farthest = float(np.max(np.linalg.norm(starts[:, None] - ends[None], axis=2)))
+    return farthest / room.speed_of_sound() + length_s
+
+
+def check_late_method(room: Room, settings: SimulationSettings) -> None:
+    """Raise ``ValueError`` if the statistical late method cannot run in ``room``: it
+    needs a closed room, and outdoors there is no diffuse field to reckon it from."""
+    if settings.late.method != "statistical":
+        return
+    if room.outdoor is not None:
+        raise ValueError(
+            "the statistical late method needs a closed room; outdoors, use the stochastic "
+            "ray tracer (simulation.late.method: stochastic_ray_tracing)"
+        )
+    if room.volume_m3 is None:
+        raise ValueError("the statistical late method needs a closed model")
 
 
 def _transition(settings: SimulationSettings, volume_m3: float | None) -> float:
@@ -91,8 +135,13 @@ def _as_room(room: Room | Scene | str | Path) -> Room:
 
 
 def _pick(items, names, kind):
+    """The items named in ``names``, or with no names those in use: not left out with
+    ``enabled: false``."""
     if names is None:
-        return list(items)
+        used = [item for item in items if item.in_use]
+        if items and not used:
+            raise ValueError(f"every {kind} is left out (enabled: false)")
+        return used
     by_name = {item.name: item for item in items}
     missing = [n for n in names if n not in by_name]
     if missing:
@@ -123,26 +172,57 @@ class _Edges:
         name: str,
         orientation: np.ndarray,
         coherent: int = 0,
+        both_sides: bool = False,
+        threads: int = 0,
     ) -> EdgeDiffraction | None:
         """Diffraction of the sound of source ``name`` at ``source``, coherent in the
-        lowest ``coherent`` bands; None when off."""
+        lowest ``coherent`` bands, with paths that reflect on both sides of an edge when
+        ``both_sides``, and the sound over the crests of a terrain, on ``threads``
+        threads (0: every core); None when off or when there is nothing to bend over."""
         if mode == "none":
             return None
         if self._edges is None:
             self._edges = find_edges(self.model)
-        if len(self._edges) == 0:
+        settings = {
+            "speed_of_sound": room.speed_of_sound(),
+            "air": room.air_attenuation(self.model.bands),
+            "directivity": room.directivity(name, self.model.bands),
+            "orientation": orientation,
+            "coherent": coherent,
+        }
+        at_edges = None
+        if len(self._edges):
+            at_edges = EdgeDiffraction(
+                self.model,
+                source,
+                mode=mode,
+                edges=self._edges,
+                both_sides=both_sides,
+                threads=threads,
+                **settings,
+            )
+        crests = CrestDiffraction.of(self.model, source, **settings)
+        if at_edges is None and crests is None:
             return None
-        return EdgeDiffraction(
-            self.model,
-            source,
-            speed_of_sound=room.speed_of_sound(),
-            air=room.air_attenuation(self.model.bands),
-            directivity=room.directivity(name, self.model.bands),
-            orientation=orientation,
-            mode=mode,
-            edges=self._edges,
-            coherent=coherent,
-        )
+        return _Diffraction(self._edges, at_edges, crests)
+
+
+@dataclass
+class _Diffraction:
+    """The diffraction at the model's edges and over the terrain's crests, in turn."""
+
+    edges: Edges
+    at_edges: EdgeDiffraction | None
+    crests: CrestDiffraction | None
+
+    def apply(
+        self, listener: np.ndarray, paths: early_stage.EarlyReflections, max_delay_s: float
+    ) -> early_stage.EarlyReflections:
+        if self.at_edges is not None:
+            paths = self.at_edges.apply(listener, paths, max_delay_s)
+        if self.crests is not None:
+            paths = self.crests.apply(listener, paths, max_delay_s)
+        return paths
 
 
 def early_paths(
@@ -177,18 +257,21 @@ def early_paths(
     orientation = np.array(src.orientation.rotation())
     edges = _Edges(model)
     elements = src.elements()
-    # A line's or a surface's points are uncorrelated: their paths add in energy.
+    # A line's or a surface's points are uncorrelated: their paths add in energy. Indoors
+    # each point's own do too; outdoors they add in pressure among themselves.
     coherent = coherent_bands(scene.simulation, model.absorption.shape[1])
-    coherent = coherent if len(elements) == 1 else 0
+    coherent = coherent if len(elements) == 1 or room.outdoor is not None else 0
     transition = _transition(scene.simulation, room.volume_m3)
+    length = response_length(room, scene.simulation.ir_length_s, elements, target)
+    eddies = Eddies.of(model, room.speed_of_sound())
     parts = []
     for position in elements:
         cutoff = min(
             float(np.linalg.norm(target - position)) / room.speed_of_sound() + transition,
-            scene.simulation.ir_length_s,
+            length,
         )
         candidates = _candidates(model, position, method or cfg.method, order, cfg.rays, threads)
-        paths = early_stage.find_paths(
+        paths = straight = early_stage.find_paths(
             model,
             position,
             target,
@@ -201,10 +284,35 @@ def early_paths(
             coherent=coherent,
         )
         found = edges.diffraction(
-            diffraction or cfg.diffraction, position, room, src.name, orientation, coherent
+            diffraction or cfg.diffraction,
+            position,
+            room,
+            src.name,
+            orientation,
+            coherent,
+            both_sides=cfg.diffraction_reflections == "both_sides",
+            threads=threads,
         )
         if found is not None:
             paths = found.apply(target, paths, cutoff)
+        refraction = refraction_for(
+            model,
+            position,
+            speed_of_sound=room.speed_of_sound(),
+            air=room.air_attenuation(model.bands),
+            directivity=room.directivity(src.name, model.bands),
+            orientation=orientation,
+            coherent=coherent,
+            max_order=order,
+            threads=threads,
+            wide_angle=cfg.parabolic_equation == "wide_angle",
+        )
+        if refraction is not None:
+            paths = refraction.apply(target[None], [straight], [paths], np.array([cutoff]))[0]
+        if model.plants is not None:
+            paths = model.plants.attenuate(paths)
+        if eddies is not None:
+            paths = eddies.attach(paths)
         parts.append(apply_grazing(model, target, paths))
     return _shared(parts, model.absorption.shape[1])
 
@@ -279,12 +387,17 @@ def coherent_bands(settings, bands: int) -> int:
 
 
 def _shared(parts: list[early_stage.EarlyReflections], bands: int) -> early_stage.EarlyReflections:
-    """The paths of a line or surface source's points, each with its share of the power."""
+    """The paths of a line or surface source's points, each with its share of the power
+    and the point it comes from."""
     if len(parts) == 1:
         return parts[0]
     share = 1.0 / len(parts)
     return early_stage.EarlyReflections.concatenate(
-        [dataclasses.replace(p, energy=share * p.energy) for p in parts], bands
+        [
+            dataclasses.replace(p, energy=share * p.energy, point=np.full(len(p), k))
+            for k, p in enumerate(parts)
+        ],
+        bands,
     )
 
 
@@ -348,7 +461,13 @@ def simulate(
     c = room.speed_of_sound()
     air = room.air_attenuation(model.bands)
     volume = room.volume_m3
-    length = settings.ir_length_s
+    listener_pos = np.array([lis.position for lis in chosen_listeners], dtype=float)
+    length = response_length(
+        room,
+        settings.ir_length_s,
+        [point for source in chosen_sources for point in source.elements()],
+        listener_pos,
+    )
     seed = settings.seed
     if seed is None:
         seed = int(np.random.SeedSequence().generate_state(1, np.uint32)[0])
@@ -356,15 +475,13 @@ def simulate(
     # Not set in the scene: this computer's default.
     late_device = tuning.resolve_device(late_cfg.device)
     statistical = late_cfg.method == "statistical"
-    if statistical and volume is None:
-        raise ValueError("the statistical late method needs a closed model")
+    check_late_method(room, settings)
     if groups is not None and statistical:
         raise ValueError("face groups need the stochastic ray tracer, not the statistical method")
 
     # Early paths end `transition` after the direct sound.
     transition = _transition(settings, volume)
 
-    listener_pos = np.array([lis.position for lis in chosen_listeners], dtype=float)
     late_from = {} if late_from is None or statistical else late_from
     unknown = sorted(set(late_from) - {item.name for item in [*chosen_listeners, *chosen_sources]})
     if unknown:
@@ -375,6 +492,7 @@ def simulate(
     traced_at = slice(None) if listener_mix is None else listener_mix[0]
     edges = _Edges(model)
     low_bands = coherent_bands(settings, model.absorption.shape[1])
+    eddies = Eddies.of(model, c)
     responses: dict[tuple[str, str], Response] = {}
     details: dict[str, dict[str, float]] = {}
     for source in chosen_sources:
@@ -393,9 +511,9 @@ def simulate(
         """Direct sound times, early paths and late energy at every listener of one point
         source, which radiates all the power; timings and counts go into ``info``.
         Unless ``single``, one of the uncorrelated points of a line or surface, whose
-        paths add in energy. Unless ``own_late``, no late energy (None): it comes from
-        other sources."""
-        coherent = low_bands if single else 0
+        paths add in energy (indoors; outdoors in pressure among themselves). Unless
+        ``own_late``, no late energy (None): it comes from other sources."""
+        coherent = low_bands if single or room.outdoor is not None else 0
         direct = np.linalg.norm(listener_pos - position, axis=1) / c
         cutoff = np.minimum(direct + transition, length)
         started = time.perf_counter()
@@ -403,7 +521,7 @@ def simulate(
         candidates = _candidates(
             model, position, early_cfg.method, early_cfg.max_order, early_cfg.rays, threads
         )
-        paths = [
+        paths = straight = [
             early_stage.find_paths(
                 model,
                 position,
@@ -420,7 +538,14 @@ def simulate(
         ]
         add(info, "candidates", float(sum(len(x) for x in candidates)))
         diffraction = edges.diffraction(
-            early_cfg.diffraction, position, room, source.name, orientation, coherent
+            early_cfg.diffraction,
+            position,
+            room,
+            source.name,
+            orientation,
+            coherent,
+            both_sides=early_cfg.diffraction_reflections == "both_sides",
+            threads=threads,
         )
         if diffraction is not None:
             say(f"{label}: edge diffraction ({early_cfg.diffraction})")
@@ -430,6 +555,27 @@ def simulate(
             ]
             info["edges"] = float(len(diffraction.edges))
             add(info, "diffracted_paths", float(sum(int(p.diffracted.sum()) for p in paths)))
+        refraction = refraction_for(
+            model,
+            position,
+            speed_of_sound=c,
+            air=air,
+            directivity=directivity,
+            orientation=orientation,
+            coherent=coherent,
+            max_order=early_cfg.max_order,
+            threads=threads,
+            wide_angle=early_cfg.parabolic_equation == "wide_angle",
+        )
+        if refraction is not None:
+            say(f"{label}: paths bent by the wind and the temperature")
+            paths = refraction.apply(listener_pos, straight, paths, cutoff)
+            direct = direct_times(direct, paths)
+        if model.plants is not None:
+            say(f"{label}: paths through vegetation")
+            paths = [model.plants.attenuate(p) for p in paths]
+        if eddies is not None:
+            paths = [eddies.attach(p) for p in paths]
         # The diffuse field is reckoned less the paths as they would come without the
         # audience, so what the seats take from them is lost, not made up by the tail.
         plain = paths
@@ -503,6 +649,8 @@ def simulate(
         info: dict[str, float] = {"seed": _seed(seed, source_index[source.name])}
         if len(elements) > 1:
             info["elements"] = float(len(elements))
+        if length != settings.ir_length_s:
+            info["ir_length_s"] = length
         own_late = source.name not in late_from
         traced = []
         for e_index, position in enumerate(elements):
@@ -558,6 +706,7 @@ def simulate(
                 scheme=settings.wave.scheme,
                 say=say,
                 label=source.name,
+                wind=settings.wave.wind,
             )
             info.update(wave_info)
             info["wave_s"] = time.perf_counter() - started
@@ -574,6 +723,15 @@ def simulate(
             )
         info = details[source.name]
         fed = source.gain_db != 0 or source.eq_db is not None or source.delay_ms > 0
+        free_field = None
+        if room.outdoor is not None:
+            free_field = free_field_energy(
+                source.elements(),
+                listener_pos,
+                air,
+                room.directivity(source.name, model.bands),
+                np.array(source.orientation.rotation()),
+            )
         for k, listener in enumerate(chosen_listeners):
             response = Response(
                 source=source.name,
@@ -597,6 +755,7 @@ def simulate(
                 source_direction=_towards(src, listener_pos[k]),
                 late_moments=late.moments[k] if late.moments.size else np.zeros((0, 0, 0)),
                 moment_step=late.moment_step,
+                free_field=None if free_field is None else free_field[k],
             )
             if fed:
                 response = response.fed(source.feed_db(model.bands), source.delay_ms * 1e-3)
@@ -604,4 +763,12 @@ def simulate(
     return SimulationResult(room=room, settings=settings, responses=responses, details=details)
 
 
-__all__ = ["TIME_STEP", "SimulationResult", "early_paths", "mixing_time", "simulate"]
+__all__ = [
+    "TIME_STEP",
+    "SimulationResult",
+    "check_late_method",
+    "early_paths",
+    "mixing_time",
+    "response_length",
+    "simulate",
+]

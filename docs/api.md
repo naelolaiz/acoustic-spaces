@@ -59,6 +59,12 @@ Simulation above; the module also has the parameters a map shows and the A-weigh
 .. automodule:: acoustic_spaces.engine.diffraction
 ```
 
+## Insertion loss
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.engine.insertion
+```
+
 ## Early reflections in pressure
 
 ```{eval-rst}
@@ -143,6 +149,8 @@ Rotating sound fields, and decoding them to the ears:
 
 ```{eval-rst}
 .. automodule:: acoustic_spaces.walkthrough
+
+.. automodule:: acoustic_spaces.doppler
 ```
 
 ## Head tracking

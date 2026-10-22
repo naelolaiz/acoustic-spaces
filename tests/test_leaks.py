@@ -151,4 +151,9 @@ def test_a_source_outside_a_closed_model(tmp_path: Path) -> None:
 @pytest.mark.parametrize("name", [e.name for e in list_examples() if e.name != "leaky_classroom"])
 def test_the_other_examples_do_not_leak(name: str) -> None:
     skip_without_extra(name)
-    assert find_leaks(Room.from_yaml(example_path(name)), rays=300).escaped == 0
+    room = Room.from_yaml(example_path(name))
+    leaks = find_leaks(room, rays=300)
+    if room.outdoor is None:
+        assert leaks.escaped == 0
+    else:  # outdoors, rays leave through the open sky, and only there
+        assert leaks.leaked == 0 and {gap.surfaces for gap in leaks.gaps} == {("sky",)}

@@ -61,6 +61,72 @@ match nothing. Normals may point either way: the room is the space the faces clo
 found from the faces themselves (see [Walls, doors and openings](#walls-doors-and-openings)),
 and a panel standing in the room, with air on both sides, reflects and absorbs on both.
 
+### Outdoors
+
+`geometry.ground` makes a scene outdoors: a flat ground under an open sky, with
+`buildings` (footprints raised to a height), `barriers` (thin screens along a path),
+`vegetation` (belts of trees, hedges and lone trees, which sound passes through) and the
+objects of a model file standing on it. See [Outdoor scenes](outdoor.md).
+
+```yaml
+geometry:
+  ground:
+    margin: 30
+    zones:                      # parts of the ground with materials of their own
+      - {name: road, polygon: [[-40, -4], [60, -4], [60, 4], [-40, 4]]}
+  buildings:
+    - {name: hall, footprint: [[0, 10], [20, 10], [20, 22], [0, 22]], height: 9}
+  barriers:
+    - {path: [[30, 6], [30, 20]], height: 3}
+  vegetation:
+    - {name: hedge, path: [[30, 24], [50, 24]], width: 1.5, height: 2}
+```
+
+The ground can be a terrain, its heights on a grid from a file or given in the scene
+(`ground.terrain`), and the buildings can come from a GeoJSON map
+(`geometry.buildings_file`); see [Terrain](outdoor.md#terrain) and
+[Buildings from a map](outdoor.md#buildings-from-a-map):
+
+```yaml
+geometry:
+  ground:
+    terrain: {file: hills.asc}      # or {heights: [[...], ...], spacing: 10}
+    map_origin: [552000, 5806000]   # subtracted from the map files' coordinates
+  buildings_file: {file: town.geojson, height: height, default_height: 9}
+```
+
+Outdoors, `atmosphere` sets the wind and the temperature over the ground, which bend
+sound down or up, into shadow zones (see
+[Wind and temperature](outdoor.md#wind-and-temperature)), their eddies, which blur
+the ground dip, scatter sound into shadows and make it flicker (see
+[Turbulence](outdoor.md#turbulence)), and `zones`, parts of the scene with weather of
+their own (see [Weather zones](outdoor.md#weather-zones)):
+
+```yaml
+atmosphere:
+  preset: windy                 # neutral, windy, sunny_day or clear_night
+  wind: {speed_m_s: 8, direction_deg: 90}   # 8 m/s 10 m up, blowing towards +y
+  turbulence: moderate          # weak, moderate or strong, or its structure parameters;
+                                # {preset: moderate, height_m: 2}: weaker with height
+  zones:                        # polygons in the plan; what they leave out is the scene's
+    - {name: lee, polygon: [[120, -60], [300, -60], [300, 60], [120, 60]], wind: {speed_m_s: 1}}
+```
+
+`long_term` runs an outdoor scene in several weather classes, each holding for a share
+of the day, the evening and the night, for the level over a long term and L_den (see
+[Levels over a long term](outdoor.md#levels-over-a-long-term)):
+
+```yaml
+long_term:
+  classes:                      # a class takes the scene's weather where it says nothing
+    - {name: downwind, share: {day: 0.4, evening: 0.3, night: 0.2}}
+    - {name: upwind, wind: {direction_deg: 180}, share: {day: 0.3, evening: 0.2, night: 0.1}}
+    - {name: inversion, preset: clear_night, share: {day: 0, evening: 0.3, night: 0.6}}
+    - {name: still, preset: neutral, share: {day: 0.3, evening: 0.2, night: 0.1}}
+  # periods: [{name: day, hours: 12}, {name: evening, hours: 4, penalty_db: 5},
+  #           {name: night, hours: 8, penalty_db: 10}]   # the default, L_den
+```
+
 ### BIM models (IFC)
 
 IFC files from Revit, ArchiCAD, Vectorworks or any other BIM program are read with the
@@ -149,7 +215,11 @@ Each entry in `materials` takes coefficients from one of:
 - `file: <library>` with `entry: <name>`: a material of a CATT-Acoustic or ODEON
   material library (see below);
 - `absorption: [...]` with eight octave values or 24 third-octave values, which also
-  overrides a preset or file.
+  overrides a preset or file;
+- `impedance:` a porous ground's impedance (`grass`, `snow`, `asphalt`... or a flow
+  resistivity; `reaction: extended` for one whose impedance changes with the angle),
+  which gives the absorption and reflects as a ground does (see
+  [Ground impedance](outdoor.md#ground-impedance)).
 
 `scattering` is a number, eight or 24 values, or the id of a built-in scattering entry.
 File data with more than one value in some octave (third-octave tables) stays in
@@ -384,17 +454,33 @@ elements:
 - The result is the array's **far-field** pattern, a balloon like a measured one, so
   the source stays one point: right beyond about the array's length squared over the
   wavelength, L² f / c (16 m for a 2 m array at 1.4 kHz). Closer to a long array, its
-  sound spreads as a line's and its beam has not formed yet; a `line_m` source is the
-  better model there. The room's warnings name every listener nearer to an array than
-  that distance at 1 kHz: `validate`, `inspect`, `simulate` and `map` print them, and
-  the editor lists them under **Properties** when the scene itself is selected. Higher
-  up the far field starts farther still:
+  sound spreads as a line's and its beam has not formed yet. The room's warnings name
+  every listener nearer to an array than that distance at 1 kHz: `validate`,
+  `inspect`, `simulate` and `map` print them, and the editor lists them under
+  **Properties** when the scene itself is selected. Higher up the far field starts
+  farther still:
 
   | array length | far field from, at 1 kHz | at 4 kHz |
   |---|---|---|
   | 0.5 m | 0.7 m | 2.9 m |
   | 1 m | 2.9 m | 11.7 m |
   | 2 m | 11.7 m | 46.6 m |
+- `near_field: true` (next to `array` or `file`) adds up the elements' sound one by
+  one instead, each from where it is, with its own distance, direction, feed and
+  pattern, wherever an early path leaves the array: the direct sound and the
+  reflections (from the image of the listener the path unfolds to), the ground's
+  reflection and refracted rays outdoors, and the sound that reaches an edge or a crest
+  before it bends round it. It is exact over each band as the pattern is, becomes the
+  pattern far away, and the warnings leave the array out. The late reverberation
+  keeps the pattern, which carries the same power. In the editor it is "Add up the
+  array's elements one by one" under the source's directivity.
+
+  ```yaml
+  directivity: {file: line_array.yaml, near_field: true}
+  ```
+
+  A 3.75 m column loses about 3 dB per doubling of the distance on axis within its far
+  field's start, as a line does, and 6 dB beyond it, as a point does.
 - As for any source, `level_db` is the array's sound power in all; the pattern only
   says where it goes. A single element's array has the element's own pattern.
 - The tests check a column against the analytic sums of a line array (the
@@ -481,6 +567,39 @@ surface) and a compressor (a point).
 
 ![Polar patterns of the per-band directivity above, from omni in the bass to a narrow pattern at 8 kHz](images/directivity.png)
 
+### Groups, and sources left out
+
+Sources and listeners can sit in groups, and can be left out of a run without being
+removed:
+
+```yaml
+sources:
+  - name: main_left
+    group: PA/Mains          # the group Mains in the group PA
+    position: [-40, 19, 14]
+  - name: vocal_wedges
+    group: Monitors
+    enabled: false           # left out of simulations, maps and checks
+    position: [-43.3, 0, 2.25]
+listeners:
+  - name: singer
+    group: Stage
+    position: [-44.8, 0, 3.7]
+```
+
+- `group` sorts the scene tree of the editor; groups nest with `/`, and a source and
+  a listener may share a group's name. It changes no result.
+- `enabled: false` leaves a source or listener out of `simulate`, `map`, `walk` (the
+  sources that do not walk) and the scene's checks, as if it were not there, but keeps
+  it in the scene; the others get the same responses as in a run of all, since seeds
+  follow the scene's order. Named on the command line (`--source`), it is simulated
+  all the same. `inspect` marks it "left out".
+- In the editor's scene tree each source, listener and group has a tick (in
+  simulations or left out, saved as `enabled: false`) and an eye that shows or hides
+  it in the 3D view and the plan. Hiding is how the editor shows the scene, not part
+  of it: it is not saved and changes no result. Sources and listeners left out are
+  drawn faded.
+
 ## Walks
 
 A listener or a point source can walk through the room, for
@@ -495,6 +614,7 @@ listeners:
       speed_m_s: 1.2       # walking pace (default 1.2 m/s)
       face_forward: true   # turn to face the way it goes (default); false keeps its yaw
       turn_deg_s: 90       # how fast it turns through a corner (default 90 degrees/s)
+      doppler: false       # pitch shifts as it goes: cars, trains (default false)
 ```
 
 - A walk goes in straight lines from the position through each point of `to`, at an
@@ -503,6 +623,10 @@ listeners:
   corner the walker turns the shorter way round at `turn_deg_s`, half of the turn
   before the corner and half after it (no further than half-way along either leg), so
   a sound to one side moves round the head instead of jumping.
+- `doppler: true` plays the early sound through delays that change as the walker goes,
+  so that its pitch shifts: for vehicles and aircraft, which go faster than anyone
+  walks (see [Moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)).
+  It needs a speed below the speed of sound and no wave solver.
 - Everything else (`simulate`, `map`, the editor) sees the walker standing where its
   walk starts; `inspect` lists how far each walk goes and for how long. Lines and
   surfaces do not walk.
@@ -518,10 +642,15 @@ simulation:
   ir_length_s: 2.0          # length of the impulse responses (s), default 2
   sample_rate: 48000        # of the impulse responses (Hz), default 48000
   seed: 1                   # random seed, 0 or more; unset, every run draws its own
+  insertion_loss_of: [noise_barrier]  # outdoors: run again without these parts
 ```
 
 - `air` sets the speed of sound and the air absorption per band (ISO 9613-1), for the
-  rays, the wave solver and the statistical reverberation times alike.
+  rays, the wave solver and the statistical reverberation times alike. Outdoors,
+  `temperature_c` is the temperature at the ground, and an `atmosphere` changes it with
+  height (see [Wind and temperature](outdoor.md#wind-and-temperature)).
+- Outdoors, `ir_length_s` counts from the latest direct sound of the run, as sources
+  and listeners can stand far apart (see [Outdoor scenes](outdoor.md#what-the-simulation-does-outdoors)).
 - A response that ends before the room has decayed is extended by its fitted decay
   rate when the parameters are computed (see [Simulation](simulation.md)); a longer
   `ir_length_s` makes longer files, and more time steps for the wave solver.
@@ -532,3 +661,8 @@ simulation:
   slightly from run to run, as do those of the CPU and a GPU sharing the rays (see
   [The late stage on a GPU](simulation.md#the-late-stage-on-a-gpu)). The editor's
   **Simulation** entry has these under **Response**, and the scene's own entry the air.
+- Outdoors, `insertion_loss_of` names buildings, barriers or vegetation to run the
+  scene again without, for their insertion loss (see
+  [Results outdoors](outdoor.md#results-outdoors)); `--without` on the command line
+  overrides it for one run, and the editor's **Simulation** entry lists the parts to
+  tick.

@@ -1,0 +1,60 @@
+# Outdoors: a street 12 m wide between a row of houses 9 m high and an office block
+# 15 m high, with traffic along it (a line source 30 m long). Past the end of the houses
+# a noise barrier 3 m high shields a garden. The scene is the ground and the open sky
+# over it: sound that reaches the sky leaves, and the ground reaches 30 m past the
+# buildings, then goes on as if it never ended. One listener stands on the pavement, one
+# on a balcony of the office block, one in the garden, where the traffic comes over the
+# top of the barrier and round its ends: `first_order` diffraction follows it.
+name: Street with a noise barrier
+geometry:
+  ground: {margin: 30}
+  buildings:
+    - name: houses
+      footprint: [[-30, 6], [10, 6], [10, 16], [-30, 16]]
+      height: 9
+    - name: offices
+      footprint: [[-30, -20], [30, -20], [30, -6], [-30, -6]]
+      height: 15
+  barriers:
+    - name: noise_barrier
+      path: [[14, 6], [44, 6]]
+      height: 3
+materials:
+  asphalt:
+    preset: concrete_floor
+    scattering: 0.05
+  brick:
+    preset: brickwork
+    scattering: 0.2
+  concrete:
+    preset: rough_concrete
+    scattering: 0.1
+assignments:
+  ground: asphalt
+  houses: brick
+  offices: concrete
+  barriers: concrete
+sources:
+  - name: traffic
+    position: [0, 0, 0.5]
+    orientation: {yaw: -90}
+    line_m: 30
+    spacing_m: 3
+    level_db: 100
+listeners:
+  - name: pavement
+    position: [0, 4, 1.6]
+    orientation: {yaw: -90}
+  - name: balcony
+    position: [5, -5, 10]
+    orientation: {yaw: 90}
+  - name: garden
+    position: [28, 14, 1.6]
+    orientation: {yaw: -90}
+simulation:
+  early: {method: ray_tracing, max_order: 3, diffraction: first_order}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 1.0
+outputs:
+  - mono
+  - binaural

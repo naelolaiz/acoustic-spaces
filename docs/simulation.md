@@ -67,6 +67,9 @@ and G. `Response.parameters()` computes them from the simulated energies;
 [Measuring impulse responses](measurements.md#measuring-impulse-responses)). A response that ends
 before it has decayed is extended by its fitted decay rate; one that ends before it
 has decayed by 20 dB leaves too much to that estimate, and all its parameters are NaN.
+Outdoors, where a response may hold no decay at all, G is then that of the energy it
+holds, and so are the levels and the STI that take it; the other parameters stay NaN
+(see [Results outdoors](outdoor.md#results-outdoors)).
 Air absorption follows ISO 9613-1 for the scene's temperature, humidity and pressure.
 
 The directions the sound arrives from give more of them:
@@ -186,6 +189,23 @@ each octave band:
 - `direct`: only the direct sound.
 - `none`: specular paths only.
 
+With `first_order` and `second_order`, `simulation.early.diffraction_reflections` says
+where a path over one edge may reflect: `one_side` (the default), before or after the
+edge, off the ground on the way to a barrier or off a façade behind it; or
+`both_sides`, before and after, which adds the path reflected off the ground on the
+way to a barrier and again behind it, the fourth of the four paths over a barrier on
+the ground. Over a hard ground that path carries a quarter of the sound over the
+barrier, and without it the insertion loss comes out 0.3 to 0.8 dB too high from 1 kHz
+up and a few decibels off in the bands below, where the four paths interfere; with it
+the engine is within 0.15 dB of the exact solution (see the
+[validation report](validation.md#outdoor-results-against-exact-solutions)). Over grass
+and other soft grounds, whose reflections near grazing are weak, the path matters
+less. `both_sides` pairs every reflection before an edge with every one after it, so
+it costs more where many faces reflect (in the `street` example about a sixth more
+diffracted paths and a few tens of milliseconds per listener);
+`--diffraction-reflections` sets it for one run of `simulate` or `map`, and the editor
+has it as **Reflections over an edge** under **Early reflections**.
+
 The edges are found in the model: corners where two faces meet with more than 195° of
 open air round them (the inside corner of an L-shaped room, the front of a stage or a
 balcony) and the free edges of thin screens. Each source and listener get the shortest
@@ -240,6 +260,15 @@ about 17 ms per source and listener. `second_order` costs more, as it looks at p
 edges: in a hall with 16 edges, the early stage takes 170 ms per source and listener
 with it, 120 ms with `first_order` and 90 ms without diffraction.
 
+Paths that reflect before or after an edge pair every edge with every plane the source
+or the listener faces, which in a whole city grows with the square of the buildings.
+Most of those pairs cannot carry a path, because the plane's faces lie nowhere near
+where a ray from the edge would meet the plane: the engine leaves them out before it
+traces a ray, on `simulation.performance.threads` threads, and the results are the
+same bit for bit. A city of 900 buildings simulates in about 2 s on four cores, and
+3,600 in about 22 s (see [Outdoor scenes](outdoor.md#buildings-from-a-map) and the
+[validation report](validation.md#edge-diffraction-in-whole-cities)).
+
 ## Low frequencies: early reflections in pressure
 
 At low frequencies reflections that arrive a few milliseconds apart do not add in
@@ -254,15 +283,26 @@ echogram that adds the paths in energy misses it. Up to
 ```yaml
 simulation:
   early:
-    coherent_max_band_hz: 125   # 63, 125 (default), 250, 500, or null for energy throughout
+    coherent_max_band_hz: 125   # 63, 125 (default), 250, 500, or null for energy throughout;
+                                # outdoors up to 8000, the default there
 ```
 
 - Each reflection turns the phase as a locally reacting surface with the material's
   absorption does: R = (cos θ - Y) / (cos θ + Y) at the angle of incidence θ, with the
   admittance Y fitted as for the wave solver. A hard surface reflects in phase at every
   angle; an absorbing one turns the phase of sound that grazes it, by half a turn at
-  grazing incidence, as a lawn does outdoors. Above those bands each path keeps the
-  phase it has at their top, so the bands join without a step.
+  grazing incidence. Above those bands each path keeps the phase it has at their top,
+  so the bands join without a step. A surface whose material has an impedance (a
+  ground's) reflects with its spherical wave's factor instead, in every band (see
+  [Ground impedance](outdoor.md#ground-impedance)).
+- Outdoors the paths are few, and the ground dip spans several bands: the early paths
+  add in pressure up to 8000 Hz by default there. Wind and temperature gradients bend
+  them, and below 500 Hz a parabolic equation gives the sound over the open ground, a
+  narrow-angle one by default and a wide-angle one with
+  `simulation.early.parabolic_equation: wide_angle` (see
+  [Wind and temperature](outdoor.md#wind-and-temperature)). Above 500 Hz they add pair by pair,
+  each pair's cross term as far as the band leaves the two coherent; a room takes
+  500 Hz at most, as its paths are many.
 - Sound bent round an edge carries the whole complex UTD coefficient, whose terms add to
   the specular paths in pressure, as the theory has them, rather than through the cross
   terms that stand for that interference in the higher bands.
@@ -271,6 +311,9 @@ simulation:
   material fit. An impulse response and the echogram it came from now give the same
   parameters in those bands: in a 7.3 x 5.1 x 3 m box, G within 0.01 dB and C50 within
   0.05 dB, where adding the paths in energy leaves them up to 2.1 and 1.6 dB apart.
+- Outdoors in turbulence the echogram takes each two paths' coherence factor, the
+  average over the eddies, and an impulse response is one moment of them, whose levels
+  scatter about the echogram's (see [Turbulence](outdoor.md#turbulence)).
 - The late part still adds in energy: its rays stand for many paths with random phases.
   So do the points of a line or surface source, which are uncorrelated.
 - With the wave solver up to the same band or higher, its bands take their place.
@@ -300,6 +343,7 @@ simulation:
     max_band_hz: 125           # the highest band it computes: 63, 125 (default), 250 or 500
     points_per_wavelength: 8   # grid cells per wavelength at the top of that band
     scheme: auto               # the grid's stencil: auto (default), isotropic or standard
+    wind: effective            # outdoors: effective (default) speed of sound, or moving air
     device: cpu                # where it steps the grid: cpu, gpu or auto; left out: this
                                # computer's default (cpu unless tune made it auto)
 ```
@@ -326,10 +370,23 @@ simulation:
 - Surfaces absorb as their materials do in each band: each material becomes a locally
   reacting surface whose admittance changes with frequency (a constant and resonant
   mass-spring-damper branches), fitted so that its random-incidence absorption matches
-  the material's in every wave band. One run covers all the bands.
+  the material's in every wave band. A material with an impedance (a ground's, see
+  [Ground impedance](outdoor.md#ground-impedance)) is fitted to its admittance itself,
+  phase and all, with branches without mass whose corner frequencies spread an octave
+  apart, as a ladder of resistors and capacitors makes a porous ground's admittance,
+  which grows with frequency at a nearly constant phase: over grass the level matches
+  the exact solution within 0.12 dB from 40 to 315 Hz. One run covers all the bands.
 - Closed rooms, open models and thin screens all work. Round an open model the grid
   grows by a perfectly matched layer of 8 cells, which takes in the sound leaving it:
   what comes back is 57 to 74 dB down, against 7 to 14 dB from the grid's edge alone.
+- Outdoors in wind and temperature (an [atmosphere](outdoor.md#wind-and-temperature)
+  in which sound bends), the speed of sound changes from cell to cell: the still air's
+  at the cell's height, plus the wind's component along the horizontal from the source.
+  The grid is then fine enough for the slowest sound and steps in time for the fastest,
+  on the CPU or on the GPU alike (see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)).
+  With `wind: moving` (`simulate --wave-wind moving`) the air moves instead, so that
+  sound a building sends back towards the source goes against the wind; it costs three
+  to four times as much and runs on the CPU.
 - The listener records the pressure and its gradient, so the low end keeps its
   direction in Ambisonics, binaural and loudspeaker outputs (to first order).
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177
@@ -386,7 +443,8 @@ simulation:
 ```
 
 - `threads`: the worker threads of the ray tracer (early candidates, the late part,
-  coverage maps, calibration) and of the wave solver on the CPU. Fewer leave the
+  coverage maps, calibration), of the wave solver on the CPU, and of writing the
+  responses' files (`simulate --out`, the editor's Export). Fewer leave the
   computer free for other work while a long run goes on. Results do not depend on it.
 - `ray_tree`: the bounding volume hierarchy that finds the surface a ray meets, and
   whether a listener can see a reflection, which is nearly all of the run time. `sah`
@@ -426,10 +484,17 @@ simulation:
 - `cpu`: the compiled core, on `performance.threads`, as before.
 - `gpu`: one compute shader traces what the CPU does (detector spheres and rain, both
   kinds of scattering, the scattering of a surface's size, air absorption, the early
-  stage's paths left out, arrival directions and the weight window). Rays start where
+  stage's paths left out, arrival directions, the weight window, and outdoors the rays
+  bent by [wind and temperature](outdoor.md#wind-and-temperature), those through
+  [vegetation](outdoor.md#vegetation) and the open sky). Rays start where
   the CPU's do, then draw random numbers of their own, in single precision, so the two
   agree statistically, not ray for ray. The tests trace main's stored runs on the GPU
-  and check that they land within the spread of the CPU's own results over seeds.
+  and check that they land within the spread of the CPU's own results over seeds. The
+  shader is compiled once per session with only what the scene has of the outdoors
+  (bent rays, vegetation), in seconds. On Direct3D 12 (Windows) the GPU leaves rays
+  bent by the air and rays through vegetation to the CPU, which the run says: there its
+  results for them disagreed with the CPU's, by 7 to 34 % on the software GPU of
+  Windows CI.
 - `both`: the CPU (on all its threads but one, which keeps the GPU busy) and the GPU
   share the rays, each taking the next part as soon as it is done with the last, so the
   faster one traces more (if the GPU declines a part at run time, the CPU traces it and
@@ -491,10 +556,11 @@ acoustic-spaces info                            # the default, and what auto tak
   *default* (or leave the tune window's second check box ticked for the open scene) to
   let them follow the default.
 
-Sound through partitions and openings, the face groups of material calibration and
-coverage maps are traced on the CPU whatever the setting, and so are runs whose results
-the GPU's buffers cannot hold (many listeners and arrival directions over a long
-response). `simulate --late-device` overrides the setting; the editor's Simulation page
+Sound through partitions and openings (an outdoor scene's sky, which lets sound out
+into no room, is not one), the face groups of material calibration, coverage maps and
+vegetation of more than 16 media are traced on the CPU whatever the setting, and so are
+runs whose results the GPU's buffers cannot hold (many listeners and arrival directions
+over a long response). `simulate --late-device` overrides the setting; the editor's Simulation page
 has it as "Run on" under Late reverberation. When it is not `cpu`, the progress messages
 say where the rays went and why
 (`talker: late rays traced on the CPU (no hardware GPU)`).
@@ -509,7 +575,11 @@ runs of such a scene differ in the late tail, within the noise of the ray count.
 
 `python validation/late_gpu.py` times the late stage on each device in BRAS's two rooms
 and two example halls, and shows how far T30, EDT and C80 come out from the CPU's next
-to how far a second CPU run with the next seed does. `python validation/rays_gpu.py`
+to how far a second CPU run with the next seed does; `python validation/outdoor_gpu.py`
+does the same for the outdoor examples (the stage in the wind, the tree belt and the
+hillside), with the late sound's level and centre time per listener and band. The GPU's
+chords through the atmosphere are tested against the CPU's ray for ray: the same turns,
+the same curve to the millimetre. `python validation/rays_gpu.py`
 times the ray searches alone, the face a ray meets next and whether a listener can see
 a reflection, and checks that the GPU finds the CPU's faces. The GPU works in single
 precision, so its boxes and triangles are widened slightly to keep rays from slipping

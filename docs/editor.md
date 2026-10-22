@@ -20,12 +20,15 @@ label, field, button or column header for a tip that says what it means, with it
 the rows of the Results table say what each parameter measures, and the band columns
 which frequencies each octave band holds.
 
-- **File > Open example** opens the bundled rooms. Saving one asks where to keep your
-  copy and takes its model file along; an example whose model needs an extra that is not
-  installed is greyed out, and its tip says how to install it. **New box room**, **New
-  room from a floor plan** and **New from model file** (OBJ, STL, PLY, OFF, glTF, DXF,
-  IFC, Collada or SketchUp) start from scratch. For an IFC model, the geometry's form
-  picks one room of the building (**IFC room**) or every element.
+- **File > Open example** opens the bundled rooms, in the groups of
+  [Example scenes](examples.md). Saving one asks where to keep your copy and takes the
+  files it uses along (its model, terrain, tables, directivities, and the patterns its
+  array files name); an example whose model needs an extra that is not installed is
+  greyed out, and its tip says how to install it. **New box room**, **New
+  room from a floor plan**, **New from model file** (OBJ, STL, PLY, OFF, glTF, DXF,
+  IFC, Collada or SketchUp) and **New outdoor scene** (a meadow 200 m across, to build
+  on; see [Outdoor scenes](#outdoor-scenes)) start from scratch. For an IFC model, the
+  geometry's form picks one room of the building (**IFC room**) or every element.
 - The **Plan** tab, next to the 3D view, shows the room from above and draws rooms (see
   below).
 - The **scene tree** lists the geometry and its surfaces, the materials, sources,
@@ -33,6 +36,18 @@ which frequencies each octave band holds.
   clicking it in the 3D view, shows its form under **Properties**. Every change is
   checked against the scene schema; a refused change says why under **Messages**, and
   every change can be undone.
+- Sources and listeners sit in their **groups** (the form's **Group** field; groups
+  nest with `/`, as PA/Delays). Each source, listener and group has a tick: unticked,
+  it is left out of simulations, maps and checks, stays in the scene drawn faded, and
+  is saved as `enabled: false` (the form's **Use in simulations** does the same). The
+  eye beside it hides it in the 3D view and the plan, or shows it again, without
+  changing the scene. See
+  [Groups, and sources left out](scenes.md#groups-and-sources-left-out).
+- The markers of sources and listeners in the 3D view take their size from the
+  scene: a fifth of the usual spacing between them, from 1.2 % to 2.5 % of the model's
+  size. Where they crowd, such as the players and monitors on a stadium's stage, they
+  get smaller rather than overlap, in the plan too, and an arrow stops short of a
+  marker ahead of it; hiding a group gives the rest their size back.
 - **Place source** and **Place listener**, then click a surface: on a floor the new
   point stands at ear or mouth height, on a wall or ceiling it goes half a metre into
   the room. In the plan, the click places it above the floor there. Sources and
@@ -50,10 +65,12 @@ which frequencies each octave band holds.
   see [Walkthroughs](spatial-audio.md#walkthroughs)), but keeps them when it saves.
 - The scene tree's **Simulation** entry has the settings of
   [Simulation](simulation.md): the early part's method, highest order, rays,
-  diffraction and **In pressure up to**; the late part's method, rays per band,
+  diffraction, **Reflections over an edge** (on one side of it or on both) and **In
+  pressure up to**; the late part's method, rays per band,
   reception, ray splitting and **Run on** (*default*: this computer's default, the CPU
   unless the tune window made it *auto*; or the CPU, a GPU, both, or *auto*); the
-  scattering model; the wave solver, its highest band and where it runs; **Performance** (CPU
+  scattering model; the wave solver, its highest band, how it takes the wind outdoors
+  (**Wind**: an effective speed of sound or moving air) and where it runs; **Performance** (CPU
   threads and the ray search tree); and, under **Response**, the length, the sample
   rate, octave or third-octave **Bands**, the early-to-late transition and the seed.
   The scene's own entry sets the air's temperature, humidity and pressure, and shows
@@ -79,9 +96,13 @@ which frequencies each octave band holds.
   ![The editor with the lecture hall example and its speech transmission index map laid over the room](images/editor_map.png)
 
 - **Simulation > Run** (F5) works in the background. The **Results** panel shows the
-  ISO 3382-1 parameters, the echogram and decay curves and the arrival directions of
-  any source and listener, and draws their reflection paths in the room. **Export**
-  writes the same files as `simulate`; **Listen** plays a dry WAV file through the
+  ISO 3382-1 parameters (outdoors also the level relative to free field, the insertion
+  loss and the level over a long term, see [Results outdoors](outdoor.md#results-outdoors)
+  and [Levels over a long term](outdoor.md#levels-over-a-long-term)), the echogram
+  and decay curves and the arrival directions of any source and listener, and draws
+  their reflection paths in the room. **Export**
+  writes the same files as `simulate`, in the background (**Cancel** stops it);
+  **Listen** plays a dry WAV file through the
   response on the sound card, binaurally (through the HRTF of the scene's binaural
   output if it has one, else a spherical head; needs the `measure` extra), or
   head-tracked with **Head tracking** ticked (see
@@ -99,7 +120,8 @@ which frequencies each octave band holds.
   bands or the wave solver, leave the results marked out of date until the next run.
 - A source's form sets its **Shape** (a point, a line or a surface, with its length,
   height and spacing), its directivity (a pattern, a SOFA or CSV file of measured data,
-  or an array file), its sound power per band, its **Spectrum** (flat, or male or female
+  or an array file, whose elements **Add up the array's elements one by one** sums near
+  its listeners), its sound power per band, its **Spectrum** (flat, or male or female
   speech) and the **Gain**, **Equalizer** and **Delay** of its feed. It shows the
   directivity index per band, opens the polar patterns, and the selected source shows
   its balloon in the 3D view.
@@ -114,9 +136,9 @@ which frequencies each octave band holds.
   one source, listener or material (the list holds those that messages name, with how
   many do), and the filter keeps only those holding some words. **Clear** removes the
   messages on show and keeps those hidden.
-- While a run, a coverage map or a tuning goes on, the status bar says what runs, what
-  it does now and for how long, beside a moving bar and a **Cancel** button; resting
-  the mouse on the bar says so at length.
+- While a run, a coverage map, a tuning or an export goes on, the status bar says what
+  runs, what it does now and for how long, beside a moving bar and a **Cancel**
+  button; resting the mouse on the bar says so at length.
 - When a run, a coverage map or a tuning ends while another window is in front, the
   editor's entry in the taskbar flashes (on macOS, its Dock icon bounces). Nothing pops
   up: the results come to the front and **Messages** says how it went.
@@ -158,6 +180,61 @@ room every corner is a handle:
 Rooms from model files show their outline, and their sources and listeners move the
 same way. Every change can be undone.
 
+## Outdoor scenes
+
+**File > New outdoor scene** starts an [outdoor scene](outdoor.md): a flat meadow 200 m
+across under an open sky, with a source and a listener 50 m apart. The **Geometry**
+entry of an outdoor scene has an **Outdoors** group instead of the room's: the
+ground's height, the margin, the sky and the **Extent** (tick it to set where the
+ground ends; unticked, the ground reaches the margin past what stands on it), then the
+buildings, barriers, [vegetation](outdoor.md#vegetation) and ground zones in tables,
+with their heights, which can be changed, and buttons to add and remove them:
+
+- **Add building**, **Add zone** and **Add vegetation** with *belt of trees* chosen
+  draw an outline in the plan, like a floor plan: click its corners in turn and close
+  it on the first one, with a double-click or Enter. **Add barrier** and **Add
+  vegetation** with *hedge* chosen draw a path: click its points and finish with a
+  double-click or Enter. A *lone tree* stands where the next click lands. Backspace
+  takes a point back and Esc stops. A new building is 10 m high, a barrier 3 m, a belt
+  of trees 12 m, a hedge 2 m high and 1.5 m wide, a tree 10 m high with a crown 8 m
+  across; change the heights in the tables and the rest in the scene file. A zone takes
+  the ground's material until its surface is given one in the scene tree.
+- **Terrain from a file** makes the ground follow the heights in an Esri ASCII grid or
+  a table of x y z points (see [Terrain](outdoor.md#terrain)); the form then describes
+  it (its points, heights and grid), and **Remove terrain** flattens the ground again.
+- **Buildings from a map** adds the buildings of a GeoJSON file of footprints (see
+  [Buildings from a map](outdoor.md#buildings-from-a-map)), after asking which of its
+  properties holds their heights (or one height for all of them), the height of those
+  without it, and which property names them. They stand in the buildings table after
+  the scene's own, where **Remove building** leaves one out of the file, and **Remove
+  the map's buildings** drops the file.
+
+The plan draws the vegetation in dashed green and the zones in their materials'
+colours; the 3D view draws the vegetation in see-through green and leaves the sky out
+but for its edges, which show where the ground ends. The scene's own entry then has a
+**Wind and temperature** group: the weather, the wind and the temperature over the
+ground, their **Eddies** with their strength, size, **Eddies' height** (the height the
+strength holds at; 0: the same at every height) and **Weaker with height** (see
+[Turbulence](outdoor.md#turbulence)), and **Show the
+profile**, a plot of them and of the speed of sound (see
+[Wind and temperature](outdoor.md#wind-and-temperature)). **Weather of** chooses whose
+weather the fields show and change, the whole scene's or a
+[weather zone](outdoor.md#weather-zones)'s: **Add weather zone** draws one in the plan
+like a zone, dotted in sky blue with its name, and **Remove weather zone** drops the
+chosen one. A zone's weather starts as the scene's, its fields are those it changes,
+(none) under **Weather** leaves the scene's weather unchanged there, and **Ground
+temperature** gives the ground in the zone a temperature of its own. **Add weather
+class** adds a [weather class](outdoor.md#levels-over-a-long-term), a weather that
+holds for a share of the time, for the levels over a long term and L_den: **Weather
+of** then shows it, with its **Share of the time** in each period of the day (the
+other classes make room, in proportion, when one changes), its ground temperature and,
+under **Eddies**, eddies of its own if it has them. The first class holds all the time
+in the scene's weather, the next ones none of it until given a share, and **Remove
+weather class** gives the chosen one's share to the others. A run then runs the scene
+in every class, and the Results panel adds the row **Long-term level** and, under
+**Run details**, the rating level and the level in each period and each class. **Draw
+room** replaces an outdoor scene with a floor plan, after asking.
+
 ## Exporting to Blender
 
 `acoustic-spaces export` writes a scene as glTF 2.0 (`.glb`) for Blender or another 3D
@@ -175,7 +252,8 @@ the scene's (+z up, metres).
 - Each surface is an object named as in the editor, with a see-through material per
   scene material; the material's custom properties hold its absorption and scattering
   per octave band. Sources (red) and listeners (blue) are spheres turned the way they
-  face, with an arrow along the aim.
+  face, with an arrow along the aim. Outdoors, each tree, hedge or belt of trees is a
+  see-through green object under `vegetation`, and the sky is left out.
 - `--paths` adds the early reflection paths from `--source` to `--listener` up to
   `--max-order`, as long after the direct sound as a simulation keeps them
   (`transition_ms`, or the mixing time with the statistical late method, see

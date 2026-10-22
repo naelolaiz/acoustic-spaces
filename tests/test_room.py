@@ -233,7 +233,8 @@ def test_example_scenes_are_ready_to_simulate(scene: Path) -> None:
         (warning,) = room.warnings()
         assert "not closed" in warning and "validate --leaks" in warning
         return
-    assert room.warnings() == []
+    warnings = room.warnings()
+    assert warnings == []
     assert room.report.closed and room.report.normals_inward
 
 

@@ -4,10 +4,12 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
+#include <cmath>
 #include <complex>
 #include <cstdint>
 #include <stdexcept>
@@ -20,8 +22,10 @@
 #include "acoustic_spaces/bvh.hpp"
 #include "acoustic_spaces/convolver.hpp"
 #include "acoustic_spaces/direct_convolution.hpp"
+#include "acoustic_spaces/edge_cull.hpp"
 #include "acoustic_spaces/fdtd.hpp"
 #include "acoustic_spaces/fft.hpp"
+#include "acoustic_spaces/rational_steps.hpp"
 #include "acoustic_spaces/ray_tracer.hpp"
 
 namespace nb = nanobind;
@@ -167,6 +171,108 @@ nb::ndarray<nb::numpy, bool> occluded(const as::Bvh &bvh, Points origins, Points
     return nb::ndarray<nb::numpy, bool>(reinterpret_cast<bool *>(owned->data()), 1, shape, owner);
 }
 
+std::vector<as::CullPlane> cull_planes(const Points &normals, const InArray &offsets,
+                                       const Points &low, const Points &high,
+                                       const InArray &spread) {
+    const std::size_t count = normals.shape(0);
+    if (offsets.shape(0) != count || low.shape(0) != count || high.shape(0) != count ||
+        spread.shape(0) != count) {
+        throw std::invalid_argument("an offset, a box and a spread per plane");
+    }
+    std::vector<as::CullPlane> planes(count);
+    for (std::size_t j = 0; j < count; ++j) {
+        planes[j].normal = {normals(j, 0), normals(j, 1), normals(j, 2)};
+        planes[j].offset = offsets(j);
+        planes[j].low = {low(j, 0), low(j, 1), low(j, 2)};
+        planes[j].high = {high(j, 0), high(j, 1), high(j, 2)};
+        planes[j].spread = spread(j);
+    }
+    return planes;
+}
+
+nb::tuple pairs_to_numpy(as::Pairs &&out) {
+    const std::size_t n = out.first.size();
+    return nb::make_tuple(to_numpy(std::move(out.first), {n}),
+                          to_numpy(std::move(out.second), {n}));
+}
+
+nb::tuple reflecting_pairs(Points starts, Points ends, Points normals, InArray offsets,
+                           Points low, Points high, InArray spread, InArray end, double offset,
+                           double grazing, std::size_t threads) {
+    if (ends.shape(0) != starts.shape(0)) {
+        throw std::invalid_argument("reflecting_pairs: one end per start of an edge");
+    }
+    const std::vector<as::Vec3> a = points(starts), b = points(ends);
+    const std::vector<as::CullPlane> planes = cull_planes(normals, offsets, low, high, spread);
+    const as::Vec3 e = vec3(end, "end");
+    as::Pairs out;
+    {
+        nb::gil_scoped_release release;
+        out = as::reflecting_pairs(a, b, planes, e, offset, grazing, threads);
+    }
+    return pairs_to_numpy(std::move(out));
+}
+
+nb::tuple reaching_pairs(Points starts, Points ends, Points normals, InArray offsets,
+                         Points low, Points high, InArray spread, InArray end, double offset,
+                         double grazing, Indices row_edge, InArray t_s, InArray rho_s,
+                         double max_distance, double tolerance, double slack,
+                         std::size_t threads) {
+    if (ends.shape(0) != starts.shape(0)) {
+        throw std::invalid_argument("reaching_pairs: one end per start of an edge");
+    }
+    const std::size_t rows = row_edge.shape(0);
+    if (t_s.shape(0) != rows || rho_s.shape(0) != rows) {
+        throw std::invalid_argument("reaching_pairs: a position and a distance per row");
+    }
+    std::vector<std::int64_t> edge(row_edge.data(), row_edge.data() + rows);
+    for (const std::int64_t i : edge) {
+        if (i < 0 || static_cast<std::size_t>(i) >= starts.shape(0)) {
+            throw std::invalid_argument("reaching_pairs: row_edge out of range");
+        }
+    }
+    const std::vector<as::Vec3> a = points(starts), b = points(ends);
+    const std::vector<as::CullPlane> planes = cull_planes(normals, offsets, low, high, spread);
+    const as::Vec3 e = vec3(end, "end");
+    const std::vector<double> ts(t_s.data(), t_s.data() + rows);
+    const std::vector<double> rs(rho_s.data(), rho_s.data() + rows);
+    as::Pairs out;
+    {
+        nb::gil_scoped_release release;
+        out = as::reaching_pairs(a, b, planes, e, offset, grazing, edge, ts, rs, max_distance,
+                                 tolerance, slack, threads);
+    }
+    return pairs_to_numpy(std::move(out));
+}
+
+using ComplexDiagonals =
+    nb::ndarray<const std::complex<double>, nb::ndim<3>, nb::c_contig, nb::device::cpu>;
+using ComplexRows =
+    nb::ndarray<const std::complex<double>, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+using ComplexField = nb::ndarray<std::complex<double>, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+
+void rational_steps_init(as::RationalSteps *self, ComplexDiagonals m, ComplexDiagonals l,
+                         ComplexRows a, ComplexRows b, std::size_t threads) {
+    const std::size_t rows = m.shape(0), points = m.shape(2), terms = a.shape(1);
+    if (m.shape(1) != 3 || l.shape(0) != rows || l.shape(1) != 3 || l.shape(2) != points) {
+        throw std::invalid_argument("RationalSteps: m and l are (rows, 3, points) diagonals");
+    }
+    if (a.shape(0) != rows || b.shape(0) != rows || b.shape(1) != terms) {
+        throw std::invalid_argument("RationalSteps: a and b are (rows, terms)");
+    }
+    nb::gil_scoped_release release;
+    new (self) as::RationalSteps(rows, points, terms, m.data(), l.data(), a.data(), b.data(),
+                                 threads);
+}
+
+void rational_steps_apply(const as::RationalSteps &steps, ComplexField psi, std::size_t threads) {
+    if (psi.shape(0) != steps.rows() || psi.shape(1) != steps.points()) {
+        throw std::invalid_argument("RationalSteps.apply: psi is (rows, points)");
+    }
+    nb::gil_scoped_release release;
+    steps.apply(psi.data(), threads);
+}
+
 nb::dict bvh_layout(const as::Bvh &bvh) {
     nb::dict out;
     bvh.layout([&](const char *name, const auto &values) {
@@ -287,6 +393,96 @@ as::StochasticScene stochastic_scene(const char *name, const as::Bvh &bvh, InArr
 
 std::vector<double> to_vector(const InArray &a) { return {a.data(), a.data() + a.shape(0)}; }
 
+// The atmosphere of an outdoor stochastic run, into `air`: rows of (height above the
+// ground, speed of sound in still air, wind speed) and the way the wind blows (x, y).
+// False with no rows (None): the rays go straight.
+bool atmosphere(const char *name, const Points &rows, const InArray &wind_direction,
+                double ground, double chord_sagitta, as::Atmosphere &air) {
+    if (!rows.is_valid() || rows.shape(0) == 0) return false;
+    const std::string fn = name;
+    if (!wind_direction.is_valid() || wind_direction.shape(0) != 2) {
+        throw std::invalid_argument(fn + ": wind_direction must be (x, y)");
+    }
+    for (std::size_t i = 0; i < rows.shape(0); ++i) {
+        air.height.push_back(rows(i, 0));
+        air.still.push_back(rows(i, 1));
+        air.wind.push_back(rows(i, 2));
+    }
+    air.wind_x = wind_direction(0);
+    air.wind_y = wind_direction(1);
+    air.ground = ground;
+    air.sagitta = chord_sagitta;
+    if (!air.valid()) {
+        throw std::invalid_argument(
+            fn + ": atmosphere rows must start at height 0 and rise, with speeds above the "
+                 "wind's, and wind_direction a unit vector");
+    }
+    air.prepare();
+    return true;
+}
+
+// The plants of an outdoor stochastic run, into `out` (see vegetation.hpp): rows of 8
+// per volume and medium in it (kind 0, medium, low, high, first corner in outline,
+// corners, 0, 0 for an upright prism; kind 1, medium, x, y, z, horizontal and vertical
+// semi-axes, 0 for a spheroid), the prisms' corners (x, y), and each medium's
+// absorption, scattering and mean cosine per band and whether it stands upright.
+// False with no rows (None): no plants.
+bool vegetation(const char *name, std::size_t bands, const Matrix &rows, const Matrix &outline,
+                const Matrix &absorption, const Matrix &scattering, const Matrix &asymmetry,
+                const Flags &upright, as::Vegetation &out) {
+    if (!rows.is_valid() || rows.shape(0) == 0) return false;
+    const std::string fn = name;
+    const auto bad = [&](const char *what) {
+        return std::invalid_argument(fn + ": " + what);
+    };
+    if (!outline.is_valid() || !absorption.is_valid() || !scattering.is_valid() ||
+        !asymmetry.is_valid() || !upright.is_valid()) {
+        throw bad("plants need plant_outline, plant_absorption, plant_scattering, "
+                  "plant_asymmetry and plant_upright");
+    }
+    const std::size_t media = upright.shape(0);
+    if (rows.shape(1) != 8 || outline.shape(1) != 2 || absorption.shape(0) != media ||
+        scattering.shape(0) != media || asymmetry.shape(0) != media ||
+        absorption.shape(1) != bands || scattering.shape(1) != bands ||
+        asymmetry.shape(1) != bands) {
+        throw bad("plants must have rows of 8, plant_outline rows of (x, y), and one row "
+                  "of plant_absorption, plant_scattering and plant_asymmetry per medium, "
+                  "with one value per band");
+    }
+    out.bands = bands;
+    out.outline.assign(outline.data(), outline.data() + outline.size());
+    out.absorption.assign(absorption.data(), absorption.data() + absorption.size());
+    out.scattering.assign(scattering.data(), scattering.data() + scattering.size());
+    out.asymmetry.assign(asymmetry.data(), asymmetry.data() + asymmetry.size());
+    out.upright.assign(upright.data(), upright.data() + media);
+    const auto whole = [&](double v) {
+        if (!(v >= 0.0) || v != std::floor(v) || v > 1e12) throw bad("bad plants row");
+        return static_cast<std::size_t>(v);
+    };
+    for (std::size_t i = 0; i < rows.shape(0); ++i) {
+        as::Vegetation::Shape shape;
+        shape.kind = static_cast<int>(whole(rows(i, 0)));
+        shape.medium = whole(rows(i, 1));
+        if (shape.kind == 0) {
+            shape.z0 = rows(i, 2);
+            shape.z1 = rows(i, 3);
+            shape.first = whole(rows(i, 4));
+            shape.count = whole(rows(i, 5));
+        } else {
+            shape.centre = {rows(i, 2), rows(i, 3), rows(i, 4)};
+            shape.radius = rows(i, 5);
+            shape.half_height = rows(i, 6);
+        }
+        out.shapes.push_back(shape);
+    }
+    if (!out.prepare()) {
+        throw bad("plants must be prisms of 3 or more corners between rising heights or "
+                  "spheroids of positive size, each with a medium, absorption and scattering "
+                  "not negative and mean cosines between -1 and 1");
+    }
+    return true;
+}
+
 // The rays trace_stochastic sends from its source: for each of the random streams
 // first_ray .. first_ray + rays - 1, the direction its ray leaves in (rays x 3) and the
 // source's energy weights that way (rays x bands, before sharing the energy out).
@@ -355,12 +551,26 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
                            std::size_t threads, double window_time_step,
                            std::uint64_t first_ray, InArray split_target, double split_ratio,
                            std::size_t max_split, std::size_t max_family, InArray room_level,
-                           Indices face_group, std::size_t groups, double moment_time_step) {
+                           Indices face_group, std::size_t groups, double moment_time_step,
+                           Points atmosphere_rows, InArray wind_direction, double ground,
+                           double chord_sagitta, Matrix plants, Matrix plant_outline,
+                           Matrix plant_absorption, Matrix plant_scattering,
+                           Matrix plant_asymmetry, Flags plant_upright) {
     as::StochasticScene scene =
         stochastic_scene("trace_stochastic", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
                          transmission, face_room, source_room);
+    as::Atmosphere bending;
+    if (atmosphere("trace_stochastic", atmosphere_rows, wind_direction, ground, chord_sagitta,
+                   bending)) {
+        scene.atmosphere = &bending;
+    }
     const std::size_t bands = scene.bands;
+    as::Vegetation greenery;
+    if (vegetation("trace_stochastic", bands, plants, plant_outline, plant_absorption,
+                   plant_scattering, plant_asymmetry, plant_upright, greenery)) {
+        scene.vegetation = &greenery;
+    }
     scene.receivers = points(receivers);
     scene.directions = points(directions);
     if (groups > 0) {
@@ -406,6 +616,50 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
         to_numpy(std::move(result.reflections), {result.windows}), result.traced_rays);
 }
 
+// One chord of each of n rays bent by an atmosphere (see atmosphere.hpp): from
+// origins along directions (unit), at most budget metres of arc, stopping where a ray
+// turns back towards the plane of normal away (zero: none). Returns the chord ends (n x
+// 3), the rays' directions there (n x 3), the metres of arc and seconds along it (n),
+// and whether each turned back (n).
+nb::tuple bent_chords(Points origins, Points directions, InArray budget, Points away,
+                      Points atmosphere_rows, InArray wind_direction, double ground,
+                      double chord_sagitta) {
+    const std::size_t n = origins.shape(0);
+    if (directions.shape(0) != n || budget.shape(0) != n || away.shape(0) != n) {
+        throw std::invalid_argument("bent_chords: one origin, direction, budget and away per ray");
+    }
+    as::Atmosphere air;
+    if (!atmosphere("bent_chords", atmosphere_rows, wind_direction, ground, chord_sagitta, air)) {
+        throw std::invalid_argument("bent_chords: no atmosphere");
+    }
+    std::vector<double> ends(3 * n), tangents(3 * n), arcs(n), times(n);
+    std::vector<std::uint8_t> turned(n);
+    {
+        nb::gil_scoped_release release;
+        for (std::size_t i = 0; i < n; ++i) {
+            const as::Vec3 o{origins(i, 0), origins(i, 1), origins(i, 2)};
+            const as::Vec3 d{directions(i, 0), directions(i, 1), directions(i, 2)};
+            const as::Vec3 a{away(i, 0), away(i, 1), away(i, 2)};
+            const bool leaving = a.x != 0.0 || a.y != 0.0 || a.z != 0.0;
+            as::BentRay ray(air, o, d);
+            const as::BentRay::Chord chord = ray.chord(budget(i), leaving ? &a : nullptr);
+            const as::Vec3 t = ray.direction();
+            ends[3 * i] = chord.end.x;
+            ends[3 * i + 1] = chord.end.y;
+            ends[3 * i + 2] = chord.end.z;
+            tangents[3 * i] = t.x;
+            tangents[3 * i + 1] = t.y;
+            tangents[3 * i + 2] = t.z;
+            arcs[i] = chord.arc;
+            times[i] = chord.time;
+            turned[i] = chord.turned ? 1 : 0;
+        }
+    }
+    return nb::make_tuple(to_numpy(std::move(ends), {n, 3}), to_numpy(std::move(tangents), {n, 3}),
+                          to_numpy(std::move(arcs), {n}), to_numpy(std::move(times), {n}),
+                          to_numpy(std::move(turned), {n}));
+}
+
 using MapIndex = nb::ndarray<const std::int64_t, nb::ndim<3>, nb::c_contig, nb::device::cpu>;
 
 nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
@@ -419,12 +673,25 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
                     double speed_of_sound, int covered_order, std::uint64_t seed,
                     std::size_t threads, double window_time_step, std::uint64_t first_ray,
                     InArray split_target, double split_ratio, std::size_t max_split,
-                    std::size_t max_family, InArray room_level) {
+                    std::size_t max_family, InArray room_level, Points atmosphere_rows,
+                    InArray wind_direction, double ground, double chord_sagitta, Matrix plants,
+                    Matrix plant_outline, Matrix plant_absorption, Matrix plant_scattering,
+                    Matrix plant_asymmetry, Flags plant_upright) {
     as::StochasticScene scene =
         stochastic_scene("trace_map", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
                          transmission, face_room, source_room);
+    as::Atmosphere bending;
+    if (atmosphere("trace_map", atmosphere_rows, wind_direction, ground, chord_sagitta,
+                   bending)) {
+        scene.atmosphere = &bending;
+    }
     const std::size_t bands = scene.bands;
+    as::Vegetation greenery;
+    if (vegetation("trace_map", bands, plants, plant_outline, plant_absorption,
+                   plant_scattering, plant_asymmetry, plant_upright, greenery)) {
+        scene.vegetation = &greenery;
+    }
     if (origin.shape(0) != 2) throw std::invalid_argument("trace_map: origin must be (x, y)");
     as::MapGrid &map = scene.map;
     map.x0 = origin(0);
@@ -464,17 +731,30 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
         to_numpy(std::move(result.reflections), {result.windows}), result.traced_rays);
 }
 
+using Speeds = nb::ndarray<const float, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
+
 void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_material,
                       InArray beta, Matrix branches, Indices branch_material, InArray origin,
                       double cell, std::size_t nx, std::size_t ny, std::size_t nz,
                       InArray source, Points probes, double edge_admittance, std::size_t layer,
-                      double layer_damping, std::size_t threads, std::size_t stencil) {
+                      double layer_damping, std::size_t threads, std::size_t stencil,
+                      std::optional<Speeds> speed, std::optional<Speeds> flow_x,
+                      std::optional<Speeds> flow_y) {
     if (face_material.shape(0) != bvh.face_count()) {
         throw std::invalid_argument("WaveSolver: one material per face");
     }
     const std::size_t count = branch_material.shape(0);
     if (branches.shape(0) != count || (count > 0 && branches.shape(1) != 3)) {
         throw std::invalid_argument("WaveSolver: m, r and q of each branch, and its material");
+    }
+    if (speed && speed->shape(0) != nx * ny * nz) {
+        throw std::invalid_argument("WaveSolver: one speed per cell of the grid");
+    }
+    if (flow_x.has_value() != flow_y.has_value()) {
+        throw std::invalid_argument("WaveSolver: flow_x and flow_y go together");
+    }
+    if (flow_x && (flow_x->shape(0) != nx * ny * nz || flow_y->shape(0) != nx * ny * nz)) {
+        throw std::invalid_argument("WaveSolver: one shift of the air per cell of the grid");
     }
     const std::vector<as::Vec3> probe_points = points(probes);
     const as::Vec3 o = vec3(origin, "origin"), s = vec3(source, "source");
@@ -483,7 +763,9 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
         new (self) as::WaveSolver(bvh, face_material.data(), beta.data(), beta.shape(0),
                                   branches.data(), branch_material.data(), count, o, cell, nx, ny,
                                   nz, s, probe_points, edge_admittance, layer, layer_damping,
-                                  threads, stencil);
+                                  threads, stencil, speed ? speed->data() : nullptr,
+                                  flow_x ? flow_x->data() : nullptr,
+                                  flow_y ? flow_y->data() : nullptr);
     }
 }
 
@@ -558,6 +840,20 @@ NB_MODULE(_native, m) {
           "Adds amplitudes[i] * kernels[index[i]] (channels x taps) at sample positions[i]; "
           "returns (channels, length).");
 
+    nb::class_<as::RationalSteps>(
+        m, "RationalSteps",
+        "The range steps of the wide-angle parabolic equation: psi <- prod_j (M + b_j L)^-1 "
+        "(M + a_j L) psi for each row, M and L tridiagonal, each M + b_j L factored once.")
+        .def("__init__", &rational_steps_init, nb::arg("m"), nb::arg("l"), nb::arg("a"),
+             nb::arg("b"), nb::arg("threads") = 1,
+             "m, l: (rows, 3, points) complex diagonals, lower (first unused), centre and "
+             "upper (last unused); a, b: (rows, terms) complex.")
+        .def("apply", &rational_steps_apply, nb::arg("psi").noconvert(), nb::arg("threads") = 1,
+             "One step on psi (rows, points), complex128 and C-contiguous, in place.")
+        .def_prop_ro("rows", &as::RationalSteps::rows)
+        .def_prop_ro("points", &as::RationalSteps::points)
+        .def_prop_ro("terms", &as::RationalSteps::terms);
+
     nb::class_<as::Bvh>(m, "Bvh", "Bounding volume hierarchy over a triangle mesh.")
         .def(
             "__init__",
@@ -592,15 +888,21 @@ NB_MODULE(_native, m) {
              nb::arg("cell"), nb::arg("nx"), nb::arg("ny"), nb::arg("nz"), nb::arg("source"),
              nb::arg("probes"), nb::arg("edge_admittance") = 1.0, nb::arg("layer") = 0,
              nb::arg("layer_damping") = 0.0, nb::arg("threads") = 0, nb::arg("stencil") = 7,
+             nb::arg("speed").none() = nb::none(), nb::arg("flow_x").none() = nb::none(),
+             nb::arg("flow_y").none() = nb::none(),
              "face_material: each face's material; beta: each material's constant admittance; "
              "branches (n, 3): m, r and q of each mass-resistance-stiffness branch, of "
              "branch_material; layer: cells of matched layer inside the grid's edge; "
-             "stencil: 7 or 19 points.")
+             "stencil: 7 or 19 points; speed (nx ny nz,) float32, x fastest: each cell's "
+             "speed of sound over the grid's, in (0, 1], or None for the same everywhere; "
+             "flow_x, flow_y (nx ny nz,) float32: the air's velocity in cells per step, "
+             "each under half, or None for still air.")
         .def_prop_ro("air_cells", &as::WaveSolver::air_cells)
         .def_prop_ro("boundary_cells", &as::WaveSolver::boundary_cells)
         .def_prop_ro("branch_states", &as::WaveSolver::branch_states)
         .def_prop_ro("layer_cells", &as::WaveSolver::layer_cells)
         .def_prop_ro("open", &as::WaveSolver::open)
+        .def_prop_ro("flowing", &as::WaveSolver::flowing)
         .def_prop_ro("stencil", &as::WaveSolver::stencil)
         .def_prop_ro("threads", &as::WaveSolver::threads)
         .def("probe_found", &as::WaveSolver::probe_found, nb::arg("probe"))
@@ -611,6 +913,28 @@ NB_MODULE(_native, m) {
         .def("layout", &wave_layout,
              "The grid's layout as arrays (see WaveSolver::layout in fdtd.hpp), for "
              "stepping it elsewhere.");
+
+    m.def("reflecting_pairs", &reflecting_pairs, nb::arg("starts"), nb::arg("ends"),
+          nb::arg("normals"), nb::arg("offsets"), nb::arg("low"), nb::arg("high"),
+          nb::arg("spread"), nb::arg("end"), nb::arg("offset"), nb::arg("grazing"),
+          nb::arg("threads"),
+          "The pairs of an edge (starts to ends, n x 3) and a plane (normals, m x 3, and "
+          "offsets) that a path from the edge to end can reflect off, by edge and then plane: "
+          "(edge rows[k], plane columns[k]). low and high (m x 3) box each plane's faces "
+          "that are not openings, spread (m) is how far those faces stray from the plane; "
+          "the ray tests start within offset of the edge, and pairs whose rays meet the "
+          "plane at a cosine below grazing are all kept. threads 0: all cores.");
+
+    m.def("reaching_pairs", &reaching_pairs, nb::arg("starts"), nb::arg("ends"),
+          nb::arg("normals"), nb::arg("offsets"), nb::arg("low"), nb::arg("high"),
+          nb::arg("spread"), nb::arg("end"), nb::arg("offset"), nb::arg("grazing"),
+          nb::arg("row_edge"), nb::arg("t_s"), nb::arg("rho_s"), nb::arg("max_distance"),
+          nb::arg("tolerance"), nb::arg("slack"), nb::arg("threads"),
+          "For rows of an edge (row_edge) with a source side at t_s along it and rho_s from "
+          "it, the planes reflecting_pairs keeps whose image of end makes a path over the "
+          "edge that touches it and is no longer than max_distance, to within slack, with "
+          "the image more than tolerance / 2 off the edge's line: (rows[k], plane "
+          "columns[k]), by row and then plane. Other arguments as for reflecting_pairs.");
 
     m.def("specular_sequences", &specular_sequences, nb::arg("bvh"), nb::arg("source"),
           nb::arg("rays"), nb::arg("max_order"), nb::arg("threads"), nb::arg("passing"),
@@ -633,6 +957,13 @@ NB_MODULE(_native, m) {
           nb::arg("split_target"), nb::arg("split_ratio"), nb::arg("max_split"),
           nb::arg("max_family"), nb::arg("room_level"), nb::arg("face_group"),
           nb::arg("groups"), nb::arg("moment_time_step"),
+          nb::arg("atmosphere").none() = nb::none(), nb::arg("wind_direction").none() = nb::none(),
+          nb::arg("ground") = 0.0, nb::arg("chord_sagitta") = 0.02,
+          nb::arg("plants").none() = nb::none(), nb::arg("plant_outline").none() = nb::none(),
+          nb::arg("plant_absorption").none() = nb::none(),
+          nb::arg("plant_scattering").none() = nb::none(),
+          nb::arg("plant_asymmetry").none() = nb::none(),
+          nb::arg("plant_upright").none() = nb::none(),
           "Stochastic ray tracing: (energy[r, band, bin], directional[r, dir, band, bin], "
           "moments[r, term, band, moment bin], escaped rays, ray_energy[window], "
           "reflections[window], traced rays); "
@@ -651,7 +982,20 @@ NB_MODULE(_native, m) {
           "the source's room. With groups > 0, face_group (one per face, -1 for none) "
           "puts faces in groups, and moments sums per receiver and bin of moment_time_step "
           "the energy times 1, the reflections a ray has had off each group, n_i, and their "
-          "products n_i n_j (i <= j); else it is empty.");
+          "products n_i n_j (i <= j); else it is empty. Outdoors, atmosphere (rows of height "
+          "above the ground, speed of sound in still air and wind speed, from height 0 up; "
+          "None: straight rays) with wind_direction (x, y, unit) and ground (z) bends the "
+          "rays, followed in chords within chord_sagitta (m) of their arcs. Plants (None: "
+          "none) absorb and scatter the rays: rows of 8 per volume and medium in it (kind "
+          "0, medium, low, high, first corner in plant_outline, corners, 0, 0 for a polygon "
+          "of corners (x, y) raised from low to high; kind 1, medium, x, y, z, horizontal "
+          "and vertical semi-axes, 0 for a spheroid), filled with media whose absorption "
+          "and scattering per metre (energy) and mean cosine of scattering per band are "
+          "the rows of plant_absorption, plant_scattering and plant_asymmetry (media x "
+          "bands); plant_upright (one per medium) marks stems, met by the horizontal share "
+          "of a ray and scattering it sideways, keeping its slope: with rain, they send "
+          "each receiver what the ray's next leg carries through its sphere, averaged over "
+          "the turns.");
 
     m.def("ray_starts", &ray_starts, nb::arg("directivity_a"), nb::arg("orientation"),
           nb::arg("directivity_table"), nb::arg("bands"), nb::arg("rays"), nb::arg("first_ray"),
@@ -660,6 +1004,15 @@ NB_MODULE(_native, m) {
           "first_ray .. first_ray + rays - 1: (directions[ray, 3], weights[ray, band]), the "
           "source's energy weights in each direction (averaging 1 over the sphere), "
           "directivity_a, orientation and directivity_table as for trace_stochastic.");
+
+    m.def("bent_chords", &bent_chords, nb::arg("origins"), nb::arg("directions"),
+          nb::arg("budget"), nb::arg("away"), nb::arg("atmosphere"), nb::arg("wind_direction"),
+          nb::arg("ground"), nb::arg("chord_sagitta"),
+          "One chord of each ray bent by an atmosphere (as trace_stochastic's): from origins "
+          "(n x 3) along directions (n x 3, unit), at most budget (n) metres of arc, stopping "
+          "where a ray turns back towards the plane whose normal is its row of away (n x 3; "
+          "zeros: none). Returns (ends[n, 3], directions at the ends[n, 3], arc lengths[n] "
+          "(m), times[n] (s), turned[n]).");
 
     m.def("trace_map", &trace_map, nb::arg("bvh"), nb::arg("source"), nb::arg("directivity_a"),
           nb::arg("orientation"), nb::arg("directivity_table"), nb::arg("absorption"),
@@ -673,6 +1026,13 @@ NB_MODULE(_native, m) {
           nb::arg("threads"), nb::arg("window_time_step"), nb::arg("first_ray"),
           nb::arg("split_target"), nb::arg("split_ratio"), nb::arg("max_split"),
           nb::arg("max_family"), nb::arg("room_level"),
+          nb::arg("atmosphere").none() = nb::none(), nb::arg("wind_direction").none() = nb::none(),
+          nb::arg("ground") = 0.0, nb::arg("chord_sagitta") = 0.02,
+          nb::arg("plants").none() = nb::none(), nb::arg("plant_outline").none() = nb::none(),
+          nb::arg("plant_absorption").none() = nb::none(),
+          nb::arg("plant_scattering").none() = nb::none(),
+          nb::arg("plant_asymmetry").none() = nb::none(),
+          nb::arg("plant_upright").none() = nb::none(),
           "Stochastic ray tracing onto a coverage map: (energy[point, band, bin], escaped "
           "rays, ray_energy[window], reflections[window], traced rays). point (ny x nx x "
           "layers) holds the map point of each column of width cell from origin (x, y), "

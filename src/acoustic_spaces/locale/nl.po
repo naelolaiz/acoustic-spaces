@@ -111,6 +111,88 @@ msgstr "STI"
 msgid "speech transmission index"
 msgstr "spraaktransmissie-index"
 
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Re free field (dB)"
+msgstr "Re vrije veld (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"level relative to free field, outdoors: the excess attenuation with its sign "
+"turned"
+msgstr ""
+"niveau ten opzichte van het vrije veld, buiten: de extra demping met "
+"omgekeerd teken"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Insertion loss (dB)"
+msgstr "Invoegdemping (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"insertion loss of the buildings, barriers or vegetation the map was also run "
+"without"
+msgstr ""
+"invoegdemping van de gebouwen, geluidsschermen of vegetatie waarzonder de "
+"kaart ook is berekend"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Insertion loss (dB(A))"
+msgstr "Invoegdemping (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "A-weighted insertion loss of the buildings, barriers or vegetation"
+msgstr "A-gewogen invoegdemping van de gebouwen, geluidsschermen of vegetatie"
+
+#: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
+msgid "Long-term level (dB)"
+msgstr "Langetermijnniveau (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"level over a long term, outdoors: the mean over the weather classes and the "
+"day"
+msgstr ""
+"niveau over een lange termijn, buiten: het gemiddelde over de weerklassen en "
+"de dag"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Rating level (dB(A))"
+msgstr "Beoordelingsniveau (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "level over a long term with each period's penalty, A-weighted (L_den)"
+msgstr ""
+"niveau over een lange termijn met de toeslag van elke periode, A-gewogen "
+"(L_den)"
+
+#: acoustic_spaces/examples.py
+msgid "Rooms"
+msgstr "Ruimtes"
+
+#: acoustic_spaces/examples.py
+msgid "Halls and churches"
+msgstr "Zalen en kerken"
+
+#: acoustic_spaces/examples.py
+msgid "Sound systems"
+msgstr "Geluidsinstallaties"
+
+#: acoustic_spaces/examples.py acoustic_spaces/gui/inspector.py
+msgid "Outdoors"
+msgstr "Buiten"
+
+#: acoustic_spaces/examples.py
+msgid "Models from CAD and BIM files"
+msgstr "Modellen uit CAD- en BIM-bestanden"
+
+#: acoustic_spaces/examples.py
+msgid "Measurements and material libraries"
+msgstr "Metingen en materiaalbibliotheken"
+
+#: acoustic_spaces/examples.py
+msgid "Other examples"
+msgstr "Andere voorbeelden"
+
 #. Translators: a background task such as "Simulating hall…", then how long it has run so far.
 #: acoustic_spaces/gui/activity.py
 #, python-brace-format
@@ -146,6 +228,74 @@ msgstr "Acoustic Spaces-editor"
 #: acoustic_spaces/gui/app.py
 msgid "Scenes (*.yaml *.yml)"
 msgstr "Scènes (*.yaml *.yml)"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New building with {count} corners, {height:g} m high; change its height "
+"under Geometry."
+msgstr ""
+"Nieuw gebouw met {count} hoeken, {height:g} m hoog; de hoogte wijzigen onder "
+"Geometrie."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New barrier along {count} points, {height:g} m high; change its height under "
+"Geometry."
+msgstr ""
+"Nieuw geluidsscherm met {count} punten, {height:g} m hoog; de hoogte "
+"wijzigen onder Geometrie."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New belt of trees with {count} corners, {height:g} m high, with dense "
+"foliage; change its height under Geometry and the rest in the scene file."
+msgstr ""
+"Nieuwe bomenstrook met {count} hoeken, {height:g} m hoog, met dicht "
+"gebladerte; de hoogte wijzigen onder Geometrie en de rest in het "
+"scènebestand."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New hedge along {count} points, {width:g} m wide and {height:g} m high, with "
+"dense foliage; change its height under Geometry and the rest in the scene "
+"file."
+msgstr ""
+"Nieuwe haag met {count} punten, {width:g} m breed en {height:g} m hoog, met "
+"dicht gebladerte; de hoogte wijzigen onder Geometrie en de rest in het "
+"scènebestand."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New tree {height:g} m high, its crown {crown_diameter:g} m across from "
+"{base:g} m up, with dense foliage; change its height under Geometry and the "
+"rest in the scene file."
+msgstr ""
+"Nieuwe boom van {height:g} m hoog, met een kroon van {crown_diameter:g} m "
+"doorsnede vanaf {base:g} m hoogte en dicht gebladerte; de hoogte wijzigen "
+"onder Geometrie en de rest in het scènebestand."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New ground zone with {count} corners; give its surface a material of its own "
+"in the scene tree."
+msgstr ""
+"Nieuwe grondzone met {count} hoeken; geef het vlak ervan een eigen materiaal "
+"in de scèneboom."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New weather zone with {count} corners; choose it under Weather of in the "
+"scene's entry to give it wind and temperature of its own."
+msgstr ""
+"Nieuwe weerzone met {count} hoeken; kies die onder Weer van in het onderdeel "
+"van de scène om haar een eigen wind en temperatuur te geven."
 
 #. Translators: {patterns} is the list of model file patterns, such as *.obj *.dxf.
 #: acoustic_spaces/gui/app.py
@@ -232,6 +382,19 @@ msgstr "Nieuwe ruimte uit &plattegrond…"
 #: acoustic_spaces/gui/app.py
 msgid "Draw the floor plan of a new room, corner by corner"
 msgstr "De plattegrond van een nieuwe ruimte hoek voor hoek tekenen"
+
+#: acoustic_spaces/gui/app.py
+msgid "New o&utdoor scene…"
+msgstr "Nieuwe b&uitenscène…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Start a new scene on open ground, to draw buildings, barriers, vegetation "
+"and ground zones on, or to set a terrain and buildings from a map"
+msgstr ""
+"Een nieuwe scène op open grond maken, om er gebouwen, geluidsschermen, "
+"vegetatie en grondzones op te tekenen, of er een reliëf en gebouwen uit een "
+"kaart op te zetten"
 
 #: acoustic_spaces/gui/app.py
 msgid "&Open…"
@@ -516,12 +679,6 @@ msgstr "&Bestand"
 msgid "Open e&xample"
 msgstr "&Voorbeeld openen"
 
-#. Translators: {extra} is the name of an optional part of the installation (gui, ifc...); {hint} says how to install it.
-#: acoustic_spaces/gui/app.py
-#, python-brace-format
-msgid "Needs the {extra} extra: {hint}"
-msgstr "Vereist de uitbreiding {extra}: {hint}"
-
 #: acoustic_spaces/gui/app.py
 msgid "&Edit"
 msgstr "Be&werken"
@@ -628,6 +785,12 @@ msgstr "Opnieuw uitvoeren {edit}"
 #: acoustic_spaces/gui/app.py
 msgid "Nothing to redo"
 msgstr "Niets om opnieuw uit te voeren"
+
+#. Translators: the status bar's summary of an outdoor scene.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "outdoors, {area:,.0f} m² of ground"
+msgstr "buiten, {area:,.0f} m² grond"
 
 #. Translators: the status bar's summary of the room: its volume and its reverberation time at one band, such as "1 kHz".
 #: acoustic_spaces/gui/app.py
@@ -745,6 +908,16 @@ msgstr ""
 "overeenkomst meer."
 
 #: acoustic_spaces/gui/app.py
+msgid ""
+"Replace the outdoor scene (its ground, buildings, barriers and model file) "
+"with the drawn floor plan? Material assignments to their surfaces will no "
+"longer match anything."
+msgstr ""
+"De buitenscène (de grond, gebouwen, geluidsschermen en het modelbestand) "
+"vervangen door de getekende plattegrond? Materiaaltoewijzingen aan hun "
+"oppervlakken hebben dan geen overeenkomst meer."
+
+#: acoustic_spaces/gui/app.py
 msgid "Add material"
 msgstr "Materiaal toevoegen"
 
@@ -772,6 +945,17 @@ msgstr "De scène bevat niet-opgeslagen wijzigingen. Opslaan?"
 #: acoustic_spaces/gui/app.py
 msgid "New box room; change its size under Geometry."
 msgstr "Nieuwe rechthoekige ruimte; de afmetingen wijzigen onder Geometrie."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"New outdoor scene: a meadow {size:g} m across. Draw buildings, barriers, "
+"vegetation and ground zones from the Geometry form, or set a terrain and "
+"buildings from a map there."
+msgstr ""
+"Nieuwe buitenscène: een weide van {size:g} m breed. Teken gebouwen, "
+"geluidsschermen, vegetatie en grondzones vanuit het formulier Geometrie, of "
+"zet daar een reliëf en gebouwen uit een kaart op."
 
 #: acoustic_spaces/gui/app.py
 msgid "New room: click its corners in the plan, and close it on the first one."
@@ -810,6 +994,12 @@ msgstr "Kan {name} niet openen"
 #, python-brace-format
 msgid "Opened {path}"
 msgstr "{path} geopend"
+
+#. Translators: {extra} is the name of an optional part of the installation (gui, ifc...); {hint} says how to install it.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Needs the {extra} extra: {hint}"
+msgstr "Vereist de uitbreiding {extra}: {hint}"
 
 #: acoustic_spaces/gui/app.py
 msgid "Save scene"
@@ -1002,6 +1192,10 @@ msgid "Tuning cancelled."
 msgstr "Optimalisatie geannuleerd."
 
 #: acoustic_spaces/gui/app.py
+msgid "Export cancelled."
+msgstr "Export geannuleerd."
+
+#: acoustic_spaces/gui/app.py
 msgid "Simulation cancelled."
 msgstr "Simulatie geannuleerd."
 
@@ -1010,8 +1204,17 @@ msgid "Nothing to export yet: run the simulation (F5) first."
 msgstr "Nog niets om te exporteren: eerst de simulatie uitvoeren (F5)."
 
 #: acoustic_spaces/gui/app.py
+msgid "Wait for the current run to end, then export."
+msgstr "Exporteren kan pas als de lopende berekening klaar is."
+
+#: acoustic_spaces/gui/app.py
 msgid "Folder for the impulse responses"
 msgstr "Map voor de impulsresponsen"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Exporting the impulse responses to {folder}…"
+msgstr "De impulsresponsen worden geëxporteerd naar {folder}…"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -1156,6 +1359,34 @@ msgid "change listener"
 msgstr "ontvanger wijzigen"
 
 #: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "use source"
+msgid_plural "use {count} sources"
+msgstr[0] "bron meenemen"
+msgstr[1] "{count} bronnen meenemen"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "leave out source"
+msgid_plural "leave out {count} sources"
+msgstr[0] "bron weglaten"
+msgstr[1] "{count} bronnen weglaten"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "use listener"
+msgid_plural "use {count} listeners"
+msgstr[0] "ontvanger meenemen"
+msgstr[1] "{count} ontvangers meenemen"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "leave out listener"
+msgid_plural "leave out {count} listeners"
+msgstr[0] "ontvanger weglaten"
+msgstr[1] "{count} ontvangers weglaten"
+
+#: acoustic_spaces/gui/document.py
 msgid "a scene needs at least one source"
 msgstr "een scène vereist minstens één bron"
 
@@ -1172,6 +1403,10 @@ msgid "remove listener"
 msgstr "ontvanger verwijderen"
 
 #: acoustic_spaces/gui/document.py
+msgid "the scene is outdoors: draw a floor plan to replace it"
+msgstr "de scène ligt buiten: een plattegrond tekenen om deze te vervangen"
+
+#: acoustic_spaces/gui/document.py
 msgid "the room is a model file: draw a floor plan to replace it"
 msgstr ""
 "de ruimte komt uit een modelbestand: een plattegrond tekenen om deze te "
@@ -1184,6 +1419,46 @@ msgstr "plattegrond wijzigen"
 #: acoustic_spaces/gui/document.py
 msgid "draw floor plan"
 msgstr "plattegrond tekenen"
+
+#: acoustic_spaces/gui/document.py
+msgid "add building"
+msgstr "gebouw toevoegen"
+
+#: acoustic_spaces/gui/document.py
+msgid "add barrier"
+msgstr "geluidsscherm toevoegen"
+
+#: acoustic_spaces/gui/document.py
+msgid "add vegetation"
+msgstr "vegetatie toevoegen"
+
+#: acoustic_spaces/gui/document.py
+msgid "add zone"
+msgstr "zone toevoegen"
+
+#: acoustic_spaces/gui/document.py
+msgid "add weather zone"
+msgstr "weerzone toevoegen"
+
+#: acoustic_spaces/gui/document.py acoustic_spaces/gui/inspector.py
+msgid "change ground"
+msgstr "grond wijzigen"
+
+#: acoustic_spaces/gui/document.py
+msgid "set terrain"
+msgstr "reliëf instellen"
+
+#: acoustic_spaces/gui/document.py
+msgid "remove terrain"
+msgstr "reliëf verwijderen"
+
+#: acoustic_spaces/gui/document.py
+msgid "add buildings from a map"
+msgstr "gebouwen uit kaart toevoegen"
+
+#: acoustic_spaces/gui/document.py
+msgid "remove the map's buildings"
+msgstr "gebouwen van de kaart verwijderen"
 
 #: acoustic_spaces/gui/document.py
 #, python-brace-format
@@ -1302,6 +1577,22 @@ msgid "second_order"
 msgstr "tweede orde"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "one side"
+msgstr "één kant"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "both sides"
+msgstr "beide kanten"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "narrow angle"
+msgstr "smalle hoek"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "wide angle"
+msgstr "brede hoek"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "stochastic_ray_tracing"
 msgstr "stochastische straaltracering"
 
@@ -1329,9 +1620,18 @@ msgstr "standaard"
 msgid "both"
 msgstr "beide"
 
+#. Translators: the sky's height when it is not set: worked out from the scene.
 #: acoustic_spaces/gui/inspector.py
 msgid "auto"
 msgstr "automatisch"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "effective speed of sound"
+msgstr "effectieve geluidssnelheid"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "moving air"
+msgstr "bewegende lucht"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "vector"
@@ -1352,6 +1652,54 @@ msgstr "octaaf"
 #: acoustic_spaces/gui/inspector.py
 msgid "third_octave"
 msgstr "terts"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "(none)"
+msgstr "(geen)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "neutral"
+msgstr "neutraal"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "windy"
+msgstr "winderig"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "sunny_day"
+msgstr "zonnige dag"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "clear_night"
+msgstr "heldere nacht"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "custom"
+msgstr "aangepast"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "log"
+msgstr "logaritmisch"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "linear"
+msgstr "lineair"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "constant"
+msgstr "constant"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "weak"
+msgstr "zwak"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "moderate"
+msgstr "matig"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "strong"
+msgstr "sterk"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Measured data or an array from a file…"
@@ -1464,8 +1812,409 @@ msgstr ""
 "Een berekening geeft het volledige resultaat"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "(none)"
-msgstr "(geen)"
+msgid "Wind and temperature"
+msgstr "Wind en temperatuur"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Whose weather the fields below show and change: the whole scene's; a weather "
+"zone's, a part of the scene with wind and temperature of its own (the lee of "
+"buildings, where the wind drops; a lake, over which the air lies cooler), "
+"drawn in the plan; or a weather class's, a weather that holds for a share of "
+"the time, for the levels over a long term (L_den). Outside the zones the "
+"scene's weather holds, and the eddies are the scene's everywhere but in a "
+"weather class, which may have its own"
+msgstr ""
+"Wiens weer de velden hieronder tonen en wijzigen: dat van de hele scène; dat "
+"van een weerzone, een deel van de scène met een eigen wind en temperatuur "
+"(de luwte van gebouwen, waar de wind wegvalt; een meer, waarboven de lucht "
+"koeler is), getekend in de plattegrond; of dat van een weerklasse, een weer "
+"dat een deel van de tijd heerst, voor de niveaus over een lange termijn "
+"(L_den). Buiten de zones geldt het weer van de scène, en de turbulentie is "
+"overal die van de scène, behalve in een weerklasse, die een eigen kan hebben"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weather of"
+msgstr "Weer van"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The weather, which bends sound outdoors: (none) or neutral, still air and "
+"sound in straight lines; windy, 5 m/s 10 m up, bending sound down downwind "
+"and up upwind; sunny_day, air cooling with height, bending sound up into a "
+"shadow a few hundred metres away; clear_night, air warming with height, "
+"bending sound down; custom, the values below. Changing one of them makes the "
+"weather custom. The air temperature above is the ground's. For a weather "
+"zone, (none) is the scene's weather unchanged"
+msgstr ""
+"Het weer, dat geluid buiten afbuigt: (geen) of neutraal, stilstaande lucht "
+"en geluid in rechte lijnen; winderig, 5 m/s op 10 m hoogte, buigt geluid met "
+"de wind mee omlaag en tegen de wind in omhoog; zonnige dag, lucht die met de "
+"hoogte afkoelt, buigt geluid omhoog, een schaduw in op een paar honderd "
+"meter; heldere nacht, lucht die met de hoogte warmer wordt, buigt geluid "
+"omlaag; aangepast, de waarden hieronder. Een daarvan wijzigen maakt het weer "
+"aangepast. De luchttemperatuur hierboven is die aan de grond. Bij een "
+"weerzone is (geen) het ongewijzigde weer van de scène"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weather"
+msgstr "Weer"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The wind's speed at the height below (m/s): sound goes faster with the wind "
+"and slower against it"
+msgstr ""
+"De windsnelheid op de hoogte hieronder (m/s): geluid gaat sneller met de "
+"wind mee en langzamer ertegenin"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The way the wind blows to, in degrees counterclockwise from +x seen from "
+"above (0: along +x, 90: along +y)"
+msgstr ""
+"Waarheen de wind waait, in graden tegen de klok in vanaf +x, van bovenaf "
+"gezien (0: langs +x, 90: langs +y)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The height above the ground the wind's speed is at (m)"
+msgstr "De hoogte boven de grond waarop de windsnelheid geldt (m)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the wind's speed grows with height: log, with the logarithm of the "
+"height over the roughness, the usual profile; linear, in proportion to the "
+"height; constant, the same at every height"
+msgstr ""
+"Hoe de windsnelheid met de hoogte toeneemt: logaritmisch, met de logaritme "
+"van de hoogte boven de ruwheid, het gebruikelijke profiel; lineair, "
+"evenredig met de hoogte; constant, op elke hoogte gelijk"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the temperature changes per metre of height (K/m): -0.0098 in air "
+"stirred by the sun, positive in an inversion. Sound goes faster in warmer "
+"air and bends away from it"
+msgstr ""
+"Hoe de temperatuur per meter hoogte verandert (K/m): -0.0098 in lucht die "
+"door de zon wordt gemengd, positief bij een inversie. Geluid gaat sneller in "
+"warmere lucht en buigt ervan af"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A change of temperature fastest near the ground (K, times ln(1 + height / "
+"roughness)): negative on a sunny day, positive on a clear night"
+msgstr ""
+"Een temperatuurverandering die vlak bij de grond het snelst is (K, maal ln(1 "
+"+ hoogte / ruwheid)): negatief op een zonnige dag, positief in een heldere "
+"nacht"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The ground's roughness length (m), for the log profiles: 0.01 to 0.1 over "
+"grass, up to 1 among buildings and trees"
+msgstr ""
+"De ruwheidslengte van de grond (m), voor de logaritmische profielen: 0.01 "
+"tot 0.1 boven gras, tot 1 tussen gebouwen en bomen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind speed"
+msgstr "Windsnelheid"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind direction"
+msgstr "Windrichting"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind height"
+msgstr "Windhoogte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind profile"
+msgstr "Windprofiel"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature gradient"
+msgstr "Temperatuurgradiënt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature near the ground"
+msgstr "Temperatuur bij de grond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Roughness"
+msgstr "Ruwheid"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The temperature at the ground in the weather zone or class (°C), where it "
+"differs from the scene's air temperature: cooler over water, warmer over a "
+"car park, colder on a winter night"
+msgstr ""
+"De temperatuur aan de grond in de weerzone of -klasse (°C), waar die afwijkt "
+"van de luchttemperatuur van de scène: koeler boven water, warmer boven een "
+"parkeerterrein, kouder in een winternacht"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground temperature"
+msgstr "Grondtemperatuur"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add weather zone"
+msgstr "Weerzone toevoegen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw a part of the scene with weather of its own in the plan, corner by "
+"corner, and close it on the first corner; then choose it under Weather of "
+"and give it its wind and temperature"
+msgstr ""
+"Een deel van de scène met eigen weer in de plattegrond hoek voor hoek "
+"tekenen en bij de eerste hoek sluiten; kies het daarna onder Weer van en "
+"geef het zijn wind en temperatuur"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove weather zone"
+msgstr "Weerzone verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the weather zone chosen under Weather of: the scene's weather holds "
+"there"
+msgstr ""
+"De onder Weer van gekozen weerzone verwijderen: daar geldt het weer van de "
+"scène"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The share of each period of the day this weather class holds (%), from "
+"weather statistics of the place: the inversions of a clear night come at "
+"night, a strong sun by day. In each period the classes' shares add up to 100 "
+"%: changing one makes room in the others, in proportion"
+msgstr ""
+"Het deel van elke periode van de dag waarin deze weerklasse heerst (%), uit "
+"de weerstatistiek van de plek: de inversies van een heldere nacht komen 's "
+"nachts, een sterke zon overdag. In elke periode tellen de delen van de "
+"klassen op tot 100 %: wie er één wijzigt, maakt naar verhouding ruimte in de "
+"andere"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Share of the time"
+msgstr "Aandeel van de tijd"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The periods of the day the levels over a long term are rated over, with "
+"their hours and the penalty each adds to its level: by default the day, the "
+"evening and the night of L_den. Other periods are set in the scene file "
+"(long_term.periods)"
+msgstr ""
+"De perioden van de dag waarover de niveaus over een lange termijn beoordeeld "
+"worden, met hun uren en de toeslag die elke periode bij haar niveau optelt: "
+"standaard de dag, de avond en de nacht van L_den. Andere perioden worden in "
+"het scènebestand ingesteld (long_term.periods)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add weather class"
+msgstr "Weerklasse toevoegen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Add a weather that holds for a share of the time, for the levels over a long "
+"term (L_den): the first holds all the time in the scene's weather, the next "
+"ones none of it until given their share. A run then runs the scene in each "
+"class and combines them"
+msgstr ""
+"Een weer toevoegen dat een deel van de tijd heerst, voor de niveaus over een "
+"lange termijn (L_den): de eerste heerst de hele tijd met het weer van de "
+"scène, de volgende helemaal niet tot ze hun aandeel krijgen. Een berekening "
+"rekent de scène dan in elke klasse door en combineert ze"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove weather class"
+msgstr "Weerklasse verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the weather class chosen under Weather of: the others take its share "
+"of the time, in proportion"
+msgstr ""
+"De weerklasse verwijderen die onder Weer van gekozen is: de andere nemen "
+"haar aandeel van de tijd over, naar verhouding"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The eddies of the wind and of the temperature, which make sound outdoors "
+"flicker: the direct sound and its reflections stop adding in step (the dip "
+"of the ground fills in), sound is scattered into shadow zones, and renders "
+"and walkthroughs change as the eddies drift past. (none): steady air; weak, "
+"overcast with a light wind; moderate, a breeze and some sun; strong, a "
+"strong wind or a hot sun; custom, the values below"
+msgstr ""
+"De wervelingen van de wind en van de temperatuur, die geluid buiten laten "
+"schommelen: het directe geluid en zijn reflecties tellen niet meer in fase "
+"op (de grondinzinking vult zich), geluid wordt in schaduwzones verstrooid, "
+"en beluisteringen en wandelingen veranderen terwijl de wervelingen "
+"voorbijdrijven. (geen): rustige lucht; zwak, bewolkt met een lichte wind; "
+"matig, een bries en wat zon; sterk, een harde wind of felle zon; aangepast, "
+"de waarden hieronder"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the temperature's eddies are: its structure parameter C_T² (K² "
+"m^-2/3), about 0.001 to 1 near the ground, the most in sunshine"
+msgstr ""
+"Hoe sterk de wervelingen van de temperatuur zijn: haar structuurparameter "
+"C_T² (K² m^-2/3), ongeveer 0,001 tot 1 dicht bij de grond, het grootst in de "
+"zon"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How strong the wind's eddies are: its structure parameter C_v² (m^4/3 s^-2), "
+"about 0.01 to 1 near the ground, the more the stronger the wind"
+msgstr ""
+"Hoe sterk de wervelingen van de wind zijn: zijn structuurparameter C_v² "
+"(m^4/3 s^-2), ongeveer 0,01 tot 1 dicht bij de grond, groter naarmate de "
+"wind sterker is"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The size of the largest eddies (m), some metres near the ground: they take "
+"this long to drift past at the wind's speed, which sets how fast the sound "
+"flickers"
+msgstr ""
+"De grootte van de grootste wervelingen (m), enkele meters dicht bij de "
+"grond: zo lang doen ze erover om met de windsnelheid voorbij te drijven, wat "
+"bepaalt hoe snel het geluid schommelt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "the same at every height"
+msgstr "op elke hoogte gelijk"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The height above the ground the eddies' strength holds at (where it was "
+"measured or estimated, usually 2 m), from which they weaken with height; "
+"nearer the ground than the eddies' size they are taken as at that height. 0: "
+"the same strength at every height"
+msgstr ""
+"De hoogte boven de grond waarvoor de sterkte van de wervels geldt (waar die "
+"gemeten of geschat is, meestal 2 m), vanwaar ze met de hoogte afnemen; "
+"dichter bij de grond dan de grootte van de wervels gelden ze als op die "
+"hoogte. 0: dezelfde sterkte op elke hoogte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How fast the eddies weaken with height: the power of the height over the "
+"eddies' height that their strength falls by. 0.67 (two thirds) in a neutral "
+"or stable surface layer, the usual; up to 1.33 in strong sunshine"
+msgstr ""
+"Hoe snel de wervelingen zwakker worden met de hoogte: de macht van de hoogte "
+"over de hoogte van de wervelingen waarmee hun sterkte afneemt. 0,67 (twee "
+"derde) in een neutrale of stabiele grenslaag, het gewone geval; tot 1,33 bij "
+"felle zon"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies"
+msgstr "Turbulentie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Temperature eddies"
+msgstr "Turbulentie van de temperatuur"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind eddies"
+msgstr "Turbulentie van de wind"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddy size"
+msgstr "Grootte van de wervelingen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Eddies' height"
+msgstr "Hoogte van de turbulentie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Weaker with height"
+msgstr "Zwakker met de hoogte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A measured profile from the scene file: the temperature and the wind's speed "
+"come from it, in straight lines between its heights"
+msgstr ""
+"Een gemeten profiel uit het scènebestand: de temperatuur en de windsnelheid "
+"komen eruit, lineair tussen de hoogtes"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the measured profile"
+msgstr "Gemeten profiel verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Use the values above in place of the measured profile of the scene file"
+msgstr ""
+"De waarden hierboven gebruiken in plaats van het gemeten profiel uit het "
+"scènebestand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Show the profile"
+msgstr "Profiel tonen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Open a plot of the temperature, the wind and the speed of sound over the "
+"ground: across the wind, downwind and upwind"
+msgstr ""
+"Opent een grafiek van de temperatuur, de wind en de geluidssnelheid boven de "
+"grond: dwars op de wind, met de wind mee en tegen de wind in"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "the whole scene"
+msgstr "de hele scène"
+
+#. Translators: {name} is a weather class's name from the scene file.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "weather class {name}"
+msgstr "weerklasse {name}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "as the whole scene"
+msgstr "als de hele scène"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Measured profile at {count} height, from the scene file"
+msgid_plural "Measured profile at {count} heights, from the scene file"
+msgstr[0] "Gemeten profiel op {count} hoogte, uit het scènebestand"
+msgstr[1] "Gemeten profiel op {count} hoogtes, uit het scènebestand"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} {hours:g} h +{penalty:g} dB"
+msgstr "{name} {hours:g} u +{penalty:g} dB"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} {hours:g} h"
+msgstr "{name} {hours:g} u"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Levels over a long term: {count} weather class over {periods} ({rating})"
+msgid_plural ""
+"Levels over a long term: {count} weather classes over {periods} ({rating})"
+msgstr[0] ""
+"Niveaus over een lange termijn: {count} weerklasse over {periods} ({rating})"
+msgstr[1] ""
+"Niveaus over een lange termijn: {count} weerklassen over {periods} ({rating})"
+
+#. Translators: {period} is a period of the day from the scene file (day, evening, night).
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "The share of the {period} this weather class holds (%)"
+msgstr "Het deel van de periode {period} waarin deze weerklasse heerst (%)"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -1517,6 +2266,51 @@ msgstr "standaardmateriaal wijzigen"
 #: acoustic_spaces/gui/inspector.py
 msgid "change air"
 msgstr "luchtinstellingen wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather"
+msgstr "weer wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather zone"
+msgstr "weerzone wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the weather class"
+msgstr "weerklasse wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "add weather class"
+msgstr "weerklasse toevoegen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove weather class"
+msgstr "weerklasse verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a share of the time is a number from 0 to 100 %"
+msgstr "een aandeel van de tijd is een getal van 0 tot 100 %"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove weather zone"
+msgstr "weerzone verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the eddies"
+msgstr "turbulentie wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the wind and temperature"
+msgstr "wind en temperatuur wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove the measured profile"
+msgstr "gemeten profiel verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Wind and temperature of {name}"
+msgstr "Wind en temperatuur van {name}"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Box"
@@ -1647,6 +2441,380 @@ msgstr "IFC-ruimte"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"The height (z) of the flat ground, or added to the terrain's heights, in the "
+"units the title shows"
+msgstr ""
+"De hoogte (z) van de vlakke grond, of opgeteld bij de hoogtes van het "
+"reliëf, in de eenheden die in de titel staan"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How far the ground reaches past the buildings, barriers and model, unless "
+"its extent is set or a terrain sets its size, and how high the sky is over "
+"the highest of them, unless the sky is set; in the units the title shows"
+msgstr ""
+"Hoe ver de grond voorbij de gebouwen, geluidsschermen en het model reikt, "
+"tenzij de omvang ervan is ingesteld of een reliëf de grootte bepaalt, en hoe "
+"hoog de hemel boven de hoogste ervan ligt, tenzij de hemel is ingesteld; in "
+"de eenheden die in de titel staan"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How high the open sky lies over the ground, in the units the title shows; "
+"auto: the margin over the highest building, barrier or model part. Sound "
+"that reaches the sky leaves the scene"
+msgstr ""
+"Hoe hoog de open hemel boven de grond ligt, in de eenheden die in de titel "
+"staan; automatisch: de marge boven het hoogste gebouw, geluidsscherm of "
+"modeldeel. Geluid dat de hemel bereikt, verlaat de scène"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground height"
+msgstr "Grondhoogte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Margin"
+msgstr "Marge"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Sky"
+msgstr "Hemel"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Extent"
+msgstr "Omvang"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the ground ends, from its south-west corner (x, y) to its north-east "
+"one, in the units the title shows; off: the margin round the buildings, "
+"barriers and model, or the whole terrain. Past the ground's edge, sound "
+"leaves the scene as if the ground went on"
+msgstr ""
+"Waar de grond eindigt, van de zuidwesthoek (x, y) tot de noordoosthoek, in "
+"de eenheden die in de titel staan; uit: de marge rond de gebouwen, "
+"geluidsschermen en het model, of het hele reliëf. Voorbij de rand van de "
+"grond verlaat het geluid de scène alsof de grond doorliep"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "x where the ground starts (its west edge)"
+msgstr "x waar de grond begint (de westrand)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "y where the ground starts (its south edge)"
+msgstr "y waar de grond begint (de zuidrand)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "x where the ground ends (its east edge)"
+msgstr "x waar de grond eindigt (de oostrand)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "y where the ground ends (its north edge)"
+msgstr "y waar de grond eindigt (de noordrand)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the ground ends: past it, sound leaves the scene as if the ground went "
+"on"
+msgstr ""
+"Waar de grond eindigt: daarbuiten verlaat het geluid de scène alsof de grond "
+"doorliep"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The terrain the ground follows: its heights on a grid, from a file or given "
+"in the scene file, sampled over the ground's extent"
+msgstr ""
+"Het reliëf dat de grond volgt: de hoogten op een raster, uit een bestand of "
+"opgegeven in het scènebestand, bemonsterd over de omvang van de grond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Terrain from a file…"
+msgstr "Reliëf uit een bestand…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Make the ground follow the heights in a file: an Esri ASCII grid (.asc) or x "
+"y z points on a regular grid (.xyz, .txt, .csv), in the units the title "
+"shows. The terrain sets the ground's size, unless an extent inside it is set"
+msgstr ""
+"De grond de hoogten uit een bestand laten volgen: een Esri ASCII-raster "
+"(.asc) of x y z-punten op een regelmatig raster (.xyz, .txt, .csv), in de "
+"eenheden die in de titel staan. Het reliëf bepaalt de grootte van de grond, "
+"tenzij een omvang erbinnen is ingesteld"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove terrain"
+msgstr "Reliëf verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Flatten the ground again, at the ground height, with the margin round the "
+"parts"
+msgstr ""
+"De grond weer vlak maken, op de grondhoogte, met de marge rond de onderdelen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Buildings"
+msgstr "Gebouwen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Corners"
+msgstr "Hoeken"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The building's name; its surfaces are named after it"
+msgstr "De naam van het gebouw; de oppervlakken ervan zijn ernaar genoemd"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high the building is, ground to roof, in the units the title shows"
+msgstr ""
+"De hoogte van het gebouw, van grond tot dak, in de eenheden die in de titel "
+"staan"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many corners the building's footprint has (as drawn in the plan)"
+msgstr ""
+"Hoeveel hoeken het grondvlak van het gebouw heeft (zoals getekend in de "
+"plattegrond)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected building, or the last one when none is selected"
+msgstr ""
+"Het geselecteerde gebouw verwijderen, of het laatste als er geen is "
+"geselecteerd"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add building"
+msgstr "Gebouw toevoegen"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Draw a building's footprint in the plan, corner by corner, and close it on "
+"the first corner; it rises {height:g} m from the ground, to change in the "
+"table"
+msgstr ""
+"Het grondvlak van een gebouw in de plattegrond hoek voor hoek tekenen en bij "
+"de eerste hoek sluiten; het rijst {height:g} m boven de grond uit, te "
+"wijzigen in de tabel"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove building"
+msgstr "Gebouw verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Barriers"
+msgstr "Geluidsschermen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Points"
+msgstr "Punten"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The barrier's name, which its surfaces carry"
+msgstr "De naam van het geluidsscherm, die de oppervlakken ervan dragen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high the barrier is over the ground, in the units the title shows"
+msgstr ""
+"De hoogte van het geluidsscherm boven de grond, in de eenheden die in de "
+"titel staan"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many points the barrier's path has (as drawn in the plan)"
+msgstr ""
+"Hoeveel punten het tracé van het geluidsscherm heeft (zoals getekend in de "
+"plattegrond)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected barrier, or the last one when none is selected"
+msgstr ""
+"Het geselecteerde geluidsscherm verwijderen, of het laatste als er geen is "
+"geselecteerd"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add barrier"
+msgstr "Geluidsscherm toevoegen"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Draw a barrier's path in the plan, point by point, and finish it with Enter "
+"or a double click; it stands {height:g} m high, to change in the table"
+msgstr ""
+"Het tracé van een geluidsscherm in de plattegrond punt voor punt tekenen en "
+"afsluiten met Enter of een dubbelklik; het is {height:g} m hoog, te wijzigen "
+"in de tabel"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove barrier"
+msgstr "Geluidsscherm verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Vegetation"
+msgstr "Vegetatie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Shape"
+msgstr "Vorm"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Plants"
+msgstr "Planten"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The name of the tree, hedge or belt of trees: no surface, a volume that "
+"sound passes through, losing some of itself"
+msgstr ""
+"De naam van de boom, de haag of de bomenstrook: geen oppervlak, maar een "
+"volume waar het geluid doorheen gaat en waarbij het een deel van zichzelf "
+"verliest"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How high its top is over the ground, in the units the title shows"
+msgstr ""
+"De hoogte van de bovenkant boven de grond, in de eenheden die in de titel "
+"staan"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A belt of trees (a footprint raised from the ground), a hedge (a path of a "
+"width) or a lone tree's crown, as drawn in the plan"
+msgstr ""
+"Een bomenstrook (een grondvlak dat vanaf de grond is opgetrokken), een haag "
+"(een tracé met een breedte) of de kroon van een losse boom, zoals getekend "
+"in de plattegrond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"What fills it: foliage, which takes so many dB per metre from sound passing "
+"through, or leaves by their area and width, which work that out for "
+"themselves; and stems, which scatter it sideways"
+msgstr ""
+"Wat het vult: gebladerte, dat zoveel dB per meter wegneemt van het geluid "
+"dat erdoor gaat, of bladeren naar oppervlak en breedte, die dat zelf "
+"bepalen; en stammen, die het zijwaarts verstrooien"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the selected vegetation, or the last one when none is selected"
+msgstr ""
+"De geselecteerde vegetatie verwijderen, of de laatste als er geen is "
+"geselecteerd"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add vegetation"
+msgstr "Vegetatie toevoegen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw the shape chosen beside in the plan: a belt's footprint closed on its "
+"first corner, a hedge's path finished with Enter, or a tree's place with one "
+"click; dense foliage, its height to change in the table and the rest in the "
+"scene file"
+msgstr ""
+"De hiernaast gekozen vorm in de plattegrond tekenen: het grondvlak van een "
+"strook, gesloten bij de eerste hoek, het tracé van een haag, afgesloten met "
+"Enter, of de plaats van een boom met één klik; dicht gebladerte, de hoogte "
+"te wijzigen in de tabel en de rest in het scènebestand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove vegetation"
+msgstr "Vegetatie verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"What to draw next: a belt of trees (its footprint, corner by corner), a "
+"hedge (its path, point by point, {width:g} m wide) or a lone tree (one "
+"click, its crown {crown:g} m across)"
+msgstr ""
+"Wat hierna wordt getekend: een bomenstrook (het grondvlak, hoek voor hoek), "
+"een haag (het tracé, punt voor punt, {width:g} m breed) of een losse boom "
+"(één klik, met een kroon van {crown:g} m doorsnede)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The map the buildings marked 'from the buildings file' come from: a GeoJSON "
+"file of footprints, each raised to the height a property of it gives (or one "
+"height for all) and named by another"
+msgstr ""
+"De kaart waar de gebouwen met de markering 'uit het gebouwenbestand' vandaan "
+"komen: een GeoJSON-bestand met grondvlakken, elk opgetrokken tot de hoogte "
+"die een eigenschap ervan opgeeft (of één hoogte voor alle) en genoemd naar "
+"een andere"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Buildings from a map…"
+msgstr "Gebouwen uit een kaart…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Add the buildings of a GeoJSON file of footprints, on a plane in the units "
+"the title shows (not longitude and latitude), each as high as a property of "
+"it says; they join the ones drawn here"
+msgstr ""
+"De gebouwen van een GeoJSON-bestand met grondvlakken toevoegen, in een vlak "
+"in de eenheden die in de titel staan (geen lengte- en breedtegraden), elk zo "
+"hoog als een eigenschap ervan zegt; ze komen bij de hier getekende"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove the map's buildings"
+msgstr "Gebouwen van de kaart verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Drop the map and every building that came from it; the buildings drawn here "
+"stay"
+msgstr ""
+"De kaart en alle gebouwen die eruit kwamen verwijderen; de hier getekende "
+"gebouwen blijven"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground zones"
+msgstr "Grondzones"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The zone's name: a part of the ground (a road, a lawn) whose surfaces carry "
+"it, to give it a material of its own"
+msgstr ""
+"De naam van de zone: een deel van de grond (een weg, een grasveld) waarvan "
+"de vlakken hem dragen, om het een eigen materiaal te geven"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "How many corners the zone's outline has (as drawn in the plan)"
+msgstr ""
+"Hoeveel hoeken de omtrek van de zone heeft (zoals getekend in de plattegrond)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Remove zone"
+msgstr "Zone verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Remove the selected ground zone, or the last one when none is selected: its "
+"part of the ground takes the ground's material"
+msgstr ""
+"De geselecteerde grondzone verwijderen, of de laatste als er geen is "
+"geselecteerd: dat deel van de grond krijgt het materiaal van de grond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Add zone"
+msgstr "Zone toevoegen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw a part of the ground in the plan, corner by corner, and close it on the "
+"first corner; then give its surface a material of its own in the scene tree"
+msgstr ""
+"Een deel van de grond in de plattegrond hoek voor hoek tekenen en bij de "
+"eerste hoek sluiten; geef het vlak ervan daarna een eigen materiaal in de "
+"scèneboom"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "A closed model has no gaps: each edge joins two faces. The volume and the "
 "reverberation estimates need one; View > Show leaks finds the gaps"
 msgstr ""
@@ -1668,6 +2836,11 @@ msgstr "Rechthoekige ruimte ({units})"
 #, python-brace-format
 msgid "Floor plan ({units})"
 msgstr "Plattegrond ({units})"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Outdoors ({units})"
+msgstr "Buiten ({units})"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -1733,6 +2906,177 @@ msgstr "eenheden wijzigen"
 #: acoustic_spaces/gui/inspector.py
 msgid "change up axis"
 msgstr "verticale as wijzigen"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"Ground from ({x0:g}, {y0:g}) to ({x1:g}, {y1:g}) m, sky {sky:g} m over it"
+msgstr ""
+"Grond van ({x0:g}, {y0:g}) tot ({x1:g}, {y1:g}) m, hemel {sky:g} m erboven"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "height from {property}"
+msgstr "hoogte uit {property}"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{height} high"
+msgstr "{height} hoog"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Map {name}: {count} building, {height}"
+msgid_plural "Map {name}: {count} buildings, {height}"
+msgstr[0] "Kaart {name}: {count} gebouw, {height}"
+msgstr[1] "Kaart {name}: {count} gebouwen, {height}"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Terrain: {points} points, z from {low} to {high} m, grid {spacing} m"
+msgstr "Reliëf: {points} punten, z van {low} tot {high} m, raster {spacing} m"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "From the buildings file, which sets its footprint and height"
+msgstr "Uit het gebouwenbestand, dat de plattegrond en de hoogte bepaalt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Terrain"
+msgstr "Reliëf"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Height grids (*.asc *.xyz *.txt *.csv);;All files (*)"
+msgstr "Hoogterasters (*.asc *.xyz *.txt *.csv);;Alle bestanden (*)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Buildings from a map"
+msgstr "Gebouwen uit een kaart"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "GeoJSON (*.geojson *.json);;All files (*)"
+msgstr "GeoJSON (*.geojson *.json);;Alle bestanden (*)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} holds no building footprints"
+msgstr "{name} bevat geen grondvlakken van gebouwen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove zone"
+msgstr "zone verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a height is one number"
+msgstr "een hoogte is één getal"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "leave out building"
+msgstr "gebouw weglaten"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove building"
+msgstr "gebouw verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove barrier"
+msgstr "geluidsscherm verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "remove vegetation"
+msgstr "vegetatie verwijderen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "belt of trees"
+msgstr "bomenstrook"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "hedge"
+msgstr "haag"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "lone tree"
+msgstr "losse boom"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{name} holds {count} building. How high is it, and what is it called?"
+msgid_plural ""
+"{name} holds {count} buildings. How high are they, and what are they called?"
+msgstr[0] "{name} bevat {count} gebouw. Hoe hoog is het, en hoe heet het?"
+msgstr[1] "{name} bevat {count} gebouwen. Hoe hoog zijn ze, en hoe heten ze?"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The property of each building that holds its height (one that holds a number "
+"in every building that has it), or one height for all of them"
+msgstr ""
+"De eigenschap van elk gebouw die de hoogte bevat (een die in elk gebouw dat "
+"haar heeft een getal bevat), of één hoogte voor alle"
+
+#. Translators: the choice of one height for every building of the map.
+#: acoustic_spaces/gui/inspector.py
+msgid "the same for all"
+msgstr "dezelfde voor alle"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The height of every building, or of those whose property is missing, in the "
+"geometry's units"
+msgstr ""
+"De hoogte van alle gebouwen, of van die waarbij de eigenschap ontbreekt, in "
+"de eenheden van de geometrie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The property that names each building, or numbered names for all of them"
+msgstr ""
+"De eigenschap die elk gebouw een naam geeft, of genummerde namen voor alle"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "building_1, building_2, …"
+msgstr "building_1, building_2, …"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Height of all"
+msgstr "Hoogte van alle"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Height when missing"
+msgstr "Hoogte als die ontbreekt"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "belt, {count} corners"
+msgstr "strook, {count} hoeken"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "hedge {width} wide, {count} points"
+msgstr "haag van {width} breed, {count} punten"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "tree, crown {diameter} across"
+msgstr "boom, kroon met een diameter van {diameter}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "dense foliage"
+msgstr "dicht gebladerte"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "leaves {area} m²/m³, {width} m wide"
+msgstr "bladeren {area} m²/m³, {width} m breed"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "foliage {values} dB/m"
+msgstr "gebladerte {values} dB/m"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count} stems/m², {diameter} m across"
+msgstr "{count} stammen/m², {diameter} m doorsnede"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -1848,6 +3192,62 @@ msgid "everything (an opening)"
 msgstr "alles (een opening)"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "snow"
+msgstr "sneeuw"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "forest floor"
+msgstr "bosgrond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "loose soil"
+msgstr "losse grond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "grass"
+msgstr "gras"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "compacted soil"
+msgstr "verdichte grond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "gravel"
+msgstr "grind"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "asphalt"
+msgstr "asfalt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "water"
+msgstr "water"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "flow resistivity below"
+msgstr "stromingsweerstand hieronder"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Miki"
+msgstr "Miki"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Delany-Bazley"
+msgstr "Delany-Bazley"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "two-parameter"
+msgstr "twee parameters"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "local: the same at every angle"
+msgstr "lokaal: dezelfde onder elke hoek"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "extended: changes with the angle"
+msgstr "uitgebreid: verandert met de hoek"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The material's name; renaming it renames it in the assignments and the "
 "default material too"
@@ -1899,6 +3299,110 @@ msgstr ""
 "rugleuningen (strijkende inval; de aanpassing van Jurkiewicz et al., 2025)"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Ground impedance"
+msgstr "Grondimpedantie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Ticked, the material is a porous ground (grass, soil, snow, gravel, "
+"asphalt): its absorption and its reflection come from its impedance, with "
+"the phase and the ground wave that make the dip over the ground outdoors. "
+"Unticked, the absorption is as given"
+msgstr ""
+"Aangevinkt: het materiaal is een poreuze grond (gras, aarde, sneeuw, grind, "
+"asfalt); de absorptie en de reflectie volgen uit de impedantie, met de fase "
+"en de grondgolf die buiten de dip boven de grond veroorzaken. Niet "
+"aangevinkt: de absorptie is zoals opgegeven"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The kind of ground: the ground classes of Nord2000, from snow (softest) to "
+"water and dense concrete (hardest), each with its flow resistivity; or a "
+"flow resistivity of your own"
+msgstr ""
+"De soort grond: de grondklassen van Nord2000, van sneeuw (het zachtst) tot "
+"water en dicht beton (het hardst), elk met een eigen stromingsweerstand; of "
+"een eigen stromingsweerstand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the impedance follows from the flow resistivity: Miki (passive at every "
+"frequency, the default), Delany-Bazley (as most of the literature quotes "
+"it), or two-parameter (a porosity that falls with depth, which fits measured "
+"grass and soil better)"
+msgstr ""
+"Hoe de impedantie uit de stromingsweerstand volgt: Miki (passief bij elke "
+"frequentie, de standaard), Delany-Bazley (zoals de meeste literatuur het "
+"aanhaalt) of twee parameters (een porositeit die met de diepte afneemt, wat "
+"beter past bij gemeten gras en aarde)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How hard it is to push air through the ground: about 10 to 30 kPa s/m² for "
+"snow, 200 for grass, 2000 for gravel, 20000 and more for asphalt"
+msgstr ""
+"Hoe moeilijk lucht door de grond te duwen is: ongeveer 10 tot 30 kPa s/m² "
+"voor sneeuw, 200 voor gras, 2000 voor grind, 20000 en meer voor asfalt"
+
+#. Translators: a ground layer with no thickness set: as deep as it likes.
+#: acoustic_spaces/gui/inspector.py
+msgid "deep"
+msgstr "diep"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"A layer of the ground this thick on a hard backing (snow on frozen ground, a "
+"thin soil over rock); deep: as deep as it likes"
+msgstr ""
+"Een laag grond van deze dikte op een harde ondergrond (sneeuw op bevroren "
+"grond, een dunne laag aarde op rots); diep: onbeperkt diep"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Two-parameter model: how fast the ground's porosity falls with depth"
+msgstr ""
+"Model met twee parameters: hoe snel de porositeit van de grond met de diepte "
+"afneemt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How the ground reacts to sound meeting it at an angle: locally, with the "
+"same impedance at every angle (the usual model, right for grass and harder "
+"grounds); or extended, sound also travelling sideways inside it, so the "
+"impedance a reflection meets changes with its angle, which tells for soft "
+"snow, moss, forest floors and thin layers. Not with the two-parameter model"
+msgstr ""
+"Hoe de grond reageert op geluid dat er schuin op valt: lokaal, met dezelfde "
+"impedantie onder elke hoek (het gebruikelijke model, juist voor gras en "
+"hardere gronden); of uitgebreid, waarbij het geluid ook zijwaarts in de "
+"grond reist, zodat de impedantie die een reflectie treft met haar hoek "
+"verandert, wat telt voor zachte sneeuw, mos, bosbodems en dunne lagen. Niet "
+"met het tweeparametermodel"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Ground"
+msgstr "Grond"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Model"
+msgstr "Model"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Flow resistivity"
+msgstr "Stromingsweerstand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Layer thickness"
+msgstr "Laagdikte"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Porosity rate"
+msgstr "Porositeitsafname"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Reaction"
+msgstr "Reactie"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Where the coefficients come from"
 msgstr "De herkomst van de coëfficiënten"
 
@@ -1917,6 +3421,10 @@ msgid ""
 msgstr ""
 "Dit materiaal en de toewijzingen die het gebruiken verwijderen; de "
 "oppervlakken krijgen het standaardmateriaal"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Source: the ground's impedance"
+msgstr "Bron: de impedantie van de grond"
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
@@ -1969,6 +3477,48 @@ msgid "The listener's name, as the results and the exported files show it"
 msgstr ""
 "De naam van de ontvanger zoals die in de resultaten en geëxporteerde "
 "bestanden staat"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The group the source belongs to in the scene tree, to show, hide, use or "
+"leave out together; groups nest with / (PA/Delays is Delays in PA)"
+msgstr ""
+"De groep van de bron in de scèneboom, om bronnen samen te tonen, te "
+"verbergen, mee te nemen of weg te laten; groepen nesten met / (PA/Delays is "
+"Delays in PA)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The group the listener belongs to in the scene tree, to show, hide, use or "
+"leave out together; groups nest with / (Stands/North is North in Stands)"
+msgstr ""
+"De groep van de ontvanger in de scèneboom, om ontvangers samen te tonen, te "
+"verbergen, mee te nemen of weg te laten; groepen nesten met / (Stands/North "
+"is North in Stands)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Group"
+msgstr "Groep"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Use in simulations"
+msgstr "Meenemen in simulaties"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Untick to leave the source out of simulations, maps and checks: it stays in "
+"the scene, drawn faded. The tick in the scene tree does the same"
+msgstr ""
+"Zonder vinkje blijft de bron buiten simulaties, kaarten en controles: hij "
+"blijft in de scène, vaag getekend. Het vinkje in de scèneboom doet hetzelfde"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Untick to leave the listener out of simulations and checks: it stays in the "
+"scene, drawn faded. The tick in the scene tree does the same"
+msgstr ""
+"Zonder vinkje blijft de ontvanger buiten simulaties en controles: hij blijft "
+"in de scène, vaag getekend. Het vinkje in de scèneboom doet hetzelfde"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2092,6 +3642,23 @@ msgstr ""
 "cardioïde"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Add up the array's elements one by one"
+msgstr "De elementen van de array een voor een optellen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"For a coherent array: add up its elements' sound one by one, each from where "
+"it is, in the direct sound and the reflections, rather than send out its "
+"far-field pattern from one point. For listeners nearer than about the "
+"array's length squared over the wavelength, which the scene warns about"
+msgstr ""
+"Voor een coherente array: telt het geluid van de elementen een voor een op, "
+"elk vanaf zijn eigen plek, in het directe geluid en de reflecties, in plaats "
+"van het verreveldpatroon vanuit één punt uit te zenden. Voor ontvangers "
+"dichterbij dan ongeveer de arraylengte in het kwadraat gedeeld door de "
+"golflengte, waarvoor de scène waarschuwt"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Show the pattern"
 msgstr "Richtingskarakteristiek tonen"
 
@@ -2180,10 +3747,6 @@ msgid ""
 msgstr ""
 "De lijn of het oppervlak bestaat uit deze puntbronnen; ze delen het "
 "geluidsvermogen"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Shape"
-msgstr "Vorm"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Length"
@@ -2349,14 +3912,44 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Where a path over one edge may reflect: on one side of the edge, before or "
+"after it (off the ground on the way to a barrier, or off a façade behind "
+"it), or on both sides, before and after (off the ground on the way to a "
+"barrier and again behind it: all four paths over a barrier on the ground)"
+msgstr ""
+"Waar een pad over een rand mag reflecteren: aan één kant van de rand, ervoor "
+"of erna (op de grond op weg naar een scherm, of op een gevel erachter), of "
+"aan beide kanten, ervoor en erna (op de grond op weg naar een scherm en "
+"opnieuw erachter: alle vier de paden over een scherm op de grond)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors in wind or temperature gradients, the parabolic equation that gives "
+"the sound over the open ground in the low bands and in the shadows: narrow "
+"angle (for the gradients near the ground that the weather has) or wide angle "
+"(also for gradients reaching hundreds of metres up, which bend sound back at "
+"steep angles over kilometres; several times the work)"
+msgstr ""
+"Buiten bij wind- of temperatuurgradiënten de parabolische vergelijking die "
+"het geluid boven open terrein geeft in de lage banden en in de schaduwzones: "
+"smalle hoek (voor de gradiënten dicht bij de grond die het weer meebrengt) "
+"of brede hoek (ook voor gradiënten die honderden meters hoog reiken en het "
+"geluid over kilometers onder steile hoeken terugbuigen; enkele keren zoveel "
+"werk)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
-"bands take their place when it runs up to this band or higher"
+"bands take their place when it runs up to this band or higher. Up to 500 Hz "
+"in a room; outdoors, where the paths are few, up to 8000 Hz, the default "
+"there"
 msgstr ""
 "De hoogste octaafband (Hz) waarin de vroege paden in geluidsdruk worden "
 "opgeteld, met de fase van elke reflectie, in plaats van in energie; de "
 "banden van de golfsolver nemen hun plaats in als deze tot deze band of hoger "
-"rekent"
+"rekent. Tot 500 Hz in een ruimte; buiten, waar er weinig paden zijn, tot "
+"8000 Hz, daar de standaard"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Method"
@@ -2373,6 +3966,14 @@ msgstr "Stralen"
 #: acoustic_spaces/gui/inspector.py
 msgid "Diffraction"
 msgstr "Diffractie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Reflections over an edge"
+msgstr "Reflecties over een rand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Parabolic equation"
+msgstr "Parabolische vergelijking"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "In pressure up to"
@@ -2552,8 +4153,25 @@ msgstr ""
 "optimaliseren… de CPU sneller vond voor de responsduur"
 
 #: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors, how it takes the wind: as a speed of sound that the wind along the "
+"way from the source changes, as the rays do, or as air that moves, so that "
+"sound going against the wind is slower whichever way it turned, off a "
+"building too (three to four times the work, on the CPU)"
+msgstr ""
+"Buiten, hoe hij de wind meeneemt: als een geluidssnelheid die de wind langs "
+"de weg vanaf de bron verandert, zoals de stralen doen, of als lucht die "
+"beweegt, zodat geluid tegen de wind in langzamer gaat, welke kant het ook op "
+"is gedraaid, ook terug van een gebouw (drie tot vier keer zoveel werk, op de "
+"CPU)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Up to band (Hz)"
 msgstr "Tot band (Hz)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Wind"
+msgstr "Wind"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Performance"
@@ -2682,6 +4300,33 @@ msgstr "Overgang naar late nagalm"
 #: acoustic_spaces/gui/inspector.py
 msgid "Seed"
 msgstr "Startwaarde"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Insertion loss"
+msgstr "Invoegdemping"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors: tick buildings, barriers or vegetation to run the scene, and the "
+"map, again without them. The results and the map then give their insertion "
+"loss, the level without them less the level with them; each run takes twice "
+"as long"
+msgstr ""
+"Buiten: vink gebouwen, geluidsschermen of vegetatie aan om de scène, en de "
+"kaart, nog eens zonder ze te berekenen. De resultaten en de kaart geven dan "
+"hun invoegdemping, het niveau zonder ze min het niveau met ze; elke "
+"berekening duurt twee keer zo lang"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Ticked, the run is also made without {name}, for its insertion loss"
+msgstr ""
+"Aangevinkt wordt de berekening ook zonder {name} gemaakt, voor de "
+"invoegdemping ervan"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change the insertion loss"
+msgstr "de invoegdemping wijzigen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "change simulation settings"
@@ -3087,6 +4732,39 @@ msgid "Off"
 msgstr "Uit"
 
 #: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a room yet: {problem}"
+msgstr "Nog geen geldige ruimte: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a building yet: {problem}"
+msgstr "Nog geen geldig gebouw: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a belt of trees yet: {problem}"
+msgstr "Nog geen geldige bomenstrook: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a zone yet: {problem}"
+msgstr "Nog geen geldige zone: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid "Not a weather zone yet: {problem}"
+msgstr "Nog geen geldige weerzone: {problem}"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Not a barrier yet: it needs two points at least"
+msgstr "Nog geen geldig geluidsscherm: het heeft minstens twee punten nodig"
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Not a hedge yet: it needs two points at least"
+msgstr "Nog geen geldige haag: die heeft minstens twee punten nodig"
+
+#: acoustic_spaces/gui/plan_view.py
 msgid ""
 "Drag corners, sources and listeners; double-click a wall to add a corner; "
 "right-click for more. Shift: no snapping."
@@ -3112,10 +4790,75 @@ msgstr ""
 
 #: acoustic_spaces/gui/plan_view.py
 msgid ""
+"The scene from above: drag sources and listeners. The Geometry form's "
+"buttons draw buildings, barriers, vegetation and zones. Shift: no snapping."
+msgstr ""
+"De scène van bovenaf: bronnen en ontvangers verslepen. De knoppen van het "
+"formulier Geometrie tekenen gebouwen, geluidsschermen, vegetatie en zones. "
+"Shift: zonder uitlijnen."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
 "Click the corners of the new room; close it on the first corner, with a "
 "double-click or Enter. Backspace takes a corner back, Esc stops."
 msgstr ""
 "De hoeken van de nieuwe ruimte aanklikken; sluiten bij de eerste hoek, met "
+"een dubbelklik of Enter. Backspace verwijdert de laatste hoek, Esc stopt."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the new building's footprint; close it on the first "
+"corner, with a double-click or Enter. Backspace takes a corner back, Esc "
+"stops."
+msgstr ""
+"De hoeken van het grondvlak van het nieuwe gebouw aanklikken; sluiten bij de "
+"eerste hoek, met een dubbelklik of Enter. Backspace verwijdert de laatste "
+"hoek, Esc stopt."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the points along the new barrier, end to end; finish with a "
+"double-click or Enter. Backspace takes a point back, Esc stops."
+msgstr ""
+"De punten van het nieuwe geluidsscherm van het ene eind naar het andere "
+"aanklikken; afsluiten met een dubbelklik of Enter. Backspace verwijdert het "
+"laatste punt, Esc stopt."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the belt of trees; close it on the first corner, with a "
+"double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"De hoeken van de bomenstrook aanklikken; sluiten bij de eerste hoek, met een "
+"dubbelklik of Enter. Backspace verwijdert de laatste hoek, Esc stopt."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the points along the hedge, end to end; finish with a double-click or "
+"Enter. Backspace takes a point back, Esc stops."
+msgstr ""
+"De punten van de haag van het ene eind naar het andere aanklikken; afsluiten "
+"met een dubbelklik of Enter. Backspace verwijdert het laatste punt, Esc "
+"stopt."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid "Click where the tree stands; Esc cancels."
+msgstr "Klikken waar de boom staat; Esc annuleert."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the ground zone; close it on the first corner, with a "
+"double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"De hoeken van de grondzone aanklikken; sluiten bij de eerste hoek, met een "
+"dubbelklik of Enter. Backspace verwijdert de laatste hoek, Esc stopt."
+
+#: acoustic_spaces/gui/plan_view.py
+msgid ""
+"Click the corners of the new weather zone; close it on the first corner, "
+"with a double-click or Enter. Backspace takes a corner back, Esc stops."
+msgstr ""
+"De hoeken van de nieuwe weerzone aanklikken; sluiten bij de eerste hoek, met "
 "een dubbelklik of Enter. Backspace verwijdert de laatste hoek, Esc stopt."
 
 #: acoustic_spaces/gui/plan_view.py
@@ -3125,11 +4868,6 @@ msgstr "Klikken waar de nieuwe bron moet komen; Esc annuleert."
 #: acoustic_spaces/gui/plan_view.py
 msgid "Click where the new listener goes; Esc cancels."
 msgstr "Klikken waar de nieuwe ontvanger moet komen; Esc annuleert."
-
-#: acoustic_spaces/gui/plan_view.py
-#, python-brace-format
-msgid "Not a room yet: {problem}"
-msgstr "Nog geen geldige ruimte: {problem}"
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "A floor plan needs at least three corners."
@@ -3166,8 +4904,13 @@ msgid "Draw room"
 msgstr "Ruimte tekenen"
 
 #: acoustic_spaces/gui/plan_view.py
-msgid "Draw a new floor plan, corner by corner; it replaces the room"
-msgstr "Een nieuwe plattegrond hoek voor hoek tekenen; deze vervangt de ruimte"
+msgid ""
+"Draw a new floor plan, corner by corner; it replaces the room. Buildings, "
+"barriers, vegetation and ground zones are drawn from the Geometry form"
+msgstr ""
+"Een nieuwe plattegrond hoek voor hoek tekenen; die vervangt de ruimte. "
+"Gebouwen, geluidsschermen, vegetatie en grondzones worden vanuit het "
+"formulier Geometrie getekend"
 
 #: acoustic_spaces/gui/plan_view.py
 msgid ""
@@ -3303,6 +5046,41 @@ msgstr ""
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
+"Level relative to free field (dB), outdoors: how much louder the source is "
+"here than the same source as far away in free field, with the same air. The "
+"ground, the weather, buildings, barriers and vegetation make the difference; "
+"negative, it is their excess attenuation"
+msgstr ""
+"Niveau ten opzichte van het vrije veld (dB), buiten: hoeveel luider de bron "
+"hier is dan dezelfde bron op dezelfde afstand in het vrije veld, met "
+"dezelfde lucht. De grond, het weer, gebouwen, geluidsschermen en vegetatie "
+"maken het verschil; negatief is het hun extra demping"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Insertion loss (dB) of the buildings, barriers or vegetation the simulation "
+"page names: the level here without them less the level with them. Positive "
+"where they shield the listener"
+msgstr ""
+"Invoegdemping (dB) van de gebouwen, geluidsschermen of vegetatie die de "
+"simulatiepagina noemt: het niveau hier zonder ze min het niveau met ze. "
+"Positief waar ze de ontvanger afschermen"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Level over a long term (dB), outdoors: the energy mean of the levels in the "
+"scene's weather classes, each by its share of the time, over the periods of "
+"the day. The Run details tab gives the rating level (L_den) and the level of "
+"each period and each class"
+msgstr ""
+"Niveau over een lange termijn (dB), buiten: het energetische gemiddelde van "
+"de niveaus in de weerklassen van de scène, elk naar zijn aandeel van de "
+"tijd, over de perioden van de dag. Het tabblad Details van de berekening "
+"geeft het beoordelingsniveau (L_den) en het niveau van elke periode en elke "
+"klasse"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
 "Early lateral energy fraction (0 to 1): the share of the early sound (5 to "
 "80 ms) that comes from the sides, which makes the source sound wider"
 msgstr ""
@@ -3373,6 +5151,16 @@ msgid ""
 msgstr ""
 "T30 (s) van een achtvormige microfoon die vanaf de ontvanger omhoog wijst. "
 "Langer dan T30 waar geluid tussen vloer en plafond heen en weer blijft lopen"
+
+#. Translators: {rating} is the rating level's symbol (L_den); {periods} and {classes} are names from the scene file, each with its level.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"{source} -> {listener}: {rating} {rated:.1f} dB(A), long-term level "
+"{level:.1f} dB(A); {periods} dB(A); in the weather classes {classes} dB(A)"
+msgstr ""
+"{source} -> {listener}: {rating} {rated:.1f} dB(A), langetermijnniveau "
+"{level:.1f} dB(A); {periods} dB(A); in de weerklassen {classes} dB(A)"
 
 #: acoustic_spaces/gui/results_view.py
 msgid "Turn the head (degrees): left is positive"
@@ -3602,6 +5390,28 @@ msgstr "{tip}. Niet gedefinieerd voor deze respons"
 
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format
+msgid "Insertion loss of {names}: the scene was also run without it"
+msgid_plural "Insertion loss of {names}: the scene was also run without them"
+msgstr[0] "Invoegdemping van {names}: de scène is ook zonder dit deel berekend"
+msgstr[1] ""
+"Invoegdemping van {names}: de scène is ook zonder deze delen berekend"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"Levels over a long term in {count} weather class ({names}), rated as {rating}"
+msgid_plural ""
+"Levels over a long term in {count} weather classes ({names}), rated as "
+"{rating}"
+msgstr[0] ""
+"Niveaus over een lange termijn in {count} weerklasse ({names}), beoordeeld "
+"als {rating}"
+msgstr[1] ""
+"Niveaus over een lange termijn in {count} weerklassen ({names}), beoordeeld "
+"als {rating}"
+
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
 msgid ""
 "{source} -> {listener}: direct sound at {delay:.1f} ms, {count} early path "
 "({diffracted} diffracted)"
@@ -3668,18 +5478,36 @@ msgid "Select it to change its absorption, scattering and what it lets through"
 msgstr "Selecteren om absorptie, verstrooiing en geluidsdoorlaat te wijzigen"
 
 #: acoustic_spaces/gui/tree.py
-msgid "The sound sources; place more with Place source"
-msgstr "De geluidsbronnen; meer toevoegen met Bron plaatsen"
+msgid ""
+"The sound sources; place more with Place source. Untick them to leave them "
+"all out of simulations"
+msgstr ""
+"De geluidsbronnen; meer toevoegen met Bron plaatsen. Zonder vinkje blijven "
+"ze allemaal buiten simulaties"
 
 #: acoustic_spaces/gui/tree.py
-msgid "Select it to change it; drag it in the 3D view or the plan to move it"
+msgid ""
+"Select it to change it; drag it in the 3D view or the plan to move it. "
+"Untick it to leave it out of simulations and maps"
 msgstr ""
 "Selecteren om te bewerken; verslepen in de 3D-weergave of plattegrond om te "
-"verplaatsen"
+"verplaatsen. Zonder vinkje blijft het buiten simulaties en kaarten"
 
 #: acoustic_spaces/gui/tree.py
-msgid "The listening positions; place more with Place listener"
-msgstr "De luisterposities; meer toevoegen met Ontvanger plaatsen"
+msgid ""
+"The listening positions; place more with Place listener. Untick them to "
+"leave them all out of simulations"
+msgstr ""
+"De luisterposities; meer toevoegen met Ontvanger plaatsen. Zonder vinkje "
+"blijven ze allemaal buiten simulaties"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"A group of the scene's sources or listeners (their Group field). Untick it "
+"to leave them all out of simulations and maps"
+msgstr ""
+"Een groep bronnen of ontvangers van de scène (hun veld Groep). Zonder vinkje "
+"blijven ze allemaal buiten simulaties en kaarten"
 
 #: acoustic_spaces/gui/tree.py
 msgid ""
@@ -3704,6 +5532,13 @@ msgid ""
 msgstr ""
 "De ligging en resolutie van de dekkingskaart en het achtergrondgeluid voor "
 "de STI"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"Shows or hides a source, a listener or a group in the 3D view and the plan"
+msgstr ""
+"Toont of verbergt een bron, een ontvanger of een groep in de 3D-weergave en "
+"de plattegrond"
 
 #: acoustic_spaces/gui/tree.py
 msgid "Geometry"
@@ -3752,6 +5587,14 @@ msgstr "{surfaces}, {spacing:g} m uit elkaar"
 #, python-brace-format
 msgid "audience, {spacing:g} m apart"
 msgstr "publiek, {spacing:g} m uit elkaar"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Hide it in the 3D view and the plan"
+msgstr "Verbergen in de 3D-weergave en de plattegrond"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Show it in the 3D view and the plan"
+msgstr "Tonen in de 3D-weergave en de plattegrond"
 
 #: acoustic_spaces/gui/tune_dialog.py
 msgid "Make auto the default on this computer"
@@ -3888,6 +5731,10 @@ msgid "gap {number}: {share:.1f} %"
 msgstr "gat {number}: {share:.1f} %"
 
 #: acoustic_spaces/viz.py
+msgid "vegetation"
+msgstr "vegetatie"
+
+#: acoustic_spaces/viz.py
 msgid "reflections"
 msgstr "reflecties"
 
@@ -4017,6 +5864,42 @@ msgid ""
 msgstr ""
 "{name}\n"
 "dB t.o.v. de luidste richting; richtingsindex {index:.1f} dB bij 1 kHz"
+
+#: acoustic_spaces/viz.py
+msgid "temperature (°C)"
+msgstr "temperatuur (°C)"
+
+#: acoustic_spaces/viz.py
+msgid "height above the ground (m)"
+msgstr "hoogte boven de grond (m)"
+
+#: acoustic_spaces/viz.py
+msgid "wind speed (m/s)"
+msgstr "windsnelheid (m/s)"
+
+#: acoustic_spaces/viz.py
+msgid "across the wind"
+msgstr "dwars op de wind"
+
+#: acoustic_spaces/viz.py
+msgid "downwind"
+msgstr "met de wind mee"
+
+#: acoustic_spaces/viz.py
+msgid "upwind"
+msgstr "tegen de wind in"
+
+#: acoustic_spaces/viz.py
+msgid "speed of sound (m/s)"
+msgstr "geluidssnelheid (m/s)"
+
+#: acoustic_spaces/viz.py
+msgid "Still air: sound goes in straight lines"
+msgstr "Stilstaande lucht: geluid gaat in rechte lijnen"
+
+#: acoustic_spaces/viz.py
+msgid "Sound bends towards where the speed of sound is lower"
+msgstr "Geluid buigt af naar waar de geluidssnelheid lager is"
 
 #: acoustic_spaces/viz.py
 msgid "broadband, 1 ms windows"
@@ -4176,6 +6059,65 @@ msgstr ""
 "verhoogd podium, gestoffeerde stoelen, verstrooiende zijwanden en een "
 "cassetteplafond. Twee bronnen op het podium, drie zitplaatsen in de zaal."
 
+#: examples/concert_stage/scene.yaml
+msgctxt "example"
+msgid "Concert stage with monitors"
+msgstr "Concertpodium met monitoren"
+
+#: examples/concert_stage/scene.yaml
+msgctxt "example"
+msgid ""
+"A concert stage on open ground with its monitors: the stage of the stadium "
+"examples, alone. On stage a pair of wedges plays the singer's mix, a drum "
+"fill the drummer's and side fills the rest of the band's. Beside the stage "
+"hang the two main line arrays of 12 boxes curved in a J (coherent arrays), "
+"with a block of eight cardioid subwoofers under the middle of the stage "
+"front, delayed 17 ms, and front fills on its lip, so the players also hear "
+"what spills back from them. Listeners stand where the singer, the drummer "
+"and a guitarist play, and at the mix position 37 m out, in a standing crowd "
+"(`audience: true`). The players stand a few metres from the arrays, much "
+"nearer than their far-field patterns hold, so every array adds up its boxes "
+"one by one (`near_field: true`).  python align.py python feedback.py python "
+"near_field.py python make_model.py  align.py prints when and how loud each "
+"loudspeaker arrives at each listener: each player hears their own monitor "
+"loudest, and nobody an echo. feedback.py finds how much gain the singer's "
+"microphone allows before the loudspeakers that play it make it ring, at the "
+"mix position and at the singer's ears, and the frequencies where it rings "
+"first, then renders the loop below and above that gain. Its microphone is an "
+"ideal supercardioid and the reverberation's phases are random, so take the "
+"frequencies as an example of where such a stage rings. near_field.py prints "
+"how far each array's far-field pattern would be off at each listener: within "
+"3 dB up to 2 kHz, but up to 8 dB at 4 and 8 kHz, the side fill's at the "
+"guitarist. make_model.py writes the model and the arrays; their boxes are a "
+"generic box made up for this example, not any product's data."
+msgstr ""
+"Een concertpodium op open terrein met zijn monitoren: het podium van de "
+"stadionvoorbeelden, alleen. Op het podium speelt een paar vloermonitoren "
+"(wedges) de mix van de zanger, een drumfill die van de drummer en sidefills "
+"die van de rest van de band. Naast het podium hangen de twee "
+"hoofd-line-arrays van 12 kasten, in een J gebogen (coherente arrays), met "
+"een blok van acht cardioïde subwoofers onder het midden van de voorkant van "
+"het podium, 17 ms vertraagd, en frontfills op de rand ervan, zodat de "
+"muzikanten ook horen wat er naar achteren weglekt. Er staan ontvangers waar "
+"de zanger, de drummer en een gitarist spelen, en op de mengpositie, op 37 m, "
+"in een staand publiek (`audience: true`). De muzikanten staan op een paar "
+"meter van de arrays, veel dichterbij dan hun verreveldpatronen gelden, dus "
+"elke array telt zijn kasten een voor een op (`near_field: true`).  python "
+"align.py python feedback.py python near_field.py python make_model.py  "
+"align.py toont wanneer en hoe luid elke luidspreker bij elke ontvanger "
+"aankomt: elke muzikant hoort zijn eigen monitor het luidst, en niemand hoort "
+"een echo. feedback.py bepaalt hoeveel versterking de microfoon van de zanger "
+"toelaat voordat de luidsprekers die hem weergeven hem laten rondzingen, op "
+"de mengpositie en bij de oren van de zanger, en de frequenties waar hij het "
+"eerst rondzingt, en maakt dan het geluid van de lus onder en boven die "
+"versterking. Zijn microfoon is een ideale supercardioïde en de fasen van de "
+"nagalm zijn willekeurig, dus de frequenties zijn een voorbeeld van waar zo'n "
+"podium rondzingt. near_field.py toont hoeveel het verreveldpatroon van elke "
+"array bij elke ontvanger zou afwijken: minder dan 3 dB tot 2 kHz, maar tot 8 "
+"dB bij 4 en 8 kHz, dat van de sidefill bij de gitarist. make_model.py "
+"schrijft het model en de arrays; hun kasten zijn een generieke kast die voor "
+"dit voorbeeld is bedacht, geen gegevens van een product."
+
 #: examples/fitting/scene.yaml
 msgctxt "example"
 msgid "Seminar room as designed (10 x 7 x 3 m)"
@@ -4279,6 +6221,34 @@ msgstr ""
 "worden opgeslagen: de stem van de gids gaat van direct en helder naar geluid "
 "dat om de hoek buigt."
 
+#: examples/hillside/scene.yaml
+msgctxt "example"
+msgid "Yard behind a hill"
+msgstr "Werf achter een heuvel"
+
+#: examples/hillside/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a works yard at the foot of a hill, heard 160 m away in the hill's "
+"shadow, on the slope that faces the yard and on the crest. The ground is a "
+"terrain, a grid of heights read from hill.asc (make_terrain.py writes it), "
+"and the two houses by the listener in the shadow come from a map, "
+"houses.geojson. The sound bends over the crest to the listener behind it, "
+"which takes 10 dB off the lowest band and nearly 40 dB off the highest, and "
+"reflects off the mean plane of the slope to the listener facing the yard, as "
+"off flat ground; the listener on the crest sees the yard just over the "
+"hill's shoulder."
+msgstr ""
+"Buiten: een werf aan de voet van een heuvel, gehoord op 160 m in de schaduw "
+"van de heuvel, op de helling die naar de werf kijkt en op de top. De grond "
+"is een terrein, een hoogteraster gelezen uit hill.asc (make_terrain.py "
+"schrijft het), en de twee huizen bij de ontvanger in de schaduw komen van "
+"een kaart, houses.geojson. Het geluid buigt over de top naar de ontvanger "
+"erachter, wat 10 dB van de laagste band en bijna 40 dB van de hoogste "
+"afhaalt, en weerkaatst op het gemiddelde vlak van de helling naar de "
+"ontvanger die naar de werf kijkt, als op vlakke grond; de ontvanger op de "
+"top ziet de werf net over de schouder van de heuvel."
+
 #: examples/leaky_classroom/scene.yaml
 msgctxt "example"
 msgid "Leaky classroom (a model with two holes)"
@@ -4369,6 +6339,38 @@ msgstr ""
 "inhoud van een bibliotheek weer. De waarden zijn eigen aan dit voorbeeld en "
 "komen niet uit een van beide programma's."
 
+#: examples/open_air_stage/scene.yaml
+msgctxt "example"
+msgid "Open-air stage in the wind"
+msgstr "Openluchtpodium in de wind"
+
+#: examples/open_air_stage/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a stage's loudspeakers 5 m up, heard 100 and 300 m away across a "
+"park on a windy evening, downwind and upwind. The wind, 5 m/s 10 m up, grows "
+"with height, so sound going with it travels faster higher up and bends down "
+"towards the ground, and sound going against it bends up, over the listeners' "
+"heads. Downwind the sound comes sooner, and louder in the low bands; 300 m "
+"upwind the listeners are in its shadow, where only what bends round its edge "
+"and what the wind's eddies scatter into it arrive: there the bands from 1 "
+"kHz up are some 19 dB below those downwind, where without the eddies they "
+"would be 60 dB below. The eddies also make the sound flicker as they drift "
+"past. Remove the atmosphere to hear the same park in still air."
+msgstr ""
+"Buiten: de luidsprekers van een podium op 5 m hoogte, gehoord op 100 en 300 "
+"m afstand over een park op een winderige avond, met de wind mee en tegen de "
+"wind in. De wind, 5 m/s op 10 m hoogte, neemt toe met de hoogte, zodat "
+"geluid dat met hem meegaat hoger op sneller gaat en naar de grond buigt, en "
+"geluid ertegenin omhoog buigt, over de hoofden van de luisteraars. Met de "
+"wind mee komt het geluid eerder aan, en luider in de lage banden; 300 m "
+"tegen de wind in staan de luisteraars in zijn schaduw, waar alleen aankomt "
+"wat om de rand ervan buigt en wat de wervelingen van de wind erin "
+"verstrooien: daar liggen de banden vanaf 1 kHz zo'n 19 dB onder die met de "
+"wind mee, waar ze zonder de wervelingen 60 dB lager zouden liggen. De "
+"wervelingen laten het geluid ook schommelen terwijl ze voorbijdrijven. "
+"Verwijder de atmosfeer om hetzelfde park in stilstaande lucht te horen."
+
 #: examples/orchestra/scene.yaml
 msgctxt "example"
 msgid "Beethoven 8 orchestra (concert hall, 61 sources)"
@@ -4410,6 +6412,33 @@ msgstr ""
 "krijgen de naam van hun materiaal en geometrie; toewijzingen negeren "
 "hoofdletters en kleine letters: Brick_Rough van SketchUp komt overeen met "
 "brick_rough."
+
+#: examples/roadside/scene.yaml
+msgctxt "example"
+msgid "Road across a meadow"
+msgstr "Weg langs een weiland"
+
+#: examples/roadside/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: traffic on a road between a meadow and a paved yard, heard 7.5, 25 "
+"and 50 m away over the grass, and 25 m away over the yard. Over soft ground "
+"the sound that reflects off it arrives out of step with the direct sound at "
+"a few hundred hertz and takes some of it away (the ground dip); over the "
+"hard yard the two add up there instead, and the dip comes higher up, near 2 "
+"kHz. The meadow, the road and the yard are parts of the ground, each with "
+"its impedance; a reflection near where two meet takes some of each, as much "
+"as each covers of its Fresnel zone."
+msgstr ""
+"Buiten: verkeer op een weg tussen een weiland en een verharde binnenplaats, "
+"gehoord op 7.5, 25 en 50 m boven het gras en op 25 m boven de binnenplaats. "
+"Boven zachte grond komt het geluid dat erop weerkaatst bij een paar honderd "
+"hertz uit fase met het directe geluid aan en neemt het er een deel van weg "
+"(de gronddip); boven de harde binnenplaats tellen de twee daar juist op, en "
+"de dip ligt hoger, rond 2 kHz. Het weiland, de weg en de binnenplaats zijn "
+"delen van de grond, elk met een eigen impedantie; een reflectie dicht bij "
+"waar twee elkaar raken neemt van elk iets, zoveel als elk van haar "
+"fresnelzone bedekt."
 
 #: examples/room_modes/scene.yaml
 msgctxt "example"
@@ -4469,6 +6498,200 @@ msgstr ""
 "weer loopt, sterft daardoor langzaam uit: de gesimuleerde T30 is enkele "
 "keren zo groot als de schattingen van Sabine en Eyring van `inspect`, die "
 "een diffuus veld veronderstellen."
+
+#: examples/stadium_concert/scene.yaml
+msgctxt "example"
+msgid "Stadium concert with sound system and monitors"
+msgstr "Stadionconcert met geluidsinstallatie en monitoren"
+
+#: examples/stadium_concert/scene.yaml
+msgctxt "example"
+msgid ""
+"A concert in a football stadium, with a sound system as tours hang it and "
+"the stage's monitors: stadium_pa and concert_stage together. The stadium is "
+"a bowl of four stands under a ring of roof, open to the sky over the pitch; "
+"the stage stands at the west end, and the stand behind it is empty. Beside "
+"the stage hang two main line arrays of 12 boxes curved in a J (coherent "
+"arrays), their top boxes aimed at the far end and their bottom ones at the "
+"crowd in front. A block of eight cardioid subwoofers under the middle of the "
+"stage front is delayed 17 ms so that it arrives with the main arrays at the "
+"mix position. Out-fills beside the main arrays cover the side stands near "
+"the stage, and front fills on the stage's lip the front rows between them. "
+"Two delay towers on the pitch, 50 m out, cover its back, and four delays "
+"hung under the roof's edge, aimed along the side and end stands, their far "
+"seats. Each fill and delay is timed to arrive at its seats 6 to 20 ms after "
+"the main arrays, so the sound still seems to come from the stage; the "
+"towers' and the delays' low bands are rolled off, where the main arrays and "
+"the subwoofers give enough. On stage a pair of wedges plays the singer's "
+"mix, a drum fill the drummer's and side fills the rest of the band's. "
+"Listeners stand where the singer, the drummer and a guitarist play, at the "
+"front, the middle, the side and the back of the pitch, and low, high and far "
+"on the stands. The crowd standing on the pitch and the one seated in the "
+"stands take up the sound and scatter it (`audience: true`). Many listeners "
+"stand nearer the arrays than their far-field patterns hold, so every array "
+"adds up its boxes one by one (`near_field: true`). The sources and listeners "
+"sit in groups: the PA's mains, subwoofers, fills and delays, the monitors, "
+"the stage, and the audience standing and seated. The editor's scene tree "
+"shows or hides each group, and its tick uses it in simulations or leaves it "
+"out.  python align.py python near_field.py python feedback.py python "
+"make_model.py  align.py prints when and how loud each loudspeaker arrives at "
+"each listener, and which would be heard as an echo: none, and each player "
+"hears their own monitor loudest. near_field.py prints how far each array's "
+"far-field pattern would be off at each listener: within 3.5 dB up to 2 kHz, "
+"but up to 10 dB at 4 and 8 kHz near the main arrays. feedback.py finds how "
+"much gain the singer's microphone allows before the loudspeakers that play "
+"it make it ring, at the mix position and at the singer's ears, and the "
+"frequencies where it rings first, then renders the loop below and above that "
+"gain. Its microphone is an ideal supercardioid and the reverberation's "
+"phases are random, so take the frequencies as an example of where such a "
+"stage rings. make_model.py writes the model and the arrays; their boxes are "
+"a generic box made up for this example, not any product's data."
+msgstr ""
+"Een concert in een voetbalstadion, met een geluidsinstallatie zoals tournees "
+"die ophangen en de monitoren van het podium: stadium_pa en concert_stage "
+"samen. Het stadion is een kom van vier tribunes onder een ring van dak, "
+"boven het veld open naar de hemel; het podium staat aan de westkant, en de "
+"tribune erachter is leeg. Naast het podium hangen twee hoofd-line-arrays van "
+"12 kasten, in een J gebogen (coherente arrays), met de bovenste kasten "
+"gericht op de overkant en de onderste op het publiek vooraan. Een blok van "
+"acht cardioïde subwoofers onder het midden van de voorkant van het podium is "
+"17 ms vertraagd zodat het samen met de hoofdarrays bij de mengpositie "
+"aankomt. Outfills naast de hoofdarrays dekken de zijtribunes dicht bij het "
+"podium, en frontfills op de podiumrand de voorste rijen ertussen. Twee "
+"delaytorens op het veld, op 50 m, dekken het achterste deel ervan, en vier "
+"delays onder de dakrand, gericht langs de zij- en eindtribunes, hun verre "
+"plaatsen. Elke fill en elke delay is zo ingesteld dat hij bij zijn plaatsen "
+"6 tot 20 ms na de hoofdarrays aankomt, zodat het geluid nog van het podium "
+"lijkt te komen; de lage banden van de torens en de delays zijn verzwakt, "
+"waar de hoofdarrays en de subwoofers genoeg geven. Op het podium speelt een "
+"paar vloermonitoren (wedges) de mix van de zanger, een drumfill die van de "
+"drummer en sidefills die van de rest van de band. Er staan ontvangers waar "
+"de zanger, de drummer en een gitarist spelen, vooraan, in het midden, aan de "
+"zijkant en achteraan op het veld, en laag, hoog en ver op de tribunes. Het "
+"staande publiek op het veld en het zittende op de tribunes absorberen het "
+"geluid en verstrooien het (`audience: true`). Veel ontvangers staan dichter "
+"bij de arrays dan hun verreveldpatronen gelden, dus elke array telt zijn "
+"kasten een voor een op (`near_field: true`). De bronnen en ontvangers staan "
+"in groepen: de hoofdarrays, de subwoofers, de fills en de delays van de PA, "
+"de monitoren, het podium en het staande en zittende publiek. De scèneboom "
+"van de editor toont of verbergt elke groep, en het vinkje ervan neemt hem "
+"mee in simulaties of laat hem weg.  python align.py python near_field.py "
+"python feedback.py python make_model.py  align.py toont wanneer en hoe luid "
+"elke luidspreker bij elke ontvanger aankomt, en welke als echo gehoord zou "
+"worden: geen, en elke muzikant hoort zijn eigen monitor het luidst. "
+"near_field.py toont hoeveel het verreveldpatroon van elke array bij elke "
+"ontvanger zou afwijken: minder dan 3,5 dB tot 2 kHz, maar tot 10 dB bij 4 en "
+"8 kHz bij de hoofdarrays. feedback.py bepaalt hoeveel versterking de "
+"microfoon van de zanger toelaat voordat de luidsprekers die hem weergeven "
+"hem laten rondzingen, op de mengpositie en bij de oren van de zanger, en de "
+"frequenties waar hij het eerst rondzingt, en maakt dan het geluid van de lus "
+"onder en boven die versterking. Zijn microfoon is een ideale supercardioïde "
+"en de fasen van de nagalm zijn willekeurig, dus de frequenties zijn een "
+"voorbeeld van waar zo'n podium rondzingt. make_model.py schrijft het model "
+"en de arrays; hun kasten zijn een generieke kast die voor dit voorbeeld is "
+"bedacht, geen gegevens van een product."
+
+#: examples/stadium_pa/scene.yaml
+msgctxt "example"
+msgid "Stadium sound system"
+msgstr "Geluidsinstallatie van een stadion"
+
+#: examples/stadium_pa/scene.yaml
+msgctxt "example"
+msgid ""
+"A football stadium's sound system for a concert, as tours hang it: the PA "
+"alone, for the crowd (the stage's monitors are in concert_stage, and both "
+"together in stadium_concert). The stadium is a bowl of four stands under a "
+"ring of roof, open to the sky over the pitch; the stage stands at the west "
+"end, and the stand behind it is empty. Beside the stage hang two main line "
+"arrays of 12 boxes curved in a J (coherent arrays), their top boxes aimed at "
+"the far end and their bottom ones at the crowd in front. A block of eight "
+"cardioid subwoofers under the middle of the stage front is delayed 17 ms so "
+"that it arrives with the main arrays at the mix position. Out-fills beside "
+"the main arrays cover the side stands near the stage, and front fills on the "
+"stage's lip the front rows between them. Two delay towers on the pitch, 50 m "
+"out, cover its back, and four delays hung under the roof's edge, aimed along "
+"the side and end stands, their far seats. Each fill and delay is timed to "
+"arrive at its seats 6 to 20 ms after the main arrays, so the sound still "
+"seems to come from the stage; the towers' and the delays' low bands are "
+"rolled off, where the main arrays and the subwoofers give enough. Listeners "
+"stand at the front, the middle, the side and the back of the pitch, and low, "
+"high and far on the stands. The crowd standing on the pitch and the one "
+"seated in the stands take up the sound and scatter it (`audience: true`). "
+"Many listeners stand nearer the arrays than their far-field patterns hold, "
+"so every array adds up its boxes one by one (`near_field: true`).  "
+"acoustic-spaces map scene.yaml --parameter spl --plot spl.png python "
+"align.py python near_field.py python make_model.py  On the pitch from the "
+"mix position back, nine points of the map in ten get the same level within "
+"2.5 dB (all bands together). The map takes under four minutes on 4 cores. "
+"align.py prints when and how loud each loudspeaker arrives at each listener, "
+"and which would be heard as an echo: none. near_field.py prints how far each "
+"array's far-field pattern would be off at each listener: within 3.5 dB up to "
+"2 kHz, but up to 10 dB at 4 and 8 kHz near the main arrays. make_model.py "
+"writes the model and the arrays; their boxes are a generic box made up for "
+"this example, not any product's data."
+msgstr ""
+"De geluidsinstallatie van een voetbalstadion voor een concert, zoals "
+"tournees die ophangen: alleen de PA, voor het publiek (de monitoren van het "
+"podium staan in concert_stage, en beide samen in stadium_concert). Het "
+"stadion is een kom van vier tribunes onder een ring van dak, boven het veld "
+"open naar de hemel; het podium staat aan de westkant, en de tribune erachter "
+"is leeg. Naast het podium hangen twee hoofd-line-arrays van 12 kasten, in "
+"een J gebogen (coherente arrays), met de bovenste kasten gericht op de "
+"overkant en de onderste op het publiek vooraan. Een blok van acht cardioïde "
+"subwoofers onder het midden van de voorkant van het podium is 17 ms "
+"vertraagd zodat het samen met de hoofdarrays bij de mengpositie aankomt. "
+"Outfills naast de hoofdarrays dekken de zijtribunes dicht bij het podium, en "
+"frontfills op de podiumrand de voorste rijen ertussen. Twee delaytorens op "
+"het veld, op 50 m, dekken het achterste deel ervan, en vier delays onder de "
+"dakrand, gericht langs de zij- en eindtribunes, hun verre plaatsen. Elke "
+"fill en elke delay is zo ingesteld dat hij bij zijn plaatsen 6 tot 20 ms na "
+"de hoofdarrays aankomt, zodat het geluid nog van het podium lijkt te komen; "
+"de lage banden van de torens en de delays zijn verzwakt, waar de hoofdarrays "
+"en de subwoofers genoeg geven. Er staan ontvangers vooraan, in het midden, "
+"aan de zijkant en achteraan op het veld, en laag, hoog en ver op de "
+"tribunes. Het staande publiek op het veld en het zittende op de tribunes "
+"absorberen het geluid en verstrooien het (`audience: true`). Veel ontvangers "
+"staan dichter bij de arrays dan hun verreveldpatronen gelden, dus elke array "
+"telt zijn kasten een voor een op (`near_field: true`).  acoustic-spaces map "
+"scene.yaml --parameter spl --plot spl.png python align.py python "
+"near_field.py python make_model.py  Op het veld vanaf de mengpositie naar "
+"achteren krijgen negen van de tien punten van de kaart hetzelfde niveau "
+"binnen 2,5 dB (alle banden samen). De dekkingskaart duurt minder dan vier "
+"minuten op 4 kernen. align.py toont wanneer en hoe luid elke luidspreker bij "
+"elke ontvanger aankomt, en welke als echo gehoord zou worden: geen. "
+"near_field.py toont hoeveel het verreveldpatroon van elke array bij elke "
+"ontvanger zou afwijken: minder dan 3,5 dB tot 2 kHz, maar tot 10 dB bij 4 en "
+"8 kHz bij de hoofdarrays. make_model.py schrijft het model en de arrays; hun "
+"kasten zijn een generieke kast die voor dit voorbeeld is bedacht, geen "
+"gegevens van een product."
+
+#: examples/street/scene.yaml
+msgctxt "example"
+msgid "Street with a noise barrier"
+msgstr "Straat met geluidsscherm"
+
+#: examples/street/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a street 12 m wide between a row of houses 9 m high and an office "
+"block 15 m high, with traffic along it (a line source 30 m long). Past the "
+"end of the houses a noise barrier 3 m high shields a garden. The scene is "
+"the ground and the open sky over it: sound that reaches the sky leaves, and "
+"the ground reaches 30 m past the buildings, then goes on as if it never "
+"ended. One listener stands on the pavement, one on a balcony of the office "
+"block, one in the garden, where the traffic comes over the top of the "
+"barrier and round its ends: `first_order` diffraction follows it."
+msgstr ""
+"Buiten: een straat van 12 m breed tussen een rij huizen van 9 m hoog en een "
+"kantoorgebouw van 15 m hoog, met verkeer langs de straat (een lijnbron van "
+"30 m lang). Voorbij het einde van de huizen schermt een geluidsscherm van 3 "
+"m hoog een tuin af. De scène is de grond met de open hemel erboven: geluid "
+"dat de hemel bereikt, verlaat de scène, en de grond reikt 30 m voorbij de "
+"gebouwen en loopt dan door alsof hij nooit ophoudt. Eén ontvanger staat op "
+"de stoep, één op een balkon van het kantoorgebouw, één in de tuin, waar het "
+"verkeer over de bovenkant van het scherm en om de uiteinden heen komt: de "
+"diffractie `first_order` volgt dat."
 
 #: examples/studio/scene.yaml
 msgctxt "example"
@@ -4533,6 +6756,35 @@ msgstr ""
 "steunluidsprekers zijn dus alleen nuttig waar het directe geluid van de "
 "kolommen is verzwakt. `inspect` vermeldt het geluidsvermogen van elke bron "
 "inclusief het ingangssignaal."
+
+#: examples/tree_belt/scene.yaml
+msgctxt "example"
+msgid "Road behind a belt of trees"
+msgstr "Weg achter een bomenstrook"
+
+#: examples/tree_belt/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: traffic on a road heard from two gardens in front of a row of "
+"houses, 55 m away over grass: one behind a belt of trees 30 m deep, the "
+"other across an open meadow. The belt's foliage takes ISO 9613-2's "
+"dense-foliage rates from the sound passing through it (up to 0.12 dB per "
+"metre at 8 kHz) and its trunks scatter some of it aside, into the late "
+"sound; a lone oak stands by the open garden. Trees cut less than a wall "
+"would: up to about 8 dB in the highest bands, under 1 dB at the lowest. "
+"Behind them much of the sound comes scattered, with the late rays, so the "
+"scene traces more of them than the default."
+msgstr ""
+"Buiten: verkeer op een weg, gehoord vanuit twee tuinen voor een rij huizen, "
+"55 m verderop boven gras: de ene achter een bomenstrook van 30 m diep, de "
+"andere aan de overkant van een open weiland. Het gebladerte van de strook "
+"neemt het geluid dat erdoorheen gaat de waarden voor dicht gebladerte uit "
+"ISO 9613-2 af (tot 0.12 dB per meter bij 8 kHz) en de stammen verstrooien er "
+"een deel van zijwaarts, naar het late geluid; een losse eik staat bij de "
+"open tuin. Bomen dempen minder dan een muur: tot ongeveer 8 dB in de hoogste "
+"banden, minder dan 1 dB in de laagste. Achter de bomen komt een groot deel "
+"van het geluid verstrooid aan, met de late stralen, dus volgt de scène meer "
+"stralen dan standaard."
 
 #: examples/workshop/scene.yaml
 msgctxt "example"

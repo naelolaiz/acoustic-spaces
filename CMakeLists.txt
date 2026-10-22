@@ -21,7 +21,10 @@ target_link_libraries(_native PRIVATE acoustic_spaces_core)
 if(MSVC)
   target_compile_options(_native PRIVATE /W4)
 else()
-  target_compile_options(_native PRIVATE -Wall -Wextra -Wpedantic)
+  # No multiply-adds fused where the source has none (Apple's clang fuses them by default
+  # on Apple silicon): every platform rounds alike, and the wave solver with a speed of
+  # sound per cell stays, with every speed the grid's, the solver without one to the bit.
+  target_compile_options(_native PRIVATE -Wall -Wextra -Wpedantic -ffp-contract=off)
 endif()
 
 install(TARGETS _native LIBRARY DESTINATION acoustic_spaces)
@@ -42,4 +45,6 @@ install(
   PATTERN "*.li8"
   PATTERN "*.ifc"
   PATTERN "*.dae"
+  PATTERN "*.asc"
+  PATTERN "*.geojson"
 )

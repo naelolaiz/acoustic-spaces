@@ -30,9 +30,11 @@ from acoustic_spaces.viz import (
     _outline,
     balloon_polydata,
     extent_polydata,
+    marker_sizes,
     plot_coverage,
     plot_leaks,
     plot_paths,
+    plot_vegetation,
     room_polydata,
 )
 
@@ -160,10 +162,13 @@ class Viewport(QWidget):
         paths=None,
         coverage=None,
         leaks=None,
+        hidden: set[tuple[str, str]] = frozenset(),
     ):
         """Draw ``room`` with ``selection`` highlighted and, if given, early ``paths``,
         a coverage map (``coverage`` is (CoverageMap, parameter, band)) and the
-        ``leaks`` from :func:`acoustic_spaces.engine.leaks.find_leaks`.
+        ``leaks`` from :func:`acoustic_spaces.engine.leaks.find_leaks`. The sources and
+        listeners in ``hidden`` ((kind, name) pairs) are left out; those left out of
+        simulations are drawn faded.
 
         The camera stays where it is, also when the room changes shape; only the first
         room gets the usual view (:meth:`reset_camera` gives it again)."""
@@ -184,11 +189,17 @@ class Viewport(QWidget):
         kind, key = selection or ("", None)
 
         materials = surface_materials(room)
+        sky = room.sky_faces()
         for label, material in enumerate(materials):
             faces = np.flatnonzero(room.mesh.face_labels == label)
             if len(faces) == 0:
                 continue
             part = room_polydata(room, faces)
+            if sky[faces[0]]:
+                # Outdoors, the open sky would hide the rest: only its edges, where the
+                # ground ends.
+                plotter.add_mesh(_outline(part), color=EDGE_COLOUR, line_width=1.0, render=False)
+                continue
             chosen = kind == "surface" and key == label
             colour = SELECTED_COLOUR if chosen else material_colour(room, material)
             opacity = 0.75 if chosen else 0.4 if material != UNASSIGNED else 0.8
@@ -201,69 +212,88 @@ class Viewport(QWidget):
                 line_width=3.0 if chosen else 1.5,
                 render=False,
             )
+        plot_vegetation(room, plotter, render=False)
 
         lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
         size = float(np.linalg.norm(hi - lo)) or 1.0
-        radius = max(0.012 * size, 0.05)
+        shown = [
+            (group, colour, index, item)
+            for group, colour in (("sources", SOURCE_COLOUR), ("listeners", LISTENER_COLOUR))
+            for index, item in enumerate(getattr(room.scene, group))
+            if (group, item.name) not in hidden
+        ]
+        # Smaller where they crowd, such as players and monitors on a stadium's stage.
+        radii, arrows = marker_sizes(
+            [item.position for *_, item in shown],
+            size,
+            [item.orientation.forward() for *_, item in shown],
+        )
         points, names = [], []
-        for group, colour in (("sources", SOURCE_COLOUR), ("listeners", LISTENER_COLOUR)):
-            for index, item in enumerate(getattr(room.scene, group)):
-                chosen = kind == group and key == index
-                scale = 1.6 if chosen else 1.0
-                sphere = pv.Sphere(radius=radius * scale, center=item.position)
-                actor = plotter.add_mesh(
-                    sphere, color=SELECTED_COLOUR if chosen else colour, render=False
+        for (group, colour, index, item), radius, arrow in zip(shown, radii, arrows, strict=True):
+            chosen = kind == group and key == index
+            scale = 1.6 if chosen else 1.0
+            # Left out of simulations: faded.
+            opacity = 1.0 if item.in_use or chosen else 0.3
+            sphere = pv.Sphere(radius=radius * scale, center=item.position)
+            actor = plotter.add_mesh(
+                sphere,
+                color=SELECTED_COLOUR if chosen else colour,
+                opacity=opacity,
+                render=False,
+            )
+            self._actors[_key(actor)] = (group, index)
+            self._markers.append(actor)
+            parts = self._point_actors[group, index] = [actor]
+            extent = extent_polydata(item, 0.5 * radius) if group == "sources" else None
+            if extent is not None:  # a line or surface source
+                shape = plotter.add_mesh(
+                    extent,
+                    color=SELECTED_COLOUR if chosen else colour,
+                    opacity=0.6 * opacity,
+                    render=False,
                 )
-                self._actors[_key(actor)] = (group, index)
-                self._markers.append(actor)
-                parts = self._point_actors[group, index] = [actor]
-                extent = extent_polydata(item, 0.5 * radius) if group == "sources" else None
-                if extent is not None:  # a line or surface source
-                    shape = plotter.add_mesh(
-                        extent,
+                self._actors[_key(shape)] = (group, index)
+                self._markers.append(shape)
+                parts.append(shape)
+            directivity = room.directivities[index] if group == "sources" else None
+            if directivity is None or not directivity.omni:
+                pointer = pv.Arrow(
+                    start=item.position,
+                    direction=item.orientation.forward(),
+                    scale=arrow * scale,
+                )
+                parts.append(
+                    plotter.add_mesh(
+                        pointer,
                         color=SELECTED_COLOUR if chosen else colour,
-                        opacity=0.6,
+                        opacity=opacity,
                         render=False,
                     )
-                    self._actors[_key(shape)] = (group, index)
-                    self._markers.append(shape)
-                    parts.append(shape)
-                directivity = room.directivities[index] if group == "sources" else None
-                if directivity is None or not directivity.omni:
-                    arrow = pv.Arrow(
-                        start=item.position,
-                        direction=item.orientation.forward(),
-                        scale=6 * radius * scale,
+                )
+                if chosen:  # a short arrow to the top of the head shows the roll
+                    up = np.array(item.orientation.rotation())[:, 2]
+                    top = pv.Arrow(start=item.position, direction=up, scale=0.5 * arrow * scale)
+                    parts.append(plotter.add_mesh(top, color=SELECTED_COLOUR, render=False))
+            if chosen and directivity is not None and not directivity.omni:
+                balloon = balloon_polydata(
+                    directivity, item.position, item.orientation.rotation(), size=10 * radius
+                )
+                parts.append(
+                    plotter.add_mesh(
+                        balloon,
+                        scalars="level",
+                        cmap="magma",
+                        clim=(-30, 0),
+                        opacity=0.55,
+                        show_scalar_bar=False,
+                        pickable=False,
+                        render=False,
                     )
-                    parts.append(
-                        plotter.add_mesh(
-                            arrow, color=SELECTED_COLOUR if chosen else colour, render=False
-                        )
-                    )
-                    if chosen:  # a short arrow to the top of the head shows the roll
-                        up = np.array(item.orientation.rotation())[:, 2]
-                        top = pv.Arrow(start=item.position, direction=up, scale=3 * radius * scale)
-                        parts.append(plotter.add_mesh(top, color=SELECTED_COLOUR, render=False))
-                if chosen and directivity is not None and not directivity.omni:
-                    balloon = balloon_polydata(
-                        directivity, item.position, item.orientation.rotation(), size=10 * radius
-                    )
-                    parts.append(
-                        plotter.add_mesh(
-                            balloon,
-                            scalars="level",
-                            cmap="magma",
-                            clim=(-30, 0),
-                            opacity=0.55,
-                            show_scalar_bar=False,
-                            pickable=False,
-                            render=False,
-                        )
-                    )
-                # The label of the selected point goes above its arrow to the top.
-                lift = (3 * scale + 1.8 if chosen else 1.8) * radius
-                points.append(np.add(item.position, [0.0, 0.0, lift]))
-                names.append(item.name)
+                )
+            # The label of the selected point goes above its arrow to the top.
+            lift = (0.5 * arrow * scale if chosen else 0.0) + 1.8 * radius
+            points.append(np.add(item.position, [0.0, 0.0, lift]))
+            names.append(item.name)
         if points:
             plotter.add_point_labels(
                 np.asarray(points, dtype=float),

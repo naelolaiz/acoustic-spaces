@@ -6,6 +6,8 @@ For every (source, listener) pair, one WAV file per output format
 others), and for the whole run ``parameters.json``: the settings, run details and the
 ISO 3382-1 parameters of every response (with IACC when a binaural response is written,
 from the first if there are several), its STI, STIPA and U50, and its echo criteria.
+Outdoors also its level relative to free field, and the insertion loss of the buildings,
+barriers or vegetation the run was also made without (``simulation.insertion_loss_of``).
 ``acoustic-spaces auralize`` reads that folder.
 """
 
@@ -14,8 +16,10 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import os
 import re
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -68,11 +72,24 @@ def write_results(
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
 
-    irs = {}
-    for key, response in result.responses.items():
+    # The responses side by side, on the run's threads: each is rendered and read as it
+    # would be alone, so the files and the report are the same as one after another.
+    threads = result.settings.performance.threads or os.cpu_count() or 1
+    workers = max(1, min(threads, len(result.responses)))
+
+    def render(key) -> dict:
+        rendered = {}
         for fmt in formats:
             say(f"{key[0]} -> {key[1]}: rendering {fmt.label}")
-            irs[key, fmt.label] = response.spatial_impulse_response(fmt, sample_rate)
+            rendered[key, fmt.label] = result.responses[key].spatial_impulse_response(
+                fmt, sample_rate
+            )
+        return rendered
+
+    irs = {}
+    with ThreadPoolExecutor(workers) as pool:
+        for rendered in pool.map(render, result.responses):
+            irs.update(rendered)
     peak = max((float(abs(ir).max(initial=0.0)) for ir in irs.values()), default=0.0)
     gain = 10.0 ** (-1.0 / 20.0) / peak if normalize and peak > 0 else 1.0
 
@@ -94,7 +111,32 @@ def write_results(
         },
         "responses": [],
     }
-    for (source, listener), response in result.responses.items():
+    if result.removed:
+        report["removed"] = list(result.removed)
+    long_term = result.long_term
+    if long_term is not None:
+        report["long_term"] = {
+            "classes": list(long_term.classes),
+            "shares": {
+                name: {
+                    period: round(float(share), 6)
+                    for period, share in zip(long_term.periods, row, strict=True)
+                }
+                for name, row in zip(long_term.classes, long_term.shares, strict=True)
+            },
+            "periods": [
+                {"name": name, "hours": float(hours), "penalty_db": float(penalty)}
+                for name, hours, penalty in zip(
+                    long_term.periods, long_term.hours, long_term.penalties, strict=True
+                )
+            ],
+            "rating": long_term.rating,
+        }
+
+    def write(key) -> dict:
+        """Write the response's files; its entry in the report, without plots."""
+        source, listener = key
+        response = result.responses[key]
         stem = response_stem(source, listener)
         written = []
         for fmt in formats:
@@ -130,6 +172,29 @@ def write_results(
             "speech": response.speech(power, noise_db, parameters=params, talker=talker).as_dict(),
             "echo": _echo(mono, sample_rate),
         }
+        if response.free_field is not None:
+            relative = response.relative_to_free_field()
+            entry["re_free_field_db"] = [_plain(v) for v in relative]
+            entry["re_free_field_a_db"] = _plain(
+                iso3382.a_weighted(spl) - iso3382.a_weighted(spl - relative)
+            )
+        loss = result.insertion_loss.get((source, listener))
+        if loss is not None:
+            entry["insertion_loss_db"] = [_plain(v) for v in loss]
+            entry["insertion_loss_a_db"] = _plain(
+                iso3382.a_weighted(spl + loss) - iso3382.a_weighted(spl)
+            )
+        if long_term is not None and (source, listener) in long_term.levels:
+            entry["long_term"] = _long_term_entry(long_term, (source, listener))
+        return entry
+
+    with ThreadPoolExecutor(workers) as pool:
+        report["responses"] = list(pool.map(write, result.responses))
+    # Plots one after another: matplotlib draws in one thread.
+    for entry, ((source, listener), response) in zip(
+        report["responses"], result.responses.items(), strict=True
+    ):
+        stem = response_stem(source, listener)
         if plots:
             try:
                 from acoustic_spaces.viz import plot_directions, plot_response
@@ -141,9 +206,37 @@ def write_results(
             except ImportError as exc:
                 say(f"warning: {exc}")
                 plots = False
-        report["responses"].append(entry)
     (out / REPORT_FILE).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
+
+
+def _long_term_entry(long_term, key) -> dict:
+    """The levels over a long term at one (source, listener), for the report: the
+    long-term level, the rating level, and those in each period and each weather class,
+    per octave band and A-weighted."""
+
+    def levels(bands, a) -> dict:
+        return {"spl_db": [_plain(v) for v in bands], "spl_a_db": _plain(a)}
+
+    entry = {
+        **levels(long_term.levels[key], long_term.levels_a[key]),
+        "rating_level_db": _plain(long_term.rating_level[key]),
+        "rating": long_term.rating,
+        "periods": {
+            name: levels(long_term.period_levels[key][k], long_term.period_a[key][k])
+            for k, name in enumerate(long_term.periods)
+        },
+        "classes": {
+            name: levels(long_term.class_levels[key][k], long_term.class_a[key][k])
+            for k, name in enumerate(long_term.classes)
+        },
+    }
+    for what in ("re_free_field", "insertion_loss"):
+        bands = getattr(long_term, what).get(key)
+        if bands is not None:
+            entry[f"{what}_db"] = [_plain(v) for v in bands]
+            entry[f"{what}_a_db"] = _plain(getattr(long_term, f"{what}_a")[key])
+    return entry
 
 
 def _plain(value: float) -> float | None:

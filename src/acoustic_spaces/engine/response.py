@@ -72,6 +72,11 @@ class Response:
     #: :meth:`reweighted`; else empty.
     late_moments: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
     moment_step: float = 0.0
+    #: Outdoors: the energy per band of the same source at the listener in free field
+    #: (its direct sound over the straight line, with the air's attenuation and the
+    #: source's directivity, without the feed), for :meth:`relative_to_free_field`; else
+    #: None.
+    free_field: np.ndarray | None = None
     #: The early part as the echogram reads its coherent bands, with what it came from.
     _pressure: tuple | None = field(default=None, init=False, repr=False, compare=False)
 
@@ -86,13 +91,16 @@ class Response:
         those it covers."""
         return self.early.coherent_bands
 
-    def _early_pressure(self) -> coherent.EarlyPressure:
+    def _early_pressure(self) -> dict:
+        """The :class:`~acoustic_spaces.engine.coherent.EarlyPressure` of each point
+        source's paths, as far as they were made, for
+        :func:`~acoustic_spaces.engine.coherent.coherent_energy`."""
         early = self.early
-        key = (early, early.energy, early.delay_s, early.direction, early.spectrum)
+        key = (early, early.energy, early.delay_s, early.direction, early.spectrum, early.point)
         if self._pressure is None or any(
             a is not b for a, b in zip(self._pressure[0], key, strict=True)
         ):
-            self._pressure = (key, coherent.EarlyPressure(early))
+            self._pressure = (key, {})
         return self._pressure[1]
 
     @property
@@ -151,8 +159,15 @@ class Response:
         if count and len(self.early):
             # The lowest bands read from the early part's pressure, as from a measured
             # response (or the wave solver's).
-            pressure = self._early_pressure()
-            out[:count] += pressure.energy(step, slots, axis, exponent, start=self.direct_delay_s)
+            out[:count] += coherent.coherent_energy(
+                self.early,
+                step,
+                slots,
+                axis,
+                exponent,
+                start=self.direct_delay_s,
+                cache=self._early_pressure(),
+            )
         if self.wave is not None:
             out[: self.wave.bands] = self.wave.energy(step, slots, axis, exponent)
         return out
@@ -264,7 +279,9 @@ class Response:
         decay times of figures of eight along the listener's axes come from the
         directions the energy arrives from; stage support only for a listener within
         ``STAGE_DISTANCE_M`` of the source. IACC needs a binaural response:
-        :func:`~acoustic_spaces.parameters.interaural_cross_correlation`.
+        :func:`~acoustic_spaces.parameters.interaural_cross_correlation`. Outdoors (with
+        :attr:`free_field`), G of a band that does not decay as a room's does is that of
+        the energy the response holds.
         """
         reference = self._reference()  # free field at 10 m
         side = self.lateral_axis()
@@ -281,7 +298,23 @@ class Response:
             <= STAGE_DISTANCE_M,
             lateral=(weighted(side), weighted(side, 1)),
             directional=[weighted(self.orientation[:, k]) for k in range(3)],
+            open_air=self.free_field is not None,
         )
+
+    def relative_to_free_field(self) -> np.ndarray:
+        """The level relative to free field per octave band (dB): how much louder (or,
+        negative, quieter) the source is here than the same source the same distance
+        away in free field, which the air between them attenuates as here. The ground,
+        the weather, buildings, barriers and vegetation make the difference; with the
+        sign turned, it is the excess attenuation of outdoor acoustics. It compares the
+        energy the response holds (nothing is extrapolated past its end, as G does for
+        a room's decay) with the free field's; -inf where no sound arrives, NaN in every
+        band of a response without :attr:`free_field`."""
+        if self.free_field is None:
+            return np.full(len(OCTAVE_BANDS_HZ), math.nan)
+        held = self.octave_energy().sum(axis=1) / self._reference()  # re 10 m free field
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return 10.0 * np.log10(held / (to_octaves(self.free_field) * (4.0 * math.pi * 100.0)))
 
     def levels(
         self,
@@ -342,7 +375,8 @@ class Response:
 
         Early paths become fractional-delay impulses filtered per band, in the lowest
         bands with the phase of their reflections
-        (:mod:`~acoustic_spaces.engine.coherent`); the late energy drives a random-sign
+        (:mod:`~acoustic_spaces.engine.coherent`), in turbulence as at one moment
+        (:meth:`moment`); the late energy drives a random-sign
         Dirac sequence with the density of reflections in the room.
         From 50 ms after the direct sound the late energy is smoothed over 10 ms first,
         so a single strong ray late in the tail does not become a click. The wave
@@ -352,8 +386,9 @@ class Response:
         """
         n = int(math.ceil(self.length_s * sample_rate))
         scale = synthesis.ENERGY_TO_IR
-        band_signals, quadrature = coherent.band_impulses(self.early, n, sample_rate)
-        low = coherent.signal(self.early, n, sample_rate)[:, 0]
+        paths = self.moment(seed)
+        band_signals, quadrature = coherent.band_impulses(paths, n, sample_rate)
+        low = coherent.signal(paths, n, sample_rate)[:, 0]
         noise_signals = np.zeros_like(band_signals)
         if np.any(self.late > 0):
             rng = np.random.default_rng(self.seed if seed is None else seed)
@@ -374,6 +409,13 @@ class Response:
         noise = synthesis.combine_bands(noise_signals, sample_rate)
         late = self.wave.high_pass(noise, sample_rate, late=True)
         return early + late + self.wave.field(sample_rate, n)[:, 0]
+
+    def moment(self, seed: int | None = None) -> EarlyReflections:
+        """The early paths at a moment of the turbulent air, drawn with ``seed``
+        (default the response's): outdoors in turbulence the eddies delay each path at
+        random, and an impulse response is one moment of them, whose levels scatter
+        about the echogram's average. Without turbulence, the early paths."""
+        return self.early.frozen(self.seed if seed is None else seed)
 
     def spatial_impulse_response(
         self, fmt, sample_rate: int = 48_000, seed: int | None = None

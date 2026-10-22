@@ -8,9 +8,11 @@ the scene as it still is.
 
 from __future__ import annotations
 
+import copy
 import math
 import os
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QLocale, Qt, Signal
@@ -19,6 +21,8 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QCompleter,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -39,16 +43,29 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces.engine import tuning
+from acoustic_spaces.engine.long_term import rating_name
+from acoustic_spaces.geometry import UNIT_SCALE
 from acoustic_spaces.geometry.io import SUPPORTED_SUFFIXES, ifc_spaces
-from acoustic_spaces.gui.document import Document, EditError
+from acoustic_spaces.geometry.terrain import footprint_properties
+from acoustic_spaces.gui.document import NEW_PART_SIZES, Document, EditError
 from acoustic_spaces.gui.levels import rich_lines
 from acoustic_spaces.gui.numbers import fmt, number, numbers_text, parse_number, parse_numbers
 from acoustic_spaces.gui.tips import band_headers, row_headers, share_tips
 from acoustic_spaces.i18n import N_, _, ngettext
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.materials.bands import convert
+from acoustic_spaces.materials.ground import PRESETS
 from acoustic_spaces.room import UNASSIGNED, matching_name
-from acoustic_spaces.scene.model import LAYOUT_NAMES
+from acoustic_spaces.scene.model import (
+    ATMOSPHERE_PRESETS,
+    INDOOR_COHERENT_MAX_BAND_HZ,
+    LAYOUT_NAMES,
+    TURBULENCE_PRESETS,
+    Atmosphere,
+    LongTerm,
+    Turbulence,
+    Wind,
+)
 
 BAND_LABELS = [f"{f} Hz" if f < 1000 else f"{f // 1000} kHz" for f in OCTAVE_BANDS_HZ]
 #: Column labels of the third-octave bands, short to fit 24 columns.
@@ -81,6 +98,8 @@ DIFFRACTION = [
     ("first_order", N_("first_order")),
     ("second_order", N_("second_order")),
 ]
+DIFFRACTION_REFLECTIONS = [("one_side", N_("one side")), ("both_sides", N_("both sides"))]
+PARABOLIC_EQUATIONS = [("narrow_angle", N_("narrow angle")), ("wide_angle", N_("wide angle"))]
 LATE_METHODS = [
     ("stochastic_ray_tracing", N_("stochastic_ray_tracing")),
     ("statistical", N_("statistical")),
@@ -99,9 +118,27 @@ LATE_DEVICES = [
     ("auto", N_("auto")),
 ]
 WAVE_DEVICES = [(None, N_("default")), ("cpu", "cpu"), ("gpu", "gpu"), ("auto", N_("auto"))]
+WAVE_WINDS = [("effective", N_("effective speed of sound")), ("moving", N_("moving air"))]
 SCATTERING_METHODS = [("vector", N_("vector")), ("random", N_("random"))]
 RAY_TREES = [("sah", "sah"), ("median", N_("median"))]
 BANDS = [("octave", N_("octave")), ("third_octave", N_("third_octave"))]
+#: The weathers an outdoor scene starts from: none, a preset, or values of its own.
+WEATHERS = [
+    (None, N_("(none)")),
+    ("neutral", N_("neutral")),
+    ("windy", N_("windy")),
+    ("sunny_day", N_("sunny_day")),
+    ("clear_night", N_("clear_night")),
+    ("custom", N_("custom")),
+]
+WIND_PROFILES = [("log", N_("log")), ("linear", N_("linear")), ("constant", N_("constant"))]
+EDDIES = [
+    (None, N_("(none)")),
+    ("weak", N_("weak")),
+    ("moderate", N_("moderate")),
+    ("strong", N_("strong")),
+    ("custom", N_("custom")),
+]
 #: The directivity list entry that asks for a SOFA or CSV file.
 MEASURED = N_("Measured data or an array from a file…")
 #: The tip of a source's directivity list, before the choice it shows.
@@ -154,6 +191,9 @@ class Page(QWidget):
     failed = Signal(str)
     #: The page asks to select another item (after a rename or removal).
     select = Signal(str, object)
+    #: The page asks for something to be drawn in the plan view: one of
+    #: :data:`~acoustic_spaces.gui.plan_view.PURPOSES` other than a room.
+    draw = Signal(str)
 
     def __init__(self, document: Callable[[], Document]) -> None:
         super().__init__()
@@ -267,6 +307,7 @@ class ScenePage(Page):
         form.addRow(_("Air temperature"), self.temperature)
         form.addRow(_("Relative humidity"), self.humidity)
         form.addRow(_("Air pressure"), self.pressure)
+        form.addRow(self._weather_group())
         self.stats = QLabel()
         self.stats.setTextFormat(Qt.TextFormat.RichText)
         self.stats.setWordWrap(True)
@@ -280,6 +321,451 @@ class ScenePage(Page):
         )
         form.addRow(self.stats)
 
+    def _weather_group(self) -> QGroupBox:
+        """Outdoors: the wind and the temperature over the ground, which bend sound."""
+        self.weather_group = QGroupBox(_("Wind and temperature"))
+        form = QFormLayout(self.weather_group)
+        self.weather_zone = QComboBox()
+        self.weather_zone.setToolTip(
+            _(
+                "Whose weather the fields below show and change: the whole scene's; a "
+                "weather zone's, a part of the scene with wind and temperature of its own "
+                "(the lee of buildings, where the wind drops; a lake, over which the air "
+                "lies cooler), drawn in the plan; or a weather class's, a weather that holds "
+                "for a share of the time, for the levels over a long term (L_den). Outside "
+                "the zones the scene's weather holds, and the eddies are the scene's "
+                "everywhere but in a weather class, which may have its own"
+            )
+        )
+        self.weather_zone.currentIndexChanged.connect(self._weather_zone_chosen)
+        form.addRow(_("Weather of"), self.weather_zone)
+        self.weather = QComboBox()
+        _fill(self.weather, WEATHERS)
+        self.weather.setToolTip(
+            _(
+                "The weather, which bends sound outdoors: (none) or neutral, still air and "
+                "sound in straight lines; windy, 5 m/s 10 m up, bending sound down downwind "
+                "and up upwind; sunny_day, air cooling with height, bending sound up into a "
+                "shadow a few hundred metres away; clear_night, air warming with height, "
+                "bending sound down; custom, the values below. Changing one of them makes "
+                "the weather custom. The air temperature above is the ground's. For a "
+                "weather zone, (none) is the scene's weather unchanged"
+            )
+        )
+        self.weather.currentIndexChanged.connect(self._weather)
+        form.addRow(_("Weather"), self.weather)
+        self.wind_speed = spin(0, 40, 1, 0.5, "m/s")
+        self.wind_speed.setToolTip(
+            _(
+                "The wind's speed at the height below (m/s): sound goes faster with the wind "
+                "and slower against it"
+            )
+        )
+        self.wind_direction = spin(0, 360, 1, 15, "°")
+        self.wind_direction.setWrapping(True)
+        self.wind_direction.setToolTip(
+            _(
+                "The way the wind blows to, in degrees counterclockwise from +x seen from "
+                "above (0: along +x, 90: along +y)"
+            )
+        )
+        self.wind_height = spin(0.1, 1000, 1, 1, "m")
+        self.wind_height.setToolTip(_("The height above the ground the wind's speed is at (m)"))
+        self.wind_profile = QComboBox()
+        _fill(self.wind_profile, WIND_PROFILES)
+        self.wind_profile.setToolTip(
+            _(
+                "How the wind's speed grows with height: log, with the logarithm of the "
+                "height over the roughness, the usual profile; linear, in proportion to the "
+                "height; constant, the same at every height"
+            )
+        )
+        self.gradient = spin(-0.2, 0.2, 4, 0.001, "K/m")
+        self.gradient.setToolTip(
+            _(
+                "How the temperature changes per metre of height (K/m): -0.0098 in air "
+                "stirred by the sun, positive in an inversion. Sound goes faster in warmer "
+                "air and bends away from it"
+            )
+        )
+        self.log_term = spin(-5, 5, 2, 0.1, "K")
+        self.log_term.setToolTip(
+            _(
+                "A change of temperature fastest near the ground (K, times ln(1 + height / "
+                "roughness)): negative on a sunny day, positive on a clear night"
+            )
+        )
+        self.roughness = spin(0.001, 2, 3, 0.01, "m")
+        self.roughness.setToolTip(
+            _(
+                "The ground's roughness length (m), for the log profiles: 0.01 to 0.1 over "
+                "grass, up to 1 among buildings and trees"
+            )
+        )
+        for box, field in (
+            (self.wind_speed, "speed_m_s"),
+            (self.wind_direction, "direction_deg"),
+            (self.wind_height, "height_m"),
+        ):
+            box.valueChanged.connect(lambda value, f=field: self._wind(f, value))
+        self.wind_profile.currentIndexChanged.connect(
+            lambda: self._wind("profile", self.wind_profile.currentData())
+        )
+        for box, field in (
+            (self.gradient, "temperature_gradient_k_m"),
+            (self.log_term, "temperature_log_k"),
+            (self.roughness, "roughness_m"),
+        ):
+            box.valueChanged.connect(lambda value, f=field: self._atmosphere(f, value))
+        form.addRow(_("Wind speed"), self.wind_speed)
+        form.addRow(_("Wind direction"), self.wind_direction)
+        form.addRow(_("Wind height"), self.wind_height)
+        form.addRow(_("Wind profile"), self.wind_profile)
+        form.addRow(_("Temperature gradient"), self.gradient)
+        form.addRow(_("Temperature near the ground"), self.log_term)
+        form.addRow(_("Roughness"), self.roughness)
+        self.zone_temperature = spin(-20, 50, 1, 0.5, "°C")
+        self.zone_temperature.setToolTip(
+            _(
+                "The temperature at the ground in the weather zone or class (°C), where it "
+                "differs from the scene's air temperature: cooler over water, warmer over a "
+                "car park, colder on a winter night"
+            )
+        )
+        self.zone_temperature.valueChanged.connect(self._zone_temperature)
+        form.addRow(_("Ground temperature"), self.zone_temperature)
+        zone_buttons = QHBoxLayout()
+        self.add_weather_zone = QPushButton(_("Add weather zone"))
+        self.add_weather_zone.setToolTip(
+            _(
+                "Draw a part of the scene with weather of its own in the plan, corner by "
+                "corner, and close it on the first corner; then choose it under Weather of "
+                "and give it its wind and temperature"
+            )
+        )
+        self.add_weather_zone.clicked.connect(lambda _checked=False: self.draw.emit("weather"))
+        self.remove_weather_zone = QPushButton(_("Remove weather zone"))
+        self.remove_weather_zone.setToolTip(
+            _("Remove the weather zone chosen under Weather of: the scene's weather holds there")
+        )
+        self.remove_weather_zone.clicked.connect(self._remove_weather_zone)
+        zone_buttons.addWidget(self.add_weather_zone)
+        zone_buttons.addWidget(self.remove_weather_zone)
+        zone_buttons.addStretch(1)
+        form.addRow(zone_buttons)
+        self.class_shares = QTableWidget(1, 3)
+        self.class_shares.verticalHeader().hide()
+        self.class_shares.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.class_shares.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.class_shares.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.class_shares.setToolTip(
+            _(
+                "The share of each period of the day this weather class holds (%), from "
+                "weather statistics of the place: the inversions of a clear night come at "
+                "night, a strong sun by day. In each period the classes' shares add up to "
+                "100 %: changing one makes room in the others, in proportion"
+            )
+        )
+        self.class_shares.itemChanged.connect(self._class_share)
+        form.addRow(_("Share of the time"), self.class_shares)
+        self.periods = QLabel()
+        self.periods.setWordWrap(True)
+        self.periods.setToolTip(
+            _(
+                "The periods of the day the levels over a long term are rated over, with "
+                "their hours and the penalty each adds to its level: by default the day, the "
+                "evening and the night of L_den. Other periods are set in the scene file "
+                "(long_term.periods)"
+            )
+        )
+        form.addRow(self.periods)
+        class_buttons = QHBoxLayout()
+        self.add_weather_class = QPushButton(_("Add weather class"))
+        self.add_weather_class.setToolTip(
+            _(
+                "Add a weather that holds for a share of the time, for the levels over a long "
+                "term (L_den): the first holds all the time in the scene's weather, the next "
+                "ones none of it until given their share. A run then runs the scene in each "
+                "class and combines them"
+            )
+        )
+        self.add_weather_class.clicked.connect(self._add_weather_class)
+        self.remove_weather_class = QPushButton(_("Remove weather class"))
+        self.remove_weather_class.setToolTip(
+            _(
+                "Remove the weather class chosen under Weather of: the others take its share "
+                "of the time, in proportion"
+            )
+        )
+        self.remove_weather_class.clicked.connect(self._remove_weather_class)
+        class_buttons.addWidget(self.add_weather_class)
+        class_buttons.addWidget(self.remove_weather_class)
+        class_buttons.addStretch(1)
+        form.addRow(class_buttons)
+        self.eddies = QComboBox()
+        _fill(self.eddies, EDDIES)
+        self.eddies.setToolTip(
+            _(
+                "The eddies of the wind and of the temperature, which make sound outdoors "
+                "flicker: the direct sound and its reflections stop adding in step (the dip "
+                "of the ground fills in), sound is scattered into shadow zones, and renders "
+                "and walkthroughs change as the eddies drift past. (none): steady air; weak, "
+                "overcast with a light wind; moderate, a breeze and some sun; strong, a strong "
+                "wind or a hot sun; custom, the values below"
+            )
+        )
+        self.eddies.currentIndexChanged.connect(self._eddies)
+        self.temperature_eddies = spin(0, 10, 4, 0.001)
+        self.temperature_eddies.setToolTip(
+            _(
+                "How strong the temperature's eddies are: its structure parameter C_T² "
+                "(K² m^-2/3), about 0.001 to 1 near the ground, the most in sunshine"
+            )
+        )
+        self.wind_eddies = spin(0, 10, 3, 0.01)
+        self.wind_eddies.setToolTip(
+            _(
+                "How strong the wind's eddies are: its structure parameter C_v² (m^4/3 s^-2), "
+                "about 0.01 to 1 near the ground, the more the stronger the wind"
+            )
+        )
+        self.eddy_size = spin(0.1, 1000, 1, 1, "m")
+        self.eddy_size.setToolTip(
+            _(
+                "The size of the largest eddies (m), some metres near the ground: they take "
+                "this long to drift past at the wind's speed, which sets how fast the sound "
+                "flickers"
+            )
+        )
+        self.eddy_height = spin(0, 100, 1, 0.5, "m")
+        self.eddy_height.setSpecialValueText(_("the same at every height"))
+        self.eddy_height.setToolTip(
+            _(
+                "The height above the ground the eddies' strength holds at (where it was "
+                "measured or estimated, usually 2 m), from which they weaken with height; "
+                "nearer the ground than the eddies' size they are taken as at that height. "
+                "0: the same strength at every height"
+            )
+        )
+        self.eddy_falloff = spin(0, 2, 2, 0.1)
+        self.eddy_falloff.setToolTip(
+            _(
+                "How fast the eddies weaken with height: the power of the height over the "
+                "eddies' height that their strength falls by. 0.67 (two thirds) in a neutral "
+                "or stable surface layer, the usual; up to 1.33 in strong sunshine"
+            )
+        )
+        for box, field in (
+            (self.temperature_eddies, "temperature_structure"),
+            (self.wind_eddies, "wind_structure"),
+            (self.eddy_size, "outer_scale_m"),
+            (self.eddy_falloff, "falloff"),
+        ):
+            box.valueChanged.connect(lambda value, f=field: self._eddy(f, value))
+        self.eddy_height.valueChanged.connect(lambda value: self._eddy("height_m", value or None))
+        form.addRow(_("Eddies"), self.eddies)
+        form.addRow(_("Temperature eddies"), self.temperature_eddies)
+        form.addRow(_("Wind eddies"), self.wind_eddies)
+        form.addRow(_("Eddy size"), self.eddy_size)
+        form.addRow(_("Eddies' height"), self.eddy_height)
+        form.addRow(_("Weaker with height"), self.eddy_falloff)
+        self.table = QLabel()
+        self.table.setWordWrap(True)
+        self.table.setToolTip(
+            _(
+                "A measured profile from the scene file: the temperature and the wind's "
+                "speed come from it, in straight lines between its heights"
+            )
+        )
+        form.addRow(self.table)
+        self.drop_table = QPushButton(_("Remove the measured profile"))
+        self.drop_table.setToolTip(
+            _("Use the values above in place of the measured profile of the scene file")
+        )
+        self.drop_table.clicked.connect(self._drop_table)
+        form.addRow(self.drop_table)
+        self.profile = QPushButton(_("Show the profile"))
+        self.profile.setToolTip(
+            _(
+                "Open a plot of the temperature, the wind and the speed of sound over the "
+                "ground: across the wind, downwind and upwind"
+            )
+        )
+        self.profile.clicked.connect(self.show_profile)
+        self.profile_window = None
+        form.addRow(self.profile)
+        self._weather_form = form
+        return self.weather_group
+
+    def _weather_choice(self) -> tuple[str, int] | None:
+        """Whose weather the form shows: None for the whole scene's, ("zone", k) for a
+        weather zone's and ("class", k) for a weather class's."""
+        value = self.weather_zone.currentData()
+        if value is None:
+            return None
+        kind, k = str(value).split(":")
+        return kind, int(k)
+
+    def _weather_zone_index(self) -> int | None:
+        """The weather zone the form shows, if it shows one."""
+        choice = self._weather_choice()
+        return choice[1] if choice is not None and choice[0] == "zone" else None
+
+    def _weather_class_index(self) -> int | None:
+        """The weather class the form shows, if it shows one."""
+        choice = self._weather_choice()
+        return choice[1] if choice is not None and choice[0] == "class" else None
+
+    def _load_weather(self, scene) -> None:
+        atmosphere, spec = scene.atmosphere, scene.long_term
+        # The zones and classes to choose from, keeping the choice while it is still there.
+        zones = [] if atmosphere is None else atmosphere.zone_names()
+        classes = [] if spec is None else spec.class_names()
+        choice = self._weather_choice()
+        self.weather_zone.blockSignals(True)
+        self.weather_zone.clear()
+        self.weather_zone.addItem(_("the whole scene"), None)
+        for k, name in enumerate(zones):
+            self.weather_zone.addItem(name, f"zone:{k}")
+        for k, name in enumerate(classes):
+            # Translators: {name} is a weather class's name from the scene file.
+            self.weather_zone.addItem(_("weather class {name}").format(name=name), f"class:{k}")
+        if choice is not None:
+            found = self.weather_zone.findData(f"{choice[0]}:{choice[1]}")
+            self.weather_zone.setCurrentIndex(max(found, 0))
+        self.weather_zone.blockSignals(False)
+        zone, given = self._weather_zone_index(), self._weather_class_index()
+        whole = zone is None and given is None
+        self.remove_weather_zone.setEnabled(zone is not None)
+        self.remove_weather_class.setEnabled(given is not None)
+        self.weather.setItemText(0, _("(none)") if whole else _("as the whole scene"))
+        self.eddies.setItemText(0, _("(none)") if given is None else _("as the whole scene"))
+        shown = atmosphere or Atmosphere()
+        own_eddies = shown.turbulence
+        eddies = own_eddies
+        if zone is not None:
+            entry = atmosphere.zones[zone]
+            shown = atmosphere.weathers()[zone + 1]
+        elif given is not None:
+            entry = spec.classes[given]
+            shown = shown.under(entry)
+            eddies = entry.turbulence  # None: the scene's
+        if whole:
+            _choose(self.weather, _weather_of(atmosphere))
+        else:
+            _choose(self.weather, _zone_weather_of(entry))
+            self.zone_temperature.setValue(
+                scene.air.temperature_c if entry.temperature_c is None else entry.temperature_c
+            )
+        self._weather_form.setRowVisible(self.zone_temperature, not whole)
+        _choose(self.eddies, None if eddies is None else eddies.preset or "custom")
+        # The eddies are the scene's everywhere, and a weather class's while it holds.
+        for box in (
+            self.eddies,
+            self.temperature_eddies,
+            self.wind_eddies,
+            self.eddy_size,
+            self.eddy_height,
+            self.eddy_falloff,
+        ):
+            box.setEnabled(zone is None)
+        eddies = eddies or own_eddies or Turbulence()
+        self.temperature_eddies.setValue(eddies.temperature_structure)
+        self.wind_eddies.setValue(eddies.wind_structure)
+        self.eddy_size.setValue(eddies.outer_scale_m)
+        self.eddy_height.setValue(eddies.height_m or 0.0)
+        self.eddy_falloff.setValue(eddies.falloff)
+        wind = shown.wind or Wind()
+        self.wind_speed.setValue(wind.speed_m_s)
+        self.wind_direction.setValue(wind.direction_deg % 360.0)
+        self.wind_height.setValue(wind.height_m)
+        _choose(self.wind_profile, wind.profile)
+        self.gradient.setValue(shown.temperature_gradient_k_m)
+        self.log_term.setValue(shown.temperature_log_k)
+        self.roughness.setValue(shown.roughness_m)
+        # A table gives the temperature and the wind's speed; the direction still counts.
+        measured = shown.table is not None
+        for box in (
+            self.wind_speed,
+            self.wind_height,
+            self.wind_profile,
+            self.gradient,
+            self.log_term,
+            self.roughness,
+        ):
+            box.setEnabled(not measured)
+        if measured:
+            count = len(shown.table)
+            self.table.setText(
+                ngettext(
+                    "Measured profile at {count} height, from the scene file",
+                    "Measured profile at {count} heights, from the scene file",
+                    count,
+                ).format(count=count)
+            )
+        self._weather_form.setRowVisible(self.table, measured)
+        self._weather_form.setRowVisible(self.drop_table, measured)
+        self._load_long_term(spec, given)
+        if self.profile_window is not None and self.profile_window.isVisible():
+            self.show_profile()
+
+    def _load_long_term(self, spec: LongTerm | None, given: int | None) -> None:
+        """The periods of the day, and the chosen weather class's share of each."""
+        self._weather_form.setRowVisible(self.periods, spec is not None)
+        self._weather_form.setRowVisible(self.class_shares, given is not None)
+        if spec is None:
+            return
+        periods = spec.period_list()
+        parts = [
+            # Translators: {name} is a period of the day from the scene file (day, evening,
+            # night), {hours} how long it lasts and {penalty} what its level gets added.
+            fmt(
+                _("{name} {hours:g} h +{penalty:g} dB"),
+                name=p.name,
+                hours=p.hours,
+                penalty=p.penalty_db,
+            )
+            if p.penalty_db
+            else fmt(_("{name} {hours:g} h"), name=p.name, hours=p.hours)
+            for p in periods
+        ]
+        count = len(spec.classes)
+        rating = rating_name(spec.period_names(), spec.hours(), spec.penalties())
+        self.periods.setText(
+            fmt(
+                ngettext(
+                    "Levels over a long term: {count} weather class over {periods} ({rating})",
+                    "Levels over a long term: {count} weather classes over {periods} ({rating})",
+                    count,
+                ),
+                count=count,
+                periods=", ".join(parts),
+                rating=rating,
+            )
+        )
+        if given is None:
+            return
+        table = self.class_shares
+        table.blockSignals(True)
+        table.setColumnCount(len(periods))
+        table.setHorizontalHeaderLabels([p.name for p in periods])
+        shares = spec.shares()
+        for col, period in enumerate(periods):
+            table.horizontalHeaderItem(col).setToolTip(
+                # Translators: {period} is a period of the day from the scene file (day,
+                # evening, night).
+                _("The share of the {period} this weather class holds (%)").format(
+                    period=period.name
+                )
+            )
+            item = QTableWidgetItem(number(100.0 * shares[given, col], ".4g"))
+            if count == 1:  # the only class holds all the time
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            table.setItem(0, col, item)
+        table.blockSignals(False)
+        header = table.horizontalHeader().sizeHint().height()
+        table.setFixedHeight(header + table.rowHeight(0) + 2 * table.frameWidth())
+
     def load(self) -> None:
         scene, room = self.document.scene, self.document.room
         self.name.setText(scene.name)
@@ -292,6 +778,10 @@ class ScenePage(Page):
         self.temperature.setValue(scene.air.temperature_c)
         self.humidity.setValue(scene.air.humidity_percent)
         self.pressure.setValue(scene.air.pressure_kpa)
+        outdoors = scene.geometry.ground is not None
+        self.weather_group.setVisible(outdoors)
+        if outdoors:
+            self._load_weather(scene)
         lines = [fmt(_("Surface area: {area:,.1f} m²"), area=room.report.surface_area_m2)]
         count = len(room.room_volumes)
         if count > 1:
@@ -312,7 +802,8 @@ class ScenePage(Page):
             lines.append(fmt(_("Volume: {volume:,.1f} m³"), volume=room.volume_m3))
         else:
             lines.append(_("Volume: model not closed"))
-        if room.volume_m3:
+        # Outdoors there is no diffuse field for a reverberation time.
+        if room.volume_m3 and room.outdoor is None:
             sabine = room.reverberation_time("sabine", air_absorption=True)
             eyring = room.reverberation_time("eyring", air_absorption=True)
             for band in (500, 1000):
@@ -361,9 +852,439 @@ class ScenePage(Page):
     def _air(self, field: str, value: float) -> None:
         self.apply(_("change air"), lambda data: data.setdefault("air", {}).update({field: value}))
 
+    def _weather_zone_chosen(self) -> None:
+        # Showing another zone's or class's weather fills the form: that edits nothing.
+        if not self._loading:
+            self._loading = True
+            try:
+                self._load_weather(self.document.scene)
+            finally:
+                self._loading = False
+
+    def _weather(self) -> None:
+        if self.weather.currentIndex() < 0:
+            return
+        value = self.weather.currentData()
+        chosen = self._weather_zone_index()
+        given = self._weather_class_index()
+        scene = self.document.scene
+        atmosphere = scene.atmosphere
+        if chosen is not None:
+            if value == _zone_weather_of(atmosphere.zones[chosen]):
+                return
+            self._zone_weather(chosen, value)
+            return
+        if given is not None:
+            if value == _zone_weather_of(scene.long_term.classes[given]):
+                return
+            self._zone_weather(given, value, kind="class")
+            return
+        if value == _weather_of(atmosphere):
+            return
+
+        def change(data: dict) -> None:
+            old = data.get("atmosphere") or {}
+            if value is None:
+                data.pop("atmosphere", None)
+            elif value == "custom":
+                data["atmosphere"] = _written_out(old)
+            else:
+                # The way the wind blows is the scene's, not the weather's: it stays.
+                data["atmosphere"] = {"preset": value}
+                wind = old.get("wind")
+                if isinstance(wind, dict) and "direction_deg" in wind:
+                    data["atmosphere"]["wind"] = {"direction_deg": wind["direction_deg"]}
+            # So do the eddies, and the weather zones.
+            for kept in ("turbulence", "zones"):
+                if old.get(kept) is not None:
+                    data.setdefault("atmosphere", {})[kept] = old[kept]
+
+        self.apply(_("change the weather"), change)
+
+    def _zone_weather(self, chosen: int, value, kind: str = "zone") -> None:
+        """The weather of zone (or ``kind`` "class": weather class) ``chosen``: None, the
+        scene's unchanged; a preset; or custom, the values it shows written out."""
+        held = ("name", "polygon", "share", "temperature_c", "turbulence")
+
+        def change(data: dict) -> None:
+            zones = _entries(data, kind)
+            old = zones[chosen]
+            kept = {k: old[k] for k in held if k in old}
+            if value is None:
+                zones[chosen] = kept
+            elif value == "custom":
+                zones[chosen] = {**kept, **_zone_written_out(old)}
+            else:
+                zones[chosen] = {**kept, "preset": value}
+                wind = old.get("wind")
+                if isinstance(wind, dict) and "direction_deg" in wind:
+                    zones[chosen]["wind"] = {"direction_deg": wind["direction_deg"]}
+
+        self.apply(_("change the weather"), change)
+
+    def _zone_temperature(self, value: float) -> None:
+        choice = self._weather_choice()
+        if choice is None:
+            return
+        kind, chosen = choice
+        scene = self.document.scene
+        scene_c = scene.air.temperature_c
+        entry = (scene.atmosphere.zones if kind == "zone" else scene.long_term.classes)[chosen]
+        if (scene_c if entry.temperature_c is None else entry.temperature_c) == value:
+            return
+
+        def change(data: dict) -> None:
+            zone = _entries(data, kind)[chosen]
+            if value == scene_c:
+                zone.pop("temperature_c", None)
+            else:
+                zone["temperature_c"] = value
+
+        if kind == "zone":
+            self.apply(_("change the weather zone"), change)
+        else:
+            self.apply(_("change the weather class"), change)
+
+    def _add_weather_class(self) -> None:
+        """A weather class in the scene's weather: the first for all the time, the next
+        ones for none of it until given a share. The form then shows it."""
+        spec = self.document.scene.long_term
+        names = [] if spec is None else spec.class_names()
+        name = unique_class_name(names)
+
+        def change(data: dict) -> None:
+            if spec is None:
+                data["long_term"] = {"classes": [{"name": name, "share": 1.0}]}
+            else:
+                data["long_term"]["classes"].append({"name": name, "share": 0.0})
+
+        if self.apply(_("add weather class"), change):
+            self.weather_zone.setCurrentIndex(self.weather_zone.findData(f"class:{len(names)}"))
+
+    def _remove_weather_class(self) -> None:
+        given = self._weather_class_index()
+        spec = self.document.scene.long_term
+        if given is None or spec is None:
+            return
+        shares = np.delete(spec.shares(), given, axis=0)
+        periods = spec.period_names()
+
+        def change(data: dict) -> None:
+            classes = data["long_term"]["classes"]
+            classes.pop(given)
+            if not classes:
+                del data["long_term"]
+                return
+            _write_shares(classes, _balanced(shares), periods)
+
+        self.weather_zone.setCurrentIndex(0)
+        self.apply(_("remove weather class"), change)
+
+    def _class_share(self, item: QTableWidgetItem) -> None:
+        """A weather class's share of one period: the other classes make room for it,
+        each in proportion to its own share (equally if none has any)."""
+        given = self._weather_class_index()
+        spec = self.document.scene.long_term
+        if given is None or spec is None or self._loading or len(spec.classes) < 2:
+            return
+        try:
+            value = parse_number(item.text()) / 100.0
+        except ValueError:
+            self.failed.emit(_("a share of the time is a number from 0 to 100 %"))
+            self.reload()
+            return
+        shares = spec.shares()
+        period = item.column()
+        shares[given, period] = min(max(value, 0.0), 1.0)
+        shares[:, period] = _balanced(shares, keep=given)[:, period]
+        periods = spec.period_names()
+
+        def change(data: dict) -> None:
+            _write_shares(data["long_term"]["classes"], shares, periods)
+
+        self.apply(_("change the weather class"), change)
+
+    def _remove_weather_zone(self) -> None:
+        chosen = self._weather_zone_index()
+        if chosen is None:
+            return
+
+        def change(data: dict) -> None:
+            atmosphere = data["atmosphere"]
+            atmosphere["zones"].pop(chosen)
+            if not atmosphere["zones"]:
+                del atmosphere["zones"]
+            if atmosphere == Atmosphere().model_dump(mode="json", exclude_none=True):
+                del data["atmosphere"]
+
+        self.weather_zone.setCurrentIndex(0)
+        self.apply(_("remove weather zone"), change)
+
+    def _eddies(self) -> None:
+        if self.eddies.currentIndex() < 0:
+            return
+        value = self.eddies.currentData()
+        scene = self.document.scene
+        given = self._weather_class_index()
+        if given is not None:
+            eddies = scene.long_term.classes[given].turbulence
+        else:
+            eddies = None if scene.atmosphere is None else scene.atmosphere.turbulence
+        if value == (None if eddies is None else eddies.preset or "custom"):
+            return
+        if given is not None:
+            self._class_eddies(given, value)
+            return
+
+        def change(data: dict) -> None:
+            atmosphere = data.get("atmosphere") or {}
+            old = atmosphere.get("turbulence")
+            if value is None:
+                atmosphere.pop("turbulence", None)
+            elif value == "custom":
+                atmosphere["turbulence"] = _eddies_written_out(old)
+            else:
+                atmosphere["turbulence"] = {"preset": value}
+                # Their size is the place's, not the weather's, and their height the
+                # measurement's: they stay.
+                for kept in ("outer_scale_m", "height_m", "falloff"):
+                    if isinstance(old, dict) and kept in old:
+                        atmosphere["turbulence"][kept] = old[kept]
+            # Still air without eddies is no atmosphere (the scene writes the defaults out).
+            if atmosphere and atmosphere != Atmosphere().model_dump(mode="json", exclude_none=True):
+                data["atmosphere"] = atmosphere
+            else:
+                data.pop("atmosphere", None)
+
+        self.apply(_("change the eddies"), change)
+
+    def _class_eddies(self, given: int, value) -> None:
+        """The eddies of weather class ``given``: None, the scene's; a preset, keeping
+        their size and height; or custom, the values the form shows written out."""
+
+        def change(data: dict) -> None:
+            entry = data["long_term"]["classes"][given]
+            old = entry.get("turbulence")
+            if value is None:
+                entry.pop("turbulence", None)
+            elif value == "custom":
+                if old is None:  # the scene's eddies, written out as the class's own
+                    atmosphere = self.document.scene.atmosphere
+                    eddies = None if atmosphere is None else atmosphere.turbulence
+                    if eddies is not None:
+                        old = eddies.model_dump(mode="json", exclude_none=True)
+                entry["turbulence"] = _eddies_written_out(old)
+            else:
+                entry["turbulence"] = {"preset": value}
+                for kept in ("outer_scale_m", "height_m", "falloff"):
+                    if isinstance(old, dict) and kept in old:
+                        entry["turbulence"][kept] = old[kept]
+
+        self.apply(_("change the eddies"), change)
+
+    def _eddy(self, field: str, value) -> None:
+        given = self._weather_class_index()
+
+        def change(data: dict) -> None:
+            if given is not None:
+                # The class's own eddies, starting from the scene's when it has none.
+                entry = data["long_term"]["classes"][given]
+                old = entry.get("turbulence")
+                if old is None:
+                    old = (data.get("atmosphere") or {}).get("turbulence")
+                eddies = _eddies_written_out(old)
+                eddies[field] = value
+                entry["turbulence"] = eddies
+                return
+            atmosphere = data.get("atmosphere") or {}
+            eddies = _eddies_written_out(atmosphere.get("turbulence"))
+            eddies[field] = value
+            atmosphere["turbulence"] = eddies
+            data["atmosphere"] = atmosphere
+
+        self.apply(_("change the eddies"), change)
+
+    def _weather_data(self, data: dict) -> dict:
+        """The scene-file entry the wind and temperature fields change, its preset
+        written out: the atmosphere's, or the chosen weather zone's or class's."""
+        choice = self._weather_choice()
+        if choice is None:
+            data["atmosphere"] = _written_out(data.get("atmosphere") or {})
+            return data["atmosphere"]
+        kind, chosen = choice
+        entries = _entries(data, kind)
+        entries[chosen] = _zone_written_out(entries[chosen])
+        return entries[chosen]
+
+    def _atmosphere(self, field: str, value) -> None:
+        def change(data: dict) -> None:
+            self._weather_data(data)[field] = value
+
+        self.apply(_("change the wind and temperature"), change)
+
+    def _wind(self, field: str, value) -> None:
+        def change(data: dict) -> None:
+            weather = self._weather_data(data)
+            if not isinstance(weather.get("wind"), dict):
+                weather["wind"] = {}
+            weather["wind"][field] = value
+
+        self.apply(_("change the wind and temperature"), change)
+
+    def _drop_table(self) -> None:
+        def change(data: dict) -> None:
+            self._weather_data(data).pop("table", None)
+
+        self.apply(_("remove the measured profile"), change)
+
+    def show_profile(self) -> None:
+        """Open (or refresh) a window with the temperature, wind and speed of sound over
+        the ground."""
+        from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+
+        from acoustic_spaces.viz import plot_atmosphere
+
+        scene, outdoor = self.document.scene, self.document.room.outdoor
+        top = 100.0 if outdoor is None else max(outdoor.sky - outdoor.ground, 1.0)
+        atmosphere, ground_c = scene.atmosphere or Atmosphere(), scene.air.temperature_c
+        chosen, given = self._weather_zone_index(), self._weather_class_index()
+        if chosen is not None:
+            # The zone's weather, as the engine resolves it.
+            atmosphere = scene.atmosphere.weathers()[chosen + 1]
+            ground_c = scene.atmosphere.ground_temperatures(ground_c)[chosen + 1]
+        elif given is not None:
+            entry = scene.long_term.classes[given]
+            atmosphere = atmosphere.under(entry)
+            if entry.temperature_c is not None:
+                ground_c = entry.temperature_c
+        figure = plot_atmosphere(atmosphere, ground_c, top=top)
+        if self.profile_window is None:
+            self.profile_window = QWidget(self, Qt.WindowType.Window)
+            QVBoxLayout(self.profile_window)
+            self.profile_window.resize(1000, 520)
+        layout = self.profile_window.layout()
+        while layout.count():
+            layout.takeAt(0).widget().deleteLater()
+        layout.addWidget(FigureCanvasQTAgg(figure))
+        self.profile_window.setWindowTitle(
+            _("Wind and temperature of {name}").format(name=scene.name)
+        )
+        self.profile_window.show()
+        self.profile_window.raise_()
+
+
+def _weather_of(atmosphere: Atmosphere | None) -> str | None:
+    """The weather the form shows: none, a preset or custom (the eddies aside)."""
+    if atmosphere is None:
+        return None
+    if atmosphere.preset is not None:
+        return atmosphere.preset
+    plain = atmosphere.model_copy(update={"turbulence": None})
+    return None if plain == Atmosphere() else "custom"
+
+
+def _eddies_written_out(eddies) -> dict:
+    """A copy of the eddies' scene-file data with their preset's values written out in
+    place of its name, so that changing one of them keeps the others."""
+    if eddies is None:
+        return {}
+    eddies = {"preset": eddies} if isinstance(eddies, str) else copy.deepcopy(eddies)
+    preset = eddies.pop("preset", None)
+    return {**TURBULENCE_PRESETS.get(preset, {}), **eddies}
+
+
+def _entries(data: dict, kind: str) -> list[dict]:
+    """The scene file's weather zones ("zone") or weather classes ("class")."""
+    return data["atmosphere"]["zones"] if kind == "zone" else data["long_term"]["classes"]
+
+
+def unique_class_name(names) -> str:
+    """A name for a new weather class: ``class_<n>``, n from one more than the count of
+    ``names`` up, the first not among them."""
+    taken = set(names)
+    n = len(taken) + 1
+    while f"class_{n}" in taken:
+        n += 1
+    return f"class_{n}"
+
+
+def _balanced(shares, keep: int | None = None) -> np.ndarray:
+    """``shares`` (classes, periods) made to add up to 1 in each period: the classes but
+    ``keep`` scaled in proportion to their shares (equally where none has any)."""
+    shares = np.array(shares, dtype=float)
+    others = [k for k in range(len(shares)) if k != keep]
+    for period in range(shares.shape[1]):
+        room = 1.0 if keep is None else 1.0 - shares[keep, period]
+        total = shares[others, period].sum()
+        if total > 0.0:
+            shares[others, period] *= room / total
+        elif others:
+            shares[others, period] = room / len(others)
+    return shares
+
+
+def _write_shares(classes: list[dict], shares, periods: list[str]) -> None:
+    """Each class's share in the scene file: one number when it is the same in every
+    period, else one per period."""
+    for entry, row in zip(classes, np.round(shares, 6), strict=True):
+        values = [float(v) for v in row]
+        if max(values) - min(values) < 1e-9:
+            entry["share"] = values[0]
+        else:
+            entry["share"] = dict(zip(periods, values, strict=True))
+
+
+def _zone_weather_of(zone) -> str | None:
+    """The weather the form shows for a weather zone: none (the scene's unchanged), a
+    preset or custom."""
+    if zone.preset is not None:
+        return zone.preset
+    fields = ("wind", "temperature_gradient_k_m", "temperature_log_k", "roughness_m", "table")
+    return "custom" if any(getattr(zone, f) is not None for f in fields) else None
+
+
+def _zone_written_out(zone: dict) -> dict:
+    """A copy of a weather zone's scene-file data with its preset's values written out in
+    place of its name (no wind, one temperature, the preset's fields over them), so that
+    changing one of them keeps the others."""
+    zone = copy.deepcopy(zone)
+    preset = zone.pop("preset", None)
+    if preset not in ATMOSPHERE_PRESETS:
+        return zone
+    values = {
+        "wind": {"speed_m_s": 0.0},
+        "temperature_gradient_k_m": 0.0,
+        "temperature_log_k": 0.0,
+        **copy.deepcopy(ATMOSPHERE_PRESETS[preset]),
+    }
+    if zone.get("table") is not None:
+        values.pop("temperature_gradient_k_m", None)
+        values.pop("temperature_log_k", None)
+    if isinstance(zone.get("wind"), dict):
+        values["wind"] = {**values["wind"], **zone["wind"]}
+    return {**values, **{k: v for k, v in zone.items() if k != "wind"}}
+
+
+def _written_out(atmosphere: dict) -> dict:
+    """A copy of an atmosphere's scene-file data with its weather's values written out in
+    place of the weather's name, so that changing one of them keeps the others."""
+    atmosphere = copy.deepcopy(atmosphere)
+    preset = atmosphere.pop("preset", None)
+    if preset not in ATMOSPHERE_PRESETS:
+        return atmosphere
+    values = copy.deepcopy(ATMOSPHERE_PRESETS[preset])
+    if atmosphere.get("table") is not None:
+        # A table gives the temperature; the formulas would contradict it.
+        values.pop("temperature_gradient_k_m", None)
+        values.pop("temperature_log_k", None)
+    if isinstance(atmosphere.get("wind"), dict) and "wind" in values:
+        atmosphere["wind"] = {**values.pop("wind"), **atmosphere["wind"]}
+    return {**values, **atmosphere}
+
 
 class GeometryPage(Page):
-    """A box's dimensions, a floor plan's corners and height, or a model file."""
+    """A box's dimensions, a floor plan's corners and height, a model file, or the
+    ground, buildings and barriers of an outdoor scene."""
 
     def __init__(self, document) -> None:
         super().__init__(document)
@@ -474,6 +1395,276 @@ class GeometryPage(Page):
         self.file_form = file_form
         layout.addWidget(self.file_group)
 
+        self.ground_group = QGroupBox(_("Outdoors"))
+        ground_layout = QVBoxLayout(self.ground_group)
+        ground_form = QFormLayout()
+        self.ground_height = spin(-LARGEST, LARGEST, 2, 0.5)
+        self.ground_height.setToolTip(
+            _(
+                "The height (z) of the flat ground, or added to the terrain's heights, in "
+                "the units the title shows"
+            )
+        )
+        self.ground_height.valueChanged.connect(lambda value: self._ground("height", value))
+        self.margin = spin(0.1, LARGEST, 1, 5.0)
+        self.margin.setToolTip(
+            _(
+                "How far the ground reaches past the buildings, barriers and model, unless "
+                "its extent is set or a terrain sets its size, and how high the sky is over "
+                "the highest of them, unless the sky is set; in the units the title shows"
+            )
+        )
+        self.margin.valueChanged.connect(lambda value: self._ground("margin", value))
+        self.sky = spin(0.0, LARGEST, 1, 5.0)
+        # Translators: the sky's height when it is not set: worked out from the scene.
+        self.sky.setSpecialValueText(_("auto"))
+        self.sky.setToolTip(
+            _(
+                "How high the open sky lies over the ground, in the units the title shows; "
+                "auto: the margin over the highest building, barrier or model part. Sound "
+                "that reaches the sky leaves the scene"
+            )
+        )
+        self.sky.valueChanged.connect(lambda value: self._ground("sky", value or None))
+        ground_form.addRow(_("Ground height"), self.ground_height)
+        ground_form.addRow(_("Margin"), self.margin)
+        ground_form.addRow(_("Sky"), self.sky)
+        ground_layout.addLayout(ground_form)
+        extent_row = QHBoxLayout()
+        self.extent_set = QCheckBox(_("Extent"))
+        self.extent_set.setToolTip(
+            _(
+                "Where the ground ends, from its south-west corner (x, y) to its north-east "
+                "one, in the units the title shows; off: the margin round the buildings, "
+                "barriers and model, or the whole terrain. Past the ground's edge, sound "
+                "leaves the scene as if the ground went on"
+            )
+        )
+        self.extent_set.toggled.connect(self._extent_toggled)
+        extent_row.addWidget(self.extent_set)
+        self.extent_spins = []
+        for tip in (
+            _("x where the ground starts (its west edge)"),
+            _("y where the ground starts (its south edge)"),
+            _("x where the ground ends (its east edge)"),
+            _("y where the ground ends (its north edge)"),
+        ):
+            box = spin(-LARGEST, LARGEST, 2, 5.0)
+            box.setToolTip(tip)
+            box.valueChanged.connect(self._extent_changed)
+            extent_row.addWidget(box)
+            self.extent_spins.append(box)
+        ground_layout.addLayout(extent_row)
+        self.extent = QLabel()
+        self.extent.setWordWrap(True)
+        self.extent.setToolTip(
+            _("Where the ground ends: past it, sound leaves the scene as if the ground went on")
+        )
+        ground_layout.addWidget(self.extent)
+        self.terrain = QLabel()
+        self.terrain.setWordWrap(True)
+        self.terrain.setToolTip(
+            _(
+                "The terrain the ground follows: its heights on a grid, from a file or given "
+                "in the scene file, sampled over the ground's extent"
+            )
+        )
+        ground_layout.addWidget(self.terrain)
+        terrain_row = QHBoxLayout()
+        self.terrain_button = QPushButton(_("Terrain from a file…"))
+        self.terrain_button.setToolTip(
+            _(
+                "Make the ground follow the heights in a file: an Esri ASCII grid (.asc) or "
+                "x y z points on a regular grid (.xyz, .txt, .csv), in the units the title "
+                "shows. The terrain sets the ground's size, unless an extent inside it is set"
+            )
+        )
+        self.terrain_button.clicked.connect(self._choose_terrain)
+        self.remove_terrain = QPushButton(_("Remove terrain"))
+        self.remove_terrain.setToolTip(
+            _("Flatten the ground again, at the ground height, with the margin round the parts")
+        )
+        self.remove_terrain.clicked.connect(self._remove_terrain)
+        terrain_row.addWidget(self.terrain_button)
+        terrain_row.addWidget(self.remove_terrain)
+        terrain_row.addStretch(1)
+        ground_layout.addLayout(terrain_row)
+        self.parts = {}
+        for kind, title, columns, tips, add_text, add_tip, remove_text in (
+            (
+                "buildings",
+                _("Buildings"),
+                (_("Name"), _("Height"), _("Corners")),
+                (
+                    _("The building's name; its surfaces are named after it"),
+                    _("How high the building is, ground to roof, in the units the title shows"),
+                    _("How many corners the building's footprint has (as drawn in the plan)"),
+                    _("Remove the selected building, or the last one when none is selected"),
+                ),
+                _("Add building"),
+                _(
+                    "Draw a building's footprint in the plan, corner by corner, and close it "
+                    "on the first corner; it rises {height:g} m from the ground, to change in "
+                    "the table"
+                ).format(height=NEW_PART_SIZES["building"]["height"]),
+                _("Remove building"),
+            ),
+            (
+                "barriers",
+                _("Barriers"),
+                (_("Name"), _("Height"), _("Points")),
+                (
+                    _("The barrier's name, which its surfaces carry"),
+                    _("How high the barrier is over the ground, in the units the title shows"),
+                    _("How many points the barrier's path has (as drawn in the plan)"),
+                    _("Remove the selected barrier, or the last one when none is selected"),
+                ),
+                _("Add barrier"),
+                _(
+                    "Draw a barrier's path in the plan, point by point, and finish it with "
+                    "Enter or a double click; it stands {height:g} m high, to change in the "
+                    "table"
+                ).format(height=NEW_PART_SIZES["barrier"]["height"]),
+                _("Remove barrier"),
+            ),
+            (
+                "vegetation",
+                _("Vegetation"),
+                (_("Name"), _("Height"), _("Shape"), _("Plants")),
+                (
+                    _(
+                        "The name of the tree, hedge or belt of trees: no surface, a volume "
+                        "that sound passes through, losing some of itself"
+                    ),
+                    _("How high its top is over the ground, in the units the title shows"),
+                    _(
+                        "A belt of trees (a footprint raised from the ground), a hedge (a path "
+                        "of a width) or a lone tree's crown, as drawn in the plan"
+                    ),
+                    _(
+                        "What fills it: foliage, which takes so many dB per metre from sound "
+                        "passing through, or leaves by their area and width, which work that "
+                        "out for themselves; and stems, which scatter it sideways"
+                    ),
+                    _("Remove the selected vegetation, or the last one when none is selected"),
+                ),
+                _("Add vegetation"),
+                _(
+                    "Draw the shape chosen beside in the plan: a belt's footprint closed on its "
+                    "first corner, a hedge's path finished with Enter, or a tree's place with "
+                    "one click; dense foliage, its height to change in the table and the rest "
+                    "in the scene file"
+                ),
+                _("Remove vegetation"),
+            ),
+        ):
+            ground_layout.addWidget(QLabel(title))
+            table = QTableWidget(0, len(columns))
+            table.setHorizontalHeaderLabels(list(columns))
+            for col in range(len(columns)):
+                table.horizontalHeaderItem(col).setToolTip(tips[col])
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            table.itemChanged.connect(lambda item, kind=kind: self._part_height(kind, item))
+            ground_layout.addWidget(table)
+            buttons = QHBoxLayout()
+            if kind == "vegetation":
+                self.plant_shape = QComboBox()
+                for purpose, label in PLANT_SHAPES:
+                    self.plant_shape.addItem(_(label), purpose)
+                self.plant_shape.setToolTip(
+                    _(
+                        "What to draw next: a belt of trees (its footprint, corner by corner), "
+                        "a hedge (its path, point by point, {width:g} m wide) or a lone tree "
+                        "(one click, its crown {crown:g} m across)"
+                    ).format(
+                        width=NEW_PART_SIZES["hedge"]["width"],
+                        crown=NEW_PART_SIZES["tree"]["crown_diameter"],
+                    )
+                )
+                buttons.addWidget(self.plant_shape)
+            add = QPushButton(add_text)
+            add.setToolTip(add_tip)
+            add.clicked.connect(lambda _checked=False, kind=kind: self._add(kind))
+            buttons.addWidget(add)
+            remove = QPushButton(remove_text)
+            remove.setToolTip(tips[-1])
+            remove.clicked.connect(lambda _checked=False, kind=kind: self._remove_part(kind))
+            buttons.addWidget(remove)
+            buttons.addStretch(1)
+            ground_layout.addLayout(buttons)
+            self.parts[kind] = table
+            if kind == "buildings":
+                self.map_label = QLabel()
+                self.map_label.setWordWrap(True)
+                self.map_label.setToolTip(
+                    _(
+                        "The map the buildings marked 'from the buildings file' come from: a "
+                        "GeoJSON file of footprints, each raised to the height a property of it "
+                        "gives (or one height for all) and named by another"
+                    )
+                )
+                ground_layout.addWidget(self.map_label)
+                map_row = QHBoxLayout()
+                self.map_button = QPushButton(_("Buildings from a map…"))
+                self.map_button.setToolTip(
+                    _(
+                        "Add the buildings of a GeoJSON file of footprints, on a plane in the "
+                        "units the title shows (not longitude and latitude), each as high as a "
+                        "property of it says; they join the ones drawn here"
+                    )
+                )
+                self.map_button.clicked.connect(self._choose_buildings_file)
+                self.remove_map = QPushButton(_("Remove the map's buildings"))
+                self.remove_map.setToolTip(
+                    _(
+                        "Drop the map and every building that came from it; the buildings "
+                        "drawn here stay"
+                    )
+                )
+                self.remove_map.clicked.connect(self._remove_buildings_file)
+                map_row.addWidget(self.map_button)
+                map_row.addWidget(self.remove_map)
+                map_row.addStretch(1)
+                ground_layout.addLayout(map_row)
+        ground_layout.addWidget(QLabel(_("Ground zones")))
+        self.zones = QTableWidget(0, 2)
+        self.zones.setHorizontalHeaderLabels([_("Name"), _("Corners")])
+        for col, tip in enumerate(
+            (
+                _(
+                    "The zone's name: a part of the ground (a road, a lawn) whose surfaces "
+                    "carry it, to give it a material of its own"
+                ),
+                _("How many corners the zone's outline has (as drawn in the plan)"),
+            )
+        ):
+            self.zones.horizontalHeaderItem(col).setToolTip(tip)
+        self.zones.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.zones.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        ground_layout.addWidget(self.zones)
+        remove = QPushButton(_("Remove zone"))
+        remove.setToolTip(
+            _(
+                "Remove the selected ground zone, or the last one when none is selected: its "
+                "part of the ground takes the ground's material"
+            )
+        )
+        remove.clicked.connect(self._remove_zone)
+        buttons = QHBoxLayout()
+        add = QPushButton(_("Add zone"))
+        add.setToolTip(
+            _(
+                "Draw a part of the ground in the plan, corner by corner, and close it on the "
+                "first corner; then give its surface a material of its own in the scene tree"
+            )
+        )
+        add.clicked.connect(lambda _checked=False: self._add("zone"))
+        buttons.addWidget(add)
+        buttons.addWidget(remove)
+        buttons.addStretch(1)
+        ground_layout.addLayout(buttons)
+        layout.addWidget(self.ground_group)
+
         self.report = QLabel()
         self.report.setWordWrap(True)
         self.report.setToolTip(
@@ -491,9 +1682,13 @@ class GeometryPage(Page):
         self.box_group.setVisible(geometry.box is not None)
         self.plan_group.setVisible(geometry.floor_plan is not None)
         self.file_group.setVisible(geometry.file is not None)
+        self.ground_group.setVisible(geometry.ground is not None)
         units = geometry.units or "m"  # a box or floor plan without units is in metres
         self.box_group.setTitle(_("Box ({units})").format(units=units))
         self.plan_group.setTitle(_("Floor plan ({units})").format(units=units))
+        self.ground_group.setTitle(_("Outdoors ({units})").format(units=units))
+        if geometry.ground is not None:
+            self._load_outdoors(geometry, room)
         if geometry.box is not None:
             for box, value in zip(self.box, geometry.box, strict=True):
                 box.setValue(value)
@@ -638,6 +1833,406 @@ class GeometryPage(Page):
 
         self.apply(_("change up axis"), change)
 
+    def _load_outdoors(self, geometry, room) -> None:
+        ground = geometry.ground
+        self.ground_height.setValue(ground.height)
+        self.margin.setValue(ground.margin)
+        self.sky.setValue(ground.sky or 0.0)
+        scale = UNIT_SCALE[geometry.units or "m"]
+        given = ground.extent is not None
+        if given:
+            (x0, y0), (x1, y1) = ground.extent
+        elif room.outdoor is not None:
+            x0, y0, x1, y1 = (value / scale for value in room.outdoor.extent)
+        else:
+            x0 = y0 = x1 = y1 = 0.0
+        self.extent_set.setChecked(given)
+        for box, value in zip(self.extent_spins, (x0, y0, x1, y1), strict=True):
+            box.setValue(value)
+            box.setEnabled(given)
+        if room.outdoor is not None:
+            x0, y0, x1, y1 = room.outdoor.extent
+            self.extent.setText(
+                fmt(
+                    _("Ground from ({x0:g}, {y0:g}) to ({x1:g}, {y1:g}) m, sky {sky:g} m over it"),
+                    x0=x0,
+                    y0=y0,
+                    x1=x1,
+                    y1=y1,
+                    sky=room.outdoor.sky - room.outdoor.ground,
+                )
+            )
+        terrain = room.outdoor.terrain if room.outdoor is not None else None
+        self.terrain.setVisible(terrain is not None)
+        self.remove_terrain.setVisible(terrain is not None)
+        spec = geometry.buildings_file
+        self.map_label.setVisible(spec is not None)
+        self.remove_map.setVisible(spec is not None)
+        if spec is not None:
+            count = len(geometry.all_buildings()) - len(geometry.buildings or [])
+            if isinstance(spec.height, str):
+                height = _("height from {property}").format(property=spec.height)
+            else:
+                height = _("{height} high").format(height=number(spec.height))
+            self.map_label.setText(
+                ngettext(
+                    "Map {name}: {count} building, {height}",
+                    "Map {name}: {count} buildings, {height}",
+                    count,
+                ).format(name=spec.file.name, count=count, height=height)
+            )
+        if terrain is not None:
+            self.terrain.setText(
+                fmt(
+                    _("Terrain: {points} points, z from {low} to {high} m, grid {spacing} m"),
+                    points=f"{terrain.nx + 1} × {terrain.ny + 1}",
+                    low=number(terrain.lowest),
+                    high=number(terrain.highest),
+                    spacing=number(terrain.grid.spacing),
+                )
+            )
+        own = len(geometry.buildings or [])
+        for kind, names, items in (
+            ("buildings", geometry.building_names(), geometry.all_buildings()),
+            ("barriers", geometry.barrier_names(), geometry.barriers or []),
+            ("vegetation", geometry.vegetation_names(), geometry.vegetation or []),
+        ):
+            table = self.parts[kind]
+            table.blockSignals(True)
+            table.setRowCount(len(items))
+            for row, (name, item) in enumerate(zip(names, items, strict=True)):
+                if kind == "vegetation":
+                    rest = (_plant_shape(item), _plant_fill(item))
+                else:
+                    rest = (str(len(item.footprint if kind == "buildings" else item.path)),)
+                from_file = kind == "buildings" and row >= own
+                for col, text in enumerate((name, number(item.height), *rest)):
+                    cell = QTableWidgetItem(text)
+                    cell.setToolTip(table.horizontalHeaderItem(col).toolTip())
+                    if col != 1 or from_file:
+                        cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    if from_file:
+                        cell.setToolTip(
+                            _("From the buildings file, which sets its footprint and height")
+                        )
+                    table.setItem(row, col, cell)
+            table.blockSignals(False)
+        zones = ground.zones or []
+        self.zones.setRowCount(len(zones))
+        for row, (name, zone) in enumerate(zip(ground.zone_names(), zones, strict=True)):
+            for col, text in enumerate((name, str(len(zone.polygon)))):
+                cell = QTableWidgetItem(text)
+                cell.setToolTip(self.zones.horizontalHeaderItem(col).toolTip())
+                self.zones.setItem(row, col, cell)
+
+    def _add(self, kind: str) -> None:
+        """Ask for a part of ``kind`` ("buildings", "barriers", "vegetation" or "zone")
+        to be drawn in the plan view."""
+        if self._loading:
+            return
+        if kind == "vegetation":
+            self.draw.emit(self.plant_shape.currentData())
+        else:
+            self.draw.emit({"buildings": "building", "barriers": "barrier"}.get(kind, kind))
+
+    def _extent_toggled(self, on: bool) -> None:
+        if self._loading:
+            return
+        if on:
+            self._extent_changed()
+        else:
+            self.run(lambda: self.document.set_extent(None))
+
+    def _extent_changed(self) -> None:
+        if self._loading or not self.extent_set.isChecked():
+            return
+        x0, y0, x1, y1 = (box.value() for box in self.extent_spins)
+        self.run(lambda: self.document.set_extent([[x0, y0], [x1, y1]]))
+
+    def _choose_terrain(self) -> None:
+        if self._loading:
+            return
+        path, _filter = QFileDialog.getOpenFileName(
+            self,
+            _("Terrain"),
+            str(self.document.base_dir),
+            _("Height grids (*.asc *.xyz *.txt *.csv);;All files (*)"),
+        )
+        if path:
+            self.run(lambda: self.document.set_terrain(path))
+
+    def _remove_terrain(self) -> None:
+        self.run(lambda: self.document.set_terrain(None))
+
+    def _choose_buildings_file(self) -> None:
+        if self._loading:
+            return
+        path, _filter = QFileDialog.getOpenFileName(
+            self,
+            _("Buildings from a map"),
+            str(self.document.base_dir),
+            _("GeoJSON (*.geojson *.json);;All files (*)"),
+        )
+        if not path:
+            return
+        try:
+            count, properties = footprint_properties(path)
+        except (OSError, ValueError) as exc:
+            self.failed.emit(str(exc))
+            return
+        if not count:
+            self.failed.emit(_("{name} holds no building footprints").format(name=Path(path).name))
+            return
+        dialog = MapDialog(self, Path(path).name, count, properties)
+        if dialog.exec():
+            choice = dialog.choice()
+            self.run(lambda: self.document.set_buildings_file(path, **choice))
+
+    def _remove_buildings_file(self) -> None:
+        self.run(lambda: self.document.set_buildings_file(None))
+
+    def _remove_zone(self) -> None:
+        if not self.zones.rowCount():
+            return
+        row = self.zones.currentRow()
+
+        def change(data: dict) -> None:
+            ground = data["geometry"]["ground"]
+            zones = ground["zones"]
+            zones.pop(row if 0 <= row < len(zones) else -1)
+            if not zones:
+                del ground["zones"]
+
+        self.apply(_("remove zone"), change)
+
+    def _ground(self, field: str, value: float | None) -> None:
+        def change(data: dict) -> None:
+            ground = data["geometry"]["ground"]
+            if value is None:
+                ground.pop(field, None)
+            else:
+                ground[field] = value
+
+        self.apply(_("change ground"), change)
+
+    def _part_height(self, kind: str, item: QTableWidgetItem) -> None:
+        if self._loading or item.column() != 1:
+            return
+        try:
+            value = parse_number(item.text())
+        except ValueError:
+            self.failed.emit(_("a height is one number"))
+            self.reload()
+            return
+        row = item.row()
+
+        def change(data: dict) -> None:
+            data["geometry"][kind][row]["height"] = value
+
+        self.apply(_("change height"), change)
+
+    def _remove_part(self, kind: str) -> None:
+        if not self.parts[kind].rowCount():
+            return
+        row = self.parts[kind].currentRow()
+        geometry = self.document.scene.geometry
+        if kind == "buildings" and geometry.buildings_file is not None:
+            names = geometry.building_names()
+            index = row if 0 <= row < len(names) else len(names) - 1
+            if index >= len(geometry.buildings or []):
+                # A building from the file: left out there, by name.
+                name = names[index]
+
+                def leave_out(data: dict) -> None:
+                    spec = data["geometry"]["buildings_file"]
+                    spec["without"] = [*(spec.get("without") or []), name]
+                    settings = data["simulation"]
+                    kept = [n for n in settings.get("insertion_loss_of") or [] if n != name]
+                    if kept:
+                        settings["insertion_loss_of"] = kept
+                    else:
+                        settings.pop("insertion_loss_of", None)
+
+                self.apply(_("leave out building"), leave_out)
+                return
+
+        def change(data: dict) -> None:
+            items = data["geometry"][kind]
+            index = row if 0 <= row < len(items) else len(items) - 1
+            before = [_part_name(kind, k, item) for k, item in enumerate(items)]
+            items.pop(index)
+            # The insertion loss keeps to the parts that stay, under their new names (an
+            # unnamed part's name is its place in the list).
+            renamed = dict(
+                zip(
+                    before[:index] + before[index + 1 :],
+                    [_part_name(kind, k, item) for k, item in enumerate(items)],
+                    strict=True,
+                )
+            )
+            settings = data["simulation"]
+            kept = [
+                renamed.get(name, name)
+                for name in settings.get("insertion_loss_of") or []
+                if name != before[index]
+            ]
+            if kept:
+                settings["insertion_loss_of"] = kept
+            else:
+                settings.pop("insertion_loss_of", None)
+            if not items:
+                del data["geometry"][kind]
+
+        what = {
+            "buildings": _("remove building"),
+            "barriers": _("remove barrier"),
+            "vegetation": _("remove vegetation"),
+        }
+        self.apply(what[kind], change)
+
+
+#: The vegetation the Geometry form draws, as the plan view names it, with its label.
+PLANT_SHAPES = [
+    ("belt", N_("belt of trees")),
+    ("hedge", N_("hedge")),
+    ("tree", N_("lone tree")),
+]
+
+
+class MapDialog(QDialog):
+    """How to read the buildings of a map: the property that holds their heights (or
+    one height for all of them), the height of those without it, and the property
+    that names them. :meth:`choice` gives :meth:`Document.set_buildings_file` its
+    arguments."""
+
+    def __init__(self, parent, name: str, count: int, properties: dict[str, str]) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(_("Buildings from a map"))
+        layout = QVBoxLayout(self)
+        intro = QLabel(
+            ngettext(
+                "{name} holds {count} building. How high is it, and what is it called?",
+                "{name} holds {count} buildings. How high are they, and what are they called?",
+                count,
+            ).format(name=name, count=count)
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        form = QFormLayout()
+        self.height = QComboBox()
+        self.height.setToolTip(
+            _(
+                "The property of each building that holds its height (one that holds a "
+                "number in every building that has it), or one height for all of them"
+            )
+        )
+        numbers = [key for key, kind in properties.items() if kind == "number"]
+        for key in numbers:
+            self.height.addItem(key, key)
+        # Translators: the choice of one height for every building of the map.
+        self.height.addItem(_("the same for all"), None)
+        self.height.setCurrentIndex(
+            numbers.index("height") if "height" in numbers else len(numbers)
+        )
+        self.height.currentIndexChanged.connect(self._relabel)
+        self.metres = spin(0.1, LARGEST, 1, 1.0)
+        self.metres.setValue(NEW_PART_SIZES["building"]["height"])
+        self.metres.setToolTip(
+            _(
+                "The height of every building, or of those whose property is missing, in "
+                "the geometry's units"
+            )
+        )
+        self.metres_label = QLabel()
+        self.metres_label.setToolTip(self.metres.toolTip())
+        self.name = QComboBox()
+        self.name.setToolTip(
+            _("The property that names each building, or numbered names for all of them")
+        )
+        for key in properties:
+            self.name.addItem(key, key)
+        self.name.addItem(_("building_1, building_2, …"), None)
+        keys = list(properties)
+        self.name.setCurrentIndex(keys.index("name") if "name" in keys else len(keys))
+        height_label = QLabel(_("Height"))
+        height_label.setToolTip(self.height.toolTip())
+        form.addRow(height_label, self.height)
+        form.addRow(self.metres_label, self.metres)
+        name_label = QLabel(_("Name"))
+        name_label.setToolTip(self.name.toolTip())
+        form.addRow(name_label, self.name)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self._relabel()
+
+    def _relabel(self) -> None:
+        same = self.height.currentData() is None
+        self.metres_label.setText(_("Height of all") if same else _("Height when missing"))
+
+    def choice(self) -> dict:
+        """The arguments of :meth:`Document.set_buildings_file` the user chose."""
+        key = self.height.currentData()
+        out = {"name": self.name.currentData() or "name"}
+        if key is None:
+            out["height"] = float(self.metres.value())
+        else:
+            out["height"] = key
+            out["default_height"] = float(self.metres.value())
+        return out
+
+
+def _part_name(kind: str, index: int, item: dict) -> str:
+    """The name of a building, barrier or vegetation in the scene data (as
+    :meth:`~acoustic_spaces.scene.Geometry.part_names` gives it)."""
+    prefix = {"buildings": "building", "barriers": "barrier", "vegetation": "vegetation"}[kind]
+    return item.get("name") or f"{prefix}_{index + 1}"
+
+
+def _plant_shape(plant) -> str:
+    """A vegetation volume's shape, in words."""
+    if plant.kind == "belt":
+        return fmt(_("belt, {count} corners"), count=len(plant.footprint))
+    if plant.kind == "hedge":
+        return fmt(
+            _("hedge {width} wide, {count} points"),
+            width=number(plant.width),
+            count=len(plant.path),
+        )
+    return fmt(_("tree, crown {diameter} across"), diameter=number(plant.crown_diameter))
+
+
+def _plant_fill(plant) -> str:
+    """What fills a vegetation volume, in words."""
+    parts = []
+    foliage = plant.foliage
+    if foliage.preset == "dense":
+        parts.append(_("dense foliage"))
+    elif foliage.leaf_area_per_m3 is not None:
+        parts.append(
+            fmt(
+                _("leaves {area} m²/m³, {width} m wide"),
+                area=number(foliage.leaf_area_per_m3),
+                width=number(foliage.leaf_width),
+            )
+        )
+    elif not foliage.bare:
+        values = "/".join(number(v) for v in foliage.attenuation)
+        parts.append(fmt(_("foliage {values} dB/m"), values=values))
+    if plant.stems is not None:
+        parts.append(
+            fmt(
+                _("{count} stems/m², {diameter} m across"),
+                count=number(plant.stems.per_m2),
+                diameter=number(plant.stems.diameter),
+            )
+        )
+    return ", ".join(parts)
+
 
 class SurfacePage(Page):
     """A group of faces that share a name: its area and its material."""
@@ -751,8 +2346,35 @@ def _nearest_filled(values: list[float | None]) -> list[float]:
     ]
 
 
+#: The octave bands the early paths may add in pressure up to; those above
+#: INDOOR_COHERENT_MAX_BAND_HZ outdoors only.
+COHERENT_BANDS_HZ = (63, 125, 250, 500, 1000, 2000, 4000, 8000)
+
 #: Fields a material keeps when its coefficients or database entry change.
 _KEPT = ("transmission", "transmission_loss", "audience")
+#: The ground presets (materials.ground.PRESETS) as the material page lists them, and
+#: a flow resistivity of one's own.
+_GROUNDS = (
+    ("snow", N_("snow")),
+    ("forest_floor", N_("forest floor")),
+    ("loose_soil", N_("loose soil")),
+    ("grass", N_("grass")),
+    ("compacted_soil", N_("compacted soil")),
+    ("gravel", N_("gravel")),
+    ("asphalt", N_("asphalt")),
+    ("water", N_("water")),
+    ("", N_("flow resistivity below")),
+)
+#: The impedance models (materials.ground.MODELS).
+_GROUND_MODELS = (
+    ("miki", N_("Miki")),
+    ("delany_bazley", N_("Delany-Bazley")),
+    ("two_parameter", N_("two-parameter")),
+)
+_REACTIONS = (
+    ("local", N_("local: the same at every angle")),
+    ("extended", N_("extended: changes with the angle")),
+)
 
 
 def _without_transmission(fields: dict) -> dict:
@@ -766,6 +2388,8 @@ class MaterialPage(Page):
 
     def __init__(self, document) -> None:
         super().__init__(document)
+        #: The material the ground controls last showed an impedance of.
+        self._ground_of = None
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.name = QLineEdit()
@@ -817,6 +2441,82 @@ class MaterialPage(Page):
         self.audience.toggled.connect(self._audience)
         form.addRow(self.audience)
         layout.addLayout(form)
+        self.ground = QGroupBox(_("Ground impedance"))
+        self.ground.setCheckable(True)
+        self.ground.setToolTip(
+            _(
+                "Ticked, the material is a porous ground (grass, soil, snow, gravel, "
+                "asphalt): its absorption and its reflection come from its impedance, with "
+                "the phase and the ground wave that make the dip over the ground outdoors. "
+                "Unticked, the absorption is as given"
+            )
+        )
+        self.ground.toggled.connect(self._ground_toggled)
+        ground_form = QFormLayout(self.ground)
+        self.ground_kind = QComboBox()
+        _fill(self.ground_kind, _GROUNDS)
+        self.ground_kind.setToolTip(
+            _(
+                "The kind of ground: the ground classes of Nord2000, from snow (softest) to "
+                "water and dense concrete (hardest), each with its flow resistivity; or a "
+                "flow resistivity of your own"
+            )
+        )
+        self.ground_kind.activated.connect(lambda _index: self._set_impedance())
+        self.ground_model = QComboBox()
+        _fill(self.ground_model, _GROUND_MODELS)
+        self.ground_model.setToolTip(
+            _(
+                "How the impedance follows from the flow resistivity: Miki (passive at every "
+                "frequency, the default), Delany-Bazley (as most of the literature quotes "
+                "it), or two-parameter (a porosity that falls with depth, which fits "
+                "measured grass and soil better)"
+            )
+        )
+        self.ground_model.activated.connect(lambda _index: self._set_impedance())
+        self.flow = spin(0.1, 1e7, 1, 10.0, "kPa s/m²")
+        self.flow.setToolTip(
+            _(
+                "How hard it is to push air through the ground: about 10 to 30 kPa s/m² for "
+                "snow, 200 for grass, 2000 for gravel, 20000 and more for asphalt"
+            )
+        )
+        self.flow.valueChanged.connect(lambda _value: self._set_impedance())
+        self.thickness = spin(0.0, 100.0, 3, 0.01, "m")
+        # Translators: a ground layer with no thickness set: as deep as it likes.
+        self.thickness.setSpecialValueText(_("deep"))
+        self.thickness.setToolTip(
+            _(
+                "A layer of the ground this thick on a hard backing (snow on frozen ground, "
+                "a thin soil over rock); deep: as deep as it likes"
+            )
+        )
+        self.thickness.valueChanged.connect(lambda _value: self._set_impedance())
+        self.porosity = spin(0.0, 1e4, 1, 10.0, "1/m")
+        self.porosity.setToolTip(
+            _("Two-parameter model: how fast the ground's porosity falls with depth")
+        )
+        self.porosity.valueChanged.connect(lambda _value: self._set_impedance())
+        self.reaction = QComboBox()
+        _fill(self.reaction, _REACTIONS)
+        self.reaction.setToolTip(
+            _(
+                "How the ground reacts to sound meeting it at an angle: locally, with the "
+                "same impedance at every angle (the usual model, right for grass and "
+                "harder grounds); or extended, sound also travelling sideways inside it, so "
+                "the impedance a reflection meets changes with its angle, which tells for "
+                "soft snow, moss, forest floors and thin layers. Not with the two-parameter "
+                "model"
+            )
+        )
+        self.reaction.activated.connect(lambda _index: self._set_impedance())
+        ground_form.addRow(_("Ground"), self.ground_kind)
+        ground_form.addRow(_("Model"), self.ground_model)
+        ground_form.addRow(_("Flow resistivity"), self.flow)
+        ground_form.addRow(_("Layer thickness"), self.thickness)
+        ground_form.addRow(_("Porosity rate"), self.porosity)
+        ground_form.addRow(_("Reaction"), self.reaction)
+        layout.addWidget(self.ground)
         self.table = QTableWidget(len(_MATERIAL_ROWS), len(OCTAVE_BANDS_HZ))
         self.table.setHorizontalHeaderLabels(BAND_LABELS)
         self.table.setVerticalHeaderLabels([_(text) for text in _MATERIAL_ROWS])
@@ -875,13 +2575,43 @@ class MaterialPage(Page):
             if kind != 1:  # set by the choice above, not typed
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(2, col, item)
+        impedance = material.impedance
+        self.ground.setChecked(impedance is not None)
+        self.preset.setEnabled(impedance is None)
+        self.passing.setEnabled(impedance is None)
+        if impedance is not None:
+            _choose(self.ground_kind, impedance.preset or "")
+            _choose(self.ground_model, impedance.model)
+            self.flow.setValue(impedance.resistivity)
+            self.thickness.setValue(impedance.thickness or 0.0)
+            self.porosity.setValue(impedance.porosity_rate or 0.0)
+            _choose(self.reaction, impedance.reaction or "local")
+            for col in range(len(labels)):  # the impedance gives the absorption
+                item = self.table.item(0, col)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self._ground_of = self.key
+        elif self._ground_of != self.key:  # ticked again, the same as before; else grass
+            self._ground_of = None
+            _choose(self.ground_kind, "grass")
+            _choose(self.ground_model, "miki")
+            self.flow.setValue(PRESETS["grass"][0])
+            self.thickness.setValue(0.0)
+            self.porosity.setValue(0.0)
+            _choose(self.reaction, "local")
+        # Set after the group's tick, which enables its controls again when ticked.
+        self.flow.setEnabled(impedance is not None and impedance.preset is None)
+        two = impedance is not None and impedance.model == "two_parameter"
+        self.thickness.setEnabled(impedance is not None and not two)
+        self.porosity.setEnabled(two)
+        self.reaction.setEnabled(impedance is not None and not two)
         # Translators: {source} is where the coefficients come from, as the material
         # database (in English) or the scene file says it.
-        self.source.setText(
-            _("Source: {source}").format(source=material.source)
-            if material.source
-            else _("Source: values given in the scene")
-        )
+        if impedance is not None:
+            self.source.setText(_("Source: the ground's impedance"))
+        elif material.source:
+            self.source.setText(_("Source: {source}").format(source=material.source))
+        else:
+            self.source.setText(_("Source: values given in the scene"))
         area = self.document.room.area_by_material().get(self.key, 0.0)
         self.usage.setText(fmt(_("Covers {area:,.1f} m² of the room."), area=area))
 
@@ -923,6 +2653,47 @@ class MaterialPage(Page):
         fields |= {k: v for k, v in self._fields().items() if k in _KEPT}
         self.run(lambda: self.document.set_material(self.key, fields))
 
+    def _impedance(self) -> dict:
+        """The impedance the ground controls show, as the scene file writes it."""
+        out: dict = {}
+        kind = self.ground_kind.currentData()
+        if not kind:
+            out["flow_resistivity"] = self.flow.value()
+        else:
+            out["preset"] = kind
+        model = self.ground_model.currentData()
+        if model != "miki":
+            out["model"] = model
+        if model == "two_parameter":
+            out["porosity_rate"] = self.porosity.value()
+        else:
+            if self.thickness.value() > 0.0:
+                out["thickness"] = self.thickness.value()
+            if self.reaction.currentData() == "extended":
+                out["reaction"] = "extended"
+        return out
+
+    def _set_impedance(self) -> None:
+        if self._loading or not self.ground.isChecked():
+            return
+        material = self.document.scene.materials[self.key]
+        fields = {"impedance": self._impedance(), "scattering": material.scattering}
+        if material.audience:
+            fields["audience"] = True
+        self.run(lambda: self.document.set_material(self.key, fields))
+
+    def _ground_toggled(self, checked: bool) -> None:
+        if self._loading:
+            return
+        if checked:
+            self._set_impedance()
+            return
+        # The absorption the impedance gave stays, as values of the material's own.
+        fields = self._fields()
+        fields.pop("impedance", None)
+        fields["source"] = "edited from a ground impedance"
+        self.run(lambda: self.document.set_material(self.key, fields))
+
     def _audience(self, checked: bool) -> None:
         if self._loading:
             return
@@ -952,6 +2723,14 @@ class MaterialPage(Page):
             return
         material = self.document.scene.materials[self.key]
         bands = self._bands(material)
+        if material.impedance is not None:  # only the scattering is typed
+            if rows[1] == [round(v, 2) for v in convert(material.scattering, bands)]:
+                return
+            fields = {"impedance": self._impedance(), "scattering": rows[1]}
+            if material.audience:
+                fields["audience"] = True
+            self.run(lambda: self.document.set_material(self.key, fields))
+            return
         passing = material.transmission_coefficients(bands)
         reduction = None
         if self._kind(passing) == 1:
@@ -1033,6 +2812,38 @@ class PointPage(Page):
         )
         self.name.editingFinished.connect(self._name)
         form.addRow(_("Name"), self.name)
+        self.group = QComboBox()
+        self.group.setEditable(True)
+        self.group.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.group.lineEdit().setPlaceholderText(_("none"))
+        self.group.setToolTip(
+            _(
+                "The group the source belongs to in the scene tree, to show, hide, use or "
+                "leave out together; groups nest with / (PA/Delays is Delays in PA)"
+            )
+            if source
+            else _(
+                "The group the listener belongs to in the scene tree, to show, hide, use or "
+                "leave out together; groups nest with / (Stands/North is North in Stands)"
+            )
+        )
+        self.group.lineEdit().editingFinished.connect(self._group)
+        self.group.activated.connect(lambda _index: self._group())
+        form.addRow(_("Group"), self.group)
+        self.in_use = QCheckBox(_("Use in simulations"))
+        self.in_use.setToolTip(
+            _(
+                "Untick to leave the source out of simulations, maps and checks: it stays in "
+                "the scene, drawn faded. The tick in the scene tree does the same"
+            )
+            if source
+            else _(
+                "Untick to leave the listener out of simulations and checks: it stays in "
+                "the scene, drawn faded. The tick in the scene tree does the same"
+            )
+        )
+        self.in_use.toggled.connect(self._in_use)
+        form.addRow(self.in_use)
         self.position = [spin(-1e4, 1e4, 2, 0.1, "m") for _ in range(3)]
         tips = (
             (
@@ -1128,6 +2939,16 @@ class PointPage(Page):
                 "directions, per octave band (dB): 0 dB for omni, about 5 dB for a cardioid"
             )
         )
+        self.near_field = QCheckBox(_("Add up the array's elements one by one"))
+        self.near_field.setToolTip(
+            _(
+                "For a coherent array: add up its elements' sound one by one, each from "
+                "where it is, in the direct sound and the reflections, rather than send out "
+                "its far-field pattern from one point. For listeners nearer than about the "
+                "array's length squared over the wavelength, which the scene warns about"
+            )
+        )
+        self.near_field.toggled.connect(self._near_field)
         self.pattern = QPushButton(_("Show the pattern"))
         self.pattern.setToolTip(
             _(
@@ -1217,6 +3038,7 @@ class PointPage(Page):
             form.addRow(self.elements)
             form.addRow(_("Directivity"), self.directivity)
             form.addRow(self.directivity_index)
+            form.addRow(self.near_field)
             form.addRow(self.pattern)
             form.addRow(_("Sound power"), self.level)
             form.addRow(_("Spectrum"), self.spectrum)
@@ -1249,6 +3071,10 @@ class PointPage(Page):
             return
         item = self._item()
         self.name.setText(item.name)
+        self.group.clear()
+        self.group.addItems(sorted({other.group for other in items if other.group}))
+        self.group.setCurrentText(item.group or "")
+        self.in_use.setChecked(item.in_use)
         for box, value in zip(self.position, item.position, strict=True):
             box.setValue(value)
         o = item.orientation
@@ -1269,6 +3095,13 @@ class PointPage(Page):
             )
             self.directivity.setToolTip(tip)
             self._form.labelForField(self.directivity).setToolTip(tip)
+            spec = item.directivity
+            array = not isinstance(spec, str) and (
+                spec.array is not None
+                or (spec.file is not None and spec.file.suffix.lower() in (".yaml", ".yml"))
+            )
+            self.near_field.setEnabled(array)
+            self.near_field.setChecked(bool(array and spec.near_field))
             directivity = self.document.room.directivities[self.key]
             index = directivity.in_bands("octave").index()
             values = numbers_text(index, ".1f")
@@ -1337,6 +3170,15 @@ class PointPage(Page):
         if name and name != self._item().name:
             self._update(name=name)
 
+    def _group(self) -> None:
+        group = self.group.currentText().strip() or None
+        if group != self._item().group:
+            self._update(group=group)
+
+    def _in_use(self, on: bool) -> None:
+        if not self._loading:
+            self.run(lambda: self.document.set_enabled(self.kind, [self.key], on))
+
     def _position(self, axis: int, value: float) -> None:
         # One value at a time (the orientation too): the other boxes show theirs rounded,
         # and a dragged point is placed to the micrometre.
@@ -1366,6 +3208,16 @@ class PointPage(Page):
                 self._update(directivity={"file": path})
             else:
                 self.reload()
+
+    def _near_field(self, on: bool) -> None:
+        if self._loading:
+            return
+        directivity = self.document.scene.to_data()["sources"][self.key]["directivity"]
+        if on:
+            directivity["near_field"] = True
+        else:
+            directivity.pop("near_field", None)
+        self._update(directivity=directivity)
 
     def show_pattern(self) -> None:
         """Open (or refresh) a window with the polar patterns of the source."""
@@ -1474,19 +3326,43 @@ class SimulationPage(Page):
                 "of the direct sound over two edges in turn"
             )
         )
+        self.diffraction_reflections = QComboBox()
+        _fill(self.diffraction_reflections, DIFFRACTION_REFLECTIONS)
+        self.diffraction_reflections.setToolTip(
+            _(
+                "Where a path over one edge may reflect: on one side of the edge, before or "
+                "after it (off the ground on the way to a barrier, or off a façade behind "
+                "it), or on both sides, before and after (off the ground on the way to a "
+                "barrier and again behind it: all four paths over a barrier on the ground)"
+            )
+        )
+        self.parabolic_equation = QComboBox()
+        _fill(self.parabolic_equation, PARABOLIC_EQUATIONS)
+        self.parabolic_equation.setToolTip(
+            _(
+                "Outdoors in wind or temperature gradients, the parabolic equation that gives "
+                "the sound over the open ground in the low bands and in the shadows: narrow "
+                "angle (for the gradients near the ground that the weather has) or wide angle "
+                "(also for gradients reaching hundreds of metres up, which bend sound back at "
+                "steep angles over kilometres; several times the work)"
+            )
+        )
         self.coherent = QComboBox()
-        _fill(self.coherent, [(None, N_("none"))] + [(f, str(f)) for f in (63, 125, 250, 500)])
+        _fill(self.coherent, [(None, N_("none"))] + [(f, str(f)) for f in COHERENT_BANDS_HZ])
         self.coherent.setToolTip(
             _(
                 "The highest octave band (Hz) in which the early paths add in pressure, with "
                 "the phase of every reflection, rather than in energy; the wave solver's bands "
-                "take their place when it runs up to this band or higher"
+                "take their place when it runs up to this band or higher. Up to 500 Hz in a "
+                "room; outdoors, where the paths are few, up to 8000 Hz, the default there"
             )
         )
         early_form.addRow(_("Method"), self.early_method)
         early_form.addRow(_("Highest order"), self.max_order)
         early_form.addRow(_("Rays"), self.early_rays)
         early_form.addRow(_("Diffraction"), self.diffraction)
+        early_form.addRow(_("Reflections over an edge"), self.diffraction_reflections)
+        early_form.addRow(_("Parabolic equation"), self.parabolic_equation)
         early_form.addRow(_("In pressure up to"), self.coherent)
         layout.addWidget(early)
 
@@ -1606,8 +3482,19 @@ class SimulationPage(Page):
                 "Tune CPU and GPU… found the CPU faster for the run's length"
             )
         )
+        self.wave_wind = QComboBox()
+        _fill(self.wave_wind, WAVE_WINDS)
+        self.wave_wind.setToolTip(
+            _(
+                "Outdoors, how it takes the wind: as a speed of sound that the wind along the "
+                "way from the source changes, as the rays do, or as air that moves, so that "
+                "sound going against the wind is slower whichever way it turned, off a "
+                "building too (three to four times the work, on the CPU)"
+            )
+        )
         wave_form.addRow(self.wave)
         wave_form.addRow(_("Up to band (Hz)"), self.wave_band)
+        wave_form.addRow(_("Wind"), self.wave_wind)
         wave_form.addRow(_("Run on"), self.wave_device)
         layout.addWidget(wave)
 
@@ -1699,16 +3586,35 @@ class SimulationPage(Page):
         response_form.addRow(_("Seed"), self.random_seed)
         response_form.addRow("", self.seed)
         layout.addWidget(response)
+
+        self.insertion_group = QGroupBox(_("Insertion loss"))
+        insertion_layout = QVBoxLayout(self.insertion_group)
+        self.insertion = QListWidget()
+        self.insertion.setToolTip(
+            _(
+                "Outdoors: tick buildings, barriers or vegetation to run the scene, and the "
+                "map, again without them. The results and the map then give their insertion "
+                "loss, the level without them less the level with them; each run takes twice "
+                "as long"
+            )
+        )
+        self.insertion.setMaximumHeight(140)
+        insertion_layout.addWidget(self.insertion)
+        layout.addWidget(self.insertion_group)
         layout.addStretch()
+        self.insertion.itemChanged.connect(self._insertion)
 
         for combo, key in (
             (self.early_method, "early.method"),
             (self.diffraction, "early.diffraction"),
+            (self.diffraction_reflections, "early.diffraction_reflections"),
+            (self.parabolic_equation, "early.parabolic_equation"),
             (self.late_method, "late.method"),
             (self.reception, "late.reception"),
             (self.scattering_method, "scattering.method"),
             (self.ray_tree, "performance.ray_tree"),
             (self.bands, "bands"),
+            (self.wave_wind, "wave.wind"),
         ):
             combo.currentIndexChanged.connect(
                 lambda index, combo=combo, key=key: self._set(key, combo.itemData(index))
@@ -1753,7 +3659,23 @@ class SimulationPage(Page):
         self.max_order.setValue(s.early.max_order)
         self.early_rays.setValue(s.early.rays)
         _choose(self.diffraction, s.early.diffraction)
+        _choose(self.diffraction_reflections, s.early.diffraction_reflections)
+        # Only diffraction with reflections has paths that reflect on both sides.
+        self.diffraction_reflections.setEnabled(
+            s.early.diffraction in ("first_order", "second_order")
+        )
         coherent = s.early.coherent_max_band_hz
+        outdoor = self.document.scene.geometry.ground is not None
+        _choose(self.parabolic_equation, s.early.parabolic_equation)
+        # The parabolic equation runs outdoors in wind or temperature gradients only.
+        atmosphere = self.document.scene.atmosphere
+        self.parabolic_equation.setEnabled(
+            outdoor and atmosphere is not None and not atmosphere.still
+        )
+        for row in range(self.coherent.count()):  # the bands above 500 Hz are outdoors only
+            value = self.coherent.itemData(row)
+            if value is not None and value > INDOOR_COHERENT_MAX_BAND_HZ:
+                self.coherent.model().item(row).setEnabled(outdoor)
         _choose(self.coherent, coherent)
         _choose(self.late_method, s.late.method)
         self.late_rays.setValue(s.late.rays)
@@ -1770,6 +3692,8 @@ class SimulationPage(Page):
         self.wave_band.setEnabled(s.wave.enabled)
         _set_device(self.wave_device, s.wave.device)
         self.wave_device.setEnabled(s.wave.enabled)
+        _choose(self.wave_wind, s.wave.wind)
+        self.wave_wind.setEnabled(s.wave.enabled and outdoor)  # wind blows outdoors only
         self.threads.setValue(s.performance.threads)
         _choose(self.ray_tree, s.performance.ray_tree)
         self.length.setValue(s.ir_length_s)
@@ -1783,6 +3707,20 @@ class SimulationPage(Page):
         self.random_seed.setChecked(s.seed is None)
         self.seed.setEnabled(s.seed is not None)
         self.seed.setValue(s.seed or 0)
+        parts = self.document.scene.geometry.part_names() if outdoor else []
+        chosen = set(s.insertion_loss_of or [])
+        self.insertion_group.setVisible(bool(parts))
+        self.insertion.clear()
+        for name in parts:
+            item = QListWidgetItem(name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if name in chosen else Qt.CheckState.Unchecked)
+            item.setToolTip(
+                _("Ticked, the run is also made without {name}, for its insertion loss").format(
+                    name=name
+                )
+            )
+            self.insertion.addItem(item)
         stochastic = s.late.method == "stochastic_ray_tracing"
         for box in (
             self.late_rays,
@@ -1793,6 +3731,21 @@ class SimulationPage(Page):
         ):
             box.setEnabled(stochastic)
         self.early_rays.setEnabled(s.early.method == "ray_tracing")
+
+    def _insertion(self) -> None:
+        names = [
+            self.insertion.item(row).text()
+            for row in range(self.insertion.count())
+            if self.insertion.item(row).checkState() == Qt.CheckState.Checked
+        ]
+
+        def change(data: dict) -> None:
+            if names:
+                data["simulation"]["insertion_loss_of"] = names
+            else:
+                data["simulation"].pop("insertion_loss_of", None)
+
+        self.apply(_("change the insertion loss"), change)
 
     def _set(self, key: str, value) -> None:
         """Write the one setting that changed (``late.rays``): the others show rounded to
@@ -2122,6 +4075,7 @@ class Inspector(QStackedWidget):
 
     failed = Signal(str)
     select = Signal(str, object)
+    draw = Signal(str)
 
     def __init__(self, document: Callable[[], Document]) -> None:
         super().__init__()
@@ -2142,6 +4096,7 @@ class Inspector(QStackedWidget):
             self.addWidget(page)
             page.failed.connect(self.failed)
             page.select.connect(self.select)
+            page.draw.connect(self.draw)
         self.kind = ""
 
     def show_item(self, kind: str, key=None) -> None:
@@ -2154,4 +4109,4 @@ class Inspector(QStackedWidget):
         self.currentWidget().reload()
 
 
-__all__ = ["Inspector", "Page", "label_text"]
+__all__ = ["Inspector", "MapDialog", "Page", "label_text"]

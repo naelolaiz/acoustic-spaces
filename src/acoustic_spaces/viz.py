@@ -10,7 +10,8 @@
   going along its walk, as a video to go with its sound.
 - Response plots (matplotlib): echogram with the early paths, decay curves per band, and
   arrival directions as the listener faces; the decays of a simulated and a measured
-  response band by band; polar patterns of a source directivity.
+  response band by band; polar patterns of a source directivity; the wind, temperature
+  and speed of sound over the ground outdoors.
 - Coverage maps: a parameter over the audience area, from above (matplotlib) or as
   coloured tiles in the 3D view.
 
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from acoustic_spaces.engine.leaks import Leaks
     from acoustic_spaces.engine.particles import Particles
     from acoustic_spaces.parameters import BandDecay
+    from acoustic_spaces.scene.model import Atmosphere
     from acoustic_spaces.walkthrough import WalkResponses
 
 #: ColorBrewer Set3: light colours, so the saturated source and listener markers stand out.
@@ -85,6 +87,8 @@ ESCAPE_COLOUR = "#ffd166"
 MAX_ESCAPES_DRAWN = 400
 #: A simulated and a measured response drawn together.
 COMPARISON_COLOURS = ("#4da3ff", "#ffd166")
+#: Trees, hedges and belts of trees outdoors.
+VEGETATION_COLOUR = "#5cb85c"
 
 
 def _outline(part: pyvista.PolyData) -> pyvista.PolyData:
@@ -302,6 +306,91 @@ def extent_polydata(source, radius: float) -> pyvista.PolyData | None:
     return pv.PolyData(corners, faces=[4, 0, 1, 2, 3])
 
 
+def nearest_spacing(points) -> np.ndarray:
+    """The distance from each of ``points`` (rows of coordinates) to the nearest other
+    one: infinite for a point alone."""
+    points = np.asarray(points, dtype=float)
+    nearest = np.full(len(points), np.inf)
+    if len(points) < 2:
+        return nearest
+    for start in range(0, len(points), 256):  # a block of rows at a time
+        part = np.linalg.norm(points[start : start + 256, None] - points[None], axis=-1)
+        part[np.arange(len(part)), np.arange(start, start + len(part))] = np.inf
+        nearest[start : start + len(part)] = part.min(axis=1)
+    return nearest
+
+
+def clear_lengths(points, directions, radius, length) -> np.ndarray:
+    """The length of the arrow from each of ``points`` along its unit row of
+    ``directions`` (zeros for none): ``length``, cut short where the arrow would run into
+    the marker (of ``radius``) of another point ahead of it, but no shorter than twice
+    its own marker's radius."""
+    points = np.asarray(points, dtype=float)
+    directions = np.asarray(directions, dtype=float)
+    radius = np.broadcast_to(np.asarray(radius, dtype=float), len(points))
+    length = np.broadcast_to(np.asarray(length, dtype=float), len(points)).copy()
+    for start in range(0, len(points), 256):  # a block of arrows at a time
+        rows = slice(start, start + 256)
+        ahead = points[None] - points[rows, None]  # from each arrow's start to every point
+        along = np.einsum("bnd,bd->bn", ahead, directions[rows])
+        aside = np.linalg.norm(ahead - along[..., None] * directions[rows, None], axis=-1)
+        reach = length[rows, None]
+        # The tip is a tenth of the arrow's length in radius.
+        hit = (along > 0) & (aside < radius + 0.1 * reach) & (along - radius < reach)
+        stop = np.where(hit, along - radius, np.inf).min(axis=1)
+        length[rows] = np.minimum(length[rows], np.maximum(0.9 * stop, 2 * radius[rows]))
+    return length
+
+
+def marker_sizes(positions, size: float, directions=None) -> tuple[np.ndarray, np.ndarray]:
+    """The radius of the marker of each source or listener at ``positions`` and the
+    length of its arrow along its unit row of ``directions``, in a model ``size`` metres
+    across, from how far apart the points are: a fifth of their usual spacing (the
+    median distance to the nearest one), from 1.2 % to 2.5 % of the model's size, and an
+    arrow six times that. Where points crowd, their markers shrink so as not to overlap,
+    down to a fifth, and an arrow stops short of a marker ahead of it."""
+    points = np.asarray(positions, dtype=float).reshape(-1, 3)
+    nearest = nearest_spacing(points)
+    apart = nearest[np.isfinite(nearest)]
+    usual = float(np.median(apart)) if len(apart) else np.inf
+    full = max(float(np.clip(0.2 * usual, 0.012 * size, 0.025 * size)), 0.05)
+    radius = np.clip(0.45 * nearest, 0.2 * full, full)
+    if directions is None:
+        return radius, 6 * radius
+    return radius, clear_lengths(points, np.reshape(directions, (-1, 3)), radius, 6 * radius)
+
+
+def vegetation_polydata(shape) -> pyvista.PolyData:
+    """The volume of a tree, a hedge or a belt of trees
+    (:class:`~acoustic_spaces.geometry.outdoor.PlantShape`) as a closed surface: a lone
+    tree's crown, or an outline raised from its bottom to its top."""
+    pv = _pyvista()
+    if shape.outline is None:
+        crown = pv.Sphere(radius=1.0, theta_resolution=24, phi_resolution=16)
+        axes = np.array([shape.radius, shape.radius, shape.half_height])
+        crown.points = np.asarray(crown.points) * axes + shape.centre
+        return crown
+    n = len(shape.outline)
+    bottom = np.column_stack([shape.outline, np.full(n, shape.low)])
+    plan = pv.PolyData(bottom, faces=[n, *range(n)])
+    return plan.extrude((0.0, 0.0, shape.high - shape.low), capping=True).triangulate()
+
+
+def plot_vegetation(room: Room, plotter: pyvista.Plotter, *, render: bool = True) -> list:
+    """Add an outdoor ``room``'s trees, hedges and belts of trees to ``plotter``, as
+    see-through green volumes; returns their legend entries."""
+    shapes = room.outdoor.vegetation if room.outdoor is not None else ()
+    for shape in shapes:
+        part = vegetation_polydata(shape)
+        plotter.add_mesh(part, color=VEGETATION_COLOUR, opacity=0.3, pickable=False, render=render)
+        edges = _outline(part)
+        if edges.n_points:  # a lone tree's round crown has none
+            plotter.add_mesh(
+                edges, color=VEGETATION_COLOUR, line_width=1.0, pickable=False, render=render
+            )
+    return [[_("vegetation"), VEGETATION_COLOUR]] if shapes else []
+
+
 def plot_room(
     room: Room,
     plotter: pyvista.Plotter | None = None,
@@ -327,8 +416,14 @@ def plot_room(
     if plotter is None:
         plotter = pv.Plotter()
     legend = []
+    # Outdoors, the open sky would hide the rest: only its edges, where the ground ends.
+    shown = room.shown_faces()
+    if not shown.all():
+        plotter.add_mesh(
+            _outline(room_polydata(room, np.flatnonzero(~shown))), color=EDGE_COLOUR, line_width=1.0
+        )
     for k, name in enumerate(room.material_names):
-        faces = np.flatnonzero(room.face_materials == k)
+        faces = np.flatnonzero((room.face_materials == k) & shown)
         if len(faces) == 0:
             continue
         part = room_polydata(room, faces)
@@ -336,28 +431,37 @@ def plot_room(
         plotter.add_mesh(part, color=colour, opacity=opacity)
         plotter.add_mesh(_outline(part), color=EDGE_COLOUR, line_width=1.5)
         legend.append([name, colour])
-    missing = np.flatnonzero(room.face_materials == UNASSIGNED)
+    missing = np.flatnonzero((room.face_materials == UNASSIGNED) & shown)
     if len(missing):
         part = room_polydata(room, missing)
         plotter.add_mesh(part, color=UNASSIGNED_COLOUR, opacity=max(opacity, 0.8))
         plotter.add_mesh(_outline(part), color=EDGE_COLOUR, line_width=1.5)
         legend.append([_("no material"), UNASSIGNED_COLOUR])
+    legend.extend(plot_vegetation(room, plotter))
 
     lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
     size = float(np.linalg.norm(hi - lo)) or 1.0
-    radius = max(0.012 * size, 0.05)
-    arrow = 6 * radius
+    sources, listeners = room.scene.sources, room.scene.listeners
+    everything = [*sources, *listeners]
+    radii, arrows = marker_sizes(
+        [item.position for item in everything],
+        size,
+        [item.orientation.forward() for item in everything],
+    )
 
     points, names = [], []
-    for source, directivity in zip(room.scene.sources, room.directivities, strict=True):
-        plotter.add_mesh(pv.Sphere(radius=radius, center=source.position), color=SOURCE_COLOUR)
+    for k, (source, directivity) in enumerate(zip(sources, room.directivities, strict=True)):
+        radius, arrow = radii[k], arrows[k]
+        opacity = 1.0 if source.in_use else 0.3  # left out of simulations: faded
+        sphere = pv.Sphere(radius=radius, center=source.position)
+        plotter.add_mesh(sphere, color=SOURCE_COLOUR, opacity=opacity)
         extent = extent_polydata(source, radius)
         if extent is not None:
-            plotter.add_mesh(extent, color=SOURCE_COLOUR, opacity=0.6)
+            plotter.add_mesh(extent, color=SOURCE_COLOUR, opacity=0.6 * opacity)
         if not directivity.omni:
             direction = source.orientation.forward()
             shape = pv.Arrow(start=source.position, direction=direction, scale=arrow)
-            plotter.add_mesh(shape, color=SOURCE_COLOUR)
+            plotter.add_mesh(shape, color=SOURCE_COLOUR, opacity=opacity)
             balloon = balloon_polydata(
                 directivity, source.position, source.orientation.rotation(), size=arrow
             )
@@ -366,17 +470,20 @@ def plot_room(
                 scalars="level",
                 cmap="magma",
                 clim=(-30, 0),
-                opacity=0.55,
+                opacity=0.55 * opacity,
                 show_scalar_bar=False,
             )
-        points.append(source.position)
+        points.append(np.add(source.position, [0.0, 0.0, 1.5 * radius]))
         names.append(source.name)
-    for listener in room.scene.listeners:
-        plotter.add_mesh(pv.Sphere(radius=radius, center=listener.position), color=LISTENER_COLOUR)
+    for k, listener in enumerate(listeners, len(sources)):
+        radius, arrow = radii[k], arrows[k]
+        opacity = 1.0 if listener.in_use else 0.3
+        sphere = pv.Sphere(radius=radius, center=listener.position)
+        plotter.add_mesh(sphere, color=LISTENER_COLOUR, opacity=opacity)
         direction = listener.orientation.forward()
         shape = pv.Arrow(start=listener.position, direction=direction, scale=arrow)
-        plotter.add_mesh(shape, color=LISTENER_COLOUR)
-        points.append(listener.position)
+        plotter.add_mesh(shape, color=LISTENER_COLOUR, opacity=opacity)
+        points.append(np.add(listener.position, [0.0, 0.0, 1.5 * radius]))
         names.append(listener.name)
     legend.append(["source", SOURCE_COLOUR])
     legend.append(["listener", LISTENER_COLOUR])
@@ -389,7 +496,7 @@ def plot_room(
 
     if show_labels and points:
         plotter.add_point_labels(
-            np.asarray(points, dtype=float) + [0.0, 0.0, 1.5 * radius],
+            np.asarray(points, dtype=float),
             names,
             font_size=14,
             text_color="white",
@@ -925,6 +1032,69 @@ def plot_directivity(
     return fig
 
 
+def plot_atmosphere(
+    atmosphere: Atmosphere,
+    ground_c: float,
+    path: str | Path | None = None,
+    *,
+    top: float = 100.0,
+):
+    """An outdoor atmosphere from the ground to ``top`` metres up: the temperature and
+    the wind's speed (left), and the speed of sound (right) in still air and, with a
+    wind, as sound going with it and against it, the speed that bends sound: towards
+    where it is lower. ``ground_c`` is the temperature at the ground (the scene's air
+    temperature). Returns the matplotlib figure."""
+    z = np.concatenate([[0.0], np.geomspace(min(0.01, top / 100.0), top, 400)])
+    fig = _figure(figsize=(10, 5), layout="constrained")
+    fig.patch.set_facecolor(BACKGROUND[0])
+    left, right = fig.subplots(1, 2, sharey=True)
+    for ax in (left, right):
+        _dark(ax)
+    left.plot(atmosphere.temperature(z, ground_c), z, color="#fdae61", lw=1.5)
+    left.set_xlabel(_("temperature (°C)"), color="#fdae61")
+    left.set_ylabel(_("height above the ground (m)"))
+    wind = atmosphere.wind_speed(z)
+    if np.any(wind > 0.0):
+        speed = left.twiny()
+        speed.plot(wind, z, color="#80b1d3", lw=1.5)
+        speed.set_xlabel(_("wind speed (m/s)"), color="#80b1d3")
+        speed.tick_params(colors="white")
+        speed.set_xlim(left=0.0)
+        right.plot(
+            atmosphere.sound_speed(z, ground_c),
+            z,
+            color="#d9d9d9",
+            lw=1.2,
+            ls="--",
+            label=_("across the wind"),
+        )
+        along = atmosphere.to_wind()
+        for sign, colour, label in (
+            (1.0, "#80b1d3", _("downwind")),
+            (-1.0, "#fb8072", _("upwind")),
+        ):
+            right.plot(
+                atmosphere.sound_speed(z, ground_c, sign * along),
+                z,
+                color=colour,
+                lw=1.5,
+                label=label,
+            )
+        _legend(right, loc="best")
+    else:
+        right.plot(atmosphere.sound_speed(z, ground_c), z, color="#d9d9d9", lw=1.5)
+    right.set_xlabel(_("speed of sound (m/s)"))
+    left.set_ylim(0.0, top)
+    if atmosphere.still:
+        title = _("Still air: sound goes in straight lines")
+    else:
+        title = _("Sound bends towards where the speed of sound is lower")
+    fig.suptitle(title, color="white")
+    if path is not None:
+        fig.savefig(str(path), dpi=120, facecolor=fig.get_facecolor())
+    return fig
+
+
 def _decay_curves(decay: BandDecay) -> list[tuple[np.ndarray, np.ndarray] | None]:
     """Each band's backward-integrated decay (dB) over 1 ms slots from the direct sound
     on, up to where it sinks into the noise, with the noise taken off and the missing
@@ -1178,9 +1348,10 @@ def plot_coverage(
 
 
 def _floor_plan(ax, room: Room) -> None:
-    """The walls seen from above, as thin lines."""
+    """The walls seen from above, as thin lines, and any vegetation's outlines."""
     from matplotlib.collections import LineCollection
 
+    _vegetation_plan(ax, room)
     mesh = room.mesh
     walls = np.abs(mesh.face_normals()[:, 2]) < 0.25
     tri = mesh.triangles[walls][:, :, :2]
@@ -1193,6 +1364,20 @@ def _floor_plan(ax, room: Room) -> None:
     rows = np.arange(len(tri))
     segments = np.stack([tri[rows, best[:, 0]], tri[rows, best[:, 1]]], axis=1)
     ax.add_collection(LineCollection(segments, colors=EDGE_COLOUR, linewidths=0.8, alpha=0.6))
+
+
+def _vegetation_plan(ax, room: Room) -> None:
+    """The outlines of an outdoor room's trees, hedges and belts of trees, seen from
+    above, as dashed green lines."""
+    from matplotlib.patches import Ellipse, Polygon
+
+    for shape in room.outdoor.vegetation if room.outdoor is not None else ():
+        style = dict(fill=False, edgecolor=VEGETATION_COLOUR, linestyle="--", linewidth=1.0)
+        if shape.outline is None:
+            size = 2.0 * shape.radius
+            ax.add_patch(Ellipse(shape.centre[:2], size, size, **style))
+        else:
+            ax.add_patch(Polygon(shape.outline, closed=True, **style))
 
 
 def plot_map(

@@ -2,7 +2,8 @@
 
 The file holds the room, one object per surface name with a see-through material per
 scene material (its absorption and scattering per octave band as extras, which Blender
-shows as custom properties), and the sources and listeners turned the way they face,
+shows as custom properties), an outdoor scene's trees, hedges and belts of trees as
+see-through green volumes, and the sources and listeners turned the way they face,
 with an arrow along the aim. It can also hold early reflection paths as lines, one
 object per order, and sound particles as an animation in slow motion: by default
 100 ms of sound play over 4 s. Blender opens it with File > Import > glTF 2.0.
@@ -23,7 +24,13 @@ import numpy as np
 from acoustic_spaces._version import __version__
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.room import UNASSIGNED, Room, _label_text
-from acoustic_spaces.viz import LISTENER_COLOUR, MATERIAL_COLOURS, SOURCE_COLOUR, path_groups
+from acoustic_spaces.viz import (
+    LISTENER_COLOUR,
+    MATERIAL_COLOURS,
+    SOURCE_COLOUR,
+    VEGETATION_COLOUR,
+    path_groups,
+)
 
 if TYPE_CHECKING:
     from acoustic_spaces.engine import EarlyReflections
@@ -35,6 +42,8 @@ PARTICLE_COUNT = 1000
 SLOW_MOTION = 40.0
 #: Opacity of the room's surfaces.
 SURFACE_ALPHA = 0.4
+#: Opacity of the vegetation's volumes.
+VEGETATION_ALPHA = 0.3
 UNASSIGNED_GREY = "#9e9e9e"
 PARTICLE_COLOUR = "#ffd166"
 
@@ -114,7 +123,8 @@ def _arrow(length: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _marker_radius(room: Room) -> float:
-    """Radius of the source and listener spheres, as the editor's 3D view draws them."""
+    """Radius of the source and listener spheres: 1.2 % of the model's size, the least
+    the editor's 3D view gives them where they do not crowd."""
     lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
     size = float(np.linalg.norm(hi - lo)) or 1.0
     return max(0.012 * size, 0.05)
@@ -254,7 +264,8 @@ def _add_room(doc: _Document, room: Room) -> None:
     areas = mesh.face_areas()
     materials: dict[int, int] = {}
     group = doc.node("room")
-    for label in np.unique(mesh.face_labels):
+    shown = room.shown_faces()  # outdoors, not the open sky
+    for label in np.unique(mesh.face_labels[shown]):
         faces = np.flatnonzero(mesh.face_labels == label)
         k = int(room.face_materials[faces[0]])
         if k not in materials:
@@ -266,6 +277,27 @@ def _add_room(doc: _Document, room: Room) -> None:
         name = _label_text(mesh.labels[label])
         index = doc.mesh(name, mesh.vertices[used], local.reshape(-1, 3), materials[k])
         doc.node(name, group, mesh=index, extras=extras)
+
+
+def _add_vegetation(doc: _Document, room: Room) -> None:
+    """Outdoors, one node per tree, hedge or belt of trees under a ``vegetation`` node."""
+    from acoustic_spaces.geometry.builders import extruded_mesh
+
+    shapes = room.outdoor.vegetation if room.outdoor is not None else ()
+    if not shapes:
+        return
+    material = doc.material("vegetation", VEGETATION_COLOUR, VEGETATION_ALPHA)
+    group = doc.node("vegetation")
+    for shape in shapes:
+        if shape.outline is None:
+            vertices, triangles = _sphere(1.0, 24, 12)
+            axes = np.array([shape.radius, shape.radius, shape.half_height])
+            vertices = vertices * axes + shape.centre
+        else:
+            prism = extruded_mesh(shape.outline, shape.high - shape.low)
+            vertices, triangles = prism.vertices + [0.0, 0.0, shape.low], prism.faces
+        index = doc.mesh(shape.name, vertices, triangles, material)
+        doc.node(shape.name, group, mesh=index, extras={"kind": shape.kind})
 
 
 def _add_points(doc: _Document, room: Room, radius: float) -> None:
@@ -418,6 +450,7 @@ def export_gltf(
     doc = _Document(room.scene.name)
     radius = _marker_radius(room)
     _add_room(doc, room)
+    _add_vegetation(doc, room)
     _add_points(doc, room, radius)
     if paths is not None and len(paths):
         _add_paths(doc, paths)

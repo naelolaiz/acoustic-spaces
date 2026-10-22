@@ -1,0 +1,52 @@
+# Outdoors: traffic on a road between a meadow and a paved yard, heard 7.5, 25 and 50 m
+# away over the grass, and 25 m away over the yard. Over soft ground the sound that
+# reflects off it arrives out of step with the direct sound at a few hundred hertz and
+# takes some of it away (the ground dip); over the hard yard the two add up there
+# instead, and the dip comes higher up, near 2 kHz. The meadow, the road and the yard
+# are parts of the ground, each with its impedance; a reflection near where two meet
+# takes some of each, as much as each covers of its Fresnel zone.
+name: Road across a meadow
+geometry:
+  ground:
+    extent: [[-80, -40], [80, 70]]
+    sky: 20
+    zones:
+      - name: road
+        polygon: [[-80, -4], [80, -4], [80, 4], [-80, 4]]
+      - name: yard
+        polygon: [[-80, -40], [80, -40], [80, -4], [-80, -4]]
+materials:
+  meadow:
+    impedance: grass
+  asphalt:
+    impedance: asphalt
+assignments:
+  ground: meadow
+  road: asphalt
+  yard: asphalt
+sources:
+  - name: traffic
+    position: [0, 0, 0.5]
+    orientation: {yaw: -90}
+    line_m: 100
+    spacing_m: 5
+    level_db: 100
+listeners:
+  - name: verge
+    position: [0, 7.5, 1.5]
+    orientation: {yaw: -90}
+  - name: meadow_25m
+    position: [0, 25, 1.5]
+    orientation: {yaw: -90}
+  - name: meadow_50m
+    position: [0, 50, 1.5]
+    orientation: {yaw: -90}
+  - name: yard_25m
+    position: [0, -25, 1.5]
+    orientation: {yaw: 90}
+simulation:
+  early: {method: image_sources, max_order: 1, diffraction: none}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 0.5
+outputs:
+  - mono

@@ -45,9 +45,12 @@ folder.
 
 from __future__ import annotations
 
+import difflib
+import functools
 import math
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
 import numpy as np
 import yaml
@@ -62,6 +65,7 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
+from acoustic_spaces.air import SOUND_SPEED_0C
 from acoustic_spaces.materials import (
     OCTAVE_BANDS_HZ,
     THIRD_OCTAVE_BANDS_HZ,
@@ -76,6 +80,8 @@ from acoustic_spaces.materials.bands import (
     power_levels,
     to_bands,
 )
+from acoustic_spaces.materials.ground import PRESETS as GROUND_PRESETS
+from acoustic_spaces.materials.ground import band_absorption, surface_impedance
 from acoustic_spaces.materials.libraries import find_material, read_library
 from acoustic_spaces.parameters import SPEECH_SPECTRUM_DB
 
@@ -87,6 +93,37 @@ class _Model(BaseModel):
     # Unknown keys are typing mistakes; NaN and infinity (YAML's .nan and .inf) are
     # no positions, angles or coefficients.
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
+def _group_path(value: str | None) -> str | None:
+    """A group's names from the outermost in, joined with "/" and without spaces around
+    them."""
+    if value is None:
+        return None
+    parts = [part.strip() for part in value.split("/")]
+    if not all(parts):
+        raise ValueError(f"group {value!r} has an empty name between its '/'")
+    return "/".join(parts)
+
+
+def _group_field():
+    return Field(
+        default=None,
+        description=(
+            "the group it belongs to in the editor's scene tree; groups nest with '/' "
+            "(PA/Delays is the group Delays in the group PA)"
+        ),
+    )
+
+
+def _enabled_field():
+    return Field(
+        default=None,
+        description=(
+            "false leaves it out of simulations, maps and checks; it stays in the scene, "
+            "and the editor draws it faded"
+        ),
+    )
 
 
 def _per_band(name: str, value: list[float]) -> list[float]:
@@ -161,9 +198,471 @@ class Orientation(_Model):
         return [[forward[i], left[i], up[i]] for i in range(3)]
 
 
+#: Names an outdoor scene gives its surfaces by kind; buildings and barriers take others.
+OUTDOOR_NAMES = ("ground", "sky", "walls", "roofs", "buildings", "barriers", "zones")
+#: The material of the sky of an outdoor scene unless the scene names its own: an
+#: opening, which lets all sound out of the scene.
+SKY = "sky"
+
+
+def sky_material() -> Material:
+    """The open sky: a surface that lets all sound through and reflects none."""
+    return Material(transmission=1.0, scattering=0.0, source="the open sky")
+
+
+class GroundZone(_Model):
+    """A part of the ground with a material of its own (a road through a field, a lawn,
+    a pond): a polygon on the ground, its surfaces ``<name>``, ``zones`` and ``ground``
+    (an assignment to the zone's name wins over one to ``ground``). The part of it past
+    the ground's edge is left out."""
+
+    name: str | None = Field(default=None, description="None: zone_1, zone_2...")
+    polygon: list[tuple[float, float]] = Field(
+        min_length=3, description="(x, y) corners of the zone, in order"
+    )
+
+
+class Terrain(_Model):
+    """Uneven ground: its heights on a square grid, from a file or given here (see
+    :mod:`acoustic_spaces.geometry.terrain`). Between the grid's nodes the ground is
+    bilinear, past its edge it goes on at the height of the edge, and the scene's ground
+    is the grid sampled over the ground's extent, so the extent must lie inside the
+    grid. Lengths are in the geometry's units."""
+
+    file: Path | None = Field(
+        default=None,
+        description=(
+            "an Esri ASCII grid (.asc) or x y z points on a regular grid (.xyz, .txt, .csv); "
+            "ground.map_origin is subtracted from its coordinates"
+        ),
+    )
+    heights: list[list[float]] | None = Field(
+        default=None,
+        description=(
+            "the heights row by row: each row along x from origin's x, the rows along y "
+            "from origin's y, spacing apart"
+        ),
+    )
+    origin: tuple[float, float] = Field(
+        default=(0.0, 0.0), description="heights: (x, y) of the first height of the first row"
+    )
+    spacing: PositiveFloat | None = Field(
+        default=None, description="heights: the distance between neighbouring heights"
+    )
+
+    @field_validator("file")
+    @classmethod
+    def _resolve_file(cls, value: Path | None, info: ValidationInfo) -> Path | None:
+        return None if value is None else _resolve_path(value, info)
+
+    @model_validator(mode="after")
+    def _one_source(self) -> Terrain:
+        if (self.file is None) == (self.heights is None):
+            raise ValueError("terrain takes a file or heights, one of them")
+        if self.heights is not None:
+            if self.spacing is None:
+                raise ValueError("terrain heights need their spacing")
+            rows = self.heights
+            if len(rows) < 2 or any(len(row) != len(rows[0]) for row in rows) or len(rows[0]) < 2:
+                raise ValueError(
+                    "terrain heights are at least two rows of at least two values, all the "
+                    "rows as long as the first"
+                )
+        elif self.spacing is not None or tuple(self.origin) != (0.0, 0.0):
+            raise ValueError("a terrain file has its own spacing and origin; leave them out")
+        return self
+
+
+class BuildingFile(_Model):
+    """Buildings from a map: a GeoJSON file whose ``Polygon`` and ``MultiPolygon``
+    features are footprints (see :mod:`acoustic_spaces.geometry.terrain`), each raised
+    to the height a property gives. Its coordinates are in the geometry's units on a
+    plane (not longitude and latitude), and ``ground.map_origin`` is subtracted from
+    them."""
+
+    file: Path = Field(description="a GeoJSON file of building footprints")
+    height: str | PositiveFloat = Field(
+        default="height",
+        description="the property that holds each building's height, or one height for all",
+    )
+    default_height: PositiveFloat | None = Field(
+        default=None, description="the height of buildings whose property is missing"
+    )
+    name: str = Field(
+        default="name",
+        description="the property that holds each building's name; without it, building_<n>",
+    )
+    without: list[str] | None = Field(
+        default=None, description="buildings of the file left out, by name"
+    )
+
+    @field_validator("file")
+    @classmethod
+    def _resolve_file(cls, value: Path, info: ValidationInfo) -> Path:
+        return _resolve_path(value, info)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> BuildingFile:
+        if not isinstance(self.height, str) and self.default_height is not None:
+            raise ValueError("default_height goes with a height property; one height is given")
+        if isinstance(self.height, str) and not self.height:
+            raise ValueError("height names the property that holds the height, or is a number")
+        if not self.name:
+            raise ValueError("name names the property that holds the name")
+        return self
+
+
+class Ground(_Model):
+    """Flat ground under an open sky, or a terrain, which makes the scene an outdoor one
+    (see :mod:`acoustic_spaces.geometry.outdoor`). Lengths are in the geometry's
+    units."""
+
+    height: float = Field(
+        default=0.0,
+        description="height (z) of the flat ground; with a terrain, added to its heights",
+    )
+    terrain: Terrain | None = Field(
+        default=None, description="uneven ground: heights on a grid, from a file or given"
+    )
+    map_origin: tuple[float, float] | None = Field(
+        default=None,
+        description=(
+            "the point of the map files' coordinates (the terrain's and the buildings "
+            "file's) that becomes the scene's (0, 0): subtracted from them"
+        ),
+    )
+    extent: tuple[tuple[float, float], tuple[float, float]] | None = Field(
+        default=None,
+        description=(
+            "[[x_min, y_min], [x_max, y_max]] of the ground; None: the buildings, barriers "
+            "and model file, with margin round them, or the whole terrain"
+        ),
+    )
+    margin: PositiveFloat = Field(
+        default=30.0,
+        description=(
+            "ground round the buildings, barriers and model file when extent is left out "
+            "(a terrain sets the ground's size itself), and sky above the highest of them "
+            "when sky is"
+        ),
+    )
+    sky: PositiveFloat | None = Field(
+        default=None,
+        description=(
+            "height of the open sky above the ground; None: margin above the highest "
+            "building, barrier or model"
+        ),
+    )
+    zones: list[GroundZone] | None = Field(
+        default=None,
+        description="parts of the ground with materials of their own; they may not overlap",
+    )
+
+    def zone_names(self) -> list[str]:
+        """The zones' names, ``zone_<n>`` for those without one."""
+        return [z.name or f"zone_{k + 1}" for k, z in enumerate(self.zones or [])]
+
+    @model_validator(mode="after")
+    def _extent_has_area(self) -> Ground:
+        if self.extent is not None:
+            (x0, y0), (x1, y1) = self.extent
+            if not (x0 < x1 and y0 < y1):
+                raise ValueError(
+                    "ground extent is [[x_min, y_min], [x_max, y_max]], each min < max"
+                )
+        return self
+
+    def height_grid(self):
+        """The terrain as a :class:`~acoustic_spaces.geometry.terrain.HeightGrid` in the
+        geometry's units, ``map_origin`` subtracted and ``height`` not yet added; None
+        for flat ground."""
+        from acoustic_spaces.geometry.terrain import HeightGrid
+
+        if self.terrain is None:
+            return None
+        if self.terrain.file is not None:
+            grid = _height_grid_file(self.terrain.file)
+        else:
+            try:
+                grid = HeightGrid(self.terrain.origin, self.terrain.spacing, self.terrain.heights)
+            except ValueError as exc:
+                raise ValueError(f"terrain: {exc}") from None
+            return grid
+        if self.map_origin is not None:
+            grid = grid.shifted(-self.map_origin[0], -self.map_origin[1])
+        return grid
+
+
+def _height_grid_file(path: Path):
+    """The grid in a terrain file, read once per version of the file."""
+    try:
+        stat = path.stat()
+    except OSError:
+        raise ValueError(f"terrain file {path} cannot be read") from None
+    return _cached_height_grid(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+@functools.lru_cache(maxsize=8)
+def _cached_height_grid(path: str, mtime_ns: int, size: int):
+    from acoustic_spaces.geometry.terrain import read_height_grid
+
+    return read_height_grid(path)
+
+
+@functools.lru_cache(maxsize=8)
+def _cached_footprints(
+    path: str, mtime_ns: int, size: int, height: str | float, name: str, default: float | None
+) -> tuple:
+    from acoustic_spaces.geometry.terrain import read_footprints
+
+    return tuple(read_footprints(path, height, name, default))
+
+
+class Building(_Model):
+    """A building standing on the ground: its footprint raised to a height (surfaces
+    ``<name>_wall_1``..., ``<name>_walls``, ``<name>_roof``, and ``walls``, ``roofs``
+    and ``buildings`` for all of them)."""
+
+    name: str | None = Field(default=None, description="None: building_1, building_2...")
+    footprint: list[tuple[float, float]] = Field(
+        min_length=3, description="(x, y) corners of the footprint, in order"
+    )
+    height: PositiveFloat = Field(description="height of the roof above the ground")
+
+
+class Barrier(_Model):
+    """A thin screen standing on the ground along a path (surfaces ``<name>`` and
+    ``barriers``)."""
+
+    name: str | None = Field(default=None, description="None: barrier_1, barrier_2...")
+    path: list[tuple[float, float]] = Field(
+        min_length=2, description="(x, y) points along the barrier, in order"
+    )
+    height: PositiveFloat = Field(description="height of its top above the ground")
+
+
+#: The foliage presets: ``dense``, ISO 9613-2's dense foliage, and ``none``, bare stems.
+FOLIAGE_PRESETS = ("dense", "none")
+#: ISO 9613-2 (1996), Annex A, Table A.1: what dense foliage takes from sound passing 20
+#: to 200 m through it, dB per metre in the octave bands of ``OCTAVE_BANDS_HZ``.
+DENSE_FOLIAGE_DB_PER_M = (0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.09, 0.12)
+
+
+class Foliage(_Model):
+    """What the leaves and twigs of a vegetation volume take from sound passing through
+    it, per metre: a preset, an attenuation per band, or the leaves themselves, their
+    area per cubic metre and their width, from which the engine works out what they
+    scatter and absorb in each band. ``albedo`` is the share of an attenuation that
+    they scatter on, the rest they absorb; ``asymmetry`` how far forward they scatter
+    it (the mean cosine of the angle, as in a Henyey-Greenstein phase function); leaves
+    given by their size and density work both out for themselves."""
+
+    preset: Literal["dense", "none"] | None = Field(
+        default=None,
+        description=(
+            "dense: ISO 9613-2's dense foliage (Annex A), its attenuation from 20 to 200 m "
+            "of foliage per metre; none: no foliage (bare stems, winter)"
+        ),
+    )
+    attenuation: list[Annotated[float, Field(ge=0.0, le=10.0)]] | None = Field(
+        default=None,
+        description="dB per metre per octave or third-octave band, when no preset says it",
+    )
+    leaf_area_per_m3: PositiveFloat | None = Field(
+        default=None,
+        le=50.0,
+        description=(
+            "the leaves' area (one side's), square metres per cubic metre of the volume, "
+            "with leaf_width: the engine works out what they scatter and absorb in each "
+            "band from thin rigid discs of that size, turned every way alike"
+        ),
+    )
+    leaf_width: PositiveFloat | None = Field(
+        default=None,
+        le=1.0,
+        description="a leaf's width (m): the diameter of a disc of a leaf's area",
+    )
+    albedo: Coefficient = Field(
+        default=0.0,
+        description="share of what the foliage takes that it scatters on rather than absorbs",
+    )
+    asymmetry: float = Field(
+        default=0.0,
+        ge=-0.9,
+        le=0.9,
+        description=(
+            "mean cosine of the angle the foliage scatters sound through: 0 every way "
+            "alike, towards 1 onwards"
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_preset(cls, data):
+        if isinstance(data, str):
+            data = {"preset": data}
+        if isinstance(data, dict) and data.get("preset") is not None:
+            preset = data["preset"]
+            if preset not in FOLIAGE_PRESETS:
+                close = difflib.get_close_matches(str(preset), list(FOLIAGE_PRESETS), n=1)
+                hint = f"; did you mean {close[0]}?" if close else ""
+                raise ValueError(
+                    f"no foliage preset named {preset!r}{hint} (the presets are "
+                    f"{', '.join(FOLIAGE_PRESETS)})"
+                )
+        return data
+
+    @field_validator("attenuation")
+    @classmethod
+    def _bands(cls, value: list[float] | None) -> list[float] | None:
+        return None if value is None else _per_band_or_third("attenuation", value)
+
+    @model_validator(mode="after")
+    def _one_way(self) -> Foliage:
+        if (self.leaf_area_per_m3 is None) != (self.leaf_width is None):
+            raise ValueError("leaf_area_per_m3 and leaf_width go together")
+        ways = [
+            w
+            for w, given in (
+                ("a preset", self.preset is not None),
+                ("an attenuation per band", self.attenuation is not None),
+                ("leaves by their area and width", self.leaf_area_per_m3 is not None),
+            )
+            if given
+        ]
+        if len(ways) != 1:
+            raise ValueError(
+                "foliage takes a preset, an attenuation per band or leaves by their area and "
+                "width, one of them"
+            )
+        if self.preset == "none" and (self.albedo or self.asymmetry):
+            raise ValueError("foliage none has nothing to scatter: leave out albedo and asymmetry")
+        if self.leaf_area_per_m3 is not None and (self.albedo or self.asymmetry):
+            raise ValueError(
+                "leaves given by their area and width work out what they scatter: leave out "
+                "albedo and asymmetry"
+            )
+        return self
+
+    @property
+    def bare(self) -> bool:
+        """Whether there is no foliage."""
+        if self.preset is not None:
+            return self.preset == "none"
+        if self.leaf_area_per_m3 is not None:
+            return False
+        return not any(self.attenuation)
+
+    def attenuation_db(
+        self, resolution: Resolution = "octave", speed_of_sound: float = 343.0
+    ) -> np.ndarray:
+        """dB per metre in each band at ``resolution``: what the foliage takes in all,
+        scattered on or absorbed; leaves given by their area and width take it for sound
+        at ``speed_of_sound`` (m/s)."""
+        if self.leaf_area_per_m3 is not None:
+            from acoustic_spaces.engine.vegetation import DB_PER_NEPER, leaves_medium
+
+            medium = leaves_medium(
+                self.leaf_area_per_m3, self.leaf_width, resolution, speed_of_sound
+            )
+            return medium.extinction * DB_PER_NEPER
+        if self.preset == "none":
+            values = [0.0] * len(OCTAVE_BANDS_HZ)
+        elif self.preset == "dense":
+            values = list(DENSE_FOLIAGE_DB_PER_M)
+        else:
+            values = self.attenuation
+        return np.asarray(convert(values, resolution), dtype=float)
+
+    def describe(self) -> str:
+        if self.preset is not None:
+            return f"{self.preset} foliage" if self.preset == "dense" else "no foliage"
+        if self.leaf_area_per_m3 is not None:
+            return f"leaves of {self.leaf_area_per_m3:g} m²/m³, {self.leaf_width:g} m wide"
+        return "foliage of " + "/".join(f"{v:g}" for v in self.attenuation) + " dB/m"
+
+
+class Stems(_Model):
+    """The trunks and stems of a vegetation volume: upright rigid cylinders, which
+    scatter sound sideways, all of it (Bullen and Fricke 1982)."""
+
+    per_m2: PositiveFloat = Field(le=100.0, description="stems per square metre of ground")
+    diameter: PositiveFloat = Field(le=5.0, description="their mean diameter (m)")
+
+
+class Vegetation(_Model):
+    """Plants standing on the ground outdoors: a volume through which sound loses some of
+    itself, scattered on or absorbed. Its shape is one of a ``footprint`` raised from
+    ``base`` to ``height`` (a tree belt, a wood), a ``path`` of a ``width`` (a hedge),
+    or a lone tree's crown over ``tree``: a spheroid ``crown_diameter`` across from
+    ``base`` to ``height``. Lengths and heights are in the geometry's units, over the
+    ground; ``foliage`` and ``stems`` say what fills it."""
+
+    name: str | None = Field(default=None, description="None: vegetation_1, vegetation_2...")
+    footprint: list[tuple[float, float]] | None = Field(
+        default=None, min_length=3, description="(x, y) corners of a belt or wood, in order"
+    )
+    path: list[tuple[float, float]] | None = Field(
+        default=None, min_length=2, description="(x, y) points along a hedge, in order"
+    )
+    width: PositiveFloat | None = Field(default=None, description="a hedge's width")
+    tree: tuple[float, float] | None = Field(default=None, description="(x, y) of a lone tree")
+    crown_diameter: PositiveFloat | None = Field(
+        default=None, description="how wide a lone tree's crown is"
+    )
+    height: PositiveFloat = Field(description="height of the top over the ground")
+    base: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="height of the bottom over the ground; a tree's, where its crown starts",
+    )
+    foliage: Foliage = Field(
+        default_factory=lambda: Foliage(preset="dense"),
+        description=(
+            "what the leaves and twigs take: a preset (dense, none), values, or the leaves "
+            "by their area and width"
+        ),
+    )
+    stems: Stems | None = Field(default=None, description="trunks and stems in it, if any")
+
+    @model_validator(mode="after")
+    def _one_shape(self) -> Vegetation:
+        given = [k for k in ("footprint", "path", "tree") if getattr(self, k) is not None]
+        if len(given) != 1:
+            raise ValueError("vegetation needs exactly one of footprint, path or tree")
+        if (self.width is not None) != (self.path is not None):
+            raise ValueError("width goes with path, and a path needs it")
+        if (self.crown_diameter is not None) != (self.tree is not None):
+            raise ValueError("crown_diameter goes with tree, and a tree needs it")
+        if self.base >= self.height:
+            raise ValueError(f"base ({self.base:g}) must be below height ({self.height:g})")
+        if self.foliage.bare and self.stems is None:
+            raise ValueError("vegetation with no foliage and no stems does nothing")
+        return self
+
+    @property
+    def kind(self) -> Literal["belt", "hedge", "tree"]:
+        """belt (a footprint), hedge (a path) or tree."""
+        if self.footprint is not None:
+            return "belt"
+        return "hedge" if self.path is not None else "tree"
+
+    def describe(self) -> str:
+        """What fills it, as text: its foliage and stems."""
+        parts = [] if self.foliage.bare else [self.foliage.describe()]
+        if self.stems is not None:
+            parts.append(f"{self.stems.per_m2:g} stems/m², {self.stems.diameter:g} m across")
+        return ", ".join(parts) or "nothing"
+
+
 class Geometry(_Model):
     """The room's surfaces: a CAD file, or a box or extruded floor plan built from
-    dimensions (surfaces ``floor``, ``ceiling``, ``walls`` and ``wall_1``, ``wall_2``...)."""
+    dimensions (surfaces ``floor``, ``ceiling``, ``walls`` and ``wall_1``, ``wall_2``...).
+
+    Outdoors, ``ground`` lays flat ground under an open sky, with ``buildings`` and
+    ``barriers`` built on it and, from ``file``, any other objects standing on it.
+    ``vegetation`` adds trees, hedges and belts of them, which are no surfaces: sound
+    passes through them, losing some of itself."""
 
     file: Path | None = Field(
         default=None,
@@ -197,6 +696,22 @@ class Geometry(_Model):
         ),
     )
 
+    ground: Ground | None = Field(
+        default=None, description="ground (flat, or a terrain) under an open sky: an outdoor scene"
+    )
+    buildings: list[Building] | None = Field(
+        default=None, description="outdoors: buildings standing on the ground"
+    )
+    buildings_file: BuildingFile | None = Field(
+        default=None, description="outdoors: buildings from a map (GeoJSON footprints)"
+    )
+    barriers: list[Barrier] | None = Field(
+        default=None, description="outdoors: thin screens standing on the ground"
+    )
+    vegetation: list[Vegetation] | None = Field(
+        default=None, description="outdoors: trees, hedges and belts of them"
+    )
+
     @field_validator("file")
     @classmethod
     def _resolve_file(cls, value: Path | None, info: ValidationInfo) -> Path | None:
@@ -204,6 +719,12 @@ class Geometry(_Model):
 
     @model_validator(mode="after")
     def _one_kind(self) -> Geometry:
+        if self.ground is not None:
+            return self._outdoor()
+        if self.buildings is not None or self.barriers is not None or self.buildings_file:
+            raise ValueError("buildings and barriers stand on the ground: add geometry.ground")
+        if self.vegetation is not None:
+            raise ValueError("vegetation stands on the ground: add geometry.ground")
         given = [k for k in ("file", "box", "floor_plan") if getattr(self, k) is not None]
         if len(given) != 1:
             raise ValueError("geometry needs exactly one of file, box or floor_plan")
@@ -213,7 +734,154 @@ class Geometry(_Model):
             raise ValueError("space names a room of an IFC file: give one as file")
         return self
 
+    def _outdoor(self) -> Geometry:
+        if self.box is not None or self.floor_plan is not None or self.height is not None:
+            raise ValueError(
+                "an outdoor scene (geometry.ground) takes buildings, barriers and a model "
+                "file, not a box or floor_plan"
+            )
+        if self.space is not None:
+            raise ValueError("space picks a room of an IFC file; outdoors, leave it out")
+        if (
+            self.ground.extent is None
+            and self.ground.terrain is None
+            and not (
+                self.file
+                or self.buildings
+                or self.buildings_file
+                or self.barriers
+                or self.vegetation
+            )
+        ):
+            raise ValueError(
+                "with no buildings, barriers, vegetation or model file, the ground needs an "
+                "extent: [[x_min, y_min], [x_max, y_max]]"
+            )
+        plants = self.vegetation_names()
+        repeated = sorted({n for n in plants if plants.count(n) > 1})
+        if repeated:
+            raise ValueError(f"vegetation names must be unique: {', '.join(repeated)}")
+        if self.buildings_file is not None:
+            # Read now, so that a file that cannot be read is reported with the scene.
+            found = {b.name for b in self.file_buildings(len(self.buildings or []), all=True)}
+            missing = [n for n in self.buildings_file.without or [] if n not in found]
+            if missing:
+                raise ValueError(
+                    f"buildings_file.without names {missing[0]!r}, which the file has no "
+                    "building of"
+                )
+        names = self.building_names() + self.barrier_names() + self.ground.zone_names()
+        reserved = sorted(set(names) & set(OUTDOOR_NAMES))
+        if reserved:
+            raise ValueError(f"{reserved[0]!r} names every surface of its kind; pick another name")
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            raise ValueError(
+                f"building, barrier and zone names must be unique: {', '.join(duplicates)}"
+            )
+        return self
+
+    def building_names(self) -> list[str]:
+        """The buildings' names, ``building_<n>`` for those without one: the scene's own
+        buildings, then the buildings file's."""
+        return [b.name for b in self.all_buildings()]
+
+    def all_buildings(self) -> list[Building]:
+        """The scene's own ``buildings``, then those of ``buildings_file``, every one
+        named (``building_<n>`` for those without a name)."""
+        own = [
+            b if b.name else b.model_copy(update={"name": f"building_{k + 1}"})
+            for k, b in enumerate(self.buildings or [])
+        ]
+        return own + self.file_buildings(len(own))
+
+    def _footprints(self) -> tuple:
+        """The buildings file's footprints, in the file's units and coordinates."""
+        spec = self.buildings_file
+        try:
+            stat = spec.file.stat()
+        except OSError:
+            raise ValueError(f"buildings file {spec.file} cannot be read") from None
+        try:
+            return _cached_footprints(
+                str(spec.file),
+                stat.st_mtime_ns,
+                stat.st_size,
+                spec.height,
+                spec.name,
+                spec.default_height,
+            )
+        except ValueError as exc:
+            raise ValueError(f"buildings file: {exc}") from None
+
+    def file_buildings(self, first: int = 0, all: bool = False) -> list[Building]:
+        """The buildings of ``buildings_file`` as :class:`Building` objects, in the
+        geometry's units with ``ground.map_origin`` subtracted, named ``building_<n>``
+        from ``first + 1`` where the file gives no name, and those in ``without`` left
+        out (kept with ``all``)."""
+        spec = self.buildings_file
+        if spec is None:
+            return []
+        dx, dy = (0.0, 0.0) if self.ground.map_origin is None else self.ground.map_origin
+        left_out = set() if all else set(spec.without or [])
+        out = []
+        unnamed = first
+        for footprint in self._footprints():
+            name = footprint.name
+            if not name:
+                unnamed += 1
+                name = f"building_{unnamed}"
+            if name in left_out:
+                continue
+            corners = [(float(x - dx), float(y - dy)) for x, y in footprint.footprint]
+            out.append(Building(name=name, footprint=corners, height=footprint.height))
+        return out
+
+    def footprint_notes(self) -> list[str]:
+        """What is worth knowing about the buildings file: footprints with holes, which
+        are built over."""
+        if self.buildings_file is None:
+            return []
+        holed = [f.name or "an unnamed building" for f in self._footprints() if f.holes]
+        if not holed:
+            return []
+        listed = ", ".join(holed[:5]) + (", ..." if len(holed) > 5 else "")
+        return [
+            f"{len(holed)} footprints of the buildings file have holes (courtyards), which "
+            f"are built over: {listed}"
+        ]
+
+    def barrier_names(self) -> list[str]:
+        """The barriers' names, ``barrier_<n>`` for those without one."""
+        return [b.name or f"barrier_{k + 1}" for k, b in enumerate(self.barriers or [])]
+
+    def vegetation_names(self) -> list[str]:
+        """The vegetation's names, ``vegetation_<n>`` for those without one."""
+        return [v.name or f"vegetation_{k + 1}" for k, v in enumerate(self.vegetation or [])]
+
+    def part_names(self) -> list[str]:
+        """The names of an outdoor scene's buildings, barriers and vegetation, in turn:
+        what an insertion loss can be given for (``simulation.insertion_loss_of``)."""
+        return [*self.building_names(), *self.barrier_names(), *self.vegetation_names()]
+
     def describe(self) -> str:
+        if self.ground is not None:
+            parts = ["outdoors"]
+            if self.ground.terrain is not None:
+                parts.append("terrain")
+            for count, one, many in (
+                (len(self.buildings or []) + len(self.file_buildings()), "building", "buildings"),
+                (len(self.barriers or []), "barrier", "barriers"),
+                *(
+                    (sum(v.kind == kind for v in self.vegetation or []), kind, f"{kind}s")
+                    for kind in ("tree", "hedge", "belt")
+                ),
+            ):
+                if count:
+                    parts.append(f"{count} {one if count == 1 else many}")
+            if self.file is not None:
+                parts.append(self.file.name)
+            return ", ".join(parts)
         if self.file is not None:
             return self.file.name + (f" (space {self.space})" if self.space else "")
         units = self.units or "m"
@@ -224,6 +892,119 @@ class Geometry(_Model):
 
 
 DEFAULT_SCATTERING = 0.1
+
+
+class Impedance(_Model):
+    """The acoustic impedance of a porous ground (grass, soil, snow, gravel, asphalt),
+    from its flow resistivity by an empirical model (see
+    :mod:`acoustic_spaces.materials.ground`): a ``preset``, one of the ground classes of
+    Nord2000, or a ``flow_resistivity``; with a ``thickness``, a layer of it on a hard
+    backing.
+
+    A material with an impedance takes its absorption from it, and reflects sound as a
+    ground does: the spherical wave's reflection (Weyl-van der Pol), with its phase and
+    the ground wave near grazing incidence, in place of the absorption."""
+
+    preset: str | None = Field(
+        default=None,
+        description="a ground class of Nord2000: " + ", ".join(GROUND_PRESETS),
+    )
+    model: Literal["miki", "delany_bazley", "two_parameter"] = Field(
+        default="miki",
+        description=(
+            "miki (passive at every frequency), delany_bazley, or two_parameter (a "
+            "porosity that falls with depth)"
+        ),
+    )
+    flow_resistivity: PositiveFloat | None = Field(
+        default=None,
+        description="kPa s/m²; with two_parameter, the effective flow resistivity",
+    )
+    porosity_rate: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="two_parameter: how fast the porosity falls with depth (1/m)",
+    )
+    thickness: PositiveFloat | None = Field(
+        default=None, description="m: a layer of the ground on a hard backing"
+    )
+    reaction: Literal["local", "extended"] | None = Field(
+        default=None,
+        description=(
+            "local (the default): the impedance is the same at every angle; extended: "
+            "sound also travels sideways in the ground, so the impedance a reflection "
+            "meets changes with its angle (soft snow, moss, thin layers; not "
+            "two_parameter)"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _complete(self) -> Impedance:
+        if self.preset is not None and self.preset not in GROUND_PRESETS:
+            close = difflib.get_close_matches(self.preset, list(GROUND_PRESETS), n=1)
+            hint = f"; did you mean {close[0]}?" if close else ""
+            raise ValueError(
+                f"no ground preset named {self.preset!r}{hint} (the presets are "
+                f"{', '.join(GROUND_PRESETS)})"
+            )
+        if (self.preset is None) == (self.flow_resistivity is None):
+            raise ValueError(
+                "give the ground a preset or a flow_resistivity (kPa s/m²), one of them"
+            )
+        if self.model == "two_parameter":
+            if self.porosity_rate is None:
+                raise ValueError("the two_parameter model needs a porosity_rate (1/m)")
+            if self.thickness is not None:
+                raise ValueError(
+                    "the two_parameter model takes no thickness: its porosity falls with depth"
+                )
+        elif self.porosity_rate is not None:
+            raise ValueError("porosity_rate is for the two_parameter model")
+        if self.model == "two_parameter" and self.reaction == "extended":
+            raise ValueError(
+                "the two_parameter model reacts locally: it has no index for the extended reaction"
+            )
+        return self
+
+    @property
+    def resistivity(self) -> float:
+        """The flow resistivity (kPa s/m²), the preset's when a preset is given."""
+        if self.flow_resistivity is not None:
+            return float(self.flow_resistivity)
+        return GROUND_PRESETS[self.preset][0]
+
+    @property
+    def extended(self) -> bool:
+        """Whether the impedance changes with the angle of incidence."""
+        return self.reaction == "extended"
+
+    def admittance(self, f, speed_of_sound: float = 343.0, cosine=None) -> np.ndarray:
+        """The normalised admittance (1 / impedance) at frequencies ``f`` (Hz), in the
+        engine's sign convention, e^(jωt): with the extended reaction, the one met at
+        the incidence ``cosine`` (broadcasting with ``f``; 1 by default, normal
+        incidence); with the local, the same at every angle."""
+        return 1.0 / surface_impedance(
+            f,
+            self.resistivity,
+            self.model,
+            porosity_rate=self.porosity_rate or 0.0,
+            thickness=self.thickness,
+            speed_of_sound=speed_of_sound,
+            cosine=cosine if self.extended else None,
+        )
+
+    def describe(self) -> str:
+        """In a few words: the preset or the flow resistivity, and the rest."""
+        model = {"miki": "Miki", "delany_bazley": "Delany-Bazley", "two_parameter": "two-parameter"}
+        words = [self.preset] if self.preset else []
+        words.append(f"{self.resistivity:g} kPa s/m²")
+        if self.porosity_rate is not None:
+            words.append(f"{self.porosity_rate:g}/m")
+        if self.thickness is not None:
+            words.append(f"{self.thickness:g} m thick")
+        if self.extended:
+            words.append("extended reaction")
+        return f"{model[self.model]}: " + ", ".join(words)
 
 
 class Material(_Model):
@@ -274,7 +1055,19 @@ class Material(_Model):
             "as it passes heads and seats (grazing incidence)"
         ),
     )
+    impedance: Impedance | None = Field(
+        default=None,
+        description=(
+            "a porous ground's impedance (a preset such as grass, or its flow "
+            "resistivity), which gives the absorption and the ground's reflection"
+        ),
+    )
     source: str | None = Field(default=None, description="where the coefficients come from")
+
+    @field_validator("impedance", mode="before")
+    @classmethod
+    def _impedance_preset(cls, value):
+        return {"preset": value} if isinstance(value, str) else value
 
     @field_validator("absorption")
     @classmethod
@@ -320,7 +1113,19 @@ class Material(_Model):
         absorption = scattering = None
         origin = scattering_origin = None
 
-        if self.preset is not None:
+        if self.impedance is not None:
+            if self.preset is not None or self.file is not None:
+                raise ValueError(
+                    "a material with an impedance takes its absorption from it: give no "
+                    "preset or file"
+                )
+            if self.transmission is not None or self.transmission_loss is not None:
+                raise ValueError("a material with an impedance lets no sound through")
+            # Third-octave bands, as the absorption changes fast with frequency; any
+            # absorption values written with it are replaced.
+            self.absorption = None
+            absorption = band_absorption(self.impedance.admittance, len(THIRD_OCTAVE_BANDS_HZ))
+        elif self.preset is not None:
             entry = _database_entry(self.preset, "absorption")
             absorption, extrapolated = _from_data(entry.frequencies, entry.coefficients)
             origin = _describe(entry.source, extrapolated)
@@ -520,6 +1325,15 @@ class DirectivitySpec(_Model):
         ge=0,
         description="SOFA: the measurement to use (a note, say); None averages them all",
     )
+    near_field: bool | None = Field(
+        default=None,
+        description=(
+            "a coherent array: add up its elements' sound one by one, each from where it "
+            "is, in the direct sound and the reflections, rather than send out its "
+            "far-field pattern from one point; for listeners nearer than about its "
+            "length squared over the wavelength"
+        ),
+    )
 
     @field_validator("pattern")
     @classmethod
@@ -539,6 +1353,12 @@ class DirectivitySpec(_Model):
             self.file is None or self.file.suffix.lower() != ".sofa"
         ):
             raise ValueError("measurement is for SOFA directivity files")
+        if (
+            self.near_field
+            and self.array is None
+            and (self.file is None or self.file.suffix.lower() not in (".yaml", ".yml"))
+        ):
+            raise ValueError("near_field is for coherent arrays: an array or a YAML file")
         return self
 
 
@@ -559,10 +1379,19 @@ class Walk(_Model):
         default=90.0,
         description="how fast it turns through a corner facing forward (degrees per second)",
     )
+    doppler: bool = Field(
+        default=False,
+        description=(
+            "the early sound through delays that change as it goes, so its pitch shifts "
+            "(Doppler): for vehicles and aircraft; false crossfades from place to place"
+        ),
+    )
 
 
 class Source(_Model):
     name: str
+    group: str | None = _group_field()
+    enabled: bool | None = _enabled_field()
     position: Vector3
     orientation: Orientation = Field(default_factory=Orientation)
     directivity: PatternName | Literal["lambert"] | DirectivitySpec = Field(
@@ -648,6 +1477,16 @@ class Source(_Model):
     @classmethod
     def _eq_per_band(cls, value: list[float] | None) -> list[float] | None:
         return None if value is None else _per_band_or_third("eq_db", value)
+
+    @field_validator("group")
+    @classmethod
+    def _group(cls, value: str | None) -> str | None:
+        return _group_path(value)
+
+    @property
+    def in_use(self) -> bool:
+        """Whether simulations and maps take it: not left out (``enabled: false``)."""
+        return self.enabled is not False
 
     @model_validator(mode="after")
     def _spectrum_of_a_total(self) -> Source:
@@ -736,15 +1575,628 @@ class Source(_Model):
 
 class Listener(_Model):
     name: str
+    group: str | None = _group_field()
+    enabled: bool | None = _enabled_field()
     position: Vector3
     orientation: Orientation = Field(default_factory=Orientation)
     walk: Walk | None = Field(default=None, description="a path to walk, for a walkthrough")
+
+    @field_validator("group")
+    @classmethod
+    def _group(cls, value: str | None) -> str | None:
+        return _group_path(value)
+
+    @property
+    def in_use(self) -> bool:
+        """Whether simulations and maps take it: not left out (``enabled: false``)."""
+        return self.enabled is not False
 
 
 class Air(_Model):
     temperature_c: float = Field(default=20.0, ge=-20.0, le=50.0)
     humidity_percent: float = Field(default=50.0, ge=0.0, le=100.0)
     pressure_kpa: float = Field(default=101.325, gt=0.0)
+
+
+class Wind(_Model):
+    """The wind over the ground: its speed at a height, the way it blows, and how the
+    speed grows with height."""
+
+    speed_m_s: float = Field(default=0.0, ge=0.0, le=40.0, description="speed at height_m (m/s)")
+    direction_deg: float = Field(
+        default=0.0,
+        description=(
+            "the way it blows to, in degrees counterclockwise from +x seen from above "
+            "(0: along +x, 90: along +y)"
+        ),
+    )
+    height_m: PositiveFloat = Field(default=10.0, description="the height the speed is at (m)")
+    profile: Literal["log", "linear", "constant"] = Field(
+        default="log",
+        description=(
+            "log: speed ln(1 + z/roughness) over the ground's friction, the usual profile; "
+            "linear: in proportion to the height; constant: the same at every height"
+        ),
+    )
+
+
+#: The atmosphere presets: the fields each sets, indicative values (the temperatures
+#: as the ground's plus gradient z + log ln(1 + z / roughness)).
+ATMOSPHERE_PRESETS: dict[str, dict] = {
+    # No wind, the same temperature everywhere: sound goes in straight lines.
+    "neutral": {},
+    # A moderate wind, 5 m/s at 10 m over grass: sound bends down downwind and up
+    # upwind.
+    "windy": {"wind": {"speed_m_s": 5.0}},
+    # Sunshine warming the ground: the air cools with height and sound bends up, with a
+    # shadow zone a few hundred metres away.
+    "sunny_day": {"temperature_log_k": -0.5, "temperature_gradient_k_m": -0.0098},
+    # A clear night cooling the ground: the air warms with height (an inversion) and
+    # sound bends down.
+    "clear_night": {"temperature_log_k": 0.5, "temperature_gradient_k_m": 0.0},
+}
+
+
+#: The turbulence presets: the structure parameters of the temperature (C_T², K² m^-2/3)
+#: and of the wind (C_v², m^4/3 s^-2) near the ground, indicative values.
+TURBULENCE_PRESETS: dict[str, dict] = {
+    # Overcast, a light wind: the air hardly stirs.
+    "weak": {"temperature_structure": 0.001, "wind_structure": 0.03},
+    # A breeze and some sun, the usual day.
+    "moderate": {"temperature_structure": 0.008, "wind_structure": 0.12},
+    # A strong wind or a hot sun: gusty air.
+    "strong": {"temperature_structure": 0.08, "wind_structure": 0.5},
+}
+
+
+def _check_table_rows(table) -> None:
+    heights = [row[0] for row in table]
+    if len(heights) < 2 or heights[0] < 0.0 or np.any(np.diff(heights) <= 0.0):
+        raise ValueError("an atmosphere table has two rows or more, by height from the ground up")
+    if any(row[2] < 0.0 for row in table):
+        raise ValueError("an atmosphere table's wind speeds are not negative")
+
+
+def _check_preset(preset: str) -> None:
+    if preset not in ATMOSPHERE_PRESETS:
+        close = difflib.get_close_matches(str(preset), list(ATMOSPHERE_PRESETS), n=1)
+        hint = f"; did you mean {close[0]}?" if close else ""
+        raise ValueError(
+            f"no atmosphere preset named {preset!r}{hint} (the presets are "
+            f"{', '.join(ATMOSPHERE_PRESETS)})"
+        )
+
+
+class ZoneWind(_Model):
+    """The wind over a weather zone: what it gives replaces the atmosphere's wind, and
+    what it leaves out (None) stays the atmosphere's."""
+
+    speed_m_s: float | None = Field(
+        default=None, ge=0.0, le=40.0, description="speed at height_m (m/s); None: the atmosphere's"
+    )
+    direction_deg: float | None = Field(
+        default=None,
+        description=(
+            "the way it blows to, in degrees counterclockwise from +x seen from above; "
+            "None: the atmosphere's"
+        ),
+    )
+    height_m: PositiveFloat | None = Field(
+        default=None, description="the height the speed is at (m); None: the atmosphere's"
+    )
+    profile: Literal["log", "linear", "constant"] | None = Field(
+        default=None, description="log, linear or constant; None: the atmosphere's"
+    )
+
+
+class _WeatherOverride(_Model):
+    """A weather given over the atmosphere's: what it gives replaces the atmosphere's,
+    what it leaves out stays. A ``preset`` gives that weather whole, its wind blowing
+    the atmosphere's way unless said otherwise; without one, a wind given keeps the
+    atmosphere's direction, height and profile where it leaves them out. Giving the
+    temperature's gradient or log term drops the atmosphere's table, and giving a table
+    drops them."""
+
+    #: What it is called in error messages.
+    _what: ClassVar[str] = "weather"
+
+    name: str | None = Field(default=None, description="None: numbered by its place")
+    preset: str | None = Field(
+        default=None,
+        description="a weather of its own to start from: " + ", ".join(ATMOSPHERE_PRESETS),
+    )
+    wind: ZoneWind | None = Field(
+        default=None,
+        description=(
+            "the wind, what it gives replacing the atmosphere's; None: the atmosphere's "
+            "(none with a preset)"
+        ),
+    )
+    temperature_gradient_k_m: float | None = Field(
+        default=None,
+        ge=-0.2,
+        le=0.2,
+        description=(
+            "how the temperature changes per metre of height (K/m); None: the atmosphere's"
+        ),
+    )
+    temperature_log_k: float | None = Field(
+        default=None,
+        ge=-5.0,
+        le=5.0,
+        description=(
+            "a change of temperature fastest near the ground, in K times ln(1 + z / "
+            "roughness_m); None: the atmosphere's"
+        ),
+    )
+    roughness_m: PositiveFloat | None = Field(
+        default=None,
+        le=2.0,
+        description="the ground's roughness length (m); None: the atmosphere's",
+    )
+    table: list[tuple[float, float, float]] | None = Field(
+        default=None,
+        description=(
+            "a measured profile in place of the formulas: [height above the ground (m), "
+            "temperature (°C), wind speed (m/s)] rows, by height"
+        ),
+    )
+    temperature_c: float | None = Field(
+        default=None,
+        ge=-20.0,
+        le=50.0,
+        description="the temperature at the ground (°C); None: the scene's air's",
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> _WeatherOverride:
+        if self.preset is not None:
+            _check_preset(self.preset)
+        if self.table is not None:
+            _check_table_rows(self.table)
+            if self.temperature_gradient_k_m is not None or self.temperature_log_k is not None:
+                raise ValueError(
+                    f"give a {self._what} a table or the temperature's gradient and log "
+                    "terms, not both"
+                )
+        return self
+
+
+class WeatherZone(_WeatherOverride):
+    """A part of the scene over which the weather differs: the wind slowed in the lee of
+    buildings or over a wood, a sea breeze over the water, an inversion over a lake. A
+    polygon on the ground, in the geometry's units; where zones overlap the first wins,
+    and outside every zone the atmosphere's own weather holds. Its weather is given
+    over the atmosphere's (see :class:`_WeatherOverride`); the eddies are the
+    atmosphere's."""
+
+    _what: ClassVar[str] = "weather zone"
+
+    name: str | None = Field(default=None, description="None: weather_1, weather_2...")
+    polygon: list[tuple[float, float]] = Field(
+        min_length=3, description="(x, y) corners of the zone, in order"
+    )
+
+
+class Turbulence(_Model):
+    """The eddies of the wind and of the temperature, which make sound outdoors flicker:
+    the paths of one sound that take different ways stop adding in step (the ground dip
+    fills in), and sound is scattered into shadow zones. Their strength is given by the
+    structure parameters of the temperature and of the wind, C_T² and C_v², with a von
+    Kármán spectrum whose largest eddies are ``outer_scale_m`` across."""
+
+    preset: str | None = Field(
+        default=None,
+        description="a strength to start from: " + ", ".join(TURBULENCE_PRESETS),
+    )
+    temperature_structure: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=10.0,
+        description=(
+            "the temperature's structure parameter C_T² (K² m^-2/3): about 0.001 to 1 near "
+            "the ground"
+        ),
+    )
+    wind_structure: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=10.0,
+        description=(
+            "the wind's structure parameter C_v² (m^4/3 s^-2): about 0.01 to 1 near the ground"
+        ),
+    )
+    outer_scale_m: PositiveFloat = Field(
+        default=10.0,
+        le=1000.0,
+        description="the size of the largest eddies (m): some metres near the ground",
+    )
+    height_m: PositiveFloat | None = Field(
+        default=None,
+        le=100.0,
+        description=(
+            "the height (m) the structure parameters hold at, from which the eddies "
+            "weaken with height as (z / height_m)^-falloff, taken no nearer the ground "
+            "than outer_scale_m; None: the same at every height"
+        ),
+    )
+    falloff: float = Field(
+        default=2.0 / 3.0,
+        ge=0.0,
+        le=2.0,
+        description=(
+            "how fast the eddies weaken with height, the power of z / height_m they fall "
+            "by: 2/3 in a neutral or stable surface layer, up to 4/3 in strong sunshine"
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_preset(cls, data):
+        if isinstance(data, str):
+            data = {"preset": data}
+        if isinstance(data, dict) and data.get("preset") is not None:
+            preset = data["preset"]
+            if preset not in TURBULENCE_PRESETS:
+                close = difflib.get_close_matches(str(preset), list(TURBULENCE_PRESETS), n=1)
+                hint = f"; did you mean {close[0]}?" if close else ""
+                raise ValueError(
+                    f"no turbulence preset named {preset!r}{hint} (the presets are "
+                    f"{', '.join(TURBULENCE_PRESETS)})"
+                )
+            data = {**TURBULENCE_PRESETS[preset], **data}
+        return data
+
+    @property
+    def calm(self) -> bool:
+        """Whether there are no eddies at all."""
+        return self.temperature_structure == 0.0 and self.wind_structure == 0.0
+
+
+class WeatherClass(_WeatherOverride):
+    """A weather that holds for a share of the time, for the levels over a long term
+    (:class:`LongTerm`): downwind, upwind, a clear night's inversion... Its weather is
+    given over the scene's atmosphere's (see :class:`_WeatherOverride`), the eddies
+    too, and the scene's weather zones hold in every class."""
+
+    _what: ClassVar[str] = "weather class"
+
+    name: str | None = Field(default=None, description="None: class_1, class_2...")
+    share: float | dict[str, float] = Field(
+        description=(
+            "the share of the time this weather holds (0 to 1): one share for every "
+            "period, or one per period by name; over the classes the shares of each "
+            "period add up to 1"
+        )
+    )
+    turbulence: Turbulence | None = Field(
+        default=None, description="the eddies in this weather; None: the atmosphere's"
+    )
+
+    @field_validator("share")
+    @classmethod
+    def _check_share(cls, share):
+        values = share.values() if isinstance(share, dict) else [share]
+        if any(not 0.0 <= v <= 1.0 for v in values):
+            raise ValueError("a weather class's share of the time is between 0 and 1")
+        return share
+
+
+class Period(_Model):
+    """A part of the day the rating level over a long term is taken over: its hours and
+    the penalty added to its level in the rating (5 dB in the evening and 10 dB at night
+    for L_den)."""
+
+    name: str = Field(min_length=1)
+    hours: PositiveFloat = Field(le=24.0, description="how many hours a day it lasts")
+    penalty_db: float = Field(
+        default=0.0, ge=0.0, le=20.0, description="added to its level in the rating"
+    )
+
+
+DEFAULT_PERIODS: tuple[dict, ...] = (
+    {"name": "day", "hours": 12.0},
+    {"name": "evening", "hours": 4.0, "penalty_db": 5.0},
+    {"name": "night", "hours": 8.0, "penalty_db": 10.0},
+)
+
+
+class LongTerm(_Model):
+    """The levels over a long term, outdoors: the weather changes from day to day, and
+    the level over a year is the energy mean of the levels in each weather, weighted by
+    the share of the time it holds (ISO 1996-2, CNOSSOS-EU, Nord2000). The scene is run
+    once in each weather class, and the results give the level in each class, in each
+    period of the day (the classes' levels, each by its share in that period) and the
+    rating level over the day (the periods' levels, each by its hours, with its penalty:
+    L_den with the default periods)."""
+
+    periods: list[Period] | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "the parts of the day; None: day 12 h, evening 4 h +5 dB, night 8 h +10 dB (L_den)"
+        ),
+    )
+    classes: list[WeatherClass] = Field(
+        min_length=1, description="the weathers, each with its share of the time"
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> LongTerm:
+        names = self.period_names()
+        twice = sorted({n for n in names if names.count(n) > 1})
+        if twice:
+            raise ValueError(f"long_term.periods names {twice[0]!r} twice")
+        classes = self.class_names()
+        twice = sorted({n for n in classes if classes.count(n) > 1})
+        if twice:
+            raise ValueError(f"long_term.classes names {twice[0]!r} twice")
+        for name, given in zip(classes, self.classes, strict=True):
+            if isinstance(given.share, dict):
+                unknown = sorted(set(given.share) - set(names))
+                if unknown:
+                    raise ValueError(
+                        f"weather class {name!r} gives a share for {unknown[0]!r}, which is "
+                        f"no period (they are: {', '.join(names)})"
+                    )
+        shares = self.shares()
+        for k, period in enumerate(names):
+            total = float(shares[:, k].sum())
+            if abs(total - 1.0) > 1e-3:
+                raise ValueError(
+                    f"the weather classes' shares of the {period} add up to {total:g}, not 1"
+                )
+        return self
+
+    def class_names(self) -> list[str]:
+        """The classes' names, ``class_<n>`` for those without one."""
+        return [c.name or f"class_{k + 1}" for k, c in enumerate(self.classes)]
+
+    def period_list(self) -> list[Period]:
+        """The periods of the day, L_den's when none are given."""
+        if self.periods is not None:
+            return list(self.periods)
+        return [Period(**p) for p in DEFAULT_PERIODS]
+
+    def period_names(self) -> list[str]:
+        return [p.name for p in self.period_list()]
+
+    def shares(self) -> np.ndarray:
+        """(classes, periods) the share of each period's time each class holds; a class
+        that gives no share for a period, in a mapping, holds none of it."""
+        periods = self.period_list()
+        out = np.zeros((len(self.classes), len(periods)))
+        for row, given in enumerate(self.classes):
+            for col, period in enumerate(periods):
+                share = given.share
+                out[row, col] = share.get(period.name, 0.0) if isinstance(share, dict) else share
+        return out
+
+    def hours(self) -> np.ndarray:
+        """(periods,) how many hours a day each period lasts."""
+        return np.array([p.hours for p in self.period_list()], dtype=float)
+
+    def penalties(self) -> np.ndarray:
+        """(periods,) the penalty added to each period's level in the rating (dB)."""
+        return np.array([p.penalty_db for p in self.period_list()], dtype=float)
+
+
+class Atmosphere(_Model):
+    """How the speed of sound changes with height outdoors, which bends sound: the
+    temperature (warmer air carries sound faster) and the wind (sound goes faster with
+    it). Both vary with height only. The scene's air temperature is the temperature at
+    the ground. Heights are in metres above the ground. Eddies of both (``turbulence``)
+    make the sound flicker."""
+
+    preset: str | None = Field(
+        default=None,
+        description="a weather to start from: " + ", ".join(ATMOSPHERE_PRESETS),
+    )
+    wind: Wind | None = Field(default=None, description="None: no wind")
+    temperature_gradient_k_m: float = Field(
+        default=0.0,
+        ge=-0.2,
+        le=0.2,
+        description="how the temperature changes per metre of height (K/m)",
+    )
+    temperature_log_k: float = Field(
+        default=0.0,
+        ge=-5.0,
+        le=5.0,
+        description=(
+            "a change of temperature fastest near the ground, in K times ln(1 + z / "
+            "roughness_m): negative on a sunny day, positive on a clear night"
+        ),
+    )
+    roughness_m: PositiveFloat = Field(
+        default=0.05,
+        le=2.0,
+        description=(
+            "the ground's roughness length (m), for the log profiles: 0.01 to 0.1 over grass"
+        ),
+    )
+    table: list[tuple[float, float, float]] | None = Field(
+        default=None,
+        description=(
+            "measured profile in place of the formulas: [height above the ground (m), "
+            "temperature (°C), wind speed (m/s)] rows, by height; between them linear, "
+            "above the top as at the top"
+        ),
+    )
+    turbulence: Turbulence | None = Field(
+        default=None,
+        description="the eddies of the wind and of the temperature; None: none",
+    )
+    zones: list[WeatherZone] | None = Field(
+        default=None,
+        description=(
+            "parts of the scene with weather of their own (the wind slowed in the lee of "
+            "buildings, a breeze over the water); outside them the weather above holds"
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_preset(cls, data):
+        if isinstance(data, dict) and data.get("preset") is not None:
+            preset = data["preset"]
+            _check_preset(preset)
+            given = dict(data)
+            data = {**ATMOSPHERE_PRESETS[preset], **given}
+            if isinstance(given.get("wind"), dict) and "wind" in ATMOSPHERE_PRESETS[preset]:
+                data["wind"] = {**ATMOSPHERE_PRESETS[preset]["wind"], **given["wind"]}
+        return data
+
+    @model_validator(mode="after")
+    def _check_table(self) -> Atmosphere:
+        if self.table is None:
+            return self
+        # Zeros are what a written-out scene has (Scene.to_data writes every field).
+        formulas = self.temperature_gradient_k_m != 0.0 or self.temperature_log_k != 0.0
+        if self.preset is None and formulas:
+            raise ValueError(
+                "give the atmosphere a table or the temperature's gradient and log terms, not both"
+            )
+        _check_table_rows(self.table)
+        return self
+
+    def zone_names(self) -> list[str]:
+        """The weather zones' names, ``weather_<n>`` for those without one."""
+        return [z.name or f"weather_{k + 1}" for k, z in enumerate(self.zones or [])]
+
+    def weathers(self) -> list[Atmosphere]:
+        """The atmosphere's own weather (first) and each zone's, as an atmosphere each,
+        without zones or eddies: a zone's preset gives it that weather whole, and its
+        other fields replace the atmosphere's (see :class:`WeatherZone`)."""
+        own = self.model_copy(update={"zones": None, "turbulence": None})
+        return [own, *(self._resolved(zone) for zone in self.zones or [])]
+
+    def under(self, given: WeatherClass) -> Atmosphere:
+        """This atmosphere in a weather class: the class's weather over its own (see
+        :class:`_WeatherOverride`), the class's eddies or its own, and its zones."""
+        values = self._values(given)
+        values["turbulence"] = given.turbulence if given.turbulence is not None else self.turbulence
+        values["zones"] = self.zones
+        return Atmosphere(**values)
+
+    def _resolved(self, zone: _WeatherOverride) -> Atmosphere:
+        return Atmosphere(**self._values(zone))
+
+    def _values(self, zone: _WeatherOverride) -> dict:
+        """The fields of this atmosphere's weather with ``zone``'s given over it."""
+        base = None if self.wind is None else self.wind.model_dump()
+        if zone.preset is not None:
+            values: dict = {
+                "preset": zone.preset,
+                "wind": None,
+                "temperature_gradient_k_m": 0.0,
+                "temperature_log_k": 0.0,
+                "table": None,
+                **{
+                    k: (dict(v) if isinstance(v, dict) else v)
+                    for k, v in ATMOSPHERE_PRESETS[zone.preset].items()
+                },
+            }
+            if isinstance(values["wind"], dict) and base is not None:
+                # The preset's wind blows the atmosphere's way, at its height.
+                values["wind"] = {**base, **values["wind"]}
+        else:
+            values = {
+                "wind": base,
+                "temperature_gradient_k_m": self.temperature_gradient_k_m,
+                "temperature_log_k": self.temperature_log_k,
+                "table": self.table,
+            }
+        values["roughness_m"] = self.roughness_m
+        if zone.wind is not None:
+            given = {k: v for k, v in zone.wind.model_dump().items() if v is not None}
+            start = values["wind"] if isinstance(values["wind"], dict) else base or {}
+            values["wind"] = {**start, **given}
+        for name in ("temperature_gradient_k_m", "temperature_log_k", "roughness_m"):
+            if getattr(zone, name) is not None:
+                values[name] = getattr(zone, name)
+        if zone.table is not None:
+            values["table"] = zone.table
+        elif zone.temperature_gradient_k_m is not None or zone.temperature_log_k is not None:
+            values["table"] = None
+        if values["table"] is not None:
+            values["temperature_gradient_k_m"] = values["temperature_log_k"] = 0.0
+        return values
+
+    def ground_temperatures(self, ground_c: float) -> list[float]:
+        """The temperature at the ground (°C) under the atmosphere's own weather
+        (``ground_c``, the scene's) and in each zone, in :meth:`weathers` order."""
+        zones = self.zones or []
+        return [
+            ground_c,
+            *(ground_c if z.temperature_c is None else z.temperature_c for z in zones),
+        ]
+
+    def to_wind(self) -> np.ndarray:
+        """(2,) the unit vector the wind blows along."""
+        angle = math.radians(self.wind.direction_deg if self.wind is not None else 0.0)
+        return np.array([math.cos(angle), math.sin(angle)])
+
+    def temperature(self, z, ground_c: float) -> np.ndarray:
+        """The temperature (°C) at heights ``z`` (m) above the ground, the ground's
+        being ``ground_c`` (a table gives its own)."""
+        z = np.maximum(np.asarray(z, dtype=float), 0.0)
+        if self.table is not None:
+            rows = np.asarray(self.table, dtype=float)
+            return np.interp(z, rows[:, 0], rows[:, 1])
+        return (
+            ground_c
+            + self.temperature_gradient_k_m * z
+            + self.temperature_log_k * np.log1p(z / self.roughness_m)
+        )
+
+    def wind_speed(self, z) -> np.ndarray:
+        """The wind's speed (m/s) at heights ``z`` (m) above the ground."""
+        z = np.maximum(np.asarray(z, dtype=float), 0.0)
+        if self.table is not None:
+            rows = np.asarray(self.table, dtype=float)
+            return np.interp(z, rows[:, 0], rows[:, 2])
+        wind = self.wind
+        if wind is None or wind.speed_m_s == 0.0:
+            return np.zeros_like(z)
+        if wind.profile == "constant":
+            return np.full_like(z, wind.speed_m_s)
+        if wind.profile == "linear":
+            return wind.speed_m_s * z / wind.height_m
+        return (
+            wind.speed_m_s
+            * np.log1p(z / self.roughness_m)
+            / math.log1p(wind.height_m / self.roughness_m)
+        )
+
+    def sound_speed(self, z, ground_c: float, towards=None) -> np.ndarray:
+        """The speed of sound (m/s) at heights ``z`` (m) above the ground: in still air,
+        or the effective speed along the horizontal direction ``towards`` (2,), the
+        wind's component along it added."""
+        z = np.asarray(z, dtype=float)
+        speed = SOUND_SPEED_0C * np.sqrt(1.0 + self.temperature(z, ground_c) / 273.15)
+        if towards is not None:
+            along = float(np.dot(self.to_wind(), towards))
+            speed = speed + along * self.wind_speed(z)
+        return speed
+
+    @property
+    def still(self) -> bool:
+        """Whether sound goes in straight lines: no wind and one temperature, over the
+        whole scene (the zones too)."""
+        if self.zones:
+            return all(w.still for w in self.weathers())
+        if self.table is not None:
+            rows = np.asarray(self.table, dtype=float)
+            return bool(np.all(rows[:, 1] == rows[0, 1]) and np.all(rows[:, 2] == 0.0))
+        calm = self.wind is None or self.wind.speed_m_s == 0.0
+        return calm and self.temperature_gradient_k_m == 0.0 and self.temperature_log_k == 0.0
+
+
+#: The highest ``simulation.early.coherent_max_band_hz`` in a room, and the default
+#: outdoors.
+INDOOR_COHERENT_MAX_BAND_HZ = 500
+OUTDOOR_COHERENT_MAX_BAND_HZ = 8000
 
 
 class EarlyStage(_Model):
@@ -762,13 +2214,35 @@ class EarlyStage(_Model):
             "of the direct sound over two edges in turn"
         ),
     )
-    coherent_max_band_hz: Literal[63, 125, 250, 500] | None = Field(
+    diffraction_reflections: Literal["one_side", "both_sides"] = Field(
+        default="one_side",
+        description=(
+            "with first_order or second_order diffraction, where a path over one edge may "
+            "reflect: on one side of the edge, before it or after it (off the ground on "
+            "the way to a barrier, or off a façade behind it), or on both sides, before "
+            "and after (off the ground on the way to a barrier and again behind it: the "
+            "four paths over a barrier on the ground)"
+        ),
+    )
+    parabolic_equation: Literal["narrow_angle", "wide_angle"] = Field(
+        default="narrow_angle",
+        description=(
+            "outdoors in wind or temperature gradients, the parabolic equation that gives "
+            "the sound over the open ground in the low bands and in the shadows: "
+            "narrow_angle (the Green's function one: within 0.1 dB to 1 km in the gradients "
+            "near the ground that make the weather's shadows and focusing) or wide_angle "
+            "(split-step Padé: also sound that a gradient reaching hundreds of metres up "
+            "bends back at up to 40 degrees, over many kilometres; several times the work)"
+        ),
+    )
+    coherent_max_band_hz: Literal[63, 125, 250, 500, 1000, 2000, 4000, 8000] | None = Field(
         default=125,
         description=(
             "the highest octave band in which the early paths add in pressure, with the "
             "phase of every reflection and of the sound bent round edges, as they do at "
-            "low frequencies, rather than in energy; null for none. The wave solver's "
-            "bands take their place when it runs up to this band or higher"
+            "low frequencies, rather than in energy; null for none. Above 500 Hz only "
+            "outdoors, where every band is the default. The wave solver's bands take "
+            "their place when it runs up to this band or higher"
         ),
     )
 
@@ -887,6 +2361,16 @@ class WaveStage(_Model):
             "only the standard one has the matched layer"
         ),
     )
+    wind: Literal["effective", "moving"] = Field(
+        default="effective",
+        description=(
+            "outdoors, how it takes the wind: effective (a speed of sound that the wind's "
+            "component along the way from the source changes, as the rays and the parabolic "
+            "equation take it) or moving (the air moves, so sound going against the wind is "
+            "slower whichever way it turned, off a building too; three to four times the "
+            "work, on the CPU)"
+        ),
+    )
     device: Literal["cpu", "gpu", "auto"] | None = Field(
         default=None,
         description=(
@@ -908,8 +2392,9 @@ class Performance(_Model):
         default=0,
         ge=0,
         description=(
-            "worker threads for ray tracing and the wave solver on the CPU; 0 uses every "
-            "core. Fewer leave the computer free for other work"
+            "worker threads for ray tracing and the wave solver on the CPU, and for "
+            "writing the responses' files; 0 uses every core. Fewer leave the computer "
+            "free for other work"
         ),
     )
     ray_tree: Literal["sah", "median"] = Field(
@@ -1006,6 +2491,15 @@ class Simulation(_Model):
     ir_length_s: float = Field(default=2.0, gt=0.0)
     sample_rate: int = Field(default=48_000, ge=8_000, le=192_000)
     seed: int | None = Field(default=None, ge=0, description="random seed, for reproducible runs")
+    insertion_loss_of: list[str] | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "outdoors: buildings, barriers or vegetation, by name, whose insertion loss the "
+            "simulate and map commands give: the scene is also run without them, and the "
+            "level without them less the level with them is the insertion loss"
+        ),
+    )
 
 
 class Coverage(_Model):
@@ -1049,6 +2543,10 @@ class Scene(_Model):
     sources: list[Source] = Field(min_length=1)
     listeners: list[Listener] = Field(min_length=1)
     air: Air = Field(default_factory=Air)
+    atmosphere: Atmosphere | None = Field(
+        default=None,
+        description="outdoors: wind and temperature changing with height, which bend sound",
+    )
     simulation: Simulation = Field(default_factory=Simulation)
     outputs: list[Output] = Field(
         default_factory=lambda: [Output(format="mono")],
@@ -1057,9 +2555,46 @@ class Scene(_Model):
     coverage: Coverage | None = Field(
         default=None, description="coverage map settings (map command); None uses the defaults"
     )
+    long_term: LongTerm | None = Field(
+        default=None,
+        description=(
+            "outdoors: the weather classes and the periods of the day the levels over a "
+            "long term are rated over (L_den); the scene is run once in each class"
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_references(self) -> Scene:
+        if self._default_sky() and SKY not in self.materials:
+            self.materials[SKY] = sky_material()
+        early = self.simulation.early
+        if self.geometry.ground is not None:
+            # Over the ground the direct sound and its reflection interfere in every
+            # band (the ground dip), and the paths are few.
+            if "coherent_max_band_hz" not in early.model_fields_set:
+                early.coherent_max_band_hz = OUTDOOR_COHERENT_MAX_BAND_HZ
+            if (
+                self.geometry.ground.terrain is not None
+                and self.atmosphere is not None
+                and not self.atmosphere.still
+            ):
+                raise ValueError(
+                    "wind and temperature profiles over a terrain are not modelled yet: the "
+                    "bent paths, the parabolic equation and the wave solver's weather take "
+                    "the ground as flat; leave the atmosphere out (or keep only its "
+                    "turbulence) with a terrain"
+                )
+        elif self.atmosphere is not None:
+            raise ValueError(
+                "atmosphere is for outdoor scenes (geometry.ground): in a room the air is "
+                "one temperature and still"
+            )
+        elif (early.coherent_max_band_hz or 0) > INDOOR_COHERENT_MAX_BAND_HZ:
+            raise ValueError(
+                f"simulation.early.coherent_max_band_hz goes up to "
+                f"{INDOOR_COHERENT_MAX_BAND_HZ} Hz in a room, whose early paths are many; "
+                "higher bands are for outdoor scenes"
+            )
         referenced = set(self.assignments.values())
         if self.default_material is not None:
             referenced.add(self.default_material)
@@ -1070,7 +2605,68 @@ class Scene(_Model):
         duplicates = sorted({n for n in names if names.count(n) > 1})
         if duplicates:
             raise ValueError(f"source and listener names must be unique: {', '.join(duplicates)}")
+        if self.long_term is not None and self.geometry.ground is None:
+            raise ValueError("long_term is for outdoor scenes (geometry.ground)")
+        removed = self.simulation.insertion_loss_of
+        if removed is not None:
+            if self.geometry.ground is None:
+                raise ValueError(
+                    "simulation.insertion_loss_of is for outdoor scenes (geometry.ground): "
+                    "it names their buildings, barriers or vegetation"
+                )
+            parts = self.geometry.part_names()
+            unknown = [name for name in removed if name not in parts]
+            if unknown:
+                known = ", ".join(parts) or "none"
+                raise ValueError(
+                    f"simulation.insertion_loss_of names {unknown[0]!r}, which is no "
+                    f"building, barrier or vegetation of the scene (they are: {known})"
+                )
+            twice = sorted({name for name in removed if removed.count(name) > 1})
+            if twice:
+                raise ValueError(f"simulation.insertion_loss_of names {twice[0]!r} twice")
         return self
+
+    def under(self, given: WeatherClass) -> Scene:
+        """This outdoor scene in a weather class: its atmosphere under the class's weather
+        (:meth:`Atmosphere.under`), the air at the class's ground temperature when it
+        gives one, and without ``long_term``."""
+        data = self.to_data()
+        atmosphere = self.atmosphere or Atmosphere()
+        data["atmosphere"] = atmosphere.under(given).model_dump(mode="json", exclude_none=True)
+        if given.temperature_c is not None:
+            data.setdefault("air", {})["temperature_c"] = given.temperature_c
+        data.pop("long_term", None)
+        return Scene.model_validate(data)
+
+    def without(self, names: Sequence[str]) -> Scene:
+        """This outdoor scene without the buildings, barriers and vegetation of these
+        names (see :meth:`Geometry.part_names`), and without ``insertion_loss_of``."""
+        parts = self.geometry.part_names()
+        unknown = [name for name in names if name not in parts]
+        if unknown:
+            raise ValueError(f"no building, barrier or vegetation is named {unknown[0]!r}")
+        data = self.to_data()
+        geometry = data["geometry"]
+        own = len(self.geometry.buildings or [])
+        for kind, kept in (
+            ("buildings", self.geometry.building_names()[:own]),
+            ("barriers", self.geometry.barrier_names()),
+            ("vegetation", self.geometry.vegetation_names()),
+        ):
+            if kind not in geometry:
+                continue
+            geometry[kind] = [
+                item for item, name in zip(geometry[kind], kept, strict=True) if name not in names
+            ]
+            if not geometry[kind]:
+                del geometry[kind]
+        from_file = [b.name for b in self.geometry.file_buildings(own) if b.name in names]
+        if from_file:
+            spec = geometry["buildings_file"]
+            spec["without"] = [*(spec.get("without") or []), *from_file]
+        data["simulation"].pop("insertion_loss_of", None)
+        return Scene.model_validate(data)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> Scene:
@@ -1087,9 +2683,22 @@ class Scene(_Model):
         """The scene as plain YAML data, dicts and lists. Settings left unset are left out,
         apart from those whose null is not their default."""
         data = self.model_dump(mode="json", exclude_none=True)
+        for name, material in self.materials.items():
+            if material.impedance is not None:  # the impedance gives the absorption
+                data["materials"][name].pop("absorption", None)
         if self.simulation.early.coherent_max_band_hz is None:
             data["simulation"]["early"]["coherent_max_band_hz"] = None
+        # The open sky's material is added when the scene is read: left out, as written.
+        if self._default_sky() and self.materials.get(SKY) == sky_material():
+            del data["materials"][SKY]
         return data
+
+    def _default_sky(self) -> bool:
+        """Whether the sky of an outdoor scene takes the built-in open sky: the scene
+        assigns the sky no material of its own."""
+        return self.geometry.ground is not None and not any(
+            key.casefold() == SKY for key in self.assignments
+        )
 
     def to_yaml(self, path: str | Path) -> None:
         """Write the scene file. Paths to files under its folder are written relative to
@@ -1100,6 +2709,11 @@ class Scene(_Model):
         geometry = data["geometry"]
         if "file" in geometry:
             geometry["file"] = _portable(geometry["file"], base)
+        terrain = geometry.get("ground", {}).get("terrain", {})
+        if "file" in terrain:
+            terrain["file"] = _portable(terrain["file"], base)
+        if "file" in geometry.get("buildings_file", {}):
+            geometry["buildings_file"]["file"] = _portable(geometry["buildings_file"]["file"], base)
         for material in data["materials"].values():
             if "file" in material:
                 material["file"] = _portable(material["file"], base)
@@ -1107,16 +2721,41 @@ class Scene(_Model):
             if "hrtf" in output:
                 output["hrtf"] = _portable(output["hrtf"], base)
         for source in data["sources"]:
-            directivity = source.get("directivity")
-            if not isinstance(directivity, dict):
-                continue
             # An inline array's element may have a file of its own.
-            element = directivity.get("array", {}).get("element")
-            for spec in (directivity, element):
-                if isinstance(spec, dict) and "file" in spec:
+            for spec in directivity_entries(source.get("directivity")):
+                if "file" in spec:
                     spec["file"] = _portable(spec["file"], base)
         with path.open("w", encoding="utf-8") as fh:
             yaml.safe_dump(data, fh, sort_keys=False)
+
+    def files(self) -> list[Path]:
+        """The files the scene uses, each once: its model, terrain and map of buildings,
+        material tables, source directivities (with the files a coherent array names for
+        its element, in the scene or in its YAML file) and HRTFs."""
+        from acoustic_spaces.directivity import directivity_files
+
+        geometry = self.geometry
+        files = [geometry.file] if geometry.file is not None else []
+        if geometry.ground is not None and geometry.ground.terrain is not None:
+            files += [geometry.ground.terrain.file] if geometry.ground.terrain.file else []
+        if geometry.buildings_file is not None:
+            files.append(geometry.buildings_file.file)
+        files += [m.file for m in self.materials.values() if m.file is not None]
+        for source in self.sources:
+            files += directivity_files(source.directivity)
+        files += [o.hrtf for o in self.outputs if o.hrtf is not None]
+        return list(dict.fromkeys(Path(f) for f in files))
+
+
+def directivity_entries(spec) -> list[dict]:
+    """A source's directivity entry as scene data (a dict, or a pattern's name) and, for
+    an inline array, its element's entry, and so on down: the entries that can name a
+    file."""
+    entries = []
+    while isinstance(spec, dict):
+        entries.append(spec)
+        spec = (spec.get("array") or {}).get("element")
+    return entries
 
 
 def _portable(file: str, base: Path) -> str:

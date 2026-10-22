@@ -1,5 +1,5 @@
-"""Simulations and coverage maps in the background, so the editor stays responsive
-while rays fly.
+"""Simulations, coverage maps and exports in the background, so the editor stays
+responsive while rays fly.
 
 The compiled tracer releases Python's lock while it works, so the window keeps
 drawing. A cancelled run stops at the next stage (the early or late part of the next
@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 from PySide6.QtCore import QThread, Signal
 
-from acoustic_spaces.engine import coverage_map, simulate
+from acoustic_spaces.engine.long_term import coverage_map, simulate
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene.model import Simulation
 
@@ -21,7 +21,10 @@ class Cancelled(Exception):
 
 
 class SimulationJob(QThread):
-    """Runs :func:`acoustic_spaces.engine.simulate` on a room in a worker thread."""
+    """Runs :func:`acoustic_spaces.engine.simulate` on a room in a worker thread, and
+    again without what ``simulation.insertion_loss_of`` names, for its insertion loss
+    (:mod:`acoustic_spaces.engine.insertion`), and in each weather class of the scene's
+    ``long_term`` (:mod:`acoustic_spaces.engine.long_term`)."""
 
     #: What it runs, for messages.
     kind = "simulation"
@@ -79,8 +82,9 @@ class SimulationJob(QThread):
 
 
 class MapJob(SimulationJob):
-    """Runs :func:`acoustic_spaces.engine.coverage_map`; ``done`` carries the
-    :class:`~acoustic_spaces.engine.CoverageResult`."""
+    """Runs :func:`acoustic_spaces.engine.coverage_map` (also for an insertion loss and
+    in weather classes);
+    ``done`` carries the :class:`~acoustic_spaces.engine.CoverageResult`."""
 
     kind = "coverage map"
 
@@ -103,4 +107,22 @@ class TuneJob(SimulationJob):
         return tuning.tune(self.room, threads=self.threads, say=self._say, keep=False)
 
 
-__all__ = ["Cancelled", "MapJob", "SimulationJob", "TuneJob"]
+class ExportJob(SimulationJob):
+    """Writes the responses of a run into a folder
+    (:func:`acoustic_spaces.results.write_results`, as ``acoustic-spaces simulate``
+    does); ``done`` carries the report. Cancelled, it stops before the next response."""
+
+    kind = "export"
+
+    def __init__(self, result, folder) -> None:
+        super().__init__(result.room)
+        self.result = result
+        self.folder = folder
+
+    def compute(self):
+        from acoustic_spaces.results import write_results
+
+        return write_results(self.result, self.folder, progress=self._say)
+
+
+__all__ = ["Cancelled", "ExportJob", "MapJob", "SimulationJob", "TuneJob"]

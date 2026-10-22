@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"name": "east_house", "height": 7},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[25, 70], [37, 70], [37, 80], [25, 80], [25, 70]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {"name": "west_house", "height": 7},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-37, 70], [-25, 70], [-25, 80], [-37, 80], [-37, 70]]]
+      }
+    }
+  ]
+}

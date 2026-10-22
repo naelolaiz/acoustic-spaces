@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -106,11 +106,28 @@ def _branch_values(
     return 1j * s * gamma / (-4.0 * q / (w0 * t) * half + 1j * s + q * w0 * t * c)
 
 
+def _relaxation_values(f: np.ndarray, conductance, corner, rate: float | None) -> np.ndarray:
+    """The admittances (branches, len(f)) of branches without mass, 1 / (R + S / s),
+    of conductance 1 / R and corner frequency S / (2 pi R): exact, or with ``rate`` the
+    scheme's at that time step."""
+    w = 2.0 * np.pi * np.asarray(f, dtype=float)[None, :]
+    gamma = np.asarray(conductance, float)[:, None]
+    wc = 2.0 * np.pi * np.asarray(corner, float)[:, None]
+    if rate is None:
+        return gamma * 1j * w / (1j * w + wc)
+    # r (z - 1/z) W / 2 + q (z + 1/z) W / 2 = (z - 1/z) P / 2, with q = S T.
+    t = 1.0 / rate
+    s, c = np.sin(w * t), np.cos(w * t)
+    return gamma * 1j * s / (1j * s + wc * t * c)
+
+
 @dataclass(frozen=True)
 class Admittance:
     """A locally reacting surface's specific admittance: ``beta`` plus one resonant
     branch per entry of ``conductance`` (its admittance at resonance, 1 / R), ``quality``
-    and ``frequency_hz``."""
+    and ``frequency_hz``, and one branch without mass per entry of ``relaxation`` (its
+    admittance at high frequencies, 1 / R) and ``relaxation_hz`` (its corner frequency,
+    S / (2 pi R)), as a porous ground's admittance needs."""
 
     beta: float
     conductance: np.ndarray = field(default_factory=lambda: np.zeros(0))
@@ -118,6 +135,8 @@ class Admittance:
     frequency_hz: np.ndarray = field(default_factory=lambda: np.zeros(0))
     #: The band absorption the fit reached, or None when not fitted.
     achieved: np.ndarray | None = None
+    relaxation: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    relaxation_hz: np.ndarray = field(default_factory=lambda: np.zeros(0))
 
     def __call__(self, f: np.ndarray, rate: float | None = None) -> np.ndarray:
         """The admittance at frequencies ``f`` (Hz): exact, or with ``rate`` the one the
@@ -126,7 +145,12 @@ class Admittance:
         branches = _branch_values(
             f.ravel(), self.conductance, self.quality, self.frequency_hz, rate
         )
-        return (self.beta + branches.sum(axis=0)).reshape(f.shape)
+        out = self.beta + branches.sum(axis=0)
+        if len(self.relaxation):
+            out = out + _relaxation_values(
+                f.ravel(), self.relaxation, self.relaxation_hz, rate
+            ).sum(axis=0)
+        return out.reshape(f.shape)
 
     def branches(self, rate: float) -> np.ndarray:
         """The branches as the wave solver takes them (branches, 3): mass over the time
@@ -135,7 +159,12 @@ class Admittance:
         r = 1.0 / np.asarray(self.conductance, float)
         w0 = 2.0 * np.pi * np.asarray(self.frequency_hz, float)
         q = np.asarray(self.quality, float)
-        return np.column_stack([q * r / (w0 * t), r, q * r * w0 * t]).reshape(-1, 3)
+        out = np.column_stack([q * r / (w0 * t), r, q * r * w0 * t]).reshape(-1, 3)
+        if len(self.relaxation):
+            r = 1.0 / np.asarray(self.relaxation, float)
+            wc = 2.0 * np.pi * np.asarray(self.relaxation_hz, float)
+            out = np.vstack([out, np.column_stack([np.zeros(len(r)), r, r * wc * t])])
+        return out
 
 
 def band_weights(f: np.ndarray, bands: int, total: int) -> np.ndarray:
@@ -241,6 +270,86 @@ def _fit(target: tuple[float, ...], total: int, rate: float | None) -> Admittanc
     )
 
 
+#: Corner frequencies of :func:`fit_impedance`'s branches: this many per octave, from
+#: :data:`_RELAXATION_REACH` octaves below the lowest band to as many above the highest.
+_RELAXATION_PER_OCTAVE = 1
+_RELAXATION_REACH = 3
+
+
+def fit_impedance(
+    admittance: Callable[[np.ndarray], np.ndarray],
+    bands: int,
+    total: int,
+    rate: float | None = None,
+) -> Admittance:
+    """The admittance whose value, at ``rate`` steps a second (None: exactly), matches
+    that of a surface with an impedance, ``admittance(f)`` (normalised, complex, in the
+    engine's convention, at frequencies f in Hz), over the lowest ``bands`` of the
+    ``total`` bands: its reflection at every angle and its phase, not only its
+    random-incidence absorption, as a ground's dip needs.
+
+    A porous ground's admittance grows with frequency at a nearly constant phase, as no
+    resonant branch does: the fit is ``beta`` and branches without mass whose corner
+    frequencies are spread evenly in log frequency, whose sum makes that shape (as a
+    ladder of resistors and capacitors makes a fractional-order element). With the
+    corners fixed the admittance is linear in the branches' conductances, which the fit
+    finds by least squares, at least 0 each, with the misses relative to the
+    admittance's size."""
+    from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, exact_centres, resolution_of
+
+    resolution = resolution_of(total)
+    half = 2.0 ** (0.5 / BANDS_PER_OCTAVE[resolution])
+    fm = exact_centres(resolution)[:bands]
+    f = _frequencies(bands, total)
+    f = f[(f >= fm[0] / half) & (f <= fm[-1] * half)]
+    target = np.asarray(admittance(f), dtype=complex)
+    return _fit_values(
+        tuple(target.real.tolist()),
+        tuple(target.imag.tolist()),
+        bands,
+        int(total),
+        None if rate is None else float(rate),
+    )
+
+
+@functools.lru_cache(maxsize=64)
+def _fit_values(
+    real: tuple[float, ...], imag: tuple[float, ...], bands: int, total: int, rate: float | None
+) -> Admittance:
+    from scipy.optimize import least_squares
+
+    from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, exact_centres, resolution_of
+
+    resolution = resolution_of(total)
+    half = 2.0 ** (0.5 / BANDS_PER_OCTAVE[resolution])
+    fm = exact_centres(resolution)[:bands]
+    f = _frequencies(bands, total)
+    f = f[(f >= fm[0] / half) & (f <= fm[-1] * half)]
+    target = np.array(real) + 1j * np.array(imag)
+    scale = np.abs(target) + 1e-3
+    low = fm[0] / 2.0**_RELAXATION_REACH
+    octaves = math.log2(fm[-1] / fm[0]) + 2 * _RELAXATION_REACH
+    corner = low * 2.0 ** (
+        np.arange(int(round(octaves * _RELAXATION_PER_OCTAVE)) + 1) / _RELAXATION_PER_OCTAVE
+    )
+    columns = np.vstack(
+        [np.ones((1, len(f))), _relaxation_values(f, np.ones(len(corner)), corner, rate)]
+    )
+    a = columns.T / scale[:, None]  # (frequencies, 1 + branches)
+    matrix = np.vstack([a.real, a.imag])
+    goal = np.concatenate([(target / scale).real, (target / scale).imag])
+    start = np.full(matrix.shape[1], 1e-3)
+    x = least_squares(lambda x: matrix @ x - goal, start, bounds=(0.0, np.inf)).x
+    used = x[1:] > 1e-9
+    out = Admittance(float(x[0]), relaxation=x[1:][used], relaxation_hz=corner[used])
+    return Admittance(
+        out.beta,
+        achieved=band_absorption(out, bands, total, rate),
+        relaxation=out.relaxation,
+        relaxation_hz=out.relaxation_hz,
+    )
+
+
 __all__ = [
     "MAX_ABSORPTION",
     "Admittance",
@@ -249,5 +358,6 @@ __all__ = [
     "band_absorption",
     "band_weights",
     "fit_admittance",
+    "fit_impedance",
     "random_incidence_absorption",
 ]

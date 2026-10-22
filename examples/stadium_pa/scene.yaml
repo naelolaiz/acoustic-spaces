@@ -1,0 +1,218 @@
+# A football stadium's sound system for a concert, as tours hang it: the PA alone, for
+# the crowd (the stage's monitors are in concert_stage, and both together in
+# stadium_concert). The stadium is a bowl of four stands under a ring of roof, open to
+# the sky over the pitch; the stage stands at the west end, and the stand behind it is
+# empty. Beside the stage hang two main line arrays of 12 boxes curved in a J (coherent
+# arrays), their top boxes aimed at the far end and their bottom ones at the crowd in
+# front. A block of eight cardioid subwoofers under the middle of the stage front is
+# delayed 17 ms so that it arrives with the main arrays at the mix position. Out-fills
+# beside the main arrays cover the side stands near the stage, and front fills on the
+# stage's lip the front rows between them. Two delay towers on the pitch, 50 m out,
+# cover its back, and four delays hung under the roof's edge, aimed along the side and
+# end stands, their far seats. Each fill and delay is timed to arrive at its seats 6 to
+# 20 ms after the main arrays, so the sound still seems to come from the stage; the
+# towers' and the delays' low bands are rolled off, where the main arrays and the
+# subwoofers give enough. Listeners stand at the front, the middle, the side and the
+# back of the pitch, and low, high and far on the stands. The crowd standing on the
+# pitch and the one seated in the stands take up the sound and scatter it
+# (`audience: true`). Many listeners stand nearer the arrays than their far-field
+# patterns hold, so every array adds up its boxes one by one (`near_field: true`).
+#
+#   acoustic-spaces map scene.yaml --parameter spl --plot spl.png
+#   python align.py
+#   python near_field.py
+#   python make_model.py
+#
+# On the pitch from the mix position back, nine points of the map in ten get the same
+# level within 2.5 dB (all bands together). The map takes under four minutes on 4
+# cores. align.py prints when and how loud each loudspeaker arrives at each listener,
+# and which would be heard as an echo: none. near_field.py prints how far each array's
+# far-field pattern would be off at each listener: within 3.5 dB up to 2 kHz, but up to
+# 10 dB at 4 and 8 kHz near the main arrays.
+# make_model.py writes the model and the arrays; their boxes are a generic box made up
+# for this example, not any product's data.
+name: Stadium sound system
+geometry:
+  file: stadium.obj
+  ground:
+    extent: [[-100, -82], [100, 82]]
+    sky: 40
+    zones:
+      - name: audience_pitch
+        polygon: [[-38, -34], [52.5, -34], [52.5, 34], [-38, 34]]
+materials:
+  grass:
+    impedance: grass
+  standing_crowd:
+    preset: audience_2_m2
+    scattering: 0.7
+    audience: true
+  seated_crowd:
+    preset: audience_1.5_m2
+    scattering: 0.7
+    audience: true
+  empty_seats:
+    preset: chairs_unoccupied_plastic
+    scattering: 0.5
+  concrete:
+    preset: rough_concrete
+    scattering: 0.2
+  roof_deck:
+    absorption: [0.15, 0.12, 0.1, 0.07, 0.05, 0.05, 0.05, 0.05]
+    scattering: 0.3
+  stage:
+    preset: wooden_lining
+    scattering: 0.2
+assignments:
+  ground: grass
+  audience_pitch: standing_crowd
+  audience_north_stand: seated_crowd
+  audience_south_stand: seated_crowd
+  audience_east_stand: seated_crowd
+  west_stand: empty_seats
+  pitch_wall: concrete
+  back_wall: concrete
+  facade: concrete
+  roof: roof_deck
+  stage_floor: stage
+  stage_deck: stage
+  stage_back: stage
+  stage_roof: stage
+sources:
+  - name: main_left
+    group: PA/Mains
+    position: [-40, 19, 14]
+    orientation: {yaw: 8}
+    level_db: 134
+    directivity: {file: main_array.yaml, near_field: true}
+  - name: main_right
+    group: PA/Mains
+    position: [-40, -19, 14]
+    orientation: {yaw: -8}
+    level_db: 134
+    directivity: {file: main_array.yaml, near_field: true}
+  - name: subs
+    group: PA/Subwoofers
+    position: [-41, 0, 0.6]
+    level_db: 134
+    eq_db: [0, 0, -18, -40, -40, -40, -40, -40]
+    delay_ms: 17
+    directivity: {file: sub_array.yaml, near_field: true}
+  - name: outfill_left
+    group: PA/Fills
+    position: [-40, 27, 12]
+    orientation: {yaw: 70, pitch: 2}
+    level_db: 130
+    delay_ms: 25
+    directivity: {file: fill_array.yaml, near_field: true}
+  - name: outfill_right
+    group: PA/Fills
+    position: [-40, -27, 12]
+    orientation: {yaw: -70, pitch: 2}
+    level_db: 130
+    delay_ms: 25
+    directivity: {file: fill_array.yaml, near_field: true}
+  - name: front_fill_left
+    group: PA/Fills
+    position: [-42.3, 6, 2.3]
+    orientation: {yaw: -10, pitch: -3}
+    level_db: 116
+    delay_ms: 33
+    directivity: {file: wedge.csv}
+  - name: front_fill_right
+    group: PA/Fills
+    position: [-42.3, -6, 2.3]
+    orientation: {yaw: 10, pitch: -3}
+    level_db: 116
+    delay_ms: 33
+    directivity: {file: wedge.csv}
+  - name: tower_left
+    group: PA/Delays
+    position: [10, 15, 12]
+    level_db: 132
+    eq_db: [-24, -18, -9, -3, 0, 0, 0, 0]
+    delay_ms: 152
+    directivity: {file: tower_array.yaml, near_field: true}
+  - name: tower_right
+    group: PA/Delays
+    position: [10, -15, 12]
+    level_db: 132
+    eq_db: [-24, -18, -9, -3, 0, 0, 0, 0]
+    delay_ms: 152
+    directivity: {file: tower_array.yaml, near_field: true}
+  - name: delay_north
+    group: PA/Delays
+    position: [25, 49, 28.5]
+    orientation: {yaw: 75, pitch: -12}
+    level_db: 130
+    eq_db: [-24, -18, -9, -3, 0, 0, 0, 0]
+    delay_ms: 202
+    directivity: {file: fill_array.yaml, near_field: true}
+  - name: delay_south
+    group: PA/Delays
+    position: [25, -49, 28.5]
+    orientation: {yaw: -75, pitch: -12}
+    level_db: 130
+    eq_db: [-24, -18, -9, -3, 0, 0, 0, 0]
+    delay_ms: 202
+    directivity: {file: fill_array.yaml, near_field: true}
+  - name: delay_east_left
+    group: PA/Delays
+    position: [67.5, 20, 28.5]
+    orientation: {yaw: 25, pitch: -12}
+    level_db: 128
+    eq_db: [-24, -18, -9, -3, 0, 0, 0, 0]
+    delay_ms: 314
+    directivity: {file: fill_array.yaml, near_field: true}
+  - name: delay_east_right
+    group: PA/Delays
+    position: [67.5, -20, 28.5]
+    orientation: {yaw: -25, pitch: -12}
+    level_db: 128
+    eq_db: [-24, -18, -9, -3, 0, 0, 0, 0]
+    delay_ms: 314
+    directivity: {file: fill_array.yaml, near_field: true}
+listeners:
+  - name: pitch_front
+    group: Audience/Standing
+    position: [-26, 0, 1.6]
+    orientation: {yaw: 180}
+  - name: mix_position
+    group: Audience/Standing
+    position: [-5, 0, 1.6]
+    orientation: {yaw: 180}
+  - name: pitch_behind_towers
+    group: Audience/Standing
+    position: [28, 10, 1.6]
+    orientation: {yaw: -173}
+  - name: pitch_back
+    group: Audience/Standing
+    position: [50, -12, 1.6]
+    orientation: {yaw: 173}
+  - name: pitch_side
+    group: Audience/Standing
+    position: [-15, -28, 1.6]
+    orientation: {yaw: 134}
+  - name: north_stand_near
+    group: Audience/Seated
+    position: [-30, 58, 12.46]
+    orientation: {yaw: -109}
+  - name: north_stand_far
+    group: Audience/Seated
+    position: [35, 66, 17.09]
+    orientation: {yaw: -142}
+  - name: north_stand_top
+    group: Audience/Seated
+    position: [30, 78, 24.04]
+    orientation: {yaw: -133}
+  - name: east_stand
+    group: Audience/Seated
+    position: [85, -20, 17.38]
+    orientation: {yaw: 159}
+simulation:
+  early: {method: image_sources, max_order: 2, diffraction: none}
+  late: {method: stochastic_ray_tracing}
+outputs:
+  - mono
+coverage:
+  spacing: 8.0

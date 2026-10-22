@@ -11,6 +11,11 @@ At a surface that lets sound through, a particle passes straight on with the sha
 the surviving energy that passes and reflects otherwise, keeping all that survives, so
 openings let every particle through. Particles that find a gap in an open model fly on
 out of it.
+
+Outdoors in wind or a temperature gradient, particles follow the bent rays of the late
+stage (:func:`~acoustic_spaces.engine.refracted.bending`): chord by chord along their
+arcs, at the speed along each, and once out of the model (through the open sky) they
+fly on along their last chord.
 """
 
 from __future__ import annotations
@@ -20,11 +25,14 @@ from dataclasses import dataclass
 import numpy as np
 
 from acoustic_spaces.engine.model import TraceModel, size_scattering, source_weights
+from acoustic_spaces.engine.refracted import bending
 from acoustic_spaces.room import Room
 from acoustic_spaces.spatial.directions import fibonacci_sphere
 
 #: Particles stop at this many reflections even if time remains.
 MAX_REFLECTIONS = 200
+#: Steps (a chord each) bent particles take at most.
+MAX_CHORDS = 5000
 
 
 @dataclass
@@ -54,6 +62,42 @@ def _lambert(normals: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     return local[:, :1] * t1 + local[:, 1:2] * t2 + local[:, 2:] * normals
 
 
+def _reflection(model: TraceModel, face, d, dist, alive, order, band: int, c: float, rng):
+    """Where particles arriving along ``d`` (unit) at ``face`` (-1: none) after legs of
+    ``dist`` metres, with ``order`` reflections then (one for all, or each its own), go
+    next: their directions, the share of their energy that survives the face (before
+    the air), which of them passed through it, and the face's normal on their side."""
+    count = len(face)
+    normal = model.plane_normal[model.face_plane[np.maximum(face, 0)]]
+    # Point the normal back at the arriving particle, whichever way the face faces.
+    normal = np.where((np.einsum("ij,ij->i", normal, d) > 0)[:, None], -normal, normal)
+    specular = d - 2.0 * np.einsum("ij,ij->i", d, normal)[:, None] * normal
+    s = model.scattering[np.maximum(face, 0), band]
+    sized = np.asarray(order) >= model.size_from_order
+    if model.surface_size is not None and np.any(sized):
+        hit_face = np.maximum(face, 0)
+        width, length = model.surface_size[hit_face].T
+        cosine = np.abs(np.einsum("ij,ij->i", normal, d))
+        leg = np.maximum(dist, 1e-9)
+        bigger = size_scattering(width, length, leg, cosine, c, model.scattering[hit_face])[:, band]
+        s = np.where(sized, bigger, s)
+    if model.vector_scattering:
+        mixed = s[:, None] * _lambert(normal, rng) + (1.0 - s[:, None]) * specular
+        new_d = mixed / np.linalg.norm(mixed, axis=1, keepdims=True)
+    else:
+        new_d = np.where((rng.random(count) < s)[:, None], _lambert(normal, rng), specular)
+    kept = 1.0 - model.absorption[np.maximum(face, 0), band]
+    passed = np.zeros(count, dtype=bool)
+    if model.transmission is not None:
+        through = model.transmission[np.maximum(face, 0), band]
+        survives = kept + through
+        share = through / np.where(survives > 0.0, survives, 1.0)
+        passed = alive & (rng.random(count) < share)
+        new_d = np.where(passed[:, None], d, new_d)
+        kept = survives
+    return new_d, kept, passed, normal
+
+
 def trace_particles(
     room: Room,
     source: str | None = None,
@@ -74,7 +118,7 @@ def trace_particles(
     scene = room.scene
     sources = {s.name: s for s in scene.sources}
     if source is None:
-        source = scene.sources[0].name
+        source = next((s.name for s in scene.sources if s.in_use), scene.sources[0].name)
     if source not in sources:
         raise ValueError(f"no source {source!r}; the scene has {', '.join(sources)}")
     if count < 1 or frames < 1 or duration <= 0:
@@ -103,6 +147,20 @@ def trace_particles(
     reflections = [np.zeros(count, dtype=np.int64)]
     alive = np.ones(count, dtype=bool)
     face = np.full(count, -1, dtype=np.int64)
+    bent = bending(model)
+    if bent:
+        return _bent_particles(
+            model,
+            bent,
+            (origins, directions, energy),
+            rng,
+            duration,
+            frames,
+            band,
+            c,
+            air,
+            source,
+        )
     for order in range(1, MAX_REFLECTIONS + 1):
         p, d, t = start[-1], direction[-1], t0[-1]
         reach = np.where(alive, np.inf, 0.0)
@@ -110,31 +168,7 @@ def trace_particles(
         alive &= hit >= 0
         dist = np.where(alive, dist, 0.0)
         face = np.where(alive, hit, -1)
-        normal = model.plane_normal[model.face_plane[np.maximum(face, 0)]]
-        # Point the normal back at the arriving particle, whichever way the face faces.
-        normal = np.where((np.einsum("ij,ij->i", normal, d) > 0)[:, None], -normal, normal)
-        specular = d - 2.0 * np.einsum("ij,ij->i", d, normal)[:, None] * normal
-        s = model.scattering[np.maximum(face, 0), band]
-        if model.surface_size is not None and order >= model.size_from_order:
-            hit_face = np.maximum(face, 0)
-            width, length = model.surface_size[hit_face].T
-            cosine = np.abs(np.einsum("ij,ij->i", normal, d))
-            leg = np.maximum(dist, 1e-9)
-            s = size_scattering(width, length, leg, cosine, c, model.scattering[hit_face])[:, band]
-        if model.vector_scattering:
-            mixed = s[:, None] * _lambert(normal, rng) + (1.0 - s[:, None]) * specular
-            new_d = mixed / np.linalg.norm(mixed, axis=1, keepdims=True)
-        else:
-            new_d = np.where((rng.random(count) < s)[:, None], _lambert(normal, rng), specular)
-        kept = 1.0 - model.absorption[np.maximum(face, 0), band]
-        passed = np.zeros(count, dtype=bool)
-        if model.transmission is not None:
-            through = model.transmission[np.maximum(face, 0), band]
-            survives = kept + through
-            share = through / np.where(survives > 0.0, survives, 1.0)
-            passed = alive & (rng.random(count) < share)
-            new_d = np.where(passed[:, None], d, new_d)
-            kept = survives
+        new_d, kept, passed, _ = _reflection(model, face, d, dist, alive, order, band, c, rng)
         kept = kept * np.exp(-air * dist)
         # A particle that escaped keeps flying along its last segment (no next one).
         t_next = np.where(alive, t + dist / c, np.inf)
@@ -167,6 +201,107 @@ def trace_particles(
         positions[f] = start_all[s, columns] + c * elapsed[:, None] * direction_all[s, columns]
         energy_out[f] = energy_all[s, columns] * np.exp(-air * c * elapsed)
         order_out[f] = reflections_all[s, columns]
+    return Particles(times, positions, energy_out, order_out, OCTAVE_BANDS_HZ[band], source)
+
+
+def _bent_particles(model, bent, start, rng, duration, frames, band, c, air, source):
+    """Particles leaving at ``start`` (origins, directions, energies) along the rays of
+    an atmosphere (``bent``, from :func:`~acoustic_spaces.engine.refracted.bending`),
+    chord by chord."""
+    from acoustic_spaces import _native
+    from acoustic_spaces.materials import OCTAVE_BANDS_HZ
+
+    pos, d, e = (np.array(a, dtype=float) for a in start)
+    count = len(pos)
+    rows = bent["atmosphere"]
+    # Faster than any sound in it: a chord this long per second left reaches the end.
+    fastest = float(np.max(rows[:, 1] + np.abs(rows[:, 2])))
+    vertices = model.room.mesh.vertices
+    pad = 1e-6 * float(np.ptp(vertices, axis=0).max())
+    low, high = vertices.min(axis=0) - pad, vertices.max(axis=0) + pad
+    t = np.zeros(count)
+    reflections = np.zeros(count, dtype=np.int64)
+    face = np.full(count, -1, dtype=np.int64)
+    away = np.zeros((count, 3))  # the face a particle left (zero: none), while it leaves it
+    leg = np.zeros(count)  # metres since the last reflection
+    flying = np.ones(count, dtype=bool)  # in the model, before the end
+    stopped = np.zeros(count, dtype=bool)  # at MAX_REFLECTIONS
+    # Segments: particle k leaves start[s, k] at time t0[s, k] along direction[s, k] at
+    # speed[s, k] (m/s along the chord), its path growing at pace[s, k] (m/s).
+    t0, starts, directions, speeds, paces, energies, orders = [], [], [], [], [], [], []
+    for _ in range(MAX_CHORDS):
+        moving = flying & ~stopped & (t < duration)
+        if not moving.any():
+            break
+        budget = np.where(moving, (duration - t) * fastest + 1e-9, 0.0)
+        end, tangent, arc, time, turned = _native.bent_chords(pos, d, budget, away, **bent)
+        span = end - pos
+        length = np.linalg.norm(span, axis=1)
+        chord = length > 0.0
+        along = np.where(chord[:, None], span / np.where(chord, length, 1.0)[:, None], d)
+        dist, hit = model.intersect(pos, along, np.where(moving & chord, length, 0.0), face)
+        met = moving & chord & (hit >= 0)
+        share = np.where(met, np.where(met, dist, 0.0) / np.where(chord, length, 1.0), 1.0)
+        timed = time > 0.0
+        t0.append(np.where(moving, t, np.where(stopped, t, np.inf)))
+        starts.append(pos.copy())
+        directions.append(along)
+        speeds.append(np.where(moving & timed, length / np.where(timed, time, 1.0), 0.0))
+        paces.append(np.where(moving & timed, arc / np.where(timed, time, 1.0), 0.0))
+        energies.append(e.copy())
+        orders.append(reflections.copy())
+        travelled = arc * share
+        t = t + time * share
+        e = e * np.exp(-air * travelled)
+        leg = leg + travelled
+        pos = np.where(met[:, None], pos + along * np.where(met, dist, 0.0)[:, None], end)
+        arriving = tangent
+        if met.any():
+            pick = np.flatnonzero(met)
+            # The ray's own direction where it meets the face.
+            _, there, *_ = _native.bent_chords(
+                starts[-1][pick], d[pick], travelled[pick], away[pick], **bent
+            )
+            arriving = tangent.copy()
+            arriving[pick] = there
+        new_d, kept, passed, normal = _reflection(
+            model, np.where(met, hit, -1), arriving, leg, met, reflections + 1, band, c, rng
+        )
+        e = np.where(met, e * kept, e)
+        d = np.where(met[:, None], new_d, arriving)
+        leaving = np.where(passed[:, None], -normal, normal)
+        away = np.where(met[:, None], leaving, np.where(turned[:, None] > 0, 0.0, away))
+        face = np.where(met, hit, np.where(turned > 0, -1, face))
+        reflected = met & ~passed
+        reflections = reflections + reflected
+        leg = np.where(reflected, 0.0, leg)
+        stopped |= reflections >= MAX_REFLECTIONS
+        # Out of the model, through the open sky: it flies on along its last chord.
+        flying &= np.all((pos >= low) & (pos <= high), axis=1)
+    # Where each stops, for those that stopped.
+    t0.append(np.where(stopped, t, np.inf))
+    starts.append(pos)
+    directions.append(d)
+    speeds.append(np.zeros(count))
+    paces.append(np.zeros(count))
+    energies.append(e)
+    orders.append(reflections)
+    t0_all, start_all, direction_all = np.array(t0), np.array(starts), np.array(directions)
+    speed_all, pace_all = np.array(speeds), np.array(paces)
+    energy_all, order_all = np.array(energies), np.array(orders)
+
+    times = np.linspace(0.0, duration, frames)
+    positions = np.zeros((frames, count, 3))
+    energy_out = np.zeros((frames, count))
+    order_out = np.zeros((frames, count), dtype=np.int64)
+    columns = np.arange(count)
+    for f, when in enumerate(times):
+        s = np.maximum(np.sum(t0_all <= when, axis=0) - 1, 0)  # the latest segment begun
+        elapsed = np.maximum(when - t0_all[s, columns], 0.0)
+        moved = speed_all[s, columns] * elapsed
+        positions[f] = start_all[s, columns] + moved[:, None] * direction_all[s, columns]
+        energy_out[f] = energy_all[s, columns] * np.exp(-air * pace_all[s, columns] * elapsed)
+        order_out[f] = order_all[s, columns]
     return Particles(times, positions, energy_out, order_out, OCTAVE_BANDS_HZ[band], source)
 
 
