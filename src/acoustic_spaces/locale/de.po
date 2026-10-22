@@ -1081,10 +1081,6 @@ msgstr ""
 "{slow:g} s. In Blender: Datei > Importieren > glTF 2.0."
 
 #: acoustic_spaces/gui/app.py
-msgid "The same particles in still air are blue."
-msgstr "Dieselben Partikel in ruhender Luft sind blau."
-
-#: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid ""
 "Wrote {path}: the room with {count} reflection path from {source} to "
@@ -4816,21 +4812,6 @@ msgstr "Zeitlupe"
 #: acoustic_spaces/gui/particle_dialog.py
 msgid "Particles"
 msgstr "Partikel"
-
-#: acoustic_spaces/gui/particle_dialog.py
-msgid "Compare with still air"
-msgstr "Mit ruhender Luft vergleichen"
-
-#: acoustic_spaces/gui/particle_dialog.py
-msgid ""
-"Adds the same particles traced in still air, in blue, beside those in the "
-"scene's wind and temperature, which bend them: the wind is a few metres a "
-"second against the sound's 343, so the two part by metres, near the ground"
-msgstr ""
-"Fügt dieselben Partikel, in ruhender Luft verfolgt, in Blau neben denen in "
-"Wind und Temperatur der Szene hinzu, die sie krümmen: Der Wind hat wenige "
-"Meter pro Sekunde, der Schall 343, daher liegen beide nur Meter auseinander, "
-"nahe am Boden"
 
 #: acoustic_spaces/gui/particle_dialog.py
 #, python-brace-format

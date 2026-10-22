@@ -743,7 +743,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
     if not _print_checks(room) and (args.paths or args.particles):
         return 1
     scene = room.scene
-    paths = particles = still = None
+    paths = particles = None
     try:
         if args.paths:
             paths = early_paths(
@@ -764,25 +764,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
                 band=OCTAVE_BANDS_HZ.index(args.band),
                 seed=args.seed,
             )
-            if args.still_air:
-                still = trace_particles(
-                    room,
-                    args.source,
-                    count=args.count,
-                    duration=args.duration / 1e3,
-                    frames=args.frames,
-                    band=OCTAVE_BANDS_HZ.index(args.band),
-                    seed=args.seed,
-                    still_air=True,
-                )
-        export_gltf(
-            room,
-            args.out,
-            paths=paths,
-            particles=particles,
-            still_air=still,
-            slow_motion=args.slow_motion,
-        )
+        export_gltf(room, args.out, paths=paths, particles=particles, slow_motion=args.slow_motion)
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -803,8 +785,6 @@ def _cmd_export(args: argparse.Namespace) -> int:
             f"  {args.count} particles from {particles.source}: {args.duration:g} ms of sound "
             f"over {seconds:g} s ({round(24 * seconds)} frames at 24 fps)"
         )
-        if still is not None:
-            print("  and the same particles in still air, in blue")
     print("Open it in Blender with File > Import > glTF 2.0.")
     return 0
 
@@ -2352,11 +2332,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=SLOW_MOTION,
         help=f"seconds of animation per second of sound (default {SLOW_MOTION:g})",
-    )
-    export.add_argument(
-        "--still-air",
-        action="store_true",
-        help="with --particles: the same particles in still air too, in blue, to compare",
     )
     export.add_argument("--seed", type=_seed, default=0, help="seed for diffuse reflections")
     export.add_argument("--threads", type=_threads, help=THREADS_HELP)

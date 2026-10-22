@@ -635,136 +635,6 @@ def _plan_points(room: Room) -> np.ndarray:
     return np.vstack(points)
 
 
-class WindMast(NamedTuple):
-    """A mast of the wind's profile (see :func:`wind_drawing`)."""
-
-    #: The weather it stands in: 0 the scene's own, k its zone k, and the zone's name
-    #: (None for the scene's own).
-    weather: int
-    zone: str | None
-    #: (3,) its foot on the ground (m).
-    base: np.ndarray
-    #: Its height (m).
-    top: float
-    #: (m, 3) a curve through the wind at every height up it, ``reach`` metres from the
-    #: pole per m/s.
-    curve: np.ndarray
-    #: The heights of its arrows (m), evenly up it, and the wind's speed at each (m/s).
-    heights: np.ndarray
-    speeds: np.ndarray
-    #: (n, 3) where its arrows start, on the pole, and (n, 3) the arrows.
-    starts: np.ndarray
-    vectors: np.ndarray
-    #: How thick its arrows are: their tips' radius (m).
-    radius: float
-    #: The wind's speed at its lowest arrow, in words, and where to write it (3,).
-    label: tuple[np.ndarray, str]
-
-
-class WindDrawing(NamedTuple):
-    """The wind of an outdoor scene as the 3D view and the Blender export draw it (see
-    :func:`wind_drawing`)."""
-
-    #: Each weather zone that holds somewhere: its index k (1 on), its outline on the
-    #: ground and the same at the top of its walls (n, 3) each, and its name and weather
-    #: in words.
-    walls: list[tuple[int, np.ndarray, np.ndarray, str]]
-    #: Where to write each zone's words, beside them: (3,) and the words.
-    labels: list[tuple[np.ndarray, str]]
-    #: (n, 3) where the arrows over the ground start, and (n, 3) the arrows.
-    starts: np.ndarray
-    vectors: np.ndarray
-    #: How thick the arrows are: their tips' radius (m).
-    radius: float
-    #: The masts of the wind's profile.
-    masts: list[WindMast]
-    #: The scene's wind in words ("wind 5.0 m/s at 10 m"), or None in still air.
-    key: str | None
-
-
-def wind_drawing(room: Room, *, field: bool = True, profile: bool = False) -> WindDrawing | None:
-    """The wind over an outdoor ``room``'s ground, as the views draw it; None indoors or
-    without an atmosphere. ``field``: arrows the way it blows, as long as it is strong,
-    at the height the scene gives the wind's speed at above the ground, and each weather
-    zone as walls up to that height with its name and wind. ``profile``: a mast in each
-    weather where the wind blows, with arrows at heights up it and a curve through the
-    wind at every height, how the wind grows with height over the ground."""
-    wind = WindMap.of(room)
-    if wind is None:
-        return None
-    layout = wind.layout
-    walls, labels = [], []
-    for k in range(1, len(wind.polygons)):
-        polygon = wind.polygons[k]
-        if polygon is None or not field:
-            continue
-        floor = layout.ground_at(polygon)
-        # Under the sky, a little, where the sky is lower than the wind's height.
-        top = floor + np.minimum(wind.height, 0.95 * (layout.sky - floor))
-        text = wind.label(k)
-        walls.append((k, np.column_stack([polygon, floor]), np.column_stack([polygon, top]), text))
-        centre = wind.centre(k)
-        high = float(layout.ground_at(centre[None])[0]) + 1.15 * float(np.max(top - floor))
-        labels.append((np.array([*centre, high]), text))
-    nothing = np.zeros((0, 3))
-    if not wind.windy:
-        return WindDrawing(walls, labels, nothing, nothing, 0.0, [], None)
-    clear = _plan_points(room)
-    arrows = wind.arrows(clear=clear)
-    middles, vectors = arrows.middles, arrows.vectors
-    ground = layout.ground_at(middles)
-    lift = np.minimum(wind.height, 0.95 * (layout.sky - ground))
-    # As thick as the markers of the sources and listeners make readable.
-    lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
-    everything = [item.position for item in (*room.scene.sources, *room.scene.listeners)]
-    radius = min(
-        0.3 * marker_radius(everything, float(np.linalg.norm(hi - lo)) or 1.0),
-        0.15 * WIND_REACH * arrows.cell,
-    )
-    spots = _profile_points(wind, arrows, clear) if profile else {}
-    # Buildings taller than the arrows hide them: none inside one.
-    roofs = np.full(len(middles), -np.inf)
-    for _name, footprint, roof in layout.buildings:
-        inside = in_polygon(middles, footprint)
-        roofs[inside] = np.maximum(roofs[inside], roof)
-    keep = np.full(len(middles), field) & (roofs < ground + lift)
-    for at in spots.values():
-        keep &= np.linalg.norm(middles - at, axis=1) > 1e-9  # the mast's top arrow
-    centres = np.column_stack([middles, ground + lift])
-    masts = [_mast(wind, k, at, arrows.reach, radius) for k, at in spots.items()]
-    labels.extend(mast.label for mast in masts)
-    key = _(WIND_KEY).format(speed=wind.speeds[0], height=wind.height)
-    starts = centres[keep] - 0.5 * vectors[keep]
-    return WindDrawing(walls, labels, starts, vectors[keep], radius, masts, key)
-
-
-def _mast(wind: WindMap, k: int, at, reach: float, radius: float) -> WindMast:
-    """Weather ``k``'s mast at ``at`` (2,): a pole from the ground up to the map's
-    height, arrows from it at heights evenly up it, ``reach`` metres long per m/s and as
-    thick as the wind's (``radius``) or less to keep apart, and a curve through the wind
-    at every height between; labelled at its lowest arrow (the highest's wind is the one
-    the arrows over the ground show)."""
-    weather, direction = wind.weathers[k], wind.directions[k]
-    floor = float(wind.layout.ground_at(at[None])[0])
-    top = min(wind.height, 0.95 * (wind.layout.sky - floor))
-    base = np.array([at[0], at[1], floor])
-    heights = np.linspace(0.0, top, 49)
-    curve = (
-        base
-        + np.outer(heights, [0, 0, 1])
-        + np.outer(reach * weather.wind_speed(heights), direction)
-    )
-    levels = top * np.arange(1, PROFILE_ARROWS + 1) / PROFILE_ARROWS
-    starts = base + np.outer(levels, [0, 0, 1])
-    speeds = np.asarray(weather.wind_speed(levels), dtype=float)
-    vectors = np.outer(reach * speeds, direction)
-    text = _(PROFILE_SPEED).format(speed=float(speeds[0]), height=levels[0])
-    thick = min(radius, 0.25 * top / PROFILE_ARROWS)
-    label = (starts[0] + vectors[0], text)
-    zone = None if k == 0 else wind.names[k]
-    return WindMast(k, zone, base, top, curve, levels, speeds, starts, vectors, thick, label)
-
-
 def plot_wind(
     room: Room,
     plotter: pyvista.Plotter,
@@ -773,46 +643,84 @@ def plot_wind(
     profile: bool = False,
     render: bool = True,
 ) -> list:
-    """Add the wind over an outdoor ``room``'s ground to ``plotter``, as
-    :func:`wind_drawing` gives it: sky blue arrows, each weather zone as see-through
-    walls with its name and wind (``field``), and the masts of the wind's profile
-    (``profile``). Nothing indoors or in still air. Returns the legend entry of the
-    wind."""
-    drawing = wind_drawing(room, field=field, profile=profile)
-    if drawing is None:
+    """Add the wind over an outdoor ``room``'s ground to ``plotter``. ``field``: sky blue
+    arrows the way it blows, as long as it is strong, at the height the scene gives the
+    wind's speed at above the ground, and each weather zone as see-through walls up to
+    that height with its name and wind. ``profile``: a mast in each weather where the
+    wind blows, with arrows at heights up it and a curve through the wind at every
+    height, how the wind grows with height over the ground. Nothing indoors or in still
+    air. Returns the legend entry of the wind."""
+    wind = WindMap.of(room)
+    if wind is None:
         return []
     pv = _pyvista()
-    for _k, floor, top, _text in drawing.walls:
-        n = len(floor)
-        rings = np.vstack([floor, top])
+    layout = wind.layout
+    zones, labels = [], []
+    for k in range(1, len(wind.polygons)):
+        polygon = wind.polygons[k]
+        if polygon is None or not field:
+            continue
+        floor = layout.ground_at(polygon)
+        # Under the sky, a little, where the sky is lower than the wind's height.
+        top = floor + np.minimum(wind.height, 0.95 * (layout.sky - floor))
+        n = len(polygon)
+        rings = np.vstack([np.column_stack([polygon, floor]), np.column_stack([polygon, top])])
         walls = [[4, j, (j + 1) % n, n + (j + 1) % n, n + j] for j in range(n)]
+        zones.append(pv.PolyData(rings, faces=np.ravel(walls)))
         edges = [[n + 1, *range(n), 0], [n + 1, *range(n, 2 * n), n]]
-        for part, opacity in (
-            (pv.PolyData(rings, faces=np.ravel(walls)), 0.12),
-            (pv.PolyData(rings, lines=np.ravel(edges)), 0.7),
-        ):
-            plotter.add_mesh(
-                part,
-                color=WIND_COLOUR,
-                opacity=opacity,
-                line_width=1.5,
-                pickable=False,
-                render=False,
-            )
-    if len(drawing.starts):
+        zones.append(pv.PolyData(rings, lines=np.ravel(edges)))
+        centre = wind.centre(k)
+        high = float(layout.ground_at(centre[None])[0]) + 1.15 * float(np.max(top - floor))
+        labels.append(([*centre, high], wind.label(k)))
+    for part in zones:
+        line = part.n_lines > 0
         plotter.add_mesh(
-            _arrows(drawing.starts, drawing.vectors, drawing.radius),
+            part,
             color=WIND_COLOUR,
-            opacity=0.85,
+            opacity=0.7 if line else 0.12,
+            line_width=1.5,
             pickable=False,
             render=False,
         )
-    for mast in drawing.masts:
-        _plot_mast(mast, plotter)
-    if drawing.labels:
+    legend = []
+    if wind.windy:
+        clear = _plan_points(room)
+        arrows = wind.arrows(clear=clear)
+        middles, vectors = arrows.middles, arrows.vectors
+        ground = layout.ground_at(middles)
+        lift = np.minimum(wind.height, 0.95 * (layout.sky - ground))
+        # As thick as the markers of the sources and listeners make readable.
+        lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
+        everything = [item.position for item in (*room.scene.sources, *room.scene.listeners)]
+        radius = min(
+            0.3 * marker_radius(everything, float(np.linalg.norm(hi - lo)) or 1.0),
+            0.15 * WIND_REACH * arrows.cell,
+        )
+        masts = _profile_points(wind, arrows, clear) if profile else {}
+        # Buildings taller than the arrows hide them: none inside one.
+        roofs = np.full(len(middles), -np.inf)
+        for _name, footprint, roof in layout.buildings:
+            inside = in_polygon(middles, footprint)
+            roofs[inside] = np.maximum(roofs[inside], roof)
+        keep = np.full(len(middles), field) & (roofs < ground + lift)
+        for at in masts.values():
+            keep &= np.linalg.norm(middles - at, axis=1) > 1e-9  # the mast's top arrow
+        if keep.any():
+            centres = np.column_stack([middles, ground + lift])
+            plotter.add_mesh(
+                _arrows(centres[keep] - 0.5 * vectors[keep], vectors[keep], radius),
+                color=WIND_COLOUR,
+                opacity=0.85,
+                pickable=False,
+                render=False,
+            )
+        for k, at in masts.items():
+            labels.extend(_plot_mast(wind, k, at, arrows.reach, radius, plotter))
+        legend.append([_(WIND_KEY).format(speed=wind.speeds[0], height=wind.height), WIND_COLOUR])
+    if labels:
         plotter.add_point_labels(
-            np.array([at for at, _text in drawing.labels], dtype=float),
-            [text for _at, text in drawing.labels],
+            np.array([at for at, _text in labels], dtype=float),
+            [text for _at, text in labels],
             font_size=11,
             text_color=WIND_COLOUR,
             shape_color=PANEL,
@@ -823,28 +731,43 @@ def plot_wind(
         )
     if render:
         plotter.render()
-    return [] if drawing.key is None else [[drawing.key, WIND_COLOUR]]
+    return legend
 
 
-def _plot_mast(mast: WindMast, plotter) -> None:
-    """Add ``mast``: its pole in white, its curve and its arrows in the wind's colour."""
+def _plot_mast(wind: WindMap, k: int, at, reach: float, radius: float, plotter) -> list:
+    """Add weather ``k``'s mast at ``at`` (2,): a pole from the ground up to the map's
+    height, arrows from it at heights evenly up it, ``reach`` metres long per m/s and as
+    thick as the wind's (``radius``) or less to keep apart, and a curve through the wind
+    at every height between; returns the label of its lowest arrow (the highest's wind
+    is the one the arrows over the ground show)."""
     pv = _pyvista()
+    weather, direction = wind.weathers[k], wind.directions[k]
+    floor = float(wind.layout.ground_at(at[None])[0])
+    top = min(wind.height, 0.95 * (wind.layout.sky - floor))
+    base = np.array([at[0], at[1], floor])
+    heights = np.linspace(0.0, top, 49)
+    curve = (
+        base
+        + np.outer(heights, [0, 0, 1])
+        + np.outer(reach * weather.wind_speed(heights), direction)
+    )
     plotter.add_mesh(
-        pv.Line(mast.base, mast.base + [0.0, 0.0, mast.top]),
+        pv.Line(base, base + [0.0, 0.0, top]),
         color="white",
         line_width=2.0,
         pickable=False,
         render=False,
     )
     plotter.add_mesh(
-        pv.lines_from_points(mast.curve),
-        color=WIND_COLOUR,
-        line_width=2.0,
-        pickable=False,
-        render=False,
+        pv.lines_from_points(curve), color=WIND_COLOUR, line_width=2.0, pickable=False, render=False
     )
-    arrows = _arrows(mast.starts, mast.vectors, mast.radius)
+    levels = top * np.arange(1, PROFILE_ARROWS + 1) / PROFILE_ARROWS
+    starts = base + np.outer(levels, [0, 0, 1])
+    vectors = np.outer(reach * weather.wind_speed(levels), direction)
+    arrows = _arrows(starts, vectors, min(radius, 0.25 * top / PROFILE_ARROWS))
     plotter.add_mesh(arrows, color=WIND_COLOUR, pickable=False, render=False)
+    text = _(PROFILE_SPEED).format(speed=float(weather.wind_speed(levels[0])), height=levels[0])
+    return [(starts[0] + vectors[0], text)]
 
 
 def plot_room(

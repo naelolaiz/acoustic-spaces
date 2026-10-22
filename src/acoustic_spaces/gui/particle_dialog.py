@@ -1,6 +1,5 @@
 """The window that asks how to export sound particles to Blender: how much sound to
-animate, how slowly, and how many particles, and in wind or a temperature gradient
-whether to add the same particles in still air. Outdoors it starts with sound enough to
+animate, how slowly, and how many particles. Outdoors it starts with sound enough to
 reach the farthest listener, slowed down to last as long as the default."""
 
 from __future__ import annotations
@@ -9,7 +8,6 @@ import math
 
 import numpy as np
 from PySide6.QtWidgets import (
-    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -50,7 +48,7 @@ def slow_motion_for(duration_ms: float) -> float:
 
 class ParticleDialog(QDialog):
     """The particle animation's settings for ``room``'s ``source``: :attr:`duration`
-    (ms), :attr:`slow_motion`, :attr:`count` and :attr:`still_air` give what OK chose."""
+    (ms), :attr:`slow_motion` and :attr:`count` give what OK chose."""
 
     def __init__(self, room: Room, source: Source, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -95,19 +93,6 @@ class ParticleDialog(QDialog):
             label.setToolTip(box.toolTip())
             form.addRow(label, box)
         layout.addLayout(form)
-        atmosphere = room.scene.atmosphere
-        bent = atmosphere is not None and not atmosphere.still
-        self.compare = QCheckBox(_("Compare with still air"))
-        self.compare.setChecked(bent)
-        self.compare.setEnabled(bent)
-        self.compare.setToolTip(
-            _(
-                "Adds the same particles traced in still air, in blue, beside those in the "
-                "scene's wind and temperature, which bend them: the wind is a few metres a "
-                "second against the sound's 343, so the two part by metres, near the ground"
-            )
-        )
-        layout.addWidget(self.compare)
         self.summary = QLabel()
         layout.addWidget(self.summary)
         self.sound.valueChanged.connect(self._summarize)
@@ -131,10 +116,6 @@ class ParticleDialog(QDialog):
     @property
     def count(self) -> int:
         return int(self.particles.value())
-
-    @property
-    def still_air(self) -> bool:
-        return self.compare.isEnabled() and self.compare.isChecked()
 
     def _summarize(self) -> None:
         self.summary.setText(

@@ -15,8 +15,7 @@ out of it.
 Outdoors in wind or a temperature gradient, particles follow the bent rays of the late
 stage (:func:`~acoustic_spaces.engine.refracted.bending`): chord by chord along their
 arcs, at the speed along each, and once out of the model (through the open sky) they
-fly on along their last chord. Traced in still air instead, they go in straight lines,
-to compare with the scene's atmosphere.
+fly on along their last chord.
 """
 
 from __future__ import annotations
@@ -49,8 +48,6 @@ class Particles:
     band_hz: int
     #: Name of the source the particles left.
     source: str = ""
-    #: Whether they were traced in still air instead of the scene's atmosphere.
-    still_air: bool = False
 
 
 def _lambert(normals: np.ndarray, rng: np.random.Generator) -> np.ndarray:
@@ -110,20 +107,14 @@ def trace_particles(
     frames: int = 100,
     band: int = 4,
     seed: int = 0,
-    still_air: bool = False,
 ) -> Particles:
     """Trace ``count`` particles from ``source`` (default: the first) for ``duration``
     seconds and sample them at ``frames`` evenly spaced times from 0 to ``duration``.
 
     ``band`` picks the octave band whose absorption and scattering apply (4 = 1 kHz).
-    ``still_air`` traces them as if the scene had no atmosphere: no wind and the air's
-    one temperature, so in straight lines. With the same ``seed`` and ``count`` they
-    leave the same way as in the atmosphere, for comparing the two.
     """
     from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 
-    if still_air and room.scene.atmosphere is not None:
-        room = Room.from_scene(room.scene.model_copy(update={"atmosphere": None}), reuse=room)
     scene = room.scene
     sources = {s.name: s for s in scene.sources}
     if source is None:
@@ -210,8 +201,7 @@ def trace_particles(
         positions[f] = start_all[s, columns] + c * elapsed[:, None] * direction_all[s, columns]
         energy_out[f] = energy_all[s, columns] * np.exp(-air * c * elapsed)
         order_out[f] = reflections_all[s, columns]
-    band_hz = OCTAVE_BANDS_HZ[band]
-    return Particles(times, positions, energy_out, order_out, band_hz, source, still_air)
+    return Particles(times, positions, energy_out, order_out, OCTAVE_BANDS_HZ[band], source)
 
 
 def _bent_particles(model, bent, start, rng, duration, frames, band, c, air, source):

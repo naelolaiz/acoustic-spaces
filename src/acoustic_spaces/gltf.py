@@ -3,12 +3,10 @@
 The file holds the room, one object per surface name with a see-through material per
 scene material (its absorption and scattering per octave band as extras, which Blender
 shows as custom properties), an outdoor scene's trees, hedges and belts of trees as
-see-through green volumes and its wind as the 3D view draws it, and the sources and
-listeners turned the way they face, with an arrow along the aim. It can also hold
-early reflection paths as lines, one object per order, and sound particles as an
-animation in slow motion: by default 100 ms of sound play over 4 s, outdoors with the
-same particles in still air beside them if asked. Blender opens it with File > Import >
-glTF 2.0.
+see-through green volumes, and the sources and listeners turned the way they face,
+with an arrow along the aim. It can also hold early reflection paths as lines, one
+object per order, and sound particles as an animation in slow motion: by default
+100 ms of sound play over 4 s. Blender opens it with File > Import > glTF 2.0.
 
 Scenes are Z-up and glTF is Y-up: a point (x, y, z) is written as (x, z, -y), which
 the importer turns back.
@@ -27,14 +25,11 @@ from acoustic_spaces._version import __version__
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.room import UNASSIGNED, Room, _label_text
 from acoustic_spaces.viz import (
-    COMPARISON_COLOURS,
     LISTENER_COLOUR,
     MATERIAL_COLOURS,
     SOURCE_COLOUR,
     VEGETATION_COLOUR,
-    WIND_COLOUR,
     path_groups,
-    wind_drawing,
 )
 
 if TYPE_CHECKING:
@@ -49,12 +44,8 @@ SLOW_MOTION = 40.0
 SURFACE_ALPHA = 0.4
 #: Opacity of the vegetation's volumes.
 VEGETATION_ALPHA = 0.3
-#: Opacity of the wind's arrows and of the weather zones' walls, as in the 3D view.
-WIND_ALPHA, ZONE_ALPHA = 0.85, 0.12
 UNASSIGNED_GREY = "#9e9e9e"
 PARTICLE_COLOUR = "#ffd166"
-#: Particles traced in still air, beside those in the scene's atmosphere.
-STILL_AIR_COLOUR = COMPARISON_COLOURS[0]
 
 #: Scene to glTF coordinates: (x, y, z) -> (x, z, -y), a rotation about x.
 _TO_GLTF = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]])
@@ -129,34 +120,6 @@ def _arrow(length: float) -> tuple[np.ndarray, np.ndarray]:
     """An arrow along +x from the origin, shaped as the 3D view draws them."""
     shaft, tip, head = 0.05 * length, 0.1 * length, 0.75 * length
     return _lathe([(0.0, 0.0), (0.0, shaft), (head, shaft), (head, tip), (length, 0.0)], 16)
-
-
-def _arrows(starts, vectors, radius: float) -> tuple[np.ndarray, np.ndarray]:
-    """Arrows from each of ``starts`` (n, 3) along and as long as its row of ``vectors``,
-    as one surface, shaped as the 3D view draws the wind's: tips ``radius`` metres in
-    radius (less on an arrow too short for them)."""
-    vertices, triangles, count = [], [], 0
-    for start, vector in zip(starts, vectors, strict=True):
-        length = float(np.linalg.norm(vector))
-        if length <= 0.0:
-            continue
-        tip = min(radius, 0.2 * length)
-        head = length - min(0.35 * length, 2.5 * tip)
-        shape, faces = _lathe(
-            [(0.0, 0.0), (0.0, 0.4 * tip), (head, 0.4 * tip), (head, tip), (length, 0.0)], 12
-        )
-        along = vector / length
-        side = np.cross([0.0, 0.0, 1.0], along)
-        if np.linalg.norm(side) < 1e-9:
-            side = np.array([0.0, 1.0, 0.0])
-        side /= np.linalg.norm(side)
-        turn = np.column_stack([along, side, np.cross(along, side)])
-        vertices.append(shape @ turn.T + start)
-        triangles.append(faces + count)
-        count += len(shape)
-    if not vertices:
-        return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.int64)
-    return np.vstack(vertices), np.vstack(triangles)
 
 
 def _marker_radius(room: Room) -> float:
@@ -337,53 +300,6 @@ def _add_vegetation(doc: _Document, room: Room) -> None:
         doc.node(shape.name, group, mesh=index, extras={"kind": shape.kind})
 
 
-def _add_wind(doc: _Document, room: Room, field: bool, profile: bool) -> None:
-    """Outdoors, the wind as the 3D view draws it, under a node named with the scene's
-    wind ("wind 5.0 m/s at 10 m"): the arrows over the ground (``field``), each weather
-    zone as see-through walls named with its weather, and a mast with the wind's profile
-    in each weather where it blows (``profile``), its pole and curve as lines. Blender
-    shows no labels: the names and the custom properties carry the speeds."""
-    drawing = wind_drawing(room, field=field, profile=profile)
-    if drawing is None or not (drawing.walls or len(drawing.starts) or drawing.masts):
-        return
-    group = doc.node(drawing.key or "wind")
-    if drawing.walls:
-        material = doc.material("weather zone", WIND_COLOUR, ZONE_ALPHA)
-        zones = doc.node("weather zones", group)
-        for k, floor, top, text in drawing.walls:
-            n = len(floor)
-            j = np.arange(n)
-            later = (j + 1) % n
-            walls = np.vstack(
-                [np.column_stack([j, later, n + later]), np.column_stack([j, n + later, n + j])]
-            )
-            mesh = doc.mesh(text, np.vstack([floor, top]), walls, material)
-            doc.node(text, zones, mesh=mesh, extras={"weather_zone": k})
-    shown = doc.material("wind", WIND_COLOUR, WIND_ALPHA)
-    if len(drawing.starts):
-        arrows = _arrows(drawing.starts, drawing.vectors, drawing.radius)
-        doc.node("wind arrows", group, mesh=doc.mesh("wind arrows", *arrows, shown))
-    if drawing.masts:
-        pole = doc.material("wind mast", "#ffffff", glow=True)
-        line = doc.material("wind profile", WIND_COLOUR, glow=True)
-    for mast in drawing.masts:
-        extras = {
-            "heights_m": [round(float(h), 3) for h in mast.heights],
-            "wind_m_s": [round(float(v), 3) for v in mast.speeds],
-        }
-        title = "profile" if mast.zone is None else f"profile in {mast.zone}"
-        node = doc.node(f"{title}: {mast.label[1]}", group, extras=extras)
-        ends = np.array([mast.base, mast.base + [0.0, 0.0, mast.top]])
-        poles = doc.mesh("pole", ends, np.array([[0, 1]]), pole, mode=_LINES)
-        doc.node(f"{title} pole", node, mesh=poles)
-        steps = np.arange(len(mast.curve) - 1)
-        lines = np.column_stack([steps, steps + 1])
-        curve = doc.mesh("curve", mast.curve, lines, line, mode=_LINES)
-        doc.node(f"{title} curve", node, mesh=curve)
-        arrows = _arrows(mast.starts, mast.vectors, mast.radius)
-        doc.node(f"{title} arrows", node, mesh=doc.mesh("arrows", *arrows, shown))
-
-
 def _add_points(doc: _Document, room: Room, radius: float) -> None:
     """Sources and listeners as spheres turned the way they face, with an arrow along
     the aim (for listeners, and for sources that are not omnidirectional)."""
@@ -465,70 +381,48 @@ def _add_paths(doc: _Document, paths: EarlyReflections) -> None:
 
 
 def _add_particles(
-    doc: _Document,
-    room: Room,
-    sets: list[Particles],
-    radius: float,
-    slow_motion: float,
-    db_range: float,
+    doc: _Document, particles: Particles, radius: float, slow_motion: float, db_range: float
 ) -> None:
-    """A node per particle under a group node per set of ``sets``, and one animation
-    moving and scaling them all (Blender plays a file's first animation). A particle
-    that leaves the room's bounds, through the open sky or a gap, disappears."""
-    times = np.asarray(sets[0].times * slow_motion, dtype=np.float32)
+    """A node per particle under one group node, and one animation moving and scaling them."""
+    times = np.asarray(particles.times * slow_motion, dtype=np.float32)
     if np.any(np.diff(times) <= 0):
         raise ValueError("particle frames must follow each other in time")
-    if any(not np.array_equal(item.times, sets[0].times) for item in sets[1:]):
-        raise ValueError("particles to compare must have the same frames")
-    vertices = room.mesh.vertices
-    pad = 1e-6 * float(np.ptp(vertices, axis=0).max())
-    low, high = vertices.min(axis=0) - pad, vertices.max(axis=0) + pad
-    sphere, triangles = _sphere(radius, 8, 6)
-    time = doc.accessor(times, bounds=True)
-    samplers, channels, names = [], [], []
-    for particles in sets:
-        with np.errstate(divide="ignore"):
-            level = 10.0 * np.log10(particles.energy)
-        scale = np.clip(1.0 + level / db_range, 0.0, 1.0)  # (frames, particles)
-        inside = np.all((particles.positions >= low) & (particles.positions <= high), axis=2)
-        scale = np.where(inside, scale, 0.0)
-        positions = particles.positions @ _TO_GLTF.T
+    with np.errstate(divide="ignore"):
+        level = 10.0 * np.log10(particles.energy)
+    scale = np.clip(1.0 + level / db_range, 0.0, 1.0)  # (frames, particles)
+    positions = particles.positions @ _TO_GLTF.T
 
-        name = f"particles from {particles.source}" if particles.source else "particles"
-        if particles.still_air:
-            name += " in still air"
-        names.append(name)
-        look = "particle in still air" if particles.still_air else "particle"
-        colour = STILL_AIR_COLOUR if particles.still_air else PARTICLE_COLOUR
-        material = doc.material(look, colour, glow=True)
-        mesh = doc.mesh(look, sphere, triangles, material, normals=sphere / radius)
-        group = doc.node(
-            name,
-            extras={
-                "band_hz": particles.band_hz,
-                "duration_ms": float(1e3 * particles.times[-1]),
-                "slow_motion": slow_motion,
-                "db_range": db_range,
-                "still_air": particles.still_air,
-            },
+    name = f"particles from {particles.source}" if particles.source else "particles"
+    material = doc.material("particle", PARTICLE_COLOUR, glow=True)
+    sphere, triangles = _sphere(radius, 8, 6)
+    mesh = doc.mesh("particle", sphere, triangles, material, normals=sphere / radius)
+    group = doc.node(
+        name,
+        extras={
+            "band_hz": particles.band_hz,
+            "duration_ms": float(1e3 * particles.times[-1]),
+            "slow_motion": slow_motion,
+            "db_range": db_range,
+        },
+    )
+    nodes = [
+        doc.node(
+            f"particle {k}",
+            group,
+            mesh=mesh,
+            translation=positions[0, k].tolist(),
+            scale=[float(scale[0, k])] * 3,
         )
-        nodes = [
-            doc.node(
-                f"particle {k}",
-                group,
-                mesh=mesh,
-                translation=positions[0, k].tolist(),
-                scale=[float(scale[0, k])] * 3,
-            )
-            for k in range(positions.shape[1])
-        ]
-        moves = doc.accessors(positions.transpose(1, 0, 2))
-        sizes = doc.accessors(np.repeat(scale.T[:, :, None], 3, axis=2))
-        for node, move, size in zip(nodes, moves, sizes, strict=True):
-            for output, path in ((move, "translation"), (size, "scale")):
-                channels.append({"sampler": len(samplers), "target": {"node": node, "path": path}})
-                samplers.append({"input": time, "output": output, "interpolation": "LINEAR"})
-    name = names[0] if len(names) == 1 else f"{names[0]}, and in still air"
+        for k in range(positions.shape[1])
+    ]
+    time = doc.accessor(times, bounds=True)
+    moves = doc.accessors(positions.transpose(1, 0, 2))
+    sizes = doc.accessors(np.repeat(scale.T[:, :, None], 3, axis=2))
+    samplers, channels = [], []
+    for node, move, size in zip(nodes, moves, sizes, strict=True):
+        for output, path in ((move, "translation"), (size, "scale")):
+            channels.append({"sampler": len(samplers), "target": {"node": node, "path": path}})
+            samplers.append({"input": time, "output": output, "interpolation": "LINEAR"})
     doc.add("animations", {"name": name, "samplers": samplers, "channels": channels})
 
 
@@ -538,27 +432,18 @@ def export_gltf(
     *,
     paths: EarlyReflections | None = None,
     particles: Particles | None = None,
-    still_air: Particles | None = None,
     slow_motion: float = SLOW_MOTION,
     db_range: float = 60.0,
-    wind: bool = True,
-    wind_profile: bool = True,
 ) -> None:
     """Write ``room`` with its sources and listeners to ``path`` as glTF 2.0 (``.glb``).
-
-    Outdoors, ``wind`` adds the wind's arrows and the weather zones and
-    ``wind_profile`` the masts of its profile, as the 3D view draws them.
 
     ``paths`` (from :func:`acoustic_spaces.engine.early_paths` or a response's
     ``early``) adds the early reflection paths, coloured by order as in the 3D view.
     ``particles`` (from :func:`acoustic_spaces.engine.trace_particles`) adds an
     animation with a small sphere per particle that moves with it and shrinks with its
-    level: full size at its share of the emitted energy, gone ``db_range`` dB below,
-    and gone too once out of the room (through the open sky outdoors). ``still_air``
-    (``trace_particles(..., still_air=True)``, with the same frames) adds the same
-    particles traced in still air, in another colour, to show what the wind and the
-    temperature change. The animation runs ``slow_motion`` times slower than the sound,
-    with a keyframe at each of the particles' frames.
+    level: full size at its share of the emitted energy, gone ``db_range`` dB below.
+    The animation runs ``slow_motion`` times slower than the sound, with a keyframe at
+    each of the particles' frames.
     """
     if slow_motion <= 0 or db_range <= 0:
         raise ValueError("slow_motion and db_range must be positive")
@@ -566,17 +451,12 @@ def export_gltf(
     radius = _marker_radius(room)
     _add_room(doc, room)
     _add_vegetation(doc, room)
-    if wind or wind_profile:
-        _add_wind(doc, room, wind, wind_profile)
     _add_points(doc, room, radius)
     if paths is not None and len(paths):
         _add_paths(doc, paths)
-    if still_air is not None and particles is None:
-        raise ValueError("still_air compares particles: give particles too")
     if particles is not None:
-        sets = [particles] if still_air is None else [particles, still_air]
-        _add_particles(doc, room, sets, 0.4 * radius, slow_motion, db_range)
+        _add_particles(doc, particles, 0.4 * radius, slow_motion, db_range)
     doc.write(path)
 
 
-__all__ = ["PARTICLE_COUNT", "SLOW_MOTION", "STILL_AIR_COLOUR", "export_gltf"]
+__all__ = ["PARTICLE_COUNT", "SLOW_MOTION", "export_gltf"]

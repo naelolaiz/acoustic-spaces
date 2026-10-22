@@ -1324,8 +1324,7 @@ class MainWindow(QMainWindow):
     def export_blender(self, particles: bool = False) -> bool:
         """Write the room as glTF for Blender, with the reflection paths on show, or with
         sound particles from the selected source (or the first) as an animation, as much
-        of the sound, as slowly and as many as the user chooses, in still air too if
-        they choose."""
+        of the sound, as slowly and as many as the user chooses."""
         from acoustic_spaces.engine import trace_particles
         from acoustic_spaces.gltf import SLOW_MOTION, export_gltf
 
@@ -1347,28 +1346,16 @@ class MainWindow(QMainWindow):
         if not path:
             return False
         response = None if particles else self._shown_response()
-        traced = still = None
+        traced = None
         slow = SLOW_MOTION if settings is None else settings.slow_motion
         try:
             with busy():
                 if settings is not None:
-                    count, duration = settings.count, settings.duration / 1e3
-                    traced = trace_particles(room, source.name, count=count, duration=duration)
-                    if settings.still_air:
-                        still = trace_particles(
-                            room, source.name, count=count, duration=duration, still_air=True
-                        )
+                    traced = trace_particles(
+                        room, source.name, count=settings.count, duration=settings.duration / 1e3
+                    )
                 paths = None if response is None else response.early
-                export_gltf(
-                    room,
-                    path,
-                    paths=paths,
-                    particles=traced,
-                    still_air=still,
-                    slow_motion=slow,
-                    wind=self.wind_action.isChecked(),
-                    wind_profile=self.wind_profile_action.isChecked(),
-                )
+                export_gltf(room, path, paths=paths, particles=traced, slow_motion=slow)
         except (OSError, ValueError) as exc:
             self._error(_("Could not export"), str(exc))
             return False
@@ -1385,8 +1372,6 @@ class MainWindow(QMainWindow):
                 sound=1e3 * sound,
                 slow=slow * sound,
             )
-            if still is not None:
-                text += " " + _("The same particles in still air are blue.")
         elif response is not None:
             count = len(response.early)
             text = ngettext(

@@ -597,19 +597,13 @@
   wind profile** stands a mast in the 3D view in each weather where the wind blows, with
   arrows up it and a curve: how the wind grows with height over the ground. The scene
   tree's new **Wind** entry has an eye for each and lists the weather zones, which
-  show their weather in the scene's form when selected. The export to Blender (`export`
-  and the editor's) holds the same arrows, zones and masts, named with their speeds;
-  `export_gltf(wind=, wind_profile=)` leaves them out. Before, only the **Show the
+  show their weather in the scene's form when selected. Before, only the **Show the
   profile** plot showed the wind, and nothing showed a weather zone's.
 - **File > Export particle animation to Blender** asks how much of the sound to animate,
   how slowly and how many particles, as `export --duration --slow-motion --count` do;
   outdoors it starts with sound enough to reach the farthest listener, slowed down to
   last about the default's 4 s. Before, it always took 100 ms, too little to leave the
-  stage outdoors. In wind or a temperature gradient, **Compare with still air** (on at
-  first; `export --still-air`, `trace_particles(still_air=True)` and
-  `export_gltf(still_air=)`) adds the same particles traced in still air, in blue,
-  beside the yellow ones the weather bends, in the same animation. Particles that leave
-  the model, through the open sky outdoors, now disappear instead of flying on.
+  stage outdoors.
 - New example: `lakeside_concert`, a concert on a lawn by a lake heard across the water
   from a boat and in a village 550 m away, with two weather zones: cool air and a
   stronger breeze over the lake, a weaker breeze among the village's houses. The

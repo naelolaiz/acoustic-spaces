@@ -405,9 +405,7 @@ the sources and listeners, and none stand inside a building taller than them. In
 editor, **View > Show wind profile** also stands a mast in each weather where the wind
 blows, the scene's and each zone's: arrows at heights evenly up to the wind's height
 and a curve through the wind at every height between, how it grows from the still air
-at the ground; **Show the profile** plots the same in numbers. The export to Blender
-holds the same arrows, zones and masts (see
-[Exporting to Blender](editor.md#exporting-to-blender)).
+at the ground; **Show the profile** plots the same in numbers.
 
 ### Weather zones
 
@@ -574,9 +572,7 @@ is an arc of a circle, so its travel time and its length are exact.
   straight after, the cost of the equivalent profile the standards take (see
   [Validation](validation.md#weather-zones-against-a-crank-nicholson-parabolic-equation)).
 - **The animation's particles** and **the drawn paths** (`view --paths`, the Blender
-  export) curve as the sound does. `export --particles --still-air` (the editor's
-  **Compare with still air**) adds the same particles in still air, in blue, to show
-  how far the weather moves them.
+  export) curve as the sound does.
 
 Bending takes time: the `open_air_stage` example runs in 3 s instead of 0.2 s in still
 air, a scene's late rays take about three times as long, and coverage maps about six

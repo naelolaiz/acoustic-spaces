@@ -9,12 +9,11 @@ import pytest
 
 from acoustic_spaces import Room, Scene
 from acoustic_spaces.engine import early_paths, trace_particles
-from acoustic_spaces.gltf import STILL_AIR_COLOUR, _linear, export_gltf
+from acoustic_spaces.gltf import export_gltf
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.scene.model import Orientation
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
-LAKE = SHOEBOX.parent.parent / "lakeside_concert" / "scene.yaml"
 
 
 def gltf(point) -> np.ndarray:
@@ -312,50 +311,6 @@ def test_particle_animation(tmp_path: Path) -> None:
         export_gltf(room, out, particles=particles, slow_motion=0.0)
 
 
-def test_particles_in_still_air(tmp_path: Path) -> None:
-    """Outdoors the same particles traced in still air fly in blue beside those the
-    wind bends, in the same animation (Blender plays a file's first), and a particle
-    gone through the open sky disappears."""
-    room = Room.from_yaml(LAKE)
-    windy = trace_particles(room, count=30, duration=0.3, frames=7)
-    still = trace_particles(room, count=30, duration=0.3, frames=7, still_air=True)
-    out = tmp_path / "lake.glb"
-    export_gltf(room, out, particles=windy, still_air=still, wind=False, wind_profile=False)
-    doc, binary = read_glb(out)
-    check_layout(doc, binary)
-    assert len(children_of(doc, "particles from stage")) == 30
-    blue = children_of(doc, "particles from stage in still air")
-    assert len(blue) == 30
-    assert nodes_named(doc)["particles from stage in still air"]["extras"]["still_air"]
-    material = doc["materials"][doc["meshes"][blue[0]["mesh"]]["primitives"][0]["material"]]
-    assert material["name"] == "particle in still air"
-    assert material["pbrMetallicRoughness"]["baseColorFactor"] == _linear(STILL_AIR_COLOUR)
-    (animation,) = doc["animations"]
-    assert animation["name"] == "particles from stage, and in still air"
-    assert len(animation["channels"]) == 120
-
-    vertices = room.mesh.vertices
-    inside = np.all(
-        (still.positions >= vertices.min(axis=0)) & (still.positions <= vertices.max(axis=0)),
-        axis=2,
-    )
-    gone = int(np.flatnonzero(~inside[-1])[0])
-    target = doc["nodes"].index(blue[gone])
-    (sampler,) = (
-        animation["samplers"][channel["sampler"]]
-        for channel in animation["channels"]
-        if channel["target"] == {"node": target, "path": "scale"}
-    )
-    scale = array(doc, binary, sampler["output"])
-    assert scale[0, 0] == 1.0 and np.all(scale[-1] == 0.0)
-
-    with pytest.raises(ValueError, match="give particles too"):
-        export_gltf(room, out, still_air=still)
-    fewer = trace_particles(room, count=30, duration=0.3, frames=5, still_air=True)
-    with pytest.raises(ValueError, match="same frames"):
-        export_gltf(room, out, particles=windy, still_air=fewer)
-
-
 def test_trimesh_reads_the_file(tmp_path: Path) -> None:
     trimesh = pytest.importorskip("trimesh")
     room = Room.from_yaml(SHOEBOX)
@@ -394,55 +349,3 @@ def test_vegetation_volumes(tmp_path: Path) -> None:
         (x0, y0, z0), (x1, y1, z1) = low, high
         np.testing.assert_allclose(corners.min(axis=0), [x0, z0, -y1], atol=1e-5)
         np.testing.assert_allclose(corners.max(axis=0), [x1, z1, -y0], atol=1e-5)
-
-
-def test_the_wind(tmp_path: Path) -> None:
-    """Outdoors the file has the wind as the 3D view draws it: its arrows, the weather
-    zones as see-through walls named with their weather, and a mast per weather, with
-    the speeds in the names and the custom properties."""
-    from acoustic_spaces.viz import wind_drawing
-
-    room = Room.from_yaml(LAKE)
-    out = tmp_path / "lake.glb"
-    export_gltf(room, out)
-    doc, binary = read_glb(out)
-    check_layout(doc, binary)
-    names = [node["name"] for node in children_of(doc, "wind 2.5 m/s at 10 m")]
-    assert names == [
-        "weather zones",
-        "wind arrows",
-        "profile: 1.8 m/s at 2 m",
-        "profile in lake: 3.0 m/s at 2 m",
-        "profile in village: 0.5 m/s at 2 m",
-    ]
-    zones = children_of(doc, "weather zones")
-    assert [node["name"] for node in zones] == ["lake: 3.5 m/s, 17.0 °C", "village: 1.0 m/s"]
-    walls = doc["meshes"][zones[0]["mesh"]]["primitives"][0]
-    assert doc["materials"][walls["material"]]["alphaMode"] == "BLEND"
-    corners = array(doc, binary, walls["attributes"]["POSITION"])
-    np.testing.assert_allclose(corners.min(axis=0), [60, 0, -120], atol=1e-5)
-    np.testing.assert_allclose(corners.max(axis=0), [520, 10, 120], atol=1e-5)
-    # The arrows lie where the 3D view draws them, pointing the way the wind blows.
-    drawing = wind_drawing(room, profile=True)
-    arrows = nodes_named(doc)["wind arrows"]
-    tips = array(
-        doc, binary, doc["meshes"][arrows["mesh"]]["primitives"][0]["attributes"]["POSITION"]
-    )
-    ends = np.vstack([drawing.starts, drawing.starts + drawing.vectors])
-    np.testing.assert_allclose(tips[:, 0].min(), ends[:, 0].min(), atol=1e-4)
-    np.testing.assert_allclose(tips[:, 0].max(), ends[:, 0].max(), atol=1e-4)
-    mast = nodes_named(doc)["profile in lake: 3.0 m/s at 2 m"]
-    assert mast["extras"]["heights_m"] == [2.0, 4.0, 6.0, 8.0, 10.0]
-    assert mast["extras"]["wind_m_s"][-1] == pytest.approx(3.5)
-    assert [doc["nodes"][k]["name"] for k in mast["children"]] == [
-        "profile in lake pole",
-        "profile in lake curve",
-        "profile in lake arrows",
-    ]
-    # Without them, or indoors, there is no wind.
-    export_gltf(room, out, wind=False, wind_profile=False)
-    assert "wind 2.5 m/s at 10 m" not in nodes_named(read_glb(out)[0])
-    export_gltf(room, out, wind_profile=False)
-    assert len(children_of(read_glb(out)[0], "wind 2.5 m/s at 10 m")) == 2
-    export_gltf(Room.from_yaml(SHOEBOX), out)
-    assert not any(name.startswith("wind") for name in nodes_named(read_glb(out)[0]))

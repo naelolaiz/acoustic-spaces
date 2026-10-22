@@ -329,16 +329,6 @@ def test_particles_bend_and_stay_put_in_still_air() -> None:
     )
     assert np.all(np.isfinite(windy.positions)) and np.all(np.isfinite(windy.energy))
     assert not np.allclose(windy.positions, still.positions)
-    # Traced in still air, the windy field's particles fly as the field's without wind.
-    calm = trace_particles(
-        Room.from_scene(field({"preset": "windy"})),
-        count=200,
-        duration=0.2,
-        frames=5,
-        still_air=True,
-    )
-    assert calm.still_air and not windy.still_air
-    assert np.array_equal(calm.positions, still.positions)
 
 
 def test_the_parabolic_equation_s_bands_read_back_as_computed() -> None:

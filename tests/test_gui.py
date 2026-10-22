@@ -2582,7 +2582,7 @@ def test_export_to_blender(window, monkeypatch, tmp_path: Path) -> None:
 def test_particle_export_settings(window, monkeypatch, tmp_path: Path) -> None:
     """The particle export asks how much of the sound, how slowly and how many
     particles: outdoors at first enough to reach the farthest listener, lasting about
-    as long as the default's 4 s, and in wind the same particles in still air too."""
+    as long as the default's 4 s."""
     from PySide6.QtWidgets import QDialog, QFileDialog
 
     window.open_example(example_path("lakeside_concert"))
@@ -2590,9 +2590,7 @@ def test_particle_export_settings(window, monkeypatch, tmp_path: Path) -> None:
     # 568 m to the bedroom window: 1.65 s, a tenth more, up to the next 100 ms.
     assert (dialog.duration, dialog.slow_motion, dialog.count) == (1900, 2.1, 1000)
     assert dialog.summary.text() == "The animation lasts 3.99 s."
-    boxes = (dialog.sound, dialog.slow, dialog.particles, dialog.compare)
-    assert all(box.toolTip() for box in boxes)
-    assert dialog.compare.isEnabled() and dialog.still_air  # the wind bends them
+    assert all(box.toolTip() for box in (dialog.sound, dialog.slow, dialog.particles))
 
     def choose(dialog) -> int:
         dialog.sound.setValue(300)
@@ -2604,16 +2602,13 @@ def test_particle_export_settings(window, monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
     monkeypatch.setattr(ParticleDialog, "exec", choose)
     assert window.export_blender(particles=True)
-    written = window.messages.toPlainText()
-    assert "50 particles from stage, 300 ms of sound over 3 s" in written
-    assert "The same particles in still air are blue." in written
+    assert "50 particles from stage, 300 ms of sound over 3 s" in window.messages.toPlainText()
     target.unlink()
     monkeypatch.setattr(ParticleDialog, "exec", lambda dialog: int(QDialog.DialogCode.Rejected))
     assert not window.export_blender(particles=True) and not target.exists()
     window.open_example(example_path("studio"))  # indoors, the default
     dialog = ParticleDialog(window.document.room, window.document.scene.sources[0], window)
     assert (dialog.duration, dialog.slow_motion) == (100, 40)
-    assert not dialog.compare.isEnabled() and not dialog.still_air
 
 
 def test_runs_of_a_scene_no_longer_open_are_dropped(window, qapp) -> None:
