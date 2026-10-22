@@ -1654,10 +1654,14 @@ fn bent_leg() -> u32 {
         if (len > 0.0) {
             let along = span / len;
             // A face the chord stops just short of (nearer than the search would look
-            // from its end) is met now, not passed through on the next chord; and a chord
-            // from the open air (after a turn or a scattering) meets a face however near.
+            // from its end) is met now, not passed through on the next chord: looking
+            // twice that far on leaves room for single precision's rounding between the
+            // two searches (a ray stopping 0.4 mm short of the sky left through it). A
+            // chord from the open air (after a turn or a scattering) meets a face however
+            // near.
             let nearest = select(0.0, run.t_min, ray.last != NONE);
-            let met = search_ray(chord.start, along, nearest, len + run.t_min, ray.last, false);
+            let reach = len + 2.0 * run.t_min;
+            let met = search_ray(chord.start, along, nearest, reach, ray.last, false);
             let found = met.face != NONE;
             var segment = select(len, met.t, found);
             let rate = run.c * chord.time / len;
