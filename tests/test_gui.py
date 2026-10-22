@@ -1785,6 +1785,73 @@ def test_weather_zones_form(window, qapp) -> None:
     assert len(atmosphere().zones) == 1 and page.weather_zone.count() == 2
 
 
+def _differ(a, b) -> int:
+    """How many pixels of two pictures of a widget differ."""
+
+    def pixels(image):
+        image = image.convertToFormat(image.Format.Format_RGB32)
+        rows = np.array(image.constBits(), dtype=np.uint8)  # a copy: the image goes
+        return rows.reshape(image.height(), -1)[:, : 4 * image.width()].reshape(
+            image.height(), image.width(), 4
+        )
+
+    return int(np.count_nonzero(np.any(pixels(a.toImage()) != pixels(b.toImage()), axis=-1)))
+
+
+def test_the_wind_is_drawn_outdoors(window, qapp) -> None:
+    window.open_example(example_path("open_air_stage"))
+    canvas = _plan(window, qapp)
+    wind, profile = window.wind_action, window.wind_profile_action
+    assert wind.isEnabled() and wind.isChecked() and profile.isEnabled() and profile.isChecked()
+    assert wind.toolTip() and profile.toolTip()
+    assert canvas.show_wind and canvas._wind is not None and canvas._wind.windy
+    shown = canvas.grab()
+    wind.setChecked(False)
+    hidden = canvas.grab()
+    assert not canvas.show_wind and _differ(shown, hidden) > 500  # arrows and the key
+    wind.setChecked(True)
+    assert _differ(shown, canvas.grab()) == 0
+    # A weather zone carries its name and its wind.
+    window.plan.canvas.part_drawn.emit("weather", [[20, -40], [80, -40], [80, 40], [20, 40]])
+    window.plan.cancel()
+    window.inspector.pages["scene"].weather_zone.setCurrentIndex(1)
+    window.inspector.pages["scene"].wind_speed.setValue(1.0)
+    assert canvas._wind.label(1) == "weather_1: 1.0 m/s"
+    canvas.grab()
+    # Indoors there is no wind to show.
+    window.open_example(example_path("studio"))
+    assert not wind.isEnabled() and not profile.isEnabled() and canvas._wind is None
+
+
+@pytest.mark.render
+def test_the_wind_in_the_3d_view(window, qapp) -> None:
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    window.open_example(example_path("open_air_stage"))
+
+    def actors() -> int:
+        qapp.processEvents()
+        return len(viewport.plotter.renderer.actors)
+
+    both = actors()
+    window.wind_profile_action.setChecked(False)
+    field = actors()
+    window.wind_action.setChecked(False)
+    none = actors()
+    window.wind_profile_action.setChecked(True)
+    mast = actors()
+    # The arrows and the key in the corner; a mast's pole, curve, arrows and labels.
+    assert field == none + 2 and mast == none + 5 and both == none + 6
+    texts = [
+        actor.GetText(k)
+        for actor in viewport.plotter.renderer.actors.values()
+        if hasattr(actor, "GetText")
+        for k in range(4)
+    ]
+    assert "wind 5.0 m/s at 10 m" in texts
+
+
 def test_weather_classes_form(window, qapp) -> None:
     window.open_example(example_path("open_air_stage"))
     window.select("scene", None)

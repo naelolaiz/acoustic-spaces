@@ -247,3 +247,6 @@ Editor:
   cleared, every other one shaded.
 - [x] Markers sized from the spacing of the sources and listeners, smaller where they
   would overlap, and arrows that stop short of a marker ahead.
+- [x] The wind drawn outdoors, in the 3D view and the plan: arrows the way it blows, as
+  long as it is strong, the weather zones with their winds, and masts with the wind's
+  profile up them.

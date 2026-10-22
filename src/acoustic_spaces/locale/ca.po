@@ -582,6 +582,33 @@ msgstr ""
 "és tancat"
 
 #: acoustic_spaces/gui/app.py
+msgid "Show &wind"
+msgstr "Mostrar el &vent"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Outdoors, draw the wind in the 3D view and the plan: arrows the way it "
+"blows, as long as it is strong, at the height the scene gives its speed at, "
+"and each weather zone with its wind"
+msgstr ""
+"A l'aire lliure, dibuixar el vent a la vista 3D i a la planta: fletxes en la "
+"direcció en què bufa, tan llargues com fort és, a l'alçada a la qual "
+"l'escena en dona la velocitat, i cada zona meteorològica amb el seu vent"
+
+#: acoustic_spaces/gui/app.py
+msgid "Show wind pro&file"
+msgstr "Mostrar el p&erfil del vent"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Outdoors, stand a mast in the 3D view in each weather where the wind blows, "
+"with arrows up it and a curve: how the wind grows with height over the ground"
+msgstr ""
+"A l'aire lliure, aixecar a la vista 3D un pal a l'escena i a cada zona "
+"meteorològica on bufa el vent, amb fletxes al llarg i una corba: com creix "
+"el vent amb l'alçada sobre el terreny"
+
+#: acoustic_spaces/gui/app.py
 msgid "Save &screenshot…"
 msgstr "Desar &captura de pantalla…"
 
@@ -5674,6 +5701,36 @@ msgstr "La vista 3D no està disponible aquí: {reason}"
 #: acoustic_spaces/gui/viewport.py
 msgid "The 3D view needs a display with OpenGL."
 msgstr "La vista 3D necessita una pantalla amb OpenGL."
+
+#. Translators: the wind over an outdoor scene, as the 3D view's legend shows it.
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "wind {speed:.1f} m/s at {height:g} m"
+msgstr "vent {speed:.1f} m/s a {height:g} m"
+
+#. Translators: a weather zone's name and its wind's speed, drawn on it.
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{name}: {speed:.1f} m/s"
+msgstr "{name}: {speed:.1f} m/s"
+
+#. Translators: a weather zone's name, its wind's speed and its ground temperature.
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{name}: {speed:.1f} m/s, {temperature:.1f} °C"
+msgstr "{name}: {speed:.1f} m/s, {temperature:.1f} °C"
+
+#. Translators: a weather zone's name and its ground temperature, in still air.
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{name}: {temperature:.1f} °C"
+msgstr "{name}: {temperature:.1f} °C"
+
+#. Translators: the wind's speed at a height, beside an arrow up the wind's profile.
+#: acoustic_spaces/viz.py
+#, python-brace-format
+msgid "{speed:.1f} m/s at {height:g} m"
+msgstr "{speed:.1f} m/s a {height:g} m"
 
 #. Translators: reflection orders: 1st order, 2nd order... {order} is the number.
 #: acoustic_spaces/viz.py

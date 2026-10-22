@@ -425,6 +425,29 @@ class MainWindow(QMainWindow):
         )
         self.leaks_action.setCheckable(True)
         self.leaks_action.toggled.connect(lambda *_: self._draw())
+        self.wind_action = a(
+            _("Show &wind"),
+            lambda: None,
+            tip=_(
+                "Outdoors, draw the wind in the 3D view and the plan: arrows the way it blows, "
+                "as long as it is strong, at the height the scene gives its speed at, and "
+                "each weather zone with its wind"
+            ),
+        )
+        self.wind_action.setCheckable(True)
+        self.wind_action.setChecked(True)
+        self.wind_action.toggled.connect(lambda *_: self._draw())
+        self.wind_profile_action = a(
+            _("Show wind pro&file"),
+            lambda: None,
+            tip=_(
+                "Outdoors, stand a mast in the 3D view in each weather where the wind blows, "
+                "with arrows up it and a curve: how the wind grows with height over the ground"
+            ),
+        )
+        self.wind_profile_action.setCheckable(True)
+        self.wind_profile_action.setChecked(True)
+        self.wind_profile_action.toggled.connect(lambda *_: self._draw())
         self.screenshot_action = a(
             _("Save &screenshot…"), self.save_screenshot, tip=_("Save the 3D view as a PNG picture")
         )
@@ -523,6 +546,7 @@ class MainWindow(QMainWindow):
         view.addActions([self.show_3d_action, self.show_plan_action])
         view.addSeparator()
         view.addActions([self.reset_camera_action, self.paths_action, self.leaks_action])
+        view.addActions([self.wind_action, self.wind_profile_action])
         view.addAction(self.screenshot_action)
         view.addSeparator()
         for dock in self.docks.values():
@@ -799,10 +823,21 @@ class MainWindow(QMainWindow):
         coverage = None if self._map_stale() else self.map_panel.shown_in_3d()
         leaks = self._leaks() if self.leaks_action.isChecked() else None
         hidden = self.document.hidden
+        outdoors = self.document.room.outdoor is not None
+        self.wind_action.setEnabled(outdoors)
+        self.wind_profile_action.setEnabled(outdoors)
+        wind = self.wind_action.isChecked()
         self.viewport.show_room(
-            self.document.room, self.selection, paths, coverage, leaks, hidden=hidden
+            self.document.room,
+            self.selection,
+            paths,
+            coverage,
+            leaks,
+            hidden=hidden,
+            wind=wind,
+            wind_profile=self.wind_profile_action.isChecked(),
         )
-        self.plan.show_room(self.document.room, self.selection, hidden)
+        self.plan.show_room(self.document.room, self.selection, hidden, wind)
 
     def _leaks(self):
         """Where rays escape from the room, found again when its geometry, materials or
