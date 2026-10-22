@@ -5,6 +5,7 @@ The comparisons run wherever wgpu finds a GPU, software ones included (CI uses M
 lavapipe on Linux), and are skipped elsewhere.
 """
 
+import logging
 import platform
 import runpy
 import sys
@@ -302,6 +303,31 @@ def test_wgpu_leaves_its_opengl_backend_out(monkeypatch) -> None:
 
     extras.set_instance_extras = too_late
     gpu._primary_backends()  # wgpu keeps the instance it has
+
+
+def test_wgpu_keeps_the_vulkan_loader_quiet_on_windows(monkeypatch) -> None:
+    """With wgpu's debug flag (Windows) the Vulkan loader's notes, such as finding no
+    driver on a computer with Direct3D 12 only, would be printed: they are left out of
+    wgpu's log, and its own warnings are not."""
+    extras = types.ModuleType("wgpu.backends.wgpu_native.extras")
+    extras.set_instance_extras = lambda backends, flags: None
+    for name in ("wgpu", "wgpu.backends", "wgpu.backends.wgpu_native"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, extras.__name__, extras)
+    log = logging.getLogger("wgpu")
+    monkeypatch.setattr(log, "filters", [])
+    monkeypatch.setattr(sys, "platform", "win32")
+    gpu._primary_backends()
+    gpu._primary_backends()  # once is enough
+    assert log.filters == [gpu._not_the_vulkan_loader]
+
+    def record(message: str) -> logging.LogRecord:
+        return log.makeRecord("wgpu", logging.WARNING, __file__, 0, message, None, None)
+
+    loader = "GENERAL [Loader Message (0x0)]\n\tvkCreateInstance: Found no drivers!"
+    assert not log.filter(record(loader))
+    assert not log.filter(record("\tobjects: (type: INSTANCE, hndl: 0x2defba30, name: ?)"))
+    assert log.filter(record("Expected wgpu-native version 25 but got 24."))
 
 
 def test_wgpu_knows_the_backends_and_flags_it_is_given(monkeypatch) -> None:

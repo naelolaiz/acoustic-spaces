@@ -18,6 +18,7 @@ next, and so do the two sets of branch velocities, by the step's parity.
 from __future__ import annotations
 
 import functools
+import logging
 import sys
 from typing import Literal
 
@@ -236,6 +237,15 @@ def _wgpu(what: str = "the wave solver"):
     return wgpu
 
 
+def _not_the_vulkan_loader(record: logging.LogRecord) -> bool:
+    """Whether wgpu's log ``record`` is anything but a note of the Vulkan loader's, or the
+    line after it naming the Vulkan instance it is about."""
+    message = record.getMessage()
+    return "[Loader Message" not in message and not message.startswith(
+        "\tobjects: (type: INSTANCE,"
+    )
+
+
 def _primary_backends() -> None:
     """Have wgpu use Vulkan, Metal or Direct3D 12 only, never its OpenGL backend: setting
     that up through EGL aborts the whole process (a Rust panic Python cannot catch) when
@@ -243,8 +253,13 @@ def _primary_backends() -> None:
     shader compiler (FXC) also goes without its optimizer (wgpu's debug flag), which
     miscompiled the ray tracer's vegetation: rays scattered in it came out where they
     had started. The driver optimizes the shader anyway, and the compile takes no
-    longer. (Only flags every wgpu from 0.31 on knows: an unknown one sets nothing.)"""
+    longer. (Only flags every wgpu from 0.31 on knows: an unknown one sets nothing.)
+    The debug flag also has wgpu pass on the Vulkan loader's notes, such as finding no
+    driver on a computer with Direct3D 12 only, which say nothing to a user: those are
+    left out of wgpu's log."""
     flags = ["Debug"] if sys.platform == "win32" else ["Default"]
+    if sys.platform == "win32":
+        logging.getLogger("wgpu").addFilter(_not_the_vulkan_loader)
     try:
         from wgpu.backends.wgpu_native.extras import set_instance_extras
 
