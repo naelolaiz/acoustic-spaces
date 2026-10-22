@@ -605,7 +605,11 @@
   how slowly and how many particles, as `export --duration --slow-motion --count` do;
   outdoors it starts with sound enough to reach the farthest listener, slowed down to
   last about the default's 4 s. Before, it always took 100 ms, too little to leave the
-  stage outdoors.
+  stage outdoors. In wind or a temperature gradient, **Compare with still air** (on at
+  first; `export --still-air`, `trace_particles(still_air=True)` and
+  `export_gltf(still_air=)`) adds the same particles traced in still air, in blue,
+  beside the yellow ones the weather bends, in the same animation. Particles that leave
+  the model, through the open sky outdoors, now disappear instead of flying on.
 - New example: `lakeside_concert`, a concert on a lawn by a lake heard across the water
   from a boat and in a village 550 m away, with two weather zones: cool air and a
   stronger breeze over the lake, a weaker breeze among the village's houses. The

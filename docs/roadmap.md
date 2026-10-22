@@ -252,4 +252,5 @@ Editor:
   profile up them; eyes for both in the scene tree, the same in the export to Blender,
   and an example to see them (`lakeside_concert`).
 - [x] The particle export to Blender asks how much of the sound, how slowly and how many
-  particles, outdoors at first enough to reach the farthest listener.
+  particles, outdoors at first enough to reach the farthest listener, and in wind adds
+  the same particles in still air to compare.

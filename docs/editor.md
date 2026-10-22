@@ -164,7 +164,7 @@ which frequencies each octave band holds.
 - **File > Export to Blender** writes the room with the reflection paths on show, and
   **File > Export particle animation to Blender** the sound particles leaving the
   selected source, asking first how much of the sound to animate, how slowly and how
-  many particles (see below).
+  many particles, and in wind whether to add them in still air (see below).
 
 ## Drawing rooms
 
@@ -285,6 +285,13 @@ the scene's (+z up, metres).
   **Sound to animate**, **Slow motion** and **Particles**. Outdoors it starts with sound
   enough to reach the farthest listener (a tenth more than the direct sound takes,
   rounded up to 100 ms), slowed down to last about the default's 4 s: 1900 ms at 2.1×
-  for the `lakeside_concert` example's village 568 m away. Outdoors most particles soon
-  leave through the open sky and fly on straight. Blender draws a dashed line from each
-  particle to the object that holds them; **Overlays > Relationship Lines** hides them.
+  for the `lakeside_concert` example's village 568 m away. A particle disappears once it
+  leaves the model: outdoors most soon go through the open sky. Blender draws a dashed
+  line from each particle to the object that holds them; **Overlays > Relationship
+  Lines** hides them.
+- `--still-air`, with `--particles` in wind or a temperature gradient, adds the same
+  particles traced in still air, in blue, beside the yellow ones the weather bends (the
+  editor's **Compare with still air**, on at first there). Wind of a few metres a second
+  against the sound's 343 moves them little: in the `lakeside_concert` example the two
+  part by about 10 m, at most 40 m, over the water a second after leaving the stage, and
+  more of the yellow ones stay under the sky.

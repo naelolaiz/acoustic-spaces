@@ -574,7 +574,9 @@ is an arc of a circle, so its travel time and its length are exact.
   straight after, the cost of the equivalent profile the standards take (see
   [Validation](validation.md#weather-zones-against-a-crank-nicholson-parabolic-equation)).
 - **The animation's particles** and **the drawn paths** (`view --paths`, the Blender
-  export) curve as the sound does.
+  export) curve as the sound does. `export --particles --still-air` (the editor's
+  **Compare with still air**) adds the same particles in still air, in blue, to show
+  how far the weather moves them.
 
 Bending takes time: the `open_air_stage` example runs in 3 s instead of 0.2 s in still
 air, a scene's late rays take about three times as long, and coverage maps about six

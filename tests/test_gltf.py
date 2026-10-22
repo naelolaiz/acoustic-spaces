@@ -9,11 +9,12 @@ import pytest
 
 from acoustic_spaces import Room, Scene
 from acoustic_spaces.engine import early_paths, trace_particles
-from acoustic_spaces.gltf import export_gltf
+from acoustic_spaces.gltf import STILL_AIR_COLOUR, _linear, export_gltf
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.scene.model import Orientation
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
+LAKE = SHOEBOX.parent.parent / "lakeside_concert" / "scene.yaml"
 
 
 def gltf(point) -> np.ndarray:
@@ -311,6 +312,50 @@ def test_particle_animation(tmp_path: Path) -> None:
         export_gltf(room, out, particles=particles, slow_motion=0.0)
 
 
+def test_particles_in_still_air(tmp_path: Path) -> None:
+    """Outdoors the same particles traced in still air fly in blue beside those the
+    wind bends, in the same animation (Blender plays a file's first), and a particle
+    gone through the open sky disappears."""
+    room = Room.from_yaml(LAKE)
+    windy = trace_particles(room, count=30, duration=0.3, frames=7)
+    still = trace_particles(room, count=30, duration=0.3, frames=7, still_air=True)
+    out = tmp_path / "lake.glb"
+    export_gltf(room, out, particles=windy, still_air=still, wind=False, wind_profile=False)
+    doc, binary = read_glb(out)
+    check_layout(doc, binary)
+    assert len(children_of(doc, "particles from stage")) == 30
+    blue = children_of(doc, "particles from stage in still air")
+    assert len(blue) == 30
+    assert nodes_named(doc)["particles from stage in still air"]["extras"]["still_air"]
+    material = doc["materials"][doc["meshes"][blue[0]["mesh"]]["primitives"][0]["material"]]
+    assert material["name"] == "particle in still air"
+    assert material["pbrMetallicRoughness"]["baseColorFactor"] == _linear(STILL_AIR_COLOUR)
+    (animation,) = doc["animations"]
+    assert animation["name"] == "particles from stage, and in still air"
+    assert len(animation["channels"]) == 120
+
+    vertices = room.mesh.vertices
+    inside = np.all(
+        (still.positions >= vertices.min(axis=0)) & (still.positions <= vertices.max(axis=0)),
+        axis=2,
+    )
+    gone = int(np.flatnonzero(~inside[-1])[0])
+    target = doc["nodes"].index(blue[gone])
+    (sampler,) = (
+        animation["samplers"][channel["sampler"]]
+        for channel in animation["channels"]
+        if channel["target"] == {"node": target, "path": "scale"}
+    )
+    scale = array(doc, binary, sampler["output"])
+    assert scale[0, 0] == 1.0 and np.all(scale[-1] == 0.0)
+
+    with pytest.raises(ValueError, match="give particles too"):
+        export_gltf(room, out, still_air=still)
+    fewer = trace_particles(room, count=30, duration=0.3, frames=5, still_air=True)
+    with pytest.raises(ValueError, match="same frames"):
+        export_gltf(room, out, particles=windy, still_air=fewer)
+
+
 def test_trimesh_reads_the_file(tmp_path: Path) -> None:
     trimesh = pytest.importorskip("trimesh")
     room = Room.from_yaml(SHOEBOX)
@@ -357,7 +402,7 @@ def test_the_wind(tmp_path: Path) -> None:
     the speeds in the names and the custom properties."""
     from acoustic_spaces.viz import wind_drawing
 
-    room = Room.from_yaml(SHOEBOX.parent.parent / "lakeside_concert" / "scene.yaml")
+    room = Room.from_yaml(LAKE)
     out = tmp_path / "lake.glb"
     export_gltf(room, out)
     doc, binary = read_glb(out)

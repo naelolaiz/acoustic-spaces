@@ -272,6 +272,10 @@ def test_export_for_blender(tmp_path: Path, capsys: pytest.CaptureFixture[str]) 
     assert out.read_bytes()[:4] == b"glTF"
     assert main(["export", str(SHOEBOX), str(out), "--particles", "--source", "piano"]) == 1
     assert "no source 'piano'" in capsys.readouterr().err
+    lake = SHOEBOX.parent.parent / "lakeside_concert" / "scene.yaml"
+    args = ["export", str(lake), str(out), "--particles", "--still-air", "--count", "10"]
+    assert main([*args, "--duration", "50", "--frames", "3"]) == 0
+    assert "and the same particles in still air, in blue" in capsys.readouterr().out
 
 
 def test_simulate_writes_responses_and_parameters(
