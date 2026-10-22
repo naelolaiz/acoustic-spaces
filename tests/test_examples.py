@@ -1,3 +1,4 @@
+import argparse
 import importlib.util
 import re
 from fnmatch import fnmatch
@@ -267,3 +268,80 @@ def test_stadium_feedback(
     assert feedback.main(["--out", str(tmp_path / "loop.wav")]) == 0
     assert "It rings first at" in capsys.readouterr().out
     assert (tmp_path / "loop.wav").stat().st_size > 0
+
+
+def _demo_args(**paths) -> argparse.Namespace:
+    return argparse.Namespace(format="binaural", **{k: Path(v) for k, v in paths.items()})
+
+
+def test_church_demo_scene_and_organ(tmp_path: Path) -> None:
+    """church_demo.py's choir and organ: the tune and every voice of the organ fill a
+    verse, every key has a sample at most two semitones away, the two sides of the organ
+    share the notes, and the scene it writes is the church with 19 singers, the organ's
+    four sources and the tour's listeners, without problems."""
+    demo = _script("church", "church_demo")
+    assert sum(beats for _, beats in demo.TUNE) == demo.BEATS
+    for voice, notes in demo.ORGAN.items():
+        assert sum(note[1] for note in notes) == demo.BEATS, voice
+    assert demo.sample_name(60) == "C3"  # VCSL's names: C3 is middle C
+    for division, voices in (("manual", "SAT"), ("pedal", "B")):
+        for midi, start, end in demo.organ_events(voices):
+            assert 0.0 <= start < end <= demo.BEATS
+            for key in (midi, midi + 12) if division == "manual" else (midi,):
+                assert abs(demo.nearest_sample(key, division) - key) <= 2, (division, key)
+    files = demo.organ_needed()
+    assert set(files) == {"Loud", "Quiet", "Loud Pedal", "Quiet Pedal"}
+    assert all(name.endswith("_rr1.wav") for name in files["Quiet"])
+    # Verse 3 slows down and holds the last chord; the music ends after the church rings.
+    assert demo.beat_time(3, demo.BEATS) - demo.VERSES[3] > demo.BEATS
+    assert demo.end_of_music() > demo.beat_time(3, 21.0) + demo.LAST_CHORD_S
+
+    args = _demo_args(source=example_path("church"), scene=tmp_path / "scene_choir.yaml")
+    args.results = tmp_path / "results_choir"
+    demo.scene(args)
+    room = Room.from_yaml(args.scene)
+    assert room.problems() == []
+    names = [source.name for source in room.scene.sources]
+    assert len([name for name in names if name.startswith("singer_")]) == 19
+    assert [name for name in names if name.startswith("organ_")] == list(demo.ORGAN_SOURCES)
+    assert {item.name for item in room.scene.listeners} == {name for name, _ in demo.TOUR}
+    assert room.scene.simulation.ir_length_s >= 9.0
+
+
+def test_church_demo_tunes_and_times_a_take() -> None:
+    """A take sung slower than the tune, 30 cents sharp and each note a little off:
+    church_demo.py moves each note onto its beat, the singer's own offset away and 60 %
+    of each note's error."""
+    demo = _script("church", "church_demo")
+    rate, beat_s, offset = 16_000, 0.8, 30.0
+    errors = [(-1) ** k * 10.0 for k in range(sum(1 for m, _ in demo.TUNE if m is not None))]
+    x, notes, t = np.zeros(int(22.0 * rate)), [], 1.0
+    for midi, beats in demo.TUNE:
+        if midi is not None:
+            cents = offset + errors[len(notes)]
+            f0 = 440.0 * 2.0 ** ((midi - 69) / 12 + cents / 1200)
+            n = int((beats * beat_s - 0.05) * rate)
+            a = int(t * rate)
+            x[a : a + n] = np.sin(2.0 * np.pi * f0 * np.arange(n) / rate) * np.hanning(n) ** 0.1
+            notes.append({"start": t, "end": t + n / rate, "f0": f0, "after": None})
+        t += beats * beat_s
+    sung = demo.tuned_and_timed("f1", x, rate, notes)
+    first, y = sung[2]
+    track = np.zeros(first + len(y))
+    track[first:] = y
+    sung_notes = [midi for midi, _ in demo.TUNE if midi is not None]
+    times = demo.note_times(2)
+    checked = 0
+    for k, ((start, end), midi) in enumerate(zip(times, sung_notes, strict=True)):
+        if end - start < 0.9:
+            continue
+        middle = int((start + end) / 2 * rate)
+        part = track[middle - int(0.15 * rate) : middle + int(0.15 * rate)]
+        spectrum = np.abs(np.fft.rfft(part * np.hanning(len(part)), 1 << 20))
+        peak = int(np.argmax(spectrum))
+        a, b, c = np.log(spectrum[peak - 1 : peak + 2])
+        f = (peak + 0.5 * (a - c) / (a - 2.0 * b + c)) * rate / (1 << 20)
+        cents = 1200.0 * np.log2(f / (440.0 * 2.0 ** ((midi - 69) / 12)))
+        assert abs(cents - 0.4 * errors[k]) < 2.0, (k, cents)
+        checked += 1
+    assert checked >= 10
