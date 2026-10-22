@@ -370,9 +370,8 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     assert roles["subs"] == "mono" and roles["vocal_wedges"] == "singer"
     assert roles["drum_fill"] == "drummer" and roles["side_fill_left"] == "stage"
     assert all(roles[name] == name for name in demo.BAND)
-    stems = {name.split("Stem_")[1] for name in demo.STEMS}
     for mix in (demo.SINGER_MIX, demo.DRUMMER_MIX, demo.STAGE_MIX, *demo.BAND_MIX.values()):
-        assert set(mix) <= stems
+        assert set(mix) <= set(demo.STEMS)
     # The cuts shift each mix by its loudest arrival: here the delay 30 ms after the
     # main array, which plays 3 dB quieter but reaches the seat 8 dB louder.
     results = tmp_path / "results"
@@ -391,7 +390,14 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     # The tour moves on phrase boundaries and leaves out listeners without a mix.
     work = tmp_path / "demo"
     (work / "feeds").mkdir(parents=True)
-    (work / "feeds" / "feeds.json").write_text('{"length_s": 264.0}', encoding="utf-8")
+    (work / "feeds" / "feeds.json").write_text('{"length_s": 195.0}', encoding="utf-8")
     tour = demo.tour_of(argparse.Namespace(tour=None, work=work), {"mix_position", "singer"})
     assert [name for name, _, _ in tour] == ["mix_position", "singer", "mix_position"]
-    assert tour[1][1] == pytest.approx(2 * demo.PHRASE_S) and tour[-1][2] == 264.0
+    assert tour[1][1] == pytest.approx(demo.PHRASE_S) and tour[-1][2] == 195.0
+    seats = {"seats": {"mix_position": {"rms_db": -40.0}, "singer": {"rms_db": -22.0}}}
+    assert demo.gains_of(seats, tour) == {"mix_position": 18.0, "singer": 0.0}
+    # The default tour fits in the song, every stop on a 4 or 8 bar boundary.
+    tour = demo.tour_of(argparse.Namespace(tour=None, work=work), set(demo.TITLES))
+    assert len(tour) == len(demo.TOUR) and tour[-1][2] - tour[-1][1] > demo.PHRASE_S
+    for _, start, _ in tour:
+        assert start / (demo.PHRASE_S / 2) == pytest.approx(round(start / (demo.PHRASE_S / 2)))

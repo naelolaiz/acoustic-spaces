@@ -36,8 +36,8 @@ BAND = ("drum_kit", "singer_voice", "guitar_amp")
 #: Where make_video draws the spectrogram: left, top, width, height.
 SPECTRUM_BOX = (100, 892, 1720, 96)
 CREDIT = (
-    'Music: Software-Entwicklungskit, "Rubidium" (album "Everything is Free"), CC0 1.0 · '
-    "github.com/ichbinsoftware/everythingisfree"
+    'Music: Rhythmussportgruppe, "Spicy Funk Cake" (Niklas Dahlheimer), recorded for the DEGA '
+    "at Hochschule Düsseldorf, CC BY 4.0 · doi.org/10.5281/zenodo.3601032"
 )
 STAGE_BOX = (-60.0, -29.0, -37.0, 29.0)  # x0, y0, x1, y1 of the close-up
 
@@ -169,7 +169,7 @@ def mmss(t: float) -> str:
 
 
 class Pictures:
-    def __init__(self, scene: dict, folder: Path, levels, seats, tour, titles):
+    def __init__(self, scene: dict, folder: Path, levels, seats, tour, titles, gains=None):
         self.scene, self.levels, self.seats, self.tour, self.titles = (
             scene,
             levels,
@@ -177,6 +177,7 @@ class Pictures:
             tour,
             titles,
         )
+        self.gains = gains or {}  # dB each listener is turned up by in the video
         self.faces = read_obj(folder / scene["geometry"]["file"])
         self.sources = scene["sources"]
         self.listeners = {item["name"]: item for item in scene["listeners"]}
@@ -470,6 +471,8 @@ class Pictures:
             ("Facing the audience" if self.on_stage(listener) else "Facing the stage")
             + " · L and R mark your ears",
         ]
+        if self.gains.get(listener, 0.0) > 0.5:
+            facts.insert(2, f"Turned up {self.gains[listener]:.0f} dB here so you can hear it")
         y = 352
         for line in facts:
             text(draw, (x, y), line, font("Regular", 24), TEXT)

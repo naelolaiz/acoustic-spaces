@@ -1,15 +1,18 @@
 """A song played by a band on the stadium example's stage and through its sound system,
 heard at each of its listeners, and a video that tours them.
 
-The sound system (main arrays, subwoofers, fills, towers and delays) plays the stereo
-master of "Rubidium" by Software-Entwicklungskit (album "Everything is Free", CC0 1.0,
-https://github.com/ichbinsoftware/everythingisfree); the monitors play mixes of its
-stems: the singer's wedges the lead vocal, the drum fill the drums, the side fills a
-mix for the whole stage. Run it from the folder of the stadium example
+The song is "Spicy Funk Cake" by the Rhythmussportgruppe (composed by Niklas Dahlheimer),
+recorded for the sound database of the DEGA (German Acoustical Society) at Hochschule
+Düsseldorf, CC BY 4.0, https://doi.org/10.5281/zenodo.3601032. The sound system (main
+arrays, subwoofers, fills, towers and delays) plays its stereo reference mix; the
+monitors play mixes of its stems: the singer's wedges the vocal, the drum fill the
+drums and bass, the side fills a mix for the whole stage; and the band on the stage
+plays its own parts: the drum kit the drums, the singer the vocal, the guitarist's
+amplifier the guitar. Run it from the folder of the stadium example
 (`acoustic-spaces examples --copy . stadium_concert && cd stadium_concert`), in the Python
 environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
-    python stadium_demo.py music     # download the master and stems (M4A), decode them
+    python stadium_demo.py music     # download the mix and the stems (WAV, 450 MB)
     python stadium_demo.py band      # scene_band.yaml: the scene with the band on the stage
     acoustic-spaces simulate scene_band.yaml --out results_band --output binaural
     python stadium_demo.py feeds     # one signal per loudspeaker, as loud as the scene says
@@ -27,67 +30,60 @@ the monitors is the scene's, and the feed files are what each loudspeaker plays.
 `render` runs `auralize` with `--equal-power`, so the levels are applied once.
 
 `video` plays the song once, moving between listeners on phrase boundaries (every 8
-bars), with a 1 s crossfade. Each listener's mix is shifted earlier by the time the
-sound system takes to reach them (0.1 s at the mix position, 0.4 s at the far end),
-so that the beat carries on across the cut; the caption gives that time and the level
-there against the loudest listener's. All listeners share one gain, so the level
-differences between them are heard as the simulation gives them.
+bars), with a 1 s crossfade. Each listener's mix is shifted
+earlier by the time the sound system takes to reach them (0.1 s at the mix position,
+0.4 s at the far end), so that the beat carries on across the cut; the caption gives
+that time and the level there against the loudest listener's. On stage it is 7 to 20
+dB(A) louder than in the audience, too much to hear both in one video, so each stop is
+turned up to the loudness of the loudest one (K-weighted, as loudness meters weigh it)
+and its caption says by how much; the mixes in demo/seats keep one gain for all.
 """
 
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import math
 import shutil
 import subprocess
 import sys
-import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 
 import numpy as np
 import yaml
 
-ALBUM = "https://github.com/ichbinsoftware/everythingisfree"
-COMMIT = "e1d0d5c0422d2626c211d5d877e6f69c37ce8712"
-RAW = f"https://raw.githubusercontent.com/ichbinsoftware/everythingisfree/{COMMIT}/src/5.Rubidium/"
-MASTER = "5.Rubidium_Master"
-STEMS = [
-    "5.Rubidium_Stem_BGVOX",
-    "5.Rubidium_Stem_BUILD",
-    "5.Rubidium_Stem_DRUMS 2",
-    "5.Rubidium_Stem_DRUMS MAIN",
-    "5.Rubidium_Stem_DRUMS OUTRO",
-    "5.Rubidium_Stem_MELODY BREAK",
-    "5.Rubidium_Stem_MINILOGUE_SYNTH",
-    "5.Rubidium_Stem_PLUCK",
-    "5.Rubidium_Stem_VOX LEAD",
-]
-BPM = 132.0
-PHRASE_S = 8 * 4 * 60.0 / BPM  # 8 bars; the master's first downbeat is at its start
-
-#: Monitor mixes: stem (without the "5.Rubidium_Stem_" prefix) and its gain in dB.
-SINGER_MIX = {"VOX LEAD": 0, "BGVOX": -6, "MINILOGUE_SYNTH": -10, "PLUCK": -12, "DRUMS MAIN": -16}
-DRUMMER_MIX = {
-    "DRUMS MAIN": 0,
-    "DRUMS 2": 0,
-    "DRUMS OUTRO": 0,
-    "BUILD": -8,
-    "MINILOGUE_SYNTH": -6,
-    "VOX LEAD": -6,
+#: The release: the whole production (3.5 GB, of which ``music`` reads only the members it
+#: needs), and the song's folder in it.
+ARCHIVE = "https://zenodo.org/records/3601032/files/RSG_Complete_Project.zip"
+SONG = "RSG_Complete_Project/Abgabe_RSG_DEGA/1_Audio/2_SPICY_FUNK_CAKE/"
+MASTER = "1_REFERENCE-MIX/Spicy_Funk_Cake"
+#: The stems, stereo and at the reference mix's levels, by the names the mixes use.
+STEMS = {
+    "drums": "2_STEMS_PROCESSED/1_STEM_PROCESSED_DRUMS",
+    "bass": "2_STEMS_PROCESSED/2_STEM_PROCESSED_Bass",
+    "guitar": "2_STEMS_PROCESSED/3_STEM_PROCESSED_GIT",
+    "keys": "2_STEMS_PROCESSED/4_STEM_PROCESSED_KEYS",
+    "brass": "2_STEMS_PROCESSED/5_STEM_PROCESSED_BRASS",
+    "vocal": "2_STEMS_PROCESSED/6_STEM_PROCESSED_VOX",
+    "shouts": "2_STEMS_PROCESSED/7_STEM_PROCESSED_SHOUTS",
 }
+BPM = 110.0
+# 8 bars. The song's first downbeat is 0.5 s in, after a pickup, so a crossfade that
+# starts half a second before a phrase boundary ends on the phrase's downbeat.
+PHRASE_S = 8 * 4 * 60.0 / BPM
+
+#: Monitor mixes: stem and its gain in dB.
+SINGER_MIX = {"vocal": 0, "shouts": -6, "keys": -8, "guitar": -12, "bass": -14, "drums": -16}
+DRUMMER_MIX = {"drums": 0, "bass": 0, "vocal": -6, "guitar": -8, "keys": -8}
 # The side fills carry the song for the whole stage, with the drums well down: the kit
 # itself is loud on stage, so the players hear the drums from where the drummer is.
-STAGE_MIX = (
-    {stem.split("Stem_")[1]: 0 for stem in STEMS}
-    | {"VOX LEAD": 3}
-    | {drums: -20 for drums in ("DRUMS MAIN", "DRUMS 2", "DRUMS OUTRO", "BUILD")}
-)
+STAGE_MIX = {stem: 0 for stem in STEMS} | {"vocal": 3, "drums": -20}
 MONITORS = {"vocal_wedges": "singer", "drum_fill": "drummer", "side_fill": "stage"}
 #: The band itself, as sources on the stage (added by ``band``): sound power (dB re 1 pW)
-#: of a rock drum kit, a singer singing loud and an instrument amplifier turned up. The
-#: song has no guitar, so the guitarist's amplifier plays its synthesizer parts.
+#: of a rock drum kit, a singer singing loud and an instrument amplifier turned up.
 BAND = {
     "drum_kit": {"position": [-52.3, 0.0, 2.8], "level_db": 116.0, "directivity": "omni"},
     "singer_voice": {
@@ -103,24 +99,20 @@ BAND = {
         "directivity": "cardioid",
     },
 }
-BAND_MIX = {
-    "drum_kit": {"DRUMS MAIN": 0, "DRUMS 2": 0, "DRUMS OUTRO": 0, "BUILD": 0},
-    "singer_voice": {"VOX LEAD": 0},
-    "guitar_amp": {"MINILOGUE_SYNTH": 0, "PLUCK": 0, "MELODY BREAK": 0},
-}
+BAND_MIX = {"drum_kit": {"drums": 0}, "singer_voice": {"vocal": 0}, "guitar_amp": {"guitar": 0}}
 
-#: The default tour: listener and how many phrases it lasts; the last one runs to the end.
+#: The default tour: listener and how many phrases it lasts (0.5: 4 bars); the last one
+#: runs to the end. The song is eleven phrases long, so the tour leaves out the side of
+#: the pitch and the north stand's near seats.
 TOUR = [
-    ("mix_position", 2),
+    ("mix_position", 1),
     ("pitch_front", 1),
-    ("singer", 2),
+    ("singer", 1),
     ("drummer", 1),
     ("guitarist", 1),
-    ("pitch_side", 1),
-    ("north_stand_near", 1),
     ("north_stand_far", 1),
-    ("north_stand_top", 2),
-    ("east_stand", 2),
+    ("north_stand_top", 1),
+    ("east_stand", 1),
     ("pitch_back", 1),
     ("pitch_behind_towers", 1),
     ("mix_position", 0),
@@ -188,6 +180,31 @@ def a_weighted(x: np.ndarray, rate: int) -> np.ndarray:
     return np.fft.irfft(np.fft.rfft(rows, n) * gain, n)[:, : len(x)].T
 
 
+def k_weighted(x: np.ndarray, rate: int) -> np.ndarray:
+    """``x`` (samples, channels) through the K weighting of loudness meters (ITU-R
+    BS.1770: a 4 dB shelf above 1.5 kHz and a high-pass at 38 Hz), by FFT."""
+    n = 1 << math.ceil(math.log2(len(x)))
+    z = np.exp(-1j * np.pi * np.fft.rfftfreq(n, 0.5))  # z^-1 at each bin
+    w, a = 2.0 * np.pi * 1500.0 / rate, 10.0 ** (4.0 / 40.0)
+    alpha, cos = math.sin(w) / math.sqrt(2.0), math.cos(w)
+    shelf = (
+        a * ((a + 1) + (a - 1) * cos + 2 * math.sqrt(a) * alpha)
+        - 2 * a * ((a - 1) + (a + 1) * cos) * z
+        + a * ((a + 1) + (a - 1) * cos - 2 * math.sqrt(a) * alpha) * z**2
+    ) / (
+        (a + 1)
+        - (a - 1) * cos
+        + 2 * math.sqrt(a) * alpha
+        + 2 * ((a - 1) - (a + 1) * cos) * z
+        + ((a + 1) - (a - 1) * cos - 2 * math.sqrt(a) * alpha) * z**2
+    )
+    w = 2.0 * np.pi * 38.0 / rate
+    alpha, cos = math.sin(w), math.cos(w)  # Q = 0.5
+    high_pass = (1 + cos) / 2 * (1 - z) ** 2 / ((1 + alpha) - 2 * cos * z + (1 - alpha) * z**2)
+    rows = np.ascontiguousarray(np.atleast_2d(x.T))
+    return np.fft.irfft(np.fft.rfft(rows, n) * shelf * high_pass, n)[:, : len(x)].T
+
+
 def lag_of(x: np.ndarray, reference: np.ndarray, rate: int, most_s: float) -> int:
     """Samples by which ``x`` lags ``reference`` (both mono), within ``most_s``."""
     n = 1 << math.ceil(math.log2(len(x) + len(reference)))
@@ -212,36 +229,82 @@ def shifted(x: np.ndarray, samples: int, length: int) -> np.ndarray:
 # --------------------------------------------------------------------------- steps
 
 
+class RangeFile(io.RawIOBase):
+    """A remote file read by HTTP range requests, so that zipfile can take one member out
+    of a large archive without downloading it."""
+
+    BLOCK = 4 << 20
+
+    def __init__(self, url: str):
+        self.url, self.pos, self.cache = url, 0, {}
+        request = urllib.request.Request(url, headers={"Range": "bytes=0-0"})
+        with urllib.request.urlopen(request, timeout=120) as response:
+            self.size = int(response.headers["Content-Range"].split("/")[1])
+
+    def readable(self):
+        return True
+
+    def seekable(self):
+        return True
+
+    def tell(self):
+        return self.pos
+
+    def seek(self, offset, whence=0):
+        self.pos = {0: offset, 1: self.pos + offset, 2: self.size + offset}[whence]
+        return self.pos
+
+    def _block(self, i: int) -> bytes:
+        if i not in self.cache:
+            a, b = i * self.BLOCK, min(self.size, (i + 1) * self.BLOCK) - 1
+            request = urllib.request.Request(self.url, headers={"Range": f"bytes={a}-{b}"})
+            with urllib.request.urlopen(request, timeout=300) as response:
+                self.cache[i] = response.read()
+            if len(self.cache) > 8:
+                self.cache.pop(next(iter(self.cache)))
+        return self.cache[i]
+
+    def readinto(self, buffer) -> int:
+        n = max(0, min(len(buffer), self.size - self.pos))
+        out = bytearray()
+        while len(out) < n:
+            block = self._block((self.pos + len(out)) // self.BLOCK)
+            start = (self.pos + len(out)) % self.BLOCK
+            out += block[start : start + n - len(out)]
+        buffer[:n] = out
+        self.pos += n
+        return n
+
+
 def music(args) -> None:
-    """Download the master and the stems (M4A) and decode them to WAV with ffmpeg.
-    WAV files already in the folder (the uncompressed ones from the album's site, say)
+    """Download the reference mix and the stems (WAV, 24-bit, 48 kHz): only those members
+    of the release's archive, read by HTTP range requests. Files already in the folder
     are kept."""
     folder = args.work / "music"
     folder.mkdir(parents=True, exist_ok=True)
-    if shutil.which("ffmpeg") is None:
-        raise SystemExit("error: ffmpeg is needed to decode the M4A files")
-    for name in [MASTER, *STEMS]:
-        wav = folder / f"{name}.wav"
-        if wav.exists():
-            continue
-        m4a = folder / f"{name}.m4a"
-        if not m4a.exists():
-            url = RAW + urllib.parse.quote(f"{name}.m4a")
-            print(f"downloading {url}")
-            with urllib.request.urlopen(url) as response:
-                m4a.write_bytes(response.read())
-        subprocess.run(
-            ["ffmpeg", "-v", "error", "-y", "-i", str(m4a), "-c:a", "pcm_f32le", str(wav)],
-            check=True,
-        )
-        print(f"wrote {wav}")
+    missing = [name for name in [MASTER, *STEMS.values()] if not wav_of(folder, name).exists()]
+    if missing:
+        print(f"reading from {ARCHIVE}")
+        with zipfile.ZipFile(io.BufferedReader(RangeFile(ARCHIVE), 1 << 20)) as archive:
+            for name in missing:
+                wav = wav_of(folder, name)
+                part = wav.with_suffix(".part")
+                with archive.open(f"{SONG}{name}.wav") as source, part.open("wb") as target:
+                    shutil.copyfileobj(source, target, 1 << 20)
+                part.replace(wav)
+                print(f"wrote {wav}")
     (folder / "SOURCES.txt").write_text(
-        'Software-Entwicklungskit, "Rubidium", from the album "Everything is Free"\n'
-        f"{ALBUM} (commit {COMMIT}), src/5.Rubidium\n"
-        "License: CC0 1.0 Universal (public domain dedication),\n"
-        "https://creativecommons.org/publicdomain/zero/1.0/\n",
+        'Rhythmussportgruppe, "Spicy Funk Cake" (composed by Niklas Dahlheimer),\n'
+        "recorded for the DEGA sound database at Hochschule Düsseldorf (2017),\n"
+        "https://doi.org/10.5281/zenodo.3601032, RSG_Complete_Project.zip:\n"
+        f"{SONG}{MASTER}.wav and the stems in {SONG}2_STEMS_PROCESSED\n"
+        "License: CC BY 4.0, https://creativecommons.org/licenses/by/4.0/\n",
         encoding="utf-8",
     )
+
+
+def wav_of(folder: Path, name: str) -> Path:
+    return folder / f"{Path(name).name}.wav"
 
 
 def band(args) -> None:
@@ -311,18 +374,19 @@ def feeds(args) -> None:
     same gated RMS, then scaled by the source's level_db against the loudest's."""
     rate = response_rate(args)
     folder = args.work / "music"
-    if not (folder / f"{MASTER}.wav").exists():
+    if not wav_of(folder, MASTER).exists():
         raise SystemExit("error: no music yet; run: python stadium_demo.py music")
     from acoustic_spaces.render import resample
 
     def load(name: str) -> np.ndarray:
-        x, r = read(folder / f"{name}.wav")
+        x, r = read(wav_of(folder, name))
         return resample(x, r, rate) if r != rate else x
 
     master = load(MASTER)
-    stems = {name.split("Stem_")[1]: load(name) for name in STEMS}
+    stems = {name: load(path) for name, path in STEMS.items()}
     length = len(master)
-    # The stems start a bar of silence before the master: line them up with it.
+    # The stems start 58 ms before the reference mix (and run a second longer): line them
+    # up with it.
     together = sum(s.mean(axis=1)[: rate * 90] for s in stems.values())
     lag = lag_of(together, master.mean(axis=1)[: rate * 90], rate, 5.0)
     stems = {k: shifted(v, lag, length) for k, v in stems.items()}
@@ -410,8 +474,12 @@ def render(args) -> None:
         x = read(out)[0] * gain
         write(out, x, rate)
         level = gated_rms(a_weighted(x, rate), rate)
-        lag = arrival_s(args, listener, table)
-        info[listener] = {"lag_s": lag, "rms_db": 20.0 * math.log10(level + 1e-12)}
+        loudness = gated_rms(k_weighted(x, rate), rate)
+        info[listener] = {
+            "lag_s": arrival_s(args, listener, table),
+            "rms_db": 20.0 * math.log10(level + 1e-12),
+            "loudness_db": 20.0 * math.log10(loudness + 1e-12),
+        }
     top = max(v["rms_db"] for v in info.values())
     for listener, v in info.items():
         v["relative_db"] = v["rms_db"] - top
@@ -449,16 +517,30 @@ def tour_of(args, rendered) -> list[tuple[str, float, float]]:
     return tour
 
 
+def gains_of(seats: dict, tour) -> dict[str, float]:
+    """The gain (dB) each listener of the tour plays at: up to the loudness of the
+    loudest one. Loudness as meters weigh it (K), not the A weighting of the levels: the
+    subwoofers' bass, which the A weighting all but leaves out, is heard."""
+    levels = {}
+    for listener, _, _ in tour:
+        seat = seats["seats"][listener]
+        levels[listener] = seat.get("loudness_db", seat["rms_db"])
+    top = max(levels.values())
+    return {listener: top - level for listener, level in levels.items()}
+
+
 def tour_audio(args, tour, seats) -> np.ndarray:
     rate = seats["rate"]
     length = round(tour[-1][2] * rate)
     out = np.zeros((length, 2))
     half = int(CROSSFADE_S * rate / 2)
+    gains = gains_of(seats, tour)
     for k, (listener, start, stop) in enumerate(tour):
         x = read(args.work / "seats" / f"{listener}.{seats['format']}.wav")[0]
         if x.shape[1] == 1:
             x = np.repeat(x, 2, axis=1)
         x = shifted(x, round(seats["seats"][listener]["lag_s"] * rate), length)
+        x = x * 10.0 ** (gains[listener] / 20.0)
         a, b = round(start * rate), round(stop * rate)
         w = np.zeros(length)
         lo, hi = (a - half if k else 0), (b + half if k < len(tour) - 1 else length)
@@ -471,7 +553,8 @@ def tour_audio(args, tour, seats) -> np.ndarray:
         out += x[:, :2] * w[:, None]
     fade = int(FADE_OUT_S * rate)
     out[-fade:] *= np.linspace(1.0, 0.0, fade)[:, None] ** 2
-    return out
+    peak = float(np.abs(out).max())
+    return out * (10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0)
 
 
 def video(args) -> None:
@@ -490,7 +573,13 @@ def video(args) -> None:
     print(f"wrote {out / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
     levels = pictures.levels_at(args.results)
     drawing = pictures.Pictures(
-        scene_of(args), args.scene.parent, levels, seats["seats"], tour, TITLES
+        scene_of(args),
+        args.scene.parent,
+        levels,
+        seats["seats"],
+        tour,
+        TITLES,
+        gains_of(seats, tour),
     )
     stills = out / "stills"
     stills.mkdir(parents=True, exist_ok=True)
@@ -553,7 +642,8 @@ def main() -> None:
     )
     parser.add_argument("--listeners", help="render: only these listeners, comma separated")
     parser.add_argument(
-        "--tour", help="video: listener:phrases,... (8 bars each; the last one runs to the end)"
+        "--tour",
+        help="video: listener:phrases,... (8 bars each, 0.5 is 4; the last runs to the end)",
     )
     parser.add_argument(
         "--no-mp4", action="store_true", help="video: write the audio and stills only"

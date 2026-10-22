@@ -157,11 +157,12 @@ Singing Dataset, the ESMUC Choir Dataset and Cantoría are all for non-commercia
 through its sound system and stage monitors, and mixes it at each of its 12 listeners.
 The video plays the song once while the listener moves, on phrase boundaries, from the
 mix position to the front of the pitch, onto the stage (singer, drummer, guitarist),
-round the stands to the far end and back.
+round the stands to the far end and back: ten of the listeners, as the song (3:15) has
+eleven phrases.
 
 ```sh
 acoustic-spaces examples --copy . stadium_concert && cd stadium_concert
-python stadium_demo.py music     # the master and 9 stems (43 MB, M4A), decoded by ffmpeg
+python stadium_demo.py music     # the reference mix and 7 stems (WAV, 450 MB)
 python stadium_demo.py band      # scene_band.yaml: the scene with the band on the stage
 acoustic-spaces simulate scene_band.yaml --out results_band --output binaural   # ~3 min on 4 cores
 python stadium_demo.py feeds     # demo/feeds: one WAV per loudspeaker and player
@@ -169,56 +170,73 @@ python stadium_demo.py render    # demo/seats: one binaural WAV per listener (~1
 python stadium_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
-Options: `--tour mix_position:2,singer:1,east_stand:2` (listener:phrases of 8 bars, the
-last one runs to the end), `--listeners a,b` for `render`, `--format` for another output
-the simulation wrote, `--no-mp4` for the audio and stills only.
+Options: `--tour mix_position:1,singer:0.5,east_stand:1` (listener:phrases of 8 bars,
+0.5 for 4; the last one runs to the end), `--listeners a,b` for `render`, `--format` for
+another output the simulation wrote, `--no-mp4` for the audio and stills only.
 
 - **The band.** The example has loudspeakers only, so `band` adds the players as sources
   on the stage, in a group of their own: a drum kit beside the drummer (116 dB sound
-  power, omni) playing the drum stems, the singer's voice (98 dB, subcardioid, facing the
-  audience) playing the lead vocal, and an amplifier behind the guitarist (112 dB,
-  cardioid, tilted up) playing the synthesizer stems, as the song has no guitar. On stage
-  and near it the players are heard from where they stand; further out the sound system
-  covers them.
-- **Who plays what.** The sound system plays the stereo master: the arrays, fills, towers
-  and delays on the audience's left (-y) take the left channel, those on its right (+y;
-  the scene's `*_left`, named from the stage) the right one, the subwoofers both. The
-  monitors play mixes of the stems: the singer's wedges the lead vocal over a little of
-  the synths and drums, the drum fill the drums with the synth and vocal under them, the
-  side fills a stage mix with the vocal 3 dB up and the drums 20 dB down (the kit is loud
-  on stage by itself).
+  power, omni) playing the drums, the singer's voice (98 dB, subcardioid, facing the
+  audience) playing the vocal, and an amplifier behind the guitarist (112 dB, cardioid,
+  tilted up) playing the guitar, each from its own stem. On stage and near it the players
+  are heard from where they stand; further out the sound system covers them.
+- **Who plays what.** The sound system plays the stereo reference mix: the arrays, fills,
+  towers and delays on the audience's left (-y) take the left channel, those on its right
+  (+y; the scene's `*_left`, named from the stage) the right one, the subwoofers both.
+  The monitors play mixes of the stems: the singer's wedges the vocal over the shouts, the
+  keys and a little of the guitar, bass and drums; the drum fill the drums and bass with
+  the vocal, guitar and keys under them; the side fills a stage mix with the vocal 3 dB
+  up and the drums 20 dB down (the kit is loud on stage by itself).
 - **How loud.** `feeds` brings every signal to the same gated RMS and then scales it by
   its `level_db` against the loudest's: the main arrays and subwoofers 0 dB, towers -2,
   delays -4 and -6, out-fills -4, side fills -12, front fills -18, wedges and drum fill
   -19. So the feed files are what each loudspeaker plays, and `render` runs `auralize`
   with `--equal-power`, so that the levels are applied once.
-- **One gain for all listeners.** `render` scales the 12 mixes by one gain (the loudest
-  peak at -1 dBFS), so the level differences between places are the simulation's.
+- **One gain for all listeners, then each stop turned up.** `render` scales the 12 mixes
+  by one gain (the loudest peak at -1 dBFS), so the level differences between places in
+  `demo/seats` are the simulation's: on stage, between the monitors and beside the drum
+  kit, it is 7 to 20 dB(A) louder than in the audience, and the mix position is
+  18 dB(A) below the singer's place. That is too much to hear both in one video, so the
+  tour turns each stop up to the loudness of the loudest one and its caption gives the
+  real level and how much it was turned up. Loudness is weighted as loudness meters
+  weigh it (K, ITU-R BS.1770), which counts the subwoofers' bass that the A weighting of
+  the levels all but leaves out: on the pitch the stops are turned up less than their
+  dB(A) alone would say.
 - **The cuts.** Every listener's mix is shifted earlier by the time the loudest sound
   takes to reach them (the peak of the energy of their responses, each weighted by how
   loud its source plays: 0.12 s at the mix position, 0.38 s at the far end), so the beat
-  runs on across each 1 s crossfade; the caption gives that time.
+  runs on across each 1 s crossfade; the caption gives that time. The stops last 8 bars,
+  and as the song's first downbeat comes half a second in, each crossfade ends on a
+  downbeat.
 
 **Limits.** The band is three point sources at typical sound powers, not measured
-instruments, and there is no crowd noise. Binaural is through the spherical head model.
-The M4A files are lossy AAC at about 190 kbit/s; the artist's uncompressed stems are a
-drop-in replacement (below). Some listeners stand nearer the arrays than their far-field
-patterns hold, which the scene's arrays handle by adding up their boxes one by one
-(`near_field.py` in the example puts numbers on it).
+instruments; the bass, keys and brass on stage come only through the monitors and the
+sound system, and there is no crowd noise. The reference mix and the stems are a
+finished studio production, reverberation and all, so a little of the studio plays in
+the stadium too. Binaural is through the spherical head model. Some listeners stand
+nearer the arrays than their far-field patterns hold, which the scene's arrays handle by
+adding up their boxes one by one (`near_field.py` in the example puts numbers on it).
 
-**Recording and licence.** "Rubidium" by Software-Entwicklungskit, from the album
-*Everything is Free* (132 BPM, G major, 4:24), **CC0 1.0** (a public domain dedication:
-no attribution required; credited anyway). `music` fetches the master and the stems from
-the album's repository, <https://github.com/ichbinsoftware/everythingisfree>, at a
-pinned commit (`src/5.Rubidium`, AAC in M4A, stereo, 48 kHz), decodes them with ffmpeg
-and writes the credit to `demo/music/SOURCES.txt`. The master plays through the sound
-system; the lead and backing vocals, the two synthesizers, the drum parts, the build-up
-and the melody of the break play through the monitors and the band. Uncompressed stems
-(24-bit WAV, 759 MB, same licence) are on the artist's site,
-<https://rubidium.ichbinsoftware.com/5.Rubidium_STEMS.zip>: WAV files unzipped into
-`demo/music/` under the M4A files' names are used as they are. The stems start one bar
-(1.8 s) before the master; `feeds` lines them up with it by cross-correlation.
+**Recording and licence.** "Spicy Funk Cake" by the Rhythmussportgruppe, a nine-piece
+funk band (guitar, drums, bass, keys, saxophone, two trumpets, trombone and voice;
+composed by Niklas Dahlheimer, sung by Juliane Blum; 110 BPM, 3:15), recorded in 2017
+for the sound database of the DEGA (German Acoustical Society) at Hochschule
+Düsseldorf's studio, <https://doi.org/10.5281/zenodo.3601032>, **CC BY 4.0**. `music`
+reads the reference mix and the seven processed stems (drums, bass, guitar, keys, brass,
+vocal, shouts; stereo WAV, 24-bit, 48 kHz) out of the release's 3.5 GB archive by HTTP
+range requests, so only those 450 MB are downloaded, and writes the credit to
+`demo/music/SOURCES.txt`. The reference mix plays through the sound system; the stems
+play through the monitors and the band. The stems start 58 ms before the reference mix;
+`feeds` lines them up with it by cross-correlation.
 
-Band multitracks under other licences were left out: Cambridge-MT's are for education
-only, MedleyDB's and MUSDB18's non-commercial or restricted, and the OnAir Music
-dataset's (CC BY-SA 4.0) share-alike clause would bind the renders too.
+Whoever shares a render has to credit the band and the DEGA, link the licence and say
+what was changed, for example:
+
+> Music: "Spicy Funk Cake" by Rhythmussportgruppe (composed by Niklas Dahlheimer),
+> recorded for the DEGA at Hochschule Düsseldorf, CC BY 4.0, doi:10.5281/zenodo.3601032;
+> the mix and its stems played through a simulated stadium sound system and stage and
+> rendered binaurally. License: https://creativecommons.org/licenses/by/4.0/
+
+Other band multitracks were left out: Cambridge-MT's are for education only, MedleyDB's
+and MUSDB18's non-commercial or restricted, and the OnAir Music dataset's (CC BY-SA 4.0)
+share-alike clause would bind the renders too.
