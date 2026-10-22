@@ -243,8 +243,8 @@ def _primary_backends() -> None:
     shader compiler (FXC) also goes without its optimizer (wgpu's debug flag), which
     miscompiled the ray tracer's vegetation: rays scattered in it came out where they
     had started. The driver optimizes the shader anyway, and the compile takes no
-    longer."""
-    flags = ["Debug", "ValidationIndirectCall"] if sys.platform == "win32" else ["Default"]
+    longer. (Only flags every wgpu from 0.31 on knows: an unknown one sets nothing.)"""
+    flags = ["Debug"] if sys.platform == "win32" else ["Default"]
     try:
         from wgpu.backends.wgpu_native.extras import set_instance_extras
 

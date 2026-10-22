@@ -295,14 +295,33 @@ def test_wgpu_leaves_its_opengl_backend_out(monkeypatch) -> None:
     for system in ("linux", "darwin", "win32"):
         monkeypatch.setattr(sys, "platform", system)
         gpu._primary_backends()
-    windows = ["Debug", "ValidationIndirectCall"]
-    assert asked == [(["Primary"], ["Default"])] * 2 + [(["Primary"], windows)]
+    assert asked == [(["Primary"], ["Default"])] * 2 + [(["Primary"], ["Debug"])]
 
     def too_late(backends, flags):
         raise RuntimeError("Instance already exists")
 
     extras.set_instance_extras = too_late
     gpu._primary_backends()  # wgpu keeps the instance it has
+
+
+def test_wgpu_knows_the_backends_and_flags_it_is_given(monkeypatch) -> None:
+    """The installed wgpu knows every backend and flag asked for on each system: an
+    unknown one sets nothing at all (wgpu 0.31, the last for Python 3.10, knows fewer
+    flags than later ones, and left Direct3D 12's optimizer on)."""
+    extras = pytest.importorskip("wgpu.backends.wgpu_native.extras")
+    from wgpu.backends.wgpu_native._mappings import native_flags
+
+    asked = []
+    monkeypatch.setattr(
+        extras, "set_instance_extras", lambda backends, flags: asked.append((backends, flags))
+    )
+    for system in ("linux", "darwin", "win32"):
+        monkeypatch.setattr(sys, "platform", system)
+        gpu._primary_backends()
+    assert len(asked) == 3
+    for backends, flags in asked:
+        assert all(f"InstanceBackend.{name}" in native_flags for name in backends)
+        assert all(f"InstanceFlag.{name}" in native_flags for name in flags)
 
 
 @needs_gpu
