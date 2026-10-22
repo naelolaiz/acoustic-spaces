@@ -215,15 +215,17 @@ struct Ray {
     order: i32,
     root: u32,
     cutoff: f32,
-    // In an atmosphere: metres along the ray so far (travelled is then the speed of
-    // sound times the time), and, while `leaving`, the normal of the face the ray left
-    // (pointing the way it went), which it cannot meet again until it turns back.
-    path: f32,
+    // In an atmosphere, while `leaving`: the normal of the face the ray left (pointing
+    // the way it went), which it cannot meet again until it turns back.
     away: vec3<f32>,
     leaving: u32,
 }
 
 var<private> ray: Ray;
+// In an atmosphere: metres along the ray so far (travelled is then the speed of sound
+// times the time). (Not in Ray: the virtual GPU of Intel Macs in CI lost what it held
+// there by the time the ray met a face, and the rain from it overflowed.)
+var<private> ray_path: f32;
 // The ray's energy per band, the share of it the detector spheres count on this leg and
 // the share that has only ever reflected specularly. (Not in Ray: Direct3D's shader
 // compiler cannot write to an array in a struct at a varying index, and gives up.)
@@ -1346,7 +1348,7 @@ fn rain(n: vec3<f32>) {
         var absorbing = ray.travelled + dist;
         if (bending) {
             reach = run.c * atm_straight_time(origin, listener);
-            absorbing = ray.path + gap;
+            absorbing = ray_path + gap;
         }
         let covered = specular && ray.order <= run.covered_order &&
                       (ray.travelled + reach) / run.c <= num(at + 5u);
@@ -1399,7 +1401,7 @@ fn foliage_rain(at: u32) {
         var absorbing = ray.travelled + dist;
         if (bending) {
             reach = run.c * atm_straight_time(ray.pos, listener);
-            absorbing = ray.path + gap;
+            absorbing = ray_path + gap;
         }
         deposit(k, 1.0 / (dist * dist), ray.travelled + reach, absorbing, -toward);
     }
@@ -1495,7 +1497,7 @@ fn stem_rain(at: u32) {
             var absorbing = ray.travelled + nearest;
             if (bending) {
                 reach = run.c * atm_straight_time(p, there);
-                absorbing = ray.path + nearest;
+                absorbing = ray_path + nearest;
             }
             deposit(k, (t1 - t0) / num(rec + 4u), ray.travelled + reach, absorbing, -leg);
         }
@@ -1513,7 +1515,7 @@ fn load(at: u32) {
     ray.order = bitcast<i32>(states[at + 12u]);
     ray.root = states[at + 13u];
     ray.cutoff = bitcast<f32>(states[at + 14u]);
-    ray.path = bitcast<f32>(states[at + 15u]);
+    ray_path = bitcast<f32>(states[at + 15u]);
     ray.away = bitcast<vec3<f32>>(vec3<u32>(states[at + 16u], states[at + 17u], states[at + 18u]));
     ray.leaving = states[at + 19u];
     for (var b = 0u; b < BANDS; b++) {
@@ -1542,7 +1544,7 @@ fn store(at: u32) {
     states[at + 12u] = bitcast<u32>(ray.order);
     states[at + 13u] = ray.root;
     states[at + 14u] = bitcast<u32>(ray.cutoff);
-    states[at + 15u] = bitcast<u32>(ray.path);
+    states[at + 15u] = bitcast<u32>(ray_path);
     states[at + 16u] = away.x;
     states[at + 17u] = away.y;
     states[at + 18u] = away.z;
@@ -1576,7 +1578,7 @@ fn start(k: u32) -> bool {
     ray.order = 0;
     ray.root = k;
     ray.cutoff = loudest * 1e-14;
-    ray.path = 0.0;
+    ray_path = 0.0;
     ray.away = vec3<f32>(0.0);
     ray.leaving = 0u;
     atomicAdd(&tallies[3], 1u);
@@ -1679,12 +1681,12 @@ fn bent_leg() -> u32 {
                 }
             }
             if ((run.flags & SPECULAR_RAIN) == 0u) {
-                detectors(chord.start, along, segment, rate, ray.path, stretch, tracked);
+                detectors(chord.start, along, segment, rate, ray_path, stretch, tracked);
             }
             if (scatter_at < FAR) {
                 // It scatters in the plants, going the ray's way there.
                 ray.travelled += rate * segment;
-                ray.path += stretch * segment;
+                ray_path += stretch * segment;
                 ray.pos = chord.start + along * segment;
                 bent = before;
                 bent_chord(chord.arc * segment / len, use_away);
@@ -1700,7 +1702,7 @@ fn bent_leg() -> u32 {
             }
             if (found) {
                 ray.travelled += rate * met.t;
-                ray.path += stretch * met.t;
+                ray_path += stretch * met.t;
                 leg_metres += stretch * met.t;
                 ray.pos = chord.start + along * met.t;
                 // The ray's own direction where it meets the face.
@@ -1712,7 +1714,7 @@ fn bent_leg() -> u32 {
             }
         }
         ray.travelled += run.c * chord.time;
-        ray.path += chord.arc;
+        ray_path += chord.arc;
         leg_metres += chord.arc;
         ray.pos = chord.end;
         ray.dir = bent_direction();
