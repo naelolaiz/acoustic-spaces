@@ -1,18 +1,18 @@
 # Demos
 
-Three demos run dry recordings through example scenes, mix them at the scenes' listeners
-and make a video of the result. Each shows one space and one kind of music: a symphony
+Four demos run recordings through example scenes, mix them at the scenes' listeners and
+make a video of the result. Each shows one space and one kind of music: a symphony
 orchestra on the stage of a shoebox concert hall, a choir and an organ in a reverberant
-stone church, and a band with its sound system and stage monitors in a stadium. None of
-them stands for what the simulator does elsewhere; the [examples](examples.md) cover far
-more.
+stone church, a band with its sound system and stage monitors in a stadium, and the same
+band's song carried across a lake on a summer evening. None of them stands for what the
+simulator does elsewhere; the [examples](examples.md) cover far more.
 
 The scripts come with the examples: `acoustic-spaces examples --copy . NAME` copies them
 with the scene. The recordings do not: they are other people's work under their own
-licences, named below with each demo, and the church and stadium scripts download them
-from where their authors publish them. The videos need [ffmpeg](https://ffmpeg.org) on
-the PATH and the pictures Pillow (the `viz` extra brings it). The mixes are binaural:
-use headphones. The videos of the three demos are in one
+licences, named below with each demo, and the church, stadium and lake scripts download
+them from where their authors publish them. The videos need [ffmpeg](https://ffmpeg.org)
+on the PATH and the pictures Pillow (the `viz` extra brings it). The mixes are binaural:
+use headphones. The videos are in one
 [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8).
 
 ## An orchestra in the concert hall
@@ -240,3 +240,86 @@ what was changed, for example:
 Other band multitracks were left out: Cambridge-MT's are for education only, MedleyDB's
 and MUSDB18's non-commercial or restricted, and the OnAir Music dataset's (CC BY-SA 4.0)
 share-alike clause would bind the renders too.
+
+## A concert across a lake
+
+![A frame of the lake video: the lake from above with the wind's arrows and the weather zones, the stage on the lawn, the boat and the village across the water, the listener at a bedroom window there; under it a slice from the stage across the lake with the sound's rays bending down to the water, the weather's caption and a spectrogram of the sound](images/lake_demo.png)
+
+`lakeside_demo.py` plays a song from the stage of the `lakeside_concert` example on a
+summer evening and mixes it in the audience on the lawn, 140 m behind the stage, on a
+boat in the middle of the lake and in the village across it, 550 m away, in a garden and
+at a bedroom window. Every place is mixed twice: in the evening's weather and in still
+air. The video tours them, and at the bedroom window plays the song in the evening's
+weather, then in still air, then in the evening's again, so the difference the weather
+makes is heard.
+
+```sh
+acoustic-spaces examples --copy . lakeside_concert && cd lakeside_concert
+python lakeside_demo.py music    # the song (WAV, 56 MB), one channel for each stack
+python lakeside_demo.py scenes   # scene_demo.yaml, and scene_still.yaml in still air
+acoustic-spaces simulate scene_demo.yaml --out results_demo --output binaural    # ~30 s
+acoustic-spaces simulate scene_still.yaml --out results_still --output binaural  # ~15 s
+python lakeside_demo.py render   # demo/seats: every listener in both weathers
+python lakeside_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
+```
+
+Options: `--song great_british_summer` or `potassium` for `music` (below),
+`--tour bedroom_window:still:1,audience::2` (listener:weather:phrases of 8 bars),
+`--last-phrases` (how long the last stop lasts, 0 to the end of the song; 2 by default),
+`--format` for another output the simulation wrote, `--no-mp4` for the audio and stills
+only.
+
+- **The stage.** `scenes` turns the example's single source (120 dB sound power) into two
+  stacks 6 m up either side of the stage, 117 dB each and radiating every way alike as
+  the example's does, playing the song's left and right channels; adds a listener 140 m
+  behind the stage, upwind; and lets the responses run 3.5 s, as the far shore hears the
+  stage 1.6 s late.
+- **The weather** is the example's: a breeze from the park out over the lake, 2.5 m/s
+  10 m up, and two weather zones, the lake's (air 17 °C at the water, a degree warmer
+  every 10 m up, and a 3.5 m/s breeze) and the village's (a 1 m/s breeze among the
+  houses). The breeze and the cool air bend the sound down to the water, which gives it
+  back almost whole. `scene_still.yaml` is the same scene with no atmosphere.
+- **What it gives.** At the bedroom window the evening's weather makes the song 4.8 dB(A)
+  louder than still air would, in the garden 3.6 dB; behind the stage, upwind, it is
+  4.3 dB quieter, and on the boat 1 dB quieter.
+- **How loud.** From the audience to the far shore the sound drops by 20 to 25 dB(A),
+  too much to hear the far places in a video, so each stop is turned up to the
+  audience's loudness (A-weighted, gated) and its caption says how much quieter the place
+  really is. The window in still air keeps the gain of the window in the evening's
+  weather, so the 4.8 dB is heard.
+- **The cuts.** Each place's mix is shifted earlier by the time the loudest sound takes
+  to reach it (the peak of the energy of its responses: 0.09 s in the audience, 1.65 s
+  at the window), so that the beat runs on across each 1 s crossfade, every 8 bars.
+- **The pictures** draw the lake from above with the wind's arrows, the weather zones and
+  their weather, and the current listener with L and R at its ears; and, under it, a
+  slice along the line from the stage across the lake, heights drawn five times larger,
+  with rays from the stage bent by the scene's own profiles of the speed of sound (traced
+  by the script for the picture; the simulation traces its own) and masts with the wind's
+  profile; in still air the rays go straight.
+
+**Limits.** The stacks are points that radiate every way alike, as in the example, not
+line arrays; there is no crowd, no wind noise and no other sound of the evening. The
+weather holds still: the example has no turbulence, so the sound does not come and go
+with the gusts as it does across a real lake. The song is a finished studio mix, played
+as it is. Binaural is through the spherical head model.
+
+**Recordings and licences.** `music` writes the credit to `demo/music/song.json`, and
+the video shows it.
+
+- `spicy_funk_cake` (the default): "Spicy Funk Cake" by the Rhythmussportgruppe, the
+  recording of the [stadium demo](#a-concert-in-the-stadium), **CC BY 4.0**; its reference
+  mix (56 MB) is read out of the release's preview archive by HTTP range requests.
+- `great_british_summer`: "Great British Summer" by Tom McKenzie, from the album
+  *Extraordinary* in AlbumDB, <https://doi.org/10.5281/zenodo.19683001>, **CC BY 4.0**,
+  read out of its archive of masters the same way.
+- `potassium`: "Potassium" by Software-Entwicklungskit, from the album *Everything is
+  Free*, <https://github.com/ichbinsoftware/everythingisfree>, **CC0 1.0**, decoded from
+  M4A with ffmpeg.
+
+A shared render of either CC BY song has to credit it, link the licence and say what was
+changed, for example:
+
+> Music: "Spicy Funk Cake" by Rhythmussportgruppe (composed by Niklas Dahlheimer),
+> recorded for the DEGA at Hochschule Düsseldorf, CC BY 4.0, doi:10.5281/zenodo.3601032;
+> played through a simulated outdoor sound system across a lake and rendered
+> binaurally. License: https://creativecommons.org/licenses/by/4.0/

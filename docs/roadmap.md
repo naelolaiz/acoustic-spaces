@@ -236,8 +236,9 @@ Examples:
   singer's microphone's gain before feedback (`concert_stage`); both together
   (`stadium_concert`); every array added up box by box near its listeners; and the
   editor's examples in groups.
-- [x] Demos with their scripts: a choir and an organ in the church and a band with its
-  sound system in the stadium, besides the orchestra in the concert hall; each downloads
+- [x] Demos with their scripts: a choir and an organ in the church, a band with its
+  sound system in the stadium and its song carried across a lake, in the evening's
+  weather and in still air, besides the orchestra in the concert hall; each downloads
   its recordings, mixes them at every listener and makes a video that tours them.
 
 Editor:

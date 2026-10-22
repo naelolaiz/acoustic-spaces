@@ -585,10 +585,16 @@
   turns each stop up to the loudness of the loudest, the stage, and says by how much.
   Each downloads its recordings, writes its scene, mixes the piece at every listener with
   one gain for all and makes a video that tours them (with ffmpeg and Pillow).
-- [Demos](docs/demos.md) gathers the three, with where each recording comes from, its
+- `lakeside_demo.py`, in `lakeside_concert`, plays the same song from the lakeside stage
+  and mixes it in the audience, behind the stage, on a boat and in the village across the
+  lake, in the evening's weather and in still air; its video plays the song at a bedroom
+  window in the evening's weather, in still air and in the evening's again, each stop
+  turned up to the audience's loudness with its real level in the caption, over a slice
+  across the lake with the sound's rays bent by the weather.
+- [Demos](docs/demos.md) gathers the four, with where each recording comes from, its
   licence and the credit a shared render needs; the orchestra's section moved there from
   [spatial audio and listening](docs/spatial-audio.md). The README and that page link the
-  [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8) of the three videos.
+  [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8) of the videos.
 
 **Editor**
 

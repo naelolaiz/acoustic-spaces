@@ -401,3 +401,55 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     assert len(tour) == len(demo.TOUR) and tour[-1][2] - tour[-1][1] > demo.PHRASE_S
     for _, start, _ in tour:
         assert start / (demo.PHRASE_S / 2) == pytest.approx(round(start / (demo.PHRASE_S / 2)))
+
+
+def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
+    """lakeside_demo.py plays the lake scene through two stacks, adds a listener upwind
+    and writes the same scene in still air; the tour moves on phrase boundaries, every
+    stop is turned up to the audience's loudness, and a place in still air keeps the
+    gain of the same place in the evening's weather, so the difference is heard."""
+    demo = _script("lakeside_concert", "lakeside_demo")
+    folder = copy_examples(tmp_path, ["lakeside_concert"])[0].parent
+    args = _demo_args(
+        source=folder / "scene.yaml",
+        scene=folder / "scene_demo.yaml",
+        still=folder / "scene_still.yaml",
+        results=folder / "results_demo",
+        still_results=folder / "results_still",
+    )
+    demo.scenes(args)
+    demo.scenes(argparse.Namespace(**vars(args) | {"source": args.scene}))  # once only
+    evening, still = Room.from_yaml(args.scene), Room.from_yaml(args.still)
+    for room in (evening, still):
+        assert room.problems() == []
+        assert [source.name for source in room.scene.sources] == list(demo.STACKS)
+        names = [listener.name for listener in room.scene.listeners]
+        assert names.count(demo.UPWIND["name"]) == 1 and set(demo.TITLES) == set(names)
+        assert room.scene.simulation.ir_length_s == demo.IR_LENGTH_S
+    assert evening.scene.atmosphere is not None and still.scene.atmosphere is None
+    # The tour: 8 bars a stop, the last one --last-phrases long.
+    work = tmp_path / "demo"
+    (work / "music").mkdir(parents=True)
+    song = demo.SONGS["spicy_funk_cake"] | {"name": "spicy_funk_cake"}
+    (work / "music" / "song.json").write_text(json.dumps(song), encoding="utf-8")
+    write_wav(work / "music" / "spicy_funk_cake.wav", np.zeros((19_500, 2)), 100)  # 195 s
+    tour = demo.tour_of(argparse.Namespace(tour=None, work=work, last_phrases=2.0))
+    phrase = demo.phrase_s(song)
+    assert [(name, weather) for name, weather, _, _ in tour] == [s[:2] for s in demo.TOUR]
+    assert tour[1][2] == pytest.approx(2 * phrase)
+    assert tour[-1][3] - tour[-1][2] == pytest.approx(2 * phrase)
+    custom = argparse.Namespace(tour="bedroom_window:still:1,audience", work=work, last_phrases=0)
+    tour = demo.tour_of(custom)
+    assert [stop[:2] for stop in tour] == [("bedroom_window", "still"), ("audience", "evening")]
+    assert tour[-1][3] == pytest.approx(195.0)
+    # The gains: the audience's loudness everywhere, still air at the evening's gain.
+    levels = {"audience": -10.0, "bedroom_window": -30.0}
+    seats = {
+        "seats": {
+            f"{name}.{weather}": {"rms_db": level - (5.0 if weather == "still" else 0.0)}
+            for name, level in levels.items()
+            for weather in ("evening", "still")
+        }
+    }
+    gains = demo.gains_of(seats, tour)
+    assert gains == {"bedroom_window.still": 20.0, "audience.evening": 0.0}

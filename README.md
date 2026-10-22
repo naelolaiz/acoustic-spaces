@@ -26,10 +26,11 @@ loudspeaker formats.
 - **Listening**: impulse responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker
   formats as WAV files; dry recordings run through them offline or in real time on the
   sound card, head-tracked on headphones, or heard along a walk through the room:
-  [spatial audio and listening](docs/spatial-audio.md). Three [demos](docs/demos.md),
+  [spatial audio and listening](docs/spatial-audio.md). Four [demos](docs/demos.md),
   binaural for headphones, each with its scripts: Beethoven's 8th symphony from 61
-  anechoic tracks in the concert hall example, a choir and an organ in the church, and a
-  band with its sound system in the stadium; the
+  anechoic tracks in the concert hall example, a choir and an organ in the church, a
+  band with its sound system in the stadium, and its song across a lake in the evening's
+  weather and in still air; the
   [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8) has their videos.
 - **Measuring real rooms** with sine sweeps, comparing them with their model in just
   noticeable differences, and fitting the model's absorption to them:
