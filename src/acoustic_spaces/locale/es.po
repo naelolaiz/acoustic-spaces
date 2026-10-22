@@ -450,10 +450,11 @@ msgstr "Exportar animación de pa&rtículas a Blender…"
 
 #: acoustic_spaces/gui/app.py
 msgid ""
-"Sound particles from the selected source (or the first) as a glTF animation"
+"Sound particles from the selected source (or the first) as a glTF animation: "
+"as much of the sound, as slowly and as many particles as you choose"
 msgstr ""
 "Partículas sonoras de la fuente seleccionada (o de la primera) como "
-"animación glTF"
+"animación glTF: tanto sonido, tan despacio y tantas partículas como elija"
 
 #: acoustic_spaces/gui/app.py
 msgid "&Quit"
@@ -1056,7 +1057,7 @@ msgstr "Guardar captura de pantalla"
 msgid "PNG (*.png)"
 msgstr "PNG (*.png)"
 
-#: acoustic_spaces/gui/app.py
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/particle_dialog.py
 msgid "Export particle animation to Blender"
 msgstr "Exportar animación de partículas a Blender"
 
@@ -4779,6 +4780,52 @@ msgstr "Errores ({count})"
 #: acoustic_spaces/gui/messages.py
 msgid "All items"
 msgstr "Todos los elementos"
+
+#: acoustic_spaces/gui/particle_dialog.py
+#, python-brace-format
+msgid ""
+"Sound particles leave {source}: how much of the sound, how slowly, how many?"
+msgstr ""
+"Las partículas sonoras salen de {source}: ¿cuánto sonido, a qué velocidad, "
+"cuántas?"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid ""
+"How much of the sound to animate, from when it leaves the source. Outdoors "
+"it starts long enough to reach the farthest listener"
+msgstr ""
+"Cuánto sonido animar, desde que sale de la fuente. Al aire libre empieza con "
+"lo bastante para llegar al receptor más lejano"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid ""
+"Seconds of animation per second of sound: 40 shows 100 ms of sound over 4 s, "
+"1 in real time"
+msgstr ""
+"Segundos de animación por segundo de sonido: 40 muestra 100 ms de sonido en "
+"4 s, 1 en tiempo real"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid "How many particles leave the source: 1000 make a file of about 3 MB"
+msgstr ""
+"Cuántas partículas salen de la fuente: 1000 dan un archivo de unos 3 MB"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid "Sound to animate"
+msgstr "Sonido a animar"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid "Slow motion"
+msgstr "Cámara lenta"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid "Particles"
+msgstr "Partículas"
+
+#: acoustic_spaces/gui/particle_dialog.py
+#, python-brace-format
+msgid "The animation lasts {seconds:g} s."
+msgstr "La animación dura {seconds:g} s."
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "Off"

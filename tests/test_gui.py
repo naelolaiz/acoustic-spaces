@@ -47,6 +47,7 @@ from acoustic_spaces.gui.document import (  # noqa: E402
     unique_name,
 )
 from acoustic_spaces.gui.levels import level_colour  # noqa: E402
+from acoustic_spaces.gui.particle_dialog import ParticleDialog  # noqa: E402
 from acoustic_spaces.gui.plan_view import grid_step, outline_segments, snap  # noqa: E402
 from acoustic_spaces.gui.tree import EYE  # noqa: E402
 from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # noqa: E402
@@ -2561,11 +2562,12 @@ def test_coverage_settings_form(window) -> None:
 
 
 def test_export_to_blender(window, monkeypatch, tmp_path: Path) -> None:
-    from PySide6.QtWidgets import QFileDialog
+    from PySide6.QtWidgets import QDialog, QFileDialog
 
     window.open_example(example_path("studio"))
     target = tmp_path / "particles.glb"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    monkeypatch.setattr(ParticleDialog, "exec", lambda dialog: int(QDialog.DialogCode.Accepted))
     window.select("sources", 1)
     window.particles_action.trigger()
     assert target.read_bytes()[:4] == b"glTF"
@@ -2575,6 +2577,38 @@ def test_export_to_blender(window, monkeypatch, tmp_path: Path) -> None:
     assert window.messages.toPlainText().splitlines()[-1].startswith(f"Wrote {target}: the room.")
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: ("", ""))
     assert not window.export_blender(particles=True)
+
+
+def test_particle_export_settings(window, monkeypatch, tmp_path: Path) -> None:
+    """The particle export asks how much of the sound, how slowly and how many
+    particles: outdoors at first enough to reach the farthest listener, lasting about
+    as long as the default's 4 s."""
+    from PySide6.QtWidgets import QDialog, QFileDialog
+
+    window.open_example(example_path("lakeside_concert"))
+    dialog = ParticleDialog(window.document.room, window.document.scene.sources[0], window)
+    # 568 m to the bedroom window: 1.65 s, a tenth more, up to the next 100 ms.
+    assert (dialog.duration, dialog.slow_motion, dialog.count) == (1900, 2.1, 1000)
+    assert dialog.summary.text() == "The animation lasts 3.99 s."
+    assert all(box.toolTip() for box in (dialog.sound, dialog.slow, dialog.particles))
+
+    def choose(dialog) -> int:
+        dialog.sound.setValue(300)
+        dialog.slow.setValue(10)
+        dialog.particles.setValue(50)
+        return int(QDialog.DialogCode.Accepted)
+
+    target = tmp_path / "lake.glb"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    monkeypatch.setattr(ParticleDialog, "exec", choose)
+    assert window.export_blender(particles=True)
+    assert "50 particles from stage, 300 ms of sound over 3 s" in window.messages.toPlainText()
+    target.unlink()
+    monkeypatch.setattr(ParticleDialog, "exec", lambda dialog: int(QDialog.DialogCode.Rejected))
+    assert not window.export_blender(particles=True) and not target.exists()
+    window.open_example(example_path("studio"))  # indoors, the default
+    dialog = ParticleDialog(window.document.room, window.document.scene.sources[0], window)
+    assert (dialog.duration, dialog.slow_motion) == (100, 40)
 
 
 def test_runs_of_a_scene_no_longer_open_are_dropped(window, qapp) -> None:

@@ -60,6 +60,7 @@ from acoustic_spaces.gui.levels import rich_lines
 from acoustic_spaces.gui.map_view import MapPanel
 from acoustic_spaces.gui.messages import MessagesPanel
 from acoustic_spaces.gui.numbers import fmt, point_text
+from acoustic_spaces.gui.particle_dialog import ParticleDialog
 from acoustic_spaces.gui.plan_view import PlanView
 from acoustic_spaces.gui.results_view import ResultsPanel
 from acoustic_spaces.gui.tree import SceneTree
@@ -346,7 +347,10 @@ class MainWindow(QMainWindow):
         self.particles_action = a(
             _("Export &particle animation to Blender…"),
             lambda: self.export_blender(particles=True),
-            tip=_("Sound particles from the selected source (or the first) as a glTF animation"),
+            tip=_(
+                "Sound particles from the selected source (or the first) as a glTF animation: "
+                "as much of the sound, as slowly and as many particles as you choose"
+            ),
         )
         self.quit_action = a(
             _("&Quit"), self.close, keys.Quit, _("Close the editor; it asks about unsaved changes")
@@ -1319,30 +1323,39 @@ class MainWindow(QMainWindow):
 
     def export_blender(self, particles: bool = False) -> bool:
         """Write the room as glTF for Blender, with the reflection paths on show, or with
-        sound particles from the selected source (or the first) as an animation."""
+        sound particles from the selected source (or the first) as an animation, as much
+        of the sound, as slowly and as many as the user chooses."""
         from acoustic_spaces.engine import trace_particles
-        from acoustic_spaces.gltf import PARTICLE_COUNT, SLOW_MOTION, export_gltf
+        from acoustic_spaces.gltf import SLOW_MOTION, export_gltf
 
+        room = self.document.room
+        settings = None
+        if particles:
+            kind, key = self.selection
+            sources = room.scene.sources
+            if kind == "sources":
+                source = sources[key]
+            else:  # the first one in use
+                source = next((s for s in sources if s.in_use), sources[0])
+            settings = ParticleDialog(room, source, self)
+            if not settings.exec():
+                return False
         title = _("Export particle animation to Blender") if particles else _("Export to Blender")
         start = "particles.glb" if particles else "room.glb"
         path, _filter = QFileDialog.getSaveFileName(self, title, start, _(GLB_FILTER))
         if not path:
             return False
-        room = self.document.room
         response = None if particles else self._shown_response()
         traced = None
+        slow = SLOW_MOTION if settings is None else settings.slow_motion
         try:
             with busy():
-                if particles:
-                    kind, key = self.selection
-                    sources = room.scene.sources
-                    if kind == "sources":
-                        source = sources[key].name
-                    else:  # the first one in use
-                        source = next((s.name for s in sources if s.in_use), sources[0].name)
-                    traced = trace_particles(room, source, count=PARTICLE_COUNT)
+                if settings is not None:
+                    traced = trace_particles(
+                        room, source.name, count=settings.count, duration=settings.duration / 1e3
+                    )
                 paths = None if response is None else response.early
-                export_gltf(room, path, paths=paths, particles=traced)
+                export_gltf(room, path, paths=paths, particles=traced, slow_motion=slow)
         except (OSError, ValueError) as exc:
             self._error(_("Could not export"), str(exc))
             return False
@@ -1354,10 +1367,10 @@ class MainWindow(QMainWindow):
                     "{slow:g} s. In Blender: File > Import > glTF 2.0."
                 ),
                 path=path,
-                count=PARTICLE_COUNT,
+                count=settings.count,
                 source=traced.source,
                 sound=1e3 * sound,
-                slow=SLOW_MOTION * sound,
+                slow=slow * sound,
             )
         elif response is not None:
             count = len(response.early)

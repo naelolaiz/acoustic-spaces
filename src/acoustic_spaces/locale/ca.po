@@ -446,10 +446,11 @@ msgstr "Exportar l'animació de partícules a Bl&ender…"
 
 #: acoustic_spaces/gui/app.py
 msgid ""
-"Sound particles from the selected source (or the first) as a glTF animation"
+"Sound particles from the selected source (or the first) as a glTF animation: "
+"as much of the sound, as slowly and as many particles as you choose"
 msgstr ""
 "Partícules sonores de la font seleccionada (o de la primera) com a animació "
-"glTF"
+"glTF: tant so, tan a poc a poc i tantes partícules com trieu"
 
 #: acoustic_spaces/gui/app.py
 msgid "&Quit"
@@ -1045,7 +1046,7 @@ msgstr "Desar captura de pantalla"
 msgid "PNG (*.png)"
 msgstr "PNG (*.png)"
 
-#: acoustic_spaces/gui/app.py
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/particle_dialog.py
 msgid "Export particle animation to Blender"
 msgstr "Exportar animació de partícules a Blender"
 
@@ -4731,6 +4732,51 @@ msgstr "Errors ({count})"
 #: acoustic_spaces/gui/messages.py
 msgid "All items"
 msgstr "Tots els elements"
+
+#: acoustic_spaces/gui/particle_dialog.py
+#, python-brace-format
+msgid ""
+"Sound particles leave {source}: how much of the sound, how slowly, how many?"
+msgstr ""
+"Les partícules sonores surten de {source}: quant so, a quina velocitat, "
+"quantes?"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid ""
+"How much of the sound to animate, from when it leaves the source. Outdoors "
+"it starts long enough to reach the farthest listener"
+msgstr ""
+"Quant so animar, des que surt de la font. A l'aire lliure comença amb prou "
+"so per arribar al receptor més llunyà"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid ""
+"Seconds of animation per second of sound: 40 shows 100 ms of sound over 4 s, "
+"1 in real time"
+msgstr ""
+"Segons d'animació per segon de so: 40 mostra 100 ms de so en 4 s, 1 en temps "
+"real"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid "How many particles leave the source: 1000 make a file of about 3 MB"
+msgstr "Quantes partícules surten de la font: 1000 fan un fitxer d'uns 3 MB"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid "Sound to animate"
+msgstr "So a animar"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid "Slow motion"
+msgstr "Càmera lenta"
+
+#: acoustic_spaces/gui/particle_dialog.py
+msgid "Particles"
+msgstr "Partícules"
+
+#: acoustic_spaces/gui/particle_dialog.py
+#, python-brace-format
+msgid "The animation lasts {seconds:g} s."
+msgstr "L'animació dura {seconds:g} s."
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "Off"

@@ -163,7 +163,8 @@ which frequencies each octave band holds.
   numbers (an equalizer's gains) apart by semicolons there.
 - **File > Export to Blender** writes the room with the reflection paths on show, and
   **File > Export particle animation to Blender** the sound particles leaving the
-  selected source (see below).
+  selected source, asking first how much of the sound to animate, how slowly and how
+  many particles (see below).
 
 ## Drawing rooms
 
@@ -273,4 +274,8 @@ the scene's (+z up, metres).
   shrink with their level, gone 60 dB down. The animation runs 40 times slower than the
   sound (`--slow-motion`): the default 100 ms take 4 s, 96 frames at 24 fps. If the
   timeline ends sooner, set its end frame, then press play. With the default 1000
-  particles (`--count`) the file is about 3 MB.
+  particles (`--count`) the file is about 3 MB. The editor asks for the same three:
+  **Sound to animate**, **Slow motion** and **Particles**. Outdoors it starts with sound
+  enough to reach the farthest listener (a tenth more than the direct sound takes,
+  rounded up to 100 ms), slowed down to last about the default's 4 s: 1900 ms at 2.1×
+  for the `lakeside_concert` example's village 568 m away.
