@@ -247,7 +247,7 @@ def test_stadium_feedback(
     """The singer's microphone: its gain before feedback, where it rings, and a loop
     that dies away below unity gain and grows above it."""
     feedback = _script("concert_stage", "feedback")
-    found = feedback.loop(Room.from_yaml(example_path("concert_stage")), rays=30)
+    found = feedback.loop(Room.from_yaml(example_path("concert_stage")), rays=30, seed=1)
     assert "vocal_wedges" in found["speakers"] and "subs" not in found["speakers"]
     for where in ("mix", "ears"):
         assert np.all(np.isfinite(found["pag"][where]))

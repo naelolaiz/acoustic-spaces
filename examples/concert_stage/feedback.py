@@ -73,13 +73,16 @@ def _bands(n_fft: int) -> list[np.ndarray]:
     return [(f >= fm / math.sqrt(2)) & (f < fm * math.sqrt(2)) for fm in OCTAVE_BANDS_HZ]
 
 
-def loop(room: Room, singer: str = "singer", rays: int | None = None) -> dict:
+def loop(
+    room: Room, singer: str = "singer", rays: int | None = None, seed: int | None = None
+) -> dict:
     """The loop of ``singer``'s microphone: ``response``, the loudspeakers' response at
     the microphone (samples at RATE, latency included); ``pag``, the potential acoustic
     gain per octave band at the mix position and at the singer's ears (dB), rung out;
     ``peaks``, how far the loop's highest peak stands above each band's average (dB);
     ``ring_hz``, the frequencies of the three highest peaks, highest first; and
-    ``speakers``, the loudspeakers in the loop."""
+    ``speakers``, the loudspeakers in the loop. ``rays`` sets the late stage's rays, and
+    ``seed`` repeats a run's random rays."""
     scene = room.scene
     head = next(listener for listener in scene.listeners if listener.name == singer)
     turn = np.array(head.orientation.rotation())
@@ -96,6 +99,8 @@ def loop(room: Room, singer: str = "singer", rays: int | None = None) -> dict:
         settings = settings.model_copy(
             update={"late": settings.late.model_copy(update={"rays": rays})}
         )
+    if seed is not None:
+        settings = settings.model_copy(update={"seed": seed})
     # The voice is heard alone at the mix position only: the microphone and the ears are
     # too near the mouth for paths, and its level at the ears is the free field's.
     copy = scene.model_copy(update={"sources": speakers, "listeners": [mic, mix, head]})

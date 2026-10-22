@@ -1989,7 +1989,10 @@ fn chords(@builtin(global_invocation_id) id: vec3<u32>,
     let use_away = any(ray.away != vec3<f32>(0.0));
     bent_init(origin, dir);
     let chord = bent_chord(budget, use_away);
-    let end = bitcast<vec3<u32>>(chord.end);
+    // Metal packs a struct's vec3 that a scalar follows, and cannot cast it whole.
+    let end = vec3<u32>(
+        bitcast<u32>(chord.end.x), bitcast<u32>(chord.end.y), bitcast<u32>(chord.end.z)
+    );
     let there = bitcast<vec3<u32>>(bent_direction());
     let out = __CHORD_OUT__u * i;
     states[out] = end.x;

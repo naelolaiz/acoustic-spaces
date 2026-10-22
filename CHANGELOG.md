@@ -651,6 +651,9 @@
   two million cells) is reset, losing every step after it and failing the GPU runs
   that follow. The steps now go in submissions of about a second's work each, which
   step the grid exactly as one long submission did.
+- The native code no longer fuses multiplies and adds that the source keeps apart, as
+  Apple's compiler did by default on Apple silicon: results there now round as on the
+  other platforms, last bits included.
 
 ## 3.2.3
 
