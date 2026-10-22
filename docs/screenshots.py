@@ -8,10 +8,12 @@ OpenGL, which ``xvfb-run`` gives on a machine without one. The simulated picture
 drawn from the bundled examples with fixed seeds, so running the script again after a
 change shows what the change did; only ``editor_map.png`` takes a new seed every time,
 as the lecture hall sets none. ``coverage.png``, ``plan.png``, ``editor.png``,
-``diffraction.png`` and ``orchestra_video.png`` are made by hand, and ``wave.png`` by
-``validation/wave_solver.py --plot``. ``measured.png`` analyses a measured response of the
-BRAS benchmark (DOI 10.14279/depositonce-6726.3, CC BY-SA 4.0): ``--bras`` is the folder
-the BRAS archives were unpacked into; without it, that picture is skipped.
+``diffraction.png`` and ``orchestra_video.png`` are made by hand, ``wave.png`` by
+``validation/wave_solver.py --plot``, and ``church_demo.png`` and ``stadium_demo.png`` are
+frames of the videos the church and stadium demos make (docs/demos.md), made smaller.
+``measured.png`` analyses a measured response of the BRAS benchmark (DOI
+10.14279/depositonce-6726.3, CC BY-SA 4.0): ``--bras`` is the folder the BRAS archives
+were unpacked into; without it, that picture is skipped.
 """
 
 from __future__ import annotations

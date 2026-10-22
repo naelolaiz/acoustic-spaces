@@ -573,6 +573,20 @@
   material libraries), and [Example scenes](docs/examples.md) lists them in the same
   groups; `acoustic_spaces.examples.example_groups()` gives them by group.
 
+**Demos**
+
+- Two more demos with their scripts, beside the orchestra in the concert hall:
+  `church_demo.py`, in the `church` example, puts a choir of 19 real singers (VocalSet's
+  dry takes, CC BY 4.0, brought onto the beat and towards the tune) and a sampled pipe
+  organ (VCSL, CC0) in the church; `stadium_demo.py`, in `stadium_concert`, adds a band to
+  the stage and plays a song (CC0) through it, the sound system and the monitors. Each
+  downloads its recordings, writes its scene, mixes the piece at every listener with one
+  gain for all and makes a video that tours them (with ffmpeg and Pillow).
+- [Demos](docs/demos.md) gathers the three, with where each recording comes from, its
+  licence and the credit a shared render needs; the orchestra's section moved there from
+  [spatial audio and listening](docs/spatial-audio.md). The README and that page link the
+  [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8) of the three videos.
+
 **Editor**
 
 - While a run, a coverage map, a tuning or an export goes on, the status bar says what

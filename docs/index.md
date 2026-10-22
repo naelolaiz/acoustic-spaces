@@ -16,6 +16,7 @@ outdoor
 simulation
 coverage-maps
 spatial-audio
+demos
 measurements
 validation
 api
