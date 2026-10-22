@@ -1956,7 +1956,7 @@ msgstr "Windrichting"
 msgid "Wind height"
 msgstr "Windhoogte"
 
-#: acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/tree.py
 msgid "Wind profile"
 msgstr "Windprofiel"
 
@@ -4196,7 +4196,7 @@ msgstr ""
 msgid "Up to band (Hz)"
 msgstr "Tot band (Hz)"
 
-#: acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/tree.py
 msgid "Wind"
 msgstr "Wind"
 
@@ -5538,6 +5538,24 @@ msgstr ""
 
 #: acoustic_spaces/gui/tree.py
 msgid ""
+"Outdoors, the wind: its eye shows or hides its arrows and the weather zones "
+"in the 3D view and the plan; select it to change the wind under Properties"
+msgstr ""
+"Buiten de wind: zijn oog toont of verbergt zijn pijlen en de weerzones in de "
+"3D-weergave en de plattegrond; geselecteerd verander je de wind onder "
+"Eigenschappen"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"The masts of the wind's profile in the 3D view, arrows up them and a curve: "
+"how the wind grows with height. Their eye shows or hides them"
+msgstr ""
+"De masten van het windprofiel in de 3D-weergave, met pijlen erlangs omhoog "
+"en een kromme: hoe de wind met de hoogte toeneemt. Hun oog toont of verbergt "
+"ze"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
 "How the early reflections and the late reverberation are computed, and the "
 "responses' length, sample rate and bands"
 msgstr ""
@@ -5562,10 +5580,21 @@ msgstr ""
 
 #: acoustic_spaces/gui/tree.py
 msgid ""
-"Shows or hides a source, a listener or a group in the 3D view and the plan"
+"A weather zone, a part of the scene with wind and temperature of its own, "
+"and its wind's speed at the scene's wind height; select it to change its "
+"weather under Properties"
 msgstr ""
-"Toont of verbergt een bron, een ontvanger of een groep in de 3D-weergave en "
-"de plattegrond"
+"Een weerzone, een deel van de scène met eigen wind en temperatuur, en de "
+"snelheid van haar wind op de windhoogte van de scène; geselecteerd verander "
+"je haar weer onder Eigenschappen"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"Shows or hides a source, a listener, a group or the wind in the 3D view and "
+"the plan"
+msgstr ""
+"Toont of verbergt een bron, een ontvanger, een groep of de wind in de "
+"3D-weergave en de plattegrond"
 
 #: acoustic_spaces/gui/tree.py
 msgid "Geometry"
@@ -5622,6 +5651,14 @@ msgstr "Verbergen in de 3D-weergave en de plattegrond"
 #: acoustic_spaces/gui/tree.py
 msgid "Show it in the 3D view and the plan"
 msgstr "Tonen in de 3D-weergave en de plattegrond"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Hide them in the 3D view"
+msgstr "Verbergen in de 3D-weergave"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Show them in the 3D view"
+msgstr "Tonen in de 3D-weergave"
 
 #: acoustic_spaces/gui/tune_dialog.py
 msgid "Make auto the default on this computer"
@@ -5741,7 +5778,7 @@ msgstr "{name}: {speed:.1f} m/s, {temperature:.1f} °C"
 msgid "{name}: {temperature:.1f} °C"
 msgstr "{name}: {temperature:.1f} °C"
 
-#. Translators: the wind's speed at a height, beside an arrow up the wind's profile.
+#. Translators: the wind's speed at a height, beside an arrow up the wind's profile and beside the wind and each weather zone in the scene tree.
 #: acoustic_spaces/viz.py
 #, python-brace-format
 msgid "{speed:.1f} m/s at {height:g} m"
@@ -6305,6 +6342,43 @@ msgstr ""
 "afhaalt, en weerkaatst op het gemiddelde vlak van de helling naar de "
 "ontvanger die naar de werf kijkt, als op vlakke grond; de ontvanger op de "
 "top ziet de werf net over de schouder van de heuvel."
+
+#: examples/lakeside_concert/scene.yaml
+msgctxt "example"
+msgid "Concert across a lake"
+msgstr "Concert aan de overkant van een meer"
+
+#: examples/lakeside_concert/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a summer evening concert on a lawn by a lake, its loudspeakers 6 m "
+"up, heard by the audience 30 m away, from a boat in the middle of the lake "
+"and in a village on the far shore, 550 m away, in a garden and at a bedroom "
+"window. The evening breeze blows from the park out over the lake, 2.5 m/s 10 "
+"m up, and three weathers share the scene: the park's, and two weather zones. "
+"Over the water the air lies cool, 17 °C at the surface where the park's is "
+"at 22 °C, warming by a degree every 10 m up, and the breeze, with nothing to "
+"slow it on the smooth water, blows at 3.5 m/s; among the village's houses "
+"and gardens it drops to 1 m/s. The cool air and the breeze both bend the "
+"sound down to the water, which gives it back almost whole: this is why a "
+"concert carries across a lake on a summer night, and the far shore hears it "
+"a few decibels louder than in still air. Show wind and Show wind profile in "
+"the editor's View menu draw the three weathers."
+msgstr ""
+"Buiten: een concert op een zomeravond op een grasveld aan een meer, de "
+"luidsprekers 6 m hoog, gehoord door het publiek op 30 m, vanuit een boot "
+"midden op het meer en in een dorp aan de overkant, op 550 m, in een tuin en "
+"bij een slaapkamerraam. De avondbries waait vanuit het park het meer op, 2.5 "
+"m/s op 10 m hoogte, en drie soorten weer delen de scène: dat van het park en "
+"dat van twee weerzones. Boven het water is de lucht koel, 17 °C aan het "
+"oppervlak waar die van het park 22 °C is, en wordt elke 10 m hoger een graad "
+"warmer, en de bries, die op het gladde water niets afremt, waait met 3.5 "
+"m/s; tussen de huizen en tuinen van het dorp zakt hij naar 1 m/s. De koele "
+"lucht en de bries buigen het geluid allebei naar het water, dat het bijna "
+"helemaal terugkaatst: daarom draagt een concert op een zomeravond over een "
+"meer, en hoort de overkant het een paar decibel luider dan in stilstaande "
+"lucht. Wind tonen en Windprofiel tonen in het menu Beeld van de editor "
+"tekenen de drie soorten weer."
 
 #: examples/leaky_classroom/scene.yaml
 msgctxt "example"

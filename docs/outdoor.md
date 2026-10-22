@@ -446,6 +446,9 @@ views draw each zone with its name and its wind's speed at the scene's wind heig
 (`lee: 1.0 m/s`), with its ground temperature when it has one of its own
 (`lake: 0.0 m/s, 12.0 °C`), and its own arrows in it; the 3D view raises see-through
 walls round it up to the wind's height.
+[`examples/lakeside_concert/scene.yaml`](https://github.com/naelolaiz/acoustic-spaces/blob/main/examples/lakeside_concert/scene.yaml)
+has two: a concert on a lawn by a lake, heard across it, with cool air and a stronger
+breeze over the water and a weaker breeze among the houses on the far shore.
 
 A zone's border is a step: the wind does not die away gradually into the lee. How
 each stage of the simulation takes the zones is described below; the parabolic
@@ -1050,7 +1053,9 @@ by corner, like a zone, **Remove weather zone** drops the chosen one, and a zone
 unchanged in a zone, and the zone's fields are those it changes. The plan draws the
 weather zones dotted in sky blue, with their names and winds, and **View > Show wind**
 and **View > Show wind profile** draw the wind and its profile (see
-[Wind and temperature](#wind-and-temperature)). **Add weather class** adds a
+[Wind and temperature](#wind-and-temperature)); the eyes of the scene tree's **Wind**
+entry do the same, and the weather zones listed under it show their weather when
+selected. **Add weather class** adds a
 [weather class](#levels-over-a-long-term), which **Weather of** then shows: the first
 holds all the time in the scene's weather, the next ones none of it until given their
 share in the **Share of the time** table, one cell per period; changing one class's

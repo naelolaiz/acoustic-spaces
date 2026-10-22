@@ -108,7 +108,8 @@ ZONE_WIND = N_("{name}: {speed:.1f} m/s")
 ZONE_WIND_TEMPERATURE = N_("{name}: {speed:.1f} m/s, {temperature:.1f} °C")
 # Translators: a weather zone's name and its ground temperature, in still air.
 ZONE_TEMPERATURE = N_("{name}: {temperature:.1f} °C")
-# Translators: the wind's speed at a height, beside an arrow up the wind's profile.
+# Translators: the wind's speed at a height, beside an arrow up the wind's profile and
+# beside the wind and each weather zone in the scene tree.
 PROFILE_SPEED = N_("{speed:.1f} m/s at {height:g} m")
 
 

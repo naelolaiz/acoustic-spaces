@@ -597,6 +597,19 @@ class ScenePage(Page):
         self._weather_form = form
         return self.weather_group
 
+    def show_item(self, key) -> None:
+        """Show the scene; picked from the wind's entries in the scene tree (``wind``,
+        ``profile`` or ``zone:k``), with the whole scene's weather or weather zone k's
+        under Weather of."""
+        picked = key != self.key
+        super().show_item(key)
+        if not picked or not isinstance(key, str):
+            return
+        if key.startswith("zone:"):
+            self.weather_zone.setCurrentIndex(max(self.weather_zone.findData(key), 0))
+        elif key in ("wind", "profile"):
+            self.weather_zone.setCurrentIndex(0)
+
     def _weather_choice(self) -> tuple[str, int] | None:
         """Whose weather the form shows: None for the whole scene's, ("zone", k) for a
         weather zone's and ("class", k) for a weather class's."""

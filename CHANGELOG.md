@@ -595,9 +595,14 @@
   weather zone with its name and wind (and its ground temperature when it has its own),
   in the 3D view as see-through walls; and the scene's wind in a corner. **View > Show
   wind profile** stands a mast in the 3D view in each weather where the wind blows, with
-  arrows up it and a curve: how the wind grows with height over the ground. Before,
-  only the **Show the profile** plot showed the wind, and nothing showed a weather
-  zone's.
+  arrows up it and a curve: how the wind grows with height over the ground. The scene
+  tree's new **Wind** entry has an eye for each and lists the weather zones, which
+  show their weather in the scene's form when selected. Before, only the **Show the
+  profile** plot showed the wind, and nothing showed a weather zone's.
+- New example: `lakeside_concert`, a concert on a lawn by a lake heard across the water
+  from a boat and in a village 550 m away, with two weather zones: cool air and a
+  stronger breeze over the lake, a weaker breeze among the village's houses. The
+  editor draws its three weathers with **Show wind** and **Show wind profile**.
 - While a run, a coverage map, a tuning or an export goes on, the status bar says what
   runs, its latest step and the time so far, with a **Cancel** button beside the bar;
   resting the mouse on the bar says the same at length. The bar was small and silent

@@ -249,4 +249,5 @@ Editor:
   would overlap, and arrows that stop short of a marker ahead.
 - [x] The wind drawn outdoors, in the 3D view and the plan: arrows the way it blows, as
   long as it is strong, the weather zones with their winds, and masts with the wind's
-  profile up them.
+  profile up them; eyes for both in the scene tree, and an example to see them
+  (`lakeside_concert`).

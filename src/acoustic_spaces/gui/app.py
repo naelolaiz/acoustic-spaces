@@ -436,7 +436,7 @@ class MainWindow(QMainWindow):
         )
         self.wind_action.setCheckable(True)
         self.wind_action.setChecked(True)
-        self.wind_action.toggled.connect(lambda *_: self._draw())
+        self.wind_action.toggled.connect(lambda *_: self._wind_shown())
         self.wind_profile_action = a(
             _("Show wind pro&file"),
             lambda: None,
@@ -447,7 +447,7 @@ class MainWindow(QMainWindow):
         )
         self.wind_profile_action.setCheckable(True)
         self.wind_profile_action.setChecked(True)
-        self.wind_profile_action.toggled.connect(lambda *_: self._draw())
+        self.wind_profile_action.toggled.connect(lambda *_: self._wind_shown())
         self.screenshot_action = a(
             _("Save &screenshot…"), self.save_screenshot, tip=_("Save the 3D view as a PNG picture")
         )
@@ -666,7 +666,7 @@ class MainWindow(QMainWindow):
     def _changed(self) -> None:
         if not self._valid(self.selection):
             self.selection = ("scene", None)
-        self.tree.rebuild(self.document.room, self.selection, self.document.hidden)
+        self._rebuild_tree()
         self.inspector.show_item(*self.selection)
         self._reweight()
         self.results.mark_stale(self._stale(), reweighted=self._reweighted())
@@ -772,10 +772,26 @@ class MainWindow(QMainWindow):
 
     def _show_points(self, kind: str, indices: list[int], shown: bool) -> None:
         """An eye in the scene tree: show these sources or listeners in the 3D view and
-        the plan, or hide them."""
+        the plan, or hide them; or the wind, or its profile's masts, as the View menu
+        does."""
+        if kind == "wind":
+            self.wind_action.setChecked(shown)
+            return
+        if kind == "wind_profile":
+            self.wind_profile_action.setChecked(shown)
+            return
         self.document.set_hidden(kind, indices, not shown)
-        self.tree.rebuild(self.document.room, self.selection, self.document.hidden)
+        self._rebuild_tree()
         self._draw()
+
+    def _wind_shown(self) -> None:
+        """View > Show wind or Show wind profile changed: the tree's eyes follow."""
+        self._rebuild_tree()
+        self._draw()
+
+    def _rebuild_tree(self) -> None:
+        wind = (self.wind_action.isChecked(), self.wind_profile_action.isChecked())
+        self.tree.rebuild(self.document.room, self.selection, self.document.hidden, wind)
 
     # -- selection and the 3D view ------------------------------------------------
 

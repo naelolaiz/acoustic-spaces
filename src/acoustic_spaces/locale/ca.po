@@ -1949,7 +1949,7 @@ msgstr "Direcció del vent"
 msgid "Wind height"
 msgstr "Alçada del vent"
 
-#: acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/tree.py
 msgid "Wind profile"
 msgstr "Perfil del vent"
 
@@ -4178,7 +4178,7 @@ msgstr ""
 msgid "Up to band (Hz)"
 msgstr "Fins a la banda (Hz)"
 
-#: acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/tree.py
 msgid "Wind"
 msgstr "Vent"
 
@@ -5523,6 +5523,23 @@ msgstr ""
 
 #: acoustic_spaces/gui/tree.py
 msgid ""
+"Outdoors, the wind: its eye shows or hides its arrows and the weather zones "
+"in the 3D view and the plan; select it to change the wind under Properties"
+msgstr ""
+"A l'aire lliure, el vent: el seu ull mostra o amaga les seves fletxes i les "
+"zones meteorològiques a la vista 3D i a la planta; en seleccionar-lo, el "
+"vent es canvia a Propietats"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"The masts of the wind's profile in the 3D view, arrows up them and a curve: "
+"how the wind grows with height. Their eye shows or hides them"
+msgstr ""
+"Els pals del perfil del vent a la vista 3D, amb fletxes al llarg i una "
+"corba: com creix el vent amb l'alçada. El seu ull els mostra o amaga"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
 "How the early reflections and the late reverberation are computed, and the "
 "responses' length, sample rate and bands"
 msgstr ""
@@ -5547,9 +5564,21 @@ msgstr ""
 
 #: acoustic_spaces/gui/tree.py
 msgid ""
-"Shows or hides a source, a listener or a group in the 3D view and the plan"
+"A weather zone, a part of the scene with wind and temperature of its own, "
+"and its wind's speed at the scene's wind height; select it to change its "
+"weather under Properties"
 msgstr ""
-"Mostra o amaga una font, un receptor o un grup a la vista 3D i a la planta"
+"Una zona meteorològica, una part de l'escena amb vent i temperatura propis, "
+"i la velocitat del seu vent a l'alçada del vent de l'escena; en "
+"seleccionar-la, el seu temps es canvia a Propietats"
+
+#: acoustic_spaces/gui/tree.py
+msgid ""
+"Shows or hides a source, a listener, a group or the wind in the 3D view and "
+"the plan"
+msgstr ""
+"Mostra o amaga una font, un receptor, un grup o el vent a la vista 3D i a la "
+"planta"
 
 #: acoustic_spaces/gui/tree.py
 msgid "Geometry"
@@ -5606,6 +5635,14 @@ msgstr "Amagar-lo a la vista 3D i a la planta"
 #: acoustic_spaces/gui/tree.py
 msgid "Show it in the 3D view and the plan"
 msgstr "Mostrar-lo a la vista 3D i a la planta"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Hide them in the 3D view"
+msgstr "Amagar-los a la vista 3D"
+
+#: acoustic_spaces/gui/tree.py
+msgid "Show them in the 3D view"
+msgstr "Mostrar-los a la vista 3D"
 
 #: acoustic_spaces/gui/tune_dialog.py
 msgid "Make auto the default on this computer"
@@ -5726,7 +5763,7 @@ msgstr "{name}: {speed:.1f} m/s, {temperature:.1f} °C"
 msgid "{name}: {temperature:.1f} °C"
 msgstr "{name}: {temperature:.1f} °C"
 
-#. Translators: the wind's speed at a height, beside an arrow up the wind's profile.
+#. Translators: the wind's speed at a height, beside an arrow up the wind's profile and beside the wind and each weather zone in the scene tree.
 #: acoustic_spaces/viz.py
 #, python-brace-format
 msgid "{speed:.1f} m/s at {height:g} m"
@@ -6289,6 +6326,43 @@ msgstr ""
 "reflecteix al pla mitjà del vessant cap al receptor que mira al pati, com en "
 "terra pla; el receptor a la carena veu el pati just per sobre de l'espatlla "
 "del turó."
+
+#: examples/lakeside_concert/scene.yaml
+msgctxt "example"
+msgid "Concert across a lake"
+msgstr "Concert a l'altra banda d'un llac"
+
+#: examples/lakeside_concert/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a summer evening concert on a lawn by a lake, its loudspeakers 6 m "
+"up, heard by the audience 30 m away, from a boat in the middle of the lake "
+"and in a village on the far shore, 550 m away, in a garden and at a bedroom "
+"window. The evening breeze blows from the park out over the lake, 2.5 m/s 10 "
+"m up, and three weathers share the scene: the park's, and two weather zones. "
+"Over the water the air lies cool, 17 °C at the surface where the park's is "
+"at 22 °C, warming by a degree every 10 m up, and the breeze, with nothing to "
+"slow it on the smooth water, blows at 3.5 m/s; among the village's houses "
+"and gardens it drops to 1 m/s. The cool air and the breeze both bend the "
+"sound down to the water, which gives it back almost whole: this is why a "
+"concert carries across a lake on a summer night, and the far shore hears it "
+"a few decibels louder than in still air. Show wind and Show wind profile in "
+"the editor's View menu draw the three weathers."
+msgstr ""
+"A l'aire lliure: un concert en un vespre d'estiu sobre la gespa vora un "
+"llac, amb els altaveus a 6 m d'alçada, escoltat pel públic a 30 m, des d'una "
+"barca enmig del llac i en un poble de l'altra riba, a 550 m, en un jardí i a "
+"la finestra d'un dormitori. La brisa del vespre bufa des del parc cap al "
+"llac, a 2,5 m/s a 10 m d'alçada, i tres temps comparteixen l'escena: el del "
+"parc i el de dues zones meteorològiques. Sobre l'aigua l'aire és fresc, a 17 "
+"°C a la superfície quan el del parc és a 22 °C, i s'escalfa un grau cada 10 "
+"m d'alçada, i la brisa, sense res que la freni sobre l'aigua llisa, bufa a "
+"3,5 m/s; entre les cases i els jardins del poble baixa a 1 m/s. L'aire fresc "
+"i la brisa corben el so cap a l'aigua, que el retorna gairebé sencer: per "
+"això un concert se sent a l'altra banda d'un llac en una nit d'estiu, i "
+"l'altra riba el sent uns quants decibels més fort que amb l'aire en calma. "
+"Mostrar el vent i Mostrar el perfil del vent, al menú Veure de l'editor, "
+"dibuixen els tres temps."
 
 #: examples/leaky_classroom/scene.yaml
 msgctxt "example"

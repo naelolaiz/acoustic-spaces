@@ -32,7 +32,7 @@ which frequencies each octave band holds.
 - The **Plan** tab, next to the 3D view, shows the room from above and draws rooms (see
   below).
 - The **scene tree** lists the geometry and its surfaces, the materials, sources,
-  listeners, simulation settings and output formats. Selecting an entry, there or by
+  listeners, the wind outdoors, simulation settings and output formats. Selecting an entry, there or by
   clicking it in the 3D view, shows its form under **Properties**. Every change is
   checked against the scene schema; a refused change says why under **Messages**, and
   every change can be undone.
@@ -152,7 +152,10 @@ which frequencies each octave band holds.
   a corner. **View > Show wind profile** stands a mast in the 3D view in each weather
   where the wind blows, with arrows up it and a curve through the wind at every height:
   how the wind grows with height over the ground (see
-  [Wind and temperature](outdoor.md#wind-and-temperature)). Both are on at first.
+  [Wind and temperature](outdoor.md#wind-and-temperature)). Both are on at first. The
+  scene tree's **Wind** entry, outdoors with wind or temperature, has an eye for each
+  (its own, and that of **Wind profile** under it) and lists the weather zones with
+  their winds; selecting one shows its weather in the scene's form.
 - **View > Language** shows the editor and the command line in English, Spanish,
   Catalan, Italian, German or Dutch, or in the computer's language, from their next
   start (see [Language](getting-started.md#language)). Numbers in the editor follow the

@@ -1,8 +1,9 @@
 """The scene as a tree: the room, its geometry and surfaces, materials, sources,
-listeners, simulation settings, outputs and the coverage map. Selecting an entry shows
-its form. Sources and listeners sit in their groups; each, and each group, has a tick
-that uses it in simulations or leaves it out, and an eye that shows or hides it in the
-3D view and the plan."""
+listeners, the wind outdoors, simulation settings, outputs and the coverage map.
+Selecting an entry shows its form. Sources and listeners sit in their groups; each, and
+each group, has a tick that uses it in simulations or leaves it out, and an eye that
+shows or hides it in the 3D view and the plan. The wind and the masts of its profile
+have eyes too, and the weather zones sit under the wind."""
 
 from __future__ import annotations
 
@@ -25,10 +26,10 @@ from acoustic_spaces.gui.numbers import fmt, point_text
 from acoustic_spaces.gui.viewport import material_colour, surface_materials
 from acoustic_spaces.i18n import N_, _
 from acoustic_spaces.room import UNASSIGNED, Room
-from acoustic_spaces.viz import LISTENER_COLOUR, SOURCE_COLOUR
+from acoustic_spaces.viz import LISTENER_COLOUR, PROFILE_SPEED, SOURCE_COLOUR, WindMap
 
 ROLE = Qt.ItemDataRole.UserRole
-#: The column of the eyes that show or hide sources and listeners.
+#: The column of the eyes that show or hide sources, listeners and the wind.
 EYE = 2
 #: The tip of each kind of entry, by (kind, key); a key of None stands for any.
 TIPS = {
@@ -60,6 +61,14 @@ TIPS = {
         "A group of the scene's sources or listeners (their Group field). Untick it to leave "
         "them all out of simulations and maps"
     ),
+    ("scene", "wind"): N_(
+        "Outdoors, the wind: its eye shows or hides its arrows and the weather zones in the "
+        "3D view and the plan; select it to change the wind under Properties"
+    ),
+    ("scene", "profile"): N_(
+        "The masts of the wind's profile in the 3D view, arrows up them and a curve: how "
+        "the wind grows with height. Their eye shows or hides them"
+    ),
     ("simulation", None): N_(
         "How the early reflections and the late reverberation are "
         "computed, and the responses' length, sample rate and bands"
@@ -71,6 +80,12 @@ TIPS = {
         "Where the coverage map lies, how fine it is, and the background noise for the STI"
     ),
 }
+#: The tip of a weather zone's entry.
+ZONE_TIP = N_(
+    "A weather zone, a part of the scene with wind and temperature of its own, and its "
+    "wind's speed at the scene's wind height; select it to change its weather under "
+    "Properties"
+)
 
 
 def swatch(colour: str, faded: bool = False) -> QIcon:
@@ -106,7 +121,9 @@ class SceneTree(QTreeWidget):
     """Emits ``selected(kind, key)`` when the user picks an entry,
     ``enabled_changed(kind, indices, enabled)`` when they tick or untick sources or
     listeners (``kind``), and ``shown_changed(kind, indices, shown)`` when they click an
-    eye."""
+    eye: ``kind`` is then ``wind`` or ``wind_profile`` (with no indices) for the wind's
+    eyes. The wind's entries select the scene, keyed ``wind``, ``profile`` and
+    ``zone:k`` for weather zone k."""
 
     selected = Signal(str, object)
     enabled_changed = Signal(str, object, bool)
@@ -117,7 +134,11 @@ class SceneTree(QTreeWidget):
         self.setHeaderLabels([_("Scene"), "", ""])
         self.setColumnCount(3)
         self.headerItem().setToolTip(
-            EYE, _("Shows or hides a source, a listener or a group in the 3D view and the plan")
+            EYE,
+            _(
+                "Shows or hides a source, a listener, a group or the wind in the 3D view and "
+                "the plan"
+            ),
         )
         self.setUniformRowHeights(True)
         self.itemSelectionChanged.connect(self._on_selection)
@@ -126,7 +147,7 @@ class SceneTree(QTreeWidget):
         #: (kind, key) of every entry; items store their index here.
         self._keys: list[tuple[str, object]] = []
         #: The sources or listeners under an entry, by the entry's index: (kind, their
-        #: indices, whether any is shown).
+        #: indices, whether any is shown); the wind's entries have no indices.
         self._points: dict[int, tuple[str, list[int], bool]] = {}
 
     def _item(self, parent, text: str, kind: str, key=None, detail: str = "", icon=None):
@@ -147,10 +168,11 @@ class SceneTree(QTreeWidget):
         room: Room,
         selection: tuple[str, object] | None,
         hidden: set[tuple[str, str]] = frozenset(),
+        wind: tuple[bool, bool] = (True, True),
     ) -> None:
         """Fill the tree from ``room`` (and its scene) and select ``selection``;
         ``hidden`` holds the (kind, name) of the sources and listeners hidden in the
-        views."""
+        views, and ``wind`` whether the views show the wind and its profile's masts."""
         scene = room.scene
         self._quiet = True
         self.clear()
@@ -191,6 +213,9 @@ class SceneTree(QTreeWidget):
             ("listeners", _("Listeners"), LISTENER_COLOUR),
         ):
             self._points_of(kind, title, colour, top, getattr(scene, kind), hidden)
+        weathers = WindMap.of(room)
+        if weathers is not None:
+            self._wind_of(top, weathers, *wind)
         simulation = scene.simulation
         self._item(
             top,
@@ -258,6 +283,36 @@ class SceneTree(QTreeWidget):
             if key[0] == kind:
                 self._mark(entry, kind, [key[1]], items, hidden, icons)
 
+    def _wind_of(self, top, wind: WindMap, shown: bool, profile: bool) -> None:
+        """Outdoors, the wind under ``top``: its entry, with its speed and the eye of its
+        arrows and zones; the masts of its profile, with their eye; and each weather
+        zone, with its wind's speed."""
+
+        def speed(k: int) -> str:
+            return fmt(_(PROFILE_SPEED), speed=wind.speeds[k], height=wind.height)
+
+        entry = self._item(top, _("Wind"), "scene", "wind", speed(0))
+        masts = self._item(entry, _("Wind profile"), "scene", "profile")
+        text = self.palette().color(QPalette.ColorRole.Text)
+        faded = self.palette().color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text)
+        entry.setIcon(EYE, eye(text, True) if shown else eye(faded, False))
+        entry.setToolTip(
+            EYE,
+            _("Hide it in the 3D view and the plan")
+            if shown
+            else _("Show it in the 3D view and the plan"),
+        )
+        masts.setIcon(EYE, eye(text, True) if profile else eye(faded, False))
+        masts.setToolTip(
+            EYE, _("Hide them in the 3D view") if profile else _("Show them in the 3D view")
+        )
+        self._points[entry.data(0, ROLE)] = ("wind", [], shown)
+        self._points[masts.data(0, ROLE)] = ("wind_profile", [], profile)
+        for k in range(1, len(wind.names)):
+            zone = self._item(entry, wind.names[k], "scene", f"zone:{k - 1}", speed(k))
+            for column in range(2):
+                zone.setToolTip(column, _(ZONE_TIP))
+
     def _mark(self, entry, kind: str, indices: list[int], items, hidden, icons) -> None:
         """Give ``entry`` the tick and the eye of the points at ``indices``."""
         if not indices:
@@ -294,7 +349,7 @@ class SceneTree(QTreeWidget):
         if self._quiet or column != 0:
             return
         found = self._points.get(item.data(0, ROLE))
-        if found is not None:
+        if found is not None and found[1]:  # the wind's entries have no tick
             kind, indices, _shown = found
             self.enabled_changed.emit(kind, indices, item.checkState(0) != Qt.CheckState.Unchecked)
 

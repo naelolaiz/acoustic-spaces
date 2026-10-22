@@ -48,6 +48,7 @@ from acoustic_spaces.gui.document import (  # noqa: E402
 )
 from acoustic_spaces.gui.levels import level_colour  # noqa: E402
 from acoustic_spaces.gui.plan_view import grid_step, outline_segments, snap  # noqa: E402
+from acoustic_spaces.gui.tree import EYE  # noqa: E402
 from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # noqa: E402
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
 from acoustic_spaces.gui.worker import MapJob, SimulationJob  # noqa: E402
@@ -1821,6 +1822,54 @@ def test_the_wind_is_drawn_outdoors(window, qapp) -> None:
     # Indoors there is no wind to show.
     window.open_example(example_path("studio"))
     assert not wind.isEnabled() and not profile.isEnabled() and canvas._wind is None
+
+
+def test_the_wind_in_the_scene_tree(window, qapp) -> None:
+    """Outdoors the scene tree has the wind, with eyes for its arrows and its masts that
+    View > Show wind and Show wind profile follow, and its weather zones, which show
+    their weather in the scene's form."""
+    window.open_example(example_path("lakeside_concert"))
+    tree = window.tree
+
+    def entry(key):
+        return next(item for item in tree._items() if tree._keys[item.data(0, 256)] == key)
+
+    def shown(key) -> bool:
+        return tree._points[entry(key).data(0, 256)][2]
+
+    wind, masts = entry(("scene", "wind")), entry(("scene", "profile"))
+    assert wind.text(1) == "2.5 m/s at 10 m" and masts.parent() is wind
+    zones = [entry(("scene", f"zone:{k}")) for k in range(2)]
+    assert [(zone.text(0), zone.text(1)) for zone in zones] == [
+        ("lake", "3.5 m/s at 10 m"),
+        ("village", "1.0 m/s at 10 m"),
+    ]
+    assert all(item.toolTip(0) and item.toolTip(EYE) for item in (wind, masts))
+    assert all(zone.toolTip(0) and zone.parent() is wind for zone in zones)
+    tree.toggle_shown(wind)
+    qapp.processEvents()
+    assert not window.wind_action.isChecked() and window.wind_profile_action.isChecked()
+    assert not window.plan.canvas.show_wind and not shown(("scene", "wind"))
+    tree.toggle_shown(entry(("scene", "profile")))
+    qapp.processEvents()
+    assert not window.wind_profile_action.isChecked() and not shown(("scene", "profile"))
+    window.wind_action.setChecked(True)
+    window.wind_profile_action.setChecked(True)
+    assert shown(("scene", "wind")) and shown(("scene", "profile"))
+    # A zone's entry shows its weather in the scene's form; the wind's, the scene's.
+    page = window.inspector.pages["scene"]
+    tree.setCurrentItem(entry(("scene", "zone:1")))
+    qapp.processEvents()
+    assert window.selection == ("scene", "zone:1")
+    assert page.weather_zone.currentData() == "zone:1"
+    assert page.wind_speed.value() == pytest.approx(1.0)
+    tree.setCurrentItem(entry(("scene", "wind")))
+    qapp.processEvents()
+    assert page.weather_zone.currentIndex() == 0
+    assert page.wind_speed.value() == pytest.approx(2.5)
+    # Without an atmosphere there is no wind to list.
+    window.open_example(example_path("street"))
+    assert ("scene", "wind") not in tree._keys
 
 
 @pytest.mark.render
