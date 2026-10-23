@@ -234,7 +234,9 @@ def mmss(t: float) -> str:
 
 
 class Pictures:
-    def __init__(self, scene: dict, folder: Path, levels, seats, tour, titles, gains=None):
+    def __init__(
+        self, scene: dict, folder: Path, levels, seats, tour, titles, gains=None, credit=CREDIT
+    ):
         self.scene, self.levels, self.seats, self.tour, self.titles = (
             scene,
             levels,
@@ -243,6 +245,7 @@ class Pictures:
             titles,
         )
         self.gains = gains or {}  # dB each listener is turned up by in the video
+        self.credit = credit  # the song's, as its licence asks
         self.faces = read_obj(folder / scene["geometry"]["file"])
         self.sources = scene["sources"]
         self.listeners = {item["name"]: item for item in scene["listeners"]}
@@ -649,7 +652,7 @@ class Pictures:
             ty += row
 
         draw.rounded_rectangle([80, 885, 1840, 995], 14, PANEL)  # the spectrogram goes here
-        text(draw, (80, 1016), CREDIT, font("Regular", 19), MUTED)
+        text(draw, (80, 1016), self.credit, font("Regular", 19), MUTED)
         text(draw, (80, 1046), self.tool, font("Regular", 17), FAINT)
         return img
 

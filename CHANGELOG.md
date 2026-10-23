@@ -593,8 +593,11 @@
   turns each stop up to the loudness of the loudest, the stage, and says by how much, and
   its pictures show the crowd standing on the pitch and seated in the stands, the empty
   stand's seats, how many people stand and sit, and how much of the sound each takes up.
-  Each downloads its recordings, writes its scene, mixes the piece at every listener with
-  one gain for all and makes a video that tours them (with ffmpeg and Pillow).
+  `--song francium` or `rubidium` plays one of Software-Entwicklungskit's electronic songs
+  (CC0) instead, from the stems its album is released with, all twelve listeners in the
+  tour. Each downloads its recordings, writes its scene, mixes the piece at every
+  listener with one gain for all and makes a video that tours them (with ffmpeg and
+  Pillow).
 - `lakeside_demo.py`, in `lakeside_concert`, plays the same song from the lakeside stage
   and mixes it in the audience, behind the stage, on a boat and in the village across the
   lake, in the evening's weather and in still air; its video plays the song at a bedroom

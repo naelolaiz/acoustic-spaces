@@ -157,8 +157,10 @@ Singing Dataset, the ESMUC Choir Dataset and Cantoría are all for non-commercia
 through its sound system and stage monitors, and mixes it at each of its 12 listeners.
 The video plays the song once while the listener moves, on phrase boundaries, from the
 mix position to the front of the pitch, onto the stage (singer, drummer, guitarist),
-round the stands to the far end and back: ten of the listeners, as the song (3:15) has
-eleven phrases.
+round the stands to the far end and back. It plays one of three songs (`--song`): "Spicy
+Funk Cake", funk by a nine-piece band (3:15, ten of the listeners, as the song has eleven
+phrases), or "Francium" (4:54, all twelve) or "Rubidium" (3:52), electronic songs by
+Software-Entwicklungskit released with their stems.
 
 ```sh
 acoustic-spaces examples --copy . stadium_concert && cd stadium_concert
@@ -170,9 +172,11 @@ python stadium_demo.py render    # demo/seats: one binaural WAV per listener (~1
 python stadium_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
-Options: `--tour mix_position:1,singer:0.5,east_stand:1` (listener:phrases of 8 bars,
-0.5 for 4; the last one runs to the end), `--listeners a,b` for `render`, `--format` for
-another output the simulation wrote, `--no-mp4` for the audio and stills only.
+Options: `--song francium` or `rubidium` for `music` and `feeds` (with `--work
+demo_francium` for a folder of its own), `--tour mix_position:1,singer:0.5,east_stand:1`
+(listener:phrases of 8 bars, 0.5 for 4; the last one runs to the end), `--listeners a,b`
+for `render`, `--format` for another output the simulation wrote, `--no-mp4` for the
+audio and stills only.
 
 - **The band.** The example has loudspeakers only, so `band` adds the players as sources
   on the stage, in a group of their own: a drum kit beside the drummer (116 dB sound
@@ -183,10 +187,11 @@ another output the simulation wrote, `--no-mp4` for the audio and stills only.
 - **Who plays what.** The sound system plays the stereo reference mix: the arrays, fills,
   towers and delays on the audience's left (-y) take the left channel, those on its right
   (+y; the scene's `*_left`, named from the stage) the right one, the subwoofers both.
-  The monitors play mixes of the stems: the singer's wedges the vocal over the shouts, the
-  keys and a little of the guitar, bass and drums; the drum fill the drums and bass with
-  the vocal, guitar and keys under them; the side fills a stage mix with the vocal 3 dB
-  up and the drums 20 dB down (the kit is loud on stage by itself).
+  The monitors play mixes of the stems: the singer's wedges the vocal over the backing
+  vocals, the keys and a little of the guitar, bass and drums; the drum fill the drums
+  and bass with the vocal, guitar and keys under them; the side fills a stage mix with
+  the vocal 3 dB up and the drums 20 dB down (the kit is loud on stage by itself). A stem
+  a song does not have (brass, hand percussion) is left out of the mixes that name it.
 - **How loud.** `feeds` brings every signal to the same gated RMS and then scales it by
   its `level_db` against the loudest's: the main arrays 0 dB, subwoofers and towers -2,
   delays -4 and -6, out-fills -4, in-fills -10, side fills -12, front fills -18, wedges
@@ -205,9 +210,11 @@ another output the simulation wrote, `--no-mp4` for the audio and stills only.
 - **The cuts.** Every listener's mix is shifted earlier by the time the loudest sound
   takes to reach them (the peak of the energy of their responses, each weighted by how
   loud its source plays: 0.12 s at the mix position, 0.38 s at the far end), so the beat
-  runs on across each 1 s crossfade; the caption gives that time. The stops last 8 bars,
-  and as the song's first downbeat comes half a second in, each crossfade ends on a
-  downbeat.
+  runs on across each 1 s crossfade; the caption gives that time. The stops last 8 bars
+  from the song's first downbeat, each crossfade ending on a downbeat. "Francium" starts
+  a beat into a bar and its intro is a bar short, so its phrases run from 14.8 s and the
+  first stop takes the intro as well; it has nineteen phrases and a half, so five stops,
+  each at a section's start, last two.
 - **The pictures.** The stadium from above, with the loudspeakers as dots and cones the
   way they point, lines from each to the listener of the moment (brighter where louder),
   and the crowd where the scene has its audience: a dot for every ten or so people
@@ -224,20 +231,29 @@ the stadium too. Binaural is through the spherical head model. Some listeners st
 nearer the arrays than their far-field patterns hold, which the scene's arrays handle by
 adding up their boxes one by one (`near_field.py` in the example puts numbers on it).
 
-**Recording and licence.** "Spicy Funk Cake" by the Rhythmussportgruppe, a nine-piece
+**Recordings and licences.** "Spicy Funk Cake" by the Rhythmussportgruppe, a nine-piece
 funk band (guitar, drums, bass, keys, saxophone, two trumpets, trombone and voice;
 composed by Niklas Dahlheimer, sung by Juliane Blum; 110 BPM, 3:15), recorded in 2017
 for the sound database of the DEGA (German Acoustical Society) at Hochschule
 Düsseldorf's studio, <https://doi.org/10.5281/zenodo.3601032>, **CC BY 4.0**. `music`
 reads the reference mix and the seven processed stems (drums, bass, guitar, keys, brass,
 vocal, shouts; stereo WAV, 24-bit, 48 kHz) out of the release's 3.5 GB archive by HTTP
-range requests, so only those 450 MB are downloaded, and writes the credit to
-`demo/music/SOURCES.txt`. The reference mix plays through the sound system; the stems
-play through the monitors and the band. The stems start 58 ms before the reference mix;
-`feeds` lines them up with it by cross-correlation.
+range requests, so only those 450 MB are downloaded. The stems start 58 ms before the
+reference mix; `feeds` lines them up with it by cross-correlation.
 
-Whoever shares a render has to credit the band and the DEGA, link the licence and say
-what was changed, for example:
+"Francium" (127.75 BPM, 4:54) and "Rubidium" (132 BPM, 3:52) by Software-Entwicklungskit,
+from the album *Everything is Free*, <https://github.com/ichbinsoftware/everythingisfree>,
+**CC0 1.0**: electronic songs released with their stems. `music --song francium` downloads
+the master and the 26 stems (M4A, 800 MB in all; "Rubidium" has 9) from the album's
+repository at a fixed commit, decodes them with ffmpeg and sums the stems into the groups
+the mixes use: drums, bass, guitar (the synth lead, which the guitarist's amplifier
+plays), keys, vocal and backing vocals.
+
+Either way the master plays through the sound system, the stems through the monitors
+and the band, and the credit goes to `demo/music/<song>/SOURCES.txt`.
+
+Whoever shares a render has to credit the musicians (and the DEGA), link the licence
+and say what was changed, for example:
 
 > Music: "Spicy Funk Cake" by Rhythmussportgruppe (composed by Niklas Dahlheimer),
 > recorded for the DEGA at Hochschule Düsseldorf, CC BY 4.0, doi:10.5281/zenodo.3601032;

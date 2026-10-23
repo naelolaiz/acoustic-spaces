@@ -371,7 +371,19 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     assert roles["drum_fill"] == "drummer" and roles["side_fill_left"] == "stage"
     assert all(roles[name] == name for name in demo.BAND)
     for mix in (demo.SINGER_MIX, demo.DRUMMER_MIX, demo.STAGE_MIX, *demo.BAND_MIX.values()):
-        assert set(mix) <= set(demo.STEMS)
+    # Every song has the stems the band and the monitor mixes lean on; the mixes name
+    # no stem that none of the songs has.
+    stems = {name: set(song["stems"]) for name, song in demo.SONGS.items()}
+    assert all({"drums", "guitar", "keys", "vocal"} <= names for names in stems.values())
+        assert set(mix) <= set.union(*stems.values())
+    for song in demo.SONGS.values():
+        assert set(song) >= {"master", "stems", "bpm", "downbeat_s", "credit", "sources"}
+        assert all(len(files) >= 1 for files in song["stems"].values())
+        for url, member in [
+            *song["master"],
+            *(f for files in song["stems"].values() for f in files),
+        ]:
+            assert url.startswith("https://") and (member is None or not member.startswith("/"))
     # The cuts shift each mix by its loudest arrival: here the delay 30 ms after the
     # main array, which plays 3 dB quieter but reaches the seat 8 dB louder.
     results = tmp_path / "results"
@@ -390,17 +402,33 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     # The tour moves on phrase boundaries and leaves out listeners without a mix.
     work = tmp_path / "demo"
     (work / "feeds").mkdir(parents=True)
-    (work / "feeds" / "feeds.json").write_text('{"length_s": 195.0}', encoding="utf-8")
+    funk = demo.SONGS["spicy_funk_cake"]
+    phrase = demo.phrase_s(funk)
+    (work / "feeds" / "feeds.json").write_text(
+        json.dumps({"length_s": 195.0, "song": funk | {"name": "spicy_funk_cake"}}), "utf-8"
+    )
     tour = demo.tour_of(argparse.Namespace(tour=None, work=work), {"mix_position", "singer"})
     assert [name for name, _, _ in tour] == ["mix_position", "singer", "mix_position"]
-    assert tour[1][1] == pytest.approx(demo.PHRASE_S) and tour[-1][2] == 195.0
+    assert tour[1][1] == pytest.approx(phrase) and tour[-1][2] == 195.0
     seats = {"seats": {"mix_position": {"rms_db": -40.0}, "singer": {"rms_db": -22.0}}}
     assert demo.gains_of(seats, tour) == {"mix_position": 18.0, "singer": 0.0}
-    # The default tour fits in the song, every stop on a 4 or 8 bar boundary.
-    tour = demo.tour_of(argparse.Namespace(tour=None, work=work), set(demo.TITLES))
-    assert len(tour) == len(demo.TOUR) and tour[-1][2] - tour[-1][1] > demo.PHRASE_S
-    for _, start, _ in tour:
-        assert start / (demo.PHRASE_S / 2) == pytest.approx(round(start / (demo.PHRASE_S / 2)))
+    # The default tour fits in each song, every stop on a 4 or 8 bar boundary half a
+    # crossfade before a downbeat, and the last stop longer than a phrase.
+    for name, length in (("spicy_funk_cake", 195.0), ("francium", 294.5), ("rubidium", 232.0)):
+        song = demo.SONGS[name] | {"name": name}
+        (work / "feeds" / "feeds.json").write_text(
+            json.dumps({"length_s": length, "song": song}), "utf-8"
+        )
+        tour = demo.tour_of(argparse.Namespace(tour=None, work=work), set(demo.TITLES))
+        left_out = {name for name, n in song.get("tour", {}).items() if n == 0}
+        assert len(tour) == len(demo.TOUR) - len(left_out)
+        assert not {name for name, _, _ in tour} & left_out
+        assert tour[-1][2] - tour[-1][1] > demo.phrase_s(song)
+        first = song["downbeat_s"] - demo.CROSSFADE_S / 2
+        for _, start, _ in tour[1:]:
+            bars = (start - first) / (demo.phrase_s(song) / 2)
+            assert bars == pytest.approx(round(bars)), (name, start)
+    assert len(tour) == len(demo.TOUR)  # Rubidium fits all twelve listeners
 
 
 def test_stadium_pictures_show_the_crowd() -> None:
