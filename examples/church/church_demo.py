@@ -19,7 +19,8 @@ PATH:
     python church_demo.py video     # demo/tour.wav, the stills, demo/tour.mp4
 
 or `python church_demo.py all` once the simulation is done. Everything goes to ./demo
-(--work). Use headphones.
+(--work). Use headphones; `--hrtf me.sofa` on every step and on `simulate` plays through
+your own or measured HRTFs instead of a spherical head.
 
 The recordings are not part of acoustic_spaces: `music` downloads them from where their
 authors publish them (about 100 MB; only the needed files are read out of VocalSet's and
@@ -549,14 +550,48 @@ def scene_of(args) -> dict:
 
 
 def simulate_command(args) -> str:
-    return f"acoustic-spaces simulate {args.scene} --out {args.results} --output {args.format}"
+    """The simulation the demo mixes from: the scene, the mixes' output and, with
+    ``--hrtf``, the SOFA file its binaural responses go through."""
+    command = f"acoustic-spaces simulate {args.scene} --out {args.results} --output {args.format}"
+    return command + hrtf_option(args)
+
+
+def hrtf_option(args) -> str:
+    """`` --hrtf FILE`` for the simulate command when ``--hrtf`` names a SOFA file."""
+    hrtf = getattr(args, "hrtf", None)
+    return f" --hrtf {hrtf}" if hrtf else ""
+
+
+def output_label(args) -> str:
+    """The output ``render`` asks auralize for: ``--format``, or with ``--hrtf`` the
+    binaural output simulated through that file (``binaural-<its name>``), so that mixes
+    through a spherical head cannot pass for ones through the listener's own ears."""
+    hrtf = getattr(args, "hrtf", None)
+    if hrtf and args.format == "binaural":
+        return f"binaural-{Path(hrtf).stem}"
+    return args.format
+
+
+def check_hrtf(args, entries: list[dict]) -> None:
+    """With ``--hrtf``, stop with the simulate command to run unless the responses were
+    made through that file."""
+    label = output_label(args)
+    if label == args.format:
+        return
+    labels = {o["format"] for e in entries for o in e.get("outputs") or [{"format": "mono"}]}
+    if label not in labels:
+        raise SystemExit(
+            f"error: {args.results} has no responses through {args.hrtf}"
+            f" ({', '.join(sorted(labels))}); run first:\n  {simulate_command(args)}"
+        )
 
 
 def responses_of(args) -> list[dict]:
     path = args.results / "parameters.json"
     if not path.exists():
+        first = "" if args.scene.exists() else "  python church_demo.py scene\n"
         raise SystemExit(
-            f"error: no simulation in {args.results}; run first:\n  {simulate_command(args)}"
+            f"error: no simulation in {args.results}; run first:\n{first}  {simulate_command(args)}"
         )
     return json.loads(path.read_text(encoding="utf-8"))["responses"]
 
@@ -879,6 +914,7 @@ def render(args) -> None:
 
     table = json.loads((args.work / "feeds" / "feeds.json").read_text(encoding="utf-8"))
     rate = table["rate"]
+    check_hrtf(args, responses_of(args))
     listeners = list(LISTENERS)
     if args.listeners:
         listeners = args.listeners.split(",")
@@ -895,7 +931,7 @@ def render(args) -> None:
                 "--listener",
                 listener,
                 "--format",
-                args.format,
+                output_label(args),
                 "--out",
                 str(out),
             ]
@@ -1051,12 +1087,20 @@ def main() -> None:
     parser.add_argument(
         "--format", default="binaural", help="output format the mixes take (default binaural)"
     )
+    parser.add_argument(
+        "--hrtf",
+        type=Path,
+        help="binaural mixes through this SOFA file of HRTFs, your own or measured, instead of "
+        "a spherical head model (the simulate command the script prints takes it too)",
+    )
     parser.add_argument("--listeners", help="render: only these listeners, comma separated")
     parser.add_argument("--tour", help="video: listener:start_s,... (each runs until the next)")
     parser.add_argument(
         "--no-mp4", action="store_true", help="video: write the audio and stills only"
     )
     args = parser.parse_args()
+    if args.hrtf and args.format != "binaural":
+        parser.error("--hrtf is for binaural mixes")
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     steps = ["music", "feeds", "render", "video"] if args.step == "all" else [args.step]
     for step in steps:

@@ -16,7 +16,8 @@ the zips in it (or `--zips FOLDER`):
     python orchestra_demo.py video    # demo/tour.wav, the stills, demo/tour.mp4
 
 or `python orchestra_demo.py all` once the simulation is done. Everything goes to ./demo
-(--work). Use headphones.
+(--work). Use headphones; `--hrtf me.sofa` on every step and on `simulate` plays through
+your own or measured HRTFs instead of a spherical head.
 
 The tour plays what the recording has of the three movements (70 to 85 s of each), each
 from two to four of the seats in turn:
@@ -232,12 +233,47 @@ def tracks(args) -> None:
         print(f"wrote {len(TRACKS)} tracks to {folder}")
 
 
+def simulate_command(args) -> str:
+    """The simulation the demo mixes from (the scene writes mono and binaural responses)
+    and, with ``--hrtf``, the SOFA file the binaural ones go through."""
+    return f"acoustic-spaces simulate {args.scene} --out {args.results}" + hrtf_option(args)
+
+
+def hrtf_option(args) -> str:
+    """`` --hrtf FILE`` for the simulate command when ``--hrtf`` names a SOFA file."""
+    hrtf = getattr(args, "hrtf", None)
+    return f" --hrtf {hrtf}" if hrtf else ""
+
+
+def output_label(args) -> str:
+    """The output ``render`` asks auralize for: ``--format``, or with ``--hrtf`` the
+    binaural output simulated through that file (``binaural-<its name>``), so that mixes
+    through a spherical head cannot pass for ones through the listener's own ears."""
+    hrtf = getattr(args, "hrtf", None)
+    if hrtf and args.format == "binaural":
+        return f"binaural-{Path(hrtf).stem}"
+    return args.format
+
+
+def check_hrtf(args, entries: list[dict]) -> None:
+    """With ``--hrtf``, stop with the simulate command to run unless the responses were
+    made through that file."""
+    label = output_label(args)
+    if label == args.format:
+        return
+    labels = {o["format"] for e in entries for o in e.get("outputs") or [{"format": "mono"}]}
+    if label not in labels:
+        raise SystemExit(
+            f"error: {args.results} has no responses through {args.hrtf}"
+            f" ({', '.join(sorted(labels))}); run first:\n  {simulate_command(args)}"
+        )
+
+
 def responses_of(args) -> list[dict]:
     path = args.results / "parameters.json"
     if not path.exists():
         raise SystemExit(
-            f"error: no simulation in {args.results}; run first:\n"
-            f"  acoustic-spaces simulate scene.yaml --out {args.results}"
+            f"error: no simulation in {args.results}; run first:\n  {simulate_command(args)}"
         )
     return json.loads(path.read_text(encoding="utf-8"))["responses"]
 
@@ -278,6 +314,7 @@ def render(args) -> None:
     one gain for all of them (the loudest peak at -1 dBFS)."""
     from acoustic_spaces.cli import main as cli
 
+    check_hrtf(args, responses_of(args))
     stops = stops_of(args)
     peaks, rate = {}, 0
     for movement, seat in stops:
@@ -290,7 +327,7 @@ def render(args) -> None:
         else:
             pairs = [f"{name}={folder / track}" for name, track in TRACKS.items()]
             command = ["auralize", str(args.results), *pairs, "--listener", seat]
-            code = cli(command + ["--format", args.format, "--out", str(out)])
+            code = cli(command + ["--format", output_label(args), "--out", str(out)])
             if code:
                 raise SystemExit(code)
         x, rate = read(out)
@@ -505,6 +542,12 @@ def main() -> None:
     parser.add_argument(
         "--format", default="binaural", help="output format the mixes take (default binaural)"
     )
+    parser.add_argument(
+        "--hrtf",
+        type=Path,
+        help="binaural mixes through this SOFA file of HRTFs, your own or measured, instead of "
+        "a spherical head model (the simulate command the script prints takes it too)",
+    )
     parser.add_argument("--movements", help="tracks: only these movements, comma separated")
     parser.add_argument(
         "--tour",
@@ -515,6 +558,8 @@ def main() -> None:
         "--no-mp4", action="store_true", help="video: write the audio and stills only"
     )
     args = parser.parse_args()
+    if args.hrtf and args.format != "binaural":
+        parser.error("--hrtf is for binaural mixes")
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     steps = ["tracks", "render", "video"] if args.step == "all" else [args.step]
     for step in steps:

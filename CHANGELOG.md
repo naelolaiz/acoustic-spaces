@@ -622,6 +622,10 @@
   licence and the credit a shared render needs; the orchestra's section moved there from
   [spatial audio and listening](docs/spatial-audio.md). The README and that page link the
   [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8) of the videos.
+- Every demo script takes `--hrtf me.sofa`, a SOFA file of your own or measured HRTFs:
+  the `simulate` command it prints carries it, and `render` mixes from the responses
+  made through that file, refusing ones made through the spherical head. A script asked
+  for feeds or mixes before its scene exists says to run its scene step first.
 
 **Editor**
 

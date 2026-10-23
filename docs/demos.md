@@ -12,8 +12,10 @@ with the scene. The recordings do not: they are other people's work under their 
 licences, named below with each demo, and the church, stadium and lake scripts download
 them from where their authors publish them. The videos need [ffmpeg](https://ffmpeg.org)
 on the PATH and the pictures Pillow (the `viz` extra brings it). The mixes are binaural:
-use headphones. The videos are in one
-[playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8).
+use headphones. They go through the spherical head model unless every step and the
+`simulate` command get `--hrtf me.sofa`, a SOFA file of your own or measured HRTFs (the
+`simulate` command a script prints carries it; the `sofa` extra reads the file). The
+videos are in one [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8).
 
 ## An orchestra in the concert hall
 
@@ -45,7 +47,8 @@ python orchestra_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, d
 Options: `--tour 1:stalls-middle,1:conductor,2:stalls-rear` (the seats of a movement take
 equal shares of it), `--zips FOLDER` for the zips, `--movements 1,2` for `tracks`,
 `--format` for another output the simulation wrote, `--no-mp4` for the audio and stills
-only. `demo/chapters.txt` lists the stops' times for a video description.
+only. `demo/chapters.txt` lists the stops' times for a video description. `all` runs
+tracks, render and video, after the simulation.
 
 - **The cuts.** Within a movement the seat changes at the quietest moment within 10 s of
   each equal share's end (the lowest half-second RMS of the first seat's mix), so the
@@ -100,7 +103,8 @@ python church_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, dem
 Options: `--tour nave_back:0,conductor:25,...` (listener:start in seconds),
 `--listeners a,b` for `render`, `--format` for another output the simulation wrote
 (`ambix3`, `5.0`, ...; the video takes its first two channels), `--no-mp4` for the audio
-and stills only. Everything goes to `./demo` (`--work`).
+and stills only. Everything goes to `./demo` (`--work`). `all` runs music, feeds, render
+and video; `scene` and the simulation come before it.
 
 - **The choir.** Each singer sang the tune alone in a recording booth, at their own tempo
   and a little off pitch here and there. `feeds` moves each take towards the tune (each
@@ -135,7 +139,7 @@ listening. The organ samples hold a little of the room they were recorded in, an
 organ is four points, not a case full of pipes. The model is the example's: the floor
 plan raised 18 m, with no gallery floor under the organ and no columns or furniture;
 `ir_length_s` is raised to 9 s, as the bass rings for nearly ten. Binaural is through the
-spherical head model; `simulate --hrtf file.sofa` uses measured HRTFs instead.
+spherical head model unless `--hrtf` names a SOFA file.
 
 **Recordings and licences.** `music` writes these credits to `demo/music/SOURCES.txt`.
 
@@ -203,7 +207,8 @@ Options: `--song francium` or `rubidium` for `music` and `feeds` (with `--work
 demo_francium` for a folder of its own), `--tour mix_position:1,singer:0.5,east_stand:1`
 (listener:phrases of 8 bars, 0.5 for 4; the last one runs to the end), `--listeners a,b`
 for `render`, `--format` for another output the simulation wrote, `--no-mp4` for the
-audio and stills only.
+audio and stills only. `all` runs music, feeds, render and video; `band` and the
+simulation come before it.
 
 - **The band.** The example has loudspeakers only, so `band` adds the players as sources
   on the stage, in a group of their own: a drum kit beside the drummer (116 dB sound
@@ -254,9 +259,10 @@ audio and stills only.
 instruments; the bass, keys and brass on stage come only through the monitors and the
 sound system, and there is no crowd noise. The reference mix and the stems are a
 finished studio production, reverberation and all, so a little of the studio plays in
-the stadium too. Binaural is through the spherical head model. Some listeners stand
-nearer the arrays than their far-field patterns hold, which the scene's arrays handle by
-adding up their boxes one by one (`near_field.py` in the example puts numbers on it).
+the stadium too. Binaural is through the spherical head model unless `--hrtf` names a
+SOFA file. Some listeners stand nearer the arrays than their far-field patterns hold,
+which the scene's arrays handle by adding up their boxes one by one (`near_field.py` in
+the example puts numbers on it).
 
 **Recordings and licences.** "Spicy Funk Cake" by the Rhythmussportgruppe, a nine-piece
 funk band (guitar, drums, bass, keys, saxophone, two trumpets, trombone and voice;
@@ -317,7 +323,8 @@ Options: `--song great_british_summer` or `potassium` for `music` (below),
 `--tour bedroom_window:still:1,audience::2` (listener:weather:phrases of 8 bars),
 `--last-phrases` (how long the last stop lasts, 0 to the end of the song; 2 by default),
 `--format` for another output the simulation wrote, `--no-mp4` for the audio and stills
-only.
+only. `all` runs music, render and video; `scenes` and the two simulations come before
+it.
 
 - **The sound system.** `scenes` replaces the example's single source (120 dB sound
   power) with a system as a lawn concert hangs it: two line arrays of eight boxes
@@ -368,7 +375,8 @@ only.
 is no crowd, no wind noise and no other sound of the evening. The
 weather holds still: the example has no turbulence, so the sound does not come and go
 with the gusts as it does across a real lake. The song is a finished studio mix, played
-as it is. Binaural is through the spherical head model.
+as it is. Binaural is through the spherical head model unless `--hrtf` names a SOFA
+file.
 
 **Recordings and licences.** `music` writes the credit to `demo/music/song.json`, and
 the video shows it.

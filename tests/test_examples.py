@@ -524,6 +524,59 @@ def test_stadium_pictures_show_the_crowd() -> None:
     assert lines[0] == lines[1] and [area.people for area in drawing.areas] == people
 
 
+def test_demo_scripts_take_an_hrtf(tmp_path: Path) -> None:
+    """Every demo script's simulate command carries ``--hrtf``; its mixes then ask for the
+    responses made through that file (``binaural-<name>``) and refuse ones made through
+    the spherical head; other formats are left alone; and asked for mixes before the
+    scene and the simulation exist, a script says which step writes the scene."""
+    sofa = tmp_path / "me.sofa"
+    scripts = {
+        ("orchestra", "orchestra_demo"): None,
+        ("church", "church_demo"): "scene",
+        ("stadium_concert", "stadium_demo"): "band",
+        ("lakeside_concert", "lakeside_demo"): "scenes",
+    }
+    for (example, name), step in scripts.items():
+        demo = _script(example, name)
+        paths = {"scene": tmp_path / "scene.yaml", "results": tmp_path / "results"}
+        if name == "lakeside_demo":
+            paths |= {"still": tmp_path / "still.yaml", "still_results": tmp_path / "still"}
+        plain = _demo_args(**paths)
+        own = argparse.Namespace(**vars(plain), hrtf=sofa)
+        if name == "lakeside_demo":
+
+            def command(a, demo=demo):
+                return demo.simulate_command(a, a.scene, a.results)
+
+            def check(a, e, demo=demo):
+                return demo.check_hrtf(a, "evening", e)
+
+            def responses(a, demo=demo):
+                return demo.responses_of(a, "evening")
+
+        else:
+            command, check, responses = demo.simulate_command, demo.check_hrtf, demo.responses_of
+        assert "--hrtf" not in command(plain), name
+        assert command(own).endswith(f" --hrtf {sofa}"), name
+        assert demo.output_label(plain) == "binaural"
+        assert demo.output_label(own) == "binaural-me"
+        assert demo.output_label(argparse.Namespace(format="ambix3", hrtf=sofa)) == "ambix3"
+        outputs = {"binaural": "x", "binaural-me": "x"}
+        head, ears = (
+            [{"listener": "a", "source": "s", "outputs": [{"format": f, "wav": w}]}]
+            for f, w in outputs.items()
+        )
+        for a, e in ((plain, head), (plain, ears), (own, ears)):
+            check(a, e)
+        with pytest.raises(SystemExit, match="me.sofa"):
+            check(own, head)
+        with pytest.raises(SystemExit) as caught:
+            responses(plain)
+        if step:
+            assert f"{name}.py {step}" in str(caught.value), name
+        assert "acoustic-spaces simulate" in str(caught.value), name
+
+
 def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     """lakeside_demo.py plays the lake scene through its sound system, adds a listener upwind
     and writes the same scene in still air; the tour moves on phrase boundaries, every
