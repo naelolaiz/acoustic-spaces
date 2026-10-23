@@ -47,7 +47,9 @@ from acoustic_spaces.gui.document import (  # noqa: E402
     unique_name,
 )
 from acoustic_spaces.gui.levels import level_colour  # noqa: E402
+from acoustic_spaces.gui.particle_dialog import ParticleDialog  # noqa: E402
 from acoustic_spaces.gui.plan_view import grid_step, outline_segments, snap  # noqa: E402
+from acoustic_spaces.gui.tree import EYE  # noqa: E402
 from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # noqa: E402
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
 from acoustic_spaces.gui.worker import MapJob, SimulationJob  # noqa: E402
@@ -1785,6 +1787,121 @@ def test_weather_zones_form(window, qapp) -> None:
     assert len(atmosphere().zones) == 1 and page.weather_zone.count() == 2
 
 
+def _differ(a, b) -> int:
+    """How many pixels of two pictures of a widget differ."""
+
+    def pixels(image):
+        image = image.convertToFormat(image.Format.Format_RGB32)
+        rows = np.array(image.constBits(), dtype=np.uint8)  # a copy: the image goes
+        return rows.reshape(image.height(), -1)[:, : 4 * image.width()].reshape(
+            image.height(), image.width(), 4
+        )
+
+    return int(np.count_nonzero(np.any(pixels(a.toImage()) != pixels(b.toImage()), axis=-1)))
+
+
+def test_the_wind_is_drawn_outdoors(window, qapp) -> None:
+    window.open_example(example_path("open_air_stage"))
+    canvas = _plan(window, qapp)
+    wind, profile = window.wind_action, window.wind_profile_action
+    assert wind.isEnabled() and wind.isChecked() and profile.isEnabled() and profile.isChecked()
+    assert wind.toolTip() and profile.toolTip()
+    assert canvas.show_wind and canvas._wind is not None and canvas._wind.windy
+    shown = canvas.grab()
+    wind.setChecked(False)
+    hidden = canvas.grab()
+    assert not canvas.show_wind and _differ(shown, hidden) > 500  # arrows and the key
+    wind.setChecked(True)
+    assert _differ(shown, canvas.grab()) == 0
+    # A weather zone carries its name and its wind.
+    window.plan.canvas.part_drawn.emit("weather", [[20, -40], [80, -40], [80, 40], [20, 40]])
+    window.plan.cancel()
+    window.inspector.pages["scene"].weather_zone.setCurrentIndex(1)
+    window.inspector.pages["scene"].wind_speed.setValue(1.0)
+    assert canvas._wind.label(1) == "weather_1: 1.0 m/s"
+    canvas.grab()
+    # Indoors there is no wind to show.
+    window.open_example(example_path("studio"))
+    assert not wind.isEnabled() and not profile.isEnabled() and canvas._wind is None
+
+
+def test_the_wind_in_the_scene_tree(window, qapp) -> None:
+    """Outdoors the scene tree has the wind, with eyes for its arrows and its masts that
+    View > Show wind and Show wind profile follow, and its weather zones, which show
+    their weather in the scene's form."""
+    window.open_example(example_path("lakeside_concert"))
+    tree = window.tree
+
+    def entry(key):
+        return next(item for item in tree._items() if tree._keys[item.data(0, 256)] == key)
+
+    def shown(key) -> bool:
+        return tree._points[entry(key).data(0, 256)][2]
+
+    wind, masts = entry(("scene", "wind")), entry(("scene", "profile"))
+    assert wind.text(1) == "2.5 m/s at 10 m" and masts.parent() is wind
+    zones = [entry(("scene", f"zone:{k}")) for k in range(2)]
+    assert [(zone.text(0), zone.text(1)) for zone in zones] == [
+        ("lake", "3.5 m/s at 10 m"),
+        ("village", "1.0 m/s at 10 m"),
+    ]
+    assert all(item.toolTip(0) and item.toolTip(EYE) for item in (wind, masts))
+    assert all(zone.toolTip(0) and zone.parent() is wind for zone in zones)
+    tree.toggle_shown(wind)
+    qapp.processEvents()
+    assert not window.wind_action.isChecked() and window.wind_profile_action.isChecked()
+    assert not window.plan.canvas.show_wind and not shown(("scene", "wind"))
+    tree.toggle_shown(entry(("scene", "profile")))
+    qapp.processEvents()
+    assert not window.wind_profile_action.isChecked() and not shown(("scene", "profile"))
+    window.wind_action.setChecked(True)
+    window.wind_profile_action.setChecked(True)
+    assert shown(("scene", "wind")) and shown(("scene", "profile"))
+    # A zone's entry shows its weather in the scene's form; the wind's, the scene's.
+    page = window.inspector.pages["scene"]
+    tree.setCurrentItem(entry(("scene", "zone:1")))
+    qapp.processEvents()
+    assert window.selection == ("scene", "zone:1")
+    assert page.weather_zone.currentData() == "zone:1"
+    assert page.wind_speed.value() == pytest.approx(1.0)
+    tree.setCurrentItem(entry(("scene", "wind")))
+    qapp.processEvents()
+    assert page.weather_zone.currentIndex() == 0
+    assert page.wind_speed.value() == pytest.approx(2.5)
+    # Without an atmosphere there is no wind to list.
+    window.open_example(example_path("street"))
+    assert ("scene", "wind") not in tree._keys
+
+
+@pytest.mark.render
+def test_the_wind_in_the_3d_view(window, qapp) -> None:
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    window.open_example(example_path("open_air_stage"))
+
+    def actors() -> int:
+        qapp.processEvents()
+        return len(viewport.plotter.renderer.actors)
+
+    both = actors()
+    window.wind_profile_action.setChecked(False)
+    field = actors()
+    window.wind_action.setChecked(False)
+    none = actors()
+    window.wind_profile_action.setChecked(True)
+    mast = actors()
+    # The arrows and the key in the corner; a mast's pole, curve, arrows and labels.
+    assert field == none + 2 and mast == none + 5 and both == none + 6
+    texts = [
+        actor.GetText(k)
+        for actor in viewport.plotter.renderer.actors.values()
+        if hasattr(actor, "GetText")
+        for k in range(4)
+    ]
+    assert "wind 5.0 m/s at 10 m" in texts
+
+
 def test_weather_classes_form(window, qapp) -> None:
     window.open_example(example_path("open_air_stage"))
     window.select("scene", None)
@@ -2445,11 +2562,12 @@ def test_coverage_settings_form(window) -> None:
 
 
 def test_export_to_blender(window, monkeypatch, tmp_path: Path) -> None:
-    from PySide6.QtWidgets import QFileDialog
+    from PySide6.QtWidgets import QDialog, QFileDialog
 
     window.open_example(example_path("studio"))
     target = tmp_path / "particles.glb"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    monkeypatch.setattr(ParticleDialog, "exec", lambda dialog: int(QDialog.DialogCode.Accepted))
     window.select("sources", 1)
     window.particles_action.trigger()
     assert target.read_bytes()[:4] == b"glTF"
@@ -2459,6 +2577,38 @@ def test_export_to_blender(window, monkeypatch, tmp_path: Path) -> None:
     assert window.messages.toPlainText().splitlines()[-1].startswith(f"Wrote {target}: the room.")
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: ("", ""))
     assert not window.export_blender(particles=True)
+
+
+def test_particle_export_settings(window, monkeypatch, tmp_path: Path) -> None:
+    """The particle export asks how much of the sound, how slowly and how many
+    particles: outdoors at first enough to reach the farthest listener, lasting about
+    as long as the default's 4 s."""
+    from PySide6.QtWidgets import QDialog, QFileDialog
+
+    window.open_example(example_path("lakeside_concert"))
+    dialog = ParticleDialog(window.document.room, window.document.scene.sources[0], window)
+    # 568 m to the bedroom window: 1.65 s, a tenth more, up to the next 100 ms.
+    assert (dialog.duration, dialog.slow_motion, dialog.count) == (1900, 2.1, 1000)
+    assert dialog.summary.text() == "The animation lasts 3.99 s."
+    assert all(box.toolTip() for box in (dialog.sound, dialog.slow, dialog.particles))
+
+    def choose(dialog) -> int:
+        dialog.sound.setValue(300)
+        dialog.slow.setValue(10)
+        dialog.particles.setValue(50)
+        return int(QDialog.DialogCode.Accepted)
+
+    target = tmp_path / "lake.glb"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    monkeypatch.setattr(ParticleDialog, "exec", choose)
+    assert window.export_blender(particles=True)
+    assert "50 particles from stage, 300 ms of sound over 3 s" in window.messages.toPlainText()
+    target.unlink()
+    monkeypatch.setattr(ParticleDialog, "exec", lambda dialog: int(QDialog.DialogCode.Rejected))
+    assert not window.export_blender(particles=True) and not target.exists()
+    window.open_example(example_path("studio"))  # indoors, the default
+    dialog = ParticleDialog(window.document.room, window.document.scene.sources[0], window)
+    assert (dialog.duration, dialog.slow_motion) == (100, 40)
 
 
 def test_runs_of_a_scene_no_longer_open_are_dropped(window, qapp) -> None:

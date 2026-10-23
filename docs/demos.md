@@ -1,52 +1,79 @@
 # Demos
 
-Three demos run dry recordings through example scenes, mix them at the scenes' listeners
-and make a video of the result. Each shows one space and one kind of music: a symphony
+Four demos run recordings through example scenes, mix them at the scenes' listeners and
+make a video of the result. Each shows one space and one kind of music: a symphony
 orchestra on the stage of a shoebox concert hall, a choir and an organ in a reverberant
-stone church, and a band with its sound system and stage monitors in a stadium. None of
-them stands for what the simulator does elsewhere; the [examples](examples.md) cover far
-more.
+stone church, a band with its sound system and stage monitors in a stadium, and the same
+band's song carried across a lake on a summer evening. None of them stands for what the
+simulator does elsewhere; the [examples](examples.md) cover far more.
 
 The scripts come with the examples: `acoustic-spaces examples --copy . NAME` copies them
 with the scene. The recordings do not: they are other people's work under their own
-licences, named below with each demo, and the church and stadium scripts download them
-from where their authors publish them. The videos need [ffmpeg](https://ffmpeg.org) on
-the PATH and the pictures Pillow (the `viz` extra brings it). The mixes are binaural:
-use headphones. The videos of the three demos are in one
+licences, named below with each demo, and the church, stadium and lake scripts download
+them from where their authors publish them. The videos need [ffmpeg](https://ffmpeg.org)
+on the PATH and the pictures Pillow (the `viz` extra brings it). The mixes are binaural:
+use headphones. The videos are in one
 [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8).
 
 ## An orchestra in the concert hall
 
 [![Beethoven 8 in a virtual concert hall: the orchestra on the stage of the concert hall and a seat in the middle of the stalls, with the first reflections from a violin to it](images/orchestra_video.png)](https://www.youtube.com/watch?v=c0-5F-iNhIE)
 
-[The video](https://www.youtube.com/watch?v=c0-5F-iNhIE) plays the first movement of
-Beethoven's 8th symphony from the TU Berlin's anechoic recording (one of the [dry
-recordings to try](spatial-audio.md#dry-recordings-to-try)) as heard from the middle of
-the stalls of the concert hall example, binaurally (use headphones). Each of the 61
-tracks is one source on the stage, in German seating: violins on both sides of the
-conductor, the winds and brass on risers, every player facing the conductor with a
-directivity that narrows above 1 kHz, horn bells pointing back. The `orchestra` example
-is that scene, with four seats from the conductor's podium to the back of the hall, and
-the scripts that made the video:
+`orchestra_demo.py` plays the three movements the TU Berlin's anechoic recording of
+Beethoven's 8th symphony has (one of the [dry recordings to
+try](spatial-audio.md#dry-recordings-to-try); 70 to 85 s of each) in the concert hall
+example, binaurally (use headphones), and makes a video of about four minutes that tours
+its four seats through them: the first
+movement from the middle of the stalls, the front rows and the conductor's podium, the
+second from the back of the hall and the middle, the finale from the podium, the front,
+the back and the middle again. Each of the 61 tracks is one source on the stage, in
+German seating: violins on both sides of the conductor, the winds and brass on risers,
+every player facing the conductor with a directivity that narrows above 1 kHz, horn
+bells pointing back. The `orchestra` example is that scene, with the four seats from the
+conductor's podium to the back of the hall.
 
 ```sh
 acoustic-spaces examples --copy . orchestra && cd orchestra
-unzip movement1.zip -d movement1  # from https://doi.org/10.14279/depositonce-6729.2
+# put movement1.zip, movement2.zip and movement4.zip here, from
+# https://doi.org/10.14279/depositonce-6729.2 (560 to 710 MB each)
 acoustic-spaces simulate scene.yaml --out results
-bash auralize.sh results movement1/anechoic stalls-middle binaural
-python make_images.py --seat stalls-middle --movement 1  # cover, seating, thumbnail
-bash make_video.sh beethoven8_movement1_stalls-middle.binaural.wav  # needs ffmpeg
+python orchestra_demo.py tracks   # demo/tracks: the 61 tracks of each movement
+python orchestra_demo.py render   # demo/seats: each stop of the tour, binaural (~1 min each)
+python orchestra_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
-`auralize.sh` maps each source to its track and calls `auralize`; the mix is
-normalized to -1 dBFS. All sources have the same power, so the balance between the
-instruments is the recording's own. `make_images.py` draws the pictures with Pillow
-(`viz` extra) and `make_video.sh` puts a scrolling spectrogram of the mix under the
-cover. Movements 2 and 4 work the same way.
+Options: `--tour 1:stalls-middle,1:conductor,2:stalls-rear` (the seats of a movement take
+equal shares of it), `--zips FOLDER` for the zips, `--movements 1,2` for `tracks`,
+`--format` for another output the simulation wrote, `--no-mp4` for the audio and stills
+only. `demo/chapters.txt` lists the stops' times for a video description.
+
+- **The cuts.** Within a movement the seat changes at the quietest moment within 10 s of
+  each equal share's end (the lowest half-second RMS of the first seat's mix), so the
+  cuts fall between phrases, with a 1 s crossfade. Between movements the hall's
+  reverberation dies away (the responses run 3.5 s) and there is a pause of 3 s. Every
+  seat's mix is shifted earlier by the time the orchestra's sound takes to reach it (the
+  peak of the energy of its responses: 10 ms on the podium, 85 ms at the back), so the
+  music runs on across a cut.
+- **One gain for all.** All stops keep one gain (the loudest peak at -1 dBFS): the hall's
+  differences are heard as the simulation gives them, from the podium, 2 m from the
+  first violins, to the back row, and each still says how far below the loudest stop it
+  is. Every source has the same power, so the balance between the instruments is the
+  recording's own.
+- **The pictures.** `make_images.py` draws the cover (the hall from above with the
+  orchestra, the seat and the first reflections from the leader to it, the sections and
+  their numbers), the seating plan and the thumbnail with Pillow (`viz` extra); the
+  demo adds the stop's facts and a bar across the top with the tour, the movements'
+  numerals and the seats, the current stop bright.
+
+One seat and one movement at a time still work as before: `auralize.sh` maps each source
+to its track and calls `auralize` (the mix normalized to -1 dBFS), `make_images.py
+--seat stalls-middle --movement 1` draws the pictures and `make_video.sh` puts a
+scrolling spectrogram of the mix under the cover.
 
 **Recording.** Böhm, Ackermann and Weinzierl, *Beethoven, Symphony No. 8*, TU Berlin,
 <https://doi.org/10.14279/depositonce-6729.2>, CC BY 4.0: movements 1, 2 and 4, 61 mono
-tracks each (zips of 590 to 740 MB), downloaded by hand.
+tracks each (zips of 560 to 710 MB), downloaded by hand; `tracks` takes the 61 WAV files
+of each out of its zip.
 
 ## A choir and an organ in the church
 
@@ -151,17 +178,20 @@ Singing Dataset, the ESMUC Choir Dataset and Cantoría are all for non-commercia
 
 ## A concert in the stadium
 
-![A frame of the stadium video: the stadium from above with the sound system, the monitors and the band, the listener at the mix position facing the stage with a line from each loudspeaker, the stage close up, the tour and a spectrogram of the sound](images/stadium_demo.png)
+![A frame of the stadium video: the stadium from above with the sound system, the monitors and the band, the listener at the mix position facing the stage with a line from each loudspeaker, the crowd standing on the pitch and seated in the stands, the stage close up, the tour and a spectrogram of the sound](images/stadium_demo.png)
 
 `stadium_demo.py` plays a song by a band on the stage of the `stadium_concert` example,
 through its sound system and stage monitors, and mixes it at each of its 12 listeners.
 The video plays the song once while the listener moves, on phrase boundaries, from the
 mix position to the front of the pitch, onto the stage (singer, drummer, guitarist),
-round the stands to the far end and back.
+round the stands to the far end and back. It plays one of three songs (`--song`): "Spicy
+Funk Cake", funk by a nine-piece band (3:15, ten of the listeners, as the song has eleven
+phrases), or "Francium" (4:54, all twelve) or "Rubidium" (3:52), electronic songs by
+Software-Entwicklungskit released with their stems.
 
 ```sh
 acoustic-spaces examples --copy . stadium_concert && cd stadium_concert
-python stadium_demo.py music     # the master and 9 stems (43 MB, M4A), decoded by ffmpeg
+python stadium_demo.py music     # the reference mix and 7 stems (WAV, 450 MB)
 python stadium_demo.py band      # scene_band.yaml: the scene with the band on the stage
 acoustic-spaces simulate scene_band.yaml --out results_band --output binaural   # ~3 min on 4 cores
 python stadium_demo.py feeds     # demo/feeds: one WAV per loudspeaker and player
@@ -169,56 +199,194 @@ python stadium_demo.py render    # demo/seats: one binaural WAV per listener (~1
 python stadium_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
-Options: `--tour mix_position:2,singer:1,east_stand:2` (listener:phrases of 8 bars, the
-last one runs to the end), `--listeners a,b` for `render`, `--format` for another output
-the simulation wrote, `--no-mp4` for the audio and stills only.
+Options: `--song francium` or `rubidium` for `music` and `feeds` (with `--work
+demo_francium` for a folder of its own), `--tour mix_position:1,singer:0.5,east_stand:1`
+(listener:phrases of 8 bars, 0.5 for 4; the last one runs to the end), `--listeners a,b`
+for `render`, `--format` for another output the simulation wrote, `--no-mp4` for the
+audio and stills only.
 
 - **The band.** The example has loudspeakers only, so `band` adds the players as sources
   on the stage, in a group of their own: a drum kit beside the drummer (116 dB sound
-  power, omni) playing the drum stems, the singer's voice (98 dB, subcardioid, facing the
-  audience) playing the lead vocal, and an amplifier behind the guitarist (112 dB,
-  cardioid, tilted up) playing the synthesizer stems, as the song has no guitar. On stage
-  and near it the players are heard from where they stand; further out the sound system
-  covers them.
-- **Who plays what.** The sound system plays the stereo master: the arrays, fills, towers
-  and delays on the audience's left (-y) take the left channel, those on its right (+y;
-  the scene's `*_left`, named from the stage) the right one, the subwoofers both. The
-  monitors play mixes of the stems: the singer's wedges the lead vocal over a little of
-  the synths and drums, the drum fill the drums with the synth and vocal under them, the
-  side fills a stage mix with the vocal 3 dB up and the drums 20 dB down (the kit is loud
-  on stage by itself).
+  power, omni) playing the drums, the singer's voice (98 dB, subcardioid, facing the
+  audience) playing the vocal, and an amplifier behind the guitarist (112 dB, cardioid,
+  tilted up) playing the guitar, each from its own stem. On stage and near it the players
+  are heard from where they stand; further out the sound system covers them.
+- **Who plays what.** The sound system plays the song's stereo master: the arrays, fills,
+  towers and delays on the audience's left (-y) take the left channel, those on its right
+  (+y; the scene's `*_left`, named from the stage) the right one, the subwoofers both.
+  The monitors play mixes of the stems: the singer's wedges the vocal over the backing
+  vocals, the keys and a little of the guitar, bass and drums; the drum fill the drums
+  and bass with the vocal, guitar and keys under them; the side fills a stage mix with
+  the vocal 3 dB up and the drums 20 dB down (the kit is loud on stage by itself). A stem
+  a song does not have (brass, hand percussion) is left out of the mixes that name it.
 - **How loud.** `feeds` brings every signal to the same gated RMS and then scales it by
-  its `level_db` against the loudest's: the main arrays and subwoofers 0 dB, towers -2,
-  delays -4 and -6, out-fills -4, side fills -12, front fills -18, wedges and drum fill
-  -19. So the feed files are what each loudspeaker plays, and `render` runs `auralize`
+  its `level_db` against the loudest's: the main arrays 0 dB, subwoofers and towers -2,
+  delays -4 and -6, out-fills -4, in-fills -10, side fills -12, front fills -18, wedges
+  and drum fill -19. So the feed files are what each loudspeaker plays, and `render` runs `auralize`
   with `--equal-power`, so that the levels are applied once.
-- **One gain for all listeners.** `render` scales the 12 mixes by one gain (the loudest
-  peak at -1 dBFS), so the level differences between places are the simulation's.
+- **One gain for all listeners, then each stop turned up.** `render` scales the 12 mixes
+  by one gain (the loudest peak at -1 dBFS), so the level differences between places in
+  `demo/seats` are the simulation's: on stage, between the monitors and beside the drum
+  kit, it is 7 to 20 dB(A) louder than in the audience, and the mix position is
+  18 dB(A) below the singer's place. That is too much to hear both in one video, so the
+  tour turns each stop up to the loudness of the loudest one and its caption gives the
+  real level and how much it was turned up. Loudness is weighted as loudness meters
+  weigh it (K, ITU-R BS.1770), which counts the subwoofers' bass that the A weighting of
+  the levels all but leaves out: on the pitch the stops are turned up less than their
+  dB(A) alone would say.
 - **The cuts.** Every listener's mix is shifted earlier by the time the loudest sound
   takes to reach them (the peak of the energy of their responses, each weighted by how
   loud its source plays: 0.12 s at the mix position, 0.38 s at the far end), so the beat
-  runs on across each 1 s crossfade; the caption gives that time.
+  runs on across each 1 s crossfade; the caption gives that time. The stops last 8 bars
+  from the song's first downbeat, each crossfade ending on a downbeat. "Francium" starts
+  a beat into a bar and its intro is a bar short, so its phrases run from 14.8 s and the
+  first stop takes the intro as well; it has nineteen phrases and a half, so five stops,
+  each at a section's start, last two.
+- **The pictures.** The stadium from above, with the loudspeakers as dots and cones the
+  way they point, lines from each to the listener of the moment (brighter where louder),
+  and the crowd where the scene has its audience: a dot for every ten or so people
+  standing on the pitch (two on a square metre) and sitting in the stands (one and a
+  half), and the empty stand behind the stage as rows of seats. A line under the plan
+  gives how many stand and sit and how much of the sound at 1 kHz the crowd, the empty
+  seats and the concrete take up, as the scene's materials have it.
 
 **Limits.** The band is three point sources at typical sound powers, not measured
-instruments, and there is no crowd noise. Binaural is through the spherical head model.
-The M4A files are lossy AAC at about 190 kbit/s; the artist's uncompressed stems are a
-drop-in replacement (below). Some listeners stand nearer the arrays than their far-field
-patterns hold, which the scene's arrays handle by adding up their boxes one by one
-(`near_field.py` in the example puts numbers on it).
+instruments; the bass, keys and brass on stage come only through the monitors and the
+sound system, and there is no crowd noise. The reference mix and the stems are a
+finished studio production, reverberation and all, so a little of the studio plays in
+the stadium too. Binaural is through the spherical head model. Some listeners stand
+nearer the arrays than their far-field patterns hold, which the scene's arrays handle by
+adding up their boxes one by one (`near_field.py` in the example puts numbers on it).
 
-**Recording and licence.** "Rubidium" by Software-Entwicklungskit, from the album
-*Everything is Free* (132 BPM, G major, 4:24), **CC0 1.0** (a public domain dedication:
-no attribution required; credited anyway). `music` fetches the master and the stems from
-the album's repository, <https://github.com/ichbinsoftware/everythingisfree>, at a
-pinned commit (`src/5.Rubidium`, AAC in M4A, stereo, 48 kHz), decodes them with ffmpeg
-and writes the credit to `demo/music/SOURCES.txt`. The master plays through the sound
-system; the lead and backing vocals, the two synthesizers, the drum parts, the build-up
-and the melody of the break play through the monitors and the band. Uncompressed stems
-(24-bit WAV, 759 MB, same licence) are on the artist's site,
-<https://rubidium.ichbinsoftware.com/5.Rubidium_STEMS.zip>: WAV files unzipped into
-`demo/music/` under the M4A files' names are used as they are. The stems start one bar
-(1.8 s) before the master; `feeds` lines them up with it by cross-correlation.
+**Recordings and licences.** "Spicy Funk Cake" by the Rhythmussportgruppe, a nine-piece
+funk band (guitar, drums, bass, keys, saxophone, two trumpets, trombone and voice;
+composed by Niklas Dahlheimer, sung by Juliane Blum; 110 BPM, 3:15), recorded in 2017
+for the sound database of the DEGA (German Acoustical Society) at Hochschule
+Düsseldorf's studio, <https://doi.org/10.5281/zenodo.3601032>, **CC BY 4.0**. `music`
+reads the reference mix and the seven processed stems (drums, bass, guitar, keys, brass,
+vocal, shouts; stereo WAV, 24-bit, 48 kHz) out of the release's 3.5 GB archive by HTTP
+range requests, so only those 450 MB are downloaded. The stems start 58 ms before the
+reference mix; `feeds` lines them up with it by cross-correlation.
 
-Band multitracks under other licences were left out: Cambridge-MT's are for education
-only, MedleyDB's and MUSDB18's non-commercial or restricted, and the OnAir Music
-dataset's (CC BY-SA 4.0) share-alike clause would bind the renders too.
+"Francium" (127.75 BPM, 4:54) and "Rubidium" (132 BPM, 3:52) by Software-Entwicklungskit,
+from the album *Everything is Free*, <https://github.com/ichbinsoftware/everythingisfree>,
+**CC0 1.0**: electronic songs released with their stems. `music --song francium` downloads
+the master and the 26 stems (M4A, 800 MB in all; "Rubidium" has 9) from the album's
+repository at a fixed commit, decodes them with ffmpeg and sums the stems into the groups
+the mixes use: drums, bass, guitar (the synth lead, which the guitarist's amplifier
+plays), keys, vocal and backing vocals.
+
+Either way the master plays through the sound system, the stems through the monitors
+and the band, and the credit goes to `demo/music/<song>/SOURCES.txt`.
+
+Whoever shares a render has to credit the musicians (and the DEGA), link the licence
+and say what was changed, for example:
+
+> Music: "Spicy Funk Cake" by Rhythmussportgruppe (composed by Niklas Dahlheimer),
+> recorded for the DEGA at Hochschule Düsseldorf, CC BY 4.0, doi:10.5281/zenodo.3601032;
+> the mix and its stems played through a simulated stadium sound system and stage and
+> rendered binaurally. License: https://creativecommons.org/licenses/by/4.0/
+
+Other band multitracks were left out: Cambridge-MT's are for education only, MedleyDB's
+and MUSDB18's non-commercial or restricted, and the OnAir Music dataset's (CC BY-SA 4.0)
+share-alike clause would bind the renders too.
+
+## A concert across a lake
+
+![A frame of the lake video: the lake from above with the wind's arrows and the weather zones, the stage on the lawn, the boat and the village across the water, the listener at a bedroom window there; under it a slice from the stage across the lake with the sound's rays bending down to the water, the weather's caption and a spectrogram of the sound](images/lake_demo.png)
+
+`lakeside_demo.py` plays a song from the stage of the `lakeside_concert` example on a
+summer evening and mixes it in the audience on the lawn, 140 m behind the stage, on a
+boat in the middle of the lake and in the village across it, 550 m away, in a garden and
+at a bedroom window. Every place is mixed twice: in the evening's weather and in still
+air. The video tours them, and at the bedroom window plays the song in the evening's
+weather, then in still air, then in the evening's again, so the difference the weather
+makes is heard.
+
+```sh
+acoustic-spaces examples --copy . lakeside_concert && cd lakeside_concert
+python lakeside_demo.py music    # the song (WAV, 56 MB), a signal for each loudspeaker
+python lakeside_demo.py scenes   # scene_demo.yaml, and scene_still.yaml in still air
+acoustic-spaces simulate scene_demo.yaml --out results_demo --output binaural    # ~30 s
+acoustic-spaces simulate scene_still.yaml --out results_still --output binaural  # ~15 s
+python lakeside_demo.py render   # demo/seats: every listener in both weathers
+python lakeside_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
+```
+
+Options: `--song great_british_summer` or `potassium` for `music` (below),
+`--tour bedroom_window:still:1,audience::2` (listener:weather:phrases of 8 bars),
+`--last-phrases` (how long the last stop lasts, 0 to the end of the song; 2 by default),
+`--format` for another output the simulation wrote, `--no-mp4` for the audio and stills
+only.
+
+- **The sound system.** `scenes` replaces the example's single source (120 dB sound
+  power) with a system as a lawn concert hangs it: two line arrays of eight boxes
+  (`lake_array.yaml`, a generic box's pattern in `box.csv`, both made with the stadium
+  example's `make_model.py`), 6.5 m up either side of the stage, 124 dB each, aimed down
+  the lawn and, box by box, from 5° down at the last rows, where the lawn meets the water,
+  to 36° at the front rows, each added up box by box (`near_field`), playing the song's
+  left and right channels; and a block of four cardioid subwoofers (`sub_array.yaml`,
+  130 dB) on the ground at the stage front, 2 m nearer the audience and delayed 6 ms so
+  that both arrive together there, playing both channels, rolled off above 125 Hz. The
+  system is tuned at the audience as a system engineer tunes it (`eq_db`: the arrays' low
+  mids up, their top octave up for the air): at 30 m every octave from 250 Hz to 4 kHz is
+  within 1 dB of 1 kHz, 8 kHz 1.5 dB down and 63 and 125 Hz 2 dB up. `scenes` also adds
+  a listener 140 m behind the stage, upwind, and lets the responses run 3.5 s, as the far
+  shore hears the stage 1.6 s late.
+- **The weather** is the example's: a breeze from the park out over the lake, 2.5 m/s
+  10 m up, and two weather zones, the lake's (air 17 °C at the water, a degree warmer
+  every 10 m up, and a 3.5 m/s breeze) and the village's (a 1 m/s breeze among the
+  houses). The breeze and the cool air bend the sound down to the water, which gives it
+  back almost whole. `scene_still.yaml` is the same scene with no atmosphere.
+- **What it gives.** At the bedroom window the evening's weather makes the song 2.3 dB(A)
+  louder than still air would, in the garden 4.2 dB; behind the stage, upwind, it is
+  0.6 dB quieter, and on the boat 1 dB quieter. (With the sound system the example's
+  single source was, radiating every way alike, the window gained 4.8 dB: the arrays send
+  less of the sound up, where the weather bends it down to the water.)
+- **How loud.** From the audience to the far shore the sound drops by 20 to 25 dB(A),
+  too much to hear the far places in a video, so each stop is turned up to the
+  audience's loudness and its caption says how much quieter the place really is, in
+  dB(A). The loudness is K-weighted, as meters weigh it, not A-weighted: the far places
+  and the back of the stage keep little but bass (the array boxes radiate every way below
+  250 Hz and the water gives the low end back whole), which the A weighting all but
+  leaves out, so matching dB(A) would put their bass far above the audience's. The window
+  in still air keeps the gain of the window in the evening's weather, so the 2.3 dB is
+  heard.
+- **The cuts.** Each place's mix is shifted earlier by the time the loudest sound takes
+  to reach it (the peak of the energy of its responses: 0.09 s in the audience, 1.65 s
+  at the window), so that the beat runs on across each 1 s crossfade, every 8 bars.
+- **The pictures** draw the lake from above with the wind's arrows, the weather zones and
+  their weather, the arrays and the subwoofers with cones the way they aim, and the
+  current listener with L and R at its ears; and, under it, a slice along the line from
+  the stage across the lake, heights drawn five times larger, with the arrays hung from
+  the roof and the wedge from their top box's aim to their bottom one's, the subwoofers
+  on the ground, and rays from the arrays bent by the scene's own profiles of the speed of sound (traced
+  by the script for the picture; the simulation traces its own) and masts with the wind's
+  profile; in still air the rays go straight.
+
+**Limits.** The arrays are a generic box's pattern, not a product's measured one; there
+is no crowd, no wind noise and no other sound of the evening. The
+weather holds still: the example has no turbulence, so the sound does not come and go
+with the gusts as it does across a real lake. The song is a finished studio mix, played
+as it is. Binaural is through the spherical head model.
+
+**Recordings and licences.** `music` writes the credit to `demo/music/song.json`, and
+the video shows it.
+
+- `spicy_funk_cake` (the default): "Spicy Funk Cake" by the Rhythmussportgruppe, the
+  recording of the [stadium demo](#a-concert-in-the-stadium), **CC BY 4.0**; its reference
+  mix (56 MB) is read out of the release's preview archive by HTTP range requests.
+- `great_british_summer`: "Great British Summer" by Tom McKenzie, from the album
+  *Extraordinary* in AlbumDB, <https://doi.org/10.5281/zenodo.19683001>, **CC BY 4.0**,
+  read out of its archive of masters the same way.
+- `potassium`: "Potassium" by Software-Entwicklungskit, from the album *Everything is
+  Free*, <https://github.com/ichbinsoftware/everythingisfree>, **CC0 1.0**, decoded from
+  M4A with ffmpeg.
+
+A shared render of either CC BY song has to credit it, link the licence and say what was
+changed, for example:
+
+> Music: "Spicy Funk Cake" by Rhythmussportgruppe (composed by Niklas Dahlheimer),
+> recorded for the DEGA at Hochschule Düsseldorf, CC BY 4.0, doi:10.5281/zenodo.3601032;
+> played through a simulated outdoor sound system across a lake and rendered
+> binaurally. License: https://creativecommons.org/licenses/by/4.0/

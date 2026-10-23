@@ -9,7 +9,9 @@ corners in turn and close it on the first one, with a double-click or with Enter
 Rooms from model files show their outline, and a drawn room replaces the model.
 
 Outdoors the plan shows the buildings' and barriers' outlines, the vegetation in dashed
-green and the ground zones in their materials' colours, and the Geometry form's buttons
+green, the ground zones in their materials' colours, the weather zones dotted in sky
+blue and the wind in sky blue arrows, the way it blows and as long as it is strong, with
+each weather zone's wind and the scene's in the corner; the Geometry form's buttons
 draw new ones: a building's, a belt of trees' or a zone's outline closes like a floor
 plan, a barrier's or a hedge's path ends with a double-click or Enter, and a tree
 stands where the next click lands.
@@ -67,6 +69,9 @@ from acoustic_spaces.viz import (
     LISTENER_COLOUR,
     SOURCE_COLOUR,
     VEGETATION_COLOUR,
+    WIND_COLOUR,
+    WIND_KEY,
+    WindMap,
     clear_lengths,
     nearest_spacing,
 )
@@ -93,7 +98,9 @@ GRID_PIXELS = 60
 MARGIN_PIXELS = 40
 #: Colour of a floor plan that cannot be (walls that cross).
 INVALID_COLOUR = "#ef476f"
-WEATHER_COLOUR = "#4cc9f0"
+WEATHER_COLOUR = WIND_COLOUR
+#: The arrows of the wind are no more than this many pixels apart.
+WIND_PIXELS = 70
 #: What a drawing is for: a room's floor plan, or outdoors a building's footprint, a
 #: barrier's path, a belt of trees' footprint, a hedge's path, where a lone tree stands
 #: or a ground zone's outline; those that close into a polygon, and those that are a
@@ -260,6 +267,9 @@ class PlanCanvas(QWidget):
         #: (kind, name) of the sources and listeners hidden in the views.
         self.hidden: set[tuple[str, str]] = frozenset()
         self.selection: tuple[str, object] = ("", None)
+        #: Whether to draw the wind outdoors.
+        self.show_wind = True
+        self._wind: WindMap | None = None
         self.snap_step = DEFAULT_SNAP
         self.drawing: list[np.ndarray] | None = None
         self.purpose: str = "room"
@@ -286,13 +296,17 @@ class PlanCanvas(QWidget):
         room: Room,
         selection: tuple[str, object] | None = None,
         hidden: set[tuple[str, str]] = frozenset(),
+        wind: bool = True,
     ) -> None:
         """Draw ``room`` with ``selection`` highlighted, without the sources and
-        listeners in ``hidden`` ((kind, name) pairs)."""
+        listeners in ``hidden`` ((kind, name) pairs); outdoors, with the wind if
+        ``wind``."""
         new_geometry = room.mesh is not self._mesh
         self.room = room
         self.selection = selection or ("", None)
         self.hidden = hidden
+        self.show_wind = wind
+        self._wind = WindMap.of(room)
         self.corners = plan_corners(room.scene)
         self._walls = wall_labels(room)
         self._materials = surface_materials(room)
@@ -723,6 +737,7 @@ class PlanCanvas(QWidget):
             if self.room.outdoor is not None:
                 self._paint_outdoors(painter)
             self._paint_points(painter)
+            self._paint_wind_key(painter)
         if self.drawing is not None:
             self._paint_drawing(painter)
         painter.end()
@@ -852,10 +867,25 @@ class PlanCanvas(QWidget):
             painter.setPen(pen)
             painter.setBrush(_qcolor(WEATHER_COLOUR, 20))
             names = atmosphere.zone_names()
-            for name, zone in zip(names, atmosphere.zones, strict=True):
-                outline = QPolygonF([self.to_screen(scale * np.asarray(c)) for c in zone.polygon])
+            outlines = [
+                QPolygonF([self.to_screen(scale * np.asarray(c)) for c in zone.polygon])
+                for zone in atmosphere.zones
+            ]
+            for outline in outlines:
                 painter.drawPolygon(outline)
-                self._label(painter, outline.boundingRect().center(), name, WEATHER_COLOUR)
+            self._paint_wind(painter)
+            wind = self._wind if self.show_wind else None
+            for k, (name, outline) in enumerate(zip(names, outlines, strict=True), start=1):
+                # Inside its top edge, clear of the arrow in its middle.
+                box = outline.boundingRect()
+                at = QPointF(
+                    box.center().x(),
+                    min(box.top() + painter.fontMetrics().height(), box.center().y()),
+                )
+                text = name if wind is None else wind.label(k)
+                self._label(painter, at, text, WEATHER_COLOUR)
+        else:
+            self._paint_wind(painter)
         pen = QPen(_qcolor(VEGETATION_COLOUR, 220), 1.5)
         pen.setStyle(Qt.PenStyle.DashLine)
         painter.setPen(pen)
@@ -871,6 +901,64 @@ class PlanCanvas(QWidget):
                 painter.drawEllipse(at, radius, radius)
             self._label(painter, at, shape.name, VEGETATION_COLOUR)
         painter.setBrush(Qt.BrushStyle.NoBrush)
+
+    def _paint_wind(self, painter: QPainter) -> None:
+        """The wind over the ground: arrows the way it blows, as long as it is strong, on
+        a grid at most :data:`WIND_PIXELS` apart, clear of the sources and listeners (see
+        :meth:`~acoustic_spaces.viz.WindMap.arrows`)."""
+        wind = self._wind
+        if wind is None or not self.show_wind or not wind.windy:
+            return
+        markers = [item.position[:2] for _kind, _k, item in self._points()]
+        lo = self.to_world(QPointF(0, self.height()))
+        hi = self.to_world(QPointF(self.width(), 0))
+        arrows = wind.arrows(WIND_PIXELS / self._scale, markers, (*lo, *hi))
+        painter.setPen(QPen(_qcolor(WIND_COLOUR, 200), 1.6))
+        for middle, vector in zip(arrows.middles, arrows.vectors, strict=True):
+            length = float(np.linalg.norm(vector)) * self._scale
+            self._arrow(painter, self.to_screen(middle), vector / np.linalg.norm(vector), length)
+
+    def _arrow(self, painter: QPainter, centre: QPointF, direction, length: float) -> None:
+        """An arrow ``length`` pixels long through ``centre`` along ``direction`` (x, y,
+        in the world), with the pen set."""
+        if length <= 0.0:
+            return
+        d = QPointF(float(direction[0]), -float(direction[1])) * (0.5 * length)
+        tail, tip = centre - d, centre + d
+        painter.drawLine(tail, tip)
+        head = min(0.35 * length, 9.0)
+        angle = math.atan2(-d.y(), -d.x())  # back along the shaft, as on the screen
+        for turn in (-0.5, 0.5):
+            painter.drawLine(
+                tip,
+                tip + QPointF(math.cos(angle + turn), math.sin(angle + turn)) * head,
+            )
+
+    def _paint_wind_key(self, painter: QPainter) -> None:
+        """In the top right corner, the scene's own wind: which way, how strong and at
+        what height, which the arrows' lengths are for."""
+        wind = self._wind
+        if wind is None or not self.show_wind or not wind.windy:
+            return
+        text = fmt(_(WIND_KEY), speed=wind.speeds[0], height=wind.height)
+        metrics = painter.fontMetrics()
+        icon = metrics.height() + 6
+        width, height = metrics.horizontalAdvance(text) + icon + 12, metrics.height() + 8
+        box = QRectF(self.width() - width - 8, 8, width, height)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(_qcolor(BACKGROUND[0], 220))
+        painter.drawRoundedRect(box, 3, 3)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor(WIND_COLOUR), 1.6))
+        if wind.speeds[0] > 0.0:
+            centre = QPointF(box.left() + 4 + icon / 2, box.center().y())
+            self._arrow(painter, centre, wind.directions[0], icon - 4)
+        painter.setPen(QColor(WIND_COLOUR))
+        painter.drawText(
+            box.adjusted(icon + 6, 0, -4, 0),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            text,
+        )
 
     def _paint_points(self, painter: QPainter) -> None:
         kind, key = self.selection
@@ -1043,8 +1131,8 @@ class PlanView(QWidget):
         self.message = self.canvas.message
         self._state()
 
-    def show_room(self, room: Room, selection=None, hidden=frozenset()) -> None:
-        self.canvas.show_room(room, selection, hidden)
+    def show_room(self, room: Room, selection=None, hidden=frozenset(), wind=True) -> None:
+        self.canvas.show_room(room, selection, hidden, wind)
         self._state()
 
     def fit(self) -> None:

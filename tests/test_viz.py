@@ -425,3 +425,153 @@ def test_screenshot_with_a_map(tmp_path: Path) -> None:
     out = tmp_path / "map3d.png"
     show_room(room, screenshot=out, window_size=(320, 200), coverage=coverage, parameter="g")
     assert out.stat().st_size > 1000
+
+
+def _windy(tmp_path: Path, example: str, atmosphere: str) -> Room:
+    """An example scene with its ``atmosphere`` (YAML) in place of its own."""
+    from acoustic_spaces.examples import example_path
+
+    text = example_path(example).read_text(encoding="utf-8")
+    start = text.find("atmosphere:")
+    if start >= 0:  # the example's own, up to the next top-level key
+        end = text.find("\nsources:", start)
+        text = text[:start] + text[end + 1 :]
+    path = tmp_path / "scene.yaml"
+    path.write_text(f"{text}\natmosphere:\n{atmosphere}", encoding="utf-8")
+    return Room.from_yaml(path)
+
+
+ZONES = """\
+  preset: windy
+  wind: {direction_deg: 0}
+  zones:
+    - name: lee
+      polygon: [[-200, -40], [-120, -40], [-120, 40], [-200, 40]]
+      wind: {speed_m_s: 1.5}
+    - name: lake
+      polygon: [[150, -30], [250, -30], [250, 30], [150, 30]]
+      temperature_c: 14
+      wind: {direction_deg: 90}
+    - name: speck
+      polygon: [[-5, 20], [-4, 20], [-4, 21], [-5, 21]]
+"""
+
+
+def test_the_wind_map_holds_each_weather(tmp_path: Path) -> None:
+    from acoustic_spaces.viz import WIND_REACH, WindMap
+
+    assert WindMap.of(Room.from_yaml(SHOEBOX)) is None  # indoors
+    wind = WindMap.of(_windy(tmp_path, "open_air_stage", ZONES))
+    # Each weather's wind at the scene's wind height, 10 m up: the zones' compare.
+    assert wind.height == 10.0 and wind.windy
+    assert wind.speeds.tolist() == pytest.approx([5.0, 1.5, 5.0, 5.0])
+    np.testing.assert_allclose(wind.directions[2], [0.0, 1.0, 0.0], atol=1e-12)
+    assert wind.weather_at([[0, 0], [-150, 0], [200, 0], [-4.5, 20.5]]).tolist() == [0, 1, 2, 3]
+    np.testing.assert_allclose(wind.centre(1), [-160, 0])
+    assert wind.label(1) == "lee: 1.5 m/s"
+    assert wind.label(2) == "lake: 5.0 m/s, 14.0 °C"
+
+    arrows = wind.arrows()
+    lengths = np.linalg.norm(arrows.vectors, axis=1)
+    # The strongest wind's arrows are WIND_REACH of a cell long, the others in proportion.
+    assert lengths.max() == pytest.approx(WIND_REACH * arrows.cell)
+    np.testing.assert_allclose(lengths, arrows.reach * wind.speeds[arrows.weather])
+    assert np.all(arrows.vectors[:, 2] == 0.0)
+    # The grid misses the speck, which gets an arrow in its middle.
+    assert arrows.weather.tolist().count(3) == 1
+    np.testing.assert_allclose(arrows.middles[arrows.weather == 3][0], [-4.5, 20.5])
+    # Arrows that would run into a source or listener are left out.
+    clear = np.array([[0.0, 0.0], [100.0, 0.0]])
+    kept = wind.arrows(clear=clear)
+    assert 0 < len(kept.middles) < len(arrows.middles)
+    for middle, vector in zip(kept.middles, kept.vectors, strict=True):
+        ends = middle + 0.5 * np.array([-vector[:2], vector[:2]])
+        assert not np.any(np.all(np.abs(ends.mean(axis=0) - clear) < 1e-9, axis=1))
+    # Only the cells in view, besides the zones' middles.
+    seen = wind.arrows(spacing=20.0, within=(0.0, 0.0, 50.0, 40.0))
+    assert np.all(seen.middles[seen.weather == 0] >= [-10.0, -10.0])
+    assert np.all(seen.middles[seen.weather == 0] <= [60.0, 50.0])
+
+
+def test_still_air_shows_the_temperatures(tmp_path: Path) -> None:
+    from acoustic_spaces.viz import WindMap, plot_wind
+
+    room = _windy(
+        tmp_path,
+        "open_air_stage",
+        "  preset: sunny_day\n  zones:\n"
+        "    - {name: lake, polygon: [[150, -30], [250, -30], [250, 30]], temperature_c: 14}\n",
+    )
+    wind = WindMap.of(room)
+    assert not wind.windy and wind.label(1) == "lake: 14.0 °C"
+    assert len(wind.arrows().middles) == 0
+    plotter = pv.Plotter(off_screen=True)
+    assert plot_wind(room, plotter, profile=True, render=False) == []
+    # The zone's walls, their edges and its label; no arrows and no masts.
+    assert len(plotter.renderer.actors) == 3
+    plotter.close()
+
+
+def test_the_wind_is_drawn(tmp_path: Path) -> None:
+    from acoustic_spaces.viz import plot_wind
+
+    room = _windy(tmp_path, "open_air_stage", ZONES)
+    plotter = pv.Plotter(off_screen=True)
+    legend = plot_wind(room, plotter, render=False)
+    assert legend == [["wind 5.0 m/s at 10 m", "#4cc9f0"]]
+    # Three zones (walls and edges each), the arrows and the zones' labels.
+    assert len(plotter.renderer.actors) == 3 * 2 + 1 + 1
+    plotter.close()
+    # With the profile, a mast in each weather: a pole, a curve and its arrows.
+    plotter = pv.Plotter(off_screen=True)
+    plot_wind(room, plotter, profile=True, render=False)
+    assert len(plotter.renderer.actors) == 3 * 2 + 1 + 4 * 3 + 1
+    plotter.close()
+    # The profile alone: the masts and their labels.
+    plotter = pv.Plotter(off_screen=True)
+    plot_wind(room, plotter, field=False, profile=True, render=False)
+    assert len(plotter.renderer.actors) == 4 * 3 + 1
+    plotter.close()
+    # Indoors, nothing.
+    plotter = pv.Plotter(off_screen=True)
+    assert plot_wind(Room.from_yaml(SHOEBOX), plotter) == []
+    assert len(plotter.renderer.actors) == 0
+    plotter.close()
+
+
+def test_a_mast_shows_the_wind_up_it(tmp_path: Path) -> None:
+    from acoustic_spaces.viz import PROFILE_ARROWS, plot_wind
+
+    room = _windy(tmp_path, "open_air_stage", "  preset: windy\n")
+    plotter = pv.Plotter(off_screen=True)
+    plot_wind(room, plotter, field=False, profile=True, render=False)
+    pole, curve, arrows, labels = plotter.renderer.actors.values()
+    bottom, top = pole.mapper.dataset.points[[0, -1]]
+    assert top[2] - bottom[2] == pytest.approx(10.0)  # up to the wind's height
+    # The curve leaves the pole at the ground, where the log profile is still, and
+    # reaches out furthest at the top, downwind (+x).
+    points = curve.mapper.dataset.points
+    assert points[0, 0] == pytest.approx(bottom[0])
+    assert np.argmax(points[:, 0]) == len(points) - 1
+    assert arrows.mapper.dataset.n_points > 0
+    assert labels.GetVisibility()
+    assert PROFILE_ARROWS == 5
+    plotter.close()
+
+
+def test_buildings_hide_the_arrows_inside_them(tmp_path: Path) -> None:
+    from acoustic_spaces.geometry.outdoor import in_polygon
+    from acoustic_spaces.viz import WindMap, _plan_points, plot_wind
+
+    room = _windy(tmp_path, "street", "  preset: windy\n")
+    plotter = pv.Plotter(off_screen=True)
+    plot_wind(room, plotter, render=False)
+    (arrows,) = plotter.renderer.actors.values()
+    # The arrows 10 m up: none in the middle of the 15 m offices, over the 9 m houses yes.
+    middles = WindMap.of(room).arrows(clear=_plan_points(room)).middles
+    offices = np.array([[-30, -20], [30, -20], [30, -6], [-30, -6]])
+    houses = np.array([[-30, 6], [10, 6], [10, 16], [-30, 16]])
+    assert in_polygon(middles, offices).any() and in_polygon(middles, houses).any()
+    drawn = len(middles) - np.count_nonzero(in_polygon(middles, offices))
+    assert arrows.mapper.dataset.n_cells == drawn * pv.Arrow().n_cells
+    plotter.close()

@@ -1,5 +1,6 @@
 """The 3D view of the editor: the room's surfaces coloured by material, sources and
-listeners, the selection, early reflection paths and a coverage map.
+listeners, the selection, early reflection paths and a coverage map; outdoors the
+vegetation, and the wind with the weather zones.
 
 A click selects what is under the mouse (sources and listeners before the surfaces in
 front of them). Dragging a source or listener moves it across the room, keeping its
@@ -27,6 +28,7 @@ from acoustic_spaces.viz import (
     PANEL,
     SOURCE_COLOUR,
     UNASSIGNED_COLOUR,
+    WIND_COLOUR,
     _outline,
     balloon_polydata,
     extent_polydata,
@@ -35,6 +37,7 @@ from acoustic_spaces.viz import (
     plot_leaks,
     plot_paths,
     plot_vegetation,
+    plot_wind,
     room_polydata,
 )
 
@@ -163,12 +166,16 @@ class Viewport(QWidget):
         coverage=None,
         leaks=None,
         hidden: set[tuple[str, str]] = frozenset(),
+        wind: bool = True,
+        wind_profile: bool = False,
     ):
         """Draw ``room`` with ``selection`` highlighted and, if given, early ``paths``,
         a coverage map (``coverage`` is (CoverageMap, parameter, band)) and the
         ``leaks`` from :func:`acoustic_spaces.engine.leaks.find_leaks`. The sources and
         listeners in ``hidden`` ((kind, name) pairs) are left out; those left out of
-        simulations are drawn faded.
+        simulations are drawn faded. Outdoors, ``wind`` draws the wind and the weather
+        zones, and ``wind_profile`` a mast in each weather with the wind up it (see
+        :func:`acoustic_spaces.viz.plot_wind`).
 
         The camera stays where it is, also when the room changes shape; only the first
         room gets the usual view (:meth:`reset_camera` gives it again)."""
@@ -213,6 +220,10 @@ class Viewport(QWidget):
                 render=False,
             )
         plot_vegetation(room, plotter, render=False)
+        if wind or wind_profile:
+            legend = plot_wind(room, plotter, field=wind, profile=wind_profile, render=False)
+            for text, _colour in legend:  # what the arrows' lengths stand for
+                plotter.add_text(text, position="lower_right", font_size=6, color=WIND_COLOUR)
 
         lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
         size = float(np.linalg.norm(hi - lo)) or 1.0

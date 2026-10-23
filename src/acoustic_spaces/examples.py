@@ -40,7 +40,10 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("lecture_hall", "concert_hall", "orchestra", "church", "gallery", "gallery_walk"),
     ),
     (N_("Sound systems"), ("town_hall_pa", "concert_stage", "stadium_pa", "stadium_concert")),
-    (N_("Outdoors"), ("street", "roadside", "tree_belt", "hillside", "open_air_stage")),
+    (
+        N_("Outdoors"),
+        ("street", "roadside", "tree_belt", "hillside", "open_air_stage", "lakeside_concert"),
+    ),
     (N_("Models from CAD and BIM files"), ("rehearsal_room", "bim_office", "leaky_classroom")),
     (N_("Measurements and material libraries"), ("fitting", "material_libraries")),
 )

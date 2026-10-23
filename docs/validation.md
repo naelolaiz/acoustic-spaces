@@ -138,7 +138,9 @@ request and checks:
   HRTFs interpolated between measured directions give the measured responses at those
   directions and, round the horizon a degree at a time, an interaural delay that moves
   by less than 50 µs per degree where the nearest measured response jumps by more than
-  150 µs, and a ring of directions or half a sphere interpolates within itself and
+  150 µs; mixing pulses delayed by fractions of a sample keeps them flat within 0.5 dB
+  up to 16 kHz, and the spherical head's within 1 dB of the nearest measured response
+  at 8 kHz; a ring of directions or half a sphere interpolates within itself and
   takes the nearest response outside; the rotation of a sound field of any order turns
   encoded plane waves exactly (to 1e-9), is orthogonal and composes;
 - rendering: the compiled FFT against NumPy, the real-time convolver and the offline

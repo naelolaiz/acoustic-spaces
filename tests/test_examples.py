@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 from conftest import skip_without_extra
 
 from acoustic_spaces.audio import write_wav
@@ -370,9 +371,20 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     assert roles["subs"] == "mono" and roles["vocal_wedges"] == "singer"
     assert roles["drum_fill"] == "drummer" and roles["side_fill_left"] == "stage"
     assert all(roles[name] == name for name in demo.BAND)
-    stems = {name.split("Stem_")[1] for name in demo.STEMS}
+    # Every song has the stems the band and the monitor mixes lean on; the mixes name
+    # no stem that none of the songs has.
+    stems = {name: set(song["stems"]) for name, song in demo.SONGS.items()}
+    assert all({"drums", "guitar", "keys", "vocal"} <= names for names in stems.values())
     for mix in (demo.SINGER_MIX, demo.DRUMMER_MIX, demo.STAGE_MIX, *demo.BAND_MIX.values()):
-        assert set(mix) <= stems
+        assert set(mix) <= set.union(*stems.values())
+    for song in demo.SONGS.values():
+        assert set(song) >= {"master", "stems", "bpm", "downbeat_s", "credit", "sources"}
+        assert all(len(files) >= 1 for files in song["stems"].values())
+        for url, member in [
+            *song["master"],
+            *(f for files in song["stems"].values() for f in files),
+        ]:
+            assert url.startswith("https://") and (member is None or not member.startswith("/"))
     # The cuts shift each mix by its loudest arrival: here the delay 30 ms after the
     # main array, which plays 3 dB quieter but reaches the seat 8 dB louder.
     results = tmp_path / "results"
@@ -391,7 +403,170 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     # The tour moves on phrase boundaries and leaves out listeners without a mix.
     work = tmp_path / "demo"
     (work / "feeds").mkdir(parents=True)
-    (work / "feeds" / "feeds.json").write_text('{"length_s": 264.0}', encoding="utf-8")
+    funk = demo.SONGS["spicy_funk_cake"]
+    phrase = demo.phrase_s(funk)
+    (work / "feeds" / "feeds.json").write_text(
+        json.dumps({"length_s": 195.0, "song": funk | {"name": "spicy_funk_cake"}}), "utf-8"
+    )
     tour = demo.tour_of(argparse.Namespace(tour=None, work=work), {"mix_position", "singer"})
     assert [name for name, _, _ in tour] == ["mix_position", "singer", "mix_position"]
-    assert tour[1][1] == pytest.approx(2 * demo.PHRASE_S) and tour[-1][2] == 264.0
+    assert tour[1][1] == pytest.approx(phrase) and tour[-1][2] == 195.0
+    seats = {"seats": {"mix_position": {"rms_db": -40.0}, "singer": {"rms_db": -22.0}}}
+    assert demo.gains_of(seats, tour) == {"mix_position": 18.0, "singer": 0.0}
+    # The default tour fits in each song, every stop on a 4 or 8 bar boundary half a
+    # crossfade before a downbeat, and the last stop longer than a phrase.
+    for name, length in (("spicy_funk_cake", 195.0), ("francium", 294.5), ("rubidium", 232.0)):
+        song = demo.SONGS[name] | {"name": name}
+        (work / "feeds" / "feeds.json").write_text(
+            json.dumps({"length_s": length, "song": song}), "utf-8"
+        )
+        tour = demo.tour_of(argparse.Namespace(tour=None, work=work), set(demo.TITLES))
+        left_out = {name for name, n in song.get("tour", {}).items() if n == 0}
+        assert len(tour) == len(demo.TOUR) - len(left_out)
+        assert not {name for name, _, _ in tour} & left_out
+        assert tour[-1][2] - tour[-1][1] > demo.phrase_s(song)
+        first = song["downbeat_s"] - demo.CROSSFADE_S / 2
+        for _, start, _ in tour[1:]:
+            bars = (start - first) / (demo.phrase_s(song) / 2)
+            assert bars == pytest.approx(round(bars)), (name, start)
+    assert len(tour) == len(demo.TOUR)  # Rubidium fits all twelve listeners
+
+
+def test_orchestra_demo_tour(tmp_path: Path) -> None:
+    """orchestra_demo.py names a track for every source of the orchestra, cuts between
+    seats at the quietest moment near each share's end, and plays the movements one
+    after the other with a pause, each seat's mix shifted earlier by its lag."""
+    demo = _script("orchestra", "orchestra_demo")
+    scene = yaml.safe_load(example_path("orchestra").read_text(encoding="utf-8"))
+    assert {source["name"] for source in scene["sources"]} == set(demo.TRACKS)
+    assert len(set(demo.TRACKS.values())) == len(demo.TRACKS)
+    assert {seat for _, seats in demo.TOUR for seat in seats} == set(demo.TITLES)
+    assert {seat["name"] for seat in scene["listeners"]} == set(demo.TITLES)
+    # A movement of 30 s, quiet from 14 to 16 s: two seats cut there, not at 15.
+    rate = 8000
+    t = np.arange(30 * rate) / rate
+    loud = np.where((t > 14.0) & (t < 16.0), 0.01, 0.5) * np.sin(2 * np.pi * 220 * t)
+    env = demo.envelope(loud, rate)
+    assert 14.0 <= demo.quiet_moment(env, 0.1, 15.0, demo.QUIET_S) <= 16.0
+    assert demo.quiet_moment(env, 0.1, 5.0, 2.0) == pytest.approx(5.0, abs=2.5)
+    work = tmp_path / "demo"
+    args = argparse.Namespace(
+        work=work, format="binaural", tour="1:stalls-middle,1:conductor,2:stalls-rear"
+    )
+    stereo = np.stack([loud, loud], axis=1)
+    for movement, seat in demo.stops_of(args):
+        length = (30 if movement == 1 else 10) * rate
+        demo.write(demo.mix_path(args, movement, seat), stereo[:length], rate)
+    stops = {
+        "1:stalls-middle": {"lag_s": 0.05, "length_s": 30.0},
+        "1:conductor": {"lag_s": 0.01, "length_s": 30.0},
+        "2:stalls-rear": {"lag_s": 0.08, "length_s": 10.0},
+    }
+    seats = {"rate": rate, "format": "binaural", "gain": 1.0, "stops": stops}
+    tour = demo.tour_of(args, seats)
+    assert [(s["movement"], s["seat"]) for s in tour] == [
+        (1, "stalls-middle"),
+        (1, "conductor"),
+        (2, "stalls-rear"),
+    ]
+    assert tour[0]["start"] == 0.0 and 14.0 <= tour[0]["stop"] <= 16.0
+    assert tour[1]["start"] == tour[0]["stop"] and tour[1]["stop"] == 30.0
+    assert tour[2]["at"] == pytest.approx(30.0 + demo.PAUSE_S) and tour[2]["start"] == 0.0
+    audio = demo.tour_audio(args, tour, seats)
+    assert len(audio) == round((30.0 + demo.PAUSE_S + 10.0) * rate)
+    pause = audio[int(30.5 * rate) : int(32.5 * rate)]
+    assert np.abs(pause).max() == 0.0  # between the movements
+    assert np.abs(audio[int(5 * rate) : int(6 * rate)]).max() > 0.4  # playing before the cut
+    assert np.abs(audio[int(20 * rate) : int(21 * rate)]).max() > 0.4  # and after it
+
+
+def test_stadium_pictures_show_the_crowd() -> None:
+    """The stadium demo's stills draw the crowd where the scene has its audience: standing
+    on the pitch, seated in three stands, and the stand behind the stage as empty seats,
+    with how many people stand or sit there and how much each takes up at 1 kHz."""
+    pytest.importorskip("PIL")
+    pictures = _script("stadium_concert", "stadium_pictures")
+    path = example_path("stadium_concert")
+    scene = Scene.from_yaml(path).model_dump(mode="json", exclude_none=True)
+    drawing = pictures.Pictures(scene, path.parent, {}, {}, [], {})
+    kinds: dict[str, list] = {}
+    for area in drawing.areas:
+        kinds.setdefault(area.kind, []).append(area)
+    assert sorted(kinds) == ["seated", "seats", "standing"]
+    assert len(kinds["standing"]) == 1 and len(kinds["seated"]) == 3 == 4 - len(kinds["seats"])
+    (standing,) = kinds["standing"]
+    assert standing.people == 12_308  # 90.5 by 68 m, two on a square metre
+    assert sum(area.people for area in kinds["seated"]) == pytest.approx(29_000, rel=0.01)
+    assert standing.absorbs == pytest.approx(0.99) and kinds["seats"][0].absorbs == 0.2
+    # Each dot stands for DOT_SPACING squared over the density in square metres.
+    dots = standing.dots(seed=0)
+    assert len(dots) == pytest.approx(90.5 * 68 * 2 / pictures.DOT_SPACING**2, rel=0.05)
+    assert pictures._inside(dots, standing.triangles).all()
+    assert drawing.thumbnail().getbbox() is not None
+    # Every still writes the same line under the plan: drawing it changes no area.
+    people, lines = [area.people for area in drawing.areas], []
+    for _ in range(2):
+        img = pictures.Image.new("RGBA", (1920, 40))
+        drawing.surfaces(pictures.ImageDraw.Draw(img), 0, 10)
+        lines.append(img.tobytes())
+    assert lines[0] == lines[1] and [area.people for area in drawing.areas] == people
+
+
+def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
+    """lakeside_demo.py plays the lake scene through its sound system, adds a listener upwind
+    and writes the same scene in still air; the tour moves on phrase boundaries, every
+    stop is turned up to the audience's loudness, and a place in still air keeps the
+    gain of the same place in the evening's weather, so the difference is heard."""
+    demo = _script("lakeside_concert", "lakeside_demo")
+    folder = copy_examples(tmp_path, ["lakeside_concert"])[0].parent
+    args = _demo_args(
+        source=folder / "scene.yaml",
+        scene=folder / "scene_demo.yaml",
+        still=folder / "scene_still.yaml",
+        results=folder / "results_demo",
+        still_results=folder / "results_still",
+    )
+    demo.scenes(args)
+    demo.scenes(argparse.Namespace(**vars(args) | {"source": args.scene}))  # once only
+    evening, still = Room.from_yaml(args.scene), Room.from_yaml(args.still)
+    for room in (evening, still):
+        assert room.problems() == []
+        assert [source.name for source in room.scene.sources] == list(demo.SYSTEM)
+        names = [listener.name for listener in room.scene.listeners]
+        assert names.count(demo.UPWIND["name"]) == 1 and set(demo.TITLES) == set(names)
+        assert room.scene.simulation.ir_length_s == demo.IR_LENGTH_S
+    assert evening.scene.atmosphere is not None and still.scene.atmosphere is None
+    # The tour: 8 bars a stop, the last one --last-phrases long.
+    work = tmp_path / "demo"
+    (work / "music").mkdir(parents=True)
+    song = demo.SONGS["spicy_funk_cake"] | {"name": "spicy_funk_cake"}
+    (work / "music" / "song.json").write_text(json.dumps(song), encoding="utf-8")
+    write_wav(work / "music" / "spicy_funk_cake.wav", np.zeros((19_500, 2)), 100)  # 195 s
+    tour = demo.tour_of(argparse.Namespace(tour=None, work=work, last_phrases=2.0))
+    phrase = demo.phrase_s(song)
+    assert [(name, weather) for name, weather, _, _ in tour] == [s[:2] for s in demo.TOUR]
+    assert tour[1][2] == pytest.approx(2 * phrase)
+    assert tour[-1][3] - tour[-1][2] == pytest.approx(2 * phrase)
+    custom = argparse.Namespace(tour="bedroom_window:still:1,audience", work=work, last_phrases=0)
+    tour = demo.tour_of(custom)
+    assert [stop[:2] for stop in tour] == [("bedroom_window", "still"), ("audience", "evening")]
+    assert tour[-1][3] == pytest.approx(195.0)
+    # The gains: the audience's loudness (K-weighted, not the dB(A)) everywhere, still
+    # air at the evening's gain.
+    levels = {"audience": -10.0, "bedroom_window": -30.0}
+    seats = {
+        "seats": {
+            f"{name}.{weather}": {
+                "rms_db": level - 8.0 - (5.0 if weather == "still" else 0.0),
+                "loudness_db": level - (5.0 if weather == "still" else 0.0),
+            }
+            for name, level in levels.items()
+            for weather in ("evening", "still")
+        }
+    }
+    gains = demo.gains_of(seats, tour)
+    assert gains == {"bedroom_window.still": 20.0, "audience.evening": 0.0}
+    # Seats rendered before loudness was kept are matched by their dB(A).
+    for seat in seats["seats"].values():
+        del seat["loudness_db"]
+    assert demo.gains_of(seats, tour) == gains

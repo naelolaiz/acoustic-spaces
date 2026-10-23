@@ -551,11 +551,19 @@
 - New examples of a concert's sound system, made of the same stage, arrays and boxes:
   - `stadium_pa`, a football stadium's sound system as tours hang it: two main line
     arrays of 12 boxes in a J, a block of eight cardioid subwoofers timed to arrive
-    with them at the mix position, out-fills for the side stands, front fills, two
-    delay towers on the pitch and four delays under the roof's edge, each arriving 6 to
-    20 ms after the main arrays at its seats. Listeners stand on the pitch and on the
-    stands. `align.py` prints when and how loud each loudspeaker arrives at each
-    listener, and which would be heard as an echo (none).
+    with them at the mix position, out-fills for the side stands, two in-fill arrays
+    under the stage roof's front edge for the pitch's centre from 10 to 30 m, where the
+    main arrays' horizontal coverage ends, front fills, two delay towers on the pitch
+    and four delays under the roof's edge, each fill and delay arriving 6 to 20 ms
+    after the main arrays at its seats (the in-fills with them), tuned at the mix
+    position as a system
+    engineer tunes it (the main arrays' low mids 1 to 2 dB down, their top octave 4 dB
+    up for the air, the subwoofers 2 dB under them, the fills' low end rolled off). The
+    stage's back is hung with drapes, as touring stages are, and the late sound reaches
+    the listeners as secondary sources: in a bowl this size a detector sphere catches so
+    few rays that a single one would be heard as an echo. Listeners stand on the pitch
+    and on the stands. `align.py` prints when and how loud each loudspeaker arrives at
+    each listener, and which would be heard as an echo (none).
   - `concert_stage`, the stage alone on open ground with its monitors (wedges for the
     singer, a drum fill and side fills), the main arrays, the subwoofers and the front
     fills; the players and the mix position listen. Each player hears their own
@@ -581,16 +589,57 @@
   `church_demo.py`, in the `church` example, puts a choir of 19 real singers (VocalSet's
   dry takes, CC BY 4.0, brought onto the beat and towards the tune) and a sampled pipe
   organ (VCSL, CC0) in the church; `stadium_demo.py`, in `stadium_concert`, adds a band to
-  the stage and plays a song (CC0) through it, the sound system and the monitors. Each
-  downloads its recordings, writes its scene, mixes the piece at every listener with one
-  gain for all and makes a video that tours them (with ffmpeg and Pillow).
-- [Demos](docs/demos.md) gathers the three, with where each recording comes from, its
+  the stage and plays a funk song through it, the sound system and the monitors, from the
+  song's own stems ("Spicy Funk Cake", recorded for the DEGA, CC BY 4.0): the drum kit
+  plays the drums, the singer the vocal, the guitarist's amplifier the guitar; its video
+  turns each stop up to the loudness of the loudest, the stage, and says by how much, and
+  its pictures show the crowd standing on the pitch and seated in the stands, the empty
+  stand's seats, how many people stand and sit, and how much of the sound each takes up.
+  `--song francium` or `rubidium` plays one of Software-Entwicklungskit's electronic songs
+  (CC0) instead, from the stems its album is released with, all twelve listeners in the
+  tour. Each downloads its recordings, writes its scene, mixes the piece at every
+  listener with one gain for all and makes a video that tours them (with ffmpeg and
+  Pillow).
+- `orchestra_demo.py`, in `orchestra`, tours the concert hall's four seats through the
+  Beethoven recording's three movements in one video: the seat changes at the
+  quietest moment near each share of a movement, the movements follow each other with a
+  pause, every seat's mix is shifted earlier by the time the sound takes to reach it,
+  and all stops keep one gain, so the hall's differences are heard as they are; the
+  cover says each stop's level against the loudest and carries a bar with the tour.
+- `lakeside_demo.py`, in `lakeside_concert`, plays the same song from the lakeside stage
+  through a sound system as a lawn concert hangs it (two line arrays of eight boxes and
+  four cardioid subwoofers, aimed at the lawn and tuned at the audience) and mixes it in
+  the audience, behind the stage, on a boat and in the village across the lake, in the
+  evening's weather and in still air; its video plays the song at a bedroom
+  window in the evening's weather, in still air and in the evening's again, each stop
+  turned up to the audience's loudness with its real level in the caption, over a slice
+  across the lake with the sound's rays bent by the weather.
+- [Demos](docs/demos.md) gathers the four, with where each recording comes from, its
   licence and the credit a shared render needs; the orchestra's section moved there from
   [spatial audio and listening](docs/spatial-audio.md). The README and that page link the
-  [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8) of the three videos.
+  [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8) of the videos.
 
 **Editor**
 
+- The wind is drawn outdoors (**View > Show wind**): sky blue arrows over the ground in
+  the 3D view, in `view` and in the plan, the way it blows and as long as it is strong,
+  at the height the scene gives its speed at, clear of the sources and listeners; each
+  weather zone with its name and wind (and its ground temperature when it has its own),
+  in the 3D view as see-through walls; and the scene's wind in a corner. **View > Show
+  wind profile** stands a mast in the 3D view in each weather where the wind blows, with
+  arrows up it and a curve: how the wind grows with height over the ground. The scene
+  tree's new **Wind** entry has an eye for each and lists the weather zones, which
+  show their weather in the scene's form when selected. Before, only the **Show the
+  profile** plot showed the wind, and nothing showed a weather zone's.
+- **File > Export particle animation to Blender** asks how much of the sound to animate,
+  how slowly and how many particles, as `export --duration --slow-motion --count` do;
+  outdoors it starts with sound enough to reach the farthest listener, slowed down to
+  last about the default's 4 s. Before, it always took 100 ms, too little to leave the
+  stage outdoors.
+- New example: `lakeside_concert`, a concert on a lawn by a lake heard across the water
+  from a boat and in a village 550 m away, with two weather zones: cool air and a
+  stronger breeze over the lake, a weaker breeze among the village's houses. The
+  editor draws its three weathers with **Show wind** and **Show wind profile**.
 - While a run, a coverage map, a tuning or an export goes on, the status bar says what
   runs, its latest step and the time so far, with a **Cancel** button beside the bar;
   resting the mouse on the bar says the same at length. The bar was small and silent
@@ -609,6 +658,18 @@
 
 **Fixes**
 
+- Binaural renders lost treble: at 8 kHz up to 13.6 dB from some directions (the
+  spherical head's ear facing a source straight ahead), 2.7 dB on average over all
+  directions, and more the higher the band. An HRTF between the measured directions
+  mixes the responses round it aligned at their onsets, and an onset was the first
+  sample within 20 dB of the peak: a response delayed by a fraction of a sample rings
+  before its peak, more the nearer the fraction is to a half, so neighbouring onsets
+  came out a sample or two apart and the mix cancelled the high frequencies. The onset
+  is now the lag at which a response best matches its minimum-phase version (the same
+  magnitude, starting at once), found to a fraction of a sample: the mix keeps the
+  measured responses' spectrum within 1 dB. Mono, Ambisonics and loudspeaker outputs
+  were not affected. Every binaural output changes; demo videos made before this sound
+  duller than they should.
 - A coverage map in the 3D view (and in `show`) hid the sources and listeners: they
   stand at listening height, half under its tiles. The map is now see-through.
 - A reflection right where the sound came from, on a surface over about 100 m across,

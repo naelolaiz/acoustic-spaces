@@ -192,6 +192,28 @@ def test_interpolated_hrtfs_give_the_measured_responses_and_a_smooth_itd() -> No
     np.testing.assert_array_equal(few.interpolate(coarse.directions[1] + 0.01), few.hrir[[1]])
 
 
+def test_interpolated_hrtfs_keep_the_spectrum() -> None:
+    """Responses delayed by fractions of a sample ring before their peak, more the
+    nearer the fraction is to a half: aligned at their onsets, mixed ones still add in
+    phase, so the mix keeps their spectrum (the spherical head lost up to 13 dB at
+    8 kHz when they were aligned at the first sample near the peak)."""
+    grid = fibonacci_sphere(256)
+    taps = np.arange(64)
+    delays = 20.0 + 6.0 * grid[:, 0] + 2.0 * grid[:, 1]
+    # Flat pulses (band-limited impulses) at fractional delays, the same at both ears.
+    pulses = np.sinc(taps[None, :] - delays[:, None])
+    hrtf = HRTF(grid, np.stack([pulses, pulses], axis=1), FS)
+    heads = fibonacci_sphere(500)
+    spectrum = np.abs(np.fft.rfft(hrtf.interpolate(heads), 1024, axis=-1))
+    f = np.fft.rfftfreq(1024, 1.0 / FS)
+    band = f < 16_000
+    assert 20 * np.log10(spectrum[..., band].min()) > -0.5
+    head = spherical_head(FS)
+    level = lambda h: np.abs(np.fft.rfft(h, 4096, axis=-1))[..., 683]  # noqa: E731  8 kHz
+    between = level(head.interpolate(heads)) / level(head.hrir[head.nearest(heads)])
+    assert np.abs(20 * np.log10(between)).max() < 1.0
+
+
 def test_interpolating_a_ring_of_directions() -> None:
     """Measured round the horizon only: between two directions the pulse arrives
     between their times, and above the horizon a direction takes the ring's response

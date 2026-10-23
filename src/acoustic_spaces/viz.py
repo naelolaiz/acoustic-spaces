@@ -2,7 +2,8 @@
 
 - 3D view (PyVista): surfaces coloured by material, sources with their directivity
   balloons, listeners, and early reflection paths coloured by order (paths diffracted
-  at an edge in a colour of their own).
+  at an edge in a colour of their own); outdoors the vegetation, and the wind: arrows
+  over the ground, the weather zones, and masts with the wind's profile up them.
 - Leaks (PyVista): the open edges of a model that is not closed, and the rays of the
   leak finder that escape through its gaps.
 - Animation (PyVista): sound particles spreading from a source and reflecting around
@@ -29,6 +30,8 @@ from typing import TYPE_CHECKING, NamedTuple
 import numpy as np
 
 from acoustic_spaces._extras import install_hint
+from acoustic_spaces.geometry import UNIT_SCALE, plan_problem
+from acoustic_spaces.geometry.outdoor import _inner_point, clip_polygon, in_polygon
 from acoustic_spaces.i18n import N_, _
 from acoustic_spaces.room import UNASSIGNED, Room
 
@@ -89,6 +92,25 @@ MAX_ESCAPES_DRAWN = 400
 COMPARISON_COLOURS = ("#4da3ff", "#ffd166")
 #: Trees, hedges and belts of trees outdoors.
 VEGETATION_COLOUR = "#5cb85c"
+#: The wind and the weather zones outdoors.
+WIND_COLOUR = "#4cc9f0"
+#: Arrows of the wind over the ground in the 3D view, about this many.
+WIND_ARROWS = 40
+#: The longest arrow of the wind, the strongest's, as a share of the space between them.
+WIND_REACH = 0.8
+#: Arrows up each mast of the wind's profile.
+PROFILE_ARROWS = 5
+# Translators: the wind over an outdoor scene, as the 3D view's legend shows it.
+WIND_KEY = N_("wind {speed:.1f} m/s at {height:g} m")
+# Translators: a weather zone's name and its wind's speed, drawn on it.
+ZONE_WIND = N_("{name}: {speed:.1f} m/s")
+# Translators: a weather zone's name, its wind's speed and its ground temperature.
+ZONE_WIND_TEMPERATURE = N_("{name}: {speed:.1f} m/s, {temperature:.1f} °C")
+# Translators: a weather zone's name and its ground temperature, in still air.
+ZONE_TEMPERATURE = N_("{name}: {temperature:.1f} °C")
+# Translators: the wind's speed at a height, beside an arrow up the wind's profile and
+# beside the wind and each weather zone in the scene tree.
+PROFILE_SPEED = N_("{speed:.1f} m/s at {height:g} m")
 
 
 def _outline(part: pyvista.PolyData) -> pyvista.PolyData:
@@ -342,6 +364,16 @@ def clear_lengths(points, directions, radius, length) -> np.ndarray:
     return length
 
 
+def marker_radius(positions, size: float) -> float:
+    """The radius of the markers of sources and listeners at ``positions`` where they do
+    not crowd, in a model ``size`` metres across: a fifth of their usual spacing (the
+    median distance to the nearest one), from 1.2 % to 2.5 % of the model's size."""
+    nearest = nearest_spacing(np.asarray(positions, dtype=float).reshape(-1, 3))
+    apart = nearest[np.isfinite(nearest)]
+    usual = float(np.median(apart)) if len(apart) else np.inf
+    return max(float(np.clip(0.2 * usual, 0.012 * size, 0.025 * size)), 0.05)
+
+
 def marker_sizes(positions, size: float, directions=None) -> tuple[np.ndarray, np.ndarray]:
     """The radius of the marker of each source or listener at ``positions`` and the
     length of its arrow along its unit row of ``directions``, in a model ``size`` metres
@@ -351,9 +383,7 @@ def marker_sizes(positions, size: float, directions=None) -> tuple[np.ndarray, n
     down to a fifth, and an arrow stops short of a marker ahead of it."""
     points = np.asarray(positions, dtype=float).reshape(-1, 3)
     nearest = nearest_spacing(points)
-    apart = nearest[np.isfinite(nearest)]
-    usual = float(np.median(apart)) if len(apart) else np.inf
-    full = max(float(np.clip(0.2 * usual, 0.012 * size, 0.025 * size)), 0.05)
+    full = marker_radius(points, size)
     radius = np.clip(0.45 * nearest, 0.2 * full, full)
     if directions is None:
         return radius, 6 * radius
@@ -391,6 +421,355 @@ def plot_vegetation(room: Room, plotter: pyvista.Plotter, *, render: bool = True
     return [[_("vegetation"), VEGETATION_COLOUR]] if shapes else []
 
 
+class WindMap:
+    """The weather over an outdoor room's ground as the views draw it: the scene's own
+    (index 0) and each weather zone's (1 on), where each holds, and each one's wind at
+    one ``height`` above the ground, the height the scene gives its wind's speed at, so
+    that the zones' winds compare with the scene's. Zones are polygons in metres, cut
+    to the ground; one that cannot be (its sides cross) or that lies off the ground is
+    None and holds nowhere."""
+
+    def __init__(self, room: Room) -> None:
+        from acoustic_spaces.scene.model import Wind
+
+        scene = room.scene
+        atmosphere = scene.atmosphere
+        self.layout = room.outdoor
+        self.weathers = atmosphere.weathers()
+        self.names = [scene.name, *atmosphere.zone_names()]
+        self.zones = [None, *(atmosphere.zones or [])]
+        self.height = float((atmosphere.wind or Wind()).height_m)
+        self.speeds = np.array([float(w.wind_speed(self.height)) for w in self.weathers])
+        self.directions = np.array([[*w.to_wind(), 0.0] for w in self.weathers])
+        scale = UNIT_SCALE[scene.geometry.units or "m"]
+        self.polygons: list[np.ndarray | None] = [None]
+        for zone in atmosphere.zones or []:
+            polygon = scale * np.asarray(zone.polygon, dtype=float)
+            simple = len(polygon) >= 3 and plan_problem(polygon) is None
+            self.polygons.append(clip_polygon(polygon, self.layout.extent) if simple else None)
+
+    @classmethod
+    def of(cls, room: Room) -> WindMap | None:
+        """The map of ``room``, or None indoors and outdoors without an atmosphere."""
+        if room.outdoor is None or room.scene.atmosphere is None:
+            return None
+        return cls(room)
+
+    @property
+    def windy(self) -> bool:
+        """Whether the wind blows anywhere at the map's height."""
+        return bool(np.any(self.speeds > 0.0))
+
+    def weather_at(self, points) -> np.ndarray:
+        """(n,) which weather holds at each point (n, 2 or 3): 0 for the scene's own, k
+        for its zone k (the first where zones overlap)."""
+        points = np.atleast_2d(np.asarray(points, dtype=float))[:, :2]
+        out = np.zeros(len(points), dtype=np.int64)
+        for k, polygon in enumerate(self.polygons):
+            if polygon is not None:
+                out[(out == 0) & in_polygon(points, polygon)] = k
+        return out
+
+    def centre(self, k: int) -> np.ndarray | None:
+        """(2,) a point inside weather zone ``k``: its centroid, or another inside if
+        the centroid is not (an L-shaped zone); None for a zone that holds nowhere."""
+        polygon = self.polygons[k]
+        if polygon is None:
+            return None
+        a, b = polygon, np.roll(polygon, -1, axis=0)
+        cross = a[:, 0] * b[:, 1] - b[:, 0] * a[:, 1]
+        centroid = ((a + b) * cross[:, None]).sum(axis=0) / (3.0 * cross.sum())
+        if in_polygon(centroid[None], polygon)[0]:
+            return centroid
+        return _inner_point(polygon)[0]
+
+    def label(self, k: int) -> str:
+        """What weather zone ``k`` holds, in words: its name, its wind's speed (if the
+        wind blows anywhere) and its ground temperature (if it has one of its own)."""
+        name, zone = self.names[k], self.zones[k]
+        temperature = None if zone is None else zone.temperature_c
+        if not self.windy:
+            if temperature is None:
+                return name
+            return _(ZONE_TEMPERATURE).format(name=name, temperature=temperature)
+        if temperature is None:
+            return _(ZONE_WIND).format(name=name, speed=self.speeds[k])
+        return _(ZONE_WIND_TEMPERATURE).format(
+            name=name, speed=self.speeds[k], temperature=temperature
+        )
+
+    def arrows(self, spacing: float | None = None, clear=None, within=None) -> WindArrows:
+        """The arrows of the wind over the ground, one in the middle of each cell of a
+        grid no more than ``spacing`` metres apart (by default about
+        :data:`WIND_ARROWS` cells), each the wind of the weather there: the strongest
+        :data:`WIND_REACH` of a cell long, the others in proportion, none where the air
+        is still. Arrows that would pass near one of ``clear`` (m, 2), where sources and
+        listeners stand, are left out, and a weather zone the grid misses gets one inside
+        it. ``within`` (x_min, y_min, x_max, y_max) keeps only the cells it overlaps."""
+        x0, y0, x1, y1 = self.layout.extent
+        width, depth = x1 - x0, y1 - y0
+        if spacing is None:
+            spacing = math.sqrt(width * depth / WIND_ARROWS)
+        # Two rows at least where there is room: sources and listeners often stand in a
+        # line down the middle.
+        nx, ny = (
+            max(1 if side < 0.5 * spacing else 2, math.ceil(side / spacing))
+            for side in (width, depth)
+        )
+        columns, rows = np.arange(nx), np.arange(ny)
+        if within is not None:
+            u0, v0, u1, v1 = within
+            columns = columns[
+                (x0 + (columns + 1) * width / nx > u0) & (x0 + columns * width / nx < u1)
+            ]
+            rows = rows[(y0 + (rows + 1) * depth / ny > v0) & (y0 + rows * depth / ny < v1)]
+        xs = x0 + (columns + 0.5) * width / nx
+        ys = y0 + (rows + 0.5) * depth / ny
+        points = np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
+        cell = min(width / nx, depth / ny)
+        reach = WIND_REACH * cell / float(self.speeds.max()) if self.windy else 0.0
+        weather = self.weather_at(points)
+        keep = self.speeds[weather] > 0.0
+        clear = np.asarray(clear if clear is not None else [], dtype=float).reshape(-1, 2)
+        if len(clear):
+            half = 0.5 * reach * (self.speeds[weather] * self.directions[weather][:, :2].T).T
+            start, along = points - half, 2.0 * half
+            ahead = clear[None] - start[:, None]  # (n, m)
+            t = (
+                np.einsum("nmd,nd->nm", ahead, along)
+                / np.maximum(np.einsum("nd,nd->n", along, along), 1e-300)[:, None]
+            )
+            nearest = start[:, None] + np.clip(t, 0.0, 1.0)[..., None] * along[:, None]
+            gap = np.linalg.norm(nearest - clear[None], axis=-1).min(axis=1)
+            keep &= gap >= 0.3 * cell
+        points, weather = points[keep], weather[keep]
+        held = set(weather.tolist())
+        for k in range(1, len(self.polygons)):
+            centre = self.centre(k)
+            if k not in held and centre is not None and self.speeds[k] > 0.0:
+                points, weather = np.vstack([points, centre]), np.append(weather, k)
+        vectors = reach * (self.speeds[weather] * self.directions[weather].T).T
+        return WindArrows(points.reshape(-1, 2), vectors.reshape(-1, 3), weather, reach, cell)
+
+
+class WindArrows(NamedTuple):
+    """The arrows of the wind over the ground (see :meth:`WindMap.arrows`)."""
+
+    #: (n, 2) the middle of each arrow (m).
+    middles: np.ndarray
+    #: (n, 3) each arrow, horizontal, from its tail to its tip (m).
+    vectors: np.ndarray
+    #: (n,) the weather each arrow shows: 0 the scene's own, k its zone k.
+    weather: np.ndarray
+    #: How long an arrow is per m/s of wind (m).
+    reach: float
+    #: The size of the grid's cells (m).
+    cell: float
+
+
+def _arrows(starts, vectors, radius: float) -> pyvista.PolyData:
+    """Arrows from each of ``starts`` (n, 3) along and as long as its row of ``vectors``,
+    as one surface, all as thick: tips ``radius`` metres in radius (less on an arrow too
+    short for them)."""
+    pv = _pyvista()
+    starts, vectors = np.asarray(starts, dtype=float), np.asarray(vectors, dtype=float)
+    parts = []
+    for start, vector in zip(starts, vectors, strict=True):
+        length = float(np.linalg.norm(vector))
+        if length <= 0.0:
+            continue
+        tip = min(radius, 0.2 * length)
+        parts.append(
+            pv.Arrow(
+                start=start,
+                direction=vector,
+                tip_length=min(0.35, 2.5 * tip / length),
+                tip_radius=tip / length,
+                shaft_radius=0.4 * tip / length,
+                scale=length,
+            )
+        )
+    return pv.merge(parts) if parts else pv.PolyData()
+
+
+def _profile_points(wind: WindMap, arrows: WindArrows, clear) -> dict[int, np.ndarray]:
+    """Where each windy weather's mast stands, in the middle of one of its ``arrows``:
+    the one nearest the middle of the ground (of a zone, for a zone's) among those three
+    cells or more from the sources and listeners (``clear``, (m, 2)), or failing that
+    the one farthest from them."""
+    x0, y0, x1, y1 = wind.layout.extent
+    out = {}
+    for k in np.flatnonzero(wind.speeds > 0.0):
+        mine = arrows.middles[arrows.weather == k]
+        if len(mine) == 0:
+            continue
+        middle = np.array([(x0 + x1) / 2, (y0 + y1) / 2]) if k == 0 else wind.centre(int(k))
+        apart = np.full(len(mine), 3.0 * arrows.cell)
+        if len(clear):
+            nearest = np.linalg.norm(mine[:, None] - clear[None], axis=-1).min(axis=1)
+            apart = np.minimum(apart, nearest)
+        # Clear first, then nearest the middle.
+        best = np.lexsort((np.linalg.norm(mine - middle, axis=1), -apart))[0]
+        out[int(k)] = mine[best]
+    return out
+
+
+def _plan_points(room: Room) -> np.ndarray:
+    """(n, 2) what the sources and listeners take up seen from above, for the wind's
+    arrows to keep clear of: where they stand, and points along the arrows the 3D view
+    draws from them the way they face."""
+    items = [*room.scene.sources, *room.scene.listeners]
+    if not items:
+        return np.zeros((0, 2))
+    lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
+    forward = np.array([item.orientation.forward() for item in items], dtype=float)
+    positions = np.array([item.position for item in items], dtype=float)
+    _radii, arrows = marker_sizes(positions, float(np.linalg.norm(hi - lo)) or 1.0, forward)
+    drawn = [d is None or not d.omni for d in room.directivities]
+    drawn += [True] * len(room.scene.listeners)
+    along = np.linspace(0.0, 1.0, 9)
+    points = [positions[:, :2]]
+    for position, way, length, shown in zip(positions, forward, arrows, drawn, strict=True):
+        if shown:
+            points.append(position[:2] + np.outer(along * length, way[:2]))
+    return np.vstack(points)
+
+
+def plot_wind(
+    room: Room,
+    plotter: pyvista.Plotter,
+    *,
+    field: bool = True,
+    profile: bool = False,
+    render: bool = True,
+) -> list:
+    """Add the wind over an outdoor ``room``'s ground to ``plotter``. ``field``: sky blue
+    arrows the way it blows, as long as it is strong, at the height the scene gives the
+    wind's speed at above the ground, and each weather zone as see-through walls up to
+    that height with its name and wind. ``profile``: a mast in each weather where the
+    wind blows, with arrows at heights up it and a curve through the wind at every
+    height, how the wind grows with height over the ground. Nothing indoors or in still
+    air. Returns the legend entry of the wind."""
+    wind = WindMap.of(room)
+    if wind is None:
+        return []
+    pv = _pyvista()
+    layout = wind.layout
+    zones, labels = [], []
+    for k in range(1, len(wind.polygons)):
+        polygon = wind.polygons[k]
+        if polygon is None or not field:
+            continue
+        floor = layout.ground_at(polygon)
+        # Under the sky, a little, where the sky is lower than the wind's height.
+        top = floor + np.minimum(wind.height, 0.95 * (layout.sky - floor))
+        n = len(polygon)
+        rings = np.vstack([np.column_stack([polygon, floor]), np.column_stack([polygon, top])])
+        walls = [[4, j, (j + 1) % n, n + (j + 1) % n, n + j] for j in range(n)]
+        zones.append(pv.PolyData(rings, faces=np.ravel(walls)))
+        edges = [[n + 1, *range(n), 0], [n + 1, *range(n, 2 * n), n]]
+        zones.append(pv.PolyData(rings, lines=np.ravel(edges)))
+        centre = wind.centre(k)
+        high = float(layout.ground_at(centre[None])[0]) + 1.15 * float(np.max(top - floor))
+        labels.append(([*centre, high], wind.label(k)))
+    for part in zones:
+        line = part.n_lines > 0
+        plotter.add_mesh(
+            part,
+            color=WIND_COLOUR,
+            opacity=0.7 if line else 0.12,
+            line_width=1.5,
+            pickable=False,
+            render=False,
+        )
+    legend = []
+    if wind.windy:
+        clear = _plan_points(room)
+        arrows = wind.arrows(clear=clear)
+        middles, vectors = arrows.middles, arrows.vectors
+        ground = layout.ground_at(middles)
+        lift = np.minimum(wind.height, 0.95 * (layout.sky - ground))
+        # As thick as the markers of the sources and listeners make readable.
+        lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
+        everything = [item.position for item in (*room.scene.sources, *room.scene.listeners)]
+        radius = min(
+            0.3 * marker_radius(everything, float(np.linalg.norm(hi - lo)) or 1.0),
+            0.15 * WIND_REACH * arrows.cell,
+        )
+        masts = _profile_points(wind, arrows, clear) if profile else {}
+        # Buildings taller than the arrows hide them: none inside one.
+        roofs = np.full(len(middles), -np.inf)
+        for _name, footprint, roof in layout.buildings:
+            inside = in_polygon(middles, footprint)
+            roofs[inside] = np.maximum(roofs[inside], roof)
+        keep = np.full(len(middles), field) & (roofs < ground + lift)
+        for at in masts.values():
+            keep &= np.linalg.norm(middles - at, axis=1) > 1e-9  # the mast's top arrow
+        if keep.any():
+            centres = np.column_stack([middles, ground + lift])
+            plotter.add_mesh(
+                _arrows(centres[keep] - 0.5 * vectors[keep], vectors[keep], radius),
+                color=WIND_COLOUR,
+                opacity=0.85,
+                pickable=False,
+                render=False,
+            )
+        for k, at in masts.items():
+            labels.extend(_plot_mast(wind, k, at, arrows.reach, radius, plotter))
+        legend.append([_(WIND_KEY).format(speed=wind.speeds[0], height=wind.height), WIND_COLOUR])
+    if labels:
+        plotter.add_point_labels(
+            np.array([at for at, _text in labels], dtype=float),
+            [text for _at, text in labels],
+            font_size=11,
+            text_color=WIND_COLOUR,
+            shape_color=PANEL,
+            shape_opacity=0.8,
+            show_points=False,
+            always_visible=True,
+            render=False,
+        )
+    if render:
+        plotter.render()
+    return legend
+
+
+def _plot_mast(wind: WindMap, k: int, at, reach: float, radius: float, plotter) -> list:
+    """Add weather ``k``'s mast at ``at`` (2,): a pole from the ground up to the map's
+    height, arrows from it at heights evenly up it, ``reach`` metres long per m/s and as
+    thick as the wind's (``radius``) or less to keep apart, and a curve through the wind
+    at every height between; returns the label of its lowest arrow (the highest's wind
+    is the one the arrows over the ground show)."""
+    pv = _pyvista()
+    weather, direction = wind.weathers[k], wind.directions[k]
+    floor = float(wind.layout.ground_at(at[None])[0])
+    top = min(wind.height, 0.95 * (wind.layout.sky - floor))
+    base = np.array([at[0], at[1], floor])
+    heights = np.linspace(0.0, top, 49)
+    curve = (
+        base
+        + np.outer(heights, [0, 0, 1])
+        + np.outer(reach * weather.wind_speed(heights), direction)
+    )
+    plotter.add_mesh(
+        pv.Line(base, base + [0.0, 0.0, top]),
+        color="white",
+        line_width=2.0,
+        pickable=False,
+        render=False,
+    )
+    plotter.add_mesh(
+        pv.lines_from_points(curve), color=WIND_COLOUR, line_width=2.0, pickable=False, render=False
+    )
+    levels = top * np.arange(1, PROFILE_ARROWS + 1) / PROFILE_ARROWS
+    starts = base + np.outer(levels, [0, 0, 1])
+    vectors = np.outer(reach * weather.wind_speed(levels), direction)
+    arrows = _arrows(starts, vectors, min(radius, 0.25 * top / PROFILE_ARROWS))
+    plotter.add_mesh(arrows, color=WIND_COLOUR, pickable=False, render=False)
+    text = _(PROFILE_SPEED).format(speed=float(weather.wind_speed(levels[0])), height=levels[0])
+    return [(starts[0] + vectors[0], text)]
+
+
 def plot_room(
     room: Room,
     plotter: pyvista.Plotter | None = None,
@@ -403,6 +782,7 @@ def plot_room(
     parameter: str = "g",
     band: int = 4,
     leaks: Leaks | None = None,
+    wind: bool = True,
 ) -> pyvista.Plotter:
     """Add the room to ``plotter`` (a new one if None) and return it.
 
@@ -410,7 +790,8 @@ def plot_room(
     or a response's ``early``), coloured by order up to ``max_order``. ``coverage`` adds
     a coverage map of one ``parameter`` and ``band`` (see :func:`plot_coverage`).
     ``leaks`` adds the open edges and the rays that escape through them (see
-    :func:`plot_leaks`).
+    :func:`plot_leaks`). Outdoors, ``wind`` adds the wind and the weather zones (see
+    :func:`plot_wind`).
     """
     pv = _pyvista()
     if plotter is None:
@@ -438,6 +819,8 @@ def plot_room(
         plotter.add_mesh(_outline(part), color=EDGE_COLOUR, line_width=1.5)
         legend.append([_("no material"), UNASSIGNED_COLOUR])
     legend.extend(plot_vegetation(room, plotter))
+    if wind:
+        legend.extend(plot_wind(room, plotter, render=False))
 
     lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
     size = float(np.linalg.norm(hi - lo)) or 1.0

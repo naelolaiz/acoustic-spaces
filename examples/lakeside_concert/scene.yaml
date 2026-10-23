@@ -1,0 +1,81 @@
+# Outdoors: a summer evening concert on a lawn by a lake, its loudspeakers 6 m up,
+# heard by the audience 30 m away, from a boat in the middle of the lake and in a
+# village on the far shore, 550 m away, in a garden and at a bedroom window. The
+# evening breeze blows from the park out over the lake, 2.5 m/s 10 m up, and three
+# weathers share the scene: the park's, and two weather zones. Over the water the air
+# lies cool, 17 °C at the surface where the park's is at 22 °C, warming by a degree
+# every 10 m up, and the breeze, with nothing to slow it on the smooth water, blows at
+# 3.5 m/s; among the village's houses and gardens it drops to 1 m/s. The cool air and
+# the breeze both bend the sound down to the water, which gives it back almost whole:
+# this is why a concert carries across a lake on a summer night, and the far shore
+# hears it a few decibels louder than in still air. Show wind and Show wind profile in
+# the editor's View menu draw the three weathers.
+name: Concert across a lake
+geometry:
+  ground:
+    extent: [[-150, -120], [700, 120]]
+    sky: 40
+    zones:
+      - name: water
+        polygon: [[60, -120], [520, -120], [520, 120], [60, 120]]
+  buildings:
+    - name: house_1
+      footprint: [[570, -70], [584, -70], [584, -56], [570, -56]]
+      height: 7
+    - name: house_2
+      footprint: [[570, -24], [586, -24], [586, -8], [570, -8]]
+      height: 8
+    - name: house_3
+      footprint: [[572, 30], [586, 30], [586, 44], [572, 44]]
+      height: 7
+materials:
+  lawn:
+    impedance: grass
+  lake:
+    impedance: water
+  rendered:
+    absorption: [0.02, 0.02, 0.03, 0.03, 0.04, 0.05, 0.05, 0.05]
+    scattering: 0.1
+assignments:
+  ground: lawn
+  water: lake
+  walls: rendered
+  roofs: rendered
+air:
+  temperature_c: 22
+  humidity_percent: 60
+atmosphere:
+  wind: {speed_m_s: 2.5, direction_deg: 0}
+  zones:
+    - name: lake
+      polygon: [[60, -120], [520, -120], [520, 120], [60, 120]]
+      temperature_c: 17
+      temperature_gradient_k_m: 0.1
+      roughness_m: 0.0002
+      wind: {speed_m_s: 3.5}
+    - name: village
+      polygon: [[520, -120], [700, -120], [700, 120], [520, 120]]
+      roughness_m: 0.5
+      wind: {speed_m_s: 1}
+sources:
+  - name: stage
+    position: [0, 0, 6]
+    level_db: 120
+listeners:
+  - name: audience
+    position: [30, 0, 1.5]
+    orientation: {yaw: 180}
+  - name: boat
+    position: [330, -50, 1.5]
+    orientation: {yaw: 180}
+  - name: garden
+    position: [550, 37, 1.5]
+    orientation: {yaw: 180}
+  - name: bedroom_window
+    position: [568, -16, 5]
+    orientation: {yaw: 180}
+simulation:
+  early: {method: image_sources, max_order: 1, diffraction: none}
+  late: {method: stochastic_ray_tracing}
+outputs:
+  - mono

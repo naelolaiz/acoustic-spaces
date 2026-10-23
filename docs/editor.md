@@ -32,7 +32,7 @@ which frequencies each octave band holds.
 - The **Plan** tab, next to the 3D view, shows the room from above and draws rooms (see
   below).
 - The **scene tree** lists the geometry and its surfaces, the materials, sources,
-  listeners, simulation settings and output formats. Selecting an entry, there or by
+  listeners, the wind outdoors, simulation settings and output formats. Selecting an entry, there or by
   clicking it in the 3D view, shows its form under **Properties**. Every change is
   checked against the scene schema; a refused change says why under **Messages**, and
   every change can be undone.
@@ -146,6 +146,16 @@ which frequencies each octave band holds.
   model that is not closed: its open edges, the escaping rays and a marker on each gap,
   with the report in the messages (see [Finding leaks](scenes.md#finding-leaks)). It
   traces again when the geometry, the materials or the sources change.
+- **View > Show wind** draws the wind of an outdoor scene in the 3D view and the plan:
+  sky blue arrows the way it blows, as long as it is strong, at the height the scene
+  gives its speed at, each weather zone with its name and wind, and the scene's wind in
+  a corner. **View > Show wind profile** stands a mast in the 3D view in each weather
+  where the wind blows, with arrows up it and a curve through the wind at every height:
+  how the wind grows with height over the ground (see
+  [Wind and temperature](outdoor.md#wind-and-temperature)). Both are on at first. The
+  scene tree's **Wind** entry, outdoors with wind or temperature, has an eye for each
+  (its own, and that of **Wind profile** under it) and lists the weather zones with
+  their winds; selecting one shows its weather in the scene's form.
 - **View > Language** shows the editor and the command line in English, Spanish,
   Catalan, Italian, German or Dutch, or in the computer's language, from their next
   start (see [Language](getting-started.md#language)). Numbers in the editor follow the
@@ -153,7 +163,8 @@ which frequencies each octave band holds.
   numbers (an equalizer's gains) apart by semicolons there.
 - **File > Export to Blender** writes the room with the reflection paths on show, and
   **File > Export particle animation to Blender** the sound particles leaving the
-  selected source (see below).
+  selected source, asking first how much of the sound to animate, how slowly and how
+  many particles (see below).
 
 ## Drawing rooms
 
@@ -220,8 +231,8 @@ profile**, a plot of them and of the speed of sound (see
 [Wind and temperature](outdoor.md#wind-and-temperature)). **Weather of** chooses whose
 weather the fields show and change, the whole scene's or a
 [weather zone](outdoor.md#weather-zones)'s: **Add weather zone** draws one in the plan
-like a zone, dotted in sky blue with its name, and **Remove weather zone** drops the
-chosen one. A zone's weather starts as the scene's, its fields are those it changes,
+like a zone, dotted in sky blue with its name and wind, and **Remove weather zone**
+drops the chosen one. A zone's weather starts as the scene's, its fields are those it changes,
 (none) under **Weather** leaves the scene's weather unchanged there, and **Ground
 temperature** gives the ground in the zone a temperature of its own. **Add weather
 class** adds a [weather class](outdoor.md#levels-over-a-long-term), a weather that
@@ -263,4 +274,10 @@ the scene's (+z up, metres).
   shrink with their level, gone 60 dB down. The animation runs 40 times slower than the
   sound (`--slow-motion`): the default 100 ms take 4 s, 96 frames at 24 fps. If the
   timeline ends sooner, set its end frame, then press play. With the default 1000
-  particles (`--count`) the file is about 3 MB.
+  particles (`--count`) the file is about 3 MB. The editor asks for the same three:
+  **Sound to animate**, **Slow motion** and **Particles**. Outdoors it starts with sound
+  enough to reach the farthest listener (a tenth more than the direct sound takes,
+  rounded up to 100 ms), slowed down to last about the default's 4 s: 1900 ms at 2.1×
+  for the `lakeside_concert` example's village 568 m away. Outdoors most particles soon
+  leave through the open sky and fly on straight. Blender draws a dashed line from each
+  particle to the object that holds them; **Overlays > Relationship Lines** hides them.

@@ -240,11 +240,16 @@ Examples:
 - [x] A concert in a stadium with a sound system: main line arrays, subwoofers, fills,
   delay towers and delays timed to them (`stadium_pa`); the stage's monitors and the
   singer's microphone's gain before feedback (`concert_stage`); both together
-  (`stadium_concert`); every array added up box by box near its listeners; and the
-  editor's examples in groups.
-- [x] Demos with their scripts: a choir and an organ in the church and a band with its
-  sound system in the stadium, besides the orchestra in the concert hall; each downloads
-  its recordings, mixes them at every listener and makes a video that tours them.
+  (`stadium_concert`); every array added up box by box near its listeners; the system
+  tuned at the mix position, as a system engineer tunes it; and the editor's examples
+  in groups.
+- [x] Demos with their scripts: a choir and an organ in the church, a band with its
+  sound system in the stadium (one of three songs) and a song carried across a lake by
+  a lawn concert's line arrays and subwoofers, in the evening's weather and in still
+  air, and the orchestra in the concert hall, its four seats toured through three
+  movements; each downloads its recordings, mixes them at every listener and makes a
+  video that tours them. The stadium's pictures show where the crowd stands and sits,
+  the empty seats, and how much each takes up.
 
 Editor:
 
@@ -253,3 +258,9 @@ Editor:
   cleared, every other one shaded.
 - [x] Markers sized from the spacing of the sources and listeners, smaller where they
   would overlap, and arrows that stop short of a marker ahead.
+- [x] The wind drawn outdoors, in the 3D view and the plan: arrows the way it blows, as
+  long as it is strong, the weather zones with their winds, and masts with the wind's
+  profile up them; eyes for both in the scene tree, and an example to see them
+  (`lakeside_concert`).
+- [x] The particle export to Blender asks how much of the sound, how slowly and how many
+  particles, outdoors at first enough to reach the farthest listener.
