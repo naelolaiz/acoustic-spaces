@@ -221,7 +221,11 @@ Each entry in `materials` takes coefficients from one of:
   which gives the absorption and reflects as a ground does (see
   [Ground impedance](outdoor.md#ground-impedance)).
 
-`scattering` is a number, eight or 24 values, or the id of a built-in scattering entry.
+`scattering` is a number, eight or 24 values, or the id of a built-in scattering entry
+(`acoustic-spaces materials --kind scattering` lists them; `theatre_audience`, measured
+over rows of seated people, rises from 0.3 at 125 Hz to 0.7 from 1 kHz up, and stands
+for the rows of an audience area modelled as one raked plane, as CATT-Acoustic and ODEON
+models do).
 File data with more than one value in some octave (third-octave tables) stays in
 third-octave bands; other data is averaged onto octaves. Bands with no data (63 Hz in
 most tables) take the nearest band's value and the material's `source` says which.
@@ -348,7 +352,7 @@ material with `audience: true` (in the editor, **Audience seating**):
 
 ```yaml
 materials:
-  seats: {preset: audience_wooden_chairs_1_m2, scattering: 0.7, audience: true}
+  seats: {preset: audience_wooden_chairs_1_m2, scattering: theatre_audience, audience: true}
 ```
 
 - The attenuation is the fit of Jurkiewicz, Rummler, Green, Wulfrank and Kahle

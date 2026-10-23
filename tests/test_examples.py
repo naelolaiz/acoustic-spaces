@@ -245,6 +245,18 @@ def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
             assert (copy / name).read_bytes() == (folder / name).read_bytes(), name
 
 
+def test_the_stadium_crowds_scatter_as_measured() -> None:
+    """The crowds of the three stadium scenes scatter as a measured theatre audience
+    does, little at 125 Hz and most from 1 kHz up, not at one value in every band."""
+    measured = [0.3, 0.3, 0.5, 0.6, 0.6, 0.7, 0.7, 0.7]
+    for name in ("stadium_pa", "concert_stage", "stadium_concert"):
+        scene = Scene.from_yaml(example_path(name))
+        crowds = [m for m in scene.materials.values() if m.audience]
+        assert crowds, name
+        for material in crowds:
+            assert material.scattering == pytest.approx(measured), (name, material)
+
+
 def test_stadium_feedback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

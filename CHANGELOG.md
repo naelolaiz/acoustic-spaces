@@ -562,8 +562,12 @@
     stage's back is hung with drapes, as touring stages are, and the late sound reaches
     the listeners as secondary sources: in a bowl this size a detector sphere catches so
     few rays that a single one would be heard as an echo. Listeners stand on the pitch
-    and on the stands. `align.py` prints when and how loud each loudspeaker arrives at
-    each listener, and which would be heard as an echo (none).
+    and on the stands. The crowds standing and seated scatter as a measured theatre
+    audience does, rising from 0.3 at 125 Hz to 0.7 from 1 kHz (`scattering:
+    theatre_audience`) rather than at one value; the rows stay out of the model, as
+    surfaces smaller than the wavelength would only mirror sound falsely. `align.py`
+    prints when and how loud each loudspeaker arrives at each listener, and which would
+    be heard as an echo (none).
   - `concert_stage`, the stage alone on open ground with its monitors (wedges for the
     singer, a drum fill and side fills), the main arrays, the subwoofers and the front
     fills; the players and the mix position listen. Each player hears their own
