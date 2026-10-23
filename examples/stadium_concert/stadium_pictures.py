@@ -1,16 +1,20 @@
 """Stills for stadium_demo.py's video: the stadium from above with the loudspeakers, the
-listener of the moment and how loud each loudspeaker reaches them, the stage close up,
-and the tour. Needs Pillow (which the viz extra brings); Inter is used when installed,
-else DejaVu Sans.
+listener of the moment and how loud each loudspeaker reaches them, where the crowd stands
+or sits and which seats are empty, the stage close up, and the tour. Needs Pillow (which
+the viz extra brings); Inter is used when installed, else DejaVu Sans.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+from acoustic_spaces.scene import Material
 
 BG = (13, 17, 28)
 PANEL = (21, 27, 42)
@@ -23,6 +27,8 @@ GRASS = (30, 52, 40)
 CROWD = (52, 58, 52)
 STAND = (38, 48, 74)
 STAND_EMPTY = (30, 34, 46)
+PERSON = (190, 176, 150)
+SEAT = (82, 92, 122)
 STAGE = (78, 58, 42)
 STAGE_EDGE = (150, 112, 78)
 PA = (255, 166, 77)
@@ -40,6 +46,11 @@ CREDIT = (
     "at Hochschule Düsseldorf, CC BY 4.0 · doi.org/10.5281/zenodo.3601032"
 )
 STAGE_BOX = (-60.0, -29.0, -37.0, 29.0)  # x0, y0, x1, y1 of the close-up
+#: How far apart (m) the dots that stand for the crowd are where one person stands on
+#: each square metre; closer where more do. Each dot is some ten people.
+DOT_SPACING = 3.2
+#: Seat rows are this many times farther apart than the seats along them are drawn.
+ROW_RATIO = 1.6
 
 _FONTS: dict = {}
 
@@ -130,6 +141,60 @@ def read_obj(path: Path) -> list[tuple[str, list[tuple[float, float, float]]]]:
     return faces
 
 
+def _inside(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    """Which of the points (n, 2) lie in any of the triangles (t, 3, 2)."""
+    a, b, c = triangles[:, 0], triangles[:, 1], triangles[:, 2]
+    v0, v1 = b - a, c - a
+    det = v0[:, 0] * v1[:, 1] - v0[:, 1] * v1[:, 0]
+    keep = np.abs(det) > 1e-9
+    a, v0, v1, det = a[keep], v0[keep], v1[keep], det[keep]
+    d = points[:, None, :] - a[None]
+    u = (d[..., 0] * v1[:, 1] - d[..., 1] * v1[:, 0]) / det
+    v = (v0[:, 0] * d[..., 1] - v0[:, 1] * d[..., 0]) / det
+    return np.any((u >= -1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9), axis=1)
+
+
+def _triangles(polygon) -> list[list[tuple[float, float]]]:
+    """A convex polygon's corners as a fan of triangles."""
+    return [[polygon[0], polygon[k], polygon[k + 1]] for k in range(1, len(polygon) - 1)]
+
+
+def _area(corners) -> float:
+    """The area of a flat polygon given by its corners (x, y[, z])."""
+    p = np.array([tuple(c) + (0.0,) * (3 - len(c)) for c in corners], dtype=float)
+    return float(np.linalg.norm(np.cross(p[1:-1] - p[0], p[2:] - p[0]).sum(axis=0)) / 2.0)
+
+
+class Area:
+    """An audience area or the seats of an empty stand: what is drawn there (``kind``:
+    standing, seated or seats), how many people stand on each square metre, how much of
+    the sound at 1 kHz its material takes up, its triangles on plan (m) and its rows'
+    direction (``along_x``)."""
+
+    def __init__(self, kind, label, density, absorbs, triangles, along_x, people):
+        self.kind, self.label, self.density, self.absorbs = kind, label, density, absorbs
+        self.triangles, self.along_x, self.people = triangles, along_x, people
+
+    def dots(self, seed: int) -> np.ndarray:
+        """Where the dots (people, or the seats of an empty stand) are drawn (n, 2)."""
+        corners = self.triangles.reshape(-1, 2)
+        (x0, y0), (x1, y1) = corners.min(axis=0), corners.max(axis=0)
+        per = DOT_SPACING**2 / max(self.density, 1.0)  # m2 per dot
+        if self.kind == "standing":
+            step = math.sqrt(per)
+            xs, ys = np.meshgrid(np.arange(x0, x1, step), np.arange(y0, y1, step))
+            ys = ys + (np.arange(ys.shape[1]) % 2)[None, :] * step / 2
+            points = np.column_stack([xs.ravel(), ys.ravel()])
+            points += np.random.default_rng(seed).uniform(-0.3, 0.3, points.shape) * step
+        else:
+            along = math.sqrt(per / ROW_RATIO)
+            across = along * ROW_RATIO
+            sx, sy = (along, across) if self.along_x else (across, along)
+            xs, ys = np.meshgrid(np.arange(x0 + sx / 2, x1, sx), np.arange(y0 + sy / 2, y1, sy))
+            points = np.column_stack([xs.ravel(), ys.ravel()])
+        return points[_inside(points, self.triangles)]
+
+
 class Plan:
     """Scene x and y to pixels: from above, north (+y) up; or ``audience``: the stage as
     the pitch sees it, its back at the top and the audience's left (-y) on the left."""
@@ -185,6 +250,7 @@ class Pictures:
         self.box = (ground[0][0], ground[0][1], ground[1][0], ground[1][1])
         zones = scene["geometry"].get("ground", {}).get("zones", [])
         self.zones = [z["polygon"] for z in zones]
+        self.areas = self._areas(zones)
         early = scene.get("simulation", {}).get("early", {})
         order = early.get("max_order")
         self.tool = (
@@ -192,6 +258,37 @@ class Pictures:
             + (f"image sources to order {order}, " if order else "")
             + "stochastic ray tracing for the late sound, binaural through a spherical head"
         )
+
+    def _areas(self, zones) -> list[Area]:
+        """The audience areas (a zone of the ground standing, the stands' faces seated)
+        and the stands of seats with no one on them, by their materials."""
+        materials, assigned = self.scene.get("materials", {}), self.scene.get("assignments", {})
+        groups: dict[str, list] = {}
+        for group, face in self.faces:
+            groups.setdefault(group, []).append(face)
+        found = [(z["name"], "zone", [list(z["polygon"])]) for z in zones]
+        found += [(g, "faces", faces) for g, faces in groups.items()]
+        areas = []
+        for name, where, polygons in found:
+            spec = materials.get(assigned.get(name, ""), {})
+            preset = str(spec.get("preset", ""))
+            if spec.get("audience"):
+                kind = "standing" if where == "zone" else "seated"
+            elif re.search("seat|chair", f"{preset} {assigned.get(name, '')}"):
+                kind = "seats"
+            else:
+                continue
+            per_m2 = re.search(r"audience_([\d.]+)_m2", preset)
+            density = float(per_m2.group(1)) if per_m2 else 2.0
+            triangles = [t for poly in polygons for t in _triangles([tuple(c[:2]) for c in poly])]
+            surface = sum(_area(poly) for poly in polygons)
+            middle = np.mean([c[:2] for poly in polygons for c in poly], axis=0)
+            along_x = abs(middle[1]) / 42.0 > abs(middle[0]) / 60.5  # a north or south stand
+            absorbs = Material.model_validate(spec).coefficients("octave")[0][4]
+            label = assigned[name].replace("_", " ")
+            people = round(surface * density) if kind != "seats" else 0
+            areas.append(Area(kind, label, density, absorbs, np.array(triangles), along_x, people))
+        return areas
 
     def title(self, listener: str) -> tuple[str, str]:
         return self.titles.get(listener, (listener.replace("_", " ").capitalize(), ""))
@@ -226,6 +323,7 @@ class Pictures:
         if stage:
             xs, ys = [p[0] for p in stage], [p[1] for p in stage]
             draw.rectangle([min(xs), min(ys), max(xs), max(ys)], outline=STAGE_EDGE, width=2)
+        self.crowd(img, plan)
         layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
         roof = ImageDraw.Draw(layer)
         for points in roofs:
@@ -235,6 +333,25 @@ class Pictures:
             self.rays(img, plan, listener)
         self.loudspeakers(img, plan, 7 if close else 5)
         self.people(img, plan, listener, 9 if close else 6, close)
+
+    def crowd(self, img, plan: Plan) -> None:
+        """A dot for every few people where the crowd stands or sits, closer where more
+        stand on a square metre; on empty stands, only the seats as dashes along their
+        rows. See-through, so the loudspeakers' lines and the listeners stay in sight."""
+        layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        r = min(max(0.32 * plan.s, 1.0), 2.6)
+        for k, area in enumerate(self.areas):
+            for x, y in area.dots(seed=k):
+                px, py = plan(x, y)
+                if area.kind == "seats":
+                    dx, dy = plan.vec(0.6, 0.0) if area.along_x else plan.vec(0.0, 0.6)
+                    w, h = abs(dx * plan.s), abs(dy * plan.s)
+                    draw.line([(px - w, py - h), (px + w, py + h)], fill=SEAT + (255,), width=2)
+                else:
+                    alpha = 170 if area.kind == "standing" else 120
+                    draw.ellipse([px - r, py - r, px + r, py + r], fill=PERSON + (alpha,))
+        img.alpha_composite(layer)
 
     def rays(self, img, plan: Plan, listener: str) -> None:
         """A line from each loudspeaker to the listener, brighter the louder it is there
@@ -300,7 +417,7 @@ class Pictures:
             if close and not self.on_stage(name):
                 continue
             ring = r * 0.55
-            draw.ellipse([x - ring, y - ring, x + ring, y + ring], outline=MUTED, width=2)
+            draw.ellipse([x - ring, y - ring, x + ring, y + ring], fill=BG, outline=MUTED, width=2)
             (fx, fy), _ = self.axes(plan, item)
             arrow(draw, (x + fx * ring, y + fy * ring), (fx, fy), r * 2.2, r * 0.9, MUTED, 2)
         if current is not None and (not close or self.on_stage(current)):
@@ -366,13 +483,16 @@ class Pictures:
             ((7, 30), "PITCH · STANDING CROWD"),
         ]:
             px, py = plan(x, y)
+            outline = {"stroke_width": 4, "stroke_fill": BG + (255,)}
             if "EAST" in label or "WEST" in label:
                 layer = Image.new("RGBA", (300, 30), (0, 0, 0, 0))
-                text(ImageDraw.Draw(layer), (150, 15), label, small, colour + (255,), "mm")
+                ImageDraw.Draw(layer).text(
+                    (150, 15), label, font=small, fill=colour + (255,), anchor="mm", **outline
+                )
                 layer = layer.rotate(90 if "WEST" in label else -90, expand=True)
                 img.alpha_composite(layer, (int(px - layer.width / 2), int(py - layer.height / 2)))
             else:
-                text(draw, (px, py), label, small, colour, "mm")
+                draw.text((px, py), label, font=small, fill=colour, anchor="mm", **outline)
         x0, y0 = plan(self.box[0], self.box[1])
         bar = 50 * plan.s
         draw.line([(x0 + 12, y0 - 14), (x0 + 12 + bar, y0 - 14)], fill=MUTED, width=3)
@@ -429,6 +549,41 @@ class Pictures:
         draw.line([(x, y + 7), (x + 26, y + 7)], fill=PA + (255,), width=3)
         text(draw, (x + 36, y - 2), "brighter: louder here", f, MUTED)
 
+    def surfaces(self, draw, x: int, y: int) -> None:
+        """The crowd, the empty seats and the walls, with how much each takes up of the
+        sound at 1 kHz."""
+        f = font("Medium", 18)
+        text(draw, (x, y - 2), "Absorbs at 1 kHz:", f, MUTED)
+        x += int(draw.textlength("Absorbs at 1 kHz:", font=f)) + 22
+        kinds, people = {}, {}
+        for area in self.areas:
+            kinds.setdefault(area.label, area)
+            people[area.label] = people.get(area.label, 0) + area.people
+        rows = []
+        order = ("standing", "seated", "seats")
+        for area in sorted(kinds.values(), key=lambda a: order.index(a.kind)):
+            if area.kind == "seats":
+                label = f"{area.label} · {area.absorbs:.0%}"
+            else:
+                many = f"{round(people[area.label], -2):,.0f}"
+                label = f"{many} {area.kind}, {area.density:g}/m² · {area.absorbs:.0%}"
+            rows.append((area.kind, label))
+        concrete = self.scene.get("materials", {}).get("concrete")
+        if concrete:
+            absorbs = Material.model_validate(concrete).coefficients("octave")[0][4]
+            rows.append(("wall", f"concrete · {absorbs:.0%}"))
+        for kind, label in rows:
+            fill = {"standing": CROWD, "seated": STAND, "seats": STAND_EMPTY}.get(kind, LINE)
+            draw.rounded_rectangle([x, y, x + 30, y + 16], 4, fill=fill)
+            for k in range(3):
+                cx, cy = x + 7 + 8 * k, y + 8
+                if kind == "seats":
+                    draw.line([(cx - 3, cy), (cx + 3, cy)], fill=SEAT, width=2)
+                elif kind != "wall":
+                    draw.ellipse([cx - 2, cy - 2, cx + 2, cy + 2], fill=PERSON)
+            text(draw, (x + 40, y - 2), label, f, MUTED)
+            x += 40 + int(draw.textlength(label, font=f)) + 30
+
     def still(self, k: int) -> Image.Image:
         listener, _start, _stop = self.tour[k]
         img = Image.new("RGBA", (1920, 1080), BG)
@@ -439,13 +594,14 @@ class Pictures:
             "heard binaurally at its listeners"
         )
         text(draw, (80, 112), subtitle, font("Regular", 26), MUTED)
-        width, height = 860, 660
+        width, height = 860, 626
         scale = min(width / (self.box[2] - self.box[0]), height / (self.box[3] - self.box[1]))
         plan = Plan(80, 172, scale, self.box)
         self.stadium(img, plan, listener)
         self.labels(img, plan)
         draw = ImageDraw.Draw(img)
-        self.legend(draw, 80, 172 + int(plan.size[1]) + 18)
+        self.legend(draw, 80, 172 + int(plan.size[1]) + 14)
+        self.surfaces(draw, 80, 172 + int(plan.size[1]) + 46)
 
         x = 1010
         pill, badge = font("SemiBold", 24), "BINAURAL  ·  USE HEADPHONES"

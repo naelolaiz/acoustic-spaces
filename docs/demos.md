@@ -151,7 +151,7 @@ Singing Dataset, the ESMUC Choir Dataset and Cantoría are all for non-commercia
 
 ## A concert in the stadium
 
-![A frame of the stadium video: the stadium from above with the sound system, the monitors and the band, the listener at the mix position facing the stage with a line from each loudspeaker, the stage close up, the tour and a spectrogram of the sound](images/stadium_demo.png)
+![A frame of the stadium video: the stadium from above with the sound system, the monitors and the band, the listener at the mix position facing the stage with a line from each loudspeaker, the crowd standing on the pitch and seated in the stands, the stage close up, the tour and a spectrogram of the sound](images/stadium_demo.png)
 
 `stadium_demo.py` plays a song by a band on the stage of the `stadium_concert` example,
 through its sound system and stage monitors, and mixes it at each of its 12 listeners.
@@ -188,9 +188,9 @@ another output the simulation wrote, `--no-mp4` for the audio and stills only.
   the vocal, guitar and keys under them; the side fills a stage mix with the vocal 3 dB
   up and the drums 20 dB down (the kit is loud on stage by itself).
 - **How loud.** `feeds` brings every signal to the same gated RMS and then scales it by
-  its `level_db` against the loudest's: the main arrays and subwoofers 0 dB, towers -2,
-  delays -4 and -6, out-fills -4, side fills -12, front fills -18, wedges and drum fill
-  -19. So the feed files are what each loudspeaker plays, and `render` runs `auralize`
+  its `level_db` against the loudest's: the main arrays 0 dB, subwoofers and towers -2,
+  delays -4 and -6, out-fills -4, in-fills -10, side fills -12, front fills -18, wedges
+  and drum fill -19. So the feed files are what each loudspeaker plays, and `render` runs `auralize`
   with `--equal-power`, so that the levels are applied once.
 - **One gain for all listeners, then each stop turned up.** `render` scales the 12 mixes
   by one gain (the loudest peak at -1 dBFS), so the level differences between places in
@@ -208,6 +208,13 @@ another output the simulation wrote, `--no-mp4` for the audio and stills only.
   runs on across each 1 s crossfade; the caption gives that time. The stops last 8 bars,
   and as the song's first downbeat comes half a second in, each crossfade ends on a
   downbeat.
+- **The pictures.** The stadium from above, with the loudspeakers as dots and cones the
+  way they point, lines from each to the listener of the moment (brighter where louder),
+  and the crowd where the scene has its audience: a dot for every ten or so people
+  standing on the pitch (two on a square metre) and sitting in the stands (one and a
+  half), and the empty stand behind the stage as rows of seats. A line under the plan
+  gives how many stand and sit and how much of the sound at 1 kHz the crowd, the empty
+  seats and the concrete take up, as the scene's materials have it.
 
 **Limits.** The band is three point sources at typical sound powers, not measured
 instruments; the bass, keys and brass on stage come only through the monitors and the

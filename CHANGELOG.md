@@ -549,11 +549,19 @@
 - New examples of a concert's sound system, made of the same stage, arrays and boxes:
   - `stadium_pa`, a football stadium's sound system as tours hang it: two main line
     arrays of 12 boxes in a J, a block of eight cardioid subwoofers timed to arrive
-    with them at the mix position, out-fills for the side stands, front fills, two
-    delay towers on the pitch and four delays under the roof's edge, each arriving 6 to
-    20 ms after the main arrays at its seats. Listeners stand on the pitch and on the
-    stands. `align.py` prints when and how loud each loudspeaker arrives at each
-    listener, and which would be heard as an echo (none).
+    with them at the mix position, out-fills for the side stands, two in-fill arrays
+    under the stage roof's front edge for the pitch's centre from 10 to 30 m, where the
+    main arrays' horizontal coverage ends, front fills, two delay towers on the pitch
+    and four delays under the roof's edge, each fill and delay arriving 6 to 20 ms
+    after the main arrays at its seats (the in-fills with them), tuned at the mix
+    position as a system
+    engineer tunes it (the main arrays' low mids 1 to 2 dB down, their top octave 4 dB
+    up for the air, the subwoofers 2 dB under them, the fills' low end rolled off). The
+    stage's back is hung with drapes, as touring stages are, and the late sound reaches
+    the listeners as secondary sources: in a bowl this size a detector sphere catches so
+    few rays that a single one would be heard as an echo. Listeners stand on the pitch
+    and on the stands. `align.py` prints when and how loud each loudspeaker arrives at
+    each listener, and which would be heard as an echo (none).
   - `concert_stage`, the stage alone on open ground with its monitors (wedges for the
     singer, a drum fill and side fills), the main arrays, the subwoofers and the front
     fills; the players and the mix position listen. Each player hears their own
@@ -582,7 +590,9 @@
   the stage and plays a funk song through it, the sound system and the monitors, from the
   song's own stems ("Spicy Funk Cake", recorded for the DEGA, CC BY 4.0): the drum kit
   plays the drums, the singer the vocal, the guitarist's amplifier the guitar; its video
-  turns each stop up to the loudness of the loudest, the stage, and says by how much.
+  turns each stop up to the loudness of the loudest, the stage, and says by how much, and
+  its pictures show the crowd standing on the pitch and seated in the stands, the empty
+  stand's seats, how many people stand and sit, and how much of the sound each takes up.
   Each downloads its recordings, writes its scene, mixes the piece at every listener with
   one gain for all and makes a video that tours them (with ffmpeg and Pillow).
 - `lakeside_demo.py`, in `lakeside_concert`, plays the same song from the lakeside stage

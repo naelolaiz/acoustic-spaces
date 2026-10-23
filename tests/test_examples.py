@@ -403,6 +403,38 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
         assert start / (demo.PHRASE_S / 2) == pytest.approx(round(start / (demo.PHRASE_S / 2)))
 
 
+def test_stadium_pictures_show_the_crowd() -> None:
+    """The stadium demo's stills draw the crowd where the scene has its audience: standing
+    on the pitch, seated in three stands, and the stand behind the stage as empty seats,
+    with how many people stand or sit there and how much each takes up at 1 kHz."""
+    pytest.importorskip("PIL")
+    pictures = _script("stadium_concert", "stadium_pictures")
+    path = example_path("stadium_concert")
+    scene = Scene.from_yaml(path).model_dump(mode="json", exclude_none=True)
+    drawing = pictures.Pictures(scene, path.parent, {}, {}, [], {})
+    kinds: dict[str, list] = {}
+    for area in drawing.areas:
+        kinds.setdefault(area.kind, []).append(area)
+    assert sorted(kinds) == ["seated", "seats", "standing"]
+    assert len(kinds["standing"]) == 1 and len(kinds["seated"]) == 3 == 4 - len(kinds["seats"])
+    (standing,) = kinds["standing"]
+    assert standing.people == 12_308  # 90.5 by 68 m, two on a square metre
+    assert sum(area.people for area in kinds["seated"]) == pytest.approx(29_000, rel=0.01)
+    assert standing.absorbs == pytest.approx(0.99) and kinds["seats"][0].absorbs == 0.2
+    # Each dot stands for DOT_SPACING squared over the density in square metres.
+    dots = standing.dots(seed=0)
+    assert len(dots) == pytest.approx(90.5 * 68 * 2 / pictures.DOT_SPACING**2, rel=0.05)
+    assert pictures._inside(dots, standing.triangles).all()
+    assert drawing.thumbnail().getbbox() is not None
+    # Every still writes the same line under the plan: drawing it changes no area.
+    people, lines = [area.people for area in drawing.areas], []
+    for _ in range(2):
+        img = pictures.Image.new("RGBA", (1920, 40))
+        drawing.surfaces(pictures.ImageDraw.Draw(img), 0, 10)
+        lines.append(img.tobytes())
+    assert lines[0] == lines[1] and [area.people for area in drawing.areas] == people
+
+
 def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     """lakeside_demo.py plays the lake scene through two stacks, adds a listener upwind
     and writes the same scene in still air; the tour moves on phrase boundaries, every
