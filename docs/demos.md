@@ -19,34 +19,61 @@ use headphones. The videos are in one
 
 [![Beethoven 8 in a virtual concert hall: the orchestra on the stage of the concert hall and a seat in the middle of the stalls, with the first reflections from a violin to it](images/orchestra_video.png)](https://www.youtube.com/watch?v=c0-5F-iNhIE)
 
-[The video](https://www.youtube.com/watch?v=c0-5F-iNhIE) plays the first movement of
-Beethoven's 8th symphony from the TU Berlin's anechoic recording (one of the [dry
-recordings to try](spatial-audio.md#dry-recordings-to-try)) as heard from the middle of
-the stalls of the concert hall example, binaurally (use headphones). Each of the 61
-tracks is one source on the stage, in German seating: violins on both sides of the
-conductor, the winds and brass on risers, every player facing the conductor with a
-directivity that narrows above 1 kHz, horn bells pointing back. The `orchestra` example
-is that scene, with four seats from the conductor's podium to the back of the hall, and
-the scripts that made the video:
+`orchestra_demo.py` plays the three movements the TU Berlin's anechoic recording of
+Beethoven's 8th symphony has (one of the [dry recordings to
+try](spatial-audio.md#dry-recordings-to-try); 70 to 85 s of each) in the concert hall
+example, binaurally (use headphones), and makes a video of about four minutes that tours
+its four seats through them: the first
+movement from the middle of the stalls, the front rows and the conductor's podium, the
+second from the back of the hall and the middle, the finale from the podium, the front,
+the back and the middle again. Each of the 61 tracks is one source on the stage, in
+German seating: violins on both sides of the conductor, the winds and brass on risers,
+every player facing the conductor with a directivity that narrows above 1 kHz, horn
+bells pointing back. The `orchestra` example is that scene, with the four seats from the
+conductor's podium to the back of the hall.
 
 ```sh
 acoustic-spaces examples --copy . orchestra && cd orchestra
-unzip movement1.zip -d movement1  # from https://doi.org/10.14279/depositonce-6729.2
+# put movement1.zip, movement2.zip and movement4.zip here, from
+# https://doi.org/10.14279/depositonce-6729.2 (560 to 710 MB each)
 acoustic-spaces simulate scene.yaml --out results
-bash auralize.sh results movement1/anechoic stalls-middle binaural
-python make_images.py --seat stalls-middle --movement 1  # cover, seating, thumbnail
-bash make_video.sh beethoven8_movement1_stalls-middle.binaural.wav  # needs ffmpeg
+python orchestra_demo.py tracks   # demo/tracks: the 61 tracks of each movement
+python orchestra_demo.py render   # demo/seats: each stop of the tour, binaural (~1 min each)
+python orchestra_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
-`auralize.sh` maps each source to its track and calls `auralize`; the mix is
-normalized to -1 dBFS. All sources have the same power, so the balance between the
-instruments is the recording's own. `make_images.py` draws the pictures with Pillow
-(`viz` extra) and `make_video.sh` puts a scrolling spectrogram of the mix under the
-cover. Movements 2 and 4 work the same way.
+Options: `--tour 1:stalls-middle,1:conductor,2:stalls-rear` (the seats of a movement take
+equal shares of it), `--zips FOLDER` for the zips, `--movements 1,2` for `tracks`,
+`--format` for another output the simulation wrote, `--no-mp4` for the audio and stills
+only. `demo/chapters.txt` lists the stops' times for a video description.
+
+- **The cuts.** Within a movement the seat changes at the quietest moment within 10 s of
+  each equal share's end (the lowest half-second RMS of the first seat's mix), so the
+  cuts fall between phrases, with a 1 s crossfade. Between movements the hall's
+  reverberation dies away (the responses run 3.5 s) and there is a pause of 3 s. Every
+  seat's mix is shifted earlier by the time the orchestra's sound takes to reach it (the
+  peak of the energy of its responses: 10 ms on the podium, 85 ms at the back), so the
+  music runs on across a cut.
+- **One gain for all.** All stops keep one gain (the loudest peak at -1 dBFS): the hall's
+  differences are heard as the simulation gives them, from the podium, 2 m from the
+  first violins, to the back row, and each still says how far below the loudest stop it
+  is. Every source has the same power, so the balance between the instruments is the
+  recording's own.
+- **The pictures.** `make_images.py` draws the cover (the hall from above with the
+  orchestra, the seat and the first reflections from the leader to it, the sections and
+  their numbers), the seating plan and the thumbnail with Pillow (`viz` extra); the
+  demo adds the stop's facts and a bar across the top with the tour, the movements'
+  numerals and the seats, the current stop bright.
+
+One seat and one movement at a time still work as before: `auralize.sh` maps each source
+to its track and calls `auralize` (the mix normalized to -1 dBFS), `make_images.py
+--seat stalls-middle --movement 1` draws the pictures and `make_video.sh` puts a
+scrolling spectrogram of the mix under the cover.
 
 **Recording.** Böhm, Ackermann and Weinzierl, *Beethoven, Symphony No. 8*, TU Berlin,
 <https://doi.org/10.14279/depositonce-6729.2>, CC BY 4.0: movements 1, 2 and 4, 61 mono
-tracks each (zips of 590 to 740 MB), downloaded by hand.
+tracks each (zips of 560 to 710 MB), downloaded by hand; `tracks` takes the 61 WAV files
+of each out of its zip.
 
 ## A choir and an organ in the church
 

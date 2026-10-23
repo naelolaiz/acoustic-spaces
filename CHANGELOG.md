@@ -598,6 +598,12 @@
   tour. Each downloads its recordings, writes its scene, mixes the piece at every
   listener with one gain for all and makes a video that tours them (with ffmpeg and
   Pillow).
+- `orchestra_demo.py`, in `orchestra`, tours the concert hall's four seats through the
+  Beethoven recording's three movements in one video: the seat changes at the
+  quietest moment near each share of a movement, the movements follow each other with a
+  pause, every seat's mix is shifted earlier by the time the sound takes to reach it,
+  and all stops keep one gain, so the hall's differences are heard as they are; the
+  cover says each stop's level against the loudest and carries a bar with the tour.
 - `lakeside_demo.py`, in `lakeside_concert`, plays the same song from the lakeside stage
   and mixes it in the audience, behind the stage, on a boat and in the village across the
   lake, in the evening's weather and in still air; its video plays the song at a bedroom

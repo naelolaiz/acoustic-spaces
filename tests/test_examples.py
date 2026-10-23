@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 from conftest import skip_without_extra
 
 from acoustic_spaces.audio import write_wav
@@ -370,11 +371,11 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     assert roles["subs"] == "mono" and roles["vocal_wedges"] == "singer"
     assert roles["drum_fill"] == "drummer" and roles["side_fill_left"] == "stage"
     assert all(roles[name] == name for name in demo.BAND)
-    for mix in (demo.SINGER_MIX, demo.DRUMMER_MIX, demo.STAGE_MIX, *demo.BAND_MIX.values()):
     # Every song has the stems the band and the monitor mixes lean on; the mixes name
     # no stem that none of the songs has.
     stems = {name: set(song["stems"]) for name, song in demo.SONGS.items()}
     assert all({"drums", "guitar", "keys", "vocal"} <= names for names in stems.values())
+    for mix in (demo.SINGER_MIX, demo.DRUMMER_MIX, demo.STAGE_MIX, *demo.BAND_MIX.values()):
         assert set(mix) <= set.union(*stems.values())
     for song in demo.SONGS.values():
         assert set(song) >= {"master", "stems", "bpm", "downbeat_s", "credit", "sources"}
@@ -429,6 +430,54 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
             bars = (start - first) / (demo.phrase_s(song) / 2)
             assert bars == pytest.approx(round(bars)), (name, start)
     assert len(tour) == len(demo.TOUR)  # Rubidium fits all twelve listeners
+
+
+def test_orchestra_demo_tour(tmp_path: Path) -> None:
+    """orchestra_demo.py names a track for every source of the orchestra, cuts between
+    seats at the quietest moment near each share's end, and plays the movements one
+    after the other with a pause, each seat's mix shifted earlier by its lag."""
+    demo = _script("orchestra", "orchestra_demo")
+    scene = yaml.safe_load(example_path("orchestra").read_text(encoding="utf-8"))
+    assert {source["name"] for source in scene["sources"]} == set(demo.TRACKS)
+    assert len(set(demo.TRACKS.values())) == len(demo.TRACKS)
+    assert {seat for _, seats in demo.TOUR for seat in seats} == set(demo.TITLES)
+    assert {seat["name"] for seat in scene["listeners"]} == set(demo.TITLES)
+    # A movement of 30 s, quiet from 14 to 16 s: two seats cut there, not at 15.
+    rate = 8000
+    t = np.arange(30 * rate) / rate
+    loud = np.where((t > 14.0) & (t < 16.0), 0.01, 0.5) * np.sin(2 * np.pi * 220 * t)
+    env = demo.envelope(loud, rate)
+    assert 14.0 <= demo.quiet_moment(env, 0.1, 15.0, demo.QUIET_S) <= 16.0
+    assert demo.quiet_moment(env, 0.1, 5.0, 2.0) == pytest.approx(5.0, abs=2.5)
+    work = tmp_path / "demo"
+    args = argparse.Namespace(
+        work=work, format="binaural", tour="1:stalls-middle,1:conductor,2:stalls-rear"
+    )
+    stereo = np.stack([loud, loud], axis=1)
+    for movement, seat in demo.stops_of(args):
+        length = (30 if movement == 1 else 10) * rate
+        demo.write(demo.mix_path(args, movement, seat), stereo[:length], rate)
+    stops = {
+        "1:stalls-middle": {"lag_s": 0.05, "length_s": 30.0},
+        "1:conductor": {"lag_s": 0.01, "length_s": 30.0},
+        "2:stalls-rear": {"lag_s": 0.08, "length_s": 10.0},
+    }
+    seats = {"rate": rate, "format": "binaural", "gain": 1.0, "stops": stops}
+    tour = demo.tour_of(args, seats)
+    assert [(s["movement"], s["seat"]) for s in tour] == [
+        (1, "stalls-middle"),
+        (1, "conductor"),
+        (2, "stalls-rear"),
+    ]
+    assert tour[0]["start"] == 0.0 and 14.0 <= tour[0]["stop"] <= 16.0
+    assert tour[1]["start"] == tour[0]["stop"] and tour[1]["stop"] == 30.0
+    assert tour[2]["at"] == pytest.approx(30.0 + demo.PAUSE_S) and tour[2]["start"] == 0.0
+    audio = demo.tour_audio(args, tour, seats)
+    assert len(audio) == round((30.0 + demo.PAUSE_S + 10.0) * rate)
+    pause = audio[int(30.5 * rate) : int(32.5 * rate)]
+    assert np.abs(pause).max() == 0.0  # between the movements
+    assert np.abs(audio[int(5 * rate) : int(6 * rate)]).max() > 0.4  # playing before the cut
+    assert np.abs(audio[int(20 * rate) : int(21 * rate)]).max() > 0.4  # and after it
 
 
 def test_stadium_pictures_show_the_crowd() -> None:

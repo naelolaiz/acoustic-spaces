@@ -158,7 +158,8 @@ def wall_hits(s, listener) -> list[tuple[float, float]]:
 
 
 class Pictures:
-    def __init__(self, scene: dict, seat: str, movement: int):
+    def __init__(self, scene: dict, seat: str, movement: int, facts: list[str] | None = None):
+        self.facts = facts or []  # lines under the seat on the cover (orchestra_demo.py)
         self.players = [
             (s["name"], s["position"], s.get("orientation", {})) for s in scene["sources"]
         ]
@@ -292,7 +293,11 @@ class Pictures:
             font("Regular", 26),
             MUTED,
         )
-        self.legend(draw, x, 390, 26, 34)
+        y = 372
+        for line in self.facts:
+            text(draw, (x, y), line, font("Regular", 24))
+            y += 34
+        self.legend(draw, x, y + 18, 26, 34)
         draw.rounded_rectangle([80, 885, 1840, 995], 14, PANEL)  # make_video.sh draws here
         text(draw, (80, 1018), CREDIT, font("Regular", 19), MUTED)
         text(draw, (80, 1046), TOOL, font("Regular", 17), FAINT)
@@ -335,7 +340,7 @@ class Pictures:
         text(draw, (80, 1030), CREDIT, font("Regular", 19), MUTED)
         return img
 
-    def thumbnail(self) -> Image.Image:
+    def thumbnail(self, note: str | None = None) -> Image.Image:
         img = Image.new("RGBA", (1280, 720), BG)
         self.hall(img, Plan(500, 172, 23.5), 5, labels=False)
         draw = ImageDraw.Draw(img)
@@ -348,7 +353,7 @@ class Pictures:
         )
         text(draw, (74, 350), "BINAURAL", pill, BG, "lm")
         text(draw, (50, 410), "use headphones", font("SemiBold", 34), LISTENER)
-        tracks = f"{len(self.players)} anechoic tracks · simulated room"
+        tracks = note or f"{len(self.players)} anechoic tracks · simulated room"
         text(draw, (50, 655), tracks, font("Medium", 28), MUTED)
         return img
 
