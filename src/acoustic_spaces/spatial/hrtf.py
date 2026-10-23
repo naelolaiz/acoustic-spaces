@@ -24,8 +24,11 @@ import numpy as np
 from acoustic_spaces._extras import install_hint
 from acoustic_spaces.spatial.directions import fibonacci_sphere, from_angles
 
-#: A response's onset: its first sample within this many dB of its peak.
-_ONSET_DB = -20.0
+#: Finding the onsets: how many times finer than a sample the cross-correlation with the
+#: minimum-phase responses is sampled, and the floor of their magnitudes (below the
+#: peak) for the minimum phase.
+_ONSET_STEPS = 8
+_FLOOR_DB = -100.0
 #: Directions interpolated in one go, and directions times triangles searched in one go
 #: (memory).
 _CHUNK = 256
@@ -60,8 +63,9 @@ class HRTF:
         return np.argmax(v @ self.directions.T, axis=1)
 
     def onsets(self) -> np.ndarray:
-        """(m, 2) onset of each response (samples, fractions included): where it first
-        rises to within 20 dB of its peak."""
+        """(m, 2) onset of each response (samples, fractions included): the lag at which
+        it best matches its minimum-phase version, which starts at once (see
+        :func:`_onsets`)."""
         return self._alignment()[0]
 
     def _alignment(self) -> tuple[np.ndarray, np.ndarray]:
@@ -69,19 +73,7 @@ class HRTF:
         there, on an FFT twice the responses long. The samples before an onset wrap
         round to the end of the FFT, so delaying the response again brings them back."""
         if self._aligned is None:
-            magnitude = np.abs(self.hrir)
-            threshold = magnitude.max(axis=-1, keepdims=True) * 10.0 ** (_ONSET_DB / 20.0)
-            first = np.argmax(magnitude >= threshold, axis=-1)
-            # Between the sample before the crossing and the crossing, linearly.
-            after = np.take_along_axis(magnitude, first[..., None], axis=-1)[..., 0]
-            before = np.take_along_axis(magnitude, np.maximum(first - 1, 0)[..., None], -1)
-            rise = after - before[..., 0]
-            fraction = np.where(
-                (first > 0) & (rise > 0),
-                (after - threshold[..., 0]) / np.where(rise > 0, rise, 1),
-                0,
-            )
-            onsets = first - fraction
+            onsets = _onsets(self.hrir)
             n_fft = 2 * self.taps
             spectra = np.fft.rfft(self.hrir, n_fft, axis=-1)
             spectra *= np.exp(2j * np.pi * np.fft.rfftfreq(n_fft) * onsets[..., None])
@@ -236,6 +228,40 @@ def spherical_head(
         phase = np.exp(-1j * omega * (lead + delay[:, None]))
         hrir[:, ear] = np.fft.irfft(shadow * phase, taps, axis=-1)
     return HRTF(grid, hrir, float(sample_rate), "spherical head")
+
+
+def _onsets(hrir: np.ndarray) -> np.ndarray:
+    """(m, 2) where each of the responses (m, 2, taps) starts (samples, fractions
+    included): the lag of the peak of its cross-correlation with its minimum-phase
+    version (from the folded real cepstrum), which has the same magnitude and starts at
+    once. Unlike the first sample near the peak, this holds for a pulse delayed by a
+    fraction of a sample, whose ringing before it rises with the fraction: responses
+    aligned at a threshold of it come apart by a sample or two, and mixing them cancels
+    the high frequencies (up to 13 dB at 8 kHz for the spherical head)."""
+    taps = hrir.shape[-1]
+    n = 1 << int(math.ceil(math.log2(4 * taps)))
+    spectra = np.fft.rfft(hrir, n, axis=-1)
+    magnitude = np.abs(spectra)
+    floor = magnitude.max(axis=-1, keepdims=True) * 10.0 ** (_FLOOR_DB / 20.0)
+    cepstrum = np.fft.irfft(np.log(np.maximum(magnitude, np.maximum(floor, 1e-300))), n)
+    fold = np.zeros(n)
+    fold[0], fold[1 : n // 2], fold[n // 2] = 1.0, 2.0, 1.0
+    minimum = np.exp(np.fft.rfft(cepstrum * fold, n))
+    fine = n * _ONSET_STEPS
+    onsets = np.empty(hrir.shape[:-1])
+    flat = onsets.reshape(-1)
+    cross = (spectra * np.conj(minimum)).reshape(-1, spectra.shape[-1])
+    for start in range(0, len(cross), _CHUNK):
+        lagged = np.fft.irfft(cross[start : start + _CHUNK], fine, axis=-1)
+        # Lags from -taps to the response's length, then the peak to a fraction of a step.
+        lagged = np.roll(lagged, taps * _ONSET_STEPS, axis=-1)[:, : 2 * taps * _ONSET_STEPS]
+        peak = np.clip(np.argmax(lagged, axis=-1), 1, lagged.shape[-1] - 2)
+        rows = np.arange(len(lagged))
+        a, b, c = lagged[rows, peak - 1], lagged[rows, peak], lagged[rows, peak + 1]
+        bend = a - 2.0 * b + c
+        shift = np.where(bend < 0.0, 0.5 * (a - c) / np.where(bend < 0.0, bend, -1.0), 0.0)
+        flat[start : start + _CHUNK] = (peak + shift) / _ONSET_STEPS - taps
+    return onsets
 
 
 def _delayed(ir: np.ndarray, delay: np.ndarray) -> np.ndarray:

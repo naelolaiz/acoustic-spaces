@@ -635,6 +635,18 @@
 
 **Fixes**
 
+- Binaural renders lost treble: at 8 kHz up to 13.6 dB from some directions (the
+  spherical head's ear facing a source straight ahead), 2.7 dB on average over all
+  directions, and more the higher the band. An HRTF between the measured directions
+  mixes the responses round it aligned at their onsets, and an onset was the first
+  sample within 20 dB of the peak: a response delayed by a fraction of a sample rings
+  before its peak, more the nearer the fraction is to a half, so neighbouring onsets
+  came out a sample or two apart and the mix cancelled the high frequencies. The onset
+  is now the lag at which a response best matches its minimum-phase version (the same
+  magnitude, starting at once), found to a fraction of a sample: the mix keeps the
+  measured responses' spectrum within 1 dB. Mono, Ambisonics and loudspeaker outputs
+  were not affected. Every binaural output changes; demo videos made before this sound
+  duller than they should.
 - A coverage map in the 3D view (and in `show`) hid the sources and listeners: they
   stand at listening height, half under its tiles. The map is now see-through.
 - A reflection right where the sound came from, on a surface over about 100 m across,

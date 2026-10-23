@@ -39,9 +39,12 @@ The statistical tail arrives evenly from all around.
   VBAP, and the responses at the corners of the triangle a direction falls in are
   aligned at their onsets, mixed with its barycentric weights and delayed by the same
   mix of their onsets, so the interaural time difference follows the direction smoothly
-  even with a coarse set. Without a SOFA file it uses Brown and Duda's spherical head
-  model: interaural time and level differences, but no pinna cues. `read_sofa` reads
-  SimpleFreeFieldHRIR files, which most HRTF databases (for example those listed by
+  even with a coarse set. A response's onset is the lag at which it best matches its
+  minimum-phase version, to a fraction of a sample, so responses delayed by fractions
+  of a sample still add in phase and the mix keeps their spectrum (within 1 dB).
+  Without a SOFA file it uses Brown and Duda's spherical head model: interaural time
+  and level differences, but no pinna cues. `read_sofa` reads SimpleFreeFieldHRIR
+  files, which most HRTF databases (for example those listed by
   [sofaconventions.org](https://www.sofaconventions.org)) provide; it needs h5py.
 
 Levels match the mono response: an arrival from straight ahead has the same height in
