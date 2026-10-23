@@ -23,7 +23,8 @@ Python environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
 or `python stadium_demo.py all` once the simulation is done. Everything goes to
 ./demo (--work); a second song goes best to a folder of its own (`--song francium
---work demo_francium`). Use headphones.
+--work demo_francium`). Use headphones; `--hrtf me.sofa` on every step and on `simulate`
+plays through your own or measured HRTFs instead of a spherical head.
 
 The impulse responses `simulate` writes carry each source's feed (gain_db, eq_db,
 delay_ms) but are per unit of sound power. `feeds` scales each loudspeaker's signal by
@@ -487,14 +488,48 @@ def scene_of(args) -> dict:
 
 
 def simulate_command(args) -> str:
-    return f"acoustic-spaces simulate {args.scene} --out {args.results} --output {args.format}"
+    """The simulation the demo mixes from: the scene, the mixes' output and, with
+    ``--hrtf``, the SOFA file its binaural responses go through."""
+    command = f"acoustic-spaces simulate {args.scene} --out {args.results} --output {args.format}"
+    return command + hrtf_option(args)
+
+
+def hrtf_option(args) -> str:
+    """`` --hrtf FILE`` for the simulate command when ``--hrtf`` names a SOFA file."""
+    hrtf = getattr(args, "hrtf", None)
+    return f" --hrtf {hrtf}" if hrtf else ""
+
+
+def output_label(args) -> str:
+    """The output ``render`` asks auralize for: ``--format``, or with ``--hrtf`` the
+    binaural output simulated through that file (``binaural-<its name>``), so that mixes
+    through a spherical head cannot pass for ones through the listener's own ears."""
+    hrtf = getattr(args, "hrtf", None)
+    if hrtf and args.format == "binaural":
+        return f"binaural-{Path(hrtf).stem}"
+    return args.format
+
+
+def check_hrtf(args, entries: list[dict]) -> None:
+    """With ``--hrtf``, stop with the simulate command to run unless the responses were
+    made through that file."""
+    label = output_label(args)
+    if label == args.format:
+        return
+    labels = {o["format"] for e in entries for o in e.get("outputs") or [{"format": "mono"}]}
+    if label not in labels:
+        raise SystemExit(
+            f"error: {args.results} has no responses through {args.hrtf}"
+            f" ({', '.join(sorted(labels))}); run first:\n  {simulate_command(args)}"
+        )
 
 
 def responses_of(args) -> list[dict]:
     path = args.results / "parameters.json"
     if not path.exists():
+        first = "" if args.scene.exists() else "  python stadium_demo.py band\n"
         raise SystemExit(
-            f"error: no simulation in {args.results}; run first:\n  {simulate_command(args)}"
+            f"error: no simulation in {args.results}; run first:\n{first}  {simulate_command(args)}"
         )
     return json.loads(path.read_text(encoding="utf-8"))["responses"]
 
@@ -623,7 +658,9 @@ def render(args) -> None:
 
     table = json.loads((args.work / "feeds" / "feeds.json").read_text(encoding="utf-8"))
     rate = table["rate"]
-    listeners = sorted({e["listener"] for e in responses_of(args)})
+    entries = responses_of(args)
+    check_hrtf(args, entries)
+    listeners = sorted({e["listener"] for e in entries})
     if args.listeners:
         listeners = [name for name in args.listeners.split(",")]
     pairs = [f"{name}={args.work / 'feeds' / f'{name}.wav'}" for name in table["sources"]]
@@ -633,7 +670,7 @@ def render(args) -> None:
         out = seats / f"{listener}.{args.format}.wav"
         # The feeds carry each source's level_db already: auralize is not to apply it.
         command = ["auralize", str(args.results), *pairs, "--listener", listener]
-        code = cli(command + ["--format", args.format, "--out", str(out), "--equal-power"])
+        code = cli(command + ["--format", output_label(args), "--out", str(out), "--equal-power"])
         if code:
             raise SystemExit(code)
         peaks[listener] = float(np.abs(read(out)[0]).max())
@@ -824,6 +861,12 @@ def main() -> None:
     parser.add_argument(
         "--format", default="binaural", help="output format the mixes take (default binaural)"
     )
+    parser.add_argument(
+        "--hrtf",
+        type=Path,
+        help="binaural mixes through this SOFA file of HRTFs, your own or measured, instead of "
+        "a spherical head model (the simulate command the script prints takes it too)",
+    )
     parser.add_argument("--listeners", help="render: only these listeners, comma separated")
     parser.add_argument(
         "--tour",
@@ -833,6 +876,8 @@ def main() -> None:
         "--no-mp4", action="store_true", help="video: write the audio and stills only"
     )
     args = parser.parse_args()
+    if args.hrtf and args.format != "binaural":
+        parser.error("--hrtf is for binaural mixes")
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     steps = ["music", "feeds", "render", "video"] if args.step == "all" else [args.step]
     for step in steps:

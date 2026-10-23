@@ -9,9 +9,10 @@
 # top octave 4 dB up for the air it crosses, the subwoofers 2 dB under them, the front
 # fills' low end rolled off. Listeners stand where the singer, the drummer and a
 # guitarist play, and at the mix position 37 m out, in a standing crowd (`audience:
-# true`). The players stand a few metres from the arrays, much nearer than their
-# far-field patterns hold, so every array adds up its boxes one by one (`near_field:
-# true`).
+# true`) that scatters as a measured theatre audience does, little at 125 Hz and most
+# from 1 kHz up (`scattering: theatre_audience`). The players stand a few metres from
+# the arrays, much nearer than their far-field patterns hold, so every array adds up its
+# boxes one by one (`near_field: true`).
 #
 #   python align.py
 #   python feedback.py
@@ -44,7 +45,7 @@ materials:
     impedance: grass
   standing_crowd:
     preset: audience_2_m2
-    scattering: 0.7
+    scattering: theatre_audience
     audience: true
   stage:
     preset: wooden_lining

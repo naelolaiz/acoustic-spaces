@@ -23,12 +23,15 @@
 # mix, a drum fill the drummer's and side fills the rest of the band's. Listeners stand
 # where the singer, the drummer and a guitarist play, at the front, the middle, the side
 # and the back of the pitch, and low, high and far on the stands. The crowd standing on
-# the pitch and the one seated in the stands take up the sound and scatter it
-# (`audience: true`). Many listeners stand nearer the arrays than their far-field
-# patterns hold, so every array adds up its boxes one by one (`near_field: true`). The
-# sources and listeners sit in groups: the PA's mains, subwoofers, fills and delays, the
-# monitors, the stage, and the audience standing and seated. The editor's scene tree
-# shows or hides each group, and its tick uses it in simulations or leaves it out.
+# the pitch and the one seated in the stands take up the sound (`audience: true`) and
+# scatter it as a measured theatre audience does, little at 125 Hz and most from 1 kHz
+# up (`scattering: theatre_audience`); the rows themselves stay out of the model, as
+# surfaces smaller than the wavelength would only mirror sound falsely. Many listeners
+# stand nearer the arrays than their far-field patterns hold, so every array adds up its
+# boxes one by one (`near_field: true`). The sources and listeners sit in groups: the
+# PA's mains, subwoofers, fills and delays, the monitors, the stage, and the audience
+# standing and seated. The editor's scene tree shows or hides each group, and its tick
+# uses it in simulations or leaves it out.
 #
 #   python align.py
 #   python near_field.py
@@ -60,11 +63,11 @@ materials:
     impedance: grass
   standing_crowd:
     preset: audience_2_m2
-    scattering: 0.7
+    scattering: theatre_audience
     audience: true
   seated_crowd:
     preset: audience_1.5_m2
-    scattering: 0.7
+    scattering: theatre_audience
     audience: true
   empty_seats:
     preset: chairs_unoccupied_plastic
