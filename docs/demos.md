@@ -211,7 +211,7 @@ audio and stills only.
   audience) playing the vocal, and an amplifier behind the guitarist (112 dB, cardioid,
   tilted up) playing the guitar, each from its own stem. On stage and near it the players
   are heard from where they stand; further out the sound system covers them.
-- **Who plays what.** The sound system plays the stereo reference mix: the arrays, fills,
+- **Who plays what.** The sound system plays the song's stereo master: the arrays, fills,
   towers and delays on the audience's left (-y) take the left channel, those on its right
   (+y; the scene's `*_left`, named from the stage) the right one, the subwoofers both.
   The monitors play mixes of the stems: the singer's wedges the vocal over the backing
@@ -305,7 +305,7 @@ makes is heard.
 
 ```sh
 acoustic-spaces examples --copy . lakeside_concert && cd lakeside_concert
-python lakeside_demo.py music    # the song (WAV, 56 MB), one channel for each stack
+python lakeside_demo.py music    # the song (WAV, 56 MB), a signal for each loudspeaker
 python lakeside_demo.py scenes   # scene_demo.yaml, and scene_still.yaml in still air
 acoustic-spaces simulate scene_demo.yaml --out results_demo --output binaural    # ~30 s
 acoustic-spaces simulate scene_still.yaml --out results_still --output binaural  # ~15 s
@@ -319,24 +319,35 @@ Options: `--song great_british_summer` or `potassium` for `music` (below),
 `--format` for another output the simulation wrote, `--no-mp4` for the audio and stills
 only.
 
-- **The stage.** `scenes` turns the example's single source (120 dB sound power) into two
-  stacks 6 m up either side of the stage, 117 dB each and radiating every way alike as
-  the example's does, playing the song's left and right channels; adds a listener 140 m
-  behind the stage, upwind; and lets the responses run 3.5 s, as the far shore hears the
-  stage 1.6 s late.
+- **The sound system.** `scenes` replaces the example's single source (120 dB sound
+  power) with a system as a lawn concert hangs it: two line arrays of eight boxes
+  (`lake_array.yaml`, a generic box's pattern in `box.csv`, both made with the stadium
+  example's `make_model.py`), 6.5 m up either side of the stage, 124 dB each, aimed down
+  the lawn and, box by box, from 5° down at the last rows, where the lawn meets the water,
+  to 36° at the front rows, each added up box by box (`near_field`), playing the song's
+  left and right channels; and a block of four cardioid subwoofers (`sub_array.yaml`,
+  130 dB) on the ground at the stage front, 2 m nearer the audience and delayed 6 ms so
+  that both arrive together there, playing both channels, rolled off above 125 Hz. The
+  system is tuned at the audience as a system engineer tunes it (`eq_db`: the arrays' low
+  mids up, their top octave up for the air): at 30 m every octave from 250 Hz to 4 kHz is
+  within 1 dB of 1 kHz, 8 kHz 1.5 dB down and 63 and 125 Hz 2 dB up. `scenes` also adds
+  a listener 140 m behind the stage, upwind, and lets the responses run 3.5 s, as the far
+  shore hears the stage 1.6 s late.
 - **The weather** is the example's: a breeze from the park out over the lake, 2.5 m/s
   10 m up, and two weather zones, the lake's (air 17 °C at the water, a degree warmer
   every 10 m up, and a 3.5 m/s breeze) and the village's (a 1 m/s breeze among the
   houses). The breeze and the cool air bend the sound down to the water, which gives it
   back almost whole. `scene_still.yaml` is the same scene with no atmosphere.
-- **What it gives.** At the bedroom window the evening's weather makes the song 4.8 dB(A)
-  louder than still air would, in the garden 3.6 dB; behind the stage, upwind, it is
-  4.3 dB quieter, and on the boat 1 dB quieter.
+- **What it gives.** At the bedroom window the evening's weather makes the song 2.3 dB(A)
+  louder than still air would, in the garden 4.2 dB; behind the stage, upwind, it is
+  0.6 dB quieter, and on the boat 1 dB quieter. (With the sound system the example's
+  single source was, radiating every way alike, the window gained 4.8 dB: the arrays send
+  less of the sound up, where the weather bends it down to the water.)
 - **How loud.** From the audience to the far shore the sound drops by 20 to 25 dB(A),
   too much to hear the far places in a video, so each stop is turned up to the
   audience's loudness (A-weighted, gated) and its caption says how much quieter the place
   really is. The window in still air keeps the gain of the window in the evening's
-  weather, so the 4.8 dB is heard.
+  weather, so the 2.3 dB is heard.
 - **The cuts.** Each place's mix is shifted earlier by the time the loudest sound takes
   to reach it (the peak of the energy of its responses: 0.09 s in the audience, 1.65 s
   at the window), so that the beat runs on across each 1 s crossfade, every 8 bars.
@@ -347,8 +358,8 @@ only.
   by the script for the picture; the simulation traces its own) and masts with the wind's
   profile; in still air the rays go straight.
 
-**Limits.** The stacks are points that radiate every way alike, as in the example, not
-line arrays; there is no crowd, no wind noise and no other sound of the evening. The
+**Limits.** The arrays are a generic box's pattern, not a product's measured one; there
+is no crowd, no wind noise and no other sound of the evening. The
 weather holds still: the example has no turbulence, so the sound does not come and go
 with the gusts as it does across a real lake. The song is a finished studio mix, played
 as it is. Binaural is through the spherical head model.

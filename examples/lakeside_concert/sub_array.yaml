@@ -1,0 +1,8 @@
+# Written with the stadium example's make_model.py (its _subs): a block of four
+# cardioid subwoofers, two wide and two high, on the ground at the stage front.
+element: cardioid
+elements:
+- position: [0.0, -0.35, -0.3]
+- position: [0.0, 0.35, -0.3]
+- position: [0.0, -0.35, 0.3]
+- position: [0.0, 0.35, 0.3]

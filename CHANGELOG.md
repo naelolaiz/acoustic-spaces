@@ -605,8 +605,10 @@
   and all stops keep one gain, so the hall's differences are heard as they are; the
   cover says each stop's level against the loudest and carries a bar with the tour.
 - `lakeside_demo.py`, in `lakeside_concert`, plays the same song from the lakeside stage
-  and mixes it in the audience, behind the stage, on a boat and in the village across the
-  lake, in the evening's weather and in still air; its video plays the song at a bedroom
+  through a sound system as a lawn concert hangs it (two line arrays of eight boxes and
+  four cardioid subwoofers, aimed at the lawn and tuned at the audience) and mixes it in
+  the audience, behind the stage, on a boat and in the village across the lake, in the
+  evening's weather and in still air; its video plays the song at a bedroom
   window in the evening's weather, in still air and in the evening's again, each stop
   turned up to the audience's loudness with its real level in the caption, over a slice
   across the lake with the sound's rays bent by the weather.

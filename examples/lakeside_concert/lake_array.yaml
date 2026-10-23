@@ -1,0 +1,22 @@
+# Written with the stadium example's make_model.py (its _line_array and box.csv): a
+# line array of 8 boxes for the lawn, the top box aimed 5 degrees down at the last
+# rows, where the lawn meets the water, and the splays growing to 7.5 degrees, so the
+# bottom one aims 36 degrees down at the front rows.
+element: {file: box.csv}
+elements:
+- position: [0.2659, 0.0, 1.4369]
+  orientation: {pitch: -5.0}
+- position: [0.2293, 0.0, 1.0185]
+  orientation: {pitch: -6.5}
+- position: [0.1817, 0.0, 0.6012]
+  orientation: {pitch: -9.0}
+- position: [0.116, 0.0, 0.1864]
+  orientation: {pitch: -12.5}
+- position: [0.0251, 0.0, -0.2237]
+  orientation: {pitch: -17.0}
+- position: [-0.0977, 0.0, -0.6253]
+  orientation: {pitch: -22.5}
+- position: [-0.2584, 0.0, -1.0133]
+  orientation: {pitch: -29.0}
+- position: [-0.462, 0.0, -1.3807]
+  orientation: {pitch: -36.5}

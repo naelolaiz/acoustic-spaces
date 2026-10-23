@@ -1,7 +1,8 @@
 """A song played on the lakeside concert example's stage, heard in the audience, behind
 the stage, from a boat and in the village across the lake, and a video that tours them.
 
-The stage's loudspeakers, a stack each side, play a stereo recording (--song): by default
+The stage's sound system, two line arrays and subwoofers, plays a stereo recording
+(--song): by default
 "Spicy Funk Cake" by the Rhythmussportgruppe, a nine-piece funk band, recorded for the
 German Acoustical Society (DEGA) at Hochschule Düsseldorf and published under CC BY 4.0
 (https://doi.org/10.5281/zenodo.3601032). At a bedroom window across the
@@ -11,7 +12,7 @@ Run it from the folder of the lakeside concert example (`acoustic-spaces example
 --copy . lakeside_concert && cd lakeside_concert`), in the Python environment
 acoustic-spaces is installed in, with ffmpeg on the PATH:
 
-    python lakeside_demo.py music    # download the song, one channel per stack
+    python lakeside_demo.py music    # download the song, a signal per loudspeaker
     python lakeside_demo.py scenes   # scene_demo.yaml, and scene_still.yaml in still air
     acoustic-spaces simulate scene_demo.yaml --out results_demo --output binaural
     acoustic-spaces simulate scene_still.yaml --out results_still --output binaural
@@ -77,12 +78,45 @@ SONGS = {
 #: The rate the songs are brought to, that of the simulation's responses.
 RATE = 48000
 
-#: The stage's sound system: the example's 120 dB source as two stacks, as the example's
-#: radiating alike every way, on the audience's left (-y: the audience looks towards
-#: -x) and right.
-STACKS = {
-    "pa_left": {"position": [0.0, -6.0, 6.0], "level_db": 117.0, "channel": 0},
-    "pa_right": {"position": [0.0, 6.0, 6.0], "level_db": 117.0, "channel": 1},
+#: The stage's sound system, as a lawn concert hangs it: two line arrays of eight boxes
+#: (lake_array.yaml, the box's own pattern in box.csv, both made with the stadium
+#: example's make_model.py) flown 6.5 m up on the audience's left (-y: the audience looks
+#: towards -x) and right, aimed straight down the lawn and, box by box, from 5 degrees
+#: down at the last rows, where the lawn meets the water, to 36 at the front rows; and
+#: a block of four cardioid subwoofers
+#: on the ground under the middle of the stage front, 2 m nearer the audience than the
+#: arrays and delayed by as much, so that both arrive together there. Levels are sound
+#: power (dB re 1 pW); the arrays play the song's channels, the subwoofers both. The
+#: system is tuned at the audience, as a system engineer tunes it (eq_db per octave band,
+#: 63 Hz to 8 kHz): the subwoofers rolled off above 125 Hz and 3 dB over the arrays
+#: together, the arrays' low mids up and their top octave up by what 30 m of air takes,
+#: so that at the audience every octave from 250 Hz to 4 kHz is within 1 dB of 1 kHz,
+#: 8 kHz 1.5 dB down and the two lowest 2 dB up.
+SYSTEM = {
+    "main_left": {
+        "position": [0.0, -6.0, 6.5],
+        "orientation": {"yaw": 0.0},
+        "level_db": 124.0,
+        "eq_db": [0, 0, 5, 0, 0, 1, 1, 2],
+        "directivity": {"file": "lake_array.yaml", "near_field": True},
+        "channel": 0,
+    },
+    "main_right": {
+        "position": [0.0, 6.0, 6.5],
+        "orientation": {"yaw": 0.0},
+        "level_db": 124.0,
+        "eq_db": [0, 0, 5, 0, 0, 1, 1, 2],
+        "directivity": {"file": "lake_array.yaml", "near_field": True},
+        "channel": 1,
+    },
+    "subs": {
+        "position": [1.0, 0.0, 0.6],
+        "level_db": 130.0,
+        "eq_db": [0, 0, -18, -40, -40, -40, -40, -40],
+        "delay_ms": 6,
+        "directivity": {"file": "sub_array.yaml", "near_field": True},
+        "channel": "mono",
+    },
 }
 #: A listener behind the stage, as far upwind as the park reaches.
 UPWIND = {"name": "behind_stage", "position": [-140.0, 0.0, 1.5], "orientation": {"yaw": 0.0}}
@@ -230,7 +264,7 @@ def phrase_s(song: dict) -> float:
 
 def music(args) -> None:
     """Download ``--song`` (from a zip file, only its own member), bring it to 48 kHz with
-    ffmpeg, and write each of its channels for the stack that plays it. A song already
+    ffmpeg, and write what each loudspeaker plays (SYSTEM, "channel"). A song already
     in the folder is kept."""
     song = song_of(args)
     folder = args.work / "music"
@@ -254,14 +288,15 @@ def music(args) -> None:
         subprocess.run(command, check=True)
         print(f"wrote {wav}")
     x, rate = read(wav)
-    for name, stack in STACKS.items():
-        write(folder / f"{name}.wav", x[:, stack["channel"]], rate)
+    for name, source in SYSTEM.items():
+        channel = source["channel"]
+        write(folder / f"{name}.wav", x.mean(axis=1) if channel == "mono" else x[:, channel], rate)
     (folder / "song.json").write_text(json.dumps(song, indent=2) + "\n", encoding="utf-8")
-    print(f"wrote {', '.join(STACKS)} ({len(x) / rate:.0f} s of {args.song}) to {folder}")
+    print(f"wrote {', '.join(SYSTEM)} ({len(x) / rate:.0f} s of {args.song}) to {folder}")
 
 
 def played(args) -> dict:
-    """The song ``music`` last wrote the stacks' signals from."""
+    """The song ``music`` last wrote the loudspeakers' signals from."""
     path = args.work / "music" / "song.json"
     if not path.exists():
         raise SystemExit("error: no song yet; run first: python lakeside_demo.py music")
@@ -270,13 +305,14 @@ def played(args) -> dict:
 
 def scenes(args) -> None:
     """``--scene`` (scene_demo.yaml) from ``--from`` (scene.yaml), with the stage's
-    loudspeakers as two stacks, a listener behind the stage and responses long enough
-    for the far shore; and ``--still`` (scene_still.yaml), the same in still air."""
+    sound system (SYSTEM) in place of the example's one source, a listener behind the
+    stage and responses long enough for the far shore; and ``--still``
+    (scene_still.yaml), the same in still air."""
     scene = yaml.safe_load(args.source.read_text(encoding="utf-8"))
     scene["name"] = scene["name"] + " (demo)"
     scene["sources"] = [
-        {"name": name} | {k: v for k, v in stack.items() if k != "channel"}
-        for name, stack in STACKS.items()
+        {"name": name} | {k: v for k, v in source.items() if k != "channel"}
+        for name, source in SYSTEM.items()
     ]
     if UPWIND["name"] not in {item["name"] for item in scene["listeners"]}:
         scene["listeners"].append(dict(UPWIND))
@@ -284,8 +320,8 @@ def scenes(args) -> None:
     still = dict(scene, name=scene["name"].replace("(demo)", "(demo, still air)"))
     still.pop("atmosphere", None)
     for path, data, what in (
-        (args.scene, scene, "with two loudspeaker stacks"),
-        (args.still, still, "in still air, with two loudspeaker stacks"),
+        (args.scene, scene, "with its sound system"),
+        (args.still, still, "in still air, with its sound system"),
     ):
         path.write_text(
             f"# The lakeside concert example {what}, written by lakeside_demo.py.\n"
@@ -322,7 +358,7 @@ def responses_of(args, weather: str) -> list[dict]:
 
 def arrival_s(args, weather: str, listener: str) -> float:
     """When the loudest sound reaches ``listener`` (s): the peak, over 2 ms, of the
-    energy of its responses from both stacks."""
+    energy of its responses from every loudspeaker."""
     total, rate = np.zeros(0), 1
     results = weathers(args)[weather][1]
     for entry in responses_of(args, weather):
@@ -343,7 +379,7 @@ def render(args) -> None:
     from acoustic_spaces.cli import main as cli
 
     music_dir = args.work / "music"
-    pairs = [f"{name}={music_dir / f'{name}.wav'}" for name in STACKS]
+    pairs = [f"{name}={music_dir / f'{name}.wav'}" for name in SYSTEM]
     seats = args.work / "seats"
     peaks, rate = {}, 0
     for weather in weathers(args):

@@ -513,7 +513,7 @@ def test_stadium_pictures_show_the_crowd() -> None:
 
 
 def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
-    """lakeside_demo.py plays the lake scene through two stacks, adds a listener upwind
+    """lakeside_demo.py plays the lake scene through its sound system, adds a listener upwind
     and writes the same scene in still air; the tour moves on phrase boundaries, every
     stop is turned up to the audience's loudness, and a place in still air keeps the
     gain of the same place in the evening's weather, so the difference is heard."""
@@ -531,7 +531,7 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     evening, still = Room.from_yaml(args.scene), Room.from_yaml(args.still)
     for room in (evening, still):
         assert room.problems() == []
-        assert [source.name for source in room.scene.sources] == list(demo.STACKS)
+        assert [source.name for source in room.scene.sources] == list(demo.SYSTEM)
         names = [listener.name for listener in room.scene.listeners]
         assert names.count(demo.UPWIND["name"]) == 1 and set(demo.TITLES) == set(names)
         assert room.scene.simulation.ir_length_s == demo.IR_LENGTH_S

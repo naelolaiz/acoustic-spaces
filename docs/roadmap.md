@@ -238,11 +238,12 @@ Examples:
   tuned at the mix position, as a system engineer tunes it; and the editor's examples
   in groups.
 - [x] Demos with their scripts: a choir and an organ in the church, a band with its
-  sound system in the stadium and its song carried across a lake, in the evening's
-  weather and in still air, besides the orchestra in the concert hall; each downloads
-  its recordings, mixes them at every listener and makes a video that tours them. The
-  stadium's pictures show where the crowd stands and sits, the empty seats, and how
-  much each takes up.
+  sound system in the stadium (one of three songs) and a song carried across a lake by
+  a lawn concert's line arrays and subwoofers, in the evening's weather and in still
+  air, and the orchestra in the concert hall, its four seats toured through three
+  movements; each downloads its recordings, mixes them at every listener and makes a
+  video that tours them. The stadium's pictures show where the crowd stands and sits,
+  the empty seats, and how much each takes up.
 
 Editor:
 
