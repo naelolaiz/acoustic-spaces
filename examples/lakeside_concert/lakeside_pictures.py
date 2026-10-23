@@ -14,8 +14,10 @@ in the plane of the wind; the sound heard is the simulation's.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import numpy as np
+import yaml
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 BG = (13, 17, 28)
@@ -89,6 +91,18 @@ def arrow(draw, start, direction, length: float, head: float, colour, width: int
         ],
         fill=colour,
     )
+
+
+def cone(draw, apex, direction, length: float, half_angle: float, rgba) -> None:
+    """A fan from ``apex`` along the unit vector ``direction``, ``half_angle`` degrees to
+    either side: where a loudspeaker aims."""
+    (x, y), (dx, dy) = apex, direction
+    aim = math.atan2(dy, dx)
+    rim = [
+        (x + length * math.cos(aim + math.radians(a)), y + length * math.sin(aim + math.radians(a)))
+        for a in range(-int(half_angle), int(half_angle) + 1, 4)
+    ]
+    draw.polygon([(x, y), *rim], fill=rgba)
 
 
 def glow(img: Image.Image, shapes, blur: float) -> None:
@@ -237,7 +251,9 @@ def rays(weather: Weather, start, extent, sky, water, step: float = 1.0):
 
 
 class Pictures:
-    def __init__(self, scenes: dict, seats, tour, titles, gains, credit: str):
+    def __init__(
+        self, scenes: dict, seats, tour, titles, gains, credit: str, folder: Path | None = None
+    ):
         self.scenes, self.seats, self.tour, self.titles, self.gains = (
             scenes,
             seats,
@@ -246,6 +262,8 @@ class Pictures:
             gains,
         )
         self.credit = credit
+        #: Where the scene's files (the arrays' directivity) are.
+        self.folder = Path(folder) if folder is not None else Path(".")
         scene = scenes["evening"]
         ground = scene["geometry"]["ground"]
         (x0, y0), (x1, y1) = ground["extent"]
@@ -260,7 +278,10 @@ class Pictures:
         self.sources = scene["sources"]
         self.listeners = {item["name"]: item for item in scene["listeners"]}
         self.weather = {w: Weather(s) for w, s in scenes.items()}
-        stage = np.mean([s["position"] for s in self.sources], axis=0)
+        # The rays and the distances start from the flown loudspeakers (the arrays), or
+        # from every source when none is flown.
+        flown = [s for s in self.sources if s["position"][2] > 2.0] or self.sources
+        stage = np.mean([s["position"] for s in flown], axis=0)
         self.stage = stage
         self.rays = {
             w: rays(
@@ -370,14 +391,57 @@ class Pictures:
             draw.rounded_rectangle([px - half, py - 13, px + half, py + 13], 13, BG + (200,))
             text(draw, (px, py), words, small, WIND, "mm")
 
+    @staticmethod
+    def is_sub(source: dict) -> bool:
+        """A subwoofer: on the ground, under the flown arrays."""
+        return source["position"][2] < 2.0
+
     def stage_marks(self, img, plan: Plan) -> None:
+        """The stage and its loudspeakers: a dot each, the arrays with a wide cone the
+        way they aim (their boxes cover 90 degrees across), the subwoofers a narrower one
+        (cardioids), as long as the plan's scale allows."""
         draw = ImageDraw.Draw(img, "RGBA")
         draw.rectangle([*plan(-10, 12), *plan(0, -12)], fill=STAGE, outline=PA)
+        cones = ImageDraw.Draw(img, "RGBA")
+        for source in self.sources:
+            x, y = source["position"][:2]
+            px, py = plan(x, y)
+            fx, fy = self.facing(source)
+            qx, qy = plan(x + fx, y + fy)
+            direction = (qx - px, qy - py)
+            if self.is_sub(source):
+                cone(cones, (px, py), direction, 16 * plan.s, 32.0, PA + (70,))
+            else:
+                cone(cones, (px, py), direction, 30 * plan.s, 45.0, PA + (70,))
         for source in self.sources:
             px, py = plan(*source["position"][:2])
-            glow(img, [(px, py, 12, PA + (120,))], 5)
+            r = 4 if self.is_sub(source) else 6
+            glow(img, [(px, py, 2 * r, PA + (120,))], 5)
             draw = ImageDraw.Draw(img, "RGBA")
-            draw.ellipse([px - 6, py - 6, px + 6, py + 6], fill=PA, outline=BG)
+            draw.ellipse([px - r, py - r, px + r, py + r], fill=PA, outline=BG)
+
+    def aims(self, source: dict) -> tuple[float, float]:
+        """The pitch (degrees, down negative) of an array's top and bottom boxes, from
+        its directivity file; a source without one aims level."""
+        elements = self.array_of(source).get("elements", [])
+        pitches = [e.get("orientation", {}).get("pitch", 0.0) for e in elements]
+        return (max(pitches), min(pitches)) if pitches else (0.0, 0.0)
+
+    def hang(self, source: dict) -> float:
+        """How tall an array hangs (m): the spread of its elements' heights."""
+        elements = self.array_of(source).get("elements", [])
+        heights = [e.get("position", [0, 0, 0])[2] for e in elements]
+        return max(heights) - min(heights) if len(heights) > 1 else 0.0
+
+    def array_of(self, source: dict) -> dict:
+        """The array a source's directivity file describes, {} without one."""
+        spec = source.get("directivity")
+        path = spec.get("file") if isinstance(spec, dict) else None
+        if not path:
+            return {}
+        with open(self.folder / path, encoding="utf-8") as handle:
+            loaded = yaml.safe_load(handle)
+        return loaded if isinstance(loaded, dict) else {}
 
     @staticmethod
     def facing(item: dict) -> tuple[float, float]:
@@ -527,12 +591,27 @@ class Pictures:
             font("Medium", 14),
             FAINT,
         )
-        # The stage and the listeners.
-        sx, sz = self.stage[0], self.stage[2]
+        # The stage and its loudspeakers: each array hung from the roof, its boxes'
+        # aims from the top one's to the bottom one's as a wedge to the lawn; the
+        # subwoofers on the ground. Then the listeners.
         draw.rectangle([*cut(-10, 1.5), *cut(0, 0.0)], fill=STAGE)
-        px, py = cut(sx, sz)
-        draw.line([cut(sx, 0.0), (px, py)], fill=PA, width=3)
-        draw.ellipse([px - 6, py - 6, px + 6, py + 6], fill=PA, outline=BG, width=2)
+        for source in self.sources:
+            x, _y, z = source["position"]
+            if self.is_sub(source):
+                draw.rectangle([*cut(x - 0.6, z + 0.6), *cut(x + 0.6, 0.0)], fill=PA, outline=BG)
+                continue
+            top, bottom = self.aims(source)
+            reach = [(x + z / math.tan(math.radians(-a)), 0.0) for a in (top, bottom) if a < 0]
+            if len(reach) == 2:
+                draw.polygon([cut(x, z), cut(*reach[0]), cut(*reach[1])], fill=PA + (60,))
+            half = self.hang(source) / 2
+            draw.line([cut(x, 0.0), cut(x, z + half + 0.5)], fill=PA + (120,), width=1)  # its mast
+            draw.line([cut(x, z + half), cut(x, z - half)], fill=PA, width=5)
+            draw.line([cut(x, z + half), cut(x, z - half)], fill=BG, width=1)
+        px, py = cut(self.stage[0], self.stage[2])
+        text(draw, (px - 12, py), "line arrays", font("Medium", 14), PA, "rm")
+        px, py = cut(self.stage[0], 0.0)
+        text(draw, (px - 12, py - 8), "subwoofers", font("Medium", 14), PA, "rm")
         for name, item in self.listeners.items():
             x, _y, z = item["position"]
             px, py = cut(x, z)

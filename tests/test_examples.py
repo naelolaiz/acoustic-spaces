@@ -551,14 +551,22 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     tour = demo.tour_of(custom)
     assert [stop[:2] for stop in tour] == [("bedroom_window", "still"), ("audience", "evening")]
     assert tour[-1][3] == pytest.approx(195.0)
-    # The gains: the audience's loudness everywhere, still air at the evening's gain.
+    # The gains: the audience's loudness (K-weighted, not the dB(A)) everywhere, still
+    # air at the evening's gain.
     levels = {"audience": -10.0, "bedroom_window": -30.0}
     seats = {
         "seats": {
-            f"{name}.{weather}": {"rms_db": level - (5.0 if weather == "still" else 0.0)}
+            f"{name}.{weather}": {
+                "rms_db": level - 8.0 - (5.0 if weather == "still" else 0.0),
+                "loudness_db": level - (5.0 if weather == "still" else 0.0),
+            }
             for name, level in levels.items()
             for weather in ("evening", "still")
         }
     }
     gains = demo.gains_of(seats, tour)
     assert gains == {"bedroom_window.still": 20.0, "audience.evening": 0.0}
+    # Seats rendered before loudness was kept are matched by their dB(A).
+    for seat in seats["seats"].values():
+        del seat["loudness_db"]
+    assert demo.gains_of(seats, tour) == gains

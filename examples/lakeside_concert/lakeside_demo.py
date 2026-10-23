@@ -191,6 +191,31 @@ def a_weighted(x: np.ndarray, rate: int) -> np.ndarray:
     return np.fft.irfft(np.fft.rfft(rows, n) * gain, n)[:, : len(x)].T
 
 
+def k_weighted(x: np.ndarray, rate: int) -> np.ndarray:
+    """``x`` (samples, channels) through the K weighting of loudness meters (ITU-R
+    BS.1770: a 4 dB shelf above 1.5 kHz and a high-pass at 38 Hz), by FFT."""
+    n = 1 << math.ceil(math.log2(len(x)))
+    z = np.exp(-1j * np.pi * np.fft.rfftfreq(n, 0.5))  # z^-1 at each bin
+    w, a = 2.0 * np.pi * 1500.0 / rate, 10.0 ** (4.0 / 40.0)
+    alpha, cos = math.sin(w) / math.sqrt(2.0), math.cos(w)
+    shelf = (
+        a * ((a + 1) + (a - 1) * cos + 2 * math.sqrt(a) * alpha)
+        - 2 * a * ((a - 1) + (a + 1) * cos) * z
+        + a * ((a + 1) + (a - 1) * cos - 2 * math.sqrt(a) * alpha) * z**2
+    ) / (
+        (a + 1)
+        - (a - 1) * cos
+        + 2 * math.sqrt(a) * alpha
+        + 2 * ((a - 1) - (a + 1) * cos) * z
+        + ((a + 1) - (a - 1) * cos - 2 * math.sqrt(a) * alpha) * z**2
+    )
+    w = 2.0 * np.pi * 38.0 / rate
+    alpha, cos = math.sin(w), math.cos(w)  # Q = 0.5
+    high_pass = (1 + cos) / 2 * (1 - z) ** 2 / ((1 + alpha) - 2 * cos * z + (1 - alpha) * z**2)
+    rows = np.ascontiguousarray(np.atleast_2d(x.T))
+    return np.fft.irfft(np.fft.rfft(rows, n) * shelf * high_pass, n)[:, : len(x)].T
+
+
 def shifted(x: np.ndarray, samples: int, length: int) -> np.ndarray:
     """``x`` started ``samples`` earlier (later if negative), cut or padded to ``length``."""
     out = np.zeros((length,) + x.shape[1:])
@@ -400,11 +425,13 @@ def render(args) -> None:
         x = read(out)[0] * gain
         write(out, x, rate)
         level = gated_rms(a_weighted(x, rate), rate)
+        loudness = gated_rms(k_weighted(x, rate), rate)
         info[f"{listener}.{weather}"] = {
             "listener": listener,
             "weather": weather,
             "lag_s": arrival_s(args, weather, listener),
             "rms_db": 20.0 * math.log10(level + 1e-12),
+            "loudness_db": 20.0 * math.log10(loudness + 1e-12),
         }
     top = max(v["rms_db"] for v in info.values())
     for key, v in sorted(info.items(), key=lambda kv: -kv[1]["rms_db"]):
@@ -442,14 +469,21 @@ def tour_of(args) -> list[tuple[str, str, float, float]]:
 
 
 def gains_of(seats: dict, tour) -> dict[str, float]:
-    """The gain (dB) each stop plays at: the audience's loudness everywhere, but a place
-    in still air at the gain of the same place in the evening's weather."""
-    top = max(v["rms_db"] for v in seats["seats"].values())
+    """The gain (dB) each stop plays at: the loudest place's loudness everywhere, but a
+    place in still air at the gain of the same place in the evening's weather. Loudness
+    as meters weigh it (K), not the A weighting of the levels: the far places and the
+    back of the stage keep little but bass, which the A weighting all but leaves out, so
+    matching levels would turn their bass up far past the audience's."""
+
+    def loudness(seat: dict) -> float:
+        return seat.get("loudness_db", seat["rms_db"])
+
+    top = max(loudness(v) for v in seats["seats"].values())
     gains = {}
     for listener, weather, _, _ in tour:
         key = f"{listener}.{weather}"
         evening = seats["seats"].get(f"{listener}.evening", seats["seats"][key])
-        gains[key] = top - evening["rms_db"]
+        gains[key] = top - loudness(evening)
     return gains
 
 
@@ -503,6 +537,7 @@ def video(args) -> None:
         TITLES,
         gains_of(seats, tour),
         played(args)["credit"],
+        folder=args.scene.parent,
     )
     stills = out / "stills"
     stills.mkdir(parents=True, exist_ok=True)

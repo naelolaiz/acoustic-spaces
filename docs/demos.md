@@ -345,16 +345,22 @@ only.
   less of the sound up, where the weather bends it down to the water.)
 - **How loud.** From the audience to the far shore the sound drops by 20 to 25 dB(A),
   too much to hear the far places in a video, so each stop is turned up to the
-  audience's loudness (A-weighted, gated) and its caption says how much quieter the place
-  really is. The window in still air keeps the gain of the window in the evening's
-  weather, so the 2.3 dB is heard.
+  audience's loudness and its caption says how much quieter the place really is, in
+  dB(A). The loudness is K-weighted, as meters weigh it, not A-weighted: the far places
+  and the back of the stage keep little but bass (the array boxes radiate every way below
+  250 Hz and the water gives the low end back whole), which the A weighting all but
+  leaves out, so matching dB(A) would put their bass far above the audience's. The window
+  in still air keeps the gain of the window in the evening's weather, so the 2.3 dB is
+  heard.
 - **The cuts.** Each place's mix is shifted earlier by the time the loudest sound takes
   to reach it (the peak of the energy of its responses: 0.09 s in the audience, 1.65 s
   at the window), so that the beat runs on across each 1 s crossfade, every 8 bars.
 - **The pictures** draw the lake from above with the wind's arrows, the weather zones and
-  their weather, and the current listener with L and R at its ears; and, under it, a
-  slice along the line from the stage across the lake, heights drawn five times larger,
-  with rays from the stage bent by the scene's own profiles of the speed of sound (traced
+  their weather, the arrays and the subwoofers with cones the way they aim, and the
+  current listener with L and R at its ears; and, under it, a slice along the line from
+  the stage across the lake, heights drawn five times larger, with the arrays hung from
+  the roof and the wedge from their top box's aim to their bottom one's, the subwoofers
+  on the ground, and rays from the arrays bent by the scene's own profiles of the speed of sound (traced
   by the script for the picture; the simulation traces its own) and masts with the wind's
   profile; in still air the rays go straight.
 
