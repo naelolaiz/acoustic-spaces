@@ -23,6 +23,10 @@ msgstr "die van deze computer"
 msgid "language: {language} ({source})"
 msgstr "taal: {language} ({source})"
 
+#: acoustic_spaces/demos/scene_demo.py
+msgid "This scene"
+msgstr "Deze scène"
+
 #: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
 msgid "SPL (dB)"
 msgstr "SPL (dB)"
@@ -215,11 +219,14 @@ msgstr "Nu: {step}"
 msgid "Running for {time:.0f} s"
 msgstr "Loopt al {time:.0f} s"
 
+#
 #: acoustic_spaces/gui/activity.py
-msgid "Cancel, or Simulation > Cancel (Shift+F5), stops it at its next stage"
+msgid ""
+"Cancel, or Simulation > Cancel (Shift+F5), stops it: a run at its next "
+"stage, a demo at once"
 msgstr ""
-"Annuleren, of Simulatie > Annuleren (Shift+F5), stopt deze bij de volgende "
-"stap"
+"Annuleren, of Simulatie > Annuleren (Shift+F5), stopt deze: een berekening "
+"bij de volgende stap, een demo meteen"
 
 #: acoustic_spaces/gui/app.py
 msgid "Acoustic Spaces editor"
@@ -668,21 +675,27 @@ msgstr "&Demo uitvoeren…"
 
 #: acoustic_spaces/gui/app.py
 msgid ""
-"Run one of the demos that come with the examples: a scene, its simulation, "
-"what each listener hears and a video, with the options to fill in"
+"Play the sounds each source's Plays names through the open scene: its "
+"simulation, what each listener hears and a video, with the options to fill "
+"in; an example's scene also has the example's own demo"
 msgstr ""
-"Voer een van de demo's bij de voorbeelden uit: een scène, de simulatie "
-"ervan, wat elke luisteraar hoort en een video, met de in te vullen opties"
+"Speelt de klanken die het veld Speelt van elke bron noemt af in de open "
+"scène: de simulatie ervan, wat elke luisteraar hoort en een video, met de "
+"opties om in te vullen; de scène van een voorbeeld heeft daarnaast de eigen "
+"demo van het voorbeeld"
 
 #: acoustic_spaces/gui/app.py
 msgid "&Cancel"
 msgstr "&Annuleren"
 
+#
 #: acoustic_spaces/gui/app.py
-msgid "Stop the run, coverage map, tuning or demo going on, at its next stage"
+msgid ""
+"Stop the run, coverage map or tuning going on at its next stage, or a demo "
+"at once"
 msgstr ""
-"De lopende berekening, dekkingskaart, optimalisatie of demo bij de volgende "
-"fase stoppen"
+"De lopende berekening, dekkingskaart of optimalisatie bij de volgende fase "
+"stoppen, of een demo meteen"
 
 #: acoustic_spaces/gui/app.py
 msgid "S&top playback"
@@ -1164,6 +1177,10 @@ msgstr ""
 "{folder}."
 
 #: acoustic_spaces/gui/app.py
+msgid "Stopping the demo…"
+msgstr "De demo wordt gestopt…"
+
+#: acoustic_spaces/gui/app.py
 msgid "Cancelling at the next stage…"
 msgstr "Annuleren bij de volgende fase…"
 
@@ -1442,19 +1459,25 @@ msgstr "Demo uitvoeren"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"The demos are the scripts that come with the examples: each writes its "
-"scene, simulates it, mixes what every listener hears and puts a video "
-"together. A demo downloads the recordings it plays and can take a while; the "
-"messages say what it is doing, and Cancel stops it."
+"A demo plays sound through the open scene, mixes what every listener hears "
+"and puts a video together. This scene plays the WAV file each source's Plays "
+"names; an example's own demo downloads the recordings it plays and can take "
+"a while. The messages say what it is doing, and Cancel stops it."
 msgstr ""
-"De demo's zijn de scripts bij de voorbeelden: elke demo schrijft haar scène, "
-"simuleert die, mixt wat elke luisteraar hoort en maakt er een video van. Een "
-"demo downloadt de opnamen die ze speelt en kan even duren; de meldingen "
-"zeggen wat ze doet, en Annuleren stopt haar."
+"Een demo speelt geluid af in de open scène, mengt wat elke luisteraar hoort "
+"en zet een video in elkaar. Deze scène speelt het WAV-bestand af dat het "
+"veld Speelt van elke bron noemt; de eigen demo van een voorbeeld downloadt "
+"de opnamen die hij speelt en kan even duren. De meldingen zeggen wat hij "
+"doet, en Annuleren stopt hem."
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "The demo to run, one for each example that has one"
-msgstr "De uit te voeren demo, één per voorbeeld dat er een heeft"
+msgid ""
+"The demo to run: This scene, with the sounds its sources play, or the "
+"example's own demo when the scene is an example's or a copy of one"
+msgstr ""
+"De demo die wordt uitgevoerd: Deze scène, met de klanken die de bronnen "
+"spelen, of de eigen demo van het voorbeeld als de scène die van een "
+"voorbeeld is of een kopie ervan"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -1500,6 +1523,12 @@ msgstr "all: elke stap op volgorde, zonder wat al gedaan is."
 #, python-brace-format
 msgid "Runs in {folder}"
 msgstr "Draait in {folder}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "save the scene first (File > Save): the demo reads it from its file"
+msgstr ""
+"sla de scène eerst op (Bestand > Opslaan): de demo leest haar uit haar "
+"bestand"
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
@@ -1742,8 +1771,9 @@ msgid "Use"
 msgstr "Gebruiken"
 
 #: acoustic_spaces/gui/hrtf_dialog.py
-msgid "Take the file on the row, and close"
-msgstr "Neemt het bestand op de regel en sluit"
+msgid "Take the file just downloaded, or else the set on the row, and close"
+msgstr ""
+"Neemt het zojuist gedownloade bestand, anders de set op de regel, en sluit"
 
 #: acoustic_spaces/gui/hrtf_dialog.py
 msgid "Close; what was downloaded stays in the folder"
@@ -1756,6 +1786,11 @@ msgstr "gedownload"
 #: acoustic_spaces/gui/hrtf_dialog.py
 msgid "not here yet"
 msgstr "nog niet aanwezig"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "by {credit}"
+msgstr "door {credit}"
 
 #: acoustic_spaces/gui/hrtf_dialog.py
 #, python-brace-format
@@ -2000,6 +2035,16 @@ msgstr ""
 "tot hypercardioïde steeds meer naar voren; achtvormig naar voren en "
 "achteren; lambertiaans als een trillend oppervlak, alleen naar voren; of "
 "meetgegevens (SOFA of CSV) of een bronnenarray uit een bestand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The WAV file the source plays in a demo of the scene (Simulation > Run "
+"demo…, This scene): a dry recording, mixed down to mono and played at the "
+"source's sound power"
+msgstr ""
+"Het WAV-bestand dat de bron speelt in een demo van de scène (Simulatie > "
+"Demo uitvoeren…, Deze scène): een droge opname, naar mono gemengd en "
+"afgespeeld met het geluidsvermogen van de bron"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -3994,6 +4039,25 @@ msgstr ""
 "evenveel later"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Choose WAV…"
+msgstr "WAV kiezen…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Pick the WAV file the source plays in a demo of the scene: a dry recording"
+msgstr ""
+"Het WAV-bestand kiezen dat de bron speelt in een demo van de scène: een "
+"droge opname"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Silent"
+msgstr "Stil"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The source plays nothing in a demo of the scene"
+msgstr "De bron speelt niets in een demo van de scène"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "A line runs along the source's left axis and a surface spans its left and up "
 "axes, both centred on its position: uncorrelated point sources share the "
@@ -4065,6 +4129,10 @@ msgid "Delay"
 msgstr "Vertraging"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Plays"
+msgstr "Speelt"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Remove source"
 msgstr "Bron verwijderen"
 
@@ -4117,6 +4185,10 @@ msgid "{tip}. Given per band in the scene file; this is their sum"
 msgstr "{tip}. Per band opgegeven in het scènebestand; dit is de som"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "nothing (silent in a demo)"
+msgstr "niets (stil in een demo)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Width"
 msgstr "Breedte"
 
@@ -4140,6 +4212,14 @@ msgstr ""
 #, python-brace-format
 msgid "Directivity of {name}"
 msgstr "Richtingskarakteristiek van {name}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "What the source plays"
+msgstr "Wat de bron speelt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "WAV files (*.wav);;All files (*)"
+msgstr "WAV-bestanden (*.wav);;Alle bestanden (*)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "the equalizer takes numbers (dB), one per band"

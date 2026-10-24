@@ -7,7 +7,8 @@ stone church, a band with its sound system and stage monitors in a stadium, the 
 band's song carried across a lake on a summer evening, and a guide talking to a visitor
 who walks away from them through a gallery and then turns their head. None of them
 stands for what the simulator does elsewhere; the [examples](examples.md) cover far
-more.
+more, and any scene makes a demo of its own with the recordings its sources are given
+([a demo of any scene](#a-demo-of-any-scene)).
 
 The scripts come with the examples: `acoustic-spaces examples --copy . NAME` copies them
 with the scene. The recordings do not: they are other people's work under their own
@@ -40,11 +41,71 @@ exist, `--work FOLDER` puts everything somewhere else, and `--no-mp4` writes the
 and the stills without calling ffmpeg. Where a step needs an earlier one, it says which
 command to run.
 
-In the editor, **Simulation > Run demo…** does the same: pick the demo and the step,
+In the editor, **Simulation > Run demo…** does the same for the open scene: *This
+scene* (below), and for an example's scene, or a copy of one, the example's own demo,
+reading the open scene where it would read the example's. Pick the demo and the step,
 fill in the options (they start at the same defaults the command line uses), and it
 runs in the background with its messages in the **Messages** panel, **Cancel** stopping
 it. The window shows the command line it is about to run, so a run started there can be
-repeated in a terminal or a script.
+repeated in a terminal or a script. A demo reads the scene from its file, so a scene
+with changes is saved first.
+
+Every still says how its sound was made, at the bottom: the version, the early
+reflections (traced or image sources, their order, diffraction) and the late sound with
+its rays, as the simulation ran them, the wave solver's bands when it ran, outdoors in
+moving air the bent paths and the parabolic equation's bands, the HRTFs the mixes went
+through (or the spherical head model) and the sample rate; and under that the command
+that makes the video again, with the options it was given and paths by their names (the
+song, the HRTFs).
+
+## A demo of any scene
+
+Any scene makes a demo: each source plays a recording of its own, every listener is
+heard in turn, and a video tours them. A source names what it plays in the scene file,
+or with **Plays** on its page in the editor (**Choose WAV…**; **Silent** takes it away):
+
+```yaml
+sources:
+  - name: talker
+    position: [2.0, 3.0, 1.5]
+    level_db: 78
+    spectrum: speech_male
+    signal: sounds/talk.wav   # a dry recording, relative to the scene's folder
+```
+
+```sh
+acoustic-spaces demo scene.yaml                 # every step, into demo/ beside the scene
+acoustic-spaces demo scene.yaml feeds           # one step: feeds, simulate, render, video
+acoustic-spaces demo scene.yaml --seconds 15 --tour front,back --hrtf me.sofa
+```
+
+- **feeds**: each source's recording mixed down to mono, at the scene's sample rate and
+  brought to the same gated RMS (unweighted), so that how loud each plays
+  against the others is its sound power in the scene (`level_db`, with its feed's gain
+  and equalizer), as the simulation says, and not how loud the recording happens to
+  be. Sources without a `signal` stay silent and are listed as such.
+- **simulate**: `acoustic-spaces simulate` on the scene, its binaural output through the
+  HRTFs the scene's binaural output names, `--hrtf` instead, or the spherical head
+  model when neither names any. A scene changed since its results is simulated again.
+- **render**: every listener in use (or those `--tour` names, in its order) hearing
+  every source that plays, with one gain for all, so that the listeners' differences in
+  level are heard as they are.
+- **video**: `tour.wav` hears each listener for `--seconds` (20 by default) while the
+  recordings run on, crossfading between them; a recording too short for every listener
+  shares its length out. Each stop is turned up to the loudness (K-weighted) of the
+  loudest, by as much as the still says, the only step that is not the simulation's. The
+  stills show the scene from above, drawn from its own model, with its sources (those
+  that play in colour, with a ray to the listener), the listeners and the one of the
+  moment as a head, and beside it the A-weighted level there of the sources that play,
+  as simulated, when their sound arrives, the reverberation time T30 at mid frequencies
+  (the mean of the 500 Hz and 1 kHz bands) and the nearest source that plays. `--credit`
+  puts a line about the recordings on the stills (who made them, their licence); without
+  it the line says which source plays which file.
+
+Everything goes to `demo/` beside the scene (`--work` elsewhere): the feeds, the
+results, the mixes in `seats/`, `tour.wav`, the stills, `thumbnail.png` and `tour.mp4`.
+In Python the demo is `acoustic_spaces.demos.scene_demo`
+(`python -m acoustic_spaces.demos.scene_demo all --scene scene.yaml`).
 
 The scripts share one package, `acoustic_spaces.demos`: the steps and options above,
 the recordings and their phrases, the simulate command and its HRTF, the mixes and
@@ -137,8 +198,9 @@ python church_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, dem
 Options: `--tour nave_back:0,conductor:25,...` (listener:start in seconds),
 `--listeners a,b` for `render`, `--format` for another output the simulation wrote
 (`ambix3`, `5.0`, ...; the video takes its first two channels), `--no-mp4` for the audio
-and stills only. Everything goes to `./demo` (`--work`). `all` runs music, feeds, render
-and video; `scene` and the simulation come before it.
+and stills only. The scene and its simulation go beside the script (`scene_choir.yaml`,
+`results_choir`), the rest to `./demo` (`--work`). `all` runs every step in turn,
+leaving out what is done already.
 
 - **The choir.** Each singer sang the tune alone in a recording booth, at their own tempo
   and a little off pitch here and there. `feeds` moves each take towards the tune (each

@@ -618,7 +618,7 @@
   window in the evening's weather, in still air and in the evening's again, each stop
   turned up to the audience's loudness with its real level in the caption, over a slice
   across the lake with the sound's rays bent by the weather.
-- [Demos](docs/demos.md) gathers the four, with where each recording comes from, its
+- [Demos](docs/demos.md) gathers the demos, with where each recording comes from, its
   licence and the credit a shared render needs; the orchestra's section moved there from
   [spatial audio and listening](docs/spatial-audio.md). The README and that page link the
   [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8) of the videos.
@@ -644,6 +644,27 @@
   time the sound takes to reach the listener, as the other tours did.
 - `acoustic_spaces.fetch` holds the downloads the demos and the HRTF sets share: a whole
   file, or one member of a remote zip archive read where it is by HTTP range requests.
+- Any scene makes a demo of its own: `acoustic-spaces demo scene.yaml` plays the WAV file
+  each source's new `signal` names, mixed down to mono and brought to one gated RMS so
+  that the sources' sound powers set the balance, as simulated; sources without one stay
+  silent. It simulates the scene, mixes every listener in use with one gain for all and
+  makes a video that hears each in turn for `--seconds` (or the listeners `--tour`
+  names), its stills drawn from the scene's own outline from above, with the level, the
+  arrival and the reverberation time there. It writes into `demo/` beside the scene (or
+  `--work`), binaural through the HRTFs the scene's binaural output names (a spherical
+  head model when it names none) unless `--hrtf` says otherwise.
+  `acoustic_spaces.demos.scene_demo` is the demo, the steps `feeds`, `simulate`,
+  `render` and `video`.
+- Every demo's stills say how the sound was made: the version, the early reflections
+  (traced or image sources, their order, diffraction) and the late sound with its rays,
+  as the simulation ran them, the wave solver's bands when it ran, outdoors in moving
+  air the bent paths and the parabolic equation's bands, the HRTFs the mixes went
+  through (or the spherical head model) and the sample rate, and the command that makes
+  the video again with the options it was given, paths by their names (the song, the
+  HRTFs).
+- A demo run elsewhere than its example (the editor's copy under the home folder, when
+  the examples cannot be written) writes scenes that find the example's model and data:
+  their paths were left relative to the example and the simulation could not find them.
 
 **HRTF sets**
 
@@ -691,11 +712,16 @@
   run into a marker ahead of it stops short, in the plan too: on the stadium's stage
   the markers were 6 m wide and the arrows 19 m long, across the players and monitors.
   In `show`, sources and listeners left out are drawn faded too.
-- **Simulation > Run demo…** runs one of the demos that come with the examples: pick
-  the demo and the step (*all* for the lot), fill in the options, which start at the
-  defaults the command line uses, and it runs in its own process in the background,
-  with what it prints in **Messages** and **Cancel** to stop it. The window shows the
-  command line it is about to run. A demo could only be run from a terminal before.
+- **Simulation > Run demo…** runs a demo of the open scene: *This scene*, with the WAV
+  files its sources play, and for an example's scene (or a copy of one) the example's
+  own demo, reading the open scene. Pick the demo and the step (*all* for the lot), fill
+  in the options, which start at the defaults the command line uses, and it runs in its
+  own process in the background, with what it prints in **Messages** and **Cancel** to
+  stop it. The window shows the command line it is about to run, and asks for a scene
+  with changes to be saved first. A demo could only be run from a terminal before.
+- The source page's **Plays** row names the WAV file the source plays in a demo of the
+  scene: **Choose WAV…** picks one, **Silent** takes it away, and the scene file keeps it
+  as `signal`, relative to the scene's folder.
 - **Download HRTFs…**, on the **Outputs** page and beside the **Run demo…** window's
   HRTF field, lists the free HRTF sets with their licences, downloads the one chosen in
   the background and puts it in the scene's binaural output; another SOFA file goes in
