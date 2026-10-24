@@ -5,7 +5,8 @@ The stage's sound system, two line arrays and subwoofers, plays a stereo recordi
 (--song): by default
 "Spicy Funk Cake" by the Rhythmussportgruppe, a nine-piece funk band, recorded for the
 German Acoustical Society (DEGA) at Hochschule Düsseldorf and published under CC BY 4.0
-(https://doi.org/10.5281/zenodo.3601032). At a bedroom window across the
+(https://doi.org/10.5281/zenodo.3601032), or a song of your own (--music, with --bpm its
+tempo). At a bedroom window across the
 lake the tour plays the song in the evening's weather, which bends the sound down to
 the water, then in still air, where it goes straight, then in the evening's again.
 Run it from the folder of the lakeside concert example (`acoustic-spaces examples
@@ -23,8 +24,13 @@ already (the song, the scenes, the simulations). The scenes and their simulation
 beside the script (scene_demo.yaml and scene_still.yaml, results_demo and
 results_still); the song, the feeds, the mixes and the video go to ./demo (--work). Use
 headphones; `--hrtf me.sofa` plays through your own or measured HRTFs instead of a
-spherical head (the simulations take it too). The editor runs the same steps from
-Simulation > Run demo…
+spherical head (the simulations take it too). `--input subs=bass.wav` has a
+loudspeaker (main_left, main_right or subs) play a file of yours instead of its part of
+the song, at the level of that part. `--music song.wav --bpm 120` plays a song of your
+own (WAV, or anything ffmpeg decodes) in place of --song: nothing is downloaded, the
+tour moves every 8 bars of the tempo given, and the video credits the file by its name
+unless `--credit` says what to show. The editor runs the same steps from Simulation >
+Run demo…
 
 From the audience to the far shore the sound drops by 20 to 25 dB(A), too much to
 hear the far places in a video. So each stop of the tour is brought to the same loudness
@@ -48,6 +54,7 @@ from acoustic_spaces.demos import (
     Option,
     Step,
     common_options,
+    input_option,
     music,
     pipeline,
     sibling,
@@ -172,7 +179,17 @@ FADE_OUT_S = 4.0
 
 
 def song_of(args) -> dict:
-    return SONGS[args.song] | {"name": args.song}
+    """The song: ``--song``'s preset, or the song of your own ``--music`` gives, named
+    after its file, at the tempo of ``--bpm``, with the credit of ``--credit`` or the
+    file's name."""
+    if args.music is None:
+        return SONGS[args.song] | {"name": args.song}
+    return {
+        "name": args.music.stem,
+        "files": args.music,
+        "bpm": args.bpm,
+        "credit": args.credit or f"Music: {args.music.name}",
+    }
 
 
 def phrase_s(song: dict) -> float:
@@ -185,29 +202,37 @@ def music_folder(args) -> Path:
 
 
 def song_path(args) -> Path:
-    return music_folder(args) / f"{args.song}.wav"
+    return music_folder(args) / f"{song_of(args)['name']}.wav"
 
 
 def music_done(args) -> bool:
     """Whether the song and each loudspeaker's signal are there."""
     folder = music_folder(args)
-    names = [args.song, *SYSTEM]
+    names = [song_of(args)["name"], *SYSTEM]
     return all((folder / f"{name}.wav").exists() for name in names)
 
 
 def music_step(args) -> None:
-    """Download ``--song`` (one member of a zip archive, or the file itself), bring it to
-    48 kHz stereo, and write what each loudspeaker plays (SYSTEM, "channel"). A song
-    already in the folder is kept."""
+    """Download ``--song`` (one member of a zip archive, or the file itself), or read the
+    song of your own ``--music`` names, bring it to 48 kHz stereo, and write what each
+    loudspeaker plays (SYSTEM, "channel"). A song downloaded before is kept."""
     song = song_of(args)
     folder = music_folder(args)
-    music.write_tracks({args.song: song["files"]}, folder, rate=RATE, channels=2)
+    music.write_tracks({song["name"]: song["files"]}, folder, rate=RATE, channels=2)
     x, rate = read(song_path(args))
     for name, source in SYSTEM.items():
         channel = source["channel"]
         write(folder / f"{name}.wav", mono(x) if channel == "mono" else x[:, channel], rate)
     pipeline.write_json(folder / "song.json", {k: v for k, v in song.items() if k in SONG_KEPT})
-    print(f"wrote {', '.join(SYSTEM)} ({len(x) / rate:.0f} s of {args.song}) to {folder}")
+    print(f"wrote {', '.join(SYSTEM)} ({len(x) / rate:.0f} s of {song['name']}) to {folder}")
+
+
+def plays(args) -> dict[str, str]:
+    """What each loudspeaker plays unless ``--input`` gives it a file: its channel of the
+    song."""
+    channels = {0: "left channel", 1: "right channel", "mono": "both channels in mono"}
+    song = song_of(args)["name"]
+    return {name: f"{song}, {channels[s['channel']]}" for name, s in SYSTEM.items()}
 
 
 def played(args) -> dict:
@@ -288,7 +313,9 @@ def render(args) -> None:
                     info={"weather": weather},
                 )
             )
-    pipeline.render_mixes(mixes, args.work / "seats", args, first=DEMO.command("scenes", args))
+    pipeline.render_mixes(
+        mixes, args.work / "seats", args, first=DEMO.command("scenes", args), inputs=args.inputs
+    )
 
 
 def tour_of(args) -> list[tuple[str, str, float, float]]:
@@ -327,6 +354,8 @@ def gains_of(seats: dict, tour) -> dict[str, float]:
 def video(args) -> None:
     """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
     scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    from acoustic_spaces.demos.pictures import save, settings_lines
+
     pictures = sibling(__file__, "lakeside_pictures")
     seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
     tour = tour_of(args)
@@ -351,17 +380,17 @@ def video(args) -> None:
         tour,
         TITLES,
         gains,
-        played(args)["credit"],
+        pipeline.credited(played(args)["credit"], seats, list(SYSTEM)),
         folder=args.scene.parent,
         hrtf=args.hrtf,
         tool={
-            w: pictures.settings_lines(
+            w: settings_lines(
                 DEMO, args, scenes[w], pipeline.read_json(s.results / pipeline.PARAMETERS)
             )
             for w, s in weathers(args).items()
         },
     )
-    pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
+    save(drawing.thumbnail(), args.work / "thumbnail.png")
     pipeline.video(
         args.work,
         [(f"{listener}_{weather}", stop - start) for listener, weather, start, stop in tour],
@@ -398,6 +427,7 @@ DEMO = Demo(
             tuple(sorted(SONGS)),
             ("music",),
         ),
+        *music.own_song_options(),
         Option(
             "source",
             "the example's scene",
@@ -417,6 +447,7 @@ DEMO = Demo(
             "folder",
         ),
         *common_options(),
+        input_option(),
         Option(
             "tour",
             "listener:weather:phrases,... (weather evening or still; 8 bars a phrase)",
@@ -433,6 +464,8 @@ DEMO = Demo(
     ],
     simulations=simulations,
     scene_from="scenes",
+    plays=plays,
+    problems=music.own_song_problems,
 )
 
 __all__ = ["DEMO"]

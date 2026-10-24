@@ -328,6 +328,33 @@ def test_walk_animation(tmp_path: Path) -> None:
         assert gif.n_frames == 5
 
 
+def test_movement_animation(tmp_path: Path) -> None:
+    """A movement's video: every mover along its path with an arrow the way it faces,
+    the still sources and listeners where they stand, as long as the longest walk."""
+    from PIL import Image
+
+    from acoustic_spaces.scene import Keyframe, Walk
+    from acoustic_spaces.viz import animate_movement
+    from acoustic_spaces.walkthrough import Movement
+
+    room = Room.from_yaml(SHOEBOX)
+    seat = room.scene.listeners[0]
+    frames = [
+        Keyframe(time_s=0.5, position=(2.0, 1.0, 1.6)),
+        Keyframe(time_s=1.0, position=(2.0, 1.0, 1.6), orientation={"yaw": 90.0}),
+    ]
+    moving = seat.model_copy(update={"walk": Walk(keyframes=frames)})
+    still = seat.model_copy(update={"name": "still", "position": (3.0, 3.0, 1.2)})
+    room = Room.from_scene(room.scene.model_copy(update={"listeners": [moving, still]}), reuse=room)
+    movement = Movement(room, np.array([0.0, 0.5, 1.0]), None, {})
+    out = tmp_path / "movement.gif"
+    animate_movement(room, movement, out, fps=2, window_size=(320, 200))
+    with Image.open(out) as gif:
+        assert gif.n_frames == 3 and gif.size == (320, 200)
+    with pytest.raises(ValueError, match="gif or .mp4"):
+        animate_movement(room, movement, tmp_path / "movement.avi")
+
+
 def test_walk_video_carries_the_sound(tmp_path: Path, capsys, monkeypatch) -> None:
     import importlib.util
     import subprocess

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from acoustic_spaces.geometry import points_inside
 from acoustic_spaces.gui.document import LISTENER_HEIGHT, SOURCE_HEIGHT, follow_floor
+from acoustic_spaces.gui.movement import handles_of, moves_at, path_of, pose_at
 from acoustic_spaces.i18n import _
 from acoustic_spaces.room import UNASSIGNED, Room
 from acoustic_spaces.viz import (
@@ -108,6 +109,9 @@ class Viewport(QWidget):
 
     picked = Signal(str, object)
     moved = Signal(str, int, tuple)
+    #: A keyframe handle of a mover (its kind, index and the row, 0 for the mover
+    #: itself) was dragged here (m).
+    keyframe_moved = Signal(str, int, int, tuple)
     place = Signal(str, tuple)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -123,6 +127,13 @@ class Viewport(QWidget):
         self._markers: list = []
         self._surfaces: list = []
         self._point_actors: dict[tuple[str, int], list] = {}
+        #: The mover whose keyframe handles are drawn, and the moment the movers are
+        #: drawn at (see :meth:`show_room`).
+        self.mover: tuple[str, int] | None = None
+        self.time: float | None = None
+        self._handles: dict[int, object] = {}
+        self._labels = None  # the points the names are at, to move with the movers
+        self._lifts: list[tuple[str, int, float]] = []
         self._press = (0, 0)
         self._drag: dict | None = None
         if opengl_available():
@@ -168,6 +179,8 @@ class Viewport(QWidget):
         hidden: set[tuple[str, str]] = frozenset(),
         wind: bool = True,
         wind_profile: bool = False,
+        mover: tuple[str, int] | None = None,
+        time: float | None = None,
     ):
         """Draw ``room`` with ``selection`` highlighted and, if given, early ``paths``,
         a coverage map (``coverage`` is (CoverageMap, parameter, band)) and the
@@ -175,11 +188,15 @@ class Viewport(QWidget):
         listeners in ``hidden`` ((kind, name) pairs) are left out; those left out of
         simulations are drawn faded. Outdoors, ``wind`` draws the wind and the weather
         zones, and ``wind_profile`` a mast in each weather with the wind up it (see
-        :func:`acoustic_spaces.viz.plot_wind`).
+        :func:`acoustic_spaces.viz.plot_wind`). Every walk is drawn as a line; with
+        ``mover`` (a source or listener as (kind, index)), its keyframes get handles to
+        drag, and with ``time`` every mover stands where it is then (:meth:`set_time`
+        moves them without drawing the room again).
 
         The camera stays where it is, also when the room changes shape; only the first
         room gets the usual view (:meth:`reset_camera` gives it again)."""
         self._room = room
+        self.mover, self.time = mover, time
         if self.plotter is None:
             return
         import pyvista as pv
@@ -192,6 +209,8 @@ class Viewport(QWidget):
         self._actors.clear()
         self._markers, self._surfaces = [], []
         self._point_actors = {}
+        self._handles = {}
+        self._labels, self._lifts = None, []
         self._drag = None
         kind, key = selection or ("", None)
 
@@ -243,6 +262,24 @@ class Viewport(QWidget):
         for (group, colour, index, item), radius, arrow in zip(shown, radii, arrows, strict=True):
             chosen = kind == group and key == index
             scale = 1.6 if chosen else 1.0
+            walk = path_of(item)
+            if walk is not None and len(walk.positions) > 1:  # the way it goes
+                plotter.add_mesh(
+                    pv.lines_from_points(walk.positions),
+                    color=SELECTED_COLOUR if chosen else colour,
+                    line_width=2.0,
+                    opacity=0.8 if item.in_use and item.walk.enabled else 0.25,
+                    render=False,
+                )
+            if mover == (group, index):  # its keyframes, to drag
+                for row, handle in enumerate(handles_of(item)):
+                    cube = pv.Cube(center=handle, x_length=radius, y_length=radius, z_length=radius)
+                    actor = plotter.add_mesh(
+                        cube, color=SELECTED_COLOUR if row else "#ffffff", render=False
+                    )
+                    self._actors[_key(actor)] = ("keyframe", row)
+                    self._markers.append(actor)
+                    self._handles[row] = actor
             # Left out of simulations: faded.
             opacity = 1.0 if item.in_use or chosen else 0.3
             sphere = pv.Sphere(radius=radius * scale, center=item.position)
@@ -304,10 +341,12 @@ class Viewport(QWidget):
             # The label of the selected point goes above its arrow to the top.
             lift = (0.5 * arrow * scale if chosen else 0.0) + 1.8 * radius
             points.append(np.add(item.position, [0.0, 0.0, lift]))
+            self._lifts.append((group, index, lift))
             names.append(item.name)
         if points:
+            self._labels = pv.PolyData(np.asarray(points, dtype=float))
             plotter.add_point_labels(
-                np.asarray(points, dtype=float),
+                self._labels,
                 names,
                 font_size=12,
                 text_color="white",
@@ -329,7 +368,47 @@ class Viewport(QWidget):
             plotter.reset_camera()
         else:
             plotter.camera_position = camera
+        self._place_movers()
         plotter.render()
+
+    def set_time(self, time: float | None) -> None:
+        """Stand every mover where it is at ``time`` (s) of the movement (None: at rest),
+        moving what is drawn rather than drawing the room again."""
+        self.time = time
+        if self.plotter is not None and self._room is not None:
+            self._place_movers()
+            self.plotter.render()
+
+    def _place_movers(self) -> None:
+        """Move each mover's marker, arrow and label to where it is at :attr:`time`."""
+        from vtkmodules.vtkCommonMath import vtkMatrix4x4
+
+        scene = self._room.scene
+        for (group, index), actors in self._point_actors.items():
+            item = getattr(scene, group)[index]
+            shown = pose_at(item, self.time)
+            if shown is item:
+                for actor in actors:
+                    actor.SetUserMatrix(None)
+                continue
+            # Turned about its own position, then carried to where it is now.
+            rotation = (
+                np.array(shown.orientation.rotation()) @ np.array(item.orientation.rotation()).T
+            )
+            transform = np.eye(4)
+            transform[:3, :3] = rotation
+            transform[:3, 3] = np.asarray(shown.position) - rotation @ np.asarray(item.position)
+            matrix = vtkMatrix4x4()
+            matrix.DeepCopy(transform.ravel().tolist())
+            for actor in actors:
+                actor.SetUserMatrix(matrix)
+        if self._labels is not None:
+            self._labels.points = np.array(
+                [
+                    np.add(pose_at(getattr(scene, group)[index], self.time).position, [0, 0, lift])
+                    for group, index, lift in self._lifts
+                ]
+            )
 
     def reset_camera(self) -> None:
         if self.plotter is not None:
@@ -362,8 +441,9 @@ class Viewport(QWidget):
         position = event.position()
         return round(position.x() * ratio), round((widget.height() - position.y() - 1) * ratio)
 
-    def marker_at(self, x: int, y: int) -> tuple[str, int] | None:
-        """The source or listener at display position (x, y), if any."""
+    def marker_at(self, x: int, y: int) -> tuple[str, object] | None:
+        """The source or listener at display position (x, y), as (kind, index), or the
+        keyframe handle there, as ("keyframe", row), if any."""
         if self.plotter is None or not self._markers:
             return None
         from vtkmodules.vtkRenderingCore import vtkCellPicker
@@ -426,7 +506,15 @@ class Viewport(QWidget):
             if target is None:
                 return False
             group, index = target
-            start = getattr(self._room.scene, group)[index].position
+            if group == "keyframe":
+                kind, which = self.mover
+                start = tuple(handles_of(getattr(self._room.scene, kind)[which])[index])
+            else:
+                item = getattr(self._room.scene, group)[index]
+                if moves_at(item, self.time):  # drawn away from its position: no drag
+                    self.picked.emit(group, index)
+                    return True
+                start = item.position
             self._drag = {"target": target, "press": (x, y), "start": start, "position": None}
             return True
         if self._drag is None:
@@ -440,14 +528,26 @@ class Viewport(QWidget):
             position = self.drag_position(self._drag["start"], x, y, vertical)
             self._drag["position"] = position
             offset = np.subtract(position, self._drag["start"])
-            for actor in self._point_actors.get(self._drag["target"], []):
+            group, index = self._drag["target"]
+            actors = (
+                [self._handles[index]]
+                if group == "keyframe"
+                else self._point_actors.get((group, index), [])
+            )
+            for actor in actors:
                 actor.SetPosition(*offset)
             self.plotter.render()
             return True
         if kind == QEvent.Type.MouseButtonRelease:
             drag, self._drag = self._drag, None
             group, index = drag["target"]
-            if drag["position"] is None:
+            if group == "keyframe":
+                kind, which = self.mover
+                if drag["position"] is None:
+                    self.picked.emit(kind, which)
+                else:
+                    self.keyframe_moved.emit(kind, which, index, tuple(drag["position"]))
+            elif drag["position"] is None:
                 self.picked.emit(group, index)
             else:
                 self.moved.emit(group, index, tuple(drag["position"]))
@@ -474,7 +574,8 @@ class Viewport(QWidget):
             for actor in self._markers:
                 picker.AddPickList(actor)
             if picker.Pick(x, y, 0, renderer) and picker.GetActor() is not None:
-                self.picked.emit(*self._actors[_key(picker.GetActor())])
+                group, index = self._actors[_key(picker.GetActor())]
+                self.picked.emit(*(self.mover if group == "keyframe" else (group, index)))
                 return
             picker.InitializePickList()
         for actor in self._surfaces:

@@ -42,6 +42,10 @@ How it works:
   removes latency) is not taken for noise: the noise floor is looked for before it.
   Decay times are left out when a band's decay does not clear the noise by enough:
   20 dB for EDT, 35 dB for T20, 45 dB for T30.
+- Each T20 and T30 comes with its ISO 3382-2 non-linearity ξ (‰) and the decay's
+  curvature (%), left out with the decay time they check (see
+  [Simulation](simulation.md)): past 10 ‰ or 10 %, the decay is not straight enough for
+  one decay time to describe it.
 - G needs the source's free-field level: `--free-field ff.wav --distance 3` uses a
   measurement of the same source in free field (or with reflections windowed out),
   and `--reference-energy 0.01` suits responses made by `simulate`.

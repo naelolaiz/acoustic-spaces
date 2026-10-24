@@ -27,14 +27,26 @@ of each shifts as it does on its way; the late part is crossfaded as without it,
 :func:`pass_by` gives the level over time, its maximum and the sound exposure level.
 Outdoors in turbulence the early sound flickers along the walk as in
 :func:`~acoustic_spaces.render.auralize`, through the same eddies from place to place.
+
+A walk may instead give ``keyframes``: where the walker is and how it faces at given
+times after its start, between which it moves and turns evenly, so that it can wait,
+turn on the spot or go at any pace (:func:`knots` gives either kind of walk as the knots
+it moves between). Several listeners and sources may move at once, each on its own
+walk, all on one clock: :func:`simulate_movement` simulates them together, every mover
+as a copy at each place it takes, in one simulation; :func:`render_movement` plays the
+signals through it as heard at every listener in use, still or moving; and
+:func:`save_movement` writes one WAV per listener. ``walk.enabled: false`` keeps a walk
+but leaves its walker standing still, and :func:`with_moving` picks which walks are on
+for one run, so that one scene serves both still and moving.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -49,10 +61,14 @@ from acoustic_spaces.render import (
     through_eddies,
 )
 from acoustic_spaces.room import Room
+from acoustic_spaces.scene.model import Orientation
 from acoustic_spaces.scene.model import Simulation as SimulationSettings
 
 #: Distance (m) between the places a walk is simulated at.
 STEP_M = 0.25
+#: Angle (degrees) a walker turns between the places of a walk along keyframes where it
+#: turns without moving on (on the spot, or nearly).
+STEP_DEG = 20.0
 #: Distance (m) between the places a walk's late part is traced at.
 LATE_STEP_M = 2.0
 #: Length (s) of the crossfade from one place's response to the next.
@@ -69,6 +85,8 @@ class WalkPoints:
     positions: np.ndarray
     #: The way it faces at each place (yaw in degrees), or None when it keeps its own.
     yaws: np.ndarray | None
+    #: Along keyframes, how it faces at each place (N, 3: yaw, pitch and roll in degrees).
+    angles: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -97,13 +115,14 @@ class WalkResponses:
 
 
 def _walker(room: Room, name: str | None):
-    """The listener or source that walks: ``name``, or the only one with a walk."""
+    """The listener or source that walks: ``name``, or the only one with a walk that is
+    enabled."""
     scene = room.scene
     found = [
         (kind, item)
         for kind in ("listeners", "sources")
         for item in getattr(scene, kind)
-        if (item.name == name if name is not None else item.walk is not None)
+        if (item.name == name if name is not None else item.walk is not None and item.walk.enabled)
     ]
     if name is not None and not found:
         raise ValueError(f"no listener or source named {name!r}")
@@ -111,53 +130,160 @@ def _walker(room: Room, name: str | None):
         raise ValueError("no listener or source walks: give one a walk")
     if len(found) > 1:
         names = ", ".join(item.name for _, item in found)
-        raise ValueError(f"more than one walks ({names}): pick one")
+        raise ValueError(
+            f"more than one walks ({names}): pick one, or play them together (--all, "
+            "simulate_movement)"
+        )
     kind, item = found[0]
     if item.walk is None:
         raise ValueError(f"{item.name!r} has no walk")
+    if not item.walk.enabled:
+        raise ValueError(f"the walk of {item.name!r} is off (enabled: false): it stands still")
     return kind, item
 
 
-def walk_points(item, step_m: float = STEP_M) -> WalkPoints:
-    """The places along ``item``'s walk (a scene listener or source), ``step_m`` or a
-    little less apart, from its position to the walk's last point."""
-    if step_m <= 0:
-        raise ValueError("step_m must be positive")
-    corners = np.array([item.position, *item.walk.to], dtype=np.float64)
+def _wrapped(angles: np.ndarray) -> np.ndarray:
+    """Angles (degrees) in (-180, 180]."""
+    return 180.0 - (180.0 - np.asarray(angles, dtype=np.float64)) % 360.0
+
+
+def _angles(orientation: Orientation) -> np.ndarray:
+    return np.array([orientation.yaw, orientation.pitch, orientation.roll], dtype=np.float64)
+
+
+@dataclass(frozen=True)
+class Knots:
+    """The knots of a walk: where the walker is and how it faces at each, moving and
+    turning evenly from one to the next (:func:`knots`)."""
+
+    #: When it is at each knot (s from the start; the first is 0).
+    times: np.ndarray
+    #: Where each knot is (K, 3).
+    positions: np.ndarray
+    #: How it faces at each knot (K, 3: yaw, pitch and roll in degrees), unwrapped so that
+    #: it turns the shorter way round from one to the next.
+    angles: np.ndarray
+
+    @property
+    def duration_s(self) -> float:
+        return float(self.times[-1])
+
+    @property
+    def length_m(self) -> float:
+        """How far the walk goes."""
+        return float(np.linalg.norm(np.diff(self.positions, axis=0), axis=1).sum())
+
+    @property
+    def top_speed(self) -> float:
+        """The fastest it goes (m/s), over a leg."""
+        legs = np.linalg.norm(np.diff(self.positions, axis=0), axis=1)
+        taken = np.diff(self.times)
+        return float(np.max(legs[taken > 0] / taken[taken > 0], initial=0.0))
+
+    def at(self, times) -> tuple[np.ndarray, np.ndarray]:
+        """Where it is and how it faces (yaw, pitch and roll in (-180, 180]) at ``times``
+        (s, a number or an array): at its start before, at its end after."""
+        t = np.clip(np.asarray(times, dtype=np.float64), 0.0, self.times[-1])
+        positions = np.stack([np.interp(t, self.times, self.positions[:, k]) for k in range(3)], -1)
+        angles = np.stack([np.interp(t, self.times, self.angles[:, k]) for k in range(3)], -1)
+        return positions, _wrapped(angles)
+
+
+def knots(item) -> Knots:
+    """The knots of ``item``'s walk (a scene listener or source): along ``to``, its
+    corners at ``speed_m_s`` and, facing forward, where each turn through a corner starts
+    and ends; along ``keyframes``, its position at 0 s and each keyframe, facing as it
+    says or as before."""
+    walk = item.walk
+    if walk is None:
+        raise ValueError(f"{item.name!r} has no walk")
+    own = _angles(item.orientation)
+    if walk.keyframes is not None:
+        times = np.array([0.0, *(frame.time_s for frame in walk.keyframes)])
+        positions = np.array(
+            [item.position, *(frame.position for frame in walk.keyframes)], dtype=np.float64
+        )
+        angles, facing = [own], own
+        for frame in walk.keyframes:
+            if frame.orientation is not None:
+                facing = _angles(frame.orientation)
+            angles.append(facing)
+        unwrapped = np.degrees(np.unwrap(np.radians(np.array(angles)), axis=0))
+        return Knots(times, positions, unwrapped)
+    corners = np.array([item.position, *walk.to], dtype=np.float64)
     legs = np.linalg.norm(np.diff(corners, axis=0), axis=1)
     along = np.concatenate([[0.0], np.cumsum(legs)])
     if along[-1] == 0.0:
         raise ValueError(f"the walk of {item.name!r} goes nowhere: it never leaves its position")
+    if not walk.face_forward:
+        return Knots(along / walk.speed_m_s, corners, np.tile(own, (len(corners), 1)))
+    heading = np.diff(corners, axis=0)[:, :2]
+    flat = np.hypot(heading[:, 0], heading[:, 1]) < 1e-9
+    yaws = np.degrees(np.arctan2(heading[:, 1], heading[:, 0]))
+    # Straight up or down (a lift): the way it faced before.
+    last = item.orientation.yaw
+    for k in range(len(yaws)):
+        if flat[k]:
+            yaws[k] = last
+        last = yaws[k]
+    # From each leg's heading to the next's the shorter way round, ...
+    turns = (np.diff(yaws) + 180.0) % 360.0 - 180.0
+    yaws = yaws[0] + np.concatenate([[0.0], np.cumsum(turns)])
+    # ... at turn_deg_s through each corner: half of the turn before it, half after
+    # it, and no further than half-way along either leg.
+    along_turn, yaw_turn = [0.0], [yaws[0]]
+    for j, turn in enumerate(turns, start=1):
+        if turn == 0.0:
+            continue
+        half = 0.5 * walk.speed_m_s * abs(turn) / walk.turn_deg_s
+        half = min(half, 0.5 * legs[j - 1], 0.5 * legs[j])
+        along_turn += [along[j] - half, along[j] + half]
+        yaw_turn += [yaws[j - 1], yaws[j]]
+    along_turn.append(along[-1])
+    yaw_turn.append(yaws[-1])
+    # The knots: the corners and the turns' ends, the yaw at each from the turns.
+    distances = np.unique(np.concatenate([along, along_turn]))
+    positions = np.column_stack([np.interp(distances, along, corners[:, k]) for k in range(3)])
+    angles = np.tile(own, (len(distances), 1))
+    angles[:, 0] = np.interp(distances, along_turn, yaw_turn)
+    return Knots(distances / walk.speed_m_s, positions, angles)
+
+
+def _sample_times(path: Knots, step_m: float, step_deg: float) -> np.ndarray:
+    """When to place a walker along ``path``: at its knots, and along each leg every
+    ``step_m`` or a little less and every ``step_deg`` of its turn or a little less,
+    whichever gives more places (a wait on the spot gives none)."""
+    times = [path.times]
+    legs = np.linalg.norm(np.diff(path.positions, axis=0), axis=1)
+    turns = np.abs(np.diff(path.angles, axis=0)).max(axis=1)
+    for j, (leg, turn) in enumerate(zip(legs, turns, strict=True)):
+        count = max(int(math.ceil(leg / step_m)), int(math.ceil(turn / step_deg)))
+        if count > 1:
+            times.append(np.linspace(path.times[j], path.times[j + 1], count + 1)[1:-1])
+    return np.unique(np.concatenate(times))
+
+
+def walk_points(item, step_m: float = STEP_M, step_deg: float = STEP_DEG) -> WalkPoints:
+    """The places along ``item``'s walk (a scene listener or source), ``step_m`` or a
+    little less apart, from its position to the walk's last point; along keyframes also
+    every ``step_deg`` of a turn on the spot."""
+    if step_m <= 0:
+        raise ValueError("step_m must be positive")
+    if step_deg <= 0:
+        raise ValueError("step_deg must be positive")
+    path = knots(item)
+    if item.walk.keyframes is not None:
+        times = _sample_times(path, step_m, step_deg)
+        positions, angles = path.at(times)
+        return WalkPoints(times, positions, angles[:, 0], angles)
+    # Along ``to``, evenly spaced over the whole path, as its legs join without a stop.
+    along = np.concatenate(
+        [[0.0], np.cumsum(np.linalg.norm(np.diff(path.positions, axis=0), axis=1))]
+    )
     count = max(int(math.ceil(along[-1] / step_m)) + 1, 2)
     s = np.linspace(0.0, along[-1], count)
-    positions = np.column_stack([np.interp(s, along, corners[:, k]) for k in range(3)])
-    yaws = None
-    if item.walk.face_forward:
-        heading = np.diff(corners, axis=0)[:, :2]
-        flat = np.hypot(heading[:, 0], heading[:, 1]) < 1e-9
-        angles = np.degrees(np.arctan2(heading[:, 1], heading[:, 0]))
-        # Straight up or down (a lift): the way it faced before.
-        last = item.orientation.yaw
-        for k in range(len(angles)):
-            if flat[k]:
-                angles[k] = last
-            last = angles[k]
-        # From each leg's heading to the next's the shorter way round, ...
-        turns = (np.diff(angles) + 180.0) % 360.0 - 180.0
-        angles = angles[0] + np.concatenate([[0.0], np.cumsum(turns)])
-        # ... at turn_deg_s through each corner: half of the turn before it, half after
-        # it, and no further than half-way along either leg.
-        along_turn, yaw_turn = [0.0], [angles[0]]
-        for j, turn in enumerate(turns, start=1):
-            if turn == 0.0:
-                continue
-            half = 0.5 * item.walk.speed_m_s * abs(turn) / item.walk.turn_deg_s
-            half = min(half, 0.5 * legs[j - 1], 0.5 * legs[j])
-            along_turn += [along[j] - half, along[j] + half]
-            yaw_turn += [angles[j - 1], angles[j]]
-        along_turn.append(along[-1])
-        yaw_turn.append(angles[-1])
-        yaws = 180.0 - (180.0 - np.interp(s, along_turn, yaw_turn)) % 360.0  # (-180, 180]
+    positions, angles = path.at(np.interp(s, along, path.times))
+    yaws = angles[:, 0] if item.walk.face_forward else None
     return WalkPoints(s / item.walk.speed_m_s, positions, yaws)
 
 
@@ -175,10 +301,16 @@ def late_mixing(distances: np.ndarray, late_step_m: float) -> dict[int, dict[int
     for k, d in enumerate(distances):
         if k in traced:
             continue
-        j = int(np.searchsorted(distances[traced], d))
-        a, b = int(traced[j - 1]), int(traced[j])
-        w = float((d - distances[a]) / (distances[b] - distances[a]))
-        mixing[k] = {a: 1.0 - w, b: w}
+        # A place where a traced one is (a turn or a wait on the spot) takes its late part.
+        j = int(np.searchsorted(distances[traced], d, side="right"))
+        if j == 0:
+            mixing[k] = {int(traced[0]): 1.0}
+        elif j == len(traced) or distances[traced[j - 1]] == d:
+            mixing[k] = {int(traced[j - 1]): 1.0}
+        else:
+            a, b = int(traced[j - 1]), int(traced[j])
+            w = float((d - distances[a]) / (distances[b] - distances[a]))
+            mixing[k] = {a: 1.0 - w, b: w}
     return mixing
 
 
@@ -208,26 +340,20 @@ def simulate_walk(
     points = walk_points(item, step_m)
     doppler = item.walk.doppler
     if doppler:
-        c = room.speed_of_sound()
-        if item.walk.speed_m_s >= c:
-            raise ValueError(
-                f"{item.name!r} walks at {item.walk.speed_m_s:g} m/s, as fast as sound or "
-                f"faster ({c:.0f} m/s): Doppler needs it slower"
-            )
-        if (settings or room.scene.simulation).wave.enabled:
-            raise ValueError(
-                "a walk with Doppler does not take the wave solver's bands: turn "
-                "simulation.wave off, or the walk's doppler"
-            )
+        _check_doppler(room, item, knots(item).top_speed, settings)
     # Numbered, as places less than 10 ms apart would share a time.
     names = tuple(f"{item.name} #{k} @ {t:.2f} s" for k, t in enumerate(points.times))
-    copies = []
-    for k, (place, label) in enumerate(zip(points.positions, names, strict=True)):
-        # The walk is asked for by name: its steps are in use.
-        update = {"name": label, "position": tuple(place), "walk": None, "enabled": None}
-        if points.yaws is not None:
-            update["orientation"] = item.orientation.model_copy(update={"yaw": points.yaws[k]})
-        copies.append(item.model_copy(update=update))
+    copies = [
+        _copy_at(item, label, place, None if points.angles is None else points.angles[k], yaw)
+        for k, (place, label, yaw) in enumerate(
+            zip(
+                points.positions,
+                names,
+                points.yaws if points.yaws is not None else [None] * len(names),
+                strict=True,
+            )
+        )
+    ]
     scene = room.scene
     if kind == "listeners":
         update = {"listeners": copies}
@@ -253,10 +379,7 @@ def simulate_walk(
                 f"the walk of {item.name!r} leaves the room at ({where}) m, "
                 f"{points.times[k]:.2f} s in"
             )
-    distances = points.times * item.walk.speed_m_s
-    # The statistical late method gives every place its own, as cheaply as a mix.
-    statistical = (settings or scene.simulation).late.method == "statistical"
-    mixing = {} if late_step_m is None or statistical else late_mixing(distances, late_step_m)
+    mixing = _late_mixing_of(points.positions, late_step_m, settings or scene.simulation)
     late_from = {
         names[k]: {names[other]: weight for other, weight in parts.items()}
         for k, parts in mixing.items()
@@ -266,6 +389,363 @@ def simulate_walk(
     )
     late_places = tuple(k for k in range(len(names)) if k not in mixing)
     return WalkResponses(item.name, kind, points, names, result, late_places, doppler)
+
+
+def _check_doppler(room: Room, item, speed: float, settings: SimulationSettings | None) -> None:
+    """What a walk with Doppler cannot do: go as fast as sound, or take the wave solver."""
+    c = room.speed_of_sound()
+    if speed >= c:
+        raise ValueError(
+            f"{item.name!r} walks at {speed:g} m/s, as fast as sound or "
+            f"faster ({c:.0f} m/s): Doppler needs it slower"
+        )
+    if (settings or room.scene.simulation).wave.enabled:
+        raise ValueError(
+            "a walk with Doppler does not take the wave solver's bands: turn "
+            "simulation.wave off, or the walk's doppler"
+        )
+
+
+def _copy_at(item, label: str, place, angles=None, yaw: float | None = None):
+    """``item`` standing at ``place`` as ``label``, facing ``angles`` (yaw, pitch, roll)
+    or turned to ``yaw``, or as it does itself. The walk is asked for by name: its
+    places are in use."""
+    update = {"name": label, "position": tuple(place), "walk": None, "enabled": None}
+    if angles is not None:
+        yaw, pitch, roll = (float(a) for a in angles)
+        update["orientation"] = Orientation(yaw=yaw, pitch=pitch, roll=roll)
+    elif yaw is not None:
+        update["orientation"] = item.orientation.model_copy(update={"yaw": float(yaw)})
+    return item.model_copy(update=update)
+
+
+def _late_mixing_of(
+    positions: np.ndarray, late_step_m: float | None, settings: SimulationSettings
+) -> dict[int, dict[int, float]]:
+    """:func:`late_mixing` over the places ``positions``, by the distance along them;
+    nothing with ``late_step_m`` None or the statistical late method, which gives every
+    place its own as cheaply as a mix."""
+    if late_step_m is None or settings.late.method == "statistical":
+        return {}
+    distances = np.concatenate(
+        [[0.0], np.cumsum(np.linalg.norm(np.diff(positions, axis=0), axis=1))]
+    )
+    if distances[-1] == 0.0:
+        return {k: {0: 1.0} for k in range(1, len(distances))}
+    return late_mixing(distances, late_step_m)
+
+
+# -- several movers on one clock -----------------------------------------------------
+
+
+def movers(scene) -> list[tuple[str, object]]:
+    """The listeners and sources of ``scene`` that move: in use, with a walk that is
+    enabled, as ("listeners" or "sources", item), listeners first."""
+    return [
+        (kind, item)
+        for kind in ("listeners", "sources")
+        for item in getattr(scene, kind)
+        if item.in_use and item.walk is not None and item.walk.enabled
+    ]
+
+
+def with_moving(scene, names: Iterable[str] | None):
+    """``scene`` with only ``names`` moving: their walks turned on and every other walk
+    off, so that its walker stands where it starts. None keeps the scene's own. Each
+    name must be a source or listener in use with a walk."""
+    if names is None:
+        return scene
+    names = set(names)
+    walkers = [
+        item.name
+        for kind in ("listeners", "sources")
+        for item in getattr(scene, kind)
+        if item.in_use and item.walk is not None
+    ]
+    unknown = sorted(names - set(walkers))
+    if unknown:
+        have = ", ".join(walkers) if walkers else "nothing"
+        raise ValueError(f"{unknown[0]!r} has no walk to move along; the scene's walks: {have}")
+    update = {}
+    for kind in ("listeners", "sources"):
+        items = []
+        for item in getattr(scene, kind):
+            on = item.name in names
+            if item.walk is not None and item.walk.enabled != on:
+                item = item.model_copy(
+                    update={"walk": item.walk.model_copy(update={"enabled": on})}
+                )
+            items.append(item)
+        update[kind] = items
+    return scene.model_copy(update=update)
+
+
+@dataclass(frozen=True)
+class Movement:
+    """Responses with every mover at each moment of its walk, from
+    :func:`simulate_movement`."""
+
+    #: The scene's room, as it was given (the movers with their walks).
+    room: Room
+    #: The moments the responses are at (s from the start, the first 0).
+    times: np.ndarray
+    #: The simulation: the still sources and listeners under their names, each mover as
+    #: a copy at each place it takes (:attr:`copies`).
+    result: SimulationResult
+    #: Each mover (("listeners" or "sources", name)) and the name of its copy at each
+    #: moment of :attr:`times`.
+    copies: dict[tuple[str, str], tuple[str, ...]]
+    #: How many of the movers' places have a late part of their own; the others mix theirs.
+    late_places: int = 0
+
+    @property
+    def duration_s(self) -> float:
+        return float(self.times[-1])
+
+    @property
+    def places(self) -> int:
+        """How many places the movers were simulated at in all."""
+        return sum(len(set(names)) for names in self.copies.values())
+
+    def key(self, source: str, listener: str, k: int) -> tuple[str, str]:
+        """The response of ``source`` at ``listener`` at moment ``k``, in :attr:`result`."""
+        source = self.copies.get(("sources", source), (source,) * len(self.times))[k]
+        listener = self.copies.get(("listeners", listener), (listener,) * len(self.times))[k]
+        return source, listener
+
+    def moves(self, source: str, listener: str) -> bool:
+        """Whether either of the pair moves."""
+        return ("sources", source) in self.copies or ("listeners", listener) in self.copies
+
+
+def simulate_movement(
+    room: Room,
+    *,
+    step_m: float = STEP_M,
+    step_deg: float = STEP_DEG,
+    late_step_m: float | None = LATE_STEP_M,
+    settings: SimulationSettings | None = None,
+    threads: int | None = None,
+    progress: Callable[[str], None] | None = None,
+) -> Movement:
+    """Simulate the scene with every mover (:func:`movers`) on one clock, in one
+    simulation: the moments are every mover's places (every ``step_m`` along its walk,
+    every ``step_deg`` of a turn on the spot, and its knots), and at each moment each
+    mover stands as a copy where its walk has it then, a copy serving every moment it
+    stands still at (once its walk is over, say). Every listener in use hears every
+    source in use, still or moving. The late part is traced every ``late_step_m`` along
+    each mover's walk, as in :func:`simulate_walk`.
+
+    A walk with Doppler is refused: Doppler plays one walk at a time
+    (:func:`simulate_walk`, ``walkthrough --walker``).
+    """
+    if step_m <= 0:
+        raise ValueError("step_m must be positive")
+    if step_deg <= 0:
+        raise ValueError("step_deg must be positive")
+    scene = room.scene
+    moving = movers(scene)
+    if not moving:
+        raise ValueError("nothing moves: give a listener or a source a walk that is enabled")
+    for _kind, item in moving:
+        if item.walk.doppler:
+            raise ValueError(
+                f"{item.name!r} walks with Doppler, which plays one walk at a time: "
+                f"simulate_walk (walkthrough --walker {item.name}), or turn its doppler off"
+            )
+    paths = {item.name: knots(item) for _, item in moving}
+    times = np.unique(np.concatenate([_sample_times(k, step_m, step_deg) for k in paths.values()]))
+    copies: dict[tuple[str, str], tuple[str, ...]] = {}
+    added: dict[str, list] = {"listeners": [], "sources": []}
+    mixing: dict[str, dict[str, float]] = {}
+    late_places = 0
+    for kind, item in moving:
+        positions, angles = paths[item.name].at(times)
+        # One copy per distinct place: the same while it stands still.
+        places: list[int] = []  # the moment each place was first seen at
+        at: list[int] = []  # each moment's place
+        for k in range(len(times)):
+            for j, first in enumerate(places):
+                if np.array_equal(positions[k], positions[first]) and np.array_equal(
+                    angles[k], angles[first]
+                ):
+                    at.append(j)
+                    break
+            else:
+                at.append(len(places))
+                places.append(k)
+        names = tuple(f"{item.name} #{j} @ {times[first]:.2f} s" for j, first in enumerate(places))
+        copies[kind, item.name] = tuple(names[j] for j in at)
+        added[kind] += [
+            _copy_at(item, names[j], positions[first], angles[first])
+            for j, first in enumerate(places)
+        ]
+        parts = _late_mixing_of(positions[places], late_step_m, settings or scene.simulation)
+        mixing |= {
+            names[j]: {names[other]: weight for other, weight in mix.items()}
+            for j, mix in parts.items()
+        }
+        late_places += len(places) - len(parts)
+    moving_names = {item.name for _, item in moving}
+    still = {
+        kind: [item for item in getattr(scene, kind) if item.name not in moving_names]
+        for kind in ("listeners", "sources")
+    }
+    update = {kind: [*still[kind], *added[kind]] for kind in ("listeners", "sources")}
+    walked = Room.from_scene(scene.model_copy(update=update), reuse=room)
+    for kind, inside in (
+        ("listeners", walked.listeners_inside),
+        ("sources", walked.sources_inside),
+    ):
+        if inside is None:
+            continue
+        offset = len(still[kind])
+        for j, copy in enumerate(added[kind]):
+            if not inside[offset + j]:
+                where = ", ".join(f"{v:.2f}" for v in copy.position)
+                name, _, when = copy.name.rpartition(" @ ")
+                raise ValueError(
+                    f"the walk of {name.rpartition(' #')[0]!r} leaves the room at ({where}) m, "
+                    f"{when} in"
+                )
+    result = simulate(
+        walked, settings=settings, threads=threads, progress=progress, late_from=mixing
+    )
+    return Movement(room, times, result, copies, late_places)
+
+
+def render_movement(
+    movement: Movement,
+    signals: Mapping[str, np.ndarray | tuple[np.ndarray, float]],
+    fmt=None,
+    *,
+    crossfade_s: float = CROSSFADE_S,
+    sample_rate: int | None = None,
+    seed: int | None = None,
+    equal_power: bool = False,
+) -> dict[str, np.ndarray]:
+    """``signals`` (source names to a signal at ``sample_rate``, or a (signal, rate)
+    pair) played through the movement, as heard at every listener in use: each as
+    (samples, channels) in format ``fmt`` (default mono) at ``sample_rate`` (default: the
+    simulation's), all of one length and, as in :func:`render_walk`, each signal scaled
+    by its source's sound power against the loudest one's unless ``equal_power``. A pair
+    that moves crossfades from each moment's response to the next's, as a walk does; a
+    still pair plays through its one response."""
+    from acoustic_spaces.spatial import Mono
+
+    if not signals:
+        raise ValueError("no signals to render")
+    fmt = fmt or Mono()
+    result = movement.result
+    scene = movement.room.scene
+    rate = int(sample_rate or result.settings.sample_rate)
+    if seed is None:
+        # One random sequence for every place's late part, so that crossfades join
+        # tails that differ only in their decay.
+        seed = result.settings.seed
+        if seed is None:
+            seed = next(iter(result)).seed
+    sources = {s.name for s in scene.sources if s.in_use}
+    unknown = sorted(set(signals) - sources)
+    if unknown:
+        raise ValueError(f"no source {unknown[0]!r}; the scene has {', '.join(sorted(sources))}")
+    listeners = [lis.name for lis in scene.listeners if lis.in_use]
+    if not listeners:
+        raise ValueError("no listener in use to hear the movement")
+    gains = {} if equal_power else power_gains(scene.sources, signals)
+    dry = {}
+    for source, value in signals.items():
+        signal, signal_rate = value if isinstance(value, tuple) else (value, rate)
+        mono = _as_2d(signal, f"signal of {source!r}").mean(axis=1) * gains.get(source, 1.0)
+        dry[source] = resample(mono, signal_rate, rate)
+    taps = int(math.ceil(max(r.length_s for r in result) * rate))
+    length = max(len(x) for x in dry.values()) + taps - 1
+    # Outdoors in turbulence the early paths flicker as the eddies drift past, the same
+    # eddies all along.
+    turbulent = [r for r in result if flickers(r)]
+    gusts = gusts_for(turbulent[0], length / rate, seed) if turbulent else None
+    times = movement.times
+    starts, lengths = _boundaries(times, crossfade_s)
+    cache: dict[tuple[str, str], np.ndarray] = {}
+
+    def response(key: tuple[str, str]) -> np.ndarray:
+        if key not in cache:
+            if len(cache) > 2 * len(dry):
+                cache.clear()  # a moment's responses are used one after the other
+            cache[key] = result[key].spatial_impulse_response(fmt, rate, seed)
+        return cache[key]
+
+    outputs = {}
+    for listener in listeners:
+        out = np.zeros((length, fmt.channels))
+        for source, signal in dry.items():
+            if not movement.moves(source, listener):
+                key = movement.key(source, listener, 0)
+                if flickers(result[key]):
+                    end = len(signal) + len(response(key)) - 1
+                    out[:end] += through_eddies(signal, result[key], fmt, rate, seed, gusts, 0, end)
+                else:
+                    wet = convolve(signal, response(key))
+                    out[: len(wet)] += wet
+                continue
+            for k in range(len(times)):
+                begin = 0 if k == 0 else int(math.floor(starts[k - 1] * rate))
+                end = (
+                    length
+                    if k == len(times) - 1
+                    else int(math.ceil((starts[k] + lengths[k]) * rate)) + 1
+                )
+                begin, end = max(begin, 0), min(end, length)
+                if begin >= end:
+                    continue  # the signals are over before this moment
+                t = np.arange(begin, end) / rate
+                weight = (_past(starts, lengths, k, t) - _past(starts, lengths, k + 1, t))[:, None]
+                key = movement.key(source, listener, k)
+                if flickers(result[key]):
+                    wet = through_eddies(signal, result[key], fmt, rate, seed, gusts, begin, end)
+                    out[begin:end] += weight[: len(wet)] * wet
+                    continue
+                ir = response(key)
+                first = max(begin - len(ir) + 1, 0)
+                piece = signal[first:end]
+                if len(piece) == 0:
+                    continue
+                wet = convolve(piece, ir)[begin - first : end - first]
+                out[begin : begin + len(wet)] += weight[: len(wet)] * wet
+        outputs[listener] = out
+    return outputs
+
+
+def save_movement(
+    rendered: Mapping[str, np.ndarray],
+    out: str | Path,
+    rate: int,
+    fmt=None,
+    *,
+    normalize: bool = False,
+) -> tuple[dict[str, Path], float]:
+    """Write what :func:`render_movement` gave: ``out`` itself for one listener, else
+    ``<out stem>_<listener>.wav`` beside it for each; ``normalize`` brings the loudest
+    peak of them all to -1 dBFS, one gain for all, so that the balance between the
+    listeners holds. Gives each listener's file and the gain applied."""
+    from acoustic_spaces.audio import write_wav
+
+    if not rendered:
+        raise ValueError("nothing rendered")
+    out = Path(out)
+    peak = max(float(np.abs(x).max(initial=0.0)) for x in rendered.values())
+    gain = 10.0 ** (-1.0 / 20.0) / peak if normalize and peak > 0 else 1.0
+    mask = fmt.channel_mask() if fmt is not None and hasattr(fmt, "channel_mask") else None
+    out.parent.mkdir(parents=True, exist_ok=True)
+    paths = {}
+    for listener, data in rendered.items():
+        path = out
+        if len(rendered) > 1:
+            safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in listener)
+            path = out.with_name(f"{out.stem}_{safe}{out.suffix or '.wav'}")
+        write_wav(path, data * gain, rate, mask)
+        paths[listener] = path
+    return paths, gain
 
 
 def _boundaries(times: np.ndarray, crossfade_s: float) -> tuple[np.ndarray, np.ndarray]:
@@ -578,14 +1058,23 @@ def pass_by(walk: WalkResponses, source: str | None = None) -> PassBy:
 __all__ = [
     "CROSSFADE_S",
     "LATE_STEP_M",
+    "STEP_DEG",
     "STEP_M",
+    "Knots",
+    "Movement",
     "PassBy",
     "WalkPoints",
     "WalkResponses",
     "crossfade_weights",
+    "knots",
     "late_mixing",
+    "movers",
     "pass_by",
+    "render_movement",
     "render_walk",
+    "save_movement",
+    "simulate_movement",
     "simulate_walk",
     "walk_points",
+    "with_moving",
 ]

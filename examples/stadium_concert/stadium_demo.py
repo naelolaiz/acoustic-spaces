@@ -5,7 +5,8 @@ The song (--song) is "Spicy Funk Cake" by the Rhythmussportgruppe (composed by N
 Dahlheimer), recorded for the sound database of the DEGA (German Acoustical Society) at
 Hochschule Düsseldorf, CC BY 4.0, https://doi.org/10.5281/zenodo.3601032, or "Francium"
 or "Rubidium" by Software-Entwicklungskit from the album "Everything is Free", CC0 1.0,
-https://github.com/ichbinsoftware/everythingisfree. The sound system (main arrays,
+https://github.com/ichbinsoftware/everythingisfree, or a song of your own (--music, its
+stereo master, with --bpm its tempo and --stem its stems). The sound system (main arrays,
 subwoofers, fills, towers and delays) plays the song's stereo master; the monitors play
 mixes of its stems: the singer's wedges the vocal, the drum fill the drums and bass, the
 side fills a mix for the whole stage; and the band on the stage plays its own parts: the
@@ -27,8 +28,19 @@ the script (scene_band.yaml, results_band); the music, the feeds, the mixes and 
 video go to ./demo (--work), and a second song goes best to a work folder of its own
 (`--song francium --work demo_francium`).
 Use headphones; `--hrtf me.sofa` plays through your own or measured HRTFs instead of a
-spherical head (the simulation takes it too). The editor runs the same steps from
-Simulation > Run demo…
+spherical head (the simulation takes it too). `--input drum_kit=drums.wav` has a source
+play a file of yours instead of its feed, at the level of that feed (a name the scene
+has no source for is refused with the list of them). The editor runs the same steps
+from Simulation > Run demo…
+
+A song of your own: `--music song.wav --bpm 120` (WAV, or anything ffmpeg decodes)
+plays its master through the sound system in place of --song's; `--stem vocal=vox.wav
+--stem drums=drums.wav` gives the stems the monitors and the band play (drums, bass,
+guitar, keys, brass, vocal, backing; a mix none of whose stems is given plays nothing,
+so without stems the monitors and the band are silent); `--downbeat 0.5` says when the
+first downbeat falls, so that the tour's cuts stay on the beat; `--credit` is the line
+the video shows for it (the file's name unless given). Nothing is downloaded; the music
+goes to demo/music/<file name>, so each song keeps its own folder.
 
 The impulse responses `simulate` writes carry each source's feed (gain_db, eq_db,
 delay_ms) but are per unit of sound power. `feeds` scales each loudspeaker's signal by
@@ -63,6 +75,7 @@ from acoustic_spaces.demos import (
     Option,
     Step,
     common_options,
+    input_option,
     music,
     pipeline,
     sibling,
@@ -197,6 +210,8 @@ SONGS = {
 }
 #: What ``music`` writes of a song to song.json and ``feeds`` to feeds.json.
 SONG_KEPT = ("name", "bpm", "downbeat_s", "tour", "credit")
+#: The stems a song of your own may give (``--stem``): those the mixes below name.
+STEMS = ("drums", "bass", "guitar", "keys", "brass", "vocal", "backing")
 
 #: Monitor mixes: stem and its gain in dB (stems a song does not have are left out).
 SINGER_MIX = {"vocal": 0, "backing": -6, "keys": -8, "guitar": -12, "bass": -14, "drums": -16}
@@ -205,6 +220,12 @@ DRUMMER_MIX = {"drums": 0, "bass": 0, "vocal": -6, "guitar": -8, "keys": -8}
 # itself is loud on stage, so the players hear the drums from where the drummer is.
 STAGE_MIX = {"vocal": 3, "drums": -20}  # every other stem at 0 dB
 MONITORS = {"vocal_wedges": "singer", "drum_fill": "drummer", "side_fill": "stage"}
+#: Each monitor mix's stems and gains; None: every stem the song has, at 0 dB unless named.
+MONITOR_MIXES: dict[str, tuple[dict[str, float], float | None]] = {
+    "singer": (SINGER_MIX, None),
+    "drummer": (DRUMMER_MIX, None),
+    "stage": (STAGE_MIX, 0.0),
+}
 #: The band itself, as sources on the stage (added by ``band``): sound power (dB re 1 pW)
 #: of a rock drum kit, a singer singing loud and an instrument amplifier turned up.
 BAND = {
@@ -264,7 +285,37 @@ FADE_OUT_S = 4.0
 
 
 def song_of(args) -> dict:
-    return SONGS[args.song] | {"name": args.song}
+    """The song: ``--song``'s preset, or the song of your own ``--music`` gives, named
+    after its file, with the stems of ``--stem``, the tempo of ``--bpm``, the first
+    downbeat of ``--downbeat``, the default tour and the credit of ``--credit`` or the
+    file's name."""
+    if args.music is None:
+        return SONGS[args.song] | {"name": args.song}
+    stems = {name: Path(file) for name, file in (args.stems or {}).items()}
+    return {
+        "name": args.music.stem,
+        "master": args.music,
+        "stems": stems,
+        "bpm": args.bpm,
+        "downbeat_s": args.downbeat,
+        "tour": {},
+        "credit": args.credit or f"Music: {args.music.name}",
+        "sources": f"master: {args.music}\n"
+        + "".join(f"{name}: {file}\n" for name, file in stems.items()),
+    }
+
+
+def stems_of(what: str, stems: set[str]) -> list[str]:
+    """The stems of ``stems`` (the song's) that the feed ``what`` plays: a monitor mix's
+    or a player's, in the order the song has them."""
+    if what in BAND_MIX:
+        plays = set(BAND_MIX[what])
+    elif what in MONITOR_MIXES:
+        gains, others = MONITOR_MIXES[what]
+        plays = stems if others is not None else set(gains)
+    else:
+        return []
+    return [name for name in STEMS if name in stems and name in plays]
 
 
 def phrase_s(song: dict) -> float:
@@ -274,7 +325,7 @@ def phrase_s(song: dict) -> float:
 
 
 def music_folder(args) -> Path:
-    return args.work / "music" / args.song
+    return args.work / "music" / song_of(args)["name"]
 
 
 def music_done(args) -> bool:
@@ -286,7 +337,8 @@ def music_done(args) -> bool:
 def music_step(args) -> None:
     """Download ``--song``'s master and stems: only the files the song names, out of its
     release's archives or one by one, each stem's files decoded and summed. Files
-    already in the folder are kept."""
+    already in the folder are kept. For a song of your own (``--music``, ``--stem``),
+    the files are decoded and written to the folder, nothing downloaded."""
     song = song_of(args)
     folder = music_folder(args)
     music.write_tracks({"master": song["master"]} | song["stems"], folder)
@@ -353,9 +405,53 @@ def role(source: dict) -> str:
     return "left" if y < 0 else "right"
 
 
+#: What each kind of feed (:func:`role`) is, for the editor's map of inputs.
+ROLES = {
+    "left": "the master's left channel, on the audience's left",
+    "right": "the master's right channel, on the audience's right",
+    "mono": "the master in mono",
+    "singer": "the singer's monitor mix",
+    "drummer": "the drummer's monitor mix",
+    "stage": "the stage's mix, drums well down",
+}
+
+
+def plays(args) -> dict[str, str]:
+    """What each source plays unless ``--input`` gives it a file (:func:`role`): the
+    sources of the scene with the band, or, before ``band`` writes it, of ``--from`` and
+    the band."""
+    if args.scene.exists():
+        sources = scene_of(args)["sources"]
+    elif args.source.exists():
+        sources = yaml.safe_load(args.source.read_text(encoding="utf-8"))["sources"]
+        names = {s["name"] for s in sources}
+        sources += [{"name": name} | spec for name, spec in BAND.items() if name not in names]
+    else:
+        return {}
+    song = song_of(args)
+    stems = set(song["stems"])
+    out = {}
+    for source in sources:
+        what = role(source)
+        if what in BAND_MIX:
+            have = stems_of(what, stems)
+            out[source["name"]] = (
+                f"{song['name']}, the {', '.join(have)} stem"
+                if have
+                else f"nothing: {song['name']} has no {', '.join(BAND_MIX[what])} stem"
+            )
+        elif what in MONITOR_MIXES and not stems_of(what, stems):
+            out[source["name"]] = f"nothing: {song['name']} has no stem for {ROLES[what]}"
+        else:
+            out[source["name"]] = f"{song['name']}, {ROLES[what]}"
+    return out
+
+
 def feeds(args) -> None:
     """One WAV per loudspeaker: the PA's channel of the master, or a monitor mix, at the
-    same gated RMS, then scaled by the source's level_db against the loudest's."""
+    same gated RMS, then scaled by the source's level_db against the loudest's. A mix
+    none of whose stems the song has (a song of your own given without them) is
+    silence."""
     rate = pipeline.response_rate(simulations(args)[0], responses_of(args))
     song = song_of(args)
     folder = music_folder(args)
@@ -368,34 +464,39 @@ def feeds(args) -> None:
         return resampled(x, r, rate)
 
     master = load("master")
+    if master.shape[1] < 2:
+        master = np.repeat(master, 2, axis=1)
     stems = {name: load(name) for name in song["stems"]}
     length = len(master)
-    # Line the stems up with the master: Spicy Funk Cake's start 58 ms before it (and run
-    # a second longer).
-    together = sum(s.mean(axis=1)[: rate * 90] for s in stems.values())
-    lag = lag_of(together, master.mean(axis=1)[: rate * 90], rate, 5.0)
-    stems = {k: shifted(v, lag, length) for k, v in stems.items()}
-    print(f"stems line up with the master {lag / rate:+.3f} s later")
+    if stems:
+        # Line the stems up with the master: Spicy Funk Cake's start 58 ms before it (and
+        # run a second longer).
+        together = sum(s.mean(axis=1)[: rate * 90] for s in stems.values())
+        lag = lag_of(together, master.mean(axis=1)[: rate * 90], rate, 5.0)
+        stems = {k: shifted(v, lag, length) for k, v in stems.items()}
+        print(f"stems line up with the master {lag / rate:+.3f} s later")
 
-    def mix(gains: dict[str, float], others: float | None = None) -> np.ndarray:
-        """The stems at ``gains`` (dB), the song's other stems at ``others`` or left out."""
+    def mix(gains: dict[str, float], others: float | None = None) -> np.ndarray | None:
+        """The stems at ``gains`` (dB), the song's other stems at ``others`` or left out;
+        None when the song has none of them."""
         levels = {k: others for k in stems} if others is not None else {}
         levels |= {k: g for k, g in gains.items() if k in stems}
+        if not levels:
+            return None
         return sum(stems[k].mean(axis=1) * 10.0 ** (g / 20.0) for k, g in levels.items())
 
     signals = {
         "left": master[:, 0],
         "right": master[:, 1],
         "mono": master.mean(axis=1),
-        "singer": mix(SINGER_MIX),
-        "drummer": mix(DRUMMER_MIX),
-        "stage": mix(STAGE_MIX, others=0.0),
-    } | {name: mix(gains) for name, gains in BAND_MIX.items()}
+    } | {name: mix(gains, others) for name, (gains, others) in MONITOR_MIXES.items()}
+    signals |= {name: mix(gains) for name, gains in BAND_MIX.items()}
     # The master's channels share one gain, so its stereo balance stays.
     reference = gated_rms(master, rate)
     norm = {
         k: reference if k in ("left", "right", "mono") else gated_rms(v, rate)
         for k, v in signals.items()
+        if v is not None
     }
     sources = scene_of(args)["sources"]
     loudest = max(total_level(s.get("level_db", 94.0)) for s in sources)
@@ -404,9 +505,14 @@ def feeds(args) -> None:
     for source in sources:
         what = role(source)
         level = total_level(source.get("level_db", 94.0))
+        table[source["name"]] = {"plays": what, "level_db": level, "gain_db": level - loudest}
+        if signals[what] is None:
+            write(out / f"{source['name']}.wav", np.zeros(length), rate)
+            table[source["name"]]["silent"] = True
+            print(f"{source['name']:>20}: {what:<8} silent: {song['name']} has no stem for it")
+            continue
         gain = 10.0 ** ((level - loudest) / 20.0) * 0.1 / norm[what]
         write(out / f"{source['name']}.wav", signals[what] * gain, rate)
-        table[source["name"]] = {"plays": what, "level_db": level, "gain_db": level - loudest}
         print(f"{source['name']:>20}: {what:<8} {level - loudest:+6.1f} dB")
     # The song as the script now has it (its tempo and tour may have been tuned since
     # ``music`` downloaded it): ``video`` reads them from here.
@@ -440,7 +546,7 @@ def render(args) -> None:
     weights = {name: entry["gain_db"] for name, entry in table["sources"].items()}
     simulation = simulations(args)[0]
     mixes = [pipeline.Mix(name, simulation, name, feeds, weights) for name in listeners]
-    pipeline.render_mixes(mixes, args.work / "seats", args, equal_power=True)
+    pipeline.render_mixes(mixes, args.work / "seats", args, equal_power=True, inputs=args.inputs)
 
 
 def tour_of(args, rendered) -> list[tuple[str, float, float]]:
@@ -479,6 +585,8 @@ def gains_of(seats: dict, tour) -> dict[str, float]:
 def video(args) -> None:
     """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
     scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    from acoustic_spaces.demos.pictures import save, settings_lines
+
     pictures = sibling(__file__, "stadium_pictures")
     seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
     tour = tour_of(args, seats["seats"])
@@ -498,13 +606,15 @@ def video(args) -> None:
         tour,
         TITLES,
         gains,
-        credit=feeds_table(args)["song"]["credit"],
+        credit=pipeline.credited(
+            feeds_table(args)["song"]["credit"], seats, list(feeds_table(args)["sources"])
+        ),
         hrtf=args.hrtf,
-        tool=pictures.settings_lines(
+        tool=settings_lines(
             DEMO, args, scene_of(args), pipeline.read_json(args.results / pipeline.PARAMETERS)
         ),
     )
-    pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
+    save(drawing.thumbnail(), args.work / "thumbnail.png")
     pipeline.video(
         args.work,
         [(name, stop - start) for name, start, stop in tour],
@@ -542,6 +652,7 @@ DEMO = Demo(
             tuple(sorted(SONGS)),
             ("music", "feeds"),
         ),
+        *music.own_song_options(("music", "feeds"), stems=STEMS, downbeat=True),
         Option(
             "source",
             "the example's scene",
@@ -554,6 +665,7 @@ DEMO = Demo(
         Option("scene", "the scene with the band", Path("scene_band.yaml"), "path"),
         Option("results", "folder written by simulate", Path("results_band"), "folder"),
         *common_options(),
+        input_option(),
         Option("listeners", "only these listeners, comma separated", None, steps=("render",)),
         Option(
             "tour",
@@ -564,6 +676,8 @@ DEMO = Demo(
     ],
     simulations=simulations,
     scene_from="band",
+    plays=plays,
+    problems=music.own_song_problems,
 )
 
 

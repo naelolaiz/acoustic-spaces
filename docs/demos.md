@@ -41,14 +41,35 @@ exist, `--work FOLDER` puts everything somewhere else, and `--no-mp4` writes the
 and the stills without calling ffmpeg. Where a step needs an earlier one, it says which
 command to run.
 
+`--input SOURCE=WAV`, once for each source, has a source play a recording of yours
+instead of what the demo gives it: `python lakeside_demo.py render --input
+subs=bass.wav`, or a singer of the choir (`--input singer_f1=take.wav`), a player of the
+orchestra (`--input fl1=flute.wav`, in every movement), any source of the stadium. The
+file is mixed down to mono, brought to the gated RMS of the feed it replaces, so the
+source plays as loud as the demo has it, and cut or padded with silence to that feed's
+length, so the tour's times hold; a name the demo has no source for is refused with
+the list of them. The mixes are made again when the inputs change. The credit line on
+the stills names the files that replaced a recording (and only them when every source
+has one); the captions go on describing the demo's own music. The walk through the
+gallery takes `--input guide=talk.wav`, played as it is: the video's one gain sets how
+loud it is heard, and the captions' level and STI stay the scene's voice.
+
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demo,
 reading the open scene where it would read the example's. Pick the demo and the step,
 fill in the options (they start at the same defaults the command line uses), and it
 runs in the background with its messages in the **Messages** panel, **Cancel** stopping
-it. The window shows the command line it is about to run, so a run started there can be
-repeated in a terminal or a script. A demo reads the scene from its file, so a scene
-with changes is saved first.
+it. The sources are a table, each with what it plays and the file it plays instead:
+**Choose WAV…** gives the selected one a file, **Default** takes it back. The
+**Movement** box lists the sources and listeners of the scene that have a walk, each
+with how it goes, how far and for how long, ticked when it moves in the run: *This
+scene*'s ticks start as **Moves** sets them in the scene and change that run only
+(`--moving`, below), **As in the scene** ticks them as the scene does again, and an
+example's demo shows what it moves (the walk through the gallery moves its visitor; the
+other example demos move nothing). **Edit movement…** closes the window and opens the
+[Movement panel](editor.md) on the selected walker. The window shows the command line it
+is about to run, so a run started there can be repeated in a terminal or a script. A
+demo reads the scene from its file, so a scene with changes is saved first.
 
 Every still says how its sound was made, at the bottom: the version, the early
 reflections (traced or image sources, their order, diffraction) and the late sound with
@@ -77,13 +98,16 @@ sources:
 acoustic-spaces demo scene.yaml                 # every step, into demo/ beside the scene
 acoustic-spaces demo scene.yaml feeds           # one step: feeds, simulate, render, video
 acoustic-spaces demo scene.yaml --seconds 15 --tour front,back --hrtf me.sofa
+acoustic-spaces demo scene.yaml --moving none   # every walker standing where it starts
 ```
 
 - **feeds**: each source's recording mixed down to mono, at the scene's sample rate and
   brought to the same gated RMS (unweighted), so that how loud each plays
   against the others is its sound power in the scene (`level_db`, with its feed's gain
   and equalizer), as the simulation says, and not how loud the recording happens to
-  be. Sources without a `signal` stay silent and are listed as such.
+  be. Sources without a `signal` stay silent and are listed as such. `--input
+  SOURCE=WAV` plays another file instead of a source's signal, without changing the
+  scene, and gives a silent source one.
 - **simulate**: `acoustic-spaces simulate` on the scene, its binaural output through the
   HRTFs the scene's binaural output names, `--hrtf` instead, or the spherical head
   model when neither names any. A scene changed since its results is simulated again.
@@ -102,8 +126,25 @@ acoustic-spaces demo scene.yaml --seconds 15 --tour front,back --hrtf me.sofa
   puts a line about the recordings on the stills (who made them, their licence); without
   it the line says which source plays which file.
 
+**Movement.** Sources and listeners whose [walk](scenes.md#walks) is on move along it
+while the recordings play, all on one clock from their start, as `walkthrough --all`
+plays them ([walkthroughs](spatial-audio.md#walkthroughs)). Then **render** simulates
+the scene with every walker at each moment of its walk, in one simulation, and mixes
+every listener hearing the walkers go by, or walking itself, with one gain for all; the
+still simulation stays for what the stills say where nothing moves. The video is a
+moving picture: the walks dotted, every walker where it is at that moment, and the
+level of the sources that play as simulated at that moment; the arrival time is left
+out where something moves, and T30 is the one where the walks start. A stop hears its
+listener where the clock has it then, so `--tour` puts a walker first to hear its walk
+from the start. `--moving` picks the walks of a run without changing the scene:
+`--moving visitor,guide` moves those two and leaves every other walker standing where it
+starts, `--moving none` keeps them all still, so one scene serves both. A walk with
+Doppler plays one walk at a time, with `acoustic-spaces walkthrough --walker`, and the
+demo says so.
+
 Everything goes to `demo/` beside the scene (`--work` elsewhere): the feeds, the
-results, the mixes in `seats/`, `tour.wav`, the stills, `thumbnail.png` and `tour.mp4`.
+results, the mixes in `seats/` (in `moving/` when something moves), `tour.wav`, the
+stills, `thumbnail.png` and `tour.mp4`.
 In Python the demo is `acoustic_spaces.demos.scene_demo`
 (`python -m acoustic_spaces.demos.scene_demo all --scene scene.yaml`).
 
@@ -306,6 +347,18 @@ for `render`, `--format` for another output the simulation wrote, `--no-mp4` for
 audio and stills only. `all` runs music, feeds, render and video; `band` and the
 simulation come before it.
 
+A song of your own plays in place of the presets: `--music song.wav --bpm 120` for
+`music` and `feeds` (and `all`), the master as a stereo file (WAV, or anything ffmpeg
+decodes) and its tempo, which the tour's phrases of 8 bars go by. `--stem vocal=vox.wav
+--stem drums=drums.wav`, once per stem (drums, bass, guitar, keys, brass, vocal,
+backing), gives the stems the monitors' mixes and the band's players draw on; a mix
+none of whose stems is given plays nothing, so without stems the monitors and the band
+are silent, which `feeds` and the Run demo window's table say. `--downbeat 0.5` is the
+time of the first downbeat, so that the cuts stay on the beat; `--credit "Music: …"`
+the line the video shows, the file's name unless given. Nothing is downloaded; the
+music goes to `demo/music/<file name>`, a folder of its own beside the presets', and
+`--input` goes on working on top of it.
+
 - **The band.** The example has loudspeakers only, so `band` adds the players as sources
   on the stage, in a group of their own: a drum kit beside the drummer (116 dB sound
   power, omni) playing the drums, the singer's voice (98 dB, subcardioid, facing the
@@ -416,11 +469,14 @@ python lakeside_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, de
 ```
 
 Options: `--song great_british_summer` or `potassium` for `music` (below),
-`--tour bedroom_window:still:1,audience::2` (listener:weather:phrases of 8 bars),
-`--last-phrases` (how long the last stop lasts, 0 to the end of the song; 2 by default),
-`--format` for another output the simulation wrote, `--no-mp4` for the audio and stills
-only. `all` runs music, render and video; `scenes` and the two simulations come before
-it.
+`--music song.wav --bpm 120` for a song of your own in their place (a stereo file, WAV
+or anything ffmpeg decodes, and its tempo, which the tour's phrases of 8 bars go by;
+nothing is downloaded, and the video credits the file by its name unless `--credit`
+says what to show), `--tour bedroom_window:still:1,audience::2`
+(listener:weather:phrases of 8 bars), `--last-phrases` (how long the last stop lasts, 0
+to the end of the song; 2 by default), `--format` for another output the simulation
+wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and video;
+`scenes` and the two simulations come before it.
 
 - **The sound system.** `scenes` replaces the example's single source (120 dB sound
   power) with a system as a lawn concert hangs it: two line arrays of eight boxes
@@ -498,7 +554,7 @@ changed, for example:
 ## A walk through the gallery
 
 `walk_demo.py` is the smallest demo and the only one of speech: a guide stands in the
-L-shaped gallery of the `gallery_walk` example and talks while a visitor walks away
+L-shaped gallery of the `gallery` example and talks while a visitor walks away
 from them, down the long arm and round the corner, where the guide is out of sight and
 only the sound bent round the corner arrives; then the visitor stands 4 m in front of
 the guide and turns their head a quarter at a time, so the voice moves to the right
@@ -506,7 +562,7 @@ ear, behind, to the left ear and back in front. The video follows the visitor fr
 above, with the head and its ears, the guide, and a bar of the levels.
 
 ```sh
-acoustic-spaces examples --copy . gallery_walk && cd gallery_walk
+acoustic-spaces examples --copy . gallery && cd gallery
 python walk_demo.py all   # or speech, scene, walk, turn, video one at a time
 ```
 
@@ -514,12 +570,15 @@ Options: `--talker M4` picks one of the corpus's 14 talkers, `--voice` how loud 
 guide speaks (relaxed, normal, raised, loud), `--stand 16,4` where the visitor stands
 for the turn, `--turn` the angles it holds, `--hrtf me.sofa` a measured head.
 
-- **The walk** is the example's own: responses every 25 cm along it
+- **The walk** is the example's visitor's: responses every 25 cm along it
   (`acoustic-spaces walkthrough`), the talk played along them so that the voice changes
   as the visitor moves. The speech level at the ears falls from 56.0 dB(A) three metres
   in front of the guide to 48.7 dB(A) round the corner, and the speech transmission
   index with it, from 0.73 to 0.54: the gallery is quiet and bare, so what is lost is
-  the direct sound, not the clarity.
+  the direct sound, not the clarity. The gallery's two other listeners stand where they
+  are and are left out. Edit the visitor's walk (the [Movement panel](editor.md), or the
+  scene file) and `all` makes the scene and the walk again; with the walk turned off
+  (**Moves**) the demo says there is no walk to play.
 - **The turn** goes through the engine's head tracker, scripted rather than played
   live: the place's response in Ambisonics of order 7, the sound field turned against
   the head every 256 samples and decoded to the ears

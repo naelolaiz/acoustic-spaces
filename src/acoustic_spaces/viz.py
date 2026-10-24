@@ -23,6 +23,7 @@ Jupyter, and off screen for screenshots.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -44,7 +45,7 @@ if TYPE_CHECKING:
     from acoustic_spaces.engine.particles import Particles
     from acoustic_spaces.parameters import BandDecay
     from acoustic_spaces.scene.model import Atmosphere
-    from acoustic_spaces.walkthrough import WalkResponses
+    from acoustic_spaces.walkthrough import Movement, WalkResponses
 
 #: ColorBrewer Set3: light colours, so the saturated source and listener markers stand out.
 MATERIAL_COLOURS = (
@@ -1131,6 +1132,96 @@ def animate_walk(
                 yaw=180.0 - (180.0 - math.degrees(yaw)) % 360.0
             )
         clock.SetText(0, text)
+
+    _record(plotter, path, fps, frames, show, sound if mp4 else None)
+
+
+def animate_movement(
+    room: Room,
+    movement: Movement,
+    path: str | Path,
+    *,
+    fps: int = 25,
+    window_size: tuple[int, int] = (1024, 640),
+    sound: str | Path | None = None,
+) -> None:
+    """Save a movement (from :func:`acoustic_spaces.walkthrough.simulate_movement`) as
+    an animated GIF or an MP4 video: the room, every mover's path and the movers going
+    along them on one clock, each with an arrow the way it faces, the still sources and
+    listeners where they stand. ``sound``, a WAV file of one listener's sound in one or
+    two channels, becomes an MP4's sound track, and the video then lasts as long as the
+    sound (a GIF has none)."""
+    from acoustic_spaces.spatial.rotation import angles_matrix
+    from acoustic_spaces.walkthrough import knots, movers
+
+    check_video(path)
+    duration = movement.duration_s
+    mp4 = Path(path).suffix.lower() == ".mp4"
+    if sound is not None and mp4:
+        from acoustic_spaces.audio import read_wav
+
+        data, rate = read_wav(sound)
+        if data.shape[1] > 2:
+            raise ValueError(f"a video's sound has one or two channels, not {data.shape[1]}")
+        duration = max(duration, len(data) / rate)
+    pv = _pyvista()
+    plotter = pv.Plotter(off_screen=True, window_size=list(window_size))
+    moving = movers(room.scene)
+    names = {item.name for _, item in moving}
+    # The room with the still sources and listeners only: the movers are drawn going.
+    still = {
+        kind: [item for item in getattr(room.scene, kind) if item.name not in names]
+        for kind in ("sources", "listeners")
+    }
+    background = dataclasses.replace(room, scene=room.scene.model_copy(update=still))
+    plot_room(background, plotter, opacity=0.12)
+    size = max(0.2, 0.02 * float(np.ptp(room.mesh.vertices, axis=0).max()))
+    markers = []
+    for kind, item in moving:
+        path_of = knots(item)
+        line = path_of.at(np.linspace(0.0, path_of.duration_s, 10 * len(path_of.times)))[0]
+        plotter.add_mesh(pv.lines_from_points(line), color="white", line_width=3)
+        marker = pv.Sphere(radius=size, center=(0.0, 0.0, 0.0))
+        colour = SOURCE_COLOUR if kind == "sources" else LISTENER_COLOUR
+        plotter.add_mesh(marker, color=colour)
+        # An arrow the way it faces, just above it so that the path does not hide it.
+        arrow = pv.Arrow(
+            start=(0.0, 0.0, 0.0),
+            direction=(1.0, 0.0, 0.0),
+            tip_length=0.3,
+            tip_radius=0.1,
+            shaft_radius=0.04,
+            scale=8.0 * size,
+        )
+        arrow.points += (0.0, 0.0, 1.5 * size)
+        plotter.add_mesh(arrow, color=FACING_COLOUR, lighting=False)
+        markers.append(
+            (item.name, path_of, marker, marker.points.copy(), arrow, arrow.points.copy())
+        )
+    labels = pv.PolyData(np.array([item.position for _, item in moving], dtype=float))
+    plotter.add_point_labels(
+        labels,
+        [item.name for _, item in moving],
+        show_points=False,
+        always_visible=True,
+        font_size=14,
+        text_color="white",
+        shape_color=PANEL,
+    )
+    clock = plotter.add_text("", position="lower_left", font_size=12, color="white")
+    plotter.view_isometric()
+    frames = int(math.floor(duration * fps)) + 1
+
+    def show(frame: int) -> None:
+        t = frame / fps
+        places = []
+        for _name, path_of, marker, shape, arrow, arrow_shape in markers:
+            where, angles = path_of.at(t)
+            marker.points = shape + where
+            arrow.points = arrow_shape @ angles_matrix(*angles).T + where
+            places.append(where + (0.0, 0.0, 3.0 * size))
+        labels.points = np.array(places)
+        clock.SetText(0, f"{t:.1f} s")
 
     _record(plotter, path, fps, frames, show, sound if mp4 else None)
 

@@ -27,6 +27,9 @@ from acoustic_spaces.geometry.io import extra_for, missing_extra
 from acoustic_spaces.i18n import N_
 
 SCENE_FILE = "scene.yaml"
+#: Names examples had before they were merged into another, which still find it:
+#: ``gallery_walk`` is the gallery, whose visitor walks unless its walk is turned off.
+FORMER_NAMES = {"gallery_walk": "gallery"}
 
 #: The groups the examples are shown in, in order, each with its examples (folder names)
 #: from the simplest. The titles are English; the editor translates them.
@@ -37,7 +40,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         N_("Halls and churches"),
-        ("lecture_hall", "concert_hall", "orchestra", "church", "gallery", "gallery_walk"),
+        ("lecture_hall", "concert_hall", "orchestra", "church", "gallery"),
     ),
     (N_("Sound systems"), ("town_hall_pa", "concert_stage", "stadium_pa", "stadium_concert")),
     (
@@ -142,8 +145,9 @@ def example_groups(examples: list[Example] | None = None) -> list[tuple[str, lis
 
 
 def example_path(name: str) -> Path:
-    """The scene file of the example ``name`` (a folder name from :func:`list_examples`)."""
-    scene_file = examples_dir() / name / SCENE_FILE
+    """The scene file of the example ``name`` (a folder name from :func:`list_examples`,
+    or one of :data:`FORMER_NAMES`)."""
+    scene_file = examples_dir() / FORMER_NAMES.get(name, name) / SCENE_FILE
     if not scene_file.is_file():
         names = ", ".join(e.name for e in list_examples())
         raise ValueError(f"no example named {name!r}; examples: {names}")
@@ -152,18 +156,23 @@ def example_path(name: str) -> Path:
 
 def copy_examples(destination: str | Path, names: list[str] | None = None) -> list[Path]:
     """Copy examples (all, or ``names``) into ``destination``, one folder each, and
-    return their scene files. Raises ``FileExistsError`` rather than overwrite a folder."""
+    return their scene files. An example asked for by a former name (:data:`FORMER_NAMES`)
+    goes into a folder of that name, so that commands written for it still work. Raises
+    ``FileExistsError`` rather than overwrite a folder."""
     destination = Path(destination)
     chosen = list_examples()
+    folders = {e.name: e.name for e in chosen}
     if names is not None:
-        chosen = [e for e in chosen if e.name in names]
-        missing = sorted(set(names) - {e.name for e in chosen})
+        folders = {FORMER_NAMES.get(name, name): name for name in names}
+        chosen = [e for e in chosen if e.name in folders]
+        found = {e.name for e in chosen}
+        missing = [name for name in names if FORMER_NAMES.get(name, name) not in found]
         if missing:
             raise ValueError(f"no example named {', '.join(missing)}")
     destination.mkdir(parents=True, exist_ok=True)
     copied = []
     for example in chosen:
-        target = destination / example.name
+        target = destination / folders[example.name]
         if target.exists():
             raise FileExistsError(f"{target} already exists")
         shutil.copytree(example.path.parent, target)
@@ -172,6 +181,7 @@ def copy_examples(destination: str | Path, names: list[str] | None = None) -> li
 
 
 __all__ = [
+    "FORMER_NAMES",
     "GROUPS",
     "OTHER_GROUP",
     "Example",

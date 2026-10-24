@@ -23,8 +23,7 @@ each from the simplest.
 | `concert_hall` | A 32 × 20 × 15 m shoebox hall with a raised stage and upholstered seats; two sources on stage, three seats in the stalls. |
 | `orchestra` | The concert hall with a full orchestra on its stage, one source for each of the 61 tracks of an anechoic recording, and the scripts that [mix them and make a video](demos.md#an-orchestra-in-the-concert-hall). |
 | `church` | A stone nave with an apse, 18 m high, with about six seconds of reverberation; `church_demo.py` puts a [choir and an organ](demos.md#a-choir-and-an-organ-in-the-church) in it and makes a video. |
-| `gallery` | An L-shaped gallery: one listener sees the guide, the other stands round the corner and hears the guide by [edge diffraction](simulation.md#edge-diffraction). |
-| `gallery_walk` | The gallery with a visitor walking away from the guide and round the corner while the guide talks, for a [walkthrough](spatial-audio.md#walkthroughs) with its video. |
+| `gallery` | An L-shaped gallery: one listener sees the guide, one stands round the corner and hears the guide by [edge diffraction](simulation.md#edge-diffraction), and a visitor walks away from the guide and round the corner, for a [walkthrough](spatial-audio.md#walkthroughs); `walk_demo.py` makes its [video](demos.md#a-walk-through-the-gallery). With the walk turned off the visitor stands where it starts. It was `gallery_walk` before 4.0.0, a name that still finds it. |
 
 ## Sound systems
 

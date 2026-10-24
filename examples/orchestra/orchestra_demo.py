@@ -19,7 +19,9 @@ or `python orchestra_demo.py all`, which runs them in turn and leaves out what i
 already (the tracks, the simulation). The simulation goes to ./results (--results); the
 tracks, the mixes and the video go to ./demo (--work). Use headphones;
 `--hrtf me.sofa` plays through your own or measured HRTFs instead of a spherical head
-(the simulation takes it too). The editor runs the same steps from Simulation > Run demo…
+(the simulation takes it too). `--input fl1=flute.wav` has a player play a file of yours
+instead of their track, in every movement of the tour, at the level of that track. The
+editor runs the same steps from Simulation > Run demo…
 
 The tour plays what the recording has of the three movements (70 to 85 s of each), each
 from two to four of the seats in turn:
@@ -47,7 +49,16 @@ from pathlib import Path
 import yaml
 
 from acoustic_spaces import fetch
-from acoustic_spaces.demos import SIMULATE, Demo, Option, Step, common_options, pipeline, sibling
+from acoustic_spaces.demos import (
+    SIMULATE,
+    Demo,
+    Option,
+    Step,
+    common_options,
+    input_option,
+    pipeline,
+    sibling,
+)
 from acoustic_spaces.demos.audio import envelope, mmss, quiet_moment, read, write
 
 #: The movements the recording has: numeral and title, and the zip each comes in.
@@ -218,10 +229,15 @@ def mixes_of(args) -> list[pipeline.Mix]:
     return mixes
 
 
+def plays(args) -> dict[str, str]:
+    """What each player plays unless ``--input`` gives them a file: their track."""
+    return {name: f"{track} of each movement" for name, track in TRACKS.items()}
+
+
 def render(args) -> None:
     """Each stop's mix: a movement at a seat (``--format``, binaural by default), then
     one gain for all of them (the loudest peak at -1 dBFS)."""
-    pipeline.render_mixes(mixes_of(args), args.work / "seats", args)
+    pipeline.render_mixes(mixes_of(args), args.work / "seats", args, inputs=args.inputs)
 
 
 # --------------------------------------------------------------------------- the tour
@@ -274,6 +290,8 @@ def facts_of(stop: dict) -> list[str]:
 def video(args) -> None:
     """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
     scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    from acoustic_spaces.demos.pictures import save, settings_lines
+
     pictures = sibling(__file__, "make_images")
     seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
     keys = [key_of(movement, seat) for movement, seat in stops_of(args)]
@@ -286,6 +304,7 @@ def video(args) -> None:
     print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
     scene = yaml.safe_load(args.scene.read_text(encoding="utf-8"))
     report = pipeline.read_json(args.results / pipeline.PARAMETERS)
+    credit = pipeline.credited(pictures.CREDIT, seats, list(TRACKS))
 
     def frame(k: int):
         stop = tour[k]
@@ -296,7 +315,8 @@ def video(args) -> None:
             info["movement"],
             facts=facts_of(info),
             hrtf=args.hrtf,
-            tool=pictures.settings_lines(DEMO, args, scene, report),
+            tool=settings_lines(DEMO, args, scene, report),
+            credit=credit,
         )
         img = drawing.cover()
         tour_bar(img, tour, k, seats, pictures)
@@ -310,10 +330,17 @@ def video(args) -> None:
         numeral = MOVEMENTS[info["movement"]][0]
         chapters.append(f"{mmss(stop.at)} {numeral} · {TITLES[info['seat']][0]}")
     first = seats["seats"][tour[0].key]
-    thumbnail = pictures.Pictures(scene, first["seat"], first["movement"]).thumbnail(
-        note=f"3 movements · 4 seats · {len(TRACKS)} anechoic tracks"
+    replaced = len({name for v in seats["seats"].values() for name in v.get("inputs", {})})
+    played = f"{len(TRACKS) - replaced} anechoic tracks" + (
+        f" and {replaced} of yours" if replaced else ""
     )
-    pictures.save(thumbnail, args.work / "thumbnail.png")
+    movements = len({seats["seats"][stop.key]["movement"] for stop in tour})
+    places = len({seats["seats"][stop.key]["seat"] for stop in tour})
+    thumbnail = pictures.Pictures(scene, first["seat"], first["movement"], credit=credit).thumbnail(
+        note=f"{movements} movement{'s' * (movements != 1)} · {places} seat"
+        f"{'s' * (places != 1)} · {played}"
+    )
+    save(thumbnail, args.work / "thumbnail.png")
     pipeline.video(
         args.work,
         frames,
@@ -377,6 +404,7 @@ DEMO = Demo(
         Option("results", "folder written by simulate", Path("results"), "folder"),
         Option("zips", "the folder with movementN.zip", Path("."), "folder", steps=("tracks",)),
         *common_options(),
+        input_option(),
         Option("movements", "only these movements, comma separated", None, steps=("tracks",)),
         Option(
             "tour",
@@ -386,6 +414,7 @@ DEMO = Demo(
         ),
     ],
     simulations=simulations,
+    plays=plays,
 )
 
 __all__ = ["DEMO"]

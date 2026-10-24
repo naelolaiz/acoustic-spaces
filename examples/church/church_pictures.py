@@ -122,11 +122,13 @@ class Pictures:
         what_plays,
         playing,
         voices,
+        credit: str = CREDIT,
         hrtf: str | Path | None = None,
         tool=None,
     ):
         self.scene, self.seats, self.tour, self.titles = scene, seats, tour, titles
         self.what_plays, self.playing, self.voices = what_plays, playing, voices
+        self.credit = credit
         self.now = ("choir", "organ")  # what plays in the picture being drawn
         self.sources = scene["sources"]
         self.listeners = {item["name"]: item for item in scene["listeners"]}
@@ -456,7 +458,7 @@ class Pictures:
         draw = ImageDraw.Draw(img)
         entries = [(self.title(name)[0], t0) for name, t0, _ in self.tour]
         tour_column(draw, 1500, y + 14, entries, k, row=30)
-        footer(draw, CREDIT, self.tool, size=18)
+        footer(draw, self.credit, self.tool, size=18)
         return img
 
     def thumbnail(self) -> Image.Image:

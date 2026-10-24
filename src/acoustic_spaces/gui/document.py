@@ -520,6 +520,22 @@ class Document(QObject):
 
         self.edit(text.format(count=count), change)
 
+    def set_walk_enabled(self, kind: str, index: int, enabled: bool) -> None:
+        """Have the source or listener at ``index`` go along its walk in a movement
+        (``walk.enabled``), or keep the walk but leave it standing where it starts."""
+        item = getattr(self.scene, kind)[index]
+        if item.walk is None:
+            raise EditError(
+                _("{name} has no walk yet: add a keyframe first").format(name=item.name)
+            )
+        if item.walk.enabled == enabled:
+            return
+
+        def change(data: dict) -> None:
+            data[kind][index]["walk"]["enabled"] = enabled
+
+        self.edit(_("turn the walk on") if enabled else _("turn the walk off"), change)
+
     def set_hidden(self, kind: str, indices, hidden: bool) -> None:
         """Hide the sources or listeners at ``indices`` in the 3D view and the plan, or
         show them again; this changes how the editor shows the scene, not the scene."""

@@ -196,13 +196,15 @@ sound system and monitors in the stadium.
 
 ### Walkthroughs
 
-A listener or a source with a [walk](scenes.md#walks) can be heard as it goes. The
-`gallery_walk` example has a visitor walk away from a guide, down the long arm of the
-L-shaped gallery and round the corner, while the guide talks (any dry speech recording
-does as `speech.wav`; see [dry recordings to try](#dry-recordings-to-try)):
+A listener or a source with a [walk](scenes.md#walks) can be heard as it goes. In the
+`gallery` example a visitor walks away from a guide, down the long arm of the L-shaped
+gallery and round the corner, while the guide talks (any dry speech recording does as
+`speech.wav`; see [dry recordings to try](#dry-recordings-to-try)); the gallery's two
+other listeners stand still, and with the visitor's walk turned off (**Moves**, or
+`enabled: false`) the visitor stands too, so one scene serves both:
 
 ```sh
-acoustic-spaces examples --copy . gallery_walk && cd gallery_walk
+acoustic-spaces examples --copy . gallery && cd gallery
 acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video walk.mp4
 ```
 
@@ -246,6 +248,9 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
 - At walking speed the Doppler shift is under half a percent (8 cents), and the
   crossfades leave it out. A car, a train or an aircraft takes `doppler: true` in its
   walk (see [Moving sources and Doppler](#moving-sources-and-doppler)).
+- A walk along [keyframes](scenes.md#walks) (timed places and facings, so the walker
+  can wait, turn on the spot or go at any pace) is placed every `--step` along each leg
+  and every `--turn-step` (20° by default) of a turn on the spot, and at every keyframe.
 
 From Python:
 
@@ -260,6 +265,43 @@ walk = simulate_walk(room)  # the only listener or source with a walk
 sound = render_walk(walk, {"guide": (speech, 44_100)}, Binaural())  # (samples, 2)
 animate_walk(room, walk, "walk.gif")
 ```
+
+#### Several movers at once
+
+When more than one listener or source has a walk, `walkthrough --all` plays them all
+together, on one clock, in one simulation:
+
+```sh
+acoustic-spaces walkthrough scene.yaml band=song.wav speaker=talk.wav --all --out heard.wav
+```
+
+- Every walk that is `enabled` moves (the default; `enabled: false` leaves a walker
+  standing where it starts), and every listener in use hears every source in use, still
+  or moving, so the balance between listeners is the scene's. One WAV is written per
+  listener (`heard_<listener>.wav`; `--listener NAME` for one of them, as `--out`
+  names it).
+- The moments simulated are every mover's places: every `--step` along its walk, every
+  `--turn-step` of a turn on the spot, and its keyframes or corners. At each moment each
+  mover stands as a copy of itself where its walk has it then, one copy serving every
+  moment it stands still at (once its walk is over, say). All the copies go into one
+  simulation with the still sources and listeners, so a moving listener costs what a
+  walk of its own does, and the late part is traced every `--late-step` along each walk,
+  the places between mixing theirs, as for one walk. A scene where both a source and a
+  listener move simulates every copy of the one against every copy of the other, which
+  grows with the square of the moments: keep `--step` coarse there, or let one of them
+  stand.
+- A pair that moves crossfades from each moment's response to the next's, as a walk
+  does; a still pair plays through its one response. `--video` draws every mover along
+  its path with an arrow the way it faces, and the still sources and listeners where
+  they stand; an MP4 carries the sound when one listener is rendered.
+- Doppler plays one walk at a time: `--all` refuses a walk with `doppler: true` (play it
+  with `--walker`), and `--levels` is for one walk too.
+
+From Python: `simulate_movement(room)`, `render_movement(movement, signals, fmt)` (a
+dict of each listener's sound), `save_movement(rendered, "heard.wav", rate, fmt)` and
+`animate_movement(room, movement, "heard.mp4")`. In the editor, the Movement panel
+edits the keyframes, previews every mover along one timeline and renders the movement
+in the background (see [Graphical editor](editor.md)).
 
 ### Moving sources and Doppler
 

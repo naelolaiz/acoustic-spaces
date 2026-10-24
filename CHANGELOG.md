@@ -626,13 +626,14 @@
   the `simulate` command it prints carries it, and `render` mixes from the responses
   made through that file, refusing ones made through the spherical head. A script asked
   for feeds or mixes before its scene exists says to run its scene step first.
-- A fifth demo, and the first of speech: `walk_demo.py`, in the new `gallery_walk`
-  example, has a guide talk while a visitor walks away from them down an L-shaped
-  gallery and round the corner, where only the sound bent round the corner arrives
-  (56.0 dB(A) and a speech transmission index of 0.73 at the start, 48.7 dB(A) and 0.54
-  round the corner), and then stands in front of them and turns their head a quarter at
-  a time through the engine's head tracker. The talk is the ACE corpus's anechoic
-  speech (CC BY 4.0); the video follows the visitor from above.
+- A fifth demo, and the first of speech: `walk_demo.py`, in the `gallery` example (into
+  which `gallery_walk` is merged, see **Movement**), has a guide talk while a visitor
+  walks away from them down an L-shaped gallery and round the corner, where only the
+  sound bent round the corner arrives (56.0 dB(A) and a speech transmission index of
+  0.73 at the start, 48.7 dB(A) and 0.54 round the corner), and then stands in front of
+  them and turns their head a quarter at a time through the engine's head tracker. The
+  talk is the ACE corpus's anechoic speech (CC BY 4.0); the video follows the visitor
+  from above.
 - The demo scripts share one package, `acoustic_spaces.demos`: a demo describes its
   steps and its options, and gets the command line, the recordings and their phrases,
   the simulate command and its HRTF, the mixes with one gain, the crossfaded tour, the
@@ -665,6 +666,71 @@
 - A demo run elsewhere than its example (the editor's copy under the home folder, when
   the examples cannot be written) writes scenes that find the example's model and data:
   their paths were left relative to the example and the simulation could not find them.
+- Every demo takes `--input SOURCE=WAV`, once for each source: the source plays that
+  file instead of what the demo gives it, mixed down to mono, at the gated RMS of the
+  feed it replaces and cut or padded with silence to its length, so the balance and the
+  tour hold (the walk plays the guide's file as it is; the demo of any scene feeds it as
+  it would the signal). The mixes are made again when the inputs change, and the
+  stills' credit line names the files. Before, only the demo of any scene could play
+  other recordings, by changing the scene.
+- The stadium and the lakeside demos play a song of the user's own in place of their
+  presets: `--music FILE` (a stereo master: WAV, or anything ffmpeg decodes) with
+  `--bpm`, its tempo, which the tour's phrases of 8 bars go by; `--credit` sets the
+  line the video shows (the file's name unless given). The stadium also takes `--stem
+  NAME=WAV` for each stem (drums, bass, guitar, keys, brass, vocal, backing), which the
+  monitors' mixes and the band play, and `--downbeat` for the first downbeat; a mix none
+  of whose stems is given plays nothing, and `feeds` and the Run demo window's table say
+  so. Nothing is downloaded, and the music goes to a folder named after the file. In the
+  Run demo window, `--music` is a file field, `--bpm` a number and the stems a table
+  with a file per row; the window's Demo list is left out when there is one demo only.
+
+**Movement**
+
+- A walk may go through `keyframes`: where the walker is at given times after its start
+  and, if given, how it faces there, between which it moves and turns evenly (the
+  shorter way round), so it can wait, turn on the spot or go at any pace. A keyframe
+  without an orientation keeps the facing of the one before. `walkthrough` places such a
+  walk every `--step` along a leg and every `--turn-step` (20° by default) of a turn on
+  the spot. `walk.enabled: false` keeps a walk but leaves its walker standing still.
+- `walkthrough --all` plays every walk that is enabled at once, on one clock, in one
+  simulation: each mover as a copy at each place it takes, with the still sources and
+  listeners, the late part traced every `--late-step` along each walk; every listener in
+  use hears every source, and one WAV is written per listener (or `--listener`'s), with
+  one gain for all. `--video` draws them all going. Doppler stays with one walk at a
+  time. From Python: `walkthrough.knots`, `movers`, `simulate_movement`,
+  `render_movement`, `save_movement` and `viz.animate_movement`.
+- `inspect` describes a walk along keyframes and one that is off.
+- Editor: **Edit > Edit movement…** (or the button in a source's or listener's form)
+  opens the Movement panel: the keyframes of the selected point source or listener in a
+  table (time, position, angles, with the speed to the next keyframe shown, not set),
+  edited in place as one step of the history each; **Add keyframe** at the playhead,
+  **Remove keyframe**, **Convert to keyframes** for a walk along `to`; a timeline whose
+  **End** can be made longer to add keyframes past the longest walk, with **Play** and a
+  slider that move every mover in the 3D view and the plan; walks drawn as dashed lines,
+  the selected mover's keyframes as numbered handles to drag in either view; **Moves**
+  (also in the forms) for `enabled`; and **Render movement…**, `walkthrough --all` in the
+  background, writing one WAV per listener with one gain.
+- One scene serves still and moving: `gallery_walk` is merged into `gallery`, whose
+  visitor walks down the long arm and round the corner unless its walk is turned off,
+  beside the two listeners that stand. The name `gallery_walk` still finds it
+  (`examples`, `examples --copy`, which copies it under that name, and the demos).
+  `walkthrough.with_moving` turns the walks it names on and every other one off, for a
+  run, without changing the scene.
+- The demo of any scene plays the walks that are on: every walker moves on one clock
+  from the start of the recordings, the mixes come from one simulation with every
+  walker at each moment of its walk (in `moving/`, one gain for all), and the video is a
+  moving picture with the walks dotted, every walker where it is and the level of the
+  sources that play at that moment, as simulated. `--moving NAME,...` picks the walks of
+  a run and `--moving none` keeps every walker standing; a walk with Doppler is refused,
+  as it plays one walk at a time.
+- The Run demo window's **Movement** box lists the sources and listeners with a walk,
+  how each goes, how far and for how long, ticked when it moves in the run: *This
+  scene*'s ticks start as **Moves** sets them and change that run only (`--moving`),
+  **As in the scene** ticks them as the scene does, an example's demo shows what it moves,
+  and **Edit movement…** closes the window and opens the Movement panel on the walker.
+- `walk_demo.py` walks the visitor as the scene has it, along keyframes too, with the
+  pace its captions state worked out from the walk; it makes its scene and its walk again
+  when the example's scene has changed since, and says when the visitor's walk is off.
 
 **HRTF sets**
 
@@ -719,6 +785,9 @@
   own process in the background, with what it prints in **Messages** and **Cancel** to
   stop it. The window shows the command line it is about to run, and asks for a scene
   with changes to be saved first. A demo could only be run from a terminal before.
+- The **Run demo…** window lists the sources of the demo in a table, what each plays and
+  the WAV file it plays instead (`--input`): **Choose WAV…** gives the selected source
+  one, **Default** takes it back.
 - The source page's **Plays** row names the WAV file the source plays in a demo of the
   scene: **Choose WAV…** picks one, **Silent** takes it away, and the scene file keeps it
   as `signal`, relative to the scene's folder.
@@ -727,8 +796,27 @@
   the background and puts it in the scene's binaural output; another SOFA file goes in
   by its address.
 
+**Checks of the decay times** (ISO 3382-2, annex B)
+
+- Each T20 and T30 comes with the non-linearity ξ of the line it is read from,
+  1000 (1 - r²) ‰ (r: the correlation of the decay curve with time over the fit range),
+  and the decay's curvature, 100 (T30 / T20 - 1) %: `xi_t20`, `xi_t30` and `curvature`
+  in `RoomParameters`, the printed tables, `parameters.json` and the editor's results
+  table. `NON_LINEARITY_LIMIT` (10 ‰) and `CURVATURE_LIMIT` (10 %) are the standard's
+  limits: past them the editor's results table shows the check in amber, a ξ with the
+  T20 or T30 it puts in doubt, each with a tip that says why. A decay time left out for
+  the background noise leaves its checks out as well.
+
 **Fixes**
 
+- A response that ends in silence (all its sound arrived before its end, as outdoors)
+  had decay times fitted through the drop after its last sound: the decay curve fell
+  there to the floor of the computation (-3000 dB), and a fit that reached it took the
+  drop for a decay. One reflection 1.5 s after the direct sound, then silence, read EDT
+  7.5 s. The drop is now the end of the data: a decay time needs the curve to fall
+  through its range before the last sound, and is NaN otherwise. The same holds where
+  removing a measurement's noise leaves no energy. The energies of such a response
+  (C50, C80, D50, Ts, G, lateral fractions, stage support) do not change.
 - Binaural renders lost treble: at 8 kHz up to 13.6 dB from some directions (the
   spherical head's ear facing a source straight ahead), 2.7 dB on average over all
   directions, and more the higher the band. An HRTF between the measured directions

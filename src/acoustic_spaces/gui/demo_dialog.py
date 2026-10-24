@@ -7,7 +7,13 @@ video. A scene of an example that comes with a demo (:mod:`acoustic_spaces.demos
 a copy of one, also has that demo, with its own recordings, reading the open scene. The
 form is built from the demo's own options, so the editor and the command line run
 exactly the same thing; the line at the bottom shows that command, to run again or to
-put in a script.
+put in a script. A demo whose sources can play files of the user's (``--input``) lists
+them in a table, each with what it plays and the WAV file it plays instead.
+
+The Movement box lists the sources and listeners of the scene that have a walk, ticked
+when they move in the run. This scene's ticks start as Moves sets them in the scene and
+can be changed for one run (``--moving``); an example's demo shows what it moves. Edit
+movement… closes the window and opens the Movement panel on the walker.
 """
 
 from __future__ import annotations
@@ -16,25 +22,31 @@ import argparse
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
+    QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from acoustic_spaces.demos import Demo, Option
+from acoustic_spaces.demos import MAP_KINDS, NO_MOVERS, PATH_KINDS, Demo, Option, moving_names
 from acoustic_spaces.gui.inspector import int_spin, spin
-from acoustic_spaces.i18n import _
+from acoustic_spaces.i18n import _, ngettext
 
 #: The folder under the user's home the editor runs a demo in when the example itself
 #: cannot be written.
@@ -188,11 +200,353 @@ class PathField(QWidget):
             self.edit.setText(chosen)
 
 
+class InputsField(QWidget):
+    """The field of ``--input``: a row for each source the demo feeds (:attr:`Demo.plays`,
+    which :meth:`set_sources` gives), with what it plays and the WAV file it plays
+    instead, typed or chosen with Choose WAV…; Default empties it again. For a ``files``
+    option (``--stem STEM=WAV``), a row for each name the option takes, with its file."""
+
+    #: A file was typed, chosen or taken back.
+    changed = Signal()
+
+    def __init__(self, option: Option, tip: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.option = option
+        self.inputs: dict[str, Path] = {}
+        self.plays: dict[str, str] = {}
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        if option.kind == "inputs":
+            self.SOURCE, self.PLAYS, self.FILE = 0, 1, 2
+            heads = (
+                (_("Source"), _("The source, as the scene names it")),
+                (_("Plays"), _("What the source plays in the demo, unless a file is given")),
+                (
+                    _("Instead"),
+                    _(
+                        "The WAV file the source plays instead (--input SOURCE=WAV); empty: "
+                        "what Plays says. The table's tip says how loud it plays"
+                    ),
+                ),
+            )
+        else:
+            self.SOURCE, self.PLAYS, self.FILE = 0, None, 1
+            heads = (
+                (_("Name"), _("The names the option takes ({how})").format(how=option.metavar)),
+                (
+                    _("File"),
+                    _("The WAV file for it ({option} {how}); empty: none").format(
+                        option=option.option, how=option.metavar
+                    ),
+                ),
+            )
+        self.table = QTableWidget(0, len(heads))
+        self.table.setToolTip(tip)
+        for column, (text, head_tip) in enumerate(heads):
+            item = QTableWidgetItem(text)
+            item.setToolTip(head_tip)
+            self.table.setHorizontalHeaderItem(column, item)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(
+            self.FILE, QHeaderView.ResizeMode.Stretch
+        )
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.itemChanged.connect(self._typed)
+        self.table.itemSelectionChanged.connect(self._selected)
+        layout.addWidget(self.table)
+        row = QHBoxLayout()
+        self.choose = QPushButton(_("Choose WAV…"))
+        self.choose.setToolTip(_("Choose the WAV file the selected source plays instead"))
+        self.choose.clicked.connect(self._choose)
+        self.default = QPushButton(_("Default"))
+        self.default.setToolTip(_("The selected source plays what Plays says again"))
+        self.default.clicked.connect(self._default)
+        row.addWidget(self.choose)
+        row.addWidget(self.default)
+        row.addStretch(1)
+        layout.addLayout(row)
+        self._selected()
+        if option.kind != "inputs":
+            self.set_sources(dict.fromkeys(option.choices, ""))
+
+    def set_sources(self, plays: dict[str, str]) -> None:
+        """The rows: each source and what it plays. A file given to a source no longer
+        listed is dropped."""
+        if plays == self.plays and self.table.rowCount() == len(plays):
+            return
+        self.plays = dict(plays)
+        self.inputs = {name: file for name, file in self.inputs.items() if name in plays}
+        self.table.blockSignals(True)
+        self.table.setRowCount(len(plays))
+        for row, (name, what) in enumerate(plays.items()):
+            for column, text in ((self.SOURCE, name), (self.PLAYS, what)):
+                if column is None:
+                    continue
+                item = QTableWidgetItem(text)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, column, item)
+            file = self.inputs.get(name)
+            self.table.setItem(row, self.FILE, QTableWidgetItem("" if file is None else str(file)))
+        self.table.resizeColumnToContents(self.SOURCE)
+        if self.PLAYS is not None:
+            self.table.resizeColumnToContents(self.PLAYS)
+        self.table.blockSignals(False)
+        # As tall as its rows, up to about eight; a long list scrolls.
+        rows = sum(self.table.rowHeight(r) for r in range(min(len(plays), 8)))
+        self.table.setFixedHeight(
+            self.table.horizontalHeader().height() + rows + 2 * self.table.frameWidth()
+        )
+        self._selected()
+
+    def value(self) -> dict[str, Path] | None:
+        return dict(self.inputs) or None
+
+    def set_value(self, value) -> None:
+        self.inputs = {str(name): Path(file) for name, file in (value or {}).items()}
+        self.table.blockSignals(True)
+        for row in range(self.table.rowCount()):
+            file = self.inputs.get(self.table.item(row, self.SOURCE).text())
+            self.table.item(row, self.FILE).setText("" if file is None else str(file))
+        self.table.blockSignals(False)
+        self._selected()
+
+    def _source(self) -> str | None:
+        row = self.table.currentRow()
+        if row < 0 or not self.table.item(row, self.SOURCE).isSelected():
+            return None
+        return self.table.item(row, self.SOURCE).text()
+
+    def _selected(self) -> None:
+        name = self._source()
+        self.choose.setEnabled(name is not None)
+        self.default.setEnabled(name is not None and name in self.inputs)
+
+    def _set(self, name: str, file: Path | None) -> None:
+        if file is None:
+            self.inputs.pop(name, None)
+        else:
+            self.inputs[name] = file
+        self.set_value(self.inputs)
+        self.changed.emit()
+
+    def _typed(self, item: QTableWidgetItem) -> None:
+        if item.column() != self.FILE:
+            return
+        text = item.text().strip()
+        self._set(self.table.item(item.row(), self.SOURCE).text(), Path(text) if text else None)
+
+    def _choose(self) -> None:
+        name = self._source()
+        if name is None:
+            return
+        start = str(self.inputs.get(name) or Path.home())
+        chosen, _filter = QFileDialog.getOpenFileName(
+            self,
+            _("WAV file for {source}").format(source=name),
+            start,
+            self.option.filter or _("All files (*)"),
+        )
+        if chosen:
+            self._set(name, Path(chosen))
+
+    def _default(self) -> None:
+        name = self._source()
+        if name is not None:
+            self._set(name, None)
+
+
+def walkers_of(scene: str | Path | None) -> list[tuple[str, object]]:
+    """The sources and listeners in use of the scene file that have a walk, on or off, as
+    ("listeners" or "sources", item), listeners first; none when it cannot be read."""
+    if scene is None:
+        return []
+    from acoustic_spaces.scene import Scene
+
+    try:
+        loaded = Scene.from_yaml(scene)
+    except Exception:  # the demo's check says what is wrong with it
+        return []
+    return [
+        (kind, item)
+        for kind in ("listeners", "sources")
+        for item in getattr(loaded, kind)
+        if item.in_use and item.walk is not None
+    ]
+
+
+def walk_text(item) -> str:
+    """A walk in a few words: how it goes, how far and for how long."""
+    from acoustic_spaces.walkthrough import knots
+
+    path = knots(item)
+    walk = item.walk
+    if walk.keyframes is not None:
+        count = len(walk.keyframes)
+        text = ngettext(
+            "{count} keyframe, {length:.1f} m in {time:.1f} s",
+            "{count} keyframes, {length:.1f} m in {time:.1f} s",
+            count,
+        ).format(count=count, length=path.length_m, time=path.duration_s)
+    else:
+        text = _("At {speed:g} m/s, {length:.1f} m in {time:.1f} s").format(
+            speed=walk.speed_m_s, length=path.length_m, time=path.duration_s
+        )
+    return text + (_(", with Doppler") if walk.doppler else "")
+
+
+class MovementBox(QGroupBox):
+    """What moves in a run: a row for each source and listener of the scene with a walk,
+    ticked when it moves. With :meth:`set_mode` ``editable`` (a demo with a ``movers``
+    option, ``--moving``) the ticks are the run's, starting as the scene's Moves sets
+    them; otherwise they show what the demo moves. Edit movement… asks for the Movement
+    panel on the selected walker (:attr:`edit`)."""
+
+    #: A tick changed.
+    changed = Signal()
+    #: Edit movement…: the walker's kind ("sources" or "listeners") and name, or two
+    #: empty strings when the scene has none.
+    edit = Signal(str, str)
+
+    MOVES, NAME, KIND, WALK = range(4)
+
+    def __init__(self, walkers: list[tuple[str, object]], parent: QWidget | None = None) -> None:
+        super().__init__(_("Movement"), parent)
+        self.setToolTip(
+            _(
+                "The sources and listeners with a walk. Ticked ones move along it while the "
+                "piece plays, all on one clock; the others stand where they start"
+            )
+        )
+        self.walkers = [(kind, item.name, item.walk.enabled) for kind, item in walkers]
+        self.editable = False
+        layout = QVBoxLayout(self)
+        # As tall as its contents, however tall the window is.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        self.note = QLabel()
+        self.note.setWordWrap(True)
+        layout.addWidget(self.note)
+        self.table = QTableWidget(len(self.walkers), 4)
+        self.table.setToolTip(self.toolTip())
+        heads = (
+            (_("Moves"), _("Tick to move it along its walk in this run")),
+            (_("Name"), _("The source or listener, as the scene names it")),
+            (_("What"), _("A source or a listener")),
+            (_("Walk"), _("How it goes, how far and for how long")),
+        )
+        for column, (text, tip) in enumerate(heads):
+            head = QTableWidgetItem(text)
+            head.setToolTip(tip)
+            self.table.setHorizontalHeaderItem(column, head)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(
+            self.WALK, QHeaderView.ResizeMode.Stretch
+        )
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        for row, (kind, item) in enumerate(walkers):
+            moves = QTableWidgetItem()
+            name = QTableWidgetItem(item.name)
+            what = QTableWidgetItem(_("Listener") if kind == "listeners" else _("Source"))
+            walk = QTableWidgetItem(walk_text(item))
+            for cell in (moves, name, what, walk):
+                cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, self.MOVES, moves)
+            self.table.setItem(row, self.NAME, name)
+            self.table.setItem(row, self.KIND, what)
+            self.table.setItem(row, self.WALK, walk)
+        rows = sum(self.table.rowHeight(r) for r in range(min(len(self.walkers), 6)))
+        self.table.setFixedHeight(
+            self.table.horizontalHeader().height() + rows + 2 * self.table.frameWidth()
+        )
+        self.table.setVisible(bool(self.walkers))
+        self.table.itemChanged.connect(self._ticked)
+        layout.addWidget(self.table)
+        row = QHBoxLayout()
+        self.edit_button = QPushButton(_("Edit movement…"))
+        self.edit_button.setToolTip(
+            _(
+                "Close this window and open the Movement panel on the selected walker, to "
+                "change its walk or give a source or listener one; save the scene before "
+                "running the demo"
+            )
+        )
+        self.edit_button.clicked.connect(self._edit)
+        self.reset = QPushButton(_("As in the scene"))
+        self.reset.setToolTip(_("Tick what Moves ticks in the scene again"))
+        self.reset.clicked.connect(lambda: self.set_value(None))
+        row.addWidget(self.edit_button)
+        row.addWidget(self.reset)
+        row.addStretch(1)
+        layout.addLayout(row)
+
+    @property
+    def own(self) -> list[str]:
+        """The walkers whose walk is on in the scene."""
+        return [name for _kind, name, on in self.walkers if on]
+
+    def ticked(self) -> list[str]:
+        return [
+            self.walkers[row][1]
+            for row in range(self.table.rowCount())
+            if self.table.item(row, self.MOVES).checkState() == Qt.CheckState.Checked
+        ]
+
+    def set_mode(self, editable: bool, ticked: list[str], note: str) -> None:
+        """Whether the ticks are the run's to change, what is ticked, and the line above."""
+        self.editable = editable
+        self.note.setText(note)
+        self.reset.setVisible(editable and bool(self.walkers))
+        self._tick(ticked)
+        for column in (self.MOVES, self.NAME, self.KIND):  # the tick boxes in too
+            self.table.resizeColumnToContents(column)
+
+    def value(self) -> str | None:
+        """``--moving``: None while the ticks are the scene's own, else the ticked names
+        (``none`` for no tick)."""
+        ticked = self.ticked()
+        if set(ticked) == set(self.own):
+            return None
+        return ",".join(ticked) if ticked else NO_MOVERS
+
+    def set_value(self, value) -> None:
+        names = moving_names(value)
+        self._tick(self.own if names is None else names)
+        self.changed.emit()
+
+    def _tick(self, names: list[str]) -> None:
+        """Tick ``names``; the ticks can be clicked only when they are the run's."""
+        self.table.blockSignals(True)
+        for row, (_kind, name, _on) in enumerate(self.walkers):
+            item = self.table.item(row, self.MOVES)
+            flags = item.flags() | Qt.ItemFlag.ItemIsUserCheckable
+            if not self.editable:
+                flags &= ~Qt.ItemFlag.ItemIsUserCheckable
+            item.setFlags(flags)
+            item.setCheckState(Qt.CheckState.Checked if name in names else Qt.CheckState.Unchecked)
+        self.table.blockSignals(False)
+
+    def _ticked(self, item: QTableWidgetItem) -> None:
+        if item.column() == self.MOVES and self.editable:
+            self.changed.emit()
+
+    def _edit(self) -> None:
+        if not self.walkers:
+            self.edit.emit("", "")
+            return
+        row = max(self.table.currentRow(), 0)
+        kind, name, _on = self.walkers[row]
+        self.edit.emit(kind, name)
+
+
 def field_for(option: Option, tip: str) -> QWidget:
     """The widget that asks for ``option``: a tick for a flag, a list for a choice, a
-    spin box for a number, a path with a Browse… button for a file or a folder, and a
-    text field for the rest (empty where the demo takes none)."""
-    if option.kind in ("file", "path", "folder"):
+    spin box for a number, a path with a Browse… button for a file or a folder, a table
+    of the sources for ``--input``, and a text field for the rest (empty where the demo
+    takes none)."""
+    if option.kind in MAP_KINDS:
+        return InputsField(option, tip)
+    if option.kind in PATH_KINDS:
         return PathField(option, tip, sets=option.name == "hrtf")
     if option.kind == "flag":
         box = QCheckBox()
@@ -221,7 +575,7 @@ def field_for(option: Option, tip: str) -> QWidget:
 def value_of(option: Option, widget: QWidget):
     """What the field holds, in the type the demo's step expects (None where it is
     empty: the demo is given no such option)."""
-    if isinstance(widget, PathField):
+    if isinstance(widget, (PathField, InputsField, MovementBox)):
         return widget.value()
     if isinstance(widget, QCheckBox):
         return widget.isChecked()
@@ -229,6 +583,11 @@ def value_of(option: Option, widget: QWidget):
         return widget.currentText()
     if isinstance(widget, QLineEdit):
         text = widget.text().strip()
+        if text and option.kind in ("int", "float"):
+            try:
+                return int(text) if option.kind == "int" else float(text)
+            except ValueError:
+                return text  # the demo's check says it is no number
         return text or None
     value = widget.value()
     return int(value) if option.kind == "int" else float(value)
@@ -263,6 +622,8 @@ class DemoDialog(QDialog):
         self.starts = {demo.name: args for demo, args in pairs if args is not None}
         self.unsaved = unsaved or (demos is None and scene is None)
         self.fields: dict[str, QWidget] = {}
+        #: What Edit movement… asked for: the walker's kind and name (empty for none).
+        self.edit_request: tuple[str, str] | None = None
         layout = self._layout = QVBoxLayout(self)
         intro = QLabel(
             _(
@@ -301,6 +662,8 @@ class DemoDialog(QDialog):
             label.setBuddy(widget)
             label.setToolTip(widget.toolTip())
             head.addRow(label, widget)
+        # One demo only (a scene of no example): nothing to pick from.
+        head.setRowVisible(self.picker, len(self.demos) > 1)
         layout.addLayout(head)
         self.about = QLabel()
         self.about.setWordWrap(True)
@@ -308,6 +671,12 @@ class DemoDialog(QDialog):
         self.about_step = QLabel()
         self.about_step.setWordWrap(True)
         layout.addWidget(self.about_step)
+
+        self.movement = MovementBox(walkers_of(scene if demos is None else None))
+        self.movement.setVisible(demos is None and scene is not None)
+        self.movement.changed.connect(self._refresh)
+        self.movement.edit.connect(self._edit_movement)
+        layout.addWidget(self.movement)
 
         self.options = QWidget()
         layout.addWidget(self.options)
@@ -327,6 +696,7 @@ class DemoDialog(QDialog):
         self.problem = QLabel()
         self.problem.setWordWrap(True)
         layout.addWidget(self.problem)
+        layout.addStretch(1)  # a taller window leaves the room above the buttons
 
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -369,10 +739,14 @@ class DemoDialog(QDialog):
         rows.setContentsMargins(0, 0, 0, 0)
         self.fields = {}
         args = self.starts.get(demo.name) or starting_arguments(demo)
+        self._show_movement(demo, args)
         for option in demo.options:
+            if option.kind == "movers":  # the Movement box's ticks
+                self.fields[option.name] = self.movement
+                continue
             tip = option.description
             widget = field_for(option, tip)
-            if isinstance(widget, PathField):
+            if isinstance(widget, (PathField, InputsField)):
                 widget.set_value(getattr(args, option.name))
                 widget.changed.connect(self._refresh)
             elif isinstance(widget, QLineEdit):
@@ -394,6 +768,47 @@ class DemoDialog(QDialog):
         self.options = form
         self._refresh()
 
+    def _show_movement(self, demo: Demo, args: argparse.Namespace) -> None:
+        """The Movement box for ``demo``: ticks to change for a demo with a ``movers``
+        option, what it moves for one that moves its own walkers, none for one that moves
+        nothing."""
+        box = self.movement
+        option = next((o for o in demo.options if o.kind == "movers"), None)
+        if not box.walkers:
+            note = _(
+                "Nothing in this scene moves. Edit movement… gives a source or a listener a "
+                "walk along keyframes."
+            )
+            box.set_mode(False, [], note)
+        elif option is not None:
+            names = moving_names(getattr(args, option.name, None))
+            note = _(
+                "Ticked sources and listeners move along their walks while the piece plays; "
+                "the others stand where they start. The ticks start as Moves sets them in "
+                "the scene, and change this run only ({option})."
+            ).format(option=option.option)
+            box.set_mode(True, box.own if names is None else names, note)
+        elif demo.moving is not None:
+            try:
+                names = demo.moving(demo.resolved(args))
+            except Exception:  # the line under the form says what is wrong
+                names = []
+            note = _(
+                "This demo moves what is ticked; Moves in the scene turns a walk on or off, "
+                "and Edit movement… changes it."
+            )
+            box.set_mode(False, names, note)
+        else:
+            note = _(
+                "This demo moves nothing: every source and listener stands where it starts. "
+                "This scene plays the walks."
+            )
+            box.set_mode(False, [], note)
+
+    def _edit_movement(self, kind: str, name: str) -> None:
+        self.edit_request = (kind, name)
+        self.reject()
+
     def _refresh(self) -> None:
         """The step's help, the command line and what is wrong with the options."""
         demo, step = self.demo, self.chosen_step()
@@ -404,6 +819,10 @@ class DemoDialog(QDialog):
         else:
             self.about_step.setText(f"{step}: {demo.step(step).help}.")
         args = self.arguments()
+        for widget in self.fields.values():
+            if isinstance(widget, InputsField) and widget.option.kind == "inputs":
+                widget.set_sources(self._plays(demo, args))
+                args = self.arguments()
         self.command.setText(demo.command(step, args))
         self.folder.setText(_("Runs in {folder}").format(folder=demo.folder))
         problem = demo.check(args)
@@ -411,6 +830,17 @@ class DemoDialog(QDialog):
             problem = _("save the scene first (File > Save): the demo reads it from its file")
         self.problem.setText(_("Cannot run: {reason}").format(reason=problem) if problem else "")
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(problem is None)
+
+    @staticmethod
+    def _plays(demo: Demo, args: argparse.Namespace) -> dict[str, str]:
+        """The sources ``demo`` feeds with ``args`` and what each plays; none when it
+        cannot tell (a scene that cannot be read: the line under the form says why)."""
+        if demo.plays is None:
+            return {}
+        try:
+            return demo.plays(demo.resolved(args))
+        except Exception:
+            return {}
 
     # -- what OK asked for ----------------------------------------------------------
 
@@ -431,12 +861,16 @@ class DemoDialog(QDialog):
 __all__ = [
     "ALL",
     "DemoDialog",
+    "InputsField",
+    "MovementBox",
     "PathField",
     "demos_for",
     "field_for",
     "reads_scene",
     "starting_arguments",
     "value_of",
+    "walk_text",
+    "walkers_of",
     "work_base",
     "writable",
 ]

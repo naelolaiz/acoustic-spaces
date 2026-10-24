@@ -5,9 +5,9 @@ corner, then stands in front of them and turns their head; and a video that foll
 The guide's voice is real: a talk recorded in an anechoic room for the ACE challenge
 corpus (Eaton, Gaubitch, Moore and Naylor, Imperial College London; CC BY 4.0), a man
 describing his way to work through Delft (--talker picks another of its 14 talkers).
-Run it from the folder of the gallery_walk example (`acoustic-spaces examples --copy .
-gallery_walk && cd gallery_walk`), in the Python environment acoustic-spaces is
-installed in, with ffmpeg on the PATH:
+Run it from the folder of the gallery example (`acoustic-spaces examples --copy .
+gallery && cd gallery`), in the Python environment acoustic-spaces is installed in, with
+ffmpeg on the PATH:
 
     python walk_demo.py speech  # the talk (reads the corpus's 148 MB speech archive)
     python walk_demo.py scene   # scene_demo.yaml: the guide with a normal voice
@@ -19,12 +19,18 @@ or `python walk_demo.py all`, every step, leaving out what is there already; the
 editor's Simulation > Run demo… runs it too. The scene goes beside the script
 (scene_demo.yaml); the speech, the walk, the head turn and the video go to ./demo
 (--work). Use headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of a
-spherical head.
+spherical head. `--input guide=talk.wav` has the guide say a recording of yours instead
+(mono, as long as the walk and the turn need, about a minute); the voice's level and
+STI in the captions are still the scene's (--voice), as the one gain of the video plays
+any recording as loud.
 
-The walk is the example's: the visitor sets off 3 m in front of the guide and faces the
+The walk is the example's visitor's: it sets off 3 m in front of the guide and faces the
 way it goes, so the guide is behind it down the long arm; at the end it turns into the
 short arm, where the guide is out of sight and the voice reaches it bent round the
-corner (the scene simulates first-order diffraction). Then the turn: the visitor stands
+corner (the scene simulates first-order diffraction). The demo hears the visitor only;
+the gallery's two other listeners stand where they are and are left out. Edit the walk
+in the editor's Movement panel and the demo walks it as edited; with the visitor's walk
+turned off (Moves) there is no walk to play, and the demo says so. Then the turn: the visitor stands
 4 m in front of the guide (--stand), faces them and turns left a quarter at a time,
 holding each (--turn): the voice moves to the right ear, behind, to the left ear and
 back in front. The turn goes through the engine's head tracker,
@@ -47,6 +53,7 @@ whole video, so the voice is as much quieter round the corner as the simulation 
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import sys
 from pathlib import Path
@@ -55,7 +62,15 @@ import numpy as np
 import yaml
 
 from acoustic_spaces import fetch
-from acoustic_spaces.demos import Demo, Option, Step, common_options, pipeline, sibling
+from acoustic_spaces.demos import (
+    Demo,
+    Option,
+    Step,
+    common_options,
+    input_option,
+    pipeline,
+    sibling,
+)
 from acoustic_spaces.demos.audio import envelope, mono, quiet_moment, read, write
 
 # --------------------------------------------------------------------------- sources
@@ -118,6 +133,8 @@ FADE_S = 0.6
 GAP_S = 0.6
 WALK = "walk.json"
 TURNING = "turn.json"
+#: The listener of the example that walks.
+VISITOR = "visitor"
 
 
 def speech_path(args) -> Path:
@@ -138,8 +155,25 @@ def speech(args) -> None:
     print(f"wrote {speech_path(args)} and its transcript")
 
 
+def guide_input(args) -> Path | None:
+    """The file ``--input guide=WAV`` gives the guide to say, or None."""
+    return (getattr(args, "inputs", None) or {}).get("guide")
+
+
+def plays(args) -> dict[str, str]:
+    """What the guide says unless ``--input`` gives it a file."""
+    return {"guide": f"the talk of ACE talker {args.talker}"}
+
+
+def played_by(args) -> str:
+    """What the guide says, as walk.json and turn.json keep it: the file ``--input``
+    gives it, or the talk of ``--talker``."""
+    file = guide_input(args)
+    return str(file) if file is not None else f"ACE {args.talker}"
+
+
 def talk(args) -> tuple[np.ndarray, int]:
-    path = speech_path(args)
+    path = guide_input(args) or speech_path(args)
     if not path.exists():
         raise SystemExit(f"error: no {path}; run first: {DEMO.command('speech', args)}")
     x, rate = read(path)
@@ -182,7 +216,7 @@ def scene(args) -> None:
             "directivity": {"pattern": list(VOICE_PATTERN)},
         }
     )
-    visitor = next(lis for lis in base["listeners"] if lis.get("walk"))
+    visitor = next(lis for lis in base["listeners"] if lis["name"] == VISITOR)
     x, y = stand_of(args)
     gx, gy = guide["position"][:2]
     yaw = round(math.degrees(math.atan2(gy - y, gx - x)), 2)
@@ -196,8 +230,8 @@ def scene(args) -> None:
     pipeline.write_scene(
         args.scene,
         base,
-        "# The gallery walkthrough example with the guide's voice as a talker's, and where\n"
-        "# the visitor stands to look round, written by walk_demo.py.\n",
+        "# The gallery example with the guide's voice as a talker's, and where the visitor\n"
+        "# stands to look round, written by walk_demo.py.\n",
         args.source.parent,
     )
     print(f"wrote {args.scene}: the guide at {guide['level_db']} dB of sound power")
@@ -252,11 +286,30 @@ def label_of(args) -> str:
 # --------------------------------------------------------------------------- the talk
 
 
+def visitor_of(scene):
+    """The visitor of ``scene`` (a :class:`~acoustic_spaces.scene.Scene`), with its walk."""
+    visitor = next((lis for lis in scene.listeners if lis.name == VISITOR), None)
+    if visitor is None:
+        raise SystemExit(f"error: the scene has no listener {VISITOR!r} to walk")
+    return visitor
+
+
 def walk_points_of(room):
     from acoustic_spaces.walkthrough import walk_points
 
-    visitor = next(lis for lis in room.scene.listeners if lis.walk is not None)
-    return walk_points(visitor)
+    return walk_points(visitor_of(room.scene))
+
+
+def pace_of(visitor) -> str:
+    """How fast the visitor goes, for the captions: the walk's speed along its points, or
+    the average along keyframes (their length over their time)."""
+    from acoustic_spaces.walkthrough import knots
+
+    if visitor.walk.keyframes is None:
+        return f"at {visitor.walk.speed_m_s:g} m/s"
+    path = knots(visitor)
+    length = float(np.linalg.norm(np.diff(path.positions, axis=0), axis=1).sum())
+    return f"at {length / path.duration_s:.1f} m/s on average"
 
 
 def cuts(args, room) -> tuple[float, float]:
@@ -271,14 +324,16 @@ def cuts(args, room) -> tuple[float, float]:
     turned = turn_of(args)[-1][0]
     second = min(quiet_moment(env, step, first + turned + LINGER_S, PAUSE_S), end_s)
     if second - first < turned:
+        what = guide_input(args)
+        what = what.name if what is not None else f"the talk of {args.talker}"
         raise SystemExit(
-            f"error: the talk of {args.talker} is {end_s:.0f} s long, too short for the "
-            f"walk and the turn ({walk_s + turned + 2 * LINGER_S:.0f} s); pick another"
+            f"error: {what} is {end_s:.0f} s long, too short for the walk and the turn "
+            f"({walk_s + turned + 2 * LINGER_S:.0f} s); pick another"
         )
     return first, second
 
 
-def guide_of(room) -> dict:
+def guide_of(room):
     return next(s for s in room.scene.sources if s.name == "guide")
 
 
@@ -307,7 +362,7 @@ def walk(args) -> None:
     x, rate = talk(args)
     first, _ = cuts(args, room)
     print("simulating the walk (the late part takes the longest)")
-    walked = simulate_walk(room, "visitor", progress=print)
+    walked = simulate_walk(room, VISITOR, progress=print)
     rate_out = walked.result.settings.sample_rate
     ears = Binaural(hrtf_of(args, rate_out))
     wet = render_walk(walked, {"guide": (x[: int(first * rate)], rate)}, ears)
@@ -317,14 +372,23 @@ def walk(args) -> None:
         out / WALK,
         {
             "talker": args.talker,
+            "plays": played_by(args),
             "talk_s": [0.0, first],
             "times": walked.points.times.tolist(),
             "positions": walked.points.positions.tolist(),
-            "yaws": walked.points.yaws.tolist(),
+            "yaws": yaws_of(walked, room).tolist(),
             **facts_of(room, [walked.result["guide", name] for name in walked.names]),
         },
     )
     print(f"wrote {out}: {walked.duration_s:.1f} s of walking, the talk to {first:.1f} s")
+
+
+def yaws_of(walked, room) -> np.ndarray:
+    """The way the visitor faces at each place of the walk: its own yaw all along when it
+    does not face forward."""
+    if walked.points.yaws is not None:
+        return walked.points.yaws
+    return np.full(len(walked.points.times), visitor_of(room.scene).orientation.yaw)
 
 
 def turn(args) -> None:
@@ -363,6 +427,7 @@ def turn(args) -> None:
         out / TURNING,
         {
             "talker": args.talker,
+            "plays": played_by(args),
             "talk_s": [first, second],
             "facing": facing,
             "keys": [list(key) for key in keys],
@@ -391,6 +456,8 @@ def video(args) -> None:
     """tour.wav (the walk, a breath of silence, the turn: one gain, the loudest peak at
     -1 dBFS), and tour.mp4: the gallery from above, the visitor walking and turning, and
     what they hear, with a scrolling spectrogram (ffmpeg); stills of its moments."""
+    from acoustic_spaces.demos.pictures import save, settings_lines
+
     pictures = sibling(__file__, "walk_pictures")
     label = label_of(args)
     parts = {}
@@ -417,13 +484,12 @@ def video(args) -> None:
         walk_s=len(walk_x) / rate,
         turn_at=(len(walk_x) + len(gap)) / rate,
         voice=(args.voice, VOICES[args.voice]),
-        credit=f"Speech: ACE challenge corpus, talker {args.talker} (Eaton, Gaubitch, Moore, "
-        f"Naylor, Imperial College London), CC BY 4.0 · doi.org/{ACE_DOI}",
+        credit=credit_of(args),
         hrtf=args.hrtf,
-        speed=float(next(lis for lis in room.scene.listeners if lis.walk).walk.speed_m_s),
-        tool=pictures.settings_lines(DEMO, args, scene_data),
+        pace=pace_of(visitor_of(room.scene)),
+        tool=settings_lines(DEMO, args, scene_data),
     )
-    pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
+    save(drawing.thumbnail(), args.work / "thumbnail.png")
     moments = drawing.moments()
     pipeline.animation(
         args.work,
@@ -436,13 +502,84 @@ def video(args) -> None:
     )
 
 
+def credit_of(args) -> str:
+    """The stills' credit line: the ACE corpus's, or the file the guide says instead."""
+    file = guide_input(args)
+    if file is not None:
+        return f"Playing guide: {file.name}"
+    return (
+        f"Speech: ACE challenge corpus, talker {args.talker} (Eaton, Gaubitch, Moore, "
+        f"Naylor, Imperial College London), CC BY 4.0 · doi.org/{ACE_DOI}"
+    )
+
+
 def speech_done(args) -> bool:
-    return speech_path(args).exists()
+    """Whether the talk is there, or not needed (``--input guide=...``)."""
+    return guide_input(args) is not None or speech_path(args).exists()
+
+
+def part_done(args, name: str, info: str) -> bool:
+    """Whether the walk's or the turn's sound is there, made from what the guide says
+    now (files written before they kept "plays" said the talk of their "talker") and
+    from the scene as it is now."""
+    path = args.work / name / info
+    if not path.exists():
+        return False
+    if args.scene.exists() and path.stat().st_mtime < args.scene.stat().st_mtime:
+        return False  # the scene changed since: the walk edited, say
+    facts = pipeline.read_json(path)
+    return facts.get("plays", f"ACE {facts.get('talker')}") == played_by(args)
+
+
+def scene_done(args) -> bool:
+    """Whether scene_demo.yaml is there and newer than the example's scene it is made from
+    (the visitor's walk edited in the editor makes it again)."""
+    if not args.scene.exists():
+        return False
+    return not args.source.exists() or args.scene.stat().st_mtime >= args.source.stat().st_mtime
+
+
+def moving(args) -> list[str]:
+    """Who the demo plays moving: the visitor, when the scene gives it a walk that is on."""
+    from acoustic_spaces.scene import Scene
+
+    try:
+        visitor = visitor_of(Scene.from_yaml(args.source))
+    except (Exception, SystemExit):
+        return []
+    return [VISITOR] if visitor.walk is not None and visitor.walk.enabled else []
+
+
+def problems(demo, args) -> str | None:
+    """The visitor must walk: the example's scene gives it a walk that is on."""
+    from acoustic_spaces.scene import Scene
+
+    source = Path(demo.resolved(args).source)
+    if not source.exists():
+        return f"no {source}"
+    try:
+        scene = Scene.from_yaml(source)
+    except Exception as exc:  # the scene's own message
+        return f"{source.name}: {exc}"
+    visitor = next((lis for lis in scene.listeners if lis.name == VISITOR), None)
+    if visitor is None:
+        return f"{source.name} has no listener {VISITOR!r} to walk"
+    if visitor.walk is None:
+        return (
+            f"the {VISITOR} has no walk in {source.name}: give it one (walk:, or the "
+            "editor's Movement panel)"
+        )
+    if not visitor.walk.enabled:
+        return (
+            f"the {VISITOR}'s walk is off in {source.name}: turn it on (Moves in the "
+            "editor, or walk: enabled: true)"
+        )
+    return None
 
 
 DEMO = Demo(
     name="walk",
-    example="gallery_walk",
+    example="gallery",
     title="A walk through the gallery",
     description=__doc__,
     script=Path(__file__),
@@ -452,24 +589,31 @@ DEMO = Demo(
             "scene",
             scene,
             "scene_demo.yaml: the guide's voice, where the visitor looks round",
-            lambda args: args.scene.exists(),
+            scene_done,
         ),
         Step(
             "walk",
             walk,
             "simulate the walk and play the talk along it",
-            lambda args: (args.work / "walk" / WALK).exists(),
+            lambda args: part_done(args, "walk", WALK),
         ),
         Step(
             "turn",
             turn,
             "simulate where the visitor stands and turn its head",
-            lambda args: (args.work / "turn" / TURNING).exists(),
+            lambda args: part_done(args, "turn", TURNING),
         ),
         Step("video", video, "tour.wav, tour.mp4 and the stills in the work folder"),
     ],
     options=[
-        Option("talker", "the ACE corpus's talker", "M4", "choice", TALKERS, ("speech",)),
+        Option(
+            "talker",
+            "the ACE corpus's talker",
+            "M4",
+            "choice",
+            TALKERS,
+            ("speech", "walk", "turn", "video"),
+        ),
         Option(
             "voice",
             "how loud the guide speaks (IEC 60268-16)",
@@ -501,8 +645,18 @@ DEMO = Demo(
             steps=("turn",),
         ),
         *[o for o in common_options() if o.name not in ("again", "format")],
+        dataclasses.replace(
+            input_option(("walk", "turn", "video")),
+            help="a WAV file the guide says instead of the ACE talk, as guide=WAV: mixed "
+            "down to mono, at least as long as the walk and the turn need; the captions' "
+            "level and STI are the scene's voice (--voice), as the video's one gain plays "
+            "any recording as loud",
+        ),
     ],
     scene_from="scene",
+    problems=problems,
+    plays=plays,
+    moving=moving,
 )
 
 

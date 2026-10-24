@@ -128,8 +128,10 @@ class Pictures:
         facts: list[str] | None = None,
         hrtf: str | Path | None = None,
         tool=None,
+        credit: str = CREDIT,
     ):
         self.lines = facts or []  # lines under the seat on the cover (orchestra_demo.py)
+        self.credit = credit
         self.tool = tool or tool_line("orchestra", scene, hrtf=hrtf)
         self.players = [
             (s["name"], s["position"], s.get("orientation", {})) for s in scene["sources"]
@@ -247,7 +249,7 @@ class Pictures:
         )
         y = facts(draw, x, 372, self.lines, size=24, step=34)
         self.legend(draw, x, y + 18, 26, 34)
-        footer(draw, CREDIT, self.tool)
+        footer(draw, self.credit, self.tool)
         return img
 
     def seating(self) -> Image.Image:
@@ -285,7 +287,7 @@ class Pictures:
         for line in notes:
             text(draw, (x, y), line, font("Regular", 23), MUTED)
             y += 32
-        text(draw, (MARGIN, 1030), CREDIT, font("Regular", 19), MUTED)
+        text(draw, (MARGIN, 1030), self.credit, font("Regular", 19), MUTED)
         return img
 
     def thumbnail(self, note: str | None = None) -> Image.Image:

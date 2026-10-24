@@ -89,6 +89,12 @@ Version 3.2.3:
 
 - [x] Added Dutch translation.
 
+Parameters:
+
+- [x] The checks of ISO 3382-2 on every T20 and T30: the non-linearity ξ of the line it
+  is read from and the curvature of the decay, amber in the editor past the standard's
+  limits.
+
 Outdoor acoustics, in steps:
 
 - [x] O1 Outdoor scenes: flat ground under an open sky, buildings, barriers and model
@@ -252,7 +258,7 @@ Examples:
   the empty seats, and how much each takes up.
 - [x] A walk through a gallery, the fifth demo and the first of speech: a guide talks
   while a visitor walks away and round a corner, then turns their head in front of
-  them (`gallery_walk`).
+  them (the `gallery` example).
 - [x] One shared package behind the demo scripts (`acoustic_spaces.demos`): a demo
   describes its steps and options and gets the command line, the recordings, the
   simulation, the mixes, the tour, the stills and the video, and runs from the editor
@@ -263,6 +269,27 @@ Examples:
   names, at its sound power, and every listener is heard in turn in a video drawn from
   the scene; every demo's stills say how the sound was made and the command that makes
   it again.
+- [x] A recording of the user's for any source of any demo (`--input SOURCE=WAV`), at
+  the level of the feed it replaces, and a table of the sources in Run demo…
+- [x] A song of the user's own in the stadium and lakeside demos (`--music`, `--bpm`,
+  `--credit`; the stadium's stems with `--stem NAME=WAV` and its first downbeat), nothing
+  downloaded, with a file field, a number and a table of the stems in Run demo…
+
+Movement:
+
+- [x] Walks along timed keyframes (position and facing at each time, waits and turns on
+  the spot), walks that can be switched off, and every mover at once on one clock in one
+  simulation (`walkthrough --all`), heard at every listener, with a video of them all.
+- [x] Editor: the Movement panel, with the keyframes of a source or listener in a table
+  (no speed to set: it follows from the times), a timeline that can be made longer to
+  add keyframes past the end, a preview of every mover in the 3D view and the plan,
+  draggable keyframe handles, and the movement rendered in the background.
+- [x] One scene still or moving: walks turned on and off rather than copies of a scene
+  with and without them (`gallery_walk` merged into `gallery`); the demo of any scene
+  plays the walks that are on, with a moving picture, and `--moving` picks them for a
+  run; the Run demo window ticks what moves and opens the Movement panel.
+- [ ] Movement: a path drawn in the plan click by click, and the walk of a vehicle
+  (Doppler, one walk at a time) in the editor.
 
 Editor:
 
@@ -280,6 +307,7 @@ Editor:
 - [x] Simulation > Run demo…: the demos of the open scene (This scene, and the
   example's own for an example's scene), its options at the command line's defaults,
   run in the background with its messages in the panel; the source page's Plays row
-  picks the WAV file each source plays.
+  picks the WAV file each source plays, and the window's table of sources the file each
+  plays instead in that run (`--input`).
 - [x] Download HRTFs…: the free sets with their licences, fetched into the user's data
   folder and put in the scene's binaural output.

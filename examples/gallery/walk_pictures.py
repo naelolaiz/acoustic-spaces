@@ -124,13 +124,13 @@ class Pictures:
         voice: tuple[str, float],
         credit: str,
         hrtf=None,
-        speed: float = 1.2,
+        pace: str = "at 1.2 m/s",
         tool=None,
     ):
         self.scene, self.walked, self.turned = scene, walked, turned
-        self.walk_s, self.turn_at, self.voice, self.speed = walk_s, turn_at, voice, speed
+        self.walk_s, self.turn_at, self.voice, self.pace = walk_s, turn_at, voice, pace
         self.credit, self.hrtf = credit, hrtf
-        self.tool = tool or tool_line("gallery_walk", scene, hrtf=hrtf)
+        self.tool = tool or tool_line("gallery", scene, hrtf=hrtf)
         self.polygon = np.array(scene["geometry"]["floor_plan"], dtype=float)
         (x0, y0), (x1, y1) = self.polygon.min(axis=0), self.polygon.max(axis=0)
         self.box = (float(x0), float(y0), float(x1), float(y1))
@@ -322,7 +322,7 @@ class Pictures:
         heading(
             draw,
             "A walk through a gallery, simulated",
-            "The gallery_walk example: a guide talks, you walk away round the corner, "
+            "The gallery example: a guide talks, you walk away round the corner, "
             "then stand and look round",
         )
         self.gallery(img, self.plan)
@@ -346,7 +346,8 @@ class Pictures:
         hears = f"Their voice at your ears: {level:.0f} dB(A), STI {sti:.2f} ({rating(sti)})"
         if state["part"] == "walk":
             title = "Walking away" if state["sight"] else "Round the corner"
-            where = f"From 3 m in front of the guide, at {self.speed:g} m/s"
+            start = math.dist(self.walked["positions"][0][:2], guide[:2])
+            where = f"Setting off {start:.0f} m from the guide, {self.pace}"
             distance = math.dist(state["at"][:2], guide[:2])
             if state["sight"]:
                 lines = [f"The guide {words}, {distance:.1f} m away", hears]
