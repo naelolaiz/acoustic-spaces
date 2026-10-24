@@ -917,6 +917,18 @@ class MainWindow(QMainWindow):
         dock.raise_()
         self._draw()
 
+    def edit_walker(self, kind: str, name: str) -> None:
+        """Open the Movement panel on the source or listener of the open scene named
+        ``name`` (Edit movement… in the Run demo window), or on the selection when it has
+        no such one."""
+        if kind in ("sources", "listeners"):
+            items = getattr(self.document.scene, kind)
+            for index, item in enumerate(items):
+                if item.name == name:
+                    self.show_movement(kind, index)
+                    return
+        self.show_movement()
+
     def _movement_shown(self) -> tuple[tuple[str, int] | None, float | None]:
         """What the views show of the movement while the Movement panel is open: the
         mover whose keyframes get handles, and the playhead's time; nothing otherwise."""
@@ -1648,6 +1660,8 @@ class MainWindow(QMainWindow):
             self.log(_("No demo to run: {reason}").format(reason=exc), "error")
             return
         if not dialog.exec():
+            if dialog.edit_request is not None:
+                self.edit_walker(*dialog.edit_request)
             return
         demo, step, args = dialog.chosen()
         job = DemoJob(demo, step, args)

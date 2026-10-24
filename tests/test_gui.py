@@ -2675,13 +2675,36 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     assert "no source plays anything" in dialog.problem.text() and not ok.isEnabled()
 
     # Another example's scene: its own demo, steps, options and command.
-    walk = DemoDialog(scene=example_path("gallery_walk"))
+    walk = DemoDialog(scene=example_path("gallery"))
     assert walk.picker.currentData() == "walk"
     assert walk.command.text() == "python walk_demo.py all"
     assert "talker" in walk.fields and "song" not in walk.fields
+    # The Movement box: the gallery's visitor walks. The walk demo shows that it moves
+    # it; This scene's ticks are the run's, starting as Moves sets them in the scene.
+    box = walk.movement
+    assert not box.isHidden() and box.walkers == [("listeners", "visitor", True)]
+    assert box.table.item(0, box.WALK).text() == "At 1.2 m/s, 25.0 m in 20.8 s"
+    assert box.table.item(0, box.KIND).text() == "Listener"
+    assert box.table.item(0, box.NAME).text() == "visitor"
+    assert box.ticked() == ["visitor"] and not box.editable and box.reset.isHidden()
+    checkable = Qt.ItemFlag.ItemIsUserCheckable
+    assert not box.table.item(0, box.MOVES).flags() & checkable
+    walk.picker.setCurrentIndex(walk.picker.findData("scene"))
+    assert box.editable and box.ticked() == ["visitor"] and walk.fields["moving"] is box
+    assert box.table.item(0, box.MOVES).flags() & checkable
+    box.table.item(0, box.MOVES).setCheckState(Qt.CheckState.Unchecked)
+    assert walk.command.text() == "acoustic-spaces demo scene.yaml all --moving none"
+    box.reset.click()
+    assert walk.command.text() == "acoustic-spaces demo scene.yaml all"
+    box.table.selectRow(0)
+    box.edit_button.click()  # closes the window, asking for the Movement panel
+    assert walk.edit_request == ("listeners", "visitor")
+    assert walk.result() == int(QDialog.DialogCode.Rejected)
     walk.deleteLater()
     # A scene of no example has This scene only, and one never saved cannot be run.
     plain = DemoDialog(scene=example_path("shoebox"))
+    assert plain.movement.note.text().startswith("Nothing in this scene moves.")
+    assert plain.movement.table.isHidden()
     assert [plain.picker.itemData(k) for k in range(plain.picker.count())] == ["scene"]
     assert plain.picker.isHidden() and not dialog.picker.isHidden()  # nothing to pick from
     plain.deleteLater()
@@ -3318,6 +3341,23 @@ def _give_walk(window, kind: str, index: int, keyframes: list[dict]) -> None:
 def _shown(window, kind: str, index: int):
     """The point as the plan draws it, at the playhead."""
     return next(item for k, i, item in window.plan.canvas._points() if (k, i) == (kind, index))
+
+
+def test_edit_movement_from_the_demo_window(window, monkeypatch) -> None:
+    """Edit movement… in the Run demo window opens the Movement panel on that walker."""
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+
+    window.open_example(example_path("gallery"))
+    assert window.docks["movement"].isHidden()
+
+    def edit(dialog) -> int:
+        dialog.movement.edit_button.click()
+        return dialog.result()
+
+    monkeypatch.setattr(DemoDialog, "exec", edit)
+    window.demo_action.trigger()
+    assert window.docks["movement"].isVisible() and window.movement.key == ("listeners", 2)
+    assert window.job is None  # nothing runs
 
 
 def test_movement_panel_edits_keyframes_in_place(window) -> None:

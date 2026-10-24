@@ -258,7 +258,7 @@ Examples:
   the empty seats, and how much each takes up.
 - [x] A walk through a gallery, the fifth demo and the first of speech: a guide talks
   while a visitor walks away and round a corner, then turns their head in front of
-  them (`gallery_walk`).
+  them (the `gallery` example).
 - [x] One shared package behind the demo scripts (`acoustic_spaces.demos`): a demo
   describes its steps and options and gets the command line, the recordings, the
   simulation, the mixes, the tour, the stills and the video, and runs from the editor
@@ -284,6 +284,10 @@ Movement:
   (no speed to set: it follows from the times), a timeline that can be made longer to
   add keyframes past the end, a preview of every mover in the 3D view and the plan,
   draggable keyframe handles, and the movement rendered in the background.
+- [x] One scene still or moving: walks turned on and off rather than copies of a scene
+  with and without them (`gallery_walk` merged into `gallery`); the demo of any scene
+  plays the walks that are on, with a moving picture, and `--moving` picks them for a
+  run; the Run demo window ticks what moves and opens the Movement panel.
 - [ ] Movement: a path drawn in the plan click by click, and the walk of a vehicle
   (Doppler, one walk at a time) in the editor.
 

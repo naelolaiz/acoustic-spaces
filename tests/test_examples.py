@@ -1,6 +1,7 @@
 import argparse
 import importlib.util
 import json
+import os
 import re
 from fnmatch import fnmatch
 from pathlib import Path
@@ -12,7 +13,7 @@ from conftest import skip_without_extra
 
 from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.cli import main
-from acoustic_spaces.demos import PATH_KINDS, load, pipeline
+from acoustic_spaces.demos import PATH_KINDS, demo_for, load, pipeline
 from acoustic_spaces.engine import simulate
 from acoustic_spaces.examples import (
     GROUPS,
@@ -30,7 +31,7 @@ NAMES = [e.name for e in list_examples()]
 #: The demos that come with the examples: (example, the name before "_demo.py").
 DEMO_SCRIPTS = [
     ("church", "church"),
-    ("gallery_walk", "walk"),
+    ("gallery", "walk"),
     ("lakeside_concert", "lakeside"),
     ("orchestra", "orchestra"),
     ("stadium_concert", "stadium"),
@@ -130,6 +131,34 @@ def test_examples_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     assert capsys.readouterr().out.strip() == str(tmp_path / "studio" / "scene.yaml")
     assert main(["examples", "cathedral"]) == 1
     assert "no example named cathedral" in capsys.readouterr().err
+    assert main(["examples", "gallery_walk"]) == 0  # the gallery's former name
+    assert capsys.readouterr().out.startswith("gallery: ")
+
+
+def test_the_gallery_stands_or_walks_in_one_scene(tmp_path: Path) -> None:
+    """One gallery for the still listeners and the visitor who walks: the walk turns off
+    and on, and gallery_walk, its former name, still finds it and its demo."""
+    from acoustic_spaces.walkthrough import movers, with_moving
+
+    assert "gallery" in NAMES and "gallery_walk" not in NAMES
+    path = example_path("gallery")
+    assert example_path("gallery_walk") == path
+    scene = Scene.from_yaml(path)
+    listeners = {lis.name: lis for lis in scene.listeners}
+    assert set(listeners) == {"in sight", "round the corner", "visitor"}
+    assert listeners["in sight"].walk is None and listeners["round the corner"].walk is None
+    visitor = listeners["visitor"]
+    assert visitor.position == (17.0, 4.0, 1.6) and visitor.walk.enabled
+    assert visitor.walk.to == [(4.0, 4.0, 1.6), (4.0, 16.0, 1.6)]
+    assert [item.name for _kind, item in movers(scene)] == ["visitor"]
+    assert movers(with_moving(scene, [])) == []
+    assert scene.outputs[0].format == "binaural"  # what walkthrough plays by default
+    assert demo_for("gallery").example == "gallery"
+    assert demo_for("gallery_walk").script == demo_for("gallery").script
+    copied = copy_examples(tmp_path, ["gallery_walk"])
+    assert copied == [tmp_path / "gallery_walk" / "scene.yaml"]
+    assert copied[0].read_bytes() == path.read_bytes()
+    assert (copied[0].parent / "walk_demo.py").is_file()
 
 
 def _script(example: str, name: str):
@@ -850,16 +879,28 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path) -> None:
     """walk_demo.py writes the gallery with the guide speaking at the level IEC 60268-16
     gives that voice and the visitor standing round the corner; it cuts from the walk to
     the turn at a pause in the talk; and its pictures name the moments of the tour."""
-    demo = _script("gallery_walk", "walk_demo")
+    demo = _script("gallery", "walk_demo")
     args = _demo_args(
         demo.DEMO,
-        source=example_path("gallery_walk"),
+        source=example_path("gallery"),
         scene=tmp_path / "scene_demo.yaml",
         work=tmp_path / "demo",
     )
     demo.scene(args)
     room = Room.from_yaml(args.scene)
     assert room.problems() == []
+    # The demo walks the visitor while its walk is on, says so when it is off, and makes
+    # its scene again from an example scene changed since.
+    assert demo.moving(args) == ["visitor"] and demo.DEMO.check(args) is None
+    assert demo.scene_done(args)
+    data = yaml.safe_load(args.source.read_text(encoding="utf-8"))
+    next(lis for lis in data["listeners"] if lis["name"] == "visitor")["walk"]["enabled"] = False
+    off = tmp_path / "off.yaml"
+    off.write_text(yaml.safe_dump(data), encoding="utf-8")
+    os.utime(off, (args.scene.stat().st_mtime + 10,) * 2)
+    stood = argparse.Namespace(**vars(args) | {"source": off})
+    assert demo.moving(stood) == [] and not demo.scene_done(stood)
+    assert "the visitor's walk is off in off.yaml" in demo.DEMO.check(stood)
     guide = next(s for s in room.scene.sources if s.name == "guide")
     # The sound power is what puts the voice at its level 1 m in front of the talker.
     at_1m_a = a_weighted(guide.power_db("octave") - 20.0 * np.log10(1.0) - 11.0 + 5.0)
@@ -927,9 +968,9 @@ def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
     """The walk's pictures work out where the guide is from the visitor, whether the
     corner is in the way, and the moments the video's chapters and stills mark."""
     pytest.importorskip("PIL")
-    demo = _script("gallery_walk", "walk_demo")
-    pictures = _script("gallery_walk", "walk_pictures")
-    scene = yaml.safe_load(example_path("gallery_walk").read_text(encoding="utf-8"))
+    demo = _script("gallery", "walk_demo")
+    pictures = _script("gallery", "walk_pictures")
+    scene = yaml.safe_load(example_path("gallery").read_text(encoding="utf-8"))
     plan = np.array(scene["geometry"]["floor_plan"], dtype=float)
     # The L's short arm cannot see the guide at the far end of the long one.
     assert pictures.in_sight(plan, (17.0, 4.0), (20.0, 4.0))

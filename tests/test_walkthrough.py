@@ -27,10 +27,11 @@ from acoustic_spaces.walkthrough import (
     simulate_movement,
     simulate_walk,
     walk_points,
+    with_moving,
 )
 
 SHOEBOX_OBJ = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "shoebox.obj"
-GALLERY = Path(__file__).resolve().parent.parent / "examples" / "gallery_walk" / "scene.yaml"
+GALLERY = Path(__file__).resolve().parent.parent / "examples" / "gallery" / "scene.yaml"
 QUICK = {
     "ir_length_s": 0.3,
     "seed": 3,
@@ -180,6 +181,18 @@ def test_keyframes_move_and_turn_evenly_between_them() -> None:
     assert walked.late_places == (0, 4, 12)
     out = render_walk(walked, {"s": np.ones(100)})
     assert np.isfinite(out).all() and np.abs(out).max() > 0
+
+
+def test_a_run_picks_which_walks_move() -> None:
+    """with_moving turns the walks it names on and every other one off, for one run of
+    the same scene; None keeps the scene's own, and a name without a walk is refused."""
+    scene = Room.from_yaml(GALLERY).scene
+    assert with_moving(scene, None) is scene
+    still = with_moving(scene, [])
+    assert movers(still) == [] and still.listeners[2].walk.to == scene.listeners[2].walk.to
+    assert [item.name for _, item in movers(with_moving(still, ["visitor"]))] == ["visitor"]
+    with pytest.raises(ValueError, match="'in sight' has no walk to move along"):
+        with_moving(scene, ["in sight"])
 
 
 def test_several_movers_on_one_clock() -> None:
@@ -514,7 +527,7 @@ def test_crossfades_are_continuous() -> None:
 
 def test_render_walk_with_the_example(tmp_path: Path) -> None:
     room = Room.from_yaml(GALLERY)
-    walker = room.scene.listeners[0]
+    walker = next(lis for lis in room.scene.listeners if lis.name == "visitor")
     assert walker.walk is not None and walk_points(walker).times.size == 101
     short = walker.walk.model_copy(update={"to": [(15.0, 4.0, 1.6)]})
     scene = room.scene.model_copy(update={"listeners": [walker.model_copy(update={"walk": short})]})

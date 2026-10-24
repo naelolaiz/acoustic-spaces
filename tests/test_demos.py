@@ -887,6 +887,97 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
     assert "no " in capsys.readouterr().err
 
 
+def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, capsys) -> None:
+    """With a walk on, the demo of any scene hears every listener with the walkers moving
+    on one clock: the mixes go to moving/, one gain for all, with the level of each
+    source at each moment; the frames move the walker and say the level then.
+    ``--moving`` picks the walks of a run: none keeps every walker standing, a name with
+    no walk is refused, and so is a walk with Doppler."""
+    pytest.importorskip("PIL")
+    import yaml
+
+    from acoustic_spaces.cli import main as cli
+    from acoustic_spaces.demos import scene_pictures
+    from acoustic_spaces.demos.scene_demo import DEMO, moving_of, moving_scene
+    from acoustic_spaces.walkthrough import knots, movers
+
+    scene = _any_scene(tmp_path)
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    turn = {"time_s": 1.5, "position": [6.0, 2.5, 1.2], "orientation": {"yaw": 180}}
+    data["listeners"][1]["walk"] = {
+        "keyframes": [{"time_s": 1.0, "position": [6.0, 2.5, 1.2]}, turn]
+    }
+    data["sources"][1]["walk"] = {"enabled": False, "to": [[5.0, 2.0, 1.0]], "doppler": True}
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    monkeypatch.chdir(scene.parent)
+    demo = DEMO.at(scene.parent)
+    args = demo.defaults()
+    args.scene = Path("scene.yaml")
+    assert moving_of(demo.resolved(args)) == ["seat-b"] and demo.check(args) is None
+    args.moving = "seat-b,radio"
+    assert demo.check(args).startswith("radio walks with Doppler, which plays one walk at a")
+    args.moving = "seat-a"
+    assert demo.check(args) == (
+        "--moving: 'seat-a' has no walk to move along; the scene's walks: seat-b, radio"
+    )
+    args.moving = "none"
+    assert moving_of(demo.resolved(args)) == [] and demo.check(args) is None
+    assert demo.command("render", args) == "acoustic-spaces demo scene.yaml render --moving none"
+
+    assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
+    work = scene.parent / "demo"
+    seats = pipeline.read_json(work / "moving" / "seats.json")
+    assert seats["moving"] == ["seat-b"] and set(seats["seats"]) == {"seat-a", "seat-b"}
+    seat_a, seat_b = seats["seats"]["seat-a"], seats["seats"]["seat-b"]
+    assert seat_b["moves"] and not seat_a["moves"]
+    assert seat_a["arrival_s"] > 0 and seat_b["arrival_s"] is None  # it changes on the way
+    assert seat_a["lag_s"] == seat_b["lag_s"] == 0.0  # the tour keeps the walks' clock
+    moments = seats["movement"]["times"]
+    assert moments[0] == 0.0 and moments[-1] == pytest.approx(1.5)
+    levels = seats["movement"]["levels_a_db"]["seat-b"]
+    assert set(levels) == {"talker", "radio"}
+    assert all(len(v) == len(moments) for v in levels.values())
+    peaks = [
+        np.abs(audio.read(work / "moving" / f"{k}.binaural.wav")[0]).max() for k in seats["seats"]
+    ]
+    assert max(peaks) == pytest.approx(10.0 ** (-1.0 / 20.0), rel=1e-3)
+    assert not (work / "seats").exists()
+    stills = sorted(p.name for p in (work / "stills").glob("*.png"))
+    assert stills == ["00_seat-a.png", "01_seat-b.png"]
+    # The frames: the walker where its walk has it then, the level of that moment.
+    resolved = demo.resolved(argparse.Namespace(**vars(demo.defaults()) | {"scene": scene}))
+    moving = moving_scene(resolved)
+    stops = [pipeline.TourStop("seat-a", 0.0, 0.0, 0.8), pipeline.TourStop("seat-b", 0.8, 0.8, 1.6)]
+    drawing = scene_pictures.Pictures(
+        moving.to_data(),
+        np.zeros((0, 2, 2)),
+        pipeline.read_json(work / "results" / pipeline.PARAMETERS),
+        seats["seats"],
+        stops,
+        playing=["talker", "radio"],
+        paths={(kind, item.name): knots(item) for kind, item in movers(moving)},
+        movement=seats["movement"],
+    )
+    walker = drawing.listeners["seat-b"]
+    assert drawing.placed("listeners", walker, 1.2)["position"] == pytest.approx([6.0, 2.5, 1.2])
+    assert drawing.placed("listeners", walker, None) is walker
+    assert drawing.moment(1.5) == len(moments) - 1 and drawing.moment(0.05) == 0
+    words = [str(line) for line in drawing.lines(1, 1.2)]
+    assert any("Moving along their walks: seat-b" in line for line in words)
+    assert not any("arrives" in line for line in words)
+    drawing.t30[("talker", "seat-b")] = 1.5  # the quick scene's responses are too short
+    assert "Reverberation time T30 1.5 s where the walks start (mean of 500 Hz and 1 kHz)" in (
+        drawing.lines(1, 1.2)
+    )
+    assert drawing.frame(1.2).getbbox() is not None
+    # Again: there already; with every walker standing, the still mixes instead.
+    capsys.readouterr()
+    assert cli(["demo", "scene.yaml", "render"]) == 0
+    assert "there already" in capsys.readouterr().out
+    assert cli(["demo", "scene.yaml", "render", "--moving", "none"]) == 0
+    assert set(pipeline.read_json(work / "seats" / "seats.json")["seats"]) == {"seat-a", "seat-b"}
+
+
 def test_a_demo_of_any_scene_plays_the_files_given_to_its_sources(
     tmp_path: Path, monkeypatch
 ) -> None:

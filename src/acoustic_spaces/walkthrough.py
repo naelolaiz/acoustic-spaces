@@ -36,14 +36,15 @@ walk, all on one clock: :func:`simulate_movement` simulates them together, every
 as a copy at each place it takes, in one simulation; :func:`render_movement` plays the
 signals through it as heard at every listener in use, still or moving; and
 :func:`save_movement` writes one WAV per listener. ``walk.enabled: false`` keeps a walk
-but leaves its walker standing still.
+but leaves its walker standing still, and :func:`with_moving` picks which walks are on
+for one run, so that one scene serves both still and moving.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -446,6 +447,37 @@ def movers(scene) -> list[tuple[str, object]]:
         for item in getattr(scene, kind)
         if item.in_use and item.walk is not None and item.walk.enabled
     ]
+
+
+def with_moving(scene, names: Iterable[str] | None):
+    """``scene`` with only ``names`` moving: their walks turned on and every other walk
+    off, so that its walker stands where it starts. None keeps the scene's own. Each
+    name must be a source or listener in use with a walk."""
+    if names is None:
+        return scene
+    names = set(names)
+    walkers = [
+        item.name
+        for kind in ("listeners", "sources")
+        for item in getattr(scene, kind)
+        if item.in_use and item.walk is not None
+    ]
+    unknown = sorted(names - set(walkers))
+    if unknown:
+        have = ", ".join(walkers) if walkers else "nothing"
+        raise ValueError(f"{unknown[0]!r} has no walk to move along; the scene's walks: {have}")
+    update = {}
+    for kind in ("listeners", "sources"):
+        items = []
+        for item in getattr(scene, kind):
+            on = item.name in names
+            if item.walk is not None and item.walk.enabled != on:
+                item = item.model_copy(
+                    update={"walk": item.walk.model_copy(update={"enabled": on})}
+                )
+            items.append(item)
+        update[kind] = items
+    return scene.model_copy(update=update)
 
 
 @dataclass(frozen=True)
@@ -1044,4 +1076,5 @@ __all__ = [
     "simulate_movement",
     "simulate_walk",
     "walk_points",
+    "with_moving",
 ]

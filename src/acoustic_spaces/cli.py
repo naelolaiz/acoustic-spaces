@@ -632,7 +632,7 @@ def _cmd_examples(args: argparse.Namespace) -> int:
     import textwrap
 
     from acoustic_spaces._extras import install_hint
-    from acoustic_spaces.examples import copy_examples, list_examples
+    from acoustic_spaces.examples import FORMER_NAMES, copy_examples, list_examples
 
     try:
         if args.copy:
@@ -640,14 +640,16 @@ def _cmd_examples(args: argparse.Namespace) -> int:
                 print(scene_file)
             return 0
         examples = list_examples()
-        unknown = sorted(set(args.names) - {e.name for e in examples})
+        names = {FORMER_NAMES.get(name, name) for name in args.names}
+        known = {e.name for e in examples}
+        unknown = sorted(name for name in args.names if FORMER_NAMES.get(name, name) not in known)
         if unknown:
             raise ValueError(f"no example named {', '.join(unknown)}")
     except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     for example in examples:
-        if args.names and example.name not in args.names:
+        if names and example.name not in names:
             continue
         print(f"{example.name}: {example.title}")
         print(textwrap.fill(example.description, 88, initial_indent="  ", subsequent_indent="  "))

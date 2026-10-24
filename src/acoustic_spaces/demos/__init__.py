@@ -35,18 +35,45 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from acoustic_spaces.examples import examples_dir
+from acoustic_spaces.examples import FORMER_NAMES, examples_dir
 
 #: The kinds of option, for the parser and for the editor's form: a free text, a choice
 #: from a list, a number, a flag, a file to read, a file the demo writes (``path``), a
 #: folder, ``inputs``: a WAV file for each of some sources (``--input NAME=WAV``, as
-#: often as needed), what they play instead of the demo's own recordings, and ``files``:
-#: a WAV file for each of some names the option lists as its choices (``--stem
-#: NAME=WAV``), such as the stems of a song.
-KINDS = ("text", "choice", "int", "float", "flag", "file", "path", "folder", "inputs", "files")
+#: often as needed), what they play instead of the demo's own recordings, ``files``: a
+#: WAV file for each of some names the option lists as its choices (``--stem
+#: NAME=WAV``), such as the stems of a song, and ``movers``: the sources and listeners
+#: that move in a run, by name and comma-separated, or ``none`` (:func:`moving_names`).
+KINDS = (
+    "text",
+    "choice",
+    "int",
+    "float",
+    "flag",
+    "file",
+    "path",
+    "folder",
+    "inputs",
+    "files",
+    "movers",
+)
 PATH_KINDS = ("file", "path", "folder")
 #: The kinds whose value is a dict of names and files.
 MAP_KINDS = ("inputs", "files")
+
+
+#: What a ``movers`` option takes for nothing moving.
+NO_MOVERS = "none"
+
+
+def moving_names(text: str | None) -> list[str] | None:
+    """The names a ``movers`` option gives (``--moving visitor,guide``): None when it is
+    not given, so that the scene's own walks decide, and none for ``none``."""
+    if text is None:
+        return None
+    if str(text).strip().casefold() == NO_MOVERS:
+        return []
+    return [name.strip() for name in str(text).split(",") if name.strip()]
 
 
 def shell_line(argv: Sequence[str]) -> str:
@@ -232,6 +259,11 @@ class Demo:
     #: Cake, both channels"}``), from the arguments (paths resolved): the rows of the
     #: editor's map of inputs, and the names ``--input`` takes.
     plays: Callable[[argparse.Namespace], dict[str, str]] | None = None
+    #: The sources and listeners the demo plays moving along their walks, by name, from
+    #: the arguments (paths resolved); None for a demo that plays every one standing where
+    #: it starts. The editor's Run demo window ticks them in its table of what moves, which
+    #: a ``movers`` option lets the user change for a run.
+    moving: Callable[[argparse.Namespace], list[str]] | None = None
     _folder: Path | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -526,8 +558,9 @@ def list_demos() -> list[Demo]:
 
 
 def demo_for(example: str) -> Demo | None:
-    """The demo of the example ``example`` (a folder name), or None."""
-    for script in sorted((examples_dir() / example).glob("*_demo.py")):
+    """The demo of the example ``example`` (a folder name, or a former name of one), or
+    None."""
+    for script in sorted((examples_dir() / FORMER_NAMES.get(example, example)).glob("*_demo.py")):
         return load(script)
     return None
 
@@ -535,6 +568,7 @@ def demo_for(example: str) -> Demo | None:
 __all__ = [
     "KINDS",
     "MAP_KINDS",
+    "NO_MOVERS",
     "PATH_KINDS",
     "SIMULATE",
     "Demo",
@@ -545,6 +579,7 @@ __all__ = [
     "demo_for",
     "list_demos",
     "load",
+    "moving_names",
     "shell_line",
     "sibling",
 ]

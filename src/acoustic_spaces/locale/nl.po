@@ -357,7 +357,7 @@ msgstr "Dekkingskaart"
 msgid "Messages"
 msgstr "Meldingen"
 
-#: acoustic_spaces/gui/app.py
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/demo_dialog.py
 msgid "Movement"
 msgstr "Beweging"
 
@@ -1600,6 +1600,84 @@ msgid "WAV file for {source}"
 msgstr "WAV-bestand voor {source}"
 
 #: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "{count} keyframe, {length:.1f} m in {time:.1f} s"
+msgid_plural "{count} keyframes, {length:.1f} m in {time:.1f} s"
+msgstr[0] "{count} keyframe, {length:.1f} m in {time:.1f} s"
+msgstr[1] "{count} keyframes, {length:.1f} m in {time:.1f} s"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "At {speed:g} m/s, {length:.1f} m in {time:.1f} s"
+msgstr "Met {speed:g} m/s, {length:.1f} m in {time:.1f} s"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ", with Doppler"
+msgstr ", met doppler"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The sources and listeners with a walk. Ticked ones move along it while the "
+"piece plays, all on one clock; the others stand where they start"
+msgstr ""
+"De bronnen en ontvangers met een route. Aangevinkte volgen die terwijl het "
+"stuk speelt, allemaal op één klok; de andere blijven staan waar ze beginnen"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
+msgid "Moves"
+msgstr "Beweegt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick to move it along its walk in this run"
+msgstr "Aanvinken om het in deze run zijn route te laten volgen"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The source or listener, as the scene names it"
+msgstr "De bron of ontvanger, zoals de scène die noemt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "What"
+msgstr "Wat"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A source or a listener"
+msgstr "Een bron of een ontvanger"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Walk"
+msgstr "Route"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "How it goes, how far and for how long"
+msgstr "Hoe het gaat, hoe ver en hoe lang"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/results_view.py
+msgid "Listener"
+msgstr "Ontvanger"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Edit movement…"
+msgstr "Beweging bewerken…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Close this window and open the Movement panel on the selected walker, to "
+"change its walk or give a source or listener one; save the scene before "
+"running the demo"
+msgstr ""
+"Sluit dit venster en opent het bewegingspaneel op het geselecteerde element, "
+"om zijn route te wijzigen of een bron of ontvanger er een te geven; sla de "
+"scène op voordat je de demo uitvoert"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "As in the scene"
+msgstr "Zoals in de scène"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick what Moves ticks in the scene again"
+msgstr "Vink weer aan wat Beweegt in de scène aanvinkt"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "Run demo"
 msgstr "Demo uitvoeren"
 
@@ -1660,6 +1738,41 @@ msgstr "Voert de stap op de achtergrond uit; de meldingen zeggen hoe het gaat"
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Close without running anything"
 msgstr "Sluit zonder iets uit te voeren"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Nothing in this scene moves. Edit movement… gives a source or a listener a "
+"walk along keyframes."
+msgstr ""
+"Niets beweegt in deze scène. Beweging bewerken… geeft een bron of een "
+"ontvanger een route langs keyframes."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"Ticked sources and listeners move along their walks while the piece plays; "
+"the others stand where they start. The ticks start as Moves sets them in the "
+"scene, and change this run only ({option})."
+msgstr ""
+"Aangevinkte bronnen en ontvangers volgen hun routes terwijl het stuk speelt; "
+"de andere blijven staan waar ze beginnen. De vinkjes beginnen zoals Beweegt "
+"ze in de scène zet, en veranderen alleen deze run ({option})."
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"This demo moves what is ticked; Moves in the scene turns a walk on or off, "
+"and Edit movement… changes it."
+msgstr ""
+"Deze demo beweegt wat is aangevinkt; Beweegt in de scène zet een route aan "
+"of uit, en Beweging bewerken… wijzigt hem."
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"This demo moves nothing: every source and listener stands where it starts. "
+"This scene plays the walks."
+msgstr ""
+"Deze demo beweegt niets: elke bron en elke ontvanger blijft staan waar hij "
+"begint. Deze scène speelt de routes."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "all: every step in order, leaving out what is done already."
@@ -4004,10 +4117,6 @@ msgstr ""
 "Zonder vinkje blijft de ontvanger buiten simulaties en controles: hij blijft "
 "in de scène, vaag getekend. Het vinkje in de scèneboom doet hetzelfde"
 
-#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
-msgid "Moves"
-msgstr "Beweegt"
-
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Tick to have the source go along its keyframes in a movement; untick to keep "
@@ -4026,10 +4135,6 @@ msgstr ""
 "Aanvinken om de ontvanger in een beweging zijn keyframes te laten volgen; "
 "uitvinken om ze te bewaren maar de ontvanger stil te laten staan waar hij "
 "begint. Keyframes voegt u toe met Beweging bewerken…"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Edit movement…"
-msgstr "Beweging bewerken…"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -6261,10 +6366,6 @@ msgid "Stop playing (Esc)"
 msgstr "Afspelen stoppen (Esc)"
 
 #: acoustic_spaces/gui/results_view.py
-msgid "Listener"
-msgstr "Ontvanger"
-
-#: acoustic_spaces/gui/results_view.py
 msgid "Parameters"
 msgstr "Parameters"
 
@@ -7227,37 +7328,23 @@ msgid ""
 "walls and an absorbing ceiling: a guide talks in the long arm, and visitors "
 "round the corner hear them only by the sound that bends round it (edge "
 "diffraction) and by reflections. The plan's corners go round the floor; "
-"wall_3 and wall_4 meet at the inner corner (8, 8)."
+"wall_3 and wall_4 meet at the inner corner (8, 8). One visitor sees the "
+"guide, one stands round the corner, and one walks from 3 m in front of the "
+"guide down the long arm and round the corner at 1.2 m/s: `acoustic-spaces "
+"walkthrough` plays a recording along that walk, and walk_demo.py makes a "
+"video of it. Turn the walk off (Moves, or `enabled: false`) and that visitor "
+"stands where it starts."
 msgstr ""
 "Een L-vormige galerij, 4 m hoog (1150 m3), met een marmeren vloer, ruwe "
 "bakstenen wanden en een absorberend plafond: een gids spreekt in de lange "
 "arm, en bezoekers om de hoek horen de gids alleen via geluid dat om de hoek "
 "buigt (randdiffractie) en via reflecties. De hoeken van de plattegrond "
-"volgen de vloeromtrek; wall_3 en wall_4 komen samen in de binnenhoek (8, 8)."
-
-#: examples/gallery_walk/scene.yaml
-msgctxt "example"
-msgid "Gallery walkthrough (L-shaped, 1150 m3)"
-msgstr "Rondgang door de galerij (L-vormig, 1150 m3)"
-
-#: examples/gallery_walk/scene.yaml
-msgctxt "example"
-msgid ""
-"A walkthrough of the L-shaped gallery: a visitor walks from in front of the "
-"guide, down the long arm and round the corner, at 1.2 m/s, while the guide "
-"talks. `acoustic-spaces walkthrough` simulates a response every 25 cm along "
-"the way (the late part every 2 m) and plays a recording through them, "
-"crossfading from each to the next, and can save the walk as a video: the "
-"guide's voice goes from direct and clear to the sound that bends round the "
-"corner."
-msgstr ""
-"Een rondgang door de L-vormige galerij: een bezoeker loopt vanaf de gids "
-"door de lange arm en om de hoek, met 1.2 m/s, terwijl de gids praat. "
-"`acoustic-spaces walkthrough` simuleert elke 25 cm een respons langs de "
-"route (het late deel elke 2 m) en speelt een opname via deze responsen af, "
-"met overvloeien van de ene naar de volgende. De rondgang kan ook als video "
-"worden opgeslagen: de stem van de gids gaat van direct en helder naar geluid "
-"dat om de hoek buigt."
+"volgen de vloeromtrek; wall_3 en wall_4 komen samen in de binnenhoek (8, 8). "
+"Eén bezoeker ziet de gids, één staat om de hoek, en één loopt van 3 m voor "
+"de gids door de lange arm en om de hoek met 1,2 m/s: `acoustic-spaces "
+"walkthrough` speelt een opname langs die route af, en walk_demo.py maakt er "
+"een video van. Zet de route uit (Beweegt, of `enabled: false`) en die "
+"bezoeker blijft staan waar hij begint."
 
 #: examples/hillside/scene.yaml
 msgctxt "example"

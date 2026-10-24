@@ -2,6 +2,10 @@
 # an absorbing ceiling: a guide talks in the long arm, and visitors round the corner hear
 # them only by the sound that bends round it (edge diffraction) and by reflections. The
 # plan's corners go round the floor; wall_3 and wall_4 meet at the inner corner (8, 8).
+# One visitor sees the guide, one stands round the corner, and one walks from 3 m in
+# front of the guide down the long arm and round the corner at 1.2 m/s: `acoustic-spaces
+# walkthrough` plays a recording along that walk, and walk_demo.py makes a video of it.
+# Turn the walk off (Moves, or `enabled: false`) and that visitor stands where it starts.
 name: Gallery (L-shaped, 1150 m3)
 geometry:
   floor_plan: [[0, 0], [24, 0], [24, 8], [8, 8], [8, 20], [0, 20]]
@@ -25,6 +29,7 @@ sources:
     position: [20.0, 4.0, 1.6]
     orientation: {yaw: 180}
     directivity: cardioid
+    spectrum: speech_male
 listeners:
   - name: in sight
     position: [12.0, 5.0, 1.6]
@@ -32,13 +37,18 @@ listeners:
   - name: round the corner
     position: [4.0, 15.0, 1.6]
     orientation: {yaw: -60}
+  - name: visitor
+    position: [17.0, 4.0, 1.6]
+    walk:
+      to: [[4.0, 4.0, 1.6], [4.0, 16.0, 1.6]]
+      speed_m_s: 1.2
 simulation:
   early: {method: ray_tracing, max_order: 3, diffraction: first_order}
   late: {method: stochastic_ray_tracing}
   ir_length_s: 3.0
 outputs:
-  - mono
   - binaural
+  - mono
 # Coverage map (`acoustic-spaces map`): over the floor, with the hum of the building.
 coverage:
   noise_db: [45, 40, 35, 30, 25, 20, 15, 10]

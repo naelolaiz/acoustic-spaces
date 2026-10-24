@@ -196,13 +196,15 @@ sound system and monitors in the stadium.
 
 ### Walkthroughs
 
-A listener or a source with a [walk](scenes.md#walks) can be heard as it goes. The
-`gallery_walk` example has a visitor walk away from a guide, down the long arm of the
-L-shaped gallery and round the corner, while the guide talks (any dry speech recording
-does as `speech.wav`; see [dry recordings to try](#dry-recordings-to-try)):
+A listener or a source with a [walk](scenes.md#walks) can be heard as it goes. In the
+`gallery` example a visitor walks away from a guide, down the long arm of the L-shaped
+gallery and round the corner, while the guide talks (any dry speech recording does as
+`speech.wav`; see [dry recordings to try](#dry-recordings-to-try)); the gallery's two
+other listeners stand still, and with the visitor's walk turned off (**Moves**, or
+`enabled: false`) the visitor stands too, so one scene serves both:
 
 ```sh
-acoustic-spaces examples --copy . gallery_walk && cd gallery_walk
+acoustic-spaces examples --copy . gallery && cd gallery
 acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video walk.mp4
 ```
 

@@ -357,7 +357,7 @@ msgstr "Mappa di copertura"
 msgid "Messages"
 msgstr "Messaggi"
 
-#: acoustic_spaces/gui/app.py
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/demo_dialog.py
 msgid "Movement"
 msgstr "Movimento"
 
@@ -1605,6 +1605,85 @@ msgid "WAV file for {source}"
 msgstr "File WAV per {source}"
 
 #: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "{count} keyframe, {length:.1f} m in {time:.1f} s"
+msgid_plural "{count} keyframes, {length:.1f} m in {time:.1f} s"
+msgstr[0] "{count} fotogramma chiave, {length:.1f} m in {time:.1f} s"
+msgstr[1] "{count} fotogrammi chiave, {length:.1f} m in {time:.1f} s"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "At {speed:g} m/s, {length:.1f} m in {time:.1f} s"
+msgstr "A {speed:g} m/s, {length:.1f} m in {time:.1f} s"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ", with Doppler"
+msgstr ", con Doppler"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The sources and listeners with a walk. Ticked ones move along it while the "
+"piece plays, all on one clock; the others stand where they start"
+msgstr ""
+"Le sorgenti e i ricevitori con un percorso. Quelli spuntati lo seguono "
+"mentre suona il brano, tutti con un unico orologio; gli altri restano dove "
+"iniziano"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
+msgid "Moves"
+msgstr "Si muove"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick to move it along its walk in this run"
+msgstr "Spuntare perché segua il suo percorso in questa esecuzione"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The source or listener, as the scene names it"
+msgstr "La sorgente o il ricevitore, come lo chiama la scena"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "What"
+msgstr "Cosa"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "A source or a listener"
+msgstr "Una sorgente o un ricevitore"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Walk"
+msgstr "Percorso"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "How it goes, how far and for how long"
+msgstr "Come va, quanto percorre e in quanto tempo"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/results_view.py
+msgid "Listener"
+msgstr "Ricevitore"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Edit movement…"
+msgstr "Modifica movimento…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Close this window and open the Movement panel on the selected walker, to "
+"change its walk or give a source or listener one; save the scene before "
+"running the demo"
+msgstr ""
+"Chiude questa finestra e apre il pannello Movimento sull'elemento "
+"selezionato, per cambiarne il percorso o darne uno a una sorgente o a un "
+"ricevitore; salvare la scena prima di eseguire la demo"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "As in the scene"
+msgstr "Come nella scena"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick what Moves ticks in the scene again"
+msgstr "Spunta di nuovo ciò che Si muove spunta nella scena"
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "Run demo"
 msgstr "Esegui una dimostrazione"
 
@@ -1665,6 +1744,41 @@ msgstr "Esegue il passo in secondo piano; i messaggi dicono come procede"
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Close without running anything"
 msgstr "Chiude senza eseguire nulla"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Nothing in this scene moves. Edit movement… gives a source or a listener a "
+"walk along keyframes."
+msgstr ""
+"Nulla si muove in questa scena. Modifica movimento… dà a una sorgente o a un "
+"ricevitore un percorso lungo fotogrammi chiave."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"Ticked sources and listeners move along their walks while the piece plays; "
+"the others stand where they start. The ticks start as Moves sets them in the "
+"scene, and change this run only ({option})."
+msgstr ""
+"Le sorgenti e i ricevitori spuntati seguono i loro percorsi mentre suona il "
+"brano; gli altri restano dove iniziano. Le spunte partono come le imposta Si "
+"muove nella scena e cambiano solo questa esecuzione ({option})."
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"This demo moves what is ticked; Moves in the scene turns a walk on or off, "
+"and Edit movement… changes it."
+msgstr ""
+"Questa demo muove ciò che è spuntato; Si muove nella scena attiva o "
+"disattiva un percorso, e Modifica movimento… lo cambia."
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"This demo moves nothing: every source and listener stands where it starts. "
+"This scene plays the walks."
+msgstr ""
+"Questa demo non muove nulla: ogni sorgente e ogni ricevitore restano dove "
+"iniziano. Questa scena riproduce i percorsi."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "all: every step in order, leaving out what is done already."
@@ -4005,10 +4119,6 @@ msgstr ""
 "controlli: rimane nella scena, disegnato sbiadito. La spunta nell'albero "
 "della scena fa lo stesso"
 
-#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
-msgid "Moves"
-msgstr "Si muove"
-
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Tick to have the source go along its keyframes in a movement; untick to keep "
@@ -4027,10 +4137,6 @@ msgstr ""
 "Spuntare perché il ricevitore segua i suoi fotogrammi chiave in un "
 "movimento; togliere la spunta per conservarli ma lasciarlo fermo dove "
 "inizia. I fotogrammi chiave si aggiungono con Modifica movimento…"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Edit movement…"
-msgstr "Modifica movimento…"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -6290,10 +6396,6 @@ msgid "Stop playing (Esc)"
 msgstr "Interrompere la riproduzione (Esc)"
 
 #: acoustic_spaces/gui/results_view.py
-msgid "Listener"
-msgstr "Ricevitore"
-
-#: acoustic_spaces/gui/results_view.py
 msgid "Parameters"
 msgstr "Parametri"
 
@@ -7256,38 +7358,24 @@ msgid ""
 "walls and an absorbing ceiling: a guide talks in the long arm, and visitors "
 "round the corner hear them only by the sound that bends round it (edge "
 "diffraction) and by reflections. The plan's corners go round the floor; "
-"wall_3 and wall_4 meet at the inner corner (8, 8)."
+"wall_3 and wall_4 meet at the inner corner (8, 8). One visitor sees the "
+"guide, one stands round the corner, and one walks from 3 m in front of the "
+"guide down the long arm and round the corner at 1.2 m/s: `acoustic-spaces "
+"walkthrough` plays a recording along that walk, and walk_demo.py makes a "
+"video of it. Turn the walk off (Moves, or `enabled: false`) and that visitor "
+"stands where it starts."
 msgstr ""
 "Una galleria a L, alta 4 m (1150 m3), con pavimento in marmo, pareti in "
 "mattoni ruvidi e soffitto assorbente: una guida parla nel braccio lungo e i "
 "visitatori dietro l'angolo la sentono soltanto attraverso il suono che lo "
 "aggira (diffrazione sugli spigoli) e le riflessioni. I vertici della pianta "
 "seguono il perimetro del pavimento; wall_3 e wall_4 si incontrano "
-"nell'angolo interno (8, 8)."
-
-#: examples/gallery_walk/scene.yaml
-msgctxt "example"
-msgid "Gallery walkthrough (L-shaped, 1150 m3)"
-msgstr "Percorso nella galleria (a L, 1150 m3)"
-
-#: examples/gallery_walk/scene.yaml
-msgctxt "example"
-msgid ""
-"A walkthrough of the L-shaped gallery: a visitor walks from in front of the "
-"guide, down the long arm and round the corner, at 1.2 m/s, while the guide "
-"talks. `acoustic-spaces walkthrough` simulates a response every 25 cm along "
-"the way (the late part every 2 m) and plays a recording through them, "
-"crossfading from each to the next, and can save the walk as a video: the "
-"guide's voice goes from direct and clear to the sound that bends round the "
-"corner."
-msgstr ""
-"Un percorso nella galleria a L: un visitatore cammina da davanti alla guida "
-"lungo il braccio maggiore e gira l'angolo, a 1.2 m/s, mentre la guida parla. "
-"`acoustic-spaces walkthrough` simula una risposta ogni 25 cm lungo il "
-"percorso (la parte tardiva ogni 2 m) e riproduce una registrazione "
-"attraverso di esse, con dissolvenza incrociata tra risposte consecutive, e "
-"può salvare il percorso come video: la voce della guida passa da diretta e "
-"chiara al suono che aggira l'angolo."
+"nell'angolo interno (8, 8). Un visitatore vede la guida, uno sta dietro "
+"l'angolo e uno cammina da 3 m davanti alla guida lungo il braccio lungo e "
+"gira l'angolo a 1,2 m/s: `acoustic-spaces walkthrough` riproduce una "
+"registrazione lungo quel percorso, e walk_demo.py ne fa un video. "
+"Disattivare il percorso (Si muove, o `enabled: false`) e quel visitatore "
+"resta dove inizia."
 
 #: examples/hillside/scene.yaml
 msgctxt "example"

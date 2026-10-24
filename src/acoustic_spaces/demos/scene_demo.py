@@ -12,14 +12,25 @@ crossfade between them, binaural through the HRTFs of the scene's binaural outpu
 scene from above with the listener of the moment, the level there, how long the sound
 takes to arrive and T30 at mid frequencies, and say how the sound was made.
 
+Sources and listeners whose walk is on move along it while the piece plays, all on one
+clock from its start (:func:`acoustic_spaces.walkthrough.simulate_movement`): every
+listener is heard as it walks or as the sources walk past it, and the video moves them
+as they go, its captions giving the level at each moment. ``--moving`` picks the walks
+of a run without changing the scene: ``--moving visitor,guide`` moves those two and
+leaves every other walker standing where it starts, ``--moving none`` keeps them all
+still, so one scene serves both. A walk with Doppler plays one walk at a time, with
+``acoustic-spaces walkthrough``.
+
     acoustic-spaces demo scene.yaml              # every step, into demo/ beside the scene
     acoustic-spaces demo scene.yaml feeds        # one step
     acoustic-spaces demo scene.yaml --hrtf me.sofa --seconds 15 --tour front,back
     acoustic-spaces demo scene.yaml --input talker=other_take.wav
+    acoustic-spaces demo scene.yaml --moving none   # every walker standing where it starts
 
-The editor runs it from **Simulation > Run demo…** as *This scene*. The video needs
-ffmpeg on the PATH and Pillow (the ``viz`` extra). The five demos of the examples are
-scripts of their own, with their recordings; this one takes any scene.
+The editor runs it from **Simulation > Run demo…** as *This scene*, with a tick for each
+walk in its Movement table. The video needs ffmpeg on the PATH and Pillow (the ``viz``
+extra). The five demos of the examples are scripts of their own, with their recordings;
+this one takes any scene.
 """
 
 from __future__ import annotations
@@ -27,6 +38,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import functools
+import math
 import sys
 from pathlib import Path
 
@@ -37,9 +49,18 @@ from acoustic_spaces.demos import (
     Step,
     common_options,
     input_option,
+    moving_names,
     pipeline,
 )
-from acoustic_spaces.demos.audio import gated_rms, mono, read, resampled, write
+from acoustic_spaces.demos.audio import (
+    gated_rms,
+    level_db,
+    loudness_db,
+    mono,
+    read,
+    resampled,
+    write,
+)
 from acoustic_spaces.i18n import N_
 from acoustic_spaces.scene import Scene
 
@@ -55,6 +76,8 @@ HRTF_HELP = (
 )
 CROSSFADE_S = 1.0
 FADE_OUT_S = 3.0
+#: The folder of the mixes when something moves (the still ones go to ``seats``).
+MOVING = "moving"
 
 
 def work_of(args: argparse.Namespace) -> Path:
@@ -117,6 +140,30 @@ def completed(args: argparse.Namespace) -> argparse.Namespace:
     return args
 
 
+def moving_scene(args: argparse.Namespace) -> Scene:
+    """The scene as this run plays it: with ``--moving``, those walk and every other
+    walker stands where it starts (:func:`~acoustic_spaces.walkthrough.with_moving`)."""
+    from acoustic_spaces.walkthrough import with_moving
+
+    return with_moving(scene_of(args), moving_names(getattr(args, "moving", None)))
+
+
+def moving_of(args: argparse.Namespace) -> list[str]:
+    """Who moves in this run: the sources and listeners in use whose walks are on, by
+    name, listeners first; none when the scene cannot be read or ``--moving`` names
+    what does not walk (:func:`problems` says why)."""
+    from acoustic_spaces.walkthrough import movers, with_moving
+
+    scene = _current(getattr(args, "scene", None))
+    if scene is None:
+        return []
+    try:
+        scene = with_moving(scene, moving_names(getattr(args, "moving", None)))
+    except ValueError:
+        return []
+    return [item.name for _kind, item in movers(scene)]
+
+
 def results_of(args: argparse.Namespace) -> Path:
     return work_of(args) / "results"
 
@@ -156,6 +203,19 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     for name, signal in signals.items():
         if not Path(signal).exists():
             return f"{name} plays {signal}, which is not there"
+    from acoustic_spaces.walkthrough import movers, with_moving
+
+    try:
+        moving = with_moving(scene, moving_names(getattr(resolved, "moving", None)))
+    except ValueError as exc:
+        return f"--moving: {exc}"
+    for _kind, item in movers(moving):
+        if item.walk.doppler:
+            return (
+                f"{item.name} walks with Doppler, which plays one walk at a time "
+                f"(acoustic-spaces walkthrough --walker {item.name}): leave it standing "
+                "(--moving)"
+            )
     return None
 
 
@@ -252,7 +312,12 @@ def listeners_of(args: argparse.Namespace, entries: list[dict]) -> list[str]:
 def render(args: argparse.Namespace) -> None:
     """Every listener's mix (``--format``, binaural by default) with one gain for all, the
     loudest peak at -1 dBFS; ``auralize`` plays each feed at its source's sound power.
-    The arrival time counts the sources that play, each at its sound power."""
+    The arrival time counts the sources that play, each at its sound power. When
+    something moves, :func:`render_moving` makes the mixes instead."""
+    moving = moving_of(args)
+    if moving:
+        render_moving(args, moving)
+        return
     table = feeds_table(args)
     entries = responses_of(args)
     simulation = simulations(args)[0]
@@ -265,6 +330,122 @@ def render(args: argparse.Namespace) -> None:
     if not mixes:
         raise SystemExit("error: no listener to render; the scene's listeners are all left out")
     pipeline.render_mixes(mixes, work_of(args) / "seats", args)
+
+
+def format_of(args: argparse.Namespace, scene: Scene):
+    """The format the moving mixes take: the scene's output of ``--format`` (as its
+    simulation renders it), through ``--hrtf`` when given."""
+    from acoustic_spaces.scene import Output
+    from acoustic_spaces.spatial import from_output
+
+    output = next((o for o in scene.outputs if o.format == args.format), None)
+    if output is None:
+        output = Output.model_validate(args.format)
+    if args.hrtf and output.format == "binaural":
+        output = output.model_copy(update={"hrtf": Path(args.hrtf)})
+    return from_output(output)
+
+
+def moving_done(
+    args: argparse.Namespace, folder: Path, moving: list[str], names: list[str]
+) -> bool:
+    """Whether the moving mixes in ``folder`` are there for this run: the same walks,
+    listeners and format, newer than the scene and the feeds."""
+    path = folder / pipeline.SEATS
+    if getattr(args, "again", False) or not path.exists():
+        return False
+    seats = pipeline.read_json(path)
+    same = (
+        seats.get("moving") == moving
+        and seats.get("label") == pipeline.output_label(args)
+        and sorted(seats.get("seats", {})) == sorted(names)
+    )
+    made = [Path(args.scene), work_of(args) / "feeds" / FEEDS]
+    return same and all(path.stat().st_mtime >= p.stat().st_mtime for p in made if p.exists())
+
+
+def levels_along(movement, source, listener: str) -> list[float | None]:
+    """The A-weighted level (dB) of ``source`` (a scene source) at ``listener`` at each
+    moment of ``movement``, as simulated; None at a moment whose response is too short
+    for its decay."""
+    from acoustic_spaces.parameters import a_weighted
+
+    power = source.power_db("octave")
+    levels: list[float | None] = []
+    for k in range(len(movement.times)):
+        response = movement.result[movement.key(source.name, listener, k)]
+        level = float(a_weighted(response.levels(power)))
+        levels.append(round(level, 2) if math.isfinite(level) else None)
+    return levels
+
+
+def render_moving(args: argparse.Namespace, moving: list[str]) -> None:
+    """Every listener's mix with ``moving`` walking, all on one clock: the scene simulated
+    with every mover at each moment of its walk
+    (:func:`~acoustic_spaces.walkthrough.simulate_movement`), each feed played through
+    it at its source's sound power, one gain for all (the loudest peak at -1 dBFS), into
+    ``moving/`` with seats.json. That also keeps the moments and, at each, the A-weighted
+    level of each source that plays at every listener, for the pictures; the arrival
+    time (``arrival_s``) is left out where something moves, as it changes along the way,
+    and the tour shifts no mix by it (``lag_s`` 0), so that the stops keep one clock."""
+    from acoustic_spaces.room import Room
+    from acoustic_spaces.walkthrough import render_movement, simulate_movement
+
+    table = feeds_table(args)
+    names = listeners_of(args, responses_of(args))
+    if not names:
+        raise SystemExit("error: no listener to render; the scene's listeners are all left out")
+    work = work_of(args)
+    folder = work / MOVING
+    if moving_done(args, folder, moving, names):
+        print(f"{folder}: there already (--again mixes them again)")
+        return
+    scene = moving_scene(args)
+    print(f"simulating the movement of {', '.join(moving)}, on one clock")
+    movement = simulate_movement(Room.from_scene(scene), progress=print)
+    rate = int(movement.result.settings.sample_rate)
+    feeds = {name: read(work / "feeds" / f"{name}.wav") for name in table["sources"]}
+    print(f"mixing {len(names)} listeners through {len(movement.times)} moments")
+    mixes = render_movement(movement, feeds, format_of(args, scene), sample_rate=rate)
+    peak = max(float(abs(mixes[name]).max(initial=0.0)) for name in names)
+    gain = 10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0
+    playing = [s for s in scene.sources if s.name in feeds]
+    weights = {s.name: s.sound_power_db for s in playing}
+    sources_move = any(s.name in moving for s in playing)
+    entries = responses_of(args)
+    info, levels = {}, {}
+    for name in names:
+        x = mixes[name] * gain
+        write(folder / f"{name}.{args.format}.wav", x, rate)
+        moves = sources_move or name in moving
+        # Where nothing moves, the sound arrives as in the still simulation. The tour
+        # shifts none of the mixes, as they keep the walks' one clock.
+        arrival = None if moves else pipeline.arrival_s(results_of(args), entries, name, weights)
+        info[name] = {
+            "listener": name,
+            "lag_s": 0.0,
+            "arrival_s": arrival,
+            "rms_db": level_db(x, rate),
+            "loudness_db": loudness_db(x, rate),
+            "length_s": len(x) / rate,
+            "moves": moves,
+        }
+        levels[name] = {s.name: levels_along(movement, s, name) for s in playing}
+    top = max(v["rms_db"] for v in info.values())
+    for name, v in info.items():
+        v["relative_db"] = v["rms_db"] - top
+        print(f"{name}: {v['relative_db']:+6.1f} dB(A)" + (", moving" if v["moves"] else ""))
+    seats = {
+        "rate": rate,
+        "format": args.format,
+        "label": pipeline.output_label(args),
+        "gain": gain,
+        "moving": moving,
+        "seats": info,
+        "movement": {"times": [float(t) for t in movement.times], "levels_a_db": levels},
+    }
+    pipeline.write_json(folder / pipeline.SEATS, seats)
+    print(f"wrote {folder}: {len(names)} mixes, {movement.places} places along the walks")
 
 
 # --------------------------------------------------------------------------- the video
@@ -288,24 +469,34 @@ def tour_of(args: argparse.Namespace, seats: dict, length_s: float) -> list[pipe
 
 def video(args: argparse.Namespace) -> None:
     """tour.wav, one still per stop, the thumbnail, and tour.mp4: the stills with a
-    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``). When
+    something moves, the video is a moving picture instead: the walkers go along their
+    walks as the piece plays, with a still of each stop."""
     from acoustic_spaces.demos import pictures, scene_pictures
     from acoustic_spaces.room import Room, outline_edges
+    from acoustic_spaces.walkthrough import knots, movers
 
     work = work_of(args)
     table = feeds_table(args)
-    seats = pipeline.seats_of(work / "seats", DEMO.command("render", args))
+    moving = moving_of(args)
+    folder = work / (MOVING if moving else "seats")
+    seats = pipeline.seats_of(folder, DEMO.command("render", args))
+    if seats.get("moving", []) != moving:
+        raise SystemExit(
+            f"error: the mixes in {folder} are of other walks; run first: "
+            f"{DEMO.command('render', args)}"
+        )
     stops = tour_of(args, seats, float(table["length_s"]))
     audio = pipeline.tour_audio(
         stops,
-        work / "seats",
+        folder,
         seats,
         crossfade_s=min(CROSSFADE_S, stops[0].length / 2),
         fade_out_s=min(FADE_OUT_S, stops[-1].length / 2),
     )
     write(work / "tour.wav", audio, seats["rate"])
     print(f"wrote {work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
-    scene = scene_of(args)
+    scene = moving_scene(args)
     data = scene.to_data()
     report = pipeline.read_json(results_of(args) / pipeline.PARAMETERS)
     outline = outline_edges(Room.from_scene(scene))[0]
@@ -319,8 +510,20 @@ def video(args: argparse.Namespace) -> None:
         credit=args.credit or plays_line(table),
         tool=pictures.settings_lines(DEMO, args, data, report),
         fmt=args.format,
+        paths={(kind, item.name): knots(item) for kind, item in movers(scene)},
+        movement=seats.get("movement"),
     )
     pictures.save(drawing.thumbnail(), work / "thumbnail.png")
+    if moving:
+        pipeline.animation(
+            work,
+            len(audio) / seats["rate"],
+            drawing.frame,
+            work / "tour.wav",
+            stills=[(stop.key, stop.at + min(0.5, stop.length / 2)) for stop in stops],
+            no_mp4=args.no_mp4,
+        )
+        return
     pipeline.video(
         work,
         [(stop.key, stop.length) for stop in stops],
@@ -383,6 +586,15 @@ DEMO = Demo(
             steps=("video",),
         ),
         Option(
+            "moving",
+            "the sources and listeners that move along their walks in this run, by name, "
+            "comma separated, every other walker standing where it starts; none keeps them "
+            "all still (default: those whose walk is on in the scene)",
+            None,
+            "movers",
+            steps=("render", "video"),
+        ),
+        Option(
             "work",
             "folder for everything the demo writes (default: demo beside the scene)",
             None,
@@ -408,6 +620,7 @@ DEMO = Demo(
     work_of=work_of,
     completes=completed,
     plays=plays,
+    moving=moving_of,
 )
 
 if __name__ == "__main__":

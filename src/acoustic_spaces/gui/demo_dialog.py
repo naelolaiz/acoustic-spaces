@@ -9,6 +9,11 @@ form is built from the demo's own options, so the editor and the command line ru
 exactly the same thing; the line at the bottom shows that command, to run again or to
 put in a script. A demo whose sources can play files of the user's (``--input``) lists
 them in a table, each with what it plays and the WAV file it plays instead.
+
+The Movement box lists the sources and listeners of the scene that have a walk, ticked
+when they move in the run. This scene's ticks start as Moves sets them in the scene and
+can be changed for one run (``--moving``); an example's demo shows what it moves. Edit
+movement… closes the window and opens the Movement panel on the walker.
 """
 
 from __future__ import annotations
@@ -26,20 +31,22 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from acoustic_spaces.demos import MAP_KINDS, PATH_KINDS, Demo, Option
+from acoustic_spaces.demos import MAP_KINDS, NO_MOVERS, PATH_KINDS, Demo, Option, moving_names
 from acoustic_spaces.gui.inspector import int_spin, spin
-from acoustic_spaces.i18n import _
+from acoustic_spaces.i18n import _, ngettext
 
 #: The folder under the user's home the editor runs a demo in when the example itself
 #: cannot be written.
@@ -349,6 +356,189 @@ class InputsField(QWidget):
             self._set(name, None)
 
 
+def walkers_of(scene: str | Path | None) -> list[tuple[str, object]]:
+    """The sources and listeners in use of the scene file that have a walk, on or off, as
+    ("listeners" or "sources", item), listeners first; none when it cannot be read."""
+    if scene is None:
+        return []
+    from acoustic_spaces.scene import Scene
+
+    try:
+        loaded = Scene.from_yaml(scene)
+    except Exception:  # the demo's check says what is wrong with it
+        return []
+    return [
+        (kind, item)
+        for kind in ("listeners", "sources")
+        for item in getattr(loaded, kind)
+        if item.in_use and item.walk is not None
+    ]
+
+
+def walk_text(item) -> str:
+    """A walk in a few words: how it goes, how far and for how long."""
+    from acoustic_spaces.walkthrough import knots
+
+    path = knots(item)
+    walk = item.walk
+    if walk.keyframes is not None:
+        count = len(walk.keyframes)
+        text = ngettext(
+            "{count} keyframe, {length:.1f} m in {time:.1f} s",
+            "{count} keyframes, {length:.1f} m in {time:.1f} s",
+            count,
+        ).format(count=count, length=path.length_m, time=path.duration_s)
+    else:
+        text = _("At {speed:g} m/s, {length:.1f} m in {time:.1f} s").format(
+            speed=walk.speed_m_s, length=path.length_m, time=path.duration_s
+        )
+    return text + (_(", with Doppler") if walk.doppler else "")
+
+
+class MovementBox(QGroupBox):
+    """What moves in a run: a row for each source and listener of the scene with a walk,
+    ticked when it moves. With :meth:`set_mode` ``editable`` (a demo with a ``movers``
+    option, ``--moving``) the ticks are the run's, starting as the scene's Moves sets
+    them; otherwise they show what the demo moves. Edit movement… asks for the Movement
+    panel on the selected walker (:attr:`edit`)."""
+
+    #: A tick changed.
+    changed = Signal()
+    #: Edit movement…: the walker's kind ("sources" or "listeners") and name, or two
+    #: empty strings when the scene has none.
+    edit = Signal(str, str)
+
+    MOVES, NAME, KIND, WALK = range(4)
+
+    def __init__(self, walkers: list[tuple[str, object]], parent: QWidget | None = None) -> None:
+        super().__init__(_("Movement"), parent)
+        self.setToolTip(
+            _(
+                "The sources and listeners with a walk. Ticked ones move along it while the "
+                "piece plays, all on one clock; the others stand where they start"
+            )
+        )
+        self.walkers = [(kind, item.name, item.walk.enabled) for kind, item in walkers]
+        self.editable = False
+        layout = QVBoxLayout(self)
+        # As tall as its contents, however tall the window is.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        self.note = QLabel()
+        self.note.setWordWrap(True)
+        layout.addWidget(self.note)
+        self.table = QTableWidget(len(self.walkers), 4)
+        self.table.setToolTip(self.toolTip())
+        heads = (
+            (_("Moves"), _("Tick to move it along its walk in this run")),
+            (_("Name"), _("The source or listener, as the scene names it")),
+            (_("What"), _("A source or a listener")),
+            (_("Walk"), _("How it goes, how far and for how long")),
+        )
+        for column, (text, tip) in enumerate(heads):
+            head = QTableWidgetItem(text)
+            head.setToolTip(tip)
+            self.table.setHorizontalHeaderItem(column, head)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(
+            self.WALK, QHeaderView.ResizeMode.Stretch
+        )
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        for row, (kind, item) in enumerate(walkers):
+            moves = QTableWidgetItem()
+            name = QTableWidgetItem(item.name)
+            what = QTableWidgetItem(_("Listener") if kind == "listeners" else _("Source"))
+            walk = QTableWidgetItem(walk_text(item))
+            for cell in (moves, name, what, walk):
+                cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.table.setItem(row, self.MOVES, moves)
+            self.table.setItem(row, self.NAME, name)
+            self.table.setItem(row, self.KIND, what)
+            self.table.setItem(row, self.WALK, walk)
+        rows = sum(self.table.rowHeight(r) for r in range(min(len(self.walkers), 6)))
+        self.table.setFixedHeight(
+            self.table.horizontalHeader().height() + rows + 2 * self.table.frameWidth()
+        )
+        self.table.setVisible(bool(self.walkers))
+        self.table.itemChanged.connect(self._ticked)
+        layout.addWidget(self.table)
+        row = QHBoxLayout()
+        self.edit_button = QPushButton(_("Edit movement…"))
+        self.edit_button.setToolTip(
+            _(
+                "Close this window and open the Movement panel on the selected walker, to "
+                "change its walk or give a source or listener one; save the scene before "
+                "running the demo"
+            )
+        )
+        self.edit_button.clicked.connect(self._edit)
+        self.reset = QPushButton(_("As in the scene"))
+        self.reset.setToolTip(_("Tick what Moves ticks in the scene again"))
+        self.reset.clicked.connect(lambda: self.set_value(None))
+        row.addWidget(self.edit_button)
+        row.addWidget(self.reset)
+        row.addStretch(1)
+        layout.addLayout(row)
+
+    @property
+    def own(self) -> list[str]:
+        """The walkers whose walk is on in the scene."""
+        return [name for _kind, name, on in self.walkers if on]
+
+    def ticked(self) -> list[str]:
+        return [
+            self.walkers[row][1]
+            for row in range(self.table.rowCount())
+            if self.table.item(row, self.MOVES).checkState() == Qt.CheckState.Checked
+        ]
+
+    def set_mode(self, editable: bool, ticked: list[str], note: str) -> None:
+        """Whether the ticks are the run's to change, what is ticked, and the line above."""
+        self.editable = editable
+        self.note.setText(note)
+        self.reset.setVisible(editable and bool(self.walkers))
+        self._tick(ticked)
+        for column in (self.MOVES, self.NAME, self.KIND):  # the tick boxes in too
+            self.table.resizeColumnToContents(column)
+
+    def value(self) -> str | None:
+        """``--moving``: None while the ticks are the scene's own, else the ticked names
+        (``none`` for no tick)."""
+        ticked = self.ticked()
+        if set(ticked) == set(self.own):
+            return None
+        return ",".join(ticked) if ticked else NO_MOVERS
+
+    def set_value(self, value) -> None:
+        names = moving_names(value)
+        self._tick(self.own if names is None else names)
+        self.changed.emit()
+
+    def _tick(self, names: list[str]) -> None:
+        """Tick ``names``; the ticks can be clicked only when they are the run's."""
+        self.table.blockSignals(True)
+        for row, (_kind, name, _on) in enumerate(self.walkers):
+            item = self.table.item(row, self.MOVES)
+            flags = item.flags() | Qt.ItemFlag.ItemIsUserCheckable
+            if not self.editable:
+                flags &= ~Qt.ItemFlag.ItemIsUserCheckable
+            item.setFlags(flags)
+            item.setCheckState(Qt.CheckState.Checked if name in names else Qt.CheckState.Unchecked)
+        self.table.blockSignals(False)
+
+    def _ticked(self, item: QTableWidgetItem) -> None:
+        if item.column() == self.MOVES and self.editable:
+            self.changed.emit()
+
+    def _edit(self) -> None:
+        if not self.walkers:
+            self.edit.emit("", "")
+            return
+        row = max(self.table.currentRow(), 0)
+        kind, name, _on = self.walkers[row]
+        self.edit.emit(kind, name)
+
+
 def field_for(option: Option, tip: str) -> QWidget:
     """The widget that asks for ``option``: a tick for a flag, a list for a choice, a
     spin box for a number, a path with a Browse… button for a file or a folder, a table
@@ -385,7 +575,7 @@ def field_for(option: Option, tip: str) -> QWidget:
 def value_of(option: Option, widget: QWidget):
     """What the field holds, in the type the demo's step expects (None where it is
     empty: the demo is given no such option)."""
-    if isinstance(widget, (PathField, InputsField)):
+    if isinstance(widget, (PathField, InputsField, MovementBox)):
         return widget.value()
     if isinstance(widget, QCheckBox):
         return widget.isChecked()
@@ -432,6 +622,8 @@ class DemoDialog(QDialog):
         self.starts = {demo.name: args for demo, args in pairs if args is not None}
         self.unsaved = unsaved or (demos is None and scene is None)
         self.fields: dict[str, QWidget] = {}
+        #: What Edit movement… asked for: the walker's kind and name (empty for none).
+        self.edit_request: tuple[str, str] | None = None
         layout = self._layout = QVBoxLayout(self)
         intro = QLabel(
             _(
@@ -480,6 +672,12 @@ class DemoDialog(QDialog):
         self.about_step.setWordWrap(True)
         layout.addWidget(self.about_step)
 
+        self.movement = MovementBox(walkers_of(scene if demos is None else None))
+        self.movement.setVisible(demos is None and scene is not None)
+        self.movement.changed.connect(self._refresh)
+        self.movement.edit.connect(self._edit_movement)
+        layout.addWidget(self.movement)
+
         self.options = QWidget()
         layout.addWidget(self.options)
 
@@ -498,6 +696,7 @@ class DemoDialog(QDialog):
         self.problem = QLabel()
         self.problem.setWordWrap(True)
         layout.addWidget(self.problem)
+        layout.addStretch(1)  # a taller window leaves the room above the buttons
 
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -540,7 +739,11 @@ class DemoDialog(QDialog):
         rows.setContentsMargins(0, 0, 0, 0)
         self.fields = {}
         args = self.starts.get(demo.name) or starting_arguments(demo)
+        self._show_movement(demo, args)
         for option in demo.options:
+            if option.kind == "movers":  # the Movement box's ticks
+                self.fields[option.name] = self.movement
+                continue
             tip = option.description
             widget = field_for(option, tip)
             if isinstance(widget, (PathField, InputsField)):
@@ -564,6 +767,47 @@ class DemoDialog(QDialog):
         self.options.deleteLater()
         self.options = form
         self._refresh()
+
+    def _show_movement(self, demo: Demo, args: argparse.Namespace) -> None:
+        """The Movement box for ``demo``: ticks to change for a demo with a ``movers``
+        option, what it moves for one that moves its own walkers, none for one that moves
+        nothing."""
+        box = self.movement
+        option = next((o for o in demo.options if o.kind == "movers"), None)
+        if not box.walkers:
+            note = _(
+                "Nothing in this scene moves. Edit movement… gives a source or a listener a "
+                "walk along keyframes."
+            )
+            box.set_mode(False, [], note)
+        elif option is not None:
+            names = moving_names(getattr(args, option.name, None))
+            note = _(
+                "Ticked sources and listeners move along their walks while the piece plays; "
+                "the others stand where they start. The ticks start as Moves sets them in "
+                "the scene, and change this run only ({option})."
+            ).format(option=option.option)
+            box.set_mode(True, box.own if names is None else names, note)
+        elif demo.moving is not None:
+            try:
+                names = demo.moving(demo.resolved(args))
+            except Exception:  # the line under the form says what is wrong
+                names = []
+            note = _(
+                "This demo moves what is ticked; Moves in the scene turns a walk on or off, "
+                "and Edit movement… changes it."
+            )
+            box.set_mode(False, names, note)
+        else:
+            note = _(
+                "This demo moves nothing: every source and listener stands where it starts. "
+                "This scene plays the walks."
+            )
+            box.set_mode(False, [], note)
+
+    def _edit_movement(self, kind: str, name: str) -> None:
+        self.edit_request = (kind, name)
+        self.reject()
 
     def _refresh(self) -> None:
         """The step's help, the command line and what is wrong with the options."""
@@ -618,12 +862,15 @@ __all__ = [
     "ALL",
     "DemoDialog",
     "InputsField",
+    "MovementBox",
     "PathField",
     "demos_for",
     "field_for",
     "reads_scene",
     "starting_arguments",
     "value_of",
+    "walk_text",
+    "walkers_of",
     "work_base",
     "writable",
 ]
