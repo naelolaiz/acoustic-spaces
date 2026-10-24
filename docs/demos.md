@@ -1,11 +1,13 @@
 # Demos
 
 Five demos run recordings through example scenes, mix them at the scenes' listeners and
-make a video of the result. Each shows one space and one kind of sound: a symphony
-orchestra on the stage of a shoebox concert hall, a choir and an organ in a reverberant
-stone church, a band with its sound system and stage monitors in a stadium, the same
-band's song carried across a lake on a summer evening, and a guide talking to a visitor
-who walks away from them through a gallery and then turns their head. None of them
+make a video of the result, and a sixth drives a car past the listeners of two outdoor
+examples. Each shows one space and one kind of sound: a symphony orchestra on the stage
+of a shoebox concert hall, a choir and an organ in a reverberant stone church, a band
+with its sound system and stage monitors in a stadium, the same band's song carried
+across a lake on a summer evening, a guide talking to a visitor who walks away from them
+through a gallery and then turns their head, and a car passing on a road across a meadow
+and along a street, its pitch falling as it goes by. None of them
 stands for what the simulator does elsewhere; the [examples](examples.md) cover far
 more, and any scene makes a demo of its own with the recordings its sources are given
 ([a demo of any scene](#a-demo-of-any-scene)).
@@ -52,7 +54,8 @@ the list of them. The mixes are made again when the inputs change. The credit li
 the stills names the files that replaced a recording (and only them when every source
 has one); the captions go on describing the demo's own music. The walk through the
 gallery takes `--input guide=talk.wav`, played as it is: the video's one gain sets how
-loud it is heard, and the captions' level and STI stay the scene's voice.
+loud it is heard, and the captions' level and STI stay the scene's voice; the pass-by
+demos take `--input car=engine.wav`, a dry recording played as the car's sound.
 
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demo,
@@ -65,8 +68,10 @@ it. The sources are a table, each with what it plays and the file it plays inste
 with how it goes, how far and for how long, ticked when it moves in the run: *This
 scene*'s ticks start as **Moves** sets them in the scene and change that run only
 (`--moving`, below), **As in the scene** ticks them as the scene does again, and an
-example's demo shows what it moves (the walk through the gallery moves its visitor; the
-other example demos move nothing). **Edit movement…** closes the window and opens the
+example's demo shows what it moves (the walk through the gallery moves its visitor, the
+pass-by demos their car; the other example demos move nothing). A walker left out of
+the scene's simulations is listed only when a demo moves it: the car, which the pass-by
+demos put in the scene they write. **Edit movement…** closes the window and opens the
 [Movement panel](editor.md) on the selected walker. The window shows the command line it
 is about to run, so a run started there can be repeated in a terminal or a script. A
 demo reads the scene from its file, so a scene with changes is saved first.
@@ -139,8 +144,12 @@ listener where the clock has it then, so `--tour` puts a walker first to hear it
 from the start. `--moving` picks the walks of a run without changing the scene:
 `--moving visitor,guide` moves those two and leaves every other walker standing where it
 starts, `--moving none` keeps them all still, so one scene serves both. A walk with
-Doppler plays one walk at a time, with `acoustic-spaces walkthrough --walker`, and the
-demo says so.
+Doppler (a car, a train) moves alone: every listener hears each early path through its
+own delay as it changes, so the pitch shifts as it passes, and the late sound
+crossfaded from place to place
+([moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)); a walking
+source is simulated along its walk once for each listener. With other walks on as well,
+the demo says to leave them standing.
 
 Everything goes to `demo/` beside the scene (`--work` elsewhere): the feeds, the
 results, the mixes in `seats/` (in `moving/` when something moves), `tour.wav`, the
@@ -596,3 +605,70 @@ for the turn, `--turn` the angles it holds, `--hrtf me.sofa` a measured head.
 **Recording.** The ACE challenge corpus (Eaton, Gaubitch, Moore and Naylor, Imperial
 College London), **CC BY 4.0**: an anechoic talk, a man describing his way to work
 through Delft; `speech` reads it out of the corpus's 148 MB archive.
+
+## A car passing by
+
+`passby_demo.py` comes with two outdoor examples, `roadside` and `street`: a passenger
+car drives past at 50 km/h and each listener hears one pass in turn, its pitch falling
+as the car goes by. The video follows the car on the plan, with the level heard over the
+pass drawn under it.
+
+```sh
+acoustic-spaces examples --copy . roadside && cd roadside   # or street
+python passby_demo.py all   # or car, scene, walk, video one at a time
+```
+
+Options: `--speed 50` how fast the car drives (km/h), `--rpm 2000` how fast its engine
+turns, for its made sound, `--step 1` how far apart the car is simulated along its walk
+(m), `--hrtf me.sofa` a measured head, `--input car=WAV` a dry recording of yours.
+
+- **The car** is the example's source `car`: a point source 0.05 m above the road, where
+  CNOSSOS-EU puts a vehicle's sound, with a walk along the road with Doppler, left out of
+  the example's own simulations until ticked (there the traffic stays a still line
+  source). The demo's scene (`scene_demo.yaml`) has the car alone, at `--speed` along
+  its walk, with CNOSSOS-EU's sound power of a passenger car (category 1) at that speed
+  on the method's reference road surface, in the scene's air temperature: rolling noise
+  A_R + B_R lg(v/70) and propulsion noise A_P + B_P (v - 70)/70 per octave band, with
+  the coefficients of Table F-1 of Commission Directive (EU) 2015/996
+  (`acoustic_spaces.demos.car`). At 50 km/h and 20 °C that is 99.0 dB, 96.0 dB(A).
+- **Its sound** is made to that power. A recording of a car going past would not do: it
+  holds its own Doppler shift, the road and the distance, and the simulation would add
+  them again. Tyre noise is noise with the rolling noise's octave spectrum; the engine is
+  a pulse each time one of its four cylinders fires (every 15 ms at 2000 rpm, the
+  cylinders a little unequal and the firing a little uneven) with the propulsion noise's
+  spectrum; the two are at the ratio of their sound powers in each band, so the octave
+  levels are CNOSSOS-EU's and the time structure is made up, as the stills say. It fades
+  in and out over its first and last second, where the car is farthest. `--input
+  car=engine.wav` plays a dry recording instead (on board, or at the wheel), mixed down
+  to mono and at least as long as the pass; the captions still give CNOSSOS-EU's car.
+- **The pass**: the car every metre along its walk (`--step`), simulated at each
+  listener in turn (`acoustic-spaces walkthrough`), its sound played through those places
+  with each early path through its own delay as it changes
+  ([moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)), the late
+  sound crossfaded from place to place without a shift of its own. Through places 1 m
+  apart a car's sound at 1 kHz follows the exact field's waveform to within -54 dB
+  (-57 dB a quarter of a metre apart;
+  [validation](validation.md#moving-sources-against-the-exact-field)). The level at
+  each moment, the loudest (L_Amax) and the sound exposure level (SEL) come from the
+  same simulation, each place's as if the car stood there; the stills give them, with
+  how close the car comes and how far the pitch of its direct sound falls from where it
+  starts to where it ends. One gain makes every pass, and each is turned up to the
+  loudness of the loudest, by as much as the still says.
+- **The roadside**: 150 m of road, the car in the lane on the meadow's side, heard at
+  the verge (5.7 m from the car as it passes), 23 and 48 m away over the grass and 27 m
+  away over the paved yard. The pass peaks at 73.7 dB(A) at the verge (SEL 73.7 dB(A)),
+  51.7 and 40.8 dB(A) over the grass and 60.7 dB(A) over the yard: over the grass the
+  ground takes away much of the middle and the treble, the more the farther away, while
+  over the yard its reflection adds to the direct sound. At the verge the engine's tone
+  falls 1.4 semitones as the car passes, as the geometry says.
+- **The street**: 125 m of street, the car in the lane on the offices' side, heard on
+  the pavement (6.2 m from the car as it passes), on a balcony of the office block and
+  in the garden behind the noise barrier. The pass peaks at 76.9 dB(A) on the pavement
+  and 71.5 dB(A) on the balcony. The garden hears it loudest, 60.0 dB(A), as the car
+  goes by the 4 m gap between the houses and the barrier, less while the barrier stands
+  between them, and more again once the car comes out past the barrier's far end; the
+  level jumps where paths through the gap and round the ends open and close.
+  Reflections off the road, the facades and the barrier and the sound diffracted round
+  their edges each shift in pitch their own way. Between the buildings the late sound,
+  which keeps the engine's pitch, is strong in the bass, so the engine's tone falls less
+  plainly than by the open road.

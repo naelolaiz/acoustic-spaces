@@ -1714,6 +1714,14 @@ msgstr "Cómo va, cuánto recorre y en cuánto tiempo"
 msgid "Listener"
 msgstr "Receptor"
 
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Left out of the scene's simulations: a demo that moves it puts it in the "
+"scene it writes"
+msgstr ""
+"Fuera de las simulaciones de la escena: una demo que lo mueve lo pone en la "
+"escena que escribe"
+
 #: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
 msgid "Edit movement…"
 msgstr "Editar movimiento…"
@@ -1921,6 +1929,14 @@ msgstr "activar recorrido"
 #: acoustic_spaces/gui/document.py
 msgid "turn the walk off"
 msgstr "desactivar recorrido"
+
+#: acoustic_spaces/gui/document.py
+msgid "turn Doppler on"
+msgstr "activar Doppler"
+
+#: acoustic_spaces/gui/document.py
+msgid "turn Doppler off"
+msgstr "desactivar Doppler"
 
 #: acoustic_spaces/gui/document.py
 msgid "a scene needs at least one source"
@@ -4228,6 +4244,14 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Only a point source moves: a line or a surface stands where it is. Set Shape "
+"to point to give the source a walk"
+msgstr ""
+"Solo una fuente puntual se mueve: una línea o una superficie se queda donde "
+"está. Pon Forma en punto para dar un recorrido a la fuente"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "Where the source is along x (m). Dragging it in the 3D view or the plan "
 "moves it too"
 msgstr ""
@@ -5492,6 +5516,24 @@ msgstr ""
 "Marque para que siga sus fotogramas clave en un movimiento; desmarque para "
 "conservarlos pero dejarlo quieto donde empieza (enabled en el archivo de "
 "escena)"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Doppler"
+msgstr "Doppler"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Tick for a vehicle or an aircraft: the early sound goes through delays that "
+"change as it goes, so its pitch shifts as it passes (doppler in the scene "
+"file). A walk with Doppler plays alone, one walk at a time (walkthrough, or "
+"a demo); Render movement… plays walks without it, crossfaded from place to "
+"place"
+msgstr ""
+"Márcalo para un vehículo o un avión: el sonido temprano pasa por retardos "
+"que cambian mientras avanza, así que su tono cambia al pasar (doppler en el "
+"archivo de escena). Un recorrido con Doppler suena solo, un recorrido cada "
+"vez (walkthrough, o una demo); Renderizar movimiento… reproduce los "
+"recorridos sin él, con fundido cruzado de un lugar al siguiente"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Render movement…"
@@ -7685,7 +7727,9 @@ msgid ""
 "hard yard the two add up there instead, and the dip comes higher up, near 2 "
 "kHz. The meadow, the road and the yard are parts of the ground, each with "
 "its impedance; a reflection near where two meet takes some of each, as much "
-"as each covers of its Fresnel zone."
+"as each covers of its Fresnel zone. A car drives along the road at 50 km/h, "
+"its pitch falling as it passes (Doppler): it is left out of simulations "
+"until ticked, and passby_demo.py plays it."
 msgstr ""
 "Al aire libre: tráfico en una carretera entre un prado y un patio "
 "pavimentado, escuchado a 7,5, 25 y 50 m sobre la hierba, y a 25 m sobre el "
@@ -7695,7 +7739,9 @@ msgstr ""
 "los dos se suman ahí, y la caída aparece más arriba, cerca de 2 kHz. El "
 "prado, la carretera y el patio son partes del terreno, cada una con su "
 "impedancia; una reflexión cerca de donde dos se encuentran toma algo de cada "
-"una, tanto como cada una cubre de su zona de Fresnel."
+"una, tanto como cada una cubre de su zona de Fresnel. Un coche circula por "
+"la carretera a 50 km/h y su tono baja al pasar (Doppler): queda fuera de las "
+"simulaciones hasta que se marca, y passby_demo.py lo reproduce."
 
 #: examples/room_modes/scene.yaml
 msgctxt "example"
@@ -7995,7 +8041,10 @@ msgid ""
 "the ground reaches 30 m past the buildings, then goes on as if it never "
 "ended. One listener stands on the pavement, one on a balcony of the office "
 "block, one in the garden, where the traffic comes over the top of the "
-"barrier and round its ends: `first_order` diffraction follows it."
+"barrier and round its ends: `first_order` diffraction follows it. A car "
+"drives along the street at 50 km/h, its pitch falling as it passes "
+"(Doppler): it is left out of simulations until ticked, and passby_demo.py "
+"plays it."
 msgstr ""
 "Al aire libre: una calle de 12 m de ancho entre una hilera de casas de 9 m "
 "de altura y un bloque de oficinas de 15 m, con tráfico a lo largo de ella "
@@ -8005,7 +8054,10 @@ msgstr ""
 "terreno se extiende 30 m más allá de los edificios y después sigue como si "
 "no acabara nunca. Un receptor está en la acera, otro en un balcón del bloque "
 "de oficinas y otro en el jardín, adonde el tráfico llega por encima de la "
-"pantalla y rodeando sus extremos: la difracción `first_order` lo sigue."
+"pantalla y rodeando sus extremos: la difracción `first_order` lo sigue. Un "
+"coche circula por la calle a 50 km/h y su tono baja al pasar (Doppler): "
+"queda fuera de las simulaciones hasta que se marca, y passby_demo.py lo "
+"reproduce."
 
 #: examples/studio/scene.yaml
 msgctxt "example"

@@ -232,7 +232,7 @@ class Pictures:
             colour = SOURCE if given in self.playing else MUTED
             rs = max(4.0, r * 0.55)
             draw.ellipse([x - rs, y - rs, x + rs, y + rs], fill=colour, outline=colour)
-            text(draw, (x + rs + 4, y), source["name"], label, MUTED, "lm")
+            self.label_source(draw, (x, y), rs, source["name"], label)
         for name, lis in listeners.items():
             if lis.get("enabled", True) is False or name == current:
                 continue
@@ -254,6 +254,10 @@ class Pictures:
         metres = nice_length(self.box[2] - self.box[0])
         unit = f"{metres:g} m"
         scale_bar(draw, plan.left + 12, plan.top + plan.size[1] - 14, metres * plan.s, unit)
+
+    def label_source(self, draw, at: tuple[float, float], r: float, name: str, f) -> None:
+        """A source's name beside its mark of radius ``r`` at ``at``, on its right."""
+        text(draw, (at[0] + r + 4, at[1]), name, f, MUTED, "lm")
 
     # -- words ---------------------------------------------------------------------------
 
