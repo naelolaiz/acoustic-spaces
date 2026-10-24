@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import shlex
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
@@ -28,7 +27,7 @@ from pathlib import Path
 
 import numpy as np
 
-from acoustic_spaces.demos import audio
+from acoustic_spaces.demos import audio, shell_line
 
 PARAMETERS = "parameters.json"
 SEATS = "seats.json"
@@ -84,7 +83,7 @@ def simulate_argv(simulation: Simulation, hrtf: str | Path | None = None) -> lis
 
 def simulate_command(simulation: Simulation, hrtf: str | Path | None = None) -> str:
     """The simulate command to run, as one line."""
-    return "acoustic-spaces " + shlex.join(simulate_argv(simulation, hrtf))
+    return "acoustic-spaces " + shell_line(simulate_argv(simulation, hrtf))
 
 
 def outputs_of(entry: dict) -> list[dict]:

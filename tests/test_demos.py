@@ -25,6 +25,7 @@ from acoustic_spaces.demos import (
     list_demos,
     music,
     pipeline,
+    shell_line,
 )
 
 RATE = 8000
@@ -204,6 +205,21 @@ def _demo(tmp_path: Path, **more) -> tuple[Demo, list[str]]:
     scene.parent.mkdir(parents=True, exist_ok=True)
     results.mkdir(parents=True, exist_ok=True)
     return demo, ran
+
+
+def test_a_command_line_is_quoted_for_the_system(monkeypatch) -> None:
+    """The command lines the demos show are pasted into a shell: on Windows a path such
+    as ``C:\\Users\\me\\ears.sofa`` stays bare and an argument with a space takes double
+    quotes; everywhere else the quoting is sh's."""
+    plain = ["simulate", "scene.yaml", "--out", "results"]
+    monkeypatch.setattr("acoustic_spaces.demos.sys.platform", "win32")
+    assert shell_line(plain) == "simulate scene.yaml --out results"
+    assert shell_line(["--hrtf", r"C:\Users\me\ears.sofa"]) == r"--hrtf C:\Users\me\ears.sofa"
+    assert shell_line(["--hrtf", r"C:\My Files\ears.sofa"]) == r'--hrtf "C:\My Files\ears.sofa"'
+    monkeypatch.setattr("acoustic_spaces.demos.sys.platform", "linux")
+    assert shell_line(plain) == "simulate scene.yaml --out results"
+    assert shell_line(["--hrtf", "/home/me/my ears.sofa"]) == "--hrtf '/home/me/my ears.sofa'"
+    assert shell_line([]) == ""
 
 
 def test_a_demo_describes_its_steps_and_options(tmp_path: Path) -> None:

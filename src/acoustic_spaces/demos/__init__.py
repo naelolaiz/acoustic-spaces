@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import shlex
+import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
@@ -37,6 +38,15 @@ from acoustic_spaces.examples import examples_dir
 #: folder.
 KINDS = ("text", "choice", "int", "float", "flag", "file", "path", "folder")
 PATH_KINDS = ("file", "path", "folder")
+
+
+def shell_line(argv: Sequence[str]) -> str:
+    """``argv`` as one line to paste into the shell of this system: quoted as ``sh``
+    reads it, or on Windows as ``cmd`` and PowerShell do, where ``C:\\Users\\me`` stays
+    as it is and only an argument with a space gets its double quotes."""
+    if sys.platform == "win32":
+        return subprocess.list2cmdline(argv)
+    return shlex.join(argv)
 
 
 @dataclass(frozen=True)
@@ -202,9 +212,7 @@ class Demo:
     def command(self, step: str, args: argparse.Namespace | None = None) -> str:
         """How to run ``step`` from the command line, with the options that differ from
         their defaults (``python church_demo.py scene``)."""
-        parts = [f"python {self.script.name} {step}"]
-        parts += [shlex.quote(part) for part in self.arguments(args)]
-        return " ".join(parts)
+        return f"python {self.script.name} {step} {shell_line(self.arguments(args))}".rstrip()
 
     # -- arguments ------------------------------------------------------------------
 
@@ -359,5 +367,6 @@ __all__ = [
     "demo_for",
     "list_demos",
     "load",
+    "shell_line",
     "sibling",
 ]
