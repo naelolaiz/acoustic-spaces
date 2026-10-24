@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased
+## 4.0.0
+
+Outdoor acoustics: scenes on a ground under the sky, with buildings and barriers, terrain
+and buildings from a map, grounds of finite and of extended impedance, wind and
+temperature gradients, turbulence, vegetation, weather zones and classes with levels
+over a long term, moving sources with Doppler, whole cities and a wide-angle parabolic
+equation, on the GPU too, validated against a fast field program. Coherent arrays
+element by element, groups of sources and listeners, demos of the examples and of any
+scene with files of your own, walks along keyframes with every mover at once on one
+clock and the editor's Movement panel, HRTF sets to download, the checks of ISO 3382-2
+on every decay time, and the wind drawn in the editor.
+
+Indoor scenes give the results of 3.2.3 but for what **Fixes** lists: every binaural
+output changes (the treble an HRTF between the measured directions lost is back), a
+response that ends in silence no longer has decay times read from the drop after its
+last sound, `auralize` and `walkthrough` mix sources at their sound power
+(`--equal-power` keeps the old mix), and the last bits round alike on every platform.
 
 **Outdoor scenes**
 

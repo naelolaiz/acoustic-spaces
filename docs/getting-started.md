@@ -14,7 +14,7 @@ and Intel) and Windows (x86-64), CPython 3.10 to 3.14; elsewhere pip builds the 
 from source, which needs a C++17 compiler. Every
 [GitHub release](https://github.com/naelolaiz/acoustic-spaces/releases) has the same
 wheels, to `pip install` with the extras after the file name, such as
-`pip install "acoustic_spaces-3.2.2-cp312-cp312-win_amd64.whl[viz,gui]"`. Between
+`pip install "acoustic_spaces-4.0.0-cp312-cp312-win_amd64.whl[viz,gui]"`. Between
 releases, install from source.
 
 The documentation (these pages, the validation report and an API reference generated

@@ -89,6 +89,12 @@ Version 3.2.3:
 
 - [x] Added Dutch translation.
 
+v4, version 4.0.0: outdoor acoustics (ground, wind, temperature, turbulence, vegetation,
+terrain and buildings from a map, weather classes and long-term levels, Doppler, whole
+cities, on the GPU), coherent arrays, groups, movement along keyframes with every mover
+on one clock, demos of any scene and of the examples, HRTF sets to download and the ISO
+3382-2 checks, in the sections below.
+
 Parameters:
 
 - [x] The checks of ISO 3382-2 on every T20 and T30: the non-linearity ξ of the line it
