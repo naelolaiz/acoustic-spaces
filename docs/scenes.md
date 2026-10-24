@@ -640,6 +640,34 @@ listeners:
   walk starts; `inspect` lists how far each walk goes and for how long. Lines and
   surfaces do not walk.
 
+A walk may instead be timed, through `keyframes`:
+
+```yaml
+sources:
+  - name: speaker
+    position: [2.0, 3.0, 1.7]        # where it is at 0 s
+    orientation: {yaw: 0}            # and how it faces then
+    walk:
+      keyframes:
+        - {time_s: 4.0, position: [6.0, 3.0, 1.7]}                        # 1 m/s, facing as before
+        - {time_s: 6.0, position: [6.0, 3.0, 1.7], orientation: {yaw: 90}} # turns on the spot
+        - {time_s: 10.0, position: [6.0, 7.0, 1.7]}                       # on, facing +y
+      enabled: true                  # false keeps the walk but leaves it standing (default true)
+```
+
+- Each keyframe says where the walker is at `time_s` (seconds from the start, in
+  order, each later than the last) and, if given, how it faces there. Between two
+  keyframes it moves and turns evenly, so each leg's speed is its distance over its
+  time: it can wait, turn on the spot, or go at any pace. A keyframe without an
+  `orientation` keeps the facing of the one before (at first, the walker's own); the
+  keyframes say how it faces, so `face_forward` and `turn_deg_s` do not apply. A turn
+  goes the shorter way round.
+- `enabled: false` keeps a walk, of either kind, but leaves its walker standing still:
+  `walkthrough --all` and the editor's movement leave it out, and `walkthrough` picks
+  the one walk that is enabled. Giving it by name (`--walker`) is refused.
+- Several listeners and sources may each have a walk; `walkthrough --all` plays them
+  all together on one clock (see [Walkthroughs](spatial-audio.md#walkthroughs)).
+
 ## Air, response length and seed
 
 ```yaml

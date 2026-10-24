@@ -1365,15 +1365,47 @@ class DirectivitySpec(_Model):
 ArraySpec.model_rebuild()
 
 
+class Keyframe(_Model):
+    """Where a listener or a source is at one moment of its movement, and how it faces
+    (:class:`Walk`, ``keyframes``)."""
+
+    time_s: PositiveFloat = Field(
+        description="when it is there, s from the start of the movement (it starts at its "
+        "position at 0 s)"
+    )
+    position: Vector3
+    orientation: Orientation | None = Field(
+        default=None,
+        description="how it faces there (yaw, pitch, roll); left out, it keeps facing as at "
+        "the keyframe before (at first, as it does itself)",
+    )
+
+
 class Walk(_Model):
     """A path a listener or a point source walks along, for a walkthrough
-    (:mod:`acoustic_spaces.walkthrough`): from its position through ``to``."""
+    (:mod:`acoustic_spaces.walkthrough`): from its position through ``to`` at
+    ``speed_m_s``, or through ``keyframes``, each timed."""
 
-    to: list[Vector3] = Field(min_length=1, description="the points it walks through, in order")
-    speed_m_s: PositiveFloat = Field(default=1.2, description="walking speed (m/s)")
+    enabled: bool = Field(
+        default=True,
+        description="whether it moves; false keeps the path but leaves it standing still",
+    )
+    to: list[Vector3] = Field(
+        default_factory=list,
+        description="the points it walks through, in order (or give keyframes)",
+    )
+    keyframes: list[Keyframe] | None = Field(
+        default=None,
+        min_length=1,
+        description="where it is and when, after its position at 0 s, in order of time; "
+        "between two keyframes it moves and turns evenly, so each leg's speed is the "
+        "distance over the time (instead of to and speed_m_s; face_forward does not "
+        "apply, the keyframes say how it faces)",
+    )
+    speed_m_s: PositiveFloat = Field(default=1.2, description="walking speed (m/s), along to")
     face_forward: bool = Field(
         default=True,
-        description="turn to face the way it walks (yaw); false keeps its orientation",
+        description="turn to face the way it walks (yaw) along to; false keeps its orientation",
     )
     turn_deg_s: PositiveFloat = Field(
         default=90.0,
@@ -1386,6 +1418,18 @@ class Walk(_Model):
             "(Doppler): for vehicles and aircraft; false crossfades from place to place"
         ),
     )
+
+    @model_validator(mode="after")
+    def _one_path(self) -> Walk:
+        if self.to and self.keyframes is not None:
+            raise ValueError("a walk goes through to or through keyframes, not both")
+        if not self.to and self.keyframes is None:
+            raise ValueError("a walk needs at least 1 point in to, or keyframes")
+        if self.keyframes is not None:
+            times = [frame.time_s for frame in self.keyframes]
+            if any(b <= a for a, b in zip(times, times[1:], strict=False)):
+                raise ValueError("keyframes go in order of time, each later than the last")
+        return self
 
 
 class Source(_Model):

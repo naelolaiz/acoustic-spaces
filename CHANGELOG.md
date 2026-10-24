@@ -683,6 +683,23 @@
   Run demo window, `--music` is a file field, `--bpm` a number and the stems a table
   with a file per row; the window's Demo list is left out when there is one demo only.
 
+**Movement**
+
+- A walk may go through `keyframes`: where the walker is at given times after its start
+  and, if given, how it faces there, between which it moves and turns evenly (the
+  shorter way round), so it can wait, turn on the spot or go at any pace. A keyframe
+  without an orientation keeps the facing of the one before. `walkthrough` places such a
+  walk every `--step` along a leg and every `--turn-step` (20° by default) of a turn on
+  the spot. `walk.enabled: false` keeps a walk but leaves its walker standing still.
+- `walkthrough --all` plays every walk that is enabled at once, on one clock, in one
+  simulation: each mover as a copy at each place it takes, with the still sources and
+  listeners, the late part traced every `--late-step` along each walk; every listener in
+  use hears every source, and one WAV is written per listener (or `--listener`'s), with
+  one gain for all. `--video` draws them all going. Doppler stays with one walk at a
+  time. From Python: `walkthrough.knots`, `movers`, `simulate_movement`,
+  `render_movement`, `save_movement` and `viz.animate_movement`.
+- `inspect` describes a walk along keyframes and one that is off.
+
 **HRTF sets**
 
 - `acoustic-spaces hrtf` lists free HRTF sets with their licences and downloads the one

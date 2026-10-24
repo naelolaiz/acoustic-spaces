@@ -275,6 +275,12 @@ Examples:
   `--credit`; the stadium's stems with `--stem NAME=WAV` and its first downbeat), nothing
   downloaded, with a file field, a number and a table of the stems in Run demo…
 
+Movement:
+
+- [x] Walks along timed keyframes (position and facing at each time, waits and turns on
+  the spot), walks that can be switched off, and every mover at once on one clock in one
+  simulation (`walkthrough --all`), heard at every listener, with a video of them all.
+
 Editor:
 
 - [x] The background task in the status bar says what runs, with Cancel beside
