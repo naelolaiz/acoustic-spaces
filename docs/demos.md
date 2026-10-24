@@ -1,11 +1,13 @@
 # Demos
 
-Four demos run recordings through example scenes, mix them at the scenes' listeners and
-make a video of the result. Each shows one space and one kind of music: a symphony
+Five demos run recordings through example scenes, mix them at the scenes' listeners and
+make a video of the result. Each shows one space and one kind of sound: a symphony
 orchestra on the stage of a shoebox concert hall, a choir and an organ in a reverberant
-stone church, a band with its sound system and stage monitors in a stadium, and the same
-band's song carried across a lake on a summer evening. None of them stands for what the
-simulator does elsewhere; the [examples](examples.md) cover far more.
+stone church, a band with its sound system and stage monitors in a stadium, the same
+band's song carried across a lake on a summer evening, and a guide talking to a visitor
+who walks away from them through a gallery and then turns their head. None of them
+stands for what the simulator does elsewhere; the [examples](examples.md) cover far
+more.
 
 The scripts come with the examples: `acoustic-spaces examples --copy . NAME` copies them
 with the scene. The recordings do not: they are other people's work under their own
@@ -16,6 +18,38 @@ use headphones. They go through the spherical head model unless every step and t
 `simulate` command get `--hrtf me.sofa`, a SOFA file of your own or measured HRTFs (the
 `simulate` command a script prints carries it; the `sofa` extra reads the file). The
 videos are in one [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8).
+
+## Running a demo
+
+Every demo is a script of steps: it writes its scene, simulates it, mixes what each
+listener hears and puts the video together. A step is run by name, and the steps of a
+demo are listed by `python NAME_demo.py --help`:
+
+```sh
+python church_demo.py music    # the recordings it plays, downloaded
+python church_demo.py scene    # the scene the demo simulates
+python church_demo.py simulate # acoustic-spaces simulate on that scene
+python church_demo.py all      # every step in order, leaving out what is done already
+```
+
+`all` is the short way through: it skips the steps whose result is in the work folder
+already (the scene file, the simulation's results, each stop's mix), so a run that
+stopped halfway carries on where it left off, and a change to one step is seen in the
+video without simulating again. `--again` mixes the stops afresh even where their files
+exist, `--work FOLDER` puts everything somewhere else, and `--no-mp4` writes the audio
+and the stills without calling ffmpeg. Where a step needs an earlier one, it says which
+command to run.
+
+In the editor, **Simulation > Run demo…** does the same: pick the demo and the step,
+fill in the options (they start at the same defaults the command line uses), and it
+runs in the background with its messages in the **Messages** panel, **Cancel** stopping
+it. The window shows the command line it is about to run, so a run started there can be
+repeated in a terminal or a script.
+
+The scripts share one package, `acoustic_spaces.demos`: the steps and options above,
+the recordings and their phrases, the simulate command and its HRTF, the mixes and
+their one gain, the crossfaded tour, the stills and the video. A new demo describes its
+steps and options and gets the rest, including the editor's window.
 
 ## An orchestra in the concert hall
 
@@ -398,3 +432,46 @@ changed, for example:
 > recorded for the DEGA at Hochschule Düsseldorf, CC BY 4.0, doi:10.5281/zenodo.3601032;
 > played through a simulated outdoor sound system across a lake and rendered
 > binaurally. License: https://creativecommons.org/licenses/by/4.0/
+
+## A walk through the gallery
+
+`walk_demo.py` is the smallest demo and the only one of speech: a guide stands in the
+L-shaped gallery of the `gallery_walk` example and talks while a visitor walks away
+from them, down the long arm and round the corner, where the guide is out of sight and
+only the sound bent round the corner arrives; then the visitor stands 4 m in front of
+the guide and turns their head a quarter at a time, so the voice moves to the right
+ear, behind, to the left ear and back in front. The video follows the visitor from
+above, with the head and its ears, the guide, and a bar of the levels.
+
+```sh
+acoustic-spaces examples --copy . gallery_walk && cd gallery_walk
+python walk_demo.py all   # or speech, scene, walk, turn, video one at a time
+```
+
+Options: `--talker M4` picks one of the corpus's 14 talkers, `--voice` how loud the
+guide speaks (relaxed, normal, raised, loud), `--stand 16,4` where the visitor stands
+for the turn, `--turn` the angles it holds, `--hrtf me.sofa` a measured head.
+
+- **The walk** is the example's own: responses every 25 cm along it
+  (`acoustic-spaces walkthrough`), the talk played along them so that the voice changes
+  as the visitor moves. The speech level at the ears falls from 56.0 dB(A) three metres
+  in front of the guide to 48.7 dB(A) round the corner, and the speech transmission
+  index with it, from 0.73 to 0.54: the gallery is quiet and bare, so what is lost is
+  the direct sound, not the clarity.
+- **The turn** goes through the engine's head tracker, scripted rather than played
+  live: the place's response in Ambisonics of order 7, the sound field turned against
+  the head every 256 samples and decoded to the ears
+  ([head tracking](spatial-audio.md#head-tracking)). It comes within half a decibel, in
+  each ear and octave, of rendering the ears again at every angle.
+- **Front and back.** Through the spherical head model the guide behind sounds much as
+  the guide in front: a sphere has no outer ears. This is the demo where a measured
+  HRTF (`--hrtf`, or [a set to download](spatial-audio.md#hrtf-sets-to-download)) is
+  heard most plainly.
+- **The voice** is IEC 60268-16's: the long-term spectrum of male speech at 60 dB(A) 1 m
+  in front for a normal voice, with a voice's directivity, all round in the bass and
+  towards the front in the treble. One gain plays the whole video, so the voice is as
+  much quieter round the corner as the simulation says.
+
+**Recording.** The ACE challenge corpus (Eaton, Gaubitch, Moore and Naylor, Imperial
+College London), **CC BY 4.0**: an anechoic talk, a man describing his way to work
+through Delft; `speech` reads it out of the corpus's 148 MB archive.

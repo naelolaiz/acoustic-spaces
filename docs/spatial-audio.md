@@ -50,6 +50,41 @@ The statistical tail arrives evenly from all around.
 Levels match the mono response: an arrival from straight ahead has the same height in
 W, in the speaker it is panned to, and, below the head's influence, at both ears.
 
+### HRTF sets to download
+
+A measured head places sounds better than the spherical head model, front from back
+above all. `acoustic-spaces hrtf` lists the free sets this program knows, with their
+licences, and downloads the one named into the user's data folder
+(`--folder` puts it elsewhere, `--url` fetches any other SOFA file):
+
+```sh
+acoustic-spaces hrtf                # the sets, their licences and sizes
+acoustic-spaces hrtf ku100          # download one; it prints the file
+acoustic-spaces hrtf viking --member subj_K.sofa   # one head of a set of many
+acoustic-spaces simulate scene.yaml --out results --hrtf ~/.local/share/acoustic-spaces/hrtf/ku100.sofa
+```
+
+| Set | Ears | Licence | Download | What it holds |
+| --- | --- | --- | --- | --- |
+| `ku100` | a Neumann KU100 dummy head | CC BY 3.0 | 3.4 MB | 2702 directions, 48 kHz, 128 taps |
+| `kemar` | a KEMAR dummy head (SADIE II) | Apache 2.0 | 38 MB | 8802 directions, 48 kHz, 256 taps |
+| `viking` | one of 20 people, and a dummy head | CC BY 4.0 | 58.4 MB | 1513 directions, 48 kHz, 128 taps |
+
+The sets are other people's measurements: `ku100` is Benjamin Bernschütz's compilation
+at TH Köln (<https://doi.org/10.5281/zenodo.3928297>), `kemar` the University of York's
+SADIE II database (<https://doi.org/10.5281/zenodo.12092466>) and `viking` the Viking
+dataset v2 of Spagnol, Miccini and Unnthorsson at Reykjavík University
+(<https://doi.org/10.5281/zenodo.4160401>), which holds one file per head. Each licence
+asks for its credit in a work that uses it; the command and the editor both print it
+before downloading. A dummy head measures the same way every time; a person's own ears
+place sounds better for that person and worse for everybody else.
+
+In the editor, **Download HRTFs…** on the **Outputs** page (and in the **Run demo…**
+window beside the HRTF field) shows the same sets with their licences, downloads the
+one chosen in the background and puts it in the scene's binaural output. Any other
+SOFA file goes in by its address in the same window, or with **HRTF file…** from the
+disk.
+
 
 ## Listening: convolution and real-time playback
 

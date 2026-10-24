@@ -659,14 +659,27 @@ msgstr ""
 "extra gpu)"
 
 #: acoustic_spaces/gui/app.py
+msgid "Run &demo…"
+msgstr "Ejecutar una demos&tración…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Run one of the demos that come with the examples: a scene, its simulation, "
+"what each listener hears and a video, with the options to fill in"
+msgstr ""
+"Ejecuta una de las demostraciones que acompañan a los ejemplos: una escena, "
+"su simulación, lo que oye cada oyente y un vídeo, con las opciones por "
+"rellenar"
+
+#: acoustic_spaces/gui/app.py
 msgid "&Cancel"
 msgstr "Ca&ncelar"
 
 #: acoustic_spaces/gui/app.py
-msgid "Stop the run, coverage map or tuning going on, at its next stage"
+msgid "Stop the run, coverage map, tuning or demo going on, at its next stage"
 msgstr ""
-"Detener el cálculo, el mapa de cobertura o el ajuste en curso, en su "
-"siguiente etapa"
+"Detener el cálculo, el mapa de cobertura, el ajuste o la demostración en "
+"curso, en su siguiente etapa"
 
 #: acoustic_spaces/gui/app.py
 msgid "S&top playback"
@@ -1130,6 +1143,29 @@ msgid "Timing the CPU and the GPU on {scene}…"
 msgstr "Midiendo los tiempos de la CPU y la GPU con {scene}…"
 
 #: acoustic_spaces/gui/app.py
+msgid "Wait for the current run to end, then run the demo."
+msgstr ""
+"Espere a que termine la ejecución actual y luego ejecute la demostración."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "No demo to run: {reason}"
+msgstr "No hay ninguna demostración que ejecutar: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Running the {demo} demo ({step})…"
+msgstr "Ejecutando la demostración {demo} ({step})…"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The {demo} demo is done in {time:.1f} s ({step}); it wrote into {folder}."
+msgstr ""
+"La demostración {demo} ha terminado en {time:.1f} s ({step}); ha escrito en "
+"{folder}."
+
+#: acoustic_spaces/gui/app.py
 msgid "Cancelling at the next stage…"
 msgstr "Cancelando en la siguiente etapa…"
 
@@ -1211,6 +1247,11 @@ msgstr "El ajuste falló: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
+msgid "The demo failed: {reason}"
+msgstr "La demostración ha fallado: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
 msgid "The simulation failed: {reason}"
 msgstr "La simulación falló: {reason}"
 
@@ -1225,6 +1266,10 @@ msgstr "Ajuste cancelado."
 #: acoustic_spaces/gui/app.py
 msgid "Export cancelled."
 msgstr "Exportación cancelada."
+
+#: acoustic_spaces/gui/app.py
+msgid "Demo cancelled."
+msgstr "Demostración cancelada."
 
 #: acoustic_spaces/gui/app.py
 msgid "Simulation cancelled."
@@ -1367,6 +1412,112 @@ msgstr ""
 #: acoustic_spaces/gui/app.py acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
 msgid "Source"
 msgstr "Fuente"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Browse…"
+msgstr "Examinar…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Choose the folder"
+msgstr "Elija la carpeta"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Choose the file"
+msgstr "Elija el archivo"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Download HRTFs…"
+msgstr "Descargar HRTF…"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Free HRTF sets to download, measured on dummy heads and on people"
+msgstr ""
+"Conjuntos de HRTF libres para descargar, medidos en cabezas artificiales y "
+"en personas"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "All files (*)"
+msgstr "Todos los archivos (*)"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "Folder for {option}"
+msgstr "Carpeta para {option}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "File for {option}"
+msgstr "Archivo para {option}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Run demo"
+msgstr "Ejecutar una demostración"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The demos are the scripts that come with the examples: each writes its "
+"scene, simulates it, mixes what every listener hears and puts a video "
+"together. A demo downloads the recordings it plays and can take a while; the "
+"messages say what it is doing, and Cancel stops it."
+msgstr ""
+"Las demostraciones son los guiones que acompañan a los ejemplos: cada una "
+"escribe su escena, la simula, mezcla lo que oye cada oyente y monta un "
+"vídeo. Una demostración descarga las grabaciones que toca y puede tardar; "
+"los mensajes dicen qué está haciendo, y Cancelar la detiene."
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The demo to run, one for each example that has one"
+msgstr "La demostración que se ejecutará, una por cada ejemplo que tiene una"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The step to run. all runs the demo from nothing to its video, leaving out "
+"the steps whose result is there already"
+msgstr ""
+"El paso que se ejecutará. all ejecuta la demostración desde cero hasta el "
+"vídeo, omitiendo los pasos cuyo resultado ya está"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Demo"
+msgstr "Demostración"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Step"
+msgstr "Paso"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The same run from a terminal, in the folder below"
+msgstr "La misma ejecución desde un terminal, en la carpeta de abajo"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Command"
+msgstr "Orden"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Run"
+msgstr "Ejecutar"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Run the step in the background; the messages say how it goes"
+msgstr "Ejecuta el paso en segundo plano; los mensajes dicen cómo va"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Close without running anything"
+msgstr "Cierra sin ejecutar nada"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "all: every step in order, leaving out what is done already."
+msgstr "all: todos los pasos en orden, omitiendo lo que ya está hecho."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "Runs in {folder}"
+msgstr "Se ejecuta en {folder}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "Cannot run: {reason}"
+msgstr "No se puede ejecutar: {reason}"
 
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"
@@ -1536,6 +1687,115 @@ msgstr "una escena necesita al menos un material"
 #, python-brace-format
 msgid "remove material {name}"
 msgstr "eliminar material {name}"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Download HRTFs"
+msgstr "Descargar HRTF"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid ""
+"Head-related transfer functions (HRTF) are how a head and its ears colour "
+"sound from every direction. Rendering through a measured set places sounds "
+"better than the spherical head model, front from back above all. Every set "
+"here is free to use; its licence asks for the credit on the row."
+msgstr ""
+"Las funciones de transferencia relacionadas con la cabeza (HRTF) son cómo "
+"una cabeza y sus orejas colorean el sonido de cada dirección. Renderizar con "
+"un conjunto medido sitúa los sonidos mejor que el modelo de cabeza esférica, "
+"sobre todo delante y detrás. Todos los conjuntos de aquí son de uso libre; "
+"su licencia pide el crédito que figura en la fila."
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "The HRTF sets on offer; each row says whose ears and whose terms"
+msgstr ""
+"Los conjuntos de HRTF disponibles; cada fila dice de quién son las orejas y "
+"con qué condiciones"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Which head of a set that holds several"
+msgstr "Qué cabeza de un conjunto que tiene varias"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Head"
+msgstr "Cabeza"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Another SOFA file"
+msgstr "Otro archivo SOFA"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "https://…/ears.sofa"
+msgstr "https://…/orejas.sofa"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid ""
+"Any other SOFA file, by its address: your own measurements, or a set from a "
+"site"
+msgstr ""
+"Cualquier otro archivo SOFA, por su dirección: mediciones propias o un "
+"conjunto de un sitio web"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "How much of the download is done"
+msgstr "Qué parte de la descarga se ha hecho"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "The sets are kept in {folder}"
+msgstr "Los conjuntos se guardan en {folder}"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Download"
+msgstr "Descargar"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Fetch the set on the row, or the address above"
+msgstr "Descarga el conjunto de la fila, o la dirección de arriba"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Use"
+msgstr "Usar"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Take the file on the row, and close"
+msgstr "Toma el archivo de la fila y cierra"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Close; what was downloaded stays in the folder"
+msgstr "Cierra; lo descargado se queda en la carpeta"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "downloaded"
+msgstr "descargado"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "not here yet"
+msgstr "todavía no está"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "{file} is here already"
+msgstr "{file} ya está"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "Downloading {name}…"
+msgstr "Descargando {name}…"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "Downloading {title} ({licence}, by {credit})…"
+msgstr "Descargando {title} ({licence}, de {credit})…"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "Downloaded {file}"
+msgstr "Descargado {file}"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "The download failed: {reason}"
+msgstr "La descarga ha fallado: {reason}"
 
 #. Translators: this and the entries below are choices as the scene file names them; translate them as words, and keep the tips that name them in step.
 #: acoustic_spaces/gui/inspector.py

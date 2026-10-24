@@ -78,6 +78,7 @@ acoustic-spaces simulate examples/shoebox/scene.yaml --out results --plot
 acoustic-spaces map examples/lecture_hall/scene.yaml --plot sti.png --parameter sti
 acoustic-spaces walkthrough examples/gallery_walk/scene.yaml guide=speech.wav --out walk.wav  # a visitor walks
 acoustic-spaces examples                               # the bundled rooms, and where they are
+acoustic-spaces hrtf                                   # free HRTF sets to download, with their licences
 acoustic-spaces tune --default auto                    # with the gpu extra: run on the fastest device here
 python -m pytest                                       # the test suite
 ```

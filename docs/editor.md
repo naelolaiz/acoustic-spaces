@@ -86,6 +86,21 @@ which frequencies each octave band holds.
   second check box (ticked) sets its **Run on** back to *default* (an edit like any
   other, undone with Undo). **OK** saves the timings and these choices; **Cancel**
   saves nothing, not even the timings.
+- **Simulation > Run demo…** runs one of the [demos](demos.md) that come with the
+  examples: the orchestra in the concert hall, the choir and organ in the church, the
+  band in the stadium, the concert across the lake or the walk through the gallery.
+  Pick the demo and the step (*all* runs it from nothing to its video, leaving out what
+  is done already), fill in the options, which start at the same defaults the command
+  line uses, and it runs in its own process in the background, with what it prints in
+  the **Messages** panel and **Cancel** to stop it. The window shows the command line
+  it is about to run, so the same run can be repeated in a terminal. A demo downloads
+  the recordings it plays and can take a while; it writes into the example's folder, or
+  under your home folder when the examples cannot be written.
+- The scene tree's **Outputs** entry chooses what a run writes: mono, binaural,
+  Ambisonics or loudspeakers. For binaural, **HRTF file…** takes a SOFA file from the
+  disk, **Spherical head** goes back to the model, and **Download HRTFs…** offers the
+  free sets with their licences and fetches the one chosen in the background (see
+  [HRTF sets to download](spatial-audio.md#hrtf-sets-to-download)).
 - **Simulation > Run coverage map** (F6) maps every source over the audience area (see
   [Coverage maps](coverage-maps.md#coverage-maps)). The **Coverage map** panel shows any parameter
   and band from above, for one source or all of them together, and **Map in 3D** lays

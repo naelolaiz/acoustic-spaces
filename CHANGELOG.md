@@ -626,6 +626,34 @@
   the `simulate` command it prints carries it, and `render` mixes from the responses
   made through that file, refusing ones made through the spherical head. A script asked
   for feeds or mixes before its scene exists says to run its scene step first.
+- A fifth demo, and the first of speech: `walk_demo.py`, in the new `gallery_walk`
+  example, has a guide talk while a visitor walks away from them down an L-shaped
+  gallery and round the corner, where only the sound bent round the corner arrives
+  (56.0 dB(A) and a speech transmission index of 0.73 at the start, 48.7 dB(A) and 0.54
+  round the corner), and then stands in front of them and turns their head a quarter at
+  a time through the engine's head tracker. The talk is the ACE corpus's anechoic
+  speech (CC BY 4.0); the video follows the visitor from above.
+- The demo scripts share one package, `acoustic_spaces.demos`: a demo describes its
+  steps and its options, and gets the command line, the recordings and their phrases,
+  the simulate command and its HRTF, the mixes with one gain, the crossfaded tour, the
+  stills and the video from the package. `python NAME_demo.py all` runs a demo from
+  nothing to its video, leaving out the steps whose result is there already (the
+  simulation among them, now a step like the others), `--again` mixes the stops afresh,
+  and the same demo runs from the editor. Roughly 2000 lines of copied code went; what
+  the demos do is unchanged, except that the church's tour now shifts each stop by the
+  time the sound takes to reach the listener, as the other tours did.
+- `acoustic_spaces.fetch` holds the downloads the demos and the HRTF sets share: a whole
+  file, or one member of a remote zip archive read where it is by HTTP range requests.
+
+**HRTF sets**
+
+- `acoustic-spaces hrtf` lists free HRTF sets with their licences and downloads the one
+  named into the user's data folder: `ku100` (a Neumann KU100 dummy head, TH Köln,
+  CC BY 3.0, 3.4 MB), `kemar` (a KEMAR dummy head, SADIE II, Apache 2.0, 38 MB) and
+  `viking` (one of 20 people or a dummy head, Viking v2, CC BY 4.0, 58.4 MB, one file
+  per head with `--member`). `--url` takes any other SOFA file, `--folder` keeps them
+  elsewhere, and the licence and who measured the set are printed before anything is
+  downloaded. Until now a measured head had to be found and fetched by hand.
 
 **Editor**
 
@@ -663,6 +691,15 @@
   run into a marker ahead of it stops short, in the plan too: on the stadium's stage
   the markers were 6 m wide and the arrows 19 m long, across the players and monitors.
   In `show`, sources and listeners left out are drawn faded too.
+- **Simulation > Run demo…** runs one of the demos that come with the examples: pick
+  the demo and the step (*all* for the lot), fill in the options, which start at the
+  defaults the command line uses, and it runs in its own process in the background,
+  with what it prints in **Messages** and **Cancel** to stop it. The window shows the
+  command line it is about to run. A demo could only be run from a terminal before.
+- **Download HRTFs…**, on the **Outputs** page and beside the **Run demo…** window's
+  HRTF field, lists the free HRTF sets with their licences, downloads the one chosen in
+  the background and puts it in the scene's binaural output; another SOFA file goes in
+  by its address.
 
 **Fixes**
 
