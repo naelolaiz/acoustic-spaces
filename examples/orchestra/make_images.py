@@ -1,13 +1,12 @@
 """Pictures for a video of the orchestra.
 
-A cover with the hall and a seat, the seating on stage, and a thumbnail. Needs Pillow
-(which matplotlib, and so the viz extra, brings).
+A cover with the hall and a seat, the seating on stage, and a thumbnail. The colours,
+fonts and the frame round them come from :mod:`acoustic_spaces.demos.pictures`.
 
     python make_images.py [--seat stalls-middle] [--movement 1] [--out .]
 
-The cover (1920 x 1080) leaves a band at its bottom for the spectrogram make_video.sh
-draws; the thumbnail is 1280 x 720, as YouTube wants it. Inter is used when installed,
-else DejaVu Sans.
+The cover (1920 x 1080) leaves a band at its bottom for the spectrogram the video draws
+over it; the thumbnail is 1280 x 720, as YouTube wants it.
 """
 
 from __future__ import annotations
@@ -17,7 +16,33 @@ import math
 from pathlib import Path
 
 import yaml
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw
+
+from acoustic_spaces.demos.pictures import (
+    BG,
+    LINE,
+    LISTENER,
+    MARGIN,
+    MUTED,
+    PANEL,
+    SIZE,
+    TEXT,
+    THUMBNAIL,
+    Plan,
+    axes,
+    badge,
+    canvas,
+    facts,
+    font,
+    footer,
+    glow,
+    head,
+    heading,
+    save,
+    text,
+    thumbnail_badge,
+    tool_line,
+)
 
 HERE = Path(__file__).resolve().parent
 HALL_X, HALL_Y, STAGE_X = 32.0, 20.0, 8.0  # the concert hall: 32 x 20 m, stage 8 m deep
@@ -28,16 +53,9 @@ MOVEMENTS = {
     4: "IV. Allegro vivace",
 }
 
-BG = (13, 17, 28)
-PANEL = (21, 27, 42)
-LINE = (58, 68, 92)
-TEXT = (232, 236, 244)
-MUTED = (148, 158, 182)
-FAINT = (110, 120, 146)
 STAGE = (58, 44, 34)
 STAGE_EDGE = (120, 90, 64)
 SEATS = (30, 38, 58)
-LISTENER = (102, 217, 239)
 
 SECTIONS = [  # source name prefix, label, colour
     ("vl1_", "Violins I", (246, 195, 91)),
@@ -71,34 +89,6 @@ CREDIT = (
     "Anechoic recording: Orchester Wiener Akademie, cond. Martin Haselböck · TU Berlin "
     "(Böhm, Ackermann, Weinzierl), CC BY 4.0, doi.org/10.14279/depositonce-6729.2"
 )
-TOOL = (
-    "Room simulated with acoustic_spaces: ray tracing for early reflections, stochastic ray "
-    "tracing for the late tail"
-)
-
-_FONTS = {}
-
-
-def font(weight: str, size: int, display: bool = False) -> ImageFont.FreeTypeFont:
-    """Inter (Display for titles) when installed, else DejaVu Sans, else Pillow's own."""
-    key = (weight, size, display)
-    if key not in _FONTS:
-        family = "InterDisplay" if display else "Inter"
-        bold = weight in ("SemiBold", "Bold", "Black")
-        for name in (f"{family}-{weight}.otf", f"{family}-{weight}.ttf"):
-            try:
-                _FONTS[key] = ImageFont.truetype(name, size)
-                break
-            except OSError:
-                continue
-        else:
-            try:
-                _FONTS[key] = ImageFont.truetype(
-                    "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf", size
-                )
-            except OSError:
-                _FONTS[key] = ImageFont.load_default(size)
-    return _FONTS[key]
 
 
 def section(name: str) -> tuple[str, tuple[int, int, int]]:
@@ -112,38 +102,10 @@ def colour_of(label: str) -> tuple[int, int, int]:
     return next(colour for _, name, colour in SECTIONS if name == label)
 
 
-class Plan:
-    """Scene x and y to pixels: from above with the stage on the left, or (rotated) the
-    stage as the audience sees it, its front at the bottom."""
-
-    def __init__(self, left, top, scale, x0=0.0, y0=0.0, y1=HALL_Y, rotated=False):
-        self.left, self.top, self.s = left, top, scale
-        self.x0, self.y0, self.y1, self.rotated = x0, y0, y1, rotated
-
-    def __call__(self, x: float, y: float) -> tuple[float, float]:
-        if self.rotated:
-            return (self.left + (y - self.y0) * self.s, self.top + (x - self.x0) * self.s)
-        return (self.left + (x - self.x0) * self.s, self.top + (self.y1 - y) * self.s)
-
-    def vec(self, dx: float, dy: float) -> tuple[float, float]:
-        return (dy, dx) if self.rotated else (dx, -dy)
-
-    def box(self, x0, y0, x1, y1) -> list[float]:
-        (a, b), (c, d) = self(x0, y1), self(x1, y0)
-        return [a, b, c, d]
-
-
-def text(draw, xy, s, f, fill=TEXT, anchor="la") -> None:
-    draw.text(xy, s, font=f, fill=fill, anchor=anchor)
-
-
-def glow(img: Image.Image, shapes, blur: float) -> None:
-    """Blurred discs, ``shapes`` as (x, y, radius, rgba), under what comes next."""
-    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(layer)
-    for x, y, r, rgba in shapes:
-        draw.ellipse([x - r, y - r, x + r, y + r], fill=rgba)
-    img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(blur)))
+def hall_plan(left, top, scale, *, y0=0.0, rotated=False) -> Plan:
+    """The hall from above with the stage on the left, or (``rotated``) the stage as the
+    audience sees it, its front at the bottom."""
+    return Plan(left, top, scale, (0.0, y0, HALL_X, HALL_Y), rotated)
 
 
 def wall_hits(s, listener) -> list[tuple[float, float]]:
@@ -158,8 +120,17 @@ def wall_hits(s, listener) -> list[tuple[float, float]]:
 
 
 class Pictures:
-    def __init__(self, scene: dict, seat: str, movement: int, facts: list[str] | None = None):
-        self.facts = facts or []  # lines under the seat on the cover (orchestra_demo.py)
+    def __init__(
+        self,
+        scene: dict,
+        seat: str,
+        movement: int,
+        facts: list[str] | None = None,
+        hrtf: str | Path | None = None,
+        tool=None,
+    ):
+        self.lines = facts or []  # lines under the seat on the cover (orchestra_demo.py)
+        self.tool = tool or tool_line("orchestra", scene, hrtf=hrtf)
         self.players = [
             (s["name"], s["position"], s.get("orientation", {})) for s in scene["sources"]
         ]
@@ -197,15 +168,15 @@ class Pictures:
 
     def hall(self, img, plan, r, labels=True) -> None:
         draw = ImageDraw.Draw(img)
-        draw.rectangle(plan.box(0, 0, HALL_X, HALL_Y), fill=PANEL)
+        draw.rectangle(plan.rect(0, 0, HALL_X, HALL_Y), fill=PANEL)
         x = 9.4
         while x < HALL_X - 0.6:  # rows of seats either side of the aisle
             for y0, y1 in ((0.9, 8.9), (11.1, 19.1)):
                 draw.line([plan(x, y0), plan(x, y1)], fill=SEATS, width=max(2, int(plan.s * 0.32)))
             x += 0.9
-        draw.rectangle(plan.box(0, 0, STAGE_X, HALL_Y), fill=STAGE)
+        draw.rectangle(plan.rect(0, 0, STAGE_X, HALL_Y), fill=STAGE)
         draw.line([plan(STAGE_X, 0), plan(STAGE_X, HALL_Y)], fill=STAGE_EDGE, width=3)
-        draw.rectangle(plan.box(0, 0, HALL_X, HALL_Y), outline=LINE, width=3)
+        draw.rectangle(plan.rect(0, 0, HALL_X, HALL_Y), outline=LINE, width=3)
         # The direct sound and the first reflections off the walls, leader to seat.
         source = next((p for n, p, _ in self.players if n == "vl1_01"), self.players[0][1])[:2]
         seat = tuple(self.listener["position"][:2])
@@ -234,24 +205,9 @@ class Pictures:
 
     def head(self, img, plan, r) -> None:
         """The listener: a head with ears and a nose the way it faces."""
-        hx, hy = plan(*self.listener["position"][:2])
-        glow(img, [(hx, hy, 3 * r, LISTENER + (90,))], r)
-        yaw = math.radians(self.listener.get("orientation", {}).get("yaw", 0.0))
-        fx, fy = plan.vec(math.cos(yaw), math.sin(yaw))
-        sx, sy = -fy, fx  # sideways
-        draw = ImageDraw.Draw(img)
-        nose = [
-            (hx + fx * r * 1.45, hy + fy * r * 1.45),
-            (hx + fx * r * 0.8 + sx * r * 0.45, hy + fy * r * 0.8 + sy * r * 0.45),
-            (hx + fx * r * 0.8 - sx * r * 0.45, hy + fy * r * 0.8 - sy * r * 0.45),
-        ]
-        draw.polygon(nose, fill=LISTENER)
-        for side in (1, -1):
-            ex, ey = hx + sx * r * 0.85 * side, hy + sy * r * 0.85 * side
-            draw.ellipse(
-                [ex - r * 0.35, ey - r * 0.35, ex + r * 0.35, ey + r * 0.35], fill=LISTENER
-            )
-        draw.ellipse([hx - r, hy - r, hx + r, hy + r], fill=LISTENER, outline=BG, width=2)
+        forward, left = axes(plan, self.listener)
+        at = plan(*self.listener["position"][:2])
+        head(img, at, forward, left, r, pointer=False, letters=False)
 
     def legend(self, draw, x, y, size, gap) -> int:
         for _, label, colour in SECTIONS:
@@ -269,22 +225,18 @@ class Pictures:
         return y
 
     def cover(self) -> Image.Image:
-        img = Image.new("RGBA", (1920, 1080), BG)
+        img = canvas(SIZE)
         draw = ImageDraw.Draw(img)
-        title = "Beethoven · Symphony No. 8 in F major, op. 93"
-        text(draw, (80, 60), title, font("Bold", 54, display=True))
-        subtitle = (
-            f"{self.movement}  ·  {len(self.players)} anechoic tracks in a simulated concert hall"
+        heading(
+            draw,
+            "Beethoven · Symphony No. 8 in F major, op. 93",
+            f"{self.movement}  ·  {len(self.players)} anechoic tracks in a simulated concert hall",
+            y=60,
         )
-        text(draw, (80, 132), subtitle, font("Regular", 28), MUTED)
-        self.hall(img, Plan(80, 205, 33), 7)
+        self.hall(img, hall_plan(MARGIN, 205, 33), 7)
         draw = ImageDraw.Draw(img)
-        x, pill = 1250, font("SemiBold", 26)
-        badge = "BINAURAL  ·  USE HEADPHONES"
-        draw.rounded_rectangle(
-            [x, 205, x + draw.textlength(badge, font=pill) + 44, 255], 25, LISTENER
-        )
-        text(draw, (x + 22, 230), badge, pill, BG, "lm")
+        x = 1250
+        badge(draw, x, 205, size=26)
         text(draw, (x, 290), f"Seat: {self.seat}", font("SemiBold", 30))
         text(
             draw,
@@ -293,25 +245,21 @@ class Pictures:
             font("Regular", 26),
             MUTED,
         )
-        y = 372
-        for line in self.facts:
-            text(draw, (x, y), line, font("Regular", 24))
-            y += 34
+        y = facts(draw, x, 372, self.lines, size=24, step=34)
         self.legend(draw, x, y + 18, 26, 34)
-        draw.rounded_rectangle([80, 885, 1840, 995], 14, PANEL)  # make_video.sh draws here
-        text(draw, (80, 1018), CREDIT, font("Regular", 19), MUTED)
-        text(draw, (80, 1046), TOOL, font("Regular", 17), FAINT)
+        footer(draw, CREDIT, self.tool)
         return img
 
     def seating(self) -> Image.Image:
-        img = Image.new("RGBA", (1920, 1080), BG)
+        img = canvas(SIZE)
         draw = ImageDraw.Draw(img)
-        text(draw, (80, 60), "The orchestra on stage", font("Bold", 54, display=True))
-        subtitle = (
-            "One source per anechoic track · German (antiphonal) seating · seen from the hall"
+        heading(
+            draw,
+            "The orchestra on stage",
+            "One source per anechoic track · German (antiphonal) seating · seen from the hall",
+            y=60,
         )
-        text(draw, (80, 132), subtitle, font("Regular", 28), MUTED)
-        plan = Plan(80, 215, 78, y0=2.4, rotated=True)
+        plan = hall_plan(MARGIN, 215, 78, y0=2.4, rotated=True)
         draw.rounded_rectangle([*plan(0.0, 2.4), *plan(8.0, 16.9)], 10, STAGE)
         draw.line([plan(8.0, 2.4), plan(8.0, 16.9)], fill=STAGE_EDGE, width=4)
         edge = "front of the stage  ·  audience this way  ↓"
@@ -337,21 +285,17 @@ class Pictures:
         for line in notes:
             text(draw, (x, y), line, font("Regular", 23), MUTED)
             y += 32
-        text(draw, (80, 1030), CREDIT, font("Regular", 19), MUTED)
+        text(draw, (MARGIN, 1030), CREDIT, font("Regular", 19), MUTED)
         return img
 
     def thumbnail(self, note: str | None = None) -> Image.Image:
-        img = Image.new("RGBA", (1280, 720), BG)
-        self.hall(img, Plan(500, 172, 23.5), 5, labels=False)
+        img = canvas(THUMBNAIL)
+        self.hall(img, hall_plan(500, 172, 23.5), 5, labels=False)
         draw = ImageDraw.Draw(img)
         text(draw, (50, 60), "Beethoven 8", font("Black", 88, display=True))
         text(draw, (50, 165), "in a virtual", font("Bold", 52, display=True), MUTED)
         text(draw, (50, 225), "concert hall", font("Bold", 52, display=True), MUTED)
-        pill = font("Bold", 34)
-        draw.rounded_rectangle(
-            [50, 320, 98 + draw.textlength("BINAURAL", font=pill), 380], 30, LISTENER
-        )
-        text(draw, (74, 350), "BINAURAL", pill, BG, "lm")
+        thumbnail_badge(draw, 50, 320)
         text(draw, (50, 410), "use headphones", font("SemiBold", 34), LISTENER)
         tracks = note or f"{len(self.players)} anechoic tracks · simulated room"
         text(draw, (50, 655), tracks, font("Medium", 28), MUTED)
@@ -370,9 +314,12 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     for name in ("cover", "seating", "thumbnail"):
         path = args.out / f"{name}.png"
-        getattr(pictures, name)().convert("RGB").save(path, optimize=True)
+        save(getattr(pictures, name)(), path)
         print(f"wrote {path}")
 
 
 if __name__ == "__main__":
     main()
+
+
+__all__ = ["CREDIT", "Pictures", "hall_plan", "save"]

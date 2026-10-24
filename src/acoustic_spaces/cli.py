@@ -648,6 +648,74 @@ def _cmd_examples(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_hrtf(args: argparse.Namespace) -> int:
+    """List the free HRTF sets, or download one."""
+    from acoustic_spaces.spatial import hrtf_sets
+
+    folder = Path(args.folder) if args.folder else hrtf_sets.data_folder()
+    if args.url:
+        name = args.name or Path(args.url).stem or "hrtf"
+        try:
+            path = hrtf_sets.other(args.url, name, folder, progress=_download_bar(name))
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(f"{path}")
+        return 0
+    if not args.name:
+        here = hrtf_sets.installed(folder)
+        print(f"HRTF sets in {folder}:")
+        for item in hrtf_sets.sets():
+            mark = "[have]" if item.name in here else "      "
+            print(f" {mark} {item.name}: {item.summary()}")
+            print(f"        {item.note}; by {item.credit}")
+            print(f"        {item.page}")
+        print("Download one with: acoustic-spaces hrtf NAME")
+        return 0
+    try:
+        item = hrtf_sets.named(args.name)
+    except KeyError as exc:
+        print(f"error: {exc.args[0]}", file=sys.stderr)
+        return 1
+    if args.member and not args.member.endswith(".sofa"):
+        print(f"error: {item.name}: a member is a SOFA file in the archive", file=sys.stderr)
+        return 1
+    path = hrtf_sets.file_of(item, args.member, folder)
+    if path.exists() and not args.again:
+        print(f"{path}: there already")
+        return 0
+    print(f"{item.title}: {item.licence}, by {item.credit} ({item.page})", file=sys.stderr)
+    try:
+        path = hrtf_sets.get(
+            item,
+            member=args.member,
+            folder=folder,
+            progress=_download_bar(item.name),
+            again=args.again,
+        )
+    except (OSError, ValueError, KeyError) as exc:
+        message = exc.args[0] if isinstance(exc, KeyError) else exc  # no quotes round it
+        print(f"error: {message}", file=sys.stderr)
+        return 1
+    print(f"{path}")
+    return 0
+
+
+def _download_bar(name: str):
+    """A progress callback that keeps one line of megabytes on the error stream."""
+
+    def say(done: int, total: int | None) -> None:
+        if total:
+            share = f"{100.0 * done / total:5.1f}%  {done / 1e6:7.1f} of {total / 1e6:.1f} MB"
+        else:
+            share = f"{done / 1e6:7.1f} MB"
+        print(f"\r{name}: {share}", end="", file=sys.stderr, flush=True)
+        if total and done >= total:
+            print(file=sys.stderr)
+
+    return say
+
+
 def _cmd_edit(args: argparse.Namespace) -> int:
     try:
         from acoustic_spaces.gui import main as editor
@@ -1879,6 +1947,28 @@ def _cmd_auralize(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_demo(args: argparse.Namespace) -> int:
+    """A demo of any scene (:mod:`acoustic_spaces.demos.scene_demo`): its steps, run
+    here, relative paths counted from the current folder."""
+    from acoustic_spaces.demos.scene_demo import DEMO
+
+    demo = DEMO.at(Path.cwd())
+    values = argparse.Namespace(**{o.name: getattr(args, o.name, o.default) for o in demo.options})
+    problem = demo.check(values)
+    if problem:
+        print(f"error: {problem}", file=sys.stderr)
+        return 2
+    names = [s.name for s in demo.steps] if args.step == "all" else [args.step]
+    try:
+        demo.run(names, values, skip_done=args.step == "all")
+    except SystemExit as exc:  # a step that stops says why
+        if isinstance(exc.code, str):
+            print(exc.code, file=sys.stderr)
+            return 1
+        return int(exc.code or 0)
+    return 0
+
+
 def _cmd_walkthrough(args: argparse.Namespace) -> int:
     from acoustic_spaces.spatial import from_output
     from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
@@ -2247,6 +2337,31 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     tune.set_defaults(func=_cmd_tune)
+
+    hrtf = sub.add_parser(
+        "hrtf",
+        help="list the free HRTF sets, or download one for binaural rendering",
+        description=(
+            "Head-related transfer functions to render binaurally through measured ears "
+            "instead of the spherical head model. Without a name it lists the sets on "
+            "offer with their licences; with one it downloads that set into the user's "
+            "data folder and prints the file, for simulate --hrtf, auralize --hrtf and "
+            "the scene's binaural output."
+        ),
+    )
+    hrtf.add_argument(
+        "name",
+        nargs="?",
+        help="the set to download, or with --url the name to save that file as "
+        "(default: list the sets)",
+    )
+    hrtf.add_argument(
+        "--member", help="which head of a set that holds several (for example subj_K.sofa)"
+    )
+    hrtf.add_argument("--folder", help="where to keep the sets (default: the user's data folder)")
+    hrtf.add_argument("--url", help="download any other SOFA file, saved under the name")
+    hrtf.add_argument("--again", action="store_true", help="download it again, over the file here")
+    hrtf.set_defaults(func=_cmd_hrtf)
 
     edit = sub.add_parser("edit", help="open the graphical editor (needs the gui extra)")
     edit.add_argument("scene", nargs="?", help="scene YAML file to open")
@@ -2646,6 +2761,33 @@ def build_parser() -> argparse.ArgumentParser:
     auralize.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")
     auralize.add_argument("--equal-power", action="store_true", help=EQUAL_POWER_HELP)
     auralize.set_defaults(func=_cmd_auralize)
+
+    from acoustic_spaces.demos.scene_demo import DEMO as SCENE_DEMO
+
+    demo = sub.add_parser(
+        "demo",
+        help="play each source's signal through a scene and make a video of every listener",
+        description=(
+            "Each source plays the WAV file its signal names, at its sound power; every "
+            "listener in use is mixed with one gain for all, and a video tours them with "
+            "stills of the scene and of how the sound was made. Everything goes to demo/ "
+            "beside the scene (--work). Needs ffmpeg for the video and Pillow (the viz extra) "
+            "for the stills."
+        ),
+    )
+    demo.add_argument("scene", help="the scene file; its sources' signal fields say what they play")
+    demo.add_argument(
+        "step",
+        nargs="?",
+        default="all",
+        choices=[s.name for s in SCENE_DEMO.steps] + ["all"],
+        help="; ".join(f"{s.name}: {s.help}" for s in SCENE_DEMO.steps)
+        + "; all (default): every step, leaving out what is done already",
+    )
+    for option in SCENE_DEMO.options:
+        if option.name != "scene":
+            option.add_to(demo)
+    demo.set_defaults(func=_cmd_demo)
 
     walkthrough = sub.add_parser(
         "walkthrough",

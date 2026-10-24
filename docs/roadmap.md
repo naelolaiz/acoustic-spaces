@@ -250,6 +250,19 @@ Examples:
   movements; each downloads its recordings, mixes them at every listener and makes a
   video that tours them. The stadium's pictures show where the crowd stands and sits,
   the empty seats, and how much each takes up.
+- [x] A walk through a gallery, the fifth demo and the first of speech: a guide talks
+  while a visitor walks away and round a corner, then turns their head in front of
+  them (`gallery_walk`).
+- [x] One shared package behind the demo scripts (`acoustic_spaces.demos`): a demo
+  describes its steps and options and gets the command line, the recordings, the
+  simulation, the mixes, the tour, the stills and the video, and runs from the editor
+  as well as from a terminal.
+- [x] Free HRTF sets to download, with their licences, from the command line
+  (`acoustic-spaces hrtf`) and from the editor.
+- [x] A demo of any scene (`acoustic-spaces demo`): each source plays the WAV file it
+  names, at its sound power, and every listener is heard in turn in a video drawn from
+  the scene; every demo's stills say how the sound was made and the command that makes
+  it again.
 
 Editor:
 
@@ -264,3 +277,9 @@ Editor:
   (`lakeside_concert`).
 - [x] The particle export to Blender asks how much of the sound, how slowly and how many
   particles, outdoors at first enough to reach the farthest listener.
+- [x] Simulation > Run demo…: the demos of the open scene (This scene, and the
+  example's own for an example's scene), its options at the command line's defaults,
+  run in the background with its messages in the panel; the source page's Plays row
+  picks the WAV file each source plays.
+- [x] Download HRTFs…: the free sets with their licences, fetched into the user's data
+  folder and put in the scene's binaural output.

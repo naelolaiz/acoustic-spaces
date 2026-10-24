@@ -1,5 +1,5 @@
-"""Simulations, coverage maps and exports in the background, so the editor stays
-responsive while rays fly.
+"""Simulations, coverage maps, exports, demo runs and downloads in the background, so
+the editor stays responsive while rays fly.
 
 The compiled tracer releases Python's lock while it works, so the window keeps
 drawing. A cancelled run stops at the next stage (the early or late part of the next
@@ -7,6 +7,10 @@ source); its result is dropped.
 """
 
 from __future__ import annotations
+
+import os
+import subprocess
+from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QThread, Signal
@@ -107,6 +111,115 @@ class TuneJob(SimulationJob):
         return tuning.tune(self.room, threads=self.threads, say=self._say, keep=False)
 
 
+class DemoJob(SimulationJob):
+    """Runs a step of a demo (:mod:`acoustic_spaces.demos`) in a process of its own, as
+    :meth:`Demo.run_argv` gives it (``python NAME_demo.py STEP``, or ``python -m
+    acoustic_spaces.demos.scene_demo STEP`` for the demo of any scene): what the demo
+    prints becomes progress messages, and Cancel stops it where it is. ``done`` carries
+    the demo, the step and the folder the demo wrote into."""
+
+    kind = "demo"
+
+    def __init__(self, demo, step: str, args) -> None:
+        super().__init__(None)
+        self.demo = demo
+        self.step = step
+        self.args = args
+        #: Every line the demo printed, in order.
+        self.lines: list[str] = []
+        self._process: subprocess.Popen | None = None
+
+    @property
+    def argv(self) -> list[str]:
+        """The command as a list (:meth:`Demo.run_argv`)."""
+        return self.demo.run_argv(self.step, self.args)
+
+    def cancel(self) -> None:
+        """Stop the demo: it is a process of its own, so it ends at once rather than at
+        the next stage."""
+        super().cancel()
+        process = self._process
+        if process is not None and process.poll() is None:
+            process.terminate()
+
+    def compute(self) -> dict:
+        folder = Path(self.demo.folder)
+        folder.mkdir(parents=True, exist_ok=True)
+        self._say(self.demo.command(self.step, self.args))
+        # The command the window showed, with paths in full; unbuffered, so its lines
+        # arrive as it writes them rather than at the end.
+        process = self._process = subprocess.Popen(
+            self.argv,
+            cwd=folder,
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        try:
+            for line in process.stdout:  # type: ignore[union-attr]
+                text = line.rstrip()
+                if text:
+                    self.lines.append(text)
+                    self._say(text)
+            code = process.wait()
+        finally:
+            if process.poll() is None:  # cancelled, or this thread failed
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+            if process.stdout is not None:
+                process.stdout.close()
+        if self._stop:
+            raise Cancelled
+        if code:
+            last = self.lines[-1] if self.lines else ""
+            raise RuntimeError(f"{self.step}: the demo stopped ({code}). {last}".strip())
+        work = self.demo.work_folder(self.args)
+        return {"demo": self.demo.name, "step": self.step, "folder": str(work)}
+
+
+class DownloadJob(QThread):
+    """Fetches a file (an HRTF set) in the background, or one member of an archive:
+    ``progress(done, total)`` counts the bytes, ``done`` carries the path, and
+    :meth:`cancel` stops it where it is, leaving no half file."""
+
+    progress = Signal(int, int)
+    done = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, url: str, path, member: str | None = None) -> None:
+        super().__init__()
+        self.url = url
+        self.path = Path(path)
+        self.member = member
+        self._stop = False
+
+    def cancel(self) -> None:
+        self._stop = True
+
+    def _step(self, done: int, total: int | None) -> None:
+        if self._stop:
+            raise Cancelled
+        self.progress.emit(done, total or 0)
+
+    def run(self) -> None:
+        from acoustic_spaces.fetch import fetch
+
+        try:
+            path = fetch(self.url, self.path, member=self.member, progress=self._step)
+        except Cancelled:
+            return
+        except Exception as exc:  # shown in the window rather than lost in the thread
+            self.failed.emit(str(exc) or type(exc).__name__)
+            return
+        self.done.emit(str(path))
+
+
 class ExportJob(SimulationJob):
     """Writes the responses of a run into a folder
     (:func:`acoustic_spaces.results.write_results`, as ``acoustic-spaces simulate``
@@ -125,4 +238,12 @@ class ExportJob(SimulationJob):
         return write_results(self.result, self.folder, progress=self._say)
 
 
-__all__ = ["Cancelled", "ExportJob", "MapJob", "SimulationJob", "TuneJob"]
+__all__ = [
+    "Cancelled",
+    "DemoJob",
+    "DownloadJob",
+    "ExportJob",
+    "MapJob",
+    "SimulationJob",
+    "TuneJob",
+]

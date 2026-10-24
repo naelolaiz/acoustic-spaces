@@ -86,6 +86,26 @@ which frequencies each octave band holds.
   second check box (ticked) sets its **Run on** back to *default* (an edit like any
   other, undone with Undo). **OK** saves the timings and these choices; **Cancel**
   saves nothing, not even the timings.
+- **Simulation > Run demo…** runs a [demo](demos.md) of the open scene. *This scene*
+  plays the WAV file each source's **Plays** names through it, mixes every listener and
+  makes a video ([a demo of any scene](demos.md#a-demo-of-any-scene)); the scene of an
+  example that comes with a demo (the orchestra in the concert hall, the choir and organ
+  in the church, the band in the stadium, the concert across the lake, the walk through
+  the gallery), or a copy of one, also has that demo, reading the open scene, and the
+  window starts on it. Pick the demo and the step (*all* runs it from nothing to its
+  video, leaving out what is done already), fill in the options, which start at the
+  same defaults the command line uses, and it runs in its own process in the
+  background, with what it prints in the **Messages** panel and **Cancel** to stop it.
+  The window shows the command line it is about to run, so the same run can be
+  repeated in a terminal, and asks for a scene with changes to be saved first, as the
+  demo reads the file. An example's demo downloads the recordings it plays and can take
+  a while. A demo writes beside the scene (*This scene* into `demo/`), or under your
+  home folder when that folder cannot be written.
+- The scene tree's **Outputs** entry chooses what a run writes: mono, binaural,
+  Ambisonics or loudspeakers. For binaural, **HRTF file…** takes a SOFA file from the
+  disk, **Spherical head** goes back to the model, and **Download HRTFs…** offers the
+  free sets with their licences and fetches the one chosen in the background (see
+  [HRTF sets to download](spatial-audio.md#hrtf-sets-to-download)).
 - **Simulation > Run coverage map** (F6) maps every source over the audience area (see
   [Coverage maps](coverage-maps.md#coverage-maps)). The **Coverage map** panel shows any parameter
   and band from above, for one source or all of them together, and **Map in 3D** lays
@@ -124,7 +144,8 @@ which frequencies each octave band holds.
   its listeners), its sound power per band, its **Spectrum** (flat, or male or female
   speech) and the **Gain**, **Equalizer** and **Delay** of its feed. It shows the
   directivity index per band, opens the polar patterns, and the selected source shows
-  its balloon in the 3D view.
+  its balloon in the 3D view. **Plays** names the WAV file the source plays in a demo of
+  the scene: **Choose WAV…** picks a dry recording, **Silent** takes it away.
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
   as you edit, with the number of problems in red.
 - **Messages** shows warnings (leaks, results from before the latest changes, dropouts

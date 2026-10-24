@@ -44,6 +44,7 @@ from acoustic_spaces.engine import ray_device, reweight, tuning
 from acoustic_spaces.examples import example_groups, example_path, list_examples
 from acoustic_spaces.geometry import SUPPORTED_SUFFIXES, points_inside
 from acoustic_spaces.gui.activity import Activity
+from acoustic_spaces.gui.demo_dialog import DemoDialog
 from acoustic_spaces.gui.document import (
     LISTENER_HEIGHT,
     NEW_GROUND_SIZE,
@@ -66,7 +67,7 @@ from acoustic_spaces.gui.results_view import ResultsPanel
 from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.tune_dialog import TuneDialog
 from acoustic_spaces.gui.viewport import Viewport
-from acoustic_spaces.gui.worker import ExportJob, MapJob, SimulationJob, TuneJob
+from acoustic_spaces.gui.worker import DemoJob, ExportJob, MapJob, SimulationJob, TuneJob
 from acoustic_spaces.i18n import N_, _, ngettext, pgettext
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
@@ -473,11 +474,20 @@ class MainWindow(QMainWindow):
                 "for the device setting auto (acoustic-spaces tune; needs the gpu extra)"
             ),
         )
+        self.demo_action = a(
+            _("Run &demo…"),
+            self.run_demo,
+            tip=_(
+                "Play the sounds each source's Plays names through the open scene: its "
+                "simulation, what each listener hears and a video, with the options to fill "
+                "in; an example's scene also has the example's own demo"
+            ),
+        )
         self.cancel_action = a(
             _("&Cancel"),
             self.cancel_simulation,
             "Shift+F5",
-            _("Stop the run, coverage map or tuning going on, at its next stage"),
+            _("Stop the run, coverage map or tuning going on at its next stage, or a demo at once"),
         )
         self.cancel_action.setEnabled(False)
         self.stop_action = a(
@@ -568,7 +578,7 @@ class MainWindow(QMainWindow):
         simulation = bar.addMenu(_("&Simulation"))
         simulation.addActions([self.run_action, self.map_action, self.cancel_action])
         simulation.addSeparator()
-        simulation.addAction(self.tune_action)
+        simulation.addActions([self.tune_action, self.demo_action])
         simulation.addSeparator()
         simulation.addAction(self.stop_action)
         help_menu = bar.addMenu(_("&Help"))
@@ -1464,6 +1474,44 @@ class MainWindow(QMainWindow):
         job.done.connect(self._tune_done)
         self._start(job, _("Timing the CPU and the GPU on {scene}…").format(scene=room.scene.name))
 
+    def run_demo(self) -> None:
+        """Ask which demo of the open scene to run (This scene, or the example's own), and
+        run the step it asks for in the background, its messages in the messages panel."""
+        if self.job is not None:
+            self.log(_("Wait for the current run to end, then run the demo."))
+            return
+        document = self.document
+        try:
+            dialog = DemoDialog(
+                parent=self,
+                scene=document.path,
+                unsaved=document.path is None or document.modified,
+            )
+        except Exception as exc:  # a script that cannot be read
+            self.log(_("No demo to run: {reason}").format(reason=exc), "error")
+            return
+        if not dialog.exec():
+            return
+        demo, step, args = dialog.chosen()
+        job = DemoJob(demo, step, args)
+        job.done.connect(self._demo_done)
+        self._start(
+            job,
+            _("Running the {demo} demo ({step})…").format(demo=demo.name, step=step),
+        )
+
+    def _demo_done(self, report: dict) -> None:
+        elapsed = time.perf_counter() - self._started
+        self.log(
+            fmt(
+                _("The {demo} demo is done in {time:.1f} s ({step}); it wrote into {folder}."),
+                demo=report["demo"],
+                time=elapsed,
+                step=report["step"],
+                folder=report["folder"],
+            )
+        )
+
     def _start(self, job: SimulationJob, message: str) -> None:
         self.job = job
         self._job_scene = self.document.scene
@@ -1477,6 +1525,7 @@ class MainWindow(QMainWindow):
         self.run_action.setEnabled(False)
         self.map_action.setEnabled(False)
         self.tune_action.setEnabled(False)
+        self.demo_action.setEnabled(False)
         self.map_panel.set_running(True)
         self.cancel_action.setEnabled(True)
         self.activity.start(message)
@@ -1486,7 +1535,10 @@ class MainWindow(QMainWindow):
     def cancel_simulation(self) -> None:
         if self.job is not None:
             self.job.cancel()
-            self.log(_("Cancelling at the next stage…"))
+            if isinstance(self.job, DemoJob):  # a process of its own: it stops at once
+                self.log(_("Stopping the demo…"))
+            else:
+                self.log(_("Cancelling at the next stage…"))
 
     def _progress(self, message: str) -> None:
         self.activity.step(message)
@@ -1614,6 +1666,7 @@ class MainWindow(QMainWindow):
         text = {
             "coverage map": _("The coverage map failed: {reason}"),
             "tuning": _("The tuning failed: {reason}"),
+            "demo": _("The demo failed: {reason}"),
         }.get(self._job_kind(), _("The simulation failed: {reason}"))
         self.log(text.format(reason=message), "error")
         self.docks["messages"].raise_()
@@ -1624,6 +1677,7 @@ class MainWindow(QMainWindow):
                 "coverage map": _("Coverage map cancelled."),
                 "tuning": _("Tuning cancelled."),
                 "export": _("Export cancelled."),
+                "demo": _("Demo cancelled."),
             }.get(self._job_kind(), _("Simulation cancelled."))
         )
 
@@ -1638,6 +1692,7 @@ class MainWindow(QMainWindow):
         self.run_action.setEnabled(True)
         self.map_action.setEnabled(True)
         self.tune_action.setEnabled(True)
+        self.demo_action.setEnabled(True)
         self.map_panel.set_running(False)
         self.cancel_action.setEnabled(False)
         self.activity.stop()

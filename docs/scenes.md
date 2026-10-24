@@ -508,6 +508,7 @@ sources:
     gain_db: -6                        # gain of the feed
     eq_db: [0, 0, -3, 0, 0, 0, 2, 4]   # equalizer per band, dB
     delay_ms: 18.5                     # plays this long after emission starts
+    signal: sounds/announcement.wav    # what it plays in a demo of the scene
 ```
 
 - `level_db` is the sound power level, in all or per band. A level in all is spread
@@ -526,6 +527,10 @@ sources:
 - `delay_ms` delays everything the source sends. Its impulse responses start that much
   later, and in the coverage map of all sources together its sound arrives that much
   later, as when delay loudspeakers are aligned with a stage.
+- `signal` is the WAV file the source plays in a demo of the scene (`acoustic-spaces
+  demo`, see [a demo of any scene](demos.md#a-demo-of-any-scene)): a dry recording,
+  relative to the scene's folder, mixed down to mono and played at the source's sound
+  power. A source without one is silent there. The simulation does not read it.
 - `simulate` reports the sound pressure level per octave band and A-weighted
   (`spl_db` and `spl_a_db` in `parameters.json`), the editor's results show it per
   band, and `inspect` lists each source's sound power. In free field, the level 4 m from

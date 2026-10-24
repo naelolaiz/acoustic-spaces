@@ -568,3 +568,27 @@ class Room:
                     log_time += area / total * np.log(eyring(axis_absorption, area))
             return np.exp(log_time)
         raise ValueError(f"unknown formula {formula!r}; use 'sabine', 'eyring' or 'arau_puchades'")
+
+
+def outline_edges(room: Room) -> tuple[np.ndarray, np.ndarray]:
+    """The model's edges seen from above, for a plan of the room: (E, 2, 2) end points
+    (m) of the edges where the surface folds or ends, and (E,) the label of a face
+    beside each. Vertical edges, points from above, are left out."""
+    mesh = room.mesh
+    faces = mesh.faces
+    edges = np.sort(np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]]), axis=1)
+    owner = np.tile(np.arange(len(faces)), 3)
+    order = np.lexsort((edges[:, 1], edges[:, 0]))
+    edges, owner = edges[order], owner[order]
+    unique, start, count = np.unique(edges, axis=0, return_index=True, return_counts=True)
+    normals = mesh.face_normals()
+    keep = count != 2
+    pairs = count == 2
+    first, second = owner[start[pairs]], owner[start[pairs] + 1]
+    fold = np.abs(np.sum(normals[first] * normals[second], axis=1)) < math.cos(math.radians(10))
+    keep[np.flatnonzero(pairs)[fold]] = True
+    points = mesh.vertices[unique[keep]][:, :, :2]
+    # Edges that are points from above (vertical edges) add nothing.
+    long = np.linalg.norm(points[:, 1] - points[:, 0], axis=1) > 1e-9
+    labels = mesh.face_labels[owner[start[keep]]]
+    return points[long], labels[long]

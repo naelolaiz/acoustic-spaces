@@ -12,6 +12,7 @@ from conftest import skip_without_extra
 
 from acoustic_spaces.audio import write_wav
 from acoustic_spaces.cli import main
+from acoustic_spaces.demos import PATH_KINDS, load, pipeline
 from acoustic_spaces.engine import simulate
 from acoustic_spaces.examples import (
     GROUPS,
@@ -20,11 +21,20 @@ from acoustic_spaces.examples import (
     example_path,
     list_examples,
 )
+from acoustic_spaces.parameters import a_weighted
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene import Scene
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 NAMES = [e.name for e in list_examples()]
+#: The demos that come with the examples: (example, the name before "_demo.py").
+DEMO_SCRIPTS = [
+    ("church", "church"),
+    ("gallery_walk", "walk"),
+    ("lakeside_concert", "lakeside"),
+    ("orchestra", "orchestra"),
+    ("stadium_concert", "stadium"),
+]
 
 
 def test_wheels_carry_every_file_the_examples_use() -> None:
@@ -285,8 +295,18 @@ def test_stadium_feedback(
     assert (tmp_path / "loop.wav").stat().st_size > 0
 
 
-def _demo_args(**paths) -> argparse.Namespace:
-    return argparse.Namespace(format="binaural", **{k: Path(v) for k, v in paths.items()})
+def _demo(example: str, name: str):
+    """The demo a script describes, loaded as the framework loads it."""
+    return load(EXAMPLES / example / f"{name}.py")
+
+
+def _demo_args(demo, **values) -> argparse.Namespace:
+    """The demo's options at their defaults, with ``values`` over them (paths as paths)."""
+    args = demo.defaults()
+    for key, value in values.items():
+        kind = demo.option(key).kind
+        setattr(args, key, Path(value) if kind in PATH_KINDS else value)
+    return demo.resolved(args)
 
 
 def test_church_demo_scene_and_organ(tmp_path: Path) -> None:
@@ -311,8 +331,12 @@ def test_church_demo_scene_and_organ(tmp_path: Path) -> None:
     assert demo.beat_time(3, demo.BEATS) - demo.VERSES[3] > demo.BEATS
     assert demo.end_of_music() > demo.beat_time(3, 21.0) + demo.LAST_CHORD_S
 
-    args = _demo_args(source=example_path("church"), scene=tmp_path / "scene_choir.yaml")
-    args.results = tmp_path / "results_choir"
+    args = _demo_args(
+        demo.DEMO,
+        source=example_path("church"),
+        scene=tmp_path / "scene_choir.yaml",
+        results=tmp_path / "results_choir",
+    )
     demo.scene(args)
     room = Room.from_yaml(args.scene)
     assert room.problems() == []
@@ -321,6 +345,10 @@ def test_church_demo_scene_and_organ(tmp_path: Path) -> None:
     assert [name for name in names if name.startswith("organ_")] == list(demo.ORGAN_SOURCES)
     assert {item.name for item in room.scene.listeners} == {name for name, _ in demo.TOUR}
     assert room.scene.simulation.ir_length_s >= 9.0
+    # The mixes weigh each source by the sound power the scene gives it.
+    weights = {source["name"]: source["level_db"] for source in demo.scene_of(args)["sources"]}
+    assert weights[f"singer_{demo.SINGERS[0]}"] == demo.SINGER_DB
+    assert weights["organ_pedal_c"] == demo.PEDAL_DB
 
 
 def test_church_demo_tunes_and_times_a_take() -> None:
@@ -368,8 +396,12 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     on its left (-y; the scene's *_right, named from the stage) the left channel."""
     demo = _script("stadium_concert", "stadium_demo")
     folder = copy_examples(tmp_path, ["stadium_concert"])[0].parent
-    args = _demo_args(source=folder / "scene.yaml", scene=folder / "scene_band.yaml")
-    args.results = folder / "results_band"
+    args = _demo_args(
+        demo.DEMO,
+        source=folder / "scene.yaml",
+        scene=folder / "scene_band.yaml",
+        results=folder / "results_band",
+    )
     demo.band(args)
     demo.band(argparse.Namespace(**vars(args) | {"source": args.scene}))  # once only
     room = Room.from_yaml(args.scene)
@@ -409,9 +441,11 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
         outputs = [{"format": "binaural", "wav": f"{name}__east_stand.wav"}]
         responses.append({"source": name, "listener": "east_stand", "outputs": outputs})
     (results / "parameters.json").write_text(json.dumps({"responses": responses}), "utf-8")
-    table = {"sources": {"main_right": {"gain_db": 0.0}, "delay_east_right": {"gain_db": -3.0}}}
-    arrival = demo.arrival_s(argparse.Namespace(results=results), "east_stand", table)
+    weights = {"main_right": 0.0, "delay_east_right": -3.0}
+    arrival = pipeline.arrival_s(results, responses, "east_stand", weights)
     assert arrival == pytest.approx(0.38, abs=0.002)
+    # Without weights every source counts alike, so the main array wins on its own.
+    assert pipeline.arrival_s(results, responses, "east_stand") == pytest.approx(0.38, abs=0.002)
     # The tour moves on phrase boundaries and leaves out listeners without a mix.
     work = tmp_path / "demo"
     (work / "feeds").mkdir(parents=True)
@@ -420,7 +454,7 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     (work / "feeds" / "feeds.json").write_text(
         json.dumps({"length_s": 195.0, "song": funk | {"name": "spicy_funk_cake"}}), "utf-8"
     )
-    tour = demo.tour_of(argparse.Namespace(tour=None, work=work), {"mix_position", "singer"})
+    tour = demo.tour_of(_demo_args(demo.DEMO, work=work), {"mix_position", "singer"})
     assert [name for name, _, _ in tour] == ["mix_position", "singer", "mix_position"]
     assert tour[1][1] == pytest.approx(phrase) and tour[-1][2] == 195.0
     seats = {"seats": {"mix_position": {"rms_db": -40.0}, "singer": {"rms_db": -22.0}}}
@@ -432,7 +466,7 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
         (work / "feeds" / "feeds.json").write_text(
             json.dumps({"length_s": length, "song": song}), "utf-8"
         )
-        tour = demo.tour_of(argparse.Namespace(tour=None, work=work), set(demo.TITLES))
+        tour = demo.tour_of(_demo_args(demo.DEMO, work=work), set(demo.TITLES))
         left_out = {name for name, n in song.get("tour", {}).items() if n == 0}
         assert len(tour) == len(demo.TOUR) - len(left_out)
         assert not {name for name, _, _ in tour} & left_out
@@ -462,29 +496,40 @@ def test_orchestra_demo_tour(tmp_path: Path) -> None:
     assert 14.0 <= demo.quiet_moment(env, 0.1, 15.0, demo.QUIET_S) <= 16.0
     assert demo.quiet_moment(env, 0.1, 5.0, 2.0) == pytest.approx(5.0, abs=2.5)
     work = tmp_path / "demo"
-    args = argparse.Namespace(
-        work=work, format="binaural", tour="1:stalls-middle,1:conductor,2:stalls-rear"
-    )
+    args = _demo_args(demo.DEMO, work=work, tour="1:stalls-middle,1:conductor,2:stalls-rear")
     stereo = np.stack([loud, loud], axis=1)
+    seats = {"rate": rate, "format": "binaural", "gain": 1.0, "seats": {}}
     for movement, seat in demo.stops_of(args):
         length = (30 if movement == 1 else 10) * rate
-        demo.write(demo.mix_path(args, movement, seat), stereo[:length], rate)
-    stops = {
-        "1:stalls-middle": {"lag_s": 0.05, "length_s": 30.0},
-        "1:conductor": {"lag_s": 0.01, "length_s": 30.0},
-        "2:stalls-rear": {"lag_s": 0.08, "length_s": 10.0},
-    }
-    seats = {"rate": rate, "format": "binaural", "gain": 1.0, "stops": stops}
+        key = demo.key_of(movement, seat)
+        demo.write(work / "seats" / f"{key}.binaural.wav", stereo[:length], rate)
+        lag = {"conductor": 0.01, "stalls-middle": 0.05, "stalls-rear": 0.08}[seat]
+        seats["seats"][key] = {
+            "movement": movement,
+            "seat": seat,
+            "lag_s": lag,
+            "length_s": length / rate,
+        }
     tour = demo.tour_of(args, seats)
-    assert [(s["movement"], s["seat"]) for s in tour] == [
-        (1, "stalls-middle"),
-        (1, "conductor"),
-        (2, "stalls-rear"),
+    assert [seats["seats"][stop.key]["seat"] for stop in tour] == [
+        "stalls-middle",
+        "conductor",
+        "stalls-rear",
     ]
-    assert tour[0]["start"] == 0.0 and 14.0 <= tour[0]["stop"] <= 16.0
-    assert tour[1]["start"] == tour[0]["stop"] and tour[1]["stop"] == 30.0
-    assert tour[2]["at"] == pytest.approx(30.0 + demo.PAUSE_S) and tour[2]["start"] == 0.0
-    audio = demo.tour_audio(args, tour, seats)
+    assert tour[0].start == 0.0 and 14.0 <= tour[0].stop <= 16.0
+    assert tour[1].start == tour[0].stop and tour[1].stop == 30.0
+    assert tour[2].at == pytest.approx(30.0 + demo.PAUSE_S) and tour[2].start == 0.0
+    # The movements are not crossfaded into each other, the seats of one are.
+    assert [stop.joined_before for stop in tour] == [False, True, False]
+    assert [stop.joined_after for stop in tour] == [True, False, False]
+    assert demo.last_of_movement(tour, 1) and not demo.last_of_movement(tour, 0)
+    audio = pipeline.tour_audio(
+        tour,
+        work / "seats",
+        seats,
+        crossfade_s=demo.CROSSFADE_S,
+        fade_out_s=demo.FADE_OUT_S,
+    )
     assert len(audio) == round((30.0 + demo.PAUSE_S + 10.0) * rate)
     pause = audio[int(30.5 * rate) : int(32.5 * rate)]
     assert np.abs(pause).max() == 0.0  # between the movements
@@ -525,56 +570,55 @@ def test_stadium_pictures_show_the_crowd() -> None:
 
 
 def test_demo_scripts_take_an_hrtf(tmp_path: Path) -> None:
-    """Every demo script's simulate command carries ``--hrtf``; its mixes then ask for the
+    """Every demo's simulate command carries ``--hrtf``; its mixes then ask for the
     responses made through that file (``binaural-<name>``) and refuse ones made through
     the spherical head; other formats are left alone; and asked for mixes before the
-    scene and the simulation exist, a script says which step writes the scene."""
+    scene and the simulation exist, a demo says which step writes the scene."""
     sofa = tmp_path / "me.sofa"
-    scripts = {
-        ("orchestra", "orchestra_demo"): None,
-        ("church", "church_demo"): "scene",
-        ("stadium_concert", "stadium_demo"): "band",
-        ("lakeside_concert", "lakeside_demo"): "scenes",
-    }
-    for (example, name), step in scripts.items():
-        demo = _script(example, name)
-        paths = {"scene": tmp_path / "scene.yaml", "results": tmp_path / "results"}
-        if name == "lakeside_demo":
-            paths |= {"still": tmp_path / "still.yaml", "still_results": tmp_path / "still"}
-        plain = _demo_args(**paths)
-        own = argparse.Namespace(**vars(plain), hrtf=sofa)
-        if name == "lakeside_demo":
+    plain = argparse.Namespace(format="binaural", hrtf=None)
+    own = argparse.Namespace(format="binaural", hrtf=sofa)
+    assert pipeline.output_label(plain) == "binaural"
+    assert pipeline.output_label(own) == "binaural-me"
+    assert pipeline.output_label(argparse.Namespace(format="ambix3", hrtf=sofa)) == "ambix3"
+    assert pipeline.hrtf_label("binaural", None) == "binaural"
 
-            def command(a, demo=demo):
-                return demo.simulate_command(a, a.scene, a.results)
-
-            def check(a, e, demo=demo):
-                return demo.check_hrtf(a, "evening", e)
-
-            def responses(a, demo=demo):
-                return demo.responses_of(a, "evening")
-
-        else:
-            command, check, responses = demo.simulate_command, demo.check_hrtf, demo.responses_of
-        assert "--hrtf" not in command(plain), name
-        assert command(own).endswith(f" --hrtf {sofa}"), name
-        assert demo.output_label(plain) == "binaural"
-        assert demo.output_label(own) == "binaural-me"
-        assert demo.output_label(argparse.Namespace(format="ambix3", hrtf=sofa)) == "ambix3"
-        outputs = {"binaural": "x", "binaural-me": "x"}
+    for demo in (_demo(e, f"{n}_demo") for e, n in DEMO_SCRIPTS):
+        args = _demo_args(demo, work=tmp_path / demo.name)
+        with_hrtf = argparse.Namespace(**vars(args) | {"hrtf": sofa})
+        assert demo.check(with_hrtf) is None
+        if "format" in {o.name for o in demo.options}:
+            wrong = argparse.Namespace(**vars(with_hrtf) | {"format": "ambix3"})
+            assert demo.check(wrong) == "--hrtf is for binaural mixes"
+        for simulation in demo.simulations(args):
+            assert "--hrtf" not in pipeline.simulate_command(simulation)
+            assert pipeline.simulate_command(simulation, sofa).endswith(f"--hrtf {sofa}")
+        # No simulation yet: the error names the step that writes the scene.
+        for simulation in demo.simulations(with_hrtf):
+            with pytest.raises(SystemExit) as caught:
+                pipeline.responses_of(simulation, with_hrtf, demo.first_step(args))
+            assert "acoustic-spaces simulate" in str(caught.value)
+            if demo.scene_from:
+                assert f"{demo.script.name} {demo.scene_from}" in str(caught.value)
+        # Responses through a spherical head cannot pass for ones through the file.
+        results = tmp_path / demo.name / "asked"
         head, ears = (
-            [{"listener": "a", "source": "s", "outputs": [{"format": f, "wav": w}]}]
-            for f, w in outputs.items()
+            [{"listener": "a", "source": "s", "outputs": [{"format": fmt, "wav": "a.wav"}]}]
+            for fmt in ("binaural", "binaural-me")
         )
-        for a, e in ((plain, head), (plain, ears), (own, ears)):
-            check(a, e)
-        with pytest.raises(SystemExit, match="me.sofa"):
-            check(own, head)
-        with pytest.raises(SystemExit) as caught:
-            responses(plain)
-        if step:
-            assert f"{name}.py {step}" in str(caught.value), name
-        assert "acoustic-spaces simulate" in str(caught.value), name
+        for entries, asked, fine in (
+            (head, args, True),
+            (ears, with_hrtf, True),
+            (head, with_hrtf, False),
+        ):
+            pipeline.write_json(results / pipeline.PARAMETERS, {"responses": entries})
+            output = pipeline.output_label(argparse.Namespace(**vars(asked) | {"hrtf": None}))
+            simulation = pipeline.Simulation(tmp_path / "scene.yaml", results, output)
+            assert pipeline.simulated(simulation, asked) == fine
+            if fine:
+                assert pipeline.responses_of(simulation, asked) == entries
+            else:
+                with pytest.raises(SystemExit, match="me.sofa"):
+                    pipeline.responses_of(simulation, asked)
 
 
 def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
@@ -585,6 +629,7 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     demo = _script("lakeside_concert", "lakeside_demo")
     folder = copy_examples(tmp_path, ["lakeside_concert"])[0].parent
     args = _demo_args(
+        demo.DEMO,
         source=folder / "scene.yaml",
         scene=folder / "scene_demo.yaml",
         still=folder / "scene_still.yaml",
@@ -604,15 +649,18 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     # The tour: 8 bars a stop, the last one --last-phrases long.
     work = tmp_path / "demo"
     (work / "music").mkdir(parents=True)
-    song = demo.SONGS["spicy_funk_cake"] | {"name": "spicy_funk_cake"}
+    song = {k: v for k, v in demo.SONGS["spicy_funk_cake"].items() if k in demo.SONG_KEPT}
+    song |= {"name": "spicy_funk_cake"}
     (work / "music" / "song.json").write_text(json.dumps(song), encoding="utf-8")
     write_wav(work / "music" / "spicy_funk_cake.wav", np.zeros((19_500, 2)), 100)  # 195 s
-    tour = demo.tour_of(argparse.Namespace(tour=None, work=work, last_phrases=2.0))
+    tour = demo.tour_of(_demo_args(demo.DEMO, work=work))
     phrase = demo.phrase_s(song)
     assert [(name, weather) for name, weather, _, _ in tour] == [s[:2] for s in demo.TOUR]
     assert tour[1][2] == pytest.approx(2 * phrase)
     assert tour[-1][3] - tour[-1][2] == pytest.approx(2 * phrase)
-    custom = argparse.Namespace(tour="bedroom_window:still:1,audience", work=work, last_phrases=0)
+    custom = _demo_args(
+        demo.DEMO, work=work, tour="bedroom_window:still:1,audience", last_phrases=0
+    )
     tour = demo.tour_of(custom)
     assert [stop[:2] for stop in tour] == [("bedroom_window", "still"), ("audience", "evening")]
     assert tour[-1][3] == pytest.approx(195.0)
@@ -635,3 +683,133 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     for seat in seats["seats"].values():
         del seat["loudness_db"]
     assert demo.gains_of(seats, tour) == gains
+
+
+def test_walk_demo_scene_cuts_and_moments(tmp_path: Path) -> None:
+    """walk_demo.py writes the gallery with the guide speaking at the level IEC 60268-16
+    gives that voice and the visitor standing round the corner; it cuts from the walk to
+    the turn at a pause in the talk; and its pictures name the moments of the tour."""
+    demo = _script("gallery_walk", "walk_demo")
+    args = _demo_args(
+        demo.DEMO,
+        source=example_path("gallery_walk"),
+        scene=tmp_path / "scene_demo.yaml",
+        work=tmp_path / "demo",
+    )
+    demo.scene(args)
+    room = Room.from_yaml(args.scene)
+    assert room.problems() == []
+    guide = next(s for s in room.scene.sources if s.name == "guide")
+    # The sound power is what puts the voice at its level 1 m in front of the talker.
+    at_1m_a = a_weighted(guide.power_db("octave") - 20.0 * np.log10(1.0) - 11.0 + 5.0)
+    assert guide.level_db == pytest.approx(
+        demo.voice_level("speech_male", demo.VOICE_PATTERN, demo.VOICES["normal"]), abs=0.05
+    )
+    assert float(at_1m_a) == pytest.approx(demo.VOICES["normal"], abs=6.0)  # the pattern's gain
+    assert guide.spectrum == "speech_male"
+    standing = next(lis for lis in room.scene.listeners if lis.name == "standing")
+    assert tuple(standing.position[:2]) == demo.STAND
+    assert standing.orientation.yaw == pytest.approx(0.0, abs=0.1)  # facing the guide
+    # A female talker speaks with the female spectrum, and a louder voice is louder.
+    assert demo.voice_level("speech_female", demo.VOICE_PATTERN, 60.0) != guide.level_db
+    assert demo.VOICES["raised"] > demo.VOICES["normal"] > demo.VOICES["relaxed"]
+    with pytest.raises(SystemExit, match="--stand takes"):
+        demo.stand_of(argparse.Namespace(stand="over there"))
+    assert demo.turn_of(argparse.Namespace(turn="0:0,3:90")) == [(0.0, 0.0), (3.0, 90.0)]
+    with pytest.raises(SystemExit, match="--turn takes"):
+        demo.turn_of(argparse.Namespace(turn="round"))
+    # The cuts fall in the talk's pauses: one after the walk and the visitor's four
+    # seconds of listening, the next after the turn and four more.
+    walk_s = float(demo.walk_points_of(room).times[-1])
+    turn_s = demo.turn_of(args)[-1][0]
+    rate = 8000
+    length = walk_s + turn_s + 4 * demo.LINGER_S
+    t = np.arange(int(length * rate)) / rate
+    talk = 0.3 * np.sin(2 * np.pi * 180 * t) * (1.0 + np.sin(2 * np.pi * 3 * t))
+    pauses = (walk_s + demo.LINGER_S, walk_s + demo.LINGER_S + turn_s + demo.LINGER_S)
+    for pause in pauses:
+        talk[int((pause - 0.5) * rate) : int((pause + 0.7) * rate)] = 0.0
+    (args.work / "speech").mkdir(parents=True)
+    write_wav(args.work / "speech" / f"{args.talker}.wav", talk, rate)
+    first, second = demo.cuts(args, room)
+    assert first == pytest.approx(pauses[0], abs=demo.PAUSE_S)
+    assert second == pytest.approx(pauses[1], abs=demo.PAUSE_S)
+    assert second - first >= turn_s
+    # A talk too short for the walk and the turn is refused, with what it would take.
+    short = argparse.Namespace(**vars(args) | {"talker": "short"})
+    write_wav(args.work / "speech" / "short.wav", talk[: int(0.5 * length * rate)], rate)
+    with pytest.raises(SystemExit, match="too short"):
+        demo.cuts(short, room)
+    with pytest.raises(SystemExit, match="run first"):
+        demo.talk(argparse.Namespace(**vars(args) | {"talker": "F9"}))
+
+
+def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
+    """The walk's pictures work out where the guide is from the visitor, whether the
+    corner is in the way, and the moments the video's chapters and stills mark."""
+    pytest.importorskip("PIL")
+    demo = _script("gallery_walk", "walk_demo")
+    pictures = _script("gallery_walk", "walk_pictures")
+    scene = yaml.safe_load(example_path("gallery_walk").read_text(encoding="utf-8"))
+    plan = np.array(scene["geometry"]["floor_plan"], dtype=float)
+    # The L's short arm cannot see the guide at the far end of the long one.
+    assert pictures.in_sight(plan, (17.0, 4.0), (20.0, 4.0))
+    assert not pictures.in_sight(plan, (4.0, 16.0), (20.0, 4.0))
+    assert pictures.inside(plan, 4.0, 16.0) and not pictures.inside(plan, 20.0, 16.0)
+    assert (8.0, 8.0) in pictures.inner_corners(plan)
+    words, angle = pictures.bearing((0.0, 0.0), 0.0, (1.0, 0.0))
+    assert words == "in front of you" and angle == pytest.approx(0.0)
+    assert pictures.bearing((0.0, 0.0), 0.0, (0.0, 1.0))[0] == "on your left"
+    assert pictures.bearing((0.0, 0.0), 0.0, (0.0, -1.0))[0] == "on your right"
+    assert pictures.bearing((0.0, 0.0), 0.0, (-1.0, 0.0))[0] == "behind you"
+    assert pictures.rating(0.2) == "bad" and pictures.rating(0.8) == "excellent"
+    assert pictures.rating(float("nan")) == "not defined"
+    # The tour: walking down the long arm, round the corner, then turning on the spot.
+    times = [0.0, 5.0, 10.0, 15.0]
+    walked = {
+        "times": times,
+        "positions": [[17.0, 4.0, 1.6], [10.0, 4.0, 1.6], [4.0, 10.0, 1.6], [4.0, 16.0, 1.6]],
+        "yaws": [180.0, 150.0, 90.0, 90.0],
+        "level_a_db": [62.0, 56.0, 50.0, 44.0],
+        "sti": [0.72, 0.64, 0.5, 0.38],
+    }
+    keys = [[0.0, 0.0], [4.0, 0.0], [10.0, 90.0], [14.0, 90.0]]
+    turned = {
+        "facing": 90.0,
+        "keys": keys,
+        "times": [t for t, _ in keys],
+        "positions": [[4.0, 16.0, 1.6]] * len(keys),
+        "yaws": [90.0 + yaw for _, yaw in keys],
+        "level_a_db": [44.0] * len(keys),
+        "sti": [0.38] * len(keys),
+    }
+    drawing = pictures.Pictures(
+        scene,
+        walked,
+        turned,
+        walk_s=16.0,
+        turn_at=16.6,
+        voice=("normal", demo.VOICES["normal"]),
+        credit="Speech: a corpus",
+    )
+    assert walked["sight"] == [True, True, False, False]
+    moments = drawing.moments()
+    assert [name for name, _, _ in moments][:4] == [
+        "setting-off",
+        "corner",
+        "out-of-sight",
+        "standing",
+    ]
+    assert [t for _, t, _ in moments][:4] == [0.0, 5.0, 10.0, 15.0]
+    assert [t for _, t, _ in moments] == sorted(t for _, t, _ in moments)
+    assert any(name.startswith("turning-") for name, _, _ in moments)
+    assert moments[0][1] == 0.0 and moments[-1][1] < 16.6 + keys[-1][0] + 1.0
+    # The state at a moment: where the visitor is, and what it hears there.
+    state = drawing.state(0.0)
+    assert state["part"] == "walk" and state["at"][0] == pytest.approx(17.0)
+    assert state["level"] == 62.0 and state["sight"]
+    late = drawing.state(16.6 + 12.0)
+    assert late["part"] == "turn" and late["yaw"] == pytest.approx(180.0)
+    assert not late["sight"]
+    for picture in (drawing.frame(0.0), drawing.frame(20.0), drawing.thumbnail()):
+        assert picture.getbbox() is not None

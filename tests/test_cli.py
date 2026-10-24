@@ -1010,3 +1010,80 @@ def test_play_with_head_tracking(
     mono = ["play", str(simulated / "talker__seat-a.wav"), str(tmp_path / "dry.wav")]
     assert main([*mono, "--head-tracking", "--osc-port", "0"]) == 1
     assert "order 1 or more: 4, 9, 16... channels, not 1" in capsys.readouterr().err
+
+
+def _test_set(tmp_path: Path):
+    """A set of one tiny file next to the tests, so nothing is downloaded."""
+    from acoustic_spaces.spatial import hrtf_sets
+
+    source = tmp_path / "source" / "ears.sofa"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"SOFA" + bytes(64))
+    return hrtf_sets.HrtfSet(
+        name="test",
+        title="Test ears",
+        ears="a test",
+        licence="CC0 1.0",
+        credit="the tests",
+        page="https://example.invalid/ears",
+        url=source.as_uri(),
+        size_mb=0.0001,
+        note="nothing much in it",
+    )
+
+
+def test_hrtf_lists_the_sets_and_downloads_one(tmp_path: Path, capsys, monkeypatch) -> None:
+    """acoustic-spaces hrtf names every set with its licence, says which are there, and
+    downloads the one asked for."""
+    from acoustic_spaces.spatial import hrtf_sets
+
+    folder = tmp_path / "sets"
+    assert main(["hrtf", "--folder", str(folder)]) == 0
+    listed = capsys.readouterr().out
+    for item in hrtf_sets.sets():
+        assert item.name in listed and item.licence in listed and item.page in listed
+    assert "[have]" not in listed  # nothing downloaded yet
+
+    monkeypatch.setattr(hrtf_sets, "SETS", (_test_set(tmp_path),))
+    assert main(["hrtf", "test", "--folder", str(folder)]) == 0
+    written = capsys.readouterr().out.strip()
+    assert written == str(folder / "test.sofa")
+    assert (folder / "test.sofa").read_bytes().startswith(b"SOFA")
+
+    # It is not downloaded again, and the list marks it.
+    assert main(["hrtf", "test", "--folder", str(folder)]) == 0
+    assert "there already" in capsys.readouterr().out
+    assert main(["hrtf", "--folder", str(folder)]) == 0
+    assert "[have] test" in capsys.readouterr().out
+
+    # A name that is not on offer says what is, and a single file has no members.
+    assert main(["hrtf", "nope", "--folder", str(folder)]) == 1
+    assert "no HRTF set 'nope'; try: test" in capsys.readouterr().err
+    assert main(["hrtf", "test", "--member", "subj_A.sofa", "--folder", str(folder)]) == 1
+    err = capsys.readouterr().err
+    assert "error: test is a single SOFA file, with no 'subj_A.sofa' in it" in err
+
+
+def test_hrtf_downloads_another_sofa_file(tmp_path: Path, capsys) -> None:
+    """--url takes any other SOFA file, saved under the name given."""
+    source = tmp_path / "mine.sofa"
+    source.write_bytes(b"SOFA" + bytes(16))
+    folder = tmp_path / "sets"
+    assert main(["hrtf", "me", "--url", source.as_uri(), "--folder", str(folder)]) == 0
+    assert capsys.readouterr().out.strip() == str(folder / "me.sofa")
+    assert (folder / "me.sofa").read_bytes() == source.read_bytes()
+    assert main(["hrtf", "--url", "file:///nothing/here.sofa", "--folder", str(folder)]) == 1
+    assert "error:" in capsys.readouterr().err
+
+
+def test_demo_of_a_scene_explains_itself(capsys: pytest.CaptureFixture[str]) -> None:
+    """``acoustic-spaces demo`` lists its steps and options, and stops with a reason on a
+    scene whose sources play nothing (the run itself is in test_demos)."""
+    with pytest.raises(SystemExit) as stopped:
+        main(["demo", "--help"])
+    assert stopped.value.code == 0
+    out = capsys.readouterr().out
+    for word in ("feeds", "simulate", "render", "video", "--hrtf", "--seconds", "--tour"):
+        assert word in out
+    assert main(["demo", str(SHOEBOX)]) == 2
+    assert "no source plays anything" in capsys.readouterr().err

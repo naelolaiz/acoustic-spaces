@@ -23,6 +23,10 @@ msgstr "el d'aquest ordinador"
 msgid "language: {language} ({source})"
 msgstr "idioma: {language} ({source})"
 
+#: acoustic_spaces/demos/scene_demo.py
+msgid "This scene"
+msgstr "Aquesta escena"
+
 #: acoustic_spaces/engine/coverage.py acoustic_spaces/gui/results_view.py
 msgid "SPL (dB)"
 msgstr "SPL (dB)"
@@ -217,10 +221,14 @@ msgstr "Ara: {step}"
 msgid "Running for {time:.0f} s"
 msgstr "En marxa des de fa {time:.0f} s"
 
+#
 #: acoustic_spaces/gui/activity.py
-msgid "Cancel, or Simulation > Cancel (Shift+F5), stops it at its next stage"
+msgid ""
+"Cancel, or Simulation > Cancel (Shift+F5), stops it: a run at its next "
+"stage, a demo at once"
 msgstr ""
-"Cancel·lar, o Simulació > Cancel·lar (Maj+F5), l'atura a la següent etapa"
+"Cancel·lar, o Simulació > Cancel·lar (Maj+F5), l'atura: un càlcul a la "
+"següent etapa, una demostració de seguida"
 
 #: acoustic_spaces/gui/app.py
 msgid "Acoustic Spaces editor"
@@ -653,13 +661,31 @@ msgstr ""
 "tune; requereix l'extra gpu)"
 
 #: acoustic_spaces/gui/app.py
+msgid "Run &demo…"
+msgstr "Executa una &demostració…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Play the sounds each source's Plays names through the open scene: its "
+"simulation, what each listener hears and a video, with the options to fill "
+"in; an example's scene also has the example's own demo"
+msgstr ""
+"Reprodueix a l'escena oberta els sons que indica el camp Reprodueix de cada "
+"font: la seva simulació, el que sent cada oient i un vídeo, amb les opcions "
+"per omplir; l'escena d'un exemple té a més la demostració pròpia de l'exemple"
+
+#: acoustic_spaces/gui/app.py
 msgid "&Cancel"
 msgstr "Ca&ncel·lar"
 
+#
 #: acoustic_spaces/gui/app.py
-msgid "Stop the run, coverage map or tuning going on, at its next stage"
+msgid ""
+"Stop the run, coverage map or tuning going on at its next stage, or a demo "
+"at once"
 msgstr ""
-"Aturar el càlcul, el mapa de cobertura o l'ajust en curs a la fase següent"
+"Aturar el càlcul, el mapa de cobertura o l'ajust en curs a la fase següent, "
+"o una demostració de seguida"
 
 #: acoustic_spaces/gui/app.py
 msgid "S&top playback"
@@ -1119,6 +1145,32 @@ msgid "Timing the CPU and the GPU on {scene}…"
 msgstr "Mesurant el temps de la CPU i la GPU amb {scene}…"
 
 #: acoustic_spaces/gui/app.py
+msgid "Wait for the current run to end, then run the demo."
+msgstr "Espereu que acabi l'execució actual i després executeu la demostració."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "No demo to run: {reason}"
+msgstr "Cap demostració per executar: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Running the {demo} demo ({step})…"
+msgstr "S'està executant la demostració {demo} ({step})…"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The {demo} demo is done in {time:.1f} s ({step}); it wrote into {folder}."
+msgstr ""
+"La demostració {demo} ha acabat en {time:.1f} s ({step}); ha escrit a "
+"{folder}."
+
+#: acoustic_spaces/gui/app.py
+msgid "Stopping the demo…"
+msgstr "S'atura la demostració…"
+
+#: acoustic_spaces/gui/app.py
 msgid "Cancelling at the next stage…"
 msgstr "Es cancel·larà a la fase següent…"
 
@@ -1198,6 +1250,11 @@ msgstr "Ha fallat l'ajust: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
+msgid "The demo failed: {reason}"
+msgstr "La demostració ha fallat: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
 msgid "The simulation failed: {reason}"
 msgstr "Ha fallat la simulació: {reason}"
 
@@ -1212,6 +1269,10 @@ msgstr "Ajust cancel·lat."
 #: acoustic_spaces/gui/app.py
 msgid "Export cancelled."
 msgstr "Exportació cancel·lada."
+
+#: acoustic_spaces/gui/app.py
+msgid "Demo cancelled."
+msgstr "Demostració cancel·lada."
 
 #: acoustic_spaces/gui/app.py
 msgid "Simulation cancelled."
@@ -1351,6 +1412,124 @@ msgstr ""
 #: acoustic_spaces/gui/app.py acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
 msgid "Source"
 msgstr "Font"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Browse…"
+msgstr "Explora…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Choose the folder"
+msgstr "Trieu la carpeta"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Choose the file"
+msgstr "Trieu el fitxer"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Download HRTFs…"
+msgstr "Baixa HRTF…"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Free HRTF sets to download, measured on dummy heads and on people"
+msgstr ""
+"Conjunts d'HRTF lliures per baixar, mesurats en caps artificials i en "
+"persones"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "All files (*)"
+msgstr "Tots els fitxers (*)"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "Folder for {option}"
+msgstr "Carpeta per a {option}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "File for {option}"
+msgstr "Fitxer per a {option}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Run demo"
+msgstr "Executa una demostració"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"A demo plays sound through the open scene, mixes what every listener hears "
+"and puts a video together. This scene plays the WAV file each source's Plays "
+"names; an example's own demo downloads the recordings it plays and can take "
+"a while. The messages say what it is doing, and Cancel stops it."
+msgstr ""
+"Una demostració reprodueix so a l'escena oberta, mescla el que sent cada "
+"oient i munta un vídeo. Aquesta escena reprodueix el fitxer WAV que indica "
+"el camp Reprodueix de cada font; la demostració pròpia d'un exemple "
+"descarrega les gravacions que toca i pot trigar. Els missatges diuen què fa, "
+"i Cancel·la l'atura."
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The demo to run: This scene, with the sounds its sources play, or the "
+"example's own demo when the scene is an example's or a copy of one"
+msgstr ""
+"La demostració que s'executarà: Aquesta escena, amb els sons que "
+"reprodueixen les seves fonts, o la demostració pròpia de l'exemple quan "
+"l'escena és d'un exemple o una còpia d'un"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The step to run. all runs the demo from nothing to its video, leaving out "
+"the steps whose result is there already"
+msgstr ""
+"El pas que s'executarà. all executa la demostració de zero fins al vídeo, "
+"deixant de banda els passos el resultat dels quals ja hi és"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Demo"
+msgstr "Demostració"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Step"
+msgstr "Pas"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The same run from a terminal, in the folder below"
+msgstr "La mateixa execució des d'un terminal, a la carpeta de sota"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Command"
+msgstr "Ordre"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Run"
+msgstr "Executa"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Run the step in the background; the messages say how it goes"
+msgstr "Executa el pas en segon pla; els missatges diuen com va"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Close without running anything"
+msgstr "Tanca sense executar res"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "all: every step in order, leaving out what is done already."
+msgstr "all: tots els passos en ordre, deixant de banda el que ja està fet."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "Runs in {folder}"
+msgstr "S'executa a {folder}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "save the scene first (File > Save): the demo reads it from its file"
+msgstr ""
+"deseu primer l'escena (Fitxer > Desar): la demostració la llegeix del seu "
+"fitxer"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "Cannot run: {reason}"
+msgstr "No es pot executar: {reason}"
 
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"
@@ -1518,6 +1697,122 @@ msgstr "una escena necessita almenys un material"
 #, python-brace-format
 msgid "remove material {name}"
 msgstr "eliminar material {name}"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Download HRTFs"
+msgstr "Baixa HRTF"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid ""
+"Head-related transfer functions (HRTF) are how a head and its ears colour "
+"sound from every direction. Rendering through a measured set places sounds "
+"better than the spherical head model, front from back above all. Every set "
+"here is free to use; its licence asks for the credit on the row."
+msgstr ""
+"Les funcions de transferència relacionades amb el cap (HRTF) són com un cap "
+"i les seves orelles acoloreixen el so de cada direcció. Renderitzar amb un "
+"conjunt mesurat situa els sons millor que el model de cap esfèric, sobretot "
+"davant i darrere. Tots els conjunts d'aquí es poden fer servir lliurement; "
+"la llicència demana el crèdit que hi ha a la fila."
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "The HRTF sets on offer; each row says whose ears and whose terms"
+msgstr ""
+"Els conjunts d'HRTF disponibles; cada fila diu de qui són les orelles i amb "
+"quines condicions"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Which head of a set that holds several"
+msgstr "Quin cap d'un conjunt que en té diversos"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Head"
+msgstr "Cap"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Another SOFA file"
+msgstr "Un altre fitxer SOFA"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "https://…/ears.sofa"
+msgstr "https://…/orelles.sofa"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid ""
+"Any other SOFA file, by its address: your own measurements, or a set from a "
+"site"
+msgstr ""
+"Qualsevol altre fitxer SOFA, per la seva adreça: mesures pròpies o un "
+"conjunt d'un lloc web"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "How much of the download is done"
+msgstr "Quina part de la baixada s'ha fet"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "The sets are kept in {folder}"
+msgstr "Els conjunts es desen a {folder}"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Download"
+msgstr "Baixa"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Fetch the set on the row, or the address above"
+msgstr "Baixa el conjunt de la fila, o l'adreça de dalt"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Use"
+msgstr "Fes-lo servir"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Take the file just downloaded, or else the set on the row, and close"
+msgstr ""
+"Fes servir el fitxer que s'acaba de baixar, o si no el conjunt de la fila, i "
+"tanca"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "Close; what was downloaded stays in the folder"
+msgstr "Tanca; el que s'ha baixat es queda a la carpeta"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "downloaded"
+msgstr "baixat"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+msgid "not here yet"
+msgstr "encara no hi és"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "by {credit}"
+msgstr "de {credit}"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "{file} is here already"
+msgstr "{file} ja hi és"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "Downloading {name}…"
+msgstr "S'està baixant {name}…"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "Downloading {title} ({licence}, by {credit})…"
+msgstr "S'està baixant {title} ({licence}, de {credit})…"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "Downloaded {file}"
+msgstr "S'ha baixat {file}"
+
+#: acoustic_spaces/gui/hrtf_dialog.py
+#, python-brace-format
+msgid "The download failed: {reason}"
+msgstr "La baixada ha fallat: {reason}"
 
 #. Translators: this and the entries below are choices as the scene file names them; translate them as words, and keep the tips that name them in step.
 #: acoustic_spaces/gui/inspector.py
@@ -1737,6 +2032,16 @@ msgstr ""
 "subcardioide a hipercardioide cada cop més cap endavant; figura de vuit cap "
 "endavant i enrere; lambertià com una superfície vibrant, només cap endavant; "
 "o dades mesurades (SOFA o CSV) o un conjunt de fonts d'un fitxer"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The WAV file the source plays in a demo of the scene (Simulation > Run "
+"demo…, This scene): a dry recording, mixed down to mono and played at the "
+"source's sound power"
+msgstr ""
+"El fitxer WAV que reprodueix la font en una demostració de l'escena "
+"(Simulació > Executa una demostració…, Aquesta escena): una gravació seca, "
+"mesclada a mono i reproduïda amb la potència acústica de la font"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -3720,6 +4025,25 @@ msgstr ""
 "respostes es retarden en la mateixa mesura"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Choose WAV…"
+msgstr "Tria un WAV…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Pick the WAV file the source plays in a demo of the scene: a dry recording"
+msgstr ""
+"Triar el fitxer WAV que reprodueix la font en una demostració de l'escena: "
+"una gravació seca"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Silent"
+msgstr "Silenci"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The source plays nothing in a demo of the scene"
+msgstr "La font no reprodueix res en una demostració de l'escena"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "A line runs along the source's left axis and a surface spans its left and up "
 "axes, both centred on its position: uncorrelated point sources share the "
@@ -3791,6 +4115,10 @@ msgid "Delay"
 msgstr "Retard"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Plays"
+msgstr "Reprodueix"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Remove source"
 msgstr "Eliminar font"
 
@@ -3842,6 +4170,10 @@ msgid "{tip}. Given per band in the scene file; this is their sum"
 msgstr "{tip}. Indicat per banda al fitxer d'escena; això és la suma"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "nothing (silent in a demo)"
+msgstr "res (en silenci en una demostració)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Width"
 msgstr "Amplada"
 
@@ -3866,6 +4198,14 @@ msgstr ""
 #, python-brace-format
 msgid "Directivity of {name}"
 msgstr "Directivitat de {name}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "What the source plays"
+msgstr "El que reprodueix la font"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "WAV files (*.wav);;All files (*)"
+msgstr "Fitxers WAV (*.wav);;Tots els fitxers (*)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "the equalizer takes numbers (dB), one per band"

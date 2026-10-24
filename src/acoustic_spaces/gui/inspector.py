@@ -148,6 +148,10 @@ DIRECTIVITY_TIP = N_(
     "the front only; or measured data (SOFA or CSV) or an array of sources from a file"
 )
 #: The tip of a source's sound power level.
+PLAYS_TIP = N_(
+    "The WAV file the source plays in a demo of the scene (Simulation > Run demo…, This "
+    "scene): a dry recording, mixed down to mono and played at the source's sound power"
+)
 LEVEL_TIP = N_(
     "The source's sound power level in all bands together (dB re 1 pW); Spectrum spreads "
     "it over the bands"
@@ -3010,6 +3014,21 @@ class PointPage(Page):
             )
         )
         self.delay.valueChanged.connect(lambda value: self._update(delay_ms=value))
+        self.signal = QLabel()
+        self.signal.setWordWrap(True)
+        self.signal.setToolTip(_(PLAYS_TIP))
+        self.choose_signal = QPushButton(_("Choose WAV…"))
+        self.choose_signal.setToolTip(
+            _("Pick the WAV file the source plays in a demo of the scene: a dry recording")
+        )
+        self.choose_signal.clicked.connect(self._choose_signal)
+        self.silent = QPushButton(_("Silent"))
+        self.silent.setToolTip(_("The source plays nothing in a demo of the scene"))
+        self.silent.clicked.connect(lambda: self._update(signal=None))
+        self.signal_buttons = QHBoxLayout()
+        self.signal_buttons.addWidget(self.choose_signal)
+        self.signal_buttons.addWidget(self.silent)
+        self.signal_buttons.addStretch(1)
         self.shape = QComboBox()
         _fill(self.shape, SHAPES)
         self.shape.setToolTip(
@@ -3058,6 +3077,9 @@ class PointPage(Page):
             form.addRow(_("Gain"), self.gain)
             form.addRow(_("Equalizer"), self.eq)
             form.addRow(_("Delay"), self.delay)
+            form.addRow(_("Plays"), self.signal)
+            self._form.labelForField(self.signal).setToolTip(_(PLAYS_TIP))
+            form.addRow("", self.signal_buttons)
         remove = QPushButton(_("Remove source") if source else _("Remove listener"))
         remove.setToolTip(
             _("Remove this source from the scene (Delete in the tree or a view)")
@@ -3144,6 +3166,12 @@ class PointPage(Page):
             self.gain.setValue(item.gain_db)
             self.eq.setText("" if item.eq_db is None else numbers_text(item.eq_db))
             self.delay.setValue(item.delay_ms)
+            self.signal.setText(
+                item.signal.name if item.signal is not None else _("nothing (silent in a demo)")
+            )
+            self.signal.setToolTip(
+                f"{_(PLAYS_TIP)}. {item.signal}" if item.signal is not None else _(PLAYS_TIP)
+            )
             shape = "line" if item.line_m else "surface" if item.surface_m else "point"
             _choose(self.shape, shape)
             if item.line_m is not None:
@@ -3252,6 +3280,16 @@ class PointPage(Page):
         )
         self.pattern_window.show()
         self.pattern_window.raise_()
+
+    def _choose_signal(self) -> None:
+        path, _filter = QFileDialog.getOpenFileName(
+            self,
+            _("What the source plays"),
+            str(self.document.base_dir),
+            _("WAV files (*.wav);;All files (*)"),
+        )
+        if path:
+            self._update(signal=path)
 
     def _shape(self, index: int) -> None:
         shape = SHAPES[index][0]
@@ -3807,8 +3845,12 @@ class OutputsPage(Page):
         head = QPushButton(_("Spherical head"))
         head.setToolTip(_("Use a spherical head model instead of an HRTF file"))
         head.clicked.connect(lambda: self._set_hrtf(None))
+        get = QPushButton(_("Download HRTFs…"))
+        get.setToolTip(_("Free HRTF sets to download, measured on dummy heads and on people"))
+        get.clicked.connect(self._download_hrtf)
         hrtf_buttons.addWidget(choose)
         hrtf_buttons.addWidget(head)
+        hrtf_buttons.addWidget(get)
         self.ambisonics = QCheckBox(_("Ambisonics (AmbiX)"))
         self.ambisonics.setToolTip(
             _(
@@ -3923,6 +3965,14 @@ class OutputsPage(Page):
         )
         if path:
             self._set_hrtf(path)
+
+    def _download_hrtf(self) -> None:
+        """Pick a free HRTF set, download it and use it (Download HRTFs…)."""
+        from acoustic_spaces.gui.hrtf_dialog import HrtfDialog
+
+        dialog = HrtfDialog(self)
+        if dialog.exec() and dialog.path is not None:
+            self._set_hrtf(str(dialog.path))
 
     def _set_hrtf(self, path: str | None) -> None:
         self._hrtf = path
