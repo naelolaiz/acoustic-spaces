@@ -334,14 +334,15 @@ def test_a_demo_takes_a_file_for_each_source(tmp_path: Path) -> None:
     assert demo.option("inputs").kind == "inputs" and demo.defaults().inputs is None
     args = demo.parser().parse_args(["render", "--input", "a=x.wav", "--input", " b = in/y.wav"])
     assert args.inputs == {"a": Path("x.wav"), "b": Path("in/y.wav")}
+    # Unresolved paths keep the system's separators; resolved relative paths use '/'.
     assert demo.command("render", args) == (
-        "python test_demo.py render --input a=x.wav --input b=in/y.wav"
+        f"python test_demo.py render --input a=x.wav --input b={Path('in/y.wav')}"
     )
     resolved = demo.resolved(args)
     assert resolved.inputs == {"a": tmp_path / "x.wav", "b": tmp_path / "in" / "y.wav"}
     assert demo.arguments(resolved, relative_to=tmp_path)[-2:] == [
         "--input",
-        "b=" + str(Path("in/y.wav")),
+        "b=in/y.wav",
     ]
     assert demo.arguments(resolved, names_only=True) == ["--input", "a=x.wav", "--input", "b=y.wav"]
     assert demo.check(args) == f"--input a: no {tmp_path / 'x.wav'}"
