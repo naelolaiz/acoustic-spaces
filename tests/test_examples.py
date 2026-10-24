@@ -859,20 +859,21 @@ def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [
-        *sorted(EXAMPLES.glob("*/*_demo.py")),
-        Path(__file__).resolve().parent.parent / "src/acoustic_spaces/demos/scene_demo.py",
-    ],
-    ids=lambda p: p.name,
+    [*sorted(EXAMPLES.glob("*/*_demo.py")), None],
+    ids=lambda p: "scene_demo.py" if p is None else p.name,
 )
-def test_a_demo_reads_only_options_it_has(path: Path) -> None:
+def test_a_demo_reads_only_options_it_has(path: Path | None) -> None:
     """Every ``args.NAME`` a demo reads is one of its options: one it does not declare
-    fails only when the step that reads it runs."""
+    fails only when the step that reads it runs. None: the demo of any scene, read from
+    the package as installed."""
     import ast
 
-    from acoustic_spaces.demos.scene_demo import DEMO as SCENE_DEMO
+    from acoustic_spaces.demos import scene_demo
 
-    demo = SCENE_DEMO if path.name == "scene_demo.py" else load(path)
+    if path is None:
+        demo, path = scene_demo.DEMO, Path(scene_demo.__file__)
+    else:
+        demo = load(path)
     have = set(vars(demo.defaults()))
     used = {
         node.attr

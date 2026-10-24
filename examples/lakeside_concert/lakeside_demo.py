@@ -56,7 +56,6 @@ from acoustic_spaces.demos import (
     sibling,
 )
 from acoustic_spaces.demos.audio import mono, read, write
-from acoustic_spaces.demos.pictures import save, settings_lines
 
 #: The songs the demo can play (``--song``): the files each one is made of (one here,
 #: a member of a zip archive read by HTTP range requests or a file of its own, as
@@ -340,6 +339,8 @@ def gains_of(seats: dict, tour) -> dict[str, float]:
 def video(args) -> None:
     """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
     scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    from acoustic_spaces.demos.pictures import save, settings_lines
+
     pictures = sibling(__file__, "lakeside_pictures")
     seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
     tour = tour_of(args)

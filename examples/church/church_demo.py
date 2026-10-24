@@ -76,7 +76,6 @@ from acoustic_spaces.demos import (
     sibling,
 )
 from acoustic_spaces.demos.audio import gated_rms, mono, read, resampled, write
-from acoustic_spaces.demos.pictures import save, settings_lines
 
 # --------------------------------------------------------------------------- sources
 
@@ -837,6 +836,8 @@ def what_plays(t: float) -> str:
 def video(args) -> None:
     """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
     scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    from acoustic_spaces.demos.pictures import save, settings_lines
+
     pictures = sibling(__file__, "church_pictures")
     seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
     tour = tour_of(args)

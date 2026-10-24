@@ -69,7 +69,6 @@ from acoustic_spaces.demos import (
     sibling,
 )
 from acoustic_spaces.demos.audio import envelope, mono, quiet_moment, read, write
-from acoustic_spaces.demos.pictures import save, settings_lines
 
 # --------------------------------------------------------------------------- sources
 
@@ -425,6 +424,8 @@ def video(args) -> None:
     """tour.wav (the walk, a breath of silence, the turn: one gain, the loudest peak at
     -1 dBFS), and tour.mp4: the gallery from above, the visitor walking and turning, and
     what they hear, with a scrolling spectrogram (ffmpeg); stills of its moments."""
+    from acoustic_spaces.demos.pictures import save, settings_lines
+
     pictures = sibling(__file__, "walk_pictures")
     label = label_of(args)
     parts = {}

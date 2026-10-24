@@ -60,7 +60,6 @@ from acoustic_spaces.demos import (
     sibling,
 )
 from acoustic_spaces.demos.audio import envelope, mmss, quiet_moment, read, write
-from acoustic_spaces.demos.pictures import save, settings_lines
 
 #: The movements the recording has: numeral and title, and the zip each comes in.
 MOVEMENTS = {
@@ -291,6 +290,8 @@ def facts_of(stop: dict) -> list[str]:
 def video(args) -> None:
     """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
     scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    from acoustic_spaces.demos.pictures import save, settings_lines
+
     pictures = sibling(__file__, "make_images")
     seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
     keys = [key_of(movement, seat) for movement, seat in stops_of(args)]

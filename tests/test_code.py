@@ -89,8 +89,11 @@ def _imports_that_are_not_there(path: Path) -> list[str]:
                 continue
             try:
                 importlib.import_module(f"{name}.{item}")
-            except ModuleNotFoundError:
-                problems.append(f"{path.name}:{node.lineno}: {name} has no {item}")
+            except ModuleNotFoundError as exc:
+                # A module that is there but needs an extra that is not installed is not
+                # a mistake of the code.
+                if exc.name and exc.name.split(".")[0] == "acoustic_spaces":
+                    problems.append(f"{path.name}:{node.lineno}: {name} has no {item}")
     return problems
 
 
@@ -117,6 +120,33 @@ def _what_code_uses_that_is_not_there(path: Path) -> list[str]:
                 found[item.targets[0].id] = _module_of(
                     path.parent / f"{item.value.args[1].value}.py"
                 )
+        return found
+
+    def imports_in(node) -> dict[str, object]:
+        """What the imports of the package inside ``node`` bind: the names a lazy import
+        brings in are checked as the module's own are."""
+        found: dict[str, object] = {}
+        for item in ast.walk(node):
+            if not (
+                isinstance(item, ast.ImportFrom)
+                and not item.level
+                and (item.module or "").split(".")[0] == "acoustic_spaces"
+            ):
+                continue
+            try:
+                source = importlib.import_module(item.module)
+            except ModuleNotFoundError:
+                continue  # an extra not installed; a missing module fails the import test
+            for alias in item.names:
+                if hasattr(source, alias.name):
+                    found[alias.asname or alias.name] = getattr(source, alias.name)
+                    continue
+                try:
+                    found[alias.asname or alias.name] = importlib.import_module(
+                        f"{item.module}.{alias.name}"
+                    )
+                except ModuleNotFoundError:
+                    continue
         return found
 
     def assigned_in(node) -> set[str]:
@@ -176,7 +206,7 @@ def _what_code_uses_that_is_not_there(path: Path) -> list[str]:
     for function in functions:
         if id(function) in inner:
             continue  # checked with the function round it
-        local = siblings_in(function)
+        local = {**imports_in(function), **siblings_in(function)}
         shadowed = assigned_in(function) - set(local)
         names = {k: v for k, v in top.items() if k not in shadowed} | local
         check(function, names)
