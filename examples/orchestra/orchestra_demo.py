@@ -16,7 +16,8 @@ the zips in it (or `--zips FOLDER`):
     python orchestra_demo.py video     # demo/tour.wav, the stills, demo/tour.mp4
 
 or `python orchestra_demo.py all`, which runs them in turn and leaves out what is there
-already (the tracks, the simulation). Everything goes to ./demo (--work). Use headphones;
+already (the tracks, the simulation). The simulation goes to ./results (--results); the
+tracks, the mixes and the video go to ./demo (--work). Use headphones;
 `--hrtf me.sofa` plays through your own or measured HRTFs instead of a spherical head
 (the simulation takes it too). The editor runs the same steps from Simulation > Run demo…
 
@@ -271,8 +272,8 @@ def facts_of(stop: dict) -> list[str]:
 
 
 def video(args) -> None:
-    """tour.wav, one still per stop of the tour, and tour.mp4 with a scrolling
-    spectrogram under the stills (ffmpeg)."""
+    """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
+    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
     pictures = sibling(__file__, "make_images")
     seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
     keys = [key_of(movement, seat) for movement, seat in stops_of(args)]
@@ -284,12 +285,18 @@ def video(args) -> None:
     write(args.work / "tour.wav", audio, seats["rate"])
     print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
     scene = yaml.safe_load(args.scene.read_text(encoding="utf-8"))
+    report = pipeline.read_json(args.results / pipeline.PARAMETERS)
 
     def frame(k: int):
         stop = tour[k]
         info = seats["seats"][stop.key]
         drawing = pictures.Pictures(
-            scene, info["seat"], info["movement"], facts=facts_of(info), hrtf=args.hrtf
+            scene,
+            info["seat"],
+            info["movement"],
+            facts=facts_of(info),
+            hrtf=args.hrtf,
+            tool=pictures.settings_lines(DEMO, args, scene, report),
         )
         img = drawing.cover()
         tour_bar(img, tour, k, seats, pictures)

@@ -130,6 +130,37 @@ def test_fetch_takes_single_members_out_of_archives(tmp_path: Path) -> None:
     assert fetch.fetch(wanted.as_uri(), tmp_path / "again.txt").exists()
 
 
+def test_a_remote_block_cut_short_every_time_fails(monkeypatch) -> None:
+    """A block of a remote archive that keeps arriving short is asked for again, and in
+    the end the read fails rather than hand on a member with a hole in it."""
+    asked: list[str] = []
+
+    class Response:
+        def __init__(self, headers: dict, body: bytes) -> None:
+            self.headers, self.body = headers, body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return self.body
+
+    def urlopen(url, headers=None, timeout=fetch.TIMEOUT):
+        asked.append(headers["Range"])
+        if headers["Range"] == "bytes=0-0":
+            return Response({"Content-Range": "bytes 0-0/100"}, b"x")
+        return Response({}, b"only part")
+
+    monkeypatch.setattr(fetch, "urlopen", urlopen)
+    remote = fetch.RangeFile("https://example.org/takes.zip")
+    with pytest.raises(OSError, match="came 9 long, 5 times"):
+        remote.read(10)
+    assert asked.count("bytes=0-99") == fetch.RETRIES
+
+
 def test_music_fetches_tracks_once_and_sums_them(tmp_path: Path) -> None:
     """A track is the sum of its files, fetched once: a second run writes nothing, and
     the files it downloaded stay for it."""
@@ -525,3 +556,253 @@ def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
     )
     assert times == [0.5]
     assert [p.name for p in (tmp_path / "walk" / "stills").glob("*.png")] == ["00_setting-off.png"]
+
+
+# --------------------------------------------------------------------------- any scene
+
+SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox"
+
+
+def _any_scene(tmp_path: Path, **outputs) -> Path:
+    """The shoebox, small and quick to simulate, with three sources: the talker plays a
+    loud stereo recording at 22.05 kHz, the radio a quiet mono one at 8 kHz, the fan
+    nothing; and two listeners."""
+    import shutil
+
+    import yaml
+
+    folder = tmp_path / "room"
+    shutil.copytree(SHOEBOX, folder)
+    data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
+    data["simulation"] = {
+        "early": {"method": "ray_tracing", "max_order": 1, "rays": 500},
+        "late": {"method": "stochastic_ray_tracing", "rays": 500},
+        "ir_length_s": 0.3,
+        "sample_rate": 16_000,
+    }
+    data["outputs"] = outputs.get("outputs", ["binaural"])
+    data["sources"][0]["signal"] = "sounds/talk.wav"
+    data["sources"] += [
+        {"name": "radio", "position": [3.0, 2.0, 1.0], "level_db": 74.0, "signal": "radio.wav"},
+        {"name": "fan", "position": [7.0, 5.0, 2.5]},
+    ]
+    data["listeners"].append(
+        {"name": "seat-b", "position": [4.0, 1.5, 1.2], "orientation": {"yaw": 90}}
+    )
+    (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    talk = _tone(2.0, 300.0, 22_050, 0.5)
+    audio.write(folder / "sounds" / "talk.wav", np.stack([talk, 0.5 * talk], axis=1), 22_050)
+    audio.write(folder / "radio.wav", _tone(2.0, 600.0, RATE, 0.02), RATE)
+    return folder / "scene.yaml"
+
+
+def test_a_demo_of_any_scene_needs_a_source_that_plays(tmp_path: Path) -> None:
+    """The demo of any scene says what is missing: the scene, a source that plays, the
+    file a source plays."""
+    from acoustic_spaces.demos.scene_demo import DEMO
+
+    scene = _any_scene(tmp_path)
+    demo = DEMO.at(scene.parent)
+    args = demo.defaults()
+    assert demo.check(args) == "give the scene to demo (--scene)"
+    args.scene = Path("other.yaml")
+    assert demo.check(args) == f"no {scene.parent / 'other.yaml'}"
+    args.scene = Path("scene.yaml")
+    assert demo.check(args) is None
+    (scene.parent / "radio.wav").unlink()
+    assert (
+        demo.check(args)
+        == f"radio plays {(scene.parent / 'radio.wav').resolve()}, which is not there"
+    )
+    text = scene.read_text(encoding="utf-8")
+    text = text.replace("signal: sounds/talk.wav", "").replace("signal: radio.wav", "")
+    scene.write_text(text, encoding="utf-8")
+    assert demo.check(args).startswith("no source plays anything")
+    # Where it writes, and how a terminal runs it: names relative to where it runs.
+    assert demo.work_folder(args) == scene.parent / "demo"
+    args.hrtf = Path("ears.sofa")
+    assert demo.command("feeds", args) == "acoustic-spaces demo scene.yaml feeds --hrtf ears.sofa"
+    argv = demo.run_argv("feeds", args)
+    assert argv[1:4] == ["-m", "acoustic_spaces.demos.scene_demo", "feeds"]
+    assert argv[4:] == ["--scene", str(scene), "--hrtf", str(scene.parent / "ears.sofa")]
+
+
+def test_a_demo_of_any_scene_takes_the_scene_hrtfs(tmp_path: Path) -> None:
+    """A scene whose binaural output names a SOFA file is heard through it unless
+    ``--hrtf`` says otherwise; other formats take none."""
+    from acoustic_spaces.demos.scene_demo import DEMO
+
+    scene = _any_scene(tmp_path, outputs=["mono", {"format": "binaural", "hrtf": "ears.sofa"}])
+    demo = DEMO.at(scene.parent)
+    args = demo.defaults()
+    args.scene = Path("scene.yaml")
+    assert demo.resolved(args).hrtf == (scene.parent / "ears.sofa").resolve()
+    args.hrtf = Path("mine.sofa")
+    assert demo.resolved(args).hrtf == scene.parent / "mine.sofa"
+    args.hrtf, args.format = None, "ambix1"
+    assert demo.resolved(args).hrtf is None
+
+
+def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, capsys) -> None:
+    """``acoustic-spaces demo``: each source that plays gets a feed at one gated RMS and
+    the scene's rate, the silent ones are listed, every listener gets a mix and the
+    video a still for each, with what was heard there and the settings of the run."""
+    pytest.importorskip("PIL")
+    from acoustic_spaces.cli import main as cli
+    from acoustic_spaces.demos import pictures
+    from acoustic_spaces.demos.scene_demo import DEMO, FEED_RMS
+
+    scene = _any_scene(tmp_path)
+    monkeypatch.chdir(scene.parent)
+    assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
+    work = scene.parent / "demo"
+    table = pipeline.read_json(work / "feeds" / "feeds.json")
+    assert table["rate"] == 16_000 and list(table["sources"]) == ["talker", "radio"]
+    assert table["silent"] == ["fan"]
+    for name in ("talker", "radio"):
+        x, rate = audio.read(work / "feeds" / f"{name}.wav")
+        assert rate == 16_000 and x.reshape(len(x), -1).shape[1] == 1
+        assert audio.gated_rms(x, rate) == pytest.approx(FEED_RMS, rel=0.02)
+    seats = pipeline.read_json(work / "seats" / "seats.json")
+    assert set(seats["seats"]) == {"seat-a", "seat-b"}
+    stills = sorted(p.name for p in (work / "stills").glob("*.png"))
+    assert stills == ["00_seat-a.png", "01_seat-b.png"]
+    assert (work / "thumbnail.png").exists() and (work / "tour.wav").exists()
+    # Again: what is there is left out, and a step on its own runs.
+    capsys.readouterr()
+    assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
+    out = capsys.readouterr().out
+    assert "feeds: done already" in out and "simulate: done already" in out
+    assert "there already" in out  # the mixes, newer than their feeds and responses
+    # The stills say how the sound was made and how to make it again.
+    args = DEMO.at(scene.parent).defaults()
+    args.scene, args.seconds, args.no_mp4 = Path("scene.yaml"), 0.8, True
+    args = DEMO.at(scene.parent).resolved(args)
+    report = pipeline.read_json(work / "results" / pipeline.PARAMETERS)
+    from acoustic_spaces.demos import scene_pictures
+    from acoustic_spaces.scene import Scene
+
+    # What each still says: the level of the sources that play, all of them or none
+    # (a response too short for a level gives None), and T30 at mid frequencies, the
+    # mean of the 500 Hz and 1 kHz bands when both are there.
+    levels = {("talker", "seat-a"): None, ("radio", "seat-a"): 70.0, ("fan", "seat-b"): None}
+    t30 = {("talker", "seat-b"): [1.0, 2.0], ("radio", "seat-b"): [1.0, None]}
+    made = {
+        "bands_hz": [500, 1000],
+        "responses": [
+            {
+                "source": s,
+                "listener": lis,
+                "spl_a_db": levels.get((s, lis), 70.0),
+                "parameters": {"t30": t30.get((s, lis), [None, None])},
+            }
+            for s in ("talker", "radio", "fan")
+            for lis in ("seat-a", "seat-b")
+        ],
+    }
+    stops = [
+        pipeline.TourStop("seat-a", 0.0, 0.0, 0.8),
+        pipeline.TourStop("seat-b", 0.8, 0.8, 1.6, gain_db=6.0),
+    ]
+    drawing = scene_pictures.Pictures(
+        Scene.from_yaml(scene).to_data(),
+        np.zeros((0, 2, 2)),
+        made,
+        seats["seats"],
+        stops,
+        playing=["talker", "radio"],
+    )
+    assert drawing.title("seat-b") == ("seat-b", "Listener 2 of 2")
+    assert drawing.level_at("seat-a") is None
+    seat_b = drawing.lines(1)
+    assert seat_b[0] == "73 dB(A) here, as simulated"
+    assert "Reverberation time T30 1.5 s (mean of 500 Hz and 1 kHz)" in seat_b
+    assert "Turned up 6 dB here so you can hear it" in seat_b
+    assert not any("dB(A)" in str(line) for line in drawing.lines(0))
+    first, run = pictures.settings_lines(DEMO.at(scene.parent), args, {}, report)
+    assert first.startswith("Simulated: early reflections traced to order 1 with 500 rays")
+    assert "stochastic ray tracing for the late sound, 500 rays per band" in first
+    assert run.startswith("acoustic-spaces ") and run.endswith(
+        " at 16 kHz, mixed binaural through a spherical head model. "
+        "Run as: acoustic-spaces demo scene.yaml all --seconds 0.8 --no-mp4"
+    )
+    # A scene changed since is fed and simulated again.
+    later = (work / "feeds" / "feeds.json").stat().st_mtime + 10
+    os.utime(scene, (later, later))
+    from acoustic_spaces.demos.scene_demo import feeds_done
+
+    assert not feeds_done(args)
+    assert not pipeline.simulated(pipeline.Simulation(scene, work / "results", "binaural"), args)
+    # A missing scene is the command line's error.
+    assert cli(["demo", "nothing.yaml"]) == 2
+    assert "no " in capsys.readouterr().err
+
+
+def test_a_demo_scene_written_elsewhere_still_finds_its_files(tmp_path: Path) -> None:
+    """A demo run in another folder than its example (the editor's copy under the home
+    folder) writes scenes whose files are found from there: relative under the new
+    folder, in full elsewhere; absolute ones and the example's own folder unchanged."""
+    import yaml
+
+    example = tmp_path / "example"
+    data = {
+        "geometry": {"file": "model.obj"},
+        "outputs": [{"format": "binaural", "hrtf": "/data/ears.sofa"}],
+        "sources": [{"name": "a", "signal": "work/talk.wav"}],
+    }
+    pipeline.write_scene(example / "scene.yaml", data, "# a header\n", example)
+    assert yaml.safe_load((example / "scene.yaml").read_text(encoding="utf-8")) == data
+    pipeline.write_scene(example / "work" / "scene.yaml", data, "", example)
+    moved = yaml.safe_load((example / "work" / "scene.yaml").read_text(encoding="utf-8"))
+    assert moved["geometry"]["file"] == (example / "model.obj").resolve().as_posix()
+    assert moved["sources"][0]["signal"] == "talk.wav"
+    assert moved["outputs"][0]["hrtf"] == "/data/ears.sofa"
+    assert (example / "scene.yaml").read_text(encoding="utf-8").startswith("# a header\n")
+
+
+def test_the_stills_say_how_the_sound_was_made(tmp_path: Path) -> None:
+    """The lines under every still state the simulation as it ran, the engine's defaults
+    for what a scene leaves out, the wave solver and, outdoors in wind, what the weather
+    bent; a line too long for the still is set smaller to fit."""
+    pytest.importorskip("PIL")
+    import yaml
+    from PIL import ImageDraw
+
+    from acoustic_spaces.demos import pictures
+
+    demo, _ran = _demo(tmp_path)
+    args = demo.resolved(demo.defaults())
+    # A scene that names nothing gets the engine's defaults, not guesses.
+    first, mixed = pictures.settings_lines(demo, args, {"simulation": {}})
+    assert "early reflections traced to order 3 with 20,000 rays" in first
+    assert "the direct sound and first reflections diffracted round edges" in first
+    assert "50,000 rays per band" in first
+    assert mixed.endswith(
+        " at 48 kHz, mixed binaural through a spherical head model. "
+        "Run as: python test_demo.py all (every option at its default)"
+    )
+    simulation = {
+        "early": {"method": "image_sources", "max_order": 2, "diffraction": "none"},
+        "late": {"method": "statistical"},
+        "wave": {"enabled": True, "max_band_hz": 250},
+    }
+    first, _mixed = pictures.settings_lines(demo, args, {"simulation": simulation})
+    assert first.endswith(
+        "image sources to order 2; a statistical late sound; the bands up to 250 Hz from "
+        "the wave solver"
+    )
+    # Outdoors in wind: the paths, the late rays and the parabolic equation.
+    lake = SHOEBOX.parent / "lakeside_concert" / "scene.yaml"
+    scene = yaml.safe_load(lake.read_text(encoding="utf-8"))
+    first, _mixed = pictures.settings_lines(demo, args, scene)
+    assert "paths and late rays bent by the wind and temperature" in first
+    assert "up to 500 Hz (2 kHz in shadows) by the narrow-angle parabolic equation" in first
+    scene["atmosphere"] = None
+    assert "bent" not in pictures.settings_lines(demo, args, scene)[0]
+    # Every line fits the still, made smaller when it is long.
+    draw = ImageDraw.Draw(pictures.canvas())
+    room = pictures.SIZE[0] - 2 * pictures.MARGIN
+    line, f = pictures.fitted(draw, "word " * 40, 18, room)
+    assert line == "word " * 40 and f.size < 18 and draw.textlength(line, font=f) <= room
+    line, f = pictures.fitted(draw, "word " * 400, 18, room)
+    assert line.endswith("…") and f.size == pictures.FOOTER_MIN

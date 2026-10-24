@@ -17,9 +17,9 @@ from acoustic_spaces.demos.pictures import (
     LISTENER,
     MARGIN,
     MUTED,
-    PA,
     PANEL,
     SIZE,
+    SOURCE,
     TEXT,
     THUMBNAIL,
     arrow,
@@ -46,7 +46,7 @@ FLOOR = (34, 38, 52)
 PEWS = (52, 46, 40)
 WALL = (120, 128, 150)
 ALTAR = (190, 160, 110)
-ORGAN = PA
+ORGAN = SOURCE
 WOMEN = (186, 236, 120)
 MEN = (110, 190, 90)
 
@@ -123,6 +123,7 @@ class Pictures:
         playing,
         voices,
         hrtf: str | Path | None = None,
+        tool=None,
     ):
         self.scene, self.seats, self.tour, self.titles = scene, seats, tour, titles
         self.what_plays, self.playing, self.voices = what_plays, playing, voices
@@ -140,7 +141,7 @@ class Pictures:
             (e["source"], e["listener"]): sum(e["parameters"]["c80"][k] for k in mid) / len(mid)
             for e in report["responses"]
         }
-        self.tool = tool_line("church", scene, hrtf=hrtf)
+        self.tool = tool or tool_line("church", scene, hrtf=hrtf)
 
     def title(self, listener: str) -> tuple[str, str]:
         return self.titles.get(listener, (listener.replace("_", " ").capitalize(), ""))

@@ -2,12 +2,12 @@
 
 The impulse responses ``simulate`` writes are per unit of sound power; ``auralize`` mixes
 each listener from them and the feeds. :func:`render_mixes` does that for every stop
-with one gain for all (the loudest peak at -1 dBFS), measures each mix (its level in
-dB(A), its loudness as meters weigh it, when the sound arrives) and writes
+with one gain for all (the loudest peak at -1 dBFS), measures each mix (its gated level
+in dB(A), its gated K-weighted loudness, when the sound arrives) and writes
 ``seats.json``. :func:`tour_audio` cuts the mixes into one piece on the tour's times, each
 shifted earlier by its arrival so the music runs on across a cut, with equal-power
-crossfades; :func:`video` writes the stills, the thumbnail and, through ffmpeg, the MP4
-with a scrolling spectrogram under them.
+crossfades; :func:`video` writes the stills and, through ffmpeg, the MP4 with a scrolling
+spectrogram over the bottom of them (the demos draw their thumbnails themselves).
 
 With ``--hrtf``, the mixes ask for the responses simulated through that file
 (``binaural-<its name>``) and refuse ones made through the spherical head, so that a mix
@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
+import yaml
 
 from acoustic_spaces.demos import audio, shell_line
 
@@ -55,6 +56,47 @@ def write_json(path: Path, data: dict) -> None:
 
 
 # --------------------------------------------------------------------------- simulation
+
+
+#: The keys of a scene file whose values name files, relative to the scene's folder.
+FILE_KEYS = ("file", "hrtf", "signal")
+
+
+def write_scene(path: Path, data: dict, header: str, source_dir: Path) -> None:
+    """``data`` as a scene file at ``path`` under the comment ``header``, the files it
+    names relative to ``source_dir`` (the folder of the scene it was made from) named so
+    that they are found from ``path``'s folder too: relative when they lie under it,
+    else in full. A demo run elsewhere than its example (the editor's copy under the
+    home folder) writes scenes that still find the example's model and data."""
+    path = Path(path)
+    dest = path.resolve().parent
+    source_dir = Path(source_dir).resolve()
+
+    def moved(value: str) -> str:
+        name = Path(value)
+        if name.is_absolute() or dest == source_dir:
+            return value
+        full = (source_dir / name).resolve()
+        try:
+            return full.relative_to(dest).as_posix()
+        except ValueError:
+            return full.as_posix()
+
+    def fix(node):
+        if isinstance(node, dict):
+            return {
+                k: moved(v) if k in FILE_KEYS and isinstance(v, str) else fix(v)
+                for k, v in node.items()
+            }
+        if isinstance(node, list):
+            return [fix(v) for v in node]
+        return node
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        header + yaml.safe_dump(fix(data), sort_keys=False, default_flow_style=None, width=100),
+        encoding="utf-8",
+    )
 
 
 def hrtf_label(fmt: str, hrtf: str | Path | None) -> str:
@@ -97,9 +139,13 @@ def labels_of(entries: list[dict]) -> set[str]:
 
 
 def simulated(simulation: Simulation, args: argparse.Namespace) -> bool:
-    """Whether the simulation's results are there, through ``--hrtf`` when given."""
+    """Whether the simulation's results are there, through ``--hrtf`` when given, and
+    newer than the scene (a scene changed since is simulated again)."""
     path = simulation.results / PARAMETERS
     if not path.exists():
+        return False
+    scene = Path(simulation.scene)
+    if scene.exists() and scene.stat().st_mtime > path.stat().st_mtime:
         return False
     label = output_label(args)
     fmt = getattr(args, "format", "binaural")
@@ -344,7 +390,7 @@ def tour_audio(
         if after:
             w[b - half : b + half] = ramp[::-1]
         out += x * w[:, None]
-    fade = int(fade_out_s * rate)
+    fade = min(int(fade_out_s * rate), length)
     if fade:
         out[-fade:] *= np.linspace(1.0, 0.0, fade)[:, None] ** 2
     peak = float(np.abs(out).max())
@@ -354,10 +400,10 @@ def tour_audio(
 
 
 def gains_of(seats: dict, keys: Sequence[str]) -> dict[str, float]:
-    """The gain (dB) each mix of a tour plays at: up to the loudness of the loudest one.
-    Loudness as meters weigh it (K), not the A weighting of the levels: the bass, which
-    the A weighting all but leaves out, is heard, and far places and the back of a stage
-    keep little else."""
+    """The gain (dB) each mix of a tour plays at: up to the loudness of the loudest one,
+    K-weighted (``loudness_db``), not A-weighted as the levels are: the bass, which the A
+    weighting all but leaves out, is heard, and far places and the back of a stage keep
+    little else. Mixes measured before ``loudness_db`` was kept fall back on ``rms_db``."""
     levels = {}
     for key in keys:
         seat = seats["seats"][key]
@@ -523,4 +569,5 @@ __all__ = [
     "tour_audio",
     "video",
     "write_json",
+    "write_scene",
 ]

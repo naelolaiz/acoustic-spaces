@@ -694,7 +694,8 @@ def _cmd_hrtf(args: argparse.Namespace) -> int:
             again=args.again,
         )
     except (OSError, ValueError, KeyError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        message = exc.args[0] if isinstance(exc, KeyError) else exc  # no quotes round it
+        print(f"error: {message}", file=sys.stderr)
         return 1
     print(f"{path}")
     return 0
@@ -1946,6 +1947,28 @@ def _cmd_auralize(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_demo(args: argparse.Namespace) -> int:
+    """A demo of any scene (:mod:`acoustic_spaces.demos.scene_demo`): its steps, run
+    here, relative paths counted from the current folder."""
+    from acoustic_spaces.demos.scene_demo import DEMO
+
+    demo = DEMO.at(Path.cwd())
+    values = argparse.Namespace(**{o.name: getattr(args, o.name, o.default) for o in demo.options})
+    problem = demo.check(values)
+    if problem:
+        print(f"error: {problem}", file=sys.stderr)
+        return 2
+    names = [s.name for s in demo.steps] if args.step == "all" else [args.step]
+    try:
+        demo.run(names, values, skip_done=args.step == "all")
+    except SystemExit as exc:  # a step that stops says why
+        if isinstance(exc.code, str):
+            print(exc.code, file=sys.stderr)
+            return 1
+        return int(exc.code or 0)
+    return 0
+
+
 def _cmd_walkthrough(args: argparse.Namespace) -> int:
     from acoustic_spaces.spatial import from_output
     from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
@@ -2738,6 +2761,33 @@ def build_parser() -> argparse.ArgumentParser:
     auralize.add_argument("--normalize", action="store_true", help="scale to a -1 dBFS peak")
     auralize.add_argument("--equal-power", action="store_true", help=EQUAL_POWER_HELP)
     auralize.set_defaults(func=_cmd_auralize)
+
+    from acoustic_spaces.demos.scene_demo import DEMO as SCENE_DEMO
+
+    demo = sub.add_parser(
+        "demo",
+        help="play each source's signal through a scene and make a video of every listener",
+        description=(
+            "Each source plays the WAV file its signal names, at its sound power; every "
+            "listener in use is mixed with one gain for all, and a video tours them with "
+            "stills of the scene and of how the sound was made. Everything goes to demo/ "
+            "beside the scene (--work). Needs ffmpeg for the video and Pillow (the viz extra) "
+            "for the stills."
+        ),
+    )
+    demo.add_argument("scene", help="the scene file; its sources' signal fields say what they play")
+    demo.add_argument(
+        "step",
+        nargs="?",
+        default="all",
+        choices=[s.name for s in SCENE_DEMO.steps] + ["all"],
+        help="; ".join(f"{s.name}: {s.help}" for s in SCENE_DEMO.steps)
+        + "; all (default): every step, leaving out what is done already",
+    )
+    for option in SCENE_DEMO.options:
+        if option.name != "scene":
+            option.add_to(demo)
+    demo.set_defaults(func=_cmd_demo)
 
     walkthrough = sub.add_parser(
         "walkthrough",

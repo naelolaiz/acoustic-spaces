@@ -1,7 +1,7 @@
 """What the demos' stills share: the colours, the fonts, the parts of a still (the heading,
-the headphones badge, the facts, the tour, the credit line) and the marks for listeners
-and loudspeakers. Needs Pillow (which the viz extra brings); Inter is used when
-installed, else DejaVu Sans.
+the headphones badge, the facts, the tour, the credit line and the lines that say how
+the sound was made) and the marks for listeners and loudspeakers. Needs Pillow (which
+the viz extra brings); Inter is used when installed, else DejaVu Sans.
 
 Each demo draws its own scene (a stadium from above, a church in plan and section, a
 lake with its bent rays, a concert hall) with its own module next to its script; the
@@ -16,6 +16,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from acoustic_spaces._version import __version__
 from acoustic_spaces.demos.audio import mmss
 from acoustic_spaces.demos.pipeline import SPECTRUM_BOX
 
@@ -25,9 +26,11 @@ LINE = (58, 68, 92)
 TEXT = (232, 236, 244)
 MUTED = (148, 158, 182)
 FAINT = (96, 106, 132)
-#: The listener of the moment, and loudspeakers (the sound system).
+#: The listener of the moment.
 LISTENER = (102, 217, 239)
-PA = (255, 166, 77)
+#: What makes the sound: the loudspeakers of a sound system, the organ, the guide, a
+#: scene's sources that play.
+SOURCE = (255, 166, 77)
 
 #: A still and a thumbnail (as YouTube wants it).
 SIZE = (1920, 1080)
@@ -346,13 +349,39 @@ def tour_column(
         y += row
 
 
-def footer(draw, credit: str, tool: str, size: int = 19) -> None:
-    """The spectrogram's panel (the video draws over it) and the credit and tool lines;
-    the credit in ``size`` pixels, smaller for a long one."""
+#: The smallest size a footer line is set in to fit the width; a line that does not fit
+#: even so is cut with an ellipsis.
+FOOTER_MIN = 13
+
+
+def fitted(draw, line: str, size: int, width: float) -> tuple[str, ImageFont.FreeTypeFont]:
+    """``line`` in the largest size from ``size`` down to :data:`FOOTER_MIN` that fits
+    ``width`` pixels, cut with an ellipsis if none does."""
+    for s in range(size, FOOTER_MIN - 1, -1):
+        f = font("Regular", s)
+        if draw.textlength(line, font=f) <= width:
+            return line, f
+    while line and draw.textlength(line + "…", font=f) > width:
+        line = line[:-1]
+    return line.rstrip() + "…", f
+
+
+def footer(draw, credit: str, tool: str | Sequence[str], size: int = 19) -> None:
+    """The spectrogram's panel (the video draws over it), the credit line and under it
+    up to two lines that say how the sound was made (:func:`settings_lines`, or one
+    line such as :func:`tool_line`'s). The credit is set in ``size`` pixels, the others
+    in 18; each is made smaller, down to :data:`FOOTER_MIN`, to fit the still's width."""
     left, top, width, height = SPECTRUM_BOX
     draw.rounded_rectangle([left - 20, top - 7, left + width + 20, top + height + 7], 14, PANEL)
-    text(draw, (MARGIN, 1016), credit, font("Regular", size), MUTED)
-    text(draw, (MARGIN, 1046), tool, font("Regular", 17), FAINT)
+    lines = [tool] if isinstance(tool, str) else list(tool)
+    if len(lines) > 2:
+        raise ValueError("the footer has room for two lines about the sound")
+    room = SIZE[0] - 2 * MARGIN
+    line, f = fitted(draw, credit, size, room)
+    text(draw, (MARGIN, 1002), line, f, MUTED)
+    for k, line in enumerate(lines):
+        line, f = fitted(draw, line, 18, room)
+        text(draw, (MARGIN, 1028 + 24 * k), line, f, MUTED)
 
 
 def thumbnail_badge(draw, x: float, y: float, label: str = "BINAURAL", size: int = 34) -> None:
@@ -366,42 +395,125 @@ def thumbnail_badge(draw, x: float, y: float, label: str = "BINAURAL", size: int
     text(draw, (x + pad, y + height / 2), label, pill, BG, "lm")
 
 
-def tool_line(
-    example: str,
-    scene: dict,
-    late: str = "stochastic ray tracing for the late sound",
-    hrtf: str | Path | None = None,
-) -> str:
-    """How the sound was made, for the stills' last line: the example, the early
-    reflections (traced or image sources, their order, diffraction), the late method and
-    what the binaural mixes went through."""
-    early = scene.get("simulation", {}).get("early", {})
-    order = early.get("max_order", 3)
-    if early.get("method", "ray_tracing") == "image_sources":
-        first = f"image sources to order {order}"
+#: What each kind of diffraction (``simulation.early.diffraction``) bends round edges.
+DIFFRACTION = {
+    "none": "",
+    "direct": ", the direct sound diffracted round edges",
+    "first_order": ", the direct sound and first reflections diffracted round edges",
+    "second_order": (
+        ", the direct sound (over up to two edges) and first reflections diffracted round edges"
+    ),
+}
+
+
+def _settings(simulation: dict):
+    """A scene's ``simulation`` (or a run's settings) as the engine takes it, with the
+    defaults of what it leaves out."""
+    from acoustic_spaces.scene.model import Simulation
+
+    return Simulation.model_validate(simulation or {})
+
+
+def _early_text(early) -> str:
+    """The early reflections as the simulation runs them (``simulation.early``): traced,
+    with their rays, or image sources, to which order, and what diffracts."""
+    if early.method == "image_sources":
+        first = f"image sources to order {early.max_order}"
     else:
-        first = f"early reflections traced to order {order}"
-    if early.get("diffraction") in ("first_order", "second_order"):
-        first += " with diffraction round edges"
-    ears = f"the HRTFs of {Path(hrtf).name}" if hrtf else "a spherical head"
+        first = f"early reflections traced to order {early.max_order} with {early.rays:,} rays"
+    return first + DIFFRACTION[early.diffraction]
+
+
+def _late_text(late) -> str:
+    """The late sound as the simulation makes it (``simulation.late``)."""
+    if late.method == "statistical":
+        return "a statistical late sound"
+    return f"stochastic ray tracing for the late sound, {late.rays:,} rays per band"
+
+
+def _more_text(scene: dict, settings) -> str:
+    """What else made the sound: the wave solver's bands, and outdoors in wind or a
+    temperature gradient what the weather bent (the paths, the late rays, the parabolic
+    equation over the open ground in the low bands); empty for none."""
+    from acoustic_spaces.engine.refracted import SHADOW_WAVE_MAX_BAND_HZ, WAVE_MAX_BAND_HZ
+    from acoustic_spaces.scene.model import Atmosphere
+
+    more = ""
+    if settings.wave.enabled:
+        more += f"; the bands up to {settings.wave.max_band_hz} Hz from the wave solver"
+    outdoors = bool((scene.get("geometry") or {}).get("ground"))
+    atmosphere = scene.get("atmosphere")
+    if outdoors and atmosphere and not Atmosphere.model_validate(atmosphere).still:
+        angle = settings.early.parabolic_equation.replace("_", "-")
+        more += (
+            "; paths and late rays bent by the wind and temperature; the open ground in the "
+            f"bands up to {WAVE_MAX_BAND_HZ:g} Hz ({SHADOW_WAVE_MAX_BAND_HZ / 1000:g} kHz in "
+            f"shadows) by the {angle} parabolic equation"
+        )
+    return more
+
+
+def ears_text(fmt: str, hrtf: str | Path | None) -> str:
+    """What the mixes went through: ``binaural through the HRTFs of me.sofa``, ``binaural
+    through a spherical head model``, or another format: ``as ambix3``."""
+    if fmt != "binaural":
+        return f"as {fmt}"
+    ears = f"the HRTFs of {Path(hrtf).name}" if hrtf else "a spherical head model"
+    return f"binaural through {ears}"
+
+
+def tool_line(example: str, scene: dict, hrtf: str | Path | None = None) -> str:
+    """How the sound was made, in one line, as the scene asks for it: the example, the
+    early reflections, the late sound, what the wave solver and the weather did, and
+    what the binaural mixes went through. :func:`settings_lines` says more, from a
+    run's own settings."""
+    settings = _settings(scene.get("simulation", {}))
     return (
-        f"Simulated with acoustic_spaces ({example} example): {first}, {late}, "
-        f"binaural through {ears}"
+        f"Simulated with acoustic-spaces ({example} example): {_early_text(settings.early)}; "
+        f"{_late_text(settings.late)}{_more_text(scene, settings)}; "
+        f"{ears_text('binaural', hrtf)}"
     )
+
+
+def settings_lines(demo, args, scene: dict, report: dict | None = None) -> list[str]:
+    """How the sound was made, for :func:`footer`, in two lines. First the early
+    reflections, the late sound, the wave solver's bands and what the weather bent
+    outdoors, as the simulation ran them (``report`` is the results' parameters.json;
+    without it, as the scene asks, with the engine's defaults for what it leaves out).
+    Then the tool, its version and the sample rate, what the mixes went through, and
+    the command with the options the run was given, paths by their names, so that a
+    video says which HRTFs and which song it came from."""
+    settings = _settings((report or {}).get("settings") or scene.get("simulation", {}))
+    rate = (report or {}).get("sample_rate") or settings.sample_rate
+    fmt = getattr(args, "format", None) or "binaural"
+    first = (
+        f"Simulated: {_early_text(settings.early)}; {_late_text(settings.late)}"
+        f"{_more_text(scene, settings)}"
+    )
+    run = demo.command("all", args, names_only=True)
+    if not demo.arguments(args, names_only=True):
+        run += " (every option at its default)"
+    second = (
+        f"acoustic-spaces {__version__} at {rate / 1000:g} kHz, mixed "
+        f"{ears_text(fmt, getattr(args, 'hrtf', None))}. Run as: {run}"
+    )
+    return [first, second]
 
 
 __all__ = [
     "BADGE",
     "BG",
+    "DIFFRACTION",
     "FAINT",
+    "FOOTER_MIN",
     "LINE",
     "LISTENER",
     "MARGIN",
     "MUTED",
-    "PA",
     "PANEL",
     "RIGHT",
     "SIZE",
+    "SOURCE",
     "SPECTRUM_BOX",
     "TEXT",
     "THUMBNAIL",
@@ -411,8 +523,10 @@ __all__ = [
     "badge",
     "canvas",
     "cone",
+    "ears_text",
     "facing",
     "facts",
+    "fitted",
     "font",
     "footer",
     "glow",
@@ -424,6 +538,7 @@ __all__ = [
     "ring",
     "save",
     "scale_bar",
+    "settings_lines",
     "text",
     "thumbnail_badge",
     "tool_line",

@@ -23,7 +23,7 @@ from typing import Any, TypeVar
 import numpy as np
 
 from acoustic_spaces import fetch
-from acoustic_spaces.demos.audio import decoded, resampled, stereo, write
+from acoustic_spaces.demos.audio import decoded, mono, resampled, stereo, write
 
 #: Bars in a phrase: the tours move on every eighth bar.
 PHRASE_BARS = 8
@@ -92,7 +92,9 @@ def write_tracks(
     channels: int | None = None,
 ) -> dict[str, Path]:
     """Each track of ``tracks`` (name to its files) as ``folder/<name>.wav``, at ``rate``
-    and in ``channels`` channels when given; tracks already there are kept."""
+    and in ``channels`` channels (1 or 2) when given; tracks already there are kept."""
+    if channels not in (None, 1, 2):
+        raise ValueError(f"channels: 1 or 2, not {channels}")
     folder.mkdir(parents=True, exist_ok=True)
     paths = {name: folder / f"{name}.wav" for name in tracks}
     with Archives() as archives:
@@ -102,7 +104,9 @@ def write_tracks(
             x, got = summed(files, folder, archives)
             if rate is not None:
                 x, got = resampled(x, got, rate), rate
-            if channels == 2:
+            if channels == 1:
+                x = mono(x)
+            elif channels == 2:
                 x = stereo(x)
             write(paths[name], x, got)
             print(f"wrote {paths[name]} from {len(files)} file(s)")

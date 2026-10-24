@@ -62,7 +62,7 @@ from acoustic_spaces.gui.numbers import fmt, number, point_text
 from acoustic_spaces.gui.tips import label_for, share_tips
 from acoustic_spaces.gui.viewport import SELECTED_COLOUR, material_colour, surface_materials
 from acoustic_spaces.i18n import N_, _
-from acoustic_spaces.room import Room
+from acoustic_spaces.room import Room, outline_edges
 from acoustic_spaces.viz import (
     BACKGROUND,
     EDGE_COLOUR,
@@ -200,27 +200,8 @@ def wall_labels(room: Room) -> list[int]:
     return [index.get(f"wall_{k + 1}", -1) for k in range(len(corners))]
 
 
-def outline_segments(room: Room) -> tuple[np.ndarray, np.ndarray]:
-    """The model's edges seen from above: (E, 2, 2) end points of the edges where the
-    surface folds or ends, and (E,) the label of a face beside each."""
-    mesh = room.mesh
-    faces = mesh.faces
-    edges = np.sort(np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]]), axis=1)
-    owner = np.tile(np.arange(len(faces)), 3)
-    order = np.lexsort((edges[:, 1], edges[:, 0]))
-    edges, owner = edges[order], owner[order]
-    unique, start, count = np.unique(edges, axis=0, return_index=True, return_counts=True)
-    normals = mesh.face_normals()
-    keep = count != 2
-    pairs = count == 2
-    first, second = owner[start[pairs]], owner[start[pairs] + 1]
-    fold = np.abs(np.sum(normals[first] * normals[second], axis=1)) < math.cos(math.radians(10))
-    keep[np.flatnonzero(pairs)[fold]] = True
-    points = mesh.vertices[unique[keep]][:, :, :2]
-    # Edges that are points from above (vertical edges) add nothing.
-    long = np.linalg.norm(points[:, 1] - points[:, 0], axis=1) > 1e-9
-    labels = mesh.face_labels[owner[start[keep]]]
-    return points[long], labels[long]
+#: The model's edges seen from above, for the plan: :func:`acoustic_spaces.room.outline_edges`.
+outline_segments = outline_edges
 
 
 def _qcolor(colour: str, alpha: int = 255) -> QColor:

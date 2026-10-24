@@ -110,6 +110,30 @@ def test_saved_paths_are_relative_to_the_scene_folder(tmp_path: Path) -> None:
     assert moved.geometry.file == (tmp_path / "shoebox" / "shoebox.obj").resolve()
 
 
+def test_a_source_names_what_it_plays(tmp_path: Path) -> None:
+    """A source's ``signal`` (the WAV it plays in a demo of the scene) counts from the
+    scene's folder, is saved relative to it and is one of the files the scene uses; a
+    source without one plays nothing."""
+    import shutil
+
+    shutil.copytree(EXAMPLES / "shoebox", tmp_path / "shoebox")
+    path = tmp_path / "shoebox" / "scene.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert Scene.model_validate(data).sources[0].signal is None
+    data["sources"][0]["signal"] = "sounds/talk.wav"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    scene = Scene.from_yaml(path)
+    signal = (tmp_path / "shoebox" / "sounds" / "talk.wav").resolve()
+    assert scene.sources[0].signal == signal
+    assert signal in scene.files()
+    scene.to_yaml(tmp_path / "shoebox" / "again.yaml")
+    text = (tmp_path / "shoebox" / "again.yaml").read_text(encoding="utf-8")
+    assert "signal: sounds/talk.wav" in text
+    (tmp_path / "elsewhere").mkdir()
+    scene.to_yaml(tmp_path / "elsewhere" / "scene.yaml")
+    assert Scene.from_yaml(tmp_path / "elsewhere" / "scene.yaml").sources[0].signal == signal
+
+
 def test_seed_is_zero_or_more() -> None:
     # Numpy takes no negative seed, which used to fail only once a run had started.
     data = yaml.safe_load((EXAMPLES / "shoebox" / "scene.yaml").read_text(encoding="utf-8"))

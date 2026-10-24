@@ -1,11 +1,12 @@
 """Audio the demos measure and cut: WAV files, levels as meters gate and weight them,
 lining signals up, and the moments between phrases.
 
-Levels are gated as loudness meters gate (ITU-R BS.1770): over the 400 ms blocks that
-are playing, so that a pause or a fade does not pull a level down. ``a_weighted`` gives
-the dB(A) the captions state, ``k_weighted`` the loudness the tours match their stops by:
-the K weighting keeps the bass that the A weighting all but leaves out, which far places
-and the back of a stage keep little else of.
+Levels are gated in the manner of a loudness meter, though not to the letter of ITU-R
+BS.1770 (:func:`gated_rms` says how): over the 400 ms blocks that are playing, so that a
+pause or a fade does not pull a level down. ``a_weighted`` gives the dB(A) the captions
+state, ``k_weighted`` the loudness the tours match their stops by: the K weighting keeps
+the bass that the A weighting all but leaves out, which far places and the back of a
+stage keep little else of.
 """
 
 from __future__ import annotations
@@ -53,8 +54,10 @@ def db(level: float) -> float:
 
 def gated_rms(x: np.ndarray, rate: int) -> float:
     """RMS over the 400 ms blocks that are playing: louder than 70 dB below the loudest
-    block and than 20 dB below the mean of those (as loudness meters gate, without the
-    K weighting)."""
+    block, then than 20 dB below the mean of those. BS.1770 gates alike but differently
+    in the details: its blocks overlap by 75 %, its first gate is at -70 LUFS, absolute,
+    and its second 10 LU below the mean. No weighting is applied here; the callers
+    weight first."""
     m = mono(x)
     block = int(0.4 * rate)
     n = len(m) // block
@@ -81,8 +84,10 @@ def a_weighted(x: np.ndarray, rate: int) -> np.ndarray:
 
 
 def k_weighted(x: np.ndarray, rate: int) -> np.ndarray:
-    """``x`` (samples, channels) through the K weighting of loudness meters (ITU-R
-    BS.1770: a 4 dB shelf above 1.5 kHz and a high-pass at 38 Hz), by FFT."""
+    """``x`` (samples, channels) through the K weighting of ITU-R BS.1770, by FFT: its
+    two filters as pyloudnorm designs them for any sample rate, a +4 dB high shelf at
+    1.5 kHz (Q 0.71) and a second-order high-pass at 38 Hz (Q 0.5), close to the
+    standard's coefficients at 48 kHz."""
     n = 1 << math.ceil(math.log2(len(x)))
     z = np.exp(-1j * np.pi * np.fft.rfftfreq(n, 0.5))  # z^-1 at each bin
     w, a = 2.0 * np.pi * 1500.0 / rate, 10.0 ** (4.0 / 40.0)
@@ -106,12 +111,13 @@ def k_weighted(x: np.ndarray, rate: int) -> np.ndarray:
 
 
 def level_db(x: np.ndarray, rate: int) -> float:
-    """The gated level of ``x``, dB(A) re full scale."""
+    """The gated A-weighted level of ``x`` (:func:`gated_rms`), dB re full scale."""
     return db(gated_rms(a_weighted(x, rate), rate))
 
 
 def loudness_db(x: np.ndarray, rate: int) -> float:
-    """The gated loudness of ``x`` (K-weighted), dB re full scale."""
+    """The gated K-weighted level of ``x`` (:func:`gated_rms`), dB re full scale: a
+    loudness in the manner of LUFS, not a BS.1770 measurement."""
     return db(gated_rms(k_weighted(x, rate), rate))
 
 
@@ -146,7 +152,8 @@ def envelope(x: np.ndarray, rate: int, step_s: float = 0.1) -> np.ndarray:
 
 
 def quiet_moment(env: np.ndarray, step_s: float, near_s: float, within_s: float) -> float:
-    """The time (s) of the quietest moment within ``within_s`` of ``near_s``."""
+    """The time (s) of the quietest moment within ``within_s`` of ``near_s``: the
+    middle of the quietest 0.5 s window of :func:`envelope`."""
     lo = max(0, int((near_s - within_s) / step_s))
     hi = min(len(env) - 1, int((near_s + within_s) / step_s))
     if hi <= lo:

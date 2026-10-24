@@ -16,8 +16,9 @@ installed in, with ffmpeg on the PATH:
     python walk_demo.py video   # demo/tour.wav, demo/tour.mp4 (an animation), stills
 
 or `python walk_demo.py all`, every step, leaving out what is there already; the
-editor's Simulation > Run demo… runs it too. Everything goes to ./demo (--work). Use
-headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of a
+editor's Simulation > Run demo… runs it too. The scene goes beside the script
+(scene_demo.yaml); the speech, the walk, the head turn and the video go to ./demo
+(--work). Use headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of a
 spherical head.
 
 The walk is the example's: the visitor sets off 3 m in front of the guide and faces the
@@ -192,11 +193,12 @@ def scene(args) -> None:
     }
     base["listeners"] = [lis for lis in base["listeners"] if lis["name"] != "standing"]
     base["listeners"].append(standing)
-    args.scene.write_text(
+    pipeline.write_scene(
+        args.scene,
+        base,
         "# The gallery walkthrough example with the guide's voice as a talker's, and where\n"
-        "# the visitor stands to look round, written by walk_demo.py.\n"
-        + yaml.safe_dump(base, sort_keys=False, default_flow_style=None, width=100),
-        encoding="utf-8",
+        "# the visitor stands to look round, written by walk_demo.py.\n",
+        args.source.parent,
     )
     print(f"wrote {args.scene}: the guide at {guide['level_db']} dB of sound power")
 
@@ -407,8 +409,9 @@ def video(args) -> None:
     write(args.work / "tour.wav", audio, rate)
     print(f"wrote {args.work / 'tour.wav'} ({len(audio) / rate:.1f} s)")
     room = room_of(args)
+    scene_data = yaml.safe_load(args.scene.read_text(encoding="utf-8"))
     drawing = pictures.Pictures(
-        yaml.safe_load(args.scene.read_text(encoding="utf-8")),
+        scene_data,
         walked,
         turned,
         walk_s=len(walk_x) / rate,
@@ -418,6 +421,7 @@ def video(args) -> None:
         f"Naylor, Imperial College London), CC BY 4.0 · doi.org/{ACE_DOI}",
         hrtf=args.hrtf,
         speed=float(next(lis for lis in room.scene.listeners if lis.walk).walk.speed_m_s),
+        tool=pictures.settings_lines(DEMO, args, scene_data),
     )
     pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
     moments = drawing.moments()

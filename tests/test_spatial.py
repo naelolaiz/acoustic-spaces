@@ -568,6 +568,8 @@ def test_hrtf_sets_download_once(tmp_path: Path, monkeypatch) -> None:
     seen: list[tuple[int, int | None]] = []
     hrtf_sets.get("test", folder=folder, progress=lambda done, total: seen.append((done, total)))
     assert seen == []  # there already: nothing is fetched
+    with pytest.raises(KeyError, match="a single SOFA file"):
+        hrtf_sets.get("test", member="subj_A.sofa", folder=folder)
 
     # One head of a set that holds several: the archive is read where it is, by range
     # requests, and only that head comes down.

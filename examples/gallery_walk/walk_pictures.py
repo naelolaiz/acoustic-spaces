@@ -17,7 +17,7 @@ from acoustic_spaces.demos.pictures import (
     FAINT,
     LISTENER,
     MUTED,
-    PA,
+    SOURCE,
     THUMBNAIL,
     Plan,
     arrow,
@@ -40,7 +40,7 @@ from acoustic_spaces.demos.pictures import (
 
 FLOOR = (34, 38, 52)
 WALL = (120, 128, 150)
-GUIDE = PA
+GUIDE = SOURCE
 
 __all__ = ["Pictures", "save"]
 
@@ -125,11 +125,12 @@ class Pictures:
         credit: str,
         hrtf=None,
         speed: float = 1.2,
+        tool=None,
     ):
         self.scene, self.walked, self.turned = scene, walked, turned
         self.walk_s, self.turn_at, self.voice, self.speed = walk_s, turn_at, voice, speed
         self.credit, self.hrtf = credit, hrtf
-        self.tool = tool_line("gallery_walk", scene, hrtf=hrtf)
+        self.tool = tool or tool_line("gallery_walk", scene, hrtf=hrtf)
         self.polygon = np.array(scene["geometry"]["floor_plan"], dtype=float)
         (x0, y0), (x1, y1) = self.polygon.min(axis=0), self.polygon.max(axis=0)
         self.box = (float(x0), float(y0), float(x1), float(y1))

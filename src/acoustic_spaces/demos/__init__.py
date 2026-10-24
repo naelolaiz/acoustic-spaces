@@ -14,7 +14,11 @@ there already (a scene file, a simulation's results).
   and the phrases its tour moves on.
 - :mod:`acoustic_spaces.demos.pipeline`: the simulate command and its HRTF, auralizing
   every listener with one gain, the tour's crossfades, the stills and the video.
-- :mod:`acoustic_spaces.demos.pictures`: the stills' shared colours, fonts and parts.
+- :mod:`acoustic_spaces.demos.pictures`: the stills' shared colours, fonts and parts,
+  and the lines that say how the sound was made.
+- :mod:`acoustic_spaces.demos.scene_demo` and :mod:`~acoustic_spaces.demos.scene_pictures`:
+  the demo of any scene (``acoustic-spaces demo``), each source playing the WAV file its
+  ``signal`` names.
 - :mod:`acoustic_spaces.fetch`: downloads, whole or one member of a remote zip archive.
 """
 
@@ -159,6 +163,21 @@ class Demo:
     #: The step that writes those scenes, when one does: the step to run before the
     #: simulation. A demo that simulates the example's own scene names none.
     scene_from: str | None = None
+    #: The demo's own check of the arguments, run by :meth:`check` with the demo (in its
+    #: folder) and the arguments: what is wrong, or None.
+    problems: Callable[[Demo, argparse.Namespace], str | None] | None = None
+    #: How a terminal runs the demo when not as ``python <script>``: the command
+    #: (``acoustic-spaces demo``), the option it takes bare before the step (``scene``)
+    #: and the module the editor runs with ``python -m``.
+    program: str | None = None
+    leading: str | None = None
+    module: str | None = None
+    #: Where the demo writes, from the arguments (paths resolved); by default the
+    #: ``work`` option, or the demo's folder.
+    work_of: Callable[[argparse.Namespace], Path] | None = None
+    #: Fills in what the arguments leave to the scene (paths resolved): the demo of any
+    #: scene takes the HRTFs its binaural output names when ``--hrtf`` gives none.
+    completes: Callable[[argparse.Namespace], argparse.Namespace] | None = None
     _folder: Path | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -192,9 +211,26 @@ class Demo:
                 return option
         raise KeyError(f"{self.name}: no option {name!r}")
 
-    def arguments(self, args: argparse.Namespace | None = None) -> list[str]:
+    def work_folder(self, args: argparse.Namespace) -> Path:
+        """Where a run with ``args`` writes (:attr:`work_of`)."""
+        resolved = self.resolved(args)
+        if self.work_of is not None:
+            return Path(self.work_of(resolved))
+        work = getattr(resolved, "work", None)
+        return Path(work) if work else self.folder
+
+    def arguments(
+        self,
+        args: argparse.Namespace | None = None,
+        *,
+        names_only: bool = False,
+        relative_to: Path | None = None,
+    ) -> list[str]:
         """The options of ``args`` that differ from their defaults, as a command line
-        (``["--hrtf", "me.sofa"]``): what :meth:`command` shows and the editor runs."""
+        (``["--hrtf", "me.sofa"]``): what :meth:`command` shows and the editor runs.
+        ``names_only`` gives a path by its file name, for a caption, and leaves out a
+        path named as its default is, wherever it lies; ``relative_to`` gives a path
+        under that folder relative to it."""
         argv: list[str] = []
         for option in self.options:
             value = getattr(args, option.name, option.default) if args is not None else None
@@ -203,16 +239,49 @@ class Demo:
             if option.kind in PATH_KINDS and option.default is not None:
                 if Path(value) == self.folder / option.default:  # the default, resolved
                     continue
+                if names_only and Path(value).name == Path(option.default).name:
+                    continue
             if option.kind == "flag":
                 argv.append(option.option)
+            elif names_only and option.kind in PATH_KINDS:
+                argv += [option.option, Path(value).name]
+            elif relative_to is not None and option.kind in PATH_KINDS:
+                argv += [option.option, _relative(Path(value), relative_to)]
             else:
                 argv += [option.option, str(value)]
         return argv
 
-    def command(self, step: str, args: argparse.Namespace | None = None) -> str:
+    def command(
+        self, step: str, args: argparse.Namespace | None = None, *, names_only: bool = False
+    ) -> str:
         """How to run ``step`` from the command line, with the options that differ from
-        their defaults (``python church_demo.py scene``)."""
-        return f"python {self.script.name} {step} {shell_line(self.arguments(args))}".rstrip()
+        their defaults (``python church_demo.py scene``, or for a demo with a
+        :attr:`program`, ``acoustic-spaces demo scene.yaml feeds``); ``names_only`` as
+        :meth:`arguments` takes it. Paths in the folder the command runs in are given
+        relative to it where the command reads them so: a demo run as a module, or a
+        script run in its own folder."""
+        here = self.module is not None or self.folder == self.script.parent
+        argv = self.arguments(
+            args, names_only=names_only, relative_to=self.folder if here else None
+        )
+        if self.program is None:
+            return f"python {self.script.name} {step} {shell_line(argv)}".rstrip()
+        lead: list[str] = []
+        if self.leading is not None:
+            flag = self.option(self.leading).option
+            if flag in argv:
+                k = argv.index(flag)
+                lead, argv = argv[k + 1 : k + 2], argv[:k] + argv[k + 2 :]
+        parts = [self.program, shell_line(lead), step, shell_line(argv)]
+        return " ".join(part for part in parts if part)
+
+    def run_argv(self, step: str, args: argparse.Namespace | None = None) -> list[str]:
+        """What the editor runs for ``step``: this Python on the script (or with ``-m`` on
+        the demo's :attr:`module`), the step and the options that differ from their
+        defaults, paths in full so that it runs from any folder."""
+        start = ["-m", self.module] if self.module else [str(self.script)]
+        values = self.resolved(args) if args is not None else None
+        return [sys.executable, *start, step, *self.arguments(values)]
 
     # -- arguments ------------------------------------------------------------------
 
@@ -234,19 +303,23 @@ class Demo:
         return argparse.Namespace(**{o.name: o.default for o in self.options})
 
     def resolved(self, args: argparse.Namespace) -> argparse.Namespace:
-        """The arguments with relative paths counted from the demo's folder."""
+        """The arguments with relative paths counted from the demo's folder, and what
+        they leave to the scene filled in (:attr:`completes`)."""
         values = vars(args).copy()
         for option in self.options:
             value = values.get(option.name)
             if option.kind in PATH_KINDS and value is not None:
                 path = Path(value)
                 values[option.name] = path if path.is_absolute() else self.folder / path
-        return argparse.Namespace(**values)
+        resolved = argparse.Namespace(**values)
+        return self.completes(resolved) if self.completes is not None else resolved
 
     def check(self, args: argparse.Namespace) -> str | None:
         """What is wrong with the arguments, or None."""
         if getattr(args, "hrtf", None) and getattr(args, "format", "binaural") != "binaural":
             return "--hrtf is for binaural mixes"
+        if self.problems is not None:
+            return self.problems(self, args)
         return None
 
     # -- running --------------------------------------------------------------------
@@ -254,7 +327,7 @@ class Demo:
     def simulate(self, args: argparse.Namespace, only_missing: bool = False) -> None:
         """``acoustic-spaces simulate`` on each scene of the demo, in this process."""
         from acoustic_spaces.cli import main as cli
-        from acoustic_spaces.demos.pipeline import simulate_argv, simulated
+        from acoustic_spaces.demos.pipeline import simulate_argv, simulate_command, simulated
 
         for simulation in self.simulations(args):
             if only_missing and simulated(simulation, args):
@@ -264,9 +337,9 @@ class Demo:
                 raise SystemExit(
                     f"error: no {simulation.scene}; run first: {self.first_step(args)}"
                 )
-            argv = simulate_argv(simulation, getattr(args, "hrtf", None))
-            print("acoustic-spaces " + " ".join(argv))
-            code = cli(argv)
+            hrtf = getattr(args, "hrtf", None)
+            print(simulate_command(simulation, hrtf))
+            code = cli(simulate_argv(simulation, hrtf))
             if code:
                 raise SystemExit(code)
 
@@ -305,14 +378,26 @@ class Demo:
                 step.run(args)
 
     def main(self, argv: Sequence[str] | None = None) -> int:
-        parser = self.parser()
+        """Run the steps a command line asks for. A demo of the examples counts relative
+        paths from its script's folder, where its files are; one run as a module
+        (:attr:`module`, a demo of any scene) from the folder it is run in."""
+        demo = self if self.module is None or self._folder else self.at(Path.cwd())
+        parser = demo.parser()
         args = parser.parse_args(argv)
-        problem = self.check(args)
+        problem = demo.check(args)
         if problem:
             parser.error(problem)
-        names = [s.name for s in self.steps] if args.step == "all" else [args.step]
-        self.run(names, args, skip_done=args.step == "all")
+        names = [s.name for s in demo.steps] if args.step == "all" else [args.step]
+        demo.run(names, args, skip_done=args.step == "all")
         return 0
+
+
+def _relative(path: Path, folder: Path) -> str:
+    """``path`` relative to ``folder`` when it lies under it, else as it is."""
+    try:
+        return Path(path).resolve().relative_to(Path(folder).resolve()).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def sibling(script: str | Path, name: str) -> ModuleType:

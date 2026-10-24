@@ -478,15 +478,16 @@ class MainWindow(QMainWindow):
             _("Run &demo…"),
             self.run_demo,
             tip=_(
-                "Run one of the demos that come with the examples: a scene, its simulation, "
-                "what each listener hears and a video, with the options to fill in"
+                "Play the sounds each source's Plays names through the open scene: its "
+                "simulation, what each listener hears and a video, with the options to fill "
+                "in; an example's scene also has the example's own demo"
             ),
         )
         self.cancel_action = a(
             _("&Cancel"),
             self.cancel_simulation,
             "Shift+F5",
-            _("Stop the run, coverage map, tuning or demo going on, at its next stage"),
+            _("Stop the run, coverage map or tuning going on at its next stage, or a demo at once"),
         )
         self.cancel_action.setEnabled(False)
         self.stop_action = a(
@@ -1474,14 +1475,19 @@ class MainWindow(QMainWindow):
         self._start(job, _("Timing the CPU and the GPU on {scene}…").format(scene=room.scene.name))
 
     def run_demo(self) -> None:
-        """Ask which demo to run, and run the step it asks for in the background
-        (``python church_demo.py all``), its messages in the messages panel."""
+        """Ask which demo of the open scene to run (This scene, or the example's own), and
+        run the step it asks for in the background, its messages in the messages panel."""
         if self.job is not None:
             self.log(_("Wait for the current run to end, then run the demo."))
             return
+        document = self.document
         try:
-            dialog = DemoDialog(parent=self, start=self._demo_of_open_scene())
-        except Exception as exc:  # no examples to run, or a script that cannot be read
+            dialog = DemoDialog(
+                parent=self,
+                scene=document.path,
+                unsaved=document.path is None or document.modified,
+            )
+        except Exception as exc:  # a script that cannot be read
             self.log(_("No demo to run: {reason}").format(reason=exc), "error")
             return
         if not dialog.exec():
@@ -1493,14 +1499,6 @@ class MainWindow(QMainWindow):
             job,
             _("Running the {demo} demo ({step})…").format(demo=demo.name, step=step),
         )
-
-    def _demo_of_open_scene(self) -> str | None:
-        """The demo of the example the open scene belongs to, so that the window starts
-        on it: the folder's name, in the examples or in a copy of one."""
-        from acoustic_spaces.demos import demo_for
-
-        found = demo_for(Path(self.document.base_dir).name)
-        return found.name if found is not None else None
 
     def _demo_done(self, report: dict) -> None:
         elapsed = time.perf_counter() - self._started
@@ -1537,7 +1535,10 @@ class MainWindow(QMainWindow):
     def cancel_simulation(self) -> None:
         if self.job is not None:
             self.job.cancel()
-            self.log(_("Cancelling at the next stage…"))
+            if isinstance(self.job, DemoJob):  # a process of its own: it stops at once
+                self.log(_("Stopping the demo…"))
+            else:
+                self.log(_("Cancelling at the next stage…"))
 
     def _progress(self, message: str) -> None:
         self.activity.step(message)

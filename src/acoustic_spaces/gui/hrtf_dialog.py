@@ -109,7 +109,9 @@ class HrtfDialog(QDialog):
         self.buttons.addButton(self.download, QDialogButtonBox.ButtonRole.ActionRole)
         self.use = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
         self.use.setText(_("Use"))
-        self.use.setToolTip(_("Take the file on the row, and close"))
+        self.use.setToolTip(
+            _("Take the file just downloaded, or else the set on the row, and close")
+        )
         self.buttons.button(QDialogButtonBox.StandardButton.Close).setToolTip(
             _("Close; what was downloaded stays in the folder")
         )
@@ -158,7 +160,8 @@ class HrtfDialog(QDialog):
         for row, item in enumerate(hrtf_sets.sets()):
             here = hrtf_sets.file_of(item, None, self.folder).exists()
             mark = _("downloaded") if here else _("not here yet")
-            self.list.item(row).setText(f"{item.summary()} — {mark}")
+            by = _("by {credit}").format(credit=item.credit)
+            self.list.item(row).setText(f"{item.summary()}; {by} — {mark}")
         running = self.job is not None
         url = self.url.text().strip()
         self.download.setEnabled(not running and (bool(url) or not self.file().exists()))

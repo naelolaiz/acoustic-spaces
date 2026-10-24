@@ -1459,6 +1459,14 @@ class Source(_Model):
     walk: Walk | None = Field(
         default=None, description="a path to walk, for a walkthrough (point sources only)"
     )
+    signal: Path | None = Field(
+        default=None,
+        description=(
+            "a WAV file of what the source plays, dry: its feed in a demo of the scene "
+            "(acoustic-spaces demo), mixed down to mono and played at the source's "
+            "level_db; None leaves the source silent there"
+        ),
+    )
 
     @field_validator("level_db", mode="before")
     @classmethod
@@ -1467,6 +1475,11 @@ class Source(_Model):
         if isinstance(value, float) and not math.isfinite(value):
             raise PydanticCustomError("finite_number", "Input should be a finite number")
         return value
+
+    @field_validator("signal")
+    @classmethod
+    def _resolve_signal(cls, value: Path | None, info: ValidationInfo) -> Path | None:
+        return None if value is None else _resolve_path(value, info)
 
     @field_validator("level_db")
     @classmethod
@@ -2721,6 +2734,8 @@ class Scene(_Model):
             if "hrtf" in output:
                 output["hrtf"] = _portable(output["hrtf"], base)
         for source in data["sources"]:
+            if "signal" in source:
+                source["signal"] = _portable(source["signal"], base)
             # An inline array's element may have a file of its own.
             for spec in directivity_entries(source.get("directivity")):
                 if "file" in spec:
@@ -2731,7 +2746,8 @@ class Scene(_Model):
     def files(self) -> list[Path]:
         """The files the scene uses, each once: its model, terrain and map of buildings,
         material tables, source directivities (with the files a coherent array names for
-        its element, in the scene or in its YAML file) and HRTFs."""
+        its element, in the scene or in its YAML file), the sources' signals and
+        HRTFs."""
         from acoustic_spaces.directivity import directivity_files
 
         geometry = self.geometry
@@ -2743,6 +2759,7 @@ class Scene(_Model):
         files += [m.file for m in self.materials.values() if m.file is not None]
         for source in self.sources:
             files += directivity_files(source.directivity)
+        files += [s.signal for s in self.sources if s.signal is not None]
         files += [o.hrtf for o in self.outputs if o.hrtf is not None]
         return list(dict.fromkeys(Path(f) for f in files))
 

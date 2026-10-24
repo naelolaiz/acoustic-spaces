@@ -878,6 +878,31 @@ def test_source_spectrum_gain_equalizer_and_delay(window) -> None:
     assert page.level.value() == pytest.approx(80.0 + 10 * np.log10(8), abs=0.05)
 
 
+def test_a_source_plays_a_wav_in_a_demo(window, monkeypatch, tmp_path: Path) -> None:
+    """The source page says what the source plays in a demo of the scene: Choose WAV…
+    names a file, Silent takes it away, and the scene file keeps it."""
+    from PySide6.QtWidgets import QFileDialog
+
+    window.open_example(example_path("studio"))
+    window.select("sources", 0)
+    page = window.inspector.pages["sources"]
+    assert page.signal.text() == "nothing (silent in a demo)"
+    assert page._form.labelForField(page.signal).toolTip()
+    assert page.choose_signal.toolTip() and page.silent.toolTip()
+    wav = tmp_path / "talk.wav"
+    write_wav(wav, np.zeros(800), 8000)
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(wav), ""))
+    page.choose_signal.click()
+    assert window.document.scene.sources[0].signal == wav
+    assert page.signal.text() == "talk.wav" and str(wav) in page.signal.toolTip()
+    assert window.undo_action.text() == "&Undo change source"
+    window.document.scene.to_yaml(tmp_path / "scene.yaml")
+    assert "signal: talk.wav" in (tmp_path / "scene.yaml").read_text(encoding="utf-8")
+    page.silent.click()
+    assert window.document.scene.sources[0].signal is None
+    assert page.signal.text() == "nothing (silent in a demo)"
+
+
 def test_line_and_surface_sources(window, qapp) -> None:
     window.open_example(example_path("studio"))
     window.select("sources", 0)
@@ -2503,8 +2528,9 @@ def _waiting_demo(tmp_path: Path, seconds: float):
 
 
 def test_demo_dialog_fills_in_the_options(qapp) -> None:
-    """The Run demo window builds its form from the demo's own options, at the defaults
-    the command line uses, and shows that command."""
+    """The Run demo window offers the demos of the open scene: This scene, and the demo
+    of the example the scene belongs to, on which it starts. It builds its form from the
+    demo's own options, at the defaults the command line uses, and shows that command."""
     from PySide6.QtWidgets import (
         QAbstractSpinBox,
         QCheckBox,
@@ -2518,11 +2544,14 @@ def test_demo_dialog_fills_in_the_options(qapp) -> None:
     from acoustic_spaces.demos import list_demos
     from acoustic_spaces.gui.demo_dialog import ALL, DemoDialog, PathField
 
-    dialog = DemoDialog()
-    names = [dialog.picker.itemData(k) for k in range(dialog.picker.count())]
+    listed = DemoDialog(list_demos())  # every demo, as given
+    names = [listed.picker.itemData(k) for k in range(listed.picker.count())]
     assert names == [demo.name for demo in list_demos()]
+    listed.deleteLater()
 
-    dialog.picker.setCurrentIndex(names.index("stadium"))
+    dialog = DemoDialog(scene=example_path("stadium_concert"))
+    names = [dialog.picker.itemData(k) for k in range(dialog.picker.count())]
+    assert names == ["scene", "stadium"] and dialog.picker.currentData() == "stadium"
     demo = dialog.demo
     assert [field for field in dialog.fields] == [option.name for option in demo.options]
     assert dialog.step.currentText() == ALL
@@ -2553,10 +2582,26 @@ def test_demo_dialog_fills_in_the_options(qapp) -> None:
     dialog.fields["format"].setText("binaural")
     assert dialog.problem.text() == "" and ok.isEnabled()
 
-    # Another demo: its own steps, options and command.
-    dialog.picker.setCurrentIndex(names.index("walk"))
-    assert dialog.command.text() == "python walk_demo.py all"
-    assert "talker" in dialog.fields and "song" not in dialog.fields
+    # This scene: the sounds its sources play, which the stadium's sources name none of.
+    dialog.picker.setCurrentIndex(names.index("scene"))
+    assert dialog.command.text() == "acoustic-spaces demo scene.yaml all"
+    assert [step.name for step in dialog.demo.steps] == ["feeds", "simulate", "render", "video"]
+    assert "song" not in dialog.fields and "seconds" in dialog.fields
+    assert "no source plays anything" in dialog.problem.text() and not ok.isEnabled()
+
+    # Another example's scene: its own demo, steps, options and command.
+    walk = DemoDialog(scene=example_path("gallery_walk"))
+    assert walk.picker.currentData() == "walk"
+    assert walk.command.text() == "python walk_demo.py all"
+    assert "talker" in walk.fields and "song" not in walk.fields
+    walk.deleteLater()
+    # A scene of no example has This scene only, and one never saved cannot be run.
+    plain = DemoDialog(scene=example_path("shoebox"))
+    assert [plain.picker.itemData(k) for k in range(plain.picker.count())] == ["scene"]
+    plain.deleteLater()
+    unsaved = DemoDialog(scene=None)
+    assert "save the scene first" in unsaved.problem.text()
+    unsaved.deleteLater()
 
     # Every control explains itself, labels included.
     missing = [
@@ -2582,9 +2627,11 @@ def test_run_demo_in_the_editor(window, qapp, monkeypatch, tmp_path: Path) -> No
     demo, args = _waiting_demo(tmp_path, 0.2)
     args.work = tmp_path / "waiting" / "work"
 
+    opened: list[tuple] = []
+
     class Dialog:
-        def __init__(self, parent=None, start=None) -> None:
-            self.parent, self.start = parent, start
+        def __init__(self, parent=None, *, scene=None, unsaved=False) -> None:
+            opened.append((scene, unsaved))
 
         def exec(self) -> int:
             return int(QDialog.DialogCode.Accepted)
@@ -2593,13 +2640,11 @@ def test_run_demo_in_the_editor(window, qapp, monkeypatch, tmp_path: Path) -> No
             return demo, "wait", args
 
     monkeypatch.setattr(app_module, "DemoDialog", Dialog)
-    # The window starts on the demo of the open scene's example, when it has one.
-    window.open_example(example_path("stadium_concert"))
-    assert window._demo_of_open_scene() == "stadium"
+    # The window offers the demos of the open scene, and knows whether it is saved.
     window.open_example(example_path("shoebox"))
-    assert window._demo_of_open_scene() is None
 
     window.demo_action.trigger()
+    assert opened == [(example_path("shoebox"), False)]
     assert not window.run_action.isEnabled() and window.cancel_action.isEnabled()
     _wait(qapp, lambda: window.job is None)
     messages = window.messages.toPlainText()
@@ -2744,7 +2789,7 @@ def test_demo_dialog_offers_the_hrtf_sets(qapp, tmp_path: Path, monkeypatch) -> 
             return int(QDialog.DialogCode.Accepted)
 
     monkeypatch.setattr(hrtf_dialog, "HrtfDialog", Dialog)
-    dialog = DemoDialog()
+    dialog = DemoDialog(scene=example_path("shoebox"))
     field = dialog.fields["hrtf"]
     assert field.sets is not None and field.sets.toolTip()
     assert dialog.fields["work"].sets is None  # only the HRTF field offers them

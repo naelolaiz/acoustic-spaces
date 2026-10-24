@@ -8,8 +8,8 @@ is asked for, and a set already in the folder is left alone.
 
 A set is one SOFA file: either a plain download or one member of a remote archive,
 taken out of it without the rest (:mod:`acoustic_spaces.fetch`). ``ears`` says whose
-head it is: a dummy head measures the same way every time, a person's own ears place
-sounds better for that person and worse for everybody else.
+head it is: a dummy head, built to average proportions, or a person's, which suits that
+person best and others as far as their ears are alike.
 """
 
 from __future__ import annotations
@@ -167,7 +167,9 @@ def get(
     """The set's SOFA file, downloaded into ``folder`` (:func:`data_folder` by default)
     unless it is there already; ``progress(done, total)`` follows the download."""
     item = named(item) if isinstance(item, str) else item
-    if member is not None and item.members and member not in item.members:
+    if member is not None and not item.members:
+        raise KeyError(f"{item.name} is a single SOFA file, with no {member!r} in it")
+    if member is not None and member not in item.members:
         raise KeyError(f"{item.name}: no {member!r}; try: {', '.join(item.members)}")
     path = file_of(item, member, folder)
     if path.exists() and not again:

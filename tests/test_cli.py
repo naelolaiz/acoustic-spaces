@@ -1042,7 +1042,7 @@ def test_hrtf_lists_the_sets_and_downloads_one(tmp_path: Path, capsys, monkeypat
     listed = capsys.readouterr().out
     for item in hrtf_sets.sets():
         assert item.name in listed and item.licence in listed and item.page in listed
-    assert "not here" not in listed and "[have]" not in listed  # nothing downloaded yet
+    assert "[have]" not in listed  # nothing downloaded yet
 
     monkeypatch.setattr(hrtf_sets, "SETS", (_test_set(tmp_path),))
     assert main(["hrtf", "test", "--folder", str(folder)]) == 0
@@ -1056,9 +1056,12 @@ def test_hrtf_lists_the_sets_and_downloads_one(tmp_path: Path, capsys, monkeypat
     assert main(["hrtf", "--folder", str(folder)]) == 0
     assert "[have] test" in capsys.readouterr().out
 
-    # A name that is not on offer says what is.
+    # A name that is not on offer says what is, and a single file has no members.
     assert main(["hrtf", "nope", "--folder", str(folder)]) == 1
     assert "no HRTF set 'nope'; try: test" in capsys.readouterr().err
+    assert main(["hrtf", "test", "--member", "subj_A.sofa", "--folder", str(folder)]) == 1
+    err = capsys.readouterr().err
+    assert "error: test is a single SOFA file, with no 'subj_A.sofa' in it" in err
 
 
 def test_hrtf_downloads_another_sofa_file(tmp_path: Path, capsys) -> None:
@@ -1071,3 +1074,16 @@ def test_hrtf_downloads_another_sofa_file(tmp_path: Path, capsys) -> None:
     assert (folder / "me.sofa").read_bytes() == source.read_bytes()
     assert main(["hrtf", "--url", "file:///nothing/here.sofa", "--folder", str(folder)]) == 1
     assert "error:" in capsys.readouterr().err
+
+
+def test_demo_of_a_scene_explains_itself(capsys: pytest.CaptureFixture[str]) -> None:
+    """``acoustic-spaces demo`` lists its steps and options, and stops with a reason on a
+    scene whose sources play nothing (the run itself is in test_demos)."""
+    with pytest.raises(SystemExit) as stopped:
+        main(["demo", "--help"])
+    assert stopped.value.code == 0
+    out = capsys.readouterr().out
+    for word in ("feeds", "simulate", "render", "video", "--hrtf", "--seconds", "--tour"):
+        assert word in out
+    assert main(["demo", str(SHOEBOX)]) == 2
+    assert "no source plays anything" in capsys.readouterr().err

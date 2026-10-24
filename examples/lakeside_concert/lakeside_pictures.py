@@ -25,8 +25,8 @@ from acoustic_spaces.demos.pictures import (
     LISTENER,
     MARGIN,
     MUTED,
-    PA,
     SIZE,
+    SOURCE,
     TEXT,
     THUMBNAIL,
     Plan,
@@ -200,6 +200,7 @@ class Pictures:
         credit: str,
         folder: Path | None = None,
         hrtf: str | Path | None = None,
+        tool=None,
     ):
         self.scenes, self.seats, self.tour, self.titles, self.gains = (
             scenes,
@@ -240,12 +241,10 @@ class Pictures:
             )
             for w in scenes
         }
-        self.tool = tool_line(
-            "lakeside_concert",
-            scene,
-            late="bent rays for the late sound in the scene's wind and temperature",
-            hrtf=hrtf,
-        )
+        #: How each weather's sound was made, for the footer of its stills.
+        self.tool = tool or {
+            w: tool_line("lakeside_concert", s, hrtf=hrtf) for w, s in scenes.items()
+        }
 
     def title(self, listener: str) -> tuple[str, str]:
         return self.titles.get(listener, (listener.replace("_", " ").capitalize(), ""))
@@ -346,7 +345,7 @@ class Pictures:
         way they aim (their boxes cover 90 degrees across), the subwoofers a narrower one
         (cardioids), as long as the plan's scale allows."""
         draw = ImageDraw.Draw(img, "RGBA")
-        draw.rectangle([*plan(-10, 12), *plan(0, -12)], fill=STAGE, outline=PA)
+        draw.rectangle([*plan(-10, 12), *plan(0, -12)], fill=STAGE, outline=SOURCE)
         cones = ImageDraw.Draw(img, "RGBA")
         for source in self.sources:
             x, y = source["position"][:2]
@@ -355,15 +354,15 @@ class Pictures:
             qx, qy = plan(x + fx, y + fy)
             direction = (qx - px, qy - py)
             if self.is_sub(source):
-                cone(cones, (px, py), direction, 16 * plan.s, 32.0, PA + (70,))
+                cone(cones, (px, py), direction, 16 * plan.s, 32.0, SOURCE + (70,))
             else:
-                cone(cones, (px, py), direction, 30 * plan.s, 45.0, PA + (70,))
+                cone(cones, (px, py), direction, 30 * plan.s, 45.0, SOURCE + (70,))
         for source in self.sources:
             px, py = plan(*source["position"][:2])
             r = 4 if self.is_sub(source) else 6
-            glow(img, [(px, py, 2 * r, PA + (120,))], 5)
+            glow(img, [(px, py, 2 * r, SOURCE + (120,))], 5)
             draw = ImageDraw.Draw(img, "RGBA")
-            draw.ellipse([px - r, py - r, px + r, py + r], fill=PA, outline=BG)
+            draw.ellipse([px - r, py - r, px + r, py + r], fill=SOURCE, outline=BG)
 
     def aims(self, source: dict) -> tuple[float, float]:
         """The pitch (degrees, down negative) of an array's top and bottom boxes, from
@@ -449,10 +448,10 @@ class Pictures:
                 [*cut(min(xs), 0.0), cut(max(xs), 0.0)[0], cut(max(xs), 0.0)[1] + 10],
                 fill=WATER_EDGE,
             )
-        # The rays.
+        # The rays, in the colour of the sources they leave, grey in still air.
         layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
         ld = ImageDraw.Draw(layer)
-        colour = PA if state.atmosphere is not None else STILL
+        colour = SOURCE if state.atmosphere is not None else STILL
         for points, strength in self.rays[weather]:
             pixels = [cut(x, z) for x, z in points]
             for j in range(0, len(pixels) - 1, 4):
@@ -506,20 +505,22 @@ class Pictures:
         for source in self.sources:
             x, _y, z = source["position"]
             if self.is_sub(source):
-                draw.rectangle([*cut(x - 0.6, z + 0.6), *cut(x + 0.6, 0.0)], fill=PA, outline=BG)
+                box = [*cut(x - 0.6, z + 0.6), *cut(x + 0.6, 0.0)]
+                draw.rectangle(box, fill=SOURCE, outline=BG)
                 continue
             top, bottom = self.aims(source)
             reach = [(x + z / math.tan(math.radians(-a)), 0.0) for a in (top, bottom) if a < 0]
             if len(reach) == 2:
-                draw.polygon([cut(x, z), cut(*reach[0]), cut(*reach[1])], fill=PA + (60,))
+                draw.polygon([cut(x, z), cut(*reach[0]), cut(*reach[1])], fill=SOURCE + (60,))
             half = self.hang(source) / 2
-            draw.line([cut(x, 0.0), cut(x, z + half + 0.5)], fill=PA + (120,), width=1)  # its mast
-            draw.line([cut(x, z + half), cut(x, z - half)], fill=PA, width=5)
+            mast = [cut(x, 0.0), cut(x, z + half + 0.5)]
+            draw.line(mast, fill=SOURCE + (120,), width=1)
+            draw.line([cut(x, z + half), cut(x, z - half)], fill=SOURCE, width=5)
             draw.line([cut(x, z + half), cut(x, z - half)], fill=BG, width=1)
         px, py = cut(self.stage[0], self.stage[2])
-        text(draw, (px - 12, py), "line arrays", font("Medium", 14), PA, "rm")
+        text(draw, (px - 12, py), "line arrays", font("Medium", 14), SOURCE, "rm")
         px, py = cut(self.stage[0], 0.0)
-        text(draw, (px - 12, py - 8), "subwoofers", font("Medium", 14), PA, "rm")
+        text(draw, (px - 12, py - 8), "subwoofers", font("Medium", 14), SOURCE, "rm")
         for name, item in self.listeners.items():
             x, _y, z = item["position"]
             px, py = cut(x, z)
@@ -615,7 +616,7 @@ class Pictures:
             for name, w, t0, _ in self.tour
         ]
         tour_column(draw, x, max(y + 24, 590), entries, k, row=26, size=18)
-        footer(draw, self.credit, self.tool)
+        footer(draw, self.credit, self.tool[weather])
         return img
 
     def thumbnail(self) -> Image.Image:

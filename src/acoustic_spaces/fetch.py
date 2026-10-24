@@ -21,7 +21,8 @@ from pathlib import Path
 
 from acoustic_spaces._version import __version__
 
-#: Seconds to wait for a server, and how often a failed block is asked for again.
+#: Seconds to wait for a server, and how many times a block of a remote archive is asked
+#: for before the read fails.
 TIMEOUT = 120
 RETRIES = 5
 #: Bytes copied at a time, and reported to the progress callback.
@@ -81,6 +82,8 @@ class RangeFile(io.RawIOBase):
                 except OSError:
                     if attempt == RETRIES - 1:
                         raise
+            if len(data) != b - a + 1:  # cut short every time: never pass it on as whole
+                raise OSError(f"{self.url}: bytes {a}-{b} came {len(data)} long, {RETRIES} times")
             if len(self.cache) >= self.KEPT:
                 self.cache.pop(next(iter(self.cache)))
             self.cache[i] = data

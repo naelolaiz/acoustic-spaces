@@ -19,10 +19,11 @@ PATH:
     python church_demo.py video     # demo/tour.wav, the stills, demo/tour.mp4
 
 or `python church_demo.py all`, which runs them in turn and leaves out what is there
-already (the music, the scene, the simulation). Everything goes to ./demo (--work). Use
-headphones; `--hrtf me.sofa` plays through your own or measured HRTFs instead of a
-spherical head (the simulation takes it too). The editor runs the same steps from
-Simulation > Run demo…
+already (the music, the scene, the simulation). The scene and its simulation go beside
+the script (scene_choir.yaml, results_choir); the music, the feeds, the mixes and the
+video go to ./demo (--work). Use headphones; `--hrtf me.sofa` plays through your own or
+measured HRTFs instead of a spherical head (the simulation takes it too). The editor
+runs the same steps from Simulation > Run demo…
 
 The recordings are not part of acoustic_spaces: `music` downloads them from where their
 authors publish them (about 100 MB; only the needed files are read out of VocalSet's and
@@ -432,11 +433,12 @@ def scene(args) -> None:
     base.setdefault("simulation", {})["ir_length_s"] = max(
         9.0, base["simulation"].get("ir_length_s", 0.0)
     )
-    args.scene.write_text(
+    pipeline.write_scene(
+        args.scene,
+        base,
         "# The church example with a choir in front of the altar and the organ in the gallery,\n"
-        "# written by church_demo.py.\n"
-        + yaml.safe_dump(base, sort_keys=False, default_flow_style=None, width=100),
-        encoding="utf-8",
+        "# written by church_demo.py.\n",
+        args.source.parent,
     )
     print(f"wrote {args.scene}; now: {pipeline.simulate_command(simulations(args)[0], args.hrtf)}")
 
@@ -806,8 +808,8 @@ def what_plays(t: float) -> str:
 
 
 def video(args) -> None:
-    """tour.wav, one still per stop of the tour, and tour.mp4 with a scrolling
-    spectrogram under the stills (ffmpeg)."""
+    """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
+    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
     pictures = sibling(__file__, "church_pictures")
     seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
     tour = tour_of(args)
@@ -828,6 +830,9 @@ def video(args) -> None:
         playing,
         VOICES,
         hrtf=args.hrtf,
+        tool=pictures.settings_lines(
+            DEMO, args, scene_of(args), pipeline.read_json(args.results / pipeline.PARAMETERS)
+        ),
     )
     pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
     pipeline.video(

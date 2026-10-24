@@ -19,8 +19,8 @@ from acoustic_spaces.demos.pictures import (
     LINE,
     LISTENER,
     MUTED,
-    PA,
     PANEL,
+    SOURCE,
     THUMBNAIL,
     Plan,
     arrow,
@@ -156,7 +156,7 @@ def kind(name: str) -> str:
     return "sub" if "sub" in name else "pa"
 
 
-COLOURS = {"pa": PA, "sub": PA, "monitor": MONITOR, "band": PLAYER}
+COLOURS = {"pa": SOURCE, "sub": SOURCE, "monitor": MONITOR, "band": PLAYER}
 
 
 class Pictures:
@@ -171,6 +171,7 @@ class Pictures:
         gains=None,
         credit=CREDIT,
         hrtf=None,
+        tool=None,
     ):
         self.scene, self.levels, self.seats, self.tour, self.titles = (
             scene,
@@ -189,7 +190,7 @@ class Pictures:
         zones = scene["geometry"].get("ground", {}).get("zones", [])
         self.zones = [z["polygon"] for z in zones]
         self.areas = self._areas(zones)
-        self.tool = tool_line("stadium", scene, hrtf=hrtf)
+        self.tool = tool or tool_line("stadium", scene, hrtf=hrtf)
 
     def _areas(self, zones) -> list[Area]:
         """The audience areas (a zone of the ground standing, the stands' faces seated)
@@ -396,7 +397,7 @@ class Pictures:
 
     def legend(self, draw, x: int, y: int) -> None:
         f = font("Medium", 18)
-        for colour, label, step in ((PA, "sound system", 205), (MONITOR, "monitors", 160)):
+        for colour, label, step in ((SOURCE, "sound system", 205), (MONITOR, "monitors", 160)):
             cone(draw, (x + 5, y + 7), (1.0, 0.0), 22, 28.0, tuple(c // 2 for c in colour))
             draw.ellipse([x, y + 2, x + 10, y + 12], fill=colour)
             text(draw, (x + 32, y - 2), label, f, MUTED)
@@ -412,7 +413,7 @@ class Pictures:
         arrow(draw, (x + 14, y + 7), (1.0, 0.0), 10, 6, MUTED, 2)
         text(draw, (x + 32, y - 2), "other places", f, MUTED)
         x += 180
-        draw.line([(x, y + 7), (x + 26, y + 7)], fill=PA + (255,), width=3)
+        draw.line([(x, y + 7), (x + 26, y + 7)], fill=SOURCE + (255,), width=3)
         text(draw, (x + 36, y - 2), "brighter: louder here", f, MUTED)
 
     def surfaces(self, draw, x: int, y: int) -> None:

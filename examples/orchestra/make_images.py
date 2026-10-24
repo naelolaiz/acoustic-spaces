@@ -127,9 +127,10 @@ class Pictures:
         movement: int,
         facts: list[str] | None = None,
         hrtf: str | Path | None = None,
+        tool=None,
     ):
         self.lines = facts or []  # lines under the seat on the cover (orchestra_demo.py)
-        self.tool = tool_line("orchestra", scene, hrtf=hrtf)
+        self.tool = tool or tool_line("orchestra", scene, hrtf=hrtf)
         self.players = [
             (s["name"], s["position"], s.get("orientation", {})) for s in scene["sources"]
         ]

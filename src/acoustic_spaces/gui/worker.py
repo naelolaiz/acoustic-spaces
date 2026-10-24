@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -113,10 +112,11 @@ class TuneJob(SimulationJob):
 
 
 class DemoJob(SimulationJob):
-    """Runs a step of a demo (:mod:`acoustic_spaces.demos`) as
-    ``python NAME_demo.py STEP``, in a process of its own: what the demo prints becomes
-    progress messages, and Cancel stops it where it is. ``done`` carries the step and
-    the folder it ran in."""
+    """Runs a step of a demo (:mod:`acoustic_spaces.demos`) in a process of its own, as
+    :meth:`Demo.run_argv` gives it (``python NAME_demo.py STEP``, or ``python -m
+    acoustic_spaces.demos.scene_demo STEP`` for the demo of any scene): what the demo
+    prints becomes progress messages, and Cancel stops it where it is. ``done`` carries
+    the demo, the step and the folder the demo wrote into."""
 
     kind = "demo"
 
@@ -131,9 +131,8 @@ class DemoJob(SimulationJob):
 
     @property
     def argv(self) -> list[str]:
-        """The command as a list: this Python, the demo's script, the step, and the
-        options that differ from their defaults."""
-        return [sys.executable, str(self.demo.script), self.step, *self.demo.arguments(self.args)]
+        """The command as a list (:meth:`Demo.run_argv`)."""
+        return self.demo.run_argv(self.step, self.args)
 
     def cancel(self) -> None:
         """Stop the demo: it is a process of its own, so it ends at once rather than at
@@ -147,8 +146,8 @@ class DemoJob(SimulationJob):
         folder = Path(self.demo.folder)
         folder.mkdir(parents=True, exist_ok=True)
         self._say(self.demo.command(self.step, self.args))
-        # The demo's own script, named in the window; unbuffered, so its lines arrive
-        # as it writes them rather than at the end.
+        # The command the window showed, with paths in full; unbuffered, so its lines
+        # arrive as it writes them rather than at the end.
         process = self._process = subprocess.Popen(
             self.argv,
             cwd=folder,
@@ -180,7 +179,8 @@ class DemoJob(SimulationJob):
         if code:
             last = self.lines[-1] if self.lines else ""
             raise RuntimeError(f"{self.step}: the demo stopped ({code}). {last}".strip())
-        return {"demo": self.demo.name, "step": self.step, "folder": str(folder)}
+        work = self.demo.work_folder(self.args)
+        return {"demo": self.demo.name, "step": self.step, "folder": str(work)}
 
 
 class DownloadJob(QThread):

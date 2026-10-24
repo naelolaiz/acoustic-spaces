@@ -1,11 +1,13 @@
-"""The window behind Simulation > Run demo…: which demo to run, which of its steps, and
-its options at the defaults the command line uses.
+"""The window behind Simulation > Run demo…: which demo of the open scene to run, which
+of its steps, and its options at the defaults the command line uses.
 
-The demos are the scripts that come with the examples
-(:mod:`acoustic_spaces.demos`): they write a scene, simulate it, mix what each listener
-hears and put a video together. The form is built from the demo's own options, so the
-editor and ``python stadium_demo.py all`` run exactly the same thing; the line at the
-bottom shows that command, to run again or to put in a script.
+Every scene has *This scene* (:mod:`acoustic_spaces.demos.scene_demo`): its sources
+play the WAV files their ``signal`` names, and every listener is heard in turn in a
+video. A scene of an example that comes with a demo (:mod:`acoustic_spaces.demos`), or
+a copy of one, also has that demo, with its own recordings, reading the open scene. The
+form is built from the demo's own options, so the editor and the command line run
+exactly the same thing; the line at the bottom shows that command, to run again or to
+put in a script.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from acoustic_spaces.demos import Demo, Option, list_demos
+from acoustic_spaces.demos import Demo, Option
 from acoustic_spaces.gui.inspector import int_spin, spin
 from acoustic_spaces.i18n import _
 
@@ -41,14 +43,62 @@ HOME_FOLDER = "acoustic-spaces"
 ALL = "all"
 
 
+def writable(folder: Path, name: str) -> Path:
+    """``folder`` when it can be written, else one called ``name`` under the user's home
+    (``~/acoustic-spaces/<name>``): where a demo writes when the scene lies among the
+    examples of an installed copy."""
+    if os.access(folder, os.W_OK):
+        return folder
+    return Path.home() / HOME_FOLDER / name
+
+
 def work_base(demo: Demo) -> Path:
     """The folder the editor runs ``demo`` in: the example's own folder, where the
     command line runs it, or one of the same name under the user's home when the
     example cannot be written (the examples of an installed copy)."""
-    folder = demo.script.parent
-    if os.access(folder, os.W_OK):
-        return folder
-    return Path.home() / HOME_FOLDER / demo.example
+    return writable(demo.script.parent, demo.example)
+
+
+def reads_scene(demo: Demo) -> Option | None:
+    """The option through which ``demo`` reads the scene it plays in: the demo of any
+    scene's leading option, or the one whose default is the example's ``scene.yaml``."""
+    for option in demo.options:
+        if option.kind != "file":
+            continue
+        if option.name == demo.leading:
+            return option
+        if option.default is not None and Path(option.default).name == "scene.yaml":
+            return option
+    return None
+
+
+def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]:
+    """The demos of the open scene, each in the folder it runs in and with the arguments
+    it starts with: *This scene* first, then the demo of the example the scene belongs
+    to (its folder's name, in the examples or in a copy of one), reading the open scene
+    instead of the example's."""
+    from acoustic_spaces.demos import demo_for
+    from acoustic_spaces.demos.scene_demo import DEMO
+
+    found: list[tuple[Demo, argparse.Namespace]] = []
+    path = Path(scene).resolve() if scene is not None else None
+    base = writable(path.parent, path.parent.name) if path else Path.home() / HOME_FOLDER
+    demo = DEMO.at(base)
+    args = demo.defaults()
+    args.scene = path
+    args = demo.resolved(args)  # with the scene's own HRTFs, when it names some
+    if path is None or base != path.parent:  # not beside the scene, its default
+        args.work = base / "demo"
+    found.append((demo, args))
+    example = demo_for(path.parent.name) if path is not None else None
+    if example is not None:
+        demo = example.at(writable(path.parent, example.example))
+        args = starting_arguments(demo)
+        option = reads_scene(demo)
+        if option is not None:
+            setattr(args, option.name, path)
+        found.append((demo, args))
+    return found
 
 
 def starting_arguments(demo: Demo) -> argparse.Namespace:
@@ -193,18 +243,33 @@ class DemoDialog(QDialog):
         demos: list[Demo] | None = None,
         parent: QWidget | None = None,
         start: str | None = None,
+        *,
+        scene: str | Path | None = None,
+        unsaved: bool = False,
     ) -> None:
+        """``scene`` is the open scene's file, ``unsaved`` whether it has changes the
+        file lacks; ``demos`` (the examples' demos at their folders, for tests) replaces
+        the scene's; ``start`` names the demo to start on (by default the example's own
+        demo when the scene has one, else *This scene*)."""
         super().__init__(parent)
         self.setWindowTitle(_("Run demo"))
-        self.demos = [demo.at(work_base(demo)) for demo in (demos or list_demos())]
+        if demos is not None:
+            pairs = [(d.at(work_base(d)), None) for d in demos]
+        else:
+            pairs = demos_for(scene)
+            if start is None:
+                start = pairs[-1][0].name
+        self.demos = [demo for demo, _args in pairs]
+        self.starts = {demo.name: args for demo, args in pairs if args is not None}
+        self.unsaved = unsaved or (demos is None and scene is None)
         self.fields: dict[str, QWidget] = {}
         layout = self._layout = QVBoxLayout(self)
         intro = QLabel(
             _(
-                "The demos are the scripts that come with the examples: each writes its "
-                "scene, simulates it, mixes what every listener hears and puts a video "
-                "together. A demo downloads the recordings it plays and can take a while; "
-                "the messages say what it is doing, and Cancel stops it."
+                "A demo plays sound through the open scene, mixes what every listener hears "
+                "and puts a video together. This scene plays the WAV file each source's Plays "
+                "names; an example's own demo downloads the recordings it plays and can take "
+                "a while. The messages say what it is doing, and Cancel stops it."
             )
         )
         intro.setWordWrap(True)
@@ -213,8 +278,13 @@ class DemoDialog(QDialog):
         head = QFormLayout()
         self.picker = QComboBox()
         for demo in self.demos:
-            self.picker.addItem(demo.title, demo.name)
-        self.picker.setToolTip(_("The demo to run, one for each example that has one"))
+            self.picker.addItem(_(demo.title), demo.name)  # This scene is translated
+        self.picker.setToolTip(
+            _(
+                "The demo to run: This scene, with the sounds its sources play, or the "
+                "example's own demo when the scene is an example's or a copy of one"
+            )
+        )
         if start is not None:
             index = self.picker.findData(start)
             if index >= 0:
@@ -298,7 +368,7 @@ class DemoDialog(QDialog):
         rows = QFormLayout(form)
         rows.setContentsMargins(0, 0, 0, 0)
         self.fields = {}
-        args = starting_arguments(demo)
+        args = self.starts.get(demo.name) or starting_arguments(demo)
         for option in demo.options:
             tip = option.description
             widget = field_for(option, tip)
@@ -337,6 +407,8 @@ class DemoDialog(QDialog):
         self.command.setText(demo.command(step, args))
         self.folder.setText(_("Runs in {folder}").format(folder=demo.folder))
         problem = demo.check(args)
+        if self.unsaved:
+            problem = _("save the scene first (File > Save): the demo reads it from its file")
         self.problem.setText(_("Cannot run: {reason}").format(reason=problem) if problem else "")
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(problem is None)
 
@@ -356,4 +428,15 @@ class DemoDialog(QDialog):
         return self.demo, self.chosen_step(), self.arguments()
 
 
-__all__ = ["ALL", "DemoDialog", "PathField", "field_for", "starting_arguments", "value_of"]
+__all__ = [
+    "ALL",
+    "DemoDialog",
+    "PathField",
+    "demos_for",
+    "field_for",
+    "reads_scene",
+    "starting_arguments",
+    "value_of",
+    "work_base",
+    "writable",
+]

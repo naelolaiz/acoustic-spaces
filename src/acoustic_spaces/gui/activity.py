@@ -103,7 +103,10 @@ class Activity(QWidget):
             lines.append(_("Now: {step}").format(step=self._step))
         lines += [
             fmt(_("Running for {time:.0f} s"), time=seconds),
-            _("Cancel, or Simulation > Cancel (Shift+F5), stops it at its next stage"),
+            _(
+                "Cancel, or Simulation > Cancel (Shift+F5), stops it: a run at its next "
+                "stage, a demo at once"
+            ),
         ]
         tip = "\n".join(lines)
         for widget in (self, self.bar, self.label):

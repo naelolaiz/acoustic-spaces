@@ -19,7 +19,9 @@ acoustic-spaces is installed in, with ffmpeg on the PATH:
     python lakeside_demo.py video     # demo/tour.wav, the stills, demo/tour.mp4
 
 or `python lakeside_demo.py all`, which runs them in turn and leaves out what is there
-already (the song, the scenes, the simulations). Everything goes to ./demo (--work). Use
+already (the song, the scenes, the simulations). The scenes and their simulations go
+beside the script (scene_demo.yaml and scene_still.yaml, results_demo and
+results_still); the song, the feeds, the mixes and the video go to ./demo (--work). Use
 headphones; `--hrtf me.sofa` plays through your own or measured HRTFs instead of a
 spherical head (the simulations take it too). The editor runs the same steps from
 Simulation > Run demo…
@@ -239,10 +241,11 @@ def scenes(args) -> None:
         (args.scene, scene, "with its sound system"),
         (args.still, still, "in still air, with its sound system"),
     ):
-        path.write_text(
-            f"# The lakeside concert example {what}, written by lakeside_demo.py.\n"
-            + yaml.safe_dump(data, sort_keys=False, default_flow_style=None, width=100),
-            encoding="utf-8",
+        pipeline.write_scene(
+            path,
+            data,
+            f"# The lakeside concert example {what}, written by lakeside_demo.py.\n",
+            args.source.parent,
         )
     print(f"wrote {args.scene} and {args.still}; now:")
     for simulation in simulations(args):
@@ -322,8 +325,8 @@ def gains_of(seats: dict, tour) -> dict[str, float]:
 
 
 def video(args) -> None:
-    """tour.wav, one still per stop of the tour, and tour.mp4 with a scrolling
-    spectrogram under the stills (ffmpeg)."""
+    """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
+    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
     pictures = sibling(__file__, "lakeside_pictures")
     seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
     tour = tour_of(args)
@@ -339,8 +342,11 @@ def video(args) -> None:
     )
     write(args.work / "tour.wav", audio, seats["rate"])
     print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
+    scenes = {
+        w: yaml.safe_load(s.scene.read_text(encoding="utf-8")) for w, s in weathers(args).items()
+    }
     drawing = pictures.Pictures(
-        {w: yaml.safe_load(s.scene.read_text(encoding="utf-8")) for w, s in weathers(args).items()},
+        scenes,
         seats["seats"],
         tour,
         TITLES,
@@ -348,6 +354,12 @@ def video(args) -> None:
         played(args)["credit"],
         folder=args.scene.parent,
         hrtf=args.hrtf,
+        tool={
+            w: pictures.settings_lines(
+                DEMO, args, scenes[w], pipeline.read_json(s.results / pipeline.PARAMETERS)
+            )
+            for w, s in weathers(args).items()
+        },
     )
     pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
     pipeline.video(

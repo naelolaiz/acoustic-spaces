@@ -16,14 +16,16 @@ Python environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
     python stadium_demo.py music     # download the master and the stems (0.4 to 0.8 GB)
     python stadium_demo.py band      # scene_band.yaml: the scene with the band on the stage
-    python stadium_demo.py simulate  # acoustic-spaces simulate scene_band.yaml --out results_band
+    python stadium_demo.py simulate  # simulate scene_band.yaml into results_band, binaural
     python stadium_demo.py feeds     # one signal per loudspeaker, as loud as the scene says
     python stadium_demo.py render    # every listener, binaural
     python stadium_demo.py video     # demo/tour.wav, the stills, demo/tour.mp4
 
 or `python stadium_demo.py all`, which runs them in turn and leaves out what is there
-already (the music, the scene, the simulation). Everything goes to ./demo (--work); a
-second song goes best to a folder of its own (`--song francium --work demo_francium`).
+already (the music, the scene, the simulation). The scene and its simulation go beside
+the script (scene_band.yaml, results_band); the music, the feeds, the mixes and the
+video go to ./demo (--work), and a second song goes best to a work folder of its own
+(`--song francium --work demo_francium`).
 Use headphones; `--hrtf me.sofa` plays through your own or measured HRTFs instead of a
 spherical head (the simulation takes it too). The editor runs the same steps from
 Simulation > Run demo…
@@ -305,10 +307,11 @@ def band(args) -> None:
     scene["sources"] += [
         {"name": name, "group": "Band"} | spec for name, spec in BAND.items() if name not in names
     ]
-    args.scene.write_text(
-        "# The stadium concert example with the band on the stage, written by stadium_demo.py.\n"
-        + yaml.safe_dump(scene, sort_keys=False, default_flow_style=None, width=100),
-        encoding="utf-8",
+    pipeline.write_scene(
+        args.scene,
+        scene,
+        "# The stadium concert example with the band on the stage, written by stadium_demo.py.\n",
+        args.source.parent,
     )
     print(f"wrote {args.scene}; now: {pipeline.simulate_command(simulations(args)[0], args.hrtf)}")
 
@@ -474,8 +477,8 @@ def gains_of(seats: dict, tour) -> dict[str, float]:
 
 
 def video(args) -> None:
-    """tour.wav, one still per stop of the tour, and tour.mp4 with a scrolling
-    spectrogram under the stills (ffmpeg)."""
+    """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
+    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
     pictures = sibling(__file__, "stadium_pictures")
     seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
     tour = tour_of(args, seats["seats"])
@@ -497,6 +500,9 @@ def video(args) -> None:
         gains,
         credit=feeds_table(args)["song"]["credit"],
         hrtf=args.hrtf,
+        tool=pictures.settings_lines(
+            DEMO, args, scene_of(args), pipeline.read_json(args.results / pipeline.PARAMETERS)
+        ),
     )
     pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
     pipeline.video(
