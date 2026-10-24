@@ -7,11 +7,12 @@ and buildings from a map, grounds of finite and of extended impedance, wind and
 temperature gradients, turbulence, vegetation, weather zones and classes with levels
 over a long term, moving sources with Doppler, whole cities and a wide-angle parabolic
 equation, on the GPU too, validated against a fast field program. Coherent arrays
-element by element, groups of sources and listeners, demos of the examples and of any
-scene with files of your own, walks along keyframes with every mover at once on one
-clock and the editor's Movement panel, HRTF sets to download, the checks of ISO 3382-2
-on every decay time, the wind drawn in the editor, and packs that carry a scene with its
-files to another computer, with a container image that runs them headless on a GPU.
+element by element, groups of sources and listeners, demos of the examples (a car driving
+past with Doppler among them) and of any scene with files of your own, walks along
+keyframes with every mover at once on one clock and the editor's Movement panel, HRTF
+sets to download, the checks of ISO 3382-2 on every decay time, the wind drawn in the
+editor, and packs that carry a scene with its files to another computer, with a
+container image that runs them headless on a GPU.
 
 Indoor scenes give the results of 3.2.3 but for what **Fixes** lists: every binaural
 output changes (the treble an HRTF between the measured directions lost is back), a
@@ -701,6 +702,31 @@ last sound, `auralize` and `walkthrough` mix sources at their sound power
   Run demo window, `--music` is a file field, `--bpm` a number and the stems a table
   with a file per row; the window's Demo list is left out when there is one demo only.
 
+**A car passing by, with Doppler**
+
+- The `roadside` and `street` examples have a car: a point source 0.05 m above the road
+  with the sound power per octave band of CNOSSOS-EU's passenger car (category 1) at
+  50 km/h, and a walk along the road with Doppler. It is left out of the examples' own
+  simulations (`enabled: false`) until ticked, so their results do not change.
+- `passby_demo.py` in both examples drives it past every listener in turn: the car's
+  sound made to CNOSSOS-EU's sound power at `--speed` (tyre noise and the firing of a
+  four-cylinder engine at `--rpm`, each with the octave spectrum of its part, the two at
+  the ratio of their powers; `acoustic_spaces.demos.car`), or a dry recording of yours
+  (`--input car=WAV`); the car simulated every `--step` (1 m) along its walk at each
+  listener and its sound played through those places, each early path through its own
+  changing delay; and a video with the car moving on the plan, the level heard over the
+  pass under it, L_Amax, the sound exposure level and how far the pitch of the direct
+  sound falls. One module, `acoustic_spaces.demos.passby`, serves both.
+- The demo of any scene plays a walk with Doppler when it is the only walk that moves:
+  every listener hears it pass (a walking source simulated along its walk once for each
+  listener), with the moving picture and the level at each place. With other walkers it
+  says to leave them standing.
+- Editor: the Movement panel has a **Doppler** tick (`walk.doppler`), one step of the
+  history; a line or a surface source's form shows **Moves** and **Edit movement…**
+  greyed, with a tip saying that only a point source moves, where it hid them before.
+  The Run demo window's Movement box lists a walker left out of the scene when the demo
+  moves it, as the pass-by demos do the car.
+
 **Movement**
 
 - A walk may go through `keyframes`: where the walker is at given times after its start
@@ -738,8 +764,8 @@ last sound, `auralize` and `walkthrough` mix sources at their sound power
   walker at each moment of its walk (in `moving/`, one gain for all), and the video is a
   moving picture with the walks dotted, every walker where it is and the level of the
   sources that play at that moment, as simulated. `--moving NAME,...` picks the walks of
-  a run and `--moving none` keeps every walker standing; a walk with Doppler is refused,
-  as it plays one walk at a time.
+  a run and `--moving none` keeps every walker standing; a walk with Doppler moves alone
+  (above).
 - The Run demo window's **Movement** box lists the sources and listeners with a walk,
   how each goes, how far and for how long, ticked when it moves in the run: *This
   scene*'s ticks start as **Moves** sets them and change that run only (`--moving`),

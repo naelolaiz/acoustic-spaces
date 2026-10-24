@@ -2701,6 +2701,18 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     assert walk.edit_request == ("listeners", "visitor")
     assert walk.result() == int(QDialog.DialogCode.Rejected)
     walk.deleteLater()
+    # The roadside's car is left out of its simulations: the pass-by demo, which puts it
+    # in the scene it writes, shows that it moves it; This scene does not list it.
+    road = DemoDialog(scene=example_path("roadside"))
+    assert road.picker.currentData() == "passby"
+    box = road.movement
+    assert box.walkers == [("sources", "car", True)] and box.used == [False]
+    assert box.ticked() == ["car"] and not box.table.isHidden()
+    assert "a demo that moves it puts it in" in box.table.item(0, box.NAME).toolTip()
+    road.picker.setCurrentIndex(road.picker.findData("scene"))
+    assert box.note.text().startswith("Nothing in this scene moves.")
+    assert box.table.isHidden() and box.table.isRowHidden(0) and box.ticked() == []
+    road.deleteLater()
     # A scene of no example has This scene only, and one never saved cannot be run.
     plain = DemoDialog(scene=example_path("shoebox"))
     assert plain.movement.note.text().startswith("Nothing in this scene moves.")
@@ -3484,6 +3496,29 @@ def test_movement_panel_edits_keyframes_in_place(window) -> None:
     assert panel.playing and panel.play.text() == "Pause"
     dock.hide()
     assert not panel.playing and window.plan.canvas.time is None
+
+
+def test_a_car_drives_with_doppler_and_a_line_stays(window) -> None:
+    """A line source's form shows Moves and Edit movement… greyed, with a tip that says
+    why; the roadside's car, a point source, has its walk's Doppler ticked in the
+    Movement panel, and the tick is one step of the history."""
+    window.open_example(example_path("roadside"))
+    page = window.inspector.pages["sources"]
+    window.select("sources", 0)  # the traffic: a line
+    assert page._form.isRowVisible(page.movement_row) and not page.movement_row.isEnabled()
+    assert page.moves.toolTip().startswith("Only a point source moves")
+    assert page.edit_movement.toolTip() == page.moves.toolTip()
+    window.select("sources", 1)  # the car
+    assert page.movement_row.isEnabled() and page.moves.isChecked()
+    assert page.moves.toolTip().startswith("Tick to have the source go along")
+    page.edit_movement.click()
+    panel = window.movement
+    assert panel.key == ("sources", 1) and panel.doppler.isChecked()
+    panel.doppler.setChecked(False)
+    assert not window.document.scene.sources[1].walk.doppler
+    assert window.undo_action.text() == "&Undo turn Doppler off"
+    window.undo()
+    assert window.document.scene.sources[1].walk.doppler and panel.doppler.isChecked()
 
 
 def start_yaw(window) -> float:

@@ -94,11 +94,14 @@ def test_examples_simulate(name: str) -> None:
         }
     )
     result = simulate(room, settings=quick)
-    assert len(result) == len(room.scene.sources) * len(room.scene.listeners)
+    # A source or listener left out (the roadside's car until it is ticked) is not simulated.
+    sources = [s for s in room.scene.sources if s.in_use]
+    listeners = [lis for lis in room.scene.listeners if lis.in_use]
+    assert len(result) == len(sources) * len(listeners)
     # Wind and temperature change the speed of sound along the way, and bend the path.
     tolerance = 1e-6 if room.scene.atmosphere is None else 0.02
-    for source in room.scene.sources:
-        for listener in room.scene.listeners:
+    for source in sources:
+        for listener in listeners:
             # The nearest of a line's or surface's points, after the source's own delay.
             distance = np.linalg.norm(source.elements() - listener.position, axis=1).min()
             expected = distance / room.speed_of_sound() + source.delay_ms / 1000.0

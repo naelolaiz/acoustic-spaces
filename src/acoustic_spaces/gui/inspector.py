@@ -2891,6 +2891,11 @@ class PointPage(Page):
             )
         )
         self.edit_movement.clicked.connect(lambda: self.movement.emit(self.kind, self.key))
+        self._moves_tip, self._edit_tip = self.moves.toolTip(), self.edit_movement.toolTip()
+        self._still_tip = _(
+            "Only a point source moves: a line or a surface stands where it is. Set Shape "
+            "to point to give the source a walk"
+        )
         self.movement_row = QWidget()
         movement = QHBoxLayout(self.movement_row)
         movement.setContentsMargins(0, 0, 0, 0)
@@ -3147,8 +3152,11 @@ class PointPage(Page):
         self.group.addItems(sorted({other.group for other in items if other.group}))
         self.group.setCurrentText(item.group or "")
         self.in_use.setChecked(item.in_use)
-        # A line or a surface does not move.
-        self._form.setRowVisible(self.movement_row, self.kind != "sources" or not item.extended)
+        # A line or a surface does not move: its row stays, greyed, saying why.
+        still = self.kind == "sources" and item.extended
+        self.movement_row.setEnabled(not still)
+        self.moves.setToolTip(self._moves_tip if not still else self._still_tip)
+        self.edit_movement.setToolTip(self._edit_tip if not still else self._still_tip)
         self.moves.setEnabled(item.walk is not None)
         self.moves.setChecked(item.walk is not None and item.walk.enabled)
         for box, value in zip(self.position, item.position, strict=True):

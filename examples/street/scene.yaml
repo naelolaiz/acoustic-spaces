@@ -4,7 +4,9 @@
 # over it: sound that reaches the sky leaves, and the ground reaches 30 m past the
 # buildings, then goes on as if it never ended. One listener stands on the pavement, one
 # on a balcony of the office block, one in the garden, where the traffic comes over the
-# top of the barrier and round its ends: `first_order` diffraction follows it.
+# top of the barrier and round its ends: `first_order` diffraction follows it. A car
+# drives along the street at 50 km/h, its pitch falling as it passes (Doppler): it is
+# left out of simulations until ticked, and passby_demo.py plays it.
 name: Street with a noise barrier
 geometry:
   ground: {margin: 30}
@@ -41,6 +43,17 @@ sources:
     line_m: 30
     spacing_m: 3
     level_db: 100
+  # A passenger car in the lane on the offices' side, its sound power per octave band
+  # CNOSSOS-EU's at 50 km/h (Directive (EU) 2015/996, Appendix F, Table F-1); its sound
+  # comes from 0.05 m above the road, where the method places it.
+  - name: car
+    enabled: false
+    position: [-55, -2, 0.05]
+    level_db: [94.9, 87.9, 86.6, 88.3, 92.9, 90.0, 82.9, 74.9]
+    walk:
+      to: [[70, -2, 0.05]]
+      speed_m_s: 13.89
+      doppler: true
 listeners:
   - name: pavement
     position: [0, 4, 1.6]
