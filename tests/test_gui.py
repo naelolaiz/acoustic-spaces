@@ -2453,6 +2453,307 @@ def test_coverage_map_in_the_editor(window, qapp, tmp_path: Path) -> None:
     assert not panel.note.isVisible()
 
 
+WAITING_DEMO = '''"""A demo that waits, for the tests of the editor's Run demo window."""
+
+import sys
+import time
+from pathlib import Path
+
+from acoustic_spaces.demos import Demo, Option, Step
+
+
+def wait(args) -> None:
+    print(f"waiting {args.seconds} s", flush=True)
+    time.sleep(args.seconds)
+    Path(args.work).mkdir(parents=True, exist_ok=True)
+    (Path(args.work) / "waited").write_text("done", "utf-8")
+    print("waited")
+
+
+DEMO = Demo(
+    name="wait",
+    example="none",
+    title="A demo that waits",
+    description=__doc__,
+    script=Path(__file__),
+    steps=[Step("wait", wait, "wait a while")],
+    options=[
+        Option("seconds", "how long to wait", 0.2, "float"),
+        Option("work", "folder for what the demo writes", Path("demo"), "folder"),
+    ],
+)
+
+if __name__ == "__main__":
+    sys.exit(DEMO.main())
+'''
+
+
+def _waiting_demo(tmp_path: Path, seconds: float):
+    """A demo of one step that waits ``seconds``, in a folder of its own."""
+    from acoustic_spaces.demos import load
+
+    folder = tmp_path / "waiting"
+    folder.mkdir(exist_ok=True)
+    script = folder / "wait_demo.py"
+    script.write_text(WAITING_DEMO, "utf-8")
+    demo = load(script)
+    args = demo.defaults()
+    args.seconds = seconds
+    return demo, demo.resolved(args)
+
+
+def test_demo_dialog_fills_in_the_options(qapp) -> None:
+    """The Run demo window builds its form from the demo's own options, at the defaults
+    the command line uses, and shows that command."""
+    from PySide6.QtWidgets import (
+        QAbstractSpinBox,
+        QCheckBox,
+        QComboBox,
+        QDialogButtonBox,
+        QLineEdit,
+        QPushButton,
+        QWidget,
+    )
+
+    from acoustic_spaces.demos import list_demos
+    from acoustic_spaces.gui.demo_dialog import ALL, DemoDialog, PathField
+
+    dialog = DemoDialog()
+    names = [dialog.picker.itemData(k) for k in range(dialog.picker.count())]
+    assert names == [demo.name for demo in list_demos()]
+
+    dialog.picker.setCurrentIndex(names.index("stadium"))
+    demo = dialog.demo
+    assert [field for field in dialog.fields] == [option.name for option in demo.options]
+    assert dialog.step.currentText() == ALL
+    assert [dialog.step.itemText(k) for k in range(dialog.step.count())] == [
+        *(step.name for step in demo.steps),
+        ALL,
+    ]
+    # Every option at its default: the command line is the plain one.
+    assert dialog.command.text() == "python stadium_demo.py all"
+    assert str(demo.folder) in dialog.folder.text()
+    assert dialog.chosen()[1] == ALL
+
+    # A field that differs shows in the command, and the song is a list of the songs.
+    song = dialog.fields["song"]
+    assert [song.itemText(k) for k in range(song.count())] == list(demo.option("song").choices)
+    song.setCurrentText("francium")
+    dialog.step.setCurrentText("render")
+    assert dialog.command.text() == "python stadium_demo.py render --song francium"
+    assert dialog.about_step.text().startswith("render: ")
+    assert dialog.chosen()[2].song == "francium"
+
+    # What cannot be run says why, and Run waits for it to be put right.
+    ok = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
+    assert isinstance(dialog.fields["hrtf"], PathField)
+    dialog.fields["hrtf"].set_value("me.sofa")
+    dialog.fields["format"].setText("ambisonics")
+    assert "--hrtf is for binaural mixes" in dialog.problem.text() and not ok.isEnabled()
+    dialog.fields["format"].setText("binaural")
+    assert dialog.problem.text() == "" and ok.isEnabled()
+
+    # Another demo: its own steps, options and command.
+    dialog.picker.setCurrentIndex(names.index("walk"))
+    assert dialog.command.text() == "python walk_demo.py all"
+    assert "talker" in dialog.fields and "song" not in dialog.fields
+
+    # Every control explains itself, labels included.
+    missing = [
+        widget.text() if hasattr(widget, "text") else type(widget).__name__
+        for widget in dialog.findChildren(QWidget)
+        if isinstance(widget, (QCheckBox, QComboBox, QLineEdit, QPushButton))
+        and not widget.toolTip()
+        and not isinstance(widget.parentWidget(), QAbstractSpinBox)
+    ]
+    assert not missing
+    labels = [
+        label for label in dialog.findChildren(QLabel) if label.buddy() is not None and label.text()
+    ]
+    assert labels and all(label.toolTip() for label in labels)
+    dialog.deleteLater()
+
+
+def test_run_demo_in_the_editor(window, qapp, monkeypatch, tmp_path: Path) -> None:
+    """Run demo… runs the step it asks for in its own process, its messages in the
+    panel, and Cancel stops it."""
+    from acoustic_spaces.gui import app as app_module
+
+    demo, args = _waiting_demo(tmp_path, 0.2)
+    args.work = tmp_path / "waiting" / "work"
+
+    class Dialog:
+        def __init__(self, parent=None, start=None) -> None:
+            self.parent, self.start = parent, start
+
+        def exec(self) -> int:
+            return int(QDialog.DialogCode.Accepted)
+
+        def chosen(self):
+            return demo, "wait", args
+
+    monkeypatch.setattr(app_module, "DemoDialog", Dialog)
+    # The window starts on the demo of the open scene's example, when it has one.
+    window.open_example(example_path("stadium_concert"))
+    assert window._demo_of_open_scene() == "stadium"
+    window.open_example(example_path("shoebox"))
+    assert window._demo_of_open_scene() is None
+
+    window.demo_action.trigger()
+    assert not window.run_action.isEnabled() and window.cancel_action.isEnabled()
+    _wait(qapp, lambda: window.job is None)
+    messages = window.messages.toPlainText()
+    assert "python wait_demo.py wait" in messages and "waiting 0.2 s" in messages
+    assert "The wait demo is done in" in messages
+    assert (args.work / "waited").read_text() == "done"
+    assert window.run_action.isEnabled() and not window.cancel_action.isEnabled()
+
+    # Cancel stops the process where it is: nothing is written.
+    slow, slow_args = _waiting_demo(tmp_path, 120.0)
+    slow_args.work = tmp_path / "waiting" / "late"
+    monkeypatch.setattr(Dialog, "chosen", lambda self: (slow, "wait", slow_args))
+    window.demo_action.trigger()
+    _wait(qapp, lambda: "waiting 120.0 s" in window.messages.toPlainText())
+    window.cancel_simulation()
+    _wait(qapp, lambda: window.job is None, timeout=30.0)
+    assert "Demo cancelled." in window.messages.toPlainText()
+    assert not (slow_args.work / "waited").exists()
+
+    # A demo that stops with an error says so, in red.
+    broken, broken_args = _waiting_demo(tmp_path, 0.0)
+    monkeypatch.setattr(Dialog, "chosen", lambda self: (broken, "wait", broken_args))
+    broken.script.write_text(
+        WAITING_DEMO.replace("time.sleep(args.seconds)", "raise SystemExit(2)"), "utf-8"
+    )
+    window.demo_action.trigger()
+    _wait(qapp, lambda: window.job is None)
+    assert "The demo failed: wait: the demo stopped (2)" in window.messages.toPlainText()
+
+
+def _hrtf_set(tmp_path: Path, monkeypatch):
+    """One set that comes from a file beside the tests, so nothing is downloaded."""
+    from acoustic_spaces.spatial import hrtf_sets
+
+    source = tmp_path / "source" / "ears.sofa"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"SOFA" + bytes(32))
+    item = hrtf_sets.HrtfSet(
+        name="test",
+        title="Test ears",
+        ears="a test",
+        licence="CC0 1.0",
+        credit="the tests",
+        page="https://example.invalid/ears",
+        url=source.as_uri(),
+        size_mb=0.0001,
+        note="nothing much in it",
+    )
+    monkeypatch.setattr(hrtf_sets, "SETS", (item,))
+    return item
+
+
+def test_hrtf_dialog_downloads_a_set(qapp, tmp_path: Path, monkeypatch) -> None:
+    """Download HRTFs… shows each set with its licence, fetches the one chosen into the
+    folder and hands back its file."""
+    from acoustic_spaces.gui.hrtf_dialog import HrtfDialog
+
+    item = _hrtf_set(tmp_path, monkeypatch)
+    folder = tmp_path / "sets"
+    dialog = HrtfDialog(folder=folder)
+    row = dialog.list.item(0)
+    assert item.licence in row.text() and "not here yet" in row.text()
+    assert item.credit in row.toolTip() and item.page in row.toolTip()
+    assert dialog.download.isEnabled() and not dialog.use.isEnabled()
+    assert not dialog.heads.isVisible()  # one head only
+
+    dialog.download.click()
+    _wait(qapp, lambda: dialog.job is None)
+    assert dialog.path == folder / "test.sofa"
+    assert dialog.path.read_bytes().startswith(b"SOFA")
+    assert "downloaded" in dialog.list.item(0).text() and "Downloaded" in dialog.status.text()
+    assert dialog.use.isEnabled() and not dialog.download.isEnabled()  # there already
+
+    # Any other SOFA file, by its address.
+    mine = tmp_path / "mine.sofa"
+    mine.write_bytes(b"SOFA mine")
+    dialog.url.setText(mine.as_uri())
+    assert dialog.download.isEnabled()
+    dialog.download.click()
+    _wait(qapp, lambda: dialog.job is None)
+    assert dialog.path == folder / "mine.sofa" and dialog.path.read_bytes() == b"SOFA mine"
+    dialog.accept()
+    assert dialog.path == folder / "mine.sofa"
+    dialog.deleteLater()
+
+    # A download that fails says so and leaves nothing behind.
+    other = HrtfDialog(folder=folder)
+    other.url.setText("file:///nothing/here.sofa")
+    other.download.click()
+    _wait(qapp, lambda: other.job is None)
+    assert "The download failed" in other.status.text() and other.path is None
+    assert not (folder / "here.sofa").exists()
+    other.deleteLater()
+
+
+def test_download_hrtfs_from_the_outputs_page(window, tmp_path: Path, monkeypatch) -> None:
+    """The Outputs page's Download HRTFs… button puts the set it brings back in the
+    scene's binaural output."""
+    from PySide6.QtWidgets import QPushButton
+
+    from acoustic_spaces.gui import hrtf_dialog
+
+    path = tmp_path / "ku100.sofa"
+    path.write_bytes(b"SOFA")
+
+    class Dialog:
+        def __init__(self, parent=None, folder=None) -> None:
+            self.path = path
+
+        def exec(self) -> int:
+            return int(QDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(hrtf_dialog, "HrtfDialog", Dialog)
+    window.open_example(example_path("studio"))
+    window.select("outputs")
+    page = window.inspector.pages["outputs"]
+    button = next(
+        child
+        for child in page.findChildren(QPushButton)
+        if child.text().startswith("Download HRTFs")
+    )
+    assert button.toolTip()
+    button.click()
+    binaural = [output for output in window.document.scene.outputs if output.format == "binaural"]
+    assert binaural and binaural[0].hrtf == path
+
+
+def test_demo_dialog_offers_the_hrtf_sets(qapp, tmp_path: Path, monkeypatch) -> None:
+    """The Run demo window's HRTF field has the same download button, and fills itself
+    in with what it brings back."""
+    from acoustic_spaces.gui import hrtf_dialog
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+
+    path = tmp_path / "ears.sofa"
+    path.write_bytes(b"SOFA")
+
+    class Dialog:
+        def __init__(self, parent=None, folder=None) -> None:
+            self.path = path
+
+        def exec(self) -> int:
+            return int(QDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(hrtf_dialog, "HrtfDialog", Dialog)
+    dialog = DemoDialog()
+    field = dialog.fields["hrtf"]
+    assert field.sets is not None and field.sets.toolTip()
+    assert dialog.fields["work"].sets is None  # only the HRTF field offers them
+    field.sets.click()
+    assert field.value() == path
+    assert dialog.command.text().endswith(f"--hrtf {path}")
+    dialog.deleteLater()
+
+
 def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
     from acoustic_spaces.engine import tuning
 

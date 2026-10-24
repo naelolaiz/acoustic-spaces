@@ -648,6 +648,73 @@ def _cmd_examples(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_hrtf(args: argparse.Namespace) -> int:
+    """List the free HRTF sets, or download one."""
+    from acoustic_spaces.spatial import hrtf_sets
+
+    folder = Path(args.folder) if args.folder else hrtf_sets.data_folder()
+    if args.url:
+        name = args.name or Path(args.url).stem or "hrtf"
+        try:
+            path = hrtf_sets.other(args.url, name, folder, progress=_download_bar(name))
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(f"{path}")
+        return 0
+    if not args.name:
+        here = hrtf_sets.installed(folder)
+        print(f"HRTF sets in {folder}:")
+        for item in hrtf_sets.sets():
+            mark = "[have]" if item.name in here else "      "
+            print(f" {mark} {item.name}: {item.summary()}")
+            print(f"        {item.note}; by {item.credit}")
+            print(f"        {item.page}")
+        print("Download one with: acoustic-spaces hrtf NAME")
+        return 0
+    try:
+        item = hrtf_sets.named(args.name)
+    except KeyError as exc:
+        print(f"error: {exc.args[0]}", file=sys.stderr)
+        return 1
+    if args.member and not args.member.endswith(".sofa"):
+        print(f"error: {item.name}: a member is a SOFA file in the archive", file=sys.stderr)
+        return 1
+    path = hrtf_sets.file_of(item, args.member, folder)
+    if path.exists() and not args.again:
+        print(f"{path}: there already")
+        return 0
+    print(f"{item.title}: {item.licence}, by {item.credit} ({item.page})", file=sys.stderr)
+    try:
+        path = hrtf_sets.get(
+            item,
+            member=args.member,
+            folder=folder,
+            progress=_download_bar(item.name),
+            again=args.again,
+        )
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"{path}")
+    return 0
+
+
+def _download_bar(name: str):
+    """A progress callback that keeps one line of megabytes on the error stream."""
+
+    def say(done: int, total: int | None) -> None:
+        if total:
+            share = f"{100.0 * done / total:5.1f}%  {done / 1e6:7.1f} of {total / 1e6:.1f} MB"
+        else:
+            share = f"{done / 1e6:7.1f} MB"
+        print(f"\r{name}: {share}", end="", file=sys.stderr, flush=True)
+        if total and done >= total:
+            print(file=sys.stderr)
+
+    return say
+
+
 def _cmd_edit(args: argparse.Namespace) -> int:
     try:
         from acoustic_spaces.gui import main as editor
@@ -2247,6 +2314,31 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     tune.set_defaults(func=_cmd_tune)
+
+    hrtf = sub.add_parser(
+        "hrtf",
+        help="list the free HRTF sets, or download one for binaural rendering",
+        description=(
+            "Head-related transfer functions to render binaurally through measured ears "
+            "instead of the spherical head model. Without a name it lists the sets on "
+            "offer with their licences; with one it downloads that set into the user's "
+            "data folder and prints the file, for simulate --hrtf, auralize --hrtf and "
+            "the scene's binaural output."
+        ),
+    )
+    hrtf.add_argument(
+        "name",
+        nargs="?",
+        help="the set to download, or with --url the name to save that file as "
+        "(default: list the sets)",
+    )
+    hrtf.add_argument(
+        "--member", help="which head of a set that holds several (for example subj_K.sofa)"
+    )
+    hrtf.add_argument("--folder", help="where to keep the sets (default: the user's data folder)")
+    hrtf.add_argument("--url", help="download any other SOFA file, saved under the name")
+    hrtf.add_argument("--again", action="store_true", help="download it again, over the file here")
+    hrtf.set_defaults(func=_cmd_hrtf)
 
     edit = sub.add_parser("edit", help="open the graphical editor (needs the gui extra)")
     edit.add_argument("scene", nargs="?", help="scene YAML file to open")

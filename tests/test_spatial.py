@@ -1,3 +1,5 @@
+import contextlib
+import dataclasses
 import math
 import sys
 from pathlib import Path
@@ -453,3 +455,149 @@ def test_outputs_in_scene_files() -> None:
         with pytest.raises(ValueError):
             Output.model_validate(bad)
     assert [o.format for o in _scene({}).outputs] == ["mono"]
+
+
+@contextlib.contextmanager
+def _serving(folder: Path):
+    """A local server that answers range requests, as the repositories the sets come
+    from do: the address it listens on."""
+    import functools
+    import http.server
+    import socketserver
+    import threading
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *args) -> None:  # quiet
+            pass
+
+        def do_GET(self) -> None:  # noqa: N802  Qt-free, this is http.server's name
+            data = Path(self.translate_path(self.path)).read_bytes()
+            asked = self.headers.get("Range")
+            if asked:
+                first, _, last = asked.removeprefix("bytes=").partition("-")
+                start, end = int(first), int(last) if last else len(data) - 1
+                part = data[start : end + 1]
+                self.send_response(206)
+                self.send_header("Content-Range", f"bytes {start}-{end}/{len(data)}")
+            else:
+                part = data
+                self.send_response(200)
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(len(part)))
+            self.end_headers()
+            self.wfile.write(part)
+
+    handler = functools.partial(Handler, directory=str(folder))
+    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def _test_set(tmp_path: Path, name: str = "test", members: tuple[str, ...] = ()):
+    """A set that comes from a file beside the tests, so nothing is downloaded."""
+    from acoustic_spaces.spatial import hrtf_sets
+
+    source = tmp_path / "source" / ("ears.zip" if members else "ears.sofa")
+    source.parent.mkdir(parents=True, exist_ok=True)
+    if members:
+        import zipfile
+
+        with zipfile.ZipFile(source, "w") as archive:
+            for member in members:
+                archive.writestr(member, b"SOFA " + member.encode())
+    else:
+        source.write_bytes(b"SOFA" + bytes(32))
+    return hrtf_sets.HrtfSet(
+        name=name,
+        title="Test ears",
+        ears="a test",
+        licence="CC0 1.0",
+        credit="the tests",
+        page="https://example.invalid/ears",
+        url=source.as_uri(),
+        size_mb=0.0001,
+        note="nothing much in it",
+        members=members,
+    )
+
+
+def test_hrtf_sets_say_what_they_are() -> None:
+    """Every set on offer names whose ears it is, its licence, where it comes from and
+    what the download costs."""
+    from acoustic_spaces.spatial import hrtf_sets
+
+    names = [item.name for item in hrtf_sets.sets()]
+    assert names == sorted(set(names), key=names.index) and len(names) >= 3
+    free = ("CC BY", "CC0", "Apache", "ODbL")
+    for item in hrtf_sets.sets():
+        assert item.licence.startswith(free), item.name
+        assert item.page.startswith("https://") and item.url.startswith("https://")
+        assert item.size_mb > 0 and item.ears and item.note and item.credit
+        assert item.file() == f"{item.name}.sofa"
+        # A set of several heads names them, and the first is the default.
+        if item.members:
+            assert item.member == item.members[0]
+            assert all(member.endswith(".sofa") for member in item.members)
+    assert hrtf_sets.named("ku100").title.startswith("Neumann KU100")
+    with pytest.raises(KeyError, match="no HRTF set 'nope'"):
+        hrtf_sets.named("nope")
+
+
+def test_hrtf_sets_download_once(tmp_path: Path, monkeypatch) -> None:
+    """A set is fetched into the folder, left alone when it is there, and --again
+    fetches it over; a set of several heads takes the one asked for."""
+    from acoustic_spaces.spatial import hrtf_sets
+
+    folder = tmp_path / "sets"
+    monkeypatch.setattr(hrtf_sets, "SETS", (_test_set(tmp_path),))
+    assert hrtf_sets.installed(folder) == {}
+    path = hrtf_sets.get("test", folder=folder)
+    assert path == folder / "test.sofa" and path.read_bytes().startswith(b"SOFA")
+    assert hrtf_sets.installed(folder) == {"test": path}
+
+    path.write_bytes(b"changed")
+    assert hrtf_sets.get("test", folder=folder).read_bytes() == b"changed"  # left alone
+    assert hrtf_sets.get("test", folder=folder, again=True).read_bytes().startswith(b"SOFA")
+
+    seen: list[tuple[int, int | None]] = []
+    hrtf_sets.get("test", folder=folder, progress=lambda done, total: seen.append((done, total)))
+    assert seen == []  # there already: nothing is fetched
+
+    # One head of a set that holds several: the archive is read where it is, by range
+    # requests, and only that head comes down.
+    monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
+    heads = _test_set(tmp_path, "many", ("subj_A.sofa", "subj_B.sofa"))
+    with _serving(tmp_path / "source") as address:
+        heads = dataclasses.replace(heads, url=f"{address}/ears.zip")
+        monkeypatch.setattr(hrtf_sets, "SETS", (heads,))
+        first = hrtf_sets.get(heads, folder=folder)
+        other = hrtf_sets.get(heads, member="subj_B.sofa", folder=folder)
+        assert first.name == "many.sofa" and other.name == "many-subj_B.sofa"
+        assert other.read_bytes() == b"SOFA subj_B.sofa"
+        with pytest.raises(KeyError, match="no 'subj_Z.sofa'"):
+            hrtf_sets.get(heads, member="subj_Z.sofa", folder=folder)
+
+    # Any other SOFA file, by its address.
+    mine = tmp_path / "mine.sofa"
+    mine.write_bytes(b"SOFA mine")
+    assert hrtf_sets.other(mine.as_uri(), "me", folder).read_bytes() == b"SOFA mine"
+    assert (folder / "me.sofa").exists()
+
+
+def test_hrtf_folder_follows_the_system(monkeypatch, tmp_path: Path) -> None:
+    """The sets are kept in the user's data folder, or where the environment says."""
+    from acoustic_spaces.spatial import hrtf_sets
+
+    monkeypatch.delenv("ACOUSTIC_SPACES_HRTF", raising=False)
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    if sys.platform not in ("win32", "darwin"):
+        assert hrtf_sets.data_folder() == tmp_path / "data" / "acoustic-spaces" / "hrtf"
+    assert hrtf_sets.data_folder().name == hrtf_sets.FOLDER
+    monkeypatch.setenv("ACOUSTIC_SPACES_HRTF", str(tmp_path / "mine"))
+    assert hrtf_sets.data_folder() == tmp_path / "mine"

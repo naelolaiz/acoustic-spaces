@@ -3807,8 +3807,12 @@ class OutputsPage(Page):
         head = QPushButton(_("Spherical head"))
         head.setToolTip(_("Use a spherical head model instead of an HRTF file"))
         head.clicked.connect(lambda: self._set_hrtf(None))
+        get = QPushButton(_("Download HRTFs…"))
+        get.setToolTip(_("Free HRTF sets to download, measured on dummy heads and on people"))
+        get.clicked.connect(self._download_hrtf)
         hrtf_buttons.addWidget(choose)
         hrtf_buttons.addWidget(head)
+        hrtf_buttons.addWidget(get)
         self.ambisonics = QCheckBox(_("Ambisonics (AmbiX)"))
         self.ambisonics.setToolTip(
             _(
@@ -3923,6 +3927,14 @@ class OutputsPage(Page):
         )
         if path:
             self._set_hrtf(path)
+
+    def _download_hrtf(self) -> None:
+        """Pick a free HRTF set, download it and use it (Download HRTFs…)."""
+        from acoustic_spaces.gui.hrtf_dialog import HrtfDialog
+
+        dialog = HrtfDialog(self)
+        if dialog.exec() and dialog.path is not None:
+            self._set_hrtf(str(dialog.path))
 
     def _set_hrtf(self, path: str | None) -> None:
         self._hrtf = path
