@@ -1474,6 +1474,24 @@ msgstr ""
 "el que diu Reprodueix. El consell de la taula diu com de fort sona"
 
 #: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Name"
+msgstr "Nom"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "The names the option takes ({how})"
+msgstr "Els noms que accepta l'opció ({how})"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "File"
+msgstr "Fitxer"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "The WAV file for it ({option} {how}); empty: none"
+msgstr "El fitxer WAV per a aquest nom ({option} {how}); buit: cap"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
 msgid "Choose WAV…"
 msgstr "Tria un WAV…"
 
@@ -2119,10 +2137,6 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid "The scene's name"
 msgstr "El nom de l'escena"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Name"
-msgstr "Nom"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

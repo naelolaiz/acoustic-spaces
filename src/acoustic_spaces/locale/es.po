@@ -1491,6 +1491,24 @@ msgstr ""
 "vacío: lo que dice Reproduce. La ayuda de la tabla dice a qué nivel suena"
 
 #: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Name"
+msgstr "Nombre"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "The names the option takes ({how})"
+msgstr "Los nombres que acepta la opción ({how})"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "File"
+msgstr "Archivo"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "The WAV file for it ({option} {how}); empty: none"
+msgstr "El archivo WAV para ese nombre ({option} {how}); vacío: ninguno"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
 msgid "Choose WAV…"
 msgstr "Elegir WAV…"
 
@@ -2139,10 +2157,6 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid "The scene's name"
 msgstr "El nombre de la escena"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Name"
-msgstr "Nombre"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

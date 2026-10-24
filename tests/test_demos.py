@@ -178,6 +178,16 @@ def test_music_fetches_tracks_once_and_sums_them(tmp_path: Path) -> None:
     music.write_tracks(tracks, folder)
     assert paths["master"].stat().st_mtime_ns == written
     assert (folder / "left.wav").exists()  # kept, so a second run downloads nothing
+    # A file of your own in place of the files to fetch: decoded and written as the
+    # others are, nothing downloaded, and read again each time, as it may have changed.
+    mine = tmp_path / "mine.wav"
+    write_wav(mine, _tone(0.5), RATE)
+    paths = music.write_tracks({"own": mine}, folder, channels=1)
+    x, rate = read_wav(paths["own"])
+    assert rate == RATE and x.squeeze().ndim == 1 and len(x) == RATE // 2
+    write_wav(mine, _tone(1.0), RATE)
+    music.write_tracks({"own": mine}, folder)
+    assert len(read_wav(paths["own"])[0]) == RATE
 
 
 def test_phrases_set_where_a_tour_cuts() -> None:
@@ -318,6 +328,46 @@ def test_a_demo_refuses_an_hrtf_for_another_format(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as caught:
         demo.main(["render", "--hrtf", "me.sofa", "--format", "ambix3"])
     assert caught.value.code == 2  # argparse's own error
+
+
+def test_a_demo_takes_a_file_for_each_name(tmp_path: Path) -> None:
+    """A ``files`` option (``--stem STEM=WAV``) takes a file for each of the names it
+    lists, once per name, the paths counted from the demo's folder; a name it does not
+    list, or a file that is not there, is refused. A number typed where the demo takes
+    one (the editor's field) has to be a number."""
+    import dataclasses
+
+    demo, _ran = _demo(tmp_path)
+    stems = Option("stems", "a stem of the song", None, "files", ("drums", "vocal"), flag="--stem")
+    assert stems.metavar == "STEM=WAV" and input_option().metavar == "SOURCE=WAV"
+    demo = dataclasses.replace(
+        demo, options=[*demo.options, stems, Option("bpm", "the tempo", None, "float")]
+    )
+    args = demo.parser().parse_args(["render", "--stem", "drums=d.wav", "--stem", "vocal=in/v.wav"])
+    assert args.stems == {"drums": Path("d.wav"), "vocal": Path("in/v.wav")}
+    resolved = demo.resolved(args)
+    assert resolved.stems == {"drums": tmp_path / "d.wav", "vocal": tmp_path / "in" / "v.wav"}
+    assert demo.arguments(resolved, names_only=True) == [
+        "--stem",
+        "drums=d.wav",
+        "--stem",
+        "vocal=v.wav",
+    ]
+    assert demo.check(args) == f"--stem drums: no {tmp_path / 'd.wav'}"
+    audio.write(tmp_path / "d.wav", _tone(0.5), RATE)
+    audio.write(tmp_path / "in" / "v.wav", _tone(0.5), RATE)
+    assert demo.check(args) is None
+    args.stems["keys"] = Path("d.wav")
+    assert demo.check(args) == "--stem keys: not one of drums, vocal"
+    with pytest.raises(SystemExit) as caught:
+        demo.parser().parse_args(["render", "--stem", "drums"])
+    assert caught.value.code == 2  # argparse's own error: STEM=WAV
+    args = demo.parser().parse_args(["render", "--bpm", "120"])
+    assert args.bpm == 120.0 and demo.check(args) is None
+    args.bpm = "fast"  # as the editor's field may hold it
+    assert demo.check(args) == "--bpm: a number, not 'fast'"
+    with pytest.raises(ValueError, match="lists the names it takes"):
+        Option("stems", "a stem", None, "files")
 
 
 def test_a_demo_takes_a_file_for_each_source(tmp_path: Path) -> None:

@@ -1478,6 +1478,24 @@ msgstr ""
 "leeg: wat Speelt zegt. De tip van de tabel zegt hoe luid het speelt"
 
 #: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Name"
+msgstr "Naam"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "The names the option takes ({how})"
+msgstr "De namen die de optie aanneemt ({how})"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "File"
+msgstr "Bestand"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "The WAV file for it ({option} {how}); empty: none"
+msgstr "Het WAV-bestand ervoor ({option} {how}); leeg: geen"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
 msgid "Choose WAV…"
 msgstr "WAV kiezen…"
 
@@ -2122,10 +2140,6 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid "The scene's name"
 msgstr "De naam van de scène"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Name"
-msgstr "Naam"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

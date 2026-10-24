@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from acoustic_spaces.demos import Demo, Option
+from acoustic_spaces.demos import MAP_KINDS, PATH_KINDS, Demo, Option
 from acoustic_spaces.gui.inspector import int_spin, spin
 from acoustic_spaces.i18n import _
 
@@ -196,11 +196,11 @@ class PathField(QWidget):
 class InputsField(QWidget):
     """The field of ``--input``: a row for each source the demo feeds (:attr:`Demo.plays`,
     which :meth:`set_sources` gives), with what it plays and the WAV file it plays
-    instead, typed or chosen with Choose WAV…; Default empties it again."""
+    instead, typed or chosen with Choose WAV…; Default empties it again. For a ``files``
+    option (``--stem STEM=WAV``), a row for each name the option takes, with its file."""
 
     #: A file was typed, chosen or taken back.
     changed = Signal()
-    SOURCE, PLAYS, FILE = range(3)
 
     def __init__(self, option: Option, tip: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -209,19 +209,32 @@ class InputsField(QWidget):
         self.plays: dict[str, str] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.table = QTableWidget(0, 3)
-        self.table.setToolTip(tip)
-        heads = (
-            (_("Source"), _("The source, as the scene names it")),
-            (_("Plays"), _("What the source plays in the demo, unless a file is given")),
-            (
-                _("Instead"),
-                _(
-                    "The WAV file the source plays instead (--input SOURCE=WAV); empty: what "
-                    "Plays says. The table's tip says how loud it plays"
+        if option.kind == "inputs":
+            self.SOURCE, self.PLAYS, self.FILE = 0, 1, 2
+            heads = (
+                (_("Source"), _("The source, as the scene names it")),
+                (_("Plays"), _("What the source plays in the demo, unless a file is given")),
+                (
+                    _("Instead"),
+                    _(
+                        "The WAV file the source plays instead (--input SOURCE=WAV); empty: "
+                        "what Plays says. The table's tip says how loud it plays"
+                    ),
                 ),
-            ),
-        )
+            )
+        else:
+            self.SOURCE, self.PLAYS, self.FILE = 0, None, 1
+            heads = (
+                (_("Name"), _("The names the option takes ({how})").format(how=option.metavar)),
+                (
+                    _("File"),
+                    _("The WAV file for it ({option} {how}); empty: none").format(
+                        option=option.option, how=option.metavar
+                    ),
+                ),
+            )
+        self.table = QTableWidget(0, len(heads))
+        self.table.setToolTip(tip)
         for column, (text, head_tip) in enumerate(heads):
             item = QTableWidgetItem(text)
             item.setToolTip(head_tip)
@@ -247,6 +260,8 @@ class InputsField(QWidget):
         row.addStretch(1)
         layout.addLayout(row)
         self._selected()
+        if option.kind != "inputs":
+            self.set_sources(dict.fromkeys(option.choices, ""))
 
     def set_sources(self, plays: dict[str, str]) -> None:
         """The rows: each source and what it plays. A file given to a source no longer
@@ -259,13 +274,16 @@ class InputsField(QWidget):
         self.table.setRowCount(len(plays))
         for row, (name, what) in enumerate(plays.items()):
             for column, text in ((self.SOURCE, name), (self.PLAYS, what)):
+                if column is None:
+                    continue
                 item = QTableWidgetItem(text)
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, column, item)
             file = self.inputs.get(name)
             self.table.setItem(row, self.FILE, QTableWidgetItem("" if file is None else str(file)))
         self.table.resizeColumnToContents(self.SOURCE)
-        self.table.resizeColumnToContents(self.PLAYS)
+        if self.PLAYS is not None:
+            self.table.resizeColumnToContents(self.PLAYS)
         self.table.blockSignals(False)
         # As tall as its rows, up to about eight; a long list scrolls.
         rows = sum(self.table.rowHeight(r) for r in range(min(len(plays), 8)))
@@ -336,9 +354,9 @@ def field_for(option: Option, tip: str) -> QWidget:
     spin box for a number, a path with a Browse… button for a file or a folder, a table
     of the sources for ``--input``, and a text field for the rest (empty where the demo
     takes none)."""
-    if option.kind == "inputs":
+    if option.kind in MAP_KINDS:
         return InputsField(option, tip)
-    if option.kind in ("file", "path", "folder"):
+    if option.kind in PATH_KINDS:
         return PathField(option, tip, sets=option.name == "hrtf")
     if option.kind == "flag":
         box = QCheckBox()
@@ -375,6 +393,11 @@ def value_of(option: Option, widget: QWidget):
         return widget.currentText()
     if isinstance(widget, QLineEdit):
         text = widget.text().strip()
+        if text and option.kind in ("int", "float"):
+            try:
+                return int(text) if option.kind == "int" else float(text)
+            except ValueError:
+                return text  # the demo's check says it is no number
         return text or None
     value = widget.value()
     return int(value) if option.kind == "int" else float(value)
@@ -447,6 +470,8 @@ class DemoDialog(QDialog):
             label.setBuddy(widget)
             label.setToolTip(widget.toolTip())
             head.addRow(label, widget)
+        # One demo only (a scene of no example): nothing to pick from.
+        head.setRowVisible(self.picker, len(self.demos) > 1)
         layout.addLayout(head)
         self.about = QLabel()
         self.about.setWordWrap(True)
@@ -551,7 +576,7 @@ class DemoDialog(QDialog):
             self.about_step.setText(f"{step}: {demo.step(step).help}.")
         args = self.arguments()
         for widget in self.fields.values():
-            if isinstance(widget, InputsField):
+            if isinstance(widget, InputsField) and widget.option.kind == "inputs":
                 widget.set_sources(self._plays(demo, args))
                 args = self.arguments()
         self.command.setText(demo.command(step, args))

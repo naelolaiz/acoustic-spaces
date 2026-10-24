@@ -2557,7 +2557,7 @@ def _waiting_demo(tmp_path: Path, seconds: float):
     return demo, demo.resolved(args)
 
 
-def test_demo_dialog_fills_in_the_options(qapp) -> None:
+def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     """The Run demo window offers the demos of the open scene: This scene, and the demo
     of the example the scene belongs to, on which it starts. It builds its form from the
     demo's own options, at the defaults the command line uses, and shows that command."""
@@ -2637,6 +2637,35 @@ def test_demo_dialog_fills_in_the_options(qapp) -> None:
     heads = [inputs.table.horizontalHeaderItem(c) for c in range(inputs.table.columnCount())]
     assert all(head.toolTip() for head in heads)
 
+    # A song of your own: --music, its tempo typed as a number, and a table of the stems
+    # with a file each; the options for it are refused without --music.
+    stems = dialog.fields["stems"]
+    assert isinstance(stems, InputsField) and stems.PLAYS is None
+    rows = [stems.table.item(r, stems.SOURCE).text() for r in range(stems.table.rowCount())]
+    assert rows == list(demo.option("stems").choices) and "vocal" in rows
+    heads = [stems.table.horizontalHeaderItem(c) for c in range(stems.table.columnCount())]
+    assert [head.text() for head in heads] == ["Name", "File"] and all(h.toolTip() for h in heads)
+    bpm = dialog.fields["bpm"]
+    assert isinstance(bpm, QLineEdit)
+    bpm.setText("fast")
+    assert "--bpm: a number, not 'fast'" in dialog.problem.text() and not ok.isEnabled()
+    bpm.setText("120")
+    assert "--bpm: for a song of your own, with --music" in dialog.problem.text()
+    song_file = tmp_path / "mine.wav"
+    write_wav(song_file, np.zeros((100, 2)), 8000)
+    dialog.fields["music"].set_value(str(song_file))
+    assert dialog.problem.text() == "" and ok.isEnabled()
+    stems.table.item(rows.index("vocal"), stems.FILE).setText(str(song_file))
+    assert f"--music {song_file} --bpm 120.0 --stem vocal={song_file}" in dialog.command.text()
+    chosen = dialog.chosen()[2]
+    assert chosen.bpm == 120.0 and chosen.stems == {"vocal": song_file}
+    stems.table.item(rows.index("vocal"), stems.FILE).setText(str(tmp_path / "none.wav"))
+    assert "--stem vocal: no " in dialog.problem.text()
+    dialog.fields["music"].set_value(None)
+    bpm.setText("")
+    stems.table.item(rows.index("vocal"), stems.FILE).setText("")
+    assert dialog.problem.text() == "" and "--music" not in dialog.command.text()
+
     # This scene: the sounds its sources play, which the stadium's sources name none of.
     dialog.picker.setCurrentIndex(names.index("scene"))
     assert dialog.command.text() == "acoustic-spaces demo scene.yaml all"
@@ -2653,6 +2682,7 @@ def test_demo_dialog_fills_in_the_options(qapp) -> None:
     # A scene of no example has This scene only, and one never saved cannot be run.
     plain = DemoDialog(scene=example_path("shoebox"))
     assert [plain.picker.itemData(k) for k in range(plain.picker.count())] == ["scene"]
+    assert plain.picker.isHidden() and not dialog.picker.isHidden()  # nothing to pick from
     plain.deleteLater()
     unsaved = DemoDialog(scene=None)
     assert "save the scene first" in unsaved.problem.text()

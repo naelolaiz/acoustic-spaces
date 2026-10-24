@@ -39,10 +39,14 @@ from acoustic_spaces.examples import examples_dir
 
 #: The kinds of option, for the parser and for the editor's form: a free text, a choice
 #: from a list, a number, a flag, a file to read, a file the demo writes (``path``), a
-#: folder, and ``inputs``: a WAV file for each of some sources (``--input NAME=WAV``, as
-#: often as needed), what they play instead of the demo's own recordings.
-KINDS = ("text", "choice", "int", "float", "flag", "file", "path", "folder", "inputs")
+#: folder, ``inputs``: a WAV file for each of some sources (``--input NAME=WAV``, as
+#: often as needed), what they play instead of the demo's own recordings, and ``files``:
+#: a WAV file for each of some names the option lists as its choices (``--stem
+#: NAME=WAV``), such as the stems of a song.
+KINDS = ("text", "choice", "int", "float", "flag", "file", "path", "folder", "inputs", "files")
 PATH_KINDS = ("file", "path", "folder")
+#: The kinds whose value is a dict of names and files.
+MAP_KINDS = ("inputs", "files")
 
 
 def shell_line(argv: Sequence[str]) -> str:
@@ -55,12 +59,12 @@ def shell_line(argv: Sequence[str]) -> str:
 
 
 class _Inputs(argparse.Action):
-    """``--input NAME=WAV``, once per source: a dict of source names and files."""
+    """``--input NAME=WAV``, once per source (or stem): a dict of names and files."""
 
     def __call__(self, parser, namespace, value, option_string=None) -> None:
         name, sep, file = str(value).partition("=")
         if not sep or not name.strip() or not file.strip():
-            parser.error(f"{option_string} takes SOURCE=WAV, not {value!r}")
+            parser.error(f"{option_string} takes {self.metavar}, not {value!r}")
         inputs = dict(getattr(namespace, self.dest, None) or {})
         inputs[name.strip()] = Path(file.strip())
         setattr(namespace, self.dest, inputs)
@@ -86,10 +90,17 @@ class Option:
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
             raise ValueError(f"{self.name}: no option kind {self.kind!r}")
+        if self.kind == "files" and not self.choices:
+            raise ValueError(f"{self.name}: a files option lists the names it takes as choices")
 
     @property
     def option(self) -> str:
         return self.flag or "--" + self.name.replace("_", "-")
+
+    @property
+    def metavar(self) -> str:
+        """How a ``files`` option is given (``STEM=WAV``, for ``--stem``), or ``inputs``."""
+        return "SOURCE=WAV" if self.kind == "inputs" else f"{self.option.lstrip('-').upper()}=WAV"
 
     @property
     def description(self) -> str:
@@ -103,13 +114,13 @@ class Option:
         if self.kind == "flag":
             parser.add_argument(self.option, dest=self.name, action="store_true", help=self.help)
             return
-        if self.kind == "inputs":
+        if self.kind in MAP_KINDS:
             parser.add_argument(
                 self.option,
                 dest=self.name,
                 action=_Inputs,
                 default=None,
-                metavar="SOURCE=WAV",
+                metavar=self.metavar,
                 help=self.description,
             )
             return
@@ -279,7 +290,7 @@ class Demo:
             value = getattr(args, option.name, option.default) if args is not None else None
             if value is None or value == option.default:
                 continue
-            if option.kind == "inputs":
+            if option.kind in MAP_KINDS:
                 for name, file in value.items():
                     if names_only:
                         shown = Path(file).name
@@ -364,7 +375,7 @@ class Demo:
             if option.kind in PATH_KINDS and value is not None:
                 path = Path(value)
                 values[option.name] = path if path.is_absolute() else self.folder / path
-            elif option.kind == "inputs" and value:
+            elif option.kind in MAP_KINDS and value:
                 values[option.name] = {
                     name: Path(f) if Path(f).is_absolute() else self.folder / f
                     for name, f in value.items()
@@ -376,14 +387,28 @@ class Demo:
         """What is wrong with the arguments, or None."""
         if getattr(args, "hrtf", None) and getattr(args, "format", "binaural") != "binaural":
             return "--hrtf is for binaural mixes"
-        inputs = getattr(self.resolved(args), "inputs", None) or {}
+        for option in self.options:
+            value = getattr(args, option.name, None)
+            if option.kind in ("int", "float") and value is not None:
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    return f"{option.option}: a number, not {value!r}"
+        resolved = self.resolved(args)
+        inputs = getattr(resolved, "inputs", None) or {}
         if inputs and self.plays is not None:
-            fed = self.plays(self.resolved(args))
+            fed = self.plays(resolved)
             for name, file in inputs.items():
                 if name not in fed:
                     return f"--input {name}: no such source plays here; it has {', '.join(fed)}"
                 if not Path(file).is_file():
                     return f"--input {name}: no {file}"
+        for option in self.options:
+            if option.kind != "files":
+                continue
+            for name, file in (getattr(resolved, option.name, None) or {}).items():
+                if name not in option.choices:
+                    return f"{option.option} {name}: not one of {', '.join(option.choices)}"
+                if not Path(file).is_file():
+                    return f"{option.option} {name}: no {file}"
         if self.problems is not None:
             return self.problems(self, args)
         return None
@@ -509,6 +534,7 @@ def demo_for(example: str) -> Demo | None:
 
 __all__ = [
     "KINDS",
+    "MAP_KINDS",
     "PATH_KINDS",
     "SIMULATE",
     "Demo",

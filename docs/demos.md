@@ -322,6 +322,18 @@ for `render`, `--format` for another output the simulation wrote, `--no-mp4` for
 audio and stills only. `all` runs music, feeds, render and video; `band` and the
 simulation come before it.
 
+A song of your own plays in place of the presets: `--music song.wav --bpm 120` for
+`music` and `feeds` (and `all`), the master as a stereo file (WAV, or anything ffmpeg
+decodes) and its tempo, which the tour's phrases of 8 bars go by. `--stem vocal=vox.wav
+--stem drums=drums.wav`, once per stem (drums, bass, guitar, keys, brass, vocal,
+backing), gives the stems the monitors' mixes and the band's players draw on; a mix
+none of whose stems is given plays nothing, so without stems the monitors and the band
+are silent, which `feeds` and the Run demo window's table say. `--downbeat 0.5` is the
+time of the first downbeat, so that the cuts stay on the beat; `--credit "Music: …"`
+the line the video shows, the file's name unless given. Nothing is downloaded; the
+music goes to `demo/music/<file name>`, a folder of its own beside the presets', and
+`--input` goes on working on top of it.
+
 - **The band.** The example has loudspeakers only, so `band` adds the players as sources
   on the stage, in a group of their own: a drum kit beside the drummer (116 dB sound
   power, omni) playing the drums, the singer's voice (98 dB, subcardioid, facing the
@@ -432,11 +444,14 @@ python lakeside_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, de
 ```
 
 Options: `--song great_british_summer` or `potassium` for `music` (below),
-`--tour bedroom_window:still:1,audience::2` (listener:weather:phrases of 8 bars),
-`--last-phrases` (how long the last stop lasts, 0 to the end of the song; 2 by default),
-`--format` for another output the simulation wrote, `--no-mp4` for the audio and stills
-only. `all` runs music, render and video; `scenes` and the two simulations come before
-it.
+`--music song.wav --bpm 120` for a song of your own in their place (a stereo file, WAV
+or anything ffmpeg decodes, and its tempo, which the tour's phrases of 8 bars go by;
+nothing is downloaded, and the video credits the file by its name unless `--credit`
+says what to show), `--tour bedroom_window:still:1,audience::2`
+(listener:weather:phrases of 8 bars), `--last-phrases` (how long the last stop lasts, 0
+to the end of the song; 2 by default), `--format` for another output the simulation
+wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and video;
+`scenes` and the two simulations come before it.
 
 - **The sound system.** `scenes` replaces the example's single source (120 dB sound
   power) with a system as a lawn concert hangs it: two line arrays of eight boxes

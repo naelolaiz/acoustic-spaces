@@ -10,7 +10,7 @@ import pytest
 import yaml
 from conftest import skip_without_extra
 
-from acoustic_spaces.audio import write_wav
+from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.cli import main
 from acoustic_spaces.demos import PATH_KINDS, load, pipeline
 from acoustic_spaces.engine import simulate
@@ -492,6 +492,99 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     assert len(tour) == len(demo.TOUR)  # Rubidium fits all twelve listeners
 
 
+def test_stadium_demo_plays_a_song_of_your_own(tmp_path: Path) -> None:
+    """``--music`` plays a master of yours in place of a song's, ``--stem`` gives the stems
+    the monitors and the band play, and a mix with none of them is silent: its sources
+    are listed as playing nothing and ``feeds`` writes them silence. Nothing is
+    downloaded, the music goes to a folder named after the file, and the credit names
+    the file unless ``--credit`` says what to show."""
+    demo = _script("stadium_concert", "stadium_demo")
+    folder = copy_examples(tmp_path, ["stadium_concert"])[0].parent
+    rate = 8000
+    t = np.arange(3 * rate) / rate
+    master = 0.5 * np.stack([np.sin(2 * np.pi * 220 * t), np.sin(2 * np.pi * 330 * t)], axis=1)
+    write_wav(tmp_path / "my song.wav", master, rate)
+    write_wav(tmp_path / "vox.wav", master[:, 0], rate)
+    work = tmp_path / "demo"
+    args = _demo_args(
+        demo.DEMO,
+        source=folder / "scene.yaml",
+        scene=folder / "scene_band.yaml",
+        results=tmp_path / "results",
+        work=work,
+        music=tmp_path / "my song.wav",
+        bpm=120.0,
+        stems={"vocal": tmp_path / "vox.wav"},
+    )
+    assert demo.DEMO.check(args) is None
+    song = demo.song_of(args)
+    assert song["name"] == "my song" and song["credit"] == "Music: my song.wav"
+    assert song["bpm"] == 120.0 and song["downbeat_s"] == 0.0 and song["tour"] == {}
+    assert demo.music_folder(args) == work / "music" / "my song"
+    credited = argparse.Namespace(**vars(args) | {"credit": "Music: a friend's band"})
+    assert demo.song_of(credited)["credit"] == "Music: a friend's band"
+    # What is wrong with the options is said before anything runs.
+    without = argparse.Namespace(**vars(args) | {"bpm": None})
+    assert demo.DEMO.check(without) == (
+        "--music needs --bpm, the song's tempo: the tour moves every 8 bars of it"
+    )
+    slow = argparse.Namespace(**vars(args) | {"bpm": 0.0})
+    assert demo.DEMO.check(slow) == "--bpm: a tempo above 0, not 0.0"
+    preset = argparse.Namespace(**vars(args) | {"music": None})
+    assert demo.DEMO.check(preset) == "--bpm, --stem: for a song of your own, with --music"
+    wrong = argparse.Namespace(**vars(args) | {"stems": {"flute": tmp_path / "vox.wav"}})
+    assert demo.DEMO.check(wrong) == (
+        "--stem flute: not one of drums, bass, guitar, keys, brass, vocal, backing"
+    )
+    gone = argparse.Namespace(**vars(args) | {"music": tmp_path / "gone.wav"})
+    assert demo.DEMO.check(gone) == f"--music: no {tmp_path / 'gone.wav'}"
+    # What each source plays: the master, the one stem, or nothing.
+    demo.band(args)
+    plays = demo.plays(args)
+    assert plays["main_left"] == "my song, the master's right channel, on the audience's right"
+    assert plays["singer_voice"] == "my song, the vocal stem"
+    assert plays["drum_kit"] == "nothing: my song has no drums stem"
+    assert plays["vocal_wedges"] == "my song, the singer's monitor mix"
+    assert plays["drum_fill"] == "my song, the drummer's monitor mix"  # it has the vocal
+    assert plays["side_fill_left"] == "my song, the stage's mix, drums well down"
+    assert demo.plays(argparse.Namespace(**vars(args) | {"stems": None}))["drum_fill"] == (
+        "nothing: my song has no stem for the drummer's monitor mix"
+    )
+    # music: the files decoded into the song's folder, nothing downloaded.
+    assert not demo.music_done(args)
+    demo.music_step(args)
+    assert demo.music_done(args)
+    assert sorted(path.name for path in demo.music_folder(args).iterdir()) == [
+        "SOURCES.txt",
+        "master.wav",
+        "song.json",
+        "vocal.wav",
+    ]
+    kept = pipeline.read_json(demo.music_folder(args) / "song.json")
+    assert kept == {k: v for k, v in song.items() if k in demo.SONG_KEPT}
+    assert str(tmp_path / "vox.wav") in (demo.music_folder(args) / "SOURCES.txt").read_text()
+    # feeds: one per source at the responses' rate, silence where no stem plays.
+    args.results.mkdir()
+    write_wav(args.results / "main_left__mix_position.wav", np.zeros((rate, 2)), rate)
+    responses = [
+        {
+            "source": "main_left",
+            "listener": "mix_position",
+            "outputs": [{"format": "binaural", "wav": "main_left__mix_position.wav"}],
+        }
+    ]
+    (args.results / "parameters.json").write_text(json.dumps({"responses": responses}), "utf-8")
+    demo.feeds(args)
+    table = pipeline.read_json(work / "feeds" / "feeds.json")
+    assert table["song"] == kept and table["length_s"] == 3.0 and table["rate"] == rate
+    assert table["sources"]["drum_kit"]["silent"] and table["sources"]["guitar_amp"]["silent"]
+    assert "silent" not in table["sources"]["singer_voice"]
+    assert "silent" not in table["sources"]["main_left"]
+    assert not read_wav(work / "feeds" / "drum_kit.wav")[0].any()
+    assert read_wav(work / "feeds" / "singer_voice.wav")[0].any()
+    assert read_wav(work / "feeds" / "subs.wav")[0].any()
+
+
 def test_orchestra_demo_tour(tmp_path: Path) -> None:
     """orchestra_demo.py names a track for every source of the orchestra, cuts between
     seats at the quietest moment near each share's end, and plays the movements one
@@ -704,6 +797,53 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     for seat in seats["seats"].values():
         del seat["loudness_db"]
     assert demo.gains_of(seats, tour) == gains
+
+
+def test_lakeside_demo_plays_a_song_of_your_own(tmp_path: Path, monkeypatch) -> None:
+    """``--music`` plays a song of yours across the lake in place of a preset: read, not
+    downloaded, brought to the demo's rate in stereo and split for the loudspeakers,
+    credited by its file name, the tour moving every 8 bars of ``--bpm``."""
+    import shutil
+
+    from acoustic_spaces.demos import music
+
+    demo = _script("lakeside_concert", "lakeside_demo")
+    rate = 8000
+    write_wav(tmp_path / "mine.wav", np.full((40 * rate, 2), 0.1), rate)
+    work = tmp_path / "demo"
+    args = _demo_args(demo.DEMO, work=work, music=tmp_path / "mine.wav", bpm=100.0)
+    assert demo.DEMO.check(args) is None
+    assert demo.song_of(args) == {
+        "name": "mine",
+        "files": tmp_path / "mine.wav",
+        "bpm": 100.0,
+        "credit": "Music: mine.wav",
+    }
+    assert demo.plays(args)["subs"] == "mine, both channels in mono"
+    assert not demo.music_done(args)
+    demo.music_step(args)
+    assert demo.music_done(args)
+    x, got = read_wav(demo.song_path(args))
+    assert demo.song_path(args) == work / "music" / "mine.wav"
+    assert got == demo.RATE and x.shape == (40 * demo.RATE, 2)
+    assert all((work / "music" / f"{name}.wav").exists() for name in demo.SYSTEM)
+    assert demo.played(args) == {"name": "mine", "bpm": 100.0, "credit": "Music: mine.wav"}
+    # A phrase is 8 bars of the tempo given: 19.2 s; the 40 s song holds two stops.
+    tour = demo.tour_of(args)
+    assert [stop[:2] for stop in tour] == [("audience", "evening"), ("behind_stage", "evening")]
+    assert tour[0][3] == pytest.approx(2 * 19.2) and tour[1][3] == pytest.approx(40.0)
+    # The other options go with --music; a song ffmpeg would decode needs ffmpeg.
+    preset = argparse.Namespace(**vars(args) | {"music": None})
+    assert demo.DEMO.check(preset) == "--bpm: for a song of your own, with --music"
+    (tmp_path / "mine.mp3").write_bytes(b"")
+    compressed = argparse.Namespace(**vars(args) | {"music": tmp_path / "mine.mp3"})
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    assert demo.DEMO.check(compressed) == (
+        "--music: ffmpeg is needed to decode mine.mp3, and is not on the PATH"
+    )
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/ffmpeg")
+    assert demo.DEMO.check(compressed) is None
+    assert music.own_song_problems(demo.DEMO, compressed) is None
 
 
 def test_walk_demo_scene_cuts_and_moments(tmp_path: Path) -> None:

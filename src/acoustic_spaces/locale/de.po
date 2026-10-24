@@ -1491,6 +1491,24 @@ msgstr ""
 "was Spielt sagt. Der Hinweis der Tabelle sagt, wie laut sie spielt"
 
 #: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Name"
+msgstr "Name"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "The names the option takes ({how})"
+msgstr "Die Namen, die die Option annimmt ({how})"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "File"
+msgstr "Datei"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "The WAV file for it ({option} {how}); empty: none"
+msgstr "Die WAV-Datei dafür ({option} {how}); leer: keine"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
 msgid "Choose WAV…"
 msgstr "WAV wählen…"
 
@@ -2138,10 +2156,6 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid "The scene's name"
 msgstr "Der Name der Szene"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Name"
-msgstr "Name"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

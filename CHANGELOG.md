@@ -672,6 +672,16 @@
   it would the signal). The mixes are made again when the inputs change, and the
   stills' credit line names the files. Before, only the demo of any scene could play
   other recordings, by changing the scene.
+- The stadium and the lakeside demos play a song of the user's own in place of their
+  presets: `--music FILE` (a stereo master: WAV, or anything ffmpeg decodes) with
+  `--bpm`, its tempo, which the tour's phrases of 8 bars go by; `--credit` sets the
+  line the video shows (the file's name unless given). The stadium also takes `--stem
+  NAME=WAV` for each stem (drums, bass, guitar, keys, brass, vocal, backing), which the
+  monitors' mixes and the band play, and `--downbeat` for the first downbeat; a mix none
+  of whose stems is given plays nothing, and `feeds` and the Run demo window's table say
+  so. Nothing is downloaded, and the music goes to a folder named after the file. In the
+  Run demo window, `--music` is a file field, `--bpm` a number and the stems a table
+  with a file per row; the window's Demo list is left out when there is one demo only.
 
 **HRTF sets**
 

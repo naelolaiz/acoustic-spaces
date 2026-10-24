@@ -271,6 +271,9 @@ Examples:
   it again.
 - [x] A recording of the user's for any source of any demo (`--input SOURCE=WAV`), at
   the level of the feed it replaces, and a table of the sources in Run demo…
+- [x] A song of the user's own in the stadium and lakeside demos (`--music`, `--bpm`,
+  `--credit`; the stadium's stems with `--stem NAME=WAV` and its first downbeat), nothing
+  downloaded, with a file field, a number and a table of the stems in Run demo…
 
 Editor:
 
