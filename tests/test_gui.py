@@ -2045,6 +2045,36 @@ def test_a_run_over_a_long_term(window, qapp) -> None:
     assert {"long_term", "rating_level"} <= set(window.coverage.parameters())
 
 
+def test_a_decay_that_is_not_straight_is_flagged(window) -> None:
+    """Past ISO 3382-2's limits, ξ (10 ‰) turns it and its decay time amber and the
+    curvature (10 %) turns amber, each with a tip that says why: here the four high
+    bands fall 15 dB at T 1 s and then at 3 s, the low ones are straight."""
+    from PySide6.QtWidgets import QTableWidgetItem
+
+    from acoustic_spaces.gui.results_view import ROWS
+    from acoustic_spaces.parameters import from_energy
+
+    t = np.arange(6001) * 1e-3
+    straight = 10.0 ** (-6.0 * t)
+    two = 10.0 ** (np.where(t < 0.25, -60.0 * t, -15.0 - 20.0 * (t - 0.25)) / 10.0)
+    energy = np.stack(4 * [straight[:-1] - straight[1:]] + 4 * [two[:-1] - two[1:]])
+    parameters = from_energy(energy, 1e-3, onset_s=0.0)
+    table = window.results.table
+    for row in range(len(ROWS)):
+        for col in range(8):
+            table.setItem(row, col, QTableWidgetItem("1.0"))
+    window.results._flag_decays(parameters)
+    amber = level_colour(table, "warning")
+    rows = [name for name, _label, _template in ROWS]
+    for name in ("t20", "xi_t20", "curvature"):
+        assert table.item(rows.index(name), 4).foreground().color() == amber, name
+        assert table.item(rows.index(name), 0).foreground().color() != amber, name
+    tip = table.item(rows.index("t20"), 4).toolTip
+    assert "Here the decay is not straight: ξ is" in tip()
+    tip = table.item(rows.index("curvature"), 4).toolTip
+    assert "Here the decay is curved: more than 10 %" in tip()
+
+
 def test_model_units_default_to_the_file(window) -> None:
     window.open_example(example_path("shoebox"))  # its scene says units: m
     window.select("geometry", None)

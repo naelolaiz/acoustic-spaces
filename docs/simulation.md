@@ -70,6 +70,19 @@ has decayed by 20 dB leaves too much to that estimate, and all its parameters ar
 Outdoors, where a response may hold no decay at all, G is then that of the energy it
 holds, and so are the levels and the STI that take it; the other parameters stay NaN
 (see [Results outdoors](outdoor.md#results-outdoors)).
+A response that ends in silence holds all its sound: its energies are those it holds,
+and its decay curve drops to nothing after the last sound. That drop is the end of the
+data, not a decay, so no decay time is fitted through it: EDT, T20 or T30 is NaN when
+the curve does not fall through its range before the last sound.
+
+Each T20 and T30 comes with the checks of ISO 3382-2 (annex B) on the line it is read
+from: its non-linearity ξ = 1000 (1 - r²) ‰, r being the correlation of the decay curve
+with time over the fit range, and the curvature of the decay, C = 100 (T30 / T20 - 1) %
+(`xi_t20`, `xi_t30` and `curvature`). Past 10 ‰ (`NON_LINEARITY_LIMIT`) the decay is not
+straight and its decay time is not to be relied on; a curvature of 0 to 5 % is usual,
+and past 10 % (`CURVATURE_LIMIT`) the decay is curved, likely with two slopes as in
+coupled rooms, which T20 and T30 each average differently. The editor's results table
+shows them in amber past those limits, a ξ with the T20 or T30 it puts in doubt.
 Air absorption follows ISO 9613-1 for the scene's temperature, humidity and pressure.
 
 The directions the sound arrives from give more of them:

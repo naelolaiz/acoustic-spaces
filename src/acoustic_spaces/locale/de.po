@@ -5447,6 +5447,18 @@ msgid "T30 Z (s)"
 msgstr "T30 Z (s)"
 
 #: acoustic_spaces/gui/results_view.py
+msgid "ξ T20 (‰)"
+msgstr "ξ T20 (‰)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "ξ T30 (‰)"
+msgstr "ξ T30 (‰)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Curvature (%)"
+msgstr "Krümmung (%)"
+
+#: acoustic_spaces/gui/results_view.py
 msgid ""
 "Early decay time (s): how long the sound would take to die away by 60 dB at "
 "the rate of its first 10 dB; the closest to how reverberant the room sounds"
@@ -5621,6 +5633,36 @@ msgid ""
 msgstr ""
 "T30 (s) eines vom Empfänger nach oben gerichteten Achtermikrofons. Länger "
 "als T30, wenn Schall zwischen Boden und Decke hin- und herläuft"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Non-linearity of the T20 decay (‰, ISO 3382-2): how far the decay curve from "
+"-5 to -25 dB strays from its straight line, 1000 (1 - r²). Above 10 ‰ the "
+"decay is not straight and T20 is not to be relied on"
+msgstr ""
+"Nichtlinearität des Abklingens für T20 (‰, ISO 3382-2): wie weit die "
+"Abklingkurve von -5 bis -25 dB von ihrer Geraden abweicht, 1000 (1 - r²). "
+"Über 10 ‰ ist das Abklingen nicht gerade und T20 nicht verlässlich"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Non-linearity of the T30 decay (‰, ISO 3382-2): how far the decay curve from "
+"-5 to -35 dB strays from its straight line, 1000 (1 - r²). Above 10 ‰ the "
+"decay is not straight and T30 is not to be relied on"
+msgstr ""
+"Nichtlinearität des Abklingens für T30 (‰, ISO 3382-2): wie weit die "
+"Abklingkurve von -5 bis -35 dB von ihrer Geraden abweicht, 1000 (1 - r²). "
+"Über 10 ‰ ist das Abklingen nicht gerade und T30 nicht verlässlich"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Curvature of the decay (%, ISO 3382-2): 100 (T30 / T20 - 1), usually 0 to 5 "
+"%; above 10 %, the decay is curved, likely with two slopes, which T20 and "
+"T30 each average differently"
+msgstr ""
+"Krümmung des Abklingens (%, ISO 3382-2): 100 (T30 / T20 - 1), üblich 0 bis 5 "
+"%; bei mehr als 10 %: gekrümmtes Abklingen, wahrscheinlich mit zwei "
+"Steigungen, die T20 und T30 jeweils anders mitteln"
 
 #. Translators: {rating} is the rating level's symbol (L_den); {periods} and {classes} are names from the scene file, each with its level.
 #: acoustic_spaces/gui/results_view.py
@@ -5858,6 +5900,19 @@ msgstr ""
 #, python-brace-format
 msgid "{tip}. Not defined for this response"
 msgstr "{tip}. Für diese Antwort nicht definiert"
+
+#. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "{tip}. Here the decay is not straight: ξ is {xi} ‰, more than {limit} ‰"
+msgstr ""
+"{tip}. Hier ist das Abklingen nicht gerade: ξ ist {xi} ‰, mehr als {limit} ‰"
+
+#. Translators: {tip} is what a parameter means; {limit} is a number.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "{tip}. Here the decay is curved: more than {limit} %"
+msgstr "{tip}. Hier ist das Abklingen gekrümmt: mehr als {limit} %"
 
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format

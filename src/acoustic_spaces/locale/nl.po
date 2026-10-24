@@ -5421,6 +5421,18 @@ msgid "T30 Z (s)"
 msgstr "T30 Z (s)"
 
 #: acoustic_spaces/gui/results_view.py
+msgid "ξ T20 (‰)"
+msgstr "ξ T20 (‰)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "ξ T30 (‰)"
+msgstr "ξ T30 (‰)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Curvature (%)"
+msgstr "Kromming (%)"
+
+#: acoustic_spaces/gui/results_view.py
 msgid ""
 "Early decay time (s): how long the sound would take to die away by 60 dB at "
 "the rate of its first 10 dB; the closest to how reverberant the room sounds"
@@ -5598,6 +5610,36 @@ msgid ""
 msgstr ""
 "T30 (s) van een achtvormige microfoon die vanaf de ontvanger omhoog wijst. "
 "Langer dan T30 waar geluid tussen vloer en plafond heen en weer blijft lopen"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Non-linearity of the T20 decay (‰, ISO 3382-2): how far the decay curve from "
+"-5 to -25 dB strays from its straight line, 1000 (1 - r²). Above 10 ‰ the "
+"decay is not straight and T20 is not to be relied on"
+msgstr ""
+"Niet-lineariteit van het verval voor T20 (‰, ISO 3382-2): hoe ver de "
+"uitsterfcurve van -5 tot -25 dB van haar rechte lijn afwijkt, 1000 (1 - r²). "
+"Boven 10 ‰ is het verval niet recht en is T20 niet betrouwbaar"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Non-linearity of the T30 decay (‰, ISO 3382-2): how far the decay curve from "
+"-5 to -35 dB strays from its straight line, 1000 (1 - r²). Above 10 ‰ the "
+"decay is not straight and T30 is not to be relied on"
+msgstr ""
+"Niet-lineariteit van het verval voor T30 (‰, ISO 3382-2): hoe ver de "
+"uitsterfcurve van -5 tot -35 dB van haar rechte lijn afwijkt, 1000 (1 - r²). "
+"Boven 10 ‰ is het verval niet recht en is T30 niet betrouwbaar"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Curvature of the decay (%, ISO 3382-2): 100 (T30 / T20 - 1), usually 0 to 5 "
+"%; above 10 %, the decay is curved, likely with two slopes, which T20 and "
+"T30 each average differently"
+msgstr ""
+"Kromming van het verval (%, ISO 3382-2): 100 (T30 / T20 - 1), gewoonlijk 0 "
+"tot 5 %; boven 10 %: gekromd verval, waarschijnlijk met twee hellingen, die "
+"T20 en T30 elk anders middelen"
 
 #. Translators: {rating} is the rating level's symbol (L_den); {periods} and {classes} are names from the scene file, each with its level.
 #: acoustic_spaces/gui/results_view.py
@@ -5834,6 +5876,18 @@ msgstr ""
 #, python-brace-format
 msgid "{tip}. Not defined for this response"
 msgstr "{tip}. Niet gedefinieerd voor deze respons"
+
+#. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "{tip}. Here the decay is not straight: ξ is {xi} ‰, more than {limit} ‰"
+msgstr "{tip}. Hier is het verval niet recht: ξ is {xi} ‰, meer dan {limit} ‰"
+
+#. Translators: {tip} is what a parameter means; {limit} is a number.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "{tip}. Here the decay is curved: more than {limit} %"
+msgstr "{tip}. Hier is het verval gekromd: meer dan {limit} %"
 
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format

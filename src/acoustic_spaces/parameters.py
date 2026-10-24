@@ -74,7 +74,15 @@ MORE_PARAMETERS = {
     "t30_x": ("s", "T30 of a figure of eight facing forward"),
     "t30_y": ("s", "T30 of a figure of eight facing left"),
     "t30_z": ("s", "T30 of a figure of eight facing up"),
+    "xi_t20": ("‰", "non-linearity of the T20 decay, 1000 (1 - r²) of its line (ISO 3382-2)"),
+    "xi_t30": ("‰", "non-linearity of the T30 decay, 1000 (1 - r²) of its line (ISO 3382-2)"),
+    "curvature": ("%", "curvature, 100 (T30 / T20 - 1) (ISO 3382-2)"),
 }
+#: ISO 3382-2, annex B: a decay whose line leaves more than this much (‰) of the curve's
+#: variance unexplained is not straight, and its decay time is better not relied on; a
+#: curvature (%) above this, a curved decay, likely of two slopes.
+NON_LINEARITY_LIMIT = 10.0
+CURVATURE_LIMIT = 10.0
 #: Every parameter, in display order.
 ALL_PARAMETERS = {**PARAMETERS, **MORE_PARAMETERS}
 _SYMBOLS = {
@@ -86,6 +94,9 @@ _SYMBOLS = {
     "t30_x": "T30_X",
     "t30_y": "T30_Y",
     "t30_z": "T30_Z",
+    "xi_t20": "ξ_T20",
+    "xi_t30": "ξ_T30",
+    "curvature": "Curvature",
 }
 #: Time windows, from the direct sound (s): the lateral fractions compare 5 to 80 ms of
 #: the lateral energy with 0 to 80 ms of all of it, and LJ and IACC_L start at 80 ms.
@@ -158,6 +169,9 @@ class RoomParameters:
     t30_x: np.ndarray | None = None
     t30_y: np.ndarray | None = None
     t30_z: np.ndarray | None = None
+    xi_t20: np.ndarray | None = None
+    xi_t30: np.ndarray | None = None
+    curvature: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         for name in MORE_PARAMETERS:
@@ -223,22 +237,47 @@ def _label(name: str) -> str:
     return _symbol(name) + (f" ({unit})" if unit else "")
 
 
-def _line(level: np.ndarray, t: np.ndarray, top: float, bottom: float):
-    """Least-squares line (slope dB/s, intercept dB) through ``level`` between two
-    levels, or None when the curve does not fall that far or does not fall at all."""
-    if not np.any(level <= bottom):
+def _fit(level: np.ndarray, t: np.ndarray, top: float, bottom: float):
+    """Least-squares line through ``level`` between two levels: its slope (dB/s), its
+    intercept (dB) and the square of the correlation coefficient of the curve with time
+    there; or None when the curve does not fall that far or does not fall at all.
+
+    The curve is -inf where no energy remains: after the last sound of a response that
+    ends in silence, or where removing the noise of a measured one leaves none. Dropping
+    there is the end of the data, not a decay, so the curve has to reach ``bottom`` at a
+    level it has.
+    """
+    below = level <= bottom
+    if not below.any():
+        return None
+    stop = int(np.argmax(below))
+    if not np.isfinite(level[stop]):
         return None
     start = int(np.argmax(level <= top))
-    stop = int(np.argmax(level <= bottom))
     if stop - start < 2:
         return None
     # The closed form of a straight-line fit: maps call this for thousands of points.
     x, y = t[start : stop + 1], level[start : stop + 1]
     n = len(x)
     sx, sy = float(x.sum()), float(y.sum())
-    slope = (n * float(x @ y) - sx * sy) / (n * float(x @ x) - sx * sx)
+    sxx, syy, sxy = (
+        n * float(x @ x) - sx * sx,
+        n * float(y @ y) - sy * sy,
+        n * float(x @ y) - sx * sy,
+    )
+    slope = sxy / sxx
+    if slope >= 0:
+        return None
     intercept = (sy - slope * sx) / n
-    return (slope, intercept) if slope < 0 else None
+    r2 = min(sxy * sxy / (sxx * syy), 1.0) if syy > 0 else 1.0
+    return slope, intercept, r2
+
+
+def _line(level: np.ndarray, t: np.ndarray, top: float, bottom: float):
+    """Least-squares line (slope dB/s, intercept dB) through ``level`` between two
+    levels, or None (see :func:`_fit`)."""
+    fit = _fit(level, t, top, bottom)
+    return None if fit is None else fit[:2]
 
 
 def _tail(e: np.ndarray, dt: float) -> tuple[float, float]:
@@ -257,7 +296,7 @@ def _tail(e: np.ndarray, dt: float) -> tuple[float, float]:
     t = np.arange(len(e)) * dt
     end = len(e) * dt
     with np.errstate(divide="ignore"):
-        level = 10.0 * np.log10(np.maximum(remaining / total, 1e-300))
+        level = 10.0 * np.log10(np.maximum(remaining / total, 0.0))  # -inf: none left
     line = _line(level, t, -5.0, -15.0)
     for _ in range(2):
         if line is None:
@@ -271,10 +310,25 @@ def _tail(e: np.ndarray, dt: float) -> tuple[float, float]:
     return float(tail), float(-slope * math.log(10.0) / 10.0)
 
 
-def _decay_time(level: np.ndarray, t: np.ndarray, top: float, bottom: float) -> float:
-    """-60 dB over the slope of a line fitted to ``level`` between two levels."""
-    line = _line(level, t, top, bottom)
-    return math.nan if line is None else -60.0 / line[0]
+def _decay_time(level: np.ndarray, t: np.ndarray, top: float, bottom: float):
+    """-60 dB over the slope of a line fitted to ``level`` between two levels, and the
+    fit's non-linearity ξ (‰, ISO 3382-2: 1000 (1 - r²)); NaN for both without a fit."""
+    fit = _fit(level, t, top, bottom)
+    if fit is None:
+        return math.nan, math.nan
+    return -60.0 / fit[0], 1000.0 * (1.0 - fit[2])
+
+
+def _curvature(t20: float, t30: float) -> float:
+    """ISO 3382-2's curvature (%): 100 (T30 / T20 - 1), NaN without both."""
+    if not (math.isfinite(t20) and math.isfinite(t30)) or t20 <= 0:
+        return math.nan
+    return 100.0 * (t30 / t20 - 1.0)
+
+
+#: What :func:`_band_parameters` gives besides :data:`PARAMETERS`: the checks of the
+#: decay times' lines.
+_CHECKS = ("xi_t20", "xi_t30", "curvature")
 
 
 def decay_curve(energy: np.ndarray, time_step: float) -> np.ndarray:
@@ -323,7 +377,7 @@ def _band_parameters(
     tail, rate = _tail(e, dt)
     total = float(e.sum()) + tail
     nan = math.nan
-    undefined = dict.fromkeys(PARAMETERS, nan)
+    undefined = dict.fromkeys([*PARAMETERS, *_CHECKS], nan)
     if stage:
         undefined.update(st_early=nan, st_late=nan)
     if total <= 0:
@@ -331,14 +385,18 @@ def _band_parameters(
 
     remaining = np.concatenate([np.cumsum(e[::-1])[::-1], [0.0]]) + tail
     with np.errstate(divide="ignore"):
-        level = 10.0 * np.log10(np.maximum(remaining / total, 1e-300))
-    out = {
-        name: _decay_time(level, edges, top, bottom) for name, (top, bottom) in DECAY_RANGES.items()
-    }
+        level = 10.0 * np.log10(np.maximum(remaining / total, 0.0))  # -inf: none left
+    out: dict[str, float] = {}
+    for name, (top, bottom) in DECAY_RANGES.items():
+        out[name], xi = _decay_time(level, edges, top, bottom)
+        if name != "edt":
+            out[f"xi_{name}"] = xi
+    out["curvature"] = _curvature(out["t20"], out["t30"])
     # A response that stops before its decay has fallen to _MIN_DECAY_DB leaves too much
     # to the estimated tail: nothing can be read from it, as T20 and T30 already cannot.
-    # The fall counts at the end of the curve, tail included, or along the early decay's
-    # slope, as one strong ray late in a sparse tail can hold the end of the curve up.
+    # The fall counts at the end of the curve, tail included (-inf when nothing is left
+    # to it), or along the early decay's slope, as one strong ray late in a sparse tail
+    # can hold the end of the curve up.
     if level[-1] > _MIN_DECAY_DB and not 60.0 * edges[-1] / out["edt"] >= -_MIN_DECAY_DB:
         if open_air and reference:
             # Outdoors the response holds what arrives: no reverberation goes on past its
@@ -943,6 +1001,9 @@ def _decay_parameters(
         for name, (_, bottom) in DECAY_RANGES.items():
             if decay.decay_range_db[b] < _NOISE_CLEARANCE_DB - bottom:
                 p[name] = math.nan
+                if name != "edt":
+                    p[f"xi_{name}"] = math.nan
+        p["curvature"] = _curvature(p["t20"], p["t30"])
         per_band.append(p)
     return per_band
 

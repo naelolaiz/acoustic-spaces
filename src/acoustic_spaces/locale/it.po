@@ -5432,6 +5432,18 @@ msgid "T30 Z (s)"
 msgstr "T30 Z (s)"
 
 #: acoustic_spaces/gui/results_view.py
+msgid "ξ T20 (‰)"
+msgstr "ξ T20 (‰)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "ξ T30 (‰)"
+msgstr "ξ T30 (‰)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid "Curvature (%)"
+msgstr "Curvatura (%)"
+
+#: acoustic_spaces/gui/results_view.py
 msgid ""
 "Early decay time (s): how long the sound would take to die away by 60 dB at "
 "the rate of its first 10 dB; the closest to how reverberant the room sounds"
@@ -5610,6 +5622,36 @@ msgstr ""
 "T30 (s) di un microfono a otto rivolto verso l'alto dal ricevitore. "
 "Superiore al T30 quando il suono continua a riflettersi tra pavimento e "
 "soffitto"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Non-linearity of the T20 decay (‰, ISO 3382-2): how far the decay curve from "
+"-5 to -25 dB strays from its straight line, 1000 (1 - r²). Above 10 ‰ the "
+"decay is not straight and T20 is not to be relied on"
+msgstr ""
+"Non linearità del decadimento di T20 (‰, ISO 3382-2): quanto la curva di "
+"decadimento da -5 a -25 dB si discosta dalla sua retta, 1000 (1 - r²). Sopra "
+"10 ‰ il decadimento non è rettilineo e T20 non è affidabile"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Non-linearity of the T30 decay (‰, ISO 3382-2): how far the decay curve from "
+"-5 to -35 dB strays from its straight line, 1000 (1 - r²). Above 10 ‰ the "
+"decay is not straight and T30 is not to be relied on"
+msgstr ""
+"Non linearità del decadimento di T30 (‰, ISO 3382-2): quanto la curva di "
+"decadimento da -5 a -35 dB si discosta dalla sua retta, 1000 (1 - r²). Sopra "
+"10 ‰ il decadimento non è rettilineo e T30 non è affidabile"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"Curvature of the decay (%, ISO 3382-2): 100 (T30 / T20 - 1), usually 0 to 5 "
+"%; above 10 %, the decay is curved, likely with two slopes, which T20 and "
+"T30 each average differently"
+msgstr ""
+"Curvatura del decadimento (%, ISO 3382-2): 100 (T30 / T20 - 1), di solito da "
+"0 a 5 %; sopra 10 %, il decadimento è curvo, probabilmente con due pendenze, "
+"che T20 e T30 mediano in modo diverso"
 
 #. Translators: {rating} is the rating level's symbol (L_den); {periods} and {classes} are names from the scene file, each with its level.
 #: acoustic_spaces/gui/results_view.py
@@ -5854,6 +5896,19 @@ msgstr ""
 #, python-brace-format
 msgid "{tip}. Not defined for this response"
 msgstr "{tip}. Non definito per questa risposta"
+
+#. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "{tip}. Here the decay is not straight: ξ is {xi} ‰, more than {limit} ‰"
+msgstr ""
+"{tip}. Qui il decadimento non è rettilineo: ξ è {xi} ‰, più di {limit} ‰"
+
+#. Translators: {tip} is what a parameter means; {limit} is a number.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "{tip}. Here the decay is curved: more than {limit} %"
+msgstr "{tip}. Qui il decadimento è curvo: più di {limit} %"
 
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format

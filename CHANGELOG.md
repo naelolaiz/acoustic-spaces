@@ -737,8 +737,27 @@
   the background and puts it in the scene's binaural output; another SOFA file goes in
   by its address.
 
+**Checks of the decay times** (ISO 3382-2, annex B)
+
+- Each T20 and T30 comes with the non-linearity ξ of the line it is read from,
+  1000 (1 - r²) ‰ (r: the correlation of the decay curve with time over the fit range),
+  and the decay's curvature, 100 (T30 / T20 - 1) %: `xi_t20`, `xi_t30` and `curvature`
+  in `RoomParameters`, the printed tables, `parameters.json` and the editor's results
+  table. `NON_LINEARITY_LIMIT` (10 ‰) and `CURVATURE_LIMIT` (10 %) are the standard's
+  limits: past them the editor's results table shows the check in amber, a ξ with the
+  T20 or T30 it puts in doubt, each with a tip that says why. A decay time left out for
+  the background noise leaves its checks out as well.
+
 **Fixes**
 
+- A response that ends in silence (all its sound arrived before its end, as outdoors)
+  had decay times fitted through the drop after its last sound: the decay curve fell
+  there to the floor of the computation (-3000 dB), and a fit that reached it took the
+  drop for a decay. One reflection 1.5 s after the direct sound, then silence, read EDT
+  7.5 s. The drop is now the end of the data: a decay time needs the curve to fall
+  through its range before the last sound, and is NaN otherwise. The same holds where
+  removing a measurement's noise leaves no energy. The energies of such a response
+  (C50, C80, D50, Ts, G, lateral fractions, stage support) do not change.
 - Binaural renders lost treble: at 8 kHz up to 13.6 dB from some directions (the
   spherical head's ear facing a source straight ahead), 2.7 dB on average over all
   directions, and more the higher the band. An HRTF between the measured directions

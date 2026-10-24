@@ -4,6 +4,8 @@ import numpy as np
 import pytest
 
 from acoustic_spaces.parameters import (
+    CURVATURE_LIMIT,
+    NON_LINEARITY_LIMIT,
     PARAMETERS,
     STI_MODULATION_HZ,
     decay_curve,
@@ -99,6 +101,58 @@ def test_a_response_that_stops_early_has_no_parameters() -> None:
     assert longer.edt[0] == pytest.approx(2.0, rel=0.01) and abs(longer.g[0]) < 0.01
     for name in ("t20", "c50", "c80", "d50", "ts"):
         assert np.isfinite(getattr(longer, name)[0]), name
+
+
+def test_the_silent_end_of_a_response_is_no_decay() -> None:
+    """A response that ends in silence: its decay curve drops to nothing after the last
+    sound, the end of the data and not a decay, so no decay time is fitted through that
+    drop. Outdoors one late reflection and then silence used to read EDT 7.5 s, and with
+    a few more steps T20 and T30 as long."""
+    energy = np.zeros((1, 3500))
+    energy[0, 10] = 1.0  # the direct sound
+    energy[0, 1510] = 0.5  # one reflection 1.5 s later, then nothing
+    p = from_energy(energy, DT, onset_s=0.0101, reference_energy=1.0, open_air=True)
+    assert np.isnan(p.edt[0]) and np.isnan(p.t20[0]) and np.isnan(p.t30[0])
+    # Nothing is left to a tail: the energies are those the response holds.
+    assert p.c80[0] == pytest.approx(10 * math.log10(1.0 / 0.5))
+    assert p.g[0] == pytest.approx(10 * math.log10(1.5))
+    # Steps down to -30 dB, then silence: T20 is read from the steps (with the
+    # non-linearity that shows they are steps), T30 needs -35 dB and is not there.
+    energy = np.zeros((1, 3500))
+    for slot, share in ((10, 1.0), (400, 0.3), (900, 0.05), (1500, 0.002)):
+        energy[0, slot] = share
+    p = from_energy(energy, DT, onset_s=0.0101, reference_energy=1.0)
+    assert np.isfinite(p.t20[0]) and np.isnan(p.t30[0])
+    assert p.xi_t20[0] > NON_LINEARITY_LIMIT and np.isnan(p.xi_t30[0])
+    assert np.isnan(p.curvature[0])
+    # A decay that ends in silence after falling far enough is read as before.
+    decay = _exponential(1.0, 1.2)
+    decay[1100:] = 0.0  # -66 dB on, nothing
+    p = from_energy(decay[None, :], DT, onset_s=0.0)
+    for value in (p.edt, p.t20, p.t30):
+        np.testing.assert_allclose(value, 1.0, rtol=0.02)
+
+
+def test_the_decay_lines_are_checked_as_iso_3382_2_says() -> None:
+    """ξ = 1000 (1 - r²) of the line each of T20 and T30 is read from, and the curvature
+    100 (T30 / T20 - 1): about nothing for a straight decay, past ISO 3382-2's 10 ‰
+    and 10 % for one of two slopes (15 dB at 1 s, then 3 s)."""
+    straight = from_energy(np.tile(_exponential(1.0, 2.0), (8, 1)), DT, onset_s=0.0)
+    assert np.all(straight.xi_t20 < 0.1) and np.all(straight.xi_t30 < 0.1)
+    assert np.all(np.abs(straight.curvature) < 2.0)
+    t = np.arange(6001) * DT
+    db = np.where(t < 0.25, -60.0 * t, -15.0 - 20.0 * (t - 0.25))
+    remaining = 10.0 ** (db / 10.0)
+    two = from_energy((remaining[:-1] - remaining[1:])[None, :], DT, onset_s=0.0)
+    assert two.edt[0] == pytest.approx(1.0, rel=0.05)
+    assert two.xi_t20[0] > NON_LINEARITY_LIMIT and two.curvature[0] > CURVATURE_LIMIT
+    assert two.t30[0] > two.t20[0] > 1.0
+    assert "ξ_T20 (‰)" in two.table() and "Curvature (%)" in two.table()
+    assert set(two.as_dict()) >= {"xi_t20", "xi_t30", "curvature"}
+    # Measured: a check goes with its decay time where the noise leaves no room for it.
+    noisy = from_impulse_response(_noisy_decay(1.0, -40.0, 2.0), 48_000)
+    assert np.all(np.isnan(noisy.xi_t30)) and np.all(np.isnan(noisy.curvature))
+    assert np.all(np.isfinite(noisy.xi_t20[2:]))
 
 
 def test_octave_filters_meet_their_band_edges() -> None:

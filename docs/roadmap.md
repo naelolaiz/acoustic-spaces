@@ -89,6 +89,12 @@ Version 3.2.3:
 
 - [x] Added Dutch translation.
 
+Parameters:
+
+- [x] The checks of ISO 3382-2 on every T20 and T30: the non-linearity ξ of the line it
+  is read from and the curvature of the decay, amber in the editor past the standard's
+  limits.
+
 Outdoor acoustics, in steps:
 
 - [x] O1 Outdoor scenes: flat ground under an open sky, buildings, barriers and model

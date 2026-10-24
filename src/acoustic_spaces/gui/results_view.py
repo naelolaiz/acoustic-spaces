@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces.gui.inspector import BAND_LABELS
+from acoustic_spaces.gui.levels import level_colour
 from acoustic_spaces.gui.numbers import fmt, number_text
 from acoustic_spaces.gui.tips import (
     band_headers,
@@ -38,7 +39,12 @@ from acoustic_spaces.gui.tips import (
 from acoustic_spaces.headtracking import DEFAULT_OSC_PORT, HeadOrientation, OscReceiver
 from acoustic_spaces.i18n import N_, _, ngettext
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
-from acoustic_spaces.parameters import MORE_PARAMETERS, PARAMETERS
+from acoustic_spaces.parameters import (
+    CURVATURE_LIMIT,
+    MORE_PARAMETERS,
+    NON_LINEARITY_LIMIT,
+    PARAMETERS,
+)
 
 #: Smallest size of a plot (pixels); a smaller panel scrolls instead of squashing it.
 PLOT_SIZE = (720, 480)
@@ -69,6 +75,9 @@ ROWS = [
     ("t30_x", N_("T30 X (s)"), "{:.2f}"),
     ("t30_y", N_("T30 Y (s)"), "{:.2f}"),
     ("t30_z", N_("T30 Z (s)"), "{:.2f}"),
+    ("xi_t20", N_("ξ T20 (‰)"), "{:.1f}"),
+    ("xi_t30", N_("ξ T30 (‰)"), "{:.1f}"),
+    ("curvature", N_("Curvature (%)"), "{:.1f}"),
 ]
 assert {row[0] for row in ROWS[:8]} == set(PARAMETERS)
 #: The outdoor rows, right after the sound pressure level.
@@ -156,6 +165,21 @@ ROW_TIPS = {
     "t30_z": N_(
         "T30 (s) of a figure-of-eight microphone facing up from the listener. Longer "
         "than T30 where sound keeps running between floor and ceiling"
+    ),
+    "xi_t20": N_(
+        "Non-linearity of the T20 decay (‰, ISO 3382-2): how far the decay curve from -5 "
+        "to -25 dB strays from its straight line, 1000 (1 - r²). Above 10 ‰ the decay is "
+        "not straight and T20 is not to be relied on"
+    ),
+    "xi_t30": N_(
+        "Non-linearity of the T30 decay (‰, ISO 3382-2): how far the decay curve from -5 "
+        "to -35 dB strays from its straight line, 1000 (1 - r²). Above 10 ‰ the decay is "
+        "not straight and T30 is not to be relied on"
+    ),
+    "curvature": N_(
+        "Curvature of the decay (%, ISO 3382-2): 100 (T30 / T20 - 1), usually 0 to 5 %; "
+        "above 10 %, the decay is curved, likely with two slopes, which T20 and T30 each "
+        "average differently"
     ),
 }
 assert set(ROW_TIPS) == {row[0] for row in ROWS}
@@ -568,6 +592,42 @@ class ResultsPanel(QWidget):
                 item.setToolTip(tip if defined else undefined)
                 self.table.setItem(row, col, item)
             self.table.setRowHidden(row, row > 8 and not np.isfinite(values).any())
+        self._flag_decays(parameters)
+
+    def _flag_decays(self, parameters) -> None:
+        """Amber for the checks of ISO 3382-2 past their limits, and for the decay times
+        they put in doubt."""
+        colour = level_colour(self.table, "warning")
+        rows = {name: k for k, (name, _label, _template) in enumerate(ROWS)}
+        for name in ("t20", "t30"):
+            for col, xi in enumerate(getattr(parameters, f"xi_{name}")):
+                if not xi > NON_LINEARITY_LIMIT:
+                    continue
+                for flagged in (name, f"xi_{name}"):
+                    item = self.table.item(rows[flagged], col)
+                    item.setForeground(colour)
+                    item.setToolTip(
+                        # Translators: {tip} is what a parameter means; {xi} and {limit}
+                        # are numbers.
+                        _(
+                            "{tip}. Here the decay is not straight: ξ is {xi} ‰, more than "
+                            "{limit} ‰"
+                        ).format(
+                            tip=_(ROW_TIPS[flagged]),
+                            xi=number_text(f"{xi:.1f}"),
+                            limit=number_text(f"{NON_LINEARITY_LIMIT:g}"),
+                        )
+                    )
+        for col, curvature in enumerate(parameters.curvature):
+            if curvature > CURVATURE_LIMIT:
+                item = self.table.item(rows["curvature"], col)
+                item.setForeground(colour)
+                item.setToolTip(
+                    # Translators: {tip} is what a parameter means; {limit} is a number.
+                    _("{tip}. Here the decay is curved: more than {limit} %").format(
+                        tip=_(ROW_TIPS["curvature"]), limit=number_text(f"{CURVATURE_LIMIT:g}")
+                    )
+                )
 
     def _details(self) -> None:
         if self.result is None:
