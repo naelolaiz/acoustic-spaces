@@ -355,6 +355,10 @@ msgid "Messages"
 msgstr "Meldungen"
 
 #: acoustic_spaces/gui/app.py
+msgid "Movement"
+msgstr "Bewegung"
+
+#: acoustic_spaces/gui/app.py
 msgid ""
 "What plays through the room: the recording, and the source and listener of "
 "the response it plays through"
@@ -571,6 +575,20 @@ msgstr "&Grundriss"
 msgid "Show the room from above, to draw and change floor plans"
 msgstr ""
 "Den Raum von oben anzeigen, um Grundrisse zu zeichnen und zu bearbeiten"
+
+#: acoustic_spaces/gui/app.py
+msgid "Edit &movement…"
+msgstr "Beweg&ung bearbeiten…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Open the Movement panel: where the selected source or listener is and how it "
+"faces at each time of a movement, with a timeline every mover is previewed "
+"along"
+msgstr ""
+"Das Fenster Bewegung öffnen: wo die ausgewählte Quelle oder der ausgewählte "
+"Empfänger in jedem Augenblick einer Bewegung ist und wohin sie oder er "
+"blickt, mit einer Zeitleiste, auf der alle Beweglichen in der Vorschau laufen"
 
 #: acoustic_spaces/gui/app.py
 msgid "Show reflection &paths"
@@ -883,6 +901,79 @@ msgstr "Fläche {name}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
+msgid "Moved {name} to ({point})"
+msgstr "{name} nach ({point}) verschoben"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Moved keyframe {n} of {name} to ({point})"
+msgstr "Keyframe {n} von {name} nach ({point}) verschoben"
+
+#: acoustic_spaces/gui/app.py
+msgid "Wait for the current run to end, then render the movement."
+msgstr ""
+"Warten Sie, bis die laufende Berechnung endet, und rendern Sie dann die "
+"Bewegung."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Nothing moves: add a keyframe to a source or listener in use, and tick Moves."
+msgstr ""
+"Nichts bewegt sich: Geben Sie einer einbezogenen Quelle oder einem "
+"einbezogenen Empfänger einen Keyframe und haken Sie Bewegt sich an."
+
+#: acoustic_spaces/gui/app.py
+msgid "Nothing to play: give a source in use a WAV file under Plays first."
+msgstr ""
+"Nichts abzuspielen: Geben Sie zuerst einer einbezogenen Quelle unter Spielt "
+"eine WAV-Datei."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot run: {problems}"
+msgstr "Berechnung nicht möglich: {problems}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Render the movement"
+msgstr "Bewegung rendern"
+
+#: acoustic_spaces/gui/app.py
+msgid "WAV files (*.wav)"
+msgstr "WAV-Dateien (*.wav)"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Rendering the movement to {path}…"
+msgstr "Bewegung wird nach {path} gerendert…"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "{count} channel"
+msgid_plural "{count} channels"
+msgstr[0] "{count} Kanal"
+msgstr[1] "{count} Kanäle"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"{movers} move for {time:.1f} s: responses at {places} places. Wrote {files}: "
+"{channels}, {length:.1f} s at {rate} Hz, in {seconds:.1f} s."
+msgstr ""
+"{movers} bewegen sich {time:.1f} s lang: Antworten an {places} Orten. "
+"{files} geschrieben: {channels}, {length:.1f} s bei {rate} Hz, in "
+"{seconds:.1f} s."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"One gain of {gain:+.1f} dB on every file brings the loudest peak to -1 dBFS; "
+"the balance between the listeners holds."
+msgstr ""
+"Eine Verstärkung von {gain:+.1f} dB auf jeder Datei bringt den höchsten "
+"Pegel auf -1 dBFS; das Verhältnis zwischen den Empfängern bleibt."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
 msgid "Leaks: {summary}"
 msgstr "Undichtigkeiten: {summary}"
 
@@ -916,11 +1007,6 @@ msgstr ""
 #, python-brace-format
 msgid "Added {name} at ({point})"
 msgstr "{name} bei ({point}) hinzugefügt"
-
-#: acoustic_spaces/gui/app.py
-#, python-brace-format
-msgid "Moved {name} to ({point})"
-msgstr "{name} nach ({point}) verschoben"
 
 #: acoustic_spaces/gui/app.py
 msgid "The box is now a floor plan with the same walls."
@@ -1134,11 +1220,6 @@ msgstr "{title}: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
-msgid "Cannot run: {problems}"
-msgstr "Berechnung nicht möglich: {problems}"
-
-#: acoustic_spaces/gui/app.py
-#, python-brace-format
 msgid "Simulating {scene}…"
 msgstr "{scene} wird simuliert…"
 
@@ -1272,6 +1353,11 @@ msgstr "Die Demo ist fehlgeschlagen: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
+msgid "The movement failed: {reason}"
+msgstr "Die Bewegung ist fehlgeschlagen: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
 msgid "The simulation failed: {reason}"
 msgstr "Die Simulation ist fehlgeschlagen: {reason}"
 
@@ -1290,6 +1376,10 @@ msgstr "Export abgebrochen."
 #: acoustic_spaces/gui/app.py
 msgid "Demo cancelled."
 msgstr "Demo abgebrochen."
+
+#: acoustic_spaces/gui/app.py
+msgid "Movement cancelled."
+msgstr "Bewegung abgebrochen."
 
 #: acoustic_spaces/gui/app.py
 msgid "Simulation cancelled."
@@ -1360,10 +1450,6 @@ msgstr ""
 #: acoustic_spaces/gui/app.py
 msgid "Dry recording to play in the room"
 msgstr "Reflexionsfreie Aufnahme zur Wiedergabe im Raum"
-
-#: acoustic_spaces/gui/app.py
-msgid "WAV files (*.wav)"
-msgstr "WAV-Dateien (*.wav)"
 
 #: acoustic_spaces/gui/app.py
 msgid "Cannot play"
@@ -1667,6 +1753,19 @@ msgid "leave out listener"
 msgid_plural "leave out {count} listeners"
 msgstr[0] "Empfänger auslassen"
 msgstr[1] "{count} Empfänger auslassen"
+
+#: acoustic_spaces/gui/document.py
+#, python-brace-format
+msgid "{name} has no walk yet: add a keyframe first"
+msgstr "{name} hat noch keinen Weg: Fügen Sie zuerst einen Keyframe hinzu"
+
+#: acoustic_spaces/gui/document.py
+msgid "turn the walk on"
+msgstr "Weg einschalten"
+
+#: acoustic_spaces/gui/document.py
+msgid "turn the walk off"
+msgstr "Weg ausschalten"
 
 #: acoustic_spaces/gui/document.py
 msgid "a scene needs at least one source"
@@ -3926,6 +4025,51 @@ msgstr ""
 "Er bleibt in der Szene und wird blass gezeichnet. Das Häkchen im Szenenbaum "
 "bewirkt dasselbe"
 
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
+msgid "Moves"
+msgstr "Bewegt sich"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Tick to have the source go along its keyframes in a movement; untick to keep "
+"them but leave it standing where it starts. Add keyframes with Edit movement…"
+msgstr ""
+"Anhaken, damit die Quelle in einer Bewegung ihren Keyframes folgt; abhaken, "
+"um sie zu behalten, die Quelle aber dort stehen zu lassen, wo sie beginnt. "
+"Keyframes fügen Sie mit Bewegung bearbeiten… hinzu"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Tick to have the listener go along its keyframes in a movement; untick to "
+"keep them but leave it standing where it starts. Add keyframes with Edit "
+"movement…"
+msgstr ""
+"Anhaken, damit der Empfänger in einer Bewegung seinen Keyframes folgt; "
+"abhaken, um sie zu behalten, den Empfänger aber dort stehen zu lassen, wo er "
+"beginnt. Keyframes fügen Sie mit Bewegung bearbeiten… hinzu"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Edit movement…"
+msgstr "Bewegung bearbeiten…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Open the Movement panel: where the source is and how it faces at each time "
+"of a movement, with a timeline every mover is previewed along"
+msgstr ""
+"Das Fenster Bewegung öffnen: wo die Quelle in jedem Augenblick einer "
+"Bewegung ist und wohin sie blickt, mit einer Zeitleiste, auf der alle "
+"Beweglichen in der Vorschau laufen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Open the Movement panel: where the listener is and how it faces at each time "
+"of a movement, with a timeline every mover is previewed along"
+msgstr ""
+"Das Fenster Bewegung öffnen: wo der Empfänger in jedem Augenblick einer "
+"Bewegung ist und wohin er blickt, mit einer Zeitleiste, auf der alle "
+"Beweglichen in der Vorschau laufen"
+
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Where the source is along x (m). Dragging it in the 3D view or the plan "
@@ -4026,15 +4170,15 @@ msgstr ""
 "Ausrichtung bestimmt die Vorwärtsrichtung der binauralen, Ambisonics- und "
 "Lautsprecherausgaben"
 
-#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/results_view.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py acoustic_spaces/gui/results_view.py
 msgid "Yaw"
 msgstr "Gierwinkel"
 
-#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/results_view.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py acoustic_spaces/gui/results_view.py
 msgid "Pitch"
 msgstr "Nickwinkel"
 
-#: acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
 msgid "Roll"
 msgstr "Rollwinkel"
 
@@ -5163,6 +5307,302 @@ msgstr "Fehler ({count})"
 msgid "All items"
 msgstr "Alle Elemente"
 
+#: acoustic_spaces/gui/movement.py
+msgid "Time"
+msgstr "Zeit"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Speed"
+msgstr "Geschwindigkeit"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"The source or listener whose keyframes the table shows (a line or a surface "
+"does not move); picking one here selects it in the scene"
+msgstr ""
+"Die Quelle oder der Empfänger, deren oder dessen Keyframes die Tabelle zeigt "
+"(eine Linie oder eine Fläche bewegt sich nicht); hier gewählt, wird sie oder "
+"er in der Szene ausgewählt"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Mover"
+msgstr "Bewegliches"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Tick to have it go along its keyframes in a movement; untick to keep them "
+"but leave it standing where it starts (enabled in the scene file)"
+msgstr ""
+"Anhaken, damit es in einer Bewegung seinen Keyframes folgt; abhaken, um sie "
+"zu behalten, es aber dort stehen zu lassen, wo es beginnt (enabled in der "
+"Szenendatei)"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Render movement…"
+msgstr "Bewegung rendern…"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Simulate every mover along its keyframes, on one clock, and write what each "
+"listener in use hears of what the sources play (their Plays files) as a WAV "
+"file, in the background (walkthrough --all)"
+msgstr ""
+"Alle Beweglichen entlang ihrer Keyframes mit einer gemeinsamen Uhr "
+"simulieren und das, was jeder einbezogene Empfänger von dem hört, was die "
+"Quellen spielen (ihre Dateien unter Spielt), als WAV-Datei schreiben, im "
+"Hintergrund (walkthrough --all)"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"When it is at this keyframe, s from the start of the movement; type another "
+"time to move the keyframe along the timeline. The first row is where it "
+"starts, at 0 s"
+msgstr ""
+"Wann es an diesem Keyframe ist, in s vom Beginn der Bewegung; eine andere "
+"Zeit eintippen verschiebt den Keyframe auf der Zeitleiste. Die erste Zeile "
+"ist, wo es beginnt, bei 0 s"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Where it is at this keyframe along x (m); dragging the keyframe's handle in "
+"the plan or the 3D view moves it too"
+msgstr ""
+"Wo es an diesem Keyframe entlang x ist (m); den Griff des Keyframes im "
+"Grundriss oder in der 3D-Ansicht zu ziehen verschiebt ihn auch"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Where it is at this keyframe along y (m); dragging the keyframe's handle in "
+"the plan or the 3D view moves it too"
+msgstr ""
+"Wo es an diesem Keyframe entlang y ist (m); den Griff des Keyframes im "
+"Grundriss oder in der 3D-Ansicht zu ziehen verschiebt ihn auch"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Where it is at this keyframe along z (m); z is up. In the 3D view the handle "
+"moves up and down with Shift"
+msgstr ""
+"Wo es an diesem Keyframe entlang z ist (m); z zeigt nach oben. In der "
+"3D-Ansicht geht der Griff mit Umschalt auf und ab"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Which way it faces at this keyframe: turned left from +x towards +y "
+"(degrees). Dimmed where it keeps facing as at the keyframe before; type an "
+"angle to turn it here, evenly from the keyframe before"
+msgstr ""
+"Wohin es an diesem Keyframe blickt: von +x nach +y nach links gedreht "
+"(Grad). Gedämpft, wo es weiter wie am Keyframe davor blickt; einen Winkel "
+"eintippen dreht es hier, gleichmäßig vom Keyframe davor"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"How far it looks up at this keyframe (degrees). Dimmed where it keeps facing "
+"as at the keyframe before; type an angle to turn it here"
+msgstr ""
+"Wie weit es an diesem Keyframe nach oben blickt (Grad). Gedämpft, wo es "
+"weiter wie am Keyframe davor blickt; einen Winkel eintippen dreht es hier"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"How far it tilts to the right at this keyframe (degrees). Dimmed where it "
+"keeps facing as at the keyframe before; type an angle to turn it here"
+msgstr ""
+"Wie weit es sich an diesem Keyframe nach rechts neigt (Grad). Gedämpft, wo "
+"es weiter wie am Keyframe davor blickt; einen Winkel eintippen dreht es hier"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"How fast it goes from this keyframe to the next: the distance between them "
+"over the time between them (m/s). Nothing to set: change a time or a "
+"position and the speed follows"
+msgstr ""
+"Wie schnell es von diesem Keyframe zum nächsten geht: der Abstand zwischen "
+"ihnen durch die Zeit zwischen ihnen (m/s). Nichts einzustellen: Ändern Sie "
+"eine Zeit oder eine Position, und die Geschwindigkeit folgt"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Add keyframe"
+msgstr "Keyframe hinzufügen"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Add a keyframe at the playhead, where the mover is then (on a keyframe "
+"already, or at 0 s: a second past the end of its walk, where it ends), then "
+"drag it into place or type where it is"
+msgstr ""
+"Einen Keyframe an der Zeitmarke hinzufügen, wo das Bewegliche dann ist "
+"(steht sie schon auf einem Keyframe oder bei 0 s: eine Sekunde nach dem Ende "
+"seines Wegs, wo er endet); dann ziehen Sie ihn an seinen Ort oder tippen "
+"ein, wo er ist"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Remove keyframe"
+msgstr "Keyframe entfernen"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Remove the selected keyframe; the mover goes straight from the one before to "
+"the one after. With the last one, the walk goes too"
+msgstr ""
+"Den ausgewählten Keyframe entfernen; das Bewegliche geht geradewegs vom "
+"Keyframe davor zum Keyframe danach. Mit dem letzten geht auch der Weg"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Convert to keyframes"
+msgstr "In Keyframes umwandeln"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Turn a walk along points at a speed (to, speed_m_s) into keyframes that move "
+"the same way, timed, so that they can be edited here"
+msgstr ""
+"Einen Weg über Punkte mit einer Geschwindigkeit (to, speed_m_s) in Keyframes "
+"umwandeln, die sich genauso bewegen, mit Zeiten, damit sie sich hier "
+"bearbeiten lassen"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Play"
+msgstr "Abspielen"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Move every mover along its keyframes in the 3D view and the plan, from the "
+"playhead to the end; nothing is simulated or changed"
+msgstr ""
+"Alle Beweglichen in der 3D-Ansicht und im Grundriss entlang ihrer Keyframes "
+"bewegen, von der Zeitmarke bis zum Ende; nichts wird simuliert oder geändert"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"The playhead: the 3D view and the plan show every mover where it is at this "
+"time, and Add keyframe adds one here"
+msgstr ""
+"Die Zeitmarke: die 3D-Ansicht und der Grundriss zeigen jedes Bewegliche "
+"dort, wo es zu dieser Zeit ist, und Keyframe hinzufügen fügt hier einen hinzu"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Where the timeline ends: at least the longest walk; make it longer to add "
+"keyframes past the end, and the movers that have ended stand where their "
+"walks end"
+msgstr ""
+"Wo die Zeitleiste endet: mindestens am längsten Weg; verlängern Sie sie, um "
+"Keyframes hinter dem Ende hinzuzufügen; Bewegliche, deren Weg zu Ende ist, "
+"stehen dort, wo er endet"
+
+#: acoustic_spaces/gui/movement.py
+msgid "End"
+msgstr "Ende"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid "Source: {name}"
+msgstr "Quelle: {name}"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid "Listener: {name}"
+msgstr "Empfänger: {name}"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Place a source or a listener to move it."
+msgstr ""
+"Platzieren Sie eine Quelle oder einen Empfänger, um sie oder ihn zu bewegen."
+
+#: acoustic_spaces/gui/movement.py
+msgid "Keeps facing as at the keyframe before; type an angle to turn here"
+msgstr ""
+"Blickt weiter wie am Keyframe davor; einen Winkel eintippen dreht es hier"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Where it starts, at 0 s: its own position and orientation"
+msgstr "Wo es beginnt, bei 0 s: seine eigene Position und Ausrichtung"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid "Keyframe {n}"
+msgstr "Keyframe {n}"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid ""
+"{name} walks through its points at {speed:.2f} m/s, turning at {turn:.0f}°/s "
+"through the corners: Convert to keyframes to edit it here."
+msgstr ""
+"{name} geht mit {speed:.2f} m/s durch seine Punkte und dreht sich in den "
+"Ecken mit {turn:.0f}°/s: In Keyframes umwandeln, um den Weg hier zu "
+"bearbeiten."
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Between two keyframes it moves and turns evenly: a keyframe at the same "
+"place waits there, one with other angles turns on the spot."
+msgstr ""
+"Zwischen zwei Keyframes bewegt und dreht es sich gleichmäßig: ein Keyframe "
+"am selben Ort wartet dort, einer mit anderen Winkeln dreht sich auf der "
+"Stelle."
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Move the playhead to when it should be somewhere else and add a keyframe "
+"there, then drag the keyframe into place."
+msgstr ""
+"Setzen Sie die Zeitmarke auf den Augenblick, zu dem es anderswo sein soll, "
+"fügen Sie dort einen Keyframe hinzu und ziehen Sie ihn an seinen Ort."
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid "{text} is not a number"
+msgstr "{text} ist keine Zahl"
+
+#: acoustic_spaces/gui/movement.py
+msgid "a keyframe comes after the start: give it a time above 0 s"
+msgstr "ein Keyframe kommt nach dem Beginn: Geben Sie ihm eine Zeit über 0 s"
+
+#: acoustic_spaces/gui/movement.py
+msgid "retime keyframe"
+msgstr "Zeit des Keyframes ändern"
+
+#: acoustic_spaces/gui/movement.py
+msgid "move keyframe"
+msgstr "Keyframe verschieben"
+
+#: acoustic_spaces/gui/movement.py
+msgid "turn keyframe"
+msgstr "Keyframe drehen"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid "{name} walks through points at a speed: Convert to keyframes first"
+msgstr ""
+"{name} geht mit einer Geschwindigkeit durch Punkte: zuerst In Keyframes "
+"umwandeln"
+
+#: acoustic_spaces/gui/movement.py
+msgid "add keyframe"
+msgstr "Keyframe hinzufügen"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid "Select a keyframe to remove; the first row is where {name} starts."
+msgstr ""
+"Wählen Sie einen Keyframe zum Entfernen aus; die erste Zeile ist, wo {name} "
+"beginnt."
+
+#: acoustic_spaces/gui/movement.py
+msgid "remove keyframe"
+msgstr "Keyframe entfernen"
+
+#: acoustic_spaces/gui/movement.py
+msgid "convert walk to keyframes"
+msgstr "Weg in Keyframes umwandeln"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Pause"
+msgstr "Pause"
+
 #: acoustic_spaces/gui/particle_dialog.py
 #, python-brace-format
 msgid ""
@@ -5368,6 +5808,15 @@ msgstr "Nicht verschoben: {problem}"
 #: acoustic_spaces/gui/plan_view.py
 msgid "move corner"
 msgstr "Ecke verschieben"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid ""
+"Not moved: {name} is drawn where it is at {time:.2f} s; drag its keyframes, "
+"or its start at 0 s"
+msgstr ""
+"Nicht verschoben: {name} ist dort gezeichnet, wo es bei {time:.2f} s ist; "
+"ziehen Sie seine Keyframes oder seinen Anfang bei 0 s"
 
 #: acoustic_spaces/gui/plan_view.py
 msgid "Add corner here"

@@ -61,8 +61,31 @@ which frequencies each octave band holds.
   its sound reduction index per band in the table) or everything (an opening), and
   **Audience seating** for the seats (see
   [Walls, doors and openings](scenes.md#walls-doors-and-openings)).
-- The editor does not draw or edit walks (`walk` in a listener's or source's entry,
-  see [Walkthroughs](spatial-audio.md#walkthroughs)), but keeps them when it saves.
+- **Edit > Edit movement…**, or **Edit movement…** in a source's or listener's form,
+  opens the **Movement** panel: the walk of the selected point source or listener (see
+  [Walks](scenes.md#walks)) as a table of keyframes, where it is and how it faces at each
+  time, with the row 0 where it starts. No speed is set: **Add keyframe** puts one at the
+  playhead, where the mover would be then (on a keyframe already, or at 0 s, a second
+  past the end of its walk), to drag into place in the plan or the 3D view (its handles
+  are numbered as the rows; Shift moves one up and down in 3D) or to type where it is;
+  the **Speed** column shows what follows, the distance to the next keyframe over the
+  time to it. A keyframe at the same place waits there, one with other angles turns on
+  the spot; dimmed angles keep facing as at the keyframe before, and typing one turns
+  it there. Every change is one step of the history, as the forms' are. The timeline
+  below runs to the longest walk at least; make **End** longer to add keyframes past
+  it. The slider (or **Play**) moves every mover in the 3D view and the plan to where
+  it is then, nothing simulated; **Moves** (in the panel and the forms) keeps a walk but
+  leaves its mover standing, as `enabled: false` does. A walk through points at a speed
+  (`to`) shows as it goes, read-only, until **Convert to keyframes** bakes it, its turns
+  through the corners included (facing forward, it faces its first leg from the start,
+  so its own orientation turns that way). A dragged keyframe keeps its height above
+  the floor, as a dragged source or listener does. **Render movement…** simulates every
+  mover on one clock
+  and writes what each listener in use hears of what the sources play (their **Plays**
+  files) as a WAV file, in the format of the scene's first output (binaural with none),
+  in the background, as `walkthrough --all` does (see
+  [Walkthroughs](spatial-audio.md#walkthroughs)); one gain brings
+  the loudest peak to -1 dBFS, so the balance between the listeners holds.
 - The scene tree's **Simulation** entry has the settings of
   [Simulation](simulation.md): the early part's method, highest order, rays,
   diffraction, **Reflections over an edge** (on one side of it or on both) and **In

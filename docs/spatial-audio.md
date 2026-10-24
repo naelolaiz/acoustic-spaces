@@ -297,7 +297,9 @@ acoustic-spaces walkthrough scene.yaml band=song.wav speaker=talk.wav --all --ou
 
 From Python: `simulate_movement(room)`, `render_movement(movement, signals, fmt)` (a
 dict of each listener's sound), `save_movement(rendered, "heard.wav", rate, fmt)` and
-`animate_movement(room, movement, "heard.mp4")`.
+`animate_movement(room, movement, "heard.mp4")`. In the editor, the Movement panel
+edits the keyframes, previews every mover along one timeline and renders the movement
+in the background (see [Graphical editor](editor.md)).
 
 ### Moving sources and Doppler
 

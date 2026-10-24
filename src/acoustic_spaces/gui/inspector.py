@@ -2816,6 +2816,9 @@ class PointPage(Page):
     """A source or listener: name, position and orientation; sources also have a
     directivity and a sound power level."""
 
+    #: Edit movement… was clicked: the kind and index of the point.
+    movement = Signal(str, object)
+
     def __init__(self, document, kind: str) -> None:
         super().__init__(document)
         self.kind = kind
@@ -2861,6 +2864,40 @@ class PointPage(Page):
         )
         self.in_use.toggled.connect(self._in_use)
         form.addRow(self.in_use)
+        self.moves = QCheckBox(_("Moves"))
+        self.moves.setToolTip(
+            _(
+                "Tick to have the source go along its keyframes in a movement; untick to keep "
+                "them but leave it standing where it starts. Add keyframes with Edit movement…"
+            )
+            if source
+            else _(
+                "Tick to have the listener go along its keyframes in a movement; untick to "
+                "keep them but leave it standing where it starts. Add keyframes with Edit "
+                "movement…"
+            )
+        )
+        self.moves.toggled.connect(self._moves)
+        self.edit_movement = QPushButton(_("Edit movement…"))
+        self.edit_movement.setToolTip(
+            _(
+                "Open the Movement panel: where the source is and how it faces at each time of "
+                "a movement, with a timeline every mover is previewed along"
+            )
+            if source
+            else _(
+                "Open the Movement panel: where the listener is and how it faces at each time "
+                "of a movement, with a timeline every mover is previewed along"
+            )
+        )
+        self.edit_movement.clicked.connect(lambda: self.movement.emit(self.kind, self.key))
+        self.movement_row = QWidget()
+        movement = QHBoxLayout(self.movement_row)
+        movement.setContentsMargins(0, 0, 0, 0)
+        movement.addWidget(self.moves)
+        movement.addWidget(self.edit_movement)
+        movement.addStretch(1)
+        form.addRow(self.movement_row)
         self.position = [spin(-1e4, 1e4, 2, 0.1, "m") for _ in range(3)]
         tips = (
             (
@@ -3110,6 +3147,10 @@ class PointPage(Page):
         self.group.addItems(sorted({other.group for other in items if other.group}))
         self.group.setCurrentText(item.group or "")
         self.in_use.setChecked(item.in_use)
+        # A line or a surface does not move.
+        self._form.setRowVisible(self.movement_row, self.kind != "sources" or not item.extended)
+        self.moves.setEnabled(item.walk is not None)
+        self.moves.setChecked(item.walk is not None and item.walk.enabled)
         for box, value in zip(self.position, item.position, strict=True):
             box.setValue(value)
         o = item.orientation
@@ -3219,6 +3260,10 @@ class PointPage(Page):
     def _in_use(self, on: bool) -> None:
         if not self._loading:
             self.run(lambda: self.document.set_enabled(self.kind, [self.key], on))
+
+    def _moves(self, on: bool) -> None:
+        if not self._loading:
+            self.run(lambda: self.document.set_walk_enabled(self.kind, self.key, on))
 
     def _position(self, axis: int, value: float) -> None:
         # One value at a time (the orientation too): the other boxes show theirs rounded,
@@ -4139,6 +4184,8 @@ class Inspector(QStackedWidget):
     failed = Signal(str)
     select = Signal(str, object)
     draw = Signal(str)
+    #: A point's Edit movement… was clicked: its kind and index.
+    movement = Signal(str, object)
 
     def __init__(self, document: Callable[[], Document]) -> None:
         super().__init__()
@@ -4160,6 +4207,8 @@ class Inspector(QStackedWidget):
             page.failed.connect(self.failed)
             page.select.connect(self.select)
             page.draw.connect(self.draw)
+            if isinstance(page, PointPage):
+                page.movement.connect(self.movement)
         self.kind = ""
 
     def show_item(self, kind: str, key=None) -> None:

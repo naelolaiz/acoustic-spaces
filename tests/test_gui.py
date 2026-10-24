@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QToolBar,
 )
 
-from acoustic_spaces.audio import write_wav  # noqa: E402
+from acoustic_spaces.audio import read_wav, write_wav  # noqa: E402
 from acoustic_spaces.examples import example_groups, example_path, list_examples  # noqa: E402
 from acoustic_spaces.geometry import RoomMesh  # noqa: E402
 from acoustic_spaces.gui.document import (  # noqa: E402
@@ -718,6 +718,7 @@ def test_every_control_explains_itself(window) -> None:
         window.map_panel,
         window.plan,
         window.message_panel,
+        window.movement,
     ]
     fields = (QAbstractSpinBox, QCheckBox, QComboBox, QListWidget, QPushButton, QSlider)
     missing = []
@@ -3304,6 +3305,237 @@ def test_new_room_from_a_floor_plan(window, qapp) -> None:
     assert window.document.room.problems() == []
 
 
+# -- movement -------------------------------------------------------------------------
+
+
+def _give_walk(window, kind: str, index: int, keyframes: list[dict]) -> None:
+    def change(data: dict) -> None:
+        data[kind][index]["walk"] = {"keyframes": keyframes}
+
+    window.document.edit("walk", change)
+
+
+def _shown(window, kind: str, index: int):
+    """The point as the plan draws it, at the playhead."""
+    return next(item for k, i, item in window.plan.canvas._points() if (k, i) == (kind, index))
+
+
+def test_movement_panel_edits_keyframes_in_place(window) -> None:
+    """The Movement panel: a keyframe added at the playhead, no speed to set (it follows
+    from the times), each change one step of the history, the timeline made longer with
+    End, dimmed angles that keep facing as before, and Moves for enabled."""
+    window.open_example(example_path("studio"))
+    window.select("listeners", 0)
+    panel, dock = window.movement, window.docks["movement"]
+    page = window.inspector.pages["listeners"]
+    assert dock.isHidden() and not page.moves.isEnabled()  # no walk yet
+    page.edit_movement.click()
+    assert dock.isVisible() and panel.key == ("listeners", 0)
+    assert panel.mover.currentText() == "Listener: mix-position"
+    assert panel.table.rowCount() == 1 and panel.end == 0.0
+    times = []
+    panel.preview_changed.connect(times.append)
+    start = window.document.scene.listeners[0].position
+    editable = Qt.ItemFlag.ItemIsEditable
+
+    panel.add.click()  # the playhead at 0 s: a second on, where it starts
+    listener = window.document.scene.listeners[0]
+    assert [(f.time_s, f.position, f.orientation) for f in listener.walk.keyframes] == [
+        (1.0, start, None)
+    ]
+    assert window.undo_action.text() == "&Undo add keyframe"
+    assert panel.time == 1.0 and panel.end == 1.0 and times[-1] == 1.0
+    assert panel.table.rowCount() == 2 and panel.table.currentRow() == 1
+    assert not panel.table.item(0, 0).flags() & editable  # the start is at 0 s
+    assert page.moves.isEnabled() and page.moves.isChecked()
+
+    panel.table.item(1, 1).setText("3")  # x of keyframe 1: the speed follows
+    listener = window.document.scene.listeners[0]
+    assert listener.walk.keyframes[0].position == (3.0, start[1], start[2])
+    distance = 3.0 - start[0]
+    assert panel.table.item(0, 7).text() == f"{distance:.2f}"
+    assert panel.table.item(1, 7).text() == "" and not panel.table.item(0, 7).flags() & editable
+    assert window.undo_action.text() == "&Undo move keyframe"
+    panel.table.item(1, 0).setText("2")  # later: slower, nothing else to set
+    assert window.document.scene.listeners[0].walk.keyframes[0].time_s == 2.0
+    assert panel.table.item(0, 7).text() == f"{distance / 2:.2f}"
+    assert panel.end == 2.0 and panel.end_box.minimum() == 2.0
+
+    # A longer timeline: a keyframe at the playhead, past the end of the walk.
+    panel.end_box.setValue(6.0)
+    assert panel.time_box.maximum() == 6.0
+    panel.slider.setValue(500)
+    assert panel.time == 3.0 and times[-1] == 3.0
+    panel.add.click()
+    keyframes = window.document.scene.listeners[0].walk.keyframes
+    assert [f.time_s for f in keyframes] == [2.0, 3.0]
+    assert keyframes[1].position == keyframes[0].position  # it waits there
+    panel.table.item(1, 0).setText("3")  # the same time as keyframe 2: refused
+    assert "each later than the last" in window.messages.toPlainText()
+    assert panel.table.item(1, 0).text() == "2.00"
+    panel.table.item(1, 0).setText("soon")
+    assert "soon is not a number" in window.messages.toPlainText()
+
+    # Angles: dimmed where it keeps facing as before; typing one turns it there.
+    assert panel.table.item(2, 4).toolTip().startswith("Keeps facing")
+    assert panel.table.item(0, 4).text() == f"{start_yaw(window):.1f}"
+    panel.table.item(2, 4).setText("90")
+    keyframes = window.document.scene.listeners[0].walk.keyframes
+    assert keyframes[1].orientation.yaw == 90.0 and keyframes[0].orientation is None
+    assert not panel.table.item(2, 4).toolTip()
+    assert window.undo_action.text() == "&Undo turn keyframe"
+
+    # The plan shows the listener where it is at the playhead.
+    panel.set_time(1.0)
+    assert _shown(window, "listeners", 0).position[0] == pytest.approx(start[0] + distance / 2)
+    panel.set_time(2.5)  # half-way through the turn from 180° to 90°
+    assert _shown(window, "listeners", 0).orientation.yaw == pytest.approx(135.0)
+    assert window.plan.canvas.time == 2.5
+
+    # Moves: the walk stays, the listener stands still; the form follows.
+    panel.moves.setChecked(False)
+    listener = window.document.scene.listeners[0]
+    assert listener.walk is not None and not listener.walk.enabled
+    assert not page.moves.isChecked() and window.undo_action.text() == "&Undo turn the walk off"
+    assert _shown(window, "listeners", 0).position == listener.position
+    page.moves.setChecked(True)
+    assert window.document.scene.listeners[0].walk.enabled
+    window.undo()
+    window.undo()
+    window.undo()  # the turn
+    assert window.document.scene.listeners[0].walk.keyframes[1].orientation is None
+
+    # Remove: the last keyframe takes the walk with it.
+    panel.table.setCurrentCell(0, 1)
+    panel.remove.click()
+    assert "Select a keyframe to remove" in window.messages.toPlainText()
+    panel.table.setCurrentCell(2, 1)
+    panel.remove.click()
+    assert len(window.document.scene.listeners[0].walk.keyframes) == 1
+    panel.table.setCurrentCell(1, 1)
+    panel.remove.click()
+    assert window.document.scene.listeners[0].walk is None
+    assert panel.table.rowCount() == 1 and not panel.moves.isEnabled()
+    assert window.undo_action.text() == "&Undo remove keyframe"
+
+    # Closing the panel stops Play, and the views show the scene at rest.
+    panel.end_box.setValue(4.0)
+    panel.play.click()
+    assert panel.playing and panel.play.text() == "Pause"
+    dock.hide()
+    assert not panel.playing and window.plan.canvas.time is None
+
+
+def start_yaw(window) -> float:
+    return window.document.scene.listeners[0].orientation.yaw
+
+
+def test_a_walk_along_points_converts_to_keyframes(window) -> None:
+    """A walk through `to` at a speed shows as it goes, read-only, until Convert to
+    keyframes bakes it, turns through the corners included."""
+    from acoustic_spaces.walkthrough import knots
+
+    window.open_example(example_path("studio"))
+
+    def change(data: dict) -> None:
+        data["sources"][0]["walk"] = {"to": [[1.0, 1.0, 1.2], [1.0, 4.0, 1.2]], "speed_m_s": 1.0}
+
+    window.document.edit("walk", change)
+    window.show_movement("sources", 0)
+    panel = window.movement
+    assert window.selection == ("sources", 0) and panel.key == ("sources", 0)
+    assert panel.convert.isVisible() and not panel.add.isEnabled() and not panel.remove.isEnabled()
+    assert "left-speaker walks through its points at 1.00 m/s" in panel.hint.text()
+    before = knots(window.document.scene.sources[0])
+    assert panel.table.rowCount() == len(before.times) > 3
+    assert not any(
+        panel.table.item(row, col).flags() & Qt.ItemFlag.ItemIsEditable
+        for row in range(panel.table.rowCount())
+        for col in range(panel.table.columnCount())
+    )
+    panel.convert.click()
+    source = window.document.scene.sources[0]
+    assert source.walk.to == [] and len(source.walk.keyframes) == len(before.times) - 1
+    assert window.undo_action.text() == "&Undo convert walk to keyframes"
+    after = knots(source)
+    for t in (0.0, 0.5, 1.7, 3.0, 4.2, 6.0):
+        np.testing.assert_allclose(after.at(t)[0], before.at(t)[0], atol=1e-5)
+        np.testing.assert_allclose(after.at(t)[1], before.at(t)[1], atol=1e-5)
+    assert panel.add.isEnabled() and not panel.convert.isVisible()
+    assert panel.table.item(1, 1).flags() & Qt.ItemFlag.ItemIsEditable
+
+
+def test_keyframe_handles_in_the_plan(window, qapp) -> None:
+    """With the Movement panel open, the plan draws the mover's keyframes as handles to
+    drag (row 0 is the mover itself) and the movers where they are at the playhead."""
+    window.open_example(example_path("studio"))
+    canvas = _plan(window, qapp)
+    start = window.document.scene.listeners[0].position
+    _give_walk(window, "listeners", 0, [{"time_s": 2.0, "position": [start[0] + 1.0, *start[1:]]}])
+    assert canvas.mover is None  # the panel is closed: no handles
+    window.show_movement("listeners", 0)
+    qapp.processEvents()
+    assert canvas.mover == ("listeners", 0) and canvas.time == 0.0
+    handle = (start[0] + 1.0, start[1])
+    assert canvas.hit(canvas.to_screen(handle)) == ("keyframe", 1)
+    assert canvas.hit(canvas.to_screen(start[:2])) == ("keyframe", 0)
+    _drag(qapp, canvas, _at(canvas, handle), _at(canvas, (start[0] + 2.0, start[1] + 0.5)))
+    keyframe = window.document.scene.listeners[0].walk.keyframes[0]
+    assert keyframe.position[0] == pytest.approx(start[0] + 2.0, abs=0.11)  # snapped
+    assert keyframe.position[1] == pytest.approx(start[1] + 0.5, abs=0.11)
+    assert keyframe.position[2] == pytest.approx(start[2])
+    assert window.document.undo_text() == "move keyframe"
+    assert "Moved keyframe 1 of mix-position" in window.messages.toPlainText()
+    _drag(qapp, canvas, _at(canvas, start[:2]), _at(canvas, (start[0] - 0.5, start[1])))
+    assert window.document.scene.listeners[0].position[0] == pytest.approx(start[0] - 0.5, abs=0.11)
+    assert window.document.undo_text() == "move listener"
+    # At 1 s the listener is drawn half-way along: a drag there is refused, the
+    # keyframes move it.
+    window.movement.set_time(1.0)
+    shown = _shown(window, "listeners", 0)
+    listener = window.document.scene.listeners[0]
+    assert shown.position != listener.position
+    assert canvas.hit(canvas.to_screen(shown.position[:2])) == ("listeners", 0)
+    before = window.document.scene
+    _drag(
+        qapp,
+        canvas,
+        _at(canvas, shown.position[:2]),
+        _at(canvas, (shown.position[0], shown.position[1] + 1.0)),
+    )
+    assert window.document.scene is before
+    assert "Not moved: mix-position is drawn where it is at 1.00 s" in window.messages.toPlainText()
+
+
+def test_render_movement_in_the_editor(window, qapp, tmp_path: Path, monkeypatch) -> None:
+    """Render movement… simulates every mover on one clock in the background and writes
+    what each listener hears of what the sources play."""
+    from PySide6.QtWidgets import QFileDialog
+
+    window.open_example(example_path("studio"))
+    _quick(window.document)
+    window.render_movement()
+    assert "Nothing moves" in window.messages.toPlainText() and window.job is None
+    start = window.document.scene.listeners[0].position
+    _give_walk(window, "listeners", 0, [{"time_s": 1.0, "position": [start[0] + 0.5, *start[1:]]}])
+    window.render_movement()
+    assert "Nothing to play" in window.messages.toPlainText() and window.job is None
+    wav = tmp_path / "talk.wav"
+    write_wav(wav, np.r_[1.0, np.zeros(7999)], 8000)
+    window.document.update_point("sources", 0, signal=str(wav))
+    out = tmp_path / "heard.wav"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(out), ""))
+    window.movement.render.click()
+    assert window.job is not None and not window.run_action.isEnabled()
+    _wait(qapp, lambda: window.job is None)
+    text = window.messages.toPlainText()
+    assert "mix-position move for 1.0 s: responses at" in text and str(out) in text
+    assert "1 channel," in text and "-1 dBFS" in text  # the scene's first output is mono
+    data, rate = read_wav(out)
+    assert data.shape[1] == 1 and rate == window.document.scene.simulation.sample_rate
+    assert np.abs(data).max() == pytest.approx(10 ** (-1 / 20), rel=1e-3)
+
+
 # -- the 3D view (needs OpenGL: a display or Xvfb) --------------------------------------
 
 
@@ -3471,6 +3703,45 @@ def _display(viewport, point: QPoint) -> tuple[int, int]:
     widget = viewport.plotter.interactor
     ratio = widget.devicePixelRatioF()
     return round(point.x() * ratio), round((widget.height() - point.y() - 1) * ratio)
+
+
+@pytest.mark.render
+def test_keyframe_handles_in_3d(window, qapp) -> None:
+    """With the Movement panel open, the 3D view draws the mover's keyframes as handles to
+    drag, and the playhead moves the movers without drawing the room again."""
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    start = window.document.scene.listeners[0].position
+    handle = (start[0] - 2.0, start[1], start[2])
+    _give_walk(window, "listeners", 0, [{"time_s": 2.0, "position": list(handle)}])
+    window.show_movement("listeners", 0)
+    qapp.processEvents()
+    viewport.plotter.render()
+    renderer = viewport.plotter.renderer
+    widget = viewport.plotter.interactor
+
+    def widget_point(point) -> QPoint:
+        renderer.SetWorldPoint(*point, 1.0)
+        renderer.WorldToDisplay()
+        x, y, _ = renderer.GetDisplayPoint()
+        ratio = widget.devicePixelRatioF()
+        return QPoint(round(x / ratio), round(widget.height() - 1 - y / ratio))
+
+    assert viewport.marker_at(*_display(viewport, widget_point(handle))) == ("keyframe", 1)
+    _drag(qapp, widget, widget_point(handle), widget_point((handle[0], handle[1] + 1.0, handle[2])))
+    keyframe = window.document.scene.listeners[0].walk.keyframes[0]
+    assert abs(keyframe.position[1] - (start[1] + 1.0)) < 0.1
+    assert keyframe.position[2] == pytest.approx(start[2])
+    assert window.document.undo_text() == "move keyframe"
+    # The playhead: half-way along, the listener's marker is carried there.
+    actors = viewport._point_actors["listeners", 0]
+    window.movement.set_time(1.0)
+    matrix = actors[0].GetUserMatrix()
+    offset = [matrix.GetElement(k, 3) for k in range(3)]
+    np.testing.assert_allclose(offset, [-1.0, 0.5, 0.0], atol=0.06)
+    window.movement.set_time(0.0)
+    assert actors[0].GetUserMatrix() is None
 
 
 @pytest.mark.parametrize("language", ["es", "ca", "it", "de", "nl"])

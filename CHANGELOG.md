@@ -699,6 +699,16 @@
   time. From Python: `walkthrough.knots`, `movers`, `simulate_movement`,
   `render_movement`, `save_movement` and `viz.animate_movement`.
 - `inspect` describes a walk along keyframes and one that is off.
+- Editor: **Edit > Edit movement…** (or the button in a source's or listener's form)
+  opens the Movement panel: the keyframes of the selected point source or listener in a
+  table (time, position, angles, with the speed to the next keyframe shown, not set),
+  edited in place as one step of the history each; **Add keyframe** at the playhead,
+  **Remove keyframe**, **Convert to keyframes** for a walk along `to`; a timeline whose
+  **End** can be made longer to add keyframes past the longest walk, with **Play** and a
+  slider that move every mover in the 3D view and the plan; walks drawn as dashed lines,
+  the selected mover's keyframes as numbered handles to drag in either view; **Moves**
+  (also in the forms) for `enabled`; and **Render movement…**, `walkthrough --all` in the
+  background, writing one WAV per listener with one gain.
 
 **HRTF sets**
 

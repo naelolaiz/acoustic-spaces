@@ -280,6 +280,12 @@ Movement:
 - [x] Walks along timed keyframes (position and facing at each time, waits and turns on
   the spot), walks that can be switched off, and every mover at once on one clock in one
   simulation (`walkthrough --all`), heard at every listener, with a video of them all.
+- [x] Editor: the Movement panel, with the keyframes of a source or listener in a table
+  (no speed to set: it follows from the times), a timeline that can be made longer to
+  add keyframes past the end, a preview of every mover in the 3D view and the plan,
+  draggable keyframe handles, and the movement rendered in the background.
+- [ ] Movement: a path drawn in the plan click by click, and the walk of a vehicle
+  (Doppler, one walk at a time) in the editor.
 
 Editor:
 

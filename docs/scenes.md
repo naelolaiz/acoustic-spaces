@@ -666,7 +666,9 @@ sources:
   `walkthrough --all` and the editor's movement leave it out, and `walkthrough` picks
   the one walk that is enabled. Giving it by name (`--walker`) is refused.
 - Several listeners and sources may each have a walk; `walkthrough --all` plays them
-  all together on one clock (see [Walkthroughs](spatial-audio.md#walkthroughs)).
+  all together on one clock (see [Walkthroughs](spatial-audio.md#walkthroughs)). The
+  editor's Movement panel edits keyframes in a table and along a timeline (see
+  [Graphical editor](editor.md)).
 
 ## Air, response length and seed
 

@@ -98,6 +98,49 @@ class MapJob(SimulationJob):
         )
 
 
+class MovementJob(SimulationJob):
+    """Runs :func:`acoustic_spaces.walkthrough.simulate_movement` on a room, every mover
+    on one clock, plays ``signals`` (source names to the WAV files they play) through it
+    in format ``fmt`` and writes what each listener in use hears
+    (:func:`~acoustic_spaces.walkthrough.save_movement`: ``out`` for one listener, else
+    ``<out stem>_<listener>.wav`` each), one gain bringing the loudest peak to -1 dBFS;
+    ``done`` carries the movement, the files written by listener, the gain, the sample
+    rate, the channels and the length (s)."""
+
+    kind = "movement"
+
+    def __init__(self, room: Room, out, signals, fmt=None, threads: int | None = None):
+        super().__init__(room, threads=threads)
+        self.out = Path(out)
+        self.signals = dict(signals)
+        self.fmt = fmt
+
+    def compute(self) -> dict:
+        from acoustic_spaces.audio import read_wav
+        from acoustic_spaces.walkthrough import (
+            render_movement,
+            save_movement,
+            simulate_movement,
+        )
+
+        movement = simulate_movement(self.room, threads=self.threads, progress=self._say)
+        self._say("rendering the movement")
+        signals = {name: read_wav(path) for name, path in self.signals.items()}
+        rendered = render_movement(movement, signals, self.fmt)
+        rate = int(movement.result.settings.sample_rate)
+        self._say(f"writing {self.out}")
+        paths, gain = save_movement(rendered, self.out, rate, self.fmt, normalize=True)
+        first = next(iter(rendered.values()))
+        return {
+            "movement": movement,
+            "paths": paths,
+            "gain": gain,
+            "rate": rate,
+            "channels": int(first.shape[1]),
+            "length_s": len(first) / rate,
+        }
+
+
 class TuneJob(SimulationJob):
     """Runs :func:`acoustic_spaces.engine.tuning.tune` (``acoustic-spaces tune``);
     ``done`` carries the :class:`~acoustic_spaces.engine.tuning.Tuning`, not yet
@@ -244,6 +287,7 @@ __all__ = [
     "DownloadJob",
     "ExportJob",
     "MapJob",
+    "MovementJob",
     "SimulationJob",
     "TuneJob",
 ]

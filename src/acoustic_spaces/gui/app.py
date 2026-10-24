@@ -60,6 +60,7 @@ from acoustic_spaces.gui.inspector import BAND_LABELS, Inspector, label_text
 from acoustic_spaces.gui.levels import rich_lines
 from acoustic_spaces.gui.map_view import MapPanel
 from acoustic_spaces.gui.messages import MessagesPanel
+from acoustic_spaces.gui.movement import MovementPanel
 from acoustic_spaces.gui.numbers import fmt, point_text
 from acoustic_spaces.gui.particle_dialog import ParticleDialog
 from acoustic_spaces.gui.plan_view import PlanView
@@ -67,7 +68,14 @@ from acoustic_spaces.gui.results_view import ResultsPanel
 from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.tune_dialog import TuneDialog
 from acoustic_spaces.gui.viewport import Viewport
-from acoustic_spaces.gui.worker import DemoJob, ExportJob, MapJob, SimulationJob, TuneJob
+from acoustic_spaces.gui.worker import (
+    DemoJob,
+    ExportJob,
+    MapJob,
+    MovementJob,
+    SimulationJob,
+    TuneJob,
+)
 from acoustic_spaces.i18n import N_, _, ngettext, pgettext
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
@@ -168,6 +176,7 @@ class MainWindow(QMainWindow):
         self.results = ResultsPanel()
         self.map_panel = MapPanel()
         self.message_panel = MessagesPanel()
+        self.movement = MovementPanel(lambda: self.document)
         #: The messages' text, as shown.
         self.messages = self.message_panel.view
         # Forms scroll rather than make the window as tall as the longest one.
@@ -187,6 +196,7 @@ class MainWindow(QMainWindow):
                 self.message_panel,
                 Qt.DockWidgetArea.BottomDockWidgetArea,
             ),
+            ("movement", _("Movement"), self.movement, Qt.DockWidgetArea.BottomDockWidgetArea),
         ):
             dock = QDockWidget(title, self)
             dock.setObjectName(name)
@@ -195,7 +205,9 @@ class MainWindow(QMainWindow):
             self.docks[name] = dock
         self.tabifyDockWidget(self.docks["results"], self.docks["map"])
         self.tabifyDockWidget(self.docks["map"], self.docks["messages"])
+        self.tabifyDockWidget(self.docks["messages"], self.docks["movement"])
         self.docks["results"].raise_()
+        self.docks["movement"].hide()  # until Edit movement… opens it
 
         self.summary = QLabel()
         self.summary.setTextFormat(Qt.TextFormat.RichText)
@@ -251,6 +263,15 @@ class MainWindow(QMainWindow):
         self.inspector.failed.connect(self._refused)
         self.inspector.select.connect(self.select)
         self.inspector.draw.connect(self.start_drawing)
+        self.inspector.movement.connect(self.show_movement)
+        self.movement.preview_changed.connect(self._preview_movement)
+        self.movement.render_requested.connect(self.render_movement)
+        self.movement.selected.connect(self.select)
+        self.movement.failed.connect(self._refused)
+        self.movement.message.connect(self.log)
+        self.plan.keyframe_moved.connect(self._move_keyframe)
+        self.viewport.keyframe_moved.connect(self._move_keyframe)
+        self.docks["movement"].visibilityChanged.connect(self._movement_visible)
         self.results.pair_changed.connect(lambda *_: self._draw())
         self.results.paths_toggled.connect(self._paths_toggled)
         self.results.export_requested.connect(self.export_results)
@@ -410,6 +431,14 @@ class MainWindow(QMainWindow):
             "Ctrl+2",
             _("Show the room from above, to draw and change floor plans"),
         )
+        self.movement_action = a(
+            _("Edit &movement…"),
+            self.show_movement,
+            tip=_(
+                "Open the Movement panel: where the selected source or listener is and how it "
+                "faces at each time of a movement, with a timeline every mover is previewed along"
+            ),
+        )
         self.paths_action = a(
             _("Show reflection &paths"),
             lambda: None,
@@ -552,6 +581,7 @@ class MainWindow(QMainWindow):
         edit.addSeparator()
         edit.addActions([self.place_source_action, self.place_listener_action])
         edit.addAction(self.draw_action)
+        edit.addAction(self.movement_action)
         edit.addActions([self.add_material_action, self.add_library_material_action])
         edit.addSeparator()
         edit.addAction(self.remove_action)
@@ -665,6 +695,7 @@ class MainWindow(QMainWindow):
         self.document = document
         document.changed.connect(self._changed)
         document.state_changed.connect(self._state)
+        self.movement.reset()
         self.result = self._result_scene = self._traced = None
         self.results.set_result(None)
         self.coverage = self._coverage_scene = None
@@ -685,6 +716,7 @@ class MainWindow(QMainWindow):
         self._reweight()
         self.results.mark_stale(self._stale(), reweighted=self._reweighted())
         self.map_panel.mark_stale(self._map_stale())
+        self.movement.reload()
         self._draw()
         self._summary()
         self._show_playing()
@@ -818,6 +850,7 @@ class MainWindow(QMainWindow):
         if not from_tree:
             self.tree.select(selection)
         self.inspector.show_item(*selection)
+        self.movement.show_item(*selection)
         self._follow(selection)
         self._draw()
 
@@ -857,6 +890,7 @@ class MainWindow(QMainWindow):
         self.wind_action.setEnabled(outdoors)
         self.wind_profile_action.setEnabled(outdoors)
         wind = self.wind_action.isChecked()
+        mover, time = self._movement_shown()
         self.viewport.show_room(
             self.document.room,
             self.selection,
@@ -866,8 +900,131 @@ class MainWindow(QMainWindow):
             hidden=hidden,
             wind=wind,
             wind_profile=self.wind_profile_action.isChecked(),
+            mover=mover,
+            time=time,
         )
-        self.plan.show_room(self.document.room, self.selection, hidden, wind)
+        self.plan.show_room(self.document.room, self.selection, hidden, wind, mover, time)
+
+    # -- movement -------------------------------------------------------------------
+
+    def show_movement(self, kind: str | None = None, key=None) -> None:
+        """Open the Movement panel, on the selected source or listener (or the one
+        given)."""
+        if kind in ("sources", "listeners"):
+            self.select(kind, key)
+        dock = self.docks["movement"]
+        dock.show()
+        dock.raise_()
+        self._draw()
+
+    def _movement_shown(self) -> tuple[tuple[str, int] | None, float | None]:
+        """What the views show of the movement while the Movement panel is open: the
+        mover whose keyframes get handles, and the playhead's time; nothing otherwise."""
+        if not self.docks["movement"].isVisible():
+            return None, None
+        return self.movement.key, self.movement.time
+
+    def _movement_visible(self, visible: bool) -> None:
+        if not visible:
+            self.movement.pause()
+        self._draw()
+
+    def _preview_movement(self, time: float) -> None:
+        """The playhead moved: every mover where it is then, in both views."""
+        if self.docks["movement"].isVisible():
+            self.plan.set_time(time)
+            self.viewport.set_time(time)
+
+    def _move_keyframe(self, kind: str, index: int, row: int, position: tuple) -> None:
+        """A keyframe handle dragged in the 3D view or the plan (row 0: the mover
+        itself)."""
+        if not self.movement.move_keyframe(kind, index, row, position):
+            self._draw()
+            return
+        item = getattr(self.document.scene, kind)[index]
+        self.log(
+            _("Moved {name} to ({point})").format(name=item.name, point=point_text(item.position))
+            if row == 0
+            else _("Moved keyframe {n} of {name} to ({point})").format(
+                n=row, name=item.name, point=point_text(position)
+            )
+        )
+
+    def render_movement(self) -> None:
+        """Simulate every mover on one clock and write what each listener hears of what
+        the sources play (their Plays files), in the background."""
+        from acoustic_spaces.spatial import Binaural, from_output
+        from acoustic_spaces.walkthrough import movers
+
+        if self.job is not None:
+            self.log(_("Wait for the current run to end, then render the movement."))
+            return
+        scene = self.document.scene
+        if not movers(scene):
+            self.log(
+                _("Nothing moves: add a keyframe to a source or listener in use, and tick Moves."),
+                "warning",
+            )
+            self.docks["movement"].raise_()
+            return
+        signals = {s.name: s.signal for s in scene.sources if s.in_use and s.signal is not None}
+        if not signals:
+            self.log(
+                _("Nothing to play: give a source in use a WAV file under Plays first."),
+                "warning",
+            )
+            return
+        problems = self.document.room.problems()
+        if problems:
+            self.log(_("Cannot run: {problems}").format(problems="; ".join(problems)), "error")
+            self.docks["messages"].raise_()
+            return
+        path, _filter = QFileDialog.getSaveFileName(
+            self,
+            _("Render the movement"),
+            str(self.document.base_dir / "movement.wav"),
+            _("WAV files (*.wav)"),
+        )
+        if not path:
+            return
+        fmt = from_output(scene.outputs[0]) if scene.outputs else Binaural()
+        job = MovementJob(self.document.room, path, signals, fmt)
+        job.done.connect(self._movement_done)
+        self._start(job, _("Rendering the movement to {path}…").format(path=path))
+
+    def _movement_done(self, report: dict) -> None:
+        if self._closed_meanwhile():
+            return
+        movement = report["movement"]
+        channels = ngettext("{count} channel", "{count} channels", report["channels"]).format(
+            count=report["channels"]
+        )
+        self.log(
+            fmt(
+                _(
+                    "{movers} move for {time:.1f} s: responses at {places} places. Wrote "
+                    "{files}: {channels}, {length:.1f} s at {rate} Hz, in {seconds:.1f} s."
+                ),
+                movers=", ".join(name for _kind, name in movement.copies),
+                time=movement.duration_s,
+                places=movement.places,
+                files=", ".join(str(path) for path in report["paths"].values()),
+                channels=channels,
+                length=report["length_s"],
+                rate=report["rate"],
+                seconds=time.perf_counter() - self._started,
+            )
+        )
+        if report["gain"] != 1.0:
+            self.log(
+                fmt(
+                    _(
+                        "One gain of {gain:+.1f} dB on every file brings the loudest peak to "
+                        "-1 dBFS; the balance between the listeners holds."
+                    ),
+                    gain=20.0 * np.log10(report["gain"]),
+                )
+            )
 
     def _leaks(self):
         """Where rays escape from the room, found again when its geometry, materials or
@@ -1667,6 +1824,7 @@ class MainWindow(QMainWindow):
             "coverage map": _("The coverage map failed: {reason}"),
             "tuning": _("The tuning failed: {reason}"),
             "demo": _("The demo failed: {reason}"),
+            "movement": _("The movement failed: {reason}"),
         }.get(self._job_kind(), _("The simulation failed: {reason}"))
         self.log(text.format(reason=message), "error")
         self.docks["messages"].raise_()
@@ -1678,6 +1836,7 @@ class MainWindow(QMainWindow):
                 "tuning": _("Tuning cancelled."),
                 "export": _("Export cancelled."),
                 "demo": _("Demo cancelled."),
+                "movement": _("Movement cancelled."),
             }.get(self._job_kind(), _("Simulation cancelled."))
         )
 

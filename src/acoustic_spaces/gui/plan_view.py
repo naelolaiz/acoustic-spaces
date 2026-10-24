@@ -58,6 +58,7 @@ from acoustic_spaces.gui.document import (
     plan_corners,
     surface_heights,
 )
+from acoustic_spaces.gui.movement import handles_of, moves_at, path_of, pose_at
 from acoustic_spaces.gui.numbers import fmt, number, point_text
 from acoustic_spaces.gui.tips import label_for, share_tips
 from acoustic_spaces.gui.viewport import SELECTED_COLOUR, material_colour, surface_materials
@@ -227,6 +228,9 @@ class PlanCanvas(QWidget):
     corners_changed = Signal(list, str)
     #: A source or listener ("sources" or "listeners", its index) was dragged here (m).
     moved = Signal(str, int, tuple)
+    #: A keyframe handle of a mover (its kind, index and the row, 0 for the mover
+    #: itself) was dragged here (m).
+    keyframe_moved = Signal(str, int, int, tuple)
     #: A new floor plan was drawn: its corners (m).
     drawn = Signal(list)
     #: An outdoor part was drawn: what for (one of :data:`PURPOSES` but "room") and its
@@ -266,9 +270,15 @@ class PlanCanvas(QWidget):
         self._user_view = False  # zoomed or panned: resizing keeps the view
         self._materials: list[int] = []
         self._press: tuple[QPointF, object] | None = None
-        self._drag: tuple | None = None  # ("corner", k) / (kind, index) / ("pan",)
+        # ("corner", k) / (kind, index) / ("keyframe", row) / ("pan",)
+        self._drag: tuple | None = None
         self._preview: np.ndarray | None = None
         self._hover: tuple | None = None
+        #: The mover whose keyframe handles are drawn ((kind, index)), while the
+        #: Movement panel is open.
+        self.mover: tuple[str, int] | None = None
+        #: The moment of the movement the movers are drawn at (s); None: at rest.
+        self.time: float | None = None
 
     # -- contents -------------------------------------------------------------------
 
@@ -278,15 +288,20 @@ class PlanCanvas(QWidget):
         selection: tuple[str, object] | None = None,
         hidden: set[tuple[str, str]] = frozenset(),
         wind: bool = True,
+        mover: tuple[str, int] | None = None,
+        time: float | None = None,
     ) -> None:
         """Draw ``room`` with ``selection`` highlighted, without the sources and
         listeners in ``hidden`` ((kind, name) pairs); outdoors, with the wind if
-        ``wind``."""
+        ``wind``. With ``mover`` (a source or listener as (kind, index)), its keyframes
+        get handles to drag; with ``time``, every mover is drawn where it is then."""
         new_geometry = room.mesh is not self._mesh
         self.room = room
         self.selection = selection or ("", None)
         self.hidden = hidden
         self.show_wind = wind
+        self.mover = mover
+        self.time = time
         self._wind = WindMap.of(room)
         self.corners = plan_corners(room.scene)
         self._walls = wall_labels(room)
@@ -366,20 +381,43 @@ class PlanCanvas(QWidget):
     # -- what is under the mouse ------------------------------------------------------
 
     def _points(self):
-        """(kind, index, item) of every source and listener shown."""
+        """(kind, index, item) of every source and listener shown, each where it is at
+        :attr:`time`."""
         if self.room is None:
             return []
         return [
-            (kind, k, item)
+            (kind, k, pose_at(item, self.time))
             for kind in ("sources", "listeners")
             for k, item in enumerate(getattr(self.room.scene, kind))
             if (kind, item.name) not in self.hidden
         ]
 
+    def set_time(self, time: float | None) -> None:
+        """Draw every mover where it is at ``time`` (s) of the movement; None: at rest."""
+        self.time = time
+        self.update()
+
+    def _handles(self) -> np.ndarray:
+        """Where the keyframes of :attr:`mover` are, (K, 3); none without a mover shown."""
+        if self.room is None or self.mover is None:
+            return np.zeros((0, 3))
+        kind, index = self.mover
+        items = getattr(self.room.scene, kind)
+        if not 0 <= index < len(items) or (kind, items[index].name) in self.hidden:
+            return np.zeros((0, 3))
+        return handles_of(items[index])
+
     def hit(self, position: QPointF) -> tuple | None:
         """What is at ``position`` (widget pixels): ("sources" or "listeners", index),
-        ("corner", k), ("wall", k, t along it), or None."""
+        ("keyframe", row) of the mover's handles, ("corner", k), ("wall", k, t along it),
+        or None."""
         best, nearest = None, HANDLE_PIXELS
+        for row, handle in enumerate(self._handles()):
+            d = self._pixels(handle, position)
+            if d <= nearest:
+                best, nearest = ("keyframe", row), d
+        if best is not None:
+            return best
         for kind, k, item in self._points():
             d = self._pixels(item.position, position)
             if d <= nearest:
@@ -621,7 +659,26 @@ class PlanCanvas(QWidget):
         elif drag[0] in ("sources", "listeners") and preview is not None:
             kind, index = drag
             item = getattr(self.room.scene, kind)[index]
-            self.moved.emit(kind, index, follow_floor(self.room.mesh, item.position, preview))
+            if moves_at(item, self.time):
+                self.message.emit(
+                    fmt(
+                        _(
+                            "Not moved: {name} is drawn where it is at {time:.2f} s; drag its "
+                            "keyframes, or its start at 0 s"
+                        ),
+                        name=item.name,
+                        time=self.time,
+                    )
+                )
+            else:
+                self.moved.emit(kind, index, follow_floor(self.room.mesh, item.position, preview))
+        elif drag[0] == "keyframe" and preview is not None:
+            handles = self._handles()
+            if drag[1] < len(handles):
+                kind, index = self.mover
+                self.keyframe_moved.emit(
+                    kind, index, drag[1], follow_floor(self.room.mesh, handles[drag[1]], preview)
+                )
         self.update()
 
     def _click(self, position: QPointF, target) -> None:
@@ -633,6 +690,8 @@ class PlanCanvas(QWidget):
             self.picked.emit(*(("surface", label) if label >= 0 else ("", None)))
         elif target[0] in ("sources", "listeners"):
             self.picked.emit(target[0], target[1])
+        elif target[0] == "keyframe" and self.mover is not None:
+            self.picked.emit(*self.mover)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         if event.button() != Qt.MouseButton.LeftButton:
@@ -717,6 +776,7 @@ class PlanCanvas(QWidget):
                 self._paint_outline(painter)
             if self.room.outdoor is not None:
                 self._paint_outdoors(painter)
+            self._paint_walks(painter)
             self._paint_points(painter)
             self._paint_wind_key(painter)
         if self.drawing is not None:
@@ -941,6 +1001,42 @@ class PlanCanvas(QWidget):
             text,
         )
 
+    def _paint_walks(self, painter: QPainter) -> None:
+        """Every walk as a dashed line through its knots, faded when it is left standing,
+        and the handles of the mover's keyframes, numbered as the table's rows."""
+        kind, key = self.selection
+        for group in ("sources", "listeners"):
+            for k, item in enumerate(getattr(self.room.scene, group)):
+                path = path_of(item)
+                if path is None or (group, item.name) in self.hidden:
+                    continue
+                chosen = (kind, key) == (group, k)
+                colour = (
+                    SELECTED_COLOUR
+                    if chosen
+                    else (SOURCE_COLOUR if group == "sources" else LISTENER_COLOUR)
+                )
+                alpha = 200 if item.in_use and item.walk.enabled else 70
+                painter.setPen(QPen(_qcolor(colour, alpha), 1.5, Qt.PenStyle.DashLine))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPolyline(QPolygonF([self.to_screen(p) for p in path.positions]))
+        handles = self._handles()
+        if len(handles) == 0:
+            return
+        drag = self._drag if self._drag is not None and self._drag[0] == "keyframe" else None
+        for row, handle in enumerate(handles):
+            at = handle[:2]
+            if drag is not None and drag[1] == row and self._preview is not None:
+                at = self._preview
+            p = self.to_screen(at)
+            size = 5.0 if self._hover == ("keyframe", row) or drag is not None else 4.0
+            painter.setPen(QPen(QColor(BACKGROUND[0]), 1))
+            painter.setBrush(QColor(SELECTED_COLOUR if row > 0 else "#ffffff"))
+            painter.drawRect(QRectF(p.x() - size, p.y() - size, 2 * size, 2 * size))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QColor("#ffffff"))
+            painter.drawText(QPointF(p.x() + size + 3, p.y() + size + 4), str(row))
+
     def _paint_points(self, painter: QPainter) -> None:
         kind, key = self.selection
         drag = (
@@ -1106,15 +1202,21 @@ class PlanView(QWidget):
         self.picked = self.canvas.picked
         self.corners_changed = self.canvas.corners_changed
         self.moved = self.canvas.moved
+        self.keyframe_moved = self.canvas.keyframe_moved
         self.drawn = self.canvas.drawn
         self.part_drawn = self.canvas.part_drawn
         self.place = self.canvas.place
         self.message = self.canvas.message
         self._state()
 
-    def show_room(self, room: Room, selection=None, hidden=frozenset(), wind=True) -> None:
-        self.canvas.show_room(room, selection, hidden, wind)
+    def show_room(
+        self, room: Room, selection=None, hidden=frozenset(), wind=True, mover=None, time=None
+    ) -> None:
+        self.canvas.show_room(room, selection, hidden, wind, mover, time)
         self._state()
+
+    def set_time(self, time: float | None) -> None:
+        self.canvas.set_time(time)
 
     def fit(self) -> None:
         self.canvas.fit()
