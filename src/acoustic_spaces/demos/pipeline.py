@@ -22,7 +22,7 @@ import math
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +32,8 @@ from acoustic_spaces.demos import audio, shell_line
 
 PARAMETERS = "parameters.json"
 SEATS = "seats.json"
+#: Where the files given with ``--input`` are made into feeds, beside the mixes' folder.
+INPUTS = "inputs"
 #: Where the video draws the spectrogram on a still: left, top, width, height.
 SPECTRUM_BOX = (100, 892, 1720, 96)
 
@@ -244,6 +246,87 @@ class Mix:
     info: dict = field(default_factory=dict)
 
 
+def input_feed(name: str, file: Path, replaced: Path, folder: Path) -> Path:
+    """``file`` made into the feed of the source ``name`` in place of ``replaced``, as
+    ``folder/<replaced's folder>/<name>.wav``: mixed down to mono (as the renderer mixes
+    every feed), at the replaced feed's rate, brought to its gated RMS (so the source
+    radiates the power the demo gives it) and cut or padded with silence to its length
+    (so the times of the tour hold). Made again when ``file`` changes, or either file is
+    newer than it."""
+    out = folder / replaced.parent.name / f"{name}.wav"
+    made_from = out.with_suffix(".json")
+    record = {"file": str(Path(file).resolve()), "replaces": str(Path(replaced).resolve())}
+    if (
+        out.exists()
+        and made_from.exists()
+        and read_json(made_from) == record
+        and all(out.stat().st_mtime >= p.stat().st_mtime for p in (file, replaced))
+    ):
+        return out
+    y, rate = audio.read(replaced)
+    x, r = audio.read(file)
+    x = audio.resampled(audio.mono(x), r, rate)
+    target, level = audio.gated_rms(y, rate), audio.gated_rms(x, rate)
+    if level <= 0.0:
+        raise SystemExit(f"error: --input {name}: {file} is silent")
+    if target <= 0.0:
+        raise SystemExit(
+            f"error: --input {name}: the feed it replaces is silent, no level to match"
+        )
+    length, given = len(y), len(x)
+    x = np.concatenate([x[:length] * (target / level), np.zeros(max(0, length - given))])
+    audio.write(out, x, rate)
+    write_json(made_from, record)
+    fit = "cut" if given > length else "padded with silence" if given < length else "as long"
+    print(
+        f"{name}: plays {Path(file).name} instead of its feed, at the feed's gated RMS "
+        f"({audio.db(target / level):+.1f} dB), {fit} to {length / rate:.1f} s"
+    )
+    return out
+
+
+def with_inputs(mixes: Sequence[Mix], inputs: dict[str, Path] | None, folder: Path) -> list[Mix]:
+    """The mixes with the feeds of the sources ``inputs`` names (``--input``) made from
+    those files (:func:`input_feed`, into ``folder``); a name no mix feeds is an error."""
+    if not inputs:
+        return list(mixes)
+    fed = sorted({name for mix in mixes for name in mix.feeds})
+    for name in inputs:
+        if name not in fed:
+            raise SystemExit(
+                f"error: --input {name}: no such source plays here; it has {', '.join(fed)}"
+            )
+    made: dict[Path, Path] = {}
+    out = []
+    for mix in mixes:
+        feeds = dict(mix.feeds)
+        for name, file in inputs.items():
+            if name in feeds:
+                key = Path(feeds[name])
+                if key not in made:
+                    made[key] = input_feed(name, Path(file), key, folder)
+                feeds[name] = made[key]
+        used = {name: str(file) for name, file in inputs.items() if name in mix.feeds}
+        out.append(replace(mix, feeds=feeds, info={**mix.info, "inputs": used}))
+    return out
+
+
+def credited(credit: str, seats: dict, sources: Sequence[str]) -> str:
+    """The stills' credit line for the mixes in ``seats`` (:func:`render_mixes`):
+    ``credit``, the recordings', then what the sources ``--input`` gave a file to play
+    instead; only those when they are all of ``sources``, as none of the recordings is
+    heard then."""
+    inputs: dict[str, str] = {}
+    for seat in seats["seats"].values():
+        inputs.update(seat.get("inputs", {}))
+    if not inputs:
+        return credit
+    plays = ", ".join(f"{name}: {Path(file).name}" for name, file in sorted(inputs.items()))
+    if set(sources) <= set(inputs):
+        return f"Playing {plays}"
+    return f"{credit} · instead, {plays}"
+
+
 def render_mixes(
     mixes: Sequence[Mix],
     folder: Path,
@@ -251,26 +334,33 @@ def render_mixes(
     *,
     equal_power: bool = False,
     first: str = "",
+    inputs: dict[str, Path] | None = None,
 ) -> dict:
     """Every mix as ``folder/<key>.<format>.wav``, with one gain for all (the loudest
     peak at -1 dBFS), and ``folder/seats.json``: the rate, the format, the gain and
     each mix's ``lag_s`` (when its sound arrives), ``rms_db`` (gated, A-weighted),
-    ``loudness_db`` (K-weighted), ``relative_db`` (against the loudest) and length.
-    Mixes that exist, newer than their feeds and responses, are kept unless ``--again``,
-    their earlier gain undone."""
+    ``loudness_db`` (K-weighted), ``relative_db`` (against the loudest), length and the
+    ``inputs`` it played. ``inputs`` (``--input``) replaces the feeds of the sources it
+    names (:func:`with_inputs`). Mixes that exist, newer than their feeds and responses
+    and made with the same inputs, are kept unless ``--again``, their earlier gain
+    undone."""
     fmt, label = args.format, output_label(args)
     seats_path = folder / SEATS
     previous = read_json(seats_path) if seats_path.exists() else {}
     old_gain = float(previous.get("gain", 1.0))
     reuse = not getattr(args, "again", False)
+    mixes = with_inputs(mixes, inputs, folder.parent / INPUTS)
 
     def path_of(mix: Mix) -> Path:
         return folder / f"{mix.key}.{fmt}.wav"
 
     def kept(mix: Mix) -> bool:
-        """Whether the mix is there and newer than its feeds and its responses."""
+        """Whether the mix is there, made with the same inputs, and newer than its feeds
+        and its responses."""
         out = path_of(mix)
         if not (reuse and out.exists() and mix.key in previous.get("seats", {})):
+            return False
+        if previous["seats"][mix.key].get("inputs", {}) != mix.info.get("inputs", {}):
             return False
         made = [mix.simulation.results / PARAMETERS, *mix.feeds.values()]
         return all(out.stat().st_mtime >= path.stat().st_mtime for path in made if path.exists())
@@ -543,6 +633,7 @@ def _ffmpeg(source: list[str], audio_path: Path, spectrum: str, out: Path, feed=
 
 
 __all__ = [
+    "INPUTS",
     "PARAMETERS",
     "SEATS",
     "SPECTRUM_BOX",
@@ -552,8 +643,10 @@ __all__ = [
     "animation",
     "arrival_s",
     "auralize",
+    "credited",
     "gains_of",
     "hrtf_label",
+    "input_feed",
     "labels_of",
     "missing_mixes",
     "output_label",
@@ -568,6 +661,7 @@ __all__ = [
     "simulated",
     "tour_audio",
     "video",
+    "with_inputs",
     "write_json",
     "write_scene",
 ]

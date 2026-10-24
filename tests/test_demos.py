@@ -22,6 +22,7 @@ from acoustic_spaces.demos import (
     audio,
     common_options,
     demo_for,
+    input_option,
     list_demos,
     music,
     pipeline,
@@ -319,6 +320,43 @@ def test_a_demo_refuses_an_hrtf_for_another_format(tmp_path: Path) -> None:
     assert caught.value.code == 2  # argparse's own error
 
 
+def test_a_demo_takes_a_file_for_each_source(tmp_path: Path) -> None:
+    """``--input SOURCE=WAV``, once per source: the sources and the files they play
+    instead, on the command line and back, the paths counted from the demo's folder; a
+    source the demo does not feed, or a file that is not there, is refused."""
+    import dataclasses
+
+    def plays(args) -> dict[str, str]:
+        return {"a": "the song, left", "b": "the song, right"}
+
+    demo, _ran = _demo(tmp_path, plays=plays)
+    demo = dataclasses.replace(demo, options=[*demo.options, input_option()])
+    assert demo.option("inputs").kind == "inputs" and demo.defaults().inputs is None
+    args = demo.parser().parse_args(["render", "--input", "a=x.wav", "--input", " b = in/y.wav"])
+    assert args.inputs == {"a": Path("x.wav"), "b": Path("in/y.wav")}
+    assert demo.command("render", args) == (
+        "python test_demo.py render --input a=x.wav --input b=in/y.wav"
+    )
+    resolved = demo.resolved(args)
+    assert resolved.inputs == {"a": tmp_path / "x.wav", "b": tmp_path / "in" / "y.wav"}
+    assert demo.arguments(resolved, relative_to=tmp_path)[-2:] == [
+        "--input",
+        "b=" + str(Path("in/y.wav")),
+    ]
+    assert demo.arguments(resolved, names_only=True) == ["--input", "a=x.wav", "--input", "b=y.wav"]
+    assert demo.check(args) == f"--input a: no {tmp_path / 'x.wav'}"
+    audio.write(tmp_path / "x.wav", _tone(0.5), RATE)
+    audio.write(tmp_path / "in" / "y.wav", _tone(0.5), RATE)
+    assert demo.check(args) is None
+    args.inputs["c"] = Path("x.wav")
+    assert demo.check(args) == "--input c: no such source plays here; it has a, b"
+    with pytest.raises(SystemExit, match="no such source"):
+        demo.run(["render"], args)
+    with pytest.raises(SystemExit) as caught:
+        demo.parser().parse_args(["render", "--input", "a"])
+    assert caught.value.code == 2  # argparse's own error: SOURCE=WAV
+
+
 def test_a_demo_stops_when_the_scene_is_missing(tmp_path: Path) -> None:
     """The simulation needs the scene: without it the demo says which step writes it."""
     demo, _ran = _demo(tmp_path)
@@ -451,6 +489,66 @@ def test_the_mixes_keep_one_gain_and_are_measured(tmp_path: Path, monkeypatch) -
     os.utime(mixes[0].simulation.results / pipeline.PARAMETERS, (later + 20, later + 20))
     pipeline.render_mixes(mixes, folder, args)
     assert made == ["near", "far"]
+
+
+def test_a_file_given_to_a_source_takes_the_place_of_its_feed(tmp_path: Path, capsys) -> None:
+    """``--input``: the file, mixed down to mono and at the feed's rate, brought to the
+    gated RMS of the feed it replaces and cut or padded with silence to its length;
+    made again when it is another file, even an older one, or either is newer."""
+    feed = tmp_path / "feeds" / "movement1" / "a.wav"
+    audio.write(feed, np.stack([_tone(2.0, gain=0.1)] * 2, axis=1), RATE)
+    mine = tmp_path / "mine.wav"
+    audio.write(mine, np.stack([_tone(3.0, 300.0, 16_000, 0.8), np.zeros(48_000)], axis=1), 16_000)
+    out = pipeline.input_feed("a", mine, feed, tmp_path / "inputs")
+    assert out == tmp_path / "inputs" / "movement1" / "a.wav"
+    x, rate = audio.read(out)
+    assert rate == RATE and x.shape == (2 * RATE, 1)
+    target = audio.gated_rms(audio.read(feed)[0], RATE)
+    assert audio.gated_rms(x, rate) == pytest.approx(target, rel=1e-3)
+    told = capsys.readouterr().out
+    assert "a: plays mine.wav instead of its feed" in told and "cut to 2.0 s" in told
+    made = out.stat().st_mtime_ns
+    assert pipeline.input_feed("a", mine, feed, tmp_path / "inputs") == out
+    assert out.stat().st_mtime_ns == made  # the same file: kept
+    short = tmp_path / "short.wav"
+    audio.write(short, _tone(0.5, 300.0), RATE)
+    older = mine.stat().st_mtime - 100
+    os.utime(short, (older, older))
+    pipeline.input_feed("a", short, feed, tmp_path / "inputs")
+    x, _rate = audio.read(out)
+    assert len(x) == 2 * RATE and not x[RATE:].any()  # padded with silence
+    assert "padded with silence to 2.0 s" in capsys.readouterr().out
+    silent = tmp_path / "silent.wav"
+    audio.write(silent, np.zeros(RATE), RATE)
+    with pytest.raises(SystemExit, match="silent.wav is silent"):
+        pipeline.input_feed("a", silent, feed, tmp_path / "inputs")
+
+
+def test_the_mixes_play_the_files_given_to_their_sources(tmp_path: Path, monkeypatch) -> None:
+    """``render_mixes(inputs=...)`` hands each mix the feeds made from the files, keeps
+    them in seats.json, and mixes again when the inputs change; the credit line names
+    them, and only them when every source plays one."""
+    mixes, folder, made = _mixes(tmp_path, monkeypatch)
+    args = argparse.Namespace(format="binaural", hrtf=None, again=False)
+    mine = tmp_path / "mine.wav"
+    audio.write(mine, _tone(1.0, 300.0), RATE)
+    seats = pipeline.render_mixes(mixes, folder, args, inputs={"a": mine})
+    assert made == ["near", "far"]
+    assert seats["seats"]["near"]["inputs"] == {"a": str(mine)}
+    assert (tmp_path / "inputs" / "feeds" / "a.wav").exists()
+    made.clear()
+    pipeline.render_mixes(mixes, folder, args, inputs={"a": mine})
+    assert made == []  # the same inputs: kept
+    pipeline.render_mixes(mixes, folder, args)
+    assert made == ["near", "far"]  # the feeds again
+    with pytest.raises(SystemExit, match="no such source plays here; it has a, b"):
+        pipeline.render_mixes(mixes, folder, args, inputs={"c": mine})
+    credit = "Music: someone, CC BY 4.0"
+    assert pipeline.credited(credit, pipeline.read_json(folder / pipeline.SEATS), "ab") == credit
+    seats = {"seats": {"near": {"inputs": {"a": str(mine)}}}}
+    assert pipeline.credited(credit, seats, ["a", "b"]) == f"{credit} · instead, a: mine.wav"
+    seats["seats"]["far"] = {"inputs": {"b": "/x/theirs.wav"}}
+    assert pipeline.credited(credit, seats, ["a", "b"]) == "Playing a: mine.wav, b: theirs.wav"
 
 
 def test_the_mixes_stop_when_the_simulation_has_no_responses(tmp_path: Path) -> None:
@@ -736,6 +834,39 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
     # A missing scene is the command line's error.
     assert cli(["demo", "nothing.yaml"]) == 2
     assert "no " in capsys.readouterr().err
+
+
+def test_a_demo_of_any_scene_plays_the_files_given_to_its_sources(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """``--input``: a source plays the file instead of its signal, a silent one too, fed
+    at the same gated RMS as every feed; the feeds are made again when the inputs
+    change, and a name the scene has no source in use for is refused."""
+    from acoustic_spaces.cli import main as cli
+    from acoustic_spaces.demos.scene_demo import DEMO, FEED_RMS, feeds_done, plays
+
+    scene = _any_scene(tmp_path)
+    monkeypatch.chdir(scene.parent)
+    audio.write(scene.parent / "hum.wav", _tone(1.0, 100.0, RATE, 0.3), RATE)
+    argv = ["demo", "scene.yaml", "feeds", "--input", "fan=hum.wav", "--input", "radio=hum.wav"]
+    assert cli(argv) == 0
+    work = scene.parent / "demo"
+    table = pipeline.read_json(work / "feeds" / "feeds.json")
+    hum = str(scene.parent / "hum.wav")
+    assert table["sources"]["fan"]["signal"] == hum and table["sources"]["radio"]["signal"] == hum
+    assert table["sources"]["talker"]["signal"].endswith("talk.wav") and table["silent"] == []
+    x, rate = audio.read(work / "feeds" / "fan.wav")
+    assert audio.gated_rms(x, rate) == pytest.approx(FEED_RMS, rel=0.02)
+    demo = DEMO.at(scene.parent)
+    args = demo.defaults()
+    args.scene, args.inputs = Path("scene.yaml"), {"fan": Path("hum.wav"), "radio": Path("hum.wav")}
+    args = demo.resolved(args)
+    assert feeds_done(args)
+    assert plays(args) == {"talker": "talk.wav", "radio": "radio.wav", "fan": "silent"}
+    args.inputs = None
+    assert not feeds_done(args)  # the radio's own signal and a silent fan now
+    args.inputs = {"nobody": scene.parent / "hum.wav"}
+    assert demo.check(args).startswith("--input nobody: no such source plays here")
 
 
 def test_a_demo_scene_written_elsewhere_still_finds_its_files(tmp_path: Path) -> None:

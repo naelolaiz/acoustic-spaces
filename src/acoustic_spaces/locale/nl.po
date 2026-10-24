@@ -1415,7 +1415,7 @@ msgstr ""
 "spiegelbronnen, late nagalm via stochastische straaltracering en binaurale, "
 "Ambisonics- en luidsprekerimpulsresponsen."
 
-#: acoustic_spaces/gui/app.py acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
 msgid "Source"
 msgstr "Bron"
 
@@ -1452,6 +1452,51 @@ msgstr "Map voor {option}"
 #, python-brace-format
 msgid "File for {option}"
 msgstr "Bestand voor {option}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The source, as the scene names it"
+msgstr "De bron, zoals de scène haar noemt"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Plays"
+msgstr "Speelt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "What the source plays in the demo, unless a file is given"
+msgstr "Wat de bron in de demo speelt, tenzij er een bestand wordt gegeven"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Instead"
+msgstr "In plaats daarvan"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The WAV file the source plays instead (--input SOURCE=WAV); empty: what "
+"Plays says. The table's tip says how loud it plays"
+msgstr ""
+"Het WAV-bestand dat de bron in plaats daarvan speelt (--input SOURCE=WAV); "
+"leeg: wat Speelt zegt. De tip van de tabel zegt hoe luid het speelt"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Choose WAV…"
+msgstr "WAV kiezen…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Choose the WAV file the selected source plays instead"
+msgstr "Kies het WAV-bestand dat de gekozen bron in plaats daarvan speelt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Default"
+msgstr "Standaard"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The selected source plays what Plays says again"
+msgstr "De gekozen bron speelt weer wat Speelt zegt"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "WAV file for {source}"
+msgstr "WAV-bestand voor {source}"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Run demo"
@@ -4039,10 +4084,6 @@ msgstr ""
 "evenveel later"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Choose WAV…"
-msgstr "WAV kiezen…"
-
-#: acoustic_spaces/gui/inspector.py
 msgid ""
 "Pick the WAV file the source plays in a demo of the scene: a dry recording"
 msgstr ""
@@ -4127,10 +4168,6 @@ msgstr "Equalizer"
 #: acoustic_spaces/gui/inspector.py
 msgid "Delay"
 msgstr "Vertraging"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Plays"
-msgstr "Speelt"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Remove source"

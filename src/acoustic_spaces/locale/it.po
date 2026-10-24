@@ -1414,7 +1414,7 @@ msgstr ""
 "di raggi stocastico e risposte all'impulso binaurali, Ambisonics e per "
 "altoparlanti."
 
-#: acoustic_spaces/gui/app.py acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
 msgid "Source"
 msgstr "Sorgente"
 
@@ -1452,6 +1452,54 @@ msgstr "Cartella per {option}"
 #, python-brace-format
 msgid "File for {option}"
 msgstr "File per {option}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The source, as the scene names it"
+msgstr "La sorgente, come la chiama la scena"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Plays"
+msgstr "Riproduce"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "What the source plays in the demo, unless a file is given"
+msgstr ""
+"Ciò che la sorgente riproduce nella dimostrazione, se non le si dà un file"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Instead"
+msgstr "Al suo posto"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The WAV file the source plays instead (--input SOURCE=WAV); empty: what "
+"Plays says. The table's tip says how loud it plays"
+msgstr ""
+"Il file WAV che la sorgente riproduce al suo posto (--input SOURCE=WAV); "
+"vuoto: ciò che dice Riproduce. Il suggerimento della tabella dice quanto "
+"forte suona"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Choose WAV…"
+msgstr "Scegli WAV…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Choose the WAV file the selected source plays instead"
+msgstr ""
+"Scegliete il file WAV che la sorgente selezionata riproduce al suo posto"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Default"
+msgstr "Predefinito"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The selected source plays what Plays says again"
+msgstr "La sorgente selezionata torna a riprodurre ciò che dice Riproduce"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "WAV file for {source}"
+msgstr "File WAV per {source}"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Run demo"
@@ -4036,10 +4084,6 @@ msgstr ""
 "risposte sono ritardati della stessa quantità"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Choose WAV…"
-msgstr "Scegli WAV…"
-
-#: acoustic_spaces/gui/inspector.py
 msgid ""
 "Pick the WAV file the source plays in a demo of the scene: a dry recording"
 msgstr ""
@@ -4125,10 +4169,6 @@ msgstr "Equalizzatore"
 #: acoustic_spaces/gui/inspector.py
 msgid "Delay"
 msgstr "Ritardo"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Plays"
-msgstr "Riproduce"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Remove source"

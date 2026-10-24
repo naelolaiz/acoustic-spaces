@@ -22,8 +22,11 @@ or `python church_demo.py all`, which runs them in turn and leaves out what is t
 already (the music, the scene, the simulation). The scene and its simulation go beside
 the script (scene_choir.yaml, results_choir); the music, the feeds, the mixes and the
 video go to ./demo (--work). Use headphones; `--hrtf me.sofa` plays through your own or
-measured HRTFs instead of a spherical head (the simulation takes it too). The editor
-runs the same steps from Simulation > Run demo…
+measured HRTFs instead of a spherical head (the simulation takes it too).
+`--input singer_f1=take.wav` has a singer or a side of the organ (organ_manual_c...)
+play a file of yours instead of its part, at the level of that part, from the start of
+the music; the stills' captions go on describing the demo's music, and their credit
+line names the files. The editor runs the same steps from Simulation > Run demo…
 
 The recordings are not part of acoustic_spaces: `music` downloads them from where their
 authors publish them (about 100 MB; only the needed files are read out of VocalSet's and
@@ -62,8 +65,18 @@ import numpy as np
 import yaml
 
 from acoustic_spaces import fetch
-from acoustic_spaces.demos import SIMULATE, Demo, Option, Step, common_options, pipeline, sibling
+from acoustic_spaces.demos import (
+    SIMULATE,
+    Demo,
+    Option,
+    Step,
+    common_options,
+    input_option,
+    pipeline,
+    sibling,
+)
 from acoustic_spaces.demos.audio import gated_rms, mono, read, resampled, write
+from acoustic_spaces.demos.pictures import save, settings_lines
 
 # --------------------------------------------------------------------------- sources
 
@@ -665,7 +678,7 @@ class Samples:
         gain = np.polyval(self.trend[sub], self.midi_of(path)) - self.level_db(x, rate)
         return x * 10.0 ** (float(np.clip(gain, -12.0, 12.0)) / 20.0)
 
-    def load(self, sub: str, midi: int) -> tuple[np.ndarray, int]:
+    def load(self, sub: str, midi: int) -> np.ndarray:
         key = (sub, midi)
         if key not in self.cache:
             base = nearest_sample(midi, "pedal" if sub.endswith("Pedal") else "manual")
@@ -759,6 +772,18 @@ def feeds(args) -> None:
     print(f"wrote {len(tracks)} feeds to {out}")
 
 
+def plays(args) -> dict[str, str]:
+    """What each source plays unless ``--input`` gives it a file."""
+    out = {
+        f"singer_{name}": f"VocalSet singer {name} ({VOICES[name]}), verses 2 and 3"
+        for name in SINGERS
+    }
+    for name, organ in ORGAN_SOURCES.items():
+        side = "C" if organ["side"] == 0 else "C#"
+        out[name] = f"the organ's {organ['division']}, {side} side, verses 1 and 3"
+    return out
+
+
 def feeds_table(args) -> dict:
     path = args.work / "feeds" / "feeds.json"
     if not path.exists():
@@ -776,7 +801,9 @@ def render(args) -> None:
     weights = {source["name"]: source["level_db"] for source in scene_of(args)["sources"]}
     simulation = simulations(args)[0]
     mixes = [pipeline.Mix(name, simulation, name, feeds, weights) for name in listeners]
-    pipeline.render_mixes(mixes, args.work / "seats", args, first=DEMO.command("scene", args))
+    pipeline.render_mixes(
+        mixes, args.work / "seats", args, first=DEMO.command("scene", args), inputs=args.inputs
+    )
 
 
 def tour_of(args) -> list[tuple[str, float, float]]:
@@ -829,12 +856,13 @@ def video(args) -> None:
         what_plays,
         playing,
         VOICES,
+        credit=pipeline.credited(pictures.CREDIT, seats, feeds_table(args)["sources"]),
         hrtf=args.hrtf,
-        tool=pictures.settings_lines(
+        tool=settings_lines(
             DEMO, args, scene_of(args), pipeline.read_json(args.results / pipeline.PARAMETERS)
         ),
     )
-    pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
+    save(drawing.thumbnail(), args.work / "thumbnail.png")
     pipeline.video(
         args.work,
         [(name, stop - start) for name, start, stop in tour],
@@ -881,11 +909,13 @@ DEMO = Demo(
         Option("scene", "the scene with the choir", Path("scene_choir.yaml"), "path"),
         Option("results", "folder written by simulate", Path("results_choir"), "folder"),
         *common_options(),
+        input_option(),
         Option("listeners", "only these listeners, comma separated", None, steps=("render",)),
         Option("tour", "listener:start_s,... (each runs until the next)", None, steps=("video",)),
     ],
     simulations=simulations,
     scene_from="scene",
+    plays=plays,
 )
 
 __all__ = ["DEMO"]

@@ -94,7 +94,9 @@ which frequencies each octave band holds.
   the gallery), or a copy of one, also has that demo, reading the open scene, and the
   window starts on it. Pick the demo and the step (*all* runs it from nothing to its
   video, leaving out what is done already), fill in the options, which start at the
-  same defaults the command line uses, and it runs in its own process in the
+  same defaults the command line uses (the **--input** table lists the sources, what
+  each plays and the WAV file it plays instead: **Choose WAV…** gives the selected one a
+  file, **Default** takes it back), and it runs in its own process in the
   background, with what it prints in the **Messages** panel and **Cancel** to stop it.
   The window shows the command line it is about to run, so the same run can be
   repeated in a terminal, and asks for a scene with changes to be saved first, as the

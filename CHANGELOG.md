@@ -665,6 +665,13 @@
 - A demo run elsewhere than its example (the editor's copy under the home folder, when
   the examples cannot be written) writes scenes that find the example's model and data:
   their paths were left relative to the example and the simulation could not find them.
+- Every demo takes `--input SOURCE=WAV`, once for each source: the source plays that
+  file instead of what the demo gives it, mixed down to mono, at the gated RMS of the
+  feed it replaces and cut or padded with silence to its length, so the balance and the
+  tour hold (the walk plays the guide's file as it is; the demo of any scene feeds it as
+  it would the signal). The mixes are made again when the inputs change, and the
+  stills' credit line names the files. Before, only the demo of any scene could play
+  other recordings, by changing the scene.
 
 **HRTF sets**
 
@@ -719,6 +726,9 @@
   own process in the background, with what it prints in **Messages** and **Cancel** to
   stop it. The window shows the command line it is about to run, and asks for a scene
   with changes to be saved first. A demo could only be run from a terminal before.
+- The **Run demo…** window lists the sources of the demo in a table, what each plays and
+  the WAV file it plays instead (`--input`): **Choose WAV…** gives the selected source
+  one, **Default** takes it back.
 - The source page's **Plays** row names the WAV file the source plays in a demo of the
   scene: **Choose WAV…** picks one, **Silent** takes it away, and the scene file keeps it
   as `signal`, relative to the scene's folder.

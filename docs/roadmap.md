@@ -263,6 +263,8 @@ Examples:
   names, at its sound power, and every listener is heard in turn in a video drawn from
   the scene; every demo's stills say how the sound was made and the command that makes
   it again.
+- [x] A recording of the user's for any source of any demo (`--input SOURCE=WAV`), at
+  the level of the feed it replaces, and a table of the sources in Run demo…
 
 Editor:
 
@@ -280,6 +282,7 @@ Editor:
 - [x] Simulation > Run demo…: the demos of the open scene (This scene, and the
   example's own for an example's scene), its options at the command line's defaults,
   run in the background with its messages in the panel; the source page's Plays row
-  picks the WAV file each source plays.
+  picks the WAV file each source plays, and the window's table of sources the file each
+  plays instead in that run (`--input`).
 - [x] Download HRTFs…: the free sets with their licences, fetched into the user's data
   folder and put in the scene's binaural output.

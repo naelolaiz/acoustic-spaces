@@ -27,8 +27,10 @@ the script (scene_band.yaml, results_band); the music, the feeds, the mixes and 
 video go to ./demo (--work), and a second song goes best to a work folder of its own
 (`--song francium --work demo_francium`).
 Use headphones; `--hrtf me.sofa` plays through your own or measured HRTFs instead of a
-spherical head (the simulation takes it too). The editor runs the same steps from
-Simulation > Run demo…
+spherical head (the simulation takes it too). `--input drum_kit=drums.wav` has a source
+play a file of yours instead of its feed, at the level of that feed (a name the scene
+has no source for is refused with the list of them). The editor runs the same steps
+from Simulation > Run demo…
 
 The impulse responses `simulate` writes carry each source's feed (gain_db, eq_db,
 delay_ms) but are per unit of sound power. `feeds` scales each loudspeaker's signal by
@@ -63,11 +65,13 @@ from acoustic_spaces.demos import (
     Option,
     Step,
     common_options,
+    input_option,
     music,
     pipeline,
     sibling,
 )
 from acoustic_spaces.demos.audio import gated_rms, lag_of, read, resampled, shifted, write
+from acoustic_spaces.demos.pictures import save, settings_lines
 
 #: The songs the demo can play (``--song``), each from its release, only the files it
 #: needs: the master and the stems by the names the mixes use, each a list of files
@@ -353,6 +357,39 @@ def role(source: dict) -> str:
     return "left" if y < 0 else "right"
 
 
+#: What each kind of feed (:func:`role`) is, for the editor's map of inputs.
+ROLES = {
+    "left": "the master's left channel, on the audience's left",
+    "right": "the master's right channel, on the audience's right",
+    "mono": "the master in mono",
+    "singer": "the singer's monitor mix",
+    "drummer": "the drummer's monitor mix",
+    "stage": "the stage's mix, drums well down",
+}
+
+
+def plays(args) -> dict[str, str]:
+    """What each source plays unless ``--input`` gives it a file (:func:`role`): the
+    sources of the scene with the band, or, before ``band`` writes it, of ``--from`` and
+    the band."""
+    if args.scene.exists():
+        sources = scene_of(args)["sources"]
+    elif args.source.exists():
+        sources = yaml.safe_load(args.source.read_text(encoding="utf-8"))["sources"]
+        names = {s["name"] for s in sources}
+        sources += [{"name": name} | spec for name, spec in BAND.items() if name not in names]
+    else:
+        return {}
+    out = {}
+    for source in sources:
+        what = role(source)
+        if what in BAND_MIX:
+            out[source["name"]] = f"{args.song}, the {', '.join(BAND_MIX[what])} stem"
+        else:
+            out[source["name"]] = f"{args.song}, {ROLES[what]}"
+    return out
+
+
 def feeds(args) -> None:
     """One WAV per loudspeaker: the PA's channel of the master, or a monitor mix, at the
     same gated RMS, then scaled by the source's level_db against the loudest's."""
@@ -440,7 +477,7 @@ def render(args) -> None:
     weights = {name: entry["gain_db"] for name, entry in table["sources"].items()}
     simulation = simulations(args)[0]
     mixes = [pipeline.Mix(name, simulation, name, feeds, weights) for name in listeners]
-    pipeline.render_mixes(mixes, args.work / "seats", args, equal_power=True)
+    pipeline.render_mixes(mixes, args.work / "seats", args, equal_power=True, inputs=args.inputs)
 
 
 def tour_of(args, rendered) -> list[tuple[str, float, float]]:
@@ -498,13 +535,15 @@ def video(args) -> None:
         tour,
         TITLES,
         gains,
-        credit=feeds_table(args)["song"]["credit"],
+        credit=pipeline.credited(
+            feeds_table(args)["song"]["credit"], seats, list(feeds_table(args)["sources"])
+        ),
         hrtf=args.hrtf,
-        tool=pictures.settings_lines(
+        tool=settings_lines(
             DEMO, args, scene_of(args), pipeline.read_json(args.results / pipeline.PARAMETERS)
         ),
     )
-    pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
+    save(drawing.thumbnail(), args.work / "thumbnail.png")
     pipeline.video(
         args.work,
         [(name, stop - start) for name, start, stop in tour],
@@ -554,6 +593,7 @@ DEMO = Demo(
         Option("scene", "the scene with the band", Path("scene_band.yaml"), "path"),
         Option("results", "folder written by simulate", Path("results_band"), "folder"),
         *common_options(),
+        input_option(),
         Option("listeners", "only these listeners, comma separated", None, steps=("render",)),
         Option(
             "tour",
@@ -564,6 +604,7 @@ DEMO = Demo(
     ],
     simulations=simulations,
     scene_from="band",
+    plays=plays,
 )
 
 

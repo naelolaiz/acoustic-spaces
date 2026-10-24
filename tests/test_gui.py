@@ -2542,7 +2542,7 @@ def test_demo_dialog_fills_in_the_options(qapp) -> None:
     )
 
     from acoustic_spaces.demos import list_demos
-    from acoustic_spaces.gui.demo_dialog import ALL, DemoDialog, PathField
+    from acoustic_spaces.gui.demo_dialog import ALL, DemoDialog, InputsField, PathField
 
     listed = DemoDialog(list_demos())  # every demo, as given
     names = [listed.picker.itemData(k) for k in range(listed.picker.count())]
@@ -2581,6 +2581,31 @@ def test_demo_dialog_fills_in_the_options(qapp) -> None:
     assert "--hrtf is for binaural mixes" in dialog.problem.text() and not ok.isEnabled()
     dialog.fields["format"].setText("binaural")
     assert dialog.problem.text() == "" and ok.isEnabled()
+
+    # The sources' inputs: a row for each source with what it plays; a file typed or
+    # chosen shows in the command (and must be there), Default takes it back.
+    inputs = dialog.fields["inputs"]
+    assert isinstance(inputs, InputsField)
+    plays = demo.plays(demo.resolved(dialog.arguments()))
+    rows = [inputs.table.item(r, inputs.SOURCE).text() for r in range(inputs.table.rowCount())]
+    assert rows == list(plays) and "main_left" in rows
+    row = rows.index("subs")
+    assert inputs.table.item(row, inputs.PLAYS).text() == plays["subs"]
+    assert not inputs.choose.isEnabled()  # no row chosen yet
+    inputs.table.selectRow(row)
+    assert inputs.choose.isEnabled() and not inputs.default.isEnabled()
+    mine = example_path("stadium_concert").parent / "box.csv"  # any file that is there
+    inputs.table.item(row, inputs.FILE).setText(str(mine))
+    assert dialog.command.text().endswith(" --input subs=box.csv")  # from the folder
+    assert dialog.chosen()[2].inputs == {"subs": mine} and ok.isEnabled()
+    inputs.table.item(row, inputs.FILE).setText(str(mine.with_name("none.wav")))
+    assert "--input subs: no " in dialog.problem.text() and not ok.isEnabled()
+    assert inputs.default.isEnabled()
+    inputs.default.click()
+    assert dialog.chosen()[2].inputs is None and inputs.table.item(row, inputs.FILE).text() == ""
+    assert "--input" not in dialog.command.text()
+    heads = [inputs.table.horizontalHeaderItem(c) for c in range(inputs.table.columnCount())]
+    assert all(head.toolTip() for head in heads)
 
     # This scene: the sounds its sources play, which the stadium's sources name none of.
     dialog.picker.setCurrentIndex(names.index("scene"))

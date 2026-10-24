@@ -23,8 +23,10 @@ already (the song, the scenes, the simulations). The scenes and their simulation
 beside the script (scene_demo.yaml and scene_still.yaml, results_demo and
 results_still); the song, the feeds, the mixes and the video go to ./demo (--work). Use
 headphones; `--hrtf me.sofa` plays through your own or measured HRTFs instead of a
-spherical head (the simulations take it too). The editor runs the same steps from
-Simulation > Run demo…
+spherical head (the simulations take it too). `--input subs=bass.wav` has a
+loudspeaker (main_left, main_right or subs) play a file of yours instead of its part of
+the song, at the level of that part. The editor runs the same steps from Simulation >
+Run demo…
 
 From the audience to the far shore the sound drops by 20 to 25 dB(A), too much to
 hear the far places in a video. So each stop of the tour is brought to the same loudness
@@ -48,11 +50,13 @@ from acoustic_spaces.demos import (
     Option,
     Step,
     common_options,
+    input_option,
     music,
     pipeline,
     sibling,
 )
 from acoustic_spaces.demos.audio import mono, read, write
+from acoustic_spaces.demos.pictures import save, settings_lines
 
 #: The songs the demo can play (``--song``): the files each one is made of (one here,
 #: a member of a zip archive read by HTTP range requests or a file of its own, as
@@ -210,6 +214,13 @@ def music_step(args) -> None:
     print(f"wrote {', '.join(SYSTEM)} ({len(x) / rate:.0f} s of {args.song}) to {folder}")
 
 
+def plays(args) -> dict[str, str]:
+    """What each loudspeaker plays unless ``--input`` gives it a file: its channel of the
+    song."""
+    channels = {0: "left channel", 1: "right channel", "mono": "both channels in mono"}
+    return {name: f"{args.song}, {channels[s['channel']]}" for name, s in SYSTEM.items()}
+
+
 def played(args) -> dict:
     """The song ``music`` last wrote the loudspeakers' signals from."""
     path = music_folder(args) / "song.json"
@@ -288,7 +299,9 @@ def render(args) -> None:
                     info={"weather": weather},
                 )
             )
-    pipeline.render_mixes(mixes, args.work / "seats", args, first=DEMO.command("scenes", args))
+    pipeline.render_mixes(
+        mixes, args.work / "seats", args, first=DEMO.command("scenes", args), inputs=args.inputs
+    )
 
 
 def tour_of(args) -> list[tuple[str, str, float, float]]:
@@ -351,17 +364,17 @@ def video(args) -> None:
         tour,
         TITLES,
         gains,
-        played(args)["credit"],
+        pipeline.credited(played(args)["credit"], seats, list(SYSTEM)),
         folder=args.scene.parent,
         hrtf=args.hrtf,
         tool={
-            w: pictures.settings_lines(
+            w: settings_lines(
                 DEMO, args, scenes[w], pipeline.read_json(s.results / pipeline.PARAMETERS)
             )
             for w, s in weathers(args).items()
         },
     )
-    pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
+    save(drawing.thumbnail(), args.work / "thumbnail.png")
     pipeline.video(
         args.work,
         [(f"{listener}_{weather}", stop - start) for listener, weather, start, stop in tour],
@@ -417,6 +430,7 @@ DEMO = Demo(
             "folder",
         ),
         *common_options(),
+        input_option(),
         Option(
             "tour",
             "listener:weather:phrases,... (weather evening or still; 8 bars a phrase)",
@@ -433,6 +447,7 @@ DEMO = Demo(
     ],
     simulations=simulations,
     scene_from="scenes",
+    plays=plays,
 )
 
 __all__ = ["DEMO"]

@@ -19,7 +19,10 @@ or `python walk_demo.py all`, every step, leaving out what is there already; the
 editor's Simulation > Run demo… runs it too. The scene goes beside the script
 (scene_demo.yaml); the speech, the walk, the head turn and the video go to ./demo
 (--work). Use headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of a
-spherical head.
+spherical head. `--input guide=talk.wav` has the guide say a recording of yours instead
+(mono, as long as the walk and the turn need, about a minute); the voice's level and
+STI in the captions are still the scene's (--voice), as the one gain of the video plays
+any recording as loud.
 
 The walk is the example's: the visitor sets off 3 m in front of the guide and faces the
 way it goes, so the guide is behind it down the long arm; at the end it turns into the
@@ -47,6 +50,7 @@ whole video, so the voice is as much quieter round the corner as the simulation 
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import sys
 from pathlib import Path
@@ -55,8 +59,17 @@ import numpy as np
 import yaml
 
 from acoustic_spaces import fetch
-from acoustic_spaces.demos import Demo, Option, Step, common_options, pipeline, sibling
+from acoustic_spaces.demos import (
+    Demo,
+    Option,
+    Step,
+    common_options,
+    input_option,
+    pipeline,
+    sibling,
+)
 from acoustic_spaces.demos.audio import envelope, mono, quiet_moment, read, write
+from acoustic_spaces.demos.pictures import save, settings_lines
 
 # --------------------------------------------------------------------------- sources
 
@@ -138,8 +151,25 @@ def speech(args) -> None:
     print(f"wrote {speech_path(args)} and its transcript")
 
 
+def guide_input(args) -> Path | None:
+    """The file ``--input guide=WAV`` gives the guide to say, or None."""
+    return (getattr(args, "inputs", None) or {}).get("guide")
+
+
+def plays(args) -> dict[str, str]:
+    """What the guide says unless ``--input`` gives it a file."""
+    return {"guide": f"the talk of ACE talker {args.talker}"}
+
+
+def played_by(args) -> str:
+    """What the guide says, as walk.json and turn.json keep it: the file ``--input``
+    gives it, or the talk of ``--talker``."""
+    file = guide_input(args)
+    return str(file) if file is not None else f"ACE {args.talker}"
+
+
 def talk(args) -> tuple[np.ndarray, int]:
-    path = speech_path(args)
+    path = guide_input(args) or speech_path(args)
     if not path.exists():
         raise SystemExit(f"error: no {path}; run first: {DEMO.command('speech', args)}")
     x, rate = read(path)
@@ -271,14 +301,16 @@ def cuts(args, room) -> tuple[float, float]:
     turned = turn_of(args)[-1][0]
     second = min(quiet_moment(env, step, first + turned + LINGER_S, PAUSE_S), end_s)
     if second - first < turned:
+        what = guide_input(args)
+        what = what.name if what is not None else f"the talk of {args.talker}"
         raise SystemExit(
-            f"error: the talk of {args.talker} is {end_s:.0f} s long, too short for the "
-            f"walk and the turn ({walk_s + turned + 2 * LINGER_S:.0f} s); pick another"
+            f"error: {what} is {end_s:.0f} s long, too short for the walk and the turn "
+            f"({walk_s + turned + 2 * LINGER_S:.0f} s); pick another"
         )
     return first, second
 
 
-def guide_of(room) -> dict:
+def guide_of(room):
     return next(s for s in room.scene.sources if s.name == "guide")
 
 
@@ -317,6 +349,7 @@ def walk(args) -> None:
         out / WALK,
         {
             "talker": args.talker,
+            "plays": played_by(args),
             "talk_s": [0.0, first],
             "times": walked.points.times.tolist(),
             "positions": walked.points.positions.tolist(),
@@ -363,6 +396,7 @@ def turn(args) -> None:
         out / TURNING,
         {
             "talker": args.talker,
+            "plays": played_by(args),
             "talk_s": [first, second],
             "facing": facing,
             "keys": [list(key) for key in keys],
@@ -417,13 +451,12 @@ def video(args) -> None:
         walk_s=len(walk_x) / rate,
         turn_at=(len(walk_x) + len(gap)) / rate,
         voice=(args.voice, VOICES[args.voice]),
-        credit=f"Speech: ACE challenge corpus, talker {args.talker} (Eaton, Gaubitch, Moore, "
-        f"Naylor, Imperial College London), CC BY 4.0 · doi.org/{ACE_DOI}",
+        credit=credit_of(args),
         hrtf=args.hrtf,
         speed=float(next(lis for lis in room.scene.listeners if lis.walk).walk.speed_m_s),
-        tool=pictures.settings_lines(DEMO, args, scene_data),
+        tool=settings_lines(DEMO, args, scene_data),
     )
-    pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
+    save(drawing.thumbnail(), args.work / "thumbnail.png")
     moments = drawing.moments()
     pipeline.animation(
         args.work,
@@ -436,8 +469,30 @@ def video(args) -> None:
     )
 
 
+def credit_of(args) -> str:
+    """The stills' credit line: the ACE corpus's, or the file the guide says instead."""
+    file = guide_input(args)
+    if file is not None:
+        return f"Playing guide: {file.name}"
+    return (
+        f"Speech: ACE challenge corpus, talker {args.talker} (Eaton, Gaubitch, Moore, "
+        f"Naylor, Imperial College London), CC BY 4.0 · doi.org/{ACE_DOI}"
+    )
+
+
 def speech_done(args) -> bool:
-    return speech_path(args).exists()
+    """Whether the talk is there, or not needed (``--input guide=...``)."""
+    return guide_input(args) is not None or speech_path(args).exists()
+
+
+def part_done(args, name: str, info: str) -> bool:
+    """Whether the walk's or the turn's sound is there, made from what the guide says
+    now (files written before they kept "plays" said the talk of their "talker")."""
+    path = args.work / name / info
+    if not path.exists():
+        return False
+    facts = pipeline.read_json(path)
+    return facts.get("plays", f"ACE {facts.get('talker')}") == played_by(args)
 
 
 DEMO = Demo(
@@ -458,18 +513,25 @@ DEMO = Demo(
             "walk",
             walk,
             "simulate the walk and play the talk along it",
-            lambda args: (args.work / "walk" / WALK).exists(),
+            lambda args: part_done(args, "walk", WALK),
         ),
         Step(
             "turn",
             turn,
             "simulate where the visitor stands and turn its head",
-            lambda args: (args.work / "turn" / TURNING).exists(),
+            lambda args: part_done(args, "turn", TURNING),
         ),
         Step("video", video, "tour.wav, tour.mp4 and the stills in the work folder"),
     ],
     options=[
-        Option("talker", "the ACE corpus's talker", "M4", "choice", TALKERS, ("speech",)),
+        Option(
+            "talker",
+            "the ACE corpus's talker",
+            "M4",
+            "choice",
+            TALKERS,
+            ("speech", "walk", "turn", "video"),
+        ),
         Option(
             "voice",
             "how loud the guide speaks (IEC 60268-16)",
@@ -501,8 +563,16 @@ DEMO = Demo(
             steps=("turn",),
         ),
         *[o for o in common_options() if o.name not in ("again", "format")],
+        dataclasses.replace(
+            input_option(("walk", "turn", "video")),
+            help="a WAV file the guide says instead of the ACE talk, as guide=WAV: mixed "
+            "down to mono, at least as long as the walk and the turn need; the captions' "
+            "level and STI are the scene's voice (--voice), as the video's one gain plays "
+            "any recording as loud",
+        ),
     ],
     scene_from="scene",
+    plays=plays,
 )
 
 

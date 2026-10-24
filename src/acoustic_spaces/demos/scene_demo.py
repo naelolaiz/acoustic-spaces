@@ -1,20 +1,21 @@
 """A demo of any scene: what its sources play, heard at each of its listeners, as a video.
 
 Each source plays the WAV file its ``signal`` names (set on the source's page in the
-editor, **Plays**, or in the scene file), dry: mixed down to mono and brought to the
-same gated RMS, so that its sound power in the scene (``level_db``) sets how loud it is
-against the others, as the simulation says and not as the recordings happen to be.
-Sources without a signal stay silent. Every listener in use is heard in turn, in the
-scene's order (or ``--tour``), for ``--seconds`` each while the piece runs on, with one
-gain for all the stops and a crossfade between them, binaural through the HRTFs of
-the scene's binaural output (or ``--hrtf``, or a spherical head model when neither names
-any). The stills show the scene from
-above with the listener of the moment, the level there, how long the sound takes to
-arrive and the reverberation time, and say how the sound was made.
+editor, **Plays**, or in the scene file), or the one ``--input SOURCE=WAV`` gives it
+instead, dry: mixed down to mono and brought to the same gated RMS, so that its sound
+power in the scene (``level_db``) sets how loud it is against the others, as the
+simulation says and not as the recordings happen to be. Sources without one stay
+silent. Every listener in use is heard in turn, in the scene's order (or ``--tour``),
+for ``--seconds`` each while the piece runs on, with one gain for all the stops and a
+crossfade between them, binaural through the HRTFs of the scene's binaural output (or
+``--hrtf``, or a spherical head model when neither names any). The stills show the
+scene from above with the listener of the moment, the level there, how long the sound
+takes to arrive and T30 at mid frequencies, and say how the sound was made.
 
     acoustic-spaces demo scene.yaml              # every step, into demo/ beside the scene
     acoustic-spaces demo scene.yaml feeds        # one step
     acoustic-spaces demo scene.yaml --hrtf me.sofa --seconds 15 --tour front,back
+    acoustic-spaces demo scene.yaml --input talker=other_take.wav
 
 The editor runs it from **Simulation > Run demo…** as *This scene*. The video needs
 ffmpeg on the PATH and Pillow (the ``viz`` extra). The five demos of the examples are
@@ -29,7 +30,15 @@ import functools
 import sys
 from pathlib import Path
 
-from acoustic_spaces.demos import SIMULATE, Demo, Option, Step, common_options, pipeline
+from acoustic_spaces.demos import (
+    SIMULATE,
+    Demo,
+    Option,
+    Step,
+    common_options,
+    input_option,
+    pipeline,
+)
 from acoustic_spaces.demos.audio import gated_rms, mono, read, resampled, write
 from acoustic_spaces.i18n import N_
 from acoustic_spaces.scene import Scene
@@ -54,26 +63,55 @@ def work_of(args: argparse.Namespace) -> Path:
 
 
 @functools.lru_cache(maxsize=8)
-def _scene_hrtf(path: str, _changed: int) -> Path | None:
-    """The HRTFs the binaural output of the scene at ``path`` names, or None (a scene
-    that cannot be read names none: :func:`problems` says why)."""
+def _scene_at(path: str, _changed: int) -> Scene | None:
+    """The scene at ``path`` as it is now (``_changed``, its time of change, keeps the
+    cache fresh), or None when it cannot be read: :func:`problems` says why."""
     try:
-        scene = Scene.from_yaml(path)
+        return Scene.from_yaml(path)
     except Exception:
         return None
-    return next((o.hrtf for o in scene.outputs if o.format == "binaural" and o.hrtf), None)
+
+
+def _current(scene: str | Path | None) -> Scene | None:
+    if not scene or not Path(scene).exists():
+        return None
+    return _scene_at(str(Path(scene).resolve()), Path(scene).stat().st_mtime_ns)
+
+
+def _scene_hrtf(scene: str | Path | None) -> Path | None:
+    """The HRTFs the binaural output of the scene names, or None."""
+    found = _current(scene)
+    if found is None:
+        return None
+    return next((o.hrtf for o in found.outputs if o.format == "binaural" and o.hrtf), None)
+
+
+def plays(args: argparse.Namespace) -> dict[str, str]:
+    """Every source in use and what it plays: the name of its signal, or silent."""
+    found = _current(getattr(args, "scene", None))
+    if found is None:
+        return {}
+    return {
+        s.name: (s.signal.name if s.signal is not None else "silent")
+        for s in found.sources
+        if s.in_use
+    }
+
+
+def signals_of(args: argparse.Namespace, scene: Scene) -> dict[str, Path | None]:
+    """What each source in use plays: the file ``--input`` gives it, else its signal
+    (None: silent)."""
+    inputs = getattr(args, "inputs", None) or {}
+    return {s.name: inputs.get(s.name, s.signal) for s in scene.sources if s.in_use}
 
 
 def completed(args: argparse.Namespace) -> argparse.Namespace:
     """The arguments with the scene's own HRTFs when ``--hrtf`` names none and the
     mixes are binaural: a scene whose binaural output names a SOFA file is heard through
     it, as its simulation is."""
-    scene = getattr(args, "scene", None)
     if getattr(args, "hrtf", None) or getattr(args, "format", "binaural") != "binaural":
         return args
-    if not scene or not Path(scene).exists():
-        return args
-    hrtf = _scene_hrtf(str(Path(scene).resolve()), Path(scene).stat().st_mtime_ns)
+    hrtf = _scene_hrtf(getattr(args, "scene", None))
     if hrtf is not None:
         args.hrtf = hrtf
     return args
@@ -98,25 +136,26 @@ def responses_of(args: argparse.Namespace) -> list[dict]:
 
 def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     """A scene is needed, it must be there, and a source of it must play a WAV file
-    that is there."""
+    that is there (its signal, or the one ``--input`` gives it)."""
     if not getattr(args, "scene", None):
         return "give the scene to demo (--scene)"
-    path = Path(demo.resolved(args).scene)
+    resolved = demo.resolved(args)
+    path = Path(resolved.scene)
     if not path.exists():
         return f"no {path}"
     try:
         scene = Scene.from_yaml(path)
     except Exception as exc:  # the scene's own message
         return f"{path.name}: {exc}"
-    sources = [s for s in scene.sources if s.in_use and s.signal is not None]
-    if not sources:
+    signals = {k: v for k, v in signals_of(resolved, scene).items() if v is not None}
+    if not signals:
         return (
             "no source plays anything: give one a WAV file (Plays on its page in the "
-            "editor, signal: in the scene file)"
+            "editor, signal: in the scene file, or --input SOURCE=WAV)"
         )
-    for source in sources:
-        if not source.signal.exists():
-            return f"{source.name} plays {source.signal}, which is not there"
+    for name, signal in signals.items():
+        if not Path(signal).exists():
+            return f"{name} plays {signal}, which is not there"
     return None
 
 
@@ -131,48 +170,55 @@ def feeds_table(args: argparse.Namespace) -> dict:
 
 
 def feeds_done(args: argparse.Namespace) -> bool:
-    """Whether the feeds are there and newer than the scene and the signals."""
+    """Whether the feeds are there, play what the scene and ``--input`` ask for, and are
+    newer than the scene and the files they play."""
     path = work_of(args) / "feeds" / FEEDS
     if not path.exists():
         return False
     made = path.stat().st_mtime
     table = pipeline.read_json(path)
-    files = [Path(args.scene), *(Path(v["signal"]) for v in table["sources"].values())]
+    scene = _current(args.scene)
+    if scene is None:
+        return False
+    wanted = {k: str(v) for k, v in signals_of(args, scene).items() if v is not None}
+    if wanted != {k: v["signal"] for k, v in table["sources"].items()}:
+        return False
+    files = [Path(args.scene), *(Path(v) for v in wanted.values())]
     return all(not f.exists() or f.stat().st_mtime <= made for f in files)
 
 
 def feeds(args: argparse.Namespace) -> None:
-    """One WAV per source that plays: its signal, mono, at the scene's sample rate and at
-    one gated RMS (FEED_RMS), so that ``auralize`` sets the balance from the sources'
-    sound powers; sources without a signal are listed as silent."""
+    """One WAV per source that plays: its signal (or what ``--input`` gives it), mono,
+    at the scene's sample rate and at one gated RMS (FEED_RMS), so that ``auralize`` sets
+    the balance from the sources' sound powers; sources without one are listed as
+    silent."""
     scene = scene_of(args)
     rate = scene.simulation.sample_rate
     out = work_of(args) / "feeds"
     table: dict[str, dict] = {}
     silent: list[str] = []
     length = 0
-    for source in scene.sources:
-        if not source.in_use:
+    for name, signal in signals_of(args, scene).items():
+        if signal is None:
+            silent.append(name)
             continue
-        if source.signal is None:
-            silent.append(source.name)
-            continue
-        if not source.signal.exists():
-            raise SystemExit(f"error: {source.name} plays {source.signal}, which is not there")
-        x, r = read(source.signal)
+        signal = Path(signal)
+        if not signal.exists():
+            raise SystemExit(f"error: {name} plays {signal}, which is not there")
+        x, r = read(signal)
         x = resampled(mono(x), r, rate)
         rms = gated_rms(x, rate)
         if rms <= 0.0:
-            raise SystemExit(f"error: {source.signal} is silent")
+            raise SystemExit(f"error: {signal} is silent")
         x = x * (FEED_RMS / rms)
-        write(out / f"{source.name}.wav", x, rate)
+        write(out / f"{name}.wav", x, rate)
         length = max(length, len(x))
-        table[source.name] = {"signal": str(source.signal), "length_s": len(x) / rate}
-        print(f"{source.name:>20}: {source.signal.name} ({len(x) / rate:.1f} s)")
+        table[name] = {"signal": str(signal), "length_s": len(x) / rate}
+        print(f"{name:>20}: {signal.name} ({len(x) / rate:.1f} s)")
     if not table:
         raise SystemExit(
-            f"error: no source of {args.scene} plays anything; give each a WAV file: Plays on "
-            "the source's page in the editor, or signal: in the scene file"
+            f"error: no source of {args.scene} plays anything; give one a WAV file: Plays on "
+            "the source's page in the editor, signal: in the scene file, or --input SOURCE=WAV"
         )
     for name in silent:
         print(f"{name:>20}: silent (no signal)")
@@ -342,6 +388,12 @@ DEMO = Demo(
             None,
             "folder",
         ),
+        dataclasses.replace(
+            input_option(("feeds",)),
+            help="a WAV file a source plays instead of its signal (Plays), as SOURCE=WAV, "
+            "once per source, fed as its signal would be (at the source's sound power); a "
+            "silent source may be given one too",
+        ),
         *[
             dataclasses.replace(o, help=HRTF_HELP) if o.name == "hrtf" else o
             for o in common_options()
@@ -355,6 +407,7 @@ DEMO = Demo(
     module="acoustic_spaces.demos.scene_demo",
     work_of=work_of,
     completes=completed,
+    plays=plays,
 )
 
 if __name__ == "__main__":

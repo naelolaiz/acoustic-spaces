@@ -38,9 +38,10 @@ from typing import Any
 from acoustic_spaces.examples import examples_dir
 
 #: The kinds of option, for the parser and for the editor's form: a free text, a choice
-#: from a list, a number, a flag, a file to read, a file the demo writes (``path``) and a
-#: folder.
-KINDS = ("text", "choice", "int", "float", "flag", "file", "path", "folder")
+#: from a list, a number, a flag, a file to read, a file the demo writes (``path``), a
+#: folder, and ``inputs``: a WAV file for each of some sources (``--input NAME=WAV``, as
+#: often as needed), what they play instead of the demo's own recordings.
+KINDS = ("text", "choice", "int", "float", "flag", "file", "path", "folder", "inputs")
 PATH_KINDS = ("file", "path", "folder")
 
 
@@ -51,6 +52,18 @@ def shell_line(argv: Sequence[str]) -> str:
     if sys.platform == "win32":
         return subprocess.list2cmdline(argv)
     return shlex.join(argv)
+
+
+class _Inputs(argparse.Action):
+    """``--input NAME=WAV``, once per source: a dict of source names and files."""
+
+    def __call__(self, parser, namespace, value, option_string=None) -> None:
+        name, sep, file = str(value).partition("=")
+        if not sep or not name.strip() or not file.strip():
+            parser.error(f"{option_string} takes SOURCE=WAV, not {value!r}")
+        inputs = dict(getattr(namespace, self.dest, None) or {})
+        inputs[name.strip()] = Path(file.strip())
+        setattr(namespace, self.dest, inputs)
 
 
 @dataclass(frozen=True)
@@ -90,6 +103,16 @@ class Option:
         if self.kind == "flag":
             parser.add_argument(self.option, dest=self.name, action="store_true", help=self.help)
             return
+        if self.kind == "inputs":
+            parser.add_argument(
+                self.option,
+                dest=self.name,
+                action=_Inputs,
+                default=None,
+                metavar="SOURCE=WAV",
+                help=self.description,
+            )
+            return
         kwargs: dict[str, Any] = {
             "dest": self.name,
             "default": self.default,
@@ -115,6 +138,22 @@ class Step:
     help: str
     #: Whether ``all`` may leave the step out (its result is there already).
     done: Callable[[argparse.Namespace], bool] | None = None
+
+
+def input_option(steps: tuple[str, ...] = ("render",)) -> Option:
+    """``--input SOURCE=WAV``: what a source plays instead of the demo's own recording,
+    for the steps that read the feeds. The demo's :attr:`Demo.plays` lists the sources."""
+    return Option(
+        "inputs",
+        "a WAV file a source plays instead of the demo's own recording, as SOURCE=WAV, once "
+        "per source: mixed down to mono, brought to the gated RMS of the feed it replaces "
+        "and cut or padded with silence to its length, so the demo's balance and tour hold",
+        None,
+        "inputs",
+        steps,
+        flag="--input",
+        filter="WAV files (*.wav)",
+    )
 
 
 #: The simulation, run by the framework: ``acoustic-spaces simulate`` on each scene the
@@ -178,6 +217,10 @@ class Demo:
     #: Fills in what the arguments leave to the scene (paths resolved): the demo of any
     #: scene takes the HRTFs its binaural output names when ``--hrtf`` gives none.
     completes: Callable[[argparse.Namespace], argparse.Namespace] | None = None
+    #: The sources the demo feeds and what each plays by default (``{"subs": "Spicy Funk
+    #: Cake, both channels"}``), from the arguments (paths resolved): the rows of the
+    #: editor's map of inputs, and the names ``--input`` takes.
+    plays: Callable[[argparse.Namespace], dict[str, str]] | None = None
     _folder: Path | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -235,6 +278,16 @@ class Demo:
         for option in self.options:
             value = getattr(args, option.name, option.default) if args is not None else None
             if value is None or value == option.default:
+                continue
+            if option.kind == "inputs":
+                for name, file in value.items():
+                    if names_only:
+                        shown = Path(file).name
+                    elif relative_to is not None:
+                        shown = _relative(Path(file), relative_to)
+                    else:
+                        shown = str(file)
+                    argv += [option.option, f"{name}={shown}"]
                 continue
             if option.kind in PATH_KINDS and option.default is not None:
                 if Path(value) == self.folder / option.default:  # the default, resolved
@@ -311,6 +364,11 @@ class Demo:
             if option.kind in PATH_KINDS and value is not None:
                 path = Path(value)
                 values[option.name] = path if path.is_absolute() else self.folder / path
+            elif option.kind == "inputs" and value:
+                values[option.name] = {
+                    name: Path(f) if Path(f).is_absolute() else self.folder / f
+                    for name, f in value.items()
+                }
         resolved = argparse.Namespace(**values)
         return self.completes(resolved) if self.completes is not None else resolved
 
@@ -318,6 +376,14 @@ class Demo:
         """What is wrong with the arguments, or None."""
         if getattr(args, "hrtf", None) and getattr(args, "format", "binaural") != "binaural":
             return "--hrtf is for binaural mixes"
+        inputs = getattr(self.resolved(args), "inputs", None) or {}
+        if inputs and self.plays is not None:
+            fed = self.plays(self.resolved(args))
+            for name, file in inputs.items():
+                if name not in fed:
+                    return f"--input {name}: no such source plays here; it has {', '.join(fed)}"
+                if not Path(file).is_file():
+                    return f"--input {name}: no {file}"
         if self.problems is not None:
             return self.problems(self, args)
         return None
@@ -449,6 +515,7 @@ __all__ = [
     "Option",
     "Step",
     "common_options",
+    "input_option",
     "demo_for",
     "list_demos",
     "load",

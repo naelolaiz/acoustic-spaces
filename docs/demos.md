@@ -41,12 +41,26 @@ exist, `--work FOLDER` puts everything somewhere else, and `--no-mp4` writes the
 and the stills without calling ffmpeg. Where a step needs an earlier one, it says which
 command to run.
 
+`--input SOURCE=WAV`, once for each source, has a source play a recording of yours
+instead of what the demo gives it: `python lakeside_demo.py render --input
+subs=bass.wav`, or a singer of the choir (`--input singer_f1=take.wav`), a player of the
+orchestra (`--input fl1=flute.wav`, in every movement), any source of the stadium. The
+file is mixed down to mono, brought to the gated RMS of the feed it replaces, so the
+source plays as loud as the demo has it, and cut or padded with silence to that feed's
+length, so the tour's times hold; a name the demo has no source for is refused with
+the list of them. The mixes are made again when the inputs change. The credit line on
+the stills names the files that replaced a recording (and only them when every source
+has one); the captions go on describing the demo's own music. The walk through the
+gallery takes `--input guide=talk.wav`, played as it is: the video's one gain sets how
+loud it is heard, and the captions' level and STI stay the scene's voice.
+
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demo,
 reading the open scene where it would read the example's. Pick the demo and the step,
 fill in the options (they start at the same defaults the command line uses), and it
 runs in the background with its messages in the **Messages** panel, **Cancel** stopping
-it. The window shows the command line it is about to run, so a run started there can be
+it. The sources are a table, each with what it plays and the file it plays instead:
+**Choose WAV…** gives the selected one a file, **Default** takes it back. The window shows the command line it is about to run, so a run started there can be
 repeated in a terminal or a script. A demo reads the scene from its file, so a scene
 with changes is saved first.
 
@@ -83,7 +97,9 @@ acoustic-spaces demo scene.yaml --seconds 15 --tour front,back --hrtf me.sofa
   brought to the same gated RMS (unweighted), so that how loud each plays
   against the others is its sound power in the scene (`level_db`, with its feed's gain
   and equalizer), as the simulation says, and not how loud the recording happens to
-  be. Sources without a `signal` stay silent and are listed as such.
+  be. Sources without a `signal` stay silent and are listed as such. `--input
+  SOURCE=WAV` plays another file instead of a source's signal, without changing the
+  scene, and gives a silent source one.
 - **simulate**: `acoustic-spaces simulate` on the scene, its binaural output through the
   HRTFs the scene's binaural output names, `--hrtf` instead, or the spherical head
   model when neither names any. A scene changed since its results is simulated again.

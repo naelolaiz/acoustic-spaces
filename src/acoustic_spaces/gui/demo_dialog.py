@@ -7,7 +7,8 @@ video. A scene of an example that comes with a demo (:mod:`acoustic_spaces.demos
 a copy of one, also has that demo, with its own recordings, reading the open scene. The
 form is built from the demo's own options, so the editor and the command line run
 exactly the same thing; the line at the bottom shows that command, to run again or to
-put in a script.
+put in a script. A demo whose sources can play files of the user's (``--input``) lists
+them in a table, each with what it plays and the WAV file it plays instead.
 """
 
 from __future__ import annotations
@@ -16,8 +17,9 @@ import argparse
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -25,9 +27,12 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -188,10 +193,151 @@ class PathField(QWidget):
             self.edit.setText(chosen)
 
 
+class InputsField(QWidget):
+    """The field of ``--input``: a row for each source the demo feeds (:attr:`Demo.plays`,
+    which :meth:`set_sources` gives), with what it plays and the WAV file it plays
+    instead, typed or chosen with Choose WAV…; Default empties it again."""
+
+    #: A file was typed, chosen or taken back.
+    changed = Signal()
+    SOURCE, PLAYS, FILE = range(3)
+
+    def __init__(self, option: Option, tip: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.option = option
+        self.inputs: dict[str, Path] = {}
+        self.plays: dict[str, str] = {}
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.table = QTableWidget(0, 3)
+        self.table.setToolTip(tip)
+        heads = (
+            (_("Source"), _("The source, as the scene names it")),
+            (_("Plays"), _("What the source plays in the demo, unless a file is given")),
+            (
+                _("Instead"),
+                _(
+                    "The WAV file the source plays instead (--input SOURCE=WAV); empty: what "
+                    "Plays says. The table's tip says how loud it plays"
+                ),
+            ),
+        )
+        for column, (text, head_tip) in enumerate(heads):
+            item = QTableWidgetItem(text)
+            item.setToolTip(head_tip)
+            self.table.setHorizontalHeaderItem(column, item)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(
+            self.FILE, QHeaderView.ResizeMode.Stretch
+        )
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.itemChanged.connect(self._typed)
+        self.table.itemSelectionChanged.connect(self._selected)
+        layout.addWidget(self.table)
+        row = QHBoxLayout()
+        self.choose = QPushButton(_("Choose WAV…"))
+        self.choose.setToolTip(_("Choose the WAV file the selected source plays instead"))
+        self.choose.clicked.connect(self._choose)
+        self.default = QPushButton(_("Default"))
+        self.default.setToolTip(_("The selected source plays what Plays says again"))
+        self.default.clicked.connect(self._default)
+        row.addWidget(self.choose)
+        row.addWidget(self.default)
+        row.addStretch(1)
+        layout.addLayout(row)
+        self._selected()
+
+    def set_sources(self, plays: dict[str, str]) -> None:
+        """The rows: each source and what it plays. A file given to a source no longer
+        listed is dropped."""
+        if plays == self.plays and self.table.rowCount() == len(plays):
+            return
+        self.plays = dict(plays)
+        self.inputs = {name: file for name, file in self.inputs.items() if name in plays}
+        self.table.blockSignals(True)
+        self.table.setRowCount(len(plays))
+        for row, (name, what) in enumerate(plays.items()):
+            for column, text in ((self.SOURCE, name), (self.PLAYS, what)):
+                item = QTableWidgetItem(text)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, column, item)
+            file = self.inputs.get(name)
+            self.table.setItem(row, self.FILE, QTableWidgetItem("" if file is None else str(file)))
+        self.table.resizeColumnToContents(self.SOURCE)
+        self.table.resizeColumnToContents(self.PLAYS)
+        self.table.blockSignals(False)
+        # As tall as its rows, up to about eight; a long list scrolls.
+        rows = sum(self.table.rowHeight(r) for r in range(min(len(plays), 8)))
+        self.table.setFixedHeight(
+            self.table.horizontalHeader().height() + rows + 2 * self.table.frameWidth()
+        )
+        self._selected()
+
+    def value(self) -> dict[str, Path] | None:
+        return dict(self.inputs) or None
+
+    def set_value(self, value) -> None:
+        self.inputs = {str(name): Path(file) for name, file in (value or {}).items()}
+        self.table.blockSignals(True)
+        for row in range(self.table.rowCount()):
+            file = self.inputs.get(self.table.item(row, self.SOURCE).text())
+            self.table.item(row, self.FILE).setText("" if file is None else str(file))
+        self.table.blockSignals(False)
+        self._selected()
+
+    def _source(self) -> str | None:
+        row = self.table.currentRow()
+        if row < 0 or not self.table.item(row, self.SOURCE).isSelected():
+            return None
+        return self.table.item(row, self.SOURCE).text()
+
+    def _selected(self) -> None:
+        name = self._source()
+        self.choose.setEnabled(name is not None)
+        self.default.setEnabled(name is not None and name in self.inputs)
+
+    def _set(self, name: str, file: Path | None) -> None:
+        if file is None:
+            self.inputs.pop(name, None)
+        else:
+            self.inputs[name] = file
+        self.set_value(self.inputs)
+        self.changed.emit()
+
+    def _typed(self, item: QTableWidgetItem) -> None:
+        if item.column() != self.FILE:
+            return
+        text = item.text().strip()
+        self._set(self.table.item(item.row(), self.SOURCE).text(), Path(text) if text else None)
+
+    def _choose(self) -> None:
+        name = self._source()
+        if name is None:
+            return
+        start = str(self.inputs.get(name) or Path.home())
+        chosen, _filter = QFileDialog.getOpenFileName(
+            self,
+            _("WAV file for {source}").format(source=name),
+            start,
+            self.option.filter or _("All files (*)"),
+        )
+        if chosen:
+            self._set(name, Path(chosen))
+
+    def _default(self) -> None:
+        name = self._source()
+        if name is not None:
+            self._set(name, None)
+
+
 def field_for(option: Option, tip: str) -> QWidget:
     """The widget that asks for ``option``: a tick for a flag, a list for a choice, a
-    spin box for a number, a path with a Browse… button for a file or a folder, and a
-    text field for the rest (empty where the demo takes none)."""
+    spin box for a number, a path with a Browse… button for a file or a folder, a table
+    of the sources for ``--input``, and a text field for the rest (empty where the demo
+    takes none)."""
+    if option.kind == "inputs":
+        return InputsField(option, tip)
     if option.kind in ("file", "path", "folder"):
         return PathField(option, tip, sets=option.name == "hrtf")
     if option.kind == "flag":
@@ -221,7 +367,7 @@ def field_for(option: Option, tip: str) -> QWidget:
 def value_of(option: Option, widget: QWidget):
     """What the field holds, in the type the demo's step expects (None where it is
     empty: the demo is given no such option)."""
-    if isinstance(widget, PathField):
+    if isinstance(widget, (PathField, InputsField)):
         return widget.value()
     if isinstance(widget, QCheckBox):
         return widget.isChecked()
@@ -372,7 +518,7 @@ class DemoDialog(QDialog):
         for option in demo.options:
             tip = option.description
             widget = field_for(option, tip)
-            if isinstance(widget, PathField):
+            if isinstance(widget, (PathField, InputsField)):
                 widget.set_value(getattr(args, option.name))
                 widget.changed.connect(self._refresh)
             elif isinstance(widget, QLineEdit):
@@ -404,6 +550,10 @@ class DemoDialog(QDialog):
         else:
             self.about_step.setText(f"{step}: {demo.step(step).help}.")
         args = self.arguments()
+        for widget in self.fields.values():
+            if isinstance(widget, InputsField):
+                widget.set_sources(self._plays(demo, args))
+                args = self.arguments()
         self.command.setText(demo.command(step, args))
         self.folder.setText(_("Runs in {folder}").format(folder=demo.folder))
         problem = demo.check(args)
@@ -411,6 +561,17 @@ class DemoDialog(QDialog):
             problem = _("save the scene first (File > Save): the demo reads it from its file")
         self.problem.setText(_("Cannot run: {reason}").format(reason=problem) if problem else "")
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(problem is None)
+
+    @staticmethod
+    def _plays(demo: Demo, args: argparse.Namespace) -> dict[str, str]:
+        """The sources ``demo`` feeds with ``args`` and what each plays; none when it
+        cannot tell (a scene that cannot be read: the line under the form says why)."""
+        if demo.plays is None:
+            return {}
+        try:
+            return demo.plays(demo.resolved(args))
+        except Exception:
+            return {}
 
     # -- what OK asked for ----------------------------------------------------------
 
@@ -431,6 +592,7 @@ class DemoDialog(QDialog):
 __all__ = [
     "ALL",
     "DemoDialog",
+    "InputsField",
     "PathField",
     "demos_for",
     "field_for",

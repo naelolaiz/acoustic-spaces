@@ -349,6 +349,11 @@ def test_church_demo_scene_and_organ(tmp_path: Path) -> None:
     weights = {source["name"]: source["level_db"] for source in demo.scene_of(args)["sources"]}
     assert weights[f"singer_{demo.SINGERS[0]}"] == demo.SINGER_DB
     assert weights["organ_pedal_c"] == demo.PEDAL_DB
+    # --input takes the names of the scene's sources, as the editor's table lists them.
+    plays = demo.plays(args)
+    assert list(plays) == names
+    assert plays["singer_f5"] == "VocalSet singer f5 (mezzo-soprano), verses 2 and 3"
+    assert plays["organ_pedal_cis"] == "the organ's pedal, C# side, verses 1 and 3"
 
 
 def test_church_demo_tunes_and_times_a_take() -> None:
@@ -415,6 +420,15 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     assert roles["subs"] == "mono" and roles["vocal_wedges"] == "singer"
     assert roles["drum_fill"] == "drummer" and roles["side_fill_left"] == "stage"
     assert all(roles[name] == name for name in demo.BAND)
+    # --input takes the names of the scene's sources, before band writes it too.
+    plays = demo.plays(args)
+    assert list(plays) == list(sources)
+    assert (
+        plays["main_left"] == "spicy_funk_cake, the master's right channel, on the audience's right"
+    )
+    assert plays["drum_kit"] == "spicy_funk_cake, the drums stem"
+    before = argparse.Namespace(**vars(args) | {"scene": folder / "not_yet.yaml"})
+    assert demo.plays(before) == plays
     # Every song has the stems the band and the monitor mixes lean on; the mixes name
     # no stem that none of the songs has.
     stems = {name: set(song["stems"]) for name, song in demo.SONGS.items()}
@@ -486,6 +500,8 @@ def test_orchestra_demo_tour(tmp_path: Path) -> None:
     scene = yaml.safe_load(example_path("orchestra").read_text(encoding="utf-8"))
     assert {source["name"] for source in scene["sources"]} == set(demo.TRACKS)
     assert len(set(demo.TRACKS.values())) == len(demo.TRACKS)
+    plays = demo.plays(demo.DEMO.defaults())
+    assert set(plays) == set(demo.TRACKS) and plays["fl1"] == "01_Fl_1.wav of each movement"
     assert {seat for _, seats in demo.TOUR for seat in seats} == set(demo.TITLES)
     assert {seat["name"] for seat in scene["listeners"]} == set(demo.TITLES)
     # A movement of 30 s, quiet from 14 to 16 s: two seats cut there, not at 15.
@@ -646,6 +662,11 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
         assert names.count(demo.UPWIND["name"]) == 1 and set(demo.TITLES) == set(names)
         assert room.scene.simulation.ir_length_s == demo.IR_LENGTH_S
     assert evening.scene.atmosphere is not None and still.scene.atmosphere is None
+    assert demo.plays(args) == {
+        "main_left": "spicy_funk_cake, left channel",
+        "main_right": "spicy_funk_cake, right channel",
+        "subs": "spicy_funk_cake, both channels in mono",
+    }
     # The tour: 8 bars a stop, the last one --last-phrases long.
     work = tmp_path / "demo"
     (work / "music").mkdir(parents=True)
@@ -742,6 +763,24 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path) -> None:
         demo.cuts(short, room)
     with pytest.raises(SystemExit, match="run first"):
         demo.talk(argparse.Namespace(**vars(args) | {"talker": "F9"}))
+    # --input guide=WAV: the guide says that file; no talk to download, its name in the
+    # credit and in the refusal, and what the walk and the turn made from another is
+    # made again (walk.json from before "plays" was kept said the talk of its talker).
+    assert demo.plays(args) == {"guide": f"the talk of ACE talker {args.talker}"}
+    assert {s.name for s in room.scene.sources} >= set(demo.plays(args))
+    mine = tmp_path / "mine.wav"
+    write_wav(mine, talk[: int(0.5 * length * rate)], rate)
+    given = argparse.Namespace(**vars(args) | {"talker": "F9", "inputs": {"guide": mine}})
+    assert demo.speech_done(given) and demo.talk(given)[1] == rate
+    assert demo.credit_of(given) == "Playing guide: mine.wav"
+    assert demo.credit_of(args).startswith("Speech: ACE challenge corpus, talker M4")
+    with pytest.raises(SystemExit, match="mine.wav is .* too short"):
+        demo.cuts(given, room)
+    (args.work / "walk").mkdir()
+    pipeline.write_json(args.work / "walk" / demo.WALK, {"talker": args.talker})
+    assert demo.part_done(args, "walk", demo.WALK)
+    assert not demo.part_done(given, "walk", demo.WALK)
+    assert not demo.part_done(args, "turn", demo.TURNING)
 
 
 def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
@@ -813,3 +852,33 @@ def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
     assert not late["sight"]
     for picture in (drawing.frame(0.0), drawing.frame(20.0), drawing.thumbnail()):
         assert picture.getbbox() is not None
+
+
+# --------------------------------------------------------------------------- the demo code
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        *sorted(EXAMPLES.glob("*/*_demo.py")),
+        Path(__file__).resolve().parent.parent / "src/acoustic_spaces/demos/scene_demo.py",
+    ],
+    ids=lambda p: p.name,
+)
+def test_a_demo_reads_only_options_it_has(path: Path) -> None:
+    """Every ``args.NAME`` a demo reads is one of its options: one it does not declare
+    fails only when the step that reads it runs."""
+    import ast
+
+    from acoustic_spaces.demos.scene_demo import DEMO as SCENE_DEMO
+
+    demo = SCENE_DEMO if path.name == "scene_demo.py" else load(path)
+    have = set(vars(demo.defaults()))
+    used = {
+        node.attr
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "args"
+    }
+    assert sorted(used - have) == []

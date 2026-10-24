@@ -1409,7 +1409,7 @@ msgstr ""
 "fonts imatge, cua reverberant per traçat de raigs estocàstic i respostes "
 "impulsionals binaurals, Ambisonics i d'altaveus."
 
-#: acoustic_spaces/gui/app.py acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
 msgid "Source"
 msgstr "Font"
 
@@ -1448,6 +1448,51 @@ msgstr "Carpeta per a {option}"
 #, python-brace-format
 msgid "File for {option}"
 msgstr "Fitxer per a {option}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The source, as the scene names it"
+msgstr "La font, tal com l'anomena l'escena"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Plays"
+msgstr "Reprodueix"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "What the source plays in the demo, unless a file is given"
+msgstr "El que reprodueix la font a la demostració, si no se li dona un fitxer"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Instead"
+msgstr "En lloc seu"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"The WAV file the source plays instead (--input SOURCE=WAV); empty: what "
+"Plays says. The table's tip says how loud it plays"
+msgstr ""
+"El fitxer WAV que la font reprodueix en lloc seu (--input SOURCE=WAV); buit: "
+"el que diu Reprodueix. El consell de la taula diu com de fort sona"
+
+#: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
+msgid "Choose WAV…"
+msgstr "Tria un WAV…"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Choose the WAV file the selected source plays instead"
+msgstr "Trieu el fitxer WAV que la font seleccionada reprodueix en lloc seu"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Default"
+msgstr "Per defecte"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "The selected source plays what Plays says again"
+msgstr "La font seleccionada torna a reproduir el que diu Reprodueix"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "WAV file for {source}"
+msgstr "Fitxer WAV per a {source}"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Run demo"
@@ -4025,10 +4070,6 @@ msgstr ""
 "respostes es retarden en la mateixa mesura"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Choose WAV…"
-msgstr "Tria un WAV…"
-
-#: acoustic_spaces/gui/inspector.py
 msgid ""
 "Pick the WAV file the source plays in a demo of the scene: a dry recording"
 msgstr ""
@@ -4113,10 +4154,6 @@ msgstr "Equalitzador"
 #: acoustic_spaces/gui/inspector.py
 msgid "Delay"
 msgstr "Retard"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Plays"
-msgstr "Reprodueix"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Remove source"
