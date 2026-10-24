@@ -1,8 +1,7 @@
 """Stills for lakeside_demo.py's video: the lake from above with the wind, the listener
 of the moment and the other places, a slice through the scene along the wind with the
 sound's rays bending in the evening's weather (or going straight in still air), and
-the tour. Needs Pillow (which the viz extra brings); Inter is used when installed, else
-DejaVu Sans.
+the tour. The frame round them comes from :mod:`acoustic_spaces.demos.pictures`.
 
 The rays are drawn from the scene's own weathers: each one's effective speed of sound
 along the slice (its temperature profile, and its wind's profile along the slice
@@ -18,14 +17,41 @@ from pathlib import Path
 
 import numpy as np
 import yaml
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter
 
-BG = (13, 17, 28)
-PANEL = (21, 27, 42)
-LINE = (58, 68, 92)
-TEXT = (232, 236, 244)
-MUTED = (148, 158, 182)
-FAINT = (96, 106, 132)
+from acoustic_spaces.demos.pictures import (
+    BG,
+    FAINT,
+    LISTENER,
+    MARGIN,
+    MUTED,
+    PA,
+    SIZE,
+    TEXT,
+    THUMBNAIL,
+    Plan,
+    arrow,
+    axes,
+    badge,
+    canvas,
+    cone,
+    facing,
+    facts,
+    font,
+    footer,
+    glow,
+    head,
+    heading,
+    place,
+    ring,
+    save,
+    scale_bar,
+    text,
+    thumbnail_badge,
+    tool_line,
+    tour_column,
+)
+
 LAWN = (31, 54, 40)
 GARDEN = (38, 58, 40)
 WATER = (24, 52, 86)
@@ -33,85 +59,17 @@ WATER_EDGE = (52, 98, 150)
 HOUSE = (110, 96, 84)
 HOUSE_EDGE = (170, 150, 128)
 STAGE = (78, 58, 42)
-PA = (255, 166, 77)
-LISTENER = (102, 217, 239)
 WIND = (76, 201, 240)
 COOL = (60, 120, 200)
 STILL = (190, 196, 210)
 
-#: Where make_video draws the spectrogram: left, top, width, height.
-SPECTRUM_BOX = (100, 892, 1720, 96)
+
 #: How much taller than wide the slice is drawn.
 EXAGGERATION = 5.0
 #: The angles (degrees above the horizontal) of the rays drawn each way from the stage.
 FAN = np.arange(-6.0, 12.01, 1.0)
 #: Of a ray's strength, what each bounce leaves: on water, and on the lawn.
 BOUNCE = {"water": 0.95, "lawn": 0.3}
-
-_FONTS: dict = {}
-
-
-def font(weight: str, size: int, display: bool = False) -> ImageFont.FreeTypeFont:
-    """Inter (Display for titles) when installed, else DejaVu Sans, else Pillow's own."""
-    key = (weight, size, display)
-    if key not in _FONTS:
-        family = "InterDisplay" if display else "Inter"
-        bold = weight in ("SemiBold", "Bold", "Black")
-        for name in (f"{family}-{weight}.otf", f"{family}-{weight}.ttf"):
-            try:
-                _FONTS[key] = ImageFont.truetype(name, size)
-                break
-            except OSError:
-                continue
-        else:
-            try:
-                _FONTS[key] = ImageFont.truetype(
-                    "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf", size
-                )
-            except OSError:
-                _FONTS[key] = ImageFont.load_default(size)
-    return _FONTS[key]
-
-
-def text(draw, xy, s, f, fill=TEXT, anchor="la") -> None:
-    draw.text(xy, s, font=f, fill=fill, anchor=anchor)
-
-
-def arrow(draw, start, direction, length: float, head: float, colour, width: int) -> None:
-    """A line from ``start`` along the unit vector ``direction``, with a head at its end."""
-    (x, y), (dx, dy) = start, direction
-    tip = (x + dx * length, y + dy * length)
-    base = (tip[0] - dx * head, tip[1] - dy * head)
-    draw.line([(x, y), base], fill=colour, width=width)
-    draw.polygon(
-        [
-            tip,
-            (base[0] - dy * head * 0.6, base[1] + dx * head * 0.6),
-            (base[0] + dy * head * 0.6, base[1] - dx * head * 0.6),
-        ],
-        fill=colour,
-    )
-
-
-def cone(draw, apex, direction, length: float, half_angle: float, rgba) -> None:
-    """A fan from ``apex`` along the unit vector ``direction``, ``half_angle`` degrees to
-    either side: where a loudspeaker aims."""
-    (x, y), (dx, dy) = apex, direction
-    aim = math.atan2(dy, dx)
-    rim = [
-        (x + length * math.cos(aim + math.radians(a)), y + length * math.sin(aim + math.radians(a)))
-        for a in range(-int(half_angle), int(half_angle) + 1, 4)
-    ]
-    draw.polygon([(x, y), *rim], fill=rgba)
-
-
-def glow(img: Image.Image, shapes, blur: float) -> None:
-    """Blurred discs, ``shapes`` as (x, y, radius, rgba), under what comes next."""
-    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(layer)
-    for x, y, r, rgba in shapes:
-        draw.ellipse([x - r, y - r, x + r, y + r], fill=rgba)
-    img.alpha_composite(layer.filter(ImageFilter.GaussianBlur(blur)))
 
 
 def inside(point, polygon) -> bool:
@@ -122,25 +80,6 @@ def inside(point, polygon) -> bool:
         if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
             hit = not hit
     return hit
-
-
-def mmss(t: float) -> str:
-    return f"{int(t // 60)}:{int(t % 60):02d}"
-
-
-class Plan:
-    """Scene x and y to pixels, from above, north (+y) up."""
-
-    def __init__(self, left, top, scale, box):
-        self.left, self.top, self.s = left, top, scale
-        self.x0, self.y0, self.x1, self.y1 = box
-
-    def __call__(self, x: float, y: float) -> tuple[float, float]:
-        return (self.left + (x - self.x0) * self.s, self.top + (self.y1 - y) * self.s)
-
-    @property
-    def size(self) -> tuple[float, float]:
-        return (self.x1 - self.x0) * self.s, (self.y1 - self.y0) * self.s
 
 
 class Slice:
@@ -252,7 +191,15 @@ def rays(weather: Weather, start, extent, sky, water, step: float = 1.0):
 
 class Pictures:
     def __init__(
-        self, scenes: dict, seats, tour, titles, gains, credit: str, folder: Path | None = None
+        self,
+        scenes: dict,
+        seats,
+        tour,
+        titles,
+        gains,
+        credit: str,
+        folder: Path | None = None,
+        hrtf: str | Path | None = None,
     ):
         self.scenes, self.seats, self.tour, self.titles, self.gains = (
             scenes,
@@ -293,13 +240,11 @@ class Pictures:
             )
             for w in scenes
         }
-        early = scene.get("simulation", {}).get("early", {})
-        order = early.get("max_order")
-        self.tool = (
-            "Simulated with acoustic_spaces (lakeside_concert example): "
-            + (f"image sources to order {order}, " if order else "")
-            + "bent rays for the late sound in the scene's wind and temperature, binaural "
-            "through a spherical head"
+        self.tool = tool_line(
+            "lakeside_concert",
+            scene,
+            late="bent rays for the late sound in the scene's wind and temperature",
+            hrtf=hrtf,
         )
 
     def title(self, listener: str) -> tuple[str, str]:
@@ -406,7 +351,7 @@ class Pictures:
         for source in self.sources:
             x, y = source["position"][:2]
             px, py = plan(x, y)
-            fx, fy = self.facing(source)
+            fx, fy = facing(source)
             qx, qy = plan(x + fx, y + fy)
             direction = (qx - px, qy - py)
             if self.is_sub(source):
@@ -443,21 +388,15 @@ class Pictures:
             loaded = yaml.safe_load(handle)
         return loaded if isinstance(loaded, dict) else {}
 
-    @staticmethod
-    def facing(item: dict) -> tuple[float, float]:
-        yaw = math.radians(item.get("orientation", {}).get("yaw", 0.0))
-        return math.cos(yaw), math.sin(yaw)
-
     def people(self, img, plan: Plan, current: str) -> None:
         draw = ImageDraw.Draw(img, "RGBA")
         small = font("Medium", 15)
         for name, item in self.listeners.items():
-            px, py = plan(*item["position"][:2])
-            fx, fy = self.facing(item)
             if name == current:
                 continue
-            draw.ellipse([px - 7, py - 7, px + 7, py + 7], outline=MUTED, width=2)
-            arrow(draw, (px + fx * 7, py - fy * 7), (fx, -fy), 12, 6, MUTED, 2)
+            px, py = plan(*item["position"][:2])
+            forward, _ = axes(plan, item)
+            ring(draw, (px, py), forward, 7, 12, 6)
             label = self.title(name)[0]
             x = item["position"][0]
             if math.dist(item["position"][:2], self.stage[:2]) < 60:
@@ -470,39 +409,8 @@ class Pictures:
         px, py = plan(*item["position"][:2])
         sx, sy = plan(*self.stage[:2])
         draw.line([(sx, sy), (px, py)], fill=LISTENER + (120,), width=2)
-        self.head(img, (px, py), self.facing(item), 11)
-
-    def head(self, img, at, facing, r: float) -> None:
-        """The listener: a head with a nose and an arrow the way it faces, and its ears
-        marked L and R."""
-        hx, hy = at
-        glow(img, [(hx, hy, 3 * r, LISTENER + (110,))], r)
-        fx, fy = facing[0], -facing[1]
-        lx, ly = fy, -fx  # the left ear, a quarter turn from the facing (y down)
-        draw = ImageDraw.Draw(img)
-        start = (hx + fx * r, hy + fy * r)
-        arrow(draw, start, (fx, fy), r * 3.4, r * 1.2, BG, 7)
-        arrow(draw, start, (fx, fy), r * 3.2, r * 1.0, LISTENER, 4)
-        draw.ellipse([hx - r, hy - r, hx + r, hy + r], fill=LISTENER, outline=BG, width=2)
-        letters = font("Bold", 15)
-        for side, letter in ((1, "L"), (-1, "R")):
-            draw.text(
-                (hx + lx * r * 2.0 * side, hy + ly * r * 2.0 * side),
-                letter,
-                font=letters,
-                fill=TEXT,
-                anchor="mm",
-                stroke_width=3,
-                stroke_fill=BG,
-            )
-
-    def scale_bar(self, img, plan: Plan) -> None:
-        draw = ImageDraw.Draw(img)
-        x0, y0, _x1, _y1 = self.box
-        left, bottom = plan(x0, y0)
-        bar = 100 * plan.s
-        draw.line([(left + 12, bottom - 14), (left + 12 + bar, bottom - 14)], fill=MUTED, width=3)
-        text(draw, (left + 12 + bar / 2, bottom - 20), "100 m", font("Medium", 15), MUTED, "md")
+        forward, left = axes(plan, item)
+        head(img, (px, py), forward, left, 11, nose=False, ears=False)
 
     # ------------------------------------------------------------------ the slice
 
@@ -659,45 +567,41 @@ class Pictures:
 
     def still(self, k: int) -> Image.Image:
         listener, weather, _start, _stop = self.tour[k]
-        img = Image.new("RGBA", (1920, 1080), BG)
+        img = canvas(SIZE)
         draw = ImageDraw.Draw(img)
-        text(draw, (80, 40), "A concert across a lake, simulated", font("Bold", 50, display=True))
-        subtitle = (
+        heading(
+            draw,
+            "A concert across a lake, simulated",
             "The lakeside concert example on a summer evening, heard binaurally from the "
-            "lawn to the far shore"
+            "lawn to the far shore",
+            y=40,
         )
-        text(draw, (80, 106), subtitle, font("Regular", 26), MUTED)
 
         width = 1120
         scale = width / (self.box[2] - self.box[0])
-        plan = Plan(80, 170, scale, self.box)
+        plan = Plan(MARGIN, 170, scale, self.box)
         self.ground(img, plan, weather)
         self.wind(img, plan, weather)
         self.stage_marks(img, plan)
         self.people(img, plan, listener)
-        self.scale_bar(img, plan)
+        draw = ImageDraw.Draw(img)
+        left, bottom = plan(self.box[0], self.box[1])
+        scale_bar(draw, left + 12, bottom - 14, 100 * plan.s, "100 m")
         _w, h = plan.size
         top = 170 + h + 50
-        draw = ImageDraw.Draw(img)
         caption = "Seen from the side, along the wind (heights ×5): " + (
             "the sound bends down over the cool water, up behind the stage"
             if weather == "evening"
             else "in still air the sound goes straight"
         )
-        text(draw, (80, top - 34), caption, font("SemiBold", 20), MUTED)
-        cut = Slice(80, top, scale, self.box[0], self.box[2], self.sky)
+        text(draw, (MARGIN, top - 34), caption, font("SemiBold", 20), MUTED)
+        cut = Slice(MARGIN, top, scale, self.box[0], self.box[2], self.sky)
         self.slice(img, cut, weather, listener)
 
         x = 1250
         draw = ImageDraw.Draw(img)
-        pill, badge = font("SemiBold", 22), "BINAURAL  ·  USE HEADPHONES"
-        draw.rounded_rectangle(
-            [x, 170, x + draw.textlength(badge, font=pill) + 36, 212], 21, LISTENER
-        )
-        text(draw, (x + 18, 191), badge, pill, BG, "lm")
-        title, where = self.title(listener)
-        text(draw, (x, 236), title, font("Bold", 40, display=True))
-        text(draw, (x, 290), where, font("Regular", 24), MUTED)
+        badge(draw, x, 170, size=22)
+        place(draw, x, 236, *self.title(listener), size=40, where_size=24)
         tag = "This evening's weather" if weather == "evening" else "If the air were still"
         tag_colour = WIND if weather == "evening" else STILL
         tf = font("SemiBold", 20)
@@ -705,41 +609,23 @@ class Pictures:
             [x, 330, x + draw.textlength(tag, font=tf) + 28, 364], 17, outline=tag_colour, width=2
         )
         text(draw, (x + 14, 347), tag, tf, tag_colour, "lm")
-        y = 384
-        for line in self.facts(listener, weather):
-            text(draw, (x, y), line, font("Regular", 21), TEXT)
-            y += 32
-
-        ty = max(y + 24, 590)
-        text(draw, (x, ty), "The tour", font("SemiBold", 21), MUTED)
-        ty += 32
-        row = min(26, (860 - ty) // max(1, len(self.tour)))
-        for j, (name, w, t0, _) in enumerate(self.tour):
-            colour = LISTENER if j == k else (MUTED if j < k else FAINT)
-            weight = "SemiBold" if j == k else "Regular"
-            mark = "▶ " if j == k else "   "
-            label = self.title(name)[0] + (", still air" if w == "still" else "")
-            text(draw, (x, ty), mark + label, font(weight, 18), colour)
-            text(draw, (1840, ty), mmss(t0), font(weight, 18), colour, "ra")
-            ty += row
-
-        draw.rounded_rectangle([80, 885, 1840, 995], 14, PANEL)  # the spectrogram goes here
-        text(draw, (80, 1016), self.credit, font("Regular", 19), MUTED)
-        text(draw, (80, 1046), self.tool, font("Regular", 17), FAINT)
+        y = facts(draw, x, 384, self.facts(listener, weather), size=21, step=32)
+        entries = [
+            (self.title(name)[0] + (", still air" if w == "still" else ""), t0)
+            for name, w, t0, _ in self.tour
+        ]
+        tour_column(draw, x, max(y + 24, 590), entries, k, row=26, size=18)
+        footer(draw, self.credit, self.tool)
         return img
 
     def thumbnail(self) -> Image.Image:
-        img = Image.new("RGBA", (1280, 720), BG)
+        img = canvas(THUMBNAIL)
         scale = 1180 / (self.box[2] - self.box[0])
         self.slice(img, Slice(50, 400, scale, self.box[0], self.box[2], self.sky), "evening", "")
         draw = ImageDraw.Draw(img)
         text(draw, (50, 50), "Concert across a lake,", font("Black", 72, display=True))
         text(draw, (50, 140), "simulated", font("Bold", 56, display=True), MUTED)
-        pill = font("Bold", 30)
-        draw.rounded_rectangle(
-            [50, 230, 94 + draw.textlength("BINAURAL", font=pill), 284], 27, LISTENER
-        )
-        text(draw, (72, 257), "BINAURAL", pill, BG, "lm")
+        thumbnail_badge(draw, 50, 230, size=30)
         text(
             draw,
             (50, 310),
@@ -748,3 +634,6 @@ class Pictures:
             LISTENER,
         )
         return img
+
+
+__all__ = ["Pictures", "Slice", "Weather", "save"]

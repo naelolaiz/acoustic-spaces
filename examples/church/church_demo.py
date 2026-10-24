@@ -13,14 +13,16 @@ PATH:
 
     python church_demo.py music     # download the 19 takes, their notes and the organ samples
     python church_demo.py scene     # scene_choir.yaml: the church with the choir and the organ
-    acoustic-spaces simulate scene_choir.yaml --out results_choir --output binaural
+    python church_demo.py simulate  # acoustic-spaces simulate scene_choir.yaml, binaural
     python church_demo.py feeds     # one WAV per singer and per side of the organ
     python church_demo.py render    # every listener, binaural
     python church_demo.py video     # demo/tour.wav, the stills, demo/tour.mp4
 
-or `python church_demo.py all` once the simulation is done. Everything goes to ./demo
-(--work). Use headphones; `--hrtf me.sofa` on every step and on `simulate` plays through
-your own or measured HRTFs instead of a spherical head.
+or `python church_demo.py all`, which runs them in turn and leaves out what is there
+already (the music, the scene, the simulation). Everything goes to ./demo (--work). Use
+headphones; `--hrtf me.sofa` plays through your own or measured HRTFs instead of a
+spherical head (the simulation takes it too). The editor runs the same steps from
+Simulation > Run demo…
 
 The recordings are not part of acoustic_spaces: `music` downloads them from where their
 authors publish them (about 100 MB; only the needed files are read out of VocalSet's and
@@ -40,27 +42,27 @@ plays loudest (the organ's first verse, each singer's singing), and the scene gi
 sound powers: 88 dB re 1 pW for each singer (a choir singing mezzo forte), 105 dB for
 each side of the organ's manual and 102 dB for each pedal tower; the quiet verse of the
 organ sits 11 dB below its full one inside its feeds.
+
+`video` tours six places over the three verses with 1 s crossfades. Every place keeps
+one gain, so the levels between them are the church's; each mix is shifted earlier by
+the time the sound takes to reach that place, so that the music runs on across a cut.
 """
 
 from __future__ import annotations
 
-import argparse
 import csv
-import io
-import json
 import math
 import re
-import shutil
-import ssl
-import subprocess
 import sys
 import urllib.parse
-import urllib.request
-import zipfile
 from pathlib import Path
 
 import numpy as np
 import yaml
+
+from acoustic_spaces import fetch
+from acoustic_spaces.demos import SIMULATE, Demo, Option, Step, common_options, pipeline, sibling
+from acoustic_spaces.demos.audio import gated_rms, mono, read, resampled, write
 
 # --------------------------------------------------------------------------- sources
 
@@ -210,8 +212,7 @@ TITLES = {
     "in_the_choir": ("In the choir", "in the back row, among the men, facing the nave"),
 }
 CROSSFADE_S = 1.0
-
-CTX = ssl.create_default_context()
+FADE_OUT_S = 2.0
 
 #: Where the recordings come from, and the credit that renders shared need (the singers
 #: are CC BY 4.0), as ``music`` writes it next to them.
@@ -237,51 +238,6 @@ Studios (CC0). License: https://creativecommons.org/licenses/by/4.0/
 
 
 # --------------------------------------------------------------------------- audio
-
-
-def read(path: Path) -> tuple[np.ndarray, int]:
-    from acoustic_spaces.audio import read_wav
-
-    return read_wav(path)
-
-
-def write(path: Path, data: np.ndarray, rate: int) -> None:
-    from acoustic_spaces.audio import write_wav
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write_wav(path, data, rate)
-
-
-def mono(x: np.ndarray) -> np.ndarray:
-    return x if x.ndim == 1 else x.mean(axis=1)
-
-
-def gated_rms(x: np.ndarray, rate: int) -> float:
-    """RMS over the 400 ms blocks that are playing: louder than -70 dBFS and than 20 dB
-    below the mean of those (as loudness meters gate, without the K weighting)."""
-    m = mono(x)
-    block = int(0.4 * rate)
-    n = len(m) // block
-    if n == 0:
-        return float(np.sqrt(np.mean(m**2)))
-    power = (m[: n * block].reshape(n, block) ** 2).mean(axis=1)
-    on = power[power > 1e-7]
-    if on.size == 0:
-        return 0.0
-    on = on[on > on.mean() * 0.01]
-    return float(np.sqrt(on.mean()))
-
-
-def a_weighted(x: np.ndarray, rate: int) -> np.ndarray:
-    """``x`` (samples, channels) through the A weighting (IEC 61672), by FFT."""
-    n = 1 << math.ceil(math.log2(len(x)))
-    f2 = np.fft.rfftfreq(n, 1.0 / rate) ** 2
-    gain = (12194.0**2 * f2**2) / (
-        (f2 + 20.6**2) * np.sqrt((f2 + 107.7**2) * (f2 + 737.9**2)) * (f2 + 12194.0**2)
-    )
-    gain *= 10.0 ** (2.0 / 20.0)
-    rows = np.ascontiguousarray(np.atleast_2d(x.T))
-    return np.fft.irfft(np.fft.rfft(rows, n) * gain, n)[:, : len(x)].T
 
 
 def cubic(x: np.ndarray, t: np.ndarray) -> np.ndarray:
@@ -326,69 +282,6 @@ def wsola(y: np.ndarray, out_times: np.ndarray, src_times: np.ndarray, length: i
 
 
 # --------------------------------------------------------------------------- downloads
-
-
-class RangeFile(io.RawIOBase):
-    """A remote file read by HTTP range requests, so that zipfile can take a few members
-    out of a large archive without downloading it."""
-
-    BLOCK = 4 << 20
-
-    def __init__(self, url: str):
-        self.url, self.pos, self.cache = url, 0, {}
-        request = urllib.request.Request(url, headers={"Range": "bytes=0-0"})
-        with urllib.request.urlopen(request, context=CTX, timeout=120) as response:
-            self.size = int(response.headers["Content-Range"].split("/")[1])
-
-    def readable(self):
-        return True
-
-    def seekable(self):
-        return True
-
-    def tell(self):
-        return self.pos
-
-    def seek(self, offset, whence=0):
-        self.pos = {0: offset, 1: self.pos + offset, 2: self.size + offset}[whence]
-        return self.pos
-
-    def _block(self, i: int) -> bytes:
-        if i not in self.cache:
-            a, b = i * self.BLOCK, min(self.size, (i + 1) * self.BLOCK) - 1
-            for attempt in range(5):
-                try:
-                    request = urllib.request.Request(self.url, headers={"Range": f"bytes={a}-{b}"})
-                    with urllib.request.urlopen(request, context=CTX, timeout=300) as response:
-                        data = response.read()
-                    if len(data) == b - a + 1:
-                        break
-                except OSError as error:
-                    if attempt == 4:
-                        raise
-                    print(f"retrying ({error})")
-            if len(self.cache) > 16:
-                self.cache.pop(next(iter(self.cache)))
-            self.cache[i] = data
-        return self.cache[i]
-
-    def read(self, n=-1):
-        if n is None or n < 0:
-            n = self.size - self.pos
-        n = max(0, min(n, self.size - self.pos))
-        out = bytearray()
-        while n > 0:
-            i, offset = divmod(self.pos, self.BLOCK)
-            chunk = self._block(i)[offset : offset + n]
-            out += chunk
-            self.pos += len(chunk)
-            n -= len(chunk)
-        return bytes(out)
-
-    def readinto(self, buffer):
-        data = self.read(len(buffer))
-        buffer[: len(data)] = data
-        return len(data)
 
 
 def take_name(singer: str) -> str:
@@ -436,6 +329,17 @@ def nearest_sample(midi: int, division: str) -> int:
     return min(notes, key=lambda m: (abs(m - midi), m))
 
 
+def music_done(args) -> bool:
+    """Whether every take, its notes and every organ sample are there."""
+    folder = args.work / "music"
+    wanted = [folder / "vocalset" / f"{take_name(s)}.wav" for s in SINGERS]
+    wanted += [folder / "annotations" / f"{take_name(s)}.csv" for s in SINGERS]
+    wanted += [
+        folder / "organ" / sub / name for sub, names in organ_needed().items() for name in names
+    ]
+    return all(path.exists() for path in wanted) and (folder / "SOURCES.txt").exists()
+
+
 def music(args) -> None:
     """Download the 19 takes of "Dona nobis pacem" (straight tone) and their note
     annotations out of the two Zenodo archives, by range requests (36 MB of 2.5 GB), and
@@ -444,45 +348,37 @@ def music(args) -> None:
     takes = folder / "vocalset"
     notes = folder / "annotations"
     organ = folder / "organ"
-    for path in (takes, notes, organ):
-        path.mkdir(parents=True, exist_ok=True)
     missing = [s for s in SINGERS if not (takes / f"{take_name(s)}.wav").exists()]
     if missing:
         print(f"reading {VOCALSET} (range requests)")
-        archive = zipfile.ZipFile(RangeFile(VOCALSET))
-        names = {
-            Path(i.filename).name: i
-            for i in archive.infolist()
-            if "excerpts/straight/" in i.filename
-        }
-        for singer in missing:
-            info = names[f"{take_name(singer)}.wav"]
-            (takes / f"{take_name(singer)}.wav").write_bytes(archive.read(info))
-            print(f"  {info.filename}")
-        for extra in ("readme-anon.txt", "DataSetVocalises.pdf"):
-            (takes / extra).write_bytes(archive.read(extra))
+        with fetch.open_zip(VOCALSET) as archive:
+            names = {
+                Path(name).name: name for name in archive.namelist() if "excerpts/straight/" in name
+            }
+            for singer in missing:
+                member = names[f"{take_name(singer)}.wav"]
+                fetch.copy_member(archive, member, takes / f"{take_name(singer)}.wav")
+                print(f"  {member}")
+            for extra in ("readme-anon.txt", "DataSetVocalises.pdf"):
+                fetch.copy_member(archive, extra, takes / extra)
     missing = [s for s in SINGERS if not (notes / f"{take_name(s)}.csv").exists()]
     if missing:
         print(f"reading {ANNOTATIONS} (range requests)")
-        archive = zipfile.ZipFile(RangeFile(ANNOTATIONS))
-        want = {
-            f"Annotated VocalSet/extended 1/with file header/straight/{take_name(s)}.csv": s
-            for s in missing
-        }
-        for info in archive.infolist():
-            if info.filename in want:
-                (notes / Path(info.filename).name).write_bytes(archive.read(info))
-                print(f"  {info.filename}")
+        with fetch.open_zip(ANNOTATIONS) as archive:
+            for singer in missing:
+                member = (
+                    "Annotated VocalSet/extended 1/with file header/straight/"
+                    f"{take_name(singer)}.csv"
+                )
+                fetch.copy_member(archive, member, notes / f"{take_name(singer)}.csv")
+                print(f"  {member}")
     for sub, files in organ_needed().items():
         for name in files:
             path = organ / sub / name
-            if path.exists():
-                continue
-            path.parent.mkdir(parents=True, exist_ok=True)
-            url = VCSL + urllib.parse.quote(f"{sub}/{name}")
-            with urllib.request.urlopen(url, context=CTX, timeout=120) as response:
-                path.write_bytes(response.read())
-            print(f"  {sub}/{name}")
+            if not path.exists():
+                fetch.download(VCSL + urllib.parse.quote(f"{sub}/{name}"), path)
+                print(f"  {sub}/{name}")
+    folder.mkdir(parents=True, exist_ok=True)
     (folder / "SOURCES.txt").write_text(CREDITS, encoding="utf-8")
     print(f"music in {folder}")
 
@@ -542,58 +438,20 @@ def scene(args) -> None:
         + yaml.safe_dump(base, sort_keys=False, default_flow_style=None, width=100),
         encoding="utf-8",
     )
-    print(f"wrote {args.scene}; now: {simulate_command(args)}")
+    print(f"wrote {args.scene}; now: {pipeline.simulate_command(simulations(args)[0], args.hrtf)}")
 
 
 def scene_of(args) -> dict:
     return yaml.safe_load(args.scene.read_text(encoding="utf-8"))
 
 
-def simulate_command(args) -> str:
-    """The simulation the demo mixes from: the scene, the mixes' output and, with
-    ``--hrtf``, the SOFA file its binaural responses go through."""
-    command = f"acoustic-spaces simulate {args.scene} --out {args.results} --output {args.format}"
-    return command + hrtf_option(args)
-
-
-def hrtf_option(args) -> str:
-    """`` --hrtf FILE`` for the simulate command when ``--hrtf`` names a SOFA file."""
-    hrtf = getattr(args, "hrtf", None)
-    return f" --hrtf {hrtf}" if hrtf else ""
-
-
-def output_label(args) -> str:
-    """The output ``render`` asks auralize for: ``--format``, or with ``--hrtf`` the
-    binaural output simulated through that file (``binaural-<its name>``), so that mixes
-    through a spherical head cannot pass for ones through the listener's own ears."""
-    hrtf = getattr(args, "hrtf", None)
-    if hrtf and args.format == "binaural":
-        return f"binaural-{Path(hrtf).stem}"
-    return args.format
-
-
-def check_hrtf(args, entries: list[dict]) -> None:
-    """With ``--hrtf``, stop with the simulate command to run unless the responses were
-    made through that file."""
-    label = output_label(args)
-    if label == args.format:
-        return
-    labels = {o["format"] for e in entries for o in e.get("outputs") or [{"format": "mono"}]}
-    if label not in labels:
-        raise SystemExit(
-            f"error: {args.results} has no responses through {args.hrtf}"
-            f" ({', '.join(sorted(labels))}); run first:\n  {simulate_command(args)}"
-        )
+def simulations(args) -> list[pipeline.Simulation]:
+    """The simulation the demo mixes from: the scene, written with ``--format``."""
+    return [pipeline.Simulation(args.scene, args.results, args.format)]
 
 
 def responses_of(args) -> list[dict]:
-    path = args.results / "parameters.json"
-    if not path.exists():
-        first = "" if args.scene.exists() else "  python church_demo.py scene\n"
-        raise SystemExit(
-            f"error: no simulation in {args.results}; run first:\n{first}  {simulate_command(args)}"
-        )
-    return json.loads(path.read_text(encoding="utf-8"))["responses"]
+    return pipeline.responses_of(simulations(args)[0], args, DEMO.command("scene", args))
 
 
 # --------------------------------------------------------------------------- the time line
@@ -723,8 +581,6 @@ def tuned_and_timed(
 
 
 def choir_tracks(args, rate_out: int, length: int) -> dict[str, np.ndarray]:
-    from acoustic_spaces.render import resample
-
     folder = args.work / "music"
     tracks = {}
     for singer in SINGERS:
@@ -736,7 +592,7 @@ def choir_tracks(args, rate_out: int, length: int) -> dict[str, np.ndarray]:
         track = np.zeros(int(length * rate / rate_out) + rate)
         for _verse, (first, y) in tuned_and_timed(singer, x, rate, notes).items():
             track[first : first + len(y)] += y[: len(track) - first]
-        track = resample(track, rate, rate_out) if rate != rate_out else track
+        track = resampled(track, rate, rate_out)
         tracks[f"singer_{singer}"] = track[:length] / max(gated_rms(track, rate_out), 1e-9)
         print(f"  {singer} ({VOICES[singer]})")
     return tracks
@@ -883,9 +739,7 @@ def organ_tracks(args, rate: int, length: int) -> dict[str, np.ndarray]:
 def feeds(args) -> None:
     """One WAV per source: each singer's tuned and timed take, each side of the organ,
     at one gated RMS where it plays loudest (the scene's level_db does the rest)."""
-    entry = responses_of(args)[0]
-    outputs = entry.get("outputs") or [{"wav": entry["wav"]}]
-    rate = read(args.results / outputs[0]["wav"])[1]
+    rate = pipeline.response_rate(simulations(args)[0], responses_of(args))
     length = int(end_of_music() * rate)
     print("the choir:")
     tracks = choir_tracks(args, rate, length)
@@ -896,66 +750,31 @@ def feeds(args) -> None:
     scale = 0.5 / peak
     for name, track in tracks.items():
         write(out / f"{name}.wav", track * scale, rate)
-    (out / "feeds.json").write_text(
-        json.dumps(
-            {"rate": rate, "length_s": length / rate, "scale": scale, "sources": sorted(tracks)},
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
+    pipeline.write_json(
+        out / "feeds.json",
+        {"rate": rate, "length_s": length / rate, "scale": scale, "sources": sorted(tracks)},
     )
     print(f"wrote {len(tracks)} feeds to {out}")
 
 
+def feeds_table(args) -> dict:
+    path = args.work / "feeds" / "feeds.json"
+    if not path.exists():
+        raise SystemExit(f"error: no feeds yet; run: {DEMO.command('feeds', args)}")
+    return pipeline.read_json(path)
+
+
 def render(args) -> None:
     """Every listener's mix (``--format``, binaural by default), with one gain for all:
-    the loudest peak at -1 dBFS."""
-    from acoustic_spaces.cli import main as cli
-
-    table = json.loads((args.work / "feeds" / "feeds.json").read_text(encoding="utf-8"))
-    rate = table["rate"]
-    check_hrtf(args, responses_of(args))
-    listeners = list(LISTENERS)
-    if args.listeners:
-        listeners = args.listeners.split(",")
-    pairs = [f"{name}={args.work / 'feeds' / f'{name}.wav'}" for name in table["sources"]]
-    seats = args.work / "seats"
-    peaks = {}
-    for listener in listeners:
-        out = seats / f"{listener}.{args.format}.wav"
-        code = cli(
-            [
-                "auralize",
-                str(args.results),
-                *pairs,
-                "--listener",
-                listener,
-                "--format",
-                output_label(args),
-                "--out",
-                str(out),
-            ]
-        )
-        if code:
-            raise SystemExit(code)
-        peaks[listener] = float(np.abs(read(out)[0]).max())
-    gain = 10.0 ** (-1.0 / 20.0) / max(peaks.values())
-    info = {}
-    for listener in listeners:
-        out = seats / f"{listener}.{args.format}.wav"
-        x = read(out)[0] * gain
-        write(out, x, rate)
-        level = gated_rms(a_weighted(x, rate), rate)
-        info[listener] = {"rms_db": 20.0 * math.log10(level + 1e-12)}
-    top = max(v["rms_db"] for v in info.values())
-    for listener, v in info.items():
-        v["relative_db"] = v["rms_db"] - top
-        print(f"{listener:>14}: {v['relative_db']:+6.1f} dB(A)")
-    (seats / "seats.json").write_text(
-        json.dumps({"rate": rate, "format": args.format, "gain": gain, "seats": info}, indent=2)
-        + "\n",
-        encoding="utf-8",
-    )
+    the loudest peak at -1 dBFS. auralize gives each source its level_db; when the sound
+    arrives counts each source as loud as that."""
+    table = feeds_table(args)
+    listeners = args.listeners.split(",") if args.listeners else list(LISTENERS)
+    feeds = {name: args.work / "feeds" / f"{name}.wav" for name in table["sources"]}
+    weights = {source["name"]: source["level_db"] for source in scene_of(args)["sources"]}
+    simulation = simulations(args)[0]
+    mixes = [pipeline.Mix(name, simulation, name, feeds, weights) for name in listeners]
+    pipeline.render_mixes(mixes, args.work / "seats", args, first=DEMO.command("scene", args))
 
 
 def tour_of(args) -> list[tuple[str, float, float]]:
@@ -967,30 +786,6 @@ def tour_of(args) -> list[tuple[str, float, float]]:
         (name, t, steps[k + 1][1] if k + 1 < len(steps) else end)
         for k, (name, t) in enumerate(steps)
     ]
-
-
-def tour_audio(args, tour, seats) -> np.ndarray:
-    rate = seats["rate"]
-    length = round(tour[-1][2] * rate)
-    out = np.zeros((length, 2))
-    half = int(CROSSFADE_S * rate / 2)
-    ramp = np.sin(np.linspace(0.0, np.pi / 2, 2 * half))  # equal power
-    for k, (listener, start, stop) in enumerate(tour):
-        x = read(args.work / "seats" / f"{listener}.{seats['format']}.wav")[0]
-        if x.shape[1] == 1:
-            x = np.repeat(x, 2, axis=1)
-        x = x[:length] if len(x) >= length else np.pad(x, ((0, length - len(x)), (0, 0)))
-        a, b = round(start * rate), round(stop * rate)
-        w = np.zeros(length)
-        w[(a - half if k else 0) : (b + half if k < len(tour) - 1 else length)] = 1.0
-        if k:
-            w[a - half : a + half] = ramp
-        if k < len(tour) - 1:
-            w[b - half : b + half] = ramp[::-1]
-        out += x[:, :2] * w[:, None]
-    fade = int(2.0 * rate)
-    out[-fade:] *= np.linspace(1.0, 0.0, fade)[:, None] ** 2
-    return out
 
 
 def playing(t: float) -> tuple[str, ...]:
@@ -1013,99 +808,83 @@ def what_plays(t: float) -> str:
 def video(args) -> None:
     """tour.wav, one still per stop of the tour, and tour.mp4 with a scrolling
     spectrogram under the stills (ffmpeg)."""
-    import church_pictures as pictures
-
-    seats = json.loads((args.work / "seats" / "seats.json").read_text(encoding="utf-8"))
+    pictures = sibling(__file__, "church_pictures")
+    seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
     tour = tour_of(args)
-    missing = [name for name, _, _ in tour if name not in seats["seats"]]
-    if missing:
-        raise SystemExit(f"error: no mix for {missing[0]}; run: python church_demo.py render")
-    audio = tour_audio(args, tour, seats)
-    out = args.work
-    write(out / "tour.wav", audio, seats["rate"])
-    print(f"wrote {out / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
-    report = json.loads((args.results / "parameters.json").read_text(encoding="utf-8"))
+    pipeline.missing_mixes(seats, [name for name, _, _ in tour], DEMO.command("render", args))
+    stops = [pipeline.TourStop(name, start, start, stop) for name, start, stop in tour]
+    audio = pipeline.tour_audio(
+        stops, args.work / "seats", seats, crossfade_s=CROSSFADE_S, fade_out_s=FADE_OUT_S
+    )
+    write(args.work / "tour.wav", audio, seats["rate"])
+    print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
     drawing = pictures.Pictures(
-        scene_of(args), report, seats["seats"], tour, TITLES, what_plays, playing, VOICES
+        scene_of(args),
+        pipeline.read_json(args.results / pipeline.PARAMETERS),
+        seats["seats"],
+        tour,
+        TITLES,
+        what_plays,
+        playing,
+        VOICES,
+        hrtf=args.hrtf,
     )
-    stills = out / "stills"
-    stills.mkdir(parents=True, exist_ok=True)
-    lines = []
-    for k, (listener, start, stop) in enumerate(tour):
-        path = stills / f"{k:02d}_{listener}.png"
-        drawing.still(k).convert("RGB").save(path, optimize=True)
-        lines += [f"file '{path.resolve().as_posix()}'", f"duration {stop - start:.3f}"]
-    lines.append(lines[-2])  # the concat demuxer needs the last picture again
-    (stills / "stills.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    drawing.thumbnail().convert("RGB").save(out / "thumbnail.png", optimize=True)
-    print(f"wrote {len(tour)} stills to {stills} and {out / 'thumbnail.png'}")
-    if args.no_mp4:
-        return
-    if shutil.which("ffmpeg") is None:
-        raise SystemExit("error: ffmpeg is needed for the video")
-    band = pictures.SPECTRUM_BOX
-    spectrum = (
-        f"[1:a]showspectrum=s={band[2]}x512:slide=scroll:color=magma:scale=log:fscale=log:"
-        f"start=40:stop=16000:drange=80:overlap=0.5:fps=30,scale={band[2]}:{band[3]},"
-        "format=rgba,colorkey=0x000000:0.08:0.25[s];"
-        f"[0:v]fps=30,format=rgba[b];[b][s]overlay={band[0]}:{band[1]}:shortest=1,format=yuv420p[v]"
+    pictures.save(drawing.thumbnail(), args.work / "thumbnail.png")
+    pipeline.video(
+        args.work,
+        [(name, stop - start) for name, start, stop in tour],
+        drawing.still,
+        args.work / "tour.wav",
+        no_mp4=args.no_mp4,
     )
-    subprocess.run(
-        [
-            "ffmpeg", "-v", "error", "-stats", "-y",
-            "-f", "concat", "-safe", "0", "-i", str(stills / "stills.txt"),
-            "-i", str(out / "tour.wav"),
-            "-filter_complex", spectrum, "-map", "[v]", "-map", "1:a",
-            "-c:v", "libx264", "-preset", "slow", "-crf", "18",
-            "-c:a", "aac", "-b:a", "384k", "-movflags", "+faststart",
-            str(out / "tour.mp4"),
-        ],
-        check=True,
-    )  # fmt: skip
-    print(f"wrote {out / 'tour.mp4'}")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("step", choices=["music", "scene", "feeds", "render", "video", "all"])
-    parser.add_argument(
-        "--from",
-        dest="source",
-        type=Path,
-        default=Path("scene.yaml"),
-        help="scene: the example's scene",
-    )
-    parser.add_argument(
-        "--scene", type=Path, default=Path("scene_choir.yaml"), help="the scene with the choir"
-    )
-    parser.add_argument(
-        "--results", type=Path, default=Path("results_choir"), help="folder written by simulate"
-    )
-    parser.add_argument(
-        "--work", type=Path, default=Path("demo"), help="folder for everything this writes"
-    )
-    parser.add_argument(
-        "--format", default="binaural", help="output format the mixes take (default binaural)"
-    )
-    parser.add_argument(
-        "--hrtf",
-        type=Path,
-        help="binaural mixes through this SOFA file of HRTFs, your own or measured, instead of "
-        "a spherical head model (the simulate command the script prints takes it too)",
-    )
-    parser.add_argument("--listeners", help="render: only these listeners, comma separated")
-    parser.add_argument("--tour", help="video: listener:start_s,... (each runs until the next)")
-    parser.add_argument(
-        "--no-mp4", action="store_true", help="video: write the audio and stills only"
-    )
-    args = parser.parse_args()
-    if args.hrtf and args.format != "binaural":
-        parser.error("--hrtf is for binaural mixes")
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    steps = ["music", "feeds", "render", "video"] if args.step == "all" else [args.step]
-    for step in steps:
-        globals()[step](args)
+DEMO = Demo(
+    name="church",
+    example="church",
+    title="A choir and an organ in the church",
+    description=__doc__,
+    script=Path(__file__),
+    steps=[
+        Step(
+            "music",
+            music,
+            "download the 19 takes, their notes and the organ samples (about 100 MB)",
+            music_done,
+        ),
+        Step(
+            "scene",
+            scene,
+            "scene_choir.yaml: the church with the choir and the organ",
+            lambda args: args.scene.exists(),
+        ),
+        SIMULATE,
+        Step("feeds", feeds, "one WAV per singer and per side of the organ"),
+        Step("render", render, "every listener, binaural, with one gain for all"),
+        Step("video", video, "tour.wav, the stills and tour.mp4 in the work folder"),
+    ],
+    options=[
+        Option(
+            "source",
+            "the example's scene",
+            Path("scene.yaml"),
+            "file",
+            steps=("scene",),
+            flag="--from",
+            filter="Scene files (*.yaml *.yml)",
+        ),
+        Option("scene", "the scene with the choir", Path("scene_choir.yaml"), "path"),
+        Option("results", "folder written by simulate", Path("results_choir"), "folder"),
+        *common_options(),
+        Option("listeners", "only these listeners, comma separated", None, steps=("render",)),
+        Option("tour", "listener:start_s,... (each runs until the next)", None, steps=("video",)),
+    ],
+    simulations=simulations,
+    scene_from="scene",
+)
+
+__all__ = ["DEMO"]
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(DEMO.main())
