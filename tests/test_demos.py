@@ -745,9 +745,10 @@ def test_a_demo_scene_written_elsewhere_still_finds_its_files(tmp_path: Path) ->
     import yaml
 
     example = tmp_path / "example"
+    ears = (tmp_path / "data" / "ears.sofa").as_posix()  # absolute on every system
     data = {
         "geometry": {"file": "model.obj"},
-        "outputs": [{"format": "binaural", "hrtf": "/data/ears.sofa"}],
+        "outputs": [{"format": "binaural", "hrtf": ears}],
         "sources": [{"name": "a", "signal": "work/talk.wav"}],
     }
     pipeline.write_scene(example / "scene.yaml", data, "# a header\n", example)
@@ -756,7 +757,7 @@ def test_a_demo_scene_written_elsewhere_still_finds_its_files(tmp_path: Path) ->
     moved = yaml.safe_load((example / "work" / "scene.yaml").read_text(encoding="utf-8"))
     assert moved["geometry"]["file"] == (example / "model.obj").resolve().as_posix()
     assert moved["sources"][0]["signal"] == "talk.wav"
-    assert moved["outputs"][0]["hrtf"] == "/data/ears.sofa"
+    assert moved["outputs"][0]["hrtf"] == ears
     assert (example / "scene.yaml").read_text(encoding="utf-8").startswith("# a header\n")
 
 
