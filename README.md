@@ -100,6 +100,8 @@ print(response.parameters().table())
   loudspeaker outputs, convolution, real-time playback and head tracking.
 - [Measurements](docs/measurements.md): measuring impulse responses, comparing them with
   simulations, and fitting materials to them.
+- [Running on another computer](docs/remote.md): a scene and its files in one pack, and
+  a container image to run it on a GPU server or a cloud job.
 - [Validation report](docs/validation.md): how the results compare with theory, another
   simulator and measured rooms.
 - [Roadmap](docs/roadmap.md),

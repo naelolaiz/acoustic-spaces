@@ -315,6 +315,10 @@ msgstr "Modelli ({patterns})"
 msgid "glTF binary (*.glb)"
 msgstr "glTF binario (*.glb)"
 
+#: acoustic_spaces/gui/app.py
+msgid "Pack (*.zip)"
+msgstr "Pacchetto (*.zip)"
+
 #. Translators: two file types of a save dialog, kept apart by ;; (keep it).
 #: acoustic_spaces/gui/app.py
 msgid "PNG picture (*.png);;JSON, every map (*.json)"
@@ -463,6 +467,19 @@ msgid ""
 msgstr ""
 "Particelle sonore della sorgente selezionata (o della prima) come animazione "
 "glTF: tanto suono, tanto lentamente e tante particelle quante se ne scelgono"
+
+#: acoustic_spaces/gui/app.py
+msgid "Pac&k for another computer…"
+msgstr "Crea un pacc&hetto per un altro computer…"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"Put the scene and every file it names in one zip file, to run on a server or "
+"a cloud job as acoustic-spaces pack does; nothing is uploaded"
+msgstr ""
+"Raccoglie la scena e tutti i file che nomina in un unico file zip, da "
+"calcolare su un server o in un job nel cloud, come acoustic-spaces pack; non "
+"viene caricato nulla"
 
 #: acoustic_spaces/gui/app.py
 msgid "&Quit"
@@ -1201,6 +1218,34 @@ msgstr[1] ""
 #, python-brace-format
 msgid "Wrote {path}: the room. In Blender: File > Import > glTF 2.0."
 msgstr "Scritto {path}: l'ambiente. In Blender: File > Importa > glTF 2.0."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot pack: {problems}"
+msgstr "Impossibile creare il pacchetto: {problems}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Pack for another computer"
+msgstr "Crea un pacchetto per un altro computer"
+
+#: acoustic_spaces/gui/app.py
+msgid "Could not pack"
+msgstr "Impossibile creare il pacchetto"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"Wrote {path}: the scene and the {count} file it names. On the other "
+"computer: acoustic-spaces simulate {name} --out results"
+msgid_plural ""
+"Wrote {path}: the scene and the {count} files it names. On the other "
+"computer: acoustic-spaces simulate {name} --out results"
+msgstr[0] ""
+"Scritto {path}: la scena e il {count} file che nomina. Sull'altro computer: "
+"acoustic-spaces simulate {name} --out results"
+msgstr[1] ""
+"Scritto {path}: la scena e i {count} file che nomina. Sull'altro computer: "
+"acoustic-spaces simulate {name} --out results"
 
 #. Translators: an error's title, then what went wrong.
 #: acoustic_spaces/gui/app.py

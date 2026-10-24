@@ -117,6 +117,7 @@ DRAWN = {
 MODEL_FILTER = N_("Models ({patterns})")
 MODEL_PATTERNS = " ".join("*" + s for s in SUPPORTED_SUFFIXES)
 GLB_FILTER = N_("glTF binary (*.glb)")
+PACK_FILTER = N_("Pack (*.zip)")
 # Translators: two file types of a save dialog, kept apart by ;; (keep it).
 MAP_FILTERS = N_("PNG picture (*.png);;JSON, every map (*.json)")
 #: Kinds of item Edit > Remove works on.
@@ -374,6 +375,14 @@ class MainWindow(QMainWindow):
                 "as much of the sound, as slowly and as many particles as you choose"
             ),
         )
+        self.pack_action = a(
+            _("Pac&k for another computer…"),
+            self.pack_scene,
+            tip=_(
+                "Put the scene and every file it names in one zip file, to run on a server "
+                "or a cloud job as acoustic-spaces pack does; nothing is uploaded"
+            ),
+        )
         self.quit_action = a(
             _("&Quit"), self.close, keys.Quit, _("Close the editor; it asks about unsaved changes")
         )
@@ -573,6 +582,7 @@ class MainWindow(QMainWindow):
         file.addSeparator()
         file.addActions([self.save_action, self.save_as_action, self.export_action])
         file.addActions([self.blender_action, self.particles_action])
+        file.addAction(self.pack_action)
         file.addSeparator()
         file.addAction(self.quit_action)
 
@@ -1565,6 +1575,44 @@ class MainWindow(QMainWindow):
                 path=path
             )
         self.log(text)
+        return True
+
+    def pack_scene(self) -> bool:
+        """Write the scene and every file it names to one zip file, to run on another
+        computer (``acoustic-spaces pack``)."""
+        from acoustic_spaces.pack import pack
+        from acoustic_spaces.results import file_name
+
+        problems = self.document.room.problems()
+        if problems:
+            self.log(_("Cannot pack: {problems}").format(problems="; ".join(problems)), "error")
+            self.docks["messages"].raise_()
+            return False
+        start = f"{file_name(self.document.scene.name)}.zip"
+        path, _filter = QFileDialog.getSaveFileName(
+            self, _("Pack for another computer"), start, _(PACK_FILTER)
+        )
+        if not path:
+            return False
+        if not path.lower().endswith(".zip"):
+            path += ".zip"
+        base = None if self.document.path is None else self.document.path.parent
+        try:
+            with busy():
+                packed = pack(self.document.scene, path, base_dir=base)
+        except (OSError, ValueError) as exc:
+            self._error(_("Could not pack"), str(exc))
+            return False
+        count = len(packed.files)
+        self.log(
+            ngettext(
+                "Wrote {path}: the scene and the {count} file it names. On the other "
+                "computer: acoustic-spaces simulate {name} --out results",
+                "Wrote {path}: the scene and the {count} files it names. On the other "
+                "computer: acoustic-spaces simulate {name} --out results",
+                count,
+            ).format(path=path, count=count, name=Path(path).name)
+        )
         return True
 
     def _error(self, title: str, text: str) -> None:

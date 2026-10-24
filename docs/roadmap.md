@@ -92,8 +92,8 @@ Version 3.2.3:
 v4, version 4.0.0: outdoor acoustics (ground, wind, temperature, turbulence, vegetation,
 terrain and buildings from a map, weather classes and long-term levels, Doppler, whole
 cities, on the GPU), coherent arrays, groups, movement along keyframes with every mover
-on one clock, demos of any scene and of the examples, HRTF sets to download and the ISO
-3382-2 checks, in the sections below.
+on one clock, demos of any scene and of the examples, HRTF sets to download, the ISO
+3382-2 checks and packs to run on another computer, in the sections below.
 
 Parameters:
 
@@ -317,3 +317,13 @@ Editor:
   plays instead in that run (`--input`).
 - [x] Download HRTFs…: the free sets with their licences, fetched into the user's data
   folder and put in the scene's binaural output.
+
+Running on other computers, in steps:
+
+- [x] Packs (`acoustic-spaces pack`, **File > Pack for another computer**): a scene and
+  every file it names in one zip, which every command that reads a scene takes, and a
+  container image that runs them headless on a GPU through Vulkan.
+- [ ] `acoustic-spaces remote`: send a pack to a server over SSH or to Hugging Face
+  Jobs, follow its progress, cancel it and bring the results back.
+- [ ] **Run remotely** in the editor, with the results opened from the folder that comes
+  back.

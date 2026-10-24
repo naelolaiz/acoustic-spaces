@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import dataclasses
 import json
 import math
 import os
 import re
+import shutil
 import sys
+import tempfile
 import textwrap
 from collections.abc import Sequence
 from pathlib import Path
@@ -21,6 +24,7 @@ from acoustic_spaces.engine.tuning import DEFAULTS
 from acoustic_spaces.gltf import PARTICLE_COUNT, SLOW_MOTION
 from acoustic_spaces.i18n import _
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
+from acoustic_spaces.pack import is_pack, unpack
 from acoustic_spaces.room import Room
 
 #: What the map command can plot (the keys of engine.coverage.MAP_PARAMETERS).
@@ -42,6 +46,8 @@ MAP_PARAMETER_NAMES = (
     "long_term",
     "rating_level",
 )
+#: What the commands that read a scene take.
+SCENE_HELP = "path to a scene YAML file, or a pack of one (.zip, see pack)"
 #: Edge diffraction settings (engine.diffraction.DIFFRACTION_MODES).
 DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
 #: Where a diffracted path may reflect (scene.model.EarlyStage.diffraction_reflections).
@@ -75,8 +81,11 @@ def _band_row(label: str, values: Sequence[float], width: int, fmt: str = "6.2f"
 
 
 def _load_room(path: str) -> Room | None:
-    """Load a scene and its geometry, printing a readable error on failure."""
+    """Load a scene, or the scene of a pack, and its geometry, printing a readable error
+    on failure."""
     try:
+        if is_pack(path):
+            path = _unpack(path)
         return Room.from_yaml(path)
     except (OSError, ImportError) as exc:  # no such file, a folder, a model without its extra
         print(f"error: {exc}", file=sys.stderr)
@@ -99,6 +108,20 @@ def _counted(items, noun: str) -> str:
 
 def _first_in_use(items) -> str:
     return next(item.name for item in items if item.in_use)
+
+
+def _unpack(path: str) -> str:
+    """Unpack a pack into a folder removed when the command ends; its scene file."""
+    folder = tempfile.mkdtemp(prefix="acoustic-spaces-pack-")
+    atexit.register(shutil.rmtree, folder, ignore_errors=True)
+    unpacked = unpack(path, folder)
+    if unpacked.version != __version__:
+        print(
+            f"warning: {Path(path).name} was packed by acoustic_spaces {unpacked.version}, "
+            f"this is {__version__}: results may differ from that version's",
+            file=sys.stderr,
+        )
+    return str(unpacked.scene)
 
 
 def _print_checks(room: Room) -> bool:
@@ -811,6 +834,42 @@ def _cmd_animate(args: argparse.Namespace) -> int:
     if args.out:
         print(f"saved {args.out}: {args.frames} frames, {args.duration:g} ms of sound")
     return 0
+
+
+def _cmd_pack(args: argparse.Namespace) -> int:
+    from acoustic_spaces.pack import pack
+
+    if is_pack(args.scene):
+        print(f"error: {args.scene} is a pack already", file=sys.stderr)
+        return 1
+    room = _load_room(args.scene)
+    if room is None or not _print_checks(room):
+        return 1
+    try:
+        packed = pack(room.scene, args.out, base_dir=Path(args.scene).resolve().parent)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    count = len(packed.files)
+    if count:
+        files = f"{count} file{'' if count == 1 else 's'}"
+        print(f"wrote {packed.path}: the scene and the {files} it names, {_size(packed.size)}")
+    else:
+        print(f"wrote {packed.path}: the scene, which names no files")
+    width = max((len(name) for name, _bytes in packed.files), default=0)
+    for name, size in packed.files:
+        print(f"  {name:<{width}}  {_size(size):>9}")
+    print(f"on the other computer: acoustic-spaces simulate {packed.path.name} --out results")
+    return 0
+
+
+def _size(size: int) -> str:
+    """A size in bytes as people read it."""
+    for unit in ("bytes", "kB", "MB"):
+        if size < 1000:
+            return f"{size} {unit}" if unit == "bytes" else f"{size:.1f} {unit}"
+        size /= 1000
+    return f"{size:.1f} GB"
 
 
 def _cmd_export(args: argparse.Namespace) -> int:
@@ -2363,7 +2422,7 @@ def build_parser() -> argparse.ArgumentParser:
     info.set_defaults(func=_cmd_info)
 
     validate = sub.add_parser("validate", help="check a scene file and its geometry")
-    validate.add_argument("scene", help="path to a scene YAML file")
+    validate.add_argument("scene", help=SCENE_HELP)
     validate.add_argument(
         "--leaks", action="store_true", help="trace rays and report where they escape"
     )
@@ -2375,7 +2434,7 @@ def build_parser() -> argparse.ArgumentParser:
     inspect = sub.add_parser(
         "inspect", help="geometry report, materials, reverberation estimates and positions"
     )
-    inspect.add_argument("scene", help="path to a scene YAML file")
+    inspect.add_argument("scene", help=SCENE_HELP)
     inspect.set_defaults(func=_cmd_inspect)
 
     materials = sub.add_parser("materials", help="list or search the built-in materials")
@@ -2414,7 +2473,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     tune.add_argument(
-        "scene", nargs="?", help="scene YAML file to time (default: the concert_hall example)"
+        "scene",
+        nargs="?",
+        help="scene YAML file, or a pack of one, to time (default: the concert_hall example)",
     )
     tune.add_argument("--rays", type=int, help="rays per band (default: the scene's)")
     tune.add_argument(
@@ -2468,7 +2529,7 @@ def build_parser() -> argparse.ArgumentParser:
     edit.set_defaults(func=_cmd_edit)
 
     view = sub.add_parser("view", help="show the room in 3D (needs the viz extra)")
-    view.add_argument("scene", help="path to a scene YAML file")
+    view.add_argument("scene", help=SCENE_HELP)
     view.add_argument("--screenshot", metavar="PNG", help="save an image instead of a window")
     view.add_argument("--paths", action="store_true", help="draw early reflection paths")
     view.add_argument("--source", help="source for --paths (default: the first)")
@@ -2489,7 +2550,7 @@ def build_parser() -> argparse.ArgumentParser:
     animate = sub.add_parser(
         "animate", help="animate sound particles leaving a source (needs the viz extra)"
     )
-    animate.add_argument("scene", help="path to a scene YAML file")
+    animate.add_argument("scene", help=SCENE_HELP)
     animate.add_argument("--out", metavar="FILE", help="save a .gif or .mp4 instead of a window")
     animate.add_argument("--source", help="source to emit from (default: the first)")
     animate.add_argument("--particles", type=int, default=4000, help="particles (default 4000)")
@@ -2514,7 +2575,7 @@ def build_parser() -> argparse.ArgumentParser:
     export = sub.add_parser(
         "export", help="write the room as glTF (.glb) for Blender, with paths or particles"
     )
-    export.add_argument("scene", help="path to a scene YAML file")
+    export.add_argument("scene", help=SCENE_HELP)
     export.add_argument("out", help="glTF binary file to write (.glb)")
     export.add_argument("--paths", action="store_true", help="add early reflection paths")
     export.add_argument("--source", help="source for paths and particles (default: the first)")
@@ -2551,8 +2612,23 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--threads", type=_threads, help=THREADS_HELP)
     export.set_defaults(func=_cmd_export)
 
+    pack = sub.add_parser(
+        "pack",
+        help="put a scene and every file it names in one zip, to run on another computer",
+        description=(
+            "Write a scene and every file it names (model, terrain, buildings map, "
+            "material and directivity files, HRTFs) to one zip file, with the scene file "
+            "naming them relatively. Every command that reads a scene takes the pack in "
+            "its place, so it runs on a server or a cloud job as it does here. Nothing "
+            "is uploaded."
+        ),
+    )
+    pack.add_argument("scene", help="path to a scene YAML file")
+    pack.add_argument("out", help="zip file to write (.zip)")
+    pack.set_defaults(func=_cmd_pack)
+
     simulate = sub.add_parser("simulate", help="simulate impulse responses and ISO 3382 parameters")
-    simulate.add_argument("scene", help="path to a scene YAML file")
+    simulate.add_argument("scene", help=SCENE_HELP)
     simulate.add_argument("--out", required=True, metavar="DIR", help="folder for the results")
     simulate.add_argument("--sample-rate", type=int, help="override simulation.sample_rate")
     simulate.add_argument("--length", type=float, help="override simulation.ir_length_s")
@@ -2644,7 +2720,7 @@ def build_parser() -> argparse.ArgumentParser:
     coverage = sub.add_parser(
         "map", help="coverage map: parameters on a grid over the audience area"
     )
-    coverage.add_argument("scene", help="path to a scene YAML file")
+    coverage.add_argument("scene", help=SCENE_HELP)
     coverage.add_argument("--source", help="map only this source (default: all, and together)")
     coverage.add_argument(
         "--surfaces",
@@ -2779,7 +2855,7 @@ def build_parser() -> argparse.ArgumentParser:
         "says otherwise) match those measured at each source and listener pair, in JNDs. "
         "Each round traces the room once and fits by re-weighting the rays traced.",
     )
-    calibrate.add_argument("scene", help="scene YAML file")
+    calibrate.add_argument("scene", help=SCENE_HELP)
     calibrate.add_argument(
         "--measured",
         nargs=3,
@@ -2896,7 +2972,7 @@ def build_parser() -> argparse.ArgumentParser:
         "place to the next; or, with --all, every walk at once on one clock, heard at "
         "every listener.",
     )
-    walkthrough.add_argument("scene", help="path to a scene YAML file")
+    walkthrough.add_argument("scene", help=SCENE_HELP)
     walkthrough.add_argument(
         "signals", nargs="+", metavar="SOURCE=WAV", help="dry signal of each source to play"
     )

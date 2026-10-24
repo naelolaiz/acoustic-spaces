@@ -10,7 +10,8 @@ equation, on the GPU too, validated against a fast field program. Coherent array
 element by element, groups of sources and listeners, demos of the examples and of any
 scene with files of your own, walks along keyframes with every mover at once on one
 clock and the editor's Movement panel, HRTF sets to download, the checks of ISO 3382-2
-on every decay time, and the wind drawn in the editor.
+on every decay time, the wind drawn in the editor, and packs that carry a scene with its
+files to another computer, with a container image that runs them headless on a GPU.
 
 Indoor scenes give the results of 3.2.3 but for what **Fixes** lists: every binaural
 output changes (the treble an HRTF between the measured directions lost is back), a
@@ -757,6 +758,25 @@ last sound, `auralize` and `walkthrough` mix sources at their sound power
   per head with `--member`). `--url` takes any other SOFA file, `--folder` keeps them
   elsewhere, and the licence and who measured the set are printed before anything is
   downloaded. Until now a measured head had to be found and fetched by hand.
+
+**Running on another computer**
+
+- `acoustic-spaces pack scene.yaml scene.zip` (**File > Pack for another computer** in the
+  editor, `acoustic_spaces.pack`) writes a scene and every file it names (model,
+  terrain, buildings map, material and directivity files, the WAV files sources play,
+  HRTFs, a glTF model's buffers, an array's element data) to one zip, with the scene file naming them relatively.
+  Every command that reads a scene (`simulate`, `map`, `validate`, `calibrate`,
+  `walkthrough`...) takes a pack in its place and gives the same results, bit for bit.
+  Its `pack.json` records the version that wrote it and a SHA-256 of every file;
+  damaged packs are refused and packs from another version warn. Packing uploads
+  nothing. Scenes with problems are not packed.
+- A `Dockerfile` builds an image with the command line, headless, on the GPU through
+  Vulkan: Mesa's drivers inside, and NVIDIA's from the host with the driver's graphics
+  capability, which the image asks for. `docs/remote.md` runs packs with it on a
+  server over SSH and on Hugging Face Jobs. CI builds the image and runs packs in it on
+  the software Vulkan driver.
+- `Scene.yaml_text()` writes the scene file's text with the files it names written
+  as a function says.
 
 **Editor**
 

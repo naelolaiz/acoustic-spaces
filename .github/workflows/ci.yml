@@ -122,6 +122,26 @@ jobs:
             particles.gif
             sim/
 
+  container:
+    name: Container image
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build the image
+        run: docker build -t acoustic-spaces .
+      - name: Pack a scene and run it in the container (on its software Vulkan driver)
+        run: |
+          run() { docker run --rm -v "$PWD:/work" --user "$(id -u):$(id -g)" acoustic-spaces "$@"; }
+          run info | tee info.txt
+          grep -q "^GPU: llvmpipe" info.txt
+          run pack examples/hillside/scene.yaml hillside.zip
+          run simulate hillside.zip --out results --rays 2000
+          test -s results/parameters.json
+          run pack examples/shoebox/scene.yaml shoebox.zip
+          run simulate shoebox.zip --out gpu --rays 2000 --wave --wave-band 63 \
+            --wave-device gpu --late-device gpu
+          test -s gpu/parameters.json
+
   editor:
     name: Editor (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

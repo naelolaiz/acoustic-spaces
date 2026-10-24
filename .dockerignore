@@ -1,0 +1,17 @@
+# What the image is built from: the package's sources, its C++ core and the examples.
+.git
+.venv
+venv
+build
+dist
+wheelhouse
+**/__pycache__
+**/*.so
+**/*.pyd
+docs
+tests
+tools
+validation
+*.wav
+*.sofa
+*.zip
