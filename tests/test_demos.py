@@ -892,7 +892,7 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     on one clock: the mixes go to moving/, one gain for all, with the level of each
     source at each moment; the frames move the walker and say the level then.
     ``--moving`` picks the walks of a run: none keeps every walker standing, a name with
-    no walk is refused, and so is a walk with Doppler."""
+    no walk is refused, and so is a walk with Doppler with another walker."""
     pytest.importorskip("PIL")
     import yaml
 
@@ -915,7 +915,10 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     args.scene = Path("scene.yaml")
     assert moving_of(demo.resolved(args)) == ["seat-b"] and demo.check(args) is None
     args.moving = "seat-b,radio"
-    assert demo.check(args).startswith("radio walks with Doppler, which plays one walk at a")
+    assert demo.check(args) == (
+        "radio walks with Doppler, which plays alone: leave the others standing "
+        "(--moving radio), or turn its Doppler off"
+    )
     args.moving = "seat-a"
     assert demo.check(args) == (
         "--moving: 'seat-a' has no walk to move along; the scene's walks: seat-b, radio"
@@ -976,6 +979,36 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     assert "there already" in capsys.readouterr().out
     assert cli(["demo", "scene.yaml", "render", "--moving", "none"]) == 0
     assert set(pipeline.read_json(work / "seats" / "seats.json")["seats"]) == {"seat-a", "seat-b"}
+
+
+def test_a_demo_of_any_scene_plays_a_walk_with_doppler(tmp_path: Path, monkeypatch) -> None:
+    """A walk with Doppler moves alone: every listener hears the radio drive past,
+    simulated along its walk for each, its level at each place (the talker's, standing,
+    the same at every one), one gain for all."""
+    pytest.importorskip("PIL")
+    import yaml
+
+    from acoustic_spaces.cli import main as cli
+
+    scene = _any_scene(tmp_path)
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    data["sources"][1]["walk"] = {"to": [[6.0, 2.0, 1.0]], "speed_m_s": 10.0, "doppler": True}
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    monkeypatch.chdir(scene.parent)
+    assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
+    work = scene.parent / "demo"
+    seats = pipeline.read_json(work / "moving" / "seats.json")
+    assert seats["moving"] == ["radio"] and len(seats["seats"]) == 2
+    moments = seats["movement"]["times"]
+    assert moments[0] == 0.0 and moments[-1] == pytest.approx(0.3)  # 3 m at 10 m/s
+    for name, levels in seats["movement"]["levels_a_db"].items():
+        assert seats["seats"][name]["moves"] and seats["seats"][name]["arrival_s"] is None
+        assert len(levels["radio"]) == len(moments) and len(set(levels["radio"])) > 1
+        assert len(set(levels["talker"])) == 1  # it stands
+    peaks = [
+        np.abs(audio.read(work / "moving" / f"{k}.binaural.wav")[0]).max() for k in seats["seats"]
+    ]
+    assert max(peaks) == pytest.approx(10.0 ** (-1.0 / 20.0), rel=1e-3)
 
 
 def test_a_demo_of_any_scene_plays_the_files_given_to_its_sources(

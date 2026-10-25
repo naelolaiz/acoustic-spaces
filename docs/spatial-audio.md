@@ -295,7 +295,9 @@ acoustic-spaces walkthrough scene.yaml band=song.wav speaker=talk.wav --all --ou
   its path with an arrow the way it faces, and the still sources and listeners where
   they stand; an MP4 carries the sound when one listener is rendered.
 - Doppler plays one walk at a time: `--all` refuses a walk with `doppler: true` (play it
-  with `--walker`), and `--levels` is for one walk too.
+  with `--walker`), and `--levels` is for one walk too. The demo of any scene plays a
+  walk with Doppler when it is the only one that moves
+  ([demos](demos.md#a-demo-of-any-scene)).
 
 From Python: `simulate_movement(room)`, `render_movement(movement, signals, fmt)` (a
 dict of each listener's sound), `save_movement(rendered, "heard.wav", rate, fmt)` and

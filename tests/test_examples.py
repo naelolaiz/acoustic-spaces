@@ -19,6 +19,7 @@ from acoustic_spaces.examples import (
     GROUPS,
     copy_examples,
     example_groups,
+    example_of,
     example_path,
     list_examples,
 )
@@ -80,6 +81,23 @@ def test_example_path() -> None:
         example_path("cathedral")
 
 
+def test_a_copy_of_an_example_is_known_by_its_folder_or_its_scene(tmp_path: Path) -> None:
+    """A scene is an example's when it sits in a folder of the example's name, or when
+    it bears the example's scene name wherever it is saved; any other scene, or one that
+    cannot be read, is none."""
+    assert example_of(example_path("roadside")) == "roadside"
+    assert example_of(tmp_path / "street" / "scene.yaml") == "street"  # the folder decides
+    copy = tmp_path / "anywhere" / "mine.yaml"
+    copy.parent.mkdir()
+    copy.write_text(example_path("roadside").read_text(encoding="utf-8"), encoding="utf-8")
+    assert example_of(copy) == "roadside"
+    copy.write_text("name: My own road\n", encoding="utf-8")
+    assert example_of(copy) is None
+    copy.write_text("[not: a scene", encoding="utf-8")
+    assert example_of(copy) is None
+    assert example_of(tmp_path / "anywhere" / "missing.yaml") is None
+
+
 @pytest.mark.parametrize("name", NAMES)
 def test_examples_simulate(name: str) -> None:
     skip_without_extra(name)
@@ -94,11 +112,14 @@ def test_examples_simulate(name: str) -> None:
         }
     )
     result = simulate(room, settings=quick)
-    assert len(result) == len(room.scene.sources) * len(room.scene.listeners)
+    # A source or listener left out (the roadside's car until it is ticked) is not simulated.
+    sources = [s for s in room.scene.sources if s.in_use]
+    listeners = [lis for lis in room.scene.listeners if lis.in_use]
+    assert len(result) == len(sources) * len(listeners)
     # Wind and temperature change the speed of sound along the way, and bend the path.
     tolerance = 1e-6 if room.scene.atmosphere is None else 0.02
-    for source in room.scene.sources:
-        for listener in room.scene.listeners:
+    for source in sources:
+        for listener in listeners:
             # The nearest of a line's or surface's points, after the source's own delay.
             distance = np.linalg.norm(source.elements() - listener.position, axis=1).min()
             expected = distance / room.speed_of_sound() + source.delay_ms / 1000.0

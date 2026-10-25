@@ -19,6 +19,9 @@ there already (a scene file, a simulation's results).
 - :mod:`acoustic_spaces.demos.scene_demo` and :mod:`~acoustic_spaces.demos.scene_pictures`:
   the demo of any scene (``acoustic-spaces demo``), each source playing the WAV file its
   ``signal`` names.
+- :mod:`acoustic_spaces.demos.passby` and :mod:`~acoustic_spaces.demos.passby_pictures`:
+  the pass-by demos of the roadside and the street, a car driving past with Doppler;
+  :mod:`acoustic_spaces.demos.car`, its sound power (CNOSSOS-EU) and a sound made to it.
 - :mod:`acoustic_spaces.fetch`: downloads, whole or one member of a remote zip archive.
 """
 

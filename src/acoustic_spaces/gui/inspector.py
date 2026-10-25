@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -34,6 +35,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QStackedWidget,
     QTableWidget,
@@ -1447,7 +1449,8 @@ class GeometryPage(Page):
         ground_form.addRow(_("Margin"), self.margin)
         ground_form.addRow(_("Sky"), self.sky)
         ground_layout.addLayout(ground_form)
-        extent_row = QHBoxLayout()
+        # The two corners on two rows, so that the form stays narrow.
+        extent_row = QGridLayout()
         self.extent_set = QCheckBox(_("Extent"))
         self.extent_set.setToolTip(
             _(
@@ -1458,7 +1461,7 @@ class GeometryPage(Page):
             )
         )
         self.extent_set.toggled.connect(self._extent_toggled)
-        extent_row.addWidget(self.extent_set)
+        extent_row.addWidget(self.extent_set, 0, 0)
         self.extent_spins = []
         for tip in (
             _("x where the ground starts (its west edge)"),
@@ -1469,7 +1472,8 @@ class GeometryPage(Page):
             box = spin(-LARGEST, LARGEST, 2, 5.0)
             box.setToolTip(tip)
             box.valueChanged.connect(self._extent_changed)
-            extent_row.addWidget(box)
+            corner, axis = divmod(len(self.extent_spins), 2)
+            extent_row.addWidget(box, corner, 1 + axis)
             self.extent_spins.append(box)
         ground_layout.addLayout(extent_row)
         self.extent = QLabel()
@@ -2891,6 +2895,11 @@ class PointPage(Page):
             )
         )
         self.edit_movement.clicked.connect(lambda: self.movement.emit(self.kind, self.key))
+        self._moves_tip, self._edit_tip = self.moves.toolTip(), self.edit_movement.toolTip()
+        self._still_tip = _(
+            "Only a point source moves: a line or a surface stands where it is. Set Shape "
+            "to point to give the source a walk"
+        )
         self.movement_row = QWidget()
         movement = QHBoxLayout(self.movement_row)
         movement.setContentsMargins(0, 0, 0, 0)
@@ -3147,8 +3156,11 @@ class PointPage(Page):
         self.group.addItems(sorted({other.group for other in items if other.group}))
         self.group.setCurrentText(item.group or "")
         self.in_use.setChecked(item.in_use)
-        # A line or a surface does not move.
-        self._form.setRowVisible(self.movement_row, self.kind != "sources" or not item.extended)
+        # A line or a surface does not move: its row stays, greyed, saying why.
+        still = self.kind == "sources" and item.extended
+        self.movement_row.setEnabled(not still)
+        self.moves.setToolTip(self._moves_tip if not still else self._still_tip)
+        self.edit_movement.setToolTip(self._edit_tip if not still else self._still_tip)
         self.moves.setEnabled(item.walk is not None)
         self.moves.setChecked(item.walk is not None and item.walk.enabled)
         for box, value in zip(self.position, item.position, strict=True):
@@ -4179,7 +4191,8 @@ class CoveragePage(Page):
 
 
 class Inspector(QStackedWidget):
-    """The form for the selected item."""
+    """The form for the selected item. It is as wide and as tall as that form needs, not
+    as the largest of them, so that a narrow form has no scroll bar for a wide one."""
 
     failed = Signal(str)
     select = Signal(str, object)
@@ -4203,6 +4216,9 @@ class Inspector(QStackedWidget):
         }
         for page in self.pages.values():
             share_tips(page)
+            # A row too wide for a narrow panel puts its field under its label.
+            for form in page.findChildren(QFormLayout):
+                form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
             self.addWidget(page)
             page.failed.connect(self.failed)
             page.select.connect(self.select)
@@ -4210,11 +4226,32 @@ class Inspector(QStackedWidget):
             if isinstance(page, PointPage):
                 page.movement.connect(self.movement)
         self.kind = ""
+        self._sized_by(self.pages[""])
+
+    def _sized_by(self, shown: QWidget) -> None:
+        """Only ``shown`` counts for the size: the stack takes the largest page's
+        otherwise, and the others are ignored."""
+        ignored = QSizePolicy.Policy.Ignored
+        for page in self.pages.values():
+            if page is shown:
+                page.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            else:
+                page.setSizePolicy(ignored, ignored)
+        self.updateGeometry()
+
+    def widest(self) -> int:
+        """The width at which the widest form shows each row on one line."""
+        return max(page.sizeHint().width() for page in self.pages.values())
+
+    def widest_minimum(self) -> int:
+        """The width below which the widest form would be cut off."""
+        return max(page.minimumSizeHint().width() for page in self.pages.values())
 
     def show_item(self, kind: str, key=None) -> None:
         page = self.pages.get(kind, self.pages[""])
         self.kind = kind if kind in self.pages else ""
         self.setCurrentWidget(page)
+        self._sized_by(page)
         page.show_item(key)
 
     def refresh(self) -> None:

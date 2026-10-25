@@ -169,6 +169,17 @@ class MovementPanel(QWidget):
         )
         self.moves.toggled.connect(self._moves)
         head.addWidget(self.moves)
+        self.doppler = QCheckBox(_("Doppler"))
+        self.doppler.setToolTip(
+            _(
+                "Tick for a vehicle or an aircraft: the early sound goes through delays that "
+                "change as it goes, so its pitch shifts as it passes (doppler in the scene "
+                "file). A walk with Doppler plays alone, one walk at a time (walkthrough, or a "
+                "demo); Render movement… plays walks without it, crossfaded from place to place"
+            )
+        )
+        self.doppler.toggled.connect(self._doppler)
+        head.addWidget(self.doppler)
         head.addStretch(1)
         self.render = QPushButton(_("Render movement…"))
         self.render.setToolTip(
@@ -409,6 +420,8 @@ class MovementPanel(QWidget):
             along = walk is not None and not timed
             self.moves.setEnabled(walk is not None)
             self.moves.setChecked(walk is not None and walk.enabled)
+            self.doppler.setEnabled(walk is not None)
+            self.doppler.setChecked(walk is not None and walk.doppler)
             self.add.setEnabled(item is not None and not along)
             self.remove.setEnabled(timed)
             self.convert.setVisible(along)
@@ -687,6 +700,11 @@ class MovementPanel(QWidget):
         if not self._loading and self.key is not None:
             kind, index = self.key
             self._run(lambda: self.document.set_walk_enabled(kind, index, on))
+
+    def _doppler(self, on: bool) -> None:
+        if not self._loading and self.key is not None:
+            kind, index = self.key
+            self._run(lambda: self.document.set_walk_doppler(kind, index, on))
 
     # -- the timeline -------------------------------------------------------------------
 

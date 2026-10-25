@@ -294,8 +294,11 @@ Movement:
   with and without them (`gallery_walk` merged into `gallery`); the demo of any scene
   plays the walks that are on, with a moving picture, and `--moving` picks them for a
   run; the Run demo window ticks what moves and opens the Movement panel.
-- [ ] Movement: a path drawn in the plan click by click, and the walk of a vehicle
-  (Doppler, one walk at a time) in the editor.
+- [x] A car passing by with Doppler: a car in the `roadside` and `street` examples with
+  CNOSSOS-EU's sound power, a pass-by demo for both with a sound made to that power and
+  the level over time, the demo of any scene playing one walk with Doppler, and the
+  Movement panel's **Doppler** tick.
+- [ ] Movement: a path drawn in the plan click by click.
 
 Editor:
 

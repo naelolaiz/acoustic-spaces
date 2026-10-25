@@ -154,6 +154,25 @@ def example_path(name: str) -> Path:
     return scene_file
 
 
+def example_of(scene_file: str | Path) -> str | None:
+    """The example the scene file ``scene_file`` is, or is a copy of: its folder's name
+    when that names an example (or once did, :data:`FORMER_NAMES`), else the example
+    whose scene has the same ``name``, so that a copy saved anywhere keeps its example;
+    None for any other scene, or one that cannot be read."""
+    path = Path(scene_file)
+    folder = FORMER_NAMES.get(path.parent.name, path.parent.name)
+    if (examples_dir() / folder / SCENE_FILE).is_file():
+        return folder
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return None
+    name = data.get("name") if isinstance(data, dict) else None
+    if name is None:
+        return None
+    return next((e.name for e in list_examples() if e.title == str(name)), None)
+
+
 def copy_examples(destination: str | Path, names: list[str] | None = None) -> list[Path]:
     """Copy examples (all, or ``names``) into ``destination``, one folder each, and
     return their scene files. An example asked for by a former name (:data:`FORMER_NAMES`)
@@ -187,6 +206,7 @@ __all__ = [
     "Example",
     "copy_examples",
     "example_groups",
+    "example_of",
     "example_path",
     "examples_dir",
     "list_examples",

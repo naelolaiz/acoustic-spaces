@@ -22,7 +22,7 @@ import argparse
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
 
 from acoustic_spaces.demos import MAP_KINDS, NO_MOVERS, PATH_KINDS, Demo, Option, moving_names
 from acoustic_spaces.gui.inspector import int_spin, spin
+from acoustic_spaces.gui.sizing import body_size, fit, reading_width, scroll_bar_width, scrolled
 from acoustic_spaces.i18n import _, ngettext
 
 #: The folder under the user's home the editor runs a demo in when the example itself
@@ -86,11 +87,13 @@ def reads_scene(demo: Demo) -> Option | None:
 
 def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]:
     """The demos of the open scene, each in the folder it runs in and with the arguments
-    it starts with: *This scene* first, then the demo of the example the scene belongs
-    to (its folder's name, in the examples or in a copy of one), reading the open scene
-    instead of the example's."""
+    it starts with: *This scene* first, then the demo of the example the scene is or is
+    a copy of (:func:`~acoustic_spaces.examples.example_of`: its folder's name, or the
+    example's scene name wherever the copy is saved), reading the open scene instead of
+    the example's."""
     from acoustic_spaces.demos import demo_for
     from acoustic_spaces.demos.scene_demo import DEMO
+    from acoustic_spaces.examples import example_of
 
     found: list[tuple[Demo, argparse.Namespace]] = []
     path = Path(scene).resolve() if scene is not None else None
@@ -102,7 +105,8 @@ def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]
     if path is None or base != path.parent:  # not beside the scene, its default
         args.work = base / "demo"
     found.append((demo, args))
-    example = demo_for(path.parent.name) if path is not None else None
+    name = example_of(path) if path is not None else None
+    example = demo_for(name) if name is not None else None
     if example is not None:
         demo = example.at(writable(path.parent, example.example))
         args = starting_arguments(demo)
@@ -357,8 +361,9 @@ class InputsField(QWidget):
 
 
 def walkers_of(scene: str | Path | None) -> list[tuple[str, object]]:
-    """The sources and listeners in use of the scene file that have a walk, on or off, as
-    ("listeners" or "sources", item), listeners first; none when it cannot be read."""
+    """The sources and listeners of the scene file that have a walk, on or off, in use or
+    left out of its simulations, as ("listeners" or "sources", item), listeners first;
+    none when it cannot be read."""
     if scene is None:
         return []
     from acoustic_spaces.scene import Scene
@@ -371,7 +376,7 @@ def walkers_of(scene: str | Path | None) -> list[tuple[str, object]]:
         (kind, item)
         for kind in ("listeners", "sources")
         for item in getattr(loaded, kind)
-        if item.in_use and item.walk is not None
+        if item.walk is not None
     ]
 
 
@@ -397,10 +402,12 @@ def walk_text(item) -> str:
 
 class MovementBox(QGroupBox):
     """What moves in a run: a row for each source and listener of the scene with a walk,
-    ticked when it moves. With :meth:`set_mode` ``editable`` (a demo with a ``movers``
-    option, ``--moving``) the ticks are the run's, starting as the scene's Moves sets
-    them; otherwise they show what the demo moves. Edit movement… asks for the Movement
-    panel on the selected walker (:attr:`edit`)."""
+    ticked when it moves; one left out of the scene's simulations shows only when it is
+    ticked (the pass-by demos' car, which they put in the scenes they write). With
+    :meth:`set_mode` ``editable`` (a demo with a ``movers`` option, ``--moving``) the
+    ticks are the run's, starting as the scene's Moves sets them; otherwise they show
+    what the demo moves. Edit movement… asks for the Movement panel on the selected
+    walker (:attr:`edit`)."""
 
     #: A tick changed.
     changed = Signal()
@@ -419,6 +426,8 @@ class MovementBox(QGroupBox):
             )
         )
         self.walkers = [(kind, item.name, item.walk.enabled) for kind, item in walkers]
+        #: Whether each walker is in the scene's simulations.
+        self.used = [item.in_use for _kind, item in walkers]
         self.editable = False
         layout = QVBoxLayout(self)
         # As tall as its contents, however tall the window is.
@@ -451,15 +460,17 @@ class MovementBox(QGroupBox):
             walk = QTableWidgetItem(walk_text(item))
             for cell in (moves, name, what, walk):
                 cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                if not item.in_use:
+                    cell.setToolTip(
+                        _(
+                            "Left out of the scene's simulations: a demo that moves it puts "
+                            "it in the scene it writes"
+                        )
+                    )
             self.table.setItem(row, self.MOVES, moves)
             self.table.setItem(row, self.NAME, name)
             self.table.setItem(row, self.KIND, what)
             self.table.setItem(row, self.WALK, walk)
-        rows = sum(self.table.rowHeight(r) for r in range(min(len(self.walkers), 6)))
-        self.table.setFixedHeight(
-            self.table.horizontalHeader().height() + rows + 2 * self.table.frameWidth()
-        )
-        self.table.setVisible(bool(self.walkers))
         self.table.itemChanged.connect(self._ticked)
         layout.addWidget(self.table)
         row = QHBoxLayout()
@@ -482,8 +493,14 @@ class MovementBox(QGroupBox):
 
     @property
     def own(self) -> list[str]:
-        """The walkers whose walk is on in the scene."""
-        return [name for _kind, name, on in self.walkers if on]
+        """The walkers in use whose walk is on in the scene."""
+        pairs = zip(self.walkers, self.used, strict=True)
+        return [name for (_kind, name, on), used in pairs if on and used]
+
+    @property
+    def any_used(self) -> bool:
+        """Whether a walker is in the scene's simulations."""
+        return any(self.used)
 
     def ticked(self) -> list[str]:
         return [
@@ -496,8 +513,18 @@ class MovementBox(QGroupBox):
         """Whether the ticks are the run's to change, what is ticked, and the line above."""
         self.editable = editable
         self.note.setText(note)
-        self.reset.setVisible(editable and bool(self.walkers))
+        self.reset.setVisible(editable and self.any_used)
         self._tick(ticked)
+        shown = []
+        for row, (_kind, name, _on) in enumerate(self.walkers):
+            self.table.setRowHidden(row, not self.used[row] and name not in ticked)
+            if not self.table.isRowHidden(row):
+                shown.append(row)
+        rows = sum(self.table.rowHeight(r) for r in shown[:6])
+        self.table.setFixedHeight(
+            self.table.horizontalHeader().height() + rows + 2 * self.table.frameWidth()
+        )
+        self.table.setVisible(bool(shown))
         for column in (self.MOVES, self.NAME, self.KIND):  # the tick boxes in too
             self.table.resizeColumnToContents(column)
 
@@ -531,11 +558,12 @@ class MovementBox(QGroupBox):
             self.changed.emit()
 
     def _edit(self) -> None:
-        if not self.walkers:
+        shown = [r for r in range(len(self.walkers)) if not self.table.isRowHidden(r)]
+        if not shown:
             self.edit.emit("", "")
             return
-        row = max(self.table.currentRow(), 0)
-        kind, name, _on = self.walkers[row]
+        row = self.table.currentRow()
+        kind, name, _on = self.walkers[row if row in shown else shown[0]]
         self.edit.emit(kind, name)
 
 
@@ -624,13 +652,18 @@ class DemoDialog(QDialog):
         self.fields: dict[str, QWidget] = {}
         #: What Edit movement… asked for: the walker's kind and name (empty for none).
         self.edit_request: tuple[str, str] | None = None
-        layout = self._layout = QVBoxLayout(self)
+        # The form scrolls where the screen is too small for it, rather than squeezing
+        # its tables and buttons; the buttons stay below it.
+        body = QWidget()
+        layout = self._layout = QVBoxLayout(body)
+        layout.setContentsMargins(0, 0, 0, 0)
         intro = QLabel(
             _(
                 "A demo plays sound through the open scene, mixes what every listener hears "
                 "and puts a video together. This scene plays the WAV file each source's Plays "
-                "names; an example's own demo downloads the recordings it plays and can take "
-                "a while. The messages say what it is doing, and Cancel stops it."
+                "names; an example's own demo plays recordings it downloads, or a sound it "
+                "makes (the pass-by demos' car), and can take a while. The messages say what "
+                "it is doing, and Cancel stops it."
             )
         )
         intro.setWordWrap(True)
@@ -697,6 +730,9 @@ class DemoDialog(QDialog):
         self.problem.setWordWrap(True)
         layout.addWidget(self.problem)
         layout.addStretch(1)  # a taller window leaves the room above the buttons
+        self.scroll = scrolled(body)
+        outer = QVBoxLayout(self)
+        outer.addWidget(self.scroll)
 
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -710,11 +746,24 @@ class DemoDialog(QDialog):
         )
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
-        layout.addWidget(self.buttons)
+        outer.addWidget(self.buttons)
 
         self.picker.currentIndexChanged.connect(self._chose_demo)
         self.step.currentIndexChanged.connect(self._refresh)
         self._chose_demo()
+        self._fit(reading_width(self))
+
+    def _fit(self, width: int) -> None:
+        """As large as the form asks at ``width`` (or wider when it needs more), the
+        buttons below, as far as the screen leaves room."""
+        margins = self.layout().contentsMargins()
+        across = margins.left() + margins.right()
+        width = max(width - across, self.scroll.widget().minimumSizeHint().width())
+        width += scroll_bar_width(self.scroll)
+        body = body_size(self.scroll, width)
+        spacing = self.layout().spacing()
+        height = body.height() + spacing + self.buttons.sizeHint().height()
+        fit(self, QSize(width + across, height + margins.top() + margins.bottom()))
 
     # -- the form -------------------------------------------------------------------
 
@@ -767,6 +816,8 @@ class DemoDialog(QDialog):
         self.options.deleteLater()
         self.options = form
         self._refresh()
+        if self.isVisible():  # another demo: as tall as its form, as wide as the window
+            self._fit(self.width())
 
     def _show_movement(self, demo: Demo, args: argparse.Namespace) -> None:
         """The Movement box for ``demo``: ticks to change for a demo with a ``movers``
@@ -774,7 +825,13 @@ class DemoDialog(QDialog):
         nothing."""
         box = self.movement
         option = next((o for o in demo.options if o.kind == "movers"), None)
-        if not box.walkers:
+        names = None
+        if option is None and demo.moving is not None:
+            try:
+                names = demo.moving(demo.resolved(args))
+            except Exception:  # the line under the form says what is wrong
+                names = []
+        if not box.any_used and not names:
             note = _(
                 "Nothing in this scene moves. Edit movement… gives a source or a listener a "
                 "walk along keyframes."
@@ -788,11 +845,7 @@ class DemoDialog(QDialog):
                 "the scene, and change this run only ({option})."
             ).format(option=option.option)
             box.set_mode(True, box.own if names is None else names, note)
-        elif demo.moving is not None:
-            try:
-                names = demo.moving(demo.resolved(args))
-            except Exception:  # the line under the form says what is wrong
-                names = []
+        elif names is not None:
             note = _(
                 "This demo moves what is ticked; Moves in the scene turns a walk on or off, "
                 "and Edit movement… changes it."

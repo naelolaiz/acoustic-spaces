@@ -536,6 +536,23 @@ class Document(QObject):
 
         self.edit(_("turn the walk on") if enabled else _("turn the walk off"), change)
 
+    def set_walk_doppler(self, kind: str, index: int, doppler: bool) -> None:
+        """Have the walk of the source or listener at ``index`` take the early sound through
+        delays that change as it goes, so its pitch shifts (``walk.doppler``), or crossfade
+        from place to place."""
+        item = getattr(self.scene, kind)[index]
+        if item.walk is None:
+            raise EditError(
+                _("{name} has no walk yet: add a keyframe first").format(name=item.name)
+            )
+        if item.walk.doppler == doppler:
+            return
+
+        def change(data: dict) -> None:
+            data[kind][index]["walk"]["doppler"] = doppler
+
+        self.edit(_("turn Doppler on") if doppler else _("turn Doppler off"), change)
+
     def set_hidden(self, kind: str, indices, hidden: bool) -> None:
         """Hide the sources or listeners at ``indices`` in the 3D view and the plan, or
         show them again; this changes how the editor shows the scene, not the scene."""

@@ -1700,6 +1700,14 @@ msgstr "Hoe het gaat, hoe ver en hoe lang"
 msgid "Listener"
 msgstr "Ontvanger"
 
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Left out of the scene's simulations: a demo that moves it puts it in the "
+"scene it writes"
+msgstr ""
+"Buiten de simulaties van de scène gelaten: een demo die het beweegt, zet het "
+"in de scène die hij schrijft"
+
 #: acoustic_spaces/gui/demo_dialog.py acoustic_spaces/gui/inspector.py
 msgid "Edit movement…"
 msgstr "Beweging bewerken…"
@@ -1730,14 +1738,16 @@ msgstr "Demo uitvoeren"
 msgid ""
 "A demo plays sound through the open scene, mixes what every listener hears "
 "and puts a video together. This scene plays the WAV file each source's Plays "
-"names; an example's own demo downloads the recordings it plays and can take "
-"a while. The messages say what it is doing, and Cancel stops it."
+"names; an example's own demo plays recordings it downloads, or a sound it "
+"makes (the pass-by demos' car), and can take a while. The messages say what "
+"it is doing, and Cancel stops it."
 msgstr ""
 "Een demo speelt geluid af in de open scène, mengt wat elke luisteraar hoort "
 "en zet een video in elkaar. Deze scène speelt het WAV-bestand af dat het "
-"veld Speelt van elke bron noemt; de eigen demo van een voorbeeld downloadt "
-"de opnamen die hij speelt en kan even duren. De meldingen zeggen wat hij "
-"doet, en Annuleren stopt hem."
+"veld Speelt van elke bron noemt; de eigen demo van een voorbeeld speelt "
+"opnamen die hij downloadt, of een geluid dat hij maakt (de auto van de "
+"passeerdemo's), en kan even duren. De meldingen zeggen wat hij doet, en "
+"Annuleren stopt hem."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -1907,6 +1917,14 @@ msgstr "route inschakelen"
 #: acoustic_spaces/gui/document.py
 msgid "turn the walk off"
 msgstr "route uitschakelen"
+
+#: acoustic_spaces/gui/document.py
+msgid "turn Doppler on"
+msgstr "Doppler inschakelen"
+
+#: acoustic_spaces/gui/document.py
+msgid "turn Doppler off"
+msgstr "Doppler uitschakelen"
 
 #: acoustic_spaces/gui/document.py
 msgid "a scene needs at least one source"
@@ -4201,6 +4219,14 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Only a point source moves: a line or a surface stands where it is. Set Shape "
+"to point to give the source a walk"
+msgstr ""
+"Alleen een puntbron beweegt: een lijn of een vlak blijft waar het is. Zet "
+"Vorm op punt om de bron een route te geven"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "Where the source is along x (m). Dragging it in the 3D view or the plan "
 "moves it too"
 msgstr ""
@@ -5461,6 +5487,24 @@ msgstr ""
 "Aanvinken om het in een beweging zijn keyframes te laten volgen; uitvinken "
 "om ze te bewaren maar het stil te laten staan waar het begint (enabled in "
 "het scènebestand)"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Doppler"
+msgstr "Doppler"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Tick for a vehicle or an aircraft: the early sound goes through delays that "
+"change as it goes, so its pitch shifts as it passes (doppler in the scene "
+"file). A walk with Doppler plays alone, one walk at a time (walkthrough, or "
+"a demo); Render movement… plays walks without it, crossfaded from place to "
+"place"
+msgstr ""
+"Vink aan voor een voertuig of een vliegtuig: het vroege geluid gaat door "
+"vertragingen die onderweg veranderen, zodat de toonhoogte verschuift bij het "
+"passeren (doppler in het scènebestand). Een route met Doppler speelt alleen, "
+"één route tegelijk (walkthrough of een demo); Beweging renderen… speelt "
+"routes zonder, van plek tot plek overgevloeid"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Render movement…"
@@ -7635,7 +7679,9 @@ msgid ""
 "hard yard the two add up there instead, and the dip comes higher up, near 2 "
 "kHz. The meadow, the road and the yard are parts of the ground, each with "
 "its impedance; a reflection near where two meet takes some of each, as much "
-"as each covers of its Fresnel zone."
+"as each covers of its Fresnel zone. A car drives along the road at 50 km/h, "
+"its pitch falling as it passes (Doppler): it is left out of simulations "
+"until ticked, and passby_demo.py plays it."
 msgstr ""
 "Buiten: verkeer op een weg tussen een weiland en een verharde binnenplaats, "
 "gehoord op 7.5, 25 en 50 m boven het gras en op 25 m boven de binnenplaats. "
@@ -7645,7 +7691,9 @@ msgstr ""
 "de dip ligt hoger, rond 2 kHz. Het weiland, de weg en de binnenplaats zijn "
 "delen van de grond, elk met een eigen impedantie; een reflectie dicht bij "
 "waar twee elkaar raken neemt van elk iets, zoveel als elk van haar "
-"fresnelzone bedekt."
+"fresnelzone bedekt. Een auto rijdt met 50 km/h over de weg, zijn toonhoogte "
+"daalt bij het passeren (Doppler): hij blijft buiten de simulaties tot hij "
+"aangevinkt wordt, en passby_demo.py speelt hem."
 
 #: examples/room_modes/scene.yaml
 msgctxt "example"
@@ -7939,7 +7987,10 @@ msgid ""
 "the ground reaches 30 m past the buildings, then goes on as if it never "
 "ended. One listener stands on the pavement, one on a balcony of the office "
 "block, one in the garden, where the traffic comes over the top of the "
-"barrier and round its ends: `first_order` diffraction follows it."
+"barrier and round its ends: `first_order` diffraction follows it. A car "
+"drives along the street at 50 km/h, its pitch falling as it passes "
+"(Doppler): it is left out of simulations until ticked, and passby_demo.py "
+"plays it."
 msgstr ""
 "Buiten: een straat van 12 m breed tussen een rij huizen van 9 m hoog en een "
 "kantoorgebouw van 15 m hoog, met verkeer langs de straat (een lijnbron van "
@@ -7949,7 +8000,9 @@ msgstr ""
 "gebouwen en loopt dan door alsof hij nooit ophoudt. Eén ontvanger staat op "
 "de stoep, één op een balkon van het kantoorgebouw, één in de tuin, waar het "
 "verkeer over de bovenkant van het scherm en om de uiteinden heen komt: de "
-"diffractie `first_order` volgt dat."
+"diffractie `first_order` volgt dat. Een auto rijdt met 50 km/h door de "
+"straat, zijn toonhoogte daalt bij het passeren (Doppler): hij blijft buiten "
+"de simulaties tot hij aangevinkt wordt, en passby_demo.py speelt hem."
 
 #: examples/studio/scene.yaml
 msgctxt "example"

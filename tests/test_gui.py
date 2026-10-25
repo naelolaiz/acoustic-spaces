@@ -17,7 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6.QtWidgets")
 pytest.importorskip("pyvistaqt")
 
-from PySide6.QtCore import QPoint, QPointF, Qt  # noqa: E402
+from PySide6.QtCore import QPoint, QPointF, QSize, Qt  # noqa: E402
 from PySide6.QtGui import QWheelEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
@@ -66,8 +66,14 @@ def qapp():
 
 @pytest.fixture
 def window(qapp, monkeypatch):
+    from acoustic_spaces.gui import app, sizing
     from acoustic_spaces.gui.app import MainWindow
 
+    # The room a desktop's screen of 1920 by 1080 leaves a window: the offscreen screen is
+    # 800 pixels square, where the plan would be too small to click a point to the half
+    # metre.
+    for module in (app, sizing):
+        monkeypatch.setattr(module, "screen_room", lambda widget: QSize(1880, 960))
     win = MainWindow()
     monkeypatch.setattr(win, "ask_save", lambda: QMessageBox.StandardButton.Discard)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: QMessageBox.StandardButton.Ok)
@@ -1296,6 +1302,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
 
     # A barrier is clicked point by point and finished with Enter.
     page._add("barriers")
+    qapp.processEvents()  # the forms may widen, and the plan with them
     assert canvas.purpose == "barrier" and "end to end" in window.plan.hint.text()
     for point in [(-30, 20), (30, 20)]:
         QTest.mouseClick(
@@ -1315,6 +1322,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
     # Vegetation takes the shape chosen beside the button: a tree is one click.
     page.plant_shape.setCurrentIndex(page.plant_shape.findData("tree"))
     page._add("vegetation")
+    qapp.processEvents()  # the forms may widen, and the plan with them
     assert canvas.purpose == "tree"
     QTest.mouseMove(canvas, _at(canvas, (40, -30)))
     canvas.grab()  # the crown follows the cursor
@@ -1343,6 +1351,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
 
     # A zone, drawn and closed on its first corner, takes the ground's material.
     page._add("zone")
+    qapp.processEvents()  # the forms may widen, and the plan with them
     assert canvas.purpose == "zone" and "zone" in window.plan.hint.text()
     for point in [(-80, -80), (-40, -80), (-40, -40), (-80, -40), (-80, -80)]:
         QTest.mouseClick(
@@ -1361,6 +1370,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
 
     # What cannot be a building yet says so and goes on; Esc stops it.
     page._add("buildings")
+    qapp.processEvents()
     for point in [(0, -50), (20, -30), (20, -50), (0, -30)]:
         QTest.mouseClick(
             canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, point)
@@ -1371,6 +1381,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
     assert canvas.mode == "outdoor" and canvas.purpose == "room"
     assert len(window.document.scene.geometry.buildings) == 1
     page._add("barriers")
+    qapp.processEvents()
     QTest.mouseClick(
         canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (0, -50))
     )
@@ -2701,6 +2712,18 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     assert walk.edit_request == ("listeners", "visitor")
     assert walk.result() == int(QDialog.DialogCode.Rejected)
     walk.deleteLater()
+    # The roadside's car is left out of its simulations: the pass-by demo, which puts it
+    # in the scene it writes, shows that it moves it; This scene does not list it.
+    road = DemoDialog(scene=example_path("roadside"))
+    assert road.picker.currentData() == "passby"
+    box = road.movement
+    assert box.walkers == [("sources", "car", True)] and box.used == [False]
+    assert box.ticked() == ["car"] and not box.table.isHidden()
+    assert "a demo that moves it puts it in" in box.table.item(0, box.NAME).toolTip()
+    road.picker.setCurrentIndex(road.picker.findData("scene"))
+    assert box.note.text().startswith("Nothing in this scene moves.")
+    assert box.table.isHidden() and box.table.isRowHidden(0) and box.ticked() == []
+    road.deleteLater()
     # A scene of no example has This scene only, and one never saved cannot be run.
     plain = DemoDialog(scene=example_path("shoebox"))
     assert plain.movement.note.text().startswith("Nothing in this scene moves.")
@@ -2879,6 +2902,91 @@ def test_download_hrtfs_from_the_outputs_page(window, tmp_path: Path, monkeypatc
     button.click()
     binaural = [output for output in window.document.scene.outputs if output.format == "binaural"]
     assert binaural and binaural[0].hrtf == path
+
+
+def test_nothing_starts_cut_off(window, qapp, tmp_path: Path) -> None:
+    """At the window's default size every form fits the Properties panel, which takes
+    the whole height on the right, with no scroll bar across; a form wider than the
+    panel widens it. The Run demo window of the demo with the longest form scrolls
+    within the screen rather than squeezing its tables and buttons, and the Download
+    HRTFs window is as wide as its rows, as far as the screen goes."""
+    from PySide6.QtWidgets import QPushButton
+
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+    from acoustic_spaces.gui.hrtf_dialog import HrtfDialog
+    from acoustic_spaces.gui.sizing import screen_room, scroll_chrome
+
+    qapp.processEvents()  # the window sizes its panels once it is laid out
+    assert window.width() >= 1400 and window.height() >= 900
+    assert window.corner(Qt.Corner.BottomRightCorner) == Qt.DockWidgetArea.RightDockWidgetArea
+    assert window.open_file(example_path("roadside"), example=True)
+    forms = window.docks["inspector"].widget()
+    for kind, key in (
+        ("scene", None),
+        ("geometry", None),
+        ("sources", 1),
+        ("listeners", 0),
+        ("material", 0),
+        ("simulation", None),
+        ("outputs", None),
+        ("coverage", None),
+    ):
+        window.select(kind, key)
+        qapp.processEvents()
+        page = window.inspector.currentWidget()
+        assert page.minimumSizeHint().width() <= forms.viewport().width(), kind
+        if forms.verticalScrollBar().isVisible():  # the room it counts is the room it takes
+            assert forms.width() - forms.viewport().width() == scroll_chrome(forms), kind
+    # Only the form on show counts: a narrow one is not as wide as the widest.
+    window.select("listeners", 0)
+    assert window.inspector.minimumSizeHint().width() < window.inspector.widest()
+    # A form that needs more than the panel has widens it.
+    window.resizeDocks([window.docks["inspector"]], [150], Qt.Orientation.Horizontal)
+    qapp.processEvents()
+    window.select("geometry", None)
+    qapp.processEvents()
+    page = window.inspector.currentWidget()
+    assert page.minimumSizeHint().width() <= forms.viewport().width()
+
+    dialog = DemoDialog(scene=example_path("stadium_concert"))
+    dialog.show()
+    qapp.processEvents()
+    room = screen_room(dialog)
+    assert dialog.width() <= room.width() and dialog.height() <= room.height()
+    assert dialog.scroll.widget().isAncestorOf(dialog.fields["stems"])
+    for button in dialog.findChildren(QPushButton):
+        if button.isVisibleTo(dialog):
+            assert button.height() >= button.minimumSizeHint().height(), button.text()
+    stems = dialog.fields["stems"].table
+    rows = sum(stems.rowHeight(r) for r in range(stems.rowCount()))
+    assert stems.height() >= stems.horizontalHeader().height() + rows
+    dialog.deleteLater()
+
+    sets = HrtfDialog(folder=tmp_path)
+    rows = sets.list.sizeHintForColumn(0) + 2 * sets.list.frameWidth()
+    assert sets.width() >= min(rows, screen_room(sets).width())
+    sets.deleteLater()
+
+
+def test_a_copy_of_an_example_saved_anywhere_keeps_its_demo(qapp, tmp_path: Path) -> None:
+    """The roadside saved in a folder of another name still has the pass-by demo, with
+    its car made to CNOSSOS-EU's power, found by the scene's name and reading the copy;
+    renamed, it is a scene of its own, with This scene only."""
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+
+    copy = tmp_path / "my project" / "scene.yaml"
+    copy.parent.mkdir()
+    text = example_path("roadside").read_text(encoding="utf-8")
+    copy.write_text(text, encoding="utf-8")
+    dialog = DemoDialog(scene=copy)
+    assert dialog.picker.currentData() == "passby" and dialog.demo.example == "roadside"
+    assert dialog.fields["source"].value() == copy.resolve()
+    assert dialog.movement.ticked() == ["car"]
+    dialog.deleteLater()
+    copy.write_text(text.replace("name: Road across a meadow", "name: My road"), "utf-8")
+    plain = DemoDialog(scene=copy)
+    assert [plain.picker.itemData(k) for k in range(plain.picker.count())] == ["scene"]
+    plain.deleteLater()
 
 
 def test_demo_dialog_offers_the_hrtf_sets(qapp, tmp_path: Path, monkeypatch) -> None:
@@ -3484,6 +3592,29 @@ def test_movement_panel_edits_keyframes_in_place(window) -> None:
     assert panel.playing and panel.play.text() == "Pause"
     dock.hide()
     assert not panel.playing and window.plan.canvas.time is None
+
+
+def test_a_car_drives_with_doppler_and_a_line_stays(window) -> None:
+    """A line source's form shows Moves and Edit movement… greyed, with a tip that says
+    why; the roadside's car, a point source, has its walk's Doppler ticked in the
+    Movement panel, and the tick is one step of the history."""
+    window.open_example(example_path("roadside"))
+    page = window.inspector.pages["sources"]
+    window.select("sources", 0)  # the traffic: a line
+    assert page._form.isRowVisible(page.movement_row) and not page.movement_row.isEnabled()
+    assert page.moves.toolTip().startswith("Only a point source moves")
+    assert page.edit_movement.toolTip() == page.moves.toolTip()
+    window.select("sources", 1)  # the car
+    assert page.movement_row.isEnabled() and page.moves.isChecked()
+    assert page.moves.toolTip().startswith("Tick to have the source go along")
+    page.edit_movement.click()
+    panel = window.movement
+    assert panel.key == ("sources", 1) and panel.doppler.isChecked()
+    panel.doppler.setChecked(False)
+    assert not window.document.scene.sources[1].walk.doppler
+    assert window.undo_action.text() == "&Undo turn Doppler off"
+    window.undo()
+    assert window.document.scene.sources[1].walk.doppler and panel.doppler.isChecked()
 
 
 def start_yaw(window) -> float:

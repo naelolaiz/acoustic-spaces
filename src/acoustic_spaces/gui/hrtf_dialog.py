@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from acoustic_spaces.gui.sizing import fit_width, scroll_bar_width
 from acoustic_spaces.gui.worker import DownloadJob
 from acoustic_spaces.i18n import _
 from acoustic_spaces.spatial import hrtf_sets
@@ -125,6 +126,10 @@ class HrtfDialog(QDialog):
         self.heads.currentIndexChanged.connect(self._refresh)
         self.list.setCurrentRow(0)
         self._refresh()
+        # Wide enough for the rows, whose credits are long, and for their scroll bar.
+        margins = layout.contentsMargins()
+        rows = self.list.sizeHintForColumn(0) + 2 * self.list.frameWidth()
+        fit_width(self, rows + scroll_bar_width(self.list) + margins.left() + margins.right())
 
     # -- the rows -------------------------------------------------------------------
 

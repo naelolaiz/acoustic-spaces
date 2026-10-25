@@ -35,7 +35,10 @@ which frequencies each octave band holds.
   listeners, the wind outdoors, simulation settings and output formats. Selecting an entry, there or by
   clicking it in the 3D view, shows its form under **Properties**. Every change is
   checked against the scene schema; a refused change says why under **Messages**, and
-  every change can be undone.
+  every change can be undone. **Properties** takes the window's whole height on the
+  right and is never narrower than its widest form needs (up to half the screen), the
+  window opening wide enough for it; a row too long for it puts its field under its
+  label.
 - Sources and listeners sit in their **groups** (the form's **Group** field; groups
   nest with `/`, as PA/Delays). Each source, listener and group has a tick: unticked,
   it is left out of simulations, maps and checks, stays in the scene drawn faded, and
@@ -75,15 +78,18 @@ which frequencies each octave band holds.
   below runs to the longest walk at least; make **End** longer to add keyframes past
   it. The slider (or **Play**) moves every mover in the 3D view and the plan to where
   it is then, nothing simulated; **Moves** (in the panel and the forms) keeps a walk but
-  leaves its mover standing, as `enabled: false` does. A walk through points at a speed
-  (`to`) shows as it goes, read-only, until **Convert to keyframes** bakes it, its turns
-  through the corners included (facing forward, it faces its first leg from the start,
-  so its own orientation turns that way). A dragged keyframe keeps its height above
-  the floor, as a dragged source or listener does. **Render movement…** simulates every
-  mover on one clock
-  and writes what each listener in use hears of what the sources play (their **Plays**
-  files) as a WAV file, in the format of the scene's first output (binaural with none),
-  in the background, as `walkthrough --all` does (see
+  leaves its mover standing, as `enabled: false` does, and **Doppler** has it play as a
+  vehicle does, each early path through a delay that changes as it goes, so its pitch
+  shifts as it passes (`doppler: true`; a walk with Doppler plays alone, in a
+  walkthrough or a demo). A line or a surface source does not move: its form shows
+  **Moves** and **Edit movement…** greyed, with a tip saying so. A walk through points at
+  a speed (`to`) shows as it goes, read-only, until **Convert to keyframes** bakes it,
+  its turns through the corners included (facing forward, it faces its first leg from
+  the start, so its own orientation turns that way). A dragged keyframe keeps its
+  height above the floor, as a dragged source or listener does. **Render movement…**
+  simulates every mover on one clock and writes what each listener in use hears of what
+  the sources play (their **Plays** files) as a WAV file, in the format of the scene's
+  first output (binaural with none), in the background, as `walkthrough --all` does (see
   [Walkthroughs](spatial-audio.md#walkthroughs)); one gain brings
   the loudest peak to -1 dBFS, so the balance between the listeners holds.
 - The scene tree's **Simulation** entry has the settings of
@@ -114,21 +120,25 @@ which frequencies each octave band holds.
   makes a video ([a demo of any scene](demos.md#a-demo-of-any-scene)); the scene of an
   example that comes with a demo (the orchestra in the concert hall, the choir and organ
   in the church, the band in the stadium, the concert across the lake, the walk through
-  the gallery), or a copy of one, also has that demo, reading the open scene, and the
-  window starts on it. Pick the demo and the step (*all* runs it from nothing to its
-  video, leaving out what is done already), fill in the options, which start at the
-  same defaults the command line uses (the **--input** table lists the sources, what
+  the gallery, the car passing the roadside and driving down the street), or a copy of
+  one, also has that demo, reading the open scene, and the window starts on it (a copy
+  is known by its folder's name or, saved anywhere, by the scene's name). Pick
+  the demo and the step (*all* runs it from nothing to its video, leaving out what is
+  done already), fill in the options, which start at the same defaults the command
+  line uses (the **--input** table lists the sources, what
   each plays and the WAV file it plays instead: **Choose WAV…** gives the selected one a
   file, **Default** takes it back; the **Movement** box ticks the sources and listeners
   whose walk moves in the run, which *This scene* lets you change for that run,
-  `--moving`, and **Edit movement…** opens the Movement panel on the selected one), and
+  `--moving`, a walker left out of the scene showing only when the demo moves it, and
+  **Edit movement…** opens the Movement panel on the selected one), and
   it runs in its own process in the background, with what it prints in the **Messages**
   panel and **Cancel** to stop it.
   The window shows the command line it is about to run, so the same run can be
   repeated in a terminal, and asks for a scene with changes to be saved first, as the
-  demo reads the file. An example's demo downloads the recordings it plays and can take
-  a while. A demo writes beside the scene (*This scene* into `demo/`), or under your
-  home folder when that folder cannot be written.
+  demo reads the file. An example's demo plays recordings it downloads, or a sound it
+  makes (the pass-by demos' car), and can take a while. A demo writes beside the scene
+  (*This scene* into `demo/`), or under your home folder when that folder cannot be
+  written.
 - The scene tree's **Outputs** entry chooses what a run writes: mono, binaural,
   Ambisonics or loudspeakers. For binaural, **HRTF file…** takes a SOFA file from the
   disk, **Spherical head** goes back to the model, and **Download HRTFs…** offers the
