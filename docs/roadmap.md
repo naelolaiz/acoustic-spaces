@@ -103,10 +103,15 @@ Edge diffraction:
   boundary at each edge it passes, checked against the exact solution past a screen's
   end, a building's corner, a strip and a gap (within 0.2 dB), and walked round the
   gallery's corner 1 cm at a time.
-- [ ] Paths that two events stop at once, as a reflection past the end of its face with
-  an edge in its way: they are left out with their terms, so the level still steps
-  where the second event clears, by up to 1.9 dB in one band (0.63 dB(A)) in the
-  street's garden. This and the fade's other known issues are listed in
+- [x] Paths that two events stop at once, as a reflection past the end of its face with
+  an edge in its way: followed where one or two edges explain the events, so the
+  street's garden no longer steps by up to 1.9 dB in one band (0.63 dB(A)) where the
+  second event clears.
+- [ ] The terms of one event at different edges in the bands that add in energy
+  (indoors from 250 Hz): near each other they are one wave, and the two edges of a
+  narrow face nearly cancel in pressure but add in energy, so behind the `archway`'s
+  wall the level steps by up to 4.4 dB where the reflection off the arch's jamb
+  appears. This and the fade's other known issues are listed in
   [Validation](validation.md#known-issues-of-the-edge-fade).
 
 Parameters:
@@ -242,7 +247,7 @@ Outdoor acoustics, in steps:
   that no path can use before it traces a ray, on every core, with the same results:
   900 buildings simulate in about 2 s on four cores instead of 81 s, and 3,600 in
   about 22 s, where 1,600 ran out of memory (`validation/city_speed.py`); with the
-  reflections that fade at edges of 4.0.0, about 11 and 49 s.
+  reflections that fade at edges of 4.0.0, about 17 and 56 s.
 - [x] O21 A wide-angle parabolic equation: `simulation.early.parabolic_equation:
   wide_angle` gives the bands the parabolic equation gives from the split-step Padé
   method (Collins' RAM: ten terms, steps of three wavelengths, fourth-order differences
