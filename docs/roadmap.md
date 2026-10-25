@@ -107,12 +107,14 @@ Edge diffraction:
   an edge in its way: followed where one or two edges explain the events, so the
   street's garden no longer steps by up to 1.9 dB in one band (0.63 dB(A)) where the
   second event clears.
-- [ ] The terms of one event at different edges in the bands that add in energy
-  (indoors from 250 Hz): near each other they are one wave, and the two edges of a
-  narrow face nearly cancel in pressure but add in energy, so behind the `archway`'s
-  wall the level steps by up to 4.4 dB where the reflection off the arch's jamb
-  appears. This and the fade's other known issues are listed in
-  [Validation](validation.md#known-issues-of-the-edge-fade).
+- [x] The terms of one event at different edges in the bands that add in energy
+  (indoors from 250 Hz): they take their cross terms with each other, as one wave, so
+  behind the `archway`'s wall the level steps by up to 1.4 dB where the reflection off
+  the arch's jamb appears, instead of 4.4 dB.
+- [ ] The archway's 1.4 dB: at 250 Hz, where the jamb's reflection is found, the cross
+  terms of the edge diffraction's paths and the fade's terms take more than they all
+  carry, and the sum stops at zero. This and the fade's other known issues are listed
+  in [Validation](validation.md#known-issues-of-the-edge-fade).
 
 Parameters:
 

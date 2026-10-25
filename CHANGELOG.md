@@ -924,14 +924,26 @@ and the last bits round alike on every platform.
 - Driving the `street`'s car 1 cm at a time, the garden's level no longer steps by up to
   1.9 dB in one band (0.63 dB(A)) where a path that two events stop clears one of them:
   at those places it now stands out from its neighbours' by at most 0.11 dB.
+- Indoors, in the bands where paths add in energy (from 250 Hz up), the terms of one
+  event take their cross terms with each other and with those the edge diffraction adds
+  there, and the edge diffraction's waves of two edges that border one path take
+  theirs, as one wave: round a narrow face the two edges' terms nearly cancel, as they
+  do in pressure. Behind the `archway`'s wall the level stepped by up to 4.4 dB at
+  250 Hz to 1 kHz where the reflection off the arch's jamb appears, now by up to 1.4 dB.
+  The early energy there changes by -2.2 dB at 250 Hz to +3.5 dB at 2 kHz: nearer the
+  sum with every band in pressure from 1 kHz up (at 2 kHz 0.3 dB below it instead of
+  3.8 dB), further at 250 Hz (1.6 dB below instead of 0.6 dB above); through the arch
+  it changes by up to 0.4 dB. In the hall with
+  alcoves of `validation/edge_diffraction.py`, with `first_order`, it is 1.8 dB below
+  that sum at 250 Hz instead of 5.6 dB. The `leaky_classroom` changes by 0.13 dB, the
+  other examples by less than 0.01 dB.
 - Known issues ([Validation](docs/validation.md#known-issues-of-the-edge-fade)): steps
   are left at the corners of edges, where the point a term diffracts at leaves the end
   of its edge: driving the `street`'s car past the barrier 1 cm at a time, up to 1.42 dB
   in one band and 0.35 dB(A) where the paths over its top reach its ends. Indoors, where
-  paths add in energy from 250 Hz up, the terms of the two edges of a narrow face add in
-  energy too, though they nearly cancel in pressure: behind the `archway`'s wall the
-  level steps by up to 4.4 dB at 250 Hz to 1 kHz where the reflection off the arch's
-  jamb, 40 cm deep, appears (2.9 dB without the fade). Not checked against an exact
+  paths add in energy from 250 Hz up, behind the `archway`'s wall the level steps by up
+  to 1.4 dB at 250 and 500 Hz where the reflection off the arch's jamb, 40 cm deep,
+  appears (2.2 dB without the fade). Not checked against an exact
   solution: paths of two or more reflections, surfaces with an impedance,
   `second_order` and `both_sides`; nothing against measurements.
 - Results change wherever paths with more reflections than the edge diffraction bends

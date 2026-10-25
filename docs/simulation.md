@@ -294,10 +294,10 @@ Where the edge diffraction bends every path the early stage follows, as with
 level by less than 0.05 dB. Steps are left at the corners of edges, where the point a
 term diffracts at leaves the end of its edge: driving the `street` example's car past
 the barrier 1 cm at a time, up to 1.42 dB in one band and 0.35 dB(A). And indoors,
-where paths add in energy from 250 Hz up, the terms of the two edges of a narrow face
-add in energy too, though they nearly cancel in pressure: behind the `archway`'s wall
-the level steps by up to 4.4 dB at 250 Hz to 1 kHz where the reflection off the arch's
-jamb, 40 cm deep, appears. The
+where paths add in energy from 250 Hz up, the terms of one event take their cross
+terms with each other, as one wave, so the two edges of a narrow face nearly cancel as
+they do in pressure; behind the `archway`'s wall the level still steps by up to 1.4 dB
+at 250 and 500 Hz where the reflection off the arch's jamb, 40 cm deep, appears. The
 [known issues](validation.md#known-issues-of-the-edge-fade) list these, with what is
 checked and what is not. The fade comes with any `diffraction` but `none`. The late
 part is unchanged, since its scattered rays already find their way round corners.

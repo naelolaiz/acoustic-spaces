@@ -219,6 +219,23 @@ def test_the_street_garden_goes_on_where_a_second_event_stops_a_path(x: float) -
     assert np.abs(after - before).max() < 0.15
 
 
+@pytest.mark.parametrize("y", [6.135, 7.325])
+def test_the_terms_of_a_narrow_face_cancel_in_energy_too(y: float) -> None:
+    """Behind the archway's wall, where the reflection off the arch's jamb (40 cm deep)
+    appears: the terms of the jamb's two edges nearly cancel in pressure, and added in
+    energy (from 250 Hz up) they made the level step by up to 4.4 dB in 1 cm. Taking
+    the cross terms between the terms of one event leaves 1.4 dB (a known issue)."""
+    scene = Scene.from_yaml(EXAMPLES / "archway" / "scene.yaml")
+    room = Room.from_scene(scene)
+    listener = next(item for item in scene.listeners if item.name == "behind the wall")
+    levels = []
+    for at in (y - 0.005, y + 0.005):
+        moved = listener.model_copy(update={"position": (7.6, at, 1.2)})
+        moved_room = Room.from_scene(scene.model_copy(update={"listeners": [moved]}), reuse=room)
+        levels.append(10 * np.log10(total_energy(early_paths(moved_room, "singer", moved.name))))
+    assert np.abs(levels[1] - levels[0])[2:].max() < 1.5
+
+
 @pytest.fixture(scope="module")
 def gallery() -> Room:
     return Room.from_yaml(EXAMPLES / "gallery" / "scene.yaml")

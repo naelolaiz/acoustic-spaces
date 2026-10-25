@@ -956,6 +956,15 @@ class EdgeDiffraction:
             fade = self._fade(distance[rows] - paths.distance_m[targets])
             own = waves[rows, groups]
             cross = 2.0 * fade * np.mean(np.real(specular * np.conj(own)), axis=2)
+            # The waves of other edges that border the same path continue it too, as round
+            # a narrow face: each pair adds its cross term to the path as well, half on
+            # each wave's.
+            i, j = _in_groups(targets, targets)
+            keep = rows[i] != rows[j]
+            i, j = i[keep], j[keep]
+            if len(i):
+                pair = np.mean(np.real(own[i] * np.conj(own[j])), axis=2)
+                np.add.at(cross, i, self._fade(distance[rows[i]] - distance[rows[j]]) * pair)
             # In the coherent bands the two add in pressure instead.
             cross[:, : self.coherent] = 0.0
             total, energy = _take(paths.energy, targets, cross, energy, rows)
@@ -1414,6 +1423,17 @@ def _energy(waves: np.ndarray, coherence: np.ndarray) -> np.ndarray:
     """(C, B) energy of waves (C, W, B, M) that cohere by ``coherence`` (C, W, W, B, M),
     averaged over each band's frequencies."""
     return np.einsum("cijbm,cibm,cjbm->cbm", coherence, waves, np.conj(waves)).real.mean(axis=2)
+
+
+def _in_groups(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Every pair (i, j) of an entry of ``a`` and one of ``b`` in the same group (the
+    values of both are groups)."""
+    order = np.argsort(b, kind="stable")
+    lo = np.searchsorted(b[order], a, side="left")
+    count = np.searchsorted(b[order], a, side="right") - lo
+    i = np.repeat(np.arange(len(a)), count)
+    within = np.arange(count.sum()) - np.repeat(np.cumsum(count) - count, count)
+    return i, order[np.repeat(lo, count) + within]
 
 
 def _take(energy, targets, cross, row_energy, rows):

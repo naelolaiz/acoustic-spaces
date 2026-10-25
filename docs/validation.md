@@ -951,17 +951,26 @@ would also be the better one here is not checked.
   1.42 dB in one band and 0.35 dB(A) where they reach its ends (see above), the edge
   diffraction's own up to 1.09 dB without the fade.
 - **Terms that cancel, in the bands that add in energy.** Indoors paths add in energy
-  from 250 Hz up (`coherent_max_band_hz`), and so do the terms of one event at different
-  edges, though near each other they are one wave and add in pressure. Where both edges
-  of a narrow face border its reflection, their terms nearly cancel at low frequencies,
-  and in energy they add up instead. Walking the `archway`'s listener behind the wall 1
-  cm at a time (x = 7.6 m), the level steps by up to 4.4 dB at 250 Hz to 1 kHz at y =
-  6.14 m and by 3.1 dB at 7.33 m, where the reflection off the arch's jamb, 40 cm deep,
-  appears; the edge diffraction's own paths step there by up to 2.9 dB without the fade.
-  With every band in pressure (`coherent_max_band_hz: 8000`) the fade's steps there are
-  at most 0.15 dB. Along the same walk the level also steps by 0.58 dB at 63 Hz (y =
-  5.40 m) and 0.52 dB at 125 Hz (6.32 m), where the terms of third-order paths stop at
-  once: not traced.
+  from 250 Hz up (`coherent_max_band_hz`). Where both edges of a narrow face border its
+  reflection, their terms nearly cancel there at low frequencies; added in energy they
+  would add up instead. The terms of one event therefore take their cross terms with
+  each other and with those the edge diffraction adds at the event, and the edge
+  diffraction's waves of two edges that border one path take theirs, as one wave. Where
+  the cross terms take more than a term of a missed path carries, the event's other
+  terms give it in proportion, and past them the edge diffraction's paths at the event,
+  none below nothing. Walking the `archway`'s listener behind the wall 1 cm at a time
+  (x = 7.6 m), where the reflection off the arch's jamb, 40 cm deep, appears, the level
+  steps by 1.37 dB at 500 Hz and 1.06 dB at 250 Hz at y = 6.14 m and by 0.92 dB at
+  250 Hz at 7.33 m, from 1 kHz up by at most 0.30 dB; it stepped by up to 4.4 dB at
+  250 Hz to 1 kHz before. The edge diffraction's own paths, without the fade, step
+  there by up to 2.2 dB (2.9 dB before). With every band in pressure
+  (`coherent_max_band_hz: 8000`) the steps there are at most 0.15 dB. What is left is not
+  traced to its end: at 250 Hz, on the side where the reflection is found, the cross
+  terms that the edge diffraction's paths over the jamb's edges (one over each, one
+  over both) and the fade's terms take from it come to more than it and they carry
+  together, and the sum stops at zero.
+  Along the same walk the level also steps by 0.58 dB at 63 Hz (y = 5.40 m) and 0.52 dB
+  at 125 Hz (6.32 m), where the terms of third-order paths stop at once: not traced.
 - **Products of terms.** The terms of a path's events multiply, as the path must get
   past each in turn, an approximation for terms at different edges. Each product is a
   path that arrives later by the detours of all its terms, an approximation too for
