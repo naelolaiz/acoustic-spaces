@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- The edge fade takes the cross terms of an event with many terms from their sum, not
+  from every pair. A curved surface with thousands of facets in one event no longer
+  runs out of memory pairing them all (the BRAS CR3 room did); events of up to 16 terms
+  take the same cross terms as before.
+- `validation/archway_ab.py` A/Bs the archway's jamb step at
+  `early.coherent_max_band_hz` 125, 250 and 500, with 1 cm and 1 mm walks at both jamb
+  edges, the ISO parameters, and `--threads`/`--late-device`. Coherent 500 Hz brings
+  the 250/500 Hz steps from 1.07/1.37 dB to 0.04/0.06 dB, but in a reduced-ray check
+  on the BRAS CR3 room raises the mean C80 error from 8.3 to 20.5 JND, so the default
+  stays at 125 Hz; the known issues and the archway example document the per-scene
+  setting.
+
 ## 4.0.0
 
 Outdoor acoustics: scenes on a ground under the sky, with buildings and barriers, terrain

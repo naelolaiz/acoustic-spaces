@@ -968,7 +968,12 @@ would also be the better one here is not checked.
   traced to its end: at 250 Hz, on the side where the reflection is found, the cross
   terms that the edge diffraction's paths over the jamb's edges (one over each, one
   over both) and the fade's terms take from it come to more than it and they carry
-  together, and the sum stops at zero.
+  together, and the sum stops at zero. `validation/archway_ab.py` A/Bs the coherence
+  setting: with `coherent_max_band_hz: 500` the 250 and 500 Hz steps are 0.04 and
+  0.06 dB at y = 6.14 m and 0.06 and 0.10 dB at y = 7.33 m (0.25 dB at 1 kHz), at about
+  50% more early-stage time. That is a per-scene remedy, not the default: on the BRAS
+  CR3 room the same setting raised the mean C80 error from 8.3 to 20.5 JND (3,000
+  early rays, second order, statistical late), so the default stays at 125 Hz.
   Along the same walk the level also steps by 0.58 dB at 63 Hz (y = 5.40 m) and 0.52 dB
   at 125 Hz (6.32 m), where the terms of third-order paths stop at once: not traced.
 - **Products of terms.** The terms of a path's events multiply, as the path must get

@@ -386,3 +386,34 @@ def test_a_wall_as_high_as_a_roof_does_not_stand_on_its_plane() -> None:
     paths = early_paths(room)
     assert paths.diffracted.any()
     assert not any(np.isin(faces, roof).any() for faces in paths.faces)
+
+
+def test_a_wide_event_takes_its_cross_terms_from_their_sum(tmp_path: Path) -> None:
+    """An event with many terms (the facets of a curved surface) is one wave: its
+    cross terms come from the sum of the terms, so the energy is that of the coherent
+    sum and the work stays linear in the terms, not quadratic."""
+    engine = _Engine(tmp_path, "corner", (-3.0, 2.0, 0.5))
+    fade = engine.fade
+    rng = np.random.default_rng(0)
+    count = 64
+    pressure = rng.normal(size=(count, BANDS, 8)) + 1j * rng.normal(size=(count, BANDS, 8))
+    group = np.zeros(count, dtype=np.int64)
+    detour = np.zeros(count)
+    empty = np.zeros(0, dtype=np.int64)
+    coherent = fade.d.coherent
+    fade.d.coherent = 0  # the bands that add in energy
+    try:
+        out = fade._within(
+            group,
+            pressure,
+            detour,
+            empty,
+            np.zeros((0, BANDS, 8), dtype=complex),
+            np.zeros(0),
+            np.zeros(0, dtype=bool),
+        )
+    finally:
+        fade.d.coherent = coherent
+    energy = np.mean(np.abs(pressure) ** 2, axis=2) + out
+    coherent = np.mean(np.abs(pressure.sum(axis=0)) ** 2, axis=1)
+    assert np.allclose(energy.sum(axis=0), coherent)

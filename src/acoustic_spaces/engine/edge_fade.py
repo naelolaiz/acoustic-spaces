@@ -1601,7 +1601,13 @@ class EdgeFade:
         ``held_group``, all arriving ``detour`` and ``held_detour`` metres after their
         path, in the bands where paths add in energy (0 in the others). The terms the
         edge diffraction adds at an event of a missed path (``held_missed``) take theirs
-        with each other there too, on the event's first term."""
+        with each other there too, on the event's first term.
+
+        The terms of one event are one wave (the module notes), so an event with many
+        terms (the many facets of a curved surface, say) takes their cross terms from
+        their sum, not from each pair: that keeps the work linear in the terms rather
+        than quadratic, and the terms of one event arrive together.
+        """
         coherent = self.d.coherent
         out = np.zeros(pressure.shape[:2])
         late = slice(coherent, None)
@@ -1611,11 +1617,32 @@ class EdgeFade:
             fade = self.d._fade(np.abs(delay))[:, late]
             np.add.at(out, (rows, late), scale * fade * products)
 
+        # An event with more terms than this takes the cross terms of their sum.
+        many = 16
+
         i, j = _in_groups(group, group)
         keep = i != j
         i, j = i[keep], j[keep]
         if len(i):
-            add(i, pressure[i], pressure[j], detour[i] - detour[j], 1.0)
+            count = np.bincount(group, minlength=group.max(initial=-1) + 1)
+            small = count[group] <= many
+            again = small[i] & small[j]
+            if again.any():
+                add(
+                    i[again],
+                    pressure[i[again]],
+                    pressure[j[again]],
+                    detour[i[again]] - detour[j[again]],
+                    1.0,
+                )
+            # The events with many terms: each term with their sum, once.
+            unique, inverse = np.unique(group, return_inverse=True)
+            total = np.zeros((len(unique), *pressure.shape[1:]), dtype=complex)
+            np.add.at(total, inverse, pressure)
+            rows = np.flatnonzero(~small)
+            if len(rows):
+                others = total[inverse[rows]] - pressure[rows]
+                add(rows, pressure[rows], others, np.zeros(len(rows)), 1.0)
         i, u = _in_groups(group, held_group)
         if len(i):
             add(i, pressure[i], held[u], detour[i] - held_detour[u], 2.0)
