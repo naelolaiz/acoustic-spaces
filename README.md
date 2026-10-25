@@ -7,7 +7,8 @@ loudspeaker formats.
 
 ![The church example in 3D: the stone nave with its early reflection paths from the altar to the front of the nave, coloured by order up to the third](docs/images/church_paths.png)
 
-**Status: 3.2** (see the [roadmap](docs/roadmap.md)).
+**Status: 4.0** (see the [roadmap](docs/roadmap.md) and the
+[known issues](docs/validation.md#known-issues)).
 
 ## What it does
 
@@ -40,7 +41,8 @@ loudspeaker formats.
   and exported to Blender: [graphical editor](docs/editor.md).
 - **Validation** against theory, against pyroomacoustics and against measured rooms,
   with the numbers and the scripts to reproduce them: the
-  [validation report](docs/validation.md) says how far the results can be trusted.
+  [validation report](docs/validation.md) says how far the results can be trusted,
+  and its [known issues](docs/validation.md#known-issues) what is still wrong.
 
 ## Install
 

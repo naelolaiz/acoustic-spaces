@@ -1045,6 +1045,18 @@ and the last bits round alike on every platform.
   Python 3.10, warns of each one on a computer without a Vulkan driver, where Direct3D
   12 does the work. They said nothing to a user and are left out now.
 
+**Known issues**
+
+- A review of the code found issues that 4.0.0 still has, listed with what each one
+  does in [Validation](docs/validation.md#known-issues) and as open items on the
+  roadmap: among them, no early path through more than two partitions while the late
+  stage still leaves them out, G against a measured free-field response up to 3 dB
+  high at 63 Hz when that response starts at its first sample, a source or listener
+  inside a closed solid taken as a room, an earlier pack deleted when writing one of
+  the same name fails, and two sources or listeners whose names differ only in
+  characters a file name leaves out writing the same result file.
+- The README said "Status: 3.2"; it says 4.0 now and links the known issues.
+
 ## 3.2.3
 
 **Languages**
