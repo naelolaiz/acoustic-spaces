@@ -759,7 +759,7 @@ class DemoDialog(QDialog):
         margins = self.layout().contentsMargins()
         across = margins.left() + margins.right()
         width = max(width - across, self.scroll.widget().minimumSizeHint().width())
-        width += scroll_bar_width(self)
+        width += scroll_bar_width(self.scroll)
         body = body_size(self.scroll, width)
         spacing = self.layout().spacing()
         height = body.height() + spacing + self.buttons.sizeHint().height()

@@ -2914,7 +2914,7 @@ def test_nothing_starts_cut_off(window, qapp, tmp_path: Path) -> None:
 
     from acoustic_spaces.gui.demo_dialog import DemoDialog
     from acoustic_spaces.gui.hrtf_dialog import HrtfDialog
-    from acoustic_spaces.gui.sizing import screen_room
+    from acoustic_spaces.gui.sizing import screen_room, scroll_chrome
 
     qapp.processEvents()  # the window sizes its panels once it is laid out
     assert window.width() >= 1400 and window.height() >= 900
@@ -2935,6 +2935,8 @@ def test_nothing_starts_cut_off(window, qapp, tmp_path: Path) -> None:
         qapp.processEvents()
         page = window.inspector.currentWidget()
         assert page.minimumSizeHint().width() <= forms.viewport().width(), kind
+        if forms.verticalScrollBar().isVisible():  # the room it counts is the room it takes
+            assert forms.width() - forms.viewport().width() == scroll_chrome(forms), kind
     # Only the form on show counts: a narrow one is not as wide as the widest.
     window.select("listeners", 0)
     assert window.inspector.minimumSizeHint().width() < window.inspector.widest()

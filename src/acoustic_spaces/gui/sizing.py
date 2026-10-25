@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QFrame, QScrollArea, QStyle, QWidget
+from PySide6.QtWidgets import QAbstractScrollArea, QFrame, QScrollArea, QStyle, QWidget
 
 #: How many characters of its font a window of text and paths is wide, at least.
 READING_CHARACTERS = 90
@@ -55,9 +55,15 @@ def scrolled(body: QWidget) -> QScrollArea:
     return area
 
 
-def scroll_bar_width(widget: QWidget) -> int:
-    """The width a vertical scroll bar takes."""
-    return widget.style().pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent, None, widget)
+def scroll_bar_width(area: QAbstractScrollArea) -> int:
+    """The width the vertical scroll bar of ``area`` takes from what it shows: the bar's
+    own size, as the area lays it out, or none where the bar lies over it. (The style's
+    metric asked without the bar's font is not it: on macOS it scales from 72 dots per
+    inch, not the screen's, and comes out 4 pixels short on a 96 one.)"""
+    bar = area.verticalScrollBar()
+    if bar.style().pixelMetric(QStyle.PixelMetric.PM_ScrollView_ScrollBarOverlap, None, bar):
+        return 0
+    return bar.sizeHint().width()
 
 
 def scroll_chrome(area: QScrollArea) -> int:

@@ -129,7 +129,7 @@ class HrtfDialog(QDialog):
         # Wide enough for the rows, whose credits are long, and for their scroll bar.
         margins = layout.contentsMargins()
         rows = self.list.sizeHintForColumn(0) + 2 * self.list.frameWidth()
-        fit_width(self, rows + scroll_bar_width(self) + margins.left() + margins.right())
+        fit_width(self, rows + scroll_bar_width(self.list) + margins.left() + margins.right())
 
     # -- the rows -------------------------------------------------------------------
 
