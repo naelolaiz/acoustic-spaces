@@ -9,11 +9,13 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -123,6 +125,14 @@ nb::ndarray<nb::numpy, double> scatter_kernels(std::size_t length, Indices posit
     return to_numpy(std::move(out), {channels, length});
 }
 
+// Threads for n rays of BVH queries: starting a thread takes about as long as a hundred
+// rays, so a small batch runs on fewer threads, and below kRaysPerThread on this one.
+std::size_t ray_threads(std::size_t n) {
+    constexpr std::size_t kRaysPerThread = 256;
+    const std::size_t cores = std::max<std::size_t>(1, std::thread::hardware_concurrency());
+    return std::min(cores, std::max<std::size_t>(1, n / kRaysPerThread));
+}
+
 nb::tuple intersect(const as::Bvh &bvh, Points origins, Points directions, InArray t_max,
                     Indices ignore) {
     const std::size_t n = origins.shape(0);
@@ -133,7 +143,7 @@ nb::tuple intersect(const as::Bvh &bvh, Points origins, Points directions, InArr
     std::vector<std::int64_t> face(n);
     {
         nb::gil_scoped_release release;
-        as::parallel_for(n, 0, [&](std::size_t begin, std::size_t end, std::size_t) {
+        as::parallel_for(n, ray_threads(n), [&](std::size_t begin, std::size_t end, std::size_t) {
             for (std::size_t i = begin; i < end; ++i) {
                 const as::Vec3 o{origins(i, 0), origins(i, 1), origins(i, 2)};
                 const as::Vec3 d{directions(i, 0), directions(i, 1), directions(i, 2)};
@@ -155,7 +165,7 @@ nb::ndarray<nb::numpy, bool> occluded(const as::Bvh &bvh, Points origins, Points
     std::vector<std::uint8_t> blocked(n);
     {
         nb::gil_scoped_release release;
-        as::parallel_for(n, 0, [&](std::size_t begin, std::size_t end, std::size_t) {
+        as::parallel_for(n, ray_threads(n), [&](std::size_t begin, std::size_t end, std::size_t) {
             for (std::size_t i = begin; i < end; ++i) {
                 const as::Vec3 o{origins(i, 0), origins(i, 1), origins(i, 2)};
                 const as::Vec3 d{directions(i, 0), directions(i, 1), directions(i, 2)};

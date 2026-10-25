@@ -19,8 +19,9 @@ those pairs grow with the square of the buildings. Most cannot carry a path, as 
 plane's faces lie nowhere near where a ray from the edge would meet the plane, and are
 left out before the ray tests (:func:`acoustic_spaces.engine.diffraction._reflecting_pairs`).
 For each size the script prints the time to build the room, to run the simulation and
-how much of it went to edge diffraction, the share of pairs tested, and the peak memory
-where the system reports it.
+how much of it went to edge diffraction (with the terms that make the other specular
+paths fade at the edges), the share of pairs tested, and the peak memory where the
+system reports it.
 
 The check runs a smaller city with buildings at random angles (``--check`` blocks a
 side), with paths reflecting on both sides of an edge, from two sources to two listeners,
@@ -41,7 +42,7 @@ from pathlib import Path
 import numpy as np
 
 from acoustic_spaces import Room, Scene, simulate
-from acoustic_spaces.engine import diffraction
+from acoustic_spaces.engine import diffraction, edge_fade
 from acoustic_spaces.engine.simulate import early_paths
 
 BLOCK, STREET = 20.0, 12.0
@@ -94,7 +95,8 @@ def city(n: int, seed: int = 1, turned: bool = False, both_sides: bool = False) 
 
 class _Counted:
     """The pairs of an edge and a plane tested, all there were, and the time edge
-    diffraction took (finding the source's sides of the edges, then each listener's)."""
+    diffraction took (finding the source's sides of the edges, then each listener's,
+    and the terms that make the other specular paths fade at the edges)."""
 
     def __init__(self) -> None:
         self.kept = self.all = 0
@@ -102,6 +104,8 @@ class _Counted:
         self._culled = diffraction._reflecting_pairs
         self._init = diffraction.EdgeDiffraction.__init__
         self._apply = diffraction.EdgeDiffraction.apply
+        self._terms = edge_fade.EdgeFade.terms
+        self._join = edge_fade.EdgeFade.join
 
     def __enter__(self) -> _Counted:
         def counting(model, edges, bounds, end, planes, among, offset, threads=0):
@@ -123,12 +127,16 @@ class _Counted:
         diffraction._reflecting_pairs = counting
         diffraction.EdgeDiffraction.__init__ = timed(self._init)
         diffraction.EdgeDiffraction.apply = timed(self._apply)
+        edge_fade.EdgeFade.terms = timed(self._terms)
+        edge_fade.EdgeFade.join = timed(self._join)
         return self
 
     def __exit__(self, *exc) -> None:
         diffraction._reflecting_pairs = self._culled
         diffraction.EdgeDiffraction.__init__ = self._init
         diffraction.EdgeDiffraction.apply = self._apply
+        edge_fade.EdgeFade.terms = self._terms
+        edge_fade.EdgeFade.join = self._join
 
 
 def _peak_memory_mb() -> float | None:

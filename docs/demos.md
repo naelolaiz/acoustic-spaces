@@ -666,15 +666,21 @@ turns, for its made sound, `--step 1` how far apart the car is simulated along i
 - **The street**: 125 m of street, the car in the lane on the offices' side, heard on
   the pavement (6.2 m from the car as it passes), on a balcony of the office block and
   in the garden behind the noise barrier. The pass peaks at 76.9 dB(A) on the pavement
-  and 71.5 dB(A) on the balcony. The garden hears it loudest, 60.0 dB(A), where the car
+  and 71.7 dB(A) on the balcony. The garden hears it loudest, 60.3 dB(A), where the car
   sees it straight through the 4 m gap between the houses and the barrier (14 m short
   of the gap), less while the barrier stands between them, and more again once the car
   comes out past the barrier's far end.
-  Where a reflection through the gap comes or goes, the level steps by up to 10.5 dB(A)
-  within a metre of road, where a real field blends over a few metres. The engine bends
-  the direct sound and first-order reflections round an edge, and those blend; not the
-  copy of a reflection off the road, which the car, so close to it, makes nearly as
-  strong and in step with it, nor second-order reflections: they come or go at once.
+  Where a reflection through the gap comes or goes, it fades in or out over a few
+  metres, as in a real field: every path, also the copy of a reflection off the road
+  (which the car, so close to it, makes nearly as strong and in step with it) and the
+  second-order reflections, fades at the edges that cut it off. From one metre of road
+  to the next the garden's early sound changes by at most 3.2 dB(A), smoothly where
+  paths go in and out of step, where it stepped by up to 11.4 dB(A) before 4.0.0; five
+  small steps are left, the largest 0.63 dB(A) within a centimetre (see
+  [Validation](validation.md#along-a-street)). The late sound comes from rays drawn at
+  random, few of which reach the garden, so two runs of the pass put its level up to
+  2.3 dB(A) apart at one place (its L_Amax within 0.02 dB) unless the scene has a
+  `seed` (see [Scenes](scenes.md#air-response-length-and-seed)).
   Reflections off the road, the facades and the barrier and the sound diffracted round
   their edges each shift in pitch their own way. Between the buildings the late sound,
   which keeps the engine's pitch, is strong in the bass, so the engine's tone falls less
