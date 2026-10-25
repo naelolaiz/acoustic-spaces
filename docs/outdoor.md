@@ -214,10 +214,10 @@ they count for insertion losses like any other building.
 A whole town or a district from a map runs as it is. Edge diffraction looks for paths
 that reflect off a wall, a roof or the ground before or after bending over an edge, and
 it skips the walls and roofs that no such path can reach before it traces a ray, with
-the same results as testing them all. On four cores 900 buildings simulate in about 11
-s and 3,600 in about 49 s, where earlier versions took 81 s for 900 and ran out of
+the same results as testing them all. On four cores 900 buildings simulate in about 17
+s and 3,600 in about 56 s, where earlier versions took 81 s for 900 and ran out of
 memory from about 1,600 (see [Validation](validation.md#edge-diffraction-in-whole-cities)).
-About three quarters of that time for 900, and half for 3,600, goes to the terms that
+About five sixths of that time for 900, and over half for 3,600, goes to the terms that
 make reflections fade at the edges ([Simulation](simulation.md#edge-diffraction)).
 The work still grows with the square of the buildings: for tens of thousands, cut the
 map to the area round the sources and listeners, or set

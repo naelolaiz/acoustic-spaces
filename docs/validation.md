@@ -729,12 +729,12 @@ With `first_order` the level drops from the path over one corner to nothing.
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
-sight, takes 60 ms per source and listener without diffraction (23 paths), 237 ms with
-`first_order` (459 paths) and 277 ms with `second_order` (474 paths). The terms that
-make the other specular paths fade at the edges (next section) take about 170 ms of
+sight, takes 67 ms per source and listener without diffraction (23 paths), 296 ms with
+`first_order` (981 paths) and 366 ms with `second_order` (996 paths). The terms that
+make the other specular paths fade at the edges (next section) take about 210 ms of
 that with `first_order` and give most of the paths, as each term is a path over its
-edge: without them the early stage takes 69 ms with `first_order` (71 paths) and 152
-ms with `second_order` (86 paths).
+edge, and so is each product of terms: without them the early stage takes 83 ms with
+`first_order` (71 paths) and 124 ms with `second_order` (86 paths).
 
 ## Reflections that fade at edges against the exact solution
 
@@ -814,7 +814,7 @@ dB:
 
 | largest step (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| with the fade | 0.30 | 0.25 | 0.06 | 0.11 | 0.10 | 0.05 | 0.07 | 0.13 |
+| with the fade | 0.07 | 0.09 | 0.05 | 0.11 | 0.10 | 0.05 | 0.07 | 0.13 |
 | without | 3.01 | 3.76 | 2.39 | 2.52 | 2.64 | 2.73 | 2.78 | 2.83 |
 
 Walking these lines found faults that made steps of 0.2 to 2.5 dB, now fixed: the
@@ -835,13 +835,26 @@ reach its top, where it meets the ceiling, neither the leg before the reflection
 the ceiling nor the one after it took them. `test_no_step_round_the_gallery_corner`
 walks seven of these places.
 
-What is left are steps of 0.16 to 0.30 dB at 63 and 125 Hz in three places (y =
-12.00 and 17.34 m on x = 5.5 m, 16.40 m on x = 3 m): there a path that is not found
-goes from being stopped by one event to being stopped by two, as its reflection off
-the floor or the ceiling leaves its face while a leg is blocked by the corner, and a
-path stopped by two events is left out, with its terms, though the path over the
-corner, which reflects off the floor or the ceiling elsewhere, goes on (see
-[Known issues](#known-issues-of-the-edge-fade)).
+Steps of 0.16 to 0.30 dB at 63 and 125 Hz in three more places are gone too. At y =
+12.00 and 17.34 m on x = 5.5 m several events stop a path that is not found, as its
+reflection off the floor or the ceiling lies past its face where the corner blocks a
+leg next to it, and such a path was left out, with its terms, though the path over the
+corner, which reflects off the floor or the ceiling elsewhere, goes on: it is now
+followed (see [Simulation](simulation.md#edge-diffraction)). At y = 16.40 m on x = 3 m
+a path off wall_6, wall_7 and wall_2 reflects off wall_2 before wall_7 on one side and
+after it on the other (perpendicular planes, one image), and the early stage's rays had
+found only one of the two orders, which the fade took as the only one: it now tries
+every order of reflections off perpendicular planes.
+
+The largest steps left stand out from their neighbours' by at most 0.10 dB, at 500 Hz
+to 1 kHz where the listener crosses the plane of wall_3 (y = 8 m), and by at most 0.07
+dB elsewhere. The largest of those, 0.07 dB at 125 Hz (y = 13.33 m on x = 5.5 m), and
+one of 0.04 dB at 63 Hz (9.81 m on x = 4 m) come from a path that the corner stops on
+one leg while another of its reflection points slides past the end of its face into a
+corner of the room: the path is left out there, though its path over the corner still
+reflects on the face. One of 0.04 dB at 125 Hz (12.99 m on x = 3 m) is a leg that takes
+the corner's term on the lit side on one side of the step and not on the other; the
+others, of up to 0.04 dB, are not traced.
 
 Where the edge diffraction already bends every path the early stage follows
 (`max_order: 0` with `direct`, `max_order: 1` with `first_order`), the fade changes the
@@ -867,30 +880,48 @@ apart at one place (x = -47 m; 0.45 dB(A) rms over the pass), the pavement's and
 balcony's up to 0.8 and 0.5 dB(A), each L_Amax within 0.02 dB.
 
 On the pavement and the balcony the early level changes by at most 0.24 and 0.15 dB(A)
-from one 10 cm to the next. In the garden, where without the fade it stepped by up to
-11.4 dB(A) from one metre to the next, five steps are left, each within a centimetre:
+from one 10 cm to the next, and in the garden by at most 1.33 dB(A), where 1 kHz swings
+by 2.5 dB at x = 28.8 m and does so smoothly 1 cm apart; without the fade the garden's
+level stepped by up to 11.4 dB(A) from one metre to the next. The steps of 0.90 to 1.90
+dB that two events stopping a path made in the garden, at x = -41.60, 30.41, 32.00 and
+34.00 m (see the next paragraph), are gone: 1 cm apart, the level there now stands out
+from its neighbours' by at most 0.11 dB in any band. The steps left that stand out by
+more than 0.1 dB in some band 1 cm apart (but at 8 kHz, where a centimetre is a quarter
+of a wavelength and the level swings by up to 0.8 dB from one to the next), each within
+a centimetre:
 
-| car at x (m) | largest step (dB) | in | dB(A) |
-|---:|---:|---|---:|
-| -41.60 | 1.90 | 500 Hz | 0.63 |
-| -14.04 | 1.35 | 63 Hz | 0.35 |
-| 30.41 | 1.65 | 125 Hz | 0.27 |
-| 32.00 | 1.43 | 125 Hz | 0.08 |
-| 34.00 | 0.90 | 250 Hz | 0.24 |
+| car at x (m) | listener | step (dB) | in | dB(A) | without the fade (dB) |
+|---:|---|---:|---|---:|---:|
+| -14.05 | garden | 1.41 | 63 Hz | 0.35 | 0.34 |
+| -0.70 | garden | 1.37 | 63 Hz | 0.27 | 0.47 |
+| 10.00 | garden | 1.04 | 63 Hz | 0.27 | 1.0 |
+| 37.79 | pavement | 0.55 | 63 Hz | 0.03 | 1.09 |
+| 58.78 | garden | 0.82 | 250 Hz | 0.09 | 0.93 |
+| 60.79 | garden | 1.42 | 500 Hz | 0.32 | 0.29 |
+| 62.89 | pavement | 1.02 | 250 Hz | 0.23 | 0.61 |
+| 63.52 | balcony | 0.32 | 63 Hz | 0.00 | 0.18 |
+| 66.52 | balcony | 0.16 | 1 kHz | 0.10 | 0.05 |
+| 69.50 | balcony | 0.75 | 63 Hz | 0.09 | 0.70 |
+| 69.99 | pavement | 0.18 | 500 Hz | 0.05 | 1.48 |
 
-Four of the five come from paths that two events stop at once, the class left round
-the gallery's corner too (see [Known issues](#known-issues-of-the-edge-fade)). At x =
+All but two are the corners of edges (see [Known issues](#known-issues-of-the-edge-fade)):
+a path over the barrier's top, on its own or with a reflection off the ground or the
+offices' façade before or after it, reaches an end of the top (x = 14 or 44 m), where
+its term stops, the edge diffraction's own as well as the fade's, whose term of the same
+path stops there with it and makes several of them larger (at 60.79 m 0.29 dB without
+the fade, 1.42 dB with it). At 69.99 m a reflection off the barrier's face reaches the
+barrier's end, where the fade brings the step down from 1.48 dB to 0.18 dB. The dip at
+10.00 m is the next paragraph's.
+
+The four steps that are gone came from paths that two events stop at once. At x =
 -41.60, 30.41 and 32.00 m the reflection off the offices' façade of a path that the
 houses' corner or the barrier blocks reaches an end of the façade (x = -30 and 30 m):
-the path goes from being stopped by two events to one, or back, and its path over the
-edge comes or goes at once. The edge diffraction's own path over the barrier with that
-reflection does the same at 30.41 m (0.60 dB at 125 Hz without the fade). At 34.00 m a
+the path went from being stopped by two events to one, or back, and its path over the
+edge came or went at once (the edge diffraction's own path over the barrier with that
+reflection does the same at 30.41 m, 0.60 dB at 125 Hz without the fade). At 34.00 m a
 second-order path off the façade and the houses' end wall, stopped where it misses the
-wall, has its last leg pass the barrier's end as well: the fade takes that leg as
-getting past, so its term there turns over from one side of the boundary to the
-other, where the path's own factor does not. At -14.04 m the path over the barrier's
-top with the reflection off the façade reaches the end of the top, at the barrier's
-corner, where the term of the edge stops (0.34 dB at 63 Hz without the fade).
+wall, has its last leg pass the barrier's end as well. The fade now follows such paths
+(see [Simulation](simulation.md#edge-diffraction)).
 
 At x = 10.0 m, where the car crosses the plane of the houses' end wall, the sound over
 the houses' corner dips by up to 10 dB at 63 Hz within 2 cm (1.0 dB in the garden's
@@ -904,26 +935,50 @@ would also be the better one here is not checked.
 
 ### Known issues of the edge fade
 
-- **Paths stopped by two events.** A path that is not found is followed only where one
-  event stops it. Where two do, as when its reflection lies past the end of its face
-  while an edge blocks one of its legs, it is left out with its terms, and its path over
-  the edge comes or goes at once where the second event clears; and where the second
-  event is a leg after the first, it is taken as getting past. The edge diffraction's own
-  paths over an edge with a reflection before or after it stop alike where that
-  reflection leaves its face: it would take diffraction at the face's end and at the
-  edge in turn. The level steps by up to 0.3 dB at 63 and 125 Hz round the gallery's
-  corner and by up to 1.9 dB in one band (0.63 dB(A)) in the street's garden (see
-  above).
+- **Paths that several events stop.** A path that is not found is followed where one
+  edge explains each run of the events that stop it, or two edges explain them between
+  them, in at most two runs. Elsewhere it is left out with its terms, as where one of
+  its reflection points slides into a corner of the room while the path over the edge
+  still reflects on the face, which makes the steps of up to 0.07 dB left round the
+  gallery's corner (see above). The edge diffraction's own paths over an edge with a
+  reflection before or after it stop where that reflection leaves its face, which the
+  fade makes up for where it follows the path; without the fade the street's garden
+  steps by 0.60 dB at 125 Hz there.
 - **Corners of edges.** A term stops where the point it diffracts at leaves the end of
   its edge, as the UTD has no terms for the corners of edges, unless that end lies in a
   plane the path reflects off next to the event; the edge diffraction's own paths stop
-  there alike. In the street's garden that makes a step of 1.35 dB at 63 Hz (0.34 dB
-  without the fade) where the path over the barrier's top reaches the barrier's corner.
+  there alike. Along the street the paths over the barrier's top make steps of up to
+  1.42 dB in one band and 0.35 dB(A) where they reach its ends (see above), the edge
+  diffraction's own up to 1.09 dB without the fade.
+- **Terms that cancel, in the bands that add in energy.** Indoors paths add in energy
+  from 250 Hz up (`coherent_max_band_hz`). Where both edges of a narrow face border its
+  reflection, their terms nearly cancel there at low frequencies; added in energy they
+  would add up instead. The terms of one event therefore take their cross terms with
+  each other and with those the edge diffraction adds at the event, and the edge
+  diffraction's waves of two edges that border one path take theirs, as one wave. Where
+  the cross terms take more than a term of a missed path carries, the event's other
+  terms give it in proportion, and past them the edge diffraction's paths at the event,
+  none below nothing. Walking the `archway`'s listener behind the wall 1 cm at a time
+  (x = 7.6 m), where the reflection off the arch's jamb, 40 cm deep, appears, the level
+  steps by 1.37 dB at 500 Hz and 1.06 dB at 250 Hz at y = 6.14 m and by 0.92 dB at
+  250 Hz at 7.33 m, from 1 kHz up by at most 0.30 dB; it stepped by up to 4.4 dB at
+  250 Hz to 1 kHz before. The edge diffraction's own paths, without the fade, step
+  there by up to 2.2 dB (2.9 dB before). With every band in pressure
+  (`coherent_max_band_hz: 8000`) the steps there are at most 0.15 dB. What is left is not
+  traced to its end: at 250 Hz, on the side where the reflection is found, the cross
+  terms that the edge diffraction's paths over the jamb's edges (one over each, one
+  over both) and the fade's terms take from it come to more than it and they carry
+  together, and the sum stops at zero.
+  Along the same walk the level also steps by 0.58 dB at 63 Hz (y = 5.40 m) and 0.52 dB
+  at 125 Hz (6.32 m), where the terms of third-order paths stop at once: not traced.
 - **Products of terms.** The terms of a path's events multiply, as the path must get
-  past each in turn, an approximation for terms at different edges. Where two events
-  meet the same edge, the product is a wave bent twice by one edge, which the exact
-  solution does not have. It is not checked on its own; behind the corner of the tests'
-  L-shaped room such products come 23 dB below the paths over the corner.
+  past each in turn, an approximation for terms at different edges. Each product is a
+  path that arrives later by the detours of all its terms, an approximation too for
+  terms bent far from their boundaries; products below -60 dB of their path are left
+  out in the bands where paths add in pressure. Where two events meet the same edge, the
+  product is a wave bent twice by one edge, which the exact solution does not have. It
+  is not checked on its own; behind the corner of the tests' L-shaped room such
+  products come 23 dB below the paths over the corner.
 - **Order of reflections.** Where the edge diffraction does not bend it, a path of the
   highest order the early stage follows takes no terms for the reflections off the
   edge's faces, behind their planes or in front, as the early stage follows no path
@@ -932,8 +987,8 @@ would also be the better one here is not checked.
 - **What is checked.** Against exact solutions: vertical edges standing on a rigid
   ground (a screen's end, a building's corner, a 2 m strip and a 4 m gap) with
   `direct`, and the corner and the strip with `first_order` too. Only for steps, with
-  no exact level: paths of two or more reflections indoors (the gallery) and in a
-  street. Only against the edge diffraction's own paths, where it bends every path: a
+  no exact level: paths of two or more reflections indoors (the gallery, and with
+  `second_order` behind the archway) and in a street. Only against the edge diffraction's own paths, where it bends every path: a
   barrier's top with a reflection off the ground before or after it. Not checked:
   surfaces with an impedance against an exact solution, `second_order` (whose paths
   over two edges take no terms of the fade) and `both_sides`. Nothing is checked
@@ -2479,11 +2534,11 @@ rays per band for the late part. Times are on 4 cores of a cloud machine:
 
 | Buildings | Faces | Edges | Build (s) | Simulation (s) | Of it diffraction (s) | Pairs tested | Peak memory | Before (s) |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 100 | 1,012 | 800 | 0.3 | 2.6 | 1.9 | 8.5 % | 0.3 GB | 1.3 |
-| 400 | 4,012 | 3,200 | 0.9 | 6.5 | 5.7 | 4.3 % | 0.3 GB | 15.1 |
-| 900 | 9,012 | 7,200 | 2.1 | 11.0 | 10.0 | 2.9 % | 0.3 GB | 81.1 (7.1 GB) |
-| 1,600 | 16,012 | 12,800 | 4.1 | 17.3 | 16.0 | 2.7 % | 0.5 GB | out of 14 GB |
-| 3,600 | 36,012 | 28,800 | 12.0 | 49.2 | 47.3 | 3.3 % | 1.7 GB | |
+| 100 | 1,012 | 800 | 0.2 | 3.7 | 3.0 | 8.5 % | 0.2 GB | 1.3 |
+| 400 | 4,012 | 3,200 | 1.1 | 9.1 | 8.4 | 4.3 % | 0.3 GB | 15.1 |
+| 900 | 9,012 | 7,200 | 2.1 | 16.6 | 15.6 | 2.9 % | 0.3 GB | 81.1 (7.1 GB) |
+| 1,600 | 16,012 | 12,800 | 4.2 | 21.4 | 20.1 | 2.7 % | 0.5 GB | out of 14 GB |
+| 3,600 | 36,012 | 28,800 | 10.2 | 56.4 | 54.5 | 3.3 % | 1.7 GB | |
 
 Diffraction includes the terms that make the other specular paths fade at the edges
 ([above](#reflections-that-fade-at-edges-against-the-exact-solution)): without them,
@@ -2502,7 +2557,7 @@ grows with the edges alone.
 turned at random angles and paths that reflect on both sides of an edge. It runs two
 sources, one in a street and one over the roofs, to two listeners, once as the engine
 runs, on one thread and on every core, and once with every pair tested. Every path, its
-energy and its spectrum come out the same bit for bit; the early paths took 1.0 s
+energy and its spectrum come out the same bit for bit; the early paths took 1.1 s
 instead of 4.3 s. The same comparison over every example and three test cities, 468
 source and listener pairs with paths reflecting on one side and on both sides of an
 edge, and over two edges, found no difference. The tests check the culling against

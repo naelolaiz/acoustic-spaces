@@ -228,11 +228,14 @@ class _Diffraction:
     def apply(
         self, listener: np.ndarray, paths: early_stage.EarlyReflections, max_delay_s: float
     ) -> early_stage.EarlyReflections:
-        # The terms at the edges of every specular path, from the specular paths alone,
-        # joined once the edge diffraction has added its own paths.
-        terms = None if self.fade is None else self.fade.terms(listener, paths, max_delay_s)
+        # The terms at the edges of every specular path, from the specular paths, less
+        # the edge diffraction's own paths over the edges.
+        specular = paths
         if self.at_edges is not None:
             paths = self.at_edges.apply(listener, paths, max_delay_s)
+        terms = (
+            None if self.fade is None else self.fade.terms(listener, specular, max_delay_s, paths)
+        )
         if terms is not None:
             paths = self.fade.join(paths, terms)
         if self.crests is not None:

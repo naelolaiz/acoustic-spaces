@@ -102,10 +102,10 @@ class _Engine:
             max_delay_s=0.5,
             coherent=BANDS,
         )
-        terms = self.fade.terms(receiver, paths, 0.5) if fade else None
-        paths = self.diffraction.apply(receiver, paths, 0.5)
+        bent = self.diffraction.apply(receiver, paths, 0.5)
         if fade:
-            paths = self.fade.join(paths, terms)
+            bent = self.fade.join(bent, self.fade.terms(receiver, paths, 0.5, bent))
+        paths = bent
         squared = float(np.sum((receiver - self.source) ** 2))
         return 10.0 * np.log10(total_energy(paths) * 4.0 * np.pi * squared)
 
@@ -196,6 +196,46 @@ def test_the_street_garden_has_no_step() -> None:
     assert abs(levels[1] - levels[0]) < 1.5
 
 
+@pytest.mark.parametrize("x", [-41.61, 30.40])
+def test_the_street_garden_goes_on_where_a_second_event_stops_a_path(x: float) -> None:
+    """Where the reflection off the offices of a path that the barrier or the houses
+    block reaches an end of the façade, two events stop the path instead of one: 1 cm
+    further on, the level in the garden changes in every band as it did over the
+    centimetre before, to 0.15 dB. Such a path was left out with its terms (up to 1.9 dB
+    at 500 Hz at once); then the products of its terms took the delay of one of them,
+    so that the band's frequencies stopped interfering with them unlike on the other
+    side of the step (0.28 dB at 125 Hz). What is left (0.11 dB at 125 Hz) is the paths
+    over the edges below the edge diffraction's least energy, which are left out, as
+    they change from one side to the other."""
+    scene = Scene.from_yaml(EXAMPLES / "street" / "scene.yaml")
+    car = next(s for s in scene.sources if s.name == "car")
+    levels = []
+    for at in (x - 0.01, x, x + 0.01):
+        moved = car.model_copy(update={"position": (at, -2.0, 0.05), "walk": None})
+        moved = moved.model_copy(update={"enabled": True})
+        paths = early_paths(scene.model_copy(update={"sources": [moved]}), "car", "garden")
+        levels.append(10 * np.log10(total_energy(paths)))
+    before, after = np.diff(levels, axis=0)
+    assert np.abs(after - before).max() < 0.15
+
+
+@pytest.mark.parametrize("y", [6.135, 7.325])
+def test_the_terms_of_a_narrow_face_cancel_in_energy_too(y: float) -> None:
+    """Behind the archway's wall, where the reflection off the arch's jamb (40 cm deep)
+    appears: the terms of the jamb's two edges nearly cancel in pressure, and added in
+    energy (from 250 Hz up) they made the level step by up to 4.4 dB in 1 cm. Taking
+    the cross terms between the terms of one event leaves 1.4 dB (a known issue)."""
+    scene = Scene.from_yaml(EXAMPLES / "archway" / "scene.yaml")
+    room = Room.from_scene(scene)
+    listener = next(item for item in scene.listeners if item.name == "behind the wall")
+    levels = []
+    for at in (y - 0.005, y + 0.005):
+        moved = listener.model_copy(update={"position": (7.6, at, 1.2)})
+        moved_room = Room.from_scene(scene.model_copy(update={"listeners": [moved]}), reuse=room)
+        levels.append(10 * np.log10(total_energy(early_paths(moved_room, "singer", moved.name))))
+    assert np.abs(levels[1] - levels[0])[2:].max() < 1.5
+
+
 @pytest.fixture(scope="module")
 def gallery() -> Room:
     return Room.from_yaml(EXAMPLES / "gallery" / "scene.yaml")
@@ -229,6 +269,14 @@ def gallery() -> Room:
         # ceiling, and neither the leg before the reflection off the ceiling nor the leg
         # after it took them.
         (4.0, 11.99, 2),
+        # A path off the ceiling, the floor and the ceiling again, whose last reflection
+        # lies past the ceiling's face where the corner blocks the leg after it: two
+        # events stop it, and it was left out with its terms.
+        (5.5, 11.99, 0),
+        # Off wall_6, wall_7 and wall_2 (wall_7 perpendicular to the others): before
+        # 16.40 the path reflects off wall_2 before wall_7, an order the rays had not
+        # found, and the fade looked at no other.
+        (3.0, 16.39, 0),
     ],
 )
 def test_no_step_round_the_gallery_corner(gallery: Room, x: float, y: float, band: int) -> None:

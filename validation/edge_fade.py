@@ -203,10 +203,10 @@ class Engine:
             max_delay_s=0.5,
             coherent=BANDS,
         )
-        terms = self.fade.terms(receiver, paths, 0.5) if fade else None
-        paths = self.diffraction.apply(receiver, paths, 0.5)
+        bent = self.diffraction.apply(receiver, paths, 0.5)
         if fade:
-            paths = self.fade.join(paths, terms)
+            bent = self.fade.join(bent, self.fade.terms(receiver, paths, 0.5, bent))
+        paths = bent
         squared = float(np.sum((receiver - self.source) ** 2))
         return 10.0 * np.log10(total_energy(paths) * 4.0 * np.pi * squared)
 
