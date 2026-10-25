@@ -862,9 +862,11 @@ last sound, `auralize` and `walkthrough` mix sources at their sound power
   sets its starting width) rather than as the widest of all, and widens when a form
   needs more; a row too long for it puts its field under its label. The **Run demo…**
   window opens wide enough for its paths and scrolls where the screen is too short,
-  rather than squeezing its tables and buttons; **Download HRTFs…** opens as wide as
-  its rows. Every window opens within the screen it is on. The ground's **Extent** takes
-  two rows, one per corner.
+  rather than squeezing its tables and buttons; **Download HRTFs…** opens as wide as its
+  rows. The main window opens 175 characters of its font wide and 60 lines tall (1400 by
+  900 pixels at a font 8 pixels a character and 15 a line), so that it grows with a
+  larger font as its forms do; every window opens within the screen it is on. The
+  ground's **Extent** takes two rows, one per corner.
 - A copy of an example saved anywhere keeps the example's demo in the **Run demo…**
   window: the example is known by the folder's name or, failing that, by the scene's
   name (`examples.example_of`).

@@ -49,6 +49,7 @@ from acoustic_spaces.gui.document import (  # noqa: E402
 from acoustic_spaces.gui.levels import level_colour  # noqa: E402
 from acoustic_spaces.gui.particle_dialog import ParticleDialog  # noqa: E402
 from acoustic_spaces.gui.plan_view import grid_step, outline_segments, snap  # noqa: E402
+from acoustic_spaces.gui.sizing import MAIN_WINDOW_TEXT, text_size  # noqa: E402
 from acoustic_spaces.gui.tree import EYE  # noqa: E402
 from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # noqa: E402
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
@@ -71,9 +72,10 @@ def window(qapp, monkeypatch):
     win = MainWindow()
     monkeypatch.setattr(win, "ask_save", lambda: QMessageBox.StandardButton.Discard)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: QMessageBox.StandardButton.Ok)
-    # The size a desktop's screen leaves the window: the offscreen screen is 800 x 600,
-    # where the plan would be too small to click a point to the half metre.
-    win.resize(1400, 900)
+    # The size the window asks for, as a desktop's screen leaves it: the offscreen
+    # screen is 800 pixels square, where the plan would be too small to click a point to
+    # the half metre.
+    win.resize(text_size(win, *MAIN_WINDOW_TEXT))
     win.show()
     yield win
     win.close()
@@ -2908,7 +2910,7 @@ def test_nothing_starts_cut_off(window, qapp, tmp_path: Path) -> None:
     from acoustic_spaces.gui.hrtf_dialog import HrtfDialog
     from acoustic_spaces.gui.sizing import screen_room
 
-    window.resize(1400, 900)
+    window.resize(text_size(window, *MAIN_WINDOW_TEXT))
     window._size_docks()
     qapp.processEvents()
     assert window.corner(Qt.Corner.BottomRightCorner) == Qt.DockWidgetArea.RightDockWidgetArea

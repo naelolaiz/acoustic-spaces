@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QLibraryInfo, QSize, Qt, QTimer, QTranslator
+from PySide6.QtCore import QLibraryInfo, Qt, QTimer, QTranslator
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -65,7 +65,7 @@ from acoustic_spaces.gui.numbers import fmt, point_text
 from acoustic_spaces.gui.particle_dialog import ParticleDialog
 from acoustic_spaces.gui.plan_view import PlanView
 from acoustic_spaces.gui.results_view import ResultsPanel
-from acoustic_spaces.gui.sizing import fit, scroll_bar_width
+from acoustic_spaces.gui.sizing import MAIN_WINDOW_TEXT, fit, scroll_chrome, text_size
 from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.tune_dialog import TuneDialog
 from acoustic_spaces.gui.viewport import Viewport
@@ -297,7 +297,7 @@ class MainWindow(QMainWindow):
             shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             shortcut.activated.connect(self.remove_selected)
 
-        fit(self, QSize(1400, 900))
+        fit(self, text_size(self, *MAIN_WINDOW_TEXT))
         self._sized = False
         self._attach(self.document)
         if not self.viewport.available:
@@ -2280,7 +2280,7 @@ class MainWindow(QMainWindow):
         # starts cut off, up to a third of the window.
         dock = self.docks["inspector"]
         forms = dock.widget()
-        need = self.inspector.widest() + scroll_bar_width(forms) + dock.width() - forms.width()
+        need = self.inspector.widest() + scroll_chrome(forms) + dock.width() - forms.width()
         tree = 330
         self.resizeDocks(
             [self.docks["tree"], dock], [tree, min(max(need, tree), self.width() // 3)], horizontal
@@ -2295,7 +2295,7 @@ class MainWindow(QMainWindow):
         if not self._sized or not dock.isVisible() or dock.isFloating():
             return  # _size_docks sizes them once the window is laid out
         forms = dock.widget()
-        room = forms.width() - scroll_bar_width(forms)
+        room = forms.width() - scroll_chrome(forms)
         missing = self.inspector.currentWidget().minimumSizeHint().width() - room
         width = min(dock.width() + missing, self.width() // 3)
         if missing > 0 and width > dock.width():
