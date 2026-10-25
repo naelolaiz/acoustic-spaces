@@ -91,9 +91,23 @@ Version 3.2.3:
 
 v4, version 4.0.0: outdoor acoustics (ground, wind, temperature, turbulence, vegetation,
 terrain and buildings from a map, weather classes and long-term levels, Doppler, whole
-cities, on the GPU), coherent arrays, groups, movement along keyframes with every mover
-on one clock, demos of any scene and of the examples, HRTF sets to download, the ISO
-3382-2 checks and packs to run on another computer, in the sections below.
+cities, on the GPU), reflections that fade at edges, coherent arrays, groups, movement
+along keyframes with every mover on one clock, demos of any scene and of the examples,
+HRTF sets to download, the ISO 3382-2 checks and packs to run on another computer, in
+the sections below.
+
+Edge diffraction:
+
+- [x] Reflections that fade in and out at the edges that cut them off: every specular
+  path, of any order, takes the uniform theory of diffraction's term of its own
+  boundary at each edge it passes, checked against the exact solution past a screen's
+  end, a building's corner, a strip and a gap (within 0.2 dB), and walked round the
+  gallery's corner 1 cm at a time.
+- [ ] Paths that two events stop at once, as a reflection past the end of its face with
+  an edge in its way: they are left out with their terms, so the level still steps
+  where the second event clears, by up to 1.9 dB in one band (0.63 dB(A)) in the
+  street's garden. This and the fade's other known issues are listed in
+  [Validation](validation.md#known-issues-of-the-edge-fade).
 
 Parameters:
 
@@ -227,7 +241,8 @@ Outdoor acoustics, in steps:
 - [x] O19 Whole cities: edge diffraction skips the pairs of an edge and a wall or roof
   that no path can use before it traces a ray, on every core, with the same results:
   900 buildings simulate in about 2 s on four cores instead of 81 s, and 3,600 in
-  about 22 s, where 1,600 ran out of memory (`validation/city_speed.py`).
+  about 22 s, where 1,600 ran out of memory (`validation/city_speed.py`); with the
+  reflections that fade at edges of 4.0.0, about 11 and 49 s.
 - [x] O21 A wide-angle parabolic equation: `simulation.early.parabolic_equation:
   wide_angle` gives the bands the parabolic equation gives from the split-step Padé
   method (Collins' RAM: ten terms, steps of three wavelengths, fourth-order differences

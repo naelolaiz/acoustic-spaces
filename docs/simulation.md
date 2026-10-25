@@ -261,25 +261,54 @@ acoustic-spaces simulate examples/archway/scene.yaml --out archway --diffraction
 The figure walks round the corner of the `gallery` example, away from the guide. Without
 diffraction (dotted) the direct sound and each reflection stop at the line where the
 corner hides them; with it, the level falls smoothly, by more at high frequencies.
-Paths with two or more reflections still stop at their boundaries: with `max_order: 3`
-in the gallery, the early energy still steps by up to 3 dB where the reflections off the
-long wall go out of sight. The late part is unchanged, since its
-scattered rays already find their way round corners.
+
+Paths with more reflections than that fade at edges too. Every specular path, found or
+stopped by one event, takes the UTD's term of its own boundary at each edge near each
+of its events: where a leg of it passes an edge, and where the point it reflects at
+nears the edge of its face, which a narrow face reflects only in part at low
+frequencies. The terms of one event add, each edge on its own side of its boundary (so
+both edges of a gap count where a path goes through it), and the events of a path
+multiply, as the path must get past each in turn. A path that one event stops is
+followed where an edge of what stops it explains that. Reflections off perpendicular
+planes, such as the floor and a wall, give the same image in either order, and the path
+over an edge may take another order than the path itself: each path takes the terms of
+every such order. Each term is a path over its edge, and the terms the edge diffraction
+adds already are left out (`engine.edge_fade` in the
+[API reference](api.md#edge-diffraction)). Against the exact solution, past the end of
+a screen, the corner of a building, a strip 2 m wide and a gap 4 m wide on a hard
+ground, each path with its copy off the ground, the level is within 0.08 dB in every
+band (0.19 dB at 8 kHz on the strip, with or without the fade), where it was up to 7
+dB off without it, and steps between listeners 1 cm apart by no more than the exact
+level does (see the
+[validation report](validation.md#reflections-that-fade-at-edges-against-the-exact-solution)).
+Walking round the gallery's corner 1 cm at a time, with reflections up to third
+order, the level now steps by at most 0.13 dB from 250 Hz up and 0.3 dB at 63 and 125
+Hz, where it stepped by up to 3.8 dB without the fade (see the
+[validation report](validation.md#round-a-corner-indoors), which says what is left).
+Where the edge diffraction bends every path the early stage follows, as with
+`max_order: 0` and `direct` or `max_order: 1` and `first_order`, the fade changes the
+level by less than 0.05 dB. Steps are left where two events stop a path at once, at the
+corners of edges and, with the edge diffraction's own paths too, where a reflection
+before or after an edge leaves its face: walking the `street` example's car past the
+garden 1 cm at a time, up to 1.9 dB in one band (0.63 dB(A)). The
+[known issues](validation.md#known-issues-of-the-edge-fade) list them, with what is
+checked and what is not. The fade comes with any `diffraction` but `none`. The late
+part is unchanged, since its scattered rays already find their way round corners.
 
 `view --paths` and the Blender export draw diffracted paths in their own colour, the
 response's `early.diffracted` marks them, and `simulate` reports how many there are. The
-cost grows with the number of edges: in a hall with about 100 edges, `first_order` adds
-about 17 ms per source and listener. `second_order` costs more, as it looks at pairs of
-edges: in a hall with 16 edges, the early stage takes 170 ms per source and listener
-with it, 120 ms with `first_order` and 90 ms without diffraction.
+cost grows with the number of edges and of the paths near them, as each term of the
+fade is a path over its edge: in a hall with 16 edges, the early stage takes 237 ms per
+source and listener with `first_order` (69 ms without the fade's terms), 277 ms with
+`second_order`, which looks at pairs of edges (152 ms), and 60 ms without diffraction.
 
 Paths that reflect before or after an edge pair every edge with every plane the source
 or the listener faces, which in a whole city grows with the square of the buildings.
 Most of those pairs cannot carry a path, because the plane's faces lie nowhere near
 where a ray from the edge would meet the plane: the engine leaves them out before it
 traces a ray, on `simulation.performance.threads` threads, and the results are the
-same bit for bit. A city of 900 buildings simulates in about 2 s on four cores, and
-3,600 in about 22 s (see [Outdoor scenes](outdoor.md#buildings-from-a-map) and the
+same bit for bit. A city of 900 buildings simulates in about 11 s on four cores, and
+3,600 in about 49 s, of which the fade's terms take about 8 and 25 s (see [Outdoor scenes](outdoor.md#buildings-from-a-map) and the
 [validation report](validation.md#edge-diffraction-in-whole-cities)).
 
 ## Low frequencies: early reflections in pressure

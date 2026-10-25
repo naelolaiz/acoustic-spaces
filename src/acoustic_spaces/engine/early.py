@@ -405,71 +405,22 @@ def find_paths(
         # Plane sequences that commute (perpendicular planes) give the same image.
         _, unique = np.unique(np.round(chain[-1][idx] / tolerance), axis=0, return_index=True)
         idx = idx[np.sort(unique)]
-        dist = distance[idx]
-        energy = np.exp(-np.outer(dist, air)) / (4.0 * np.pi * dist[:, None] ** 2)
-        energy *= through[idx]
-        spectrum = None
-        if coherent:
-            spectrum = np.ones((len(idx), *sample_frequencies(bands, coherent).shape), complex)
-        # Reflections off surfaces with an impedance (a ground's) take its spherical
-        # wave's reflection factor, in every band: its energy averaged over each band,
-        # and in the coherent bands its pressure; on a ground with zones, those of the
-        # grounds round the reflection.
-        grounds = bool(k) and model.factor_faces(faces[idx]).any()
-        factor = None
-        before = np.broadcast_to(source, (len(idx), 3))
-        for j in range(k):
-            incoming = points[j][idx] - before
-            energy *= model.reflection(faces[idx, j], incoming, j + 1, impedance=True)
-            if coherent or grounds:
-                # At a corner the path reflects where it reflected last: it meets the
-                # second plane at the angle it leaves it.
-                after = points[j + 1][idx] - points[j][idx]
-                corner = np.linalg.norm(incoming, axis=1) <= tolerance
-                incoming = np.where(corner[:, None], after, incoming)
-                normal = model.plane_normal[model.face_plane[faces[idx, j]]]
-                cosine = np.abs(np.einsum("ij,ij->i", normal, incoming)) / np.maximum(
-                    np.linalg.norm(incoming, axis=1), 1e-300
-                )
-                if coherent:
-                    spectrum *= reflection_phases(model, faces[idx, j], cosine, coherent)
-                if grounds:
-                    following = points[j + 1][idx] if j + 1 < k else listener
-                    ends = (before, points[j][idx], np.broadcast_to(following, before.shape))
-                    q = ground_factors(model, faces[idx, j], cosine, dist, ends=ends)
-                    factor = q if factor is None else factor * q
-            before = points[j][idx]
-        if factor is not None:
-            gain = np.mean(np.abs(factor) ** 2, axis=2)  # (n, bands)
-            energy *= gain
-            if coherent:
-                level = np.sqrt(gain[:, :coherent, None])
-                spectrum *= np.where(
-                    level > 0.0, factor[:, :coherent] / np.where(level > 0.0, level, 1.0), 1.0
-                )
-        first = points[0][idx] if k else np.broadcast_to(listener, (len(idx), 3))
-        departure = first - source
-        departure /= np.maximum(np.linalg.norm(departure, axis=1), 1e-300)[:, None]
-        energy *= source_weights(
-            directivity, orientation, departure, energy.shape[1], distances=dist
-        )
-        last = points[k - 1][idx] if k else np.broadcast_to(source, (len(idx), 3))
-        arrival = last - listener
-        arrival /= np.maximum(np.linalg.norm(arrival, axis=1), 1e-300)[:, None]
-        path_points = [
-            np.vstack([source, *[points[j][i] for j in range(k)], listener]) for i in idx
-        ]
         parts.append(
-            EarlyReflections(
-                order=np.full(len(idx), k, dtype=np.int64),
-                delay_s=dist / speed_of_sound,
-                distance_m=dist,
-                direction=arrival,
-                energy=energy,
-                points=path_points,
-                faces=[faces[i].copy() for i in idx],
-                crossings=crossings[idx],
-                spectrum=spectrum,
+            assemble_paths(
+                model,
+                source,
+                listener,
+                [p[idx] for p in points],
+                faces[idx],
+                distance[idx],
+                through[idx],
+                crossings[idx],
+                speed_of_sound=speed_of_sound,
+                air=air,
+                directivity=directivity,
+                orientation=orientation,
+                coherent=coherent,
+                tolerance=tolerance,
             )
         )
     found = EarlyReflections.concatenate(parts, bands)
@@ -489,6 +440,95 @@ def find_paths(
             coherent=coherent,
         )
     return found
+
+
+def assemble_paths(
+    model: TraceModel,
+    source: np.ndarray,
+    listener: np.ndarray,
+    points: list[np.ndarray],
+    faces: np.ndarray,
+    distance: np.ndarray,
+    through: np.ndarray,
+    crossings: np.ndarray,
+    *,
+    speed_of_sound: float,
+    air: np.ndarray,
+    directivity: Directivity | None = None,
+    orientation: np.ndarray | None = None,
+    coherent: int = 0,
+    tolerance: float = 0.0,
+) -> EarlyReflections:
+    """Paths of one order k from ``source`` to ``listener`` with their energies: their
+    reflection points ``points`` (k + 1 arrays of (n, 3), the listener last), the faces
+    they reflect off (n, k), their lengths (n,), the share of sound the surfaces they
+    pass let through (n, bands) and how many they cross (n,), as :func:`find_paths`
+    finds them."""
+    n, k = faces.shape
+    bands = model.absorption.shape[1]
+    dist = distance
+    energy = np.exp(-np.outer(dist, air)) / (4.0 * np.pi * dist[:, None] ** 2)
+    energy *= through
+    spectrum = None
+    if coherent:
+        spectrum = np.ones((n, *sample_frequencies(bands, coherent).shape), complex)
+    # Reflections off surfaces with an impedance (a ground's) take its spherical
+    # wave's reflection factor, in every band: its energy averaged over each band,
+    # and in the coherent bands its pressure; on a ground with zones, those of the
+    # grounds round the reflection.
+    grounds = bool(k) and model.factor_faces(faces).any()
+    factor = None
+    before = np.broadcast_to(source, (n, 3))
+    for j in range(k):
+        incoming = points[j] - before
+        energy *= model.reflection(faces[:, j], incoming, j + 1, impedance=True)
+        if coherent or grounds:
+            # At a corner the path reflects where it reflected last: it meets the
+            # second plane at the angle it leaves it.
+            after = points[j + 1] - points[j]
+            corner = np.linalg.norm(incoming, axis=1) <= tolerance
+            incoming = np.where(corner[:, None], after, incoming)
+            normal = model.plane_normal[model.face_plane[faces[:, j]]]
+            cosine = np.abs(np.einsum("ij,ij->i", normal, incoming)) / np.maximum(
+                np.linalg.norm(incoming, axis=1), 1e-300
+            )
+            if coherent:
+                spectrum *= reflection_phases(model, faces[:, j], cosine, coherent)
+            if grounds:
+                following = points[j + 1] if j + 1 < k else listener
+                ends = (before, points[j], np.broadcast_to(following, before.shape))
+                q = ground_factors(model, faces[:, j], cosine, dist, ends=ends)
+                factor = q if factor is None else factor * q
+        before = points[j]
+    if factor is not None:
+        gain = np.mean(np.abs(factor) ** 2, axis=2)  # (n, bands)
+        energy *= gain
+        if coherent:
+            level = np.sqrt(gain[:, :coherent, None])
+            spectrum *= np.where(
+                level > 0.0, factor[:, :coherent] / np.where(level > 0.0, level, 1.0), 1.0
+            )
+    first = points[0] if k else np.broadcast_to(listener, (n, 3))
+    departure = first - source
+    departure /= np.maximum(np.linalg.norm(departure, axis=1), 1e-300)[:, None]
+    energy *= source_weights(directivity, orientation, departure, energy.shape[1], distances=dist)
+    last = points[k - 1] if k else np.broadcast_to(source, (n, 3))
+    arrival = last - listener
+    arrival /= np.maximum(np.linalg.norm(arrival, axis=1), 1e-300)[:, None]
+    path_points = [
+        np.vstack([source, *[points[j][i] for j in range(k)], listener]) for i in range(n)
+    ]
+    return EarlyReflections(
+        order=np.full(n, k, dtype=np.int64),
+        delay_s=dist / speed_of_sound,
+        distance_m=dist,
+        direction=arrival,
+        energy=energy,
+        points=path_points,
+        faces=[faces[i].copy() for i in range(n)],
+        crossings=crossings,
+        spectrum=spectrum,
+    )
 
 
 def _towards_plane(model, start, direction, length, ignore, plane, trace, tolerance):

@@ -18,6 +18,7 @@ from acoustic_spaces.engine.diffraction import (
     wedge_prefactor,
     wedge_terms,
 )
+from acoustic_spaces.engine.edge_fade import EdgeFade
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.scene.model import EarlyStage
@@ -44,6 +45,12 @@ def _l_room(listeners, **simulation) -> Room:
             }
         )
     )
+
+
+def _edge_diffraction_alone(monkeypatch) -> None:
+    """Leave out the edge fade (:mod:`acoustic_spaces.engine.edge_fade`), to test what the
+    edge diffraction does on its own."""
+    monkeypatch.setattr(EdgeFade, "terms", lambda self, *args: None)
 
 
 def _screen(tmp_path: Path, source, listener, obj: Path | None = None) -> Room:
@@ -223,13 +230,18 @@ def _levels(room: Room, **kwargs) -> np.ndarray:
     return np.array(out)
 
 
-def test_levels_are_continuous_across_the_shadow_boundary() -> None:
+def test_levels_are_continuous_across_the_shadow_boundary(monkeypatch) -> None:
     listeners = [[2.0, y, 1.5] for y in (4.99, 4.999, 5.0, 5.001, 5.01)]
     room = _l_room(listeners)
     # The direct sound and the floor and ceiling reflections all end on the boundary.
     plain = _levels(room, max_order=1, diffraction="none")
     assert np.all(plain[1] - plain[3] > 5.0)
-    # Only the direct sound bends round the corner: the reflections still jump.
+    # With "direct" the edge fade takes the reflections round the corner.
+    for mode in ("direct", "first_order"):
+        step = np.abs(np.diff(_levels(room, max_order=1, diffraction=mode), axis=0))
+        assert step.max() < 0.25
+    # Without it only the direct sound bends round the corner: the reflections still jump.
+    _edge_diffraction_alone(monkeypatch)
     direct = np.abs(np.diff(_levels(room, max_order=1, diffraction="direct"), axis=0))
     assert 1.0 < direct.max() < np.abs(np.diff(plain, axis=0)).max() - 1.0
     first = np.abs(np.diff(_levels(room, max_order=1, diffraction="first_order"), axis=0))
@@ -336,9 +348,13 @@ def test_a_listener_on_the_source() -> None:
     assert len(diffraction.apply(source, early_stage.EarlyReflections.empty(8), 1.0)) == 0
 
 
-def test_reflections_bend_round_edges_too() -> None:
+def test_reflections_bend_round_edges_too(monkeypatch) -> None:
     # Behind the corner the floor and ceiling reflections arrive over the edge as well.
     room = _l_room([[2.0, 8.0, 1.5]])
+    # With "direct" the edge fade takes the walls' reflections over it.
+    direct = early_paths(room, max_order=1, diffraction="direct")
+    assert (direct.diffracted & (direct.order == 1)).sum() >= 2
+    _edge_diffraction_alone(monkeypatch)
     direct = early_paths(room, max_order=1, diffraction="direct")
     first = early_paths(room, max_order=1, diffraction="first_order")
     assert direct.diffracted.sum() == 1
@@ -379,11 +395,12 @@ def test_coverage_maps_hear_round_corners() -> None:
     assert bent.details["s"]["diffracted_paths"] > 0 and "edges" not in plain.details["s"]
     shadow = (bent.grid.points[:, 0] < 4) & (bent.grid.points[:, 1] > 6)
     assert shadow.any()
-    # Behind the corner, at 125 Hz: more sound, and more of it early. The statistical
+    # Behind the corner, at 250 Hz: more sound, and more of it early. The statistical
     # tail is Barron's energy less the early paths', so of what bends round the corner
-    # only the direct sound adds to the total.
-    for name, rise in (("g", 0.02), ("c80", 0.02)):
-        values = bent.get().values[name][shadow, 1] - plain.get().values[name][shadow, 1]
+    # only the direct sound adds to the total. (At 63 and 125 Hz the paths add in
+    # pressure, and those of the edge fade may cancel others.)
+    for name, rise in (("g", 0.01), ("c80", 0.01)):
+        values = bent.get().values[name][shadow, 2] - plain.get().values[name][shadow, 2]
         assert np.all(values > rise)
 
 
@@ -594,10 +611,12 @@ def test_both_sides_is_off_by_default_and_a_setting() -> None:
     assert (both.relative_to_free_field()[4:] > one.relative_to_free_field()[4:]).all()
 
 
-def test_both_sides_in_a_room() -> None:
+def test_both_sides_in_a_room(monkeypatch) -> None:
     """Behind the corner of the L-shaped room the floor and ceiling reflections also
     arrive over the edge with a reflection on each side (floor then ceiling, and the
-    other way round); the paths that reflect on one side are unchanged."""
+    other way round); the paths that reflect on one side are unchanged. (The edge
+    diffraction's own paths: the edge fade's would count among them.)"""
+    _edge_diffraction_alone(monkeypatch)
     one = early_paths(_l_room([[2.0, 8.0, 1.5]]), max_order=2, diffraction="first_order")
     room = _l_room([[2.0, 8.0, 1.5]], early={"diffraction_reflections": "both_sides"})
     both = early_paths(room, max_order=2, diffraction="first_order")

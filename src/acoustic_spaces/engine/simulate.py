@@ -19,6 +19,7 @@ from acoustic_spaces.engine import wave as wave_stage
 from acoustic_spaces.engine.coherent import band_count
 from acoustic_spaces.engine.crests import CrestDiffraction
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
+from acoustic_spaces.engine.edge_fade import EdgeFade
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel, free_field_energy
 from acoustic_spaces.engine.refracted import direct_times, refraction_for
@@ -174,11 +175,16 @@ class _Edges:
         coherent: int = 0,
         both_sides: bool = False,
         threads: int = 0,
-    ) -> EdgeDiffraction | None:
+        candidates: list[np.ndarray] | None = None,
+    ) -> _Diffraction | None:
         """Diffraction of the sound of source ``name`` at ``source``, coherent in the
         lowest ``coherent`` bands, with paths that reflect on both sides of an edge when
         ``both_sides``, and the sound over the crests of a terrain, on ``threads``
-        threads (0: every core); None when off or when there is nothing to bend over."""
+        threads (0: every core); with the plane sequences the early stage tests
+        (``candidates``), also the terms at the edges of every specular path, found or
+        just missed, that make it fade in and out there
+        (:mod:`~acoustic_spaces.engine.edge_fade`). None when off or when there is
+        nothing to bend over."""
         if mode == "none":
             return None
         if self._edges is None:
@@ -204,7 +210,10 @@ class _Edges:
         crests = CrestDiffraction.of(self.model, source, **settings)
         if at_edges is None and crests is None:
             return None
-        return _Diffraction(self._edges, at_edges, crests)
+        fade = None
+        if at_edges is not None and candidates is not None:
+            fade = EdgeFade(at_edges, candidates)
+        return _Diffraction(self._edges, at_edges, crests, fade)
 
 
 @dataclass
@@ -214,12 +223,18 @@ class _Diffraction:
     edges: Edges
     at_edges: EdgeDiffraction | None
     crests: CrestDiffraction | None
+    fade: EdgeFade | None = None
 
     def apply(
         self, listener: np.ndarray, paths: early_stage.EarlyReflections, max_delay_s: float
     ) -> early_stage.EarlyReflections:
+        # The terms at the edges of every specular path, from the specular paths alone,
+        # joined once the edge diffraction has added its own paths.
+        terms = None if self.fade is None else self.fade.terms(listener, paths, max_delay_s)
         if self.at_edges is not None:
             paths = self.at_edges.apply(listener, paths, max_delay_s)
+        if terms is not None:
+            paths = self.fade.join(paths, terms)
         if self.crests is not None:
             paths = self.crests.apply(listener, paths, max_delay_s)
         return paths
@@ -292,6 +307,7 @@ def early_paths(
             coherent,
             both_sides=cfg.diffraction_reflections == "both_sides",
             threads=threads,
+            candidates=candidates,
         )
         if found is not None:
             paths = found.apply(target, paths, cutoff)
@@ -546,6 +562,7 @@ def simulate(
             coherent,
             both_sides=early_cfg.diffraction_reflections == "both_sides",
             threads=threads,
+            candidates=candidates,
         )
         if diffraction is not None:
             say(f"{label}: edge diffraction ({early_cfg.diffraction})")

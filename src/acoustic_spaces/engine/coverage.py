@@ -696,6 +696,7 @@ def _trace_part(
         coherent,
         both_sides=sim.early.diffraction_reflections == "both_sides",
         threads=threads,
+        candidates=candidates,
     )
     found, straight = [], []
     diffracted = 0

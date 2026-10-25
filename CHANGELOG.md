@@ -6,19 +6,21 @@ Outdoor acoustics: scenes on a ground under the sky, with buildings and barriers
 and buildings from a map, grounds of finite and of extended impedance, wind and
 temperature gradients, turbulence, vegetation, weather zones and classes with levels
 over a long term, moving sources with Doppler, whole cities and a wide-angle parabolic
-equation, on the GPU too, validated against a fast field program. Coherent arrays
-element by element, groups of sources and listeners, demos of the examples (a car driving
-past with Doppler among them) and of any scene with files of your own, walks along
-keyframes with every mover at once on one clock and the editor's Movement panel, HRTF
-sets to download, the checks of ISO 3382-2 on every decay time, the wind drawn in the
-editor, and packs that carry a scene with its files to another computer, with a
-container image that runs them headless on a GPU.
+equation, on the GPU too, validated against a fast field program. Reflections that
+fade in and out at the edges that cut them off, coherent arrays element by element,
+groups of sources and listeners, demos of the examples (a car driving past with
+Doppler among them) and of any scene with files of your own, walks along keyframes
+with every mover at once on one clock and the editor's Movement panel, HRTF sets to
+download, the checks of ISO 3382-2 on every decay time, the wind drawn in the editor,
+and packs that carry a scene with its files to another computer, with a container
+image that runs them headless on a GPU.
 
-Indoor scenes give the results of 3.2.3 but for what **Fixes** lists: every binaural
-output changes (the treble an HRTF between the measured directions lost is back), a
-response that ends in silence no longer has decay times read from the drop after its
-last sound, `auralize` and `walkthrough` mix sources at their sound power
-(`--equal-power` keeps the old mix), and the last bits round alike on every platform.
+Indoor scenes give the results of 3.2.3 but where edges diffract (**Reflections that
+fade at edges**) and for what **Fixes** lists: every binaural output changes (the
+treble an HRTF between the measured directions lost is back), a response that ends in
+silence no longer has decay times read from the drop after its last sound, `auralize`
+and `walkthrough` mix sources at their sound power (`--equal-power` keeps the old mix),
+and the last bits round alike on every platform.
 
 **Outdoor scenes**
 
@@ -497,10 +499,11 @@ last sound, `auralize` and `walkthrough` mix sources at their sound power
   plane's faces. For the listener's images it also skips the paths that would touch the
   edge's line beyond its ends or arrive too late. The exact tests run on the rest as
   before, in native code on `simulation.performance.threads` threads, so the results
-  are the same bit for bit. A city of 900 buildings simulates in 2.3 s on four cores
-  instead of 81 s and 7.1 GB, 1,600 buildings, which ran out of 14 GB, in 4.4 s, and
-  3,600 in 22 s. The work still grows with the square of the buildings, as about 3 %
-  of the pairs can carry a path as far as geometry alone tells.
+  are the same bit for bit. A city of 900 buildings simulates in 2.6 s on four cores
+  instead of 81 s and 7.1 GB, 1,600 buildings, which ran out of 14 GB, in 4.8 s, and
+  3,600 in 24 s; with the reflections that fade at edges (below) in 11, 17 and 49 s.
+  The work still grows with the square of the buildings, as about 3 % of the
+  pairs can carry a path as far as geometry alone tells.
 - `validation/city_speed.py` times cities of growing size and checks the results
   against testing every pair (see
   [Validation](docs/validation.md#edge-diffraction-in-whole-cities)).
@@ -869,6 +872,58 @@ last sound, `auralize` and `walkthrough` mix sources at their sound power
 - A copy of an example saved anywhere keeps the example's demo in the **Run demo…**
   window: the example is known by the folder's name or, failing that, by the scene's
   name (`examples.example_of`).
+
+**Reflections that fade at edges**
+
+- Every specular path fades in and out at the edges that cut it off, instead of coming
+  or going at full strength: where a leg of it passes an edge, and where the point it
+  reflects at passes the edge of its face (`engine.edge_fade`). The edge diffraction
+  bends the direct sound and the first-order reflections round edges; a path with more
+  reflections, such as the copy of a first-order reflection off the ground or a
+  second-order reflection, stepped at its boundary: in the `street` example's garden
+  the passing car's early level stepped by up to 11.4 dB(A) from one metre of road to
+  the next. Every
+  path, found or stopped by one event, now takes the uniform theory of diffraction's
+  term of its own boundary at each edge near each of its events. The terms of one
+  event add (each edge on its own side, as round a gap), the events of a path
+  multiply, and the terms the edge diffraction adds already are left out. Reflections
+  off perpendicular planes (the floor and a wall) give one image in either order, and
+  each path takes the terms of every such order. Each term is a path over its edge. It
+  comes with `diffraction` on (any mode but `none`).
+- Against the exact solution (`validation/edge_fade.py`: BTM with images in a rigid
+  ground, listeners 1 cm apart past a screen's end, a building's corner, a strip 2 m
+  wide and a gap 4 m wide): within 0.08 dB in every band (0.19 dB at 8 kHz on the
+  strip, with or without the fade), and no step larger than the exact solution's own;
+  without the fade up to 7 dB off, with steps of up to 9.2 dB.
+- Round the `gallery`'s corner, walked 1 cm at a time with reflections up to third
+  order, the level steps by at most 0.13 dB from 250 Hz up and 0.3 dB at 63 and 125 Hz,
+  instead of up to 3.8 dB (see [Validation](docs/validation.md#round-a-corner-indoors),
+  which lists what is left). Where the edge diffraction bends every path the early stage
+  follows (`max_order: 0` with `direct`, `max_order: 1` with `first_order`), the fade
+  changes the level by less than 0.05 dB.
+- Known issues ([Validation](docs/validation.md#known-issues-of-the-edge-fade)): steps
+  are left where two events stop a path at once (it is left out, with its terms), at
+  the corners of edges and, with the edge diffraction's own paths too, where a
+  reflection before or after an edge leaves its face: walking the `street`'s car past
+  the garden 1 cm at a time, up to 1.9 dB in one band (0.63 dB(A)). Not checked against
+  an exact solution: paths of two or more reflections, surfaces with an impedance,
+  `second_order` and `both_sides`; nothing against measurements.
+- Results change wherever paths with more reflections than the edge diffraction bends
+  pass an edge. The examples' early energy changes by up to 6.4 dB at 63 Hz behind the
+  `archway`'s wall (3.8 dB at 125 Hz), 3.3 dB at 63 Hz in the `leaky_classroom`'s back
+  row, 1.4 dB at 250 Hz in the `street`'s garden, 1.3 dB round the `gallery`'s corner,
+  1.3 dB in the `concert_hall`'s rear stalls and 2.2 dB at 63 Hz in the `orchestra`'s
+  middle stalls (a cello's second- and third-order reflections that pass just over the
+  front edge of the stage, as its direct sound does), over every source and listener;
+  the other examples are unchanged (most have no edge that diffracts, or diffraction
+  off).
+- Each term is a path, so the early stage costs more where edges diffract: in a hall
+  with 16 edges 237 ms per source and listener instead of 69 ms (459 paths instead of
+  71), the gallery's coverage map 31.9 s instead of 16.9 s, and a city of 900 buildings
+  11.0 s instead of 2.6 s.
+- BVH queries of fewer than 256 rays run on one thread, and larger ones on a thread
+  per 256 rays up to the cores: starting a thread for every core took longer than the
+  rays (100 rays took 0.14 ms, now 0.02 ms). The results are the same bit for bit.
 
 **Checks of the decay times** (ISO 3382-2, annex B)
 
