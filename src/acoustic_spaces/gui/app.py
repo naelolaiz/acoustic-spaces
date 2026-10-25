@@ -971,18 +971,20 @@ class MainWindow(QMainWindow):
             self._draw()
             return
         item = getattr(self.document.scene, kind)[index]
-        self.log(
-            _("Moved {name} to ({point})").format(name=item.name, point=point_text(item.position))
-            if row == 0
-            else _("Moved keyframe {n} of {name} to ({point})").format(
-                n=row, name=item.name, point=point_text(position)
-            )
-        )
+        if row == 0:
+            text = _("Moved {name} to ({point})")
+            position = item.position
+        elif item.walk is not None and item.walk.keyframes is None:
+            text = _("Moved point {n} of {name} to ({point})")
+        else:
+            text = _("Moved keyframe {n} of {name} to ({point})")
+        self.log(text.format(n=row, name=item.name, point=point_text(position)))
 
     def render_movement(self) -> None:
         """Simulate every mover on one clock and write what each listener hears of what
-        the sources play (their Plays files), in the background."""
-        from acoustic_spaces.spatial import Binaural, from_output
+        the sources play (their Plays files), in the Movement panel's output, in the
+        background."""
+        from acoustic_spaces.spatial import from_output
         from acoustic_spaces.walkthrough import movers
 
         if self.job is not None:
@@ -1016,7 +1018,11 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
-        fmt = from_output(scene.outputs[0]) if scene.outputs else Binaural()
+        try:
+            fmt = from_output(self.movement.chosen_output)
+        except (OSError, ValueError) as exc:  # an HRTF file that cannot be read
+            self.log(_("Cannot run: {problems}").format(problems=exc), "error")
+            return
         job = MovementJob(self.document.room, path, signals, fmt)
         job.done.connect(self._movement_done)
         self._start(job, _("Rendering the movement to {path}…").format(path=path))
@@ -1032,12 +1038,14 @@ class MainWindow(QMainWindow):
             fmt(
                 _(
                     "{movers} move for {time:.1f} s: responses at {places} places. Wrote "
-                    "{files}: {channels}, {length:.1f} s at {rate} Hz, in {seconds:.1f} s."
+                    "{files}: {output}, {channels}, {length:.1f} s at {rate} Hz, in "
+                    "{seconds:.1f} s."
                 ),
                 movers=", ".join(name for _kind, name in movement.copies),
                 time=movement.duration_s,
                 places=movement.places,
                 files=", ".join(str(path) for path in report["paths"].values()),
+                output=report["output"],
                 channels=channels,
                 length=report["length_s"],
                 rate=report["rate"],

@@ -80,18 +80,29 @@ which frequencies each octave band holds.
   it is then, nothing simulated; **Moves** (in the panel and the forms) keeps a walk but
   leaves its mover standing, as `enabled: false` does, and **Doppler** has it play as a
   vehicle does, each early path through a delay that changes as it goes, so its pitch
-  shifts as it passes (`doppler: true`; a walk with Doppler plays alone, in a
-  walkthrough or a demo). A line or a surface source does not move: its form shows
+  shifts as it passes (`doppler: true`; a walk with Doppler moves alone, so the other
+  walks must be off). A line or a surface source does not move: its form shows
   **Moves** and **Edit movement…** greyed, with a tip saying so. A walk through points at
-  a speed (`to`) shows as it goes, read-only, until **Convert to keyframes** bakes it,
-  its turns through the corners included (facing forward, it faces its first leg from
-  the start, so its own orientation turns that way). A dragged keyframe keeps its
-  height above the floor, as a dragged source or listener does. **Render movement…**
-  simulates every mover on one clock and writes what each listener in use hears of what
-  the sources play (their **Plays** files) as a WAV file, in the format of the scene's
-  first output (binaural with none), in the background, as `walkthrough --all` does (see
-  [Walkthroughs](spatial-audio.md#walkthroughs)); one gain brings
-  the loudest peak to -1 dBFS, so the balance between the listeners holds.
+  one speed (`to`, as the car of the `roadside` and `street` examples has) is edited the
+  other way round: a row per point, its **x**, **y** and **z** typed or its handle
+  dragged, the walk's one speed typed in the **Speed** column (m/s; the hint gives it in
+  km/h too), and the times following from them, read-only, as do the angles of a walker
+  that faces the way it goes. **Add point** splits the leg the playhead is on where the
+  mover is then (at 0 s or on a point, it adds one a second further on past the end,
+  along the last leg), and **Remove point** takes the selected one away; **Convert to
+  keyframes** bakes the walk into keyframes to time each place, its turns through the
+  corners included (facing forward, it faces its first leg from the start, so its own
+  orientation turns that way). The columns give their units. A dragged keyframe or point
+  keeps its height above the floor, as a dragged source or listener does. **Render
+  movement…** simulates every mover on one clock and writes what each listener in use
+  hears of what the sources play (their **Plays** files) as a WAV file, in the
+  background, as `walkthrough --all` does (see
+  [Walkthroughs](spatial-audio.md#walkthroughs)), in the output **Output** picks: the
+  scene's outputs, binaural ones first, and binaural through a spherical head model first
+  when the scene has none (the `roadside` lists mono only), since a source passing by
+  goes from one ear to the other only in binaural. A walk with Doppler plays there too
+  when it is the only one that moves. One gain brings the loudest peak to -1 dBFS, so
+  the balance between the listeners holds; the messages name the output.
 - The scene tree's **Simulation** entry has the settings of
   [Simulation](simulation.md): the early part's method, highest order, rays,
   diffraction, **Reflections over an edge** (on one side of it or on both) and **In
@@ -130,7 +141,10 @@ which frequencies each octave band holds.
   file, **Default** takes it back; the **Movement** box ticks the sources and listeners
   whose walk moves in the run, which *This scene* lets you change for that run,
   `--moving`, a walker left out of the scene showing only when the demo moves it, and
-  **Edit movement…** opens the Movement panel on the selected one), and
+  **Edit movement…** opens the Movement panel on the selected one; a number shows its
+  unit, and the pass-by demos' **--speed** reads *as in the scene* at zero, the speed of
+  the car's walk, with the line under the Movement box saying how far, how fast (km/h
+  and m/s) and so for how long the car drives, as the options stand), and
   it runs in its own process in the background, with what it prints in the **Messages**
   panel and **Cancel** to stop it.
   The window shows the command line it is about to run, so the same run can be

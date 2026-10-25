@@ -5,10 +5,13 @@ it goes by (Doppler): the pass-by demos of the roadside and the street examples
 The car is the example's source ``car``: a point source 0.05 m above the road, where
 CNOSSOS-EU places a vehicle's sound, with a walk along the road with Doppler, left out of
 the example's own simulations (``enabled: false``), which keep the traffic as a still
-line source. The demo writes ``scene_demo.yaml`` beside its script: the car in use, at
-``--speed`` along its walk, with CNOSSOS-EU's sound power of a passenger car at that
-speed and the scene's air temperature (:mod:`acoustic_spaces.demos.car`), and every other
-source left out, so that the car is heard alone. It plays a sound made to that power
+line source. Its walk goes through points at a speed (``to``, ``speed_m_s``) or through
+keyframes at one steady speed, as CNOSSOS-EU gives a car's sound at a steady speed. The
+demo writes ``scene_demo.yaml`` beside its script: the car in use, along its walk at the
+walk's own speed or at ``--speed`` (through the keyframes' places, for keyframes), with
+CNOSSOS-EU's sound power of a passenger car at that speed and the scene's air
+temperature (:mod:`acoustic_spaces.demos.car`), and every other source left out, so that
+the car is heard alone. It plays a sound made to that power
 (``demo/car/car.wav``: tyre noise and a four-cylinder engine at ``--rpm``), or the dry
 recording ``--input car=WAV`` gives.
 
@@ -38,7 +41,11 @@ from acoustic_spaces.demos.audio import write as write_wav
 
 #: The source of the examples that drives past.
 CAR = "car"
+#: The speed of the examples' car (km/h), as their scenes give it.
 SPEED_KMH = 50.0
+#: How far the legs of a car's keyframes may differ in speed and still be one steady
+#: speed (a share of the slowest): 1 % is 0.2 dB of CNOSSOS-EU's rolling noise at most.
+STEADY = 0.01
 #: How far apart the places of the walk are simulated (m): through places 1 m apart a
 #: car's sound at 1 kHz follows the exact field's waveform to within -54 dB, -57 dB a
 #: quarter of a metre apart (validation/doppler.py).
@@ -56,12 +63,43 @@ WALK = "walk.json"
 # --------------------------------------------------------------------------- the car
 
 
+def walk_speed(car) -> float:
+    """The speed the walk of ``car`` (a scene source) goes at (m/s): its ``speed_m_s``
+    along points, or along keyframes the one steady speed they keep; a ValueError says
+    when keyframes go at different speeds or wait."""
+    from acoustic_spaces.walkthrough import knots
+
+    if car.walk.keyframes is None:
+        return float(car.walk.speed_m_s)
+    path = knots(car)
+    speeds = np.linalg.norm(np.diff(path.positions, axis=0), axis=1) / np.diff(path.times)
+    slow, fast = float(speeds.min()), float(speeds.max())
+    if slow <= 0.0 or fast > slow * (1.0 + STEADY):
+        raise ValueError(
+            f"the {CAR}'s keyframes go at {3.6 * slow:.1f} to {3.6 * fast:.1f} km/h, but "
+            "CNOSSOS-EU gives a car's sound power at one steady speed: time them for one "
+            "speed (or give its walk points at a speed), or drive it through their places "
+            "at one speed with --speed"
+        )
+    return path.length_m / path.duration_s
+
+
 def speed_of(args: argparse.Namespace) -> float:
-    """``--speed`` (km/h), checked: positive and finite."""
-    speed = float(args.speed)
-    if not math.isfinite(speed) or speed <= 0.0:
-        raise SystemExit(f"error: --speed is a positive number of km/h, not {args.speed!r}")
-    return speed
+    """The speed the car drives at (km/h): ``--speed``, checked positive and finite, or
+    without it the speed of its walk in the example's scene (:func:`walk_speed`)."""
+    if args.speed is not None:
+        speed = float(args.speed)
+        if not math.isfinite(speed) or speed <= 0.0:
+            raise SystemExit(f"error: --speed is a positive number of km/h, not {args.speed!r}")
+        return speed
+    scene = source_scene(args)
+    problem = car_problem(scene, args.source.name)
+    if problem:
+        raise SystemExit(f"error: {problem}")
+    try:
+        return 3.6 * walk_speed(car_of(scene))
+    except ValueError as exc:
+        raise SystemExit(f"error: {exc}") from None
 
 
 def car_of(scene):
@@ -74,7 +112,7 @@ def car_of(scene):
 
 def car_problem(scene, name: str) -> str | None:
     """What keeps the car of ``scene`` (read from the file ``name``) from driving past:
-    none, a line or a surface, no walk, a walk that is off or one through keyframes."""
+    none, a line or a surface, no walk, or a walk that is off."""
     car = next((s for s in scene.sources if s.name == CAR), None)
     if car is None:
         return f"{name} has no source {CAR!r} to drive"
@@ -90,22 +128,36 @@ def car_problem(scene, name: str) -> str | None:
             f"the {CAR}'s walk is off in {name}: turn it on (Moves in the editor, or walk: "
             "enabled: true)"
         )
-    if car.walk.keyframes is not None:
-        return (
-            f"the {CAR}'s walk in {name} goes through keyframes: the demo drives it at one "
-            "speed (--speed) along points (walk: to:)"
-        )
     return None
 
 
-def driving(car, speed_kmh: float):
-    """``car`` (a scene source) with its walk at ``speed_kmh`` and with Doppler."""
-    walk = car.walk.model_copy(update={"speed_m_s": speed_kmh / 3.6, "doppler": True})
+def places_of(car) -> list[tuple[float, ...]]:
+    """The places the keyframes of ``car`` go through after its position, each once:
+    the points of a walk through them."""
+    places: list[tuple[float, ...]] = []
+    last = tuple(car.position)
+    for frame in car.walk.keyframes:
+        if tuple(frame.position) != last:
+            places.append(tuple(frame.position))
+            last = tuple(frame.position)
+    return places
+
+
+def driving(car, speed_kmh: float | None):
+    """``car`` (a scene source) in use, with Doppler, along its walk as it is (None) or
+    at ``speed_kmh``: a walk through points at that speed, through the keyframes' places
+    for keyframes."""
+    update: dict = {"doppler": True}
+    if speed_kmh is not None:
+        update["speed_m_s"] = speed_kmh / 3.6
+        if car.walk.keyframes is not None:
+            update |= {"to": places_of(car), "keyframes": None}
+    walk = car.walk.model_copy(update=update)
     return car.model_copy(update={"walk": walk, "enabled": True})
 
 
-def pass_s(car, speed_kmh: float) -> float:
-    """How long the car takes along its walk at ``speed_kmh`` (s)."""
+def pass_s(car, speed_kmh: float | None = None) -> float:
+    """How long the car takes along its walk, as it is or at ``speed_kmh`` (s)."""
     from acoustic_spaces.walkthrough import knots
 
     return float(knots(driving(car, speed_kmh)).duration_s)
@@ -137,11 +189,11 @@ def car_info(args: argparse.Namespace) -> dict:
     speed = speed_of(args)
     power = light_vehicle_power(speed, scene.air.temperature_c)
     return {
-        "speed_kmh": speed,
+        "speed_kmh": round(speed, 6),
         "rpm": float(args.rpm),
         "temperature_c": scene.air.temperature_c,
         "rate": int(scene.simulation.sample_rate),
-        "duration_s": round(pass_s(car_of(scene), speed), 6),
+        "duration_s": round(pass_s(car_of(scene), args.speed), 6),
         "level_db": [round(float(v), 1) for v in power.total_db],
         "rolling_db": [round(float(v), 2) for v in power.rolling_db],
         "propulsion_db": [round(float(v), 2) for v in power.propulsion_db],
@@ -186,13 +238,19 @@ def car_done(args: argparse.Namespace) -> bool:
 
 def plays(args: argparse.Namespace) -> dict[str, str]:
     """What the car plays unless ``--input`` gives it a file."""
-    return {CAR: f"a car at {float(args.speed):g} km/h, made to CNOSSOS-EU's sound power"}
+    try:
+        speed = f"at {round(speed_of(args), 2):g} km/h, "
+    except SystemExit:  # the check under the form says what keeps it from driving
+        speed = ""
+    return {CAR: f"a car {speed}made to CNOSSOS-EU's sound power"}
 
 
 def played_by(args: argparse.Namespace) -> str:
     """What the car plays, as walk.json keeps it."""
     file = car_input(args)
-    return str(file) if file is not None else f"car {float(args.speed):g} km/h {args.rpm:g} rpm"
+    if file is not None:
+        return str(file)
+    return f"car {round(speed_of(args), 4):g} km/h {args.rpm:g} rpm"
 
 
 def feed(demo: Demo, args: argparse.Namespace, rate: int, duration_s: float) -> np.ndarray:
@@ -237,19 +295,24 @@ def feed(demo: Demo, args: argparse.Namespace, rate: int, duration_s: float) -> 
 
 
 def scene(demo: Demo, args: argparse.Namespace) -> None:
-    """``--scene`` (scene_demo.yaml) from ``--from`` (scene.yaml): the car in use, at
-    ``--speed`` along its walk with Doppler and CNOSSOS-EU's sound power at that speed,
-    every other source left out."""
+    """``--scene`` (scene_demo.yaml) from ``--from`` (scene.yaml): the car in use, along
+    its walk with Doppler, at its own speed or at ``--speed`` (:func:`driving`), and
+    CNOSSOS-EU's sound power at that speed, every other source left out."""
     info = car_info(args)
     data = yaml.safe_load(args.source.read_text(encoding="utf-8"))
     data["name"] = f"{data.get('name', 'scene')}: a car passing"
+    car = car_of(source_scene(args))
     for source in data["sources"]:
         if source["name"] == CAR:
             source["enabled"] = True
             source["level_db"] = info["level_db"]
             source.pop("spectrum", None)
             walk = source["walk"]
-            walk["speed_m_s"] = round(info["speed_kmh"] / 3.6, 6)
+            if args.speed is not None:
+                walk["speed_m_s"] = round(info["speed_kmh"] / 3.6, 6)
+                if walk.get("keyframes"):
+                    walk["to"] = [list(place) for place in places_of(car)]
+                    walk.pop("keyframes")
             walk["doppler"] = True
         else:
             source["enabled"] = False
@@ -269,14 +332,18 @@ def scene(demo: Demo, args: argparse.Namespace) -> None:
 def scene_done(args: argparse.Namespace) -> bool:
     """Whether scene_demo.yaml is there, newer than the example's scene, and for this
     speed."""
+    from acoustic_spaces.scene import Scene
+
     if not args.scene.exists():
         return False
     if args.source.exists() and args.scene.stat().st_mtime < args.source.stat().st_mtime:
         return False
-    data = yaml.safe_load(args.scene.read_text(encoding="utf-8")) or {}
-    car = next((s for s in data.get("sources", []) if s.get("name") == CAR), {})
-    speed = (car.get("walk") or {}).get("speed_m_s")
-    return speed is not None and abs(speed * 3.6 - float(args.speed)) < 1e-4
+    try:
+        car = car_of(Scene.from_yaml(args.scene))
+        made = 3.6 * walk_speed(car)
+    except (Exception, SystemExit):  # a scene of another kind: written again
+        return False
+    return car.walk.doppler and abs(made - speed_of(args)) < 1e-4 * made
 
 
 def room_of(demo: Demo, args: argparse.Namespace):
@@ -330,8 +397,12 @@ def walk(demo: Demo, args: argparse.Namespace) -> None:
             f"error: the car in {args.scene.name} has no Doppler; run: "
             f"{demo.command('scene', args)}"
         )
+    try:
+        speed = walk_speed(car)
+    except ValueError as exc:
+        raise SystemExit(f"error: {args.scene.name}: {exc}") from None
     rate = int(room.scene.simulation.sample_rate)
-    duration = pass_s(car, car.walk.speed_m_s * 3.6)
+    duration = pass_s(car)
     x = feed(demo, args, rate, duration)
     fmt = format_of(args, room.scene)
     names = listeners_of(room)
@@ -356,7 +427,7 @@ def walk(demo: Demo, args: argparse.Namespace) -> None:
             "sel_a_db": round(level.exposure_a, 2),
             "leq_a_db": round(level.equivalent_a, 2),
             "closest_m": round(float(distances.min()), 2),
-            "pitch_semitones": round(pitch_change(points, position, car.walk.speed_m_s, c), 3),
+            "pitch_semitones": round(pitch_change(points, position, speed, c), 3),
         }
         print(
             f"{name}: L_Amax {level.max_a:.1f} dB(A), SEL {level.exposure_a:.1f} dB(A), "
@@ -383,14 +454,14 @@ def walk(demo: Demo, args: argparse.Namespace) -> None:
     )
     from acoustic_spaces.demos.car import light_vehicle_power
 
-    power = light_vehicle_power(car.walk.speed_m_s * 3.6, room.scene.air.temperature_c)
+    power = light_vehicle_power(speed * 3.6, room.scene.air.temperature_c)
     pipeline.write_json(
         out / WALK,
         {
             "plays": played_by(args),
             "label": label,
             "step_m": float(args.step_m),
-            "speed_kmh": round(car.walk.speed_m_s * 3.6, 4),
+            "speed_kmh": round(speed * 3.6, 4),
             "rpm": float(args.rpm),
             "sound_power_a_db": round(power.sound_power_a_db, 2),
             "speed_of_sound": round(c, 3),
@@ -413,8 +484,12 @@ def walk_done(args: argparse.Namespace) -> bool:
     if any(f.exists() and f.stat().st_mtime > made for f in feeds):
         return False
     facts = pipeline.read_json(path)
+    try:
+        plays = played_by(args)
+    except SystemExit:
+        return False
     return (
-        facts.get("plays") == played_by(args)
+        facts.get("plays") == plays
         and facts.get("label") == pipeline.output_label(args)
         and facts.get("step_m") == float(args.step_m)
     )
@@ -518,8 +593,9 @@ def moving(args: argparse.Namespace) -> list[str]:
 
 
 def problems(demo: Demo, args: argparse.Namespace) -> str | None:
-    """The car must drive: the example's scene gives it a walk along points that is on,
-    and the speed, the engine and the step are positive."""
+    """The car must drive: the example's scene gives it a walk that is on, at one steady
+    speed unless ``--speed`` gives one, and the speed, the engine and the step are
+    positive."""
     from acoustic_spaces.scene import Scene
 
     for option in ("speed", "rpm", "step_m"):
@@ -533,7 +609,46 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
         scene = Scene.from_yaml(source)
     except Exception as exc:  # the scene's own message
         return f"{source.name}: {exc}"
-    return car_problem(scene, source.name)
+    problem = car_problem(scene, source.name)
+    if problem is None and problems_of_speed(args, scene):
+        return f"{source.name}: {problems_of_speed(args, scene)}"
+    return problem
+
+
+def summary(args: argparse.Namespace) -> str | None:
+    """How the car drives in a run with ``args`` (paths resolved), in a line: how far,
+    how fast (km/h and m/s, and whose speed) and so how long the pass and its sound last;
+    None when it cannot drive (the check says why)."""
+    from acoustic_spaces.walkthrough import knots
+
+    try:
+        scene = source_scene(args)
+        if car_problem(scene, args.source.name) or problems_of_speed(args, scene):
+            return None
+        path = knots(driving(car_of(scene), args.speed))
+    except (Exception, SystemExit):
+        return None
+    speed = path.length_m / path.duration_s
+    whose = "--speed" if args.speed is not None else "as its walk in the scene goes"
+    return (
+        f"The car drives {path.length_m:.1f} m along its walk at {3.6 * speed:.1f} km/h "
+        f"({speed:.2f} m/s, {whose}): the pass, and the car's sound, last "
+        f"{path.duration_s:.1f} s. --speed drives it faster or slower along the same road; "
+        "Edit movement… changes the road, and its speed."
+    )
+
+
+def problems_of_speed(args: argparse.Namespace, scene) -> str | None:
+    """What keeps the car of ``scene`` from one speed: a ``--speed`` that is not positive,
+    or without one keyframes that are not steady."""
+    if args.speed is not None:
+        speed = float(args.speed)
+        return None if math.isfinite(speed) and speed > 0.0 else "--speed is not positive"
+    try:
+        walk_speed(car_of(scene))
+    except ValueError as exc:
+        return str(exc)
+    return None
 
 
 def demo(script: Path, example: str, title: str, description: str) -> Demo:
@@ -548,10 +663,16 @@ def demo(script: Path, example: str, title: str, description: str) -> Demo:
         options=[
             Option(
                 "speed",
-                "how fast the car drives (km/h)",
-                SPEED_KMH,
+                "how fast the car drives along its walk (km/h; m/s times 3.6), which sets "
+                "how long its pass and its sound last (the walk's length over the speed) and "
+                "its sound power; by default as its walk in the scene goes: its speed along "
+                "points, or the one steady speed of its keyframes (whose places it goes "
+                "through at --speed when given)",
+                None,
                 "float",
                 steps=("car", "scene", "walk"),
+                unit="km/h",
+                unset="as in the scene",
             ),
             Option(
                 "rpm",
@@ -559,6 +680,7 @@ def demo(script: Path, example: str, title: str, description: str) -> Demo:
                 2000.0,
                 "float",
                 steps=("car",),
+                unit="rpm",
             ),
             Option(
                 "step_m",
@@ -567,6 +689,7 @@ def demo(script: Path, example: str, title: str, description: str) -> Demo:
                 "float",
                 steps=("walk",),
                 flag="--step",
+                unit="m",
             ),
             Option(
                 "source",
@@ -596,6 +719,7 @@ def demo(script: Path, example: str, title: str, description: str) -> Demo:
         problems=problems,
         plays=plays,
         moving=moving,
+        summary=summary,
     )
     made.steps = [
         Step(
@@ -630,8 +754,11 @@ __all__ = [
     "FADE_S",
     "GAP_S",
     "SPEED_KMH",
+    "STEADY",
     "STEP_M",
     "car_problem",
     "demo",
+    "driving",
     "pitch_change",
+    "walk_speed",
 ]

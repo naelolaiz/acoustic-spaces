@@ -108,18 +108,26 @@ def _roadside(tmp_path: Path) -> Path:
 
 
 def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) -> None:
-    """No car, a car with no walk, one whose walk is off or goes through keyframes, and a
-    speed that is not positive are refused before anything runs."""
+    """No car, a car with no walk, one whose walk is off or whose keyframes go at more
+    than one speed (unless --speed gives one), and a speed that is not positive are
+    refused before anything runs; by default the car goes as fast as its walk does."""
     from acoustic_spaces.demos import load
 
     folder = _roadside(tmp_path)
     demo = load(folder / "passby_demo.py").at(folder)
     args = demo.defaults()
+    assert args.speed is None  # as the scene's walk goes: 13.89 m/s
     assert demo.check(args) is None and demo.moving(demo.resolved(args)) == ["car"]
-    assert demo.plays(args) == {"car": "a car at 50 km/h, made to CNOSSOS-EU's sound power"}
+    assert demo.plays(demo.resolved(args)) == {
+        "car": "a car at 50 km/h, made to CNOSSOS-EU's sound power"
+    }
+    assert demo.summary(demo.resolved(args)).startswith(
+        "The car drives 40.0 m along its walk at 50.0 km/h (13.89 m/s, as its walk in the "
+        "scene goes): the pass, and the car's sound, last 2.9 s."
+    )
     args.speed = -3.0
     assert demo.check(args) == "--speed is a positive number, not -3.0"
-    args.speed = 50.0
+    args.speed = None
     path = folder / "scene.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     (car,) = [s for s in data["sources"] if s["name"] == "car"]
@@ -127,12 +135,78 @@ def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) ->
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     assert "the car's walk is off in scene.yaml" in demo.check(args)
     assert demo.moving(demo.resolved(args)) == []
-    car["walk"] = {"keyframes": [{"time_s": 3.0, "position": [-20, 2, 0.05]}]}
+    # Keyframes at one steady speed drive as they are timed: 40 m in 3 s.
+    car["walk"] = {"keyframes": [{"time_s": 3.0, "position": [-20, 2, 0.05]}], "doppler": True}
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
-    assert "goes through keyframes" in demo.check(args)
+    assert demo.check(args) is None
+    assert "at 48.0 km/h (13.33 m/s, as its walk in the scene goes)" in demo.summary(
+        demo.resolved(args)
+    )
+    # Keyframes at two speeds: CNOSSOS-EU has a car's power at one; --speed gives it.
+    car["walk"]["keyframes"] = [
+        {"time_s": 1.0, "position": [0, 2, 0.05]},
+        {"time_s": 3.0, "position": [0, 2, 0.05]},  # it waits
+        {"time_s": 5.0, "position": [-20, 2, 0.05]},
+    ]
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    assert demo.check(args).startswith(
+        "scene.yaml: the car's keyframes go at 0.0 to 72.0 km/h, but CNOSSOS-EU gives a car's "
+        "sound power at one steady speed"
+    )
+    assert demo.summary(demo.resolved(args)) is None
+    args.speed = 36.0
+    assert demo.check(args) is None
+    assert "40.0 m along its walk at 36.0 km/h (10.00 m/s, --speed)" in demo.summary(
+        demo.resolved(args)
+    )
     data["sources"] = [s for s in data["sources"] if s["name"] != "car"]
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     assert demo.check(args) == "scene.yaml has no source 'car' to drive"
+
+
+def test_the_passby_demo_drives_keyframes_as_timed_or_at_speed(tmp_path: Path) -> None:
+    """The demo's scene keeps a car's steady keyframes as they are, with Doppler and
+    CNOSSOS-EU's power at their speed; with --speed it drives through their places (each
+    once) at that speed instead, and a scene written for one speed is written again for
+    another."""
+    from acoustic_spaces.demos import load
+    from acoustic_spaces.demos.passby import driving, walk_speed
+
+    folder = _roadside(tmp_path)
+    path = folder / "scene.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    (car,) = [s for s in data["sources"] if s["name"] == "car"]
+    car["walk"] = {
+        "keyframes": [
+            {"time_s": 1.5, "position": [0, 2, 0.05]},
+            {"time_s": 3.0, "position": [-20, 2, 0.05], "orientation": {"yaw": 180}},
+        ],
+        "enabled": True,
+    }
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    demo = load(folder / "passby_demo.py").at(folder)
+    assert demo.main(["scene"]) == 0
+    written = Scene.from_yaml(folder / "scene_demo.yaml")
+    (driven,) = [s for s in written.sources if s.name == "car"]
+    assert driven.in_use and driven.walk.doppler and len(driven.walk.keyframes) == 2
+    assert walk_speed(driven) == pytest.approx(40.0 / 3.0)
+    power = light_vehicle_power(48.0, written.air.temperature_c)
+    assert driven.level_db == pytest.approx(power.total_db, abs=0.05)
+    args = demo.resolved(demo.defaults())
+    assert demo.is_done(demo.step("scene"), args)
+    args.speed = 72.0
+    assert not demo.is_done(demo.step("scene"), args)
+    assert demo.main(["scene", "--speed", "72"]) == 0
+    (driven,) = [s for s in Scene.from_yaml(folder / "scene_demo.yaml").sources if s.name == "car"]
+    assert driven.walk.keyframes is None and driven.walk.speed_m_s == pytest.approx(20.0)
+    assert driven.walk.to == [(0.0, 2.0, 0.05), (-20.0, 2.0, 0.05)] and driven.walk.doppler
+    assert demo.is_done(demo.step("scene"), args)
+    # The same, from Python: a wait drops out of the places.
+    source = Scene.from_yaml(path)
+    (car,) = [s for s in source.sources if s.name == "car"]
+    frames = [*car.walk.keyframes[:1], car.walk.keyframes[0].model_copy(update={"time_s": 2.0})]
+    waiting = car.model_copy(update={"walk": car.walk.model_copy(update={"keyframes": frames})})
+    assert driving(waiting, 36.0).walk.to == [(0.0, 2.0, 0.05)]
 
 
 def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, capsys) -> None:

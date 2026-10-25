@@ -149,9 +149,9 @@ starts, `--moving none` keeps them all still, so one scene serves both. A walk w
 Doppler (a car, a train) moves alone: every listener hears each early path through its
 own delay as it changes, so the pitch shifts as it passes, and the late sound
 crossfaded from place to place
-([moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)); a walking
-source is simulated along its walk once for each listener. With other walks on as well,
-the demo says to leave them standing.
+([moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)), all from
+the one simulation of the moving run, as the editor's **Render movement…** plays it.
+With other walks on as well, the demo says to leave them standing.
 
 Everything goes to `demo/` beside the scene (`--work` elsewhere): the feeds, the
 results, the mixes in `seats/` (in `moving/` when something moves), `tour.wav`, the
@@ -620,15 +620,23 @@ acoustic-spaces examples --copy . roadside && cd roadside   # or street
 python passby_demo.py all   # or car, scene, walk, video one at a time
 ```
 
-Options: `--speed 50` how fast the car drives (km/h), `--rpm 2000` how fast its engine
-turns, for its made sound, `--step 1` how far apart the car is simulated along its walk
-(m), `--hrtf me.sofa` a measured head, `--input car=WAV` a dry recording of yours.
+Options: `--speed 70` how fast the car drives (km/h; without it, the speed of its walk
+in the example's scene, 50 km/h in both), `--rpm 2000` how fast its engine turns, for its
+made sound, `--step 1` how far apart the car is simulated along its walk (m), `--hrtf
+me.sofa` a measured head, `--input car=WAV` a dry recording of yours. The car drives the
+length of its walk at that speed, so the pass lasts the length divided by the speed: the
+150 m of the roadside take 10.8 s at 50 km/h, 7.7 s at 70 km/h. The **Run demo** window
+gives the three under its options as they change.
 
 - **The car** is the example's source `car`: a point source 0.05 m above the road, where
   CNOSSOS-EU puts a vehicle's sound, with a walk along the road with Doppler, left out of
   the example's own simulations until ticked (there the traffic stays a still line
-  source). The demo's scene (`scene_demo.yaml`) has the car alone, at `--speed` along
-  its walk, with CNOSSOS-EU's sound power of a passenger car (category 1) at that speed
+  source). Its walk goes through points at a speed, or through keyframes timed for one
+  steady speed, since CNOSSOS-EU gives a car's sound at a steady speed: keyframes that
+  speed up or slow down by more than 1 % are refused, unless `--speed` drives the car
+  through their places at one speed. The demo's scene (`scene_demo.yaml`) has the car
+  alone along its walk at that speed, with CNOSSOS-EU's sound power of a passenger car
+  (category 1) at that speed
   on the method's reference road surface, in the scene's air temperature: rolling noise
   A_R + B_R lg(v/70) and propulsion noise A_P + B_P (v - 70)/70 per octave band, with
   the coefficients of Table F-1 of Commission Directive (EU) 2015/996

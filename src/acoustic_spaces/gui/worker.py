@@ -104,8 +104,8 @@ class MovementJob(SimulationJob):
     in format ``fmt`` and writes what each listener in use hears
     (:func:`~acoustic_spaces.walkthrough.save_movement`: ``out`` for one listener, else
     ``<out stem>_<listener>.wav`` each), one gain bringing the loudest peak to -1 dBFS;
-    ``done`` carries the movement, the files written by listener, the gain, the sample
-    rate, the channels and the length (s)."""
+    ``done`` carries the movement, the output's label, the files written by listener, the
+    gain, the sample rate, the channels and the length (s)."""
 
     kind = "movement"
 
@@ -133,6 +133,7 @@ class MovementJob(SimulationJob):
         first = next(iter(rendered.values()))
         return {
             "movement": movement,
+            "output": getattr(self.fmt, "label", "mono"),
             "paths": paths,
             "gain": gain,
             "rate": rate,

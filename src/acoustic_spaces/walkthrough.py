@@ -35,7 +35,9 @@ it moves between). Several listeners and sources may move at once, each on its o
 walk, all on one clock: :func:`simulate_movement` simulates them together, every mover
 as a copy at each place it takes, in one simulation; :func:`render_movement` plays the
 signals through it as heard at every listener in use, still or moving; and
-:func:`save_movement` writes one WAV per listener. ``walk.enabled: false`` keeps a walk
+:func:`save_movement` writes one WAV per listener. A walk with Doppler moves alone, there
+as in a walk of its own: every listener hears each early path through its changing
+delay. ``walk.enabled: false`` keeps a walk
 but leaves its walker standing still, and :func:`with_moving` picks which walks are on
 for one run, so that one scene serves both still and moving.
 """
@@ -497,6 +499,9 @@ class Movement:
     copies: dict[tuple[str, str], tuple[str, ...]]
     #: How many of the movers' places have a late part of their own; the others mix theirs.
     late_places: int = 0
+    #: Whether the mover, then alone, walks with Doppler (``walk.doppler``): each pair it
+    #: is part of plays its early paths through delays that change as it goes.
+    doppler: bool = False
 
     @property
     def duration_s(self) -> float:
@@ -536,8 +541,8 @@ def simulate_movement(
     source in use, still or moving. The late part is traced every ``late_step_m`` along
     each mover's walk, as in :func:`simulate_walk`.
 
-    A walk with Doppler is refused: Doppler plays one walk at a time
-    (:func:`simulate_walk`, ``walkthrough --walker``).
+    A walk with Doppler moves alone: with another mover it is refused. It must go slower
+    than sound, without the wave solver, as in :func:`simulate_walk`.
     """
     if step_m <= 0:
         raise ValueError("step_m must be positive")
@@ -547,13 +552,16 @@ def simulate_movement(
     moving = movers(scene)
     if not moving:
         raise ValueError("nothing moves: give a listener or a source a walk that is enabled")
-    for _kind, item in moving:
-        if item.walk.doppler:
-            raise ValueError(
-                f"{item.name!r} walks with Doppler, which plays one walk at a time: "
-                f"simulate_walk (walkthrough --walker {item.name}), or turn its doppler off"
-            )
     paths = {item.name: knots(item) for _, item in moving}
+    doppler = next((item for _, item in moving if item.walk.doppler), None)
+    if doppler is not None:
+        if len(moving) > 1:
+            others = ", ".join(item.name for _, item in moving if item is not doppler)
+            raise ValueError(
+                f"{doppler.name!r} walks with Doppler, which moves alone: leave {others} "
+                f"standing (turn their walks off), or turn its doppler off"
+            )
+        _check_doppler(room, doppler, paths[doppler.name].top_speed, settings)
     times = np.unique(np.concatenate([_sample_times(k, step_m, step_deg) for k in paths.values()]))
     copies: dict[tuple[str, str], tuple[str, ...]] = {}
     added: dict[str, list] = {"listeners": [], "sources": []}
@@ -611,7 +619,7 @@ def simulate_movement(
     result = simulate(
         walked, settings=settings, threads=threads, progress=progress, late_from=mixing
     )
-    return Movement(room, times, result, copies, late_places)
+    return Movement(room, times, result, copies, late_places, doppler is not None)
 
 
 def render_movement(
@@ -629,8 +637,10 @@ def render_movement(
     (samples, channels) in format ``fmt`` (default mono) at ``sample_rate`` (default: the
     simulation's), all of one length and, as in :func:`render_walk`, each signal scaled
     by its source's sound power against the loudest one's unless ``equal_power``. A pair
-    that moves crossfades from each moment's response to the next's, as a walk does; a
-    still pair plays through its one response."""
+    that moves crossfades from each moment's response to the next's, as a walk does, or
+    with Doppler (:attr:`Movement.doppler`) plays each early path through its changing
+    delay and crossfades the late part, as :func:`render_walk` does; a still pair plays
+    through its one response."""
     from acoustic_spaces.spatial import Mono
 
     if not signals:
@@ -667,6 +677,12 @@ def render_movement(
     times = movement.times
     starts, lengths = _boundaries(times, crossfade_s)
     cache: dict[tuple[str, str], np.ndarray] = {}
+    # Where each mover's copies stand, for the steps of a walk with Doppler.
+    places = {
+        item.name: item.position
+        for kind in ("listeners", "sources")
+        for item in getattr(result.room.scene, kind)
+    }
 
     def response(key: tuple[str, str]) -> np.ndarray:
         if key not in cache:
@@ -687,6 +703,25 @@ def render_movement(
                 else:
                     wet = convolve(signal, response(key))
                     out[: len(wet)] += wet
+                continue
+            if movement.doppler:
+                keys = [movement.key(source, listener, k) for k in range(len(times))]
+                walks = ("sources", source) in movement.copies
+                positions = np.array([places[key[0] if walks else key[1]] for key in keys])
+                _doppler(
+                    result,
+                    keys,
+                    times,
+                    positions,
+                    signal,
+                    out,
+                    fmt,
+                    rate,
+                    seed,
+                    gusts,
+                    source_walks=walks,
+                    crossfade_s=crossfade_s,
+                )
                 continue
             for k in range(len(times)):
                 begin = 0 if k == 0 else int(math.floor(starts[k - 1] * rate))
@@ -840,17 +875,12 @@ def render_walk(
             return (source, walk.names[k])
         return (walk.names[k] if source == walk.name else source, listener)
 
-    def response(source: str, k: int, late_only: bool = False) -> np.ndarray:
+    def response(source: str, k: int) -> np.ndarray:
         key = key_of(source, k)
-        if (key, late_only) not in cache:
+        if key not in cache:
             cache.clear()  # a place's responses are used one after the other
-            chosen = result[key]
-            if late_only:
-                from acoustic_spaces.engine.early import EarlyReflections
-
-                chosen = dataclasses.replace(chosen, early=EarlyReflections.empty(chosen.bands))
-            cache[key, late_only] = chosen.spatial_impulse_response(fmt, rate, seed)
-        return cache[key, late_only]
+            cache[key] = result[key].spatial_impulse_response(fmt, rate, seed)
+        return cache[key]
 
     moving = list(dry) if walk.kind == "listeners" else [s for s in dry if s == walk.name]
     still = [s for s in dry if s not in moving]
@@ -903,20 +933,50 @@ def render_walk(
             wet = convolve(piece, ir)[begin - first : end - first]
             out[begin : begin + len(wet)] += weight[: len(wet)] * wet
     if walk.doppler:
-        _doppler(walk, dry, moving, fmt, rate, seed, gusts, out, key_of, response, crossfade_s)
+        for source in moving:
+            _doppler(
+                result,
+                [key_of(source, k) for k in range(len(times))],
+                times,
+                walk.points.positions,
+                dry[source],
+                out,
+                fmt,
+                rate,
+                seed,
+                gusts,
+                source_walks=walk.kind == "sources",
+                crossfade_s=crossfade_s,
+            )
     return out
 
 
-def _doppler(walk, dry, moving, fmt, rate, seed, gusts, out, key_of, response, crossfade_s):
-    """Adds to ``out`` the ``moving`` sources' sound along a walk with Doppler: their
-    late parts crossfaded from place to place, their early paths each through its own
-    changing delay (:func:`acoustic_spaces.doppler.render`)."""
+def _doppler(
+    result,
+    keys,
+    times,
+    positions,
+    signal,
+    out,
+    fmt,
+    rate,
+    seed,
+    gusts,
+    *,
+    source_walks: bool,
+    crossfade_s: float,
+) -> None:
+    """Adds to ``out`` the mono ``signal`` heard along a walk with Doppler, through
+    ``keys`` (the pair's response in ``result`` at each place, the walker there at
+    ``times`` and ``positions``; ``source_walks`` when the walker is the source): the late
+    parts crossfaded from place to place, the early paths each through its own changing
+    delay (:func:`acoustic_spaces.doppler.render`)."""
     from acoustic_spaces import doppler
+    from acoustic_spaces.engine.early import EarlyReflections
 
-    result = walk.result
-    times = walk.points.times
     length = len(out)
     starts, lengths = _boundaries(times, crossfade_s)
+    late: dict[tuple[str, str], np.ndarray] = {}
     for k in range(len(times)):
         begin = 0 if k == 0 else int(math.floor(starts[k - 1] * rate))
         end = length if k == len(times) - 1 else int(math.ceil((starts[k] + lengths[k]) * rate)) + 1
@@ -925,35 +985,36 @@ def _doppler(walk, dry, moving, fmt, rate, seed, gusts, out, key_of, response, c
             continue
         t = np.arange(begin, end) / rate
         weight = (_past(starts, lengths, k, t) - _past(starts, lengths, k + 1, t))[:, None]
-        for source in moving:
-            ir = response(source, k, late_only=True)
-            first = max(begin - len(ir) + 1, 0)
-            piece = dry[source][first:end]
-            if len(piece) == 0:
-                continue
-            wet = convolve(piece, ir)[begin - first : end - first]
-            out[begin : begin + len(wet)] += weight[: len(wet)] * wet
-    planes = doppler.plane_ids(result.room.mesh)
-    steps = np.linalg.norm(np.diff(walk.points.positions, axis=0), axis=1)
-    for source in moving:
-        responses = [result[key_of(source, k)] for k in range(len(times))]
-        speed_of_sound = responses[0].speed_of_sound
-        # The most a path's delay moves from one place to the next and stays the same
-        # path's: the step over the speed of sound, with room to spare.
-        step_s = 1.5 * float(steps.max(initial=0.0)) / speed_of_sound + 1e-4
-        out += doppler.render(
-            dry[source],
-            responses,
-            times,
-            fmt,
-            rate,
-            length,
-            source_walks=walk.kind == "sources",
-            planes=planes,
-            step_s=step_s,
-            gusts=gusts,
-            seed=seed,
-        )
+        if keys[k] not in late:
+            late.clear()  # a place's response is used one after the other
+            chosen = result[keys[k]]
+            chosen = dataclasses.replace(chosen, early=EarlyReflections.empty(chosen.bands))
+            late[keys[k]] = chosen.spatial_impulse_response(fmt, rate, seed)
+        ir = late[keys[k]]
+        first = max(begin - len(ir) + 1, 0)
+        piece = signal[first:end]
+        if len(piece) == 0:
+            continue
+        wet = convolve(piece, ir)[begin - first : end - first]
+        out[begin : begin + len(wet)] += weight[: len(wet)] * wet
+    responses = [result[key] for key in keys]
+    steps = np.linalg.norm(np.diff(np.asarray(positions, dtype=float), axis=0), axis=1)
+    # The most a path's delay moves from one place to the next and stays the same path's:
+    # the step over the speed of sound, with room to spare.
+    step_s = 1.5 * float(steps.max(initial=0.0)) / responses[0].speed_of_sound + 1e-4
+    out += doppler.render(
+        signal,
+        responses,
+        times,
+        fmt,
+        rate,
+        length,
+        source_walks=source_walks,
+        planes=doppler.plane_ids(result.room.mesh),
+        step_s=step_s,
+        gusts=gusts,
+        seed=seed,
+    )
 
 
 @dataclass(frozen=True)

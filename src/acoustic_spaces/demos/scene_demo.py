@@ -21,8 +21,7 @@ leaves every other walker standing where it starts, ``--moving none`` keeps them
 still, so one scene serves both. A walk with Doppler (a car going past) moves alone:
 every listener hears each early path through its own delay as it changes, so the pitch
 shifts as it passes, the late sound crossfaded from place to place
-(:func:`acoustic_spaces.walkthrough.render_walk`); a walking source is simulated along
-its walk once for each listener.
+(:func:`acoustic_spaces.walkthrough.render_movement`), all from one simulation.
 
     acoustic-spaces demo scene.yaml              # every step, into demo/ beside the scene
     acoustic-spaces demo scene.yaml feeds        # one step
@@ -382,90 +381,19 @@ def levels_along(movement, source, listener: str) -> list[float | None]:
     return levels
 
 
-def _finite(levels) -> list[float | None]:
-    """Levels (dB) rounded, None for one the simulation gives none (a response too short
-    for its decay)."""
-    return [round(float(v), 2) if math.isfinite(v) else None for v in levels]
-
-
-def walk_levels(walked, playing, listener: str) -> dict[str, list[float | None]]:
-    """The A-weighted level (dB) of each source of ``playing`` (scene sources) at
-    ``listener`` at each place of ``walked`` (a walk with Doppler,
-    :func:`~acoustic_spaces.walkthrough.simulate_walk`), as simulated: the walker's at
-    each of its places, a still source's the same at every one."""
-    from acoustic_spaces.parameters import a_weighted
-    from acoustic_spaces.walkthrough import pass_by
-
-    count = len(walked.names)
-    levels = {}
-    for source in playing:
-        if walked.kind == "listeners":
-            levels[source.name] = _finite(pass_by(walked, source.name).levels_a)
-        elif source.name == walked.name:
-            levels[source.name] = _finite(pass_by(walked).levels_a)
-        else:
-            response = walked.result[source.name, listener]
-            levels[source.name] = _finite([a_weighted(response.levels(source.power_db()))] * count)
-    return levels
-
-
-def doppler_mixes(room, walker, names, feeds, fmt, rate):
-    """The mixes of ``names`` with ``walker`` (a scene source or listener) going along its
-    walk with Doppler, each early path through its own changing delay
-    (:func:`~acoustic_spaces.walkthrough.render_walk`): a walking source simulated along
-    its walk once per listener, a walking listener once along its own, every other
-    listener standing where it is. Returns the mixes, the places' times, each playing
-    source's level at every listener at each place and how many places there are."""
-    from acoustic_spaces import simulate
-    from acoustic_spaces.parameters import a_weighted
-    from acoustic_spaces.render import auralize
-    from acoustic_spaces.room import Room
-    from acoustic_spaces.walkthrough import render_walk, simulate_walk
-
-    scene = room.scene
-    playing = [s for s in scene.sources if s.name in feeds]
-    mixes, levels = {}, {}
-    if any(s.name == walker.name for s in scene.sources):
-        for name in names:
-            print(f"simulating {walker.name} along its walk with Doppler, heard at {name}")
-            walked = simulate_walk(room, walker.name, listener=name, progress=print)
-            mixes[name] = render_walk(walked, feeds, fmt, sample_rate=rate)
-            levels[name] = walk_levels(walked, playing, name)
-        return mixes, walked.points.times, levels, len(walked.names)
-    print(f"simulating {walker.name} along its walk with Doppler")
-    walked = simulate_walk(room, walker.name, progress=print)
-    count = len(walked.names)
-    if walker.name in names:
-        mixes[walker.name] = render_walk(walked, feeds, fmt, sample_rate=rate)
-        levels[walker.name] = walk_levels(walked, playing, walker.name)
-    others = [name for name in names if name != walker.name]
-    if others:
-        print(f"simulating {', '.join(others)}, standing")
-        listeners = [lis for lis in scene.listeners if lis.name in others]
-        still = Room.from_scene(scene.model_copy(update={"listeners": listeners}), reuse=room)
-        result = simulate(still, progress=print)
-        for name in others:
-            mixes[name] = auralize(result, feeds, name, fmt, sample_rate=rate)
-            levels[name] = {
-                s.name: _finite([a_weighted(result[s.name, name].levels(s.power_db()))] * count)
-                for s in playing
-            }
-    return mixes, walked.points.times, levels, count
-
-
 def render_moving(args: argparse.Namespace, moving: list[str]) -> None:
     """Every listener's mix with ``moving`` walking, all on one clock: the scene simulated
     with every mover at each moment of its walk
     (:func:`~acoustic_spaces.walkthrough.simulate_movement`), each feed played through
     it at its source's sound power, one gain for all (the loudest peak at -1 dBFS), into
-    ``moving/`` with seats.json; a walk with Doppler, which moves alone, through
-    :func:`doppler_mixes` instead. That also keeps the moments and, at each, the
+    ``moving/`` with seats.json; a walk with Doppler, which moves alone, with each early
+    path through its changing delay. That also keeps the moments and, at each, the
     A-weighted level of each source that plays at every listener, for the pictures; the
     arrival time (``arrival_s``) is left out where something moves, as it changes along
     the way, and the tour shifts no mix by it (``lag_s`` 0), so that the stops keep one
     clock."""
     from acoustic_spaces.room import Room
-    from acoustic_spaces.walkthrough import movers, render_movement, simulate_movement
+    from acoustic_spaces.walkthrough import render_movement, simulate_movement
 
     table = feeds_table(args)
     names = listeners_of(args, responses_of(args))
@@ -482,18 +410,13 @@ def render_moving(args: argparse.Namespace, moving: list[str]) -> None:
     feeds = {name: read(work / "feeds" / f"{name}.wav") for name in table["sources"]}
     playing = [s for s in scene.sources if s.name in feeds]
     fmt = format_of(args, scene)
-    walkers = [item for _kind, item in movers(scene)]
-    if len(walkers) == 1 and walkers[0].walk.doppler:
-        mixes, times, levels, places = doppler_mixes(room, walkers[0], names, feeds, fmt, rate)
-    else:
-        print(f"simulating the movement of {', '.join(moving)}, on one clock")
-        movement = simulate_movement(room, progress=print)
-        print(f"mixing {len(names)} listeners through {len(movement.times)} moments")
-        mixes = render_movement(movement, feeds, fmt, sample_rate=rate)
-        times, places = movement.times, movement.places
-        levels = {
-            name: {s.name: levels_along(movement, s, name) for s in playing} for name in names
-        }
+    print(f"simulating the movement of {', '.join(moving)}, on one clock")
+    movement = simulate_movement(room, progress=print)
+    with_doppler = ", each early path through its changing delay" if movement.doppler else ""
+    print(f"mixing {len(names)} listeners through {len(movement.times)} moments{with_doppler}")
+    mixes = render_movement(movement, feeds, fmt, sample_rate=rate)
+    times, places = movement.times, movement.places
+    levels = {name: {s.name: levels_along(movement, s, name) for s in playing} for name in names}
     peak = max(float(abs(mixes[name]).max(initial=0.0)) for name in names)
     gain = 10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0
     weights = {s.name: s.sound_power_db for s in playing}
