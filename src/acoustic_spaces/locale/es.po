@@ -922,6 +922,11 @@ msgstr "Se movió {name} a ({point})"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
+msgid "Moved point {n} of {name} to ({point})"
+msgstr "Punto {n} de {name} movido a ({point})"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
 msgid "Moved keyframe {n} of {name} to ({point})"
 msgstr "Fotograma clave {n} de {name} movido a ({point})"
 
@@ -972,10 +977,11 @@ msgstr[1] "{count} canales"
 #, python-brace-format
 msgid ""
 "{movers} move for {time:.1f} s: responses at {places} places. Wrote {files}: "
-"{channels}, {length:.1f} s at {rate} Hz, in {seconds:.1f} s."
+"{output}, {channels}, {length:.1f} s at {rate} Hz, in {seconds:.1f} s."
 msgstr ""
 "{movers} se mueven durante {time:.1f} s: respuestas en {places} posiciones. "
-"Escrito {files}: {channels}, {length:.1f} s a {rate} Hz, en {seconds:.1f} s."
+"Escrito {files}: {output}, {channels}, {length:.1f} s a {rate} Hz, en "
+"{seconds:.1f} s."
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -1667,8 +1673,8 @@ msgstr[1] "{count} fotogramas clave, {length:.1f} m en {time:.1f} s"
 
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
-msgid "At {speed:g} m/s, {length:.1f} m in {time:.1f} s"
-msgstr "A {speed:g} m/s, {length:.1f} m en {time:.1f} s"
+msgid "At {speed:g} m/s ({kmh:.1f} km/h), {length:.1f} m in {time:.1f} s"
+msgstr "A {speed:g} m/s ({kmh:.1f} km/h), {length:.1f} m en {time:.1f} s"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ", with Doppler"
@@ -4355,15 +4361,15 @@ msgstr ""
 "mira (grados). Su orientación determina qué oyen como frente las salidas "
 "binaural, Ambisonics y de altavoces"
 
-#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py acoustic_spaces/gui/results_view.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/results_view.py
 msgid "Yaw"
 msgstr "Guiñada"
 
-#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py acoustic_spaces/gui/results_view.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/results_view.py
 msgid "Pitch"
 msgstr "Cabeceo"
 
-#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
+#: acoustic_spaces/gui/inspector.py
 msgid "Roll"
 msgstr "Alabeo"
 
@@ -5491,12 +5497,51 @@ msgid "All items"
 msgstr "Todos los elementos"
 
 #: acoustic_spaces/gui/movement.py
-msgid "Time"
-msgstr "Tiempo"
+msgid "Time (s)"
+msgstr "Tiempo (s)"
 
 #: acoustic_spaces/gui/movement.py
-msgid "Speed"
-msgstr "Velocidad"
+msgid "Yaw (°)"
+msgstr "Guiñada (°)"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Pitch (°)"
+msgstr "Cabeceo (°)"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Roll (°)"
+msgstr "Alabeo (°)"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Speed (m/s)"
+msgstr "Velocidad (m/s)"
+
+#: acoustic_spaces/gui/movement.py
+msgid "mono"
+msgstr "mono"
+
+#: acoustic_spaces/gui/movement.py
+msgid "binaural"
+msgstr "binaural"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid "binaural ({file})"
+msgstr "binaural ({file})"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid "Ambisonics, order {order}"
+msgstr "Ambisonics, orden {order}"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid "loudspeakers {layout}"
+msgstr "altavoces {layout}"
+
+#: acoustic_spaces/gui/movement.py
+msgid "loudspeakers, a layout of the scene's own"
+msgstr "altavoces, una disposición propia de la escena"
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
@@ -5527,15 +5572,31 @@ msgstr "Doppler"
 msgid ""
 "Tick for a vehicle or an aircraft: the early sound goes through delays that "
 "change as it goes, so its pitch shifts as it passes (doppler in the scene "
-"file). A walk with Doppler plays alone, one walk at a time (walkthrough, or "
-"a demo); Render movement… plays walks without it, crossfaded from place to "
-"place"
+"file). A walk with Doppler moves alone: Render movement… and the demos play "
+"it while every other walk is off"
 msgstr ""
 "Márcalo para un vehículo o un avión: el sonido temprano pasa por retardos "
 "que cambian mientras avanza, así que su tono cambia al pasar (doppler en el "
-"archivo de escena). Un recorrido con Doppler suena solo, un recorrido cada "
-"vez (walkthrough, o una demo); Renderizar movimiento… reproduce los "
-"recorridos sin él, con fundido cruzado de un lugar al siguiente"
+"archivo de escena). Un recorrido con Doppler se mueve solo: Renderizar "
+"movimiento… y las demos lo reproducen mientras todos los demás recorridos "
+"están desactivados"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"The output Render movement… writes: one of the scene's (Outputs in the scene "
+"tree), or binaural through a spherical head model when it has no binaural "
+"one. Binaural, for headphones, comes first: a source passing by goes from "
+"one ear to the other, which mono, one channel, cannot show"
+msgstr ""
+"La salida que escribe Renderizar movimiento…: una de las de la escena "
+"(Salidas en el árbol de la escena), o binaural con un modelo de cabeza "
+"esférica cuando no tiene ninguna binaural. La binaural, para auriculares, va "
+"primero: una fuente que pasa va de un oído al otro, lo que el mono, un solo "
+"canal, no puede mostrar"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Output"
+msgstr "Salida"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Render movement…"
@@ -5556,11 +5617,12 @@ msgstr ""
 msgid ""
 "When it is at this keyframe, s from the start of the movement; type another "
 "time to move the keyframe along the timeline. The first row is where it "
-"starts, at 0 s"
+"starts, at 0 s. Along points at one speed the times follow from the speed"
 msgstr ""
 "Cuándo está en este fotograma clave, en s desde el inicio del movimiento; "
 "escriba otro tiempo para desplazar el fotograma clave por la línea de "
-"tiempo. La primera fila es donde empieza, a 0 s"
+"tiempo. La primera fila es donde empieza, a 0 s. Por puntos a una sola "
+"velocidad, los tiempos se deducen de la velocidad"
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
@@ -5618,38 +5680,15 @@ msgstr ""
 #: acoustic_spaces/gui/movement.py
 msgid ""
 "How fast it goes from this keyframe to the next: the distance between them "
-"over the time between them (m/s). Nothing to set: change a time or a "
-"position and the speed follows"
+"over the time between them (m/s; 3.6 km/h each). Nothing to set: change a "
+"time or a position and the speed follows. A walk through points goes at one "
+"speed: type it here and the times follow"
 msgstr ""
 "A qué velocidad va de este fotograma clave al siguiente: la distancia entre "
-"ambos dividida por el tiempo entre ambos (m/s). Nada que ajustar: cambie un "
-"tiempo o una posición y la velocidad se deduce"
-
-#: acoustic_spaces/gui/movement.py
-msgid "Add keyframe"
-msgstr "Añadir fotograma clave"
-
-#: acoustic_spaces/gui/movement.py
-msgid ""
-"Add a keyframe at the playhead, where the mover is then (on a keyframe "
-"already, or at 0 s: a second past the end of its walk, where it ends), then "
-"drag it into place or type where it is"
-msgstr ""
-"Añadir un fotograma clave en el cursor de tiempo, donde está el móvil en ese "
-"instante (si ya hay uno ahí, o a 0 s: un segundo después del final de su "
-"recorrido, donde termina); después arrástrelo a su sitio o escriba dónde está"
-
-#: acoustic_spaces/gui/movement.py
-msgid "Remove keyframe"
-msgstr "Quitar fotograma clave"
-
-#: acoustic_spaces/gui/movement.py
-msgid ""
-"Remove the selected keyframe; the mover goes straight from the one before to "
-"the one after. With the last one, the walk goes too"
-msgstr ""
-"Quitar el fotograma clave seleccionado; el móvil va directo del anterior al "
-"siguiente. Con el último se va también el recorrido"
+"ambos dividida por el tiempo entre ambos (m/s; 3,6 km/h cada uno). Nada que "
+"ajustar: cambie un tiempo o una posición y la velocidad se deduce. Un "
+"recorrido por puntos va a una sola velocidad: escríbala aquí y los tiempos "
+"se deducen"
 
 #: acoustic_spaces/gui/movement.py
 msgid "Convert to keyframes"
@@ -5714,6 +5753,19 @@ msgid "Place a source or a listener to move it."
 msgstr "Coloque una fuente o un receptor para moverlo."
 
 #: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid ""
+"Faces the way it goes, turning at {turn:.0f}°/s through the corners "
+"(face_forward in the scene file)"
+msgstr ""
+"Mira hacia donde va, girando a {turn:.0f}°/s en las esquinas (face_forward "
+"en el archivo de escena)"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Keeps its own orientation all along (face_forward: false)"
+msgstr "Mantiene su propia orientación todo el recorrido (face_forward: false)"
+
+#: acoustic_spaces/gui/movement.py
 msgid "Keeps facing as at the keyframe before; type an angle to turn here"
 msgstr ""
 "Sigue mirando como en el fotograma clave anterior; escriba un ángulo para "
@@ -5725,17 +5777,25 @@ msgstr "Donde empieza, a 0 s: su propia posición y orientación"
 
 #: acoustic_spaces/gui/movement.py
 #, python-brace-format
+msgid "Point {n}"
+msgstr "Punto {n}"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
 msgid "Keyframe {n}"
 msgstr "Fotograma clave {n}"
 
 #: acoustic_spaces/gui/movement.py
 #, python-brace-format
 msgid ""
-"{name} walks through its points at {speed:.2f} m/s, turning at {turn:.0f}°/s "
-"through the corners: Convert to keyframes to edit it here."
+"{name} goes through its points at one speed, {speed:.2f} m/s ({kmh:.1f} "
+"km/h): type or drag a point to move it, type a speed for the whole walk, and "
+"the times follow. Convert to keyframes to time each point yourself."
 msgstr ""
-"{name} recorre sus puntos a {speed:.2f} m/s, girando a {turn:.0f}°/s en las "
-"esquinas: Convertir en fotogramas clave para editarlo aquí."
+"{name} recorre sus puntos a una sola velocidad, {speed:.2f} m/s ({kmh:.1f} "
+"km/h): escriba o arrastre un punto para moverlo, escriba una velocidad para "
+"todo el recorrido, y los tiempos se deducen. Convertir en fotogramas clave "
+"para fijar usted el tiempo de cada punto."
 
 #: acoustic_spaces/gui/movement.py
 msgid ""
@@ -5754,9 +5814,74 @@ msgstr ""
 "añada ahí un fotograma clave; después arrastre el fotograma clave a su sitio."
 
 #: acoustic_spaces/gui/movement.py
+msgid "Add point"
+msgstr "Añadir punto"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Add a point at the playhead, where the mover is then, splitting the leg it "
+"is on (at 0 s or on a point: a second further on past the end, along the "
+"last leg), then drag it into place or type where it is"
+msgstr ""
+"Añadir un punto en el cursor de tiempo, donde está el móvil en ese instante, "
+"partiendo el tramo en que está (a 0 s o sobre un punto: un segundo más allá "
+"del final, a lo largo del último tramo); después arrástrelo a su sitio o "
+"escriba dónde está"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Remove point"
+msgstr "Quitar punto"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Remove the selected point; the mover goes straight from the one before to "
+"the one after. With the last one, the walk goes too"
+msgstr ""
+"Quitar el punto seleccionado; el móvil va en línea recta del anterior al "
+"siguiente. Con el último, el recorrido también desaparece"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Add keyframe"
+msgstr "Añadir fotograma clave"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Add a keyframe at the playhead, where the mover is then (on a keyframe "
+"already, or at 0 s: a second past the end of its walk, where it ends), then "
+"drag it into place or type where it is"
+msgstr ""
+"Añadir un fotograma clave en el cursor de tiempo, donde está el móvil en ese "
+"instante (si ya hay uno ahí, o a 0 s: un segundo después del final de su "
+"recorrido, donde termina); después arrástrelo a su sitio o escriba dónde está"
+
+#: acoustic_spaces/gui/movement.py
+msgid "Remove keyframe"
+msgstr "Quitar fotograma clave"
+
+#: acoustic_spaces/gui/movement.py
+msgid ""
+"Remove the selected keyframe; the mover goes straight from the one before to "
+"the one after. With the last one, the walk goes too"
+msgstr ""
+"Quitar el fotograma clave seleccionado; el móvil va directo del anterior al "
+"siguiente. Con el último se va también el recorrido"
+
+#: acoustic_spaces/gui/movement.py
 #, python-brace-format
 msgid "{text} is not a number"
 msgstr "{text} no es un número"
+
+#: acoustic_spaces/gui/movement.py
+msgid "a walk goes at a speed above 0 m/s"
+msgstr "un recorrido va a una velocidad mayor que 0 m/s"
+
+#: acoustic_spaces/gui/movement.py
+msgid "change speed"
+msgstr "cambiar velocidad"
+
+#: acoustic_spaces/gui/movement.py
+msgid "move point"
+msgstr "mover punto"
 
 #: acoustic_spaces/gui/movement.py
 msgid "a keyframe comes after the start: give it a time above 0 s"
@@ -5776,14 +5901,25 @@ msgid "turn keyframe"
 msgstr "girar fotograma clave"
 
 #: acoustic_spaces/gui/movement.py
-#, python-brace-format
-msgid "{name} walks through points at a speed: Convert to keyframes first"
-msgstr ""
-"{name} recorre puntos a una velocidad: primero Convertir en fotogramas clave"
-
-#: acoustic_spaces/gui/movement.py
 msgid "add keyframe"
 msgstr "añadir fotograma clave"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid "{name}'s last leg goes nowhere: move its last point first"
+msgstr ""
+"el último tramo de {name} no lleva a ninguna parte: mueva primero su último "
+"punto"
+
+#: acoustic_spaces/gui/movement.py
+msgid "add point"
+msgstr "añadir punto"
+
+#: acoustic_spaces/gui/movement.py
+#, python-brace-format
+msgid "Select a point to remove; the first row is where {name} starts."
+msgstr ""
+"Seleccione un punto para quitarlo; la primera fila es donde empieza {name}."
 
 #: acoustic_spaces/gui/movement.py
 #, python-brace-format
@@ -5791,6 +5927,10 @@ msgid "Select a keyframe to remove; the first row is where {name} starts."
 msgstr ""
 "Seleccione un fotograma clave para quitarlo; la primera fila es donde "
 "empieza {name}."
+
+#: acoustic_spaces/gui/movement.py
+msgid "remove point"
+msgstr "quitar punto"
 
 #: acoustic_spaces/gui/movement.py
 msgid "remove keyframe"

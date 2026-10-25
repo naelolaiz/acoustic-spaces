@@ -712,17 +712,25 @@ and the last bits round alike on every platform.
   50 km/h, and a walk along the road with Doppler. It is left out of the examples' own
   simulations (`enabled: false`) until ticked, so their results do not change.
 - `passby_demo.py` in both examples drives it past every listener in turn: the car's
-  sound made to CNOSSOS-EU's sound power at `--speed` (tyre noise and the firing of a
+  sound made to CNOSSOS-EU's sound power at its speed, the speed of its walk in the
+  scene or `--speed` in km/h (tyre noise and the firing of a
   four-cylinder engine at `--rpm`, each with the octave spectrum of its part, the two at
   the ratio of their powers; `acoustic_spaces.demos.car`), or a dry recording of yours
   (`--input car=WAV`); the car simulated every `--step` (1 m) along its walk at each
   listener and its sound played through those places, each early path through its own
   changing delay; and a video with the car moving on the plan, the level heard over the
   pass under it, L_Amax, the sound exposure level and how far the pitch of the direct
-  sound falls. One module, `acoustic_spaces.demos.passby`, serves both.
+  sound falls. One module, `acoustic_spaces.demos.passby`, serves both. The car's walk
+  goes through points at a speed or through keyframes timed for one steady speed (within
+  1 %), as CNOSSOS-EU gives a car's sound at a steady speed; `--speed` drives it through
+  the keyframes' places at the speed given. In the Run demo window `--speed` shows
+  "km/h" and starts at the walk's own speed ("as in the scene"), each number shows its
+  unit, and a line under the options gives the walk's length, the speed in km/h and m/s
+  and how long the pass lasts, as they change (`Option.unit`, `Option.unset` and
+  `Demo.summary` for any demo).
 - The demo of any scene plays a walk with Doppler when it is the only walk that moves:
-  every listener hears it pass (a walking source simulated along its walk once for each
-  listener), with the moving picture and the level at each place. With other walkers it
+  every listener hears it pass, with the moving picture and the level at each place, all
+  from the one simulation of the moving run (`render_movement`). With other walkers it
   says to leave them standing.
 - Editor: the Movement panel has a **Doppler** tick (`walk.doppler`), one step of the
   history; a line or a surface source's form shows **Moves** and **Edit movement…**
@@ -742,20 +750,29 @@ and the last bits round alike on every platform.
   simulation: each mover as a copy at each place it takes, with the still sources and
   listeners, the late part traced every `--late-step` along each walk; every listener in
   use hears every source, and one WAV is written per listener (or `--listener`'s), with
-  one gain for all. `--video` draws them all going. Doppler stays with one walk at a
-  time. From Python: `walkthrough.knots`, `movers`, `simulate_movement`,
+  one gain for all. `--video` draws them all going. A walk with Doppler moves alone: it
+  plays with Doppler when it is the only walk that is on, and with others on as well the
+  run says to leave them standing (`Movement.doppler`). From Python: `walkthrough.knots`,
+  `movers`, `simulate_movement`,
   `render_movement`, `save_movement` and `viz.animate_movement`.
 - `inspect` describes a walk along keyframes and one that is off.
 - Editor: **Edit > Edit movement…** (or the button in a source's or listener's form)
   opens the Movement panel: the keyframes of the selected point source or listener in a
-  table (time, position, angles, with the speed to the next keyframe shown, not set),
-  edited in place as one step of the history each; **Add keyframe** at the playhead,
-  **Remove keyframe**, **Convert to keyframes** for a walk along `to`; a timeline whose
+  table (time in s, position in m, angles in degrees, with the speed in m/s to the next
+  keyframe shown, not set), edited in place as one step of the history each; **Add
+  keyframe** at the playhead, **Remove keyframe**, **Convert to keyframes** for a walk
+  along `to`; a walk along `to` edited in place too, its start and points in the table
+  with the time each is reached, a point typed or dragged, **Add point** and **Remove
+  point**, and one speed for the whole walk typed in its Speed column; a timeline whose
   **End** can be made longer to add keyframes past the longest walk, with **Play** and a
   slider that move every mover in the 3D view and the plan; walks drawn as dashed lines,
   the selected mover's keyframes as numbered handles to drag in either view; **Moves**
   (also in the forms) for `enabled`; and **Render movement…**, `walkthrough --all` in the
-  background, writing one WAV per listener with one gain.
+  background, writing one WAV per listener with one gain, in the panel's **Output**:
+  binaural first (through a spherical head when the scene has no binaural output), then
+  the scene's own outputs; a walk with Doppler plays with Doppler. Before, it wrote the
+  scene's first output, mono in the `roadside` and `street` examples, so the car passed
+  no ear, and a walk with Doppler was refused.
 - One scene serves still and moving: `gallery_walk` is merged into `gallery`, whose
   visitor walks down the long arm and round the corner unless its walk is turned off,
   beside the two listeners that stand. The name `gallery_walk` still finds it

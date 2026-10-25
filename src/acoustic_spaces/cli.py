@@ -2990,7 +2990,8 @@ def build_parser() -> argparse.ArgumentParser:
         dest="all_movers",
         action="store_true",
         help="every listener and source whose walk is enabled moves, all on one clock, in "
-        "one simulation, heard at every listener in use (or --listener); not with Doppler",
+        "one simulation, heard at every listener in use (or --listener); a walk with "
+        "Doppler only when it is the one that moves",
     )
     walkthrough.add_argument(
         "--listener",

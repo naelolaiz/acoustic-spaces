@@ -116,6 +116,11 @@ class Option:
     flag: str | None = None
     #: The editor's file filter for a ``file`` option ("SOFA files (*.sofa)").
     filter: str = ""
+    #: A number's unit, shown after it in the editor ("km/h").
+    unit: str = ""
+    #: What a number without a default stands for when not given ("as in the scene"):
+    #: the editor's field shows it at its lowest, zero.
+    unset: str = ""
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -267,6 +272,10 @@ class Demo:
     #: it starts. The editor's Run demo window ticks them in its table of what moves, which
     #: a ``movers`` option lets the user change for a run.
     moving: Callable[[argparse.Namespace], list[str]] | None = None
+    #: What a run with the arguments (paths resolved) does, in a line under the editor's
+    #: form that follows the options (how far and how fast the pass-by demos' car drives,
+    #: and so for how long); None to say nothing.
+    summary: Callable[[argparse.Namespace], str | None] | None = None
     _folder: Path | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:

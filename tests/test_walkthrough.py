@@ -265,18 +265,51 @@ def test_several_movers_on_one_clock() -> None:
         render_movement(movement, {"x": np.ones(10)})
     with pytest.raises(ValueError, match="no signals"):
         render_movement(movement, {})
-    # Nothing moves, or Doppler, is refused.
+    # Nothing moves, or Doppler beside another mover, is refused.
     stills = Room.from_scene(_scene(sources=sources[1:], listeners=listeners[1:]))
     with pytest.raises(ValueError, match="nothing moves"):
         simulate_movement(stills)
     fast = {**sources[0], "walk": {**sources[0]["walk"], "doppler": True}}
-    with pytest.raises(ValueError, match="'s' walks with Doppler, which plays one walk"):
+    with pytest.raises(ValueError, match="'s' walks with Doppler, which moves alone: leave w"):
         simulate_movement(Room.from_scene(_scene(sources=[fast, sources[1]], listeners=listeners)))
     with pytest.raises(ValueError, match=r"leaves the room at \(8\.\d\d, 1\.00, 1\.50\)"):
         gone = [_walker({"to": [[9.0, 1.0, 1.5]]}), *listeners[1:]]
         simulate_movement(Room.from_scene(_scene(sources=sources, listeners=gone)))
     with pytest.raises(ValueError, match="step_m must be positive"):
         simulate_movement(room, step_m=0.0)
+
+
+def test_a_walk_with_doppler_moves_alone_on_the_clock() -> None:
+    """A walk with Doppler moving alone plays in a movement as in a walk of its own: at
+    each listener, the same places, each early path through its changing delay and the
+    late part crossfaded, so render_movement gives what render_walk does; a listener
+    that the walk does not reach hears it too, from the same simulation."""
+    from acoustic_spaces.spatial import Binaural
+
+    car = {
+        "name": "car",
+        "position": [1.0, 4.0, 1.0],
+        "walk": {"to": [[7.0, 4.0, 1.0]], "speed_m_s": 20.0, "doppler": True},
+    }
+    seat = {"name": "seat", "position": [4.0, 1.0, 1.2], "orientation": {"yaw": 90.0}}
+    room = Room.from_scene(_scene(sources=[car], listeners=[seat]))
+    movement = simulate_movement(room, step_m=0.5)
+    assert movement.doppler
+    walked = simulate_walk(room, "car", step_m=0.5)
+    np.testing.assert_allclose(movement.times, walked.points.times)
+    signal = np.random.default_rng(4).standard_normal(int(0.3 * room.scene.simulation.sample_rate))
+    for fmt in (Mono(), Binaural()):
+        moved = render_movement(movement, {"car": signal}, fmt)["seat"]
+        np.testing.assert_allclose(moved, render_walk(walked, {"car": signal}, fmt), atol=1e-12)
+    # Facing +y, the seat hears the car start on its left (x < 4) and end on its right.
+    ears = render_movement(movement, {"car": signal}, Binaural())["seat"]
+    third = len(signal) // 3
+    start, end = (ears[:third] ** 2).sum(axis=0), (ears[2 * third : 3 * third] ** 2).sum(axis=0)
+    assert start[0] > 1.5 * start[1] and end[1] > 1.2 * end[0]
+    # Faster than sound, or with the wave solver, as a walk of its own.
+    supersonic = {**car, "walk": {**car["walk"], "speed_m_s": 400.0}}
+    with pytest.raises(ValueError, match="as fast as sound"):
+        simulate_movement(Room.from_scene(_scene(sources=[supersonic], listeners=[seat])))
 
 
 def test_save_movement_writes_a_file_per_listener(tmp_path: Path) -> None:

@@ -2694,7 +2694,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     # it; This scene's ticks are the run's, starting as Moves sets them in the scene.
     box = walk.movement
     assert not box.isHidden() and box.walkers == [("listeners", "visitor", True)]
-    assert box.table.item(0, box.WALK).text() == "At 1.2 m/s, 25.0 m in 20.8 s"
+    assert box.table.item(0, box.WALK).text() == "At 1.2 m/s (4.3 km/h), 25.0 m in 20.8 s"
     assert box.table.item(0, box.KIND).text() == "Listener"
     assert box.table.item(0, box.NAME).text() == "visitor"
     assert box.ticked() == ["visitor"] and not box.editable and box.reset.isHidden()
@@ -2720,6 +2720,22 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     assert box.walkers == [("sources", "car", True)] and box.used == [False]
     assert box.ticked() == ["car"] and not box.table.isHidden()
     assert "a demo that moves it puts it in" in box.table.item(0, box.NAME).toolTip()
+    # Its speed: the walk's by default, in km/h, and the line under the form says how
+    # far, how fast and so how long the car drives.
+    speed = road.fields["speed"]
+    assert speed.text() == "as in the scene" and speed.suffix() == " km/h"
+    assert road.fields["rpm"].suffix() == " rpm" and road.fields["step_m"].suffix() == " m"
+    assert road.summary.text().startswith(
+        "The car drives 150.0 m along its walk at 50.0 km/h (13.89 m/s, as its walk in the "
+        "scene goes): the pass, and the car's sound, last 10.8 s."
+    )
+    assert road.command.text() == "python passby_demo.py all"
+    speed.setValue(100.0)
+    assert "at 100.0 km/h (27.78 m/s, --speed)" in road.summary.text()
+    assert "last 5.4 s" in road.summary.text()
+    assert road.command.text() == "python passby_demo.py all --speed 100.0"
+    speed.setValue(0.0)
+    assert road.command.text() == "python passby_demo.py all"
     road.picker.setCurrentIndex(road.picker.findData("scene"))
     assert box.note.text().startswith("Nothing in this scene moves.")
     assert box.table.isHidden() and box.table.isRowHidden(0) and box.ticked() == []
@@ -3621,9 +3637,11 @@ def start_yaw(window) -> float:
     return window.document.scene.listeners[0].orientation.yaw
 
 
-def test_a_walk_along_points_converts_to_keyframes(window) -> None:
-    """A walk through `to` at a speed shows as it goes, read-only, until Convert to
-    keyframes bakes it, turns through the corners included."""
+def test_a_walk_along_points_is_edited_in_place(window, qapp) -> None:
+    """A walk through `to` at one speed is edited as it is: a row per point, the points
+    typed or dragged, the one speed typed and the times following, a point added at the
+    playhead (splitting the leg) or past the end and removed, each one step of the
+    history; Convert to keyframes still bakes it, turns through the corners included."""
     from acoustic_spaces.walkthrough import knots
 
     window.open_example(example_path("studio"))
@@ -3634,26 +3652,80 @@ def test_a_walk_along_points_converts_to_keyframes(window) -> None:
     window.document.edit("walk", change)
     window.show_movement("sources", 0)
     panel = window.movement
+    editable = Qt.ItemFlag.ItemIsEditable
+    source = window.document.scene.sources[0]
     assert window.selection == ("sources", 0) and panel.key == ("sources", 0)
-    assert panel.convert.isVisible() and not panel.add.isEnabled() and not panel.remove.isEnabled()
-    assert "left-speaker walks through its points at 1.00 m/s" in panel.hint.text()
-    before = knots(window.document.scene.sources[0])
-    assert panel.table.rowCount() == len(before.times) > 3
-    assert not any(
-        panel.table.item(row, col).flags() & Qt.ItemFlag.ItemIsEditable
-        for row in range(panel.table.rowCount())
-        for col in range(panel.table.columnCount())
+    assert panel.convert.isVisible() and panel.add.isEnabled() and panel.remove.isEnabled()
+    assert panel.add.text() == "Add point" and panel.remove.text() == "Remove point"
+    assert "left-speaker goes through its points at one speed, 1.00 m/s (3.6 km/h)" in (
+        panel.hint.text()
     )
+    first = float(np.linalg.norm(np.subtract(source.position, (1.0, 1.0, 1.2))))
+    assert panel.table.rowCount() == 3  # where it starts and its two points
+    assert [panel.table.item(row, 0).text() for row in range(3)] == [
+        "0.00",
+        f"{first:.2f}",
+        f"{first + 3.0:.2f}",
+    ]
+    assert panel.table.verticalHeaderItem(2).toolTip() == "Point 2"
+    assert not panel.table.item(1, 0).flags() & editable  # the times follow
+    assert not panel.table.item(1, 4).flags() & editable  # it faces the way it goes
+    assert panel.table.item(1, 4).toolTip().startswith("Faces the way it goes")
+    assert panel.table.item(2, 4).text() == "90.0"  # the leg into point 2 goes along +y
+    assert panel.table.item(1, 1).flags() & editable and panel.table.item(0, 7).flags() & editable
+    assert panel.table.item(2, 7).text() == "" and not panel.table.item(2, 7).flags() & editable
+
+    panel.table.item(2, 2).setText("5")  # y of point 2
+    assert window.document.scene.sources[0].walk.to[1] == (1.0, 5.0, 1.2)
+    assert window.undo_action.text() == "&Undo move point"
+    assert panel.table.item(2, 0).text() == f"{first + 4.0:.2f}"
+    panel.table.item(1, 7).setText("2")  # the one speed: every time halves
+    assert window.document.scene.sources[0].walk.speed_m_s == 2.0
+    assert window.undo_action.text() == "&Undo change speed"
+    assert panel.table.item(2, 0).text() == f"{(first + 4.0) / 2:.2f}"
+    assert panel.table.item(0, 7).text() == "2.00"
+    assert panel.end_box.minimum() == pytest.approx((first + 4.0) / 2, abs=0.05)
+    panel.table.item(0, 7).setText("0")
+    assert "a speed above 0 m/s" in window.messages.toPlainText()
+    assert window.document.scene.sources[0].walk.speed_m_s == 2.0
+
+    # A point at the playhead splits the leg it is on, where the source is then.
+    panel.set_time(round(first / 2, 2) + 1.0)  # about 2 m along the second leg
+    y = 1.0 + 2.0 * (panel.time - first / 2)
+    panel.add.click()
+    walk = window.document.scene.sources[0].walk
+    assert walk.to[0] == (1.0, 1.0, 1.2) and walk.to[2] == (1.0, 5.0, 1.2)
+    np.testing.assert_allclose(walk.to[1], (1.0, y, 1.2), atol=1e-6)
+    assert window.undo_action.text() == "&Undo add point" and panel.table.currentRow() == 2
+    # Dragged in the plan, it bends the walk.
+    canvas = _plan(window, qapp)
+    _drag(qapp, canvas, _at(canvas, (1.0, y)), _at(canvas, (2.0, 3.0)))
+    moved = window.document.scene.sources[0].walk.to[1]
+    assert moved[0] == pytest.approx(2.0, abs=0.11) and moved[1] == pytest.approx(3.0, abs=0.11)
+    assert window.document.undo_text() == "move point"
+    assert "Moved point 2 of left-speaker" in window.messages.toPlainText()
+    # At the start: a second further on past the end, along the last leg (2 m at 2 m/s).
+    leg = np.subtract((1.0, 5.0, 1.2), moved)
+    panel.set_time(0.0)
+    panel.add.click()
+    last = window.document.scene.sources[0].walk.to[-1]
+    np.testing.assert_allclose(last, (1.0, 5.0, 1.2) + 2.0 * leg / np.linalg.norm(leg), atol=1e-5)
+    panel.table.setCurrentCell(4, 1)
+    panel.remove.click()
+    assert len(window.document.scene.sources[0].walk.to) == 3
+    assert window.undo_action.text() == "&Undo remove point"
+
+    before = knots(window.document.scene.sources[0])
     panel.convert.click()
     source = window.document.scene.sources[0]
     assert source.walk.to == [] and len(source.walk.keyframes) == len(before.times) - 1
     assert window.undo_action.text() == "&Undo convert walk to keyframes"
     after = knots(source)
-    for t in (0.0, 0.5, 1.7, 3.0, 4.2, 6.0):
+    for t in (0.0, 0.5, 1.7, 3.0, 4.2):
         np.testing.assert_allclose(after.at(t)[0], before.at(t)[0], atol=1e-5)
         np.testing.assert_allclose(after.at(t)[1], before.at(t)[1], atol=1e-5)
-    assert panel.add.isEnabled() and not panel.convert.isVisible()
-    assert panel.table.item(1, 1).flags() & Qt.ItemFlag.ItemIsEditable
+    assert panel.add.text() == "Add keyframe" and not panel.convert.isVisible()
+    assert panel.table.item(1, 0).flags() & editable
 
 
 def test_keyframe_handles_in_the_plan(window, qapp) -> None:
@@ -3721,10 +3793,29 @@ def test_render_movement_in_the_editor(window, qapp, tmp_path: Path, monkeypatch
     _wait(qapp, lambda: window.job is None)
     text = window.messages.toPlainText()
     assert "mix-position move for 1.0 s: responses at" in text and str(out) in text
-    assert "1 channel," in text and "-1 dBFS" in text  # the scene's first output is mono
+    # Binaural comes first in the Output list, before the scene's first output, mono.
+    assert "binaural, 2 channels," in text and "-1 dBFS" in text
     data, rate = read_wav(out)
-    assert data.shape[1] == 1 and rate == window.document.scene.simulation.sample_rate
+    assert data.shape[1] == 2 and rate == window.document.scene.simulation.sample_rate
     assert np.abs(data).max() == pytest.approx(10 ** (-1 / 20), rel=1e-3)
+    window.movement.output.setCurrentText("mono")
+    window.movement.render.click()
+    _wait(qapp, lambda: window.job is None)
+    assert "Wrote " + str(out) + ": mono, 1 channel," in window.messages.toPlainText()
+    assert read_wav(out)[0].shape[1] == 1
+    assert [window.movement.output.itemText(k) for k in range(2)] == ["binaural", "mono"]
+    # A walk with Doppler moving alone renders too, each early path through its delay.
+    window.document.set_walk_doppler("listeners", 0, True)
+    window.movement.render.click()
+    _wait(qapp, lambda: window.job is None)
+    assert window.messages.toPlainText().count("mix-position move for 1.0 s") == 3
+    assert np.isfinite(read_wav(out)[0]).all()
+    from PySide6.QtWidgets import QMessageBox
+
+    monkeypatch.setattr(window, "ask_save", lambda: QMessageBox.StandardButton.Discard)
+    window.open_example(example_path("roadside"))  # mono only: binaural first all the same
+    assert [window.movement.output.itemText(k) for k in range(2)] == ["binaural", "mono"]
+    assert window.movement.output.currentText() == "binaural"
 
 
 # -- the 3D view (needs OpenGL: a display or Xvfb) --------------------------------------

@@ -313,6 +313,10 @@ Movement:
   CNOSSOS-EU's sound power, a pass-by demo for both with a sound made to that power and
   the level over time, the demo of any scene playing one walk with Doppler, and the
   Movement panel's **Doppler** tick.
+- [x] Editing a car's walk as it is: a walk along points edited in the Movement panel
+  (points, one speed), keyframes at a steady speed accepted by the pass-by demo,
+  **Render movement…** heard binaurally and with Doppler, and units for every number in
+  the panel and in Run demo, with the pass's length, speed and duration.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:

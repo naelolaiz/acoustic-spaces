@@ -8,7 +8,10 @@ a copy of one, also has that demo, with its own recordings, reading the open sce
 form is built from the demo's own options, so the editor and the command line run
 exactly the same thing; the line at the bottom shows that command, to run again or to
 put in a script. A demo whose sources can play files of the user's (``--input``) lists
-them in a table, each with what it plays and the WAV file it plays instead.
+them in a table, each with what it plays and the WAV file it plays instead. A number
+shows its unit, and one whose default the scene gives (the pass-by demos' ``--speed``)
+says so at zero; the line under the form says what the options make of the run, where
+the demo says (how far, how fast and how long the car drives), under the Movement box.
 
 The Movement box lists the sources and listeners of the scene that have a walk, ticked
 when they move in the run. This scene's ticks start as Moves sets them in the scene and
@@ -394,8 +397,11 @@ def walk_text(item) -> str:
             count,
         ).format(count=count, length=path.length_m, time=path.duration_s)
     else:
-        text = _("At {speed:g} m/s, {length:.1f} m in {time:.1f} s").format(
-            speed=walk.speed_m_s, length=path.length_m, time=path.duration_s
+        text = _("At {speed:g} m/s ({kmh:.1f} km/h), {length:.1f} m in {time:.1f} s").format(
+            speed=walk.speed_m_s,
+            kmh=3.6 * walk.speed_m_s,
+            length=path.length_m,
+            time=path.duration_s,
         )
     return text + (_(", with Doppler") if walk.doppler else "")
 
@@ -569,8 +575,9 @@ class MovementBox(QGroupBox):
 
 def field_for(option: Option, tip: str) -> QWidget:
     """The widget that asks for ``option``: a tick for a flag, a list for a choice, a
-    spin box for a number, a path with a Browse… button for a file or a folder, a table
-    of the sources for ``--input``, and a text field for the rest (empty where the demo
+    spin box for a number (with its unit; at zero, its ``unset`` text, for one the scene
+    gives by default), a path with a Browse… button for a file or a folder, a table of
+    the sources for ``--input``, and a text field for the rest (empty where the demo
     takes none)."""
     if option.kind in MAP_KINDS:
         return InputsField(option, tip)
@@ -588,11 +595,16 @@ def field_for(option: Option, tip: str) -> QWidget:
             combo.setCurrentText(str(option.default))
         combo.setToolTip(tip)
         return combo
-    if option.kind in ("int", "float") and option.default is not None:
+    if option.kind in ("int", "float") and (option.default is not None or option.unset):
         number = (
             int_spin(-1_000_000, 1_000_000) if option.kind == "int" else spin(-1e6, 1e6, 2, 0.5)
         )
-        number.setValue(option.default)
+        if option.unit:
+            number.setSuffix(f" {option.unit}")
+        if option.unset:  # zero, the lowest, stands for not given
+            number.setMinimum(0)
+            number.setSpecialValueText(option.unset)
+        number.setValue(option.default if option.default is not None else 0)
         number.setToolTip(tip)
         return number
     edit = QLineEdit("" if option.default is None else str(option.default))
@@ -618,6 +630,8 @@ def value_of(option: Option, widget: QWidget):
                 return text  # the demo's check says it is no number
         return text or None
     value = widget.value()
+    if option.unset and value == widget.minimum():
+        return None  # its unset text: the demo is given none
     return int(value) if option.kind == "int" else float(value)
 
 
@@ -710,6 +724,10 @@ class DemoDialog(QDialog):
         self.movement.changed.connect(self._refresh)
         self.movement.edit.connect(self._edit_movement)
         layout.addWidget(self.movement)
+        # What the options make of the run, where the demo says: beside what moves.
+        self.summary = QLabel()
+        self.summary.setWordWrap(True)
+        layout.addWidget(self.summary)
 
         self.options = QWidget()
         layout.addWidget(self.options)
@@ -878,11 +896,24 @@ class DemoDialog(QDialog):
                 args = self.arguments()
         self.command.setText(demo.command(step, args))
         self.folder.setText(_("Runs in {folder}").format(folder=demo.folder))
+        self.summary.setText(self._summary(demo, args) or "")
+        self.summary.setVisible(bool(self.summary.text()))
         problem = demo.check(args)
         if self.unsaved:
             problem = _("save the scene first (File > Save): the demo reads it from its file")
         self.problem.setText(_("Cannot run: {reason}").format(reason=problem) if problem else "")
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(problem is None)
+
+    @staticmethod
+    def _summary(demo: Demo, args: argparse.Namespace) -> str | None:
+        """What the run does, as the demo says it (:attr:`Demo.summary`); none when it
+        says nothing or cannot tell (the line below says what is wrong)."""
+        if demo.summary is None:
+            return None
+        try:
+            return demo.summary(demo.resolved(args))
+        except Exception:
+            return None
 
     @staticmethod
     def _plays(demo: Demo, args: argparse.Namespace) -> dict[str, str]:
