@@ -59,7 +59,9 @@ demos take `--input car=engine.wav`, a dry recording played as the car's sound.
 
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demo,
-reading the open scene where it would read the example's. Pick the demo and the step,
+reading the open scene where it would read the example's (a copy is known by its
+folder's name or, saved anywhere, by the scene's name: a renamed scene is a scene of
+its own). Pick the demo and the step,
 fill in the options (they start at the same defaults the command line uses), and it
 runs in the background with its messages in the **Messages** panel, **Cancel** stopping
 it. The sources are a table, each with what it plays and the file it plays instead:
@@ -664,10 +666,15 @@ turns, for its made sound, `--step 1` how far apart the car is simulated along i
 - **The street**: 125 m of street, the car in the lane on the offices' side, heard on
   the pavement (6.2 m from the car as it passes), on a balcony of the office block and
   in the garden behind the noise barrier. The pass peaks at 76.9 dB(A) on the pavement
-  and 71.5 dB(A) on the balcony. The garden hears it loudest, 60.0 dB(A), as the car
-  goes by the 4 m gap between the houses and the barrier, less while the barrier stands
-  between them, and more again once the car comes out past the barrier's far end; the
-  level jumps where paths through the gap and round the ends open and close.
+  and 71.5 dB(A) on the balcony. The garden hears it loudest, 60.0 dB(A), where the car
+  sees it straight through the 4 m gap between the houses and the barrier (14 m short
+  of the gap), less while the barrier stands between them, and more again once the car
+  comes out past the barrier's far end.
+  Where a reflection through the gap comes or goes, the level steps by up to 10.5 dB(A)
+  within a metre of road, where a real field blends over a few metres. The engine bends
+  the direct sound and first-order reflections round an edge, and those blend; not the
+  copy of a reflection off the road, which the car, so close to it, makes nearly as
+  strong and in step with it, nor second-order reflections: they come or go at once.
   Reflections off the road, the facades and the barrier and the sound diffracted round
   their edges each shift in pitch their own way. Between the buildings the late sound,
   which keeps the engine's pitch, is strong in the bass, so the engine's tone falls less

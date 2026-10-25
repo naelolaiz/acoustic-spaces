@@ -22,7 +22,7 @@ import argparse
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
 
 from acoustic_spaces.demos import MAP_KINDS, NO_MOVERS, PATH_KINDS, Demo, Option, moving_names
 from acoustic_spaces.gui.inspector import int_spin, spin
+from acoustic_spaces.gui.sizing import body_size, fit, reading_width, scroll_bar_width, scrolled
 from acoustic_spaces.i18n import _, ngettext
 
 #: The folder under the user's home the editor runs a demo in when the example itself
@@ -86,11 +87,13 @@ def reads_scene(demo: Demo) -> Option | None:
 
 def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]:
     """The demos of the open scene, each in the folder it runs in and with the arguments
-    it starts with: *This scene* first, then the demo of the example the scene belongs
-    to (its folder's name, in the examples or in a copy of one), reading the open scene
-    instead of the example's."""
+    it starts with: *This scene* first, then the demo of the example the scene is or is
+    a copy of (:func:`~acoustic_spaces.examples.example_of`: its folder's name, or the
+    example's scene name wherever the copy is saved), reading the open scene instead of
+    the example's."""
     from acoustic_spaces.demos import demo_for
     from acoustic_spaces.demos.scene_demo import DEMO
+    from acoustic_spaces.examples import example_of
 
     found: list[tuple[Demo, argparse.Namespace]] = []
     path = Path(scene).resolve() if scene is not None else None
@@ -102,7 +105,8 @@ def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]
     if path is None or base != path.parent:  # not beside the scene, its default
         args.work = base / "demo"
     found.append((demo, args))
-    example = demo_for(path.parent.name) if path is not None else None
+    name = example_of(path) if path is not None else None
+    example = demo_for(name) if name is not None else None
     if example is not None:
         demo = example.at(writable(path.parent, example.example))
         args = starting_arguments(demo)
@@ -648,13 +652,18 @@ class DemoDialog(QDialog):
         self.fields: dict[str, QWidget] = {}
         #: What Edit movement… asked for: the walker's kind and name (empty for none).
         self.edit_request: tuple[str, str] | None = None
-        layout = self._layout = QVBoxLayout(self)
+        # The form scrolls where the screen is too small for it, rather than squeezing
+        # its tables and buttons; the buttons stay below it.
+        body = QWidget()
+        layout = self._layout = QVBoxLayout(body)
+        layout.setContentsMargins(0, 0, 0, 0)
         intro = QLabel(
             _(
                 "A demo plays sound through the open scene, mixes what every listener hears "
                 "and puts a video together. This scene plays the WAV file each source's Plays "
-                "names; an example's own demo downloads the recordings it plays and can take "
-                "a while. The messages say what it is doing, and Cancel stops it."
+                "names; an example's own demo plays recordings it downloads, or a sound it "
+                "makes (the pass-by demos' car), and can take a while. The messages say what "
+                "it is doing, and Cancel stops it."
             )
         )
         intro.setWordWrap(True)
@@ -721,6 +730,9 @@ class DemoDialog(QDialog):
         self.problem.setWordWrap(True)
         layout.addWidget(self.problem)
         layout.addStretch(1)  # a taller window leaves the room above the buttons
+        self.scroll = scrolled(body)
+        outer = QVBoxLayout(self)
+        outer.addWidget(self.scroll)
 
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -734,11 +746,24 @@ class DemoDialog(QDialog):
         )
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
-        layout.addWidget(self.buttons)
+        outer.addWidget(self.buttons)
 
         self.picker.currentIndexChanged.connect(self._chose_demo)
         self.step.currentIndexChanged.connect(self._refresh)
         self._chose_demo()
+        self._fit(reading_width(self))
+
+    def _fit(self, width: int) -> None:
+        """As large as the form asks at ``width`` (or wider when it needs more), the
+        buttons below, as far as the screen leaves room."""
+        margins = self.layout().contentsMargins()
+        across = margins.left() + margins.right()
+        width = max(width - across, self.scroll.widget().minimumSizeHint().width())
+        width += scroll_bar_width(self)
+        body = body_size(self.scroll, width)
+        spacing = self.layout().spacing()
+        height = body.height() + spacing + self.buttons.sizeHint().height()
+        fit(self, QSize(width + across, height + margins.top() + margins.bottom()))
 
     # -- the form -------------------------------------------------------------------
 
@@ -791,6 +816,8 @@ class DemoDialog(QDialog):
         self.options.deleteLater()
         self.options = form
         self._refresh()
+        if self.isVisible():  # another demo: as tall as its form, as wide as the window
+            self._fit(self.width())
 
     def _show_movement(self, demo: Demo, args: argparse.Namespace) -> None:
         """The Movement box for ``demo``: ticks to change for a demo with a ``movers``

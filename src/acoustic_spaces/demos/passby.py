@@ -481,10 +481,7 @@ def video(demo: Demo, args: argparse.Namespace) -> None:
     room = room_of(demo, args)
     data = room.scene.to_data()
     tool = pictures.settings_lines(demo, args, data)
-    tool[0] += (
-        f"; the car placed every {facts['step_m']:g} m, each early path through its own "
-        "changing delay (Doppler)"
-    )
+    tool[0] += f"; the car simulated every {facts['step_m']:g} m, with Doppler"
     drawing = passby_pictures.Pictures(
         data,
         outline_edges(room)[0],

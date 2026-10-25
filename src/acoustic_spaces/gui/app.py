@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QLibraryInfo, Qt, QTimer, QTranslator
+from PySide6.QtCore import QLibraryInfo, QSize, Qt, QTimer, QTranslator
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -65,6 +65,7 @@ from acoustic_spaces.gui.numbers import fmt, point_text
 from acoustic_spaces.gui.particle_dialog import ParticleDialog
 from acoustic_spaces.gui.plan_view import PlanView
 from acoustic_spaces.gui.results_view import ResultsPanel
+from acoustic_spaces.gui.sizing import fit, scroll_bar_width
 from acoustic_spaces.gui.tree import SceneTree
 from acoustic_spaces.gui.tune_dialog import TuneDialog
 from acoustic_spaces.gui.viewport import Viewport
@@ -209,6 +210,9 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.docks["messages"], self.docks["movement"])
         self.docks["results"].raise_()
         self.docks["movement"].hide()  # until Edit movement… opens it
+        # The forms take the whole height on the right, the panels below only the
+        # width the views leave, so that a long form shows its buttons.
+        self.setCorner(Qt.Corner.BottomRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
 
         self.summary = QLabel()
         self.summary.setTextFormat(Qt.TextFormat.RichText)
@@ -293,7 +297,7 @@ class MainWindow(QMainWindow):
             shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             shortcut.activated.connect(self.remove_selected)
 
-        self.resize(1400, 900)
+        fit(self, QSize(1400, 900))
         self._sized = False
         self._attach(self.document)
         if not self.viewport.available:
@@ -723,6 +727,7 @@ class MainWindow(QMainWindow):
             self.selection = ("scene", None)
         self._rebuild_tree()
         self.inspector.show_item(*self.selection)
+        self._widen_forms()
         self._reweight()
         self.results.mark_stale(self._stale(), reweighted=self._reweighted())
         self.map_panel.mark_stale(self._map_stale())
@@ -860,6 +865,7 @@ class MainWindow(QMainWindow):
         if not from_tree:
             self.tree.select(selection)
         self.inspector.show_item(*selection)
+        self._widen_forms()
         self.movement.show_item(*selection)
         self._follow(selection)
         self._draw()
@@ -2270,9 +2276,30 @@ class MainWindow(QMainWindow):
 
     def _size_docks(self) -> None:
         horizontal, vertical = Qt.Orientation.Horizontal, Qt.Orientation.Vertical
-        self.resizeDocks([self.docks["tree"], self.docks["inspector"]], [330, 360], horizontal)
+        # The forms as wide as the widest needs with its scroll bar, so that no button
+        # starts cut off, up to a third of the window.
+        dock = self.docks["inspector"]
+        forms = dock.widget()
+        need = self.inspector.widest() + scroll_bar_width(forms) + dock.width() - forms.width()
+        tree = 330
+        self.resizeDocks(
+            [self.docks["tree"], dock], [tree, min(max(need, tree), self.width() // 3)], horizontal
+        )
         height = max(340, int(self.height() / 2.5))
         self.resizeDocks([self.docks["results"], self.docks["messages"]], [height] * 2, vertical)
+
+    def _widen_forms(self) -> None:
+        """Widen the forms when the one on show needs more than they have (a long name,
+        another language), up to a third of the window, so that none starts cut off."""
+        dock = self.docks["inspector"]
+        if not self._sized or not dock.isVisible() or dock.isFloating():
+            return  # _size_docks sizes them once the window is laid out
+        forms = dock.widget()
+        room = forms.width() - scroll_bar_width(forms)
+        missing = self.inspector.currentWidget().minimumSizeHint().width() - room
+        width = min(dock.width() + missing, self.width() // 3)
+        if missing > 0 and width > dock.width():
+            self.resizeDocks([dock], [width], Qt.Orientation.Horizontal)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if not self._discard_ok():

@@ -19,6 +19,7 @@ from acoustic_spaces.examples import (
     GROUPS,
     copy_examples,
     example_groups,
+    example_of,
     example_path,
     list_examples,
 )
@@ -78,6 +79,23 @@ def test_example_path() -> None:
     assert example_path("studio").parent.name == "studio"
     with pytest.raises(ValueError, match="examples: apartment, archway, bim_office"):
         example_path("cathedral")
+
+
+def test_a_copy_of_an_example_is_known_by_its_folder_or_its_scene(tmp_path: Path) -> None:
+    """A scene is an example's when it sits in a folder of the example's name, or when
+    it bears the example's scene name wherever it is saved; any other scene, or one that
+    cannot be read, is none."""
+    assert example_of(example_path("roadside")) == "roadside"
+    assert example_of(tmp_path / "street" / "scene.yaml") == "street"  # the folder decides
+    copy = tmp_path / "anywhere" / "mine.yaml"
+    copy.parent.mkdir()
+    copy.write_text(example_path("roadside").read_text(encoding="utf-8"), encoding="utf-8")
+    assert example_of(copy) == "roadside"
+    copy.write_text("name: My own road\n", encoding="utf-8")
+    assert example_of(copy) is None
+    copy.write_text("[not: a scene", encoding="utf-8")
+    assert example_of(copy) is None
+    assert example_of(tmp_path / "anywhere" / "missing.yaml") is None
 
 
 @pytest.mark.parametrize("name", NAMES)

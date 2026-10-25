@@ -71,6 +71,9 @@ def window(qapp, monkeypatch):
     win = MainWindow()
     monkeypatch.setattr(win, "ask_save", lambda: QMessageBox.StandardButton.Discard)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: QMessageBox.StandardButton.Ok)
+    # The size a desktop's screen leaves the window: the offscreen screen is 800 x 600,
+    # where the plan would be too small to click a point to the half metre.
+    win.resize(1400, 900)
     win.show()
     yield win
     win.close()
@@ -2891,6 +2894,90 @@ def test_download_hrtfs_from_the_outputs_page(window, tmp_path: Path, monkeypatc
     button.click()
     binaural = [output for output in window.document.scene.outputs if output.format == "binaural"]
     assert binaural and binaural[0].hrtf == path
+
+
+def test_nothing_starts_cut_off(window, qapp, tmp_path: Path) -> None:
+    """At the window's default size every form fits the Properties panel, which takes
+    the whole height on the right, with no scroll bar across; a form wider than the
+    panel widens it. The Run demo window of the demo with the longest form scrolls
+    within the screen rather than squeezing its tables and buttons, and the Download
+    HRTFs window is as wide as its rows, as far as the screen goes."""
+    from PySide6.QtWidgets import QPushButton
+
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+    from acoustic_spaces.gui.hrtf_dialog import HrtfDialog
+    from acoustic_spaces.gui.sizing import screen_room
+
+    window.resize(1400, 900)
+    window._size_docks()
+    qapp.processEvents()
+    assert window.corner(Qt.Corner.BottomRightCorner) == Qt.DockWidgetArea.RightDockWidgetArea
+    assert window.open_file(example_path("roadside"), example=True)
+    forms = window.docks["inspector"].widget()
+    for kind, key in (
+        ("scene", None),
+        ("geometry", None),
+        ("sources", 1),
+        ("listeners", 0),
+        ("material", 0),
+        ("simulation", None),
+        ("outputs", None),
+        ("coverage", None),
+    ):
+        window.select(kind, key)
+        qapp.processEvents()
+        page = window.inspector.currentWidget()
+        assert page.minimumSizeHint().width() <= forms.viewport().width(), kind
+    # Only the form on show counts: a narrow one is not as wide as the widest.
+    window.select("listeners", 0)
+    assert window.inspector.minimumSizeHint().width() < window.inspector.widest()
+    # A form that needs more than the panel has widens it.
+    window.resizeDocks([window.docks["inspector"]], [150], Qt.Orientation.Horizontal)
+    qapp.processEvents()
+    window.select("geometry", None)
+    qapp.processEvents()
+    page = window.inspector.currentWidget()
+    assert page.minimumSizeHint().width() <= forms.viewport().width()
+
+    dialog = DemoDialog(scene=example_path("stadium_concert"))
+    dialog.show()
+    qapp.processEvents()
+    room = screen_room(dialog)
+    assert dialog.width() <= room.width() and dialog.height() <= room.height()
+    assert dialog.scroll.widget().isAncestorOf(dialog.fields["stems"])
+    for button in dialog.findChildren(QPushButton):
+        if button.isVisibleTo(dialog):
+            assert button.height() >= button.minimumSizeHint().height(), button.text()
+    stems = dialog.fields["stems"].table
+    rows = sum(stems.rowHeight(r) for r in range(stems.rowCount()))
+    assert stems.height() >= stems.horizontalHeader().height() + rows
+    dialog.deleteLater()
+
+    sets = HrtfDialog(folder=tmp_path)
+    rows = sets.list.sizeHintForColumn(0) + 2 * sets.list.frameWidth()
+    assert sets.width() >= min(rows, screen_room(sets).width())
+    sets.deleteLater()
+
+
+def test_a_copy_of_an_example_saved_anywhere_keeps_its_demo(qapp, tmp_path: Path) -> None:
+    """The roadside saved in a folder of another name still has the pass-by demo, with
+    its car made to CNOSSOS-EU's power, found by the scene's name and reading the copy;
+    renamed, it is a scene of its own, with This scene only."""
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+
+    copy = tmp_path / "my project" / "scene.yaml"
+    copy.parent.mkdir()
+    text = example_path("roadside").read_text(encoding="utf-8")
+    copy.write_text(text, encoding="utf-8")
+    dialog = DemoDialog(scene=copy)
+    assert dialog.picker.currentData() == "passby" and dialog.demo.example == "roadside"
+    assert dialog.fields["source"].value() == copy.resolve()
+    assert dialog.movement.ticked() == ["car"]
+    dialog.deleteLater()
+    copy.write_text(text.replace("name: Road across a meadow", "name: My road"), "utf-8")
+    plain = DemoDialog(scene=copy)
+    assert [plain.picker.itemData(k) for k in range(plain.picker.count())] == ["scene"]
+    plain.deleteLater()
 
 
 def test_demo_dialog_offers_the_hrtf_sets(qapp, tmp_path: Path, monkeypatch) -> None:
