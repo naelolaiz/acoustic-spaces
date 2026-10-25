@@ -10,9 +10,6 @@ from PySide6.QtWidgets import QFrame, QScrollArea, QStyle, QWidget
 
 #: How many characters of its font a window of text and paths is wide, at least.
 READING_CHARACTERS = 90
-#: How many characters of its font the main window is wide, and lines of it tall, as far
-#: as its screen goes: 1400 by 900 pixels at a font 8 pixels a character and 15 a line.
-MAIN_WINDOW_TEXT = (175, 60)
 
 
 def screen_room(widget: QWidget) -> QSize:
@@ -23,13 +20,6 @@ def screen_room(widget: QWidget) -> QSize:
     frame = widget.style().pixelMetric(QStyle.PixelMetric.PM_TitleBarHeight, None, widget)
     line = widget.fontMetrics().height()
     return QSize(area.width() - line, area.height() - frame - 2 * line)
-
-
-def text_size(widget: QWidget, characters: int, lines: int) -> QSize:
-    """The size of ``characters`` of ``widget``'s font across and ``lines`` of it down:
-    a window sized so grows with its font, as what it holds does."""
-    metrics = widget.fontMetrics()
-    return QSize(metrics.averageCharWidth() * characters, metrics.lineSpacing() * lines)
 
 
 def reading_width(widget: QWidget) -> int:
@@ -91,7 +81,6 @@ def body_size(area: QScrollArea, width: int) -> QSize:
 
 
 __all__ = [
-    "MAIN_WINDOW_TEXT",
     "READING_CHARACTERS",
     "body_size",
     "fit",
@@ -101,5 +90,4 @@ __all__ = [
     "scroll_bar_width",
     "scroll_chrome",
     "scrolled",
-    "text_size",
 ]

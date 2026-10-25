@@ -36,8 +36,9 @@ which frequencies each octave band holds.
   clicking it in the 3D view, shows its form under **Properties**. Every change is
   checked against the scene schema; a refused change says why under **Messages**, and
   every change can be undone. **Properties** takes the window's whole height on the
-  right and is as wide as the form on show needs, up to a third of the window; a row
-  too long for it puts its field under its label.
+  right and is never narrower than its widest form needs (up to half the screen), the
+  window opening wide enough for it; a row too long for it puts its field under its
+  label.
 - Sources and listeners sit in their **groups** (the form's **Group** field; groups
   nest with `/`, as PA/Delays). Each source, listener and group has a tick: unticked,
   it is left out of simulations, maps and checks, stays in the scene drawn faded, and

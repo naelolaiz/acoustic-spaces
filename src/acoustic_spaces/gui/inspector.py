@@ -4243,6 +4243,10 @@ class Inspector(QStackedWidget):
         """The width at which the widest form shows each row on one line."""
         return max(page.sizeHint().width() for page in self.pages.values())
 
+    def widest_minimum(self) -> int:
+        """The width below which the widest form would be cut off."""
+        return max(page.minimumSizeHint().width() for page in self.pages.values())
+
     def show_item(self, kind: str, key=None) -> None:
         page = self.pages.get(kind, self.pages[""])
         self.kind = kind if kind in self.pages else ""

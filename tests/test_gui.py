@@ -17,7 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6.QtWidgets")
 pytest.importorskip("pyvistaqt")
 
-from PySide6.QtCore import QPoint, QPointF, Qt  # noqa: E402
+from PySide6.QtCore import QPoint, QPointF, QSize, Qt  # noqa: E402
 from PySide6.QtGui import QWheelEvent  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
@@ -49,7 +49,6 @@ from acoustic_spaces.gui.document import (  # noqa: E402
 from acoustic_spaces.gui.levels import level_colour  # noqa: E402
 from acoustic_spaces.gui.particle_dialog import ParticleDialog  # noqa: E402
 from acoustic_spaces.gui.plan_view import grid_step, outline_segments, snap  # noqa: E402
-from acoustic_spaces.gui.sizing import MAIN_WINDOW_TEXT, text_size  # noqa: E402
 from acoustic_spaces.gui.tree import EYE  # noqa: E402
 from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # noqa: E402
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
@@ -67,15 +66,17 @@ def qapp():
 
 @pytest.fixture
 def window(qapp, monkeypatch):
+    from acoustic_spaces.gui import app, sizing
     from acoustic_spaces.gui.app import MainWindow
 
+    # The room a desktop's screen of 1920 by 1080 leaves a window: the offscreen screen is
+    # 800 pixels square, where the plan would be too small to click a point to the half
+    # metre.
+    for module in (app, sizing):
+        monkeypatch.setattr(module, "screen_room", lambda widget: QSize(1880, 960))
     win = MainWindow()
     monkeypatch.setattr(win, "ask_save", lambda: QMessageBox.StandardButton.Discard)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: QMessageBox.StandardButton.Ok)
-    # The size the window asks for, as a desktop's screen leaves it: the offscreen
-    # screen is 800 pixels square, where the plan would be too small to click a point to
-    # the half metre.
-    win.resize(text_size(win, *MAIN_WINDOW_TEXT))
     win.show()
     yield win
     win.close()
@@ -1301,6 +1302,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
 
     # A barrier is clicked point by point and finished with Enter.
     page._add("barriers")
+    qapp.processEvents()  # the forms may widen, and the plan with them
     assert canvas.purpose == "barrier" and "end to end" in window.plan.hint.text()
     for point in [(-30, 20), (30, 20)]:
         QTest.mouseClick(
@@ -1320,6 +1322,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
     # Vegetation takes the shape chosen beside the button: a tree is one click.
     page.plant_shape.setCurrentIndex(page.plant_shape.findData("tree"))
     page._add("vegetation")
+    qapp.processEvents()  # the forms may widen, and the plan with them
     assert canvas.purpose == "tree"
     QTest.mouseMove(canvas, _at(canvas, (40, -30)))
     canvas.grab()  # the crown follows the cursor
@@ -1348,6 +1351,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
 
     # A zone, drawn and closed on its first corner, takes the ground's material.
     page._add("zone")
+    qapp.processEvents()  # the forms may widen, and the plan with them
     assert canvas.purpose == "zone" and "zone" in window.plan.hint.text()
     for point in [(-80, -80), (-40, -80), (-40, -40), (-80, -40), (-80, -80)]:
         QTest.mouseClick(
@@ -1366,6 +1370,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
 
     # What cannot be a building yet says so and goes on; Esc stops it.
     page._add("buildings")
+    qapp.processEvents()
     for point in [(0, -50), (20, -30), (20, -50), (0, -30)]:
         QTest.mouseClick(
             canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, point)
@@ -1376,6 +1381,7 @@ def test_new_outdoor_scene_and_drawn_parts(window, qapp) -> None:
     assert canvas.mode == "outdoor" and canvas.purpose == "room"
     assert len(window.document.scene.geometry.buildings) == 1
     page._add("barriers")
+    qapp.processEvents()
     QTest.mouseClick(
         canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _at(canvas, (0, -50))
     )
@@ -2910,9 +2916,8 @@ def test_nothing_starts_cut_off(window, qapp, tmp_path: Path) -> None:
     from acoustic_spaces.gui.hrtf_dialog import HrtfDialog
     from acoustic_spaces.gui.sizing import screen_room
 
-    window.resize(text_size(window, *MAIN_WINDOW_TEXT))
-    window._size_docks()
-    qapp.processEvents()
+    qapp.processEvents()  # the window sizes its panels once it is laid out
+    assert window.width() >= 1400 and window.height() >= 900
     assert window.corner(Qt.Corner.BottomRightCorner) == Qt.DockWidgetArea.RightDockWidgetArea
     assert window.open_file(example_path("roadside"), example=True)
     forms = window.docks["inspector"].widget()

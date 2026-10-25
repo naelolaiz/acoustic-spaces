@@ -857,16 +857,15 @@ last sound, `auralize` and `walkthrough` mix sources at their sound power
   HRTF field, lists the free HRTF sets with their licences, downloads the one chosen in
   the background and puts it in the scene's binaural output; another SOFA file goes in
   by its address.
-- Nothing starts cut off. **Properties** takes the window's whole height on the right,
-  is as wide as the form on show needs (up to a third of the window; the widest form
-  sets its starting width) rather than as the widest of all, and widens when a form
-  needs more; a row too long for it puts its field under its label. The **Run demo…**
-  window opens wide enough for its paths and scrolls where the screen is too short,
-  rather than squeezing its tables and buttons; **Download HRTFs…** opens as wide as its
-  rows. The main window opens 175 characters of its font wide and 60 lines tall (1400 by
-  900 pixels at a font 8 pixels a character and 15 a line), so that it grows with a
-  larger font as its forms do; every window opens within the screen it is on. The
-  ground's **Extent** takes two rows, one per corner.
+- Nothing starts cut off. **Properties** takes the window's whole height on the right
+  and is never narrower than its widest form needs (up to half the screen): the window
+  opens, and stays, wide enough for it beside the views and the panels under them, so a
+  larger font or a longer language widens the window rather than cutting off the forms.
+  A form scrolls by its own height, not the tallest form's, and a row too long for the
+  panel puts its field under its label. The **Run demo…** window opens wide enough for
+  its paths and scrolls where the screen is too short, rather than squeezing its tables
+  and buttons; **Download HRTFs…** opens as wide as its rows. Every window opens within
+  the screen it is on. The ground's **Extent** takes two rows, one per corner.
 - A copy of an example saved anywhere keeps the example's demo in the **Run demo…**
   window: the example is known by the folder's name or, failing that, by the scene's
   name (`examples.example_of`).
