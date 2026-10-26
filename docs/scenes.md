@@ -229,6 +229,9 @@ models do).
 File data with more than one value in some octave (third-octave tables) stays in
 third-octave bands; other data is averaged onto octaves. Bands with no data (63 Hz in
 most tables) take the nearest band's value and the material's `source` says which.
+Coefficients run from 0 to 1: values written in the scene must lie in that range, and a
+file's values outside it (absorption measured in a reverberation room can exceed 1) are
+taken as 0 or 1, with a warning that names the material, the file and the bands.
 Surfaces get a material through `assignments` (any geometry name to a material),
 by having the same name as a material, or through `default_material`. Names match
 whatever their case (`brick_rough` names SketchUp's `Brick_Rough`), though a name

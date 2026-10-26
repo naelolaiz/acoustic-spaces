@@ -139,6 +139,55 @@ def test_material_from_file_relative_to_scene(tmp_path: Path) -> None:
     assert material.source == "file wall.csv"
 
 
+def test_coefficients_outside_0_to_1_from_a_file_are_held_and_warned_about(tmp_path: Path) -> None:
+    # Absorption measured in a reverberation room can exceed 1 (edge effects); a value
+    # outside 0 to 1 is held to it, as before, but no longer silently.
+    from acoustic_spaces import Room, Scene
+
+    (tmp_path / "absorber.csv").write_text(
+        "125, 250, 500, 1000, 2000, 4000\n"
+        "-0.02, 0.4, 0.9, 1.12, 1.05, 0.98\n"
+        "0.1, 0.1, 0.2, 0.3, 0.4, 1.3\n",
+        encoding="utf-8",
+    )
+    material = Material.model_validate({"file": "absorber.csv"}, context={"base_dir": tmp_path})
+    assert min(material.absorption) == 0.0 and max(material.absorption) == 1.0
+    assert max(material.scattering) == 1.0
+    assert material.clipped == [
+        "the absorption of file absorber.csv is -0.02 at 63 Hz, -0.02 at 125 Hz, 1.12 at "
+        "1000 Hz, 1.05 at 2000 Hz; coefficients run from 0 to 1, so it is taken as the "
+        "nearer of the two there",
+        "the scattering of file absorber.csv is 1.3 at 4000 Hz, 1.3 at 8000 Hz; "
+        "coefficients run from 0 to 1, so it is taken as the nearer of the two there",
+    ]
+    # Values given in the scene that cover the file's are not noted.
+    given = Material.model_validate(
+        {"file": "absorber.csv", "absorption": [0.5] * 8, "scattering": 0.2},
+        context={"base_dir": tmp_path},
+    )
+    assert given.clipped == []
+    (tmp_path / "box.obj").write_text(
+        "v 0 0 0\nv 4 0 0\nv 4 3 0\nv 0 3 0\nv 0 0 3\nv 4 0 3\nv 4 3 3\nv 0 3 3\n"
+        "f 1 2 3 4\nf 5 8 7 6\nf 1 5 6 2\nf 2 6 7 3\nf 3 7 8 4\nf 4 8 5 1\n",
+        encoding="utf-8",
+    )
+    room = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"file": "box.obj"},
+                "materials": {"panel": {"file": "absorber.csv"}},
+                "default_material": "panel",
+                "sources": [{"name": "s", "position": [1, 1, 1]}],
+                "listeners": [{"name": "l", "position": [3, 2, 1.5]}],
+            },
+            context={"base_dir": tmp_path},
+        )
+    )
+    assert [w for w in room.warnings() if w.startswith("material 'panel': ")] == [
+        f"material 'panel': {note}" for note in material.clipped
+    ]
+
+
 def test_preset_and_file_together_are_rejected(tmp_path: Path) -> None:
     _bras_csv(tmp_path / "wall.csv")
     with pytest.raises(ValidationError, match="not both"):
