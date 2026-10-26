@@ -284,6 +284,15 @@ class TraceModel:
             return np.zeros(len(self.face_plane), dtype=bool)
         return np.all(self.transmission >= 1.0, axis=1)
 
+    @property
+    def partition(self) -> np.ndarray:
+        """(F,) partitions: faces that let some sound through and reflect some, so a path
+        that meets one goes on both ways. Openings reflect nothing, and neither does a
+        face that absorbs all the sound it does not let through."""
+        if self.transmission is None:
+            return np.zeros(len(self.face_plane), dtype=bool)
+        return np.any(self.transmission > 0.0, axis=1) & np.any(self.absorption < 1.0, axis=1)
+
     def in_front(self, distance: np.ndarray, tolerance: float) -> np.ndarray:
         """Whether points at signed ``distance`` (..., P) from every plane, farther than
         ``tolerance``, can see it: in front of it, or on either side of a two-sided
@@ -297,23 +306,25 @@ class TraceModel:
         lengths: np.ndarray,
         ignore: np.ndarray,
         transparent_only: bool = False,
+        counted: np.ndarray | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """(n, bands) share of sound that travels from each origin ``lengths`` along its
         direction (unit): the product of the transmission of the faces it crosses, 0
         where a face lets nothing through; and (n,) how many of those faces it crosses
-        that are not openings. With ``transparent_only``, only openings let sound
-        through."""
+        that are not openings, or (n, m) how many of each column of ``counted`` (F, m).
+        With ``transparent_only``, only openings let sound through."""
         origins = np.ascontiguousarray(origins, dtype=np.float64).reshape(-1, 3)
         directions = np.ascontiguousarray(directions, dtype=np.float64).reshape(-1, 3)
         n = len(origins)
         bands = self.absorption.shape[1]
         factor = np.ones((n, bands))
-        crossings = np.zeros(n, dtype=np.int64)
+        transparent = self.transparent
+        counted = ~transparent if counted is None else np.asarray(counted, dtype=bool)
+        crossings = np.zeros((n, *counted.shape[1:]), dtype=np.int64)
         lengths = np.broadcast_to(np.asarray(lengths, dtype=np.float64), (n,)).copy()
         skip = np.broadcast_to(np.asarray(ignore, dtype=np.int64), (n,)).copy()
         start = origins.copy()
         alive = np.arange(n)
-        transparent = self.transparent
         for _ in range(MAX_CROSSINGS + 1):
             if len(alive) == 0:
                 break
@@ -327,7 +338,7 @@ class TraceModel:
             if transparent_only:
                 through = np.where(transparent[face][:, None], through, 0.0)
             factor[rows] *= through
-            crossings[rows] += ~transparent[face]
+            crossings[rows] += counted[face]
             start[rows] += directions[rows] * t[:, None]
             lengths[rows] -= t
             skip[rows] = face

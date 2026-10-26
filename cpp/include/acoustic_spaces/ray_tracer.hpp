@@ -219,17 +219,19 @@ void parallel_for(std::size_t n, std::size_t threads, Body body) {
 enum class Passing : std::uint8_t { kReflects = 0, kBoth = 1, kThrough = 2 };
 
 // Faces that let sound through, crossed on one path of specular_sequences: only that
-// many of those that also reflect (each one forks the path), and only that many in all.
+// many partitions, those that also reflect (each one forks the path), and only that
+// many in all. The stochastic tracer leaves to the late part every path that reflects
+// and passes through more partitions than the early stage follows.
 constexpr std::size_t kMaxForks = 2;
 constexpr std::size_t kMaxCrossings = 64;
-// Rows one ray of specular_sequences may give, its forks included.
-constexpr std::size_t kMaxRows = 64;
 
 // Face indices hit by `rays` specular rays from `source` (Fibonacci directions), up to
 // `max_order` reflections each; one row of max_order per ray, -1 once a ray leaves the
 // model. With `passing` (one Passing per face), a ray passes straight through faces
 // that let sound through: past an opening, and both through and off a partition, each
-// branch giving its own row (the reflections only, not the crossings).
+// branch giving its own row (the reflections only, not the crossings). A branch forks
+// at each partition it meets until it has passed through kMaxForks of them, so one ray
+// gives at most C(max_order + kMaxForks, kMaxForks) rows (10 at order 3), all kept.
 inline std::vector<std::int64_t> specular_sequences(const Bvh &bvh, const Vec3 &source,
                                                     std::size_t rays, std::size_t max_order,
                                                     std::size_t threads,
@@ -248,7 +250,7 @@ inline std::vector<std::int64_t> specular_sequences(const Bvh &bvh, const Vec3 &
             auto &out = rows[i];
             stack.clear();
             stack.push_back(Branch{source, fibonacci_sphere(i, rays), -1, 0, 0, {}});
-            while (!stack.empty() && out.size() < kMaxRows * max_order) {
+            while (!stack.empty()) {
                 Branch branch = std::move(stack.back());
                 stack.pop_back();
                 while (branch.faces.size() < max_order) {
@@ -469,7 +471,17 @@ struct RayState {
     double path = 0.0;
     Vec3 away{};
     bool leaving = false;
+    // Partitions passed through (faces that let sound through and also reflect, not
+    // openings). Once more than the early stage follows (kMaxForks) and a reflection,
+    // the path is no longer the early stage's: alone drops to zero.
+    std::size_t partitions = 0;
 };
+
+// A ray that passes through a partition: one more, and once past those the early stage
+// follows, a path that has reflected is no longer the early stage's.
+inline void pass_partition(RayState &state) {
+    if (++state.partitions > kMaxForks && state.order > 0) state.alone.fill(0.0);
+}
 
 // The share of sound per band that travels from `origin` along `dir` (unit) for
 // `length` metres: 1 in the open, the product of the transmission of the faces it
@@ -1113,7 +1125,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                 stack.pop_back();
                 ++out.traced_rays;
                 auto &[pos, dir, energy, seen, alone, travelled, order, last, rng, room, hits,
-                       path, away, leaving] = ray_state;
+                       path, away, leaving, partitions] = ray_state;
 
                 while (travelled < max_length) {
                     Hit hit;
@@ -1390,7 +1402,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         rain[b] = reflected[b] * scatter[b];
                         peak = std::max(peak, reflected[b]);
                         p += scatter[b];
-                        alone[b] *= 1.0 - scatter[b];  // after this reflection
+                        // After this reflection; past the partitions the early stage
+                        // follows, none of the path is the early stage's.
+                        alone[b] = partitions > kMaxForks ? 0.0 : alone[b] * (1.0 - scatter[b]);
                     }
                     p /= static_cast<double>(bands);
                     const std::size_t window =
@@ -1455,8 +1469,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             stack.push_back(detail::RayState{pos, dir, through, seen_before,
                                                              alone_before, travelled, order - 1,
                                                              last, rng.split(), beyond, hits,
-                                                             path, -n, true});
+                                                             path, -n, true, partitions});
                             if (group >= 0) --stack.back().hits[static_cast<std::size_t>(group)];
+                            detail::pass_partition(stack.back());
                             ++family;
                         } else {
                             const double q = passed / (passed + kept);
@@ -1468,6 +1483,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                           alone.begin());
                                 --order;
                                 if (group >= 0) --hits[static_cast<std::size_t>(group)];
+                                detail::pass_partition(ray_state);
                                 room = beyond;
                                 away = -n;
                                 continue;

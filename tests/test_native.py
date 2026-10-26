@@ -167,6 +167,26 @@ def test_specular_sequences_stay_inside_a_closed_box() -> None:
     assert np.all(seq[:, 1:] != seq[:, :-1])
 
 
+def test_specular_sequences_keep_every_branch_of_a_ray() -> None:
+    from acoustic_spaces import _native
+
+    # Three nested boxes that reflect and let sound through, inside one that only
+    # reflects: a branch of the one ray forks at each of their faces it meets until it
+    # has passed through MAX_FORKS of them, giving C(order + MAX_FORKS, MAX_FORKS) rows,
+    # and every one is kept.
+    vertices, faces = _unit_cube()
+    sizes = (1.0, 2.0, 3.0, 50.0)
+    bvh = _native.Bvh(
+        np.vstack([(2.0 * vertices - 1.0) * s for s in sizes]),
+        np.vstack([faces + 8 * k for k in range(len(sizes))]),
+    )
+    passing = np.ones(12 * len(sizes), np.uint8)
+    passing[-12:] = 0
+    for order in (3, 10):
+        rows = _native.specular_sequences(bvh, np.array([0.1, 0.2, 0.3]), 1, order, 1, passing)
+        assert len(rows) == math.comb(order + _native.MAX_FORKS, _native.MAX_FORKS)
+
+
 def _stochastic_args(rays: int = 2000) -> dict:
     """The tracer's arguments for the unit cube, one band, one listener."""
     from acoustic_spaces import _native

@@ -22,17 +22,18 @@ from acoustic_spaces.scene import Coverage, Material
 SOURCE = [1.3, 2.2, 1.6]
 
 
-def _box(x0, x1, width, height, skip=None):
-    """The quads of a box from x0 to x1, with the wall at x0 or x1 left out."""
+def _box(x0, x1, width, height, skip=()):
+    """The quads of a box from x0 to x1, with the walls at x0 and x1 in ``skip`` left
+    out."""
     quads = [
         ((x0, 0, 0), (x0, width, 0), (x1, width, 0), (x1, 0, 0)),
         ((x0, 0, height), (x1, 0, height), (x1, width, height), (x0, width, height)),
         ((x0, 0, 0), (x1, 0, 0), (x1, 0, height), (x0, 0, height)),
         ((x0, width, 0), (x0, width, height), (x1, width, height), (x1, width, 0)),
     ]
-    if skip != "x0":
+    if "x0" not in skip:
         quads.append(((x0, 0, 0), (x0, 0, height), (x0, width, height), (x0, width, 0)))
-    if skip != "x1":
+    if "x1" not in skip:
         quads.append(((x1, 0, 0), (x1, width, 0), (x1, width, height), (x1, 0, height)))
     return quads
 
@@ -43,8 +44,8 @@ def _coupled(path: Path, first, second, width, height, opening=None) -> Path:
     partition (None)."""
     x = first
     groups = {
-        "room1": _box(0, first, width, height, skip="x1"),
-        "room2": _box(first, first + second, width, height, skip="x0"),
+        "room1": _box(0, first, width, height, skip=("x1",)),
+        "room2": _box(first, first + second, width, height, skip=("x0",)),
     }
     if opening == "all":
         groups["opening"] = [((x, 0, 0), (x, width, 0), (x, width, height), (x, 0, height))]
@@ -58,6 +59,25 @@ def _coupled(path: Path, first, second, width, height, opening=None) -> Path:
             ((x, y1, 0), (x, width, 0), (x, width, height), (x, y1, height)),
             ((x, y0, z1), (x, y1, z1), (x, y1, height), (x, y0, height)),
         ]
+    return _write(path, groups)
+
+
+def _row(path: Path, rooms: int, length, width, height) -> Path:
+    """``rooms`` rooms ``length`` long in a row along x, a partition between each two."""
+    groups = {"walls": [], "partition": []}
+    for k in range(rooms):
+        skip = ("x0",) * (k > 0) + ("x1",) * (k < rooms - 1)
+        groups["walls"] += _box(k * length, (k + 1) * length, width, height, skip=skip)
+        if k > 0:
+            x = k * length
+            groups["partition"].append(
+                ((x, 0, 0), (x, width, 0), (x, width, height), (x, 0, height))
+            )
+    return _write(path, groups)
+
+
+def _write(path: Path, groups) -> Path:
+    """An OBJ file of the quads of each group."""
     lines, n = [], 0
     for name, quads in groups.items():
         lines.append(f"g {name}")
@@ -287,6 +307,71 @@ def test_the_statistical_method_and_maps_cross_rooms(tmp_path: Path) -> None:
         values = result["s", name].parameters()
         for key in ("g", "t30", "c80"):
             np.testing.assert_allclose(late.values[key][k], getattr(values, key), atol=0.01)
+
+
+def _four_rooms(path: Path, **simulation) -> Room:
+    """Four rooms 4 m long in a row, the source in the first and a listener in each,
+    behind partitions that let 30 % of the sound through."""
+    return Room.from_scene(
+        _scene(
+            _row(path, 4, 4.0, 3.5, 3.0),
+            {
+                "wall": _flat(0.15, scattering=0.3),
+                "partition": _flat(0.35, scattering=0.3, transmission=0.3),
+            },
+            {"walls": "wall", "partition": "partition"},
+            {f"r{k + 1}": [4.0 * k + 2.4, 2.1, 1.7] for k in range(4)},
+            source=[1.3, 1.6, 1.4],
+            **simulation,
+        )
+    )
+
+
+def _arrivals(paths) -> set[tuple[int, int]]:
+    """Each path's delay (us) and order."""
+    return set(
+        zip(np.round(paths.delay_s * 1e6).astype(int).tolist(), paths.order.tolist(), strict=True)
+    )
+
+
+def test_early_paths_pass_as_many_partitions_as_the_late_tracer_leaves_out(
+    tmp_path: Path,
+) -> None:
+    # The stochastic late tracer counts every reflected path through more than two
+    # partitions, so the early stage keeps none of them: the 4th room's early paths are
+    # the direct sound alone. Ray tracing, which follows two partitions at most, then
+    # finds what image sources find in every room.
+    room = _four_rooms(tmp_path / "row.obj", early={"max_order": 3})
+    for k in range(4):
+        found = {
+            method: early_paths(room, "s", f"r{k + 1}", method=method, diffraction="none")
+            for method in ("ray_tracing", "image_sources")
+        }
+        assert _arrivals(found["ray_tracing"]) == _arrivals(found["image_sources"])
+        assert np.any(found["image_sources"].order > 0) == (k < 3)
+    # The statistical method takes the early paths' energy out of its own, whatever
+    # paths they are: the early stage keeps those through three partitions.
+    room.scene.simulation.late.method = "statistical"
+    paths = early_paths(room, "s", "r4", method="image_sources", diffraction="none")
+    assert np.any(paths.order > 0)
+
+
+def test_paths_through_three_partitions_are_not_lost(tmp_path: Path) -> None:
+    # Where the early stage keeps no reflected path, the late tracer counts them all:
+    # the 4th room's response is the same whatever the early stage's order.
+    responses = [
+        simulate(
+            _four_rooms(
+                tmp_path / f"order{order}.obj",
+                early={"max_order": order},
+                late={"rays": 2000},
+                ir_length_s=0.5,
+            ),
+            listeners=["r4"],
+        )["s", "r4"]
+        for order in (0, 3)
+    ]
+    np.testing.assert_allclose(responses[1].energy(), responses[0].energy(), rtol=1e-9)
 
 
 def test_diffraction_bends_round_a_doorway(tmp_path: Path) -> None:
