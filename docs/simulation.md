@@ -241,12 +241,12 @@ there, since near the first edge's boundaries it is still curved like the source
 Where one of the two edges' waves is lit, the path continues a path over the other edge
 alone and shares its energy with it, so the level is continuous where a path over one
 edge appears: as the listener rises past the top of a barrier, it changes by at most
-0.1 dB from 1 kHz up, and 0.01 dB at 63 Hz, where the waves add in pressure (0.8 dB in
+0.1 dB from 1 kHz up, and 0.01 dB at 63 Hz, where the waves add in pressure (0.7 dB in
 energy). Against the exact solution (BTM, in the
 [validation report](validation.md#edge-diffraction-against-the-exact-solution)),
-the level over barriers 0.3 to 3 m thick is within 0.35 dB from 500 Hz up, and over two
-screens in a row within 0.75 dB; at 63 and 125 Hz, in pressure, within 0.6 and 0.12 dB
-(2 and 2.7 dB with the waves in energy).
+the level over barriers 0.3 to 3 m thick is within 0.3 dB from 500 Hz up, and over two
+screens in a row within 0.45 dB; at 63 and 125 Hz, in pressure, within 0.6 and 0.12 dB
+(1.7 and 1.9 dB with the waves in energy).
 
 ```sh
 acoustic-spaces simulate examples/gallery/scene.yaml --out gallery
@@ -294,10 +294,15 @@ Where the edge diffraction bends every path the early stage follows, as with
 level by less than 0.05 dB. Steps are left at the corners of edges, where the point a
 term diffracts at leaves the end of its edge: driving the `street` example's car past
 the barrier 1 cm at a time, up to 1.42 dB in one band and 0.35 dB(A). And indoors,
-where paths add in energy from 250 Hz up, the terms of one event take their cross
-terms with each other, as one wave, so the two edges of a narrow face nearly cancel as
-they do in pressure; behind the `archway`'s wall the level still steps by up to 1.4 dB
-at 250 and 500 Hz where the reflection off the arch's jamb, 40 cm deep, appears. The
+where paths add in energy from 250 Hz up, the sound bent round edges is kept as waves
+(`engine.clusters` in the [API reference](api.md#edge-diffraction)): a term continues
+its geometric wave as far as it is coherent with it over the band (on the dark side of
+its boundary, where that wave is gone, near the boundary only), and the rest of it is
+part of its event's diffracted wave, whose terms add up as one wave, so the two edges of
+a narrow face nearly cancel as they do in pressure. A wave's energy is that of its
+pieces added up in pressure and averaged over the band, never below nothing. Behind the
+`archway`'s wall, where the reflection off the arch's jamb, 40 cm deep, appears, the
+level steps by at most 0.08 dB from 250 Hz to 1 kHz (1.4 dB in 4.0.0). The
 [known issues](validation.md#known-issues-of-the-edge-fade) list these, with what is
 checked and what is not. The fade comes with any `diffraction` but `none`. The late
 part is unchanged, since its scattered rays already find their way round corners.
@@ -305,9 +310,10 @@ part is unchanged, since its scattered rays already find their way round corners
 `view --paths` and the Blender export draw diffracted paths in their own colour, the
 response's `early.diffracted` marks them, and `simulate` reports how many there are. The
 cost grows with the number of edges and of the paths near them, as each term of the
-fade is a path over its edge: in a hall with 16 edges, the early stage takes 296 ms per
-source and listener with `first_order` (83 ms without the fade's terms), 366 ms with
-`second_order`, which looks at pairs of edges (124 ms), and 67 ms without diffraction.
+fade is a path over its edge: in a hall with 16 edges, the early stage takes 650 ms per
+source and listener on four cores with `first_order` (70 ms without the fade's terms),
+710 ms with `second_order`, which looks at pairs of edges (135 ms), and 55 ms without
+diffraction.
 
 Paths that reflect before or after an edge pair every edge with every plane the source
 or the listener faces, which in a whole city grows with the square of the buildings.
@@ -338,9 +344,11 @@ simulation:
 
 - Each reflection turns the phase as a locally reacting surface with the material's
   absorption does: R = (cos θ - Y) / (cos θ + Y) at the angle of incidence θ, with the
-  admittance Y fitted as for the wave solver. A hard surface reflects in phase at every
-  angle; an absorbing one turns the phase of sound that grazes it, by half a turn at
-  grazing incidence. Above those bands each path keeps the phase it has at their top,
+  admittance Y fitted to the material's absorption in every band, as the wave solver
+  fits it but without its grid, so the phase in a band does not depend on how many
+  bands add in pressure. A hard surface reflects in phase at every angle; an absorbing
+  one turns the phase of sound that grazes it, by half a turn at grazing incidence.
+  Above those bands each path keeps the phase it has at their top,
   so the bands join without a step. A surface whose material has an impedance (a
   ground's) reflects with its spherical wave's factor instead, in every band (see
   [Ground impedance](outdoor.md#ground-impedance)).

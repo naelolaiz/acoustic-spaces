@@ -22,8 +22,10 @@ from acoustic_spaces.engine.diffraction import (
     wedge_prefactor,
     wedge_terms,
 )
+from acoustic_spaces.engine.impedance import fit_admittance
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.simulate import coherent_bands
+from acoustic_spaces.materials.ground import band_absorption, plane_reflection, surface_impedance
 from acoustic_spaces.parameters import from_impulse_response
 from acoustic_spaces.scene.model import EarlyStage
 from acoustic_spaces.synthesis import REFERENCE_ENERGY_10M
@@ -51,15 +53,17 @@ def _box(coherent, **simulation) -> Room:
     )
 
 
-def _floor(tmp_path: Path, absorption: float) -> Room:
+def _floor(tmp_path: Path, absorption: float | list[float]) -> Room:
     """A floor 100 m wide in free field, a source and a listener 0.3 m above it."""
+    if isinstance(absorption, float):
+        absorption = [absorption] * 8
     obj = tmp_path / "floor.obj"
     obj.write_text("v -50 -50 0\nv 50 -50 0\nv 50 50 0\nv -50 50 0\ng floor\nf 1 2 3 4\n")
     return Room.from_scene(
         Scene.model_validate(
             {
                 "geometry": {"file": str(obj)},
-                "materials": {"floor": {"absorption": [absorption] * 8, "scattering": 0.0}},
+                "materials": {"floor": {"absorption": absorption, "scattering": 0.0}},
                 "default_material": "floor",
                 "sources": [{"name": "s", "position": [0.0, 0.0, 0.3]}],
                 "listeners": [{"name": "l", "position": [10.0, 0.0, 0.3]}],
@@ -109,6 +113,30 @@ def test_reflection_phases_of_hard_and_absorbing_surfaces(tmp_path: Path) -> Non
         phase = np.angle(reflection_phases(model, faces, np.array([1.0, 0.5, 0.05]), 2))
         np.testing.assert_allclose(phase[:2], 0.0, atol=1e-6)  # constant: a real admittance
         np.testing.assert_allclose(np.abs(phase[2]), grazing, atol=1e-6)
+
+
+@pytest.mark.parametrize(("flow", "thickness"), [(10.0, 0.05), (20.0, 0.1), (40.0, 0.025)])
+def test_reflection_phases_come_from_every_band(
+    tmp_path: Path, flow: float, thickness: float
+) -> None:
+    # A porous layer on a hard backing (Miki's model) absorbs more with frequency. The
+    # phase it gives at 63 and 125 Hz is matched more closely by an admittance fitted
+    # to its absorption in every band than by one fitted to those two bands alone, and
+    # it does not depend on how many bands add in pressure.
+    def layer(f):
+        return 1.0 / surface_impedance(f, flow, thickness=thickness)
+
+    absorption = band_absorption(layer, 8)
+    model = TraceModel.from_room(_floor(tmp_path, absorption))
+    cosines = np.array([1.0, 0.7, 0.4, 0.15])
+    faces = np.zeros(len(cosines), dtype=np.int64)
+    phase = reflection_phases(model, faces, cosines, 2)
+    np.testing.assert_allclose(phase, reflection_phases(model, faces, cosines, 8)[:, :2])
+    f = sample_frequencies(8, 2)
+    true = plane_reflection(layer(f)[None], cosines[:, None, None])
+    two = plane_reflection(fit_admittance(absorption[:2], 8)(f)[None], cosines[:, None, None])
+    error = np.abs(np.angle(phase / true)).max()
+    assert error < 0.5 * np.abs(np.angle(two / true)).max()
 
 
 @pytest.mark.parametrize(("absorption", "low"), [(0.01, 5.5), (0.8, -4.0)])

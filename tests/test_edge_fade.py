@@ -223,8 +223,11 @@ def test_the_street_garden_goes_on_where_a_second_event_stops_a_path(x: float) -
 def test_the_terms_of_a_narrow_face_cancel_in_energy_too(y: float) -> None:
     """Behind the archway's wall, where the reflection off the arch's jamb (40 cm deep)
     appears: the terms of the jamb's two edges nearly cancel in pressure, and added in
-    energy (from 250 Hz up) they made the level step by up to 4.4 dB in 1 cm. Taking
-    the cross terms between the terms of one event leaves 1.4 dB (a known issue)."""
+    energy (from 250 Hz up) they made the level step by up to 4.4 dB in 1 cm; with the
+    cross terms between the terms of one event, by 1.4 dB. As pieces of the waves they
+    join (the jamb's diffracted wave and the reflection's), with the events a path gets
+    past split alike, by 0.03 dB or less up to 1 kHz and 0.12 dB at 8 kHz, as it does
+    with every band in pressure."""
     scene = Scene.from_yaml(EXAMPLES / "archway" / "scene.yaml")
     room = Room.from_scene(scene)
     listener = next(item for item in scene.listeners if item.name == "behind the wall")
@@ -233,7 +236,28 @@ def test_the_terms_of_a_narrow_face_cancel_in_energy_too(y: float) -> None:
         moved = listener.model_copy(update={"position": (7.6, at, 1.2)})
         moved_room = Room.from_scene(scene.model_copy(update={"listeners": [moved]}), reuse=room)
         levels.append(10 * np.log10(total_energy(early_paths(moved_room, "singer", moved.name))))
-    assert np.abs(levels[1] - levels[0])[2:].max() < 1.5
+    assert np.abs(levels[1] - levels[0])[2:].max() < 0.15
+
+
+def test_a_term_goes_on_past_the_foot_of_its_edge_as_the_edge_s_image() -> None:
+    """Behind the archway's wall at y = 6.32 m, a third-order reflection that the jamb
+    cuts off (off the bar's side wall, the floor and the dining room's far wall) takes
+    the term of the jamb's corner on the leg the jamb blocks, where the path over the
+    corner touches it just above the floor. A centimetre on, that point lies below the
+    corner's foot: the corner goes on as its image in the floor, the path over the
+    image is the path over the corner on the leg after the floor bounce, and its term
+    is the blocked leg's. The term ended there instead, and the level stepped by
+    0.63 dB at 125 Hz and 0.11 dB from 250 Hz to 1 kHz; now it changes as it does over
+    the centimetres either side, by 0.04 dB or less."""
+    scene = Scene.from_yaml(EXAMPLES / "archway" / "scene.yaml")
+    room = Room.from_scene(scene)
+    listener = next(item for item in scene.listeners if item.name == "behind the wall")
+    levels = []
+    for at in (6.32, 6.33):
+        moved = listener.model_copy(update={"position": (7.6, at, 1.2)})
+        moved_room = Room.from_scene(scene.model_copy(update={"listeners": [moved]}), reuse=room)
+        levels.append(10 * np.log10(total_energy(early_paths(moved_room, "singer", moved.name))))
+    assert np.abs(levels[1] - levels[0])[:5].max() < 0.04
 
 
 @pytest.fixture(scope="module")
