@@ -1581,6 +1581,22 @@ class EdgeFade:
         tail = np.flatnonzero(heard & ~stops)
         if len(head) == 0 or len(tail) == 0:
             return out
+        # A path with many terms (a curved surface) would pair each of its stop
+        # event's terms with every term of its other events: the terms of one path
+        # arrive together, so their sum stands in for them, which keeps the work
+        # linear in the terms.
+        if len(head) * len(tail) > 1 << 16:
+            unique, inverse = np.unique(path[tail], return_inverse=True)
+            total = np.zeros((len(unique), *pressure.shape[1:]), dtype=complex)
+            np.add.at(total, inverse, pressure[tail])
+            index = np.searchsorted(unique, path[head])
+            out[head, coherent:] += (
+                2.0
+                * np.real(
+                    total[index, coherent:] * np.conj(pressure[head, coherent:])
+                ).mean(axis=2)
+            )
+            return out
         head = head[np.argsort(path[head], kind="stable")]
         lo = np.searchsorted(path[head], path[tail], side="left")
         count = np.searchsorted(path[head], path[tail], side="right") - lo
@@ -1619,23 +1635,17 @@ class EdgeFade:
 
         # An event with more terms than this takes the cross terms of their sum.
         many = 16
+        size = np.bincount(group, minlength=group.max(initial=-1) + 1)
+        small = size[group] <= many
 
-        i, j = _in_groups(group, group)
-        keep = i != j
-        i, j = i[keep], j[keep]
-        if len(i):
-            count = np.bincount(group, minlength=group.max(initial=-1) + 1)
-            small = count[group] <= many
-            again = small[i] & small[j]
-            if again.any():
-                add(
-                    i[again],
-                    pressure[i[again]],
-                    pressure[j[again]],
-                    detour[i[again]] - detour[j[again]],
-                    1.0,
-                )
-            # The events with many terms: each term with their sum, once.
+        # Each term with the sum of the others of its event.
+        if (size**2).sum() <= 1 << 16:
+            i, j = _in_groups(group, group)
+            keep = i != j
+            i, j = i[keep], j[keep]
+            if len(i):
+                add(i, pressure[i], pressure[j], detour[i] - detour[j], 1.0)
+        else:
             unique, inverse = np.unique(group, return_inverse=True)
             total = np.zeros((len(unique), *pressure.shape[1:]), dtype=complex)
             np.add.at(total, inverse, pressure)
@@ -1643,19 +1653,73 @@ class EdgeFade:
             if len(rows):
                 others = total[inverse[rows]] - pressure[rows]
                 add(rows, pressure[rows], others, np.zeros(len(rows)), 1.0)
-        i, u = _in_groups(group, held_group)
-        if len(i):
-            add(i, pressure[i], held[u], detour[i] - held_detour[u], 2.0)
-        u, v = _in_groups(held_group, held_group)
-        keep = (u < v) & held_missed[u]
-        u, v = u[keep], v[keep]
-        if len(u):
-            groups, first = np.unique(group, return_index=True)
-            at = np.searchsorted(groups, held_group[u])
-            on = (at < len(groups)) & (groups[np.minimum(at, len(groups) - 1)] == held_group[u])
-            u, v, at = u[on], v[on], at[on]
-            if len(u):
-                add(first[at], held[u], held[v], held_detour[u] - held_detour[v], 2.0)
+            sel = np.flatnonzero(small)
+            if len(sel):
+                i, j = _in_groups(group[sel], group[sel])
+                keep = i != j
+                i, j = sel[i[keep]], sel[j[keep]]
+                if len(i):
+                    add(i, pressure[i], pressure[j], detour[i] - detour[j], 1.0)
+
+        # Each term with the edge diffraction's terms at its event.
+        if len(held):
+            held_size = np.bincount(
+                held_group, minlength=max(group.max(initial=-1), held_group.max(initial=-1)) + 1
+            )
+            if (size[group] * held_size[group]).sum() <= 1 << 16:
+                i, u = _in_groups(group, held_group)
+                if len(i):
+                    add(i, pressure[i], held[u], detour[i] - held_detour[u], 2.0)
+            else:
+                unique_h, inverse_h = np.unique(held_group, return_inverse=True)
+                total_h = np.zeros((len(unique_h), *held.shape[1:]), dtype=complex)
+                np.add.at(total_h, inverse_h, held)
+                index = np.searchsorted(unique_h, group)
+                rows = np.flatnonzero(index < len(unique_h))
+                if len(rows):
+                    index = index[rows]
+                    match = unique_h[index] == group[rows]
+                    rows, index = rows[match], index[match]
+                    if len(rows):
+                        add(rows, pressure[rows], total_h[index], np.zeros(len(rows)), 2.0)
+
+        # The edge diffraction's terms at an event of a missed path, with each other,
+        # on the event's first term.
+        if len(held) and held_missed.any():
+            held_size = np.bincount(
+                held_group, minlength=max(group.max(initial=-1), held_group.max(initial=-1)) + 1
+            )
+            if (held_size**2).sum() <= 1 << 16:
+                u, v = _in_groups(held_group, held_group)
+                keep = (u < v) & held_missed[u]
+                u, v = u[keep], v[keep]
+                if len(u):
+                    groups, first = np.unique(group, return_index=True)
+                    at = np.searchsorted(groups, held_group[u])
+                    on = (at < len(groups)) & (
+                        groups[np.minimum(at, len(groups) - 1)] == held_group[u]
+                    )
+                    u, v, at = u[on], v[on], at[on]
+                    if len(u):
+                        add(first[at], held[u], held[v], held_detour[u] - held_detour[v], 2.0)
+            else:
+                unique_h, inverse_h = np.unique(held_group, return_inverse=True)
+                total_h = np.zeros((len(unique_h), *held.shape[1:]), dtype=complex)
+                np.add.at(total_h, inverse_h, held)
+                own_h = np.zeros((len(unique_h), *held.shape[1:]), dtype=complex)
+                np.add.at(own_h, inverse_h, np.abs(held) ** 2)
+                cross = np.mean(np.abs(total_h) ** 2 - own_h, axis=2)  # (U, B)
+                missed = np.zeros(len(unique_h), dtype=bool)
+                missed[np.unique(inverse_h[held_missed])] = True
+                groups, first = np.unique(group, return_index=True)
+                at = np.searchsorted(groups, unique_h[missed])
+                keep = (at < len(groups)) & (
+                    groups[np.minimum(at, len(groups) - 1)] == unique_h[missed]
+                )
+                if keep.any():
+                    which = np.flatnonzero(missed)[keep]
+                    at = np.minimum(at[keep], len(groups) - 1)
+                    out[first[at], late] += 2.0 * cross[which][:, late]
         return out
 
     def _energy(self, listener, go, k, ids, faces):

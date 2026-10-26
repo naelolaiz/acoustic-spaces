@@ -959,12 +959,24 @@ class EdgeDiffraction:
             # The waves of other edges that border the same path continue it too, as round
             # a narrow face: each pair adds its cross term to the path as well, half on
             # each wave's.
-            i, j = _in_groups(targets, targets)
-            keep = rows[i] != rows[j]
-            i, j = i[keep], j[keep]
-            if len(i):
-                pair = np.mean(np.real(own[i] * np.conj(own[j])), axis=2)
-                np.add.at(cross, i, self._fade(distance[rows[i]] - distance[rows[j]]) * pair)
+            size = np.bincount(targets, minlength=targets.max(initial=-1) + 1)
+            if (size**2).sum() <= 1 << 16:
+                i, j = _in_groups(targets, targets)
+                keep = rows[i] != rows[j]
+                i, j = i[keep], j[keep]
+                if len(i):
+                    pair = np.mean(np.real(own[i] * np.conj(own[j])), axis=2)
+                    np.add.at(
+                        cross, i, self._fade(distance[rows[i]] - distance[rows[j]]) * pair
+                    )
+            else:
+                # A path many edges border (a curved surface): the waves' sum
+                # stands in for each pair, which keeps the work linear in them.
+                unique, inverse = np.unique(targets, return_inverse=True)
+                total = np.zeros((len(unique), *own.shape[1:]), dtype=complex)
+                np.add.at(total, inverse, own)
+                rest = total[inverse] - own
+                cross += np.mean(np.real(own * np.conj(rest)), axis=2)
             # In the coherent bands the two add in pressure instead.
             cross[:, : self.coherent] = 0.0
             total, energy = _take(paths.energy, targets, cross, energy, rows)
