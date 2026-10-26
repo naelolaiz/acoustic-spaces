@@ -616,11 +616,6 @@ class EdgeDiffraction:
             kl, angle, lit, self.wavenumber[bands], self.slice_hz[bands], self.speed_of_sound
         )
 
-    def _coherent_share(self, share: np.ndarray) -> np.ndarray:
-        """``share`` (C, W, B, M) with the waves fully coherent in the coherent bands."""
-        share[:, :, : self.coherent] = 1.0
-        return share
-
     def _spectrum(self, pressure: np.ndarray, distance: np.ndarray) -> np.ndarray | None:
         """(C, coherent, M) the paths' pressure (C, B, M) in the coherent bands relative
         to their delay, over its level in each band; None without coherent bands."""
@@ -1016,8 +1011,9 @@ class EdgeDiffraction:
         # s = sqrt(1 - c^2) (_continued, :mod:`~acoustic_spaces.engine.clusters`); in
         # the others all of it adds in pressure.
         counted = lit == (found >= 0)
-        share = _share(kl, angle)
-        energy = _energy(waves * counted[:, :, None, None], _coherence(self._coherent_share(share)))
+        energy = np.zeros((len(edge), self.wavenumber.shape[0]))
+        pressure = (waves * counted[:, :, None, None]).sum(axis=1)
+        energy[:, : self.coherent] = np.mean(np.abs(pressure[:, : self.coherent]) ** 2, axis=2)
         if clusters is not None:
             late = slice(self.coherent, None)
             carried = (waves * counted[:, :, None, None])[:, :, late]
@@ -1062,7 +1058,7 @@ class EdgeDiffraction:
             "waves": waves,
             "counted": counted,
             "energy": energy,
-            "spectrum": self._spectrum((waves * counted[:, :, None, None]).sum(axis=1), distance),
+            "spectrum": self._spectrum(pressure, distance),
             "distance": distance,
             "order": np.where(kind == 3, 2, np.where(kind > 0, 1, 0)).astype(np.int64),
             "edge": edge,
@@ -1498,15 +1494,6 @@ def _merge(waves: np.ndarray, faces: np.ndarray) -> None:
         waves[rows, face + 1] = 0.0
 
 
-def _coherence(share: np.ndarray) -> np.ndarray:
-    """(C, W, W, B, M) how waves (C, W, B, M) that add coherently by ``share`` cohere:
-    the product of their shares, 1 for a wave with itself."""
-    out = share[:, :, None] * share[:, None, :]
-    index = np.arange(share.shape[1])
-    out[:, index, index] = 1.0
-    return out
-
-
 def _share(kl: np.ndarray, angle: np.ndarray) -> np.ndarray:
     """(C, 3, B, M) |F(X)| of each wave's boundary, ``angle`` (C, 3) away."""
     x = 2.0 * kl[:, None] * np.sin(0.5 * angle)[..., None, None] ** 2
@@ -1530,12 +1517,6 @@ def _continued(kl, angle, lit, wavenumber, slice_hz, speed_of_sound) -> np.ndarr
     coherence = np.abs(np.mean(np.exp(-1j * x) * fade, axis=-1, keepdims=True))
     dark = np.sqrt(np.maximum(1.0 - np.abs(transition(x)) ** 2, 0.0))
     return np.where(np.asarray(lit)[..., None, None], np.minimum(coherence, 1.0), dark)
-
-
-def _energy(waves: np.ndarray, coherence: np.ndarray) -> np.ndarray:
-    """(C, B) energy of waves (C, W, B, M) that cohere by ``coherence`` (C, W, W, B, M),
-    averaged over each band's frequencies."""
-    return np.einsum("cijbm,cibm,cjbm->cbm", coherence, waves, np.conj(waves)).real.mean(axis=2)
 
 
 def _phase_curvature(n, phi, phi_source, kl, reflection, angle) -> np.ndarray:
