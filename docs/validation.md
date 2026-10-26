@@ -2806,13 +2806,6 @@ The edge fade's own are listed in
 
 Results:
 
-- **Paths through three partitions.** The early stage follows a specular path through
-  at most two partitions (surfaces that both reflect and let sound through); from the
-  third on it only reflects. The late stage still takes out the specular part of every ray up to
-  `early.max_order` reflections, so a path through three partitions or more is in
-  neither. It carries the product of the shares the partitions pass (a thousandth of
-  its energy through three that pass 10 % each), so this matters only with surfaces
-  that let much through.
 - **The first milliseconds of a rendered response.** An impulse response is put
   together from its bands with zero-phase filters (`synthesis.combine_bands`), which
   spread each arrival both ways in time, and what would fall before the response's

@@ -1,59 +1,5 @@
 # Changelog
 
-## Unreleased
-
-Fixes for most of the small findings of the review of 25 October 2026 (see
-[Known issues](docs/validation.md#known-issues)), and one it did not find: a closed
-solid standing on a surface counted as air. No example's results change.
-
-- A closed solid that touches the rest of the model at no edge (a pillar, a platform, a
-  cabinet) is placed in its room from points just off the largest faces of up to six of
-  its planes, which vote by those faces' areas, instead of off its largest face alone.
-  Where that face lay on another surface, as a platform's underside on the floor, the
-  point was outside every room and the solid's inside counted as a room of its own: a
-  1 m cube on the floor of a 3 m room gave 28 m³ instead of 26, a platform 1.5 x 1.5 x
-  0.5 m 28.1 instead of 25.9. Every example keeps its volume, and finding the cells of a
-  city of 10,000 buildings takes as long as before.
-- The model's repair drops vertices that no face uses. A stray one moved the point that
-  places a separate shell, set off its face by a millionth of the vertices' extent: one
-  1000 km off set it 1 m off, and a slab's inside became a room (28.6 m³ instead of
-  25.4). Every format now refuses coordinates that are not finite and faces that name a
-  missing vertex, where only the OBJ reader refused the first.
-- `pack` writes the zip as `<name>.zip.part` and puts it in place only once it is
-  complete, so a pack that fails leaves an earlier one of the same name as it was;
-  before, the earlier one was emptied when packing began and deleted when it failed.
-- Result files of names that give the same file name, such as `A/B` and `A_B` (anything
-  but ASCII letters, digits, dots, dashes and underscores becomes `_`), or that differ
-  only in case, get `-2`, `-3` and so on after the later ones, where the second
-  response's WAV file overwrote the first's. Two binaural outputs through HRTF files of
-  the same name, and `walkthrough`'s files per listener, are kept apart the same way.
-- `parameters.free_field_reference`, which the `--free-field` options read, takes the
-  bands with 0.2 s of silence on both sides of the response. It lost what the zero-phase
-  filters spread before the first sample: of a response that starts with its direct
-  sound it kept 0.50 of the energy at 63 Hz to 0.71 at 8 kHz, so G against it read up to
-  3 dB too high. `octave_bands` and `split_bands` return signals as long as their input,
-  which cannot hold that spread; their docstrings now say how much is lost. The same
-  loss at the start of a rendered impulse response is a known issue.
-- Absorption or scattering outside 0 to 1 read from a preset, a CSV file or a CATT or
-  ODEON library is still taken as 0 or 1, but the run now warns, naming the material,
-  where the values came from and each band out of range (`Material.clipped`). Values
-  written in the scene were already refused.
-- No path arrives before it leaves the source: a moment of turbulence keeps every path's
-  delay at zero or more, and the echogram, calibration and the statistical late method
-  count a path of negative delay in the first time slot instead of the last. No run
-  reached it (in strong turbulence a path moved by at most 0.5 % of its delay).
-- An error in one of the native code's worker threads (running out of memory, say) is
-  raised in Python instead of ending the process.
-- `Convolver.process` takes `out`, an array to write the block into, and `play` keeps one
-  such buffer, so the sound card's callback no longer makes new arrays the size of a
-  block; `HeadTrackedBinaural.process` takes `out` too and keeps its buffers.
-- The wave solver checks its grid against its limit of 40 million cells before it makes
-  the weather's fields for it, so a grid too large outdoors in wind or a temperature
-  gradient is refused with the message that says what to lower instead of running out
-  of memory; and round an open model it lets its first grid go before it makes the one
-  with the matched layer (for a 30 x 20 m open floor at 250 Hz, 151 MiB at the peak
-  instead of 209).
-
 ## 4.0.1
 
 Behind the `archway`'s wall, where the reflection off the arch's jamb appears, the level
@@ -63,6 +9,13 @@ level changes at 63 and 125 Hz in every example but `room_modes`, whose wave sol
 those bands, as the reflection phases now come from every band (by up to 3.8 dB, in
 `orchestra`), and from 250 Hz up in the five examples with edges near their paths (by up
 to 1.04 dB, in `archway`).
+
+4.0.1 also fixes findings of the code review of 25 October 2026 (those still open are
+in [Known issues](docs/validation.md#known-issues)), among them paths
+through three partitions or more, which neither the early nor the late part counted,
+and one the review did not find: a closed solid standing on a surface counted as air.
+Of the examples' results, these change only the `apartment` bedroom's, its G by less
+than 10⁻⁶ dB.
 
 - Indoors, in the bands where the early paths add in energy (from 250 Hz with the
   default `coherent_max_band_hz`), the sound bent round edges is kept as waves
@@ -116,6 +69,68 @@ to 1.04 dB, in `archway`).
   of thousands of terms, no longer runs out of memory in the early stage: the BRAS CR3
   room at its defaults peaks at 10.6 GB, where 4.0.0 asked for 16.4 GiB at once, and CR2
   runs, where 4.0.0 asked for 19.6 GiB.
+- A path that reflects and passes through three partitions or more (faces that reflect
+  and let sound through) was counted by neither part: the early stage follows a path
+  through two partitions at most, and the stochastic late stage left out the specular
+  part of every ray up to `early.max_order` reflections, wherever it went. In four rooms
+  in a row behind partitions that let 30 % through, the early stage's ray tracing at
+  order 3 missed 18 of the 62 paths through three partitions into the fourth room,
+  21 % of its early energy. The late stage now counts the partitions each ray passes
+  and keeps the reflected paths through more than two, and the early stage leaves those
+  out: the fourth room's response is the same at order 3 as at order 0, and ray tracing
+  finds the same early paths as image sources in every room. With the statistical late
+  method, which takes the early paths' energy out of its own, the early stage keeps
+  them. In the `apartment`, the only example with partitions, the bedroom keeps 70 of
+  its 76 early paths and its G changes by less than 10⁻⁶ dB at the same seed. From
+  order 10 up, one ray of the early stage's ray tracing also kept only 64 of the
+  branches it forks into at partitions (66 at order 10); it keeps them all.
+- A closed solid that touches the rest of the model at no edge (a pillar, a platform, a
+  cabinet) is placed in its room from points just off the largest faces of up to six of
+  its planes, which vote by those faces' areas, instead of off its largest face alone.
+  Where that face lay on another surface, as a platform's underside on the floor, the
+  point was outside every room and the solid's inside counted as a room of its own: a
+  1 m cube on the floor of a 3 m room gave 28 m³ instead of 26, a platform 1.5 x 1.5 x
+  0.5 m 28.1 instead of 25.9. Every example keeps its volume, and finding the cells of a
+  city of 10,000 buildings takes as long as before.
+- The model's repair drops vertices that no face uses. A stray one moved the point that
+  places a separate shell, set off its face by a millionth of the vertices' extent: one
+  1000 km off set it 1 m off, and a slab's inside became a room (28.6 m³ instead of
+  25.4). Every format now refuses coordinates that are not finite and faces that name a
+  missing vertex, where only the OBJ reader refused the first.
+- `pack` writes the zip as `<name>.zip.part` and puts it in place only once it is
+  complete, so a pack that fails leaves an earlier one of the same name as it was;
+  before, the earlier one was emptied when packing began and deleted when it failed.
+- Result files of names that give the same file name, such as `A/B` and `A_B` (anything
+  but ASCII letters, digits, dots, dashes and underscores becomes `_`), or that differ
+  only in case, get `-2`, `-3` and so on after the later ones, where the second
+  response's WAV file overwrote the first's. Two binaural outputs through HRTF files of
+  the same name, and `walkthrough`'s files per listener, are kept apart the same way.
+- `parameters.free_field_reference`, which the `--free-field` options read, takes the
+  bands with 0.2 s of silence on both sides of the response. It lost what the zero-phase
+  filters spread before the first sample: of a response that starts with its direct
+  sound it kept 0.50 of the energy at 63 Hz to 0.71 at 8 kHz, so G against it read up to
+  3 dB too high. `octave_bands` and `split_bands` return signals as long as their input,
+  which cannot hold that spread; their docstrings now say how much is lost. The same
+  loss at the start of a rendered impulse response is a known issue.
+- Absorption or scattering outside 0 to 1 read from a preset, a CSV file or a CATT or
+  ODEON library is still taken as 0 or 1, but the run now warns, naming the material,
+  where the values came from and each band out of range (`Material.clipped`). Values
+  written in the scene were already refused.
+- No path arrives before it leaves the source: a moment of turbulence keeps every path's
+  delay at zero or more, and the echogram, calibration and the statistical late method
+  count a path of negative delay in the first time slot instead of the last. No run
+  reached it (in strong turbulence a path moved by at most 0.5 % of its delay).
+- An error in one of the native code's worker threads (running out of memory, say) is
+  raised in Python instead of ending the process.
+- `Convolver.process` takes `out`, an array to write the block into, and `play` keeps one
+  such buffer, so the sound card's callback no longer makes new arrays the size of a
+  block; `HeadTrackedBinaural.process` takes `out` too and keeps its buffers.
+- The wave solver checks its grid against its limit of 40 million cells before it makes
+  the weather's fields for it, so a grid too large outdoors in wind or a temperature
+  gradient is refused with the message that says what to lower instead of running out
+  of memory; and round an open model it lets its first grid go before it makes the one
+  with the matched layer (for a 30 x 20 m open floor at 250 Hz, 151 MiB at the peak
+  instead of 209).
 
 ## 4.0.0
 
