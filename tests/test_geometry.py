@@ -11,6 +11,8 @@ from acoustic_spaces.geometry import (
     points_inside,
 )
 from acoustic_spaces.geometry.triangulate import triangulate_polygon
+from acoustic_spaces.room import Room
+from acoustic_spaces.scene import Scene
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 SHOEBOX = EXAMPLES / "shoebox" / "shoebox.obj"
@@ -378,10 +380,51 @@ def test_clean_merges_duplicates_and_drops_degenerate_faces() -> None:
     mesh = RoomMesh(vertices + 1e-9, faces, np.zeros(len(faces)), [("box",)])
 
     cleaned, merged, removed = clean_mesh(mesh)
-    assert len(cleaned.vertices) == 8 + 3
+    assert len(cleaned.vertices) == 8  # the sliver's corners go with it
     assert merged == 36 - 8
     assert removed == 1
     assert check_mesh(cleaned).closed
+
+
+def _box_obj(low, high, first: int, group: str) -> str:
+    """OBJ lines of an axis-aligned box from ``low`` to ``high``, its vertices numbered
+    from ``first``."""
+    (x0, y0, z0), (x1, y1, z1) = low, high
+    corners = [(x, y, z) for z in (z0, z1) for y in (y0, y1) for x in (x0, x1)]
+    quads = [(0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4), (2, 6, 7, 3), (0, 4, 6, 2), (1, 3, 7, 5)]
+    lines = [f"v {x} {y} {z}" for x, y, z in corners] + [f"g {group}"]
+    lines += ["f " + " ".join(str(first + i) for i in quad) for quad in quads]
+    return "\n".join(lines) + "\n"
+
+
+def _room_with_blocks(path: Path, blocks, extra: str = "") -> Room:
+    """A 3 m cube of a room with closed blocks in it (low and high corners), the
+    source and the listener in its top corner."""
+    text = _box_obj((0, 0, 0), (3, 3, 3), 1, "walls")
+    for k, (low, high) in enumerate(blocks):
+        text += _box_obj(low, high, 9 + 8 * k, f"block{k}")
+    path.write_text(text + extra, encoding="utf-8")
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"file": str(path)},
+                "materials": {"hard": {"absorption": [0.1] * 8}},
+                "default_material": "hard",
+                "sources": [{"name": "s", "position": [2.5, 2.5, 2.5]}],
+                "listeners": [{"name": "l", "position": [2.6, 2.6, 2.6]}],
+            }
+        )
+    )
+
+
+def test_a_vertex_no_face_uses_changes_nothing(tmp_path: Path) -> None:
+    # A slab over the floor; a stray point far away moved the point that tells which
+    # room holds the slab off it by a millionth of the stray's distance, out of the
+    # room, and the slab's inside became a room of its own (28.6 m3).
+    slab = [((0.5, 0.5, 0.1), (2.5, 2.5, 0.5))]
+    room = _room_with_blocks(tmp_path / "room.obj", slab, "v 1e6 1e6 1e6\n")
+    assert room.volume_m3 == pytest.approx(27.0 - 1.6)
+    assert len(room.mesh.vertices) == 16
 
 
 def test_mesh_without_faces_is_not_closed() -> None:

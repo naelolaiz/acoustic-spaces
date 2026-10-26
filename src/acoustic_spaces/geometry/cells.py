@@ -145,7 +145,7 @@ def mesh_cells(vertices: np.ndarray, faces: np.ndarray) -> MeshCells:
     volume = np.bincount(side[:, 0], weights=-cone, minlength=count) + np.bincount(
         side[:, 1], weights=cone, minlength=count
     )
-    side, volume = _nest(vertices, tri, normal, side, volume)
+    side, volume = _nest(tri, normal, side, volume)
     tolerance = float(np.abs(volume).max(initial=0.0)) * EMPTY_SHARE
     outside = volume < -tolerance
     enclosed = volume > tolerance
@@ -172,7 +172,7 @@ def _components(nodes: int, a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return rank[inverse.reshape(-1)].astype(np.int64)
 
 
-def _nest(vertices, tri, normal, side, volume):
+def _nest(tri, normal, side, volume):
     """Joins the outer sides of shells, and panels, that lie inside a cell to that cell.
 
     A shell joined to the rest at no edge is a cell of negative volume by itself; a
@@ -187,7 +187,7 @@ def _nest(vertices, tri, normal, side, volume):
     shells = np.flatnonzero((volume < -tolerance) | loose)
     if len(shells) < 2 and not loose.any():
         return side, volume
-    size = float(np.ptp(vertices, axis=0).max()) or 1.0
+    size = float(np.ptp(tri.reshape(-1, 3), axis=0).max()) or 1.0  # the faces' extent
     area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
     enclosed = np.flatnonzero(volume > tolerance)
     parent = np.arange(len(volume))
