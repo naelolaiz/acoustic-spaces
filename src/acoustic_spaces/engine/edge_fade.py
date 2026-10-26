@@ -83,7 +83,9 @@ times what continues the path at its other events, is part of that wave. A term 
 where the point it diffracts at leaves the end of its edge (the UTD has no terms for
 the corners of edges), so the level can still step slightly there; where that end lies
 in a plane the path reflects off next to the event, the edge goes on as its image in
-the plane, and the leg on one side of the reflection or the other takes the term.
+the plane, and the leg on one side of the reflection or the other takes the term. Where
+such a leg stops a path, the term of the edge's image, found on the leg on the other
+side, is the stopping leg's.
 """
 
 from __future__ import annotations
@@ -451,6 +453,7 @@ class EdgeFade:
                     "row": rows,
                     "kind": np.full(n, _LEG),
                     "at": np.full(n, 2 * j),
+                    "own": np.full(n, own),
                     "covered": np.full(n, self.covered(j, k - j)),
                     "source": sources[j],
                     "listener": listeners[j],
@@ -479,6 +482,7 @@ class EdgeFade:
                     "row": rows,
                     "kind": np.full(n, _FACE),
                     "at": np.full(n, 2 * order[j - 1] + 1),
+                    "own": np.full(n, own),
                     "covered": np.full(n, self.covered(j - 1, k - j)),
                     "source": sources[j - 1],
                     "listener": listeners[j],
@@ -766,6 +770,8 @@ class EdgeFade:
             own = part["explains"] & (part["at"] == fail[part["slot"]])
             stop[part["path"][own]] = part["at"][own]
         stop2 = np.full(count, -1, dtype=np.int64)
+        across, handed = self._by_image(table, stop, many, max_delay_s)
+        parts += across
         skip = np.zeros((count, width), dtype=bool)
         if many.any():
             # Only an edge that explains one of the events can be chosen, so the terms of
@@ -801,7 +807,12 @@ class EdgeFade:
                 face & ((table["fail"] == at + 1) | (stop2[path] == at + 1)),
             ]
         )
-        parts += self._terms_at(table, np.flatnonzero(going), True, max_delay_s)
+        passed = self._terms_at(table, np.flatnonzero(going), True, max_delay_s)
+        # The leg whose term at an edge a stopping leg took does not take it again.
+        parts += [
+            _subset(part, ~np.isin(part["slot"] * len(self.edges) + part["edge"], handed))
+            for part in passed
+        ]
         parts = [part for part in parts if len(part["go"])]
         if not parts:
             return [None] * len(groups)
@@ -812,6 +823,69 @@ class EdgeFade:
             _subset(t, slice(lo, hi)) if hi > lo else None
             for lo, hi in zip(bounds[:-1], bounds[1:], strict=True)
         ]
+
+    def _by_image(self, table, stop, many, max_delay_s) -> tuple[list, np.ndarray]:
+        """The terms of the missed paths that one leg stops where no edge explains that
+        at the leg itself (``stop`` -1, set in place; ``many`` marks the paths that
+        several events stop), past the end of an edge that stands on a plane the path
+        reflects off next to the leg and has a face that blocks it (see :meth:`_on_face`).
+        The edge goes on there as its image in the plane: the path over the image is the
+        path over the edge on the leg on the other side of the reflection, where the term
+        is found, and the term is the stopping leg's, in that leg's waves. Also the pairs
+        (the slot times the number of edges, plus the edge) of the legs and edges whose
+        terms are taken so, which those legs do not take again."""
+        fail, path, at = table["fail"], table["path"], table["at"]
+        legs = np.flatnonzero(table["own"] & (table["kind"] == _LEG))
+        width = int(at.max()) + 1
+        slot_of = np.full((len(stop), width), -1, dtype=np.int64)
+        slot_of[path[legs], at[legs]] = legs
+        stopped = legs[(at[legs] == fail[legs]) & ~many[path[legs]] & (stop[path[legs]] < 0)]
+        stopped = stopped[table["blocked"][stopped, 0] >= 0]
+        slots, edges, of = [], [], []
+        for side, step in ((0, -2), (1, 2)):
+            for s in stopped.tolist():
+                plane, other = int(table["next_to"][s, side]), int(at[s]) + step
+                if plane < 0 or not 0 <= other < width or slot_of[path[s], other] < 0:
+                    continue
+                standing = self._standing_on(plane)
+                blocks = self._on_face(
+                    standing,
+                    np.full(len(standing), table["blocked"][s, 0]),
+                    np.broadcast_to(table["stop_at"][s, 0], (len(standing), 3)),
+                )
+                slots.append(np.full(int(blocks.sum()), slot_of[path[s], other]))
+                edges.append(standing[blocks])
+                of.append(np.full(int(blocks.sum()), s))
+        if not slots:
+            return [], np.zeros(0, dtype=np.int64)
+        slot, edge, of = np.concatenate(slots), np.concatenate(edges), np.concatenate(of)
+        key = slot * len(self.edges) + edge
+        out, handed = [], []
+        for part in self._terms_of(table, slot, edge, False, max_delay_s):
+            keep = np.flatnonzero(~part["lit"])
+            # The first term of each path, on the dark side of its edge.
+            keep = keep[np.unique(part["path"][keep], return_index=True)[1]]
+            keep = keep[stop[part["path"][keep]] < 0]
+            if len(keep) == 0:
+                continue
+            part = _subset(part, keep)
+            order = np.argsort(key)
+            leg = of[order][
+                np.searchsorted(key[order], part["slot"] * len(self.edges) + part["edge"])
+            ]
+            stop[part["path"]] = at[leg]
+            handed.append(part["slot"] * len(self.edges) + part["edge"])
+            out.append(
+                dict(
+                    part,
+                    slot=leg,
+                    at=at[leg],
+                    explains=np.ones(len(leg), dtype=bool),
+                    source_side=table["source"][leg],
+                    listener_side=table["listener"][leg],
+                )
+            )
+        return out, np.concatenate(handed) if handed else np.zeros(0, dtype=np.int64)
 
     def _geometry(self, groups, count: int, width: int) -> dict:
         """What stops the missed paths of ``groups`` (``count`` paths, ``width`` events
