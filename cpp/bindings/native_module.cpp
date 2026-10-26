@@ -96,16 +96,33 @@ nb::ndarray<nb::numpy, double> inverse_real_fft(Spectrum bins, std::size_t n) {
     return to_numpy(std::move(out), {n});
 }
 
-nb::ndarray<nb::numpy, float> convolver_process(Convolver &convolver, FloatBlock block) {
+using FloatOut = nb::ndarray<float, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+
+void check_block(const Convolver &convolver, FloatBlock block) {
     if (block.shape(0) != convolver.block() || block.shape(1) != convolver.inputs()) {
         throw std::invalid_argument("Convolver.process: expected a (block, inputs) array");
     }
+}
+
+nb::ndarray<nb::numpy, float> convolver_process(Convolver &convolver, FloatBlock block) {
+    check_block(convolver, block);
     std::vector<float> out(convolver.block() * convolver.outputs());
     {
         nb::gil_scoped_release release;
         convolver.process(block.data(), out.data());
     }
     return to_numpy(std::move(out), {convolver.block(), convolver.outputs()});
+}
+
+// As convolver_process, into an array the caller keeps: nothing is allocated, as a
+// sound card's callback needs.
+void convolver_process_into(Convolver &convolver, FloatBlock block, FloatOut out) {
+    check_block(convolver, block);
+    if (out.shape(0) != convolver.block() || out.shape(1) != convolver.outputs()) {
+        throw std::invalid_argument("Convolver.process_into: expected a (block, outputs) array");
+    }
+    nb::gil_scoped_release release;
+    convolver.process(block.data(), out.data());
 }
 
 // For the tests: parallel_for over [0, n) on `threads` threads, whose worker that
@@ -842,6 +859,10 @@ NB_MODULE(_native, m) {
             "uniform).")
         .def("process", &convolver_process, nb::arg("block"),
              "One block (block, inputs) in, (block, outputs) out.")
+        .def("process_into", &convolver_process_into, nb::arg("block"),
+             nb::arg("out").noconvert(),
+             "One block (block, inputs) in, written into out (block, outputs) float32, "
+             "which must already be one (it is never copied).")
         .def("reset", &Convolver::reset, "Forget all past input.")
         .def_prop_ro("inputs", &Convolver::inputs)
         .def_prop_ro("outputs", &Convolver::outputs)

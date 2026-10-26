@@ -311,6 +311,10 @@ class HeadTrackedBinaural:
         self._ears = Convolver(binaural_decoder(order, hrtf, decoder), block)
         self._field = FieldRotation(order)
         self._ramp = (np.arange(1, block + 1, dtype=np.float32) / block)[:, None]
+        # Buffers the size of a block, kept from block to block (see process).
+        self._wet = np.zeros((block, h.shape[1]), np.float32)
+        self._turned = np.zeros_like(self._wet)
+        self._moved = np.zeros_like(self._wet)
         self._version, rotation = self.orientation.rotation()
         self._matrix = self._turn(rotation)
 
@@ -326,18 +330,21 @@ class HeadTrackedBinaural:
         # A source straight ahead of the centred head is at rotation.T @ d once it turns.
         return self._field.matrix(rotation.T).T.astype(np.float32)
 
-    def process(self, block: np.ndarray) -> np.ndarray:
-        """One block (block,) of the dry signal to (block, 2) float32."""
-        wet = self._room.process(block)  # (block, channels)
+    def process(self, block: np.ndarray, out: np.ndarray | None = None) -> np.ndarray:
+        """One block (block,) of the dry signal to (block, 2) float32, into ``out`` when
+        given, as :meth:`Convolver.process <acoustic_spaces.render.Convolver.process>`
+        takes it. The buffers the size of a block are kept from block to block."""
+        wet = self._room.process(block, out=self._wet)  # (block, channels)
         version, rotation = self.orientation.rotation()
-        if version == self._version:
-            turned = wet @ self._matrix
-        else:
+        turned = np.matmul(wet, self._matrix, out=self._turned)
+        if version != self._version:
             matrix = self._turn(rotation)
-            before = wet @ self._matrix
-            turned = before + (wet @ matrix - before) * self._ramp
+            moved = np.matmul(wet, matrix, out=self._moved)
+            moved -= turned
+            moved *= self._ramp
+            turned += moved
             self._matrix, self._version = matrix, version
-        return self._ears.process(turned)
+        return self._ears.process(turned, out=out)
 
     def run(
         self,

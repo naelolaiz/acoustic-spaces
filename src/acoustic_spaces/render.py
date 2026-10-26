@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import math
 import threading
 import time
@@ -355,12 +356,23 @@ class Convolver:
         """(first tap, partition length, partitions) of each segment of the response."""
         return list(self._native.segments)
 
-    def process(self, block: np.ndarray) -> np.ndarray:
-        """One block, (block,) or (block, inputs), to (block, outputs) float32."""
+    def process(self, block: np.ndarray, out: np.ndarray | None = None) -> np.ndarray:
+        """One block, (block,) or (block, inputs), to (block, outputs) float32.
+
+        Given ``out``, a writable C-contiguous float32 (block, outputs) array, the block
+        is written into it and nothing new is allocated for it, as a sound card's
+        callback needs (a float32 C-contiguous ``block`` is not copied either).
+        """
         x = np.asarray(block, dtype=np.float32)
         if x.ndim == 1:
             x = x[:, None]
-        return self._native.process(np.ascontiguousarray(x))
+        x = np.ascontiguousarray(x)
+        if out is None:
+            return self._native.process(x)
+        if out.dtype != np.float32 or not out.flags.c_contiguous or not out.flags.writeable:
+            raise ValueError("out must be a writable C-contiguous float32 array")
+        self._native.process_into(x, out)
+        return out
 
     def run(self, signal: np.ndarray) -> np.ndarray:
         """A whole signal, (samples,) or (samples, inputs), through the convolver:
@@ -429,12 +441,17 @@ def play(
     state = {"frames": 0, "xruns": 0, "load": 0.0}
     done = threading.Event()
     scratch = np.zeros(block, np.float32)
+    # A processor that takes ``out`` writes each block into this one buffer, so the
+    # sound card's callback allocates nothing for it.
+    wet = np.zeros((block, convolver.outputs), np.float32)
+    into = "out" in inspect.signature(convolver.process).parameters
 
     def render(frames_in: np.ndarray, outdata: np.ndarray, status) -> None:
         began = time.perf_counter()
         if status:
             state["xruns"] += 1
-        outdata[:] = convolver.process(frames_in) * gain
+        processed = convolver.process(frames_in, out=wet) if into else convolver.process(frames_in)
+        np.multiply(processed, gain, out=outdata)
         state["load"] = max(state["load"], (time.perf_counter() - began) / budget)
         state["frames"] += block
         if (total is not None and state["frames"] >= total) or (stop and stop.is_set()):

@@ -118,6 +118,27 @@ def test_convolver_streams_and_resets() -> None:
     np.testing.assert_array_equal(convolver.process(x[:256]), first[:256])
 
 
+def test_convolver_writes_into_an_array_it_is_given() -> None:
+    rng = np.random.default_rng(7)
+    ir = rng.standard_normal((300, 2))
+    x = rng.standard_normal(256 * 3).astype(np.float32)
+    plain, into = Convolver(ir, 256), Convolver(ir, 256)
+    out = np.empty((256, 2), np.float32)
+    for b in x.reshape(3, 256):
+        assert into.process(b, out=out) is out
+        np.testing.assert_array_equal(out, plain.process(b))
+    read_only = np.empty((256, 2), np.float32)
+    read_only.flags.writeable = False
+    for bad in (
+        np.empty((256, 2)),
+        np.empty((2, 256), np.float32).T,
+        read_only,
+        np.empty((128, 2), np.float32),
+    ):
+        with pytest.raises(ValueError, match="out"):
+            into.process(x[:256], out=bad)
+
+
 def test_convolver_rejects_bad_settings() -> None:
     from acoustic_spaces import _native
 
