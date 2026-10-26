@@ -1301,6 +1301,19 @@ def test_moving_air_stays_on_the_cpu(monkeypatch) -> None:
         assert np.array_equal(a.signals, b.signals)
 
 
+@pytest.mark.parametrize("wind", ["effective", "moving"])
+def test_a_grid_too_big_is_refused_before_its_weather_is_made(monkeypatch, wind) -> None:
+    from acoustic_spaces.engine import wave as wave_module
+
+    made = []
+    for name in ("ratios", "moving_fields"):
+        monkeypatch.setattr(wave_module._Weather, name, lambda *_, name=name: made.append(name))
+    monkeypatch.setattr(wave_module, "MAX_CELLS", 1_000)
+    with pytest.raises(ValueError, match=r"cells \(at most 1,000\); lower max_band_hz"):
+        _windy_run(_windy_ground(15.0, wind), wind)
+    assert made == []
+
+
 def test_the_wave_stage_takes_its_wind_model() -> None:
     assert WaveStage().wind == "effective"
     assert _windy_ground(15.0, "moving").scene.simulation.wave.wind == "moving"
