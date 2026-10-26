@@ -1590,12 +1590,9 @@ class EdgeFade:
             total = np.zeros((len(unique), *pressure.shape[1:]), dtype=complex)
             np.add.at(total, inverse, pressure[tail])
             index = np.searchsorted(unique, path[head])
-            out[head, coherent:] += (
-                2.0
-                * np.real(
-                    total[index, coherent:] * np.conj(pressure[head, coherent:])
-                ).mean(axis=2)
-            )
+            out[head, coherent:] += 2.0 * np.real(
+                total[index, coherent:] * np.conj(pressure[head, coherent:])
+            ).mean(axis=2)
             return out
         head = head[np.argsort(path[head], kind="stable")]
         lo = np.searchsorted(path[head], path[tail], side="left")

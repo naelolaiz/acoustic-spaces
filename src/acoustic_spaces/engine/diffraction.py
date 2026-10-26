@@ -966,9 +966,7 @@ class EdgeDiffraction:
                 i, j = i[keep], j[keep]
                 if len(i):
                     pair = np.mean(np.real(own[i] * np.conj(own[j])), axis=2)
-                    np.add.at(
-                        cross, i, self._fade(distance[rows[i]] - distance[rows[j]]) * pair
-                    )
+                    np.add.at(cross, i, self._fade(distance[rows[i]] - distance[rows[j]]) * pair)
             else:
                 # A path many edges border (a curved surface): the waves' sum
                 # stands in for each pair, which keeps the work linear in them.

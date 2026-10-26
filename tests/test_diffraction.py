@@ -391,7 +391,8 @@ def test_coverage_maps_hear_round_corners() -> None:
     # Where the paths add in energy (here from 250 Hz up): the default takes 500 Hz
     # in pressure, where the fade's paths may cancel others behind the corner.
     room = _l_room(
-        [[2.0, 8.0, 1.5]], late={"method": "statistical"},
+        [[2.0, 8.0, 1.5]],
+        late={"method": "statistical"},
         early={"coherent_max_band_hz": 125},
     )
     settings = Coverage(spacing=2.0)
