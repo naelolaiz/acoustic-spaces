@@ -483,6 +483,12 @@ C80 0.6 dB higher; elsewhere within 3.2 % and 0.5 dB). Below that the octave hol
 third-octave bands whose values differ a lot, so averaging them is not the same analysis.
 G is left out because the responses have no free-field reference.
 
+The tables and plots in this section were made on 15 October 2026, before version
+3.0.0, and have not been run again since. The versions since then change the early part
+of the responses, so these are not this version's numbers. 4.0.0 could not run either
+room at its defaults (its early stage asked for 16.4 GiB at once in CR3 and 19.6 GiB in
+CR2); 4.0.1 runs both, CR3 peaking at 10.6 GB.
+
 BRAS gives two sets of absorption coefficients. The **fitted** set was adjusted until
 Eyring's formula gave the measured reverberation time; the scenes use it. The
 **initial** set is BRAS's estimate before that, from tables and measurements of the
