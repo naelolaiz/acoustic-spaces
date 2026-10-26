@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- A source or listener inside a closed solid (a column, a block, a thick wall) is
+  reported as such, and `simulate` refuses to run, where the solid's inside became a
+  room of its own: a listener inside a 1 m³ block on the floor of a 3 m room made the
+  volume 27 m³ instead of 26, and the run only warned that the listener was in another
+  room than the source. Such a space still holds air when a surface that lets sound
+  through joins it to a room (a booth with glass walls). `inspect` marks the position
+  `IN A SOLID`. When no source or listener stands in the model's rooms (walls drawn as
+  a closed shell inside another), the spaces they stand in are the rooms, as before.
+- A material with `transmission: 0` lets nothing through when the rooms are found
+  either: in walls drawn as a shell, a room joined to the source's only by such a wall
+  held air too (rooms of 48 and 72 m³ gave 120 m³ instead of 48).
+- Known issue, documented: with vector-based scattering (the default) the late part
+  carries the specular share of the first orders with more energy than the exact paths
+  (a quarter more for orders 1 to 3 near the middle of a small box), so the total depends
+  a little on the early order: within 0.04 dB of exact paths up to order 9 at the
+  default `early.max_order: 3`, 0.15 to 0.2 dB higher with `max_order: 0`. Random
+  scattering keeps within 0.03 dB.
+
 ## 4.0.1
 
 Behind the `archway`'s wall, where the reflection off the arch's jamb appears, the level

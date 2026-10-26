@@ -309,9 +309,13 @@ assignments:
 - The rooms are found from the faces: every space the faces close off on all sides is
   one, whichever way the normals point. The space inside a thick wall or a column, with
   rooms all round it, is solid, as is the inside of a closed shell standing on the floor
-  or in a corner, its faces lying on the room's; it is air when a source or listener
-  stands in it, and so is any space it opens into through surfaces that let sound
-  through. The faces between two rooms have a room on both sides and reflect and absorb
+  or in a corner, its faces lying on the room's. Such a solid holds air when a source or
+  listener stands in it and a surface that lets sound through joins it to a room (a
+  booth with glass walls), and so does any space it opens into that way; a source or
+  listener inside any other solid is reported as inside a closed solid, and `simulate`
+  refuses to run. When none stands in the model's rooms (walls drawn as a closed shell
+  inside another), the spaces they stand in are the rooms. A material with
+  `transmission: 0` lets nothing through. The faces between two rooms have a room on both sides and reflect and absorb
   in both. `inspect` lists the rooms ("closed, 2 rooms of 48.00, 72.00 m3"), the editor
   too, and the volume is theirs together. When the sources and listeners stand in air
   that the model's rooms do not include (walls drawn as a closed shell inside another),

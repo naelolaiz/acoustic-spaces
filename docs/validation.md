@@ -2818,6 +2818,20 @@ Results:
   sound changes by 0.014 dB or less. The echograms, and the parameters `simulate`
   prints and writes from them, are not affected; the parameters `analyze` takes from
   the WAV files are.
+- **The early order with vector-based scattering.** Vector-based scattering (the
+  default) sends each reflection along the sum of its specular direction and a Lambert
+  direction, which leans towards the wall's normal, so the late part carries the
+  specular share of the first orders along other paths than the exact ones, and with
+  more energy at the listener: in a 4 x 3.5 x 3 m box (absorption 0.15, scattering
+  0.3), a quarter more for orders 1 to 3 near the middle of the room, and 4 to 53 % more
+  over four positions and scattering from 0.1 to 0.6. The early part replaces those
+  orders with the exact paths, so the total depends a little on how many it takes:
+  with the default `early.max_order: 3` it is within 0.04 dB of taking orders 1 to 9,
+  and with `max_order: 0` 0.15 to 0.2 dB higher (from 250 Hz up). Random scattering
+  keeps the specular share on the specular paths: within 0.03 dB either way
+  (`tests/test_scattering.py`). A lobe centred on the specular direction would remove
+  this, but changes the late part's decay, which the default was chosen to match in
+  the BRAS rooms.
 - **Several rooms: the detector and the mixing time.** The stochastic tracer's detector
   radius (unless `late.receiver_radius` is set) and the statistical method's mixing
   time, where its early part ends, come from the volume of all the rooms together
@@ -2830,17 +2844,6 @@ Results:
 
 Models:
 
-- **A source or listener inside a closed solid**, such as a pillar modelled as a closed
-  box, is not reported as such. The solid's inside becomes a room of its own and counts
-  in `volume_m3`, and the run warns at most that the listener is in another room than
-  the source: a listener inside a 0.5 m³ pillar in a room of 71.5 m³ gives that warning
-  and a volume of 72.0 m³. The faces alone can't tell such a solid from a room inside
-  a model with thick walls, which is why rooms are taken from where the sources and
-  listeners are.
-- **`transmission: 0`** counts as a surface that lets sound through when the rooms are
-  found, though no sound goes through it: in a model with thick walls, a room joined
-  to the source's only by such a surface becomes air too (two rooms of 48 and 72 m³
-  give 120 m³ instead of 48).
 - **Collada polygons with holes** (`<ph>`) are read with their holes filled.
 
 Files and runs:
