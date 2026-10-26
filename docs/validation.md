@@ -729,13 +729,13 @@ With `first_order` the level drops from the path over one corner to nothing.
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
-sight, takes 62 ms per source and listener on four cores without diffraction (23
-paths), 680 ms with `first_order` (995 paths) and 820 ms with `second_order` (1,010
-paths), about half of what 4.0.0 takes on the same computer. The terms that make the
-other specular paths fade at the edges (next section) take about 610 ms of that with
-`first_order` and give most of the paths, as each term is a path over its edge, and so
-is each product of terms: without them the early stage takes 73 ms with `first_order`
-(71 paths) and 170 ms with `second_order` (86 paths).
+sight, takes 55 ms per source and listener on four cores without diffraction (23
+paths), 650 ms with `first_order` (995 paths) and 710 ms with `second_order` (1,010
+paths), the medians of nine runs; on the same computer 4.0.0 takes about 1.0 and
+1.1 s. The terms that make the other specular paths fade at the edges (next section)
+take about 580 ms of that with `first_order` and give most of the paths, as each term
+is a path over its edge, and so is each product of terms: without them the early stage
+takes 70 ms with `first_order` (71 paths) and 135 ms with `second_order` (86 paths).
 
 ## Reflections that fade at edges against the exact solution
 
@@ -815,8 +815,8 @@ dB:
 
 | largest step (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| with the fade | 0.07 | 0.09 | 0.02 | 0.03 | 0.04 | 0.05 | 0.07 | 0.13 |
-| without | 3.01 | 3.76 | 2.39 | 2.52 | 2.64 | 2.73 | 2.78 | 2.83 |
+| with the fade | 0.06 | 0.10 | 0.02 | 0.03 | 0.04 | 0.05 | 0.07 | 0.13 |
+| without | 3.03 | 3.72 | 2.38 | 2.52 | 2.64 | 2.73 | 2.78 | 2.83 |
 
 Walking these lines found faults that made steps of 0.2 to 2.5 dB, now fixed: the
 cross terms of the terms with their paths went to other paths, as the edge diffraction
@@ -847,15 +847,15 @@ after it on the other (perpendicular planes, one image), and the early stage's r
 found only one of the two orders, which the fade took as the only one: it now tries
 every order of reflections off perpendicular planes.
 
-The largest steps left stand out from their neighbours' by at most 0.07 dB, all at 63
+The largest steps left stand out from their neighbours' by at most 0.08 dB, all at 63
 and 125 Hz; from 250 Hz up by at most 0.01 dB, where in 4.0.0 they stood out by up to
 0.10 dB at 500 Hz to 1 kHz as the listener crossed the plane of wall_3 (y = 8 m). The
-largest, 0.07 dB at 125 Hz (y = 13.33 m on x = 5.5 m), and one of 0.04 dB at 63 Hz
+largest, 0.08 dB at 125 Hz (y = 13.33 m on x = 5.5 m), and one of 0.03 dB at 63 Hz
 (9.81 m on x = 4 m) come from a path that the corner stops on one leg while another of
 its reflection points slides past the end of its face into a corner of the room: the
 path is left out there, though its path over the corner still reflects on the face. One
 of 0.02 dB at 125 Hz (12.99 m on x = 3 m) is a leg that takes the corner's term on the
-lit side on one side of the step and not on the other; the others, of up to 0.03 dB,
+lit side on one side of the step and not on the other; the others, of up to 0.035 dB,
 are not traced.
 
 Where the edge diffraction already bends every path the early stage follows
@@ -941,15 +941,16 @@ would also be the better one here is not checked.
   edge explains each run of the events that stop it, or two edges explain them between
   them, in at most two runs. Elsewhere it is left out with its terms, as where one of
   its reflection points slides into a corner of the room while the path over the edge
-  still reflects on the face, which makes the steps of up to 0.07 dB left round the
+  still reflects on the face, which makes the steps of up to 0.08 dB left round the
   gallery's corner (see above). The edge diffraction's own paths over an edge with a
   reflection before or after it stop where that reflection leaves its face, which the
   fade makes up for where it follows the path; without the fade the street's garden
   steps by 0.60 dB at 125 Hz there.
 - **Corners of edges.** A term stops where the point it diffracts at leaves the end of
   its edge, as the UTD has no terms for the corners of edges, unless that end lies in a
-  plane the path reflects off next to the event; the edge diffraction's own paths stop
-  there alike. Along the street the paths over the barrier's top make steps of up to
+  plane the path reflects off next to the event, where the edge goes on as its image in
+  the plane (for a leg that stops a path, the image's term is found on the leg on the
+  other side of the reflection); the edge diffraction's own paths stop there alike. Along the street the paths over the barrier's top make steps of up to
   1.42 dB in one band and 0.35 dB(A) where they reach its ends (see above), the edge
   diffraction's own up to 1.09 dB without the fade.
 - **Terms that cancel, in the bands that add in energy.** Indoors paths add in energy
@@ -968,20 +969,28 @@ would also be the better one here is not checked.
   and where its pieces' cross terms take more than it has, the rest comes off them in
   proportion. Walking the `archway`'s listener behind the wall 1 cm at a time
   (x = 7.6 m, y = 5.3 to 7.8 m), where the reflection off the arch's jamb, 40 cm deep,
-  appears, the level steps by at most 0.11 dB from 250 Hz to 1 kHz, between y = 6.32
-  and 6.33 m, where it steps at 63 and 125 Hz too and, with every band in pressure
-  (`coherent_max_band_hz: 8000`), by 0.32 dB at 250 Hz; and by
-  at most 0.16 dB from 2 kHz up. In 4.0.0, where the cross terms between pairs of terms
-  could take more than the terms carried and the sum stopped at zero, it stepped by
-  1.37 dB at 500 Hz and 1.06 dB at 250 Hz at y = 6.14 m and by 0.92 dB at 250 Hz at
-  7.33 m, and by up to 4.4 dB before the terms of one event took their cross terms with
-  each other. The edge diffraction's own paths, without the fade, step there
-  by up to 2.15 dB (125 Hz, in pressure) and 1.88 dB from 250 Hz up. Averaged over the
-  walk, the level is 0.5, 1.0 and 0.7 dB above that with every band in pressure at 250,
-  500 and 1000 Hz (4.0.0: 0.1, 1.6 and 0.9 dB) and 0.1 to 0.4 dB below it from 2 kHz
-  up: not traced. Along the same walk the level also steps by 0.59 dB at 63 Hz
-  (y = 5.40 to 5.41 m) and 0.52 dB at 125 Hz (6.32 to 6.33 m), where the terms of
-  third-order paths stop at once, as it does with every band in pressure: not traced.
+  appears, the level steps by at most 0.08 dB from 250 Hz to 1 kHz, between y = 5.39
+  and 5.40 m (see the next item), and by at most 0.16 dB from 2 kHz up. In 4.0.0, where
+  the cross terms between pairs of terms could take more than the terms carried and the
+  sum stopped at zero, it stepped by 1.37 dB at 500 Hz and 1.06 dB at 250 Hz at
+  y = 6.14 m and by 0.92 dB at 250 Hz at 7.33 m, and by up to 4.4 dB before the terms
+  of one event took their cross terms with each other. The edge diffraction's own
+  paths, without the fade, step there by up to 1.57 dB at 63 Hz and 1.88 dB from 250 Hz
+  up. Averaged over the walk, the level is 0.4, 1.1 and 0.7 dB above that with every
+  band in pressure (`coherent_max_band_hz: 8000`) at 250, 500 and 1000 Hz (4.0.0: 0.1,
+  1.6 and 0.9 dB) and 0.1 to 0.4 dB below it from 2 kHz up: not traced.
+- **Cut off by a thick end.** Behind the `archway`'s wall the level steps by 0.57 dB at
+  63 Hz and 0.41 dB at 125 Hz between y = 5.39 and 5.40 m, and by 0.08 dB or less from
+  250 Hz up, as it does with every band in pressure. Reflections that the end of the
+  arch's jamb cuts off are followed while the leg they are cut off on hits the end's
+  face, and left out once it hits the jamb's face on the far side, 40 cm on, which is a
+  face of the end's other corner and not of the edge whose shadow they are in. Letting
+  that other corner explain them removed the step but made one of 1.75 dB at y = 5.90 m,
+  where a reflection point of one of those paths also leaves its face and the path,
+  stopped at two events, is left out at once; so it is not done. The other steps along
+  the walk, of up to 0.24 dB at 63 and 125 Hz and 0.07 dB from 250 Hz up, are there in
+  pressure too; at y = 6.83 to 6.84 m and 7.00 to 7.01 m, terms of cut-off second- and
+  third-order reflections come or go, and why is not traced.
 - **Products of terms.** The terms of a path's events multiply, as the path must get
   past each in turn, an approximation for terms at different edges. Each product is a
   path that arrives later by the detours of all its terms, an approximation too for
@@ -2958,7 +2967,6 @@ python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
 python validation/edge_diffraction.py --json diffraction.json
 python validation/edge_fade.py --json edge_fade.json
-python validation/archway_ab.py --json archway_ab.json
 python validation/ground_reflection.py --wave --parabolic --extended --json ground.json
 python validation/outdoor_propagation.py --json outdoor.json --plots docs/validation
 python validation/outdoor_propagation.py --turbulence moderate

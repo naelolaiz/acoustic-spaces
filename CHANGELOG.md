@@ -9,26 +9,51 @@
   the dark side of the boundary, where that wave is gone, by the UTD's share) and is
   part of its event's diffracted wave by the rest, and a wave's energy is that of its
   pieces' pressures added up and averaged over the band, never below nothing. This
-  replaces the cross terms between pairs of terms, which could take more than the
-  terms carried, after which the sum stopped at zero. Behind the `archway`'s wall,
-  where the reflection off the arch's jamb appears, the level no longer steps by
-  1.37 dB at 500 Hz and 1.06 dB at 250 Hz: walking 1 cm at a time it steps by at most
-  0.11 dB from 250 Hz to 1 kHz. Of the examples, five change: the early level from
-  250 Hz up by up to 0.98 dB in `archway`, 0.28 dB in `orchestra`, 0.24 dB in
-  `concert_hall`, 0.08 dB in `leaky_classroom` and 0.06 dB in `gallery`, and at 63 and
-  125 Hz by up to 0.07 dB, where paths near the floor under which paths are left out
-  come in or go (in the archway a path 40 dB down); outdoor scenes are unchanged. Over
-  two edges with the waves in energy the level is closer to the exact solution at low
-  frequencies (two screens 1 m apart: 1.86 dB low at 63 Hz instead of 2.74 dB) and
-  within 0.44 dB of it from 500 Hz up (4.0.0: 0.75 dB), and the early stage of
-  the alcove hall in `validation/edge_diffraction.py` takes about half the time (680 ms
-  per source and listener with `first_order` instead of about 1.5 s).
+  replaces the cross terms between pairs of terms, which could take more than the terms
+  carried, after which the sum stopped at zero. Behind the `archway`'s wall, where the
+  reflection off the arch's jamb appears, the level no longer steps by 1.37 dB at 500 Hz
+  and 1.06 dB at 250 Hz: walking 1 cm at a time it steps by at most 0.11 dB from 250 Hz
+  to 1 kHz (0.08 dB with the edge's image, below). Of the examples, five change: the
+  early level from 250 Hz up by up to 0.98 dB in `archway`, 0.28 dB in `orchestra`,
+  0.24 dB in `concert_hall`, 0.08 dB in `leaky_classroom` and 0.06 dB in `gallery`, and
+  at 63 and 125 Hz by up to 0.07 dB, where paths near the floor under which paths are
+  left out come in or go (in the archway a path 40 dB down); outdoor scenes are
+  unchanged. Over two edges with the waves in energy the level is closer to the exact
+  solution at low frequencies (two screens 1 m apart: 1.86 dB low at 63 Hz instead of
+  2.74 dB) and within 0.44 dB of it from 500 Hz up (4.0.0: 0.75 dB), and the early stage
+  of the alcove hall in `validation/edge_diffraction.py` takes about a third less time
+  (650 ms per source and listener with `first_order` instead of about 1.0 s).
+- A path that an edge cuts off on one leg, where the path over the edge would pass below
+  the edge's foot, takes the term of the edge's image when the edge stands on the plane
+  the path reflects off next to that leg: the path over the image is the path over the
+  edge on the leg on the other side of the reflection, and its term is the cut-off
+  leg's. The term ended at the foot of the edge instead: behind the `archway`'s wall the
+  level stepped by 0.63 dB at 125 Hz and 0.11 dB from 250 Hz to 1 kHz between y = 6.32
+  and 6.33 m, where a third-order reflection that the jamb cuts off reaches the jamb's
+  corner just above the floor; it now changes there by 0.04 dB or less, as over the
+  centimetres either side. Only the archway changes, by up to 0.29 dB at 63 Hz, 0.62 dB
+  at 125 Hz and 0.13 dB from 250 Hz up; the exact solutions of the fade in
+  `validation/edge_fade.py` are matched as before.
+- In the bands where the early paths add in pressure, a face's reflection takes its
+  phase from an admittance fitted to the face's absorption in every band, as the ground
+  outdoors already did, instead of in those bands alone, so the level in a band no
+  longer depends on how many bands add in pressure (`coherent_max_band_hz`). Behind the
+  `archway`'s wall the level at 125 Hz is -27.29 dB with the default and -27.28 dB with
+  every band in pressure, where 4.0.0 gave -27.17 and -27.91 dB; walking along the wall
+  the two stay within 0.08 dB at 63 and 125 Hz, where paths near the floor under which
+  paths are left out come in or go. Against porous layers of known impedance
+  (`tests/test_coherent.py`), the phases at 63 and 125 Hz from a fit to every band are
+  less than half as far off as those from a fit to the two bands alone. The early level
+  at 63 and 125 Hz changes in the rooms: by up to 2.8 and 3.8 dB in `orchestra`, 2 to
+  2.7 dB at 125 Hz in `apartment`, `archway`, `concert_hall`, `listening_room` and
+  `studio`, and less in the others; the parameters of BRAS CR2 change by 0.1 JND or
+  less. Outdoor scenes, the bands the wave solver takes (`room_modes`) and the bands
+  from 250 Hz up are unchanged. The fit takes up to about 0.5 s per material, once per
+  process.
 - A room with a curved surface of many facets, whose events at the edges have hundreds
   of thousands of terms, no longer runs out of memory in the early stage: the BRAS CR3
-  room at its defaults peaks at 10.4 GB, where 4.0.0 asked for 16.4 GiB at once.
-- `validation/archway_ab.py` measures the archway's jamb steps, 1 cm and 1 mm apart at
-  both edges of the jamb, with `coherent_max_band_hz` 125, 250 and 500, and the ISO
-  parameters with each (`--threads`, `--late-device`, `--no-simulate`).
+  room at its defaults peaks at 10.6 GB, where 4.0.0 asked for 16.4 GiB at once, and CR2
+  runs, where 4.0.0 asked for 19.6 GiB.
 
 ## 4.0.0
 

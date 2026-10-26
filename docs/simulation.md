@@ -302,7 +302,7 @@ part of its event's diffracted wave, whose terms add up as one wave, so the two 
 a narrow face nearly cancel as they do in pressure. A wave's energy is that of its
 pieces added up in pressure and averaged over the band, never below nothing. Behind the
 `archway`'s wall, where the reflection off the arch's jamb, 40 cm deep, appears, the
-level steps by at most 0.11 dB from 250 Hz to 1 kHz (1.4 dB in 4.0.0). The
+level steps by at most 0.08 dB from 250 Hz to 1 kHz (1.4 dB in 4.0.0). The
 [known issues](validation.md#known-issues-of-the-edge-fade) list these, with what is
 checked and what is not. The fade comes with any `diffraction` but `none`. The late
 part is unchanged, since its scattered rays already find their way round corners.
@@ -310,9 +310,9 @@ part is unchanged, since its scattered rays already find their way round corners
 `view --paths` and the Blender export draw diffracted paths in their own colour, the
 response's `early.diffracted` marks them, and `simulate` reports how many there are. The
 cost grows with the number of edges and of the paths near them, as each term of the
-fade is a path over its edge: in a hall with 16 edges, the early stage takes 680 ms per
-source and listener on four cores with `first_order` (73 ms without the fade's terms),
-820 ms with `second_order`, which looks at pairs of edges (170 ms), and 62 ms without
+fade is a path over its edge: in a hall with 16 edges, the early stage takes 650 ms per
+source and listener on four cores with `first_order` (70 ms without the fade's terms),
+710 ms with `second_order`, which looks at pairs of edges (135 ms), and 55 ms without
 diffraction.
 
 Paths that reflect before or after an edge pair every edge with every plane the source
@@ -344,9 +344,11 @@ simulation:
 
 - Each reflection turns the phase as a locally reacting surface with the material's
   absorption does: R = (cos θ - Y) / (cos θ + Y) at the angle of incidence θ, with the
-  admittance Y fitted as for the wave solver. A hard surface reflects in phase at every
-  angle; an absorbing one turns the phase of sound that grazes it, by half a turn at
-  grazing incidence. Above those bands each path keeps the phase it has at their top,
+  admittance Y fitted to the material's absorption in every band, as the wave solver
+  fits it but without its grid, so the phase in a band does not depend on how many
+  bands add in pressure. A hard surface reflects in phase at every angle; an absorbing
+  one turns the phase of sound that grazes it, by half a turn at grazing incidence.
+  Above those bands each path keeps the phase it has at their top,
   so the bands join without a step. A surface whose material has an impedance (a
   ground's) reflects with its spherical wave's factor instead, in every band (see
   [Ground impedance](outdoor.md#ground-impedance)).
