@@ -357,7 +357,7 @@ def test_statistical_and_stochastic_methods_agree(scattering) -> None:
     for key, response in results["stochastic_ray_tracing"].responses.items():
         statistical = results["statistical"][key]
         a, b = response.parameters(), statistical.parameters()
-        np.testing.assert_allclose(b.g, a.g, atol=1.0)
+        np.testing.assert_allclose(b.g, a.g, atol=0.7)
         np.testing.assert_allclose(b.c80, a.c80, atol=2.5)
         assert np.all(statistical.late >= 0)
 

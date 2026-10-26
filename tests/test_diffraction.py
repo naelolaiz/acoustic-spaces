@@ -235,9 +235,7 @@ def test_levels_are_continuous_across_the_shadow_boundary(monkeypatch) -> None:
     room = _l_room(listeners)
     # The direct sound and the floor and ceiling reflections all end on the boundary.
     plain = _levels(room, max_order=1, diffraction="none")
-    # From 1 kHz up the paths add in energy and the reflections jump; the bands in
-    # pressure (up to 500 Hz) interfere instead.
-    assert np.all((plain[1] - plain[3])[4:] > 5.0)
+    assert np.all(plain[1] - plain[3] > 5.0)
     # With "direct" the edge fade takes the reflections round the corner.
     for mode in ("direct", "first_order"):
         step = np.abs(np.diff(_levels(room, max_order=1, diffraction=mode), axis=0))
@@ -380,7 +378,7 @@ def test_simulate_and_settings() -> None:
     assert not plain.early.diffracted.any() and "edges" not in simulate(off).details["s"]
     # Where the paths add in energy (in pressure they may cancel).
     count = response.coherent_bands
-    assert count == 4 and np.all(response.parameters().g[count:] > plain.parameters().g[count:])
+    assert count == 2 and np.all(response.parameters().g[count:] > plain.parameters().g[count:])
     assert np.all(np.isfinite(response.impulse_response(16_000)))
 
 
@@ -388,13 +386,7 @@ def test_coverage_maps_hear_round_corners() -> None:
     from acoustic_spaces.engine import coverage_map
     from acoustic_spaces.scene import Coverage
 
-    # Where the paths add in energy (here from 250 Hz up): the default takes 500 Hz
-    # in pressure, where the fade's paths may cancel others behind the corner.
-    room = _l_room(
-        [[2.0, 8.0, 1.5]],
-        late={"method": "statistical"},
-        early={"coherent_max_band_hz": 125},
-    )
+    room = _l_room([[2.0, 8.0, 1.5]], late={"method": "statistical"})
     settings = Coverage(spacing=2.0)
     bent = coverage_map(room, settings=settings)
     off = room.scene.simulation.model_copy(deep=True)

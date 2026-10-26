@@ -156,19 +156,14 @@ def test_delay_and_gain_shift_and_scale_the_response() -> None:
     np.testing.assert_allclose(fed.early.delay_s, plain.early.delay_s + 0.0125)
     np.testing.assert_allclose(fed.late.sum(axis=1), plain.late.sum(axis=1) * gain)
     a, b = plain.parameters(), fed.parameters()
-    # A delayed copy only agrees in the bands that add in energy: up to 500 Hz the
-    # paths add in pressure, and the delay turns their phases.
-    energy = slice(plain.coherent_bands, None)
     for name in ("g", "t30", "edt", "c80", "d50"):
-        np.testing.assert_allclose(getattr(b, name)[energy], getattr(a, name)[energy], atol=0.02)
+        np.testing.assert_allclose(getattr(b, name), getattr(a, name), atol=0.02)
     np.testing.assert_allclose(b.ts, a.ts, atol=1e-3)
     ir, reference = fed.impulse_response(FS), plain.impulse_response(FS)
     lag = int(np.argmax(np.abs(ir))) - int(np.argmax(np.abs(reference)))
     assert lag == 600  # 12.5 ms at 48 kHz
     level = fed.levels(_shoebox(gain_db=6.0, eq_db=eq).sources[0].power_db(), b)
-    np.testing.assert_allclose(
-        (level - plain.levels(94.0, a))[energy], np.add(6.0, eq)[energy], atol=0.02
-    )
+    np.testing.assert_allclose(level - plain.levels(94.0, a), np.add(6.0, eq), atol=0.02)
 
 
 def test_delay_and_gain_of_the_wave_bands() -> None:

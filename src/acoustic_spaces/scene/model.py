@@ -2293,14 +2293,13 @@ class EarlyStage(_Model):
         ),
     )
     coherent_max_band_hz: Literal[63, 125, 250, 500, 1000, 2000, 4000, 8000] | None = Field(
-        default=500,
+        default=125,
         description=(
             "the highest octave band in which the early paths add in pressure, with the "
             "phase of every reflection and of the sound bent round edges, as they do at "
-            "low frequencies, rather than in energy; null for none. In a room up to "
-            "500 Hz, whose reflections off narrow faces cancel in pressure; above that "
-            "only outdoors, where every band is the default. The wave solver's bands "
-            "take their place when it runs up to this band or higher"
+            "low frequencies, rather than in energy; null for none. Above 500 Hz only "
+            "outdoors, where every band is the default. The wave solver's bands take "
+            "their place when it runs up to this band or higher"
         ),
     )
 

@@ -46,8 +46,8 @@ listeners:
     position: [7.6, 6.8, 1.2]
     orientation: {yaw: -30}
 simulation:
-  # The default coherent_max_band_hz: 500 keeps the jamb's walk within 0.06/0.10 dB at
-  # 250/500 Hz; at 125 Hz it steps by up to 1.4 dB (validation/archway_ab.py).
+  # The jamb's 1.4 dB step at 250/500 Hz with the default coherent_max_band_hz: 125 is
+  # removed by `coherent_max_band_hz: 500` (0.06/0.10 dB; validation/archway_ab.py).
   early: {method: ray_tracing, max_order: 3, diffraction: second_order}
   late: {method: stochastic_ray_tracing}
   ir_length_s: 2.0

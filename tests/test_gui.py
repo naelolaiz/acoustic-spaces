@@ -643,7 +643,7 @@ def test_selection_and_forms(window) -> None:
     page.diffraction_reflections.setCurrentText("one side")
     page.diffraction.setCurrentText("direct")
     assert window.document.scene.simulation.early.diffraction_reflections == "one_side"
-    assert page.coherent.currentText() == "500"
+    assert page.coherent.currentText() == "125"
     page.coherent.setCurrentText("none")
     assert window.document.scene.simulation.early.coherent_max_band_hz is None
     page.coherent.setCurrentText("250")
@@ -1104,7 +1104,7 @@ def test_outdoor_geometry_form(window, monkeypatch) -> None:
     assert window.document.scene.default_material == "asphalt"
     assert page.ground_group.isHidden()
     # Outdoors the early paths were in pressure up to 8 kHz; a room takes its default.
-    assert window.document.scene.simulation.early.coherent_max_band_hz == 500
+    assert window.document.scene.simulation.early.coherent_max_band_hz == 125
 
 
 def test_vegetation_table(window) -> None:

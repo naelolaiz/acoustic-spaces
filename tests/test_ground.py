@@ -307,7 +307,7 @@ def test_outdoors_the_early_paths_add_in_pressure_in_every_band() -> None:
     given = ground_scene({"impedance": "grass"}, coherent=125)
     assert given.simulation.early.coherent_max_band_hz == 125
     room = Scene.from_yaml(SHOEBOX).to_data()
-    assert Scene.model_validate(room).simulation.early.coherent_max_band_hz == 500
+    assert Scene.model_validate(room).simulation.early.coherent_max_band_hz == 125
     room["simulation"]["early"]["coherent_max_band_hz"] = 1000
     with pytest.raises(ValidationError, match="up to 500 Hz in a room"):
         Scene.model_validate(room)
