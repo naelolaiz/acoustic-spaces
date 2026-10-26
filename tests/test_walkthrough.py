@@ -327,6 +327,11 @@ def test_save_movement_writes_a_file_per_listener(tmp_path: Path) -> None:
     assert np.abs(read_wav(paths["a seat"])[0]).max() == pytest.approx(0.5 * 10 ** (-1 / 20), 1e-5)
     paths, gain = save_movement({"w": rendered["w"]}, tmp_path / "one.wav", 1000)
     assert paths == {"w": tmp_path / "one.wav"} and gain == 1.0
+    # Names that would give one file, also where a file system ignores case.
+    alike = {"A/B": rendered["w"], "A_B": rendered["a seat"], "a_b": rendered["w"]}
+    paths, _ = save_movement(alike, tmp_path / "alike" / "walk.wav", 1000)
+    assert [p.name for p in paths.values()] == ["walk_A_B.wav", "walk_A_B-2.wav", "walk_a_b-3.wav"]
+    assert len(list((tmp_path / "alike").iterdir())) == 3
     with pytest.raises(ValueError, match="nothing rendered"):
         save_movement({}, tmp_path / "none.wav", 1000)
 
