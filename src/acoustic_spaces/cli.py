@@ -358,12 +358,14 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
             print(note)
 
     print("\npositions")
-    for kind, items, inside in (
-        ("source", scene.sources, room.sources_inside),
-        ("listener", scene.listeners, room.listeners_inside),
+    for kind, items, inside, solid in (
+        ("source", scene.sources, room.sources_inside, room.sources_in_solid),
+        ("listener", scene.listeners, room.listeners_inside, room.listeners_in_solid),
     ):
         for k, item in enumerate(items):
             where = "" if inside is None else ("  inside" if inside[k] else "  OUTSIDE")
+            if inside is not None and not inside[k] and solid is not None and solid[k]:
+                where = "  IN A SOLID"
             x, y, z = item.position
             print(
                 f"  {kind:<9}{item.name:<{width}}({x:.2f}, {y:.2f}, {z:.2f}){where}"
