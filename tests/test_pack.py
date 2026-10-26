@@ -163,6 +163,26 @@ def test_folders_of_the_same_name_stay_apart(tmp_path: Path) -> None:
     ]
 
 
+def test_a_pack_that_fails_keeps_the_earlier_one(tmp_path: Path, monkeypatch) -> None:
+    scene = Scene.from_yaml(EXAMPLES / "material_libraries" / "scene.yaml")
+    out = tmp_path / "seminar.zip"
+    out.write_bytes(b"an earlier pack")
+
+    def disk_full(path: Path) -> str:
+        raise OSError(28, "No space left on device")
+
+    # Failing while it writes, after every file the scene names was found.
+    monkeypatch.setattr("acoustic_spaces.pack._sha256", disk_full)
+    with pytest.raises(OSError, match="No space left"):
+        pack(scene, out)
+    assert out.read_bytes() == b"an earlier pack"
+    assert list(tmp_path.iterdir()) == [out]
+    monkeypatch.undo()
+    pack(scene, out)
+    assert zipfile.is_zipfile(out)
+    assert list(tmp_path.iterdir()) == [out]
+
+
 def test_a_file_naming_one_outside_its_folder_cannot_be_packed(tmp_path: Path) -> None:
     path = _scattered_scene(tmp_path)
     column = tmp_path / "arrays" / "column.yaml"
