@@ -42,7 +42,6 @@ from __future__ import annotations
 
 import dataclasses
 import math
-import os
 import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
@@ -50,7 +49,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from acoustic_spaces.engine import parabolic, wide_angle
+from acoustic_spaces.engine import parabolic, run_size, wide_angle
 from acoustic_spaces.engine.coherent import ground_factors, reflection_phases
 from acoustic_spaces.engine.early import _EDGE_TOLERANCE, EarlyReflections, _face_at
 from acoustic_spaces.engine.model import TraceModel, _ground_faces, source_weights
@@ -186,7 +185,7 @@ class Refraction:
         self._profiles: dict[float, Profile] = {}
         self._admittances: dict[int, np.ndarray] = {}
         self._lock = threading.Lock()
-        self.threads = int(threads) or os.cpu_count() or 1
+        self.threads = run_size.worker_threads(int(threads))
         self.wide_angle = bool(wide_angle)
         self._starts: dict[tuple, float | None] = {}
         self.eddies = Eddies.of(model, self.c)

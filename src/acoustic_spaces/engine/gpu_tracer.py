@@ -2082,12 +2082,6 @@ def _uniform(values: dict) -> np.ndarray:
     return out
 
 
-def _fixed(words: np.ndarray) -> np.ndarray:
-    """64-bit fixed-point numbers (pairs of 32-bit words, low first) as floats."""
-    pairs = words.reshape(-1, 2).astype(np.float64)
-    return pairs[:, 0] + pairs[:, 1] * 4294967296.0
-
-
 def _atmosphere_rows(atmosphere, wind_direction) -> tuple[np.ndarray, np.ndarray] | None:
     """The atmosphere's rows (height, speed in still air, wind speed) and the way the
     wind blows, checked as the CPU checks them; None where the rays go straight."""
@@ -2566,15 +2560,21 @@ class GpuTracer:
             raise Unsupported(
                 f"a ray met more than {MAX_SPANS} volumes of vegetation at once on the GPU"
             )
-        words = np.frombuffer(device.queue.read_buffer(tallies, 0, 4 * family_at), np.uint32)
-        window = words[_COUNTERS:energy_at].reshape(windows, 2, 2)
-        ray_energy = _fixed(window[:, 0]) / settings["window_scale"]
-        reflections = _fixed(window[:, 1])
-        energy_out[:] = (_fixed(words[energy_at:directional_at]) / settings["scale"]).reshape(
-            energy_out.shape
-        )
-        directional_out[:] = (_fixed(words[directional_at:family_at]) / settings["scale"]).reshape(
-            directional_out.shape
+
+        def read(start: int, stop: int) -> np.ndarray:
+            # The 64-bit fixed-point sums between those words: one part at a time, each
+            # straight into its array, so no more is held than the part and the arrays.
+            if stop == start:
+                return np.zeros(0, np.uint64)
+            data = device.queue.read_buffer(tallies, 4 * start, 4 * (stop - start))
+            return np.frombuffer(data, "<u8")
+
+        window = read(_COUNTERS, energy_at).reshape(windows, 2)
+        ray_energy = window[:, 0] / settings["window_scale"]
+        reflections = window[:, 1].astype(np.float64)
+        np.divide(read(energy_at, directional_at), settings["scale"], out=energy_out.reshape(-1))
+        np.divide(
+            read(directional_at, family_at), settings["scale"], out=directional_out.reshape(-1)
         )
         return (
             energy_out,
@@ -2695,6 +2695,18 @@ def passes_sound(transmission, face_room, source_room) -> bool:
 def tracer(bvh) -> GpuTracer:
     """The GPU tracer of ``bvh``, made once per model."""
     return GpuTracer(bvh)
+
+
+def run_memory(rays: int, bands: int, results: float) -> float:
+    """Bytes a run of ``rays`` rays in ``bands`` bands takes on the GPU and off it, for
+    results (the energy and directional arrays, in 64-bit floats) of ``results`` bytes:
+    the results, the GPU's sums of them and one part of those read back at a time; the
+    rays' starts (``_native.ray_starts``), their copies for the GPU and a word per ray
+    for its family; and the GPU's rays in flight (at most ``_MOST_RAYS`` of
+    ``20 + 3 * bands`` words, twice). A GPU built into the processor takes its buffers
+    from the computer's memory."""
+    starts = 8.0 * rays * (3 + bands)
+    return 3.0 * results + 2.5 * starts + 4.0 * rays + 8.0 * _MOST_RAYS * (20 + 3 * bands)
 
 
 def trace_stochastic(
@@ -2824,4 +2836,12 @@ def trace_stochastic(
     return energy, directional, moments, escaped, ray_energy, reflections, traced
 
 
-__all__ = ["MAX_MEDIA", "MAX_SPANS", "GpuTracer", "Unsupported", "trace_stochastic", "tracer"]
+__all__ = [
+    "MAX_MEDIA",
+    "MAX_SPANS",
+    "GpuTracer",
+    "Unsupported",
+    "run_memory",
+    "trace_stochastic",
+    "tracer",
+]

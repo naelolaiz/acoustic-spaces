@@ -105,6 +105,10 @@ Simulation above; the module also has the parameters a map shows and the A-weigh
 .. automodule:: acoustic_spaces.engine.gpu
 ```
 
+```{eval-rst}
+.. automodule:: acoustic_spaces.engine.run_size
+```
+
 ## The late stage on a GPU
 
 ```{eval-rst}

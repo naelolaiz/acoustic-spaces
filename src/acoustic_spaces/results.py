@@ -17,7 +17,6 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
-import os
 import re
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -91,9 +90,11 @@ def write_results(
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
 
+    from acoustic_spaces.engine.run_size import worker_threads
+
     # The responses side by side, on the run's threads: each is rendered and read as it
     # would be alone, so the files and the report are the same as one after another.
-    threads = result.settings.performance.threads or os.cpu_count() or 1
+    threads = worker_threads(result.settings.performance.threads)
     workers = max(1, min(threads, len(result.responses)))
 
     def render(key) -> dict:

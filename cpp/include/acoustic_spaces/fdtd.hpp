@@ -276,7 +276,7 @@ public:
             branch_a_.push_back(a);
         }
         set_up_stencil();
-        threads_ = threads ? threads : std::max<std::size_t>(1, std::thread::hardware_concurrency());
+        threads_ = worker_threads(threads);
         const std::size_t n = nx * ny * nz;
         if (speed != nullptr) {
             scale_.resize(n);

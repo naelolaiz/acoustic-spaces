@@ -421,7 +421,31 @@ class Room:
         out.extend(self._near_arrays())
         if self.outdoor is not None:
             out.extend(self.scene.geometry.footprint_notes())
+        out.extend(self._run_size())
         return out
+
+    def _run_size(self) -> list[str]:
+        """Runs of the scene (a simulation, and a map where ``coverage`` is set) whose
+        late part would need over half of the computer's memory (see
+        :mod:`~acoustic_spaces.engine.run_size`)."""
+        from acoustic_spaces.engine import run_size
+        from acoustic_spaces.engine.coverage import map_size
+
+        sources, listeners = self._used("sources"), self._used("listeners")
+        if not sources:
+            return []
+        simulation = self.scene.simulation
+        threads = simulation.performance.threads
+        needs = []
+        if listeners:
+            needs.append(run_size.simulation_need(self, simulation, sources, listeners, threads))
+        if self.scene.coverage is not None:
+            try:
+                needs.append(map_size(self, self.scene.coverage, simulation, sources, threads))
+            except ValueError:
+                pass  # no surface to lay the map over: the map command says so
+        memory = run_size.machine_memory()
+        return [note for need in needs if (note := run_size.warning(need, memory)) is not None]
 
     def _near_arrays(self) -> list[str]:
         """Listeners too close to a coherent array for its far-field pattern."""

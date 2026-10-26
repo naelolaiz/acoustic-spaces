@@ -34,7 +34,6 @@ then vary from run to run within the noise of the ray count.
 from __future__ import annotations
 
 import math
-import os
 import threading
 import time
 from dataclasses import dataclass
@@ -42,7 +41,7 @@ from typing import Literal
 
 import numpy as np
 
-from acoustic_spaces.engine import gpu, tuning
+from acoustic_spaces.engine import gpu, run_size, tuning
 
 #: The settings of ``simulation.late.device``.
 Device = Literal["cpu", "gpu", "both", "auto"]
@@ -59,6 +58,9 @@ CPU_SHARE = 1.1
 #: per device (fewer and larger for the GPU, which works best on many rays at once).
 CPU_PARTS = 12
 GPU_PARTS = 4
+# The results of trace_stochastic that carry energy, which a part traced on the CPU
+# scales to the whole run: energy, directional, moments and ray_energy.
+_SCALED = (0, 1, 2, 4)
 
 _trial = True
 _lock = threading.Lock()
@@ -127,7 +129,7 @@ def _check_gpu(setting: str) -> None:
 
 
 def _cpu_threads(values: dict) -> int:
-    return int(values["threads"]) or os.cpu_count() or 1
+    return run_size.worker_threads(int(values["threads"]))
 
 
 def trial(values: dict) -> tuple[float, float]:
@@ -273,7 +275,10 @@ def _shared(plan: Plan, values: dict) -> tuple[tuple, Plan]:
     }
     cursor = [0]
     lock = threading.Lock()
-    parts: list[tuple[float, tuple]] = []
+    # The parts' results summed as each comes in (each scaled to the whole run), so the
+    # run holds the sums and the parts being traced, not every part.
+    totals: list = []
+    summing = threading.Lock()
     errors: list[BaseException] = []
     on_gpu = threading.Event()
     declined: list[str] = []
@@ -288,6 +293,18 @@ def _shared(plan: Plan, values: dict) -> tuple[tuple, Plan]:
             cursor[0] = hi = min(count, lo + sizes[device])
         return lo, hi
 
+    def add(scale: float, part: tuple) -> None:
+        part = list(part)
+        if scale != 1.0:
+            for i in _SCALED:
+                part[i] *= scale
+        with summing:
+            if not totals:
+                totals.extend(part)
+                return
+            for i, value in enumerate(part):
+                totals[i] += value
+
     def on_cpu(lo: int, hi: int, workers: int) -> None:
         m = hi - lo
         part = _native.trace_stochastic(
@@ -299,7 +316,7 @@ def _shared(plan: Plan, values: dict) -> tuple[tuple, Plan]:
                 "threads": workers,
             }
         )
-        parts.append((m / count, part))
+        add(m / count, part)
 
     def work(device: str) -> None:
         try:
@@ -320,7 +337,7 @@ def _shared(plan: Plan, values: dict) -> tuple[tuple, Plan]:
                     with lock:
                         left.append((lo, hi))
                     return
-                parts.append((1.0, part))
+                add(1.0, part)
                 on_gpu.set()
         except BaseException as error:  # noqa: BLE001 - handed to the caller below
             errors.append(error)
@@ -334,21 +351,16 @@ def _shared(plan: Plan, values: dict) -> tuple[tuple, Plan]:
     # What the GPU declined after the CPU had run out of parts.
     for lo, hi in left:
         on_cpu(lo, hi, threads)
-    scales = [scale for scale, _ in parts]
-    results = [part for _, part in parts]
-
-    def total_of(i: int, scaled: bool = True):
-        return sum((s if scaled else 1.0) * r[i] for s, r in zip(scales, results, strict=True))
-
     followed = Plan("cpu", reason=declined[0]) if declined and not on_gpu.is_set() else plan
+    energy, directional, moments, escaped, ray_energy, reflections, traced = totals
     return (
-        total_of(0),
-        total_of(1),
-        total_of(2),
-        int(total_of(3, scaled=False)),
-        total_of(4),
-        total_of(5, scaled=False),
-        int(total_of(6, scaled=False)),
+        energy,
+        directional,
+        moments,
+        int(escaped),
+        ray_energy,
+        reflections,
+        int(traced),
     ), followed
 
 
