@@ -378,19 +378,26 @@ Known issues found by the review of 25 October 2026 (see
 
 - [ ] Paths through three partitions or more: the late stage takes out only what the
   early stage followed.
-- [ ] Packs that keep an earlier one when writing fails, and result file names that
+- [x] Packs that keep an earlier one when writing fails, and result file names that
   can't be the same for two names.
-- [ ] Sources and listeners inside a closed solid reported, `transmission: 0` as a
-  surface that lets nothing through, vertices that no face uses dropped, and
-  coordinates that are not finite refused in every format.
-- [ ] G against a free-field response that starts at its first sample: silence before
-  it when it is split into bands.
+- [x] Vertices that no face uses dropped, coordinates that are not finite refused in
+  every format, and a solid standing on a surface (a block on the floor) found to be
+  solid from several of its faces.
+- [ ] Sources and listeners inside a closed solid reported, and `transmission: 0` as a
+  surface that lets nothing through.
+- [x] G against a free-field response that starts at its first sample: the free-field
+  reference keeps what its band filters spread before it.
+- [ ] The first milliseconds of a rendered response, where the band filters' spread
+  before the first sample is lost: filters that don't spread before an arrival.
+- [x] No path arriving before it leaves the source, and errors in the native code's
+  threads raised in Python.
 - [ ] The echogram's pairs of paths from 1 kHz up without adding energy where they
-  cancel, and errors in the native code's threads raised in Python.
-- [ ] Coefficients outside 0 to 1 refused, limits on the size of a run, the wave
-  solver's grid checked before the weather's fields and built once round an open
-  model, and the detector and the mixing time from the listener's room.
-- [ ] The real-time convolver with no allocation in the sound card's callback.
+  cancel.
+- [x] A warning for coefficients outside 0 to 1, and the wave solver's grid checked
+  before the weather's fields and the first one let go round an open model.
+- [ ] Limits on the size of a run, and the detector and the mixing time from the
+  listener's room.
+- [x] The real-time convolver writing each block into buffers made before playback starts.
 - [ ] Uncertainty: how much each parameter scatters over seeds, as a standard error.
 - [ ] CI: type checks, sanitizers for the native code and the tests' coverage.
 - [ ] Collada polygons with their holes.

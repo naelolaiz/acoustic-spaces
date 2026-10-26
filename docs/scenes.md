@@ -48,18 +48,20 @@ by colour, so give each material its own colour; a face painted differently on i
 sides takes its front's material; and some files do not read at all (the BRAS
 auditorium, for one). An OBJ export from SketchUp is then the way.
 
-Polygons are triangulated, duplicate vertices merged and degenerate faces dropped,
-and faces that meet along an edge are turned to agree with each other (each part of
-the model keeps the orientation most of its area has), so a few faces flipped by the
-exporter do not spoil the volume or the inside checks. Where a face's edge runs past
-the corners of faces on its other side (a T-junction, which SketchUp stitches with
-faces of zero area), the edge is split at those corners, so the model stays closed.
-A model with no faces left is refused. `validate` then reports surfaces without a
-material, sources or listeners outside the room and listeners within 1 cm of a source;
-it warns about models that are not closed (rays would escape) and assignments that
-match nothing. Normals may point either way: the room is the space the faces close off,
-found from the faces themselves (see [Walls, doors and openings](#walls-doors-and-openings)),
-and a panel standing in the room, with air on both sides, reflects and absorbs on both.
+Polygons are triangulated, duplicate vertices merged, degenerate faces and the vertices
+no face uses dropped, and faces that meet along an edge are turned to agree with each
+other (each part of the model keeps the orientation most of its area has), so a few
+faces flipped by the exporter do not spoil the volume or the inside checks. Where a
+face's edge runs past the corners of faces on its other side (a T-junction, which
+SketchUp stitches with faces of zero area), the edge is split at those corners, so the
+model stays closed. A model with no faces left is refused, as is one with coordinates
+that are not finite numbers or a face that names a vertex the file does not have.
+`validate` then reports surfaces without a material, sources or listeners outside the
+room and listeners within 1 cm of a source; it warns about models that are not closed
+(rays would escape) and assignments that match nothing. Normals may point either way:
+the room is the space the faces close off, found from the faces themselves (see
+[Walls, doors and openings](#walls-doors-and-openings)), and a panel standing in the
+room, with air on both sides, reflects and absorbs on both.
 
 ### Outdoors
 
@@ -306,12 +308,13 @@ assignments:
   values, preset or file absorbs what it lets through: an opening absorbs 1.
 - The rooms are found from the faces: every space the faces close off on all sides is
   one, whichever way the normals point. The space inside a thick wall or a column, with
-  rooms all round it, is solid; it is air when a source or listener stands in it, and
-  so is any space it opens into through surfaces that let sound through. The faces
-  between two rooms have a room on both sides and reflect and absorb in both.
-  `inspect` lists the rooms ("closed, 2 rooms of 48.00, 72.00 m3"), the editor too,
-  and the volume is theirs together. When the sources and listeners stand in air that
-  the model's rooms do not include (walls drawn as a closed shell inside another),
+  rooms all round it, is solid, as is the inside of a closed shell standing on the floor
+  or in a corner, its faces lying on the room's; it is air when a source or listener
+  stands in it, and so is any space it opens into through surfaces that let sound
+  through. The faces between two rooms have a room on both sides and reflect and absorb
+  in both. `inspect` lists the rooms ("closed, 2 rooms of 48.00, 72.00 m3"), the editor
+  too, and the volume is theirs together. When the sources and listeners stand in air
+  that the model's rooms do not include (walls drawn as a closed shell inside another),
   `inspect` also gives that "air volume", the one its reverberation times use.
 - Early reflections pass through those surfaces, keeping the share that passes at each;
   through openings they pass unchanged. The rays of the late part that hit a partition

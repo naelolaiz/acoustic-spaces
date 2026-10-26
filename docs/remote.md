@@ -24,7 +24,8 @@ array's element data). It lists what went in and their sizes. Files under the sc
 relative to it; files elsewhere go under `external/<their folder>/`. The scene file in
 the pack names them all relatively, so the pack runs wherever it is unpacked. The
 editor does the same from **File > Pack for another computer**, also for a scene not yet
-saved.
+saved. The zip is written as `hall.zip.part` and takes the name only once it is
+complete, so a pack that fails leaves an earlier `hall.zip` as it was.
 
 A scene with problems (a listener outside the room, surfaces without a material) is
 not packed, as `simulate` would not run it either; warnings are shown. A file that

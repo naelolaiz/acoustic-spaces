@@ -115,14 +115,14 @@ mono, as sources are points, and resampled to the response's rate. The results a
 
 `play` convolves in real time on the sound card (it needs the `measure` extra). The
 compiled convolver adds no latency beyond one `--block` of frames (256 by default, 5.3
-ms at 48 kHz), and nothing allocates memory while it runs. It cuts the response into
-partitions that grow along it, from the block size up to 8192 frames, and spreads the
-work of the long ones evenly over the blocks in between (non-uniform partitioning), so
-long and multichannel responses stay cheap: a 3 s, 16-channel third-order Ambisonics
-response in blocks of 128 frames takes about 0.3 ms of the 2.7 ms each block lasts, on
-one current x86-64 core, where uniform partitions took 3.6 ms. By default the response
-is scaled to unit energy so the result plays about as loud as the dry signal;
-`--absolute` keeps the simulated level.
+ms at 48 kHz), and each block is written into buffers made before playback starts. It
+cuts the response into partitions that grow along it, from the block size up to 8192
+frames, and spreads the work of the long ones evenly over the blocks in between
+(non-uniform partitioning), so long and multichannel responses stay cheap: a 3 s,
+16-channel third-order Ambisonics response in blocks of 128 frames takes about 0.3 ms of
+the 2.7 ms each block lasts, on one current x86-64 core, where uniform partitions took
+3.6 ms. By default the response is scaled to unit energy so the result plays about as
+loud as the dry signal; `--absolute` keeps the simulated level.
 
 From Python:
 
@@ -134,6 +134,7 @@ mix = auralize(result, {"talker": (speech, 44_100)}, "seat-a", Binaural())  # (s
 wet = convolve(speech_48k, binaural)  # offline, float64
 convolver = Convolver(binaural, block=256)  # block by block, float32
 out = convolver.process(next_block)  # (256, 2)
+convolver.process(next_block, out=out)  # into an array of your own, as a callback would
 play(binaural, 48_000, speech_48k)  # through the sound card
 ```
 

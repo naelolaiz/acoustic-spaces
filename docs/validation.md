@@ -2813,18 +2813,18 @@ Results:
   neither. It carries the product of the shares the partitions pass (a thousandth of
   its energy through three that pass 10 % each), so this matters only with surfaces
   that let much through.
-- **G against a measured free-field response.** The `--free-field` options of
-  `analyze`, `measure` and `compare` read the reference through
-  `parameters.free_field_reference`, which splits it into bands with
-  `parameters.octave_bands` with no silence before it (as does `synthesis.split_bands`,
-  which `octave_bands` uses for the crossover filters). Those zero-phase filters
-  spread a sound both ways in time, and what would fall before the first sample is
-  lost: of an impulse at the first sample, `free_field_reference` keeps 0.50 of the
-  energy at 63 Hz to 0.71 at 8 kHz. G against a free-field response that starts with
-  its direct sound is then up to 3.0 dB too high at 63 Hz and 1.5 dB at 8 kHz, and
-  still 1.2 dB at 63 Hz with the direct sound 2.9 ms in. The responses the simulation
-  renders, and the room responses `analyze` reads, are filtered with silence before
-  them, and their direct sound keeps its energy in every band.
+- **The first milliseconds of a rendered response.** An impulse response is put
+  together from its bands with zero-phase filters (`synthesis.combine_bands`), which
+  spread each arrival both ways in time, and what would fall before the response's
+  first sample is lost. For an arrival whose level differs from band to band, that
+  changes its level in the low bands when it comes in the first milliseconds: the
+  direct sound of a source whose level towards the listener is 1.5 dB lower at 125 Hz
+  than at 63 Hz, 4.7 dB at 250 Hz and 20 dB from 2 kHz up has a G 0.33 dB lower at
+  63 Hz and 0.55 dB higher at 125 Hz at 1 m (2.9 ms in), and 0.31 dB lower and 0.15 dB
+  higher at 2 m, than the same sound 200 ms later; an omnidirectional source's direct
+  sound changes by 0.014 dB or less. The echograms, and the parameters `simulate`
+  prints and writes from them, are not affected; the parameters `analyze` takes from
+  the WAV files are.
 - **Several rooms: the detector and the mixing time.** The stochastic tracer's detector
   radius (unless `late.receiver_radius` is set) and the statistical method's mixing
   time, where its early part ends, come from the volume of all the rooms together
@@ -2848,42 +2848,13 @@ Models:
   found, though no sound goes through it: in a model with thick walls, a room joined
   to the source's only by such a surface becomes air too (two rooms of 48 and 72 m³
   give 120 m³ instead of 48).
-- **Vertices that no face uses** are kept by the model's repair (`clean_mesh`) and count
-  wherever the model's size is taken from its vertices. For one, where a separate shell
-  (a pillar) stands in a room, the point that tells which room holds it is set off its
-  largest face by a millionth of the extent of all the vertices: a stray vertex 10 km
-  away sets it 1 cm off, and a shell closer than that to another surface can be put in
-  the wrong cell.
-- **Coordinates that are not numbers**: only the OBJ reader refuses vertices that are
-  not finite (NaN or infinite); the other formats pass them on.
 - **Collada polygons with holes** (`<ph>`) are read with their holes filled.
-- **Coefficients outside 0 to 1**: absorption and scattering below 0 or above 1 are
-  clamped to that range without a warning, so `absorption: 1.2` runs as 1.
 
 Files and runs:
 
-- **Result files of similar names.** File names keep only ASCII letters, digits, dots,
-  dashes and underscores, the rest becoming `_` (`unnamed` when nothing is left). Names
-  that differ only in the rest, such as `A/B` and `A_B`, or `左` and `右`, give the same
-  file, and the second response's WAV file overwrites the first's.
-- **Packs.** `pack` writes over an existing zip file of the same name, and when it fails,
-  for example because a file the scene names is missing, it deletes the file it was
-  writing, so an earlier pack of that name is lost too.
 - **No upper limits.** `simulation.ir_length_s`, the numbers of rays and `threads` have
   no upper bound, and `coverage.spacing` only has to be above zero: a mistyped value is
   accepted, however large the run it asks for.
-- **The wave solver's memory.** Round an open model, whose air reaches the edge of the
-  grid, the wave solver builds its grid a second time with the matched layer while the
-  first is still held, so setting it up takes up to twice the memory. Outdoors in wind
-  or a temperature gradient it computes the weather's speeds of sound (and its moving
-  air) for the grid before it checks the grid against its limit of 40 million cells, so a grid too large fails for lack of
-  memory instead of with the message that says how to make it smaller.
-- **Errors in the native code's threads.** An exception in one of the C++ engine's
-  worker threads (running out of memory, for one) ends the whole process instead of
-  reaching Python as an error: `parallel_for` doesn't catch it.
-- **The real-time convolver** allocates the output of every block in its Python binding
-  (`Convolver.process`), which a sound card's callback should avoid. The benchmark
-  above had no block over its budget in CPU time.
 - **No uncertainty.** A run gives no standard errors: nothing says how much its
   parameters would change with another seed or more rays. Only `calibrate` gives one,
   for the absorption it fits.
