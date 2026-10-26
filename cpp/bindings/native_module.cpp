@@ -108,6 +108,15 @@ nb::ndarray<nb::numpy, float> convolver_process(Convolver &convolver, FloatBlock
     return to_numpy(std::move(out), {convolver.block(), convolver.outputs()});
 }
 
+// For the tests: parallel_for over [0, n) on `threads` threads, whose worker that
+// reaches `at` throws, as a worker that runs out of memory would.
+void parallel_for_raises(std::size_t n, std::size_t threads, std::size_t at) {
+    nb::gil_scoped_release release;
+    as::parallel_for(n, threads, [&](std::size_t begin, std::size_t end, std::size_t) {
+        if (begin <= at && at < end) throw std::runtime_error("a worker failed");
+    });
+}
+
 nb::ndarray<nb::numpy, double> scatter_kernels(std::size_t length, Indices positions,
                                                Indices index, InArray amplitudes,
                                                Kernels kernels) {
@@ -807,6 +816,11 @@ NB_MODULE(_native, m) {
 
     m.def("convolve_direct", &convolve_direct, nb::arg("signal"), nb::arg("ir"),
           "Full linear convolution of two 1-D float64 arrays (reference implementation).");
+
+    m.def("_parallel_for_raises", &parallel_for_raises, nb::arg("n"), nb::arg("threads"),
+          nb::arg("at"),
+          "For the tests: runs the worker pool over n items, and the worker that reaches "
+          "item `at` throws, which must come back as an exception, not end the process.");
 
     m.def("real_fft", &real_fft, nb::arg("x"),
           "FFT of a real signal of power-of-two length: n / 2 + 1 bins (as numpy.fft.rfft).");

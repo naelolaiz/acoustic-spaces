@@ -20,7 +20,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -171,6 +173,9 @@ struct Directivity {
 };
 
 // Runs body(begin, end, worker) over [0, n) on up to `threads` threads (0: all cores).
+// An exception that left a thread would end the process (std::terminate): the first a
+// worker throws is kept and thrown here once every thread has finished, as is one from
+// starting a thread, after the threads already started have finished.
 template <typename Body>
 void parallel_for(std::size_t n, std::size_t threads, Body body) {
     if (threads == 0) {
@@ -181,16 +186,32 @@ void parallel_for(std::size_t n, std::size_t threads, Body body) {
         body(std::size_t{0}, n, std::size_t{0});
         return;
     }
+    std::exception_ptr error;
+    std::mutex error_mutex;
+    const auto run = [&](std::size_t begin, std::size_t end, std::size_t w) {
+        try {
+            body(begin, end, w);
+        } catch (...) {
+            const std::lock_guard<std::mutex> lock(error_mutex);
+            if (!error) error = std::current_exception();
+        }
+    };
     std::vector<std::thread> pool;
     pool.reserve(threads);
     const std::size_t chunk = (n + threads - 1) / threads;
-    for (std::size_t w = 0; w < threads; ++w) {
-        const std::size_t begin = w * chunk;
-        const std::size_t end = std::min(n, begin + chunk);
-        if (begin >= end) break;
-        pool.emplace_back([=, &body] { body(begin, end, w); });
+    try {
+        for (std::size_t w = 0; w < threads; ++w) {
+            const std::size_t begin = w * chunk;
+            const std::size_t end = std::min(n, begin + chunk);
+            if (begin >= end) break;
+            pool.emplace_back(run, begin, end, w);
+        }
+    } catch (...) {
+        for (auto &t : pool) t.join();
+        throw;
     }
     for (auto &t : pool) t.join();
+    if (error) std::rethrow_exception(error);
 }
 
 // How a face treats a specular ray in specular_sequences: it reflects it, it reflects
