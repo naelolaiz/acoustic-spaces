@@ -59,7 +59,11 @@ def _scene(tmp_path: Path, audience: bool, listener, panel: bool = False) -> Sce
             "assignments": assignments,
             "sources": [{"name": "talker", "position": [2.0, 5.0, 1.5]}],
             "listeners": [{"name": "seat", "position": listener}],
-            "simulation": {"early": {"max_order": 1}, "ir_length_s": 0.3},
+            # 125 Hz: the grazing ratios are of energies, not of pressures.
+            "simulation": {
+                "early": {"max_order": 1, "coherent_max_band_hz": 125},
+                "ir_length_s": 0.3,
+            },
         }
     )
 
@@ -135,7 +139,7 @@ def test_coverage_maps_attenuate_grazing_sound(tmp_path: Path) -> None:
     def run(audience: bool):
         data = _scene(tmp_path, audience, [20.0, 5.0, 1.2]).model_dump(mode="json")
         data["simulation"] = {
-            "early": {"method": "image_sources", "max_order": 1},
+            "early": {"method": "image_sources", "max_order": 1, "coherent_max_band_hz": 125},
             "late": {"method": "statistical"},
             "ir_length_s": 1.0,
         }

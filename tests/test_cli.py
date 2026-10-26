@@ -334,7 +334,7 @@ def test_simulate_checks_the_options_that_override_the_scene(
     report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
     assert report["sample_rate"] == 16000
     assert report["settings"]["sample_rate"] == 16000
-    assert report["settings"]["early"]["coherent_max_band_hz"] == 125
+    assert report["settings"]["early"]["coherent_max_band_hz"] == 500
     assert main([*args, "--rays", "500", "--max-order", "1", "--coherent-band", "none"]) == 0
     capsys.readouterr()
     report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))

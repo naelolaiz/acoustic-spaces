@@ -70,7 +70,7 @@ def _floor(tmp_path: Path, absorption: float) -> Room:
 
 
 def test_settings_pick_the_bands() -> None:
-    assert EarlyStage().coherent_max_band_hz == 125
+    assert EarlyStage().coherent_max_band_hz == 500
     assert band_count(125, 8) == 2 and band_count(125, 24) == 6 and band_count(None, 8) == 0
     assert band_count(250, 8, wave_max_band_hz=125) == 3
     assert band_count(125, 8, wave_max_band_hz=125) == 0  # the wave solver's bands
@@ -124,12 +124,12 @@ def test_a_floor_reflection_adds_to_the_direct_sound_in_pressure(
     free = 1.0 / (4 * math.pi * 100.0)
     level = 10 * np.log10(total_energy(paths) / free)
     in_energy = 10 * np.log10(paths.energy.sum(axis=0) / free)
-    assert np.all(level[:2] > low) if low > 0 else np.all(level[:2] < low)
-    np.testing.assert_allclose(level[2:], in_energy[2:])
+    assert np.all(level[:4] > low) if low > 0 else np.all(level[:4] < low)
+    np.testing.assert_allclose(level[4:], in_energy[4:])
     response = simulate(room)["s", "l"]
     early = dataclasses.replace(response, late=np.zeros_like(response.late))
-    g = early.parameters().g[:2]
-    np.testing.assert_allclose(g, level[:2], atol=0.3)
+    g = early.parameters().g[:4]
+    np.testing.assert_allclose(g, level[:4], atol=0.3)
 
 
 def test_sound_over_an_edge_adds_all_its_terms_where_coherent(tmp_path: Path) -> None:

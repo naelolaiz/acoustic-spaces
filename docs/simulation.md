@@ -294,13 +294,13 @@ Where the edge diffraction bends every path the early stage follows, as with
 level by less than 0.05 dB. Steps are left at the corners of edges, where the point a
 term diffracts at leaves the end of its edge: driving the `street` example's car past
 the barrier 1 cm at a time, up to 1.42 dB in one band and 0.35 dB(A). And indoors,
-where paths add in energy from 250 Hz up, the terms of one event take their cross
-terms with each other, as one wave, so the two edges of a narrow face nearly cancel as
-they do in pressure; behind the `archway`'s wall the level still steps by up to 1.4 dB
-at 250 and 500 Hz where the reflection off the arch's jamb, 40 cm deep, appears. Set
-`simulation.early.coherent_max_band_hz: 500` for a scene like that: it brings those
-steps to 0.06 and 0.10 dB, at about 50% more early-stage time. It is not the default,
-as it raises the early C80 error in a large measured room (`validation/archway_ab.py`).
+the terms of one event take their cross terms with each other, as one wave, so the two
+edges of a narrow face nearly cancel as they do in pressure. A room's early paths add
+in pressure up to 500 Hz (the default), which walks behind the `archway`'s wall within
+0.06 and 0.10 dB at 250 and 500 Hz (0.25 dB at 1 kHz) where the reflection off the
+arch's jamb, 40 cm deep, appears; added in energy from 250 Hz up
+(`simulation.early.coherent_max_band_hz: 125`, about a third less early-stage time)
+the level steps there by up to 1.4 dB. `validation/archway_ab.py` A/Bs the settings.
 The [known issues](validation.md#known-issues-of-the-edge-fade) list these, with what is
 checked and what is not. The fade comes with any `diffraction` but `none`. The late
 part is unchanged, since its scattered rays already find their way round corners.
@@ -335,8 +335,8 @@ echogram that adds the paths in energy misses it. Up to
 ```yaml
 simulation:
   early:
-    coherent_max_band_hz: 125   # 63, 125 (default), 250, 500, or null for energy throughout;
-                                # outdoors up to 8000, the default there
+    coherent_max_band_hz: 500   # 63, 125, 250 or 500 (default), or null for energy throughout;
+                                # a room goes up to 500 Hz; outdoors up to 8000, the default there
 ```
 
 - Each reflection turns the phase as a locally reacting surface with the material's

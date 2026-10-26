@@ -1104,7 +1104,7 @@ def test_outdoor_geometry_form(window, monkeypatch) -> None:
     assert window.document.scene.default_material == "asphalt"
     assert page.ground_group.isHidden()
     # Outdoors the early paths were in pressure up to 8 kHz; a room takes its default.
-    assert window.document.scene.simulation.early.coherent_max_band_hz == 125
+    assert window.document.scene.simulation.early.coherent_max_band_hz == 500
 
 
 def test_vegetation_table(window) -> None:
