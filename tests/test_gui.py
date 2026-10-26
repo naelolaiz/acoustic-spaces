@@ -643,7 +643,7 @@ def test_selection_and_forms(window) -> None:
     page.diffraction_reflections.setCurrentText("one side")
     page.diffraction.setCurrentText("direct")
     assert window.document.scene.simulation.early.diffraction_reflections == "one_side"
-    assert page.coherent.currentText() == "125"
+    assert page.coherent.currentText() == "500"
     page.coherent.setCurrentText("none")
     assert window.document.scene.simulation.early.coherent_max_band_hz is None
     page.coherent.setCurrentText("250")
