@@ -104,10 +104,12 @@ def receiver_radius(
     """Detector sphere radius: Lehnert's log10(c * t_max) * sqrt(V / (pi * N)), kept
     within ``RADIUS_RANGE`` and inside the room.
 
-    ``volume_m3`` may hold one volume per listener: that of the room it is in, where
-    partitions or openings divide the model. ``clearance`` is each listener's distance
-    to the nearest surface; a sphere reaching through a wall would read too low, so the
-    radius stays below 90 % of it.
+    ``volume_m3`` is the volume the rays spread over: where partitions or openings
+    divide the model, that of all the rooms. Sized from a side room's own volume, the
+    spheres there catch fewer rays: the same results, with half as much again spread
+    between seeds. It may hold one volume per listener. ``clearance`` is each
+    listener's distance to the nearest surface; a sphere reaching through a wall would
+    read too low, so the radius stays below 90 % of it.
     """
     if volume_m3 is None:
         r = np.asarray(RADIUS_RANGE[0])

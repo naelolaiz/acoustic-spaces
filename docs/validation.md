@@ -2832,10 +2832,6 @@ Results:
   (`tests/test_scattering.py`). A lobe centred on the specular direction would remove
   this, but changes the late part's decay, which the default was chosen to match in
   the BRAS rooms.
-- **Several rooms: the detector and the mixing time.** The stochastic tracer's detector
-  radius (unless `late.receiver_radius` is set) and the statistical method's mixing
-  time, where its early part ends, come from the volume of all the rooms together
-  (`Room.volume_m3`), not from the listener's room.
 - **Pairs of paths from 1 kHz up.** In the bands above 500 Hz that add in pressure
   (outdoors, 1 to 8 kHz), the echogram shares each pair of paths' cross term between
   their two time slots, and a slot that would go below zero is set to zero

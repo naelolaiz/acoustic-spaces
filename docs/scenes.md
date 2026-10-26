@@ -328,15 +328,19 @@ assignments:
   go on as two: the reflection, and a copy behind it with the share that passes, so even
   a 60 dB wall has rays behind it. Each room's rays are thinned and split for the level
   that room is expected to reach (from the rooms' power balance in a diffuse field),
-  so a quiet room behind a wall is traced as finely as the loud one. Sound goes straight
+  so a quiet room behind a wall is traced as finely as the loud one. The detector
+  spheres are sized for the volume of all the rooms, which the rays spread over: sized
+  from the volume of a side room behind a 10 or 40 dB wall, they gave the same G, C80
+  and T30 there with half as much again spread between seeds. Sound goes straight
   through, in the direction it came.
 - Coverage maps cover the audience areas of every room and find at each point what a
   listener there would. The statistical late method follows coupled-room theory: each
   room's diffuse field decays as the energy the rooms exchange through the faces
   between them has it, with Eyring's absorption in each, so a room behind a partition
-  holds less and a dry room opening into a live one decays in two slopes. The
-  statistical reverberation times of `inspect` count each face between two rooms on
-  both its sides, as for one room.
+  holds less and a dry room opening into a live one decays in two slopes; the early
+  paths end at the mixing time of the listener's room. The statistical reverberation
+  times of `inspect` count each face between two rooms on both its sides, as for one
+  room.
 - For diffraction an opening is a hole: the edges of a doorway are the free edges of
   the wall round it, and sound bends round them into the next room. Diffraction through
   a wall is left out, as it is far weaker than what passes straight through.

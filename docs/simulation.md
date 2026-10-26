@@ -45,12 +45,12 @@ or in a corner. Sound that bends round edges is added to them (see
 - `statistical`: the reflected energy of Barron's revised theory, an exponential
   decay at the Eyring reverberation time T from the direct sound on, less what the
   early paths carry. Early paths end `transition_ms` after the direct sound (by
-  default the mixing time, the square root of the volume in milliseconds), so the
-  late part holds the scattered share of every early reflection, the orders above
-  `max_order` before the transition and everything after it. The total is Barron's,
-  c T / (13.8 V) for a unit source: the Sabine form 4 / A with Eyring's absorption
-  area, which reads 0.2 dB above the classical 4 (1 - α) / (α S) at a mean
-  absorption of 0.1 and 0.8 dB above at 0.3.
+  default the mixing time, the square root of the volume of the listener's room in
+  milliseconds), so the late part holds the scattered share of every early
+  reflection, the orders above `max_order` before the transition and everything after
+  it. The total is Barron's, c T / (13.8 V) for a unit source: the Sabine form 4 / A
+  with Eyring's absorption area, which reads 0.2 dB above the classical
+  4 (1 - α) / (α S) at a mean absorption of 0.1 and 0.8 dB above at 0.3.
 
 The two parts hand over by reflection order by default. Set `transition_ms` to
 keep early paths only that long after the direct sound.

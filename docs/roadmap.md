@@ -395,8 +395,9 @@ Known issues found by the review of 25 October 2026 (see
   cancel.
 - [x] A warning for coefficients outside 0 to 1, and the wave solver's grid checked
   before the weather's fields and the first one let go round an open model.
-- [ ] Limits on the size of a run, and the detector and the mixing time from the
-  listener's room.
+- [ ] Limits on the size of a run.
+- [x] The mixing time from the listener's room (the detector stays sized for all the
+  rooms, which the rays spread over).
 - [x] The real-time convolver writing each block into buffers made before playback starts.
 - [ ] Uncertainty: how much each parameter scatters over seeds, as a standard error.
 - [ ] CI: type checks, sanitizers for the native code and the tests' coverage.

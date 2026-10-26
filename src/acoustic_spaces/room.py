@@ -506,6 +506,19 @@ class Room:
         mesh = self.mesh
         return cell_of(mesh.vertices, mesh.faces, mesh.cells(), points, self.air_cells)
 
+    def volume_at(self, points) -> np.ndarray | None:
+        """(P,) the volume (m3) of the room each point lies in, where partitions or
+        openings divide the model into rooms, and that of all the rooms together for a
+        point in none; None when the model is not closed."""
+        total = self.volume_m3
+        if total is None:
+            return None
+        points = np.asarray(points, dtype=float).reshape(-1, 3)
+        if len(self.room_volumes) == 1:
+            return np.full(len(points), total)
+        where = self.room_of(points)
+        return np.where(where >= 0, self.room_volumes[np.maximum(where, 0)], total)
+
     def face_transmission(self, bands: Resolution = "octave") -> np.ndarray | None:
         """(F, bands) share of sound each face lets through, or None when none does."""
         names = self.material_names
