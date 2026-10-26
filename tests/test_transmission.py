@@ -286,6 +286,40 @@ def _double(path: Path, listeners, **simulation) -> tuple[Room, np.ndarray]:
     return room, (c / 4) * np.array([[-a1 / v1, door / v1], [door / v2, -a2 / v2]])
 
 
+def test_sound_let_out_of_the_rooms_does_not_come_back_in(tmp_path: Path) -> None:
+    # Two houses across a 1 m lane, their walls on the lane letting sound through. What
+    # a wall lets out of a house goes into no room, and counts as absorbed: neither the
+    # rays nor the rain of their reflections, which would go out through one wall and in
+    # through the other, reach the second house. Through a wall the houses share, both
+    # do.
+    def houses(lane: float) -> dict:
+        far = 4 + lane
+        return {
+            "house1": _box(0, 4, 4, 3, skip=("x1",)),
+            "house2": _box(far, far + 4, 4, 3, skip=("x0",)),
+            "lane": [((x, 0, 0), (x, 4, 0), (x, 4, 3), (x, 0, 3)) for x in {4, far}],
+        }
+
+    late = []
+    for lane in (1.0, 0.0):
+        room = Room.from_scene(
+            _scene(
+                _write(tmp_path / f"houses{lane:g}.obj", houses(lane)),
+                {"wall": _flat(0.2), "thin": _flat(0.2, transmission_loss=10)},
+                {"house1": "wall", "house2": "wall", "lane": "thin"},
+                {"other": [4.0 + lane + 2.0, 2.1, 1.4]},
+                source=[2.1, 1.9, 1.6],
+                ir_length_s=0.3,
+                late={"rays": 2000},
+            )
+        )
+        assert len(TraceModel.from_room(room).room_volumes) == 2
+        late.append(simulate(room)["s", "other"].late)
+    apart, shared = late
+    assert not apart.any()
+    assert shared[:5].sum(axis=1).min() > 0.0
+
+
 def test_coupled_rooms_decay_in_two_slopes(tmp_path: Path) -> None:
     # The dry room's decay falls fast, then follows the live room's, as the two-room
     # diffuse-field model has it.

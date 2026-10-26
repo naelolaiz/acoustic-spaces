@@ -385,6 +385,8 @@ Known issues found by the review of 25 October 2026 (see
   solid from several of its faces.
 - [x] Sources and listeners inside a closed solid reported, and `transmission: 0` as a
   surface that lets nothing through.
+- [x] The late part's rain kept from going out of the rooms and back in, as the rays
+  are.
 - [x] G against a free-field response that starts at its first sample: the free-field
   reference keeps what its band filters spread before it.
 - [ ] The first milliseconds of a rendered response, where the band filters' spread

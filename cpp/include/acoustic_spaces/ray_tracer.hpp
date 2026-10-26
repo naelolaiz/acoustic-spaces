@@ -495,7 +495,8 @@ inline void pass_partition(RayState &state) {
 
 // The share of sound per band that travels from `origin` along `dir` (unit) for
 // `length` metres: 1 in the open, the product of the transmission of the faces it
-// crosses; false (and no share) where a face lets nothing through.
+// crosses; false (and no share) where a face lets nothing through, or, as for a ray,
+// where it would let the sound out into no room (StochasticScene::face_room).
 inline bool passing_share(const StochasticScene &scene, const Vec3 &origin, const Vec3 &dir,
                           double length, std::int64_t ignore, double *share) {
     const Bvh &bvh = *scene.bvh;
@@ -506,7 +507,12 @@ inline bool passing_share(const StochasticScene &scene, const Vec3 &origin, cons
     for (std::size_t k = 0; k <= kMaxCrossings; ++k) {
         const Hit hit = bvh.intersect(pos, dir, length, ignore);
         if (!hit.found()) return true;
-        const double *tau = scene.transmission + static_cast<std::size_t>(hit.face) * bands;
+        const auto face = static_cast<std::size_t>(hit.face);
+        if (scene.face_room != nullptr) {
+            const bool from_back = dot(bvh.normal(face), dir) > 0.0;
+            if (scene.face_room[2 * face + (from_back ? 0 : 1)] < 0) return false;
+        }
+        const double *tau = scene.transmission + face * bands;
         bool any = false;
         for (std::size_t b = 0; b < bands; ++b) {
             share[b] *= tau[b];
