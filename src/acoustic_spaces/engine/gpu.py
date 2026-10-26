@@ -484,7 +484,9 @@ class GpuWaveSolver:
         self._groups = (min(groups, _MAX_GROUPS), -(-groups // _MAX_GROUPS))
 
         limit = device.limits["max-storage-buffer-binding-size"]
-        largest = max(4 * n, table.nbytes)
+        # The branches' and the matched layer's state: round an open grid, the largest.
+        state = 4 * max(1, 2 * branches + 9 * layers)
+        largest = max(4 * n, table.nbytes, state)
         if largest > limit:
             raise ValueError(
                 f"the wave grid needs GPU buffers of {largest / 2**20:,.0f} MiB, and this GPU "
@@ -496,9 +498,8 @@ class GpuWaveSolver:
         self._grid = device.create_buffer_with_data(data=grid, usage=usage.UNIFORM)
         self._table = device.create_buffer_with_data(data=table, usage=usage.STORAGE)
         self._fields = [device.create_buffer(size=4 * n, usage=storage) for _ in range(2)]
-        self._state = device.create_buffer(
-            size=4 * max(1, 2 * branches + 9 * layers), usage=storage
-        )
+        self._state = device.create_buffer(size=state, usage=storage)
+        self._limit = limit
         self._stride = max(16, device.limits["min-uniform-buffer-offset-alignment"])
         self._steps = device.create_buffer(
             size=self._stride * _BATCH, usage=usage.UNIFORM | usage.COPY_DST
@@ -536,12 +537,21 @@ class GpuWaveSolver:
     def run(self, signal: np.ndarray) -> np.ndarray:
         """Advances one step per sample of ``signal`` (added at the source) and returns
         the pressure at every probe before each step (probes, steps)."""
-        wgpu = _wgpu()
-        device, queue = self._device, self._device.queue
         signal = np.ascontiguousarray(signal, dtype=np.float32).reshape(-1)
         steps = len(signal)
-        if steps == 0:
-            return np.zeros((self._probes, 0))
+        recorded = np.empty((self._probes, steps))
+        # The probes' pressures go to one buffer, so as many steps at a time as it binds.
+        most = max(1, self._limit // (4 * max(1, self._probes)))
+        for begin in range(0, steps, most):
+            end = min(begin + most, steps)
+            recorded[:, begin:end] = self._run(signal[begin:end])
+        return recorded
+
+    def _run(self, signal: np.ndarray) -> np.ndarray:
+        """:meth:`run` for as many steps as one buffer of the probes' pressures binds."""
+        wgpu = _wgpu()
+        device, queue = self._device, self._device.queue
+        steps = len(signal)
         size = 4 * max(1, steps * self._probes)
         out = device.create_buffer(
             size=size, usage=wgpu.BufferUsage.STORAGE | wgpu.BufferUsage.COPY_SRC
@@ -590,7 +600,7 @@ class GpuWaveSolver:
                 queue.submit([encoder.finish()])
         self._done += steps
         recorded = np.frombuffer(queue.read_buffer(out), np.float32)[: steps * self._probes]
-        return recorded.reshape(steps, self._probes).T.astype(np.float64)
+        return recorded.reshape(steps, self._probes).T
 
 
 __all__ = ["Device", "GpuWaveSolver", "gpu_name", "hardware_gpu", "use_gpu"]

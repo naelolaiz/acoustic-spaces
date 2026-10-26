@@ -464,7 +464,9 @@ The editor's Simulation page has the same switch, and where to run it. Each octa
 higher costs about 16 times as much: on 4 cores, up to the 125 Hz band, the studio takes
 0.4 s, the concert hall (9,400 m³, 3.5 s responses) 15 s, and the church (7 s
 responses) 28 s per source; 8 s and 19 s with `scheme: standard`, at the cost of its
-dispersion. Grids of more than 40 million cells are refused. `python
+dispersion. Grids of more than 40 million cells are refused, and on a GPU so is a grid
+with a buffer larger than the GPU binds: the field's or, round an open model, the
+matched layer's, of nine values a cell. `python
 validation/wave_gpu.py` times your GPU against your CPU; Mesa's lavapipe, a Vulkan
 driver that runs on the CPU (and what CI tests with), takes roughly 8 to 9 times as long
 as the CPU solver in a whole run (the [validation report](validation.md) has the times).

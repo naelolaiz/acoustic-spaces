@@ -151,6 +151,15 @@ density of reflections of each listener's room.
   of memory; and round an open model it lets its first grid go before it makes the one
   with the matched layer (for a 30 x 20 m open floor at 250 Hz, 151 MiB at the peak
   instead of 209).
+- The wave solver on a GPU checks the matched layer's state against what the GPU binds
+  in one buffer, as it did the field: round an open model it is the largest buffer (4
+  to 7 times the field's round the tests' 5 x 4 m ground, with cells of 6 to 30 cm),
+  and a grid whose layer the GPU could not bind stopped with wgpu's validation error
+  once it was built, instead of being refused with what to lower. The pressures at the
+  listeners go to the GPU's buffer as many steps at a time as it binds.
+- The wave solver's recording of the pressures at the listeners is no longer copied
+  once more at the end of the run: with 60 listeners and 4 s responses at 63 Hz the
+  run peaks 12 to 13 MiB lower, the recording's size. The results are the same.
 - A run's memory is estimated before it starts (`engine.run_size`): the late part's
   energy at every listener or map point for every source, and while a source is traced,
   the tracer's copies on the CPU's threads or its buffers on a GPU, the worst of the

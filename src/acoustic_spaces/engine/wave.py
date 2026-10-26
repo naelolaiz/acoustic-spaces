@@ -752,13 +752,18 @@ def wave_responses(
     stepper = GpuWaveSolver(solver) if on_gpu else solver
     # Long runs report every tenth (which is also where a cancelled run stops).
     chunks = 10 if solver.air_cells * steps > _LONG_RUN else 1
-    recorded = []
-    bounds = np.linspace(0, steps, chunks + 1).astype(np.int64)
-    for c in range(chunks):
-        if c:
-            say(f"{label}: wave solver, {name}, {100 * c // chunks} %")
-        recorded.append(stepper.run(drive[bounds[c] : bounds[c + 1]]))
-    run = np.concatenate(recorded, axis=1)[:, delay:][:, :samples]
+    if chunks == 1:
+        recorded = stepper.run(drive)
+    else:
+        # Into one array as each tenth comes, not all ten joined at the end (twice the
+        # memory).
+        recorded = np.empty((len(probes), steps))
+        bounds = np.linspace(0, steps, chunks + 1).astype(np.int64)
+        for c in range(chunks):
+            if c:
+                say(f"{label}: wave solver, {name}, {100 * c // chunks} %")
+            recorded[:, bounds[c] : bounds[c + 1]] = stepper.run(drive[bounds[c] : bounds[c + 1]])
+    run = recorded[:, delay:][:, :samples]
     info: dict[str, float] = {
         "wave_cells": float(solver.air_cells),
         "wave_cell_m": h,

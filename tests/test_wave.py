@@ -413,6 +413,37 @@ def test_free_field_level_matches_the_rays() -> None:
         assert 10 * math.log10(direct[1]) == pytest.approx(0.0, abs=0.1)  # rays
 
 
+def test_a_long_run_records_its_tenths_as_one_run_does(monkeypatch) -> None:
+    """A long run steps in tenths, reporting each, into one array of the probes'
+    pressures: the responses are those of one run, to the bit."""
+    from acoustic_spaces.engine import wave as wave_module
+
+    room = _free_room((4.0,))
+    source = np.array(room.scene.sources[0].position)
+
+    def run():
+        said: list[str] = []
+        responses, _ = wave_responses(
+            TraceModel.from_room(room),
+            source,
+            [source + [4.0, 0.0, 0.0]],
+            ["r"],
+            max_band_hz=63,
+            length_s=0.1,
+            sample_rate=FS,
+            speed_of_sound=room.speed_of_sound(),
+            say=said.append,
+        )
+        return responses[0].signals, [s for s in said if s.endswith(" %")]
+
+    once, reported = run()
+    assert reported == []
+    monkeypatch.setattr(wave_module, "_LONG_RUN", 0)
+    tenths, reported = run()
+    assert [int(s.split(", ")[-1][:-2]) for s in reported] == list(range(10, 100, 10))
+    np.testing.assert_array_equal(tenths, once)
+
+
 def test_direct_sound_arrives_on_time() -> None:
     # 4 m from the source, 25 to 100 Hz, against the source's own pulse: the wave bands
     # arrive r / c after emission, as the rays do, within a fraction of a step (0.67 ms).

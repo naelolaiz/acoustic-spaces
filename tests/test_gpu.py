@@ -82,9 +82,9 @@ def test_gpu_steps_a_room_with_resonant_walls_as_the_cpu_does(stencil: int) -> N
     assert np.abs(a - b).max() < _tolerance(3e-5, 2e-3) * np.abs(a).max()
 
 
-@needs_gpu
-def test_gpu_steps_the_matched_layer_round_an_open_model_as_the_cpu_does() -> None:
-    h = 0.3
+def _open_solver(h: float = 0.3):
+    """A wave solver over a 5 m by 4 m ground in the open, its grid ringed by the matched
+    layer, with two listeners."""
     vertices = np.array([[0, 0, 0], [5, 0, 0], [5, 4, 0], [0, 4, 0]], float)
     bvh = _native.Bvh(vertices, np.array([[0, 1, 2], [0, 2, 3]], np.int64))
     source = np.array([2.0, 2.0, 1.5])
@@ -93,26 +93,28 @@ def test_gpu_steps_the_matched_layer_round_an_open_model_as_the_cpu_does() -> No
     low = np.minimum(vertices.min(0), points.min(0) - 2 * h) - h * (2.0 + LAYER_CELLS)
     high = np.maximum(vertices.max(0), points.max(0) + 2 * h)
     shape = np.ceil((high - low) / h).astype(int) + 2 + LAYER_CELLS
+    return _native.WaveSolver(
+        bvh,
+        np.zeros(2, np.int64),
+        np.array([0.05]),
+        np.zeros((0, 3)),
+        np.zeros(0, np.int64),
+        low + np.array([0.0137, 0.0219, 0.0291]) * h,
+        h,
+        *map(int, shape),
+        source,
+        listeners,
+        layer=LAYER_CELLS,
+        layer_damping=LAYER_DAMPING,
+    )
 
-    def make():
-        return _native.WaveSolver(
-            bvh,
-            np.zeros(2, np.int64),
-            np.array([0.05]),
-            np.zeros((0, 3)),
-            np.zeros(0, np.int64),
-            low + np.array([0.0137, 0.0219, 0.0291]) * h,
-            h,
-            *map(int, shape),
-            source,
-            listeners,
-            layer=LAYER_CELLS,
-            layer_damping=LAYER_DAMPING,
-        )
 
-    assert make().layer_cells > 0
+@needs_gpu
+def test_gpu_steps_the_matched_layer_round_an_open_model_as_the_cpu_does() -> None:
+    h = 0.3
+    assert _open_solver(h).layer_cells > 0
     rate = C / (COURANT * h)
-    a, b = _runs(make, _drive(rate, h, 600), [0, 301, 600])
+    a, b = _runs(_open_solver, _drive(rate, h, 600), [0, 301, 600])
     assert np.abs(a - b).max() < _tolerance(1e-5, 1e-4) * np.abs(a).max()
 
 
@@ -268,6 +270,38 @@ def test_gpu_steps_in_submissions_short_enough_for_the_gpus_watchdog(monkeypatch
     # 700 steps: a batch of 512 and one of 188, sent whole or 37 steps at a time.
     assert len(submits) - once == once + -(-512 // 37) + -(-188 // 37) - 2
     np.testing.assert_array_equal(split, whole)
+
+
+@needs_gpu
+def test_the_gpu_refuses_a_grid_whose_matched_layer_it_cannot_bind(monkeypatch) -> None:
+    """Round an open grid the matched layer's state (nine values a cell) is the largest
+    buffer, larger than the field's: the GPU must bind it too, or the run is refused
+    before it starts."""
+    layout = _open_solver().layout()
+    field = 4 * int(np.prod(layout["shape"]))
+    state = 4 * (2 * len(layout["state_branch"]) + 9 * len(layout["layer_cells"]))
+    assert state > 4 * field
+    limits = gpu._device().limits
+    monkeypatch.setitem(limits, "max-storage-buffer-binding-size", state - 4)
+    with pytest.raises(ValueError, match="the wave grid needs GPU buffers of .*: lower"):
+        gpu.GpuWaveSolver(_open_solver())
+    monkeypatch.setitem(limits, "max-storage-buffer-binding-size", state)
+    gpu.GpuWaveSolver(_open_solver())
+
+
+@needs_gpu
+def test_gpu_records_the_probes_as_many_steps_at_a_time_as_a_buffer_binds() -> None:
+    """A long run's pressures at the probes take more than one buffer the GPU binds: the
+    steps go in pieces whose pressures fit one, and step the grid as one run does."""
+    h = 0.3
+    signal = _drive(C / (COURANT * h), h, 700)
+    whole, pieces = gpu.GpuWaveSolver(_open_solver(h)), gpu.GpuWaveSolver(_open_solver(h))
+    pieces._limit = 4 * pieces.probes * 97 + 3
+    steps: list[int] = []
+    run = pieces._run
+    pieces._run = lambda part: steps.append(len(part)) or run(part)
+    np.testing.assert_array_equal(pieces.run(signal), whole.run(signal))
+    assert steps == [97] * 7 + [21]
 
 
 def test_the_device_setting_picks_the_cpu_or_the_gpu(monkeypatch) -> None:
