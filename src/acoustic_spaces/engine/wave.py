@@ -714,6 +714,7 @@ def wave_responses(
                 "simulation.wave.scheme to auto or standard"
             )
         stencil = "standard"
+        del solver  # its grid goes before the one with the layer is made
         solver, grid, fits, probes, courant, extremes = prepare(stencil, LAYER_CELLS)
     h = grid.cell
     signal, delay = source_signal(grid.rate, h, courant)
