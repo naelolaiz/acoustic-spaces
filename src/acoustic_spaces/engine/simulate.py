@@ -39,9 +39,12 @@ if TYPE_CHECKING:
 TIME_STEP = 1e-3
 
 
-def mixing_time(volume_m3: float | None) -> float:
-    """Time after the direct sound when the late field is diffuse (s): sqrt(V) ms."""
-    return 1e-3 * math.sqrt(volume_m3) if volume_m3 else 0.02
+def mixing_time(volume_m3: float | np.ndarray | None) -> float | np.ndarray:
+    """Time after the direct sound when the late field is diffuse (s): sqrt(V) ms, V the
+    volume of the room the listener is in (one per listener in an array)."""
+    if volume_m3 is None:
+        return 0.02
+    return 1e-3 * np.sqrt(volume_m3)
 
 
 @dataclass
@@ -112,14 +115,15 @@ def check_late_method(room: Room, settings: SimulationSettings) -> None:
         raise ValueError("the statistical late method needs a closed model")
 
 
-def _transition(settings: SimulationSettings, volume_m3: float | None) -> float:
-    """How long after the direct sound the early paths end (s). Without a set
-    transition the stochastic tracer hands over by order alone, and the statistical
-    method keeps early paths until the mixing time."""
+def _transition(settings: SimulationSettings, room: Room, points) -> float | np.ndarray:
+    """How long after the direct sound the early paths end at each of ``points`` (s).
+    Without a set transition the stochastic tracer hands over by order alone, and the
+    statistical method keeps early paths until the mixing time of the room each point
+    is in."""
     if settings.transition_ms is not None:
         return settings.transition_ms * 1e-3
     if settings.late.method == "statistical":
-        return mixing_time(volume_m3)
+        return mixing_time(room.volume_at(points))
     return math.inf
 
 
@@ -289,7 +293,7 @@ def early_paths(
     # each point's own do too; outdoors they add in pressure among themselves.
     coherent = coherent_bands(scene.simulation, model.absorption.shape[1])
     coherent = coherent if len(elements) == 1 or room.outdoor is not None else 0
-    transition = _transition(scene.simulation, room.volume_m3)
+    transition = float(np.squeeze(_transition(scene.simulation, room, target)))
     length = response_length(room, scene.simulation.ir_length_s, elements, target)
     eddies = Eddies.of(model, room.speed_of_sound())
     parts = []
@@ -492,6 +496,9 @@ def simulate(
     air = room.air_attenuation(model.bands)
     volume = room.volume_m3
     listener_pos = np.array([lis.position for lis in chosen_listeners], dtype=float)
+    # The volume of each listener's room, for its tail's density. The detector is sized
+    # for all the rooms (`volume`), which the rays spread over.
+    volumes = room.volume_at(listener_pos)
     length = response_length(
         room,
         settings.ir_length_s,
@@ -509,8 +516,8 @@ def simulate(
     if groups is not None and statistical:
         raise ValueError("face groups need the stochastic ray tracer, not the statistical method")
 
-    # Early paths end `transition` after the direct sound.
-    transition = _transition(settings, volume)
+    # Early paths end `transition` after the direct sound, at each listener.
+    transition = _transition(settings, room, listener_pos)
     max_partitions = _max_partitions(settings)
 
     late_from = {} if late_from is None or statistical else late_from
@@ -775,7 +782,7 @@ def simulate(
                 length_s=length,
                 direct_delay_s=float(direct[k]),
                 transition_s=float(cutoff[k]),
-                volume_m3=volume,
+                volume_m3=None if volumes is None else float(volumes[k]),
                 speed_of_sound=c,
                 seed=_seed(info["seed"], listener_index[listener.name] + 1),
                 orientation=np.array(listener.orientation.rotation()),

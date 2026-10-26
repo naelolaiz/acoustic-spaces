@@ -1,29 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- A source or listener inside a closed solid (a column, a block, a thick wall) is
-  reported as such, and `simulate` refuses to run, where the solid's inside became a
-  room of its own: a listener inside a 1 m³ block on the floor of a 3 m room made the
-  volume 27 m³ instead of 26, and the run only warned that the listener was in another
-  room than the source. Such a space still holds air when a surface that lets sound
-  through joins it to a room (a booth with glass walls). `inspect` marks the position
-  `IN A SOLID`. When no source or listener stands in the model's rooms (walls drawn as
-  a closed shell inside another), the spaces they stand in are the rooms, as before.
-- A material with `transmission: 0` lets nothing through when the rooms are found
-  either: in walls drawn as a shell, a room joined to the source's only by such a wall
-  held air too (rooms of 48 and 72 m³ gave 120 m³ instead of 48).
-- Known issue, documented: with vector-based scattering (the default) the late part
-  carries the specular share of the first orders with more energy than the exact paths
-  (a quarter more for orders 1 to 3 near the middle of a small box), so the total depends
-  a little on the early order: within 0.04 dB of exact paths up to order 9 at the
-  default `early.max_order: 3`, 0.15 to 0.2 dB higher with `max_order: 0`. Random
-  scattering keeps within 0.03 dB.
-- Known issue, measured: outdoors, where the echogram's pairs of paths from 1 kHz up
-  would take a time slot below zero and it is set to zero, the energy added comes to at
-  most 0.009 dB of a band's response over the nine outdoor examples' 419 pairs of a
-  source and a listener, and 0.04 dB in the lateral figures of eight.
-
 ## 4.0.1
 
 Behind the `archway`'s wall, where the reflection off the arch's jamb appears, the level
@@ -38,8 +14,9 @@ to 1.04 dB, in `archway`).
 in [Known issues](docs/validation.md#known-issues)), among them paths
 through three partitions or more, which neither the early nor the late part counted,
 and one the review did not find: a closed solid standing on a surface counted as air.
-Of the examples' results, these change only the `apartment` bedroom's, its G by less
-than 10⁻⁶ dB.
+Of the examples' results, these change only the `apartment`'s: the bedroom's G by less
+than 10⁻⁶ dB, and the synthesized tails of its rendered responses, which now take the
+density of reflections of each listener's room.
 
 - Indoors, in the bands where the early paths add in energy (from 250 Hz with the
   default `coherent_max_band_hz`), the sound bent round edges is kept as waves
@@ -116,6 +93,25 @@ than 10⁻⁶ dB.
   1 m cube on the floor of a 3 m room gave 28 m³ instead of 26, a platform 1.5 x 1.5 x
   0.5 m 28.1 instead of 25.9. Every example keeps its volume, and finding the cells of a
   city of 10,000 buildings takes as long as before.
+- A source or listener inside a closed solid (a column, a block, a thick wall) is
+  reported as such, and `simulate` refuses to run, where the solid's inside became a
+  room of its own: a listener inside a 1 m³ block on the floor of a 3 m room made the
+  volume 27 m³ instead of 26, and the run only warned that the listener was in another
+  room than the source. Such a space still holds air when a surface that lets sound
+  through joins it to a room (a booth with glass walls). `inspect` marks the position
+  `IN A SOLID`. When no source or listener stands in the model's rooms (walls drawn as
+  a closed shell inside another), the spaces they stand in are the rooms, as before.
+- A material with `transmission: 0` lets nothing through when the rooms are found
+  either: in walls drawn as a shell, a room joined to the source's only by such a wall
+  held air too (rooms of 48 and 72 m³ gave 120 m³ instead of 48).
+- Where partitions or openings divide the model into rooms, the statistical method's
+  mixing time (where its early paths end) and the density of reflections in the
+  synthesized tail come from the volume of the listener's room (a map's mixing time
+  from each point's), not from all the rooms together. `Room.volume_at` gives it, and a
+  response's `volume_m3` is now its listener's room's. The stochastic tracer's
+  detector spheres stay sized for all the rooms, which the rays spread over: sized
+  for a side room's own volume, they gave the same results with half as much again
+  spread between seeds.
 - The model's repair drops vertices that no face uses. A stray one moved the point that
   places a separate shell, set off its face by a millionth of the vertices' extent: one
   1000 km off set it 1 m off, and a slab's inside became a room (28.6 m³ instead of
@@ -155,6 +151,16 @@ than 10⁻⁶ dB.
   of memory; and round an open model it lets its first grid go before it makes the one
   with the matched layer (for a 30 x 20 m open floor at 250 Hz, 151 MiB at the peak
   instead of 209).
+- Known issue, documented: with vector-based scattering (the default) the late part
+  carries the specular share of the first orders with more energy than the exact paths
+  (a quarter more for orders 1 to 3 near the middle of a small box), so the total depends
+  a little on the early order: within 0.04 dB of exact paths up to order 9 at the
+  default `early.max_order: 3`, 0.15 to 0.2 dB higher with `max_order: 0`. Random
+  scattering keeps within 0.03 dB.
+- Known issue, measured: outdoors, where the echogram's pairs of paths from 1 kHz up
+  would take a time slot below zero and it is set to zero, the energy added comes to at
+  most 0.009 dB of a band's response over the nine outdoor examples' 419 pairs of a
+  source and a listener, and 0.04 dB in the lateral figures of eight.
 
 ## 4.0.0
 

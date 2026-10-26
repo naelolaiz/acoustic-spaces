@@ -656,7 +656,7 @@ def _trace_part(
     name: str,
     directivity,
     orientation: np.ndarray,
-    transition: float,
+    transition: float | np.ndarray,
     length: float,
     rays: int,
     seed: int,
@@ -840,7 +840,7 @@ def coverage_map(
         seed = int(np.random.SeedSequence().generate_state(1, np.uint32)[0])
     statistical = sim.late.method == "statistical"
     check_late_method(room, sim)
-    transition = _transition(sim, volume)
+    transition = _transition(sim, room, grid.points)
     rays = settings.rays or sim.late.rays
     reference = 1.0 / (4.0 * math.pi * 100.0)
     details: dict[str, dict[str, float]] = {"map": {"points": float(len(grid))}}

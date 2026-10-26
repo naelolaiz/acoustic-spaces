@@ -44,6 +44,8 @@ class Response:
     direct_delay_s: float
     #: Early paths end here (s, from emission); the late part covers everything else.
     transition_s: float
+    #: Volume of the listener's room (m3; None in a model that is not closed): how
+    #: densely the synthesized late part's reflections come.
     volume_m3: float | None
     speed_of_sound: float
     #: Seed for the noise of the synthesized late part.

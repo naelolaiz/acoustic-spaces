@@ -341,6 +341,29 @@ def test_the_statistical_method_and_maps_cross_rooms(tmp_path: Path) -> None:
             np.testing.assert_allclose(late.values[key][k], getattr(values, key), atol=0.01)
 
 
+def test_the_mixing_time_comes_from_the_listeners_room(tmp_path: Path) -> None:
+    # The statistical method's mixing time and the density of the synthesized tail come
+    # from the volume of the listener's room, not from both rooms' 288 m3. The
+    # detector's radius (Lehnert's) stays that of all the rooms, which the rays fill.
+    listeners = {"one": [2.0, 3.0, 2.0], "two": [8.0, 3.0, 2.0]}
+    room, _ = _double(tmp_path / "double.obj", listeners, late={"rays": 1000})
+    volumes = {"one": 4 * 6 * 4, "two": 8 * 6 * 4}
+    outside = [20.0, 3.0, 2.0]
+    np.testing.assert_allclose(room.volume_at([*listeners.values(), outside]), [96, 192, 288])
+    radius = math.log10(room.speed_of_sound() * 2.5) * math.sqrt(288 / (math.pi * 1000))
+    for name, volume in volumes.items():
+        result = simulate(room, listeners=[name])
+        assert result.details["s"]["receiver_radius_m"] == pytest.approx(radius)
+        assert result["s", name].volume_m3 == pytest.approx(volume)
+    room.scene.simulation.late.method = "statistical"
+    result = simulate(room)
+    for name, volume in volumes.items():
+        response = result["s", name]
+        mixing = response.transition_s - response.direct_delay_s
+        assert mixing == pytest.approx(1e-3 * math.sqrt(volume))
+        assert response.volume_m3 == pytest.approx(volume)
+
+
 def _four_rooms(path: Path, **simulation) -> Room:
     """Four rooms 4 m long in a row, the source in the first and a listener in each,
     behind partitions that let 30 % of the sound through."""

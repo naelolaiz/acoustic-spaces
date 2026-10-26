@@ -2580,7 +2580,8 @@ class Simulation(_Model):
         gt=0.0,
         description=(
             "early paths end this long after the direct sound; None hands over by "
-            "reflection order (stochastic) or at the mixing time sqrt(V) ms (statistical)"
+            "reflection order (stochastic) or at the mixing time sqrt(V) ms, V the volume "
+            "of the listener's room (statistical)"
         ),
     )
     ir_length_s: float = Field(default=2.0, gt=0.0)
