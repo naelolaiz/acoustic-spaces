@@ -111,16 +111,11 @@ Edge diffraction:
   (indoors from 250 Hz): they take their cross terms with each other, as one wave, so
   behind the `archway`'s wall the level steps by up to 1.4 dB where the reflection off
   the arch's jamb appears, instead of 4.4 dB.
-- [ ] The archway's 1.4 dB: at 250 Hz, where the jamb's reflection is found, the cross
-  terms of the edge diffraction's paths and the fade's terms take more than they all
-  carry, and the sum stops at zero. An event-coherent sum of the terms of the missed
-  path's event, including the terms the edge diffraction stands in for, was tried and
-  is not accurate enough yet: it moves the step to the jamb's other edge. The
-  per-scene remedy is `coherent_max_band_hz: 500`, which brings both jamb walks within
-  0.1 dB at 250/500 Hz (0.25 dB at 1 kHz); it is not the default because in a
-  reduced-ray check on the BRAS CR3 room it raises the mean C80 error from 8.3 to
-  20.5 JND. `validation/archway_ab.py` measures both. This and the fade's other known issues are listed in
-  [Validation](validation.md#known-issues-of-the-edge-fade).
+- [x] The archway's 1.4 dB, where the reflection off the jamb is found: in the bands
+  that add in energy the terms are kept as waves, whose energy is never below nothing,
+  and the events a path gets past split like those that stop it, so the level steps
+  there by at most 0.11 dB from 250 Hz to 1 kHz. The fade's other known issues are
+  listed in [Validation](validation.md#known-issues-of-the-edge-fade).
 
 Parameters:
 

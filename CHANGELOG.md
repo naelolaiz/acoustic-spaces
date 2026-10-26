@@ -2,17 +2,33 @@
 
 ## Unreleased
 
-- The edge fade takes the cross terms of an event with many terms from their sum, not
-  from every pair. A curved surface with thousands of facets in one event no longer
-  runs out of memory pairing them all (the BRAS CR3 room did); events of up to 16 terms
-  take the same cross terms as before.
-- `validation/archway_ab.py` A/Bs the archway's jamb step at
-  `early.coherent_max_band_hz` 125, 250 and 500, with 1 cm and 1 mm walks at both jamb
-  edges, the ISO parameters, and `--threads`/`--late-device`. Coherent 500 Hz brings
-  the 250/500 Hz steps from 1.07/1.37 dB to 0.04/0.06 dB, but in a reduced-ray check
-  on the BRAS CR3 room raises the mean C80 error from 8.3 to 20.5 JND, so the default
-  stays at 125 Hz; the known issues and the archway example document the per-scene
-  setting.
+- Indoors, in the bands where the early paths add in energy (from 250 Hz with the
+  default `coherent_max_band_hz`), the sound bent round edges is kept as waves
+  (`engine.clusters`): each term of the edge diffraction and of the edge fade continues
+  the geometric wave of its boundary as far as it is coherent with it over the band (on
+  the dark side of the boundary, where that wave is gone, by the UTD's share) and is
+  part of its event's diffracted wave by the rest, and a wave's energy is that of its
+  pieces' pressures added up and averaged over the band, never below nothing. This
+  replaces the cross terms between pairs of terms, which could take more than the
+  terms carried, after which the sum stopped at zero. Behind the `archway`'s wall,
+  where the reflection off the arch's jamb appears, the level no longer steps by
+  1.37 dB at 500 Hz and 1.06 dB at 250 Hz: walking 1 cm at a time it steps by at most
+  0.11 dB from 250 Hz to 1 kHz. Of the examples, five change: the early level from
+  250 Hz up by up to 0.98 dB in `archway`, 0.28 dB in `orchestra`, 0.24 dB in
+  `concert_hall`, 0.08 dB in `leaky_classroom` and 0.06 dB in `gallery`, and at 63 and
+  125 Hz by up to 0.07 dB, where paths near the floor under which paths are left out
+  come in or go (in the archway a path 40 dB down); outdoor scenes are unchanged. Over
+  two edges with the waves in energy the level is closer to the exact solution at low
+  frequencies (two screens 1 m apart: 1.86 dB low at 63 Hz instead of 2.74 dB) and
+  within 0.44 dB of it from 500 Hz up (4.0.0: 0.75 dB), and the early stage of
+  the alcove hall in `validation/edge_diffraction.py` takes about half the time (680 ms
+  per source and listener with `first_order` instead of about 1.5 s).
+- A room with a curved surface of many facets, whose events at the edges have hundreds
+  of thousands of terms, no longer runs out of memory in the early stage: the BRAS CR3
+  room at its defaults peaks at 10.4 GB, where 4.0.0 asked for 16.4 GiB at once.
+- `validation/archway_ab.py` measures the archway's jamb steps, 1 cm and 1 mm apart at
+  both edges of the jamb, with `coherent_max_band_hz` 125, 250 and 500, and the ISO
+  parameters with each (`--threads`, `--late-device`, `--no-simulate`).
 
 ## 4.0.0
 

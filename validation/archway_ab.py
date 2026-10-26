@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """A/B the archway's jamb step at different early coherence settings.
 
-The jamb step at x = 7.6 m is the known issue: at 250 and 500 Hz the energy model
-(``simulation.early.coherent_max_band_hz: 125``, the default) steps by about 1 dB where
-the reflection off the 40 cm jamb appears; with those bands in pressure it is smooth.
-This script measures the three settings on the same points:
+Behind the archway's wall, at x = 7.6 m, the reflection off the arch's jamb, 40 cm
+deep, appears at y = 6.14 m and 7.33 m, where 4.0.0 stepped by up to 1.4 dB at 250 and
+500 Hz with those bands in energy (``simulation.early.coherent_max_band_hz: 125``, the
+default). This script measures three settings on the same points:
 
     energy        coherent_max_band_hz: 125   (default)
     coherent250   coherent_max_band_hz: 250
