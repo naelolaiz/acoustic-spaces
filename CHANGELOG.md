@@ -104,6 +104,12 @@ density of reflections of each listener's room.
 - A material with `transmission: 0` lets nothing through when the rooms are found
   either: in walls drawn as a shell, a room joined to the source's only by such a wall
   held air too (rooms of 48 and 72 m³ gave 120 m³ instead of 48).
+- What a surface lets out of the rooms counts as absorbed for the rain of the late part
+  (the energy each reflection sends straight to the listeners) as it did for the rays:
+  on the CPU the rain went out of a room through one surface and back in through
+  another, which no ray can do, so two houses across a lane whose facing walls let
+  sound through heard each other's rain. The GPU's rain stops at every surface, as
+  before. The examples have no such path: their results are the same to the bit.
 - Where partitions or openings divide the model into rooms, the statistical method's
   mixing time (where its early paths end) and the density of reflections in the
   synthesized tail come from the volume of the listener's room (a map's mixing time
