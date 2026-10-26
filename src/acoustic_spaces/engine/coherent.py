@@ -13,9 +13,9 @@ for paths over an edge the whole complex UTD coefficient, whose terms then add t
 specular paths in pressure, as the theory has them, rather than through the cross
 terms of the higher bands. Its level in each band stays the energy that band gives it.
 A surface reflects like a locally reacting one whose admittance has the material's
-absorption, fitted as for the wave solver
-(:func:`~acoustic_spaces.engine.impedance.fit_admittance`): R = (cos theta - Y) /
-(cos theta + Y) at the angle of incidence theta. A hard surface reflects in phase at
+absorption in every band (:func:`~acoustic_spaces.engine.impedance.fit_admittance`), so
+the phases in a band do not depend on how many bands add in pressure: R = (cos theta -
+Y) / (cos theta + Y) at the angle of incidence theta. A hard surface reflects in phase at
 every angle; an absorbing one turns the phase of sound that grazes it, by half a turn at
 grazing incidence. Above those bands each path keeps the phase it has at their top
 (:func:`held_phase`).
@@ -97,8 +97,8 @@ def reflection_phases(
 ) -> np.ndarray:
     """(n, count, M) e^(j arg R) of the reflections off ``faces`` (n,) of sound that
     meets them at incidence cosines ``cosines`` (n,), at the frequencies of
-    :func:`sample_frequencies`: R is that of a locally reacting surface whose
-    admittance gives the face's absorption in the lowest ``count`` bands; 1 for the
+    :func:`sample_frequencies` of the lowest ``count`` bands: R is that of a locally
+    reacting surface whose admittance gives the face's absorption in every band; 1 for the
     faces whose reflection :func:`ground_factors` gives (see
     :meth:`~acoustic_spaces.engine.model.TraceModel.factor_faces`)."""
     faces = np.asarray(faces, dtype=np.int64)
@@ -111,18 +111,18 @@ def reflection_phases(
         fitted = ~model.factor_faces(faces)
         if fitted.any():
             out[fitted] = _fitted_phases(
-                model, faces[fitted], np.asarray(cosines)[fitted], count, f, out[fitted]
+                model, faces[fitted], np.asarray(cosines)[fitted], f, out[fitted]
             )
         return out
-    return _fitted_phases(model, faces, cosines, count, f, out)
+    return _fitted_phases(model, faces, cosines, f, out)
 
 
-def _fitted_phases(model, faces, cosines, count, f, out):
+def _fitted_phases(model, faces, cosines, f, out):
     """:func:`reflection_phases` into ``out`` for faces without an impedance."""
     from acoustic_spaces.engine.impedance import fit_admittance
 
     total = model.absorption.shape[1]
-    rows, inverse = np.unique(model.absorption[faces, :count], axis=0, return_inverse=True)
+    rows, inverse = np.unique(model.absorption[faces], axis=0, return_inverse=True)
     admittance = np.array([fit_admittance(row, total, None)(f) for row in rows])
     y = admittance[inverse.reshape(-1)]
     cos = np.clip(np.asarray(cosines, dtype=float), 0.0, 1.0)[:, None, None]
@@ -237,9 +237,8 @@ def _surface_factors(model, faces, cosines, rows, distance, spherical, f) -> np.
             out[own] = plane_reflection(admittance, cos[own, None, None])
     if not own.all():
         other = ~own
-        bands = f.shape[0]
         phase = _fitted_phases(
-            model, faces[other], cos[other], bands, f, np.ones((other.sum(), *f.shape), complex)
+            model, faces[other], cos[other], f, np.ones((other.sum(), *f.shape), complex)
         )
         level = np.sqrt(np.clip(1.0 - model.absorption[faces[other]], 0.0, None))
         out[other] = level[:, :, None] * phase
