@@ -72,27 +72,48 @@ def _material_for(label: tuple[str, ...], scene: Scene) -> str | None:
     return matching_name(label, scene.materials) or scene.default_material
 
 
+def _lets_through(material) -> bool:
+    """Whether a material lets some sound through in some band (``transmission: 0``
+    lets none)."""
+    through = material.transmission_coefficients()
+    return through is not None and any(t > 0.0 for t in through)
+
+
 def _air_cells(
     cells: MeshCells, where: np.ndarray, face_materials, scene: Scene, names: list[str]
 ) -> np.ndarray:
     """The cells that hold air (see :attr:`Room.air_cells`), given the enclosed cell
     each source element and listener lies in (``where``, -1 for none)."""
     occupied = np.unique(where[where >= 0])
-    if np.isin(occupied, cells.rooms).all():
+    in_rooms = np.isin(occupied, cells.rooms)
+    if in_rooms.all():
         return cells.rooms
-    # Cells joined by a surface that lets sound through.
-    passing = np.array(
-        [scene.materials[n].transmission_coefficients() is not None for n in names] + [False]
-    )[face_materials]
+    # Cells joined by a surface that lets some sound through.
+    passing = np.array([_lets_through(scene.materials[n]) for n in names] + [False])[face_materials]
     links = cells.side[passing]
-    air = set(occupied.tolist())
-    grown = True
-    while grown:
-        grown = False
-        for a, b in links.tolist():
-            if (a in air) != (b in air) and cells.enclosed[a] and cells.enclosed[b]:
-                air |= {a, b}
-                grown = True
+
+    def joined(start) -> set[int]:
+        air = set(np.asarray(start).tolist())
+        grown = True
+        while grown:
+            grown = False
+            for a, b in links.tolist():
+                if (a in air) != (b in air) and cells.enclosed[a] and cells.enclosed[b]:
+                    air |= {a, b}
+                    grown = True
+        return air
+
+    if not in_rooms.any():
+        # Walls drawn as a shell: the rooms are the cavities they stand in.
+        return np.array(sorted(joined(occupied)), dtype=np.int64)
+    # Some stand in the model's rooms. Another cell is air only where surfaces that let
+    # sound through join it to a room (a booth with glass walls); otherwise it is the
+    # inside of a solid (a column, a closed box), and what stands in it is in no room.
+    air = set(cells.rooms.tolist())
+    for cell in occupied[~in_rooms]:
+        reached = joined([cell])
+        if reached & air:
+            air |= reached
     return np.array(sorted(air), dtype=np.int64)
 
 
@@ -128,6 +149,11 @@ class Room:
     #: Where the ground and the sky lie in an outdoor scene (``geometry.ground``); None
     #: for a room.
     outdoor: Layout | None = None
+    #: Whether each source (any of its point sources) / listener stands inside a closed
+    #: solid: in a cell the faces enclose that holds no air (see ``air_cells``); None
+    #: when the mesh is not closed.
+    sources_in_solid: np.ndarray | None = None
+    listeners_in_solid: np.ndarray | None = None
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> Room:
@@ -182,7 +208,7 @@ class Room:
         )
         face_materials = per_label[mesh.face_labels]
 
-        sources_inside = listeners_inside = None
+        sources_inside = listeners_inside = sources_in_solid = listeners_in_solid = None
         air = np.zeros(0, dtype=np.int64)
         if report.closed:
             cells = mesh.cells()
@@ -201,13 +227,19 @@ class Room:
             ).astype(bool)
             air = _air_cells(cells, where[used], face_materials, scene, material_names)
             inside = np.isin(where, air) & (where >= 0)
+            solid = (where >= 0) & ~inside
             count = sum(len(e) for e in elements)
-            # A line or surface source is inside when all its point sources are.
+            # A line or surface source is inside when all its point sources are, and in a
+            # solid when any of them is.
             ends = np.cumsum([len(e) for e in elements])[:-1]
             sources_inside = np.array(
                 [part.all() for part in np.split(inside[:count], ends)] if elements else [], bool
             )
+            sources_in_solid = np.array(
+                [part.any() for part in np.split(solid[:count], ends)] if elements else [], bool
+            )
             listeners_inside = inside[count:]
+            listeners_in_solid = solid[count:]
 
         names = {name.casefold() for name in mesh.label_names()}
         unused = [key for key in scene.assignments if key.casefold() not in names]
@@ -239,6 +271,8 @@ class Room:
             directivities=directivities,
             air_cells=air,
             outdoor=outdoor,
+            sources_in_solid=sources_in_solid,
+            listeners_in_solid=listeners_in_solid,
         )
 
     def directivity(self, source: str, bands: Resolution = "octave") -> Directivity:
@@ -303,14 +337,17 @@ class Room:
                 f"surfaces without a material: {listed}; "
                 "add them to assignments or set default_material"
             )
-        for kind, every, every_inside in (
-            ("source", self.scene.sources, self.sources_inside),
-            ("listener", self.scene.listeners, self.listeners_inside),
+        for kind, every, every_inside, every_solid in (
+            ("source", self.scene.sources, self.sources_inside, self.sources_in_solid),
+            ("listener", self.scene.listeners, self.listeners_inside, self.listeners_in_solid),
         ):
             items = [item for item in every if item.in_use]
             inside = None
             if every_inside is not None:
                 inside = [ok for item, ok in zip(every, every_inside, strict=True) if item.in_use]
+            if every_solid is None:
+                every_solid = np.zeros(len(every), dtype=bool)
+            solid = [bad for item, bad in zip(every, every_solid, strict=True) if item.in_use]
             if self.outdoor is not None:
                 for item in items:
                     points = item.elements() if kind == "source" else [item.position]
@@ -322,7 +359,7 @@ class Room:
                         )
             if inside is None:
                 continue
-            for item, ok in zip(items, inside, strict=True):
+            for item, ok, in_solid in zip(items, inside, solid, strict=True):
                 where = "reaches" if getattr(item, "extended", False) else "is"
                 if not ok and self.outdoor is not None:
                     ground = "the ground" if self.outdoor.terrain is None else "the terrain"
@@ -330,6 +367,13 @@ class Room:
                         f"{kind} {item.name!r} at {list(item.position)} {where} outside the "
                         f"open air: below {ground}, above the sky or past the edge of the "
                         "ground (geometry.ground's extent, margin and sky)"
+                    )
+                elif not ok and in_solid:
+                    into = "reaches into" if where == "reaches" else "is inside"
+                    out.append(
+                        f"{kind} {item.name!r} at {list(item.position)} {into} a closed "
+                        "solid (the inside of a column, a thick wall or a closed box), not in "
+                        "a room"
                     )
                 elif not ok:
                     out.append(

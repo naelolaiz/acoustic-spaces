@@ -397,21 +397,30 @@ def _box_obj(low, high, first: int, group: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _room_with_blocks(path: Path, blocks, extra: str = "") -> Room:
+def _room_with_blocks(
+    path: Path, blocks, extra: str = "", listener=(2.6, 2.6, 2.6), block_material=None
+) -> Room:
     """A 3 m cube of a room with closed blocks in it (low and high corners), the
-    source and the listener in its top corner."""
+    source in its top corner and the listener beside it, the blocks of
+    ``block_material`` (default: the walls')."""
     text = _box_obj((0, 0, 0), (3, 3, 3), 1, "walls")
     for k, (low, high) in enumerate(blocks):
         text += _box_obj(low, high, 9 + 8 * k, f"block{k}")
     path.write_text(text + extra, encoding="utf-8")
+    materials = {"hard": {"absorption": [0.1] * 8}}
+    assignments = {}
+    if block_material is not None:
+        materials["block"] = block_material
+        assignments = {f"block{k}": "block" for k in range(len(blocks))}
     return Room.from_scene(
         Scene.model_validate(
             {
                 "geometry": {"file": str(path)},
-                "materials": {"hard": {"absorption": [0.1] * 8}},
+                "materials": materials,
+                "assignments": assignments,
                 "default_material": "hard",
                 "sources": [{"name": "s", "position": [2.5, 2.5, 2.5]}],
-                "listeners": [{"name": "l", "position": [2.6, 2.6, 2.6]}],
+                "listeners": [{"name": "l", "position": list(listener)}],
             }
         )
     )
@@ -444,6 +453,33 @@ def test_solids_standing_on_a_surface_are_no_air(tmp_path: Path, blocks, solid: 
     # on the floor it was under the floor, and the solid's inside counted as air.
     room = _room_with_blocks(tmp_path / "room.obj", blocks)
     assert room.volume_m3 == pytest.approx(27.0 - solid)
+
+
+@pytest.mark.parametrize(
+    ("block", "air"),
+    [
+        (None, False),
+        ({"absorption": [0.2] * 8, "transmission": 0.01}, True),
+        ({"absorption": [0.2] * 8, "transmission": 0}, False),
+    ],
+    ids=["closed", "lets sound through", "transmission 0"],
+)
+def test_a_listener_inside_a_solid_is_reported(tmp_path: Path, block, air: bool) -> None:
+    # A listener inside a block on the floor, the source in the room. The block's inside
+    # is air only where its faces let some sound through (a booth); otherwise it stays
+    # solid and the listener is reported, where its inside became a room of its own.
+    room = _room_with_blocks(
+        tmp_path / "room.obj",
+        [((1, 1, 0), (2, 2, 1))],
+        listener=(1.5, 1.5, 0.5),
+        block_material=block,
+    )
+    assert room.volume_m3 == pytest.approx(27.0 if air else 26.0)
+    assert room.listeners_inside.tolist() == [air]
+    assert room.listeners_in_solid.tolist() == [not air]
+    assert room.sources_inside.tolist() == [True]
+    reported = [p for p in room.problems() if "inside a closed solid" in p]
+    assert len(reported) == (0 if air else 1)
 
 
 def test_mesh_without_faces_is_not_closed() -> None:

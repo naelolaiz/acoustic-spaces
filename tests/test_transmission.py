@@ -187,6 +187,38 @@ def test_an_opening_is_not_there(tmp_path: Path) -> None:
         np.testing.assert_allclose(p.c80[1:7], q.c80[1:7], atol=0.5)
 
 
+@pytest.mark.parametrize(("transmission", "volume"), [(0.01, 120.0), (0.0, 48.0)])
+def test_walls_drawn_as_a_shell_join_the_rooms_sound_passes_between(
+    tmp_path: Path, transmission: float, volume: float
+) -> None:
+    # Two rooms of 48 and 72 m3 inside a closed shell, as walls drawn as solids are, the
+    # source and the listener in the first: the second holds air when the wall between
+    # them lets some sound through, and not with transmission 0, which joined them too.
+    low, high = (-1, -1, -1), (11, 5, 4)
+    (x0, y0, z0), (x1, y1, z1) = low, high
+    shell = [
+        ((x0, y0, z0), (x0, y1, z0), (x1, y1, z0), (x1, y0, z0)),
+        ((x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)),
+        ((x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)),
+        ((x0, y1, z0), (x0, y1, z1), (x1, y1, z1), (x1, y1, z0)),
+        ((x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0)),
+        ((x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)),
+    ]
+    groups = {
+        "room1": _box(0, 4, 4, 3, skip=("x1",)),
+        "room2": _box(4, 10, 4, 3, skip=("x0",)),
+        "partition": [((4, 0, 0), (4, 4, 0), (4, 4, 3), (4, 0, 3))],
+        "shell": shell,
+    }
+    scene = _scene(
+        _write(tmp_path / "shell.obj", groups),
+        {"wall": _flat(0.2), "partition": _flat(0.2, transmission=transmission)},
+        {"room1": "wall", "room2": "wall", "shell": "wall", "partition": "partition"},
+        {"l": [2.5, 2.0, 1.5]},
+    )
+    assert Room.from_scene(scene).volume_m3 == pytest.approx(volume)
+
+
 @pytest.mark.parametrize("loss_db", [30.0, 50.0])
 def test_level_difference_across_a_partition(tmp_path: Path, loss_db: float) -> None:
     # Two 5 x 4 x 3 m rooms, 20 % absorbing everywhere, with a 12 m2 partition between

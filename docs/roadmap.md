@@ -383,7 +383,7 @@ Known issues found by the review of 25 October 2026 (see
 - [x] Vertices that no face uses dropped, coordinates that are not finite refused in
   every format, and a solid standing on a surface (a block on the floor) found to be
   solid from several of its faces.
-- [ ] Sources and listeners inside a closed solid reported, and `transmission: 0` as a
+- [x] Sources and listeners inside a closed solid reported, and `transmission: 0` as a
   surface that lets nothing through.
 - [x] G against a free-field response that starts at its first sample: the free-field
   reference keeps what its band filters spread before it.
@@ -401,3 +401,6 @@ Known issues found by the review of 25 October 2026 (see
 - [ ] Uncertainty: how much each parameter scatters over seeds, as a standard error.
 - [ ] CI: type checks, sanitizers for the native code and the tests' coverage.
 - [ ] Collada polygons with their holes.
+- [ ] Vector-based scattering with a lobe centred on the specular direction, so the late
+  part carries the first orders' specular share as the exact paths do, checked against
+  the BRAS rooms' decay.
