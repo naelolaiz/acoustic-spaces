@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 4.0.1
+
+Behind the `archway`'s wall, where the reflection off the arch's jamb appears, the level
+now steps by at most 0.08 dB from 250 Hz to 1 kHz instead of 1.37 dB, and the BRAS CR2
+and CR3 rooms run at their defaults. Outdoor scenes are unchanged. Indoors the early
+level changes at 63 and 125 Hz in every example but `room_modes`, whose wave solver takes
+those bands, as the reflection phases now come from every band (by up to 3.8 dB, in
+`orchestra`), and from 250 Hz up in the five examples with edges near their paths (by up
+to 1.04 dB, in `archway`).
 
 - Indoors, in the bands where the early paths add in energy (from 250 Hz with the
   default `coherent_max_band_hz`), the sound bent round edges is kept as waves

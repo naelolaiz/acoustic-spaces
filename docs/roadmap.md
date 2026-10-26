@@ -54,9 +54,6 @@ v3, version 3.0.0:
   the exact solution.
 - [x] Early reflections that add in pressure at low frequencies, with the phase of every
   reflection and of the sound over edges.
-- [x] Reflection phases from an admittance fitted to a material's absorption in every
-  band, so that the level at 63 and 125 Hz no longer depends on how many bands add in
-  pressure.
 - [x] A leak finder: where rays escape from a model that is not closed.
 - [x] Materials from CATT-Acoustic and ODEON material libraries.
 - [x] IFC (BIM) and Collada import.
@@ -114,14 +111,6 @@ Edge diffraction:
   (indoors from 250 Hz): they take their cross terms with each other, as one wave, so
   behind the `archway`'s wall the level steps by up to 1.4 dB where the reflection off
   the arch's jamb appears, instead of 4.4 dB.
-- [x] The archway's 1.4 dB, where the reflection off the jamb is found: in the bands
-  that add in energy the terms are kept as waves, whose energy is never below nothing,
-  and the events a path gets past split like those that stop it, so the level steps
-  there by at most 0.11 dB from 250 Hz to 1 kHz.
-- [x] A term past the foot of its edge, where the edge stands on the plane of the next
-  reflection, goes on as the term of the edge's image: behind the archway's wall the
-  level steps by at most 0.08 dB from 250 Hz to 1 kHz, and no longer by 0.63 dB at
-  125 Hz at y = 6.32 m.
 - [ ] Reflections cut off by a thick end: behind the archway's wall the level steps by
   0.57 dB at 63 Hz where they go from hitting the jamb's end face to its far face, a
   face of the end's other corner. This and the fade's other known issues are listed in
@@ -367,6 +356,22 @@ Running on other computers, in steps:
   Jobs, follow its progress, cancel it and bring the results back.
 - [ ] **Run remotely** in the editor, with the results opened from the folder that comes
   back.
+
+Version 4.0.1:
+
+- [x] The archway's 1.4 dB, where the reflection off the jamb is found: in the bands
+  that add in energy the terms are kept as waves, whose energy is never below nothing,
+  and the events a path gets past split like those that stop it, so the level steps
+  there by at most 0.11 dB from 250 Hz to 1 kHz.
+- [x] A term past the foot of its edge, where the edge stands on the plane of the next
+  reflection, goes on as the term of the edge's image: behind the archway's wall the
+  level steps by at most 0.08 dB from 250 Hz to 1 kHz, and no longer by 0.63 dB at
+  125 Hz at y = 6.32 m.
+- [x] Reflection phases from an admittance fitted to a material's absorption in every
+  band, so that the level at 63 and 125 Hz no longer depends on how many bands add in
+  pressure.
+- [x] Rooms with a curved surface of many facets, as BRAS CR2 and CR3, run at their
+  defaults instead of running out of memory.
 
 Known issues found by the review of 25 October 2026 (see
 [Validation](validation.md#known-issues)), in the order they come next:
