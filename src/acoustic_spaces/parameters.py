@@ -809,6 +809,13 @@ def octave_bands(signal: np.ndarray, sample_rate: float, filters: str = "iec") -
     ``filters="iec"`` applies the magnitudes of :func:`octave_filter_gains` with zero
     phase, so no band is delayed against another; ``"crossover"`` uses the crossovers of
     :mod:`acoustic_spaces.synthesis`, whose bands sum back to the input.
+
+    Zero-phase filters spread a sound both ways in time, and the bands cover the
+    signal's samples only: what a band spreads before the first sample or after the
+    last is not in it. Of an impulse at the first sample a band keeps about half its
+    energy (0.50 at 63 Hz to 0.71 at 8 kHz with the IEC filters); with the impulse
+    0.2 s in, all of it. Pad the signal with silence for its energies, as
+    :func:`free_field_reference` and :func:`from_impulse_response` do.
     """
     from acoustic_spaces import synthesis
 
@@ -1145,8 +1152,12 @@ def free_field_reference(
 
     ``ir`` is the source measured at ``distance_m`` with no reflections (or with them
     windowed out); the result is its band energies moved to 10 m (inverse square law).
+    The bands are taken with silence on both sides, as the zero-phase filters spread
+    the sound both ways in time: a response that starts with its direct sound keeps
+    all of each band's energy.
     """
-    energy = octave_bands(np.asarray(ir, dtype=float), sample_rate, filters) ** 2
+    lead = int(round(_FILTER_LEAD_S * sample_rate))
+    energy = octave_bands(np.pad(_mono(ir), lead), sample_rate, filters) ** 2
     return energy.sum(axis=1) * (distance_m / 10.0) ** 2
 
 
