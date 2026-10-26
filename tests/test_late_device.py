@@ -275,6 +275,38 @@ def test_shared_rays_add_up_to_one_run(reference, monkeypatch, name) -> None:
         )
 
 
+@pytest.mark.parametrize("name", ["vector", "vector_split"])
+def test_shared_rays_on_both_devices_add_up_to_one_run(reference, monkeypatch, name) -> None:
+    """With parts on the GPU too (the CPU's tracer standing in for it, each part
+    carrying its share of the energy as the GPU's do), the sums kept as the parts come
+    in give what one run on the CPU does."""
+
+    taken: list[int] = []
+
+    def on_gpu(*, total, **values):
+        taken.append(values["rays"])
+        share = values["rays"] / total
+        target = np.asarray(values["split_target"]) * (total / values["rays"])
+        part = list(_native.trace_stochastic(**(values | {"split_target": target})))
+        for i in (0, 1, 2, 4):
+            part[i] = part[i] * share
+        return tuple(part)
+
+    monkeypatch.setattr(gpu_tracer, "trace_stochastic", on_gpu)
+    # Enough rays for parts on both: the GPU's are 4096 rays at least.
+    values = _arguments(reference, name) | {"rays": 20_000}
+    plan = ray_device.Plan("both", cpu_rate=1.0, gpu_rate=1.0)
+    found, followed = ray_device.trace(plan, values)
+    assert followed == plan and 0 < sum(taken) < values["rays"]
+    expected = late_results(_native.trace_stochastic(**values))
+    # A part's weight window takes the run's target times the run's rays over its own,
+    # which rounds, and a ray at the edge of the window can go the other way.
+    for key, value in expected.items():
+        np.testing.assert_allclose(
+            late_results(found)[key], value, rtol=1e-6, atol=1e-300, err_msg=key
+        )
+
+
 def test_a_run_the_gpu_declines_says_where_it_went(reference, machine, monkeypatch) -> None:
     def decline(**_):
         raise gpu_tracer.Unsupported("the GPU's buffers cannot hold this run's results")

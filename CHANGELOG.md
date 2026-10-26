@@ -151,6 +151,28 @@ density of reflections of each listener's room.
   of memory; and round an open model it lets its first grid go before it makes the one
   with the matched layer (for a 30 x 20 m open floor at 250 Hz, 151 MiB at the peak
   instead of 209).
+- A run's memory is estimated before it starts (`engine.run_size`): the late part's
+  energy at every listener or map point for every source, and while a source is traced,
+  the tracer's copies on the CPU's threads or its buffers on a GPU, the worst of the
+  devices `late.device` may take on this computer. A simulation or a coverage map that
+  would need more than the computer's memory (or its container's limit) is refused with
+  a message that says what to lower, and `Room.warnings()` (the editor's messages)
+  notes one that would need more than half. A map is checked again once its first
+  source point is traced, with the early paths found there at every point.
+  `performance.threads` above the computer's cores run as its cores. On the CPU the
+  estimate came within 1 MiB of the late part's measured peak at 1, 4 and 64 threads;
+  see [Memory](docs/simulation.md#memory) for what it leaves out.
+- The late part takes less memory, with the same results: the stochastic tracer keeps
+  its threads' copies of the results within 256 MiB together (one thread at least),
+  where only those of a map and of the moments had a limit, each its own; a run traced
+  on the CPU and the GPU together adds each part to the sums as it comes in instead of
+  keeping every part; the two batches of the weight window are mixed in place and the
+  bands joined as each is traced; the GPU's sums are read back one array at a time; a
+  line or surface source's points are summed as each is traced; and a source with a
+  feed of its own lets its late part go once its responses have their copies.
+  `stadium_pa` at 8 s peaks at 547 MiB instead of about 1,030 MiB. The results are the
+  same bit for bit on the CPU, in maps, and on the GPU without the weight window (with
+  it, and on both, they vary from run to run within the noise of the rays, as before).
 - Known issue, documented: with vector-based scattering (the default) the late part
   carries the specular share of the first orders with more energy than the exact paths
   (a quarter more for orders 1 to 3 near the middle of a small box), so the total depends

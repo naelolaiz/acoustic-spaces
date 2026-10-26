@@ -20,6 +20,7 @@ sound pressure levels from the sources' sound power.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import time
 from collections.abc import Callable, Sequence
@@ -32,6 +33,7 @@ import numpy as np
 from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
+from acoustic_spaces.engine import run_size
 from acoustic_spaces.engine.coherent import coherent_energy
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel, free_field_energy
@@ -237,6 +239,56 @@ def audience_surfaces(room: Room) -> list[str]:
     )
 
 
+def _map_faces(room: Room, surfaces: Sequence[str] | None) -> np.ndarray:
+    """(n, 3, 3) the triangles a map lies over: those of the named surfaces (default:
+    :func:`audience_surfaces`) that can be walked on, not walls."""
+    mesh = room.mesh
+    names = list(surfaces) if surfaces else audience_surfaces(room)
+    known = set(mesh.label_names())
+    missing = [n for n in names if n not in known]
+    if missing:
+        raise ValueError(
+            f"no surface named {', '.join(missing)}; this model has: {', '.join(sorted(known))}"
+        )
+    wanted = np.array([any(n in label for n in names) for label in mesh.labels], dtype=bool)
+    faces = np.flatnonzero(wanted[mesh.face_labels] & (np.abs(mesh.face_normals()[:, 2]) > 0.25))
+    if len(faces) == 0:
+        raise ValueError(f"{', '.join(names)}: no surface there faces up")
+    return mesh.triangles[faces]
+
+
+def _columns(tri: np.ndarray, spacing: float) -> tuple[np.ndarray, np.ndarray, int, int]:
+    """The plan extent (low and high corner) of ``tri`` and the columns of a grid
+    ``spacing`` apart over it, along x and y."""
+    lo, hi = tri[:, :, :2].reshape(-1, 2).min(axis=0), tri[:, :, :2].reshape(-1, 2).max(axis=0)
+    nx, ny = (np.maximum(1, np.ceil((hi - lo) / spacing - 1e-9)).astype(int)).tolist()
+    return lo, hi, nx, ny
+
+
+def map_size(
+    room: Room,
+    settings: Coverage,
+    simulation: Simulation,
+    sources: Sequence,
+    threads: int,
+) -> run_size.Need:
+    """The memory a coverage map with ``settings`` needs (see
+    :func:`~acoustic_spaces.engine.run_size.map_need`), before its grid is laid out:
+    about a point for each ``coverage.spacing`` squared of the surfaces' plan area."""
+    tri = _map_faces(room, settings.surfaces)
+    lo, hi, _, _ = _columns(tri, settings.spacing)
+    u, v = tri[:, 1, :2] - tri[:, 0, :2], tri[:, 2, :2] - tri[:, 0, :2]
+    area = 0.5 * float(np.abs(u[:, 0] * v[:, 1] - u[:, 1] * v[:, 0]).sum())
+    points = max(1, math.ceil(area / settings.spacing**2))
+    top = float(tri[:, :, 2].max()) + settings.height
+    corners = np.array(
+        [[lo[0], lo[1], top], [hi[0], lo[1], top], [lo[0], hi[1], top], [hi[0], hi[1], top]]
+    )
+    # Each point's sub-samples of the surfaces, three values each, while it is laid out.
+    grid = float(points * _SAMPLES**2 * 3 * run_size.VALUE_BYTES)
+    return run_size.map_need(room, simulation, sources, points, corners, grid, threads)
+
+
 def map_grid(
     room: Room,
     surfaces: Sequence[str] | None = None,
@@ -251,21 +303,8 @@ def map_grid(
     if not (height > 0 and spacing > 0):
         raise ValueError("height and spacing must be positive")
     mesh = room.mesh
-    names = list(surfaces) if surfaces else audience_surfaces(room)
-    known = set(mesh.label_names())
-    missing = [n for n in names if n not in known]
-    if missing:
-        raise ValueError(
-            f"no surface named {', '.join(missing)}; this model has: {', '.join(sorted(known))}"
-        )
-    wanted = np.array([any(n in label for n in names) for label in mesh.labels], dtype=bool)
-    faces = np.flatnonzero(wanted[mesh.face_labels] & (np.abs(mesh.face_normals()[:, 2]) > 0.25))
-    if len(faces) == 0:
-        raise ValueError(f"{', '.join(names)}: no surface there faces up")
-    tri = mesh.triangles[faces]
-
-    lo, hi = tri[:, :, :2].reshape(-1, 2).min(axis=0), tri[:, :, :2].reshape(-1, 2).max(axis=0)
-    nx, ny = (np.maximum(1, np.ceil((hi - lo) / spacing - 1e-9)).astype(int)).tolist()
+    tri = _map_faces(room, surfaces)
+    lo, hi, nx, ny = _columns(tri, spacing)
     # Centre the grid on the surfaces.
     origin = lo - 0.5 * (np.array([nx, ny]) * spacing - (hi - lo))
     step = spacing / _SAMPLES
@@ -822,6 +861,7 @@ def coverage_map(
 
     started = time.perf_counter()
     if grid is None:
+        run_size.check(map_size(room, settings, sim, chosen, threads))
         grid = map_grid(room, settings.surfaces, height=settings.height, spacing=settings.spacing)
     say(f"Map: {len(grid)} points, {grid.cell:g} m apart")
     model = TraceModel.from_room(room, sim)
@@ -885,6 +925,13 @@ def coverage_map(
                     single=single,
                 )
             )
+            if not runs and e_index == 0:
+                # The early paths at every point grow with the points too: as many for
+                # each point source as the first's took.
+                need = run_size.map_need(room, sim, chosen, len(grid), grid.points, 0.0, threads)
+                early = run_size.held_bytes((parts[0].early, parts[0].plain))
+                total = sum(len(s.elements()) for s in chosen)
+                run_size.check(dataclasses.replace(need, bytes=need.bytes + total * early))
         stat = None
         if statistical:
             t60 = room.reverberation_time("eyring", air_absorption=True, bands=model.bands)

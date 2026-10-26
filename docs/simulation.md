@@ -504,7 +504,8 @@ simulation:
 - `threads`: the worker threads of the ray tracer (early candidates, the late part,
   coverage maps, calibration), of the wave solver on the CPU, and of writing the
   responses' files (`simulate --out`, the editor's Export). Fewer leave the
-  computer free for other work while a long run goes on. Results do not depend on it.
+  computer free for other work while a long run goes on; more than the computer's
+  cores run as its cores (see [Memory](#memory)). Results do not depend on it.
 - `ray_tree`: the bounding volume hierarchy that finds the surface a ray meets, and
   whether a listener can see a reflection, which is nearly all of the run time. `sah`
   splits it by the surface area heuristic and walks the nearer box first; `median`
@@ -524,6 +525,43 @@ above.
 ```sh
 acoustic-spaces simulate validation/bras/CR3/scene.yaml --out cr3 --threads 3
 ```
+
+### Memory
+
+Before a simulation or a coverage map starts, the memory of its late part is estimated
+(`engine.run_size`): the energy at every listener (or map point), band and millisecond
+of the response, and at a listener, every 10 ms, for each arrival direction
+(`late.directions`), for every source until the run ends; and while a source is traced,
+the tracer's own. On the CPU that is a copy of the results for each thread that sums
+rays, 256 MiB at most together (one thread at least, however large the copy): a run
+whose copies would take more runs on fewer threads, and more slowly. The examples'
+copies take 1.6 MiB a thread at most, as the default vector-based scattering traces one
+band at a time; with one ray for all eight octave bands, 20 listeners and responses of
+10 s would take 90 MiB a thread, so two threads. On a GPU it is the GPU's buffers, which
+a GPU built into the processor takes from the computer's memory. With `late.device`
+gpu, both or auto (auto only where there is a hardware GPU), the estimate takes the
+worst of the CPU, the GPU and the two together. So the memory grows with
+`simulation.ir_length_s`, the listeners, `late.directions`, the sources and their points,
+and the map points (`coverage.spacing`). On the CPU the rays cost time, not memory.
+
+A run that would need more memory than the computer has (or than its container may
+use) is refused before it starts, with a message that says what to lower, and the
+editor's messages (`Room.warnings()`) note one that would need more than half of it. A
+map is checked again once its first source point is traced, with the early paths found
+there at every point, which grow with the points too (`workshop`'s map: 311 MiB of early
+paths beside 495 MiB of late energy). The editor's note counts a map's late part only.
+`threads` above the computer's cores run as its cores: more would only take turns on
+them, each with its copy.
+
+The estimate leaves out the model, a simulation's early paths (little beside the late
+part at a few listeners) and a GPU driver's own memory. On the CPU it came within 1 MiB
+of the late part's measured peak in `shoebox` at 1, 4 and 64 threads (4 cores), with
+responses of 30 to 480 s and both kinds of scattering. Whole runs peaked a little above
+it: `stadium_pa` at 8 s (15 sources, 9 listeners) at 547 MiB against 537, `orchestra` at
+6 s at 723 MiB against 669. Traced on a software GPU (SwiftShader's Vulkan), the late
+part peaked 60 to 100 MiB above the GPU's estimate, the driver's own. With both, the
+estimate takes the CPU's part and the GPU's at their peaks at once, which those runs
+never reached: up to 1.5 times what they used.
 
 ### The late stage on a GPU
 

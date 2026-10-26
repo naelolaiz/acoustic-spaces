@@ -116,8 +116,7 @@ using Pairs = std::pair<std::vector<std::int64_t>, std::vector<std::int64_t>>;
 // pairs, and joins them in the order of i.
 template <typename Emit>
 Pairs pairs_in_order(std::size_t n, std::size_t threads, Emit emit) {
-    if (threads == 0) threads = std::max<std::size_t>(1, std::thread::hardware_concurrency());
-    threads = std::max<std::size_t>(1, std::min(threads, n));
+    threads = std::max<std::size_t>(1, std::min(worker_threads(threads), n));
     std::vector<Pairs> found(threads);
     parallel_for(n, threads, [&](std::size_t begin, std::size_t stop, std::size_t worker) {
         for (std::size_t i = begin; i < stop; ++i)

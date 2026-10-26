@@ -990,6 +990,8 @@ NB_MODULE(_native, m) {
     // The partitions a path of specular_sequences passes through at most; the
     // stochastic tracer leaves a path that reflects and passes more to the late part.
     m.attr("MAX_FORKS") = as::kMaxForks;
+    // Bytes the stochastic tracer's threads' copies of its results may take together.
+    m.attr("COPY_MEMORY") = as::kCopyMemory;
 
     m.def("trace_stochastic", &trace_stochastic, nb::arg("bvh"), nb::arg("source"),
           nb::arg("directivity_a"), nb::arg("orientation"), nb::arg("directivity_table"),

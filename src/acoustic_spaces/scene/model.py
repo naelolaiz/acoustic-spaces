@@ -2488,8 +2488,8 @@ class Performance(_Model):
         ge=0,
         description=(
             "worker threads for ray tracing and the wave solver on the CPU, and for "
-            "writing the responses' files; 0 uses every core. Fewer leave the computer "
-            "free for other work"
+            "writing the responses' files; 0 uses every core, and more than the cores "
+            "run as the cores. Fewer leave the computer free for other work"
         ),
     )
     ray_tree: Literal["sah", "median"] = Field(

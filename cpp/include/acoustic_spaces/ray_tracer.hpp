@@ -172,16 +172,21 @@ struct Directivity {
     }
 };
 
-// Runs body(begin, end, worker) over [0, n) on up to `threads` threads (0: all cores).
-// An exception that left a thread would end the process (std::terminate): the first a
-// worker throws is kept and thrown here once every thread has finished, as is one from
-// starting a thread, after the threads already started have finished.
+// The worker threads for `threads` asked: as many as this computer has cores for 0 or
+// more, as more would only take turns on them, each with its own buffers.
+inline std::size_t worker_threads(std::size_t threads) {
+    const std::size_t cores = std::max<std::size_t>(1, std::thread::hardware_concurrency());
+    return threads == 0 ? cores : std::min(threads, cores);
+}
+
+// Runs body(begin, end, worker) over [0, n) on up to `threads` threads (0: all cores;
+// see worker_threads). An exception that left a thread would end the process
+// (std::terminate): the first a worker throws is kept and thrown here once every
+// thread has finished, as is one from starting a thread, after the threads already
+// started have finished.
 template <typename Body>
 void parallel_for(std::size_t n, std::size_t threads, Body body) {
-    if (threads == 0) {
-        threads = std::max<std::size_t>(1, std::thread::hardware_concurrency());
-    }
-    threads = std::max<std::size_t>(1, std::min(threads, n));
+    threads = std::max<std::size_t>(1, std::min(worker_threads(threads), n));
     if (threads == 1) {
         body(std::size_t{0}, n, std::size_t{0});
         return;
@@ -224,6 +229,11 @@ enum class Passing : std::uint8_t { kReflects = 0, kBoth = 1, kThrough = 2 };
 // and passes through more partitions than the early stage follows.
 constexpr std::size_t kMaxForks = 2;
 constexpr std::size_t kMaxCrossings = 64;
+
+// Bytes the stochastic tracer's threads' copies of the results (the energy at the
+// receivers, over a coverage map and the moments) may take together: fewer threads sum
+// them where more copies would not fit (one at least).
+constexpr double kCopyMemory = 256.0 * 1024.0 * 1024.0;
 
 // Face indices hit by `rays` specular rays from `source` (Fibonacci directions), up to
 // `max_order` reflections each; one row of max_order per ray, -1 once a ray leaves the
@@ -880,20 +890,10 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
     }
     const double offset = 1e-7 * bvh.scale();
 
-
-    std::size_t threads = settings.threads;
-    if (threads == 0) threads = std::max<std::size_t>(1, std::thread::hardware_concurrency());
-    threads = std::max<std::size_t>(1, std::min(threads, settings.rays));
     double map_bottom = 0.0, map_top = 0.0;
     if (has_map) {
         map_bottom = *std::min_element(map.low.begin(), map.low.end());
         map_top = *std::max_element(map.high.begin(), map.high.end());
-        // Every thread sums its own copy of the map: keep them within kMapMemory.
-        constexpr double kMapMemory = 256.0 * 1024.0 * 1024.0;
-        const double copy = 8.0 * static_cast<double>(map.points() * bands) *
-                            static_cast<double>(map.bins(settings.max_time));
-        threads = std::min(threads, std::max<std::size_t>(
-                                        1, static_cast<std::size_t>(kMapMemory / copy)));
     }
     const std::size_t moment_terms =
         scene.groups > 0 ? 1 + scene.groups + scene.groups * (scene.groups + 1) / 2 : 0;
@@ -901,13 +901,20 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         moment_terms > 0
             ? static_cast<std::size_t>(std::ceil(settings.max_time / settings.moment_time_step))
             : 0;
-    if (moment_terms > 0) {
-        // Every thread sums its own copy of the moments, too.
-        constexpr double kMomentMemory = 256.0 * 1024.0 * 1024.0;
-        const double copy = 8.0 * static_cast<double>(n_rec * moment_terms * bands) *
-                            static_cast<double>(moment_bins);
+    // Every thread sums its own copy of the results (at the receivers, over the map and
+    // the moments): keep the copies within kCopyMemory together, one thread at least.
+    const double bins = std::ceil(settings.max_time / settings.time_step);
+    const double dir_bins = n_dirs > 0 ? std::ceil(settings.max_time / settings.dir_time_step) : 0.0;
+    const double copy =
+        8.0 * static_cast<double>(bands) *
+        (static_cast<double>(n_rec) * (bins + static_cast<double>(n_dirs) * dir_bins) +
+         (has_map ? static_cast<double>(map.points() * map.bins(settings.max_time)) : 0.0) +
+         static_cast<double>(n_rec * moment_terms * moment_bins));
+    std::size_t threads = std::max<std::size_t>(
+        1, std::min(worker_threads(settings.threads), settings.rays));
+    if (copy > 0.0) {
         threads = std::min(threads, std::max<std::size_t>(
-                                        1, static_cast<std::size_t>(kMomentMemory / copy)));
+                                        1, static_cast<std::size_t>(kCopyMemory / copy)));
     }
 
     auto make_result = [&] {

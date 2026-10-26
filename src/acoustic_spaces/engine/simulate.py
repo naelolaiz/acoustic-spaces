@@ -14,7 +14,7 @@ import numpy as np
 
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
-from acoustic_spaces.engine import tuning
+from acoustic_spaces.engine import run_size, tuning
 from acoustic_spaces.engine import wave as wave_stage
 from acoustic_spaces.engine.coherent import band_count
 from acoustic_spaces.engine.crests import CrestDiffraction
@@ -441,6 +441,12 @@ def _where(plan) -> str:
     return f"{where} ({plan.reason})" if plan.reason else where
 
 
+def is_fed(source) -> bool:
+    """Whether ``source`` has a feed of its own: a gain, an equalizer or a delay, which
+    its responses take (:meth:`~acoustic_spaces.engine.response.Response.fed`)."""
+    return source.gain_db != 0 or source.eq_db is not None or source.delay_ms > 0
+
+
 def simulate(
     room: Room | Scene | str | Path,
     *,
@@ -486,6 +492,12 @@ def simulate(
     chosen_listeners = _pick(scene.listeners, listeners, "listener")
     if not chosen_listeners:
         raise ValueError("no listener to simulate")
+    faces = 0 if groups is None else int(np.max(groups, initial=-1)) + 1
+    run_size.check(
+        run_size.simulation_need(
+            room, settings, chosen_sources, chosen_listeners, threads, groups=faces
+        )
+    )
     # Seeds follow the scene's order, so a run of some sources or listeners gives them
     # what a run of all does, as coverage maps do.
     source_index = {source.name: k for k, source in enumerate(scene.sources)}
@@ -696,19 +708,26 @@ def simulate(
         for e_index, position in enumerate(elements):
             # One point source of a line or surface: its share of the rays, a seed of its own.
             single = len(elements) == 1
-            traced.append(
-                trace_point(
-                    source.name if single else f"{source.name} ({e_index + 1})",
-                    position,
-                    directivity,
-                    orientation,
-                    info["seed"] if single else _seed(info["seed"], e_index + 1),
-                    math.ceil(late_cfg.rays / len(elements)),
-                    info,
-                    single,
-                    own_late,
-                )
+            found = trace_point(
+                source.name if single else f"{source.name} ({e_index + 1})",
+                position,
+                directivity,
+                orientation,
+                info["seed"] if single else _seed(info["seed"], e_index + 1),
+                math.ceil(late_cfg.rays / len(elements)),
+                info,
+                single,
+                own_late,
             )
+            if traced and found[2] is not None:
+                # The points' late energy is summed into the first's as each is traced,
+                # so the source holds one point's at a time besides the sum.
+                total = traced[0][2]
+                total.energy += found[2].energy
+                total.directional += found[2].directional
+                total.moments += found[2].moments
+                found = (found[0], found[1], None)
+            traced.append(found)
         direct = np.min([t[0] for t in traced], axis=0)
         cutoff = np.minimum(direct + transition, length)
         if len(traced) == 1:
@@ -718,15 +737,12 @@ def simulate(
             paths = [
                 _shared([t[1][k] for t in traced], bands) for k in range(len(chosen_listeners))
             ]
-            late = None
-            if own_late:
+            late = traced[0][2]
+            if late is not None:
                 share = 1.0 / len(traced)
-                late = dataclasses.replace(
-                    traced[0][2],
-                    energy=share * np.sum([t[2].energy for t in traced], axis=0),
-                    directional=share * np.sum([t[2].directional for t in traced], axis=0),
-                    moments=share * np.sum([t[2].moments for t in traced], axis=0),
-                )
+                late.energy *= share
+                late.directional *= share
+                late.moments *= share
 
         waves: list = [None] * len(chosen_listeners)
         if settings.wave.enabled:
@@ -755,6 +771,10 @@ def simulate(
 
     for s_index, source in enumerate(chosen_sources):
         src, direct, cutoff, paths, late, waves = done[source.name]
+        if source_mix is None:
+            # No other source takes this one's late part: once its responses have what
+            # they keep of it (a copy, where the source is fed), it can go.
+            del done[source.name]
         if late is None:
             row = source_mix[1][s_index]
             used = np.flatnonzero(row)
@@ -762,7 +782,7 @@ def simulate(
                 [done[chosen_sources[source_mix[0][j]].name][4] for j in used], row[used]
             )
         info = details[source.name]
-        fed = source.gain_db != 0 or source.eq_db is not None or source.delay_ms > 0
+        fed = is_fed(source)
         free_field = None
         if room.outdoor is not None:
             free_field = free_field_energy(

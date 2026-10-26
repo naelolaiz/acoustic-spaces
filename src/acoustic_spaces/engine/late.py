@@ -260,11 +260,12 @@ def _in_batches(trace, rays: int, splitting: bool, own: np.ndarray | None = None
         share = np.full(len(arrays[0]), first / rays)
         if own is not None:
             share = np.where(own, share, 0.0)
-        arrays = [
-            share.reshape(-1, *[1] * (a.ndim - 1)) * a
-            + (1.0 - share).reshape(-1, *[1] * (a.ndim - 1)) * b
-            for a, b in zip(arrays, more, strict=True)
-        ]
+        # In place, so that the two batches take no more memory than their arrays.
+        for a, b in zip(arrays, more, strict=True):
+            a *= share.reshape(-1, *[1] * (a.ndim - 1))
+            b *= (1.0 - share).reshape(-1, *[1] * (b.ndim - 1))
+            a += b
+        del more
         escaped += more_escaped
         traced += more_traced
     return arrays, escaped, traced
@@ -293,13 +294,28 @@ def band_groups(model: TraceModel) -> list[slice]:
     in every band, one ray carries them all; so it does when the model asks for one
     ray for all bands (``by_band`` off). Either way each band has the rays asked for,
     so tracing band by band traces that many rays per band."""
-    bands = model.absorption.shape[1]
+    return group_bands(
+        model.absorption,
+        model.scattering,
+        sized=model.surface_size is not None,
+        vector=model.vector_scattering,
+        by_band=model.by_band,
+    )
+
+
+def group_bands(
+    absorption: np.ndarray, scattering: np.ndarray, *, sized: bool, vector: bool, by_band: bool
+) -> list[slice]:
+    """:func:`band_groups` for surfaces of ``absorption`` and ``scattering`` (rows of
+    bands), with the scattering of their size (``sized``), vector-based scattering
+    (``vector``) and ``by_band``."""
+    bands = np.shape(absorption)[1]
     # Faces that reflect nothing (openings) scatter nothing either.
-    scattering = np.asarray(model.scattering)[np.any(model.absorption < 1.0, axis=1)]
+    scattering = np.asarray(scattering)[np.any(np.asarray(absorption) < 1.0, axis=1)]
     uniform = bool(np.all(scattering == scattering[:, :1]))
-    if model.surface_size is not None:
+    if sized:
         uniform = uniform and bool(np.all(scattering == 1.0))  # fully diffuse at any size
-    if not model.vector_scattering or not model.by_band or uniform:
+    if not vector or not by_band or uniform:
         return [slice(0, bands)]
     return [slice(b, b + 1) for b in range(bands)]
 
@@ -307,10 +323,24 @@ def band_groups(model: TraceModel) -> list[slice]:
 def _by_band(groups: list[slice], rays: int, run) -> tuple[list[np.ndarray], int, int]:
     """Runs ``run(group, rays)`` (returning arrays with bands on their second last axis,
     escaped rays and traced rays) for each group of bands, so every band has ``rays``
-    rays, and joins the arrays along the band axis."""
-    parts = [run(group, rays) for group in groups]
-    arrays = [np.concatenate(found, axis=-2) for found in zip(*(p[0] for p in parts), strict=True)]
-    return arrays, sum(p[1] for p in parts), sum(p[2] for p in parts)
+    rays, and joins the arrays along the band axis. Each group's arrays go into the
+    joined ones as soon as it is done, so no more than one group's are held besides."""
+    if len(groups) == 1:
+        arrays, escaped, traced = run(groups[0], rays)
+        return list(arrays), escaped, traced
+    bands = max(group.stop for group in groups)
+    joined: list[np.ndarray] = []
+    escaped = traced = 0
+    for group in groups:
+        arrays, more_escaped, more_traced = run(group, rays)
+        if not joined:
+            joined = [np.empty((*a.shape[:-2], bands, a.shape[-1])) for a in arrays]
+        for whole, part in zip(joined, arrays, strict=True):
+            whole[..., group, :] = part
+        del arrays, part
+        escaped += more_escaped
+        traced += more_traced
+    return joined, escaped, traced
 
 
 def _directivity_arrays(directivity: Directivity | None, orientation, bands: int):

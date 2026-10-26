@@ -2848,9 +2848,10 @@ Models:
 
 Files and runs:
 
-- **No upper limits.** `simulation.ir_length_s`, the numbers of rays and `threads` have
-  no upper bound, and `coverage.spacing` only has to be above zero: a mistyped value is
-  accepted, however large the run it asks for.
+- **No limit on time.** The numbers of rays have no upper bound: a mistyped count runs
+  as long as it asks for. (A run's memory is estimated before it starts, and a run that
+  would need more than the computer has is refused; see
+  [Performance](simulation.md#performance).)
 - **No uncertainty.** A run gives no standard errors: nothing says how much its
   parameters would change with another seed or more rays. Only `calibrate` gives one,
   for the absorption it fits.
