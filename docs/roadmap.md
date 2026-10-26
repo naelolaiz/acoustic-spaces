@@ -376,8 +376,8 @@ Version 4.0.1:
 Known issues found by the review of 25 October 2026 (see
 [Validation](validation.md#known-issues)), in the order they come next:
 
-- [ ] Paths through three partitions or more: the late stage takes out only what the
-  early stage followed.
+- [x] Paths through three partitions or more, which neither part counted: the late
+  stage counts those that reflect, and the early stage leaves them to it.
 - [x] Packs that keep an earlier one when writing fails, and result file names that
   can't be the same for two names.
 - [x] Vertices that no face uses dropped, coordinates that are not finite refused in

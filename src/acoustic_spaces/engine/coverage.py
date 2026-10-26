@@ -40,6 +40,7 @@ from acoustic_spaces.engine.simulate import (
     _as_room,
     _candidates,
     _Edges,
+    _max_partitions,
     _pick,
     _seed,
     _transition,
@@ -712,6 +713,7 @@ def _trace_part(
             directivity=directivity,
             orientation=orientation,
             coherent=coherent,
+            max_partitions=_max_partitions(sim),
         )
         straight.append(paths)
         if diffraction is not None:

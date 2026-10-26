@@ -123,6 +123,16 @@ def _transition(settings: SimulationSettings, volume_m3: float | None) -> float:
     return math.inf
 
 
+def _max_partitions(settings: SimulationSettings) -> int | None:
+    """The partitions a reflected early path may pass through: with the stochastic
+    tracer, as many as the early stage follows, as the tracer leaves paths through more
+    to the late part; with the statistical method, which takes the early paths' energy
+    out of its own, any number."""
+    from acoustic_spaces import _native
+
+    return None if settings.late.method == "statistical" else int(_native.MAX_FORKS)
+
+
 def _seed(base: int, index: int) -> int:
     return int(np.random.SeedSequence([base, index]).generate_state(1, np.uint64)[0])
 
@@ -300,6 +310,7 @@ def early_paths(
             directivity=room.directivity(src.name, model.bands),
             orientation=orientation,
             coherent=coherent,
+            max_partitions=_max_partitions(scene.simulation),
         )
         found = edges.diffraction(
             diffraction or cfg.diffraction,
@@ -500,6 +511,7 @@ def simulate(
 
     # Early paths end `transition` after the direct sound.
     transition = _transition(settings, volume)
+    max_partitions = _max_partitions(settings)
 
     late_from = {} if late_from is None or statistical else late_from
     unknown = sorted(set(late_from) - {item.name for item in [*chosen_listeners, *chosen_sources]})
@@ -552,6 +564,7 @@ def simulate(
                 directivity=directivity,
                 orientation=orientation,
                 coherent=coherent,
+                max_partitions=max_partitions,
             )
             for k in range(len(chosen_listeners))
         ]

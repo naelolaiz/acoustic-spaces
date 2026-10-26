@@ -233,8 +233,7 @@ def ray_traced_candidates(
     if model.transmission is not None:
         # 0: reflects, 1: reflects and lets sound through, 2: lets it through only.
         through = np.any(model.transmission > 0.0, axis=1)
-        reflects = np.any(model.absorption < 1.0, axis=1)
-        passing = np.where(through, np.where(reflects, 1, 2), 0).astype(np.uint8)
+        passing = np.where(model.partition, 1, np.where(through, 2, 0)).astype(np.uint8)
     faces = _native.specular_sequences(
         model.bvh,
         np.asarray(source, dtype=np.float64),
@@ -329,19 +328,25 @@ def find_paths(
     directivity: Directivity | None = None,
     orientation: np.ndarray | None = None,
     coherent: int = 0,
+    max_partitions: int | None = None,
 ) -> EarlyReflections:
     """Validate candidate plane sequences for one listener; add the direct sound.
 
     Each path's energy is weighted by the source's ``directivity`` (default: omni) in
     the direction it leaves the source; ``orientation`` has the source's forward, left
     and up axes as columns. In the lowest ``coherent`` bands each path also carries the
-    phase of its reflections (:mod:`~acoustic_spaces.engine.coherent`).
+    phase of its reflections (:mod:`~acoustic_spaces.engine.coherent`). With
+    ``max_partitions``, a reflected path that passes through more partitions
+    (:attr:`TraceModel.partition`) is left out, as the stochastic late tracer leaves it
+    to the late part (ray-traced candidates find no such path but where planes are
+    shared, as the floor of rooms in a row).
     """
     source = np.asarray(source, dtype=np.float64)
     listener = np.asarray(listener, dtype=np.float64)
     bands = model.absorption.shape[1]
 
     tolerance = _EDGE_TOLERANCE * float(np.ptp(model.room.mesh.vertices, axis=0).max())
+    counted = np.column_stack([~model.transparent, model.partition])
     parts = []
     direct = np.zeros((1, 0), dtype=np.int64)
     for seqs in [direct, *candidates]:
@@ -367,7 +372,8 @@ def find_paths(
         points[k] = current.copy()
         ignore = np.full(n, -1, dtype=np.int64)
         through = np.ones((n, bands))
-        crossings = np.zeros(n, dtype=np.int64)
+        # Per path: the faces crossed that are not openings, and the partitions.
+        crossings = np.zeros((n, 2), dtype=np.int64)
         for j in range(k - 1, -1, -1):
             plane = seqs[:, j]
             # A reflection point on an edge already lies on the next plane too: the path
@@ -380,7 +386,7 @@ def find_paths(
             length = np.linalg.norm(delta, axis=1)
             direction = delta / np.maximum(length, 1e-300)[:, None]
             face, current, share, crossed = _towards_plane(
-                model, current, direction, length, ignore, plane, trace, tolerance
+                model, current, direction, length, ignore, plane, trace, tolerance, counted
             )
             through *= share
             crossings += crossed
@@ -395,10 +401,14 @@ def find_paths(
         delta = source - current
         length = np.linalg.norm(delta, axis=1)
         direction = delta / np.maximum(length, 1e-300)[:, None]
-        share, crossed = model.passes(current, direction, length * (1.0 - 1e-9), ignore)
+        share, crossed = model.passes(
+            current, direction, length * (1.0 - 1e-9), ignore, counted=counted
+        )
         through *= share
         crossings += crossed
         valid &= np.any(through > 0.0, axis=1)
+        if max_partitions is not None and k > 0:
+            valid &= crossings[:, 1] <= max_partitions
         if not valid.any():
             continue
 
@@ -415,7 +425,7 @@ def find_paths(
                 faces[idx],
                 distance[idx],
                 through[idx],
-                crossings[idx],
+                crossings[idx, 0],
                 speed_of_sound=speed_of_sound,
                 air=air,
                 directivity=directivity,
@@ -532,24 +542,24 @@ def assemble_paths(
     )
 
 
-def _towards_plane(model, start, direction, length, ignore, plane, trace, tolerance):
+def _towards_plane(model, start, direction, length, ignore, plane, trace, tolerance, counted):
     """For the rays from ``start`` (n, 3) along ``direction`` up to ``length`` where
     ``trace`` holds: the face of ``plane`` (n,) each meets first, passing straight
     through faces of other planes that let sound through, or -1; where it meets it (the
     start where it does not); the share of sound that passes the faces on the way (n,
-    bands); and how many of them it crossed that are not openings. A hit on another face
-    exactly where it meets the expected plane counts as on the plane."""
+    bands); and how many of them it crossed of each column of ``counted`` (F, m), (n,
+    m). A hit on another face exactly where it meets the expected plane counts as on
+    the plane."""
     n = len(start)
     bands = model.absorption.shape[1]
     face = np.full(n, -1, dtype=np.int64)
     end = start.copy()
     share = np.ones((n, bands))
-    crossed = np.zeros(n, dtype=np.int64)
+    crossed = np.zeros((n, counted.shape[1]), dtype=np.int64)
     position = start.copy()
     remaining = np.asarray(length, dtype=float).copy()
     skip = np.asarray(ignore, dtype=np.int64).copy()
     alive = np.flatnonzero(trace)
-    transparent = model.transparent
     for _ in range(MAX_CROSSINGS + 1):
         if len(alive) == 0:
             break
@@ -570,7 +580,7 @@ def _towards_plane(model, start, direction, length, ignore, plane, trace, tolera
             break
         through = model.transmission[hit]
         share[rows] *= through
-        crossed[rows] += ~transparent[hit]
+        crossed[rows] += counted[hit]
         skip[rows] = hit
         alive = rows[np.any(through > 0.0, axis=1)]
     return face, end, share, crossed

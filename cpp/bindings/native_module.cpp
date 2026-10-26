@@ -985,7 +985,11 @@ NB_MODULE(_native, m) {
           nb::arg("rays"), nb::arg("max_order"), nb::arg("threads"), nb::arg("passing"),
           "Faces hit by deterministic specular rays, one row of max_order per ray, -1 "
           "padded. passing (one per face, or empty): 0 reflects, 1 reflects and lets rays "
-          "through (each ray forks, adding rows), 2 only lets them through.");
+          "through (each ray forks, adding rows, through MAX_FORKS of them at most), 2 "
+          "only lets them through.");
+    // The partitions a path of specular_sequences passes through at most; the
+    // stochastic tracer leaves a path that reflects and passes more to the late part.
+    m.attr("MAX_FORKS") = as::kMaxForks;
 
     m.def("trace_stochastic", &trace_stochastic, nb::arg("bvh"), nb::arg("source"),
           nb::arg("directivity_a"), nb::arg("orientation"), nb::arg("directivity_table"),

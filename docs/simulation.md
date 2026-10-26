@@ -18,7 +18,9 @@ or in a corner. Sound that bends round edges is added to them (see
 - `stochastic_ray_tracing` (default): `rays` rays per band (50,000 by default)
   leave the source and reflect off the surfaces as [Scattering](#scattering) says,
   losing energy to absorption and air.
-  Specular paths the early part already computed are left out. How energy reaches the
+  Specular paths the early part already computed are left out (with partitions, those
+  through two at most; the early part keeps no reflected path through more). How
+  energy reaches the
   listener is set by `reception`:
   - `diffuse_rain` (default): the scattered part of every reflection radiates to
     each listener it can see; the rest counts when a ray crosses a detector

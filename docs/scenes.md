@@ -317,7 +317,10 @@ assignments:
   that the model's rooms do not include (walls drawn as a closed shell inside another),
   `inspect` also gives that "air volume", the one its reverberation times use.
 - Early reflections pass through those surfaces, keeping the share that passes at each;
-  through openings they pass unchanged. The rays of the late part that hit a partition
+  through openings they pass unchanged. A reflected path through more than two
+  partitions is left to the late part, which with the stochastic method counts it
+  (the statistical method takes what the early paths carry out of its own energy, so
+  there the early part keeps any it finds). The rays of the late part that hit a partition
   go on as two: the reflection, and a copy behind it with the share that passes, so even
   a 60 dB wall has rays behind it. Each room's rays are thinned and split for the level
   that room is expected to reach (from the rooms' power balance in a diffuse field),
@@ -345,7 +348,9 @@ diffuse-field theory (within 0.3 dB), two rooms joined by an opening the size of
 wall against one room of both their sizes, and the double-sloped decay of a dry room
 opening into a live one against the two-room model (within 1 dB down to -40 dB). The
 statistical method follows that model in both rooms, and maps over both rooms match
-listeners at their points.
+listeners at their points. In four rooms in a row, the fourth room's response is the
+same whether the early part follows reflections to order 3 or not at all, and ray
+tracing finds the same early paths as image sources in every room.
 
 The `apartment` example has a wall and a door, closed or open, between the living room
 and the bedroom of a flat.
