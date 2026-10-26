@@ -59,6 +59,7 @@ from pydantic import (
     ConfigDict,
     Field,
     PositiveFloat,
+    PrivateAttr,
     ValidationInfo,
     field_validator,
     model_validator,
@@ -1063,6 +1064,14 @@ class Material(_Model):
         ),
     )
     source: str | None = Field(default=None, description="where the coefficients come from")
+    # Notes on the coefficients of a preset or file outside 0 to 1, held to that range.
+    _clipped: list[str] = PrivateAttr(default_factory=list)
+
+    @property
+    def clipped(self) -> list[str]:
+        """What of the coefficients taken from a preset or file lay outside 0 to 1 and
+        was taken as 0 or 1: one note each for the absorption and the scattering."""
+        return list(self._clipped)
 
     @field_validator("impedance", mode="before")
     @classmethod
@@ -1112,6 +1121,8 @@ class Material(_Model):
             raise ValueError("give either a preset or a file, not both")
         absorption = scattering = None
         origin = scattering_origin = None
+        # Where coefficients read from data come from, for the note when they are clipped.
+        absorption_from = scattering_from = None
 
         if self.impedance is not None:
             if self.preset is not None or self.file is not None:
@@ -1129,6 +1140,7 @@ class Material(_Model):
             entry = _database_entry(self.preset, "absorption")
             absorption, extrapolated = _from_data(entry.frequencies, entry.coefficients)
             origin = _describe(entry.source, extrapolated)
+            absorption_from = f"preset {self.preset!r}"
         elif self.file is not None:
             if not self.file.exists():
                 raise ValueError(f"coefficient file not found: {self.file}")
@@ -1141,6 +1153,7 @@ class Material(_Model):
                 where = f"file {self.file.name}"
             absorption, extrapolated = _from_data(freqs, alpha)
             origin = _describe(where, extrapolated)
+            absorption_from = scattering_from = where
             if scatter is not None:
                 scattering, _ = _from_data(freqs, scatter)
         if self.entry is not None and self.file is None:
@@ -1150,8 +1163,10 @@ class Material(_Model):
             entry = _database_entry(self.scattering, "scattering")
             scattering, extrapolated = _from_data(entry.frequencies, entry.coefficients)
             scattering_origin = "scattering: " + _describe(entry.source, extrapolated)
+            scattering_from = f"preset {self.scattering!r}"
         elif self.scattering is not None:
             scattering = self.scattering
+            scattering_from = None  # values given here lie within 0 and 1
 
         if self.transmission is not None and self.transmission_loss is not None:
             raise ValueError("give either transmission or transmission_loss, not both")
@@ -1161,9 +1176,14 @@ class Material(_Model):
                 absorption = passing
             if absorption is None:
                 raise ValueError("give absorption values, a preset or a file")
+            # From an impedance or a transmission they lie within 0 and 1 but for
+            # rounding; from data, a value outside is noted.
+            self._clipped = _outside("absorption", absorption, absorption_from)
             self.absorption = _clip(absorption)
         else:
             origin = None
+        if scattering is not None:
+            self._clipped += _outside("scattering", scattering, scattering_from)
         self.scattering = _clip(scattering or [DEFAULT_SCATTERING] * len(OCTAVE_BANDS_HZ))
         if passing is not None:
             thirds = len(THIRD_OCTAVE_BANDS_HZ) in (len(passing), len(self.absorption))
@@ -1230,6 +1250,24 @@ def _database_entry(name: str, kind: Literal["absorption", "scattering"]):
 
 def _clip(values: list[float]) -> list[float]:
     return [min(max(float(v), 0.0), 1.0) for v in values]
+
+
+def _outside(kind: str, values: list[float], origin: str | None) -> list[str]:
+    """A note on the bands where ``values`` from ``origin`` (None: values that need
+    none) lie outside 0 to 1, which :func:`_clip` takes them to."""
+    if origin is None:
+        return []
+    centres = (
+        THIRD_OCTAVE_BANDS_HZ if len(values) == len(THIRD_OCTAVE_BANDS_HZ) else OCTAVE_BANDS_HZ
+    )
+    outside = [(f, v) for f, v in zip(centres, values, strict=True) if not 0.0 <= v <= 1.0]
+    if not outside:
+        return []
+    bands = ", ".join(f"{v:.3g} at {f:g} Hz" for f, v in outside)
+    return [
+        f"the {kind} of {origin} is {bands}; coefficients run from 0 to 1, so it is "
+        "taken as the nearer of the two there"
+    ]
 
 
 #: The most point sources a line or surface source may be made of.

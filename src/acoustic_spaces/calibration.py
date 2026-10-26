@@ -227,7 +227,7 @@ class _Band:
         step = response.time_step
         slots = int(math.ceil(response.length_s / step - 1e-9))
         early = response.early
-        index = (early.delay_s / step).astype(np.int64)
+        index = np.maximum(early.delay_s / step, 0.0).astype(np.int64)  # as the echogram
         keep = index < slots
         every = reweight.path_counts(early, face_group, groups)
         counts = every[keep]

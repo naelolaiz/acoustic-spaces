@@ -3,7 +3,8 @@ and the editor's Export produce.
 
 For every (source, listener) pair, one WAV file per output format
 (``<source>__<listener>.wav`` for mono, ``<source>__<listener>.<format>.wav`` for the
-others), and for the whole run ``parameters.json``: the settings, run details and the
+others, with ``-2``, ``-3``... after the names or the format where two files would
+otherwise be the same), and for the whole run ``parameters.json``: the settings, run details and the
 ISO 3382-1 parameters of every response (with IACC when a binaural response is written,
 from the first if there are several), its STI, STIPA and U50, and its echo criteria.
 Outdoors also its level relative to free field, and the insertion loss of the buildings,
@@ -43,6 +44,24 @@ def response_stem(source: str, listener: str) -> str:
     return f"{file_name(source)}__{file_name(listener)}"
 
 
+def unique_stems(stems: Sequence[str], suffixes: Sequence[str] = ("",)) -> list[str]:
+    """``stems``, each that would name the same file as one before it with any of
+    ``suffixes`` given ``-2``, ``-3``... in turn, also where the names differ only in
+    case (the file systems of Windows and macOS ignore it): :func:`file_name` turns
+    ``A/B`` and ``A_B`` into the same name, and names in other scripts into
+    ``unnamed``."""
+    taken: set[str] = set()
+    out = []
+    for stem in stems:
+        unique, k = stem, 1
+        while any((unique + suffix).casefold() in taken for suffix in suffixes):
+            k += 1
+            unique = f"{stem}-{k}"
+        taken.update((unique + suffix).casefold() for suffix in suffixes)
+        out.append(unique)
+    return out
+
+
 def write_results(
     result: SimulationResult,
     out: str | Path,
@@ -79,11 +98,9 @@ def write_results(
 
     def render(key) -> dict:
         rendered = {}
-        for fmt in formats:
+        for k, fmt in enumerate(formats):
             say(f"{key[0]} -> {key[1]}: rendering {fmt.label}")
-            rendered[key, fmt.label] = result.responses[key].spatial_impulse_response(
-                fmt, sample_rate
-            )
+            rendered[key, k] = result.responses[key].spatial_impulse_response(fmt, sample_rate)
         return rendered
 
     irs = {}
@@ -92,6 +109,22 @@ def write_results(
             irs.update(rendered)
     peak = max((float(abs(ir).max(initial=0.0)) for ir in irs.values()), default=0.0)
     gain = 10.0 ** (-1.0 / 20.0) / peak if normalize and peak > 0 else 1.0
+
+    # File names that no two responses or formats share, though their names may give
+    # the same (two binaural outputs with HRTF files of the same name, say).
+    parts = unique_stems(
+        ["" if fmt.label == "mono" else f".{file_name(fmt.label)}" for fmt in formats]
+    )
+    suffixes = [f"{part}.wav" for part in parts] + [".png", ".directions.png"]
+    stems = dict(
+        zip(
+            result.responses,
+            unique_stems([response_stem(*key) for key in result.responses], suffixes),
+            strict=True,
+        )
+    )
+    binaural = [k for k, fmt in enumerate(formats) if isinstance(fmt, Binaural)]
+    mono_at = [k for k, fmt in enumerate(formats) if fmt.label == "mono"]
 
     scene = result.room.scene
     sources = {s.name: s for s in scene.sources}
@@ -137,23 +170,21 @@ def write_results(
         """Write the response's files; its entry in the report, without plots."""
         source, listener = key
         response = result.responses[key]
-        stem = response_stem(source, listener)
+        stem = stems[key]
         written = []
-        for fmt in formats:
-            label = fmt.label
-            name = f"{stem}.wav" if label == "mono" else f"{stem}.{file_name(label)}.wav"
+        for k, (fmt, part) in enumerate(zip(formats, parts, strict=True)):
+            name = f"{stem}{part}.wav"
             mask = fmt.channel_mask() if hasattr(fmt, "channel_mask") else None
-            write_wav(out / name, irs[(source, listener), label] * gain, sample_rate, mask)
-            written.append({"format": label, "wav": name, "channels": fmt.channel_names})
+            write_wav(out / name, irs[key, k] * gain, sample_rate, mask)
+            written.append({"format": fmt.label, "wav": name, "channels": fmt.channel_names})
         params = response.parameters()
-        binaural = [fmt.label for fmt in formats if isinstance(fmt, Binaural)]
         if binaural:
-            ears = irs[(source, listener), binaural[0]]
+            ears = irs[key, binaural[0]]
             params = dataclasses.replace(
                 params, **iso3382.interaural_cross_correlation(ears, sample_rate)
             )
-        if ((source, listener), "mono") in irs:
-            mono = irs[(source, listener), "mono"][:, 0]
+        if mono_at:
+            mono = irs[key, mono_at[0]][:, 0]
         else:
             mono = response.impulse_response(sample_rate)
         power = sources[source].power_db("octave") if source in sources else 94.0
@@ -191,10 +222,8 @@ def write_results(
     with ThreadPoolExecutor(workers) as pool:
         report["responses"] = list(pool.map(write, result.responses))
     # Plots one after another: matplotlib draws in one thread.
-    for entry, ((source, listener), response) in zip(
-        report["responses"], result.responses.items(), strict=True
-    ):
-        stem = response_stem(source, listener)
+    for entry, (key, response) in zip(report["responses"], result.responses.items(), strict=True):
+        stem = stems[key]
         if plots:
             try:
                 from acoustic_spaces.viz import plot_directions, plot_response
@@ -257,4 +286,4 @@ def _echo(ir, sample_rate: int) -> dict:
     return out
 
 
-__all__ = ["REPORT_FILE", "file_name", "response_stem", "write_results"]
+__all__ = ["REPORT_FILE", "file_name", "response_stem", "unique_stems", "write_results"]

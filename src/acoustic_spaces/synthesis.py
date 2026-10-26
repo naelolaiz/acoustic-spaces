@@ -96,7 +96,9 @@ def split_bands(
     signal: np.ndarray, sample_rate: float, bands: int = len(OCTAVE_BANDS_HZ)
 ) -> np.ndarray:
     """Split a signal into the 8 octave bands or 24 third-octave bands: (n,) ->
-    (bands, n); the rows sum to the input."""
+    (bands, n); the rows sum to the input. As the bands are zero-phase, what each
+    spreads before the first sample or after the last is not in it (see
+    :func:`acoustic_spaces.parameters.octave_bands`)."""
     signal = np.asarray(signal, dtype=float)
     n = len(signal)
     n_fft = fft_size(n, sample_rate)

@@ -1,3 +1,4 @@
+import dataclasses
 import json
 from pathlib import Path
 
@@ -7,7 +8,13 @@ import pytest
 from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.cli import main
 from acoustic_spaces.engine import simulate
-from acoustic_spaces.results import REPORT_FILE, file_name, response_stem, write_results
+from acoustic_spaces.results import (
+    REPORT_FILE,
+    file_name,
+    response_stem,
+    unique_stems,
+    write_results,
+)
 from acoustic_spaces.room import Room
 from acoustic_spaces.spatial import Ambisonics, Binaural, Mono, spherical_head
 
@@ -28,6 +35,44 @@ def test_file_names() -> None:
     assert file_name("seat a/1") == "seat_a_1"
     assert file_name("  ") == "unnamed"
     assert response_stem("talker", "seat a") == "talker__seat_a"
+    # Names that give the same file, also where a file system ignores case.
+    assert unique_stems(["A_B", "A_B", "a_b", "unnamed", "A_B-2"]) == [
+        "A_B",
+        "A_B-2",
+        "a_b-3",
+        "unnamed",
+        "A_B-2-2",
+    ]
+    # The stem of one file and another's stem with a format's suffix.
+    assert unique_stems(["a__b", "a__b.binaural"], [".wav", ".binaural.wav"]) == [
+        "a__b",
+        "a__b.binaural-2",
+    ]
+
+
+def test_names_that_give_one_file_name_write_files_of_their_own(result, tmp_path: Path) -> None:
+    # "A/B" and "A_B" both give A_B, and two HRTF files of one name give one label.
+    response = result["talker", "seat-a"]
+    twice = dataclasses.replace(
+        result, responses={("talker", "A/B"): response, ("talker", "A_B"): response}
+    )
+    kemar = [Binaural(spherical_head(), label="binaural-kemar") for _ in range(2)]
+    report = write_results(twice, tmp_path / "out", [Mono(), *kemar])
+    names = [[o["wav"] for o in entry["outputs"]] for entry in report["responses"]]
+    assert names == [
+        ["talker__A_B.wav", "talker__A_B.binaural-kemar.wav", "talker__A_B.binaural-kemar-2.wav"],
+        [
+            "talker__A_B-2.wav",
+            "talker__A_B-2.binaural-kemar.wav",
+            "talker__A_B-2.binaural-kemar-2.wav",
+        ],
+    ]
+    assert sorted(p.name for p in (tmp_path / "out").glob("*.wav")) == sorted(sum(names, []))
+    assert [o["format"] for o in report["responses"][0]["outputs"]] == [
+        "mono",
+        "binaural-kemar",
+        "binaural-kemar",
+    ]
 
 
 def test_write_results(result, tmp_path: Path) -> None:

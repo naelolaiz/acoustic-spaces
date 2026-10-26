@@ -265,6 +265,23 @@ def test_free_field_reference_moves_to_ten_metres() -> None:
 
 
 @pytest.mark.parametrize("filters", ["iec", "crossover"])
+@pytest.mark.parametrize("at_s", [0.0, 0.0005, 0.0029, 0.1])
+def test_free_field_reference_of_a_response_that_starts_with_its_sound(
+    filters: str, at_s: float
+) -> None:
+    # The filters' ringing before the first sample counts: an impulse at sample 0 kept
+    # 0.50 of the energy at 63 Hz to 0.71 at 8 kHz (G 3 dB too high).
+    from acoustic_spaces.parameters import band_energy_share, free_field_reference
+
+    fs = 48_000
+    ir = np.zeros(fs // 4)
+    ir[round(at_s * fs)] = 0.1  # the direct sound at 10 m
+    reference = free_field_reference(ir, fs, 10.0, filters=filters)
+    expected = REFERENCE_ENERGY_10M * band_energy_share(fs, filters)
+    np.testing.assert_allclose(reference, expected, rtol=1e-3)
+
+
+@pytest.mark.parametrize("filters", ["iec", "crossover"])
 def test_strength_from_a_broadband_reference(filters: str) -> None:
     ir = np.zeros(48_000)
     ir[480] = 0.1  # the free-field direct sound at 10 m

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -76,7 +77,8 @@ def pack(scene: Scene, out: str | Path, base_dir: str | Path | None = None) -> P
 
     ``base_dir`` is the scene file's folder: the files under it keep their place
     relative to it. Without it (a scene never saved), every file goes under
-    ``external/``.
+    ``external/``. The pack is written to ``<out>.part`` and takes the place of a file
+    ``out`` only when complete: when packing fails, an earlier ``out`` stays.
     """
     out = Path(out)
     if not is_pack(out):
@@ -85,8 +87,11 @@ def pack(scene: Scene, out: str | Path, base_dir: str | Path | None = None) -> P
     names, entries = _layout([Path(file).resolve() for file in scene.files()], base)
     text = scene.yaml_text(lambda file: names[Path(file).resolve()])
     hashes = {}
+    # Written beside ``out`` and put in its place once complete, so a pack that fails
+    # leaves an earlier one of the same name as it was.
+    part = out.with_name(out.name + ".part")
     try:
-        with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        with zipfile.ZipFile(part, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(SCENE_FILE, text)
             for name, file in entries.items():
                 archive.write(file, name)
@@ -98,8 +103,9 @@ def pack(scene: Scene, out: str | Path, base_dir: str | Path | None = None) -> P
                 "files": {SCENE_FILE: _sha256_of(text.encode("utf-8")), **hashes},
             }
             archive.writestr(MANIFEST_FILE, json.dumps(manifest, indent=2) + "\n")
+        os.replace(part, out)
     except BaseException:
-        out.unlink(missing_ok=True)
+        part.unlink(missing_ok=True)
         raise
     return Packed(out, [(name, file.stat().st_size) for name, file in entries.items()])
 

@@ -102,9 +102,11 @@ slider, or saves a GIF (`--out particles.gif`) or an MP4 video (`--out particles
 
 `simulate` writes impulse responses for every source and listener in each format the
 scene's `outputs` list (`results/talker__seat-a.wav` in mono, `.binaural.wav`,
-`.ambix3.wav`, `.5.0.wav` and so on, 32-bit float), `parameters.json` with the room
-acoustic parameters of every response per octave band, its STI and its echo criteria,
-and with `--plot` an echogram, decay curves and a map of arrival directions as PNG.
+`.ambix3.wav`, `.5.0.wav` and so on, 32-bit float; names that would give one file
+name, as `A/B` and `A_B` do, get `-2`, `-3`... after the later ones), `parameters.json`
+with the room acoustic parameters of every response per octave band, its STI and its
+echo criteria, and with `--plot` an echogram, decay curves and a map of arrival
+directions as PNG.
 `--output ambisonics:3` (repeatable) picks formats on the command line. It prints the
 parameters as it goes:
 

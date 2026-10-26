@@ -67,6 +67,15 @@ def test_an_unknown_up_axis_is_refused(tmp_path: Path) -> None:
         load_mesh(path)
 
 
+def test_coordinates_that_are_not_finite_are_refused(tmp_path: Path) -> None:
+    # Every format, not only OBJ: a NaN would make the model's extent and volume NaN.
+    path = tmp_path / "floor.dae"
+    floor = [(0, 0, 0), (2, 0, 0), (2, 3, 0), (0, 3, float("inf"))]
+    path.write_text(_make_model().collada([("floor", "Oak", [floor])]))
+    with pytest.raises(ValueError, match="floor.dae: vertex coordinates must be finite"):
+        load_mesh(path)
+
+
 NODES = """<?xml version="1.0"?>
 <COLLADA xmlns="http://www.collada.org/2008/03/COLLADASchema" version="1.5.0">
   <asset><up_axis>Z_UP</up_axis></asset>

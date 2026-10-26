@@ -677,7 +677,7 @@ def statistical_energy(
         ).sum(axis=1)
         if i < len(early):
             paths = early[i]
-            slot = (paths.delay_s / time_step).astype(np.int64)
+            slot = np.maximum(paths.delay_s / time_step, 0.0).astype(np.int64)
             keep = (paths.order > 0) & (slot < bins)
             per_slot = np.zeros((bins, len(t60)))
             np.add.at(per_slot, slot[keep], paths.energy[keep])

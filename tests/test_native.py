@@ -397,3 +397,13 @@ def test_trace_map_skips_what_the_early_part_covers() -> None:
 def test_trace_map_rejects_a_bad_map(change, message) -> None:
     with pytest.raises(ValueError, match=message):
         _trace_map(10, **change)
+
+
+def test_a_worker_that_fails_raises_instead_of_ending_the_process() -> None:
+    """An exception that left a worker thread ended the process (std::terminate)."""
+    from acoustic_spaces import _native
+
+    for threads, at in ((4, 0), (4, 999), (1, 3)):
+        with pytest.raises(RuntimeError, match="a worker failed"):
+            _native._parallel_for_raises(1_000, threads, at)
+    _native._parallel_for_raises(1_000, 4, 1_000)  # past the last item: none fails

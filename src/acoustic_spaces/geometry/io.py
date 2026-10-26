@@ -116,6 +116,14 @@ def load_mesh(
         mesh, file_scale, file_up = _read_collada(path)
     else:
         mesh = read_with_trimesh(path)
+    # Each reader's own checks aside, for every format: a coordinate that is no number
+    # would make the model's extent and volume NaN or infinite.
+    if not np.isfinite(mesh.vertices).all():
+        raise ValueError(f"{path}: vertex coordinates must be finite")
+    if len(mesh.faces) and not 0 <= int(mesh.faces.min()) <= int(mesh.faces.max()) < len(
+        mesh.vertices
+    ):
+        raise ValueError(f"{path}: a face refers to a missing vertex")
 
     if up_axis is None:
         up_axis = file_up or ("y" if suffix in _Y_UP_SUFFIXES else "z")
@@ -702,7 +710,7 @@ def _read_collada(path: Path) -> tuple[RoomMesh, float, str]:
                 materials = {
                     bound.get("symbol"): target(bound) for bound in child.iter("instance_material")
                 }
-                _collada_geometry(builder, target(child), matrix, materials, ids)
+                _collada_geometry(builder, target(child), matrix, materials, ids, path)
 
     reference = root.find("scene/instance_visual_scene")
     scene = target(reference) if reference is not None else None
@@ -751,7 +759,7 @@ def _collada_transform(node) -> np.ndarray:
     return out
 
 
-def _collada_geometry(builder: _MeshBuilder, geometry, matrix, materials, ids) -> None:
+def _collada_geometry(builder: _MeshBuilder, geometry, matrix, materials, ids, path) -> None:
     mesh = geometry.find("mesh")
     if mesh is None:
         return  # splines and other kinds of geometry
@@ -763,6 +771,8 @@ def _collada_geometry(builder: _MeshBuilder, geometry, matrix, materials, ids) -
     accessor = source.find("technique_common/accessor")
     stride = int(accessor.get("stride", 3)) if accessor is not None else 3
     points = _numbers(source.find("float_array")).reshape(-1, stride)[:, :3]
+    if not (np.isfinite(points).all() and np.isfinite(matrix).all()):
+        raise ValueError(f"{path}: vertex coordinates must be finite")
     points = points @ matrix[:3, :3].T + matrix[:3, 3]
     mirrored = np.linalg.det(matrix[:3, :3]) < 0  # a mirrored copy turns its faces over
     for primitive in mesh:

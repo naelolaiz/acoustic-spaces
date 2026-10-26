@@ -616,6 +616,17 @@ def wave_responses(
         shape = np.ceil((high - origin) / h).astype(np.int64) + 2 + layer
         return grid, origin, shape
 
+    def check_size(shape, layer: int) -> None:
+        """Refuses a grid of more than MAX_CELLS cells, before the weather's fields or
+        the solver, each the size of the grid, are made for it."""
+        if int(np.prod(shape)) > MAX_CELLS:
+            what = " with the matched layer round this open model" if layer else ""
+            raise ValueError(
+                f"the wave grid up to the {max_band_hz} Hz band would have "
+                f"{int(np.prod(shape)):,} cells{what} (at most {MAX_CELLS:,}); lower "
+                "max_band_hz or points_per_wavelength"
+            )
+
     def prepare(stencil: str, layer: int):
         """The solver, grid, fits and probes for the stencil, with ``layer`` cells of
         matched layer."""
@@ -623,6 +634,7 @@ def wave_responses(
         speeds, extremes, flow = None, None, (None, None)
         if weather is None:
             grid, origin, shape = layout(courant, layer, speed_of_sound, points_per_wavelength)
+            check_size(shape, layer)
         elif moving:
             # Fine enough for sound going against the fastest wind in the slowest air, in
             # time steps for the fastest still air (the air's motion is carried apart).
@@ -635,6 +647,7 @@ def wave_responses(
                 if low - top >= slowest and high <= fastest:
                     break
                 slowest, fastest = min(slowest, low - top), max(fastest, high)
+            check_size(shape, layer)
             step = courant * grid.cell * grid.rate
             speeds, *flow = weather.moving_fields(
                 origin, grid.cell, shape, step, 1.0 / (grid.cell * grid.rate)
@@ -652,16 +665,10 @@ def wave_responses(
                 if low_speed >= slowest and high_speed <= fastest:
                     break
                 slowest, fastest = min(slowest, low_speed), max(fastest, high_speed)
+            check_size(shape, layer)
             speeds = weather.ratios(origin, grid.cell, shape, courant * grid.cell * grid.rate)
             extremes = (low_speed, high_speed)
         h = grid.cell
-        if int(np.prod(shape)) > MAX_CELLS:
-            what = " with the matched layer round this open model" if layer else ""
-            raise ValueError(
-                f"the wave grid up to the {max_band_hz} Hz band would have "
-                f"{int(np.prod(shape)):,} cells{what} (at most {MAX_CELLS:,}); lower "
-                "max_band_hz or points_per_wavelength"
-            )
         fits = [fit_admittance(row, total, grid.rate) for row in rows]
         if impedance is not None:
             for m in np.flatnonzero(impedance >= 0).tolist():
@@ -707,6 +714,7 @@ def wave_responses(
                 "simulation.wave.scheme to auto or standard"
             )
         stencil = "standard"
+        del solver  # its grid goes before the one with the layer is made
         solver, grid, fits, probes, courant, extremes = prepare(stencil, LAYER_CELLS)
     h = grid.cell
     signal, delay = source_signal(grid.rate, h, courant)

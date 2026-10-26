@@ -93,8 +93,8 @@ class MeshReport:
 
 
 def clean_mesh(mesh: RoomMesh) -> tuple[RoomMesh, int, int]:
-    """Merge duplicate vertices, drop degenerate faces, split faces at T-junctions and
-    orient the faces alike.
+    """Merge duplicate vertices, drop degenerate faces and the vertices no face uses,
+    split faces at T-junctions and orient the faces alike.
 
     A face whose edge runs past a corner of the faces on its other side (a T-junction,
     which CAD exporters leave, or close with a zero-area sliver that is dropped here) is
@@ -121,7 +121,11 @@ def clean_mesh(mesh: RoomMesh) -> tuple[RoomMesh, int, int]:
     tri = vertices[faces]
     area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
     faces = _orient_faces(faces, area)
-    cleaned = RoomMesh(vertices, faces, labels, list(mesh.labels))
+    # A stray point of the file, or a corner only degenerate faces had, would count
+    # wherever the model's extent is taken from its vertices.
+    used, faces = np.unique(faces, return_inverse=True)
+    faces = faces.reshape(-1, 3).astype(np.int64, copy=False)
+    cleaned = RoomMesh(vertices[used], faces, labels, list(mesh.labels))
     return cleaned, merged, int(np.count_nonzero(~keep))
 
 

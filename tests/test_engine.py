@@ -1,3 +1,4 @@
+import dataclasses
 import itertools
 import math
 from pathlib import Path
@@ -143,6 +144,24 @@ def test_impulse_response_carries_the_same_parameters(diffuse_result) -> None:
     np.testing.assert_allclose(p_ir.g[3:], p.g[3:], atol=1.0)
     np.testing.assert_allclose(p_ir.t30[3:], p.t30[3:], rtol=0.1)
     assert abs(ir).max() == pytest.approx(1 / r, rel=0.3)
+
+
+def test_a_path_before_its_emission_counts_in_the_first_slot(diffuse_result) -> None:
+    # Not the last slot, where a negative index would put it.
+    _, result = diffuse_result
+    response = result["s", "l0"]
+    count = response.coherent_bands
+
+    def at(delay_s):
+        early = dataclasses.replace(response.early, delay_s=delay_s)
+        return dataclasses.replace(response, early=early).energy()[count:]
+
+    # The direct sound and the paths after it in the first 5 ms come before emission.
+    delay_s = response.early.delay_s - response.direct_delay_s - 0.005
+    assert (delay_s < -response.time_step).any()
+    before = at(delay_s)
+    np.testing.assert_array_equal(before, at(np.maximum(delay_s, 0.0)))
+    assert before[:, -1].sum() < 1e-3 * before[:, 0].sum()
 
 
 def test_transition_time_does_not_change_the_total(diffuse_result) -> None:

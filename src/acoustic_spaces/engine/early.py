@@ -142,10 +142,11 @@ class EarlyReflections:
         :meth:`wander_roots`)."""
         if self.wander is None:
             return self
-        delays = Wander.delays(roots, draws, len(self))
+        # No path arrives before it leaves the source, however the eddies draw.
+        delays = np.maximum(self.delay_s[:, None] + Wander.delays(roots, draws, len(self)), 0.0)
         return dataclasses.replace(
             self,
-            delay_s=self.delay_s + delays[:, -1],
+            delay_s=delays[:, -1],
             wander=None,
             lag=delays - delays[:, -1:],
         )

@@ -372,6 +372,8 @@ class Room:
             )
         for key in self.unused_assignments:
             out.append(f"assignment {key!r} matches no name in the geometry")
+        for name, material in self.scene.materials.items():
+            out.extend(f"material {name!r}: {note}" for note in material.clipped)
         out.extend(self._near_arrays())
         if self.outdoor is not None:
             out.extend(self.scene.geometry.footprint_notes())

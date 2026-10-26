@@ -618,7 +618,20 @@ def test_wave_responses_refuse_before_running(tmp_path: Path) -> None:
         )
 
 
-def test_open_models_absorb_at_the_grid_edge(tmp_path: Path) -> None:
+def test_open_models_absorb_at_the_grid_edge(tmp_path: Path, monkeypatch) -> None:
+    # An open model's first solver (no layer) goes before the one with the layer is made.
+    alive, most = [0], [0]
+
+    class Counted(_native.WaveSolver):
+        def __init__(self, *args) -> None:
+            super().__init__(*args)
+            alive[0] += 1
+            most[0] = max(most[0], alive[0])
+
+        def __del__(self) -> None:
+            alive[0] -= 1
+
+    monkeypatch.setattr(_native, "WaveSolver", Counted)
     obj = tmp_path / "floor.obj"
     obj.write_text("v 0 0 0\nv 8 0 0\nv 8 6 3\nv 0 6 3\ng floor\nf 1 2 3 4\n")
     room = Room.from_scene(
@@ -645,6 +658,7 @@ def test_open_models_absorb_at_the_grid_edge(tmp_path: Path) -> None:
     )
     assert info["wave_open"] == 1.0
     assert info["wave_stencil"] == 7  # the matched layer needs the standard stencil
+    assert most[0] == 1
     with pytest.raises(ValueError, match="no matched layer"):
         wave_responses(
             model,
@@ -1299,6 +1313,19 @@ def test_moving_air_stays_on_the_cpu(monkeypatch) -> None:
     assert "the air moving (on the CPU: the GPU steps still air)" in said[0]
     for a, b in zip(cpu, asked, strict=True):
         assert np.array_equal(a.signals, b.signals)
+
+
+@pytest.mark.parametrize("wind", ["effective", "moving"])
+def test_a_grid_too_big_is_refused_before_its_weather_is_made(monkeypatch, wind) -> None:
+    from acoustic_spaces.engine import wave as wave_module
+
+    made = []
+    for name in ("ratios", "moving_fields"):
+        monkeypatch.setattr(wave_module._Weather, name, lambda *_, name=name: made.append(name))
+    monkeypatch.setattr(wave_module, "MAX_CELLS", 1_000)
+    with pytest.raises(ValueError, match=r"cells \(at most 1,000\); lower max_band_hz"):
+        _windy_run(_windy_ground(15.0, wind), wind)
+    assert made == []
 
 
 def test_the_wave_stage_takes_its_wind_model() -> None:

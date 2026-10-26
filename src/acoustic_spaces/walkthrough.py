@@ -760,10 +760,12 @@ def save_movement(
     normalize: bool = False,
 ) -> tuple[dict[str, Path], float]:
     """Write what :func:`render_movement` gave: ``out`` itself for one listener, else
-    ``<out stem>_<listener>.wav`` beside it for each; ``normalize`` brings the loudest
+    ``<out stem>_<listener>.wav`` beside it for each (with ``-2``, ``-3``... where two
+    listeners' names would give the same file); ``normalize`` brings the loudest
     peak of them all to -1 dBFS, one gain for all, so that the balance between the
     listeners holds. Gives each listener's file and the gain applied."""
     from acoustic_spaces.audio import write_wav
+    from acoustic_spaces.results import unique_stems
 
     if not rendered:
         raise ValueError("nothing rendered")
@@ -772,12 +774,18 @@ def save_movement(
     gain = 10.0 ** (-1.0 / 20.0) / peak if normalize and peak > 0 else 1.0
     mask = fmt.channel_mask() if fmt is not None and hasattr(fmt, "channel_mask") else None
     out.parent.mkdir(parents=True, exist_ok=True)
+    suffix = out.suffix or ".wav"
+    # "A/B" and "A_B" would write one file: the second gets -2.
+    stems = unique_stems(
+        [
+            f"{out.stem}_" + "".join(c if c.isalnum() or c in "-_." else "_" for c in listener)
+            for listener in rendered
+        ],
+        (suffix,),
+    )
     paths = {}
-    for listener, data in rendered.items():
-        path = out
-        if len(rendered) > 1:
-            safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in listener)
-            path = out.with_name(f"{out.stem}_{safe}{out.suffix or '.wav'}")
+    for (listener, data), stem in zip(rendered.items(), stems, strict=True):
+        path = out if len(rendered) == 1 else out.with_name(stem + suffix)
         write_wav(path, data * gain, rate, mask)
         paths[listener] = path
     return paths, gain
