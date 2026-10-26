@@ -19,6 +19,10 @@
   a little on the early order: within 0.04 dB of exact paths up to order 9 at the
   default `early.max_order: 3`, 0.15 to 0.2 dB higher with `max_order: 0`. Random
   scattering keeps within 0.03 dB.
+- Known issue, measured: outdoors, where the echogram's pairs of paths from 1 kHz up
+  would take a time slot below zero and it is set to zero, the energy added comes to at
+  most 0.009 dB of a band's response over the nine outdoor examples' 419 pairs of a
+  source and a listener, and 0.04 dB in the lateral figures of eight.
 
 ## 4.0.1
 

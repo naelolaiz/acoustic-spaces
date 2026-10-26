@@ -2839,8 +2839,12 @@ Results:
 - **Pairs of paths from 1 kHz up.** In the bands above 500 Hz that add in pressure
   (outdoors, 1 to 8 kHz), the echogram shares each pair of paths' cross term between
   their two time slots, and a slot that would go below zero is set to zero
-  (`coherent.pair_energy`). That adds energy where paths cancel; by how much has not
-  been measured. Impulse responses add the paths in pressure without it.
+  (`coherent.pair_energy`). That adds energy where paths cancel. Over all 419 pairs of
+  a source and a listener in the nine outdoor examples, it adds at most 0.009 dB to a
+  band's response (the `street`'s garden at 1 kHz) and nothing elsewhere; to the
+  lateral figures of eight behind LF, LFC and LG, at most 0.04 dB (the `street`'s
+  balcony at 1 kHz) and 0.003 dB elsewhere. Impulse responses add the paths in pressure
+  without it.
 
 Models:
 
