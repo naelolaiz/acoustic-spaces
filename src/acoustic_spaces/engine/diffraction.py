@@ -16,16 +16,19 @@ the far side of its boundary, where the edge cuts the wave off, the terms make a
 At the boundary itself both sides carry a quarter of the wave's energy, so levels stay
 continuous where the direct sound or a reflection disappears behind an edge.
 
-Each specular path interferes with the terms of its own wave only, as it adds to the
-other paths in energy. In the diffracted path the terms of all the waves add up
+In the bands where the paths add in energy, each specular path interferes with the
+terms of its own wave only, as it adds to the other paths in energy: each term counts in
+two waves (:mod:`~acoustic_spaces.engine.clusters`), the geometric wave it continues, by
+c, and the edge's diffracted wave, by sqrt(1 - c^2). On the lit side of its boundary c
+is the term's coherence with the geometric wave over the band; on the dark side, where
+the term stands in for the wave, c = ``sqrt(1 - |F|^2)`` with F its transition
+function, 0 well off the boundary. So in the diffracted path the terms of all the waves add up
 coherently, as they must deep in the shadow, except near each wave's boundary, where
-they stand in for the geometric wave they continue and add in energy too: a wave adds
-coherently by the magnitude of its transition function, 0 on its boundary and 1 well
-off it. Coherent all the way, levels would step by up to 4 dB where one wave's boundary
-is crossed while another's terms are there; in energy all the way, the shadow of a
-screen would be 3 dB deeper than Maekawa's chart. As it is, deep behind the corner of
-an L-shaped room the 63 Hz band is 0.7 dB below the coherent sum, the 125 Hz band 0.4
-dB, and from 500 Hz up the two agree within 0.1 dB.
+they add in energy too. Coherent all the way, levels would step by up to 4 dB where one
+wave's boundary is crossed while another's terms are there; in energy all the way, the
+shadow of a screen would be 3 dB deeper than Maekawa's chart. As it is, deep behind the
+corner of an L-shaped room the 63 Hz band is 0.7 dB below the coherent sum, the 125 Hz
+band 0.4 dB, and from 500 Hz up the two agree within 0.1 dB.
 
 With ``first_order`` diffraction the same is done for the first-order reflections: sound
 that reflects off a plane and then bends over an edge, and sound that bends over an edge
@@ -41,12 +44,12 @@ boundaries its wave still curves like the source's, not like a wave from the edg
 the second edge's distance parameter takes that curvature where the wave reaches it;
 seen from the listener, the same holds for the second edge's wave at the first. Each
 edge takes the other's curvature by how much nearer the other's boundary is, so the
-path is the same both ways round. The waves of the two edges add coherently by the
-product of their transition functions, and near either edge's boundary the path
-interferes with the path over the other edge alone, which takes its cross term, as a
-specular path does at one edge. Where the source's wave would reach the listener past
-both edges the path over two edges is left out: it is then a correction of a
-correction.
+path is the same both ways round. In the bands where the paths add in energy, each
+term splits at each edge as at one: near the first edge's boundary it is part of the
+wave of the path over the second edge alone, near the second's of the path over the
+first alone, and well off both the waves of the two edges add coherently. Where the
+source's wave would reach the listener past both edges the path over two edges is left
+out: it is then a correction of a correction.
 
 Openings are not there for diffraction: the edges of a doorway are the free edges of the
 wall round it, and diffracted paths pass through openings as through air. Outdoors, the
@@ -66,6 +69,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from acoustic_spaces.directivity import Directivity
+from acoustic_spaces.engine.clusters import Clusters
 from acoustic_spaces.engine.coherent import ground_factors, reflection_phases
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
@@ -549,6 +553,8 @@ class EdgeDiffraction:
         self.two_edges = mode == "second_order"
         self.threads = int(threads)
         self._edge_pair_cache: np.ndarray | None = None
+        #: The paths :meth:`apply` returned last and the waves of their pieces.
+        self.ledger: tuple[EarlyReflections, Clusters] | None = None
         self.size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
         frequencies, self.slice_hz = band_frequencies(bands=model.bands)
         self.wavenumber = 2.0 * np.pi * frequencies / self.speed_of_sound  # (B, M)
@@ -603,6 +609,12 @@ class EdgeDiffraction:
                         spherical=False,
                     )
         return out
+
+    def _continued(self, kl, angle, lit, bands: slice) -> np.ndarray:
+        """:func:`_continued` in ``bands``, for ``kl`` there."""
+        return _continued(
+            kl, angle, lit, self.wavenumber[bands], self.slice_hz[bands], self.speed_of_sound
+        )
 
     def _coherent_share(self, share: np.ndarray) -> np.ndarray:
         """``share`` (C, W, B, M) with the waves fully coherent in the coherent bands."""
@@ -662,23 +674,85 @@ class EdgeDiffraction:
         """``paths`` (the specular paths from the source to ``listener``) with the
         diffracted sound up to ``max_delay_s``: specular paths near the edges' shadow
         and reflection boundaries change their energy, and paths over the edges into the
-        shadows are added."""
+        shadows are added. In the bands where the paths add in energy, the waves of
+        their terms (:mod:`~acoustic_spaces.engine.clusters`) are kept in
+        :attr:`ledger` with the paths returned, for the edge fade to add to."""
         listener = np.asarray(listener, dtype=float)
+        self.ledger = None
         if len(self.edges) == 0:
             return paths
         combos = self._combos(listener, max_delay_s)
-        single = None if combos is None else self._single(listener, paths, combos)
-        double = self._double(listener, max_delay_s, single) if self.two_edges else None
+        clusters = self.clusters(listener, paths)
+        first = len(paths)
+        single = None if combos is None else self._single(listener, paths, combos, clusters, first)
+        if single is not None:
+            first += len(single["distance"])
+        double = None
+        if self.two_edges:
+            double = self._double(listener, max_delay_s, single, clusters, first)
         if single is None and double is None:
+            if clusters is not None:
+                self.ledger = (paths, clusters)
             return paths
+        count = first + (0 if double is None else len(double["distance"]))
+        starts = (len(paths), first)
+        if clusters is not None:
+            energy, has = clusters.resolve(count)
+            paths = self.settled(paths, energy[: len(paths)], has[: len(paths)])
+            for found, start in zip((single, double), starts, strict=True):
+                if found is not None:
+                    rows = slice(start, start + len(found["distance"]))
+                    found["energy"][:, self.coherent :] = energy[rows]
         # The direct sound in free field; a listener on the source counts as just off it.
         squared = max(float(np.sum((listener - self.source) ** 2)), (_TOLERANCE * self.size) ** 2)
         floor = MIN_RELATIVE_ENERGY / (4.0 * np.pi * squared)
-        parts = [paths if single is None else single["paths"]]
-        for found in (single, double):
+        parts, ids = [paths], [np.arange(len(paths))]
+        for found, start in zip((single, double), starts, strict=True):
             if found is not None:
-                parts.append(self._emit(listener, found, floor, max_delay_s))
-        return EarlyReflections.concatenate(parts, self.model.absorption.shape[1])
+                emitted, idx = self._emit(listener, found, floor, max_delay_s)
+                parts.append(emitted)
+                ids.append(start + idx)
+        out = EarlyReflections.concatenate(parts, self.model.absorption.shape[1])
+        if clusters is not None:
+            # Where each piece's path is among those returned (sorted by arrival).
+            ids = np.concatenate(ids)
+            delay = np.concatenate([p.delay_s for p in parts])
+            mapping = np.full(count, -1, dtype=np.int64)
+            mapping[ids[np.argsort(delay, kind="stable")]] = np.arange(len(ids))
+            clusters.renumber(mapping)
+            self.ledger = (out, clusters)
+        return out
+
+    def clusters(self, listener: np.ndarray, paths: EarlyReflections) -> Clusters | None:
+        """The waves of the specular paths ``paths`` at ``listener`` in the bands where
+        the paths add in energy, each path its own; None without such bands."""
+        late = slice(self.coherent, None)
+        if self.coherent >= self.model.absorption.shape[1]:
+            return None
+        out = Clusters(self.slice_hz[late], self.speed_of_sound, self.size)
+        rows = np.flatnonzero((paths.edge < 0) & (paths.crossings == 0))
+        if len(rows):
+            energy = paths.energy[rows][:, late]
+            distance = paths.distance_m[rows]
+            phase = np.exp(-1j * self.wavenumber[None, late] * distance[:, None, None])
+            out.add(
+                rows,
+                out.geometric(_image_sources(listener, paths)[rows], paths.order[rows]),
+                np.sqrt(energy)[:, :, None] * phase,
+                distance,
+                anchor=True,
+                own=energy,
+            )
+        return out
+
+    def settled(self, paths: EarlyReflections, energy: np.ndarray, has: np.ndarray):
+        """``paths`` with the ``energy`` (n, bands where the paths add in energy) the
+        waves give the paths that ``has`` says are in them."""
+        if not has.any():
+            return paths
+        total = paths.energy.copy()
+        total[np.ix_(np.flatnonzero(has), np.arange(self.coherent, total.shape[1]))] = energy[has]
+        return _replace_energy(paths, total)
 
     def _combos(self, listener: np.ndarray, max_delay_s: float):
         """Source and listener sides of every edge whose shortest path over the edge
@@ -821,6 +895,7 @@ class EdgeDiffraction:
         return {
             "edge": edge[sel],
             "source_side": src[sel],
+            "listener_side": rcv[sel],
             "plane": plane[sel],
             "plane2": plane2[sel],
             "kind": kind[sel],
@@ -836,9 +911,10 @@ class EdgeDiffraction:
             "phi_r": phi_r[sel],
         }
 
-    def _single(self, listener, paths: EarlyReflections, c: dict) -> dict:
-        """The paths over one edge: each wave's terms and their energy, and ``paths`` with
-        the cross terms of the specular paths that border them."""
+    def _single(self, listener, paths: EarlyReflections, c: dict, clusters, start: int) -> dict:
+        """The paths over one edge: each wave's terms and their energy in the bands where
+        the terms add in pressure; in the others, their pieces go to ``clusters`` (if
+        any), as rows from ``start``."""
         model, edges = self.model, self.edges
         edge, kind = c["edge"], c["kind"]
         r1, r2 = c["r1"], c["r2"]
@@ -855,7 +931,7 @@ class EdgeDiffraction:
         # when the path is there, and on the dark side when it is not; where the two
         # disagree (the path is blocked by something else, lies beyond the highest
         # order, or passes round the end of the edge) the term is left out.
-        found = self._specular(listener, paths, c)
+        found, images, orders, front = self._specular(listener, paths, c)
         angle = boundary_angles(n, c["phi_r"], c["phi_s"])
         lit = (angle > _ON_BOUNDARY) | ((np.abs(angle) <= _ON_BOUNDARY) & (found >= 0))
         kl = k * length_param[:, None, None]
@@ -935,50 +1011,34 @@ class EdgeDiffraction:
 
         # The waves' terms add up coherently, as one diffracted wave, except in the
         # transition zone round each wave's boundary: there its terms stand in for the
-        # geometric wave they continue and add in energy, as the specular paths do. A
-        # wave adds coherently by |F(X)| of its boundary, 0 on it and 1 well off it.
+        # geometric wave they continue. In the bands where the paths add in energy a
+        # term continues its geometric wave by c and is part of the diffracted wave by
+        # s = sqrt(1 - c^2) (_continued, :mod:`~acoustic_spaces.engine.clusters`); in
+        # the others all of it adds in pressure.
         counted = lit == (found >= 0)
-        coherence = _coherence(self._coherent_share(_share(kl, angle)))
-        energy = _energy(waves * counted[:, :, None, None], coherence)
-
-        # The diffracted wave arrives on its own, but interferes with the specular
-        # paths of its lit terms, which arrive at almost the same time near the
-        # boundaries: each of those paths takes the cross term with its own wave's
-        # terms. On the boundary a path's energy and the diffracted wave's then add up
-        # to a quarter of the path's on its own, as the diffracted wave alone carries on
-        # the dark side.
-        out = paths
-        rows, groups = np.nonzero(lit & (found >= 0))
-        if len(rows):
-            targets = found[rows, groups]
-            phase = np.exp(-1j * self.wavenumber[None] * paths.distance_m[targets, None, None])
-            specular = np.sqrt(paths.energy[targets])[:, :, None] * phase
-            fade = self._fade(distance[rows] - paths.distance_m[targets])
-            own = waves[rows, groups]
-            cross = 2.0 * fade * np.mean(np.real(specular * np.conj(own)), axis=2)
-            # The waves of other edges that border the same path continue it too, as round
-            # a narrow face: each pair adds its cross term to the path as well, half on
-            # each wave's.
-            size = np.bincount(targets, minlength=targets.max(initial=-1) + 1)
-            if (size**2).sum() <= 1 << 16:
-                i, j = _in_groups(targets, targets)
-                keep = rows[i] != rows[j]
-                i, j = i[keep], j[keep]
-                if len(i):
-                    pair = np.mean(np.real(own[i] * np.conj(own[j])), axis=2)
-                    np.add.at(cross, i, self._fade(distance[rows[i]] - distance[rows[j]]) * pair)
-            else:
-                # A path many edges border (a curved surface): the waves' sum
-                # stands in for each pair, which keeps the work linear in them.
-                unique, inverse = np.unique(targets, return_inverse=True)
-                total = np.zeros((len(unique), *own.shape[1:]), dtype=complex)
-                np.add.at(total, inverse, own)
-                rest = total[inverse] - own
-                cross += np.mean(np.real(own * np.conj(rest)), axis=2)
-            # In the coherent bands the two add in pressure instead.
-            cross[:, : self.coherent] = 0.0
-            total, energy = _take(paths.energy, targets, cross, energy, rows)
-            out = _replace_energy(paths, total)
+        share = _share(kl, angle)
+        energy = _energy(waves * counted[:, :, None, None], _coherence(self._coherent_share(share)))
+        if clusters is not None:
+            late = slice(self.coherent, None)
+            carried = (waves * counted[:, :, None, None])[:, :, late]
+            kept = self._continued(kl[:, late], angle, lit, late)
+            share = np.sqrt(np.maximum(1.0 - kept**2, 0.0))
+            # The geometric wave of each term: its specular path where that was found.
+            points = images.copy()
+            hit = found >= 0
+            points[hit] = _image_sources(listener, paths)[found[hit]]
+            rows, cols = np.nonzero(counted)
+            keys = clusters.geometric(points[rows, cols], orders[rows, cols])
+            # A face the wave comes from behind has no geometric wave of its own.
+            alone = ~front[rows, cols]
+            keys[alone] = clusters.private(int(alone.sum()))
+            clusters.add(start + rows, keys, kept[rows, cols] * carried[rows, cols], distance[rows])
+            clusters.add(
+                start + np.arange(len(edge)),
+                clusters.diffracted(c["source_side"], c["listener_side"]),
+                np.sum(share * carried, axis=1),
+                distance,
+            )
 
         def corners(i: int) -> list[np.ndarray]:
             if kind[i] == 1:
@@ -1001,11 +1061,9 @@ class EdgeDiffraction:
             "c": c,
             "waves": waves,
             "counted": counted,
-            "coherence": coherence,
             "energy": energy,
             "spectrum": self._spectrum((waves * counted[:, :, None, None]).sum(axis=1), distance),
             "distance": distance,
-            "paths": out,
             "order": np.where(kind == 3, 2, np.where(kind > 0, 1, 0)).astype(np.int64),
             "edge": edge,
             "last": last,
@@ -1013,10 +1071,10 @@ class EdgeDiffraction:
             "faces": faces,
         }
 
-    def _double(self, listener: np.ndarray, max_delay_s: float, single: dict | None):
+    def _double(self, listener, max_delay_s: float, single: dict | None, clusters, start: int):
         """The direct sound over two edges in turn (see the module notes), as
-        :meth:`_single` gives the paths over one edge; the cross terms with those paths go
-        to their energies in ``single``."""
+        :meth:`_single` gives the paths over one edge, with its pieces as rows from
+        ``start``."""
         model, edges = self.model, self.edges
         tolerance = _TOLERANCE * self.size
         edge_s, side_s, _, rho_s, phi_s = self._source_side
@@ -1178,59 +1236,82 @@ class EdgeDiffraction:
         )  # (C, B, M)
         waves = first[:, :, None] * second[:, None, :] * common[:, None, None]  # (C, 3, 3, B, M)
         counted = (lit1 == (has1 >= 0))[:, :, None] & (lit2 == (has2 >= 0))[:, None, :]
-        # Each edge's waves add coherently by the product of their transition functions'
-        # magnitudes, the rest in energy: between the waves of the first edge, A (C, 3,
-        # 3, B, M), between those of the second, B, and between two pairs of waves the
-        # product of the two.
-        coherence1 = _coherence(self._coherent_share(_share(kl1, angle1)))
-        coherence2 = _coherence(self._coherent_share(_share(kl2, angle2)))
-        dark = ~lit1[:, :, None] & ~lit2[:, None, :] & counted
-        alone = waves * dark[..., None, None]
-        energy = np.einsum(
-            "cikbm,cjlbm,cijbm,cklbm->cbm", coherence1, coherence2, alone, np.conj(alone)
-        ).real.mean(axis=2)
         # A wave that reaches the second edge from the source (or its reflection) does
         # not reach the listener past both edges: where the first edge's wave is lit, the
-        # path continues the path over the second edge alone, its waves at the second
-        # edge add to that path's as they do to each other, and it takes the cross term
-        # with them; and likewise where the second edge's wave is lit. Where both are,
-        # the path is left out.
-        others = None if single is None else single["waves"] * single["counted"][:, :, None, None]
-        for lit, has, at_first in ((lit1, has1, True), (lit2, has2, False)):
-            rows, groups = np.nonzero(lit & (has >= 0))
-            if len(rows) == 0:
-                continue
-            if at_first:
-                own = (
-                    waves[rows, groups]
-                    * (counted & ~lit2[:, None, :])[rows, groups][..., None, None]
-                )
-                between = coherence2[rows]
-            else:
-                own = (
-                    waves[rows, :, groups]
-                    * (counted & ~lit1[:, :, None])[rows, :, groups][..., None, None]
-                )
-                between = coherence1[rows]
-            # own (R, 3, B, M): this path's waves at the other edge; between their coherence.
-            np.add.at(
-                energy,
-                rows,
-                np.einsum("rjlbm,rjbm,rlbm->rbm", between, own, np.conj(own)).real.mean(axis=2),
-            )
-            targets = has[rows, groups]
-            partner = others[targets]
-            fade = self._fade(distance[rows] - single["distance"][targets])
-            product = np.einsum("rjlbm,rjbm,rlbm->rbm", between, partner, np.conj(own)).real
-            cross = 2.0 * fade * np.mean(product, axis=2)
-            cross[:, : self.coherent] = 0.0
-            single["energy"], energy = _take(single["energy"], targets, cross, energy, rows)
-
-        # In the coherent bands all the waves the path carries add in pressure, and add
-        # to the paths over one edge in the impulse response.
+        # path continues the path over the second edge alone, and its waves at the second
+        # edge are one with that path's; and likewise where the second edge's wave is
+        # lit. Where both are, the path is left out. In the coherent bands all the waves
+        # the path carries add in pressure, and add to the paths over one edge in the
+        # impulse response.
         carried = counted & ~(lit1[:, :, None] & lit2[:, None, :])
         pressure = (waves * carried[..., None, None]).sum(axis=(1, 2))
+        energy = np.zeros((len(e1), self.wavenumber.shape[0]))
         energy[:, : self.coherent] = np.mean(np.abs(pressure[:, : self.coherent]) ** 2, axis=2)
+        if clusters is not None:
+            # In the others each term (i, j) continues the geometric wave i at the first
+            # edge or is part of its diffracted wave, and likewise at the second: four
+            # pieces, as one edge's two (:mod:`~acoustic_spaces.engine.clusters`).
+            late = slice(self.coherent, None)
+            t = (waves * carried[..., None, None])[..., late, :]
+            c1 = self._continued(kl1[:, late], angle1, lit1, late)
+            c2 = self._continued(kl2[:, late], angle2, lit2, late)
+            s1 = np.sqrt(np.maximum(1.0 - c1**2, 0.0))
+            s2 = np.sqrt(np.maximum(1.0 - c2**2, 0.0))
+            # The source and its images in the faces of the first edge, the listener and
+            # its images in those of the second, and whether the waves come from in
+            # front of the faces they reflect off.
+            plane1, plane2 = edges.plane[e1], edges.plane[e2]
+            count = len(e1)
+            src = [np.broadcast_to(self.source, (count, 3))]
+            rcv = [np.broadcast_to(listener, (count, 3))]
+            for face in (0, 1):
+                src.append(model.mirror(src[0], plane1[:, face]))
+                rcv.append(model.mirror(rcv[0], plane2[:, face]))
+            yes = np.ones(count, dtype=bool)
+            front1 = [yes, phi_s1 < np.pi, phi_s1 > (n1 - 1.0) * np.pi]
+            front2 = [yes, phi_12 < np.pi, phi_12 > (n2 - 1.0) * np.pi]
+            rows = start + np.arange(count)
+
+            def keyed(keys, ok):
+                keys[~ok] = clusters.private(int((~ok).sum()))
+                return keys
+
+            for i in range(3):
+                for j in range(3):
+                    image = src[i] if j == 0 else model.mirror(src[i], plane2[:, j - 1])
+                    order = int(i > 0) + int(j > 0)
+                    clusters.add(
+                        rows,
+                        keyed(clusters.geometric(image, order), front1[i] & front2[j]),
+                        c1[:, i] * c2[:, j] * t[:, i, j],
+                        distance,
+                    )
+            # Bent at the first edge and on past the second (j), or on past the first and
+            # bent at the second (i): where the two are one wave (both from the source to
+            # the listener), a term is in it once, by the energy of both its pieces.
+            bent1 = [keyed(clusters.diffracted(src[0], rcv[j]), front2[j]) for j in range(3)]
+            bent2 = [keyed(clusters.diffracted(src[i], rcv[0]), front1[i]) for i in range(3)]
+            first_part = s1[:, :, None] * c2[:, None, :]  # (C, 3, 3, B, M)
+            second_part = c1[:, :, None] * s2[:, None, :]
+            for i in range(3):
+                for j in range(3):
+                    same = np.flatnonzero(bent1[j] == bent2[i])
+                    if len(same):
+                        both = first_part[same, i, j] ** 2 + second_part[same, i, j] ** 2
+                        first_part[same, i, j] = np.sqrt(both)
+                        second_part[same, i, j] = 0.0
+            for j in range(3):
+                clusters.add(
+                    rows, bent1[j], np.sum(first_part[:, :, j] * t[:, :, j], axis=1), distance
+                )
+            for i in range(3):
+                clusters.add(rows, bent2[i], np.sum(second_part[:, i] * t[:, i], axis=1), distance)
+            clusters.add(
+                rows,
+                clusters.private(count),
+                np.einsum("cibm,cjbm,cijbm->cbm", s1, s2, t),
+                distance,
+            )
         return {
             "energy": energy,
             "spectrum": self._spectrum(pressure, distance),
@@ -1304,20 +1385,16 @@ class EdgeDiffraction:
             self._edge_pair_cache = pairs[mark[pairs[:, 1], pairs[:, 0]]].astype(np.int64)
         return self._edge_pair_cache
 
-    def _fade(self, delta_m: np.ndarray) -> np.ndarray:
-        """Each sample stands for its slice of the band: averaged over the slice, the
-        interference of two waves that arrive ``delta_m`` metres apart fades by sinc."""
-        return np.sinc(np.outer(delta_m / self.speed_of_sound, self.slice_hz))
-
-    def _emit(self, listener, found: dict, floor: float, max_delay_s: float) -> EarlyReflections:
+    def _emit(self, listener, found: dict, floor: float, max_delay_s: float):
         """The paths in ``found`` (from :meth:`_single` or :meth:`_double`) that carry
-        at least ``floor`` in some band and arrive by ``max_delay_s``."""
+        at least ``floor`` in some band and arrive by ``max_delay_s``, and their rows
+        there."""
         energy, distance = found["energy"], found["distance"]
         bands = self.model.absorption.shape[1]
         keep = (energy.max(axis=1) >= floor) & (distance / self.speed_of_sound <= max_delay_s)
         idx = np.flatnonzero(keep)
         if len(idx) == 0:
-            return EarlyReflections.empty(bands)
+            return EarlyReflections.empty(bands), idx
         arrival = found["last"][idx] - listener
         arrival /= np.maximum(np.linalg.norm(arrival, axis=1), 1e-300)[:, None]
         spectrum = found["spectrum"]
@@ -1331,19 +1408,22 @@ class EdgeDiffraction:
             faces=[found["faces"](i) for i in idx],
             edge=found["edge"][idx].astype(np.int64),
             spectrum=None if spectrum is None else spectrum[idx],
-        )
+        ), idx
 
-    def _specular(self, listener: np.ndarray, paths: EarlyReflections, c: dict) -> np.ndarray:
+    def _specular(self, listener: np.ndarray, paths: EarlyReflections, c: dict):
         """(C, 3) index in ``paths`` of the specular path of each term's wave (the
-        incident wave and the reflections off face 0 and face n), or -1."""
+        incident wave and the reflections off face 0 and face n), or -1; (C, 3, 3) the
+        image of the source each wave comes from and (C, 3) its order; and (C, 3)
+        whether the wave comes from in front of its face (always for the incident
+        wave)."""
         model, edges = self.model, self.edges
         count = len(c["edge"])
         out = np.full((count, 3), -1, dtype=np.int64)
+        points = np.zeros((count, 3, 3))
+        reflections = np.zeros((count, 3), dtype=np.int64)
         # A path through a wall is not the geometric wave a term continues.
         specular = np.flatnonzero((paths.edge < 0) & (paths.crossings == 0))
-        if len(specular) == 0:
-            return out
-        images = listener + paths.direction[specular] * paths.distance_m[specular, None]
+        images = _image_sources(listener, paths)[specular]
         orders = paths.order[specular]
         kind, plane, plane2 = c["kind"], c["plane"], c["plane2"]
         base = np.broadcast_to(self.source, (count, 3)).copy()
@@ -1371,13 +1451,17 @@ class EdgeDiffraction:
             if both.any():
                 image[both] = model.mirror(image[both], plane2[both])
                 order = order + both.astype(np.int64)
-            out[:, column] = _match(image, order, images, orders, specular, tolerance)
+            points[:, column], reflections[:, column] = image, order
+            if len(specular):
+                out[:, column] = _match(image, order, images, orders, specular, tolerance)
         # A reflection off a face needs the wave to come from in front of it: on a free
         # edge both faces' images are the same point, and only one side is in front.
         n = edges.wedge[c["edge"]]
-        out[:, 1] = np.where(c["phi_s"] < np.pi, out[:, 1], -1)
-        out[:, 2] = np.where(c["phi_s"] > (n - 1.0) * np.pi, out[:, 2], -1)
-        return out
+        front = np.column_stack(
+            [np.ones(count, dtype=bool), c["phi_s"] < np.pi, c["phi_s"] > (n - 1.0) * np.pi]
+        )
+        out = np.where(front, out, -1)
+        return out, points, reflections, front
 
 
 def _waves(n, phi, phi_source, kl, lit, reflection) -> np.ndarray:
@@ -1429,37 +1513,29 @@ def _share(kl: np.ndarray, angle: np.ndarray) -> np.ndarray:
     return np.abs(transition(x))
 
 
+def _continued(kl, angle, lit, wavenumber, slice_hz, speed_of_sound) -> np.ndarray:
+    """(C, 3, B, M) how much of each wave's term continues the geometric wave of its
+    boundary, ``angle`` (C, 3) away, on its ``lit`` side or not, in bands of wave
+    numbers ``wavenumber`` (B, M) that stand for slices ``slice_hz`` (B,) wide, for those
+    times the distance parameter ``kl`` (C, B, M); the rest of it, s = sqrt(1 - c^2), is
+    part of the edge's diffracted wave. On the lit side, where the term adds to the wave,
+    c is its coherence with it over the band: the magnitude of the band's mean of
+    exp(-jkd) sinc(w d / speed_of_sound), with d = X / k how much farther the term goes
+    than the wave (X the argument of its transition function, k d near the boundary) and
+    w the slice. On the dark side, where it stands in for the wave, which is gone,
+    s = |F(X)|, 0 on the boundary and 1 well off it. The same at each of the band's
+    frequencies on the lit side."""
+    x = 2.0 * kl[:, None] * np.sin(0.5 * angle)[..., None, None] ** 2
+    fade = np.sinc(slice_hz[:, None] * (x / wavenumber) / speed_of_sound)
+    coherence = np.abs(np.mean(np.exp(-1j * x) * fade, axis=-1, keepdims=True))
+    dark = np.sqrt(np.maximum(1.0 - np.abs(transition(x)) ** 2, 0.0))
+    return np.where(np.asarray(lit)[..., None, None], np.minimum(coherence, 1.0), dark)
+
+
 def _energy(waves: np.ndarray, coherence: np.ndarray) -> np.ndarray:
     """(C, B) energy of waves (C, W, B, M) that cohere by ``coherence`` (C, W, W, B, M),
     averaged over each band's frequencies."""
     return np.einsum("cijbm,cibm,cjbm->cbm", coherence, waves, np.conj(waves)).real.mean(axis=2)
-
-
-def _in_groups(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Every pair (i, j) of an entry of ``a`` and one of ``b`` in the same group (the
-    values of both are groups)."""
-    order = np.argsort(b, kind="stable")
-    lo = np.searchsorted(b[order], a, side="left")
-    count = np.searchsorted(b[order], a, side="right") - lo
-    i = np.repeat(np.arange(len(a)), count)
-    within = np.arange(count.sum()) - np.repeat(np.cumsum(count) - count, count)
-    return i, order[np.repeat(lo, count) + within]
-
-
-def _take(energy, targets, cross, row_energy, rows):
-    """``energy`` with each cross term added to that of its target path, and
-    ``row_energy`` of the paths that took them. Where the cross terms take more than a
-    path has, the rest comes off the paths that took it, in proportion, so the sum stays
-    the same; unless they have less still (two of them nearly cancelling each other)."""
-    total = energy.copy()
-    np.add.at(total, targets, cross)
-    taken = np.maximum(-cross, 0.0)
-    owed = np.zeros_like(total)
-    np.add.at(owed, targets, taken)
-    short = np.maximum(-total, 0.0)[targets]
-    row_energy = row_energy.copy()
-    np.add.at(row_energy, rows, -short * taken / np.maximum(owed[targets], 1e-300))
-    return np.maximum(total, 0.0), np.maximum(row_energy, 0.0)
 
 
 def _phase_curvature(n, phi, phi_source, kl, reflection, angle) -> np.ndarray:
@@ -1747,6 +1823,11 @@ def _reflect(model: TraceModel, start, image, plane, end):
         model, where, direction, length * (1.0 - 1e-9), np.where(hit, face, -1)
     )
     return hit & (blocked < 0), where, np.where(hit, face, -1)
+
+
+def _image_sources(listener: np.ndarray, paths: EarlyReflections) -> np.ndarray:
+    """(n, 3) the image of the source of each of the specular ``paths`` at ``listener``."""
+    return listener + paths.direction * paths.distance_m[:, None]
 
 
 def _replace_energy(paths: EarlyReflections, energy: np.ndarray) -> EarlyReflections:

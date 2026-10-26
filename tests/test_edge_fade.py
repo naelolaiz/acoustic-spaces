@@ -223,8 +223,11 @@ def test_the_street_garden_goes_on_where_a_second_event_stops_a_path(x: float) -
 def test_the_terms_of_a_narrow_face_cancel_in_energy_too(y: float) -> None:
     """Behind the archway's wall, where the reflection off the arch's jamb (40 cm deep)
     appears: the terms of the jamb's two edges nearly cancel in pressure, and added in
-    energy (from 250 Hz up) they made the level step by up to 4.4 dB in 1 cm. Taking
-    the cross terms between the terms of one event leaves 1.4 dB (a known issue)."""
+    energy (from 250 Hz up) they made the level step by up to 4.4 dB in 1 cm; with the
+    cross terms between the terms of one event, by 1.4 dB. As pieces of the waves they
+    join (the jamb's diffracted wave and the reflection's), with the events a path gets
+    past split alike, by 0.03 dB or less up to 1 kHz and 0.12 dB at 8 kHz, as it does
+    with every band in pressure."""
     scene = Scene.from_yaml(EXAMPLES / "archway" / "scene.yaml")
     room = Room.from_scene(scene)
     listener = next(item for item in scene.listeners if item.name == "behind the wall")
@@ -233,7 +236,7 @@ def test_the_terms_of_a_narrow_face_cancel_in_energy_too(y: float) -> None:
         moved = listener.model_copy(update={"position": (7.6, at, 1.2)})
         moved_room = Room.from_scene(scene.model_copy(update={"listeners": [moved]}), reuse=room)
         levels.append(10 * np.log10(total_energy(early_paths(moved_room, "singer", moved.name))))
-    assert np.abs(levels[1] - levels[0])[2:].max() < 1.5
+    assert np.abs(levels[1] - levels[0])[2:].max() < 0.15
 
 
 @pytest.fixture(scope="module")
@@ -386,34 +389,3 @@ def test_a_wall_as_high_as_a_roof_does_not_stand_on_its_plane() -> None:
     paths = early_paths(room)
     assert paths.diffracted.any()
     assert not any(np.isin(faces, roof).any() for faces in paths.faces)
-
-
-def test_a_wide_event_takes_its_cross_terms_from_their_sum(tmp_path: Path) -> None:
-    """An event with many terms (the facets of a curved surface) is one wave: its
-    cross terms come from the sum of the terms, so the energy is that of the coherent
-    sum and the work stays linear in the terms, not quadratic."""
-    engine = _Engine(tmp_path, "corner", (-3.0, 2.0, 0.5))
-    fade = engine.fade
-    rng = np.random.default_rng(0)
-    count = 64
-    pressure = rng.normal(size=(count, BANDS, 8)) + 1j * rng.normal(size=(count, BANDS, 8))
-    group = np.zeros(count, dtype=np.int64)
-    detour = np.zeros(count)
-    empty = np.zeros(0, dtype=np.int64)
-    coherent = fade.d.coherent
-    fade.d.coherent = 0  # the bands that add in energy
-    try:
-        out = fade._within(
-            group,
-            pressure,
-            detour,
-            empty,
-            np.zeros((0, BANDS, 8), dtype=complex),
-            np.zeros(0),
-            np.zeros(0, dtype=bool),
-        )
-    finally:
-        fade.d.coherent = coherent
-    energy = np.mean(np.abs(pressure) ** 2, axis=2) + out
-    coherent = np.mean(np.abs(pressure.sum(axis=0)) ** 2, axis=1)
-    assert np.allclose(energy.sum(axis=0), coherent)
