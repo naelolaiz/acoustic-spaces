@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Re-weighting a run for other absorption (the editor's results after a material's
+  absorption changes, `Response.reweighted`) turns the phase of each early reflection
+  off a changed material where the paths add in pressure (up to 125 Hz indoors by
+  default, every band outdoors), as tracing again does. It kept the phases as traced,
+  which a reflection factor fitted to the absorption sets: with the `studio`'s side
+  panels 0.2 more absorbent, G, C50 and C80 at 63 Hz came out up to 0.98 dB from those
+  with the new phases. The paths keep the angle of each reflection
+  (`EarlyReflections.cosines`), and `Response.reweighted` takes the absorption as traced
+  and as re-weighted for (`absorption=(old, new)`), which it needs where a path reflects
+  off a group whose absorption changes. As for their energy, the faces of an edge that
+  a path bends round keep what they did to its phase as traced. `calibrate`'s results
+  are unchanged: its fit within a round keeps the traced phases, and each round traces
+  again.
+
 ## 4.0.1
 
 Behind the `archway`'s wall, where the reflection off the arch's jamb appears, the level

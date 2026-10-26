@@ -405,6 +405,9 @@ Known issues found by the review of 25 October 2026 (see
 - [x] The real-time convolver writing each block into buffers made before playback starts.
 - [x] The wave solver's buffers on a GPU all checked against what it binds, and its
   recording at the listeners kept once.
+- [x] Re-weighting for other absorption (the editor's results after an absorption
+  change) turns the phases of the early reflections where they add in pressure, as
+  tracing again has them.
 - [ ] Uncertainty: how much each parameter scatters over seeds, as a standard error.
 - [ ] CI: type checks, sanitizers for the native code and the tests' coverage.
 - [ ] Collada polygons with their holes.

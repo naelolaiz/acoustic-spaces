@@ -154,6 +154,14 @@ def reflection_factor(
     return share, spectrum
 
 
+def own_cosine(model: TraceModel, found: GroundReflection) -> np.ndarray:
+    """(1,) the cosine of the reflection ``found`` where its phase is its face's
+    absorption's (:attr:`~acoustic_spaces.engine.early.EarlyReflections.cosines`), NaN
+    where it is a ground's impedance's."""
+    factor = model.factor_faces(np.array([found.face]))[0]
+    return np.array([np.nan if factor else float(found.cosine)])
+
+
 def terrain_paths(
     model: TraceModel,
     paths: EarlyReflections,
@@ -214,6 +222,7 @@ def terrain_paths(
         points=[np.vstack([source, found.at, listener])],
         faces=[np.array([found.face], dtype=np.int64)],
         spectrum=spectrum[None] if coherent else None,
+        cosines=[own_cosine(model, found)] if coherent else [],
     )
     return EarlyReflections.concatenate([paths, reflected], bands)
 
@@ -223,6 +232,7 @@ __all__ = [
     "ground_face_under",
     "ground_reflection",
     "mean_plane",
+    "own_cosine",
     "reflection_factor",
     "terrain_paths",
 ]

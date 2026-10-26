@@ -187,8 +187,11 @@ which frequencies each octave band holds.
   them.
 - Change a material's absorption after a run and the results follow at once: the run
   counted each ray's reflections off each material, and is re-weighted for the new
-  values instead of traced again (as `calibrate` does). The panel says so; **Run**
-  traces afresh. Other changes, and runs with the statistical method, third-octave
+  values instead of traced again (as `calibrate` does). Where the early reflections add
+  in pressure (up to 125 Hz indoors by default, every band outdoors), their phases turn
+  with the absorption too, as a new run has them; only the faces of an edge that sound
+  bends round keep what they did to it as traced. The panel says so; **Run** traces
+  afresh. Other changes, and runs with the statistical method, third-octave
   bands or the wave solver, leave the results marked out of date until the next run.
 - A source's form sets its **Shape** (a point, a line or a surface, with its length,
   height and spacing), its directivity (a pattern, a SOFA or CSV file of measured data,

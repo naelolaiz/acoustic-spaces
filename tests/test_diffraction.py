@@ -5,8 +5,11 @@ import numpy as np
 import pytest
 
 from acoustic_spaces import Room, Scene, simulate
+from acoustic_spaces.calibration import with_absorption
+from acoustic_spaces.engine import diffraction as diffraction_module
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import early_paths
+from acoustic_spaces.engine import edge_fade as edge_fade_module
 from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.diffraction import (
     EdgeDiffraction,
@@ -20,6 +23,7 @@ from acoustic_spaces.engine.diffraction import (
 )
 from acoustic_spaces.engine.edge_fade import EdgeFade
 from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.engine.reweight import groups_of, reweighted_result
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.scene.model import EarlyStage
 
@@ -402,6 +406,37 @@ def test_coverage_maps_hear_round_corners() -> None:
     for name, rise in (("g", 0.01), ("c80", 0.01)):
         values = bent.get().values[name][shadow, 2] - plain.get().values[name][shadow, 2]
         assert np.all(values > rise)
+
+
+def test_re_weighting_turns_the_phase_of_reflections_on_the_way_round_an_edge(
+    monkeypatch,
+) -> None:
+    # Behind the corner the floor's reflections arrive over the edge. Re-weighted for
+    # another floor, their phases at 63 and 125 Hz, where the paths add in pressure, turn
+    # as tracing again has them. (Tracing again leaves out the paths that the floor's
+    # absorption takes under the energy floor; re-weighting keeps them.)
+    for module in (diffraction_module, edge_fade_module):
+        monkeypatch.setattr(module, "MIN_RELATIVE_ENERGY", 0.0)
+    scene = _l_room([[2.0, 8.0, 1.5]], late={"rays": 300}).scene
+    floor = [0.3, 0.4, 0.5, 0.6, 0.6, 0.6, 0.6, 0.6]
+    scene.materials["floor"] = scene.materials["m"].model_copy(update={"absorption": floor})
+    scene.assignments = {"floor": "floor"}
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    traced = simulate(room, groups=face_group)
+    changed = with_absorption(scene, ["floor"], [np.add(floor, 0.2)])
+    guess = reweighted_result(traced, scene, face_group, materials, changed)["s", "l0"].early
+    fresh = simulate(Room.from_scene(changed))["s", "l0"].early
+    base = traced["s", "l0"].early
+    np.testing.assert_array_equal(guess.delay_s, fresh.delay_s)
+    floor_group = materials.index("floor")
+    on_floor = [
+        np.any(face_group[np.asarray(f, dtype=np.int64)] == floor_group) for f in guess.faces
+    ]
+    bent = guess.diffracted & np.array(on_floor)
+    assert bent.sum() >= 10
+    assert np.abs(base.spectrum[bent] - fresh.spectrum[bent]).max() > 0.1
+    np.testing.assert_allclose(guess.spectrum, fresh.spectrum, rtol=0, atol=1e-12)
 
 
 # -- over two edges -------------------------------------------------------------------

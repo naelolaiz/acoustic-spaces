@@ -546,10 +546,17 @@ class Refraction:
                         length,
                     )
                 )
+        # Each path's reflections in order, with the cosines of those whose phase is
+        # their face's absorption's (EarlyReflections.cosines).
+        own = [np.full(int(np.count_nonzero(r[3] > 0)), np.nan) for r in rows]
         if events:
             row_of = np.array([e[0] for e in events])
             faces = np.array([e[1] for e in events], dtype=np.int64)
             cosines = np.array([e[2] for e in events])
+            plain = ~model.factor_faces(faces)
+            for row in np.unique(row_of):
+                mine = row_of == row
+                own[row] = np.where(plain[mine], cosines[mine], np.nan)
             incoming = np.array([e[3] for e in events])
             orders = np.array([e[7] for e in events])
             lengths = np.array([e[8] for e in events])
@@ -598,6 +605,7 @@ class Refraction:
             faces=[r[2][r[3] > 0] for r in rows],
             crossings=np.array([r[5] for r in rows], dtype=np.int64),
             spectrum=spectrum,
+            cosines=own if coherent else [],
         )
 
     # -- legs --------------------------------------------------------------------------
@@ -844,6 +852,9 @@ class Refraction:
             low = np.flatnonzero(bands[:coherent])
             family.spectrum[wave.carrier, low] = spectrum[low]
             family.spectrum[others[:, None], low[None]] = 1.0
+            if family.cosines:
+                # The parabolic equation's pressure has no reflection phase to turn.
+                family.cosines[wave.carrier] = np.full(len(family.cosines[wave.carrier]), np.nan)
 
     def _blurred(self, energy: np.ndarray, rays: EarlyReflections, bands: np.ndarray):
         """The parabolic equation's ``energy`` (bands,) in still air, in the ``bands``

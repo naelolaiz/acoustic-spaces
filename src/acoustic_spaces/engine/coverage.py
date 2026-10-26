@@ -536,6 +536,13 @@ class CoverageResult:
         }
 
 
+def _unturned(paths: early_stage.EarlyReflections) -> early_stage.EarlyReflections:
+    """``paths`` without the cosines of their reflections
+    (:attr:`~acoustic_spaces.engine.early.EarlyReflections.cosines`): an array per path
+    that only re-weighting for other absorption uses, and a map is never re-weighted."""
+    return dataclasses.replace(paths, cosines=[]) if paths.cosines else paths
+
+
 @dataclass
 class _Part:
     """What one point source (all a source has, or one of a line's or surface's) brings
@@ -754,11 +761,12 @@ def _trace_part(
             coherent=coherent,
             max_partitions=_max_partitions(sim),
         )
+        paths = _unturned(paths)
         straight.append(paths)
         if diffraction is not None:
             paths = diffraction.apply(grid.points[k], paths, float(cutoff[k]))
             diffracted += int(paths.diffracted.sum())
-        found.append(paths)
+        found.append(_unturned(paths))
     refraction = refraction_for(
         model,
         position,
@@ -773,7 +781,7 @@ def _trace_part(
     )
     if refraction is not None:
         say(f"{label}: paths bent by the wind and the temperature")
-        found = refraction.apply(grid.points, straight, found, cutoff)
+        found = [_unturned(p) for p in refraction.apply(grid.points, straight, found, cutoff)]
         # The response starts when the bent direct sound arrives.
         onset = direct_times(onset, found)
     if model.plants is not None:

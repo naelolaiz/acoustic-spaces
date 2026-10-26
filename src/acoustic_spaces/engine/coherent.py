@@ -119,10 +119,20 @@ def reflection_phases(
 
 def _fitted_phases(model, faces, cosines, f, out):
     """:func:`reflection_phases` into ``out`` for faces without an impedance."""
+    out[...] = absorption_phases(model.absorption[faces], cosines, f)
+    return out
+
+
+def absorption_phases(absorption: np.ndarray, cosines: np.ndarray, f: np.ndarray) -> np.ndarray:
+    """(n, count, M) e^(j arg R) at the frequencies ``f`` (count, M) of
+    reflections at incidence cosines ``cosines`` (n,) off locally reacting surfaces whose
+    admittance gives the absorption ``absorption`` (n, bands) in every band, as
+    :func:`reflection_phases` has them."""
     from acoustic_spaces.engine.impedance import fit_admittance
 
-    total = model.absorption.shape[1]
-    rows, inverse = np.unique(model.absorption[faces], axis=0, return_inverse=True)
+    absorption = np.asarray(absorption, dtype=float)
+    total = absorption.shape[1]
+    rows, inverse = np.unique(absorption, axis=0, return_inverse=True)
     admittance = np.array([fit_admittance(row, total, None)(f) for row in rows])
     y = admittance[inverse.reshape(-1)]
     cos = np.clip(np.asarray(cosines, dtype=float), 0.0, 1.0)[:, None, None]
@@ -130,8 +140,7 @@ def _fitted_phases(model, faces, cosines, f, out):
     hard = np.abs(total_) < 1e-12  # a hard surface met at grazing incidence
     r = (cos - y) / np.where(hard, 1.0, total_)
     magnitude = np.abs(r)
-    out[...] = np.where(hard | (magnitude < 1e-12), 1.0, r / np.maximum(magnitude, 1e-300))
-    return out
+    return np.where(hard | (magnitude < 1e-12), 1.0, r / np.maximum(magnitude, 1e-300))
 
 
 def ground_factors(
@@ -679,6 +688,7 @@ class EarlyPressure:
 __all__ = [
     "FILTERED_MAX_BAND_HZ",
     "EarlyPressure",
+    "absorption_phases",
     "amplitude_spectra",
     "band_count",
     "band_impulses",

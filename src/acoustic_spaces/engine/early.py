@@ -80,6 +80,14 @@ class EarlyReflections:
     #: ``delay_s``, its delay in the highest band (the eddies part paths near the
     #: ground less at low frequencies); None otherwise.
     lag: np.ndarray | None = None
+    #: Where the paths carry a :attr:`spectrum`: for each path, the cosine of the angle
+    #: at which it meets the face of each of its reflections (as :attr:`faces`), whose
+    #: phase its spectrum takes from that face's absorption
+    #: (:func:`~acoustic_spaces.engine.coherent.reflection_phases`), so that re-weighting
+    #: for other absorption can turn it (:func:`~acoustic_spaces.engine.reweight.
+    #: turned_paths`); NaN for a reflection whose phase comes from elsewhere (a ground's
+    #: impedance). Empty without a spectrum.
+    cosines: list[np.ndarray] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.edge is None:
@@ -109,6 +117,7 @@ class EarlyReflections:
             point=self.point[rows],
             wander=None if self.wander is None else self.wander[rows],
             lag=None if self.lag is None else self.lag[rows],
+            cosines=[self.cosines[i] for i in rows] if self.cosines else [],
         )
 
     @property
@@ -197,12 +206,29 @@ class EarlyReflections:
             point=np.concatenate([p.point for p in parts]),
             wander=Wander.stacked([p.wander for p in parts], [len(p) for p in parts]),
             lag=_lags(parts, bands),
+            cosines=_cosines(parts),
         )
         return out.sorted()
 
     def sorted(self) -> EarlyReflections:
         """The same paths in order of arrival."""
         return self[np.argsort(self.delay_s, kind="stable")]
+
+
+def _cosines(parts: list[EarlyReflections]) -> list[np.ndarray]:
+    """The parts' :attr:`~EarlyReflections.cosines` one after the other (NaN for the
+    reflections of paths without them); empty when no part has them."""
+    if all(not p.cosines for p in parts):
+        return []
+    out = []
+    for p in parts:
+        if p.cosines:
+            out.extend(p.cosines)
+        elif p.faces:
+            out.extend(np.full(len(f), np.nan) for f in p.faces)
+        else:
+            out.extend(np.zeros(0) for _ in range(len(p)))
+    return out
 
 
 def _lags(parts: list[EarlyReflections], bands: int) -> np.ndarray | None:
@@ -483,6 +509,7 @@ def assemble_paths(
     spectrum = None
     if coherent:
         spectrum = np.ones((n, *sample_frequencies(bands, coherent).shape), complex)
+        cosines = np.full((n, k), np.nan)
     # Reflections off surfaces with an impedance (a ground's) take its spherical
     # wave's reflection factor, in every band: its energy averaged over each band,
     # and in the coherent bands its pressure; on a ground with zones, those of the
@@ -505,6 +532,8 @@ def assemble_paths(
             )
             if coherent:
                 spectrum *= reflection_phases(model, faces[:, j], cosine, coherent)
+                own = ~model.factor_faces(faces[:, j]) if grounds else slice(None)
+                cosines[own, j] = cosine[own]
             if grounds:
                 following = points[j + 1] if j + 1 < k else listener
                 ends = (before, points[j], np.broadcast_to(following, before.shape))
@@ -539,6 +568,7 @@ def assemble_paths(
         faces=[faces[i].copy() for i in range(n)],
         crossings=crossings,
         spectrum=spectrum,
+        cosines=[cosines[i].copy() for i in range(n)] if coherent else [],
     )
 
 

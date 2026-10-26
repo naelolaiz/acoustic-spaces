@@ -83,7 +83,12 @@ from acoustic_spaces.engine.diffraction import (
 )
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel, _ground_faces, source_weights
-from acoustic_spaces.engine.terrain import GroundReflection, ground_face_under, reflection_factor
+from acoustic_spaces.engine.terrain import (
+    GroundReflection,
+    ground_face_under,
+    own_cosine,
+    reflection_factor,
+)
 
 #: Fresnel number below which a crest in the lit zone no longer screens the sound.
 LIT_LIMIT = -0.2
@@ -995,6 +1000,7 @@ class CrestDiffraction:
             points=[corners],
             faces=[np.array([face], dtype=np.int64)],
             spectrum=spectrum[None] if self.coherent else None,
+            cosines=[own_cosine(model, found)] if self.coherent else [],
         )
 
     @staticmethod
