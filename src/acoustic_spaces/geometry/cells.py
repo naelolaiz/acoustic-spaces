@@ -10,7 +10,7 @@ lies a wedge of space onto which one side of each opens, so those two sides face
 same volume. Joining sides edge by edge splits the sides of all the faces into cells. A
 cell enclosed by faces has a positive volume; the space around the model, a negative
 one. A shell inside another one (a pillar standing in a room) touches it at no edge, so
-its outer sides join the cell they lie in by a point test.
+its outer sides join the cell they lie in, which points just off its faces tell.
 
 Rooms are the enclosed cells that the outside of the model borders. A cell enclosed by
 rooms alone is solid: the inside of a pillar modelled as a closed box. Both sides of a
@@ -32,6 +32,9 @@ from scipy.sparse.csgraph import connected_components
 EMPTY_SHARE = 1e-9
 #: Angles (radians) around an edge closer than this count as equal: coincident faces.
 _SAME_ANGLE = 1e-9
+#: The most planes of a shell's faces whose points vote on the cell it lies in (see
+#: ``_nest``): a box's six.
+_NEST_PLANES = 6
 
 
 @dataclass(frozen=True, eq=False)
@@ -177,8 +180,11 @@ def _nest(tri, normal, side, volume):
 
     A shell joined to the rest at no edge is a cell of negative volume by itself; a
     free-standing panel that touches nothing, a cell of no volume with both sides of its
-    faces. A point just off the largest face, on the cell's side, tells which enclosed
-    cell it lies in (the smallest that holds it), if any.
+    faces. A point just off a face, on the cell's side, tells which enclosed cell it lies
+    in (the smallest that holds it), if any. A face may lie on another surface, as a
+    platform's underside on the floor, and its point then on that surface's far side:
+    points off the largest faces of up to ``_NEST_PLANES`` planes vote by those faces'
+    area, until the rest could no longer change the outcome.
     """
     tolerance = float(np.abs(volume).max(initial=0.0)) * EMPTY_SHARE
     both = side[side[:, 0] == side[:, 1], 0]
@@ -191,15 +197,45 @@ def _nest(tri, normal, side, volume):
     area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
     enclosed = np.flatnonzero(volume > tolerance)
     parent = np.arange(len(volume))
-    for shell in shells.tolist():
-        rows, column = np.nonzero(side == shell)
-        best = np.argmax(area[rows])
-        face, back = rows[best], column[best]
-        sign = -1.0 if back else 1.0
-        point = tri[face].mean(axis=0) + sign * 1e-6 * size * normal[face]
-        holders = [c for c in enclosed.tolist() if _winding(tri, normal, side, c, point) > 0.5]
-        if holders:
-            parent[shell] = min(holders, key=lambda c: volume[c])
+    # The sides of each cell, in the order of their faces.
+    order = np.argsort(side.reshape(-1), kind="stable")
+    bounds = np.searchsorted(side.reshape(-1)[order], np.stack([shells, shells + 1]))
+    for shell, start, stop in zip(shells.tolist(), *bounds.tolist(), strict=True):
+        # Only a cell larger than the shell can hold it (none holds the model's outside).
+        among = [c for c in enclosed.tolist() if volume[c] > -volume[shell]]
+        if not among:
+            continue
+        rows, column = np.divmod(order[start:stop], 2)
+        # The largest face of each plane the shell's sides lie in, the largest first.
+        probes: list[tuple[int, np.ndarray]] = []
+        planes: list[tuple[np.ndarray, float]] = []
+        for k in np.argsort(-area[rows], kind="stable").tolist():
+            face = int(rows[k])
+            out = (-1.0 if column[k] else 1.0) * normal[face]  # off the shell's side
+            offset = float(out @ tri[face, 0])
+            if any(
+                out @ seen > 1.0 - 1e-9 and abs(offset - at) <= 1e-6 * size for seen, at in planes
+            ):
+                continue
+            planes.append((out, offset))
+            probes.append((face, out))
+            if len(probes) == _NEST_PLANES:
+                break
+        votes: dict[int, float] = {}
+        left = float(sum(area[face] for face, _ in probes))
+        for face, out in probes:
+            point = tri[face].mean(axis=0) + 1e-6 * size * out
+            holders = [c for c in among if _winding(tri, normal, side, c, point) > 0.5]
+            holder = min(holders, key=lambda c: volume[c]) if holders else -1
+            votes[holder] = votes.get(holder, 0.0) + area[face]
+            left -= area[face]
+            leading = sorted(votes.values(), reverse=True) + [0.0]
+            if leading[0] > leading[1] + left:
+                break
+        # A tie, as between the two sides of a rug lying on the floor, goes to a cell.
+        holder = max(votes, key=lambda c: (votes[c], c >= 0))
+        if holder >= 0:
+            parent[shell] = holder
     _, compact = np.unique(parent, return_inverse=True)
     compact = compact.reshape(-1)
     return compact[side], np.bincount(compact, weights=volume)

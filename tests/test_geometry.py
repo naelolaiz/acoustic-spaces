@@ -427,6 +427,25 @@ def test_a_vertex_no_face_uses_changes_nothing(tmp_path: Path) -> None:
     assert len(room.mesh.vertices) == 16
 
 
+@pytest.mark.parametrize(
+    ("blocks", "solid"),
+    [
+        ([((1, 1, 1), (2, 2, 2))], 1.0),
+        ([((1, 1, 0), (2, 2, 1))], 1.0),
+        ([((0.5, 0.5, 0), (2, 2, 0.5))], 1.125),
+        ([((0, 1, 0), (1, 2, 1))], 1.0),
+        ([((1, 1, 0), (2, 2, 1)), ((1, 1, 1), (2, 2, 2))], 2.0),
+        ([((0.5, 0.5, 0), (2.5, 2.5, 0.01))], 0.04),
+    ],
+    ids=["in the air", "on the floor", "platform", "in a corner", "one on another", "rug"],
+)
+def test_solids_standing_on_a_surface_are_no_air(tmp_path: Path, blocks, solid: float) -> None:
+    # The point off a solid's largest face told which room holds it; off a face lying
+    # on the floor it was under the floor, and the solid's inside counted as air.
+    room = _room_with_blocks(tmp_path / "room.obj", blocks)
+    assert room.volume_m3 == pytest.approx(27.0 - solid)
+
+
 def test_mesh_without_faces_is_not_closed() -> None:
     # Two triangles whose corners lie on one line: both are dropped.
     vertices = np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]], float)
