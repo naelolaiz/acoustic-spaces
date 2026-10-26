@@ -234,6 +234,21 @@ def test_an_impulse_response_is_a_moment_of_the_eddies() -> None:
     )
 
 
+def test_no_moment_has_a_path_before_its_emission(monkeypatch) -> None:
+    response = simulate(Room.from_scene(in_turbulence("strong", listeners=((150.0, 0.0, 1.5),))))[
+        "s", "l0"
+    ]
+    early = response.early
+    # Eddies that would hold every path back by more than it takes (no draw comes near).
+    held = float(early.delay_s.max()) + 1.0
+    bands = early.energy.shape[1]
+    monkeypatch.setattr(
+        Wander, "delays", staticmethod(lambda roots, draws, n: np.full((n, bands), -held))
+    )
+    moment = response.moment(4)
+    assert np.all(moment.delay_s == 0.0) and np.all(moment.lag == 0.0)
+
+
 # -- weaker with height ----------------------------------------------------------------
 
 

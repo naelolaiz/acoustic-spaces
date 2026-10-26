@@ -151,7 +151,9 @@ class Response:
         early = self.early.energy
         if axis is not None:
             early = early * (np.abs(self.early.direction @ axis) ** exponent)[:, None]
-        idx = (self.early.delay_s / step).astype(np.int64)
+        # A path before its emission (none: see EarlyReflections.at_moment) would count
+        # in the first slot, as what a measured response's filters spread before it.
+        idx = np.maximum(self.early.delay_s / step, 0.0).astype(np.int64)
         keep = idx < slots
         count = self.coherent_bands
         for b in range(count, self.bands):
