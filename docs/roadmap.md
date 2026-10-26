@@ -401,6 +401,8 @@ Known issues found by the review of 25 October 2026 (see
 - [x] The mixing time from the listener's room (the detector stays sized for all the
   rooms, which the rays spread over).
 - [x] The real-time convolver writing each block into buffers made before playback starts.
+- [x] The wave solver's buffers on a GPU all checked against what it binds, and its
+  recording at the listeners kept once.
 - [ ] Uncertainty: how much each parameter scatters over seeds, as a standard error.
 - [ ] CI: type checks, sanitizers for the native code and the tests' coverage.
 - [ ] Collada polygons with their holes.
