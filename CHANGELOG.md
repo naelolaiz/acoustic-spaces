@@ -15,6 +15,14 @@
   a path bends round keep what they did to its phase as traced. `calibrate`'s results
   are unchanged: its fit within a round keeps the traced phases, and each round traces
   again.
+- The echo criterion for music filters the response with one band-pass over the 1 and
+  2 kHz octaves (two octaves about 1.4 kHz, as Dietsch and Kraak have it) instead of the
+  two octave filters added, which rise 3 dB where they meet: an echo near 1.4 kHz
+  reached the 50 % mark 2.0 to 2.2 dB quieter than one at 1 or 2 kHz, and now all three
+  reach it at the same level within 0.25 dB. Over 24 responses in seven examples the
+  criterion moves by 0.063 at most (`open_air_stage`, 300 m downwind: 0.225 to 0.288).
+  The criterion for speech, and both with `--filters crossover` (whose bands add up
+  flat), are unchanged to the bit.
 
 ## 4.0.1
 

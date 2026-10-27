@@ -131,7 +131,8 @@ request and checks:
   rounding; STIPA of exponential decays against Houtgast's closed form within 0.002,
   and within 0.01 of the STI; U50 against its definition; and the echo criteria of an
   echo as loud as the direct sound 100 ms later within 10 % of the jump of the centre
-  time, and below the 10 % audibility mark for a smooth decay;
+  time, below the 10 % audibility mark for a smooth decay, and for music an echo at 1,
+  1.4 or 2 kHz reaching the 50 % mark at the same level within 0.25 dB;
 - spatial outputs: SN3D spherical harmonics against closed forms and orthogonality,
   VBAP gains of unit power that point at the panned direction and are mirrored for a
   mirrored direction, the direct sound's direction in first-order Ambisonics, the mono

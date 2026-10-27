@@ -397,6 +397,8 @@ Known issues found by the review of 25 October 2026 (see
   cancel.
 - [x] A warning for coefficients outside 0 to 1, and the wave solver's grid checked
   before the weather's fields and the first one let go round an open model.
+- [x] The music echo criterion through one band-pass over its two octaves, as Dietsch
+  and Kraak have it.
 - [x] Limits on the size of a run: its memory estimated before it starts, for the
   computer's cores and devices, and a run past the computer's memory refused (threads
   above the cores run as the cores).

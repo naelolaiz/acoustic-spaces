@@ -340,6 +340,31 @@ def test_no_echo_in_a_smooth_decay() -> None:
         assert echo_criterion(ir, FS, kind)[0] < hardly
 
 
+def test_the_music_criterion_hears_an_echo_alike_across_its_two_octaves() -> None:
+    # Dietsch and Kraak filter the response to two octaves about 1.4 kHz for music: an
+    # echo 100 ms after the direct sound of a smooth decay, a 16 ms burst at 1, 1.4 or
+    # 2 kHz, reaches the 50 % mark (1.8) at the same level within 0.25 dB. (The 1 and
+    # 2 kHz octave filters added rise 3 dB where they meet: there it was heard 2.2 dB
+    # quieter.)
+    ir = _noise_decay(np.random.default_rng(4), FS)
+    ir[: FS // 100] = 0.0
+    ir[FS // 100] = 3.0
+    t = np.arange(-0.008, 0.008, 1.0 / FS)
+    audible = iso3382.ECHO_CRITERIA["music"][3][1]
+    levels = []
+    for f in (1000.0, 1414.0, 2000.0):
+        burst = np.cos(2 * np.pi * f * t) * np.hanning(len(t))
+        low, high = 0.0, 16.0
+        for _ in range(24):
+            middle = 0.5 * (low + high)
+            echoed = ir.copy()
+            echoed[FS // 100 + FS // 10 :][: len(burst)] += middle * burst
+            heard = echo_criterion(echoed, FS, "music")[0] > audible
+            low, high = (low, middle) if heard else (middle, high)
+        levels.append(20 * math.log10(low + high))
+    assert max(levels) - min(levels) < 0.25, levels
+
+
 def test_echo_criterion_kinds() -> None:
     with pytest.raises(ValueError, match="unknown echo criterion"):
         echo_criterion(np.zeros(100), FS, "song")

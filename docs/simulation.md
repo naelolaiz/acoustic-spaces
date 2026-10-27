@@ -101,7 +101,8 @@ The directions the sound arrives from give more of them:
 - STI and STIPA (IEC 60268-16) and U50, at the level the source's `level_db` gives and
   the background noise of `coverage.noise_db`, as the coverage maps take them (NaN,
   like G, when a band from 125 Hz up is undefined); and the echo criteria of Dietsch
-  and Kraak for speech and music.
+  and Kraak for speech and music, from the response filtered to the 1 kHz octave for
+  speech and to the two octaves about 1.4 kHz (0.7 to 2.8 kHz) for music.
 
 The echogram adds the arrivals in energy, as ODEON and CATT do, except the early
 reflections in the lowest bands, which add in pressure (see
