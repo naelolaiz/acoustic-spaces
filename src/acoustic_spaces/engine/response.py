@@ -241,17 +241,28 @@ class Response:
         feed = np.ones(self.bands) if self.feed is None else self.feed
         return to_octaves(feed) / (4.0 * math.pi * 100.0)
 
-    def reweighted(self, face_group: np.ndarray, ratio: np.ndarray) -> Response:
+    def reweighted(
+        self,
+        face_group: np.ndarray,
+        ratio: np.ndarray,
+        absorption: tuple[np.ndarray, np.ndarray] | None = None,
+    ) -> Response:
         """This response for other absorption, without tracing again
         (:mod:`acoustic_spaces.engine.reweight`): ``face_group`` the group of each face
         (-1 for none) as traced, ``ratio`` the change per reflection off each group,
         ln((1 - new) / (1 - old)) per group and band (:func:`~acoustic_spaces.engine.
-        reweight.log_ratio`). The early paths re-weight exactly, the late part from its
-        moments, which the response needs (``simulate(groups=...)``)."""
+        reweight.log_ratio`), and ``absorption`` each group's absorption (groups, bands)
+        as traced and as ``ratio`` changes it, (old, new). The early paths re-weight
+        exactly, the late part from its moments, which the response needs
+        (``simulate(groups=...)``). Where the early paths add in pressure
+        (:mod:`~acoustic_spaces.engine.coherent`), the phase of their reflections
+        depends on the absorption too, and turns with it
+        (:func:`~acoustic_spaces.engine.reweight.turned_paths`): that needs
+        ``absorption``, unless no path reflects off a group whose absorption changes."""
         from acoustic_spaces.engine import reweight
 
         ratio = np.asarray(ratio, dtype=float)
-        if ratio.shape[1] != self.bands:
+        if ratio.ndim != 2 or ratio.shape[1] != self.bands:
             raise ValueError(f"expected a ratio per group and each of {self.bands} bands")
         groups = ratio.shape[0]
         if self.late_moments.shape[0] != 1 + groups + groups * (groups + 1) // 2:
@@ -261,9 +272,22 @@ class Response:
             )
         if self.wave is not None:
             raise ValueError("the wave solver's bands do not re-weight; trace without it")
-        early = reweight.reweighted_paths(
-            self.early, reweight.path_counts(self.early, face_group, groups), ratio
-        )
+        counts = reweight.path_counts(self.early, face_group, groups)
+        early = reweight.reweighted_paths(self.early, counts, ratio)
+        if self.early.spectrum is not None:
+            if absorption is not None:
+                old, new = (np.asarray(a, dtype=float) for a in absorption)
+                if old.shape != ratio.shape or new.shape != ratio.shape:
+                    raise ValueError(
+                        f"expected the absorption of {groups} groups in {self.bands} bands"
+                    )
+                early = reweight.turned_paths(early, face_group, old, new)
+            elif len(counts) and np.any(counts[:, np.any(ratio != 0.0, axis=1)] > 0):
+                raise ValueError(
+                    "the early paths add in pressure in the lowest bands, where the phase "
+                    "of a reflection depends on the absorption: give the absorption as "
+                    "traced and as re-weighted for"
+                )
         exponent = reweight.moment_exponent(self.late_moments, ratio)
         late = self.late * reweight.slot_factor(
             exponent, self.late.shape[1], self.time_step, self.moment_step

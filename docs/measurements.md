@@ -199,7 +199,10 @@ T30 after       0.04    0.07    0.07    0.11    0.08    0.08    0.06    0.09
   ray's reflections off each material, and the responses for other absorption come from
   re-weighting those rays (`acoustic_spaces.engine.reweight`); the next round traces
   again at the absorption found, until it moves by less than 0.01 or `--rounds` (4) run
-  out. A round costs about one simulation of the measured sources at the scene's rays
+  out. Within a round the early reflections keep the phases they were traced with where
+  they add in pressure (up to 125 Hz indoors by default), which the absorption also
+  sets; the next round's trace has them at the absorption found, and the parameters
+  reported after the fit come from a last trace. A round costs about one simulation of the measured sources at the scene's rays
   (`--rays` overrides them).
 - It needs stochastic ray tracing in octave bands, without the wave solver.
 - On the two measured rooms of the validation report, fitted to one loudspeaker

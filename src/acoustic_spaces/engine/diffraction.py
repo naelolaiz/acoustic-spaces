@@ -959,7 +959,10 @@ class EdgeDiffraction:
             * wedge_prefactor(n[:, None, None], k, sin_beta[:, None, None])
             * np.exp(-1j * k * distance[:, None, None])
         )  # (C, B, M)
-        for faces, bounces, via in legs:
+        # The cosine each reflection on the way meets its face at, where its phase is
+        # that face's absorption's (EarlyReflections.cosines).
+        leg_cosines = np.full((2, len(kind)), np.nan)
+        for place, (faces, bounces, via) in enumerate(legs):
             on_plane = faces >= 0
             grounds = on_plane.any() and model.factor_faces(faces[on_plane]).any()
             if not ((self.coherent or grounds) and on_plane.any()):
@@ -983,6 +986,7 @@ class EdgeDiffraction:
                     model, face, cosine, self.coherent
                 )
             ground = model.factor_faces(face)
+            leg_cosines[place, rows[~ground]] = cosine[~ground]
             if ground.any():
                 # A ground's spherical wave, from the image of the source or the listener
                 # to the edge.
@@ -1050,6 +1054,9 @@ class EdgeDiffraction:
                 return np.array([c["face"][i], c["face2"][i]], dtype=np.int64)
             return np.array([c["face"][i]] if kind[i] else [], dtype=np.int64)
 
+        def cosines(i: int) -> np.ndarray:
+            return leg_cosines[: 2 if kind[i] == 3 else 1 if kind[i] else 0, i].copy()
+
         last = np.where((kind == 2)[:, None], c["bounce"], c["point"])
         last = np.where((kind == 3)[:, None], c["bounce2"], last)
 
@@ -1065,6 +1072,7 @@ class EdgeDiffraction:
             "last": last,
             "corners": corners,
             "faces": faces,
+            "cosines": cosines,
         }
 
     def _double(self, listener, max_delay_s: float, single: dict | None, clusters, start: int):
@@ -1317,6 +1325,7 @@ class EdgeDiffraction:
             "last": p2,
             "corners": lambda i: [p1[i], p2[i]],
             "faces": lambda i: np.zeros(0, dtype=np.int64),
+            "cosines": lambda i: np.zeros(0),
         }
 
     def _alone(self, single, e1, e2, phi_1, phi_2, leave, graze):
@@ -1404,6 +1413,7 @@ class EdgeDiffraction:
             faces=[found["faces"](i) for i in idx],
             edge=found["edge"][idx].astype(np.int64),
             spectrum=None if spectrum is None else spectrum[idx],
+            cosines=[] if spectrum is None else [found["cosines"](i) for i in idx],
         ), idx
 
     def _specular(self, listener: np.ndarray, paths: EarlyReflections, c: dict):

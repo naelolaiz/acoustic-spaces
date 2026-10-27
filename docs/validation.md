@@ -111,8 +111,10 @@ request and checks:
   paths lose (the tail does not make it up); and a coverage map less clear and weaker
   over the middle of the seats;
 - fitting materials to measurements: a run re-weighted for other absorption against
-  the room traced again with it (the same early paths; T30 within 4 %, EDT within 5 %,
-  C80 within 0.3 dB and G within 0.1 dB); the absorption a simulated room was given
+  the room traced again with it (the same early paths, with the same energies and,
+  where they add in pressure, the same phases to 10⁻¹², those of reflections on the way
+  round an edge included; T30 within 4 %, EDT within 5 %, C80 within 0.3 dB and G
+  within 0.1 dB); the absorption a simulated room was given
   recovered from its own responses within 0.05 in every band, and a shoebox's walls
   within 0.015 from 500 Hz up, where the fit's own uncertainty is below 0.05 and above
   0.1 in the bands the measurements leave open; a third-octave material that keeps its

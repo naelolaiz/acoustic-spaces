@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 
 import numpy as np
@@ -67,14 +68,17 @@ def test_reweighted_responses_match_tracing_again():
     np.testing.assert_allclose(same.energy(), base.energy(), rtol=1e-12)
 
     new = np.array([0.15, 0.25, 0.08])
-    ratio = log_ratio(np.repeat(old[:, None], 8, 1), np.repeat(new[:, None], 8, 1))
+    before, after = np.repeat(old[:, None], 8, 1), np.repeat(new[:, None], 8, 1)
+    ratio = log_ratio(before, after)
     fresh = simulate(Room.from_scene(_box(_flat(*new), rays=4000, length=1.2)), sources=["s"])
     for listener in ("a", "b", "c"):
-        guess = traced["s", listener].reweighted(group, ratio)
+        guess = traced["s", listener].reweighted(group, ratio, absorption=(before, after))
         again = fresh["s", listener]
-        # The early paths are the same paths, so their energies re-weight exactly.
+        # The early paths are the same paths, so their energies re-weight exactly, and
+        # so do their phases where they add in pressure.
         np.testing.assert_array_equal(guess.early.delay_s, again.early.delay_s)
         np.testing.assert_allclose(guess.early.energy, again.early.energy, rtol=1e-9)
+        np.testing.assert_allclose(guess.early.spectrum, again.early.spectrum, rtol=0, atol=1e-12)
         found, expected = guess.parameters(), again.parameters()
         bands = slice(1, 7)
         np.testing.assert_allclose(found.t30[bands], expected.t30[bands], rtol=0.04)
@@ -92,10 +96,10 @@ def test_a_run_re_weights_when_only_absorption_changes():
     harder = np.multiply(TRUTH["walls"], 0.5)
     changed = with_absorption(scene, ["walls"], [harder])
     found = reweighted_result(result, scene, face_group, materials, changed)
-    ratio = log_ratio(
-        np.array([TRUTH[m] for m in MATERIALS]), [TRUTH["floor"], TRUTH["ceiling"], harder]
-    )
-    expected = result["s", "a"].reweighted(face_group, ratio)
+    before = np.array([TRUTH[m] for m in MATERIALS])
+    after = np.array([TRUTH["floor"], TRUTH["ceiling"], harder])
+    ratio = log_ratio(before, after)
+    expected = result["s", "a"].reweighted(face_group, ratio, absorption=(before, after))
     np.testing.assert_allclose(found["s", "a"].energy(), expected.energy())
     assert np.all(found["s", "a"].parameters().t30[2:] > result["s", "a"].parameters().t30[2:])
     assert reweighted_result(result, scene, face_group, materials, scene) is result
@@ -113,6 +117,63 @@ def test_a_run_re_weights_when_only_absorption_changes():
     # So does a run whose settings keep no counts.
     for change in ({"late": {"method": "statistical"}}, {"bands": "third_octave"}):
         assert groups_of(Room.from_scene(_box(TRUTH, **change))) is None
+
+
+def _early_only(response):
+    """The echogram of ``response``'s early paths alone (bands, slots)."""
+    return dataclasses.replace(response, late=np.zeros_like(response.late)).energy()
+
+
+def test_re_weighting_turns_the_phase_of_reflections_where_paths_add_in_pressure():
+    # An absorbent surface reflects with a phase its absorption sets. At 63 and 125 Hz,
+    # where the early paths add in pressure, re-weighting turns each reflection's phase
+    # to the new absorption's, as tracing again with that absorption has it.
+    walls = [0.3, 0.45, 0.6, 0.7, 0.75, 0.8, 0.8, 0.8]
+    scene = _box({"floor": [0.1] * 8, "ceiling": [0.15] * 8, "walls": walls}, rays=300)
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    traced = simulate(room, sources=["s"], groups=face_group)
+    changed = with_absorption(scene, ["walls"], [np.add(walls, 0.15)])
+    found = reweighted_result(traced, scene, face_group, materials, changed)
+    again = simulate(Room.from_scene(changed), sources=["s"])
+    worst = 0.0
+    for listener in ("a", "b", "c"):
+        guess, fresh, base = found["s", listener], again["s", listener], traced["s", listener]
+        np.testing.assert_array_equal(guess.early.delay_s, fresh.early.delay_s)
+        assert guess.early.coherent_bands == 2
+        # The phases change with the absorption, and turn with it.
+        assert np.abs(base.early.spectrum - fresh.early.spectrum).max() > 0.1
+        np.testing.assert_allclose(guess.early.spectrum, fresh.early.spectrum, rtol=0, atol=1e-12)
+        low = slice(0, 2)
+        expected = _early_only(fresh)[low].sum(axis=1)
+        np.testing.assert_allclose(_early_only(guess)[low].sum(axis=1), expected, rtol=1e-9)
+        # Kept as traced, the phases would have the early energy wrong.
+        kept = dataclasses.replace(
+            guess, early=dataclasses.replace(guess.early, spectrum=base.early.spectrum)
+        )
+        worst = max(worst, np.abs(_early_only(kept)[low].sum(axis=1) / expected - 1).max())
+    assert worst > 0.05
+
+
+def test_re_weighting_asks_for_the_absorption_where_paths_add_in_pressure():
+    room = Room.from_scene(_box(TRUTH, rays=200))
+    group = face_groups(room, MATERIALS)
+    response = simulate(room, sources=["s"], groups=group)["s", "a"]
+    before = np.array([TRUTH[m] for m in MATERIALS])
+    after = before.copy()
+    after[2] += 0.1  # the walls, in every band
+    ratio = log_ratio(before, after)
+    with pytest.raises(ValueError, match="give the absorption as traced and as re-weighted for"):
+        response.reweighted(group, ratio)
+    with pytest.raises(ValueError, match="expected the absorption of 3 groups in 8 bands"):
+        response.reweighted(group, ratio, absorption=(before[:2], after[:2]))
+    # Nothing to turn where nothing changes, or where the early paths add in energy.
+    same = response.reweighted(group, np.zeros((3, 8)))
+    np.testing.assert_array_equal(same.early.spectrum, response.early.spectrum)
+    room = Room.from_scene(_box(TRUTH, rays=200, early={"coherent_max_band_hz": None}))
+    response = simulate(room, sources=["s"], groups=group)["s", "a"]
+    assert response.early.spectrum is None
+    assert response.reweighted(group, ratio).early.spectrum is None
 
 
 def test_calibration_recovers_the_absorption_it_measured():

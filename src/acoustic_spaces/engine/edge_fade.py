@@ -197,6 +197,7 @@ class EdgeFade:
             "distance": paths.distance_m[rows],
             "energy": paths.energy[rows],
             "spectrum": None if paths.spectrum is None else paths.spectrum[rows],
+            "cosines": _stacked(paths.cosines, rows, k),
             "blocked": np.full((len(rows), k + 1), -1, dtype=np.int64),
             "stop_at": np.zeros((len(rows), k + 1, 3)),
             "fail": np.full(len(rows), -1, dtype=np.int64),
@@ -713,7 +714,7 @@ class EdgeFade:
         if len(idx) == 0:
             return paths
         listener = terms["listener"]
-        points, faces = _points(terms, idx)
+        points, faces, cosines = _points(terms, idx)
         arrival = np.array([p[-2] for p in points]) - listener
         arrival /= np.maximum(np.linalg.norm(arrival, axis=1), 1e-300)[:, None]
         distance = terms["distance"][idx]
@@ -727,6 +728,7 @@ class EdgeFade:
             faces=faces,
             edge=terms["edge"][idx],
             spectrum=terms["spectrum"][idx] if self.d.coherent else None,
+            cosines=cosines if self.d.coherent else [],
         )
         return EarlyReflections.concatenate([paths, added], paths.energy.shape[1])
 
@@ -1470,6 +1472,7 @@ class EdgeFade:
         if "energy" in go:
             energy = go["energy"][ids]
             spectrum = None if go["spectrum"] is None else go["spectrum"][ids]
+            cosines = None if go["cosines"] is None else go["cosines"][ids]
         else:
             stopping = t["explains"] & stops & (t["at"] % 2 == 1)
             strength = np.mean(np.abs(t["pressure"]) ** 2, axis=(1, 2))
@@ -1486,7 +1489,7 @@ class EdgeFade:
                 faces[i, j] = _nearest_face(
                     self.model, go["planes"][ids[i], j], go["points"][ids[i], j + 1]
                 )
-            energy, spectrum = self._energy(listener, go, k, ids, faces)
+            energy, spectrum, cosines = self._energy(listener, go, k, ids, faces)
         # Each event's terms take the product of the events before it, the one that
         # stops a missed path first; where two events stop it, the first takes the
         # second's terms, and the second's terms take none. Each product of terms is a
@@ -1638,6 +1641,7 @@ class EdgeFade:
             "point": t["point"][row],
             "path_points": go["points"][ids][mine],
             "path_faces": faces[mine],
+            "path_cosines": None if cosines is None else cosines[mine],
         }
 
     def _pieces(self, go, ids, k, t, rows, terms, distance, energy) -> list[dict]:
@@ -1820,7 +1824,8 @@ class EdgeFade:
         return out
 
     def _energy(self, listener, go, k, ids, faces):
-        """The energy (n, bands) and, in the coherent bands, the spectrum of the missed
+        """The energy (n, bands) and, in the coherent bands, the spectrum and the
+        cosines of the reflections (n, k; :attr:`EarlyReflections.cosines`) of the missed
         paths ``ids`` of ``go`` as if found, reflecting off ``faces``."""
         points = go["points"][ids]
         n = len(ids)
@@ -1841,7 +1846,15 @@ class EdgeFade:
             coherent=self.d.coherent,
             tolerance=self.tolerance,
         )
-        return found.energy, found.spectrum
+        return found.energy, found.spectrum, _stacked(found.cosines, np.arange(n), k)
+
+
+def _stacked(cosines: list[np.ndarray], rows: np.ndarray, k: int) -> np.ndarray | None:
+    """(len(rows), k) the :attr:`~acoustic_spaces.engine.early.EarlyReflections.cosines`
+    of the paths ``rows`` of order ``k``; None without them."""
+    if not cosines:
+        return None
+    return np.array([cosines[i] for i in rows], dtype=float).reshape(len(rows), k)
 
 
 def _perpendicular(model, a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -2019,11 +2032,13 @@ def _runs(stopped: np.ndarray) -> np.ndarray:
     return runs
 
 
-def _points(terms: dict, idx: np.ndarray) -> tuple[list, list]:
-    """The points and faces of the paths over the edges ``idx`` of :meth:`EdgeFade.terms`:
-    each path's own, with the point on the edge on the leg it passes or instead of the
+def _points(terms: dict, idx: np.ndarray) -> tuple[list, list, list]:
+    """The points, faces and cosines of the reflections off them
+    (:attr:`~acoustic_spaces.engine.early.EarlyReflections.cosines`, NaN where the
+    paths have none) of the paths over the edges ``idx`` of :meth:`EdgeFade.terms`: each
+    path's own, with the point on the edge on the leg it passes or instead of the
     reflection it bends."""
-    points, faces = [None] * len(idx), [None] * len(idx)
+    points, faces, cosines = [None] * len(idx), [None] * len(idx), [None] * len(idx)
     offset = terms["offset"]
     part_of = np.searchsorted(offset, idx, side="right") - 1
     for p in np.unique(part_of):
@@ -2036,16 +2051,22 @@ def _points(terms: dict, idx: np.ndarray) -> tuple[list, list]:
             rows = local[sel]
             j = (event + 1) // 2
             base, base_faces = part["path_points"][rows], part["path_faces"][rows]
+            base_cosines = part["path_cosines"]
+            if base_cosines is None:
+                base_cosines = np.full(base_faces.shape, np.nan)
+            else:
+                base_cosines = base_cosines[rows]
             point = part["point"][rows][:, None]
             if event % 2 == 0:  # leg j: over the edge on the way
                 new = np.concatenate([base[:, : j + 1], point, base[:, j + 1 :]], axis=1)
-                new_faces = base_faces
+                new_faces, new_cosines = base_faces, base_cosines
             else:  # reflection j: at the edge instead
                 new = np.concatenate([base[:, :j], point, base[:, j + 1 :]], axis=1)
                 new_faces = np.delete(base_faces, j - 1, axis=1)
-            for i, a, b in zip(where[sel], new, new_faces, strict=True):
-                points[i], faces[i] = a, b
-    return points, faces
+                new_cosines = np.delete(base_cosines, j - 1, axis=1)
+            for i, a, b, c in zip(where[sel], new, new_faces, new_cosines, strict=True):
+                points[i], faces[i], cosines[i] = a, b, c
+    return points, faces, cosines
 
 
 def _subset(part: dict, keep: np.ndarray) -> dict:
