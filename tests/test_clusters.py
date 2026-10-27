@@ -129,6 +129,34 @@ def test_pieces_added_in_many_parts_resolve_as_if_added_at_once(monkeypatch) -> 
     np.testing.assert_allclose(batched, energy, rtol=1e-9, atol=1e-12 * energy.max())
 
 
+def test_the_energy_of_pieces_in_single_precision_is_worked_out_again(monkeypatch) -> None:
+    """Pieces in single precision added without their energy (the edge fade's, of which a
+    room of many facets has millions) keep only their pressure: their energy, worked out
+    again a few pieces at a time as they are resolved, is the same, bit for bit, as when
+    it is given."""
+    rng = np.random.default_rng(9)
+    count = 200
+    pressure, distance = _pieces(rng, count, 5.0)
+    pressure = pressure.astype(np.complex64)
+    keys = rng.integers(0, 10, count)
+    keys[:3] = np.arange(3)
+    rows = rng.permutation(count)
+    own = np.mean(np.abs(pressure[:3].astype(complex)) ** 2, axis=2)
+
+    def resolve(energy):
+        clusters = Clusters(SLICE_HZ, C, 10.0)
+        clusters.add(rows[:3], keys[:3], pressure[:3], distance[:3], anchor=True, own=own)
+        clusters.add(rows[3:], keys[3:], pressure[3:], distance[3:], own=energy)
+        return clusters, clusters.resolve(count)
+
+    monkeypatch.setattr(clusters_module, "_VALUES", 100)
+    kept, (energy, has) = resolve(None)
+    assert kept._parts[1]["own"] is None and has.all()
+    given = np.mean(np.abs(pressure[3:]) ** 2, axis=2)
+    _, (with_given, given_has) = resolve(given)
+    assert np.array_equal(with_given, energy) and np.array_equal(given_has, has)
+
+
 def test_the_specular_path_takes_the_cross_terms_of_its_wave() -> None:
     """Its pieces keep their own energy; where the cross terms take more than the path
     has, the rest comes off them in proportion to their energy."""

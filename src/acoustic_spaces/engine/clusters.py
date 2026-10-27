@@ -163,8 +163,11 @@ class Clusters:
         ``distance`` (n,) metres long. ``anchor``: the rows are specular paths, whose
         waves they are, with energy ``own`` (n, bands). Pressure in single precision is
         kept as given (the edge fade's comes in its own :class:`Pages`); any other is
-        copied into a page."""
+        copied into a page. The energy of pieces in single precision without ``own`` is
+        not kept but worked out again from their pressure when it is needed."""
         rows = np.asarray(rows, dtype=np.int64).reshape(-1)
+        single = np.asarray(pressure).dtype == np.complex64
+        again = single and own is None
         own = np.mean(np.abs(pressure) ** 2, axis=2) if own is None else np.asarray(own, float)
         keys = np.broadcast_to(np.asarray(keys, dtype=np.int64), rows.shape)
         distance = np.broadcast_to(np.asarray(distance, dtype=float), rows.shape)
@@ -176,7 +179,7 @@ class Clusters:
         if not some.all():
             rows, keys, pressure = rows[some], keys[some], pressure[some]
             distance, own = distance[some], own[some]
-        if pressure.dtype != np.complex64 or not some.all():
+        if not single or not some.all():
             pressure = self._pages.keep(pressure)
         self._parts.append(
             {
@@ -185,7 +188,7 @@ class Clusters:
                 "pressure": pressure,
                 "distance": np.array(distance),
                 "anchor": np.full(len(rows), anchor),
-                "own": own,
+                "own": None if again else own,
             }
         )
 
@@ -229,14 +232,20 @@ class Clusters:
         bounds = np.searchsorted(which[by_part], np.arange(len(self._parts) + 1))
         out = []
         for name in names:
-            first = self._parts[0][name]
-            kind = np.result_type(*(p[name] for p in self._parts))
-            out.append(np.empty((len(index), *first.shape[1:]), dtype=kind))
+            first = self._parts[0]
+            shape = first["pressure"].shape[1:2] if name == "own" else first[name].shape[1:]
+            kind = np.result_type(
+                *(p[name] if p[name] is not None else np.float32 for p in self._parts)
+            )
+            out.append(np.empty((len(index), *shape), dtype=kind))
         for i in np.flatnonzero(np.diff(bounds)):
             mine = by_part[bounds[i] : bounds[i + 1]]
             local = index[mine] - part["starts"][i]
             for values, name in zip(out, names, strict=True):
-                values[mine] = self._parts[i][name][local]
+                if self._parts[i][name] is None:
+                    values[mine] = _energy(self._parts[i]["pressure"], local)
+                else:
+                    values[mine] = self._parts[i][name][local]
         return out
 
     def resolve(self, count: int) -> tuple[np.ndarray, np.ndarray]:
@@ -256,10 +265,11 @@ class Clusters:
         start = np.flatnonzero(np.r_[True, keys[1:] != keys[:-1]])
         size = np.diff(np.r_[start, len(keys)])
         del keys
-        # The waves with more than one piece, a batch of whole waves at a time, each with
-        # the waves of one piece up to the next batch, in the order of the waves.
+        # The waves with more than one piece, a batch of whole waves of at most _VALUES
+        # values of pressure at a time (or one wave of more), each with the waves of one
+        # piece up to the next batch, in the order of the waves.
         many = np.flatnonzero(size > 1)
-        values = size[many] * self._parts[0]["pressure"].shape[2]
+        values = size[many] * math.prod(self._parts[0]["pressure"].shape[1:])
         batch = np.cumsum(values) // _VALUES
         batches = np.unique(batch)
         bounds = [0, *start[many[np.searchsorted(batch, batches[1:])]], len(part["order"])]
@@ -391,6 +401,18 @@ def _slice_shares(pressure, relative, cluster, width, panels, points) -> np.ndar
                 mine = np.real(phase * (p[a : a + rows] @ np.conj(total).T)) / per_band
                 out[first + a : first + a + len(phase)] += mine @ weight
     return out
+
+
+def _energy(pressure: np.ndarray, local: np.ndarray) -> np.ndarray:
+    """(n, bands) the energy of the pieces ``local`` of ``pressure`` (n, bands, M), a few
+    at a time."""
+    step = max(_VALUES // max(math.prod(pressure.shape[1:]), 1), 1)
+    return np.concatenate(
+        [
+            np.mean(np.abs(pressure[local[a : a + step]]) ** 2, axis=2)
+            for a in range(0, len(local), step)
+        ]
+    )
 
 
 def _phases(turn: np.ndarray, ends: np.ndarray, within: np.ndarray) -> np.ndarray:
