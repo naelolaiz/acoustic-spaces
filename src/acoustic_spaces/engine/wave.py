@@ -107,8 +107,8 @@ MAX_CELLS = 40_000_000
 WAVE_BANDS_HZ = OCTAVE_BANDS_HZ[:4]
 #: The source's high-pass, applied twice: once so that the air the source pushes into
 #: the room stops flowing, twice so that as much flows out again and a closed room's
-#: pressure comes back to rest (but for a slow swing from rounding L^2 down, far below
-#: the wave bands). Its length in seconds; twice, it is flat within 0.2 dB above 20 Hz.
+#: pressure comes back to rest. Its length in seconds; twice, it is flat within 0.2 dB
+#: above 20 Hz.
 HIGH_PASS_S = 0.12
 #: Cells of the matched layer round an open model, and its damping at the grid's edge
 #: (the damping rate times half a time step). Sound leaving the model comes back from

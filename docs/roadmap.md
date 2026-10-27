@@ -407,9 +407,13 @@ Known issues found by the review of 25 October 2026 (see
   its shortest waves travel, and that in each run's details.
 - [x] The wave solver's buffers on a GPU all checked against what it binds, and its
   recording at the listeners kept once.
+- [x] The late part's last milliseconds with the whole chords of the rays through the
+  listeners' spheres and the map's cells.
 - [x] Re-weighting for other absorption (the editor's results after an absorption
   change) turns the phases of the early reflections where they add in pressure, as
   tracing again has them.
+- [x] The wave solver's highest modes kept inside its stability limit in single
+  precision, with both stencils.
 - [ ] Uncertainty: how much each parameter scatters over seeds, as a standard error.
 - [ ] CI: type checks, sanitizers for the native code and the tests' coverage.
 - [ ] Collada polygons with their holes.

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- The late part's last milliseconds take the whole chord of a ray through a listener's
+  detector sphere, or through a coverage map's cell, where the ray's time runs out as it
+  crosses it: a ray's legs now go on past its time by twice the largest sphere's radius
+  (or map cell's half diagonal) without reflecting there, and a chord counts if its
+  closest approach (a map cell's: its middle) is in time. The chords were cut short
+  where the time ran out, and one whose closest approach came later was counted at the
+  end: in the example box the last 1 to 3 ms came out up to 38 % low with 1 m spheres
+  and no rain, and the last millisecond 17 to 23 % low with the default diffuse rain and
+  0.5 m spheres, on the CPU and the GPU alike. The total energy moves by 2.1e-4 at most.
+  The tracer's reference results (`tests/reference/tracer.npz`) are written again: only
+  their last slots change.
 - Re-weighting a run for other absorption (the editor's results after a material's
   absorption changes, `Response.reweighted`) turns the phase of each early reflection
   off a changed material where the paths add in pressure (up to 125 Hz indoors by
@@ -15,15 +26,19 @@
   a path bends round keep what they did to its phase as traced. `calibrate`'s results
   are unchanged: its fit within a round keeps the traced phases, and each round traces
   again.
-- Below the default 8 cells per wavelength (`simulation.wave.points_per_wavelength`,
-  which takes 5 to 20), the scene's warnings say how much slower the wave solver's
-  shortest waves travel, at the top of its highest band along the grid's axes, where
-  both stencils are slowest: at 5, 1.85 % with the isotropic stencil and 4.56 % with the
-  standard one, against 0.67 % and 1.74 % at 8, so the modes there come out that much
-  low. Each run's details give it for the grid the run took, as `wave_slow_percent` (in
-  wind and temperature, for the slowest sound on it). `engine.wave.slow_by` and
-  `grid_phase` give the stencils' dispersion relation, which a tube's modes at 12, 8
-  and 5 cells per wavelength follow within 2e-5.
+- The wave solver's update takes its Laplacian times 1 − 2⁻¹⁸ (sound 2⁻¹⁹ slower), which
+  keeps the grid's highest modes inside the stability limit in single precision. At the
+  limit itself they sat on its edge, where a kick grows linearly: the 7-point stencil's
+  checkerboard 2⁻²³ inside, which rounding can take over it, and the 19-point
+  stencil's modes alternating along two axes exactly on it. Kicked, they grew to 7,000
+  and 20,000 times the kick in 20,000 steps; 2⁻¹⁶ inside, they swing within 259 times
+  it over 300,000. No room was seen to grow: its walls and the grid's edge keep its
+  highest mode further inside (a rigid box ran 200,000 steps). The 7-point stencil's
+  weights, rounded down, also made a room's uniform pressure swing slowly (0.3 Hz with
+  10 cm cells), which reached into the bands: in a duct, the reflection off an end whose
+  admittance resonates now follows the grid's theory within 0.001 instead of 0.003 from
+  30 to 250 Hz. The wave solver's validation tables move by one in their last digit at
+  most.
 
 ## 4.0.1
 
@@ -191,6 +206,15 @@ density of reflections of each listener's room.
 - The wave solver's recording of the pressures at the listeners is no longer copied
   once more at the end of the run: with 60 listeners and 4 s responses at 63 Hz the
   run peaks 12 to 13 MiB lower, the recording's size. The results are the same.
+- Below the default 8 cells per wavelength (`simulation.wave.points_per_wavelength`,
+  which takes 5 to 20), the scene's warnings say how much slower the wave solver's
+  shortest waves travel, at the top of its highest band along the grid's axes, where
+  both stencils are slowest: at 5, 1.85 % with the isotropic stencil and 4.56 % with the
+  standard one, against 0.67 % and 1.74 % at 8, so the modes there come out that much
+  low. Each run's details give it for the grid the run took, as `wave_slow_percent` (in
+  wind and temperature, for the slowest sound on it). `engine.wave.slow_by` and
+  `grid_phase` give the stencils' dispersion relation, which a tube's modes at 12, 8
+  and 5 cells per wavelength follow within 2e-5.
 - A run's memory is estimated before it starts (`engine.run_size`): the late part's
   energy at every listener or map point for every source, and while a source is traced,
   the tracer's copies on the CPU's threads or its buffers on a GPU, the worst of the
