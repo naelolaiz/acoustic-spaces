@@ -267,7 +267,8 @@ class DownloadJob(QThread):
 class ExportJob(SimulationJob):
     """Writes the responses of a run into a folder
     (:func:`acoustic_spaces.results.write_results`, as ``acoustic-spaces simulate``
-    does); ``done`` carries the report. Cancelled, it stops before the next response."""
+    does); ``done`` carries the report. Cancelled, it stops before the next file and
+    leaves the folder as it was."""
 
     kind = "export"
 

@@ -1072,7 +1072,7 @@ def _add_without_argument(parser: argparse.ArgumentParser) -> None:
 
 def _cmd_simulate(args: argparse.Namespace) -> int:
     from acoustic_spaces.engine.long_term import simulate
-    from acoustic_spaces.results import REPORT_FILE, write_results
+    from acoustic_spaces.results import REPORT_FILE, results_folder, write_results
     from acoustic_spaces.spatial import from_output
 
     room = _load_room(args.scene)
@@ -1111,6 +1111,14 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
     except (ValueError, ImportError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    # The folder for the results, before the run, so that the run is not lost at its end;
+    # the folders made here are removed again if nothing is written into them.
+    made = [path for path in (Path(args.out), *Path(args.out).parents) if not path.exists()]
+    try:
+        out = results_folder(args.out)
+    except OSError as exc:
+        print(f"error: --out: {exc}", file=sys.stderr)
+        return 1
 
     if args.no_device_trial:
         from acoustic_spaces.engine import ray_device
@@ -1124,18 +1132,23 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
+        _remove_if_empty(made)
         return 1
 
-    out = Path(args.out)
-    report = write_results(
-        result,
-        out,
-        formats,
-        sample_rate=settings.sample_rate,
-        normalize=args.normalize,
-        plots=args.plot,
-        progress=lambda message: print(message, file=sys.stderr),
-    )
+    try:
+        report = write_results(
+            result,
+            out,
+            formats,
+            sample_rate=settings.sample_rate,
+            normalize=args.normalize,
+            plots=args.plot,
+            progress=lambda message: print(message, file=sys.stderr),
+        )
+    except OSError as exc:
+        print(f"error: the results could not be written to {out}: {exc}", file=sys.stderr)
+        _remove_if_empty(made)
+        return 1
     from acoustic_spaces.parameters import RoomParameters
 
     for entry, ((source, listener), response) in zip(
@@ -1163,6 +1176,15 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     return 0
+
+
+def _remove_if_empty(made: list[Path]) -> None:
+    """Remove the folders a run ``made`` (the deepest first) while they are empty."""
+    for folder in made:
+        try:
+            folder.rmdir()
+        except OSError:
+            return  # something is in it after all
 
 
 def _feed_text(source) -> str:

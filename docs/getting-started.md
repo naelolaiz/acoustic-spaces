@@ -106,7 +106,11 @@ scene's `outputs` list (`results/talker__seat-a.wav` in mono, `.binaural.wav`,
 name, as `A/B` and `A_B` do, get `-2`, `-3`... after the later ones), `parameters.json`
 with the room acoustic parameters of every response per octave band, its STI and its
 echo criteria, and with `--plot` an echogram, decay curves and a map of arrival
-directions as PNG.
+directions as PNG. The files go into the folder once all of them are written,
+`parameters.json` last, so a run that cannot write them all (a full disk, say) leaves
+the folder as it was; the editor's Export does the same. A file where the folder should
+be stops `simulate` before its run. Files of an earlier run whose names this one does
+not write stay in the folder.
 `--output ambisonics:3` (repeatable) picks formats on the command line. It prints the
 parameters as it goes:
 

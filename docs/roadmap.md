@@ -400,6 +400,8 @@ Known issues found by the review of 25 October 2026 (see
 - [x] Limits on the size of a run: its memory estimated before it starts, for the
   computer's cores and devices, and a run past the computer's memory refused (threads
   above the cores run as the cores).
+- [x] Results written whole or not at all, a response at a time, and `simulate`'s
+  folder checked before its run.
 - [x] The mixing time from the listener's room (the detector stays sized for all the
   rooms, which the rays spread over).
 - [x] The real-time convolver writing each block into buffers made before playback starts.

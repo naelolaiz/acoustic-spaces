@@ -21,15 +21,16 @@ def write_wav(
 
     Float WAV keeps levels above full scale, so relative levels between files survive.
     Files with more than two channels, or a ``channel_mask`` (WAVE_FORMAT_EXTENSIBLE
-    speaker positions; 0 for none, as in AmbiX), use the extensible format.
+    speaker positions; 0 for none, as in AmbiX), use the extensible format. The samples
+    go out a few MiB at a time, so a long file takes no copy of itself in memory.
     """
-    data = np.asarray(data, dtype="<f4")
+    data = np.asarray(data)
     if data.ndim == 1:
         data = data[:, None]
     if data.ndim != 2:
         raise ValueError("data must be (frames,) or (frames, channels)")
-    channels = data.shape[1]
-    payload = np.ascontiguousarray(data).tobytes()
+    frames, channels = data.shape
+    size = 4 * frames * channels
     block = 4 * channels
     extensible = channels > 2 or channel_mask is not None
     fmt = struct.pack(
@@ -45,14 +46,23 @@ def write_wav(
         fmt += struct.pack("<HHI", 22, 32, int(channel_mask or 0)) + _FLOAT_GUID
     else:
         fmt += struct.pack("<H", 0)
-    fact = struct.pack("<I", data.shape[0])
-    chunks = [
-        b"fmt " + struct.pack("<I", len(fmt)) + fmt,
-        b"fact" + struct.pack("<I", len(fact)) + fact,
-        b"data" + struct.pack("<I", len(payload)) + payload + (b"\0" if len(payload) % 2 else b""),
-    ]
-    body = b"WAVE" + b"".join(chunks)
-    Path(path).write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
+    fact = struct.pack("<I", frames)
+    head = (
+        b"WAVE"
+        + b"fmt "
+        + struct.pack("<I", len(fmt))
+        + fmt
+        + b"fact"
+        + struct.pack("<I", len(fact))
+        + fact
+        + b"data"
+        + struct.pack("<I", size)
+    )
+    step = max(1, (1 << 20) // channels)  # frames of 4 MiB
+    with open(path, "wb") as file:
+        file.write(b"RIFF" + struct.pack("<I", len(head) + size) + head)
+        for start in range(0, frames, step):
+            file.write(np.ascontiguousarray(data[start : start + step], dtype="<f4").tobytes())
 
 
 def read_wav(path: str | Path) -> tuple[np.ndarray, int]:

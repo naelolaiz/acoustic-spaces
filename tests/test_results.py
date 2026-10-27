@@ -1,17 +1,21 @@
 import dataclasses
+import errno
 import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from acoustic_spaces import results
 from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.cli import main
 from acoustic_spaces.engine import simulate
+from acoustic_spaces.engine.response import Response
 from acoustic_spaces.results import (
     REPORT_FILE,
     file_name,
     response_stem,
+    results_folder,
     unique_stems,
     write_results,
 )
@@ -95,6 +99,115 @@ def test_write_results(result, tmp_path: Path) -> None:
     data, rate = read_wav(tmp_path / "out" / "talker__seat-a.ambix1.wav")
     assert rate == 16_000 and data.shape[1] == 4
     assert messages and "rendering" in messages[0]
+    # The files scaled together once all are written: the loudest sample at -1 dBFS.
+    loudest = max(np.abs(read_wav(p)[0]).max() for p in (tmp_path / "out").glob("*.wav"))
+    assert loudest == pytest.approx(10 ** (-1 / 20), rel=1e-6)
+    assert [p.name for p in (tmp_path / "out").iterdir() if p.name.startswith(".")] == []
+
+
+def test_a_write_that_fails_leaves_the_folder_as_it_was(
+    result, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A full disk at the second file, or an export cancelled (the progress raises): the
+    # folder keeps the results it had, report and files, and nothing of the new ones.
+    out = tmp_path / "out"
+    formats = [Mono(), Ambisonics(1)]
+    write_results(result, out, formats, normalize=True)
+    before = {p.name: p.read_bytes() for p in out.iterdir()}
+    real, calls = results.write_wav, [0]
+
+    def full(path, *args, **kwargs) -> None:
+        calls[0] += 1
+        if calls[0] == 2:
+            raise OSError(errno.ENOSPC, "No space left on device", str(path))
+        real(path, *args, **kwargs)
+
+    monkeypatch.setattr(results, "write_wav", full)
+    with pytest.raises(OSError, match="No space left on device"):
+        write_results(result, out, formats)
+    monkeypatch.undo()
+    assert calls[0] >= 2
+
+    class Cancelled(Exception):
+        pass
+
+    def cancel(message: str) -> None:
+        if "ambix" in message:
+            raise Cancelled
+
+    with pytest.raises(Cancelled):
+        write_results(result, out, formats, progress=cancel)
+    assert {p.name: p.read_bytes() for p in out.iterdir()} == before
+
+
+def test_each_response_is_written_before_the_next_is_rendered(
+    result, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # On one thread: each file goes out as soon as it is rendered, so memory holds one
+    # response's files at a time, not the run's.
+    response = result["talker", "seat-a"]
+    performance = result.settings.performance.model_copy(update={"threads": 1})
+    two = dataclasses.replace(
+        result,
+        responses={("talker", "a"): response, ("talker", "b"): response},
+        settings=result.settings.model_copy(update={"performance": performance}),
+    )
+    events: list[str] = []
+    render, write = Response.spatial_impulse_response, results.write_wav
+
+    def rendered(self, *args, **kwargs):
+        events.append("render")
+        return render(self, *args, **kwargs)
+
+    def written(path, *args, **kwargs) -> None:
+        events.append(Path(path).name)
+        write(path, *args, **kwargs)
+
+    monkeypatch.setattr(Response, "spatial_impulse_response", rendered)
+    monkeypatch.setattr(results, "write_wav", written)
+    write_results(two, tmp_path / "out", [Mono(), Ambisonics(1)])
+    assert events == [
+        "render",
+        "talker__a.wav",
+        "render",
+        "talker__a.ambix1.wav",
+        "render",
+        "talker__b.wav",
+        "render",
+        "talker__b.ambix1.wav",
+    ]
+
+
+def test_the_results_folder_is_checked(result, tmp_path: Path) -> None:
+    file = tmp_path / "file"
+    file.write_text("x")
+    with pytest.raises(NotADirectoryError, match="is a file, not a folder"):
+        results_folder(file)
+    with pytest.raises(NotADirectoryError):
+        write_results(result, file, [Mono()])
+    assert results_folder(tmp_path / "a" / "b").is_dir()
+    assert list((tmp_path / "a" / "b").iterdir()) == []
+
+
+def test_simulate_checks_its_folder_before_the_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An existing file as --out stops simulate before the run, not after it; the folders
+    # it made go again where the run fails.
+    from acoustic_spaces.engine import long_term
+
+    def fail(*args, **kwargs):
+        raise ValueError("the run failed")
+
+    monkeypatch.setattr(long_term, "simulate", fail)
+    file = tmp_path / "file"
+    file.write_text("x")
+    assert main(["simulate", str(SHOEBOX), "--out", str(file)]) == 1
+    assert "is a file, not a folder" in capsys.readouterr().err
+    out = tmp_path / "new" / "results"
+    assert main(["simulate", str(SHOEBOX), "--out", str(out)]) == 1
+    assert "error: the run failed" in capsys.readouterr().err
+    assert not (tmp_path / "new").exists()
 
 
 def test_a_binaural_output_through_a_sofa_file(

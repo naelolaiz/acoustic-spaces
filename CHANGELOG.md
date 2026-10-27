@@ -15,6 +15,21 @@
   a path bends round keep what they did to its phase as traced. `calibrate`'s results
   are unchanged: its fit within a round keeps the traced phases, and each round traces
   again.
+- The results of `simulate` and the editor's Export are written into a hidden folder in
+  the results folder and moved into place once all of them are, `parameters.json` last:
+  a run that fails while writing (a full disk) or an export that is cancelled leaves the
+  folder as it was. Before, it left the new run's first files beside the earlier run's
+  report and other files. `simulate` checks its `--out` folder before the run: an
+  existing file there stopped it with a traceback only once the run was done, and now
+  stops it at once, as a folder it cannot make or write in does (the folders it made are
+  removed again when the run fails). The responses are rendered and written one at a
+  time, on the run's threads, instead of all held until the end: writing 48 responses in
+  mono, binaural and third-order Ambisonics on 4 threads peaked at about 1,280 MiB, and
+  now at 725 to 821 MiB whatever the number of responses (8, 24 or 48; it varies with
+  how the threads' renders overlap). `write_wav` writes a few MiB at a time. The files
+  are the same to the byte but with `--normalize`, whose files are scaled once all are
+  written, by one rounding to single precision more (one unit in the last place at
+  most).
 
 ## 4.0.1
 
