@@ -76,6 +76,38 @@ def test_a_wave_of_many_pieces_arriving_together_is_their_coherent_sum() -> None
     np.testing.assert_allclose(energy.sum(axis=0), coherent, rtol=1e-5)
 
 
+def test_pieces_added_in_many_parts_resolve_as_if_added_at_once(monkeypatch) -> None:
+    """The pieces stay in the parts they were added in (a room of many facets has
+    millions of them) and are taken from there a batch of waves at a time: their energy
+    is the same, bit for bit, as of pieces added at once, and within rounding however
+    many batches the waves take."""
+    rng = np.random.default_rng(8)
+    count = 300
+    pressure, distance = _pieces(rng, count, 5.0)
+    pressure = pressure.astype(np.complex64)  # as the edge fade adds them
+    keys = rng.integers(0, 12, count)
+    keys[:4] = np.arange(4)  # the specular paths' waves
+    keys[10:15] = 50 + np.arange(5)  # waves of one piece
+    rows = rng.permutation(count)
+    own = np.mean(np.abs(pressure[:4].astype(complex)) ** 2, axis=2)
+
+    def resolve(splits):
+        clusters = Clusters(SLICE_HZ, C, 10.0)
+        clusters.add(rows[:4], keys[:4], pressure[:4], distance[:4], anchor=True, own=own)
+        for part in np.split(np.arange(4, count), splits):
+            clusters.add(rows[part], keys[part], pressure[part], distance[part])
+        return clusters.resolve(count)
+
+    energy, has = resolve([])
+    assert has.all() and (energy >= 0.0).all()
+    split, split_has = resolve([30, 31, 150, 220])
+    assert np.array_equal(split, energy) and np.array_equal(split_has, has)
+    monkeypatch.setattr(clusters_module, "_VALUES", 200)
+    batched, batched_has = resolve([30, 31, 150, 220])
+    assert np.array_equal(batched_has, has)
+    np.testing.assert_allclose(batched, energy, rtol=1e-9, atol=1e-12 * energy.max())
+
+
 def test_the_specular_path_takes_the_cross_terms_of_its_wave() -> None:
     """Its pieces keep their own energy; where the cross terms take more than the path
     has, the rest comes off them in proportion to their energy."""

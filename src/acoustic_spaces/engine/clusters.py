@@ -172,30 +172,35 @@ class Clusters:
         self._alone = [(move(rows), energy) for rows, energy in self._alone]
 
     def _gather(self) -> dict | None:
-        """All the pieces but their pressure as one part, sorted by wave, with ``order``
-        their places among all the pieces; their pressure stays in its parts, as the
-        pieces of a curved surface's facets take gigabytes (:meth:`_pressure`)."""
+        """The pieces sorted by wave: ``order`` their places among all the pieces and
+        ``keys`` their waves in that order. All else stays in the parts, as the pieces of
+        a curved surface's facets take gigabytes (:meth:`_take`)."""
         if not self._parts:
             return None
-        whole = {
-            name: np.concatenate([p[name] for p in self._parts])
-            for name in ("rows", "keys", "distance", "anchor", "own")
+        keys = np.concatenate([p["keys"] for p in self._parts])
+        order = np.argsort(keys, kind="stable")
+        return {
+            "order": order,
+            "keys": keys[order],
+            "starts": np.cumsum([0] + [len(p["rows"]) for p in self._parts]),
         }
-        order = np.argsort(whole["keys"], kind="stable")
-        out = {name: value[order] for name, value in whole.items()}
-        out["order"] = order
-        out["starts"] = np.cumsum([0] + [len(p["rows"]) for p in self._parts])
-        return out
 
-    def _pressure(self, part: dict, sel: np.ndarray) -> np.ndarray:
-        """The pressure of the pieces ``sel`` of :meth:`_gather`'s ``part``."""
+    def _take(self, part: dict, sel: np.ndarray, names: tuple[str, ...]) -> list[np.ndarray]:
+        """The values ``names`` of the pieces ``sel`` of :meth:`_gather`'s ``part``."""
         index = part["order"][sel]
         which = np.searchsorted(part["starts"], index, side="right") - 1
-        first = self._parts[0]["pressure"]
-        out = np.empty((len(index), *first.shape[1:]), dtype=first.dtype)
-        for i in np.unique(which):
-            mine = which == i
-            out[mine] = self._parts[i]["pressure"][index[mine] - part["starts"][i]]
+        by_part = np.argsort(which, kind="stable")
+        bounds = np.searchsorted(which[by_part], np.arange(len(self._parts) + 1))
+        out = []
+        for name in names:
+            first = self._parts[0][name]
+            kind = np.result_type(*(p[name] for p in self._parts))
+            out.append(np.empty((len(index), *first.shape[1:]), dtype=kind))
+        for i in np.flatnonzero(np.diff(bounds)):
+            mine = by_part[bounds[i] : bounds[i + 1]]
+            local = index[mine] - part["starts"][i]
+            for values, name in zip(out, names, strict=True):
+                values[mine] = self._parts[i][name][local]
         return out
 
     def resolve(self, count: int) -> tuple[np.ndarray, np.ndarray]:
@@ -210,23 +215,33 @@ class Clusters:
         part = self._gather() if self.bands else None
         if part is None:
             return energy, has
-        rows, keys, own = part["rows"], part["keys"], part["own"]
-        _, start, size = np.unique(keys, return_index=True, return_counts=True)
-        given = own.copy()
-        # The waves with more than one piece, a batch of whole waves at a time.
+        _, start, size = np.unique(part["keys"], return_index=True, return_counts=True)
+        del part["keys"]
+        # The waves with more than one piece, a batch of whole waves at a time, each with
+        # the waves of one piece up to the next batch, in the order of the waves.
         many = np.flatnonzero(size > 1)
         values = size[many] * self._parts[0]["pressure"].shape[2]
         batch = np.cumsum(values) // _VALUES
-        for b in np.unique(batch):
-            waves = many[batch == b]
-            local = np.repeat(np.arange(len(waves)), size[waves])
-            before = np.cumsum(size[waves]) - size[waves]
-            sel = start[waves][local] + np.arange(len(local)) - before[local]
-            share = self._shares(self._pressure(part, sel), part["distance"][sel], local)
-            given[sel] = _distribute(share, own[sel], local, part["anchor"][sel], rows[sel] >= 0)
-        kept = rows >= 0
-        np.add.at(energy, rows[kept], given[kept])
-        has[rows[kept]] = True
+        batches = np.unique(batch)
+        bounds = [0, *start[many[np.searchsorted(batch, batches[1:])]], len(part["order"])]
+        for i in range(len(bounds) - 1):
+            low = bounds[i]
+            rows, given = self._take(part, np.arange(low, bounds[i + 1]), ("rows", "own"))
+            if i < len(batches):
+                waves = many[batch == batches[i]]
+                local = np.repeat(np.arange(len(waves)), size[waves])
+                before = np.cumsum(size[waves]) - size[waves]
+                sel = start[waves][local] + np.arange(len(local)) - before[local]
+                pressure, distance, anchor = self._take(
+                    part, sel, ("pressure", "distance", "anchor")
+                )
+                share = self._shares(pressure, distance, local)
+                del pressure
+                mine = sel - low
+                given[mine] = _distribute(share, given[mine], local, anchor, rows[mine] >= 0)
+            kept = rows >= 0
+            np.add.at(energy, rows[kept], given[kept])
+            has[rows[kept]] = True
         return np.maximum(energy, 0.0), has
 
     def _shares(self, pressure: np.ndarray, distance: np.ndarray, cluster: np.ndarray):
