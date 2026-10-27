@@ -299,8 +299,9 @@ for speech (in `church`).
   energy at every listener or map point for every source, and while a source is traced,
   the tracer's copies on the CPU's threads or its buffers on a GPU, the worst of the
   devices `late.device` may take on this computer. A simulation or a coverage map that
-  would need more than the computer's memory (or its container's limit) is refused with
-  a message that says what to lower, and `Room.warnings()` (the editor's messages)
+  would need more than the computer's memory (or its container's limit, on the
+  process's own control group or one above it) is refused with a message that says
+  what to lower, and `Room.warnings()` (the editor's messages)
   notes one that would need more than half. A map is checked again once its first
   source point is traced, with the early paths found there at every point.
   `performance.threads` above the computer's cores run as its cores. On the CPU the

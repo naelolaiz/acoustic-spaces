@@ -563,7 +563,8 @@ worst of the CPU, the GPU and the two together. So the memory grows with
 and the map points (`coverage.spacing`). On the CPU the rays cost time, not memory.
 
 A run that would need more memory than the computer has (or than its container may
-use) is refused before it starts, with a message that says what to lower, and the
+use: on Linux, the lowest limit on the process's control groups and on those above
+them) is refused before it starts, with a message that says what to lower, and the
 editor's messages (`Room.warnings()`) note one that would need more than half of it. A
 map is checked again once its first source point is traced, with the early paths found
 there at every point, which grow with the points too (`workshop`'s map: 311 MiB of early

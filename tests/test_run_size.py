@@ -25,6 +25,30 @@ def test_the_computers_memory_is_read() -> None:
     assert memory is not None and memory > 256 * MiB
 
 
+def test_a_containers_limit_is_found_on_the_process_own_control_group(tmp_path) -> None:
+    def limit(group: Path, name: str, text: str) -> None:
+        group.mkdir(parents=True, exist_ok=True)
+        (group / name).write_text(text + "\n")
+
+    # Version 1, as in a container whose limit is on its own group, not on the root.
+    v1 = tmp_path / "memory"
+    limit(v1, "memory.limit_in_bytes", "9223372036854771712")
+    limit(v1 / "box", "memory.limit_in_bytes", "9223372036854771712")
+    limit(v1 / "box" / "shell", "memory.limit_in_bytes", "14341890048")
+    groups = "4:memory:/box/shell\n3:cpuset:/\n0::/\n"
+    assert run_size._container_limit(groups, tmp_path) == 14341890048
+    # A lower limit on a group above the process's holds too.
+    limit(v1 / "box", "memory.limit_in_bytes", "8000000000")
+    assert run_size._container_limit(groups, tmp_path) == 8000000000
+    # Version 2 ("max" is no limit), and no control groups at all.
+    v2 = tmp_path / "v2"
+    limit(v2, "memory.max", "max")
+    limit(v2 / "user.slice", "memory.max", "6000000000")
+    assert run_size._container_limit("0::/user.slice/app\n", v2) == 6000000000
+    assert run_size._container_limit("0::/\n", v2) is None
+    assert run_size._container_limit("", tmp_path) is None
+
+
 def test_threads_above_the_cores_run_as_the_cores(monkeypatch) -> None:
     monkeypatch.setattr(os, "cpu_count", lambda: 6)
     assert [run_size.worker_threads(t) for t in (0, 1, 4, 6, 7, 100)] == [6, 1, 4, 6, 6, 6]
