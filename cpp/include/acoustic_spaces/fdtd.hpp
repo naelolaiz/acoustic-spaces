@@ -15,8 +15,16 @@
 //   wavelength, within 0.03 % the same in every direction.
 //
 // Either way a cell's update is a weighted graph Laplacian over its links to its
-// neighbours, p+ - 2 p + p- = sum_k g_k (p_k - p) - (boundary terms), its weights
-// rounded down so that the highest mode cannot grow.
+// neighbours, p+ - 2 p + p- = sum_k g_k (p_k - p) - (boundary terms). At the Courant
+// limit its highest modes lie on the edge of stability even in exact arithmetic (the
+// 7-point stencil's checkerboard and the 19-point's modes alternating along two axes,
+// p+ + 2 p + p- = 0, under which a kick grows linearly), and single precision's
+// rounding can take them over it. So the update takes the Laplacian times 1 - 2^-18,
+// each link weighing g_k (1 - 2^-18) rounded down and the centre 2 less their sum:
+// sound goes 2^-19 slower, and those modes lie 2^-16 inside the limit and, kicked
+// once, swing within 1 / sin of their angle a step, 256 times the kick (259 over
+// 300,000 steps in single precision). The uniform pressure stays as a closed room's
+// should: what the source pushes in stays.
 //
 // The grid's cells are air when they can be reached from the source without crossing
 // a face of the model, so closed rooms, open models and thin screens all work. A link
@@ -120,10 +128,11 @@ namespace acoustic_spaces {
 // The interior update over cells lo to hi, all interior: the 7-point stencil's, and
 // the 19-point one's. No test per cell, so the compiler can vectorise them.
 inline void update_interior(float *__restrict a, const float *__restrict b, std::size_t lo,
-                            std::size_t hi, std::size_t sy, std::size_t sz, float axial) {
+                            std::size_t hi, std::size_t sy, std::size_t sz, float axial,
+                            float centre) {
     for (std::size_t i = lo; i < hi; ++i) {
         const float sum = b[i - 1] + b[i + 1] + b[i - sy] + b[i + sy] + b[i - sz] + b[i + sz];
-        a[i] = axial * sum - a[i];
+        a[i] = centre * b[i] + axial * sum - a[i];
     }
 }
 
@@ -141,7 +150,7 @@ inline void update_interior(float *__restrict a, const float *__restrict b, std:
 
 // The same, each cell's links weighed by its scale[i] (the square of its speed of sound
 // over the grid's) and its centre by 2 - total scale[i], total the stencil's weights
-// summed (2 and 3). With scale 1 the update is the one above, to the bit.
+// summed (2 and 3 less the margin). With scale 1 the update is the one above, to the bit.
 inline void update_interior(float *__restrict a, const float *__restrict b,
                             const float *__restrict scale, std::size_t lo, std::size_t hi,
                             std::size_t sy, std::size_t sz, float axial, float total) {
@@ -608,7 +617,7 @@ public:
                     } else if (wide) {
                         update_interior(a, b, lo, hi, sy, sz, axial, diagonal, centre);
                     } else {
-                        update_interior(a, b, lo, hi, sy, sz, axial);
+                        update_interior(a, b, lo, hi, sy, sz, axial, centre);
                     }
                 }
                 const float s = signal[step];
@@ -664,6 +673,7 @@ public:
 private:
     static constexpr std::uint8_t kSolid = 0, kInterior = 1, kSpecial = 2, kLayer = 3;
     static constexpr std::size_t npos = static_cast<std::size_t>(-1);
+    static constexpr double kMargin = 1.0 / 262144.0;  // 2^-18 (see above)
     // The directions to a cell's neighbours: the six axial ones (2 a + side, side 1 the
     // + side), then the twelve edge ones, 6 + 4 p + sa + 2 sb for the pair of axes p
     // ((x, y), (x, z), (y, z)) and the signs sa, sb of its steps along them (1: +).
@@ -681,7 +691,7 @@ private:
         return {2 * pairs[p][0] + sa, 2 * pairs[p][1] + sb};
     }
 
-    // The stencil's weights (exact, and rounded down for the update), boundary weights,
+    // The stencil's weights (exact, and lowered for the update), boundary weights,
     // offsets and the bits of the + half's directions in the cut mask.
     void set_up_stencil() {
         directions_ = stencil_ == 7 ? 6 : 18;
@@ -691,7 +701,7 @@ private:
         int bits = 0;
         for (int k = 0; k < 18; ++k) {
             exact_[k] = k < directions_ ? (k < 6 ? axial : diagonal) : 0.0;
-            weight_[k] = down(exact_[k]);
+            weight_[k] = lowered(exact_[k]);
             boundary_[k] = exact_[k] / (2.0 * courant);
             offset_[k] = kSteps[k][0] + kSteps[k][1] * static_cast<std::ptrdiff_t>(sy_) +
                          kSteps[k][2] * static_cast<std::ptrdiff_t>(sz_);
@@ -699,8 +709,9 @@ private:
             const bool plus = d[2] > 0 || (d[2] == 0 && (d[1] > 0 || (d[1] == 0 && d[0] > 0)));
             bit_[k] = k < directions_ && plus ? bits++ : -1;
         }
+        // Both exact in single precision, so that the centre and the links sum to 2.
         double total = 0.0;
-        for (int k = 0; k < directions_; ++k) total += exact_[k];
+        for (int k = 0; k < directions_; ++k) total += weight_[k];
         centre_ = static_cast<float>(2.0 - total);
         total_ = static_cast<float>(total);
     }
@@ -807,6 +818,10 @@ private:
         return f;
     }
 
+    // A link's weight w as the update takes it: lowered by the stability margin (see
+    // above), rounded down.
+    static float lowered(double w) { return down(w * (1.0 - kMargin)); }
+
     Vec3 unit(int k) const {
         const int *d = kSteps[k];
         const double scale = 1.0 / std::sqrt(static_cast<double>(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]));
@@ -877,7 +892,7 @@ private:
     void layer_coefficients(int a) {
         const std::size_t size = a == 0 ? nx_ : (a == 1 ? ny_ : nz_);
         const double layer = static_cast<double>(layer_);
-        const double courant = std::sqrt(static_cast<double>(std::nextafter(1.0f / 3.0f, 0.0f)));
+        const double courant = std::sqrt(static_cast<double>(weight_[0]));  // as the interior's
         auto damping = [&](double from_edge) {
             const double into = std::max(0.0, layer + 0.5 - from_edge) / layer;
             return layer_damping_ * into * into;
@@ -1020,10 +1035,10 @@ private:
             if (!(w[k] > 0.0)) continue;
             total += w[k];
             link_direction_.push_back(static_cast<std::uint8_t>(k));
-            link_weight_.push_back(down(s * w[k]));
+            link_weight_.push_back(lowered(s * w[k]));
         }
         link_start_.push_back(link_direction_.size());
-        coef_a_.push_back(static_cast<float>(2.0 - s * total));
+        coef_a_.push_back(static_cast<float>(2.0 - s * total * (1.0 - kMargin)));
         coef_b_.push_back(static_cast<float>(1.0 - r * g));
         coef_inv_.push_back(static_cast<float>(1.0 / (1.0 + r * g)));
         source_.push_back(0.0f);
@@ -1065,7 +1080,7 @@ private:
     std::array<std::ptrdiff_t, 18> offset_{};
     std::array<int, 18> bit_{};
     float centre_ = 0.0f;
-    float total_ = 0.0f;  // the exact weights summed
+    float total_ = 0.0f;  // the update's weights summed
     // With a speed field: the square of each cell's speed of sound over the grid's, and
     // of each matched-layer cell's; both empty without one.
     std::vector<float> scale_, layer_scale_;

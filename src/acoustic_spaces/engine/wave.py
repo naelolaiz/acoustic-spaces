@@ -18,7 +18,8 @@ octave bands replace the ray-traced ones.
   at 8 cells per wavelength, within 0.03 % the same in every direction; the standard
   one (7 points, :data:`COURANT`) up to 1.7 %, along the grid's axes. ``auto`` takes the
   isotropic one but round an open model, where only the standard one has the matched
-  layer.
+  layer. Along the axes both are slowest (:func:`slow_by`); the run's details give how
+  slow the top of the highest band is there (``wave_slow_percent``).
 - The surfaces absorb as their materials do in each band: each material becomes a
   locally reacting surface whose admittance changes with frequency, fitted so that its
   random-incidence absorption matches the material's in every wave band
@@ -97,14 +98,17 @@ Scheme = Literal["auto", "standard", "isotropic"]
 WindModel = Literal["effective", "moving"]
 #: The stencils' points, and their Courant numbers, by scheme.
 STENCILS = {"standard": (7, COURANT), "isotropic": (19, ISOTROPIC_COURANT)}
+#: Each stencil's link weights, by its points: of an axial link and of an edge link (the
+#: Courant number squared shared out over the links, as the update takes them).
+LINK_WEIGHTS = {7: (1.0 / 3.0, 0.0), 19: (0.25, 0.125)}
 #: Grids with more cells than this are refused (about 20 bytes each).
 MAX_CELLS = 40_000_000
 #: The highest bands the solver may compute (``simulation.wave.max_band_hz``).
 WAVE_BANDS_HZ = OCTAVE_BANDS_HZ[:4]
 #: The source's high-pass, applied twice: once so that the air the source pushes into
 #: the room stops flowing, twice so that as much flows out again and a closed room's
-#: pressure comes back to rest (but for a slow swing from rounding L^2 down, far below
-#: the wave bands). Its length in seconds; twice, it is flat within 0.2 dB above 20 Hz.
+#: pressure comes back to rest. Its length in seconds; twice, it is flat within 0.2 dB
+#: above 20 Hz.
 HIGH_PASS_S = 0.12
 #: Cells of the matched layer round an open model, and its damping at the grid's edge
 #: (the damping rate times half a time step). Sound leaving the model comes back from
@@ -151,6 +155,32 @@ def _filter(x: np.ndarray, gain: np.ndarray, n_fft: int) -> np.ndarray:
     shape = (-1,) + (1,) * (x.ndim - 1)
     spectrum = np.fft.rfft(x, n_fft, axis=0) * gain.reshape(shape)
     return np.fft.irfft(spectrum, n_fft, axis=0)[: len(x)]
+
+
+def grid_phase(theta, stencil: int, ratio: float = 1.0) -> np.ndarray:
+    """The phase w T a wave turns through in a time step on the ``stencil``-point grid,
+    from the phase it turns through across a cell along each axis, ``theta`` (..., 3),
+    k h: the stencil's dispersion relation, 2 - 2 cos(w T) = ratio^2 sum over the links
+    of g_k (1 - cos(k . d_k)). ``ratio`` is the speed of sound over the one the grid's
+    time step is set by (in wind and temperature, below 1 in all but the fastest air)."""
+    axial, edge = LINK_WEIGHTS[stencil]
+    cos = np.cos(np.asarray(theta, dtype=float))
+    total = 2 * axial * (1 - cos).sum(axis=-1)
+    for a, b in ((0, 1), (0, 2), (1, 2)):
+        total += 4 * edge * (1 - cos[..., a] * cos[..., b])
+    return np.arccos(1 - ratio**2 * total / 2)
+
+
+def slow_by(stencil: int, per_wavelength: float, ratio: float = 1.0) -> float:
+    """How much slower than it should (a fraction) a wave of ``per_wavelength`` cells per
+    wavelength travels on the ``stencil``-point grid along its axes, the way it is
+    slowest with either stencil; ``ratio`` as in :func:`grid_phase` (below 1, slower
+    still). The 19-point stencil at 8 cells per wavelength: 0.67 %, at 5: 1.85 %; the
+    7-point one 1.74 % and 4.56 %."""
+    courant = dict(STENCILS.values())[stencil]
+    theta = 2.0 * math.pi / per_wavelength
+    turned = float(grid_phase([theta, 0.0, 0.0], stencil, ratio))
+    return 1.0 - turned / (ratio * courant * theta)
 
 
 @dataclass(frozen=True)
@@ -632,6 +662,7 @@ def wave_responses(
         matched layer."""
         size, courant = STENCILS[stencil]
         speeds, extremes, flow = None, None, (None, None)
+        still = speed_of_sound  # the slowest still air's speed of sound on the grid
         if weather is None:
             grid, origin, shape = layout(courant, layer, speed_of_sound, points_per_wavelength)
             check_size(shape, layer)
@@ -652,7 +683,7 @@ def wave_responses(
             speeds, *flow = weather.moving_fields(
                 origin, grid.cell, shape, step, 1.0 / (grid.cell * grid.rate)
             )
-            extremes = (low - top, high + top)
+            extremes, still = (low - top, high + top), low
         else:
             # Fine enough for the slowest sound and in time steps for the fastest, over
             # the grid those give (which grows a little as its cells shrink).
@@ -667,7 +698,7 @@ def wave_responses(
                 slowest, fastest = min(slowest, low_speed), max(fastest, high_speed)
             check_size(shape, layer)
             speeds = weather.ratios(origin, grid.cell, shape, courant * grid.cell * grid.rate)
-            extremes = (low_speed, high_speed)
+            extremes, still = (low_speed, high_speed), low_speed
         h = grid.cell
         fits = [fit_admittance(row, total, grid.rate) for row in rows]
         if impedance is not None:
@@ -701,12 +732,12 @@ def wave_responses(
             speeds,
             *flow,
         )
-        return solver, grid, fits, probes, courant, extremes
+        return solver, grid, fits, probes, courant, extremes, still
 
     # The isotropic stencil, but round an open model the standard one with its matched
     # layer, which the isotropic one has none of.
     stencil = "standard" if scheme == "standard" else "isotropic"
-    solver, grid, fits, probes, courant, extremes = prepare(stencil, 0)
+    solver, grid, fits, probes, courant, extremes, still = prepare(stencil, 0)
     if solver.open:
         if scheme == "isotropic":
             raise ValueError(
@@ -715,7 +746,7 @@ def wave_responses(
             )
         stencil = "standard"
         del solver  # its grid goes before the one with the layer is made
-        solver, grid, fits, probes, courant, extremes = prepare(stencil, LAYER_CELLS)
+        solver, grid, fits, probes, courant, extremes, still = prepare(stencil, LAYER_CELLS)
     h = grid.cell
     signal, delay = source_signal(grid.rate, h, courant)
     samples = int(math.ceil(length_s * grid.rate))
@@ -778,6 +809,14 @@ def wave_responses(
         info["wave_speed_min_m_s"], info["wave_speed_max_m_s"] = extremes
     if solver.flowing:
         info["wave_moving_air"] = 1.0
+    # How much slower than it should sound travels at the top of the highest band along
+    # the grid's axes: the slowest sound's cells per wavelength there, stepped as the
+    # slowest air is (in moving air, the still air's step in the air's own frame;
+    # carrying it with the wind adds an error of its own).
+    slowest = speed_of_sound if extremes is None else extremes[0]
+    per_wavelength = slowest / (band_top(bands - 1, total) * h)
+    ratio = still / (courant * h * grid.rate)
+    info["wave_slow_percent"] = 100.0 * slow_by(solver.stencil, per_wavelength, ratio)
     # How far the fitted surfaces' absorption is from the materials', at worst.
     used = np.unique(face_material)
     wanted = np.minimum(rows[used], MAX_ABSORPTION)
@@ -816,6 +855,7 @@ __all__ = [
     "LOW_EDGE_HZ",
     "MAX_ABSORPTION",
     "MAX_CELLS",
+    "LINK_WEIGHTS",
     "STENCILS",
     "WAVE_BANDS_HZ",
     "Scheme",
@@ -828,6 +868,8 @@ __all__ = [
     "fit_admittance",
     "band_grid",
     "band_top",
+    "grid_phase",
+    "slow_by",
     "source_signal",
     "wave_gains",
     "wave_responses",
