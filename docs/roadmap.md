@@ -426,7 +426,9 @@ Known issues found by the review of 25 October 2026 (see
   and `wave_responses` checking what they are given. The others were not borne out, or
   only a direct caller of the native module can reach them.
 - [ ] Uncertainty: how much each parameter scatters over seeds, as a standard error.
-- [ ] CI: type checks, sanitizers for the native code and the tests' coverage.
+- [x] CI: type checks, sanitizers for the native code and the tests' coverage.
+- [ ] Type checks passing in the modules that did not when they began (listed in
+  `pyproject.toml`), a few at a time.
 - [ ] Collada polygons with their holes.
 - [ ] Vector-based scattering with a lobe centred on the specular direction, so the late
   part carries the first orders' specular share as the exact paths do, checked against

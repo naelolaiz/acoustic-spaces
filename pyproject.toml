@@ -46,7 +46,7 @@ sketchup = ["openskp>=1.3"]
 ifc = ["ifcopenshell>=0.8", "mapbox-earcut>=1.0"]
 gpu = ["wgpu>=0.31"]
 test = ["pytest>=7", "h5py>=3.8"]
-dev = ["pytest>=7", "h5py>=3.8", "ruff>=0.6"]
+dev = ["pytest>=7", "h5py>=3.8", "ruff>=0.6", "mypy>=2.4", "types-PyYAML>=6.0"]
 docs = ["sphinx>=7.2", "furo>=2024.1", "myst-parser>=3"]
 
 [project.scripts]
@@ -62,7 +62,7 @@ Changelog = "https://github.com/naelolaiz/acoustic-spaces/blob/main/CHANGELOG.md
 # What `uv sync` installs along with the package in a source checkout; for pip, the
 # `dev` extra holds the same.
 [dependency-groups]
-dev = ["pytest>=7", "h5py>=3.8", "ruff>=0.6"]
+dev = ["pytest>=7", "h5py>=3.8", "ruff>=0.6", "mypy>=2.4", "types-PyYAML>=6.0"]
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
@@ -116,6 +116,108 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.mypy]
+# The type check CI runs (`mypy`, with the dependencies and types-PyYAML installed).
+files = ["src/acoustic_spaces"]
+python_version = "3.10"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# Optional extras and libraries that carry no types.
+module = [
+    "h5py",
+    "ifcopenshell.*",
+    "matplotlib.*",
+    "PySide6.*",
+    "pyvista",
+    "pyvistaqt",
+    "scipy.*",
+    "sounddevice",
+    "vtkmodules.*",
+    "wgpu",
+    "wgpu.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Modules that did not pass when the check began (M21 of the code review of 25 October
+# 2026). Each leaves this list once it passes; new modules are checked from the start.
+module = [
+    "acoustic_spaces",
+    "acoustic_spaces.calibration",
+    "acoustic_spaces.cli",
+    "acoustic_spaces.compare",
+    "acoustic_spaces.demos",
+    "acoustic_spaces.demos.audio",
+    "acoustic_spaces.demos.passby",
+    "acoustic_spaces.demos.passby_pictures",
+    "acoustic_spaces.demos.pictures",
+    "acoustic_spaces.demos.pipeline",
+    "acoustic_spaces.demos.scene_demo",
+    "acoustic_spaces.demos.scene_pictures",
+    "acoustic_spaces.directivity",
+    "acoustic_spaces.engine.coherent",
+    "acoustic_spaces.engine.coverage",
+    "acoustic_spaces.engine.crests",
+    "acoustic_spaces.engine.diffraction",
+    "acoustic_spaces.engine.early",
+    "acoustic_spaces.engine.edge_fade",
+    "acoustic_spaces.engine.gpu_rays",
+    "acoustic_spaces.engine.gpu_tracer",
+    "acoustic_spaces.engine.insertion",
+    "acoustic_spaces.engine.late",
+    "acoustic_spaces.engine.leaks",
+    "acoustic_spaces.engine.long_term",
+    "acoustic_spaces.engine.model",
+    "acoustic_spaces.engine.ray_device",
+    "acoustic_spaces.engine.refracted",
+    "acoustic_spaces.engine.refraction",
+    "acoustic_spaces.engine.reweight",
+    "acoustic_spaces.engine.run_size",
+    "acoustic_spaces.engine.shadow",
+    "acoustic_spaces.engine.simulate",
+    "acoustic_spaces.engine.terrain",
+    "acoustic_spaces.engine.tuning",
+    "acoustic_spaces.engine.turbulence",
+    "acoustic_spaces.engine.vegetation",
+    "acoustic_spaces.engine.wave",
+    "acoustic_spaces.engine.wide_angle",
+    "acoustic_spaces.fetch",
+    "acoustic_spaces.geometry.builders",
+    "acoustic_spaces.geometry.cells",
+    "acoustic_spaces.geometry.checks",
+    "acoustic_spaces.geometry.io",
+    "acoustic_spaces.geometry.outdoor",
+    "acoustic_spaces.geometry.terrain",
+    "acoustic_spaces.gltf",
+    "acoustic_spaces.gui.app",
+    "acoustic_spaces.gui.demo_dialog",
+    "acoustic_spaces.gui.document",
+    "acoustic_spaces.gui.inspector",
+    "acoustic_spaces.gui.movement",
+    "acoustic_spaces.gui.plan_view",
+    "acoustic_spaces.gui.results_view",
+    "acoustic_spaces.gui.tree",
+    "acoustic_spaces.gui.viewport",
+    "acoustic_spaces.gui.worker",
+    "acoustic_spaces.headtracking",
+    "acoustic_spaces.i18n",
+    "acoustic_spaces.materials.bands",
+    "acoustic_spaces.pack",
+    "acoustic_spaces.parameters",
+    "acoustic_spaces.render",
+    "acoustic_spaces.room",
+    "acoustic_spaces.scene.model",
+    "acoustic_spaces.spatial.loudspeakers",
+    "acoustic_spaces.spatial.render",
+    "acoustic_spaces.synthesis",
+    "acoustic_spaces.viz",
+    "acoustic_spaces.walkthrough",
+]
+ignore_errors = true
 
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-* cp314-*"

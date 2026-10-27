@@ -26,6 +26,21 @@ jobs:
       - name: Translation catalogs up to date and translated
         run: python tools/catalog.py check
 
+  types:
+    name: Type check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install mypy and the package's dependencies (the package itself is not built)
+        run: |
+          python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']))" > requirements.txt
+          python -m pip install -r requirements.txt mypy==2.4.0 types-PyYAML==6.0.12.20260906
+      - name: mypy (the modules it checks and those not yet clean are in pyproject.toml)
+        run: mypy
+
   test:
     name: Test (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
@@ -45,13 +60,25 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
       - name: Build and install
         run: python -m pip install ".[test,sketchup,gpu,ifc]"
+      - name: The coverage tool (one job measures the tests' coverage)
+        if: matrix.os == 'ubuntu-24.04' && matrix.python == '3.14'
+        run: python -m pip install pytest-cov==7.1.0
       - name: Test
         # A hung GPU test would otherwise hold the runner for 6 hours. Windows needs the
         # most: its software GPU (WARP) runs the shaders that Direct3D 12's compiler
         # builds without its optimizer (see gpu._primary_backends) slowly: over 30
         # minutes on Python 3.10.
         timeout-minutes: 45
-        run: python -m pytest -q -W error
+        run: >-
+          python -m pytest -q -W error
+          ${{ matrix.os == 'ubuntu-24.04' && matrix.python == '3.14'
+          && '--cov=acoustic_spaces --cov-report=term --cov-report=html' || '' }}
+      - name: Keep the coverage report
+        if: matrix.os == 'ubuntu-24.04' && matrix.python == '3.14'
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage
+          path: htmlcov/
       - name: Smoke-test the command line
         shell: bash  # stops at the first failing command on every platform
         run: |
@@ -66,6 +93,31 @@ jobs:
           acoustic-spaces analyze ir.wav --reference-energy 0.01
           acoustic-spaces convolve sweep.wav sim/talker__seat-a.binaural.wav --out wet.wav --normalize
           acoustic-spaces auralize sim talker=sweep.wav --format ambix3 --out mix.wav --normalize
+
+  sanitizers:
+    # The native module built with AddressSanitizer and UndefinedBehaviorSanitizer: an
+    # out-of-bounds or freed read or write, or undefined behaviour, stops the tests.
+    name: Native code under ASan and UBSan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Build and install with the sanitizers
+        run: >-
+          python -m pip install ".[test]" -C cmake.build-type=RelWithDebInfo
+          -C cmake.define.ACOUSTIC_SPACES_SANITIZE=ON
+      - name: Test
+        # Python itself is not built with them, so their runtimes are loaded first. Leaks
+        # are not checked: Python keeps some memory to the end on purpose.
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: print_stacktrace=1
+        timeout-minutes: 45
+        run: >-
+          LD_PRELOAD="$(gcc -print-file-name=libasan.so) $(gcc -print-file-name=libubsan.so)"
+          python -m pytest -q -W error
 
   uv:
     # The setup docs/getting-started.md gives for a source checkout: `uv sync` with its dev group.

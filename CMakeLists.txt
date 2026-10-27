@@ -27,6 +27,18 @@ else()
   target_compile_options(_native PRIVATE -Wall -Wextra -Wpedantic -ffp-contract=off)
 endif()
 
+# For CI's sanitizer job (GCC or Clang): out-of-bounds and use-after-free reads and writes,
+# and undefined behaviour, stop the process. Python then needs the sanitizers' runtimes
+# preloaded; see CONTRIBUTING.md.
+option(ACOUSTIC_SPACES_SANITIZE "Build the native module with ASan and UBSan" OFF)
+if(ACOUSTIC_SPACES_SANITIZE)
+  target_compile_options(
+    _native PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=undefined
+    -fno-omit-frame-pointer -g
+  )
+  target_link_options(_native PRIVATE -fsanitize=address,undefined)
+endif()
+
 install(TARGETS _native LIBRARY DESTINATION acoustic_spaces)
 
 # The example scenes and their scripts ship inside the package; acoustic_spaces.examples
