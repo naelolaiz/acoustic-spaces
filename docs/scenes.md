@@ -48,17 +48,21 @@ by colour, so give each material its own colour; a face painted differently on i
 sides takes its front's material; and some files do not read at all (the BRAS
 auditorium, for one). An OBJ export from SketchUp is then the way.
 
-Polygons are triangulated, duplicate vertices merged, degenerate faces and the vertices
-no face uses dropped, and faces that meet along an edge are turned to agree with each
-other (each part of the model keeps the orientation most of its area has), so a few
+Polygons are triangulated, duplicate vertices merged, degenerate faces, copies of a face
+(the same corners, turning the same way) and the vertices no face uses dropped, and
+faces that meet along an edge are turned to agree with each other (each part of the
+model keeps the orientation most of its area has), so a few
 faces flipped by the exporter do not spoil the volume or the inside checks. Where a
 face's edge runs past the corners of faces on its other side (a T-junction, which
 SketchUp stitches with faces of zero area), the edge is split at those corners, so the
 model stays closed. A model with no faces left is refused, as is one with coordinates
 that are not finite numbers or a face that names a vertex the file does not have.
 `validate` then reports surfaces without a material, sources or listeners outside the
-room and listeners within 1 cm of a source; it warns about models that are not closed
-(rays would escape) and assignments that match nothing. Normals may point either way:
+room or on a surface (within 1 µm of it; an opening, with air on both sides, does not
+count) and listeners within 1 cm of a source; it warns about models that are not closed
+(rays would escape), listeners so close to a surface or an opening that the late part
+comes out noisy, and assignments that match nothing. Errors exit
+with status 1, and with `--strict` warnings too. Normals may point either way:
 the room is the space the faces close off, found from the faces themselves (see
 [Walls, doors and openings](#walls-doors-and-openings)), and a panel standing in the
 room, with air on both sides, reflects and absorbs on both.

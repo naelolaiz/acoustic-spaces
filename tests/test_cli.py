@@ -83,6 +83,14 @@ def test_validate_example(capsys: pytest.CaptureFixture[str]) -> None:
     assert "1 sources, 1 listeners, 12 triangles" in capsys.readouterr().out
 
 
+def test_validate_strict_counts_warnings(capsys: pytest.CaptureFixture[str]) -> None:
+    leaky = EXAMPLES / "leaky_classroom" / "scene.yaml"
+    assert main(["validate", str(leaky)]) == 0
+    assert "warning: the model is not closed" in capsys.readouterr().err
+    assert main(["validate", str(leaky), "--strict"]) == 1
+    assert main(["validate", str(SHOEBOX), "--strict"]) == 0
+
+
 def test_validate_reports_problems(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     data = yaml.safe_load(SHOEBOX.read_text(encoding="utf-8"))
     data["geometry"]["file"] = str(EXAMPLES / "shoebox" / "shoebox.obj")

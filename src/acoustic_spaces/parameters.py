@@ -1079,8 +1079,14 @@ def from_impulse_response(
     reference = None
     if reference_energy is not None:
         reference = np.asarray(reference_energy, dtype=float)
+        bands = decay.energy.shape[0]
         if reference.ndim == 0:
             reference = reference * band_energy_share(sample_rate, filters)
+        elif reference.shape != (bands,):
+            raise ValueError(
+                f"reference_energy is one energy or one per octave band ({bands}), not "
+                f"{reference.shape[0] if reference.ndim == 1 else reference.shape}"
+            )
     per_band = _decay_parameters(decay, reference, stage)
     start = int(round(decay.onset_s * sample_rate))
     if lateral is not None:

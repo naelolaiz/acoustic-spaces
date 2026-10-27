@@ -588,8 +588,29 @@ def wave_responses(
     use_gpu(device)  # an unknown device, or the GPU missing, before any work
     if max_band_hz not in WAVE_BANDS_HZ:
         raise ValueError(f"max_band_hz must be one of {WAVE_BANDS_HZ}, got {max_band_hz}")
+    # The scene's schema checks these; a caller of this function may pass anything.
+    if scheme not in ("auto", "standard", "isotropic"):
+        raise ValueError(f"unknown scheme {scheme!r}; use auto, standard or isotropic")
+    if wind not in ("effective", "moving"):
+        raise ValueError(f"unknown wind {wind!r}; use effective or moving")
+    for what, value in (
+        ("points_per_wavelength", points_per_wavelength),
+        ("length_s", length_s),
+        ("sample_rate", sample_rate),
+        ("speed_of_sound", speed_of_sound),
+    ):
+        if not (math.isfinite(value) and value > 0.0):
+            raise ValueError(f"{what} must be a positive number, not {value!r}")
+    listeners = np.asarray(listeners, dtype=float).reshape(-1, 3)
+    if len(names) != len(listeners):
+        raise ValueError(f"{len(names)} names for {len(listeners)} listeners")
     mesh = model.room.mesh
     solid = ~model.transparent
+    if not solid.any():
+        raise ValueError(
+            "the wave solver needs a surface that reflects: every face of the model lets "
+            "all sound through (an opening)"
+        )
     if model.transmission is not None:
         partial = np.unique(model.room.face_materials[solid & np.any(model.transmission > 0, 1)])
         if len(partial):
@@ -604,7 +625,6 @@ def wave_responses(
         bvh = _native.Bvh(
             mesh.vertices, np.ascontiguousarray(mesh.faces[solid]), split=model.ray_tree
         )
-    listeners = np.asarray(listeners, dtype=float).reshape(-1, 3)
     points = np.vstack([np.asarray(source, dtype=float).reshape(1, 3), listeners])
     centres = band_centres(model.bands)
     bands = (OCTAVE_BANDS_HZ.index(max_band_hz) + 1) * BANDS_PER_OCTAVE[model.bands]

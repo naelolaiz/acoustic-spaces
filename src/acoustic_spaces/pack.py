@@ -22,7 +22,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import zipfile
+import zlib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote
@@ -112,7 +114,12 @@ def pack(scene: Scene, out: str | Path, base_dir: str | Path | None = None) -> P
 
 def unpack(path: str | Path, into: str | Path) -> Unpacked:
     """Unpack the pack ``path`` into the folder ``into``, checking every file against
-    the hash the pack records."""
+    the hash the pack records.
+
+    Nothing is written unless the folder has room for every file at the size the pack
+    records (which is as much as reading one gives). Each file is written to
+    ``<file>.part`` and takes its name once its hash matches, so a damaged file is
+    never left in the folder."""
     path, into = Path(path), Path(into)
     try:
         archive = zipfile.ZipFile(path)
@@ -136,21 +143,47 @@ def unpack(path: str | Path, into: str | Path) -> Unpacked:
         files = manifest.get("files")
         if not isinstance(files, dict) or SCENE_FILE not in files:
             raise ValueError(f"{path.name}: {MANIFEST_FILE} lists no {SCENE_FILE}")
+        targets, size = {}, 0
+        for name in files:
+            targets[name] = into.joinpath(*_safe_parts(name, path))
+            try:
+                size += archive.getinfo(name).file_size
+            except KeyError:
+                raise ValueError(f"{path.name} lacks {name}, which its manifest lists") from None
+        into.mkdir(parents=True, exist_ok=True)
+        free = shutil.disk_usage(into).free
+        if size > free:
+            raise ValueError(
+                f"{path.name} unpacks to {size / 2**20:,.1f} MiB; {into} has "
+                f"{free / 2**20:,.1f} MiB free"
+            )
         for name, expected in files.items():
-            target = into.joinpath(*_safe_parts(name, path))
+            target = targets[name]
             target.parent.mkdir(parents=True, exist_ok=True)
+            part = target.with_name(target.name + ".part")
             digest = hashlib.sha256()
             try:
-                with archive.open(name) as source, target.open("wb") as sink:
+                with archive.open(name) as source, part.open("wb") as sink:
                     while chunk := source.read(_CHUNK):
                         digest.update(chunk)
                         sink.write(chunk)
-            except KeyError:
-                raise ValueError(f"{path.name} lacks {name}, which its manifest lists") from None
-            except zipfile.BadZipFile:
-                digest = None
-            if digest is None or digest.hexdigest() != expected:
-                raise ValueError(f"{path.name}: {name} is damaged (its hash does not match)")
+                if digest.hexdigest() != expected:
+                    raise zipfile.BadZipFile("its hash does not match")
+            # Damaged on the way, encrypted (RuntimeError) or compressed in a way zipfile
+            # cannot read (NotImplementedError).
+            except (
+                zipfile.BadZipFile,
+                zlib.error,
+                EOFError,
+                RuntimeError,
+                NotImplementedError,
+            ) as exc:
+                part.unlink(missing_ok=True)
+                raise ValueError(f"{path.name}: {name} is damaged ({exc})") from None
+            except BaseException:
+                part.unlink(missing_ok=True)
+                raise
+            os.replace(part, target)
     return Unpacked(into / SCENE_FILE, str(manifest.get("acoustic_spaces", "?")))
 
 

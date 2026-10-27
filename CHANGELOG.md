@@ -19,8 +19,11 @@ and the synthesized tails of its rendered responses, which now take the density 
 reflections of each listener's room; `room_modes`'s, whose wave solver keeps its highest
 modes inside its stability limit, by less than 10⁻⁴ dB in G, C50 and C80 (its EDT at
 250 Hz by 5 ms); every response's last milliseconds, where the late part now takes the
-whole chords of the rays through the listeners' spheres; and the echo criterion for
-music, by up to 0.063 (in `open_air_stage`).
+whole chords of the rays through the listeners' spheres; the echo criterion for music,
+by up to 0.063 (in `open_air_stage`); and, as the late part of rendered responses no
+longer moves ahead of 50 ms after the direct sound, the early IACC of binaural responses
+by up to 0.024 (in `apartment`) and the echo criteria by up to 0.019 for music and 0.016
+for speech (in `church`).
 
 - Indoors, in the bands where the early paths add in energy (from 250 Hz with the
   default `coherent_max_band_hz`), the sound bent round edges is kept as waves
@@ -118,6 +121,17 @@ music, by up to 0.063 (in `open_air_stage`).
   through joins it to a room (a booth with glass walls). `inspect` marks the position
   `IN A SOLID`. When no source or listener stands in the model's rooms (walls drawn as
   a closed shell inside another), the spaces they stand in are the rooms, as before.
+- A source or listener on a surface (within 1 µm of it) is reported as such, and
+  `simulate` refuses to run: the inside checks can say either there, and a listener on
+  the shoebox's far wall counted as inside, with a detector sphere of 1 mm. An opening,
+  such as an outdoor scene's sky, has air on both sides and does not count. A listener
+  closer than 5.6 cm to a surface, an opening included, gets a warning where the late
+  part is traced with detector spheres sized for the room: kept clear of the surface,
+  its sphere is under a tenth of the smallest such one and catches a hundredth of the
+  rays or fewer. A centimetre from the shoebox's wall, G at 1 kHz came out 1.5 dB apart
+  between two seeds and T30 0.97 and 1.40 s, against 1.24 and 1.27 s a metre from it.
+- `validate --strict` exits with status 1 on warnings too (a model that is not closed,
+  for one), for scripts that should stop there.
 - A material with `transmission: 0` lets nothing through when the rooms are found
   either: in walls drawn as a shell, a room joined to the source's only by such a wall
   held air too (rooms of 48 and 72 m³ gave 120 m³ instead of 48).
@@ -138,6 +152,18 @@ music, by up to 0.063 (in `open_air_stage`).
   0.5 m spheres, on the CPU and the GPU alike. The total energy moves by 2.1e-4 at most.
   The tracer's reference results (`tests/reference/tracer.npz`) are written again: only
   their last slots change.
+- A rendered response's late part, spread over 10 ms from 50 ms after the direct sound
+  so that a single strong ray does not become a click (`synthesis.smooth_energy`), now
+  spreads each slot only over the part of its window from those 50 ms to the end. The
+  window centred on each slot moved energy up to 5 ms ahead of that time, into C50's
+  early part, and lost some past the end: at the examples' own settings it moved 0.03
+  to 5.2 % of the late energy after those 50 ms ahead of them (5.2 % in `studio`), which
+  raised C50 of the energy the responses are made from by up to 0.45 dB (`gallery`,
+  round the corner). The parameters a run reports come from its echograms, which are
+  not smoothed, and do not change. Measured on the rendered responses, the early IACC
+  of the binaural ones moves by up to 0.024 (`apartment`, television to bed), the echo
+  criteria by up to 0.019 for music and 0.016 for speech (`church`, altar to the back
+  of the nave), and the late IACC by 1.4 × 10⁻⁴ at most.
 - Where partitions or openings divide the model into rooms, the statistical method's
   mixing time (where its early paths end) and the density of reflections in the
   synthesized tail come from the volume of the listener's room (a map's mixing time
@@ -151,9 +177,23 @@ music, by up to 0.063 (in `open_air_stage`).
   1000 km off set it 1 m off, and a slab's inside became a room (28.6 m³ instead of
   25.4). Every format now refuses coordinates that are not finite and faces that name a
   missing vertex, where only the OBJ reader refused the first.
+- The model's repair drops a face given twice (the same corners, turning the same way),
+  counted with the degenerate faces it drops. The copy left each edge of the face
+  shared by three faces, and the room open with no volume: one wall triangle given twice
+  in a box left 13 faces with no room on either side. Two faces with the same corners
+  turning opposite ways both stay, as where two closed models touch.
 - `pack` writes the zip as `<name>.zip.part` and puts it in place only once it is
   complete, so a pack that fails leaves an earlier one of the same name as it was;
   before, the earlier one was emptied when packing began and deleted when it failed.
+- Unpacking a pack first checks that the folder has room for its files, at the sizes
+  the pack records (as much as reading them gives), and writes each file as
+  `<file>.part`, which takes its name once its hash matches: a damaged file is no longer
+  left in the folder. A file that is encrypted or compressed in a way Python's `zipfile`
+  cannot read is refused as damaged, where it ended in a traceback.
+- A key written twice in one mapping of a scene file or an array's YAML file is refused
+  (`found the key 'materials' twice`): PyYAML keeps the last, so a second `materials:`
+  dropped the first without a word. A key that a merge (`<<:`) brings in may still be
+  given again.
 - Result files of names that give the same file name, such as `A/B` and `A_B` (anything
   but ASCII letters, digits, dots, dashes and underscores becomes `_`), or that differ
   only in case, get `-2`, `-3` and so on after the later ones, where the second
@@ -181,6 +221,9 @@ music, by up to 0.063 (in `open_air_stage`).
   3 dB too high. `octave_bands` and `split_bands` return signals as long as their input,
   which cannot hold that spread; their docstrings now say how much is lost. The same
   loss at the start of a rendered impulse response is a known issue.
+- `parameters.from_impulse_response` refuses a `reference_energy` that is neither one
+  energy nor one per octave band: 24 third-octave references were cut to their first 8
+  and taken for octaves, and a list of one raised an `IndexError`.
 - The echo criterion for music filters the response with one band-pass over the 1 and
   2 kHz octaves (two octaves about 1.4 kHz, as Dietsch and Kraak have it) instead of the
   two octave filters added, which rise 3 dB where they meet: an echo near 1.4 kHz
@@ -199,6 +242,14 @@ music, by up to 0.063 (in `open_air_stage`).
   reached it (in strong turbulence a path moved by at most 0.5 % of its delay).
 - An error in one of the native code's worker threads (running out of memory, say) is
   raised in Python instead of ending the process.
+- The stochastic tracer counts a ray's reflections off each group of faces (for
+  re-weighting) in 32 bits instead of 16, which went back to 0 after 65,535 reflections
+  off one group: in a 1 m cube of one material, a ray reflects that often in about two
+  minutes.
+- The docs said results do not depend on `threads`. They do, by rounding: each thread
+  sums its share of the rays, and the shares add up in another order (in the shoebox
+  example, 7 × 10⁻¹⁶ of the late energy's peak between 1, 2 and 4 threads; the early
+  paths are the same to the bit).
 - `Convolver.process` takes `out`, an array to write the block into, and `play` keeps one
   such buffer, so the sound card's callback no longer makes new arrays the size of a
   block; `HeadTrackedBinaural.process` takes `out` too and keeps its buffers.
@@ -221,6 +272,11 @@ music, by up to 0.063 (in `open_air_stage`).
   of memory; and round an open model it lets its first grid go before it makes the one
   with the matched layer (for a 30 x 20 m open floor at 250 Hz, 151 MiB at the peak
   instead of 209).
+- `engine.wave.wave_responses` checks what it is given, as the scene's schema does: a
+  mistyped `scheme` ran the isotropic stencil and a mistyped `wind` the effective one, a
+  length of 0 ran with no samples, and fewer names than listeners left listeners out. A
+  model whose every face is an opening is refused as having no surface that reflects,
+  where the solver stopped with `Bvh: the mesh has no faces`.
 - The wave solver on a GPU checks the matched layer's state against what the GPU binds
   in one buffer, as it did the field: round an open model it is the largest buffer (4
   to 7 times the field's round the tests' 5 x 4 m ground, with cells of 6 to 30 cm),

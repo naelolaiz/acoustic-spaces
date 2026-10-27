@@ -534,11 +534,11 @@ def read_array(path: str | Path):
     import yaml
     from pydantic import ValidationError
 
-    from acoustic_spaces.scene.model import ArraySpec
+    from acoustic_spaces.scene.model import ArraySpec, load_yaml
 
     path = Path(path)
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = load_yaml(path.read_text(encoding="utf-8"))
         return ArraySpec.model_validate(data, context={"base_dir": path.parent})
     except (yaml.YAMLError, ValidationError) as exc:
         raise ValueError(f"{path.name}: not an array description: {exc}") from None

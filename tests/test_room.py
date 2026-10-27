@@ -150,6 +150,50 @@ def test_listener_at_a_source_is_a_problem(tmp_path: Path) -> None:
         simulate(room, listeners=["close"])
 
 
+def test_points_on_or_next_to_a_surface(tmp_path: Path) -> None:
+    # On a wall the inside checks can say either: this listener counted as inside, and
+    # its detector sphere shrank to 1 mm. A centimetre from one, the sphere is 9 mm and
+    # catches next to no rays: G came out 1.5 dB apart between two seeds.
+    path = _scene(
+        tmp_path,
+        sources=[{"name": "floor", "position": [2.0, 3.0, 0.0]}],
+        listeners=[
+            {"name": "on", "position": [8.0, 3.0, 1.2]},
+            {"name": "next to", "position": [7.99, 3.0, 1.2]},
+            {"name": "clear", "position": [7.9, 3.0, 1.2]},
+        ],
+    )
+    room = Room.from_yaml(path)
+    problems = room.problems()
+    assert len(problems) == 2
+    assert problems[0].startswith("source 'floor' at [2.0, 3.0, 0.0] is on a surface")
+    assert problems[1].startswith("listener 'on' at [8.0, 3.0, 1.2] is on a surface")
+    (near,) = [w for w in room.warnings() if "from a surface" in w]
+    assert near.startswith("listener 'next to' is 1 cm from a surface")
+    assert "a radius of 0.9 cm instead of 50 cm or more" in near
+    assert "move it 5.6 cm or more" in near
+
+
+def test_a_point_on_an_opening_is_in_the_air() -> None:
+    # The sky lets all sound through: a listener at its edge stands in the air. The late
+    # part's sphere, kept clear of every face, shrinks to 1 mm there all the same.
+    room = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"ground": {"extent": [[-50.0, -20.0], [50.0, 20.0]], "sky": 20.0}},
+                "materials": {"lawn": {"impedance": "grass"}},
+                "assignments": {"ground": "lawn"},
+                "sources": [{"name": "s", "position": [0.0, 0.0, 2.0]}],
+                "listeners": [{"name": "edge", "position": [50.0, 0.0, 1.5]}],
+            }
+        )
+    )
+    assert room.problems() == []
+    (near,) = [w for w in room.warnings() if "detector sphere" in w]
+    assert near.startswith("listener 'edge' is on an opening")
+    assert "a radius of 0.1 cm" in near
+
+
 def test_flipped_faces_do_not_put_points_outside(tmp_path: Path) -> None:
     # The shoebox with its floor written the other way round.
     obj = tmp_path / "flipped.obj"

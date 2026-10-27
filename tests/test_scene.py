@@ -5,8 +5,20 @@ import yaml
 from pydantic import ValidationError
 
 from acoustic_spaces.scene import OCTAVE_BANDS_HZ, Material, Scene
+from acoustic_spaces.scene.model import load_yaml
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+
+
+def test_a_key_written_twice_is_refused(tmp_path: Path) -> None:
+    # PyYAML keeps the last: a second materials: dropped the first without a word.
+    text = (EXAMPLES / "shoebox" / "scene.yaml").read_text(encoding="utf-8")
+    path = tmp_path / "scene.yaml"
+    path.write_text(text + "\nmaterials:\n  other: {absorption: [0.1, 0.1, 0.1, 0.1]}\n")
+    with pytest.raises(ValueError, match="found the key 'materials' twice"):
+        Scene.from_yaml(path)
+    # A key a merge brings in may be given again: the mapping's own wins.
+    assert load_yaml("a: &b {x: 1, y: 2}\nc: {<<: *b, y: 3}\n")["c"] == {"x": 1, "y": 3}
 
 
 def test_example_scene_loads() -> None:
