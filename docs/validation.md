@@ -176,6 +176,8 @@ request and checks:
   (within 0.6 Hz), the 19-point stencil's modes along a tube against its dispersion
   relation (within 0.15 %, less than half the 7-point one's error), the 19-point
   stencil stable for 30,000 steps in a rotated room with a cube and a screen in it,
+  both stencils' highest modes 2⁻¹⁶ inside the stability limit (kicked, within
+  1.1 × 256 times the kick over 20,000 steps, rounded as the update rounds),
   the reflection off the end
   of a duct for four admittances (within 0.005, and below 0.05 for a matched end, and
   off the inner face of a wall thinner than a cell), and off an end whose admittance
@@ -2598,7 +2600,12 @@ faces that stray from their plane and for planes with only openings.
 there are any, and for a whole room the sum of its modes. It has two stencils, each at
 its stability limit: the standard one (7 points, the six axial neighbours) and the
 interpolated isotropic one (19 points, the twelve edge neighbours too), which closed
-rooms take. Each check runs with both where both apply.
+rooms take. Each check runs with both where both apply. (Each takes its Laplacian
+times 1 − 2⁻¹⁸, which slows sound by 2⁻¹⁹: at the limit itself the highest modes, the
+7-point stencil's checkerboard and the 19-point one's modes alternating along two
+axes, sit on the edge of stability, where a kick grows linearly and single precision's
+rounding can take them over it. 2⁻¹⁶ inside it, they swing within 259 times a kick
+over 300,000 steps in single precision.)
 
 **Speed of sound on the grid.** Waves on the grid travel a little slower the shorter
 they are. From the peaks of a rigid 2.4 x 2.4 x 0.2 m box (10 cm cells) ringing for
@@ -2608,7 +2615,7 @@ relation, 2 − 2 cos ωT = Σ g_k (1 − cos k·d_k) over its links:
 | direction | mode | cells per wavelength | 7-point, relation | wave solver | 19-point, relation | wave solver |
 |---|---|---:|---:|---:|---:|---:|
 | along an axis | (6, 0, 0) | 8.00 | −1.740 % | −1.740 % | −0.672 % | −0.672 % |
-| along a diagonal | (4, 4, 0) | 8.49 | −0.387 % | −0.387 % | −0.573 % | −0.573 % |
+| along a diagonal | (4, 4, 0) | 8.49 | −0.387 % | −0.388 % | −0.573 % | −0.573 % |
 
 Both follow their relations within 2e-5. At 8 cells per wavelength the 7-point stencil
 is 1.74 % slow along the axes, 0.44 % along the face diagonals and exact along the body
@@ -2630,7 +2637,7 @@ up to 0.6 %), the decay rates, which differ fivefold, within 1.7 %:
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | (1, 0, 0) | 24.50 | 24.39 | 24.39 | 24.39 | 0.0028 | 0.779 | 0.770 | 0.770 |
 | (0, 1, 0) | 34.30 | 34.14 | 34.14 | 34.15 | 0.0039 | 1.185 | 1.167 | 1.168 |
-| (1, 1, 0) | 42.15 | 41.93 | 41.91 | 41.91 | 0.0057 | 1.990 | 1.956 | 1.958 |
+| (1, 1, 0) | 42.15 | 41.93 | 41.91 | 41.91 | 0.0057 | 1.990 | 1.955 | 1.958 |
 | (2, 0, 0) | 49.00 | 48.84 | 48.87 | 48.88 | 0.0078 | 2.200 | 2.191 | 2.195 |
 | (0, 0, 1) | 57.17 | 57.10 | 56.97 | 56.98 | 0.0098 | 3.407 | 3.442 | 3.445 |
 | (0, 2, 1) | 89.30 | 89.56 | 89.55 | 89.54 | 0.0052 | 2.152 | 2.124 | 2.117 |
@@ -2681,17 +2688,17 @@ reflection, which the grid returns whole at every frequency:
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 7-point: normal-incidence absorption, fitted admittance | 0.030 | 0.022 | 0.022 | 0.037 | 0.075 | 0.138 | 0.259 | 0.366 | 0.567 | 0.597 |
 | 7-point: the grid's theory | 0.030 | 0.022 | 0.022 | 0.037 | 0.074 | 0.137 | 0.253 | 0.355 | 0.542 | 0.571 |
-| 7-point: wave solver | 0.030 | 0.021 | 0.023 | 0.037 | 0.074 | 0.137 | 0.253 | 0.352 | 0.541 | 0.565 |
+| 7-point: wave solver | 0.030 | 0.022 | 0.022 | 0.037 | 0.075 | 0.136 | 0.254 | 0.353 | 0.540 | 0.566 |
 | 19-point: normal-incidence absorption, fitted admittance | 0.030 | 0.022 | 0.022 | 0.037 | 0.072 | 0.143 | 0.268 | 0.346 | 0.532 | 0.659 |
 | 19-point: the grid's theory | 0.030 | 0.022 | 0.022 | 0.036 | 0.072 | 0.142 | 0.262 | 0.338 | 0.509 | 0.651 |
-| 19-point: wave solver | 0.030 | 0.022 | 0.022 | 0.036 | 0.072 | 0.142 | 0.263 | 0.338 | 0.509 | 0.651 |
+| 19-point: wave solver | 0.030 | 0.022 | 0.022 | 0.037 | 0.072 | 0.142 | 0.263 | 0.339 | 0.509 | 0.651 |
 
 (Each stencil has its own time step, so its own fit.) The wave solver matches the
 grid's theory (a plane wave on the grid, the wall half a cell past the last cell
-centres) within 0.006 with the 7-point stencil and within 0.001 with the 19-point one,
+centres) within 0.005 with the 7-point stencil and within 0.001 with the 19-point one,
 from 30 to 720 Hz. That half cell takes a little of the absorption away as the
 wavelength shortens: within 0.015 (7-point) and 0.009 (19-point) of the fitted
-admittance's below 360 Hz, 0.026 and 0.023 less at 500 Hz with 14 cells per
+admittance's below 360 Hz, 0.027 and 0.023 less at 500 Hz with 14 cells per
 wavelength. The fit does not correct for it.
 
 **Open models.** Round a model whose air reaches the edge of the grid, the grid grows

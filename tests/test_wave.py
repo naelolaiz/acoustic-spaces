@@ -1,4 +1,5 @@
 import dataclasses
+import itertools
 import math
 from pathlib import Path
 
@@ -318,6 +319,48 @@ def test_isotropic_stencil_stays_stable_in_a_slanted_room() -> None:
     levels = [np.mean(pressure[:, k * tenth : (k + 1) * tenth] ** 2) for k in range(10)]
     assert np.all(np.isfinite(pressure))
     assert max(levels[1:]) < 3 * min(levels[1:])
+
+
+@STENCILS
+def test_the_update_keeps_its_highest_modes_inside_the_stability_limit(stencil: int) -> None:
+    # On a mode alternating along some axes and constant along the rest, signs c = +-1,
+    # the update is p+ = A p - p-, A = centre + 2 axial sum_a c_a + 4 diagonal sum_a<b
+    # c_a c_b: the extremes of its factors. At A = -2 a kick grows linearly (the 7-point
+    # checkerboard, the 19-point's modes alternating along two axes): the Laplacian
+    # times 1 - 2^-18 keeps them 2^-16 inside, sound 2^-19 slower, and the uniform
+    # pressure at A = 2, as a closed room's.
+    solver, _ = _solver(
+        (0.4, 0.4, 0.4), lambda m: np.zeros(len(m.faces)), [0.2] * 3, [[0.2] * 3], stencil=stencil
+    )
+    layout = solver.layout()
+    axial = float(layout["weights"][0])
+    diagonal = float(layout["weights"][6]) if stencil == 19 else 0.0
+    centre = float(layout["centre"][0])
+    margin = 2.0**-18
+    exact = (1 / 3, 0.0) if stencil == 7 else (0.25, 0.125)
+    np.testing.assert_allclose([axial, diagonal], np.multiply(exact, 1 - margin), rtol=2**-22)
+    c = np.array(list(itertools.product([1.0, -1.0], repeat=3)))
+    pairs = c[:, 0] * c[:, 1] + c[:, 0] * c[:, 2] + c[:, 1] * c[:, 2]
+    factors = centre + 2 * axial * c.sum(axis=1) + 4 * diagonal * pairs
+    assert factors[0] == 2.0
+    assert factors.min() >= -2 + 4 * margin
+    # In single precision, rounded as update_interior rounds (fdtd.hpp), the checkerboard
+    # and the mode (0, pi, pi), kicked, swing within 1 / sin of their angle a step,
+    # 1 / (2 sqrt(margin)) = 256 times the kick, rather than growing.
+    f32 = np.float32
+    kicks = np.random.default_rng(1).uniform(0.5, 2.0, 32).astype(f32)
+    previous, current, peak = np.zeros_like(kicks), kicks.copy(), np.zeros_like(kicks)
+    a, d, centre32 = f32(axial), f32(diagonal), f32(centre)
+    for _ in range(20_000):
+        p, q = current, -current
+        if stencil == 7:
+            following = centre32 * p + a * (q + q + q + q + q + q) - previous
+        else:
+            edges = q + q + q + q + q + q + q + q + p + p + p + p
+            following = centre32 * p + a * (p + p + q + q + q + q) + d * edges - previous
+        previous, current = current, following
+        np.maximum(peak, np.abs(current), out=peak)
+    assert np.max(peak / kicks) < 1.1 * 256
 
 
 @STENCILS
