@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- The late part's last milliseconds take the whole chord of a ray through a listener's
+  detector sphere, or through a coverage map's cell, where the ray's time runs out as it
+  crosses it: a ray's legs now go on past its time by twice the largest sphere's radius
+  (or map cell's half diagonal) without reflecting there, and a chord counts if its
+  closest approach (a map cell's: its middle) is in time. The chords were cut short
+  where the time ran out, and one whose closest approach came later was counted at the
+  end: in the example box the last 1 to 3 ms came out up to 38 % low with 1 m spheres
+  and no rain, and the last millisecond 17 to 23 % low with the default diffuse rain and
+  0.5 m spheres, on the CPU and the GPU alike. The total energy moves by 2.1e-4 at most.
+  The tracer's reference results (`tests/reference/tracer.npz`) are written again: only
+  their last slots change.
 - Re-weighting a run for other absorption (the editor's results after a material's
   absorption changes, `Response.reweighted`) turns the phase of each early reflection
   off a changed material where the paths add in pressure (up to 125 Hz indoors by

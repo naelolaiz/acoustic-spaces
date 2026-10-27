@@ -598,6 +598,34 @@ def test_the_late_stage_traces_where_its_device_says() -> None:
         assert found.energy.sum() == pytest.approx(on_cpu.energy.sum(), rel=0.15)
 
 
+@needs_gpu
+def test_the_late_stage_s_last_slots_on_a_gpu_take_the_whole_chords() -> None:
+    # As on the CPU (test_engine): the same rays traced for 0.2 s and for 0.25 s give the
+    # same echogram up to 0.2 s, the last slots too.
+    room = Room.from_yaml(SHOEBOX)
+    model = TraceModel.from_room(room, room.scene.simulation)
+    short, long = (
+        late.stochastic_energy(
+            model,
+            np.array([2.0, 3.0, 1.5]),
+            np.array([[6.0, 3.0, 1.2]]),
+            rays=2000,
+            max_time=max_time,
+            time_step=1e-3,
+            speed_of_sound=C,
+            air=room.air_attenuation(model.bands),
+            reception="detector",
+            radius=1.0,
+            splitting=False,
+            seed=3,
+            device="gpu",
+        ).energy[0]
+        for max_time in (0.2, 0.25)
+    )
+    assert short[:, -3:].min() > 0.0
+    np.testing.assert_allclose(short, long[:, : short.shape[1]], rtol=1e-6)
+
+
 # -- outdoors: rays bent by the atmosphere, and through vegetation ------------------------
 
 
@@ -713,6 +741,20 @@ def test_gpu_tracer_bends_the_rays_as_the_cpu_does(gradient: float, wind: float)
     # cannot tell.
     gpu_left, cpu_left = (np.cumsum(energy[::-1])[::-1] for energy in (on_gpu[4], on_cpu[4]))
     np.testing.assert_allclose(gpu_left, cpu_left, rtol=0.03, atol=1e-3 * cpu_left[0])
+
+
+@pytest.mark.parametrize("device", ["cpu", pytest.param("gpu", marks=needs_gpu)])
+def test_bent_rays_last_slots_take_the_whole_chords(device: str) -> None:
+    # The field's rays bent downwind, traced for 0.3 s and for 0.35 s: up to 0.3 s the
+    # echograms are the same, the last slots too, where the sound 100 m off downwind and
+    # across the wind (0.27 to 0.31 s) crosses the spheres (8 m in radius) as a ray's
+    # time runs out.
+    trace = _native.trace_stochastic if device == "cpu" else gpu_tracer.trace_stochastic
+    values = _open_field(rays=20_000, diffuse_rain=False) | _profile(-0.1, 6.0)
+    short, long = (trace(**values | {"max_time": max_time})[0] for max_time in (0.3, 0.35))
+    assert short[[0, 2], :, -3:].min() > 0.0
+    # (Chords end where the time does, so the two runs' rays bend a little apart.)
+    np.testing.assert_allclose(short, long[:, :, : short.shape[2]], rtol=0.01, atol=0.0)
 
 
 def _crown(absorption, scattering, asymmetry) -> dict:

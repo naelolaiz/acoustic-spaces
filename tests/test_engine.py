@@ -247,6 +247,35 @@ def test_splitting_keeps_a_sparse_tail_together() -> None:
     assert np.mean(np.median(error, axis=1)) < 4.0
 
 
+@pytest.mark.parametrize("reception", ["detector", "diffuse_rain"])
+def test_the_late_part_s_last_slots_take_the_whole_chords_through_the_spheres(
+    reception: str,
+) -> None:
+    # The same rays traced for 0.2 s and for 0.25 s: up to 0.2 s their echograms are the
+    # same, the last slots too, where a ray's time runs out as it crosses a sphere.
+    room = Room.from_yaml(SHOEBOX_YAML)
+    model = TraceModel.from_room(room)
+    short, long = (
+        late_stage.stochastic_energy(
+            model,
+            np.array([2.0, 3.0, 1.5]),
+            np.array([[6.0, 3.0, 1.2]]),
+            rays=2000,
+            max_time=max_time,
+            time_step=1e-3,
+            speed_of_sound=room.speed_of_sound(),
+            air=room.air_attenuation(),
+            reception=reception,
+            radius=1.0,
+            splitting=False,
+            seed=3,
+        ).energy[0]
+        for max_time in (0.2, 0.25)
+    )
+    assert short[:, -3:].min() > 0.0
+    np.testing.assert_allclose(short, long[:, : short.shape[1]], rtol=1e-12, atol=0.0)
+
+
 #: Absorption of the example scene's materials: painted concrete walls, carpet on the
 #: floor and an absorbing tile ceiling.
 EXAMPLE_ABSORPTION = {

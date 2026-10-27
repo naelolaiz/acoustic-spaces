@@ -37,6 +37,10 @@ request and checks:
   scattering) from 10k rays with splitting against 1 million rays: within 4 dB on
   average from 0.5 to 2.5 s, and splitting or thinning out every ray keeps the energy
   of plain ray tracing;
+- the late part's last slots: the same rays traced 50 ms longer give the same echogram
+  up to the end, where a ray's time runs out as it crosses a listener's sphere: with
+  and without the rain on the CPU, without it on the GPU, and with rays bent by the
+  wind on both;
 - scattering: the energy of an early reflection off a wall against Christensen and
   Rindel's scattering of its size, to rounding; the early paths and the late part
   adding up to what the tracer finds on its own within 5 %, with vector-based and with
