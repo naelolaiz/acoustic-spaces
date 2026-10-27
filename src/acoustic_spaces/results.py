@@ -17,14 +17,17 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import os
 import re
+import shutil
+import tempfile
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from acoustic_spaces import parameters as iso3382
-from acoustic_spaces.audio import write_wav
+from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 
 if TYPE_CHECKING:
@@ -32,6 +35,9 @@ if TYPE_CHECKING:
     from acoustic_spaces.spatial import Format
 
 REPORT_FILE = "parameters.json"
+#: How the hidden folder starts that the files are written into before they move into
+#: place (see :func:`write_results`).
+_STAGING = ".writing-"
 
 
 def file_name(text: str) -> str:
@@ -61,6 +67,19 @@ def unique_stems(stems: Sequence[str], suffixes: Sequence[str] = ("",)) -> list[
     return out
 
 
+def results_folder(out: str | Path) -> Path:
+    """The folder ``out`` ready for results: made where it is missing, and found to take
+    files. Otherwise an OSError says why not: ``out`` is a file, or the folder cannot be
+    made or written in. ``acoustic-spaces simulate`` asks before its run, so that a run is
+    not lost at its end."""
+    out = Path(out)
+    if out.exists() and not out.is_dir():
+        raise NotADirectoryError(f"{out} is a file, not a folder")
+    out.mkdir(parents=True, exist_ok=True)
+    Path(tempfile.mkdtemp(prefix=_STAGING, dir=out)).rmdir()
+    return out
+
+
 def write_results(
     result: SimulationResult,
     out: str | Path,
@@ -80,15 +99,35 @@ def write_results(
     simulation's levels, which exceed full scale when a listener is closer than 1 m to
     a source (the report's ``peak`` says by how much). ``plots`` adds the echogram and
     direction plots of :mod:`acoustic_spaces.viz` when matplotlib is installed.
+
+    The files are written into a hidden folder in ``out`` first and moved into place
+    once all of them are, the report last, so that a run that fails or is cancelled
+    while writing (a full disk, say) leaves ``out`` as it was. Each response is rendered
+    and written in turn (on the run's threads, one each), so memory holds a response's
+    files at a time, not the whole run's; with ``normalize`` the files are scaled once
+    all are written, by one rounding to single precision more.
     """
+    out = results_folder(out)
+    staging = Path(tempfile.mkdtemp(prefix=_STAGING, dir=out))
+    try:
+        report = _write_results(
+            result, staging, formats, sample_rate, normalize, plots, progress or (lambda _: None)
+        )
+        # Into place, the report last: until it is, the folder's report is the one before.
+        for path in sorted(staging.iterdir(), key=lambda path: path.name == REPORT_FILE):
+            os.replace(path, out / path.name)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    return report
+
+
+def _write_results(result, out: Path, formats, sample_rate, normalize, plots, say) -> dict:
+    """:func:`write_results`, its files written straight into ``out``."""
     from acoustic_spaces.spatial import Binaural, from_output
 
-    say = progress or (lambda _: None)
     if formats is None:
         formats = [from_output(o) for o in result.room.scene.outputs]
     sample_rate = int(sample_rate or result.settings.sample_rate)
-    out = Path(out)
-    out.mkdir(parents=True, exist_ok=True)
 
     from acoustic_spaces.engine.run_size import worker_threads
 
@@ -96,20 +135,6 @@ def write_results(
     # would be alone, so the files and the report are the same as one after another.
     threads = worker_threads(result.settings.performance.threads)
     workers = max(1, min(threads, len(result.responses)))
-
-    def render(key) -> dict:
-        rendered = {}
-        for k, fmt in enumerate(formats):
-            say(f"{key[0]} -> {key[1]}: rendering {fmt.label}")
-            rendered[key, k] = result.responses[key].spatial_impulse_response(fmt, sample_rate)
-        return rendered
-
-    irs = {}
-    with ThreadPoolExecutor(workers) as pool:
-        for rendered in pool.map(render, result.responses):
-            irs.update(rendered)
-    peak = max((float(abs(ir).max(initial=0.0)) for ir in irs.values()), default=0.0)
-    gain = 10.0 ** (-1.0 / 20.0) / peak if normalize and peak > 0 else 1.0
 
     # File names that no two responses or formats share, though their names may give
     # the same (two binaural outputs with HRTF files of the same name, say).
@@ -124,69 +149,39 @@ def write_results(
             strict=True,
         )
     )
+    masks = [fmt.channel_mask() if hasattr(fmt, "channel_mask") else None for fmt in formats]
     binaural = [k for k, fmt in enumerate(formats) if isinstance(fmt, Binaural)]
     mono_at = [k for k, fmt in enumerate(formats) if fmt.label == "mono"]
 
     scene = result.room.scene
     sources = {s.name: s for s in scene.sources}
     noise_db = scene.coverage.noise_db if scene.coverage is not None else None
-    report = {
-        "scene": result.room.scene.name,
-        "bands_hz": list(OCTAVE_BANDS_HZ),
-        "sample_rate": sample_rate,
-        "ir_gain": gain,
-        "peak": peak * gain,
-        "settings": result.settings.model_dump(mode="json"),
-        "details": result.details,
-        # What auralize needs to mix the sources at their power: the responses are per
-        # unit of it.
-        "sources": {
-            source.name: {"sound_power_db": source.sound_power_db} for source in scene.sources
-        },
-        "responses": [],
-    }
-    if result.removed:
-        report["removed"] = list(result.removed)
     long_term = result.long_term
-    if long_term is not None:
-        report["long_term"] = {
-            "classes": list(long_term.classes),
-            "shares": {
-                name: {
-                    period: round(float(share), 6)
-                    for period, share in zip(long_term.periods, row, strict=True)
-                }
-                for name, row in zip(long_term.classes, long_term.shares, strict=True)
-            },
-            "periods": [
-                {"name": name, "hours": float(hours), "penalty_db": float(penalty)}
-                for name, hours, penalty in zip(
-                    long_term.periods, long_term.hours, long_term.penalties, strict=True
-                )
-            ],
-            "rating": long_term.rating,
-        }
 
-    def write(key) -> dict:
-        """Write the response's files; its entry in the report, without plots."""
+    def write(key) -> tuple[dict, float]:
+        """Render the response in each format and write its files, at the simulation's
+        levels; its entry in the report, without plots, and its loudest sample."""
         source, listener = key
         response = result.responses[key]
         stem = stems[key]
-        written = []
+        written, peak, ears, mono = [], 0.0, None, None
         for k, (fmt, part) in enumerate(zip(formats, parts, strict=True)):
+            say(f"{source} -> {listener}: rendering {fmt.label}")
+            ir = response.spatial_impulse_response(fmt, sample_rate)
+            peak = max(peak, float(abs(ir).max(initial=0.0)))
             name = f"{stem}{part}.wav"
-            mask = fmt.channel_mask() if hasattr(fmt, "channel_mask") else None
-            write_wav(out / name, irs[key, k] * gain, sample_rate, mask)
+            write_wav(out / name, ir, sample_rate, masks[k])
             written.append({"format": fmt.label, "wav": name, "channels": fmt.channel_names})
+            if binaural and k == binaural[0]:
+                ears = ir
+            if mono_at and k == mono_at[0]:
+                mono = ir[:, 0]
         params = response.parameters()
-        if binaural:
-            ears = irs[key, binaural[0]]
+        if ears is not None:
             params = dataclasses.replace(
                 params, **iso3382.interaural_cross_correlation(ears, sample_rate)
             )
-        if mono_at:
-            mono = irs[key, mono_at[0]][:, 0]
-        else:
+        if mono is None:
             mono = response.impulse_response(sample_rate)
         power = sources[source].power_db("octave") if source in sources else 94.0
         talker = sources[source].talker if source in sources else "male"
@@ -218,12 +213,60 @@ def write_results(
             )
         if long_term is not None and (source, listener) in long_term.levels:
             entry["long_term"] = _long_term_entry(long_term, (source, listener))
-        return entry
+        return entry, peak
 
     with ThreadPoolExecutor(workers) as pool:
-        report["responses"] = list(pool.map(write, result.responses))
+        done = list(pool.map(write, result.responses))
+    entries = [entry for entry, _ in done]
+    peak = max((p for _, p in done), default=0.0)
+    gain = 10.0 ** (-1.0 / 20.0) / peak if normalize and peak > 0 else 1.0
+    if gain != 1.0:
+
+        def scale(entry: dict) -> None:
+            for output, mask in zip(entry["outputs"], masks, strict=True):
+                data, _ = read_wav(out / output["wav"])
+                write_wav(out / output["wav"], data * gain, sample_rate, mask)
+
+        with ThreadPoolExecutor(workers) as pool:
+            list(pool.map(scale, entries))
+
+    report = {
+        "scene": result.room.scene.name,
+        "bands_hz": list(OCTAVE_BANDS_HZ),
+        "sample_rate": sample_rate,
+        "ir_gain": gain,
+        "peak": peak * gain,
+        "settings": result.settings.model_dump(mode="json"),
+        "details": result.details,
+        # What auralize needs to mix the sources at their power: the responses are per
+        # unit of it.
+        "sources": {
+            source.name: {"sound_power_db": source.sound_power_db} for source in scene.sources
+        },
+        "responses": entries,
+    }
+    if result.removed:
+        report["removed"] = list(result.removed)
+    if long_term is not None:
+        report["long_term"] = {
+            "classes": list(long_term.classes),
+            "shares": {
+                name: {
+                    period: round(float(share), 6)
+                    for period, share in zip(long_term.periods, row, strict=True)
+                }
+                for name, row in zip(long_term.classes, long_term.shares, strict=True)
+            },
+            "periods": [
+                {"name": name, "hours": float(hours), "penalty_db": float(penalty)}
+                for name, hours, penalty in zip(
+                    long_term.periods, long_term.hours, long_term.penalties, strict=True
+                )
+            ],
+            "rating": long_term.rating,
+        }
     # Plots one after another: matplotlib draws in one thread.
-    for entry, (key, response) in zip(report["responses"], result.responses.items(), strict=True):
+    for entry, (key, response) in zip(entries, result.responses.items(), strict=True):
         stem = stems[key]
         if plots:
             try:
@@ -287,4 +330,11 @@ def _echo(ir, sample_rate: int) -> dict:
     return out
 
 
-__all__ = ["REPORT_FILE", "file_name", "response_stem", "unique_stems", "write_results"]
+__all__ = [
+    "REPORT_FILE",
+    "file_name",
+    "response_stem",
+    "results_folder",
+    "unique_stems",
+    "write_results",
+]

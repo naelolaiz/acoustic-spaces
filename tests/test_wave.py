@@ -31,6 +31,7 @@ from acoustic_spaces.engine.wave import (
     admittance,
     band_grid,
     band_top,
+    slow_by,
     source_signal,
     wave_gains,
     wave_responses,
@@ -246,35 +247,71 @@ def test_rigid_box_rings_at_its_modes(stencil: int) -> None:
 
 
 def test_isotropic_stencil_disperses_less() -> None:
-    # The axial modes of a 3 m tube (rigid, 10 cm cells), up to 7.5 cells per wavelength:
-    # each stencil's frequencies follow its dispersion relation along an axis,
-    # sin(w T / 2) = L sin(k h / 2), and the 19-point stencil's fall short of the
-    # tube's by less than half as much as the 7-point one's.
-    size, h = (3.0, 0.3, 0.2), 0.1
+    # The axial modes of a 6 m tube (rigid, 10 cm cells) at 12, 8 and 5 cells per
+    # wavelength: each stencil's frequencies fall short of the tube's as much as
+    # slow_by says its waves along an axis are slow, and the 19-point stencil's by less
+    # than half as much as the 7-point one's.
+    size, h = (6.0, 0.3, 0.2), 0.1
+    spacing = C / (2 * size[0])  # between the tube's modes
     error = {}
     for stencil in (7, 19):
-        courant = _courant(stencil)
         solver, rate = _solver(
             size,
             lambda m: np.zeros(len(m.faces)),
             (0.13, 0.12, 0.07),
-            (2.84, 0.17, 0.12),
+            (5.84, 0.17, 0.12),
             stencil=stencil,
         )
         pressure = solver.run(_drive(rate, h, int(3 * rate)))[0]
         n_fft = 1 << 20
         spectrum = np.abs(np.fft.rfft(pressure * np.hanning(len(pressure)), n_fft))
         f = np.fft.rfftfreq(n_fft, 1.0 / rate)
-        for m in (2, 4, 6, 8):
-            exact = C * m / (2 * size[0])
-            k = math.pi * m / size[0]
-            grid = rate / math.pi * math.asin(courant * math.sin(k * h / 2))
-            near = (f > 0.95 * exact) & (f < 1.02 * exact)
+        for per_wavelength in (12, 8, 5):
+            m = round(2 * size[0] / (per_wavelength * h))
+            exact = m * spacing
+            grid = exact * (1 - slow_by(stencil, per_wavelength))
+            near = np.abs(f - grid) < 0.4 * spacing
             peak = f[near][np.argmax(spectrum[near])]
-            assert peak == pytest.approx(grid, rel=1.5e-3)
-            error[stencil, m] = peak / exact - 1
+            assert peak == pytest.approx(grid, rel=2e-5)
+            error[stencil, per_wavelength] = peak / exact - 1
     assert error[7, 8] < -0.015
     assert abs(error[19, 8]) < 0.5 * abs(error[7, 8])
+
+
+def test_a_grid_coarser_than_the_default_is_noted(tmp_path: Path) -> None:
+    # Below the default 8 cells per wavelength the warnings say how slow the top band's
+    # waves travel with the stencil the run takes: in a closed room the isotropic one,
+    # round an open model (auto) or asked for, the standard one.
+    def notes(room: Room, **wave) -> list[str]:
+        room.scene.simulation.wave = WaveStage(enabled=True, **wave)
+        return [w for w in room.warnings() if "points_per_wavelength" in w]
+
+    closed = _free_room([1.0])
+    assert notes(closed) == [] and notes(closed, points_per_wavelength=7.9)
+    closed.scene.simulation.wave = WaveStage(points_per_wavelength=5)  # not enabled
+    assert not [w for w in closed.warnings() if "points_per_wavelength" in w]
+    (note,) = notes(closed, points_per_wavelength=5)
+    assert "is 5 (default 8): with the isotropic (19-point) stencil" in note
+    assert "up to 1.85 % slow in still air (0.67 % at 8)" in note
+    (note,) = notes(closed, points_per_wavelength=6, scheme="standard")
+    assert "with the standard (7-point) stencil" in note
+    assert "up to 3.13 % slow in still air (1.74 % at 8)" in note
+    obj = tmp_path / "floor.obj"
+    obj.write_text("v 0 0 0\nv 8 0 0\nv 8 6 3\nv 0 6 3\ng floor\nf 1 2 3 4\n")
+    plate = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"file": str(obj)},
+                "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+                "default_material": "hard",
+                "sources": [{"name": "s", "position": [2.0, 2.0, 2.5]}],
+                "listeners": [{"name": "l", "position": [6.0, 3.0, 3.0]}],
+            }
+        )
+    )
+    (note,) = notes(plate, points_per_wavelength=5)
+    assert "with an open model's standard (7-point) stencil" in note
+    assert "up to 4.56 % slow" in note
 
 
 def test_isotropic_stencil_stays_stable_in_a_slanted_room() -> None:
@@ -604,6 +641,12 @@ def test_simulate_with_the_wave_solver() -> None:
     info = next(iter(result.details.values()))
     assert info["wave_cells"] > 0 and info["wave_cell_m"] == pytest.approx(0.2, rel=0.05)
     assert "wave_open" not in info and info["wave_s"] > 0
+    # At least 8 cells per wavelength at the top of the 125 Hz band, and the waves there
+    # as slow along the axes as the 19-point stencil makes them.
+    per_wavelength = room.speed_of_sound() / (band_top(1) * info["wave_cell_m"])
+    assert 8.0 <= per_wavelength < 8.5
+    assert info["wave_slow_percent"] == pytest.approx(100 * slow_by(19, per_wavelength))
+    assert info["wave_slow_percent"] <= 100 * slow_by(19, 8.0)
     response = next(iter(result.responses.values()))
     assert response.wave.bands == 2
     parameters = response.parameters()
@@ -732,6 +775,8 @@ def test_open_models_absorb_at_the_grid_edge(tmp_path: Path, monkeypatch) -> Non
     )
     assert info["wave_open"] == 1.0
     assert info["wave_stencil"] == 7  # the matched layer needs the standard stencil
+    per_wavelength = C / (band_top(0) * info["wave_cell_m"])
+    assert info["wave_slow_percent"] == pytest.approx(100 * slow_by(7, per_wavelength))
     assert most[0] == 1
     with pytest.raises(ValueError, match="no matched layer"):
         wave_responses(
@@ -1135,6 +1180,15 @@ def test_a_speed_of_sound_that_grows_with_height_bends_the_sound_as_the_rays_do(
         assert info["wave_speed_min_m_s"] == pytest.approx(337.3, abs=0.1)
         assert info["wave_speed_max_m_s"] == pytest.approx(402.5, abs=0.1)
         assert "wave_gpu" not in info
+        # The slowest sound, 8 cells per wavelength at the top of the 63 Hz band, stepped
+        # as the fastest sound's time step lets it: slower than in still air.
+        slowest = info["wave_speed_min_m_s"]
+        per_wavelength = slowest / (band_top(0) * wave.cell)
+        assert 8.0 <= per_wavelength < 8.5
+        ratio = slowest / (COURANT * wave.cell * wave.rate)
+        assert ratio == pytest.approx(337.3 / 402.5, rel=1e-3)
+        assert info["wave_slow_percent"] == pytest.approx(100 * slow_by(7, per_wavelength, ratio))
+        assert info["wave_slow_percent"] > 100 * slow_by(7, per_wavelength) + 0.2
         rays = Rays(Profile.of(atmosphere, room.scene.air.temperature_c), 30.0)
         eigenrays = rays.eigenrays(30.0, 60.0, 0)
         assert len(eigenrays) == 1
@@ -1364,6 +1418,11 @@ def test_wave_responses_carry_the_sound_with_the_wind() -> None:
     assert info["wave_cells"] > 0 and "the air moving" in said[0]
     assert info["wave_speed_min_m_s"] == pytest.approx(c - 15.0, abs=0.01)
     assert info["wave_speed_max_m_s"] == pytest.approx(c + 15.0, abs=0.01)
+    # The still air's step, in the air's frame: sound against the wind has 8 cells per
+    # wavelength at the top of the 63 Hz band, and the still air the grid's time step.
+    per_wavelength = (c - 15.0) / (band_top(0) * moving[0].cell)
+    assert 8.0 <= per_wavelength < 8.5
+    assert info["wave_slow_percent"] == pytest.approx(100 * slow_by(7, per_wavelength))
     for a, b, want in zip(
         moving, still, (6.0 / (c + 15.0) - 6.0 / c, 6.0 / (c - 15.0) - 6.0 / c), strict=True
     ):

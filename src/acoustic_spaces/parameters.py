@@ -706,8 +706,9 @@ def useful_to_detrimental(
 
 
 #: Echo criteria (Dietsch and Kraak, 1986): the power n of the pressure's magnitude, the
-#: window (s), the octave bands the response is filtered to, and the EC at which 10 % and
-#: 50 % of listeners hear an echo.
+#: window (s), the octave bands the response is filtered to with one band-pass over them
+#: (one octave about 1 kHz for speech, two about 1.4 kHz for music), and the EC at which
+#: 10 % and 50 % of listeners hear an echo.
 ECHO_CRITERIA: dict[str, tuple[float, float, tuple[int, ...], tuple[float, float]]] = {
     "speech": (2.0 / 3.0, 0.009, (1000,), (0.9, 1.0)),
     "music": (1.0, 0.014, (1000, 2000), (1.5, 1.8)),
@@ -721,7 +722,8 @@ def echo_criterion(
     the time (s after the direct sound) where it peaks.
 
     The response, filtered to the bands of ``ECHO_CRITERIA[kind]`` (1 kHz for speech,
-    1 and 2 kHz for music), gives the build-up of its centre time ts(t), the mean
+    1 and 2 kHz for music, with one band-pass over both: two octaves about 1.4 kHz, as
+    Dietsch and Kraak have it), gives the build-up of its centre time ts(t), the mean
     arrival time up to t weighted by the pressure's magnitude to the power n; EC is the
     steepest rise of ts over the window, in units of the window. An echo makes ts jump:
     listeners hear one where EC exceeds 1.0 for speech or 1.8 for music (half of them;
@@ -732,23 +734,45 @@ def echo_criterion(
         raise ValueError(f"unknown echo criterion {kind!r}; use 'speech' or 'music'")
     exponent, window, bands, _ = ECHO_CRITERIA[kind]
     ir = _mono(ir)
-    start = onset(ir)
-    after, before = _from_onset(ir, sample_rate, filters, start)
-    chosen = [OCTAVE_BANDS_HZ.index(f) for f in bands]
     # The filters' ringing ahead of the direct sound counts, at its own (negative)
     # times, or the direct sound would weigh half of what an echo does.
-    p = np.concatenate([before[chosen], after[chosen]], axis=1).sum(axis=0)
+    lead = int(round(_FILTER_LEAD_S * sample_rate))
+    p = _band_span(np.concatenate([np.zeros(lead), ir]), sample_rate, bands, filters)
+    first = lead + onset(ir)
     weight = np.abs(p) ** exponent
-    t = (np.arange(len(p)) - before.shape[1]) / sample_rate
+    t = (np.arange(len(p)) - first) / sample_rate
     arrived = np.cumsum(weight)
     centre = np.cumsum(t * weight) / np.where(arrived > 0, arrived, np.inf)
-    centre = centre[before.shape[1] :]
+    centre = centre[first:]
     step = max(1, int(round(window * sample_rate)))
     if len(centre) <= step or arrived[-1] <= 0:
         return math.nan, math.nan
     rise = (centre[step:] - centre[:-step]) * sample_rate / step
     peak = int(np.argmax(rise))
     return float(rise[peak]), float((peak + step) / sample_rate)
+
+
+def _band_span(
+    signal: np.ndarray, sample_rate: float, bands: Sequence[int], filters: str
+) -> np.ndarray:
+    """``signal`` (n,) through one band-pass over the adjacent octave ``bands`` (Hz): with
+    the IEC filters, a Butterworth band-pass of theirs from the lowest band's lower edge
+    to the highest band's upper edge, with zero phase (one band's own filter for one
+    band); with the crossovers, the bands added, which is flat across them. (The IEC
+    filters of two bands added rise 3 dB where they meet.)"""
+    if filters != "iec":
+        chosen = [OCTAVE_BANDS_HZ.index(f) for f in bands]
+        return octave_bands(signal, sample_rate, filters)[chosen].sum(axis=0)
+    from acoustic_spaces import synthesis
+
+    signal = np.asarray(signal, dtype=float)
+    n = len(signal)
+    n_fft = synthesis.fft_size(n, sample_rate)
+    f = np.maximum(np.fft.rfftfreq(n_fft, 1.0 / sample_rate), 1e-9)
+    mid = octave_midbands()
+    low, high = (mid[OCTAVE_BANDS_HZ.index(b)] for b in (bands[0], bands[-1]))
+    gain = _band_pass(f, math.sqrt(low * high), OCTAVE_RATIO ** (0.5 * len(bands)), FILTER_ORDER)
+    return np.fft.irfft(np.fft.rfft(signal, n_fft) * gain, n_fft)[:n]
 
 
 def _mono(ir: np.ndarray) -> np.ndarray:
@@ -798,7 +822,12 @@ def band_filter_gains(
     resolution = resolution_of(bands)
     f = np.maximum(np.fft.rfftfreq(n_fft, 1.0 / sample_rate), 1e-9)
     fm = (octave_midbands() if resolution == "octave" else exact_centres(resolution))[:, None]
-    half = OCTAVE_RATIO ** (0.5 / BANDS_PER_OCTAVE[resolution])
+    return _band_pass(f, fm, OCTAVE_RATIO ** (0.5 / BANDS_PER_OCTAVE[resolution]), order)
+
+
+def _band_pass(f: np.ndarray, fm, half: float, order: int) -> np.ndarray:
+    """Magnitude at ``f`` of a Butterworth band-pass of ``order`` about ``fm``, -3 dB at
+    fm / ``half`` and fm ``half``."""
     width = half - 1.0 / half
     return 1.0 / np.sqrt(1.0 + ((f / fm - fm / f) / width) ** (2 * order))
 

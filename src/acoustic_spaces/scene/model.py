@@ -2445,7 +2445,11 @@ class WaveStage(_Model):
         default=8.0,
         ge=5.0,
         le=20.0,
-        description="grid cells per wavelength at the top of each band's crossover",
+        description=(
+            "grid cells per wavelength at the top of each band's crossover; fewer make the "
+            "waves there slower (at 5, 1.85 % with the isotropic stencil and 4.56 % with the "
+            "standard one, along the grid's axes), and below 8 the warnings say so"
+        ),
     )
     scheme: Literal["auto", "isotropic", "standard"] = Field(
         default="auto",

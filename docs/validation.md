@@ -135,7 +135,8 @@ request and checks:
   rounding; STIPA of exponential decays against Houtgast's closed form within 0.002,
   and within 0.01 of the STI; U50 against its definition; and the echo criteria of an
   echo as loud as the direct sound 100 ms later within 10 % of the jump of the centre
-  time, and below the 10 % audibility mark for a smooth decay;
+  time, below the 10 % audibility mark for a smooth decay, and for music an echo at 1,
+  1.4 or 2 kHz reaching the 50 % mark at the same level within 0.25 dB;
 - spatial outputs: SN3D spherical harmonics against closed forms and orthogonality,
   VBAP gains of unit power that point at the panned direction and are mirrored for a
   mirrored direction, the direct sound's direction in first-order Ambisonics, the mono
@@ -177,8 +178,9 @@ request and checks:
   screen's diffracted wave, with all four terms of the UTD added in pressure, to
   1e-9;
 - the wave solver, with both stencils where both apply: the modes of a rigid box
-  (within 0.6 Hz), the 19-point stencil's modes along a tube against its dispersion
-  relation (within 0.15 %, less than half the 7-point one's error), the 19-point
+  (within 0.6 Hz), both stencils' modes along a tube at 12, 8 and 5 cells per
+  wavelength as slow as their dispersion relation along an axis says (within 2e-5,
+  the 19-point stencil's error less than half the 7-point one's), the 19-point
   stencil stable for 30,000 steps in a rotated room with a cube and a screen in it,
   both stencils' highest modes 2⁻¹⁶ inside the stability limit (kicked, within
   1.1 × 256 times the kick over 20,000 steps, rounded as the update rounds),

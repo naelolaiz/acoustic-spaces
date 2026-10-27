@@ -397,12 +397,18 @@ Known issues found by the review of 25 October 2026 (see
   cancel.
 - [x] A warning for coefficients outside 0 to 1, and the wave solver's grid checked
   before the weather's fields and the first one let go round an open model.
+- [x] The music echo criterion through one band-pass over its two octaves, as Dietsch
+  and Kraak have it.
 - [x] Limits on the size of a run: its memory estimated before it starts, for the
   computer's cores and devices, and a run past the computer's memory refused (threads
   above the cores run as the cores).
+- [x] Results written whole or not at all, a response at a time, and `simulate`'s
+  folder checked before its run.
 - [x] The mixing time from the listener's room (the detector stays sized for all the
   rooms, which the rays spread over).
 - [x] The real-time convolver writing each block into buffers made before playback starts.
+- [x] A warning when the wave solver's grid is coarser than the default, with how slow
+  its shortest waves travel, and that in each run's details.
 - [x] The wave solver's buffers on a GPU all checked against what it binds, and its
   recording at the listeners kept once.
 - [x] The late part's last milliseconds with the whole chords of the rays through the
