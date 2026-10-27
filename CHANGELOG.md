@@ -317,6 +317,12 @@ for speech (in `church`).
   `stadium_pa` at 8 s peaks at 547 MiB instead of about 1,030 MiB. The results are the
   same bit for bit on the CPU, in maps, and on the GPU without the weight window (with
   it, and on both, they vary from run to run within the noise of the rays, as before).
+- CI checks types with mypy, on every module but the 70 of 116 that did not pass when
+  the check began (`pyproject.toml` lists them; each leaves the list once it passes),
+  runs the tests on a build of the native module with AddressSanitizer and
+  UndefinedBehaviorSanitizer (the CMake option `ACOUSTIC_SPACES_SANITIZE`), and measures
+  the tests' coverage of the Python code. The `dev` extra and group install mypy and
+  PyYAML's types.
 - Known issue, documented: with vector-based scattering (the default) the late part
   carries the specular share of the first orders with more energy than the exact paths
   (a quarter more for orders 1 to 3 near the middle of a small box), so the total depends

@@ -10,21 +10,38 @@ You need Python 3.10 or newer, a C++17 compiler and CMake 3.18 or newer.
 uv sync --extra viz                  # or, with pip: python -m pip install -e ".[dev,viz]"
 ```
 
-`uv sync` installs the `dev` group (pytest, h5py, ruff) along with the package, and
+`uv sync` installs the `dev` group (pytest, h5py, ruff, mypy) along with the package, and
 rebuilds the compiled core when the C++ sources or the build files change; pip rebuilds
 it on every `pip install -e .`.
 
 ## Checks
 
-CI runs the tests on Linux, macOS (Apple silicon and Intel) and Windows and ruff on
-Linux, and its logs are kept free of warnings, not only of errors (with uv, put
+CI runs the tests on Linux, macOS (Apple silicon and Intel) and Windows and ruff and
+mypy on Linux, and its logs are kept free of warnings, not only of errors (with uv, put
 `uv run` in front of each):
 
 ```sh
 ruff check .
 ruff format --check .
+mypy
 python tools/catalog.py check
 pytest -W error
+```
+
+mypy checks every module but those `pyproject.toml` lists with `ignore_errors`, which did
+not pass when the check began: a module leaves that list once it passes, and a new
+module is checked from the start. CI pins mypy's version, so a new release of it does
+not fail a pull request.
+
+CI also measures the tests' coverage of the Python code (on Linux with Python 3.14; the
+report is the run's `coverage` artifact) and runs the tests on a build of the native
+module with AddressSanitizer and UndefinedBehaviorSanitizer, where a read or write out
+of bounds or of freed memory, or undefined behaviour, stops them. To run those on Linux
+with GCC:
+
+```sh
+python -m pip install ".[test]" -C cmake.build-type=RelWithDebInfo -C cmake.define.ACOUSTIC_SPACES_SANITIZE=ON
+ASAN_OPTIONS=detect_leaks=0 LD_PRELOAD="$(gcc -print-file-name=libasan.so) $(gcc -print-file-name=libubsan.so)" pytest -W error
 ```
 
 Text the editor or the command line shows is marked for translation and goes into the
