@@ -110,7 +110,7 @@ fn interior(i: u32) {
         if (scaled) {
             next[i] = (2.0 - grid.total * s) * current[i] + (s * grid.axial) * sum - next[i];
         } else {
-            next[i] = grid.axial * sum - next[i];
+            next[i] = grid.centre * current[i] + grid.axial * sum - next[i];
         }
         return;
     }

@@ -408,7 +408,7 @@ simulation:
 ```
 
 - The sound field is computed with finite differences in time on a cubic grid over the
-  room (an explicit leapfrog scheme at its stability limit), in the compiled core, on
+  room (an explicit leapfrog scheme just inside its stability limit), in the compiled core, on
   all cores. Up to the 125 Hz band the cells are 20 cm.
 - Waves on the grid travel a little slower the shorter they are. In closed rooms the
   grid takes the interpolated isotropic stencil (19 points): 0.67 % slow at 8 cells per

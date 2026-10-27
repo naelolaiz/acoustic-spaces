@@ -15,6 +15,19 @@
   a path bends round keep what they did to its phase as traced. `calibrate`'s results
   are unchanged: its fit within a round keeps the traced phases, and each round traces
   again.
+- The wave solver's update takes its Laplacian times 1 − 2⁻¹⁸ (sound 2⁻¹⁹ slower), which
+  keeps the grid's highest modes inside the stability limit in single precision. At the
+  limit itself they sat on its edge, where a kick grows linearly: the 7-point stencil's
+  checkerboard 2⁻²³ inside, which rounding can take over it, and the 19-point
+  stencil's modes alternating along two axes exactly on it. Kicked, they grew to 7,000
+  and 20,000 times the kick in 20,000 steps; 2⁻¹⁶ inside, they swing within 259 times
+  it over 300,000. No room was seen to grow: its walls and the grid's edge keep its
+  highest mode further inside (a rigid box ran 200,000 steps). The 7-point stencil's
+  weights, rounded down, also made a room's uniform pressure swing slowly (0.3 Hz with
+  10 cm cells), which reached into the bands: in a duct, the reflection off an end whose
+  admittance resonates now follows the grid's theory within 0.001 instead of 0.003 from
+  30 to 250 Hz. The wave solver's validation tables move by one in their last digit at
+  most.
 
 ## 4.0.1
 
