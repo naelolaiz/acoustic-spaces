@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- CI checks types with mypy, on every module but the 70 of 116 that did not pass when
+  the check began (`pyproject.toml` lists them; each leaves the list once it passes),
+  runs the tests on a build of the native module with AddressSanitizer and
+  UndefinedBehaviorSanitizer (the CMake option `ACOUSTIC_SPACES_SANITIZE`), and measures
+  the tests' coverage of the Python code. The `dev` extra and group install mypy and
+  PyYAML's types.
+
 ## 4.0.1
 
 Behind the `archway`'s wall, where the reflection off the arch's jamb appears, the level
