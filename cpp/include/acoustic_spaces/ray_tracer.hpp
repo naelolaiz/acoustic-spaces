@@ -810,6 +810,7 @@ struct Accumulator {
                 if (!(b > a)) continue;
                 const double middle = 0.5 * (a + b);
                 const double distance = travelled + rate * middle;
+                if (distance > c * settings.max_time) continue;  // in the overrun
                 const double absorbing = path < 0.0 ? distance : path + stretch * middle;
                 const bool covered =
                     order <= settings.covered_order && distance / c <= map.covered_time[k];
@@ -901,6 +902,18 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         map_bottom = *std::min_element(map.low.begin(), map.low.end());
         map_top = *std::max_element(map.high.begin(), map.high.end());
     }
+    // A ray's legs go on this far past its time (in metres the sound goes), without
+    // reflecting there, so that a detector sphere or map cell it crosses as its time runs
+    // out takes the whole chord, booked at the time of its middle, if that is in time:
+    // half the longest chord of a sphere or of a map cell, twice over for the bent rays'
+    // slower or faster sound.
+    double overrun = 0.0;
+    for (const double r : settings.receiver_radius) overrun = std::max(overrun, r);
+    for (std::size_t k = 0; k < map.points(); ++k) {
+        const double height = map.high[k] - map.low[k];
+        overrun = std::max(overrun, 0.5 * std::sqrt(2.0 * map.cell * map.cell + height * height));
+    }
+    overrun *= 2.0;
     const std::size_t moment_terms =
         scene.groups > 0 ? 1 + scene.groups + scene.groups * (scene.groups + 1) / 2 : 0;
     const std::size_t moment_bins =
@@ -986,6 +999,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                 if (t1 <= t0) continue;
                 const double nearest = std::clamp(s, t0, t1);
                 const double distance = state.travelled + rate * nearest;
+                if (distance > max_length) continue;  // in the overrun: after the time
                 const bool covered = state.order <= settings.covered_order &&
                                      (settings.covered_time.empty() ||
                                       distance / c <= settings.covered_time[k]);
@@ -1146,8 +1160,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     // Where on its piece (track) the ray scatters in plants, if it does.
                     double scatter_at = inf;
                     if (atmosphere == nullptr) {
-                        hit = bvh.intersect(pos, dir, max_length - travelled, last);
-                        double segment = hit.found() ? hit.t : max_length - travelled;
+                        const double left = max_length - travelled;
+                        hit = bvh.intersect(pos, dir, left + overrun, last);
+                        double segment = hit.found() ? hit.t : left + overrun;
                         const detail::Track *plant_track = nullptr;
                         if (plants != nullptr &&
                             track.build(*plants, pos, dir, segment, energy.data())) {
@@ -1162,6 +1177,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         if (has_map) {
                             acc.add_map(pos, dir, segment, travelled, energy.data(), alone.data(),
                                         order, 1.0, -1.0, 1.0, plant_track);
+                        }
+                        if (scatter_at < inf ? scatter_at > left : hit.found() && hit.t > left) {
+                            break;  // in the overrun
                         }
                         if (scatter_at < inf) {
                             travelled += segment;
@@ -1186,10 +1204,11 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     } else {
                         // Chord by chord along the bent ray, to the first face it meets.
                         BentRay bent(*atmosphere, pos, dir);
-                        while (travelled < max_length) {
+                        const double end = max_length + overrun;
+                        while (travelled < end) {
                             const BentRay before = bent;
                             const double budget =
-                                1.05 * (max_length - travelled) / c * bent.speed() + offset;
+                                1.05 * (end - travelled) / c * bent.speed() + offset;
                             const BentRay::Chord chord = bent.chord(budget, leaving ? &away : nullptr);
                             const Vec3 span = chord.end - chord.start;
                             const double length = norm(span);
@@ -1255,6 +1274,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             } else if (!(length > 0.0)) {
                                 break;
                             }
+                        }
+                        if ((scatter_at < inf || hit.found()) && travelled > max_length) {
+                            break;  // in the overrun
                         }
                         if (scatter_at == inf && !hit.found()) {
                             if (!bvh.occluded(pos, dir, std::numeric_limits<double>::infinity(),

@@ -422,7 +422,34 @@ class Room:
         if self.outdoor is not None:
             out.extend(self.scene.geometry.footprint_notes())
         out.extend(self._run_size())
+        out.extend(self._wave_grid())
         return out
+
+    def _wave_grid(self) -> list[str]:
+        """A wave solver's grid coarser than the default, whose shortest waves travel
+        slow enough to lower the modes near the top of its highest band."""
+        from acoustic_spaces.engine.wave import slow_by
+        from acoustic_spaces.scene.model import WaveStage
+
+        wave = self.scene.simulation.wave
+        default = WaveStage().points_per_wavelength
+        if not wave.enabled or wave.points_per_wavelength >= default:
+            return []
+        # The stencil the run takes: auto's is the isotropic one but round an open model.
+        closed = self.report.closed and self.outdoor is None
+        if wave.scheme == "isotropic" or (wave.scheme == "auto" and closed):
+            stencil, name = 19, "the isotropic (19-point) stencil"
+        else:
+            which = "the" if wave.scheme == "standard" else "an open model's"
+            stencil, name = 7, f"{which} standard (7-point) stencil"
+        per_wavelength = wave.points_per_wavelength
+        return [
+            f"simulation.wave.points_per_wavelength is {per_wavelength:g} (default "
+            f"{default:g}): with {name}, waves at the top of the wave solver's highest band "
+            f"travel up to {100 * slow_by(stencil, per_wavelength):.2f} % slow in still "
+            f"air ({100 * slow_by(stencil, default):.2f} % at {default:g}), and the modes "
+            "there come out that much low"
+        ]
 
     def _run_size(self) -> list[str]:
         """Runs of the scene (a simulation, and a map where ``coverage`` is set) whose

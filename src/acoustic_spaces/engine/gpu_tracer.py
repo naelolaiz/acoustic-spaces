@@ -120,6 +120,7 @@ _FIELDS = (
     ("ray_seed", "u"),
     ("box_at", "u"),
     ("max_length", "f"),
+    ("overrun", "f"),
     ("c", "f"),
     ("time_step", "f"),
     ("dir_time_step", "f"),
@@ -1302,6 +1303,9 @@ fn detectors(origin: vec3<f32>, along: vec3<f32>, segment: f32, rate: f32, path:
         }
         let nearest = clamp(s, t0, t1);
         let travel = ray.travelled + rate * nearest;
+        if (travel > run.max_length) {
+            continue;  // in the overrun: after the time
+        }
         let covered = ray.order <= run.covered_order && travel / run.c <= num(at + 5u);
         if (tracked) {
             track_weight(nearest);
@@ -1595,9 +1599,11 @@ fn escaped() {
 }
 
 // A straight leg of the ray, to the face it meets (1), to where it scatters in the
-// plants (2), or to its end (0: out of time, or out of the model).
+// plants (2), or to its end (0: out of time, or out of the model). It goes on past the
+// ray's time by the overrun, as on the CPU, without meeting a face or scattering there.
 fn straight_leg() -> u32 {
-    let reach = run.max_length - ray.travelled;
+    let left = run.max_length - ray.travelled;
+    let reach = left + run.overrun;
     let hit = search_ray(ray.pos, ray.dir, run.t_min, reach, ray.last, false);
     let found = hit.face != NONE;
     var segment = select(reach, hit.t, found);
@@ -1615,6 +1621,9 @@ fn straight_leg() -> u32 {
     }
     if ((run.flags & SPECULAR_RAIN) == 0u) {
         detectors(ray.pos, ray.dir, segment, 1.0, -1.0, 1.0, tracked);
+    }
+    if (select(found && hit.t > left, scatter_at > left, scatter_at < FAR)) {
+        return 0u;  // in the overrun
     }
     if (scatter_at < FAR) {
         ray.travelled += segment;
@@ -1659,10 +1668,11 @@ fn bent_leg() -> u32 {
     var end_arc = 0.0;
     var end_bent = bent;
     var end_away = false;
-    while (ray.travelled < run.max_length) {
+    let far_end = run.max_length + run.overrun;
+    while (ray.travelled < far_end) {
         let before = bent;
         let use_away = ray.leaving != 0u;
-        let budget = 1.05 * (run.max_length - ray.travelled) / run.c * bent_speed_in(bent.z) +
+        let budget = 1.05 * (far_end - ray.travelled) / run.c * bent_speed_in(bent.z) +
                      run.offset;
         let chord = bent_chord(budget, use_away);
         let span = chord.end - chord.start;
@@ -1747,6 +1757,9 @@ fn bent_leg() -> u32 {
     }
     // Where it meets the face, or scatters in the plants, going the ray's way there.
     ray.travelled += end_rate * end_t;
+    if (ray.travelled > run.max_length) {
+        return 0u;  // in the overrun
+    }
     ray_path += end_stretch * end_t;
     if (went == 1u) {
         leg_metres += end_stretch * end_t;
@@ -2503,6 +2516,8 @@ class GpuTracer:
             "family_at": family_at,
             "ray_seed": first_ray & 0xFFFFFFFF,
             "max_length": speed_of_sound * max_time,
+            # As the CPU's (ray_tracer.hpp), which has the maps too.
+            "overrun": 2.0 * float(np.max(radius)),
             "c": speed_of_sound,
             "time_step": time_step,
             "dir_time_step": dir_time_step,
