@@ -58,6 +58,37 @@ _VALUES = 1 << 22
 _PANEL = 128
 #: Waves of at most this many pieces take their pairs one by one.
 _PAIRS = 32
+#: Bytes of each of the pages that keep the pieces' pressure (:class:`Pages`).
+_PAGE = 1 << 27
+
+
+class Pages:
+    """The pressure of pieces, kept in pages of :data:`_PAGE` bytes. The C library maps
+    an array that large on its own and hands it back to the system once it is let go,
+    where it keeps smaller ones in its heap: the millions of pieces of a room of many
+    facets (BRAS CR3), let go at one listener, left gigabytes there that the next could
+    not use."""
+
+    def __init__(self) -> None:
+        self._page: np.ndarray | None = None
+        self._used = 0
+
+    def keep(self, values: np.ndarray) -> np.ndarray:
+        """``values`` (n, ...) in single precision, copied into a page."""
+        values = np.asarray(values)
+        page = self._page
+        if (
+            page is None
+            or page.shape[1:] != values.shape[1:]
+            or self._used + len(values) > len(page)
+        ):
+            row = max(math.prod(values.shape[1:]) * np.dtype(np.complex64).itemsize, 1)
+            page = np.empty((max(len(values), _PAGE // row), *values.shape[1:]), np.complex64)
+            self._page, self._used = page, 0
+        out = page[self._used : self._used + len(values)]
+        out[...] = values
+        self._used += len(values)
+        return out
 
 
 class Clusters:
@@ -74,6 +105,7 @@ class Clusters:
         self._private = 0
         self._parts: list[dict] = []
         self._alone: list[tuple[np.ndarray, np.ndarray]] = []
+        self._pages = Pages()
 
     @property
     def bands(self) -> int:
@@ -129,7 +161,9 @@ class Clusters:
         """Pieces of the rows ``rows`` (-1 for a row left out) in the waves ``keys``:
         their pressure (n, bands, M) with the phase of their whole way, which is
         ``distance`` (n,) metres long. ``anchor``: the rows are specular paths, whose
-        waves they are, with energy ``own`` (n, bands)."""
+        waves they are, with energy ``own`` (n, bands). Pressure in single precision is
+        kept as given (the edge fade's comes in its own :class:`Pages`); any other is
+        copied into a page."""
         rows = np.asarray(rows, dtype=np.int64).reshape(-1)
         own = np.mean(np.abs(pressure) ** 2, axis=2) if own is None else np.asarray(own, float)
         keys = np.broadcast_to(np.asarray(keys, dtype=np.int64), rows.shape)
@@ -138,10 +172,12 @@ class Clusters:
         some = own.max(axis=1, initial=0.0) > 0.0
         if not some.any():
             return
-        pressure = np.asarray(pressure, dtype=np.complex64)
+        pressure = np.asarray(pressure)
         if not some.all():
             rows, keys, pressure = rows[some], keys[some], pressure[some]
             distance, own = distance[some], own[some]
+        if pressure.dtype != np.complex64 or not some.all():
+            pressure = self._pages.keep(pressure)
         self._parts.append(
             {
                 "rows": rows,
@@ -215,8 +251,11 @@ class Clusters:
         part = self._gather() if self.bands else None
         if part is None:
             return energy, has
-        _, start, size = np.unique(part["keys"], return_index=True, return_counts=True)
-        del part["keys"]
+        # Where each wave begins among the pieces sorted by wave, and how many it has.
+        keys = part.pop("keys")
+        start = np.flatnonzero(np.r_[True, keys[1:] != keys[:-1]])
+        size = np.diff(np.r_[start, len(keys)])
+        del keys
         # The waves with more than one piece, a batch of whole waves at a time, each with
         # the waves of one piece up to the next batch, in the order of the waves.
         many = np.flatnonzero(size > 1)

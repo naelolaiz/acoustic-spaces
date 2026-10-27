@@ -7,7 +7,13 @@ from __future__ import annotations
 import numpy as np
 
 from acoustic_spaces.engine import clusters as clusters_module
-from acoustic_spaces.engine.clusters import Clusters, _pair_shares, _rule_size, _slice_shares
+from acoustic_spaces.engine.clusters import (
+    Clusters,
+    Pages,
+    _pair_shares,
+    _rule_size,
+    _slice_shares,
+)
 from acoustic_spaces.engine.diffraction import band_frequencies
 
 C = 343.0
@@ -74,6 +80,21 @@ def test_a_wave_of_many_pieces_arriving_together_is_their_coherent_sum() -> None
     coherent = np.mean(np.abs(pressure.sum(axis=0)) ** 2, axis=1)
     assert has.all() and (energy >= 0.0).all()
     np.testing.assert_allclose(energy.sum(axis=0), coherent, rtol=1e-5)
+
+
+def test_pages_keep_pieces_together_in_single_precision(monkeypatch) -> None:
+    """Pieces go into pages of _PAGE bytes, a new one where the last is full, as they
+    would be in single precision."""
+    monkeypatch.setattr(clusters_module, "_PAGE", 10 * BANDS * PER_BAND * 8)
+    rng = np.random.default_rng(9)
+    pressure, _ = _pieces(rng, 14, 0.0)
+    pages = Pages()
+    kept = [pages.keep(pressure[a:b]) for a, b in ((0, 4), (4, 9), (9, 14))]
+    for piece, (a, b) in zip(kept, ((0, 4), (4, 9), (9, 14)), strict=True):
+        assert piece.dtype == np.complex64
+        assert np.array_equal(piece, pressure[a:b].astype(np.complex64))
+    assert kept[0].base is kept[1].base is not kept[2].base
+    assert len(kept[0].base) == 10
 
 
 def test_pieces_added_in_many_parts_resolve_as_if_added_at_once(monkeypatch) -> None:

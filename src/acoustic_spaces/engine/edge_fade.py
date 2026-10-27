@@ -94,6 +94,7 @@ import itertools
 
 import numpy as np
 
+from acoustic_spaces.engine.clusters import Pages
 from acoustic_spaces.engine.diffraction import (
     _OFFSET,
     _ON_BOUNDARY,
@@ -159,6 +160,7 @@ class EdgeFade:
         self._plane_edges = pairs[:, 1]
         self._plane_start = np.searchsorted(pairs[:, 0], np.arange(self.model.plane_count + 1))
         self._standing: dict[tuple[int, int], bool] = {}  # see _stands
+        self._pages: Pages | None = None  # the pieces' pressure, while terms runs
 
     def covered(self, before: int, after: int) -> bool:
         """Whether the edge diffraction bends the waves from a source side mirrored in
@@ -654,11 +656,13 @@ class EdgeFade:
             float(np.sum((listener - self.d.source) ** 2)), (_TOLERANCE * self.d.size) ** 2
         )
         floor = MIN_RELATIVE_ENERGY / (4.0 * np.pi * squared)
+        self._pages = Pages()
         parts = [
             self._combine(listener, go, k, t, floor)
             for (k, go), t in zip(groups, self._group_terms(groups, max_delay_s), strict=True)
             if t is not None
         ]
+        self._pages = None
         out = {"listener": listener, "floor": floor, "count": 0, "parts": parts}
         if parts:
             offset = np.cumsum([0] + [len(p["edge"]) for p in parts])
@@ -1776,7 +1780,7 @@ class EdgeFade:
                     "kind": "geometric",
                     "image": image[path],
                     "order": k,
-                    "pressure": (scale * geometric).astype(np.complex64),
+                    "pressure": self._pages.keep(scale * geometric),
                     "distance": distance[r],
                 }
             )
@@ -1790,7 +1794,7 @@ class EdgeFade:
                             "kind": "diffracted",
                             "source_side": t["source_side"][qq],
                             "listener_side": t["listener_side"][qq],
-                            "pressure": (scale * diffracted[which])[has].astype(np.complex64),
+                            "pressure": self._pages.keep((scale * diffracted[which])[has]),
                             "distance": distance[r][has],
                         }
                     )
@@ -1801,7 +1805,7 @@ class EdgeFade:
                         "kind": "diffracted",
                         "source_side": sides[0, at_cell[path[on], event]],
                         "listener_side": sides[1, at_cell[path[on], event]],
-                        "pressure": (scale * part)[on].astype(np.complex64),
+                        "pressure": self._pages.keep((scale * part)[on]),
                         "distance": distance[r][on],
                     }
                 )
