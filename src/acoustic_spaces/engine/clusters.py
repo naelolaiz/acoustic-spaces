@@ -45,8 +45,11 @@ stays what it is.
 
 from __future__ import annotations
 
+import ctypes
 import functools
 import math
+import sys
+from collections.abc import Callable
 
 import numpy as np
 
@@ -89,6 +92,28 @@ class Pages:
         out[...] = values
         self._used += len(values)
         return out
+
+
+def hand_back() -> None:
+    """Hands back to the system the memory the C library keeps free (glibc's
+    ``malloc_trim``; elsewhere nothing). The pieces of a room of many facets come and go
+    by gigabytes at each listener, many of them in blocks too small for the library to
+    map on their own, and it kept what they freed: at the start of BRAS CR3's second
+    listener in octave bands, 1.3 GiB free of a heap of 1.5 GiB, and in third-octave
+    bands more at each listener, until the third ran out of memory."""
+    trim = _malloc_trim()
+    if trim is not None:
+        trim(0)
+
+
+@functools.cache
+def _malloc_trim() -> Callable[[int], int] | None:
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        return ctypes.CDLL(None).malloc_trim
+    except (OSError, AttributeError):  # not glibc
+        return None
 
 
 class Clusters:

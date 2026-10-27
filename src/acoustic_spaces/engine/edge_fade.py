@@ -94,7 +94,7 @@ import itertools
 
 import numpy as np
 
-from acoustic_spaces.engine.clusters import Pages
+from acoustic_spaces.engine.clusters import Pages, hand_back
 from acoustic_spaces.engine.diffraction import (
     _OFFSET,
     _ON_BOUNDARY,
@@ -632,6 +632,7 @@ class EdgeFade:
         ``bent``, the paths the edge diffraction finds at ``listener``, the terms leave
         out exactly those of its paths over an edge; without, those it adds where it
         bends an event, as it does where nothing else stops its paths."""
+        hand_back()  # what the last listener's pieces left
         listener = np.asarray(listener, dtype=float)
         self._bent = None if bent is None else self._bent_index(bent)
         top = max([int(paths.order.max()) if len(paths) else 0, *self.candidates])

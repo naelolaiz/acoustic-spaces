@@ -4,6 +4,9 @@ the band, and goes to the rows the pieces belong to."""
 
 from __future__ import annotations
 
+import platform
+import sys
+
 import numpy as np
 
 from acoustic_spaces.engine import clusters as clusters_module
@@ -13,6 +16,7 @@ from acoustic_spaces.engine.clusters import (
     _pair_shares,
     _rule_size,
     _slice_shares,
+    hand_back,
 )
 from acoustic_spaces.engine.diffraction import band_frequencies
 
@@ -155,6 +159,13 @@ def test_the_energy_of_pieces_in_single_precision_is_worked_out_again(monkeypatc
     given = np.mean(np.abs(pressure[3:]) ** 2, axis=2)
     _, (with_given, given_has) = resolve(given)
     assert np.array_equal(with_given, energy) and np.array_equal(given_has, has)
+
+
+def test_the_memory_kept_free_is_handed_back_where_the_c_library_can() -> None:
+    """glibc's malloc_trim on Linux; nothing where there is none."""
+    hand_back()
+    if sys.platform.startswith("linux") and platform.libc_ver()[0] == "glibc":
+        assert clusters_module._malloc_trim() is not None
 
 
 def test_the_specular_path_takes_the_cross_terms_of_its_wave() -> None:
