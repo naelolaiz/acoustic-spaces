@@ -692,7 +692,7 @@ class EdgeFade:
         (:data:`MIN_RELATIVE_ENERGY` of the direct sound in free field) in some band."""
         if not terms["count"]:
             return paths
-        energy = terms["energy"].copy()
+        energy = terms.pop("energy")  # the terms are used once
         late = slice(self.d.coherent, None)
         if self.d.coherent < energy.shape[1]:
             ledger = self.d.ledger
@@ -713,7 +713,9 @@ class EdgeFade:
                     keys = clusters.geometric(piece["image"], piece["order"])
                 else:
                     keys = clusters.diffracted(piece["source_side"], piece["listener_side"])
-                clusters.add(rows, keys, piece["pressure"], piece["distance"])
+                heard = piece["heard"]
+                clusters.add(rows[heard], keys[heard], piece["pressure"], piece["distance"][heard])
+            hand_back()  # what the pieces' making left
             resolved, has = clusters.resolve(base + terms["count"])
             paths = self.d.settled(paths, resolved[:base], has[:base])
             energy[:, late] = resolved[base:]
@@ -1781,8 +1783,8 @@ class EdgeFade:
                     "kind": "geometric",
                     "image": image[path],
                     "order": k,
-                    "pressure": self._pages.keep(scale * geometric),
                     "distance": distance[r],
+                    **self._heard(scale * geometric),
                 }
             )
             for which, q in enumerate((q0, stop[r, 0], stop[r, 1])):
@@ -1795,8 +1797,8 @@ class EdgeFade:
                             "kind": "diffracted",
                             "source_side": t["source_side"][qq],
                             "listener_side": t["listener_side"][qq],
-                            "pressure": self._pages.keep((scale * diffracted[which])[has]),
                             "distance": distance[r][has],
+                            **self._heard((scale * diffracted[which])[has]),
                         }
                     )
             for event, on, part in bent_at:
@@ -1806,13 +1808,25 @@ class EdgeFade:
                         "kind": "diffracted",
                         "source_side": sides[0, at_cell[path[on], event]],
                         "listener_side": sides[1, at_cell[path[on], event]],
-                        "pressure": self._pages.keep((scale * part)[on]),
                         "distance": distance[r][on],
+                        **self._heard((scale * part)[on]),
                     }
                 )
             alone = np.mean(np.abs(scale * rest) ** 2, axis=2)
             out.append({"rows": rows, "kind": "alone", "energy": alone})
         return out
+
+    def _heard(self, pressure: np.ndarray) -> dict:
+        """The ``pressure`` (n, bands, M) of pieces in single precision, in the pages, of
+        those of them that are ``heard`` (n,), that have something in them: the others
+        change nothing in their waves, which leave them out (as
+        :meth:`~acoustic_spaces.engine.clusters.Clusters.add` does), and kept they held
+        the pages the waves copied the rest out of. A piece's other values stay whole,
+        for its waves to be found in the same order."""
+        single = np.asarray(pressure, dtype=np.complex64)
+        heard = np.mean(np.abs(single) ** 2, axis=2).max(axis=1, initial=0.0) > 0.0
+        kept = single if heard.all() else single[heard]
+        return {"heard": heard, "pressure": self._pages.keep(kept) if len(kept) else kept}
 
     def _bent_index(self, bent: EarlyReflections) -> dict:
         """The lengths of the paths over each edge in ``bent`` and their rows there, by

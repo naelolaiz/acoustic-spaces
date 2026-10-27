@@ -186,10 +186,11 @@ class Clusters:
         """Pieces of the rows ``rows`` (-1 for a row left out) in the waves ``keys``:
         their pressure (n, bands, M) with the phase of their whole way, which is
         ``distance`` (n,) metres long. ``anchor``: the rows are specular paths, whose
-        waves they are, with energy ``own`` (n, bands). Pressure in single precision is
-        kept as given (the edge fade's comes in its own :class:`Pages`); any other is
-        copied into a page. The energy of pieces in single precision without ``own`` is
-        not kept but worked out again from their pressure when it is needed."""
+        waves they are, with energy ``own`` (n, bands). Pressure in single precision with
+        something in every piece is kept as given (the edge fade's comes so, in its own
+        :class:`Pages`); any other is copied into a page. The energy of pieces in single
+        precision without ``own`` is not kept but worked out again from their pressure
+        when it is needed."""
         rows = np.asarray(rows, dtype=np.int64).reshape(-1)
         single = np.asarray(pressure).dtype == np.complex64
         again = single and own is None

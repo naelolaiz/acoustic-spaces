@@ -11,6 +11,7 @@ import pytest
 from acoustic_spaces import Room, Scene
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import early_paths
+from acoustic_spaces.engine.clusters import Clusters
 from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, find_edges
 from acoustic_spaces.engine.edge_fade import _FACE, EdgeFade
@@ -315,6 +316,30 @@ def test_no_step_round_the_gallery_corner(gallery: Room, x: float, y: float, ban
         room = Room.from_scene(scene.model_copy(update={"listeners": [moved]}), reuse=gallery)
         levels.append(10 * np.log10(total_energy(early_paths(room, max_order=3))[band]))
     assert abs(levels[1] - levels[0]) < 0.1
+
+
+def test_the_waves_keep_the_edge_fade_s_pieces_as_they_come(gallery: Room, monkeypatch) -> None:
+    """The edge fade leaves out the pieces with nothing in them before it keeps their
+    pressure, so that the waves keep the others as they come: they left those out by
+    copying the rest, while the pages they came from stayed for the pieces next to them."""
+    kept, left_out = [], []
+    add, heard = Clusters.add, EdgeFade._heard
+
+    def counted_add(self, rows, keys, pressure, distance, anchor=False, own=None):
+        if np.asarray(pressure).dtype == np.complex64:
+            energy = np.mean(np.abs(pressure) ** 2, axis=2)
+            kept.append(energy.max(axis=1, initial=0.0) > 0.0)
+        return add(self, rows, keys, pressure, distance, anchor, own)
+
+    def counted_heard(self, pressure):
+        out = heard(self, pressure)
+        left_out.append(int(np.sum(~out["heard"])))
+        return out
+
+    monkeypatch.setattr(Clusters, "add", counted_add)
+    monkeypatch.setattr(EdgeFade, "_heard", counted_heard)
+    early_paths(gallery, max_order=3)
+    assert sum(left_out) > 0 and kept and all(some.all() for some in kept)
 
 
 def test_a_block_of_reflections_alone(tmp_path: Path) -> None:
