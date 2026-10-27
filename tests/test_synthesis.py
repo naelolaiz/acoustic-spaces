@@ -89,3 +89,18 @@ def test_smooth_energy_keeps_the_total() -> None:
     early = np.zeros(500)
     early[20] = 1.0
     np.testing.assert_array_equal(smooth_energy(early[None], 1e-3, 0.1)[0], early)
+
+
+@pytest.mark.parametrize("at", [100, 102, 497, 499])
+def test_smooth_energy_moves_nothing_ahead_of_its_start_or_past_the_end(at: int) -> None:
+    # The window centred on a slot just after the start reached back before it: a slot
+    # 2 ms after a start 50 ms after the direct sound put 3/11 of its energy into
+    # C50's early window. Near the end, part of it went past the last slot.
+    energy = np.zeros(500)
+    energy[at] = 1.0
+    smoothed = smooth_energy(energy, 1e-3, 0.1, window_s=0.01)
+    assert smoothed.sum() == pytest.approx(1.0, rel=1e-15)
+    assert not smoothed[:100].any()
+    assert smoothed.min() >= 0.0
+    spread = np.flatnonzero(smoothed)
+    assert spread.min() == max(at - 5, 100) and spread.max() == min(at + 5, 499)

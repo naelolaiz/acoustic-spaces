@@ -90,6 +90,39 @@ Vector3 = tuple[float, float, float]
 Coefficient = Annotated[float, Field(ge=0.0, le=1.0)]
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """PyYAML's safe loader, refusing a key written twice in one mapping, of which
+    PyYAML keeps the last: a second ``materials:`` or a source's ``position`` given twice
+    would drop the first without a word."""
+
+    def construct_mapping(self, node, deep=False):
+        if isinstance(node, yaml.MappingNode):
+            seen = set()
+            for key_node, _value in node.value:
+                if key_node.tag == "tag:yaml.org,2002:merge":
+                    continue  # ``<<: *defaults``, whose keys the mapping's own override
+                key = self.construct_object(key_node, deep=deep)
+                try:
+                    repeated = key in seen
+                except TypeError:
+                    continue  # unhashable, which PyYAML refuses below
+                if repeated:
+                    raise yaml.constructor.ConstructorError(
+                        "while reading a mapping",
+                        node.start_mark,
+                        f"found the key {key!r} twice",
+                        key_node.start_mark,
+                    )
+                seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
+def load_yaml(stream):
+    """YAML text or an open file as data, as ``yaml.safe_load`` reads it, but refusing
+    a key written twice in one mapping (``yaml.YAMLError``)."""
+    return yaml.load(stream, Loader=_UniqueKeyLoader)
+
+
 class _Model(BaseModel):
     # Unknown keys are typing mistakes; NaN and infinity (YAML's .nan and .inf) are
     # no positions, angles or coefficients.
@@ -2774,7 +2807,7 @@ class Scene(_Model):
         path = Path(path)
         with path.open(encoding="utf-8") as fh:
             try:
-                data = yaml.safe_load(fh)
+                data = load_yaml(fh)
             except yaml.YAMLError as exc:
                 raise ValueError(f"{path.name}: not valid YAML: {exc}") from None
         return cls.model_validate(data, context={"base_dir": path.resolve().parent})

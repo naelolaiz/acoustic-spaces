@@ -2,8 +2,10 @@
 
 import json
 import shutil
+import struct
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -233,6 +235,9 @@ def test_unpack_checks_what_it_unpacks(tmp_path: Path, capsys) -> None:
     _rewrite(damaged, lambda name, data: data + b"0" if name == "hill.asc" else data)
     with pytest.raises(ValueError, match="hill.asc is damaged"):
         unpack(damaged, tmp_path / "d")
+    # Checked before it takes its name: no damaged file is left.
+    assert not (tmp_path / "d" / "hill.asc").exists()
+    assert not list((tmp_path / "d").rglob("*.part"))
     assert main(["simulate", str(damaged), "--out", str(tmp_path / "r")]) == 1
     assert "error: damaged.zip: hill.asc is damaged" in capsys.readouterr().err
 
@@ -307,3 +312,35 @@ def test_scene_files_include_array_elements(tmp_path: Path) -> None:
     # The HRTF is not there to pack.
     with pytest.raises(ValueError, match="head.sofa, which is not there"):
         pack(scene, tmp_path / "out.zip", base_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("offset", "value", "message"),
+    [(8, 1, "is encrypted"), (10, 99, "compression method is not supported")],
+)
+def test_unpack_refuses_a_file_it_cannot_read(tmp_path: Path, offset, value, message) -> None:
+    # An encrypted file, or one compressed some other way, raised zipfile's own error.
+    zipped = tmp_path / "hillside.zip"
+    pack(Scene.from_yaml(EXAMPLES / "hillside" / "scene.yaml"), zipped, EXAMPLES / "hillside")
+    data = bytearray(zipped.read_bytes())
+    entry = data.find(b"PK\x01\x02")  # the first file's record in the central directory
+    struct.pack_into("<H", data, entry + offset, value)
+    zipped.write_bytes(bytes(data))
+    first = zipfile.ZipFile(zipped).namelist()[0]
+    with pytest.raises(ValueError, match=f"{first} is damaged .*{message}"):
+        unpack(zipped, tmp_path / "u")
+    assert not list((tmp_path / "u").rglob("*.part"))
+
+
+def test_unpack_needs_room_for_the_files(tmp_path: Path, monkeypatch) -> None:
+    zipped = tmp_path / "hillside.zip"
+    packed = pack(
+        Scene.from_yaml(EXAMPLES / "hillside" / "scene.yaml"), zipped, EXAMPLES / "hillside"
+    )
+    free = packed.size // 2
+    monkeypatch.setattr(
+        "acoustic_spaces.pack.shutil.disk_usage", lambda path: SimpleNamespace(free=free)
+    )
+    with pytest.raises(ValueError, match="MiB free"):
+        unpack(zipped, tmp_path / "u")
+    assert not any((tmp_path / "u").iterdir())

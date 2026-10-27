@@ -24,7 +24,10 @@ or in a corner. Sound that bends round edges is added to them (see
   listener is set by `reception`:
   - `diffuse_rain` (default): the scattered part of every reflection radiates to
     each listener it can see; the rest counts when a ray crosses a detector
-    sphere (`receiver_radius`, 0.5 to 1 m by default and kept clear of walls).
+    sphere (`receiver_radius`, 0.5 to 1 m by default and kept clear of walls). Kept
+    clear, the sphere of a listener closer than 5.6 cm to a surface (an opening or
+    an outdoor scene's sky too) is under a tenth of that size and catches a hundredth
+    of the rays or fewer, which the scene's warnings say.
   - `secondary_sources`: all reflected energy radiates that way, as in ODEON's late
     method. Much smoother tails, but it treats specular energy as diffuse: in the
     example box (smooth walls, absorbing ceiling) EDT comes out about 20 % shorter.
@@ -59,7 +62,10 @@ keep early paths only that long after the direct sound.
 impulses (in the lowest bands with the phase of their reflections, see
 [Low frequencies: early reflections in pressure](#low-frequencies-early-reflections-in-pressure)),
 the late energy shapes a Dirac sequence with the density of reflections in
-the room, and a zero-phase crossover bank sums the bands. The direct sound at r
+the room, and a zero-phase crossover bank sums the bands. From 50 ms after the direct
+sound the late energy is spread over 10 ms first, so a single strong ray late in the
+tail does not become a click; none of it moves ahead of those 50 ms (into C50's early
+part) or past the end. The direct sound at r
 metres is an impulse of height 1/r, so levels compare between files and the energy
 of the direct sound at 10 m (0.01) is the reference for strength G.
 
@@ -514,7 +520,10 @@ simulation:
   coverage maps, calibration), of the wave solver on the CPU, and of writing the
   responses' files (`simulate --out`, the editor's Export). Fewer leave the
   computer free for other work while a long run goes on; more than the computer's
-  cores run as its cores (see [Memory](#memory)). Results do not depend on it.
+  cores run as its cores (see [Memory](#memory)). Results do not depend on it beyond
+  rounding: each thread sums its share of the rays, and the shares add up in another
+  order (in the shoebox example, the late energy moved by 7 × 10⁻¹⁶ of its peak between
+  1, 2 and 4 threads, and the early paths were the same to the bit).
 - `ray_tree`: the bounding volume hierarchy that finds the surface a ray meets, and
   whether a listener can see a reflection, which is nearly all of the run time. `sah`
   splits it by the surface area heuristic and walks the nearer box first; `median`

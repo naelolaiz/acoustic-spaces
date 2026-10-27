@@ -289,6 +289,16 @@ def test_strength_from_a_broadband_reference(filters: str) -> None:
     np.testing.assert_allclose(p.g, 0.0, atol=0.1)
 
 
+@pytest.mark.parametrize("bands", [1, 24])
+def test_a_reference_for_other_bands_is_refused(bands: int) -> None:
+    # 24 third-octave references were cut to their first 8 and taken for octaves; one
+    # in a list raised an IndexError at the second band.
+    ir = np.zeros(48_000)
+    ir[480] = 0.1
+    with pytest.raises(ValueError, match=f"one per octave band \\(8\\), not {bands}"):
+        from_impulse_response(ir, 48_000, [REFERENCE_ENERGY_10M] * bands)
+
+
 def test_modulation_transfer_of_an_exponential() -> None:
     t60 = 1.2
     m = modulation_transfer(_exponential(t60, 6.0), DT)

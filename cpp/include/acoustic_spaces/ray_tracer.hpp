@@ -474,7 +474,7 @@ struct RayState {
     Rng rng;
     std::int64_t room;   // the room the ray is in (StochasticScene::face_room), or -1
     // Reflections so far off each face group (StochasticScene::face_group).
-    std::array<std::uint16_t, kMaxGroups> hits{};
+    std::array<std::uint32_t, kMaxGroups> hits{};
     // In an atmosphere: metres along the ray so far (travelled is then the speed of
     // sound times the time), and, while `leaving`, the normal of the face the ray left
     // (pointing the way it went), which it cannot meet again until it turns back.
@@ -693,7 +693,7 @@ struct Accumulator {
     // a ray with `hits` reflections off each face group; the air absorbs over
     // `air_distance` instead where that is not negative.
     void add(std::size_t receiver, const double *energy, double factor, double distance,
-             const Vec3 &arrival, const std::uint16_t *hits, double air_distance = -1.0) {
+             const Vec3 &arrival, const std::uint32_t *hits, double air_distance = -1.0) {
         const double time = distance / settings.speed_of_sound;
         const auto bin = static_cast<std::size_t>(time / settings.time_step);
         if (bin >= out.bins) return;

@@ -528,13 +528,20 @@ def test_rooms_touching_along_an_edge_are_closed() -> None:
     assert report.volume_m3 == pytest.approx(2.0)
 
 
-def test_a_face_given_twice_leaves_the_model_open() -> None:
+def test_a_face_given_twice_is_one_face() -> None:
+    # The copy left each of the face's edges shared by three faces, and the model with
+    # no inside: 13 faces with no room on either side and no volume. Its corners start
+    # elsewhere but turn the same way.
     box = _box(8, 6, 3)
-    faces = np.vstack([box.faces, box.faces[:1]])
-    report = check_mesh(RoomMesh(box.vertices, faces, np.zeros(len(faces)), box.labels))
-    assert report.boundary_edges == 0 and report.odd_edges == 3
-    assert not report.closed and report.volume_m3 is None
-    assert "3 edges shared by an odd number of faces" in report.summary()
+    faces = np.vstack([box.faces, np.roll(box.faces[:1], 1, axis=1)])
+    mesh = RoomMesh(box.vertices, faces, np.zeros(len(faces)), box.labels)
+    raw = check_mesh(mesh)
+    assert raw.boundary_edges == 0 and raw.odd_edges == 3
+    assert not raw.closed and raw.volume_m3 is None
+    report = check_mesh(*clean_mesh(mesh))
+    assert report.closed and report.volume_m3 == pytest.approx(144.0)
+    assert report.faces == 12 and report.removed_degenerate_faces == 1
+    assert "removed 1 degenerate or repeated faces" in report.summary()
 
 
 def test_points_inside_either_orientation() -> None:

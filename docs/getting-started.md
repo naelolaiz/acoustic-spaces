@@ -65,6 +65,7 @@ on Windows), or with uv put `uv run` in front of each.
 ```sh
 acoustic-spaces info
 acoustic-spaces validate examples/shoebox/scene.yaml   # errors exit with status 1
+acoustic-spaces validate examples/leaky_classroom/scene.yaml --strict  # warnings too
 acoustic-spaces validate examples/leaky_classroom/scene.yaml --leaks  # where rays escape
 acoustic-spaces inspect examples/shoebox/scene.yaml    # geometry, materials, RT estimates
 acoustic-spaces view examples/shoebox/scene.yaml       # 3D window; --screenshot out.png

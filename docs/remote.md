@@ -40,9 +40,11 @@ Every command that reads a scene takes a pack in its place: `simulate`, `map`,
 acoustic-spaces simulate hall.zip --out results --bands third_octave   # on the other computer
 ```
 
-The pack is unpacked into a temporary folder for the command and removed after it.
-`pack.json` in it records the version that wrote it and a SHA-256 of every file, so a
-damaged pack is refused, and a pack written by another version runs with a warning:
+The pack is unpacked into a temporary folder for the command and removed after it,
+once the folder is found to have room for it. `pack.json` in it records the version
+that wrote it and a SHA-256 of every file, which each file is checked against before it
+takes its name, so a damaged pack is refused, and a pack written by another version
+runs with a warning:
 results can differ between versions, so for numbers to compare, run the same version on
 both computers. Runs of a pack give the same results, bit for bit, as runs of the scene
 file on the same computer.

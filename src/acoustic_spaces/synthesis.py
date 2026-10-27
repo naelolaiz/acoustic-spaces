@@ -185,27 +185,39 @@ def dirac_sequence(
 def smooth_energy(
     energy: np.ndarray, time_step: float, start_s: float, window_s: float = 0.01
 ) -> np.ndarray:
-    """Spread each slot's energy after ``start_s`` over a ``window_s`` moving window.
+    """Spread each slot's energy after ``start_s`` over a ``window_s`` window centred
+    on it.
 
     The late energy of a ray tracer is a sum of discrete hits; a single strong ray late
     in the tail would become a click. Smoothing moves energy by at most half a window
-    and keeps the total, except what spills past the end.
+    and keeps the total. A slot within half a window of ``start_s`` or of the end
+    spreads over the part of its window from ``start_s`` to the end, so no energy moves
+    ahead of ``start_s`` (into the early window of C50, when that is 50 ms after the
+    direct sound) or past the end.
     """
     energy = np.asarray(energy, dtype=float)
+    n = energy.shape[-1]
     half = int(round(window_s / time_step / 2.0))
     start = int(math.ceil(start_s / time_step))
-    if half < 1 or start >= energy.shape[-1]:
+    if half < 1 or start >= n:
         return energy.copy()
-    late = energy.copy()
-    late[..., :start] = 0.0
-    width = 2 * half + 1
-    padded = np.pad(late, [(0, 0)] * (late.ndim - 1) + [(half, half)])
-    cumulative = np.cumsum(padded, axis=-1)
-    cumulative = np.concatenate([np.zeros_like(cumulative[..., :1]), cumulative], axis=-1)
-    smoothed = (cumulative[..., width:] - cumulative[..., :-width]) / width
     out = energy.copy()
     out[..., start:] = 0.0
-    return out + smoothed
+    # The slots whose whole window lies after start_s: a moving average.
+    first, last = start + half, n - half
+    if last > first:
+        width = 2 * half + 1
+        inner = np.zeros_like(energy)
+        inner[..., first:last] = energy[..., first:last]
+        padded = np.pad(inner, [(0, 0)] * (inner.ndim - 1) + [(half, half)])
+        cumulative = np.cumsum(padded, axis=-1)
+        cumulative = np.concatenate([np.zeros_like(cumulative[..., :1]), cumulative], axis=-1)
+        out += (cumulative[..., width:] - cumulative[..., :-width]) / width
+    # The others, near either end: over the part of their window inside.
+    for k in (*range(start, min(first, n)), *range(max(last, first), n)):
+        low, high = max(k - half, start), min(k + half, n - 1)
+        out[..., low : high + 1] += energy[..., k : k + 1] / (high - low + 1)
+    return out
 
 
 def shape_noise(

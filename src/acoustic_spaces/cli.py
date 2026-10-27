@@ -124,14 +124,16 @@ def _unpack(path: str) -> str:
     return str(unpacked.scene)
 
 
-def _print_checks(room: Room) -> bool:
-    """Print problems and warnings; return True when there are no problems."""
-    for warning in room.warnings():
+def _print_checks(room: Room, strict: bool = False) -> bool:
+    """Print problems and warnings; return True when there are no problems, nor with
+    ``strict`` warnings."""
+    warnings = room.warnings()
+    for warning in warnings:
         print(f"warning: {warning}", file=sys.stderr)
     problems = room.problems()
     for problem in problems:
         print(f"error: {problem}", file=sys.stderr)
-    return not problems
+    return not problems and not (strict and warnings)
 
 
 def _cmd_info(args: argparse.Namespace) -> int:
@@ -208,7 +210,7 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     room = _load_room(args.scene)
     if room is None:
         return 1
-    ok = _print_checks(room)
+    ok = _print_checks(room, strict=args.strict)
     scene = room.scene
     print(
         f"{scene.name}: {len(scene.materials)} materials, "
@@ -2452,6 +2454,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate.add_argument(
         "--rays", type=int, default=LEAK_RAYS, help=f"rays for --leaks (default {LEAK_RAYS})"
+    )
+    validate.add_argument(
+        "--strict",
+        action="store_true",
+        help="exit with status 1 on warnings too (a model that is not closed, for one)",
     )
     validate.set_defaults(func=_cmd_validate)
 

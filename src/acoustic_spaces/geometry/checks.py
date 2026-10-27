@@ -23,6 +23,7 @@ class MeshReport:
     vertices: int
     faces: int
     merged_vertices: int
+    #: Faces cleaning removed: degenerate ones, and copies of another face.
     removed_degenerate_faces: int
     boundary_edges: int
     non_manifold_edges: int
@@ -87,14 +88,19 @@ class MeshReport:
         if self.merged_vertices:
             lines.append(f"merged {self.merged_vertices} duplicate vertices")
         if self.removed_degenerate_faces:
-            lines.append(f"removed {self.removed_degenerate_faces} degenerate faces")
+            lines.append(f"removed {self.removed_degenerate_faces} degenerate or repeated faces")
         lines.extend(self.notes)
         return "\n".join(lines)
 
 
 def clean_mesh(mesh: RoomMesh) -> tuple[RoomMesh, int, int]:
-    """Merge duplicate vertices, drop degenerate faces and the vertices no face uses,
-    split faces at T-junctions and orient the faces alike.
+    """Merge duplicate vertices, drop degenerate faces, copies of a face and the
+    vertices no face uses, split faces at T-junctions and orient the faces alike.
+
+    A copy is a face with the same corners as an earlier one, turning the same way: the
+    same face given twice, which would leave every edge of it shared by three faces and
+    the model with no inside. Two faces with the same corners turning opposite ways
+    both stay: that is where two closed models touch, each with its own face.
 
     A face whose edge runs past a corner of the faces on its other side (a T-junction,
     which CAD exporters leave, or close with a zero-area sliver that is dropped here) is
@@ -117,6 +123,13 @@ def clean_mesh(mesh: RoomMesh) -> tuple[RoomMesh, int, int]:
         (faces[:, 0] != faces[:, 1]) & (faces[:, 1] != faces[:, 2]) & (faces[:, 0] != faces[:, 2])
     )
     keep = distinct & (area > MIN_FACE_AREA_M2)
+    # Copies: the corners from the lowest on, which keeps the way they turn.
+    kept = np.flatnonzero(keep)
+    lowest = np.argmin(faces[kept], axis=1)
+    turned = faces[kept[:, None], (lowest[:, None] + np.arange(3)) % 3]
+    _, once = np.unique(turned, axis=0, return_index=True)
+    keep[kept] = False
+    keep[kept[once]] = True
     faces, labels = _split_t_junctions(vertices, faces[keep], mesh.face_labels[keep])
     tri = vertices[faces]
     area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)

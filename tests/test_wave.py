@@ -686,6 +686,44 @@ def test_wave_responses_refuse_listeners_outside_and_huge_grids() -> None:
             wave_responses(model, source, [source], ["l"], max_band_hz=band, **common)
 
 
+def test_wave_responses_check_what_they_are_given() -> None:
+    # The scene's schema checks these. Called directly, a mistyped scheme ran the
+    # isotropic stencil and a mistyped wind the effective one, a length of 0 ran with no
+    # samples, and a name short of the listeners left one out.
+    room = Room.from_yaml(SHOEBOX)
+    model = TraceModel.from_room(room)
+    source = np.array(room.scene.sources[0].position)
+    common = {"max_band_hz": 63, "length_s": 0.1, "sample_rate": FS, "speed_of_sound": C}
+    for more, message in (
+        ({"scheme": "isotropc"}, "unknown scheme 'isotropc'"),
+        ({"wind": "moved"}, "unknown wind 'moved'"),
+        ({"length_s": 0.0}, "length_s must be a positive number, not 0.0"),
+        ({"sample_rate": -48000.0}, "sample_rate must be a positive number"),
+        ({"points_per_wavelength": math.nan}, "points_per_wavelength must be a positive"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            wave_responses(model, source, [source], ["l"], **{**common, **more})
+    with pytest.raises(ValueError, match="1 names for 2 listeners"):
+        wave_responses(model, source, [source, source], ["l"], **common)
+    # Every face an opening: no wall for the grid, which failed with "Bvh: the mesh has
+    # no faces".
+    openings = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"box": [4.0, 3.0, 2.5]},
+                "materials": {"gap": {"absorption": [1.0] * 8, "transmission": [1.0] * 8}},
+                "default_material": "gap",
+                "sources": [{"name": "s", "position": [1.0, 1.0, 1.0]}],
+                "listeners": [{"name": "l", "position": [3.0, 2.0, 1.2]}],
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="needs a surface that reflects"):
+        wave_responses(
+            TraceModel.from_room(openings), [1.0, 1.0, 1.0], [[3.0, 2.0, 1.2]], ["l"], **common
+        )
+
+
 def test_the_wave_bands_match_the_schema() -> None:
     from typing import get_args
 

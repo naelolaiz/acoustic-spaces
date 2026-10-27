@@ -418,6 +418,13 @@ Known issues found by the review of 25 October 2026 (see
   tracing again has them.
 - [x] The wave solver's highest modes kept inside its stability limit in single
   precision, with both stencils.
+- [x] The review's lower-severity findings, each checked: faces given twice dropped,
+  sources and listeners on a surface refused and listeners next to one warned of,
+  `validate --strict`, YAML keys written twice refused, packs unpacked only with room
+  for them and each file checked before it takes its name, the late part's smoothing
+  kept after 50 ms, the tracer's reflection counts in 32 bits, and `from_impulse_response`
+  and `wave_responses` checking what they are given. The others were not borne out, or
+  only a direct caller of the native module can reach them.
 - [ ] Uncertainty: how much each parameter scatters over seeds, as a standard error.
 - [ ] CI: type checks, sanitizers for the native code and the tests' coverage.
 - [ ] Collada polygons with their holes.

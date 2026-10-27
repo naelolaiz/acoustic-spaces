@@ -30,10 +30,12 @@ from acoustic_spaces.geometry import (
     box_mesh,
     check_mesh,
     clean_mesh,
+    distance_to_surface,
     extruded_mesh,
     load_mesh,
 )
 from acoustic_spaces.geometry.cells import MeshCells, cell_of
+from acoustic_spaces.geometry.checks import MERGE_TOLERANCE_M
 from acoustic_spaces.geometry.outdoor import SKY, Layout, outdoor_mesh
 from acoustic_spaces.materials.bands import Resolution, band_centres
 from acoustic_spaces.scene import Scene
@@ -42,6 +44,13 @@ UNASSIGNED = -1
 #: A listener closer than this (metres) to a source has no response: the direct
 #: sound's level grows without bound as the distance goes to zero.
 MIN_SOURCE_DISTANCE_M = 0.01
+#: A source or listener closer than this (metres) to a surface is on it: neither in the
+#: room nor out of it (the distance at which two corners count as one).
+ON_SURFACE_M = MERGE_TOLERANCE_M
+#: The late part's detector sphere, kept clear of the surfaces, smaller than this share
+#: of the smallest one sized for the room (``late.RADIUS_RANGE``) catches a hundredth of
+#: the rays or fewer: a listener that close to a surface gets a noisy late part.
+NEAR_SURFACE_SHARE = 0.1
 
 
 def _label_text(label: tuple[str, ...]) -> str:
@@ -357,10 +366,24 @@ class Room:
                             f"{kind} {item.name!r} at {list(item.position)} is inside building "
                             f"{building!r}"
                         )
+            # On a surface the inside checks can say either; that is the problem. An
+            # opening (the sky, say) has air on both sides.
+            points = [item.elements() if kind == "source" else item.position for item in items]
+            on = [bool((self._clearance(p, solid=True) < ON_SURFACE_M).any()) for p in points]
+            for item, on_surface in zip(items, on, strict=True):
+                if on_surface:
+                    reaches = "reaches" if getattr(item, "extended", False) else "is"
+                    out.append(
+                        f"{kind} {item.name!r} at {list(item.position)} {reaches} on a "
+                        f"surface (within {ON_SURFACE_M * 1e6:g} µm of it), neither in the "
+                        "air nor out of it: move it off the surface"
+                    )
             if inside is None:
                 continue
-            for item, ok, in_solid in zip(items, inside, solid, strict=True):
+            for item, ok, in_solid, on_surface in zip(items, inside, solid, on, strict=True):
                 where = "reaches" if getattr(item, "extended", False) else "is"
+                if on_surface:
+                    continue
                 if not ok and self.outdoor is not None:
                     ground = "the ground" if self.outdoor.terrain is None else "the terrain"
                     out.append(
@@ -391,6 +414,17 @@ class Room:
                     )
         return out
 
+    def _clearance(self, points, solid: bool = False) -> np.ndarray:
+        """Distance (m) from each point to the nearest surface, or with ``solid`` to the
+        nearest that is not an opening (one that lets all sound through in every band,
+        as an outdoor scene's sky does)."""
+        mesh = self.mesh
+        through = self.face_transmission() if solid else None
+        if through is not None:
+            keep = ~np.all(through >= 1.0, axis=1)
+            mesh = RoomMesh(mesh.vertices, mesh.faces[keep], mesh.face_labels[keep], mesh.labels)
+        return distance_to_surface(mesh, np.reshape(np.asarray(points, dtype=float), (-1, 3)))
+
     def _used(self, kind: str) -> list:
         """The scene's sources or listeners (``kind``) in use: not left out."""
         return [item for item in getattr(self.scene, kind) if item.in_use]
@@ -419,6 +453,7 @@ class Room:
         for name, material in self.scene.materials.items():
             out.extend(f"material {name!r}: {note}" for note in material.clipped)
         out.extend(self._near_arrays())
+        out.extend(self._near_surfaces())
         if self.outdoor is not None:
             out.extend(self.scene.geometry.footprint_notes())
         out.extend(self._run_size())
@@ -473,6 +508,45 @@ class Room:
                 pass  # no surface to lay the map over: the map command says so
         memory = run_size.machine_memory()
         return [note for need in needs if (note := run_size.warning(need, memory)) is not None]
+
+    def _near_surfaces(self) -> list[str]:
+        """Listeners so close to a surface that the late part's detector sphere, kept
+        clear of it, catches few rays."""
+        from acoustic_spaces.engine.late import RADIUS_RANGE
+
+        late = self.scene.simulation.late
+        listeners = self._used("listeners")
+        if (
+            late.method != "stochastic_ray_tracing"
+            or late.reception == "secondary_sources"  # no sphere: all reflections radiate
+            or late.receiver_radius is not None
+            or not listeners
+        ):
+            return []
+        positions = [lis.position for lis in listeners]
+        # Kept clear of every face, openings too, as the run keeps it.
+        clearance = self._clearance(positions)
+        on_solid = self._clearance(positions, solid=True) < ON_SURFACE_M  # a problem
+        smallest = RADIUS_RANGE[0]
+        out = []
+        for listener, gap, on in zip(listeners, clearance.tolist(), on_solid, strict=True):
+            radius = max(0.9 * gap, 1e-3)  # as late.receiver_radius keeps it
+            if on or radius >= NEAR_SURFACE_SHARE * smallest:
+                continue
+            where = (
+                "on an opening (a surface that lets all sound through)"
+                if gap < ON_SURFACE_M
+                else f"{100 * gap:.2g} cm from a surface"
+            )
+            out.append(
+                f"listener {listener.name!r} is {where}: the late "
+                "part's detector sphere, kept clear of it, has a radius of "
+                f"{100 * radius:.2g} cm instead of {100 * smallest:g} cm or more, and catches "
+                f"{(smallest / radius) ** 2:,.0f} times fewer rays or more, so the late part "
+                f"comes out noisy; move it {100 * NEAR_SURFACE_SHARE * smallest / 0.9:.2g} cm "
+                "or more from the surfaces"
+            )
+        return out
 
     def _near_arrays(self) -> list[str]:
         """Listeners too close to a coherent array for its far-field pattern."""
