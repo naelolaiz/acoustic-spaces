@@ -1,62 +1,25 @@
 # Changelog
 
-## Unreleased
-
-- The late part's last milliseconds take the whole chord of a ray through a listener's
-  detector sphere, or through a coverage map's cell, where the ray's time runs out as it
-  crosses it: a ray's legs now go on past its time by twice the largest sphere's radius
-  (or map cell's half diagonal) without reflecting there, and a chord counts if its
-  closest approach (a map cell's: its middle) is in time. The chords were cut short
-  where the time ran out, and one whose closest approach came later was counted at the
-  end: in the example box the last 1 to 3 ms came out up to 38 % low with 1 m spheres
-  and no rain, and the last millisecond 17 to 23 % low with the default diffuse rain and
-  0.5 m spheres, on the CPU and the GPU alike. The total energy moves by 2.1e-4 at most.
-  The tracer's reference results (`tests/reference/tracer.npz`) are written again: only
-  their last slots change.
-- Re-weighting a run for other absorption (the editor's results after a material's
-  absorption changes, `Response.reweighted`) turns the phase of each early reflection
-  off a changed material where the paths add in pressure (up to 125 Hz indoors by
-  default, every band outdoors), as tracing again does. It kept the phases as traced,
-  which a reflection factor fitted to the absorption sets: with the `studio`'s side
-  panels 0.2 more absorbent, G, C50 and C80 at 63 Hz came out up to 0.98 dB from those
-  with the new phases. The paths keep the angle of each reflection
-  (`EarlyReflections.cosines`), and `Response.reweighted` takes the absorption as traced
-  and as re-weighted for (`absorption=(old, new)`), which it needs where a path reflects
-  off a group whose absorption changes. As for their energy, the faces of an edge that
-  a path bends round keep what they did to its phase as traced. `calibrate`'s results
-  are unchanged: its fit within a round keeps the traced phases, and each round traces
-  again.
-- The wave solver's update takes its Laplacian times 1 − 2⁻¹⁸ (sound 2⁻¹⁹ slower), which
-  keeps the grid's highest modes inside the stability limit in single precision. At the
-  limit itself they sat on its edge, where a kick grows linearly: the 7-point stencil's
-  checkerboard 2⁻²³ inside, which rounding can take over it, and the 19-point
-  stencil's modes alternating along two axes exactly on it. Kicked, they grew to 7,000
-  and 20,000 times the kick in 20,000 steps; 2⁻¹⁶ inside, they swing within 259 times
-  it over 300,000. No room was seen to grow: its walls and the grid's edge keep its
-  highest mode further inside (a rigid box ran 200,000 steps). The 7-point stencil's
-  weights, rounded down, also made a room's uniform pressure swing slowly (0.3 Hz with
-  10 cm cells), which reached into the bands: in a duct, the reflection off an end whose
-  admittance resonates now follows the grid's theory within 0.001 instead of 0.003 from
-  30 to 250 Hz. The wave solver's validation tables move by one in their last digit at
-  most.
-
 ## 4.0.1
 
 Behind the `archway`'s wall, where the reflection off the arch's jamb appears, the level
 now steps by at most 0.08 dB from 250 Hz to 1 kHz instead of 1.37 dB, and the BRAS CR2
-and CR3 rooms run at their defaults. Outdoor scenes are unchanged. Indoors the early
-level changes at 63 and 125 Hz in every example but `room_modes`, whose wave solver takes
+and CR3 rooms run at their defaults. Outdoors the early level is unchanged. Indoors it
+changes at 63 and 125 Hz in every example but `room_modes`, whose wave solver takes
 those bands, as the reflection phases now come from every band (by up to 3.8 dB, in
 `orchestra`), and from 250 Hz up in the five examples with edges near their paths (by up
 to 1.04 dB, in `archway`).
 
-4.0.1 also fixes findings of the code review of 25 October 2026 (those still open are
-in [Known issues](docs/validation.md#known-issues)), among them paths
-through three partitions or more, which neither the early nor the late part counted,
-and one the review did not find: a closed solid standing on a surface counted as air.
-Of the examples' results, these change only the `apartment`'s: the bedroom's G by less
-than 10⁻⁶ dB, and the synthesized tails of its rendered responses, which now take the
-density of reflections of each listener's room.
+4.0.1 also fixes findings of the code review of 25 October 2026 (those still open are in
+[Known issues](docs/validation.md#known-issues)), among them paths through three
+partitions or more, which neither the early nor the late part counted, and one the
+review did not find: a closed solid standing on a surface counted as air. Of the
+examples' results, these change the `apartment`'s, the bedroom's G by less than 10⁻⁶ dB
+and the synthesized tails of its rendered responses, which now take the density of
+reflections of each listener's room; `room_modes`'s, whose wave solver keeps its highest
+modes inside its stability limit, by less than 10⁻⁴ dB in G, C50 and C80 (its EDT at
+250 Hz by 5 ms); and every response's last milliseconds, where the late part now takes
+the whole chords of the rays through the listeners' spheres.
 
 - Indoors, in the bands where the early paths add in energy (from 250 Hz with the
   default `coherent_max_band_hz`), the sound bent round edges is kept as waves
@@ -106,6 +69,19 @@ density of reflections of each listener's room.
   less. Outdoor scenes, the bands the wave solver takes (`room_modes`) and the bands
   from 250 Hz up are unchanged. The fit takes up to about 0.5 s per material, once per
   process.
+- Re-weighting a run for other absorption (the editor's results after a material's
+  absorption changes, `Response.reweighted`) turns the phase of each early reflection
+  off a changed material where the paths add in pressure (up to 125 Hz indoors by
+  default, every band outdoors), as tracing again does. It kept the phases as traced,
+  which a reflection factor fitted to the absorption sets: with the `studio`'s side
+  panels 0.2 more absorbent, G, C50 and C80 at 63 Hz came out up to 0.98 dB from those
+  with the new phases. The paths keep the angle of each reflection
+  (`EarlyReflections.cosines`), and `Response.reweighted` takes the absorption as traced
+  and as re-weighted for (`absorption=(old, new)`), which it needs where a path reflects
+  off a group whose absorption changes. As for their energy, the faces of an edge that
+  a path bends round keep what they did to its phase as traced. `calibrate`'s results
+  are unchanged: its fit within a round keeps the traced phases, and each round traces
+  again.
 - A room with a curved surface of many facets, whose events at the edges have hundreds
   of thousands of terms, no longer runs out of memory in the early stage: the BRAS CR3
   room at its defaults peaks at 10.6 GB, where 4.0.0 asked for 16.4 GiB at once, and CR2
@@ -150,6 +126,17 @@ density of reflections of each listener's room.
   another, which no ray can do, so two houses across a lane whose facing walls let
   sound through heard each other's rain. The GPU's rain stops at every surface, as
   before. The examples have no such path: their results are the same to the bit.
+- The late part's last milliseconds take the whole chord of a ray through a listener's
+  detector sphere, or through a coverage map's cell, where the ray's time runs out as it
+  crosses it: a ray's legs now go on past its time by twice the largest sphere's radius
+  (or map cell's half diagonal) without reflecting there, and a chord counts if its
+  closest approach (a map cell's: its middle) is in time. The chords were cut short
+  where the time ran out, and one whose closest approach came later was counted at the
+  end: in the example box the last 1 to 3 ms came out up to 38 % low with 1 m spheres
+  and no rain, and the last millisecond 17 to 23 % low with the default diffuse rain and
+  0.5 m spheres, on the CPU and the GPU alike. The total energy moves by 2.1e-4 at most.
+  The tracer's reference results (`tests/reference/tracer.npz`) are written again: only
+  their last slots change.
 - Where partitions or openings divide the model into rooms, the statistical method's
   mixing time (where its early paths end) and the density of reflections in the
   synthesized tail come from the volume of the listener's room (a map's mixing time
@@ -191,6 +178,19 @@ density of reflections of each listener's room.
 - `Convolver.process` takes `out`, an array to write the block into, and `play` keeps one
   such buffer, so the sound card's callback no longer makes new arrays the size of a
   block; `HeadTrackedBinaural.process` takes `out` too and keeps its buffers.
+- The wave solver's update takes its Laplacian times 1 − 2⁻¹⁸ (sound 2⁻¹⁹ slower), which
+  keeps the grid's highest modes inside the stability limit in single precision. At the
+  limit itself they sat on its edge, where a kick grows linearly: the 7-point stencil's
+  checkerboard 2⁻²³ inside, which rounding can take over it, and the 19-point
+  stencil's modes alternating along two axes exactly on it. Kicked, they grew to 7,000
+  and 20,000 times the kick in 20,000 steps; 2⁻¹⁶ inside, they swing within 259 times
+  it over 300,000. No room was seen to grow: its walls and the grid's edge keep its
+  highest mode further inside (a rigid box ran 200,000 steps). The 7-point stencil's
+  weights, rounded down, also made a room's uniform pressure swing slowly (0.3 Hz with
+  10 cm cells), which reached into the bands: in a duct, the reflection off an end whose
+  admittance resonates now follows the grid's theory within 0.001 instead of 0.003 from
+  30 to 250 Hz. The wave solver's validation tables move by one in their last digit at
+  most.
 - The wave solver checks its grid against its limit of 40 million cells before it makes
   the weather's fields for it, so a grid too large outdoors in wind or a temperature
   gradient is refused with the message that says what to lower instead of running out
