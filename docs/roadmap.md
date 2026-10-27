@@ -403,6 +403,8 @@ Known issues found by the review of 25 October 2026 (see
 - [x] The mixing time from the listener's room (the detector stays sized for all the
   rooms, which the rays spread over).
 - [x] The real-time convolver writing each block into buffers made before playback starts.
+- [x] A warning when the wave solver's grid is coarser than the default, with how slow
+  its shortest waves travel, and that in each run's details.
 - [x] The wave solver's buffers on a GPU all checked against what it binds, and its
   recording at the listeners kept once.
 - [x] Re-weighting for other absorption (the editor's results after an absorption

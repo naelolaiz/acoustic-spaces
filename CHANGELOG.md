@@ -15,6 +15,15 @@
   a path bends round keep what they did to its phase as traced. `calibrate`'s results
   are unchanged: its fit within a round keeps the traced phases, and each round traces
   again.
+- Below the default 8 cells per wavelength (`simulation.wave.points_per_wavelength`,
+  which takes 5 to 20), the scene's warnings say how much slower the wave solver's
+  shortest waves travel, at the top of its highest band along the grid's axes, where
+  both stencils are slowest: at 5, 1.85 % with the isotropic stencil and 4.56 % with the
+  standard one, against 0.67 % and 1.74 % at 8, so the modes there come out that much
+  low. Each run's details give it for the grid the run took, as `wave_slow_percent` (in
+  wind and temperature, for the slowest sound on it). `engine.wave.slow_by` and
+  `grid_phase` give the stencils' dispersion relation, which a tube's modes at 12, 8
+  and 5 cells per wavelength follow within 2e-5.
 
 ## 4.0.1
 

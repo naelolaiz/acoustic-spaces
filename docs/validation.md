@@ -173,8 +173,9 @@ request and checks:
   screen's diffracted wave, with all four terms of the UTD added in pressure, to
   1e-9;
 - the wave solver, with both stencils where both apply: the modes of a rigid box
-  (within 0.6 Hz), the 19-point stencil's modes along a tube against its dispersion
-  relation (within 0.15 %, less than half the 7-point one's error), the 19-point
+  (within 0.6 Hz), both stencils' modes along a tube at 12, 8 and 5 cells per
+  wavelength as slow as their dispersion relation along an axis says (within 2e-5,
+  the 19-point stencil's error less than half the 7-point one's), the 19-point
   stencil stable for 30,000 steps in a rotated room with a cube and a screen in it,
   the reflection off the end
   of a duct for four admittances (within 0.005, and below 0.05 for a matched end, and

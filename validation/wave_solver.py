@@ -54,6 +54,7 @@ from acoustic_spaces.engine.wave import (
     LAYER_CELLS,
     LAYER_DAMPING,
     STENCILS,
+    grid_phase,
     source_signal,
 )
 from acoustic_spaces.geometry import box_mesh
@@ -138,22 +139,12 @@ def _peak(f: np.ndarray, magnitude: np.ndarray, centre: float, half_width: float
     return float(f[j] + 0.5 * (a - c) / (a - 2 * b + c) * (f[1] - f[0]))
 
 
-#: Each stencil's weights: of an axial link and of an edge link (scaled by the Courant
-#: number squared, as the update uses them).
-WEIGHTS = {7: (1.0 / 3.0, 0.0), 19: (0.25, 0.125)}
-
-
 def grid_frequency(numbers: np.ndarray, size, cell: float, rate: float, stencil: int):
     """The frequencies of a rigid box's modes on the ``stencil``-point grid with the
     walls half a cell past the last centres, from the stencil's dispersion relation
-    2 - 2 cos(w T) = sum over the links of g_k (1 - cos(k . d_k))."""
-    axial, edge = WEIGHTS[stencil]
+    2 - 2 cos(w T) = sum over the links of g_k (1 - cos(k . d_k)) (``grid_phase``)."""
     theta = np.pi * numbers * cell / np.array(size)
-    cos = np.cos(theta)
-    total = 2 * axial * (1 - cos).sum(axis=1)
-    for a, b in ((0, 1), (0, 2), (1, 2)):
-        total += 4 * edge * (1 - cos[:, a] * cos[:, b])
-    return np.arccos(1 - total / 2) * rate / (2 * math.pi)
+    return grid_phase(theta, stencil) * rate / (2 * math.pi)
 
 
 def relation_error(direction, points_per_wavelength: float, stencil: int) -> float:

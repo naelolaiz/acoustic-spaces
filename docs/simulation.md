@@ -415,6 +415,12 @@ simulation:
   wavelength, the same in every direction within 0.03 %. Round open models it takes
   the standard one (7 points), the only one with the matched layer below: up to 1.7 %
   slow, along the grid's axes. `scheme` picks one or the other.
+- Fewer cells per wavelength make the waves slower still, along the grid's axes most:
+  at 5 (the least `points_per_wavelength` takes), 1.85 % with the isotropic stencil and
+  4.56 % with the standard one. Below the default 8, the scene's warnings (`validate`,
+  `simulate` and the editor's) say how slow they are at the top of the highest band.
+  Each run's details give it as `wave_slow_percent`, for the grid the run took (in
+  wind and temperature, for the slowest sound on it).
 - With `device: gpu` the grid is stepped on the GPU instead, through WebGPU: Vulkan,
   Metal or Direct3D 12, so AMD, NVIDIA, Intel and Apple GPUs alike, with the `gpu`
   extra (wgpu); `auto` takes a hardware GPU when wgpu finds one, and the CPU otherwise.
@@ -486,8 +492,8 @@ cells per wavelength); walls on the grid lie within half a cell of the model's, 
 room's modes by a few percent (more `points_per_wavelength` moves them less); waves on
 the grid travel slower the shorter they are, at the top of the highest band with 8
 points per wavelength by 0.67 % in closed rooms and up to 1.7 % round open models
-(along the grid's axes, not at all along its body diagonals), which nothing corrects,
-so the modes there come out up to that much low;
+(along the grid's axes, not at all along its body diagonals; `wave_slow_percent` in the
+run's details), which nothing corrects, so the modes there come out up to that much low;
 sources radiate equally in all directions in the wave bands; and air absorption,
 negligible there, is left out.
 
