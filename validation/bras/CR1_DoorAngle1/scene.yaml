@@ -1,0 +1,29 @@
+# BRAS CR1 (coupled rooms), door at 4.1 degrees, from the BRAS benchmark (Aspöck et al., 2020),
+# DOI 10.14279/depositonce-6726.3, CC BY-SA 4.0.
+# Made by validation/bras/prepare.py: the model converted from SketchUp, the surface
+# data as published (absorption fitted to the measured reverberation time; the
+# initial estimates are in materials/initial), and the dodecahedron loudspeaker and
+# microphone positions of the measured responses.
+name: BRAS CR1 (coupled rooms), door at 4.1 degrees
+geometry:
+  file: CR1_DoorAngle1.obj
+materials:
+  mat_CR1_absorber:
+    file: materials/fitted/mat_CR1_absorber.csv
+  mat_CR1_concrete:
+    file: materials/fitted/mat_CR1_concrete.csv
+  mat_CR1_paintedConcrete:
+    file: materials/fitted/mat_CR1_paintedConcrete.csv
+  mat_CR1_tablesEquipment:
+    file: materials/fitted/mat_CR1_tablesEquipment.csv
+air: {temperature_c: 18.2, humidity_percent: 47.6}
+sources:
+  - {name: LS1, position: [1.5, -2.225, 0.773]}
+  - {name: LS2, position: [-1.77, -2.28, 0.723]}
+listeners:
+  - {name: MP3, position: [-1.205, 0.68, 1.235]}
+  - {name: MP4, position: [-4.35, 0.695, 1.235]}
+simulation:
+  ir_length_s: 8.0
+  seed: 1
+outputs: [mono]

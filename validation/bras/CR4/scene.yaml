@@ -1,0 +1,40 @@
+# BRAS CR4 (auditorium), from the BRAS benchmark (Aspöck et al., 2020),
+# DOI 10.14279/depositonce-6726.3, CC BY-SA 4.0.
+# Made by validation/bras/prepare.py: the model converted from SketchUp, the surface
+# data as published (absorption fitted to the measured reverberation time; the
+# initial estimates are in materials/initial), and the dodecahedron loudspeaker and
+# microphone positions of the measured responses.
+name: BRAS CR4 (auditorium)
+geometry:
+  file: CR4.obj
+materials:
+  mat_CR4_brickwall:
+    file: materials/fitted/mat_CR4_brickwall.csv
+  mat_CR4_concrete:
+    file: materials/fitted/mat_CR4_concrete.csv
+  mat_CR4_linoleum:
+    file: materials/fitted/mat_CR4_linoleum.csv
+  mat_CR4_parquet:
+    file: materials/fitted/mat_CR4_parquet.csv
+  mat_CR4_seating:
+    file: materials/fitted/mat_CR4_seating.csv
+  mat_CR4_whitePanels:
+    file: materials/fitted/mat_CR4_whitePanels.csv
+  mat_CR4_windows:
+    file: materials/fitted/mat_CR4_windows.csv
+  mat_CR4_woodPanels:
+    file: materials/fitted/mat_CR4_woodPanels.csv
+air: {temperature_c: 20.9, humidity_percent: 37.5}
+sources:
+  - {name: LS1, position: [0.0, 4.5, 1.38]}
+  - {name: LS2, position: [-2.8, -4.5, 1.38]}
+listeners:
+  - {name: MP1, position: [8.5, 0.0, 1.09]}
+  - {name: MP2, position: [3.33, -7.95, 0.57]}
+  - {name: MP3, position: [9.33, -6.96, 1.18]}
+  - {name: MP4, position: [5.91, 6.34, 0.83]}
+  - {name: MP5, position: [11.83, 8.43, 1.43]}
+simulation:
+  ir_length_s: 3.0
+  seed: 1
+outputs: [mono]

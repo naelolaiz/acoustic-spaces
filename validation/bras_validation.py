@@ -1,6 +1,8 @@
-"""Validation against measured rooms: the seminar room and the chamber music hall of BRAS.
+"""Validation against measured rooms: the coupled rooms, seminar room, chamber music hall
+and auditorium of BRAS.
 
-    python validation/bras_validation.py [--scenes CR2 CR3] [--materials fitted]
+    python validation/bras_validation.py [--scenes CR1_DoorAngle1 CR2 CR3 CR4]
+                                         [--materials fitted]
                                          [--rays 50000] [--diffraction first_order]
                                          [--bands octave] [--json results.json]
                                          [--plots DIR] [--calibrate [SOURCE ...]]
@@ -8,10 +10,11 @@
     python validation/bras_validation.py --from-json results.json [--plots DIR]
 
 The BRAS benchmark (Aspöck et al., 2020, DOI 10.14279/depositonce-6726.3) measured
-rooms whose geometry and surfaces it describes; ``validation/bras/`` holds two of them
-as scenes, with the parameters of their measured responses (see the README there). Each
-scene is simulated as it stands, and every source and listener pair compared with the
-response measured there, band by band in just noticeable differences
+rooms whose geometry and surfaces it describes; ``validation/bras/`` holds four of them
+as scenes, the coupled rooms once per angle of the door between them, with the
+parameters of their measured responses (see the README there). Each scene is simulated
+as it stands, and every source and listener pair compared with the response measured
+there, band by band in just noticeable differences
 (:func:`acoustic_spaces.compare.compare_parameters`). Both sides are analysed by this
 package. ``--materials initial`` takes BRAS's first estimates of the surfaces instead of
 the absorption it fitted to the measured reverberation time, which is the blind case.
@@ -26,10 +29,14 @@ sources named, only their responses are fitted, and the averages are over the ot
 source's: responses the fit did not see.
 
 The script prints a Markdown table per room: the measured and simulated parameters
-averaged over the ten pairs, and the mean difference in JNDs; then how many of the
-pair-and-band differences from 125 Hz to 4 kHz are within one JND. ``--plots`` draws the
-averages with the JND around the measured ones. Progress goes to standard error: each
-stage of each room's simulation as it starts, with the seconds since the room started.
+averaged over its pairs (ten; four in the coupled rooms), and the mean difference in
+JNDs; then how many of the pair-and-band differences from 125 Hz to 4 kHz are within one
+JND. G has no free-field reference in the measurements, so it is compared from seat to
+seat: each pair's G less the mean over the room's pairs, against each pair's measured
+level less its mean, by the rms difference over the pairs and how many are within one
+JND (1 dB). ``--plots`` draws the averages with the JND around the measured ones.
+Progress goes to standard error: each stage of each room's simulation as it starts, with
+the seconds since the room started.
 """
 
 from __future__ import annotations
@@ -51,8 +58,8 @@ from acoustic_spaces.parameters import RoomParameters
 from acoustic_spaces.scene.model import Material
 
 HERE = Path(__file__).resolve().parent / "bras"
-#: The parameters BRAS measured, and those the responses give besides (G has no
-#: free-field reference in the measurements).
+#: The parameters BRAS measured, and those the responses give besides (G, which has no
+#: free-field reference in the measurements, is compared from seat to seat).
 PARAMETERS = ("edt", "t20", "t30", "c50", "c80", "d50", "ts")
 LABELS = {
     "edt": "EDT (s)",
@@ -103,7 +110,8 @@ def _plain(values: np.ndarray) -> list[float | None]:
 
 
 def measured_parameters(entry: dict) -> RoomParameters:
-    return RoomParameters(**{k: _values(v) for k, v in entry.items()})
+    """The parameters of a measured pair (its level aside)."""
+    return RoomParameters(**{k: _values(v) for k, v in entry.items() if k != "level_db"})
 
 
 def _averages(pairs: dict) -> dict:
@@ -127,6 +135,33 @@ def _averages(pairs: dict) -> dict:
                 "mean_abs_jnd": float(np.abs(middle[compared]).mean()) if compared.any() else None,
             }
     return out
+
+
+def _seat_to_seat(levels: dict) -> dict:
+    """G less the room's mean over its pairs, simulated and measured (``levels``: per
+    pair, the simulated G and the measured level, whose means are taken off the same
+    way), their difference in dB (1 JND) and its rms over the pairs, and how many
+    differences from 125 Hz to 4 kHz are within one JND."""
+    simulated = np.array([g for g, _ in levels.values()])
+    measured = np.array([level for _, level in levels.values()])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # a band no pair has: NaN
+        simulated = simulated - np.nanmean(simulated, axis=0)
+        measured = measured - np.nanmean(measured, axis=0)
+        difference = simulated - measured
+        rms = np.sqrt(np.nanmean(difference**2, axis=0))
+    middle = difference[:, SUMMARY]
+    compared = np.isfinite(middle)
+    return {
+        "pairs": {
+            key: {"simulated": _plain(s), "measured": _plain(m), "difference_db": _plain(d)}
+            for key, s, m, d in zip(levels, simulated, measured, difference, strict=True)
+        },
+        "rms_difference_db": _plain(rms),
+        "within_jnd": int(np.count_nonzero(np.abs(middle[compared]) <= 1.0)),
+        "compared": int(np.count_nonzero(compared)),
+        "mean_abs_db": float(np.abs(middle[compared]).mean()) if compared.any() else None,
+    }
 
 
 def calibrated_scene(
@@ -182,10 +217,12 @@ def validate(
     seconds = time.perf_counter() - start
     progress("done")
     pairs = {}
+    levels = {}
     for key, entry in measured["pairs"].items():
         source, listener = key.split()
         simulated = result[source, listener].parameters()
         pairs[key] = compare_parameters(simulated, measured_parameters(entry)).as_dict()
+        levels[key] = (np.asarray(simulated.g, dtype=float), _values(entry["level_db"]))
     out = {
         "scene": name,
         "name": scene.name,
@@ -197,6 +234,7 @@ def validate(
         "volume_m3": room.volume_m3,
         "bands_hz": list(OCTAVE_BANDS_HZ),
         "pairs": pairs,
+        "g_seat_to_seat": _seat_to_seat(levels),
     }
     if calibration is not None:
         out["calibration"] = calibration
@@ -222,7 +260,7 @@ def calibration_table(result: dict) -> str:
         "|---|" + "---:|" * len(bands),
     ]
     for material, entry in found["materials"].items():
-        short = material.removeprefix(f"mat_{result['scene']}_")
+        short = material.removeprefix(f"mat_{result['scene'].partition('_')[0]}_")
         for key, label in (
             ("initial", "start"),
             ("absorption", "calibrated"),
@@ -278,6 +316,22 @@ def table(result: dict) -> str:
         mean = avg["mean_abs_jnd"]
         share = f"{avg['within_jnd']} of {avg['compared']}"
         lines.append(f"| {LABELS[p]} | {share} | {'-' if mean is None else f'{mean:.1f}'} |")
+    seats = result.get("g_seat_to_seat")
+    if seats is not None:
+        mean = seats["mean_abs_db"]
+        share = f"{seats['within_jnd']} of {seats['compared']}"
+        lines.append(
+            f"| G, seat to seat (dB) | {share} | {'-' if mean is None else f'{mean:.1f}'} |"
+        )
+        cells = ["-" if v is None else f"{v:.1f}" for v in seats["rms_difference_db"]]
+        lines += [
+            "",
+            "| G less the room's mean, simulated - measured | "
+            + " | ".join(_band(f) for f in bands)
+            + " |",
+            "|---|" + "---:|" * len(bands),
+            "| rms over the pairs (dB) | " + " | ".join(cells) + " |",
+        ]
     return "\n".join(lines)
 
 
@@ -304,7 +358,10 @@ def plot(result: dict, path: Path) -> None:
         ax.set_title(LABELS[p])
         ax.grid(alpha=0.3)
         ax.legend(fontsize=7)
-    title = f"{result['name']}, {result['materials']} absorption: averages of ten responses"
+    title = (
+        f"{result['name']}, {result['materials']} absorption: averages of "
+        f"{len(result['pairs'])} responses"
+    )
     if "calibration" in result:
         count = sum(
             k.split()[0] in result.get("averaged_over", [k.split()[0]]) for k in result["pairs"]
@@ -320,7 +377,7 @@ def plot(result: dict, path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--scenes", nargs="+", default=["CR2", "CR3"])
+    parser.add_argument("--scenes", nargs="+", default=["CR1_DoorAngle1", "CR2", "CR3", "CR4"])
     parser.add_argument("--materials", choices=["fitted", "initial"], default="fitted")
     parser.add_argument("--rays", type=int, help="late rays (default: the scene's)")
     parser.add_argument("--diffraction", choices=["none", "direct", "first_order"])
