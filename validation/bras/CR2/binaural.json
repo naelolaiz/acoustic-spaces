@@ -1,0 +1,64 @@
+{
+ "scene": "CR2",
+ "source": "BRAS benchmark (Aspöck, Brinkmann, Ackermann, Weinzierl, Vorländer, 2020), DOI 10.14279/depositonce-6726.3, CC BY-SA 4.0",
+ "responses": "CR2_BRIRs.sofa: FABIAN, a head and torso simulator, its head straight on the torso (view 0, 0 degrees), facing LS7; one QSC K8 loudspeaker at a time",
+ "setup": "positions from CR2_BRIRs.sofa (the loudspeakers' tweeters), yaw and pitch from the labels of CR2_BRIR.skp",
+ "analysis": "acoustic_spaces.parameters.interaural_cross_correlation: IEC octave filters; IACC_E from the direct sound to 80 ms, IACC_L from there to the end (ISO 3382-1, annex B)",
+ "sample_rate": 44100.0,
+ "bands_hz": [63, 125, 250, 500, 1000, 2000, 4000, 8000],
+ "listener": {
+  "name": "FABIAN",
+  "position": [0.0, 2.026, 1.23],
+  "yaw": 270.0,
+  "pitch": 0.0
+ },
+ "sources": {
+  "LS3": {
+   "position": [1.498, -1.974, 1.026],
+   "yaw": 110.5,
+   "pitch": 2.7
+  },
+  "LS4": {
+   "position": [0.758, -3.17, 1.026],
+   "yaw": 98.3,
+   "pitch": 2.2
+  },
+  "LS5": {
+   "position": [-0.746, -3.17, 1.03],
+   "yaw": 81.8,
+   "pitch": 2.2
+  },
+  "LS6": {
+   "position": [-1.502, -1.974, 0.816],
+   "yaw": 69.4,
+   "pitch": 5.5
+  },
+  "LS7": {
+   "position": [0.0, -1.974, 1.5],
+   "yaw": 90.0,
+   "pitch": 0.0
+  }
+ },
+ "iacc": {
+  "LS3": {
+   "iacc_e": [0.9816, 0.8643, 0.5357, 0.5383, 0.3325, 0.4449, 0.3127, 0.2072],
+   "iacc_l": [0.9638, 0.9049, 0.4504, 0.1205, 0.1343, 0.055, 0.072, 0.053]
+  },
+  "LS4": {
+   "iacc_e": [0.9598, 0.9101, 0.6182, 0.334, 0.3623, 0.3898, 0.4373, 0.2118],
+   "iacc_l": [0.9161, 0.9302, 0.5399, 0.1772, 0.1229, 0.0636, 0.0598, 0.072]
+  },
+  "LS5": {
+   "iacc_e": [0.9511, 0.8977, 0.7716, 0.3693, 0.3738, 0.3979, 0.3219, 0.099],
+   "iacc_l": [0.8703, 0.8551, 0.6583, 0.1436, 0.0779, 0.0624, 0.0468, 0.0584]
+  },
+  "LS6": {
+   "iacc_e": [0.9394, 0.8871, 0.4653, 0.1649, 0.2741, 0.3503, 0.2988, 0.1958],
+   "iacc_l": [0.9254, 0.8696, 0.5141, 0.1696, 0.1369, 0.0826, 0.0656, 0.0652]
+  },
+  "LS7": {
+   "iacc_e": [0.9789, 0.9655, 0.9336, 0.4712, 0.5297, 0.5053, 0.4217, 0.214],
+   "iacc_l": [0.9552, 0.9321, 0.5558, 0.076, 0.0568, 0.095, 0.0805, 0.0618]
+  }
+ }
+}

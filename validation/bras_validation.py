@@ -34,7 +34,10 @@ JNDs; then how many of the pair-and-band differences from 125 Hz to 4 kHz are wi
 JND. G has no free-field reference in the measurements, so it is compared from seat to
 seat: each pair's G less the mean over the room's pairs, against each pair's measured
 level less its mean, by the rms difference over the pairs and how many are within one
-JND (1 dB). ``--plots`` draws the averages with the JND around the measured ones.
+JND (1 dB). Where the late rays were traced in batches, the summary's last column is
+the largest standard error of a simulated parameter over the pairs from 125 Hz to 4 kHz,
+in JNDs: how much the simulation itself would change with another seed. ``--plots``
+draws the averages with the JND around the measured ones.
 Progress goes to standard error: each stage of each room's simulation as it starts, with
 the seconds since the room started.
 """
@@ -52,7 +55,7 @@ import numpy as np
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.calibration import calibrate
-from acoustic_spaces.compare import JND, SUMMARY_BANDS_HZ, compare_parameters
+from acoustic_spaces.compare import JND, SUMMARY_BANDS_HZ, compare_parameters, in_jnds
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import RoomParameters
 from acoustic_spaces.scene.model import Material
@@ -134,6 +137,11 @@ def _averages(pairs: dict) -> dict:
                 "compared": int(np.count_nonzero(compared)),
                 "mean_abs_jnd": float(np.abs(middle[compared]).mean()) if compared.any() else None,
             }
+        errors = [pair["parameters"][p].get("standard_error_jnd") for pair in pairs.values()]
+        if all(e is not None for e in errors):
+            errors = np.array([_values(e) for e in errors])[:, SUMMARY]
+            known = errors[np.isfinite(errors)]
+            out[p]["largest_standard_error_jnd"] = float(known.max()) if known.size else None
     return out
 
 
@@ -220,8 +228,14 @@ def validate(
     levels = {}
     for key, entry in measured["pairs"].items():
         source, listener = key.split()
-        simulated = result[source, listener].parameters()
+        response = result[source, listener]
+        simulated = response.parameters()
         pairs[key] = compare_parameters(simulated, measured_parameters(entry)).as_dict()
+        errors = response.standard_errors()
+        if errors is not None:
+            for p, values in in_jnds(simulated, errors).items():
+                if p in pairs[key]["parameters"]:
+                    pairs[key]["parameters"][p]["standard_error_jnd"] = _plain(values)
         levels[key] = (np.asarray(simulated.g, dtype=float), _values(entry["level_db"]))
     out = {
         "scene": name,
@@ -306,22 +320,29 @@ def table(result: dict) -> str:
             lines.append(f"| {LABELS[p]} {label} | " + " | ".join(cells) + " |")
         cells = ["-" if v is None else f"{v:+.1f}" for v in avg["difference_jnd"]]
         lines.append(f"| {LABELS[p]} JNDs | " + " | ".join(cells) + " |")
+    errors = all("largest_standard_error_jnd" in result["average"][p] for p in PARAMETERS)
     lines += [
         "",
-        "| | within 1 JND, 125 Hz to 4 kHz | mean abs. difference (JNDs) |",
-        "|---|---:|---:|",
+        "| | within 1 JND, 125 Hz to 4 kHz | mean abs. difference (JNDs) |"
+        + (" largest standard error (JNDs) |" if errors else ""),
+        "|---|---:|---:|" + ("---:|" if errors else ""),
     ]
     for p in PARAMETERS:
         avg = result["average"][p]
         mean = avg["mean_abs_jnd"]
         share = f"{avg['within_jnd']} of {avg['compared']}"
-        lines.append(f"| {LABELS[p]} | {share} | {'-' if mean is None else f'{mean:.1f}'} |")
+        line = f"| {LABELS[p]} | {share} | {'-' if mean is None else f'{mean:.1f}'} |"
+        if errors:
+            largest = avg["largest_standard_error_jnd"]
+            line += f" {'-' if largest is None else f'{largest:.2f}'} |"
+        lines.append(line)
     seats = result.get("g_seat_to_seat")
     if seats is not None:
         mean = seats["mean_abs_db"]
         share = f"{seats['within_jnd']} of {seats['compared']}"
         lines.append(
             f"| G, seat to seat (dB) | {share} | {'-' if mean is None else f'{mean:.1f}'} |"
+            + (" |" if errors else "")
         )
         cells = ["-" if v is None else f"{v:.1f}" for v in seats["rms_difference_db"]]
         lines += [
