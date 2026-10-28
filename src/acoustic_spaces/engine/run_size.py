@@ -191,18 +191,21 @@ def late_call(
     threads: int,
     rays: int,
     devices: Sequence[str] = ("cpu",),
+    estimates: float = 0.0,
 ) -> float:
     """Bytes one run of the late part's tracer takes at its peak, whose arrays take
     ``results`` bytes in ``bands`` bands traced in ``groups`` groups of bands
-    (:func:`~acoustic_spaces.engine.late.band_groups`): the arrays the groups are joined
-    in, the first batch's while the second is traced (``splitting``), and a group's
-    own, on the worst of ``devices``: on the CPU with its threads' copies (at most
-    ``_native.COPY_MEMORY`` together, one at least), on a GPU with its buffers
+    (:func:`~acoustic_spaces.engine.late.band_groups`), and the energy as each batch of
+    rays gives it ``estimates``: the arrays the groups are joined in, the sums of the
+    runs before while the next is traced (``splitting``: a first batch, or batches
+    traced in runs), a group's estimates, and a group's own arrays, on the worst of
+    ``devices``: on the CPU with its threads' copies (at most ``_native.COPY_MEMORY``
+    together, one at least), on a GPU with its buffers
     (:func:`~acoustic_spaces.engine.gpu_tracer.run_memory`), or on both with the sums of
     the parts and a part on each."""
     group = results / groups
-    joined = results if groups > 1 else 0.0
-    first = group if splitting else 0.0
+    joined = results + estimates if groups > 1 else 0.0
+    first = group + estimates / groups if splitting else 0.0
     workers = worker_threads(threads)
     from acoustic_spaces import _native
 
@@ -267,8 +270,9 @@ def simulation_need(
     (:func:`late_call`, on the devices :func:`late_devices` gives). Then, for a source
     with a feed of its own, a listener's copy at a time while its response takes it (four
     arrays as large at most). ``groups`` face groups (``simulate(groups=...)``) add
-    their moments to each listener's arrays."""
-    from acoustic_spaces.engine.late import DIRECTION_STEP, MOMENT_STEP
+    their moments to each listener's arrays, and batches of rays (``late.batches``)
+    the energy as each gives it."""
+    from acoustic_spaces.engine.late import BATCH_STEP, DIRECTION_STEP, MOMENT_STEP
     from acoustic_spaces.engine.simulate import TIME_STEP, is_fed, response_length
 
     bands = len(band_centres(settings.bands))
@@ -296,18 +300,26 @@ def simulation_need(
         terms = 1 + groups + groups * (groups + 1) // 2
         values += terms * math.ceil(length / MOMENT_STEP - 1e-9)
     results = float(count * bands * values * VALUE_BYTES)
+    coarse = math.ceil(length / BATCH_STEP - 1e-9)
+    estimates = float(count * bands * late.batches * coarse * VALUE_BYTES)
+    if late.batches < 2:
+        estimates = 0.0
     call = late_call(
         results,
         bands,
         _band_groups(room, settings),
-        splitting=late.splitting,
+        # Batches traced in runs hold their sums while the next run is traced.
+        splitting=late.splitting or late.batches > 1,
         threads=threads,
         rays=late.rays,
         devices=late_devices(late.device),
+        estimates=estimates,
     )
+    results += estimates
     what += f", {directions} arrival directions)"
     advice = (
-        "lower simulation.ir_length_s, simulation.late.directions, the listeners or the sources"
+        "lower simulation.ir_length_s, simulation.late.directions, simulation.late.batches, "
+        "the listeners or the sources"
     )
     need = max(held * results + call, (len(sources) + feeding) * results)
     return Need(need, what, advice)

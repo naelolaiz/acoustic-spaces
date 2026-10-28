@@ -64,6 +64,9 @@ JND: dict[str, tuple[float, bool]] = {
 }
 #: The octave bands the mean difference of each parameter is taken over (Hz).
 SUMMARY_BANDS_HZ: tuple[int, ...] = (125, 250, 500, 1000, 2000, 4000)
+#: The standard error, in JNDs, past which more rays would be worth tracing: the
+#: parameter would change by about a JND or more between runs with other seeds.
+CONVERGED_JND = 0.5
 
 
 @dataclass
@@ -302,6 +305,22 @@ def compare_parameters(simulated: RoomParameters, measured: RoomParameters) -> C
     return _compare(simulated, measured)
 
 
+def in_jnds(values: RoomParameters, errors: RoomParameters) -> dict[str, np.ndarray]:
+    """``errors`` of ``values`` (such as their standard errors,
+    :meth:`~acoustic_spaces.engine.response.Response.standard_errors`) in JNDs, for each
+    parameter with a JND, per octave band; a relative JND is taken of the value itself.
+    NaN where either is undefined."""
+    out = {}
+    for name, (step, relative) in JND.items():
+        value = np.asarray(getattr(values, name), dtype=float)
+        error = np.asarray(getattr(errors, name), dtype=float)
+        jnd = step * np.abs(value) if relative else np.full(value.shape, step)
+        ok = np.isfinite(value) & np.isfinite(error) & (jnd > 0)
+        out[name] = np.full(value.shape, math.nan)
+        out[name][ok] = error[ok] / jnd[ok]
+    return out
+
+
 def compare_impulse_responses(
     simulated: np.ndarray,
     simulated_rate: float,
@@ -336,10 +355,12 @@ def compare_impulse_responses(
 
 
 __all__ = [
+    "CONVERGED_JND",
     "JND",
     "SUMMARY_BANDS_HZ",
     "Comparison",
     "ParameterComparison",
     "compare_impulse_responses",
     "compare_parameters",
+    "in_jnds",
 ]

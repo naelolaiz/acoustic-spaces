@@ -387,7 +387,11 @@ def _mix_listeners(late: late_stage.LateEnergy, weights: np.ndarray) -> late_sta
         return np.einsum("lt,t...->l...", weights, a) if a.size else a
 
     return dataclasses.replace(
-        late, energy=mix(late.energy), directional=mix(late.directional), moments=mix(late.moments)
+        late,
+        energy=mix(late.energy),
+        directional=mix(late.directional),
+        moments=mix(late.moments),
+        batches=mix(late.batches),
     )
 
 
@@ -402,11 +406,14 @@ def _mix_sources(
             return parts[0]
         return np.einsum("t,t...->...", np.asarray(weights, dtype=float), np.array(parts))
 
+    # Batches only where every source has as many.
+    batches = {late.batches.shape for late in lates}
     return dataclasses.replace(
         lates[0],
         energy=mix("energy"),
         directional=mix("directional"),
         moments=mix("moments"),
+        batches=mix("batches") if len(batches) == 1 else np.zeros((0, 0, 0, 0)),
         rays=0,
         escaped_rays=0,
         traced_rays=0,
@@ -680,6 +687,7 @@ def simulate(
                 threads=threads,
                 groups=groups,
                 device=late_device,
+                batches=late_cfg.batches,
             )
             if late.plan is not None and late_device != "cpu":
                 say(f"{label}: late rays traced on {_where(late.plan)}")
@@ -726,6 +734,7 @@ def simulate(
                 total.energy += found[2].energy
                 total.directional += found[2].directional
                 total.moments += found[2].moments
+                total.batches += found[2].batches
                 found = (found[0], found[1], None)
             traced.append(found)
         direct = np.min([t[0] for t in traced], axis=0)
@@ -743,6 +752,7 @@ def simulate(
                 late.energy *= share
                 late.directional *= share
                 late.moments *= share
+                late.batches *= share
 
         waves: list = [None] * len(chosen_listeners)
         if settings.wave.enabled:
@@ -815,6 +825,8 @@ def simulate(
                 source_direction=_towards(src, listener_pos[k]),
                 late_moments=late.moments[k] if late.moments.size else np.zeros((0, 0, 0)),
                 moment_step=late.moment_step,
+                late_batches=late.batches[k] if late.batches.size else np.zeros((0, 0, 0)),
+                batch_step=late.batch_step,
                 free_field=None if free_field is None else free_field[k],
             )
             if fed:

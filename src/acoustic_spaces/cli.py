@@ -1165,6 +1165,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             f"{_early_text(response.early)}{wave}"
         )
         print(RoomParameters.from_dict(entry["parameters"]).table())
+        if "standard_errors" in entry:
+            print(_convergence_text(entry, len(response.late_batches)))
         print(_level_text(entry))
         for line in _outdoor_lines(entry, result.removed):
             print(line)
@@ -1208,6 +1210,40 @@ def _level_text(entry: dict) -> str:
     """One line: the A-weighted sound pressure level and that of each octave band."""
     bands = " ".join(_number(v, ".1f") for v in entry["spl_db"])
     return f"SPL {_number(entry['spl_a_db'], '.1f')} dB(A); per octave band, dB: {bands}"
+
+
+def _convergence_text(entry: dict, batches: int) -> str:
+    """One line: the largest standard error of the parameters in JNDs from 125 Hz to
+    4 kHz, from ``batches`` batches of rays, and more rays to trace when it is over
+    ``CONVERGED_JND``."""
+    from acoustic_spaces.compare import CONVERGED_JND, SUMMARY_BANDS_HZ, in_jnds
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+    from acoustic_spaces.parameters import RoomParameters, _band_label, _symbol
+
+    errors = in_jnds(
+        RoomParameters.from_dict(entry["parameters"]),
+        RoomParameters.from_dict(entry["standard_errors"]),
+    )
+    bands = [OCTAVE_BANDS_HZ.index(hz) for hz in SUMMARY_BANDS_HZ]
+    found = [
+        (float(errors[name][b]), name, b)
+        for name in errors
+        for b in bands
+        if math.isfinite(errors[name][b])
+    ]
+    text = f"standard errors from {batches} batches of rays: "
+    if not found:
+        return text + "none from 125 Hz to 4 kHz"
+    value, name, band = max(found)
+    text += (
+        f"at most {value:.2f} JND from 125 Hz to 4 kHz "
+        f"({_symbol(name)} at {_band_label(OCTAVE_BANDS_HZ[band])})"
+    )
+    if value > CONVERGED_JND:
+        text += (
+            "; more rays (simulation.late.rays) would change the parameters less from seed to seed"
+        )
+    return text
 
 
 def _outdoor_lines(entry: dict, removed) -> list[str]:

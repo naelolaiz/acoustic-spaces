@@ -446,7 +446,6 @@ Known issues found by the review of 25 October 2026 (see
   kept after 50 ms, the tracer's reflection counts in 32 bits, and `from_impulse_response`
   and `wave_responses` checking what they are given. The others were not borne out, or
   only a direct caller of the native module can reach them.
-- [ ] Uncertainty: how much each parameter scatters over seeds, as a standard error.
 - [x] CI: type checks, sanitizers for the native code and the tests' coverage.
 - [ ] Type checks passing in the modules that did not when they began (listed in
   `pyproject.toml`), a few at a time.
@@ -457,4 +456,8 @@ Known issues found by the review of 25 October 2026 (see
 
 Next version:
 
+- [x] Uncertainty: each parameter's standard error, how much it would change between
+  runs with other seeds, from the late rays traced in batches (a jackknife over them),
+  in `parameters.json`, `simulate`'s output and the editor's results; checked against
+  the spread over seeds.
 - [x] EDT's line fit always from the onset, however the energy is summed.

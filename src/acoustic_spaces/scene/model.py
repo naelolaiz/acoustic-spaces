@@ -2417,6 +2417,18 @@ class LateStage(_Model):
             "carry much less (unbiased); keeps late tails smooth where few rays survive"
         ),
     )
+    batches: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description=(
+            "stochastic ray tracing only: the batches the rays are traced in, each with "
+            "the rays' random streams of its own (the same rays as in one, so the same "
+            "result but for rounding); with 2 or more, each parameter gets a standard "
+            "error from how the batches differ: how much it would change between runs "
+            "with other seeds"
+        ),
+    )
     device: Literal["cpu", "gpu", "both", "auto"] | None = Field(
         default=None,
         description=(

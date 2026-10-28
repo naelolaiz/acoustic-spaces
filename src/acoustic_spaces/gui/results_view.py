@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from acoustic_spaces.compare import CONVERGED_JND, in_jnds
 from acoustic_spaces.gui.inspector import BAND_LABELS
 from acoustic_spaces.gui.levels import level_colour
 from acoustic_spaces.gui.numbers import fmt, number_text
@@ -593,6 +594,50 @@ class ResultsPanel(QWidget):
                 self.table.setItem(row, col, item)
             self.table.setRowHidden(row, row > 8 and not np.isfinite(values).any())
         self._flag_decays(parameters)
+        self._flag_errors(parameters, response)
+
+    def _flag_errors(self, parameters, response) -> None:
+        """Each parameter's standard error in its tip, where the late rays were traced
+        in batches; amber where it is more than ``CONVERGED_JND``."""
+        errors = response.standard_errors()
+        if errors is None:
+            return
+        colour = level_colour(self.table, "warning")
+        jnds = in_jnds(parameters, errors)
+        batches = len(response.late_batches)
+        for row, (name, _label, template) in enumerate(ROWS):
+            if not hasattr(errors, name):
+                continue
+            values = getattr(errors, name) * (1e3 if name == "ts" else 1.0)
+            for col, value in enumerate(values):
+                item = self.table.item(row, col)
+                if item is None or not np.isfinite(value):
+                    continue
+                tip = fmt(
+                    # Translators: {error} is a number in the parameter's unit.
+                    ngettext(
+                        "Standard error {error}, from {count} batch of rays",
+                        "Standard error {error}, from {count} batches of rays",
+                        batches,
+                    ),
+                    error=number_text(template.format(value)),
+                    count=batches,
+                )
+                jnd = jnds.get(name)
+                if jnd is not None and jnd[col] > CONVERGED_JND:
+                    item.setForeground(colour)
+                    tip = fmt(
+                        # Translators: {tip} is the standard error's sentence; {jnd} a
+                        # number.
+                        _(
+                            "{tip}: {jnd:.1f} JND, so the value can change noticeably "
+                            "between runs with other seeds; more rays per band make the error "
+                            "smaller"
+                        ),
+                        tip=tip,
+                        jnd=float(jnd[col]),
+                    )
+                item.setToolTip(f"{item.toolTip()}. {tip}")
 
     def _flag_decays(self, parameters) -> None:
         """Amber for the checks of ISO 3382-2 past their limits, and for the decay times

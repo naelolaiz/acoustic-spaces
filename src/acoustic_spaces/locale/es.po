@@ -4801,6 +4801,20 @@ msgstr ""
 "reverberación"
 
 #: acoustic_spaces/gui/inspector.py
+msgid ""
+"How many batches the rays are traced in: the same rays as in one, and so the "
+"same result but for rounding. From 2, each parameter gets a standard error "
+"from how the batches differ, which the results show: how much it would "
+"change between runs with other seeds (10 batches take about 10 to 15 % "
+"longer)"
+msgstr ""
+"En cuántos lotes se trazan los rayos: los mismos rayos que en uno solo, y "
+"por tanto el mismo resultado salvo por el redondeo. A partir de 2, cada "
+"parámetro recibe un error estándar según lo que difieren los lotes, que "
+"muestran los resultados: cuánto cambiaría entre cálculos con otras semillas "
+"(10 lotes tardan alrededor de un 10 a 15 % más)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Split strong rays, thin out weak ones"
 msgstr "Dividir los rayos fuertes y descartar parte de los débiles"
 
@@ -4841,6 +4855,10 @@ msgstr "Recepción"
 #: acoustic_spaces/gui/inspector.py
 msgid "Arrival directions"
 msgstr "Direcciones de llegada"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Batches"
+msgstr "Lotes"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Run on"
@@ -6705,6 +6723,24 @@ msgstr ""
 #, python-brace-format
 msgid "{tip}. Not defined for this response"
 msgstr "{tip}. No definido para esta respuesta"
+
+#. Translators: {error} is a number in the parameter's unit.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "Standard error {error}, from {count} batch of rays"
+msgid_plural "Standard error {error}, from {count} batches of rays"
+msgstr[0] "Error estándar {error}, de {count} lote de rayos"
+msgstr[1] "Error estándar {error}, de {count} lotes de rayos"
+
+#. Translators: {tip} is the standard error's sentence; {jnd} a number.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"{tip}: {jnd:.1f} JND, so the value can change noticeably between runs with "
+"other seeds; more rays per band make the error smaller"
+msgstr ""
+"{tip}: {jnd:.1f} JND, así que el valor puede cambiar de forma perceptible "
+"entre cálculos con otras semillas; más rayos por banda reducen el error"
 
 #. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
 #: acoustic_spaces/gui/results_view.py

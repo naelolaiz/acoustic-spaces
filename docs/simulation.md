@@ -43,6 +43,29 @@ or in a corner. Sound that bends round edges is added to them (see
   reference by 0.5 to 2 dB per band instead of 1 to 8 dB at 100k rays (1 to 4 dB
   instead of 4 to 17 dB at 10k), for about 1.5 times the run time.
 
+  The rays are traced in `batches` (10 by default), each with the random streams of
+  its share of the rays: the same rays as at once, so the same result but for rounding
+  (which can tip a split or a roulette the other way). From 2 batches on, the
+  parameters get standard errors, one standard deviation of how much each would change
+  between runs with other seeds: a jackknife leaves out each batch in turn and takes
+  the spread of the parameters. `acoustic-spaces simulate` prints the largest in JNDs
+  from 125 Hz to 4 kHz and suggests more rays when it is over half a JND;
+  `parameters.json` holds them all (`standard_errors`), and the editor shows each in
+  the results table's tips, amber over half a JND. The early paths and the wave solver's
+  bands do not depend on the seed and add none; the parameters from the directions the
+  late energy arrives from (LF, LFC, LJ, the decay times along the listener's axes) get
+  none. Over 60 seeds in a diffuse box (2,000 rays), the root mean square of the
+  standard errors of EDT, T30, C80 and G came within 0.91 to 1.18 of the spread between
+  the runs from 125 Hz to 4 kHz, and within 0.7 to 1.4 over 20 seeds in the shoebox
+  example at its 50,000 rays. With few
+  rays in a room whose late tail rides on a few rays, one strong arrival (a ray through
+  the listener's sphere long after the rest) comes in some runs and not in others: the
+  standard errors are then right on average over runs but low in most of them (those of
+  T20 and T30 about 0.5 to 0.9 of the spread in the shoebox at 2,000 rays). Batches cost
+  time, as each batch's run sums its threads' copies of the results: 10 made the late
+  part 10 to 16 % slower in the shoebox and concert hall examples on 4 cores, and no
+  slower on one thread; `batches: 1` traces the rays at once, without standard errors.
+
   Nearly all of the run time goes into ray queries: which surface a ray meets next,
   and whether each listener can see a reflection (see [Performance](#performance)).
 - `statistical`: the reflected energy of Barron's revised theory, an exponential
@@ -552,7 +575,8 @@ acoustic-spaces simulate validation/bras/CR3/scene.yaml --out cr3 --threads 3
 Before a simulation or a coverage map starts, the memory of its late part is estimated
 (`engine.run_size`): the energy at every listener (or map point), band and millisecond
 of the response, and at a listener, every 10 ms, for each arrival direction
-(`late.directions`), for every source until the run ends; and while a source is traced,
+(`late.directions`) and as each batch of rays gives it (`late.batches`), for every
+source until the run ends; and while a source is traced,
 the tracer's own. On the CPU that is a copy of the results for each thread that sums
 rays, 256 MiB at most together (one thread at least, however large the copy): a run
 whose copies would take more runs on fewer threads, and more slowly. The examples'
@@ -562,8 +586,15 @@ band at a time; with one ray for all eight octave bands, 20 listeners and respon
 a GPU built into the processor takes from the computer's memory. With `late.device`
 gpu, both or auto (auto only where there is a hardware GPU), the estimate takes the
 worst of the CPU, the GPU and the two together. So the memory grows with
-`simulation.ir_length_s`, the listeners, `late.directions`, the sources and their points,
-and the map points (`coverage.spacing`). On the CPU the rays cost time, not memory.
+`simulation.ir_length_s`, the listeners, `late.directions`, `late.batches`, the sources
+and their points, and the map points (`coverage.spacing`). On the CPU the rays cost
+time, not memory. The 10 batches of the default add about an eighth to the late part's
+memory with 64 arrival directions: in the estimate, the late part of `stadium_pa` at 8 s
+went from 537 to 607 MiB and `orchestra`'s at 6 s from 669 to 759 MiB; measured on 4
+threads, the whole runs went from 544 to 635 MiB and from 729 to 820 MiB. `orchestra`'s
+grew as estimated, `stadium_pa`'s by 21 MiB more, as the batches' many smaller arrays
+leave the memory allocator more to hold (with glibc's mmap threshold fixed at 128 KiB,
+that run grew by 75 MiB against the estimate's 70).
 
 A run that would need more memory than the computer has (or than its container may
 use: on Linux, the lowest limit on the process's control groups and on those above
@@ -585,8 +616,8 @@ and in third-octave bands each listener's starts from less than 0.9 GiB. On the 
 the estimate came within 1 MiB of the late part's measured peak in `shoebox` at 1, 4
 and 64 threads (4 cores), with
 responses of 30 to 480 s and both kinds of scattering. Whole runs peaked a little above
-it: `stadium_pa` at 8 s (15 sources, 9 listeners) at 547 MiB against 537, `orchestra` at
-6 s at 723 MiB against 669. Traced on a software GPU (SwiftShader's Vulkan), the late
+it: `stadium_pa` at 8 s (15 sources, 9 listeners) at 635 MiB against 607, `orchestra` at
+6 s at 820 MiB against 759 (544 against 537 and 729 against 669 in one batch). Traced on a software GPU (SwiftShader's Vulkan), the late
 part peaked 60 to 100 MiB above the GPU's estimate, the driver's own. With both, the
 estimate takes the CPU's part and the GPU's at their peaks at once, which those runs
 never reached: up to 1.5 times what they used.

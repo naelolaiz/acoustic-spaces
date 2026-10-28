@@ -208,6 +208,69 @@ def test_splitting_leaves_a_diffuse_box_alone(diffuse_result) -> None:
         np.testing.assert_allclose(b.t30, a.t30, rtol=0.01)
 
 
+def test_batches_trace_the_same_rays() -> None:
+    # Each ray keeps its random stream in whatever batch it is traced; without splitting
+    # only the order of summation differs, with it rounding may tip a split or a roulette.
+    for splitting in (False, True):
+        settings = {"late": {"rays": 3000, "splitting": splitting}, "ir_length_s": 0.5}
+        one = simulate(_diffuse_box({**settings, "late": {**settings["late"], "batches": 1}}))
+        ten = simulate(_diffuse_box({**settings, "late": {**settings["late"], "batches": 10}}))
+        for key, response in ten.responses.items():
+            assert one[key].late_batches.shape[0] == 0
+            assert one[key].standard_errors() is None
+            batches = response.late_batches
+            assert batches.shape == (10, 8, 50)
+            # Their mean is the late energy, in slots of 10 ms.
+            coarse = response.late.reshape(8, 50, 10).sum(axis=-1)
+            np.testing.assert_allclose(batches.mean(axis=0), coarse, rtol=1e-12, atol=0)
+            if splitting:
+                # A tipped split moved EDT at 1 kHz by 0.2 % here.
+                a, b = one[key].parameters(), response.parameters()
+                np.testing.assert_allclose(b.g, a.g, atol=1e-3)
+                np.testing.assert_allclose(b.edt, a.edt, rtol=0.01)
+            else:
+                np.testing.assert_allclose(response.late, one[key].late, rtol=1e-12, atol=0)
+
+
+def test_standard_errors_match_the_spread_over_seeds() -> None:
+    # The jackknife over one run's batches against the spread of 30 runs with other
+    # seeds, from 125 Hz to 4 kHz (with 60 runs the ratios came within 0.91 to 1.18).
+    values, errors = [], []
+    for seed in range(30):
+        room = _diffuse_box({"late": {"rays": 2000}, "ir_length_s": 1.0, "seed": seed})
+        response = simulate(room)["s", "l1"]
+        values.append(response.parameters())
+        errors.append(response.standard_errors())
+    for name in ("edt", "t30", "c80", "g"):
+        spread = np.std([getattr(v, name)[1:7] for v in values], axis=0, ddof=1)
+        error = np.sqrt(np.mean([getattr(e, name)[1:7] ** 2 for e in errors], axis=0))
+        ratio = error / spread
+        assert 0.8 < ratio.mean() < 1.25, (name, ratio)
+        assert np.all((ratio > 0.6) & (ratio < 1.6)), (name, ratio)
+    # Those from the directions the energy arrives from have none.
+    assert np.all(np.isnan(errors[0].lf)) and np.all(np.isnan(errors[0].t30_x))
+
+
+def test_standard_errors_take_the_feed_and_new_absorption_along() -> None:
+    room = _diffuse_box({"late": {"rays": 2000}, "ir_length_s": 1.0})
+    groups = np.zeros(len(room.mesh.faces), dtype=np.int64)
+    response = simulate(room, groups=groups)["s", "l1"]
+    errors = response.standard_errors()
+    # The feed changes neither the decay nor G (taken against the source as fed); a whole
+    # number of slots late, it moves the batches as it moves the rest.
+    fed = response.fed(np.full(8, 3.0), 0.02).standard_errors()
+    for name in ("edt", "t30", "c80", "g"):
+        np.testing.assert_allclose(getattr(fed, name), getattr(errors, name), rtol=1e-6)
+    # More absorption re-weights the batches with the rest: the decays shorten, and so
+    # do their standard errors, about as much.
+    old = np.array([[0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.3, 0.3]])  # as _diffuse_box has it
+    new = 1.5 * old
+    louder = response.reweighted(groups, np.log((1 - new) / (1 - old)), (old, new))
+    shorter = (louder.parameters().t30 / response.parameters().t30)[1:]  # 1 s: none at 63 Hz
+    assert np.all(shorter < 0.7)
+    np.testing.assert_allclose((louder.standard_errors().t30 / errors.t30)[1:], shorter, rtol=0.5)
+
+
 #: Late energy (dB, 100 ms windows from 0.5 to 2.5 s) at 500 Hz, 1 kHz and 2 kHz in the
 #: shoebox example, from 1 million rays with splitting; 2 million without agree within
 #: 0.3 to 0.9 dB.

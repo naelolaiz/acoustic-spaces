@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Standard errors: the late rays are traced in batches (`simulation.late.batches`, 10
+  by default; **Batches** in the editor), each with the random streams of its share of
+  the rays: the same rays as at once, with the same result but for rounding, which can
+  tip a split or a roulette the other way. A jackknife over the batches gives each
+  parameter its standard error, one standard deviation of how much it would change
+  between runs with other seeds: in `parameters.json` (`standard_errors`), as the
+  largest in JNDs from 125 Hz to 4 kHz in `simulate`'s output (with a suggestion of
+  more rays when it is over half a JND, `compare.CONVERGED_JND`), and in the tips of
+  the editor's results, amber over half a JND (`Response.standard_errors()`,
+  `compare.in_jnds()`). Over 60 seeds of a diffuse box, their root mean square came
+  within 0.91 to 1.18 of the spread between the runs. The 10 batches make the late part 10 to 16 % slower in
+  the shoebox and concert hall examples on 4 cores and take about an eighth more of its
+  memory, which the estimate of a run's memory includes; `batches: 1` traces the rays
+  at once.
 - EDT's line fit starts at the onset in every response. The decay curve was taken
   against the response's total, summed in another order than the curve, so it started
   a rounding above or below 0 dB, and above it the fit left out the slot holding the

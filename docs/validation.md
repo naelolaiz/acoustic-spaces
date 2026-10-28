@@ -37,6 +37,14 @@ request and checks:
   scattering) from 10k rays with splitting against 1 million rays: within 4 dB on
   average from 0.5 to 2.5 s, and splitting or thinning out every ray keeps the energy
   of plain ray tracing;
+- the late rays in batches: the same late energy as at once (to rounding without
+  splitting; with it, a tipped split moved EDT by at most 0.2 %), and the batches'
+  mean is the late energy; standard errors (a jackknife over 10 batches, 2,000 rays,
+  30 seeds of a diffuse box) of EDT, T30, C80 and G against the spread of the
+  parameters between the runs, from 125 Hz to 4 kHz: their ratio held within 0.6 to
+  1.6 band by band and 0.8 to 1.25 on average (over 60 seeds, the root mean square of
+  the standard errors came within 0.91 to 1.18 of the spread); and they follow a
+  source's feed and new absorption (re-weighted) along with the rest;
 - a response's decay times and ratios read the same however loud it is (20 gains, to
   1e-9): the decay curve starts at 0 dB exactly, so EDT's fit always starts at the
   onset;
