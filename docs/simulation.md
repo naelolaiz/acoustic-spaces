@@ -572,9 +572,15 @@ paths beside 495 MiB of late energy). The editor's note counts a map's late part
 `threads` above the computer's cores run as its cores: more would only take turns on
 them, each with its copy.
 
-The estimate leaves out the model, a simulation's early paths (little beside the late
-part at a few listeners) and a GPU driver's own memory. On the CPU it came within 1 MiB
-of the late part's measured peak in `shoebox` at 1, 4 and 64 threads (4 cores), with
+The estimate leaves out the model, a simulation's early paths and a GPU driver's own
+memory. The early paths take little beside the late part at a few listeners, but not in
+a room of many facets with edge diffraction, where the edge fade keeps the pieces of
+the waves round the edges in single precision: about 17 million at the third listener of
+BRAS CR3 in third-octave bands. Its run peaks at 10.0 GiB (11.7 GiB in third-octave
+bands), nearly all of it at one listener: the edge fade hands it back before the next,
+and in third-octave bands each listener's starts from less than 0.9 GiB. On the CPU
+the estimate came within 1 MiB of the late part's measured peak in `shoebox` at 1, 4
+and 64 threads (4 cores), with
 responses of 30 to 480 s and both kinds of scattering. Whole runs peaked a little above
 it: `stadium_pa` at 8 s (15 sources, 9 listeners) at 547 MiB against 537, `orchestra` at
 6 s at 723 MiB against 669. Traced on a software GPU (SwiftShader's Vulkan), the late
