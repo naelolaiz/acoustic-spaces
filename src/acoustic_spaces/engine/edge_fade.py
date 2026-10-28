@@ -94,6 +94,7 @@ import itertools
 
 import numpy as np
 
+from acoustic_spaces.engine.clusters import Pages, hand_back
 from acoustic_spaces.engine.diffraction import (
     _OFFSET,
     _ON_BOUNDARY,
@@ -159,6 +160,7 @@ class EdgeFade:
         self._plane_edges = pairs[:, 1]
         self._plane_start = np.searchsorted(pairs[:, 0], np.arange(self.model.plane_count + 1))
         self._standing: dict[tuple[int, int], bool] = {}  # see _stands
+        self._pages: Pages | None = None  # the pieces' pressure, while terms runs
 
     def covered(self, before: int, after: int) -> bool:
         """Whether the edge diffraction bends the waves from a source side mirrored in
@@ -630,6 +632,7 @@ class EdgeFade:
         ``bent``, the paths the edge diffraction finds at ``listener``, the terms leave
         out exactly those of its paths over an edge; without, those it adds where it
         bends an event, as it does where nothing else stops its paths."""
+        hand_back()  # what the last listener's pieces left
         listener = np.asarray(listener, dtype=float)
         self._bent = None if bent is None else self._bent_index(bent)
         top = max([int(paths.order.max()) if len(paths) else 0, *self.candidates])
@@ -654,18 +657,22 @@ class EdgeFade:
             float(np.sum((listener - self.d.source) ** 2)), (_TOLERANCE * self.d.size) ** 2
         )
         floor = MIN_RELATIVE_ENERGY / (4.0 * np.pi * squared)
+        self._pages = Pages()
         parts = [
             self._combine(listener, go, k, t, floor)
             for (k, go), t in zip(groups, self._group_terms(groups, max_delay_s), strict=True)
             if t is not None
         ]
+        self._pages = None
         out = {"listener": listener, "floor": floor, "count": 0, "parts": parts}
         if parts:
-            for key in ("edge", "order", "distance", "energy"):
-                out[key] = np.concatenate([p[key] for p in parts])
-            if self.d.coherent:
-                out["spectrum"] = np.concatenate([p["spectrum"] for p in parts])
             offset = np.cumsum([0] + [len(p["edge"]) for p in parts])
+            # The parts keep only what _points needs.
+            for key in ("edge", "order", "distance", "energy", "spectrum"):
+                values = [p.pop(key) for p in parts]
+                if key != "spectrum" or self.d.coherent:
+                    out[key] = np.concatenate(values)
+                del values
             out["offset"] = offset
             out["pieces"] = [
                 dict(piece, rows=piece["rows"] + o)
@@ -685,7 +692,7 @@ class EdgeFade:
         (:data:`MIN_RELATIVE_ENERGY` of the direct sound in free field) in some band."""
         if not terms["count"]:
             return paths
-        energy = terms["energy"].copy()
+        energy = terms.pop("energy")  # the terms are used once
         late = slice(self.d.coherent, None)
         if self.d.coherent < energy.shape[1]:
             ledger = self.d.ledger
@@ -706,7 +713,9 @@ class EdgeFade:
                     keys = clusters.geometric(piece["image"], piece["order"])
                 else:
                     keys = clusters.diffracted(piece["source_side"], piece["listener_side"])
-                clusters.add(rows, keys, piece["pressure"], piece["distance"])
+                heard = piece["heard"]
+                clusters.add(rows[heard], keys[heard], piece["pressure"], piece["distance"][heard])
+            hand_back()  # what the pieces' making left
             resolved, has = clusters.resolve(base + terms["count"])
             paths = self.d.settled(paths, resolved[:base], has[:base])
             energy[:, late] = resolved[base:]
@@ -1580,6 +1589,7 @@ class EdgeFade:
                 stop = np.concatenate([stop, stop[which]])
                 alone = np.concatenate([alone, np.ones(len(which), dtype=bool)])
         pressure = term[row, :coherent] * factor
+        factor = top = None  # heard() is done with them
         # What the edge diffraction adds comes off each term once, at its own detour.
         pressure[plain] -= less[row[plain], :coherent]
         own_row = np.zeros(len(path), dtype=bool)
@@ -1604,6 +1614,8 @@ class EdgeFade:
             p = p * np.exp(1j * wavenumber[None, :coherent] * detour[:, None, None])
             level = np.sqrt(np.mean(np.abs(p) ** 2, axis=2, keepdims=True))
             out_spectrum = np.where(level > 0.0, p / np.where(level > 0.0, level, 1.0), 1.0)
+            del p, level
+        del pressure
         # Each row's pieces in the waves of the bands where the paths add in energy; a
         # row with any is kept for them, the others only where they reach the floor.
         heard_late = ~alone & (energy[mine, late].max(axis=1, initial=0.0) > 0.0)
@@ -1616,9 +1628,27 @@ class EdgeFade:
             heard_late[keep],
         )
         distance = t["length"][row] + detour - t["detour"][row]
-        pieces = []
+        out = {
+            "edge": t["edge"][row],
+            "order": np.where(at % 2 == 0, k, k - 1).astype(np.int64),
+            "distance": distance,
+            "energy": out_energy[keep],
+            "spectrum": None if out_spectrum is None else out_spectrum[keep],
+            "pieces": [],
+            # For the points of the paths over the edges that join keeps (_points): each
+            # row's path, and the points, faces and cosines of the paths.
+            "k": k,
+            "at": at,
+            "point": t["point"][row],
+            "path": mine,
+            "path_points": go["points"][ids],
+            "path_faces": faces,
+            "path_cosines": cosines,
+        }
+        # The pieces of a room of many facets take gigabytes: what made the rest goes first.
+        del out_energy, out_spectrum
         if coherent < bands:
-            pieces = self._pieces(
+            out["pieces"] = self._pieces(
                 go,
                 ids,
                 k,
@@ -1628,21 +1658,7 @@ class EdgeFade:
                 distance,
                 energy,
             )
-        return {
-            "edge": t["edge"][row],
-            "order": np.where(at % 2 == 0, k, k - 1).astype(np.int64),
-            "distance": distance,
-            "energy": out_energy[keep],
-            "spectrum": None if out_spectrum is None else out_spectrum[keep],
-            "pieces": pieces,
-            # For the points of the paths over the edges that join keeps (_points).
-            "k": k,
-            "at": at,
-            "point": t["point"][row],
-            "path_points": go["points"][ids][mine],
-            "path_faces": faces[mine],
-            "path_cosines": None if cosines is None else cosines[mine],
-        }
+        return out
 
     def _pieces(self, go, ids, k, t, rows, terms, distance, energy) -> list[dict]:
         """The pieces of the ``rows`` (terms ``row`` of the paths ``mine`` of ``go``
@@ -1670,7 +1686,13 @@ class EdgeFade:
         # the images of the diffracted wave.
         on_path = np.unique(t["go"], return_inverse=True)[1].reshape(-1)
         term = t["pressure"][:, late]
-        shape = (len(ids), events, *term.shape[1:])
+        # One row for each event of a path that has terms there (``at_cell``), and a last
+        # row for those that have none.
+        cells, cell = np.unique(on_path * events + t["at"], return_inverse=True)
+        cell = cell.reshape(-1)
+        at_cell = np.full((len(ids), events), len(cells), dtype=np.int64)
+        at_cell[cells // events, cells % events] = np.arange(len(cells))
+        shape = (len(cells) + 1, *term.shape[1:])
         event_parts = [np.zeros(shape, dtype=complex) for _ in range(3)]
         for total, value in zip(
             event_parts,
@@ -1681,11 +1703,11 @@ class EdgeFade:
             ),
             strict=True,
         ):
-            np.add.at(total, (on_path, t["at"]), value)
+            np.add.at(total, cell, value)
         event_cont, event_bent, event_on = event_parts
-        sides = np.zeros((2, len(ids), events, 3))
-        sides[0, on_path, t["at"]] = t["source_side"]
-        sides[1, on_path, t["at"]] = t["listener_side"]
+        sides = np.zeros((2, len(cells) + 1, 3))
+        sides[0, cell] = t["source_side"]
+        sides[1, cell] = t["listener_side"]
         out = []
         sel = np.flatnonzero(heard)
         for begin in range(0, len(sel), _CHUNK * 4):
@@ -1717,13 +1739,9 @@ class EdgeFade:
                 on &= (event != fail[path]) & (event != fail2[path])
                 if on.any():
                     passed.append((event, on))
-                    keep[on] *= 1.0 + event_cont[path[on], event]
-                    whole[on] *= (
-                        1.0
-                        + event_cont[path[on], event]
-                        + event_bent[path[on], event]
-                        + event_on[path[on], event]
-                    )
+                    there = at_cell[path[on], event]
+                    keep[on] *= 1.0 + event_cont[there]
+                    whole[on] *= 1.0 + event_cont[there] + event_bent[there] + event_on[there]
             mid = g1 * g2
             geometric = g0 * mid * keep
             diffracted = [d0 * mid * keep, g0 * d1 * g2 * keep, g0 * g1 * d2 * keep]
@@ -1732,9 +1750,9 @@ class EdgeFade:
                 others = np.ones_like(g0)
                 for other, there in passed:
                     if other != event:
-                        others[there] *= 1.0 + event_cont[path[there], other]
+                        others[there] *= 1.0 + event_cont[at_cell[path[there], other]]
                 part = np.zeros_like(g0)
-                part[on] = (g0 * mid * others)[on] * event_bent[path[on], event]
+                part[on] = (g0 * mid * others)[on] * event_bent[at_cell[path[on], event]]
                 bent_at.append((event, on, part))
             rest = w0 * w1 * w2 * whole - geometric - sum(diffracted)
             for _, _, part in bent_at:
@@ -1765,8 +1783,8 @@ class EdgeFade:
                     "kind": "geometric",
                     "image": image[path],
                     "order": k,
-                    "pressure": (scale * geometric).astype(np.complex64),
                     "distance": distance[r],
+                    **self._heard(scale * geometric),
                 }
             )
             for which, q in enumerate((q0, stop[r, 0], stop[r, 1])):
@@ -1779,8 +1797,8 @@ class EdgeFade:
                             "kind": "diffracted",
                             "source_side": t["source_side"][qq],
                             "listener_side": t["listener_side"][qq],
-                            "pressure": (scale * diffracted[which])[has].astype(np.complex64),
                             "distance": distance[r][has],
+                            **self._heard((scale * diffracted[which])[has]),
                         }
                     )
             for event, on, part in bent_at:
@@ -1788,15 +1806,27 @@ class EdgeFade:
                     {
                         "rows": rows[on],
                         "kind": "diffracted",
-                        "source_side": sides[0, path[on], event],
-                        "listener_side": sides[1, path[on], event],
-                        "pressure": (scale * part)[on].astype(np.complex64),
+                        "source_side": sides[0, at_cell[path[on], event]],
+                        "listener_side": sides[1, at_cell[path[on], event]],
                         "distance": distance[r][on],
+                        **self._heard((scale * part)[on]),
                     }
                 )
             alone = np.mean(np.abs(scale * rest) ** 2, axis=2)
             out.append({"rows": rows, "kind": "alone", "energy": alone})
         return out
+
+    def _heard(self, pressure: np.ndarray) -> dict:
+        """The ``pressure`` (n, bands, M) of pieces in single precision, in the pages, of
+        those of them that are ``heard`` (n,), that have something in them: the others
+        change nothing in their waves, which leave them out (as
+        :meth:`~acoustic_spaces.engine.clusters.Clusters.add` does), and kept they held
+        the pages the waves copied the rest out of. A piece's other values stay whole,
+        for its waves to be found in the same order."""
+        single = np.asarray(pressure, dtype=np.complex64)
+        heard = np.mean(np.abs(single) ** 2, axis=2).max(axis=1, initial=0.0) > 0.0
+        kept = single if heard.all() else single[heard]
+        return {"heard": heard, "pressure": self._pages.keep(kept) if len(kept) else kept}
 
     def _bent_index(self, bent: EarlyReflections) -> dict:
         """The lengths of the paths over each edge in ``bent`` and their rows there, by
@@ -2050,12 +2080,13 @@ def _points(terms: dict, idx: np.ndarray) -> tuple[list, list, list]:
             sel = np.flatnonzero(at == event)
             rows = local[sel]
             j = (event + 1) // 2
-            base, base_faces = part["path_points"][rows], part["path_faces"][rows]
+            paths = part["path"][rows]
+            base, base_faces = part["path_points"][paths], part["path_faces"][paths]
             base_cosines = part["path_cosines"]
             if base_cosines is None:
                 base_cosines = np.full(base_faces.shape, np.nan)
             else:
-                base_cosines = base_cosines[rows]
+                base_cosines = base_cosines[paths]
             point = part["point"][rows][:, None]
             if event % 2 == 0:  # leg j: over the edge on the way
                 new = np.concatenate([base[:, : j + 1], point, base[:, j + 1 :]], axis=1)

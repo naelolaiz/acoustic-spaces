@@ -371,7 +371,9 @@ Version 4.0.1:
   band, so that the level at 63 and 125 Hz no longer depends on how many bands add in
   pressure.
 - [x] Rooms with a curved surface of many facets, as BRAS CR2 and CR3, run at their
-  defaults instead of running out of memory.
+  defaults instead of running out of memory, in octave and in third-octave bands.
+- [x] The validation report's measured rooms (BRAS) and its cross-check with
+  pyroomacoustics run again with this version, with their run times and memory.
 
 Known issues found by the review of 25 October 2026 (see
 [Validation](validation.md#known-issues)), in the order they come next:

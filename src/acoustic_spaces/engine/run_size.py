@@ -41,22 +41,50 @@ if TYPE_CHECKING:
 #: Bytes of one value of the late part's arrays.
 VALUE_BYTES = 8
 
-# The control groups' limits a container may set on Linux (v2, then v1).
-_LIMITS = ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes")
+# Where Linux keeps its control groups, which set a container's memory limit.
+_CGROUPS = Path("/sys/fs/cgroup")
 
 
 def machine_memory() -> int | None:
     """Bytes of memory this computer has, or the limit of the container the run is in
     where that is lower; None where neither can be read."""
     total = _windows_memory() if sys.platform == "win32" else _physical_memory()
-    for path in _LIMITS:
-        try:
-            text = Path(path).read_text(encoding="ascii").strip()
-        except (OSError, UnicodeDecodeError):
-            continue
-        if text.isdigit():
-            total = int(text) if total is None else min(total, int(text))
+    try:
+        groups = Path("/proc/self/cgroup").read_text(encoding="ascii")
+    except (OSError, UnicodeDecodeError):
+        groups = ""
+    limit = _container_limit(groups)
+    if limit is not None:
+        total = limit if total is None else min(total, limit)
     return total if total else None
+
+
+def _container_limit(groups: str, root: Path = _CGROUPS) -> int | None:
+    """The lowest memory limit (bytes) on this process's control groups and the groups
+    above them, from ``/proc/self/cgroup``'s ``groups``: a container's may be on any of
+    them, not only on the root (``memory.max`` in version 2, ``memory.limit_in_bytes``
+    in version 1's memory controller); None where none is set."""
+    limit = None
+    for line in groups.splitlines():
+        fields = line.split(":", 2)
+        if len(fields) < 3:
+            continue
+        number, controllers, path = fields
+        if number == "0" and not controllers:
+            base, name = root, "memory.max"
+        elif "memory" in controllers.split(","):
+            base, name = root / "memory", "memory.limit_in_bytes"
+        else:
+            continue
+        parts = [part for part in path.split("/") if part]
+        for depth in range(len(parts) + 1):
+            try:
+                text = base.joinpath(*parts[:depth], name).read_text(encoding="ascii").strip()
+            except (OSError, UnicodeDecodeError):
+                continue
+            if text.isdigit():
+                limit = int(text) if limit is None else min(limit, int(text))
+    return limit
 
 
 def _physical_memory() -> int | None:

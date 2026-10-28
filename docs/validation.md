@@ -340,58 +340,61 @@ the scattering of the surfaces' size, the decay of the room's total energy under
 model and, where a diffuse field makes them apply, Eyring's reverberation time and
 Barron's revised theory.
 
-**Specular box.** The programs agree: T30 within 3 %, EDT within 5 % and C80 within
-1 dB from 250 Hz up. Rays that travel parallel to the floor never meet the absorbing
+**Specular box.** The programs agree: T30 within 3 %, EDT within 7 % and C80 within
+1 dB. Rays that travel parallel to the floor never meet the absorbing
 ceiling, so the decay is many times longer than Eyring's estimate in both. Even a
 smooth wall is only 3 m high, though, and scatters what reaches it from far away or at a
 grazing angle: with that, T30 comes out 2.7 to 4.7 s instead of 3 to 15 s.
 
 | | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz |
 |---|---:|---:|---:|---:|---:|---:|
-| EDT (s), acoustic_spaces | 7.29 | 6.30 | 3.55 | 3.01 | 2.33 | 1.33 |
-| EDT (s), pyroomacoustics | 6.89 | 6.02 | 3.52 | 2.90 | 2.23 | 1.26 |
-| EDT (s), pyroomacoustics' spread over 5 runs | 0.39 | 0.76 | 0.35 | 0.17 | 0.06 | 0.08 |
-| EDT difference | -5 % | -5 % | -1 % | -4 % | -5 % | -5 % |
-| T30 (s), acoustic_spaces | 15.08 | 14.00 | 8.32 | 6.32 | 4.98 | 3.05 |
-| T30 (s), pyroomacoustics | 15.45 | 13.78 | 8.28 | 6.25 | 5.03 | 3.15 |
-| T30 (s), pyroomacoustics' spread over 5 runs | 0.29 | 0.28 | 0.14 | 0.15 | 0.04 | 0.04 |
-| T30 difference | +2 % | -2 % | +0 % | -1 % | +1 % | +3 % |
-| C80 (dB), acoustic_spaces | -2.7 | -1.4 | 0.1 | 1.7 | 3.1 | 5.0 |
-| C80 (dB), pyroomacoustics | -1.4 | -1.0 | 0.8 | 2.2 | 3.1 | 5.3 |
-| C80 (dB), pyroomacoustics' spread over 5 runs | 2.9 | 0.8 | 1.1 | 0.7 | 0.3 | 0.4 |
-| C80 difference | +1.2 dB | +0.4 dB | +0.7 dB | +0.5 dB | +0.0 dB | +0.2 dB |
-| T30 (s), acoustic_spaces with surface size (default) | 3.82 | 4.36 | 4.58 | 4.67 | 4.10 | 2.69 |
-| T30 (s) of the room's energy, vector-based scattering | 15.60 | 13.99 | 7.29 | 6.28 | 4.98 | 2.87 |
-| T30 (s) of the room's energy, with surface size | 4.14 | 5.28 | 4.76 | 5.15 | 4.29 | 2.64 |
+| EDT (s), acoustic_spaces | 7.31 | 6.37 | 3.54 | 3.00 | 2.33 | 1.33 |
+| EDT (s), pyroomacoustics | 7.27 | 5.95 | 3.56 | 2.94 | 2.21 | 1.28 |
+| EDT (s), pyroomacoustics' spread over 5 runs | 1.31 | 0.49 | 0.36 | 0.14 | 0.13 | 0.03 |
+| EDT difference | -1 % | -7 % | +1 % | -2 % | -5 % | -4 % |
+| T30 (s), acoustic_spaces | 15.10 | 14.03 | 8.31 | 6.31 | 4.98 | 3.05 |
+| T30 (s), pyroomacoustics | 15.32 | 13.75 | 8.23 | 6.27 | 5.00 | 3.15 |
+| T30 (s), pyroomacoustics' spread over 5 runs | 0.51 | 0.21 | 0.11 | 0.07 | 0.04 | 0.04 |
+| T30 difference | +1 % | -2 % | -1 % | -1 % | +1 % | +3 % |
+| C80 (dB), acoustic_spaces | -2.9 | -1.7 | 0.1 | 1.8 | 3.1 | 5.0 |
+| C80 (dB), pyroomacoustics | -2.3 | -1.0 | 0.9 | 2.0 | 3.2 | 5.2 |
+| C80 (dB), pyroomacoustics' spread over 5 runs | 2.6 | 1.5 | 0.9 | 0.7 | 0.4 | 0.2 |
+| C80 difference | +0.6 dB | +0.7 dB | +0.7 dB | +0.1 dB | +0.1 dB | +0.2 dB |
+| T30 (s), acoustic_spaces with surface size (default) | 3.91 | 4.43 | 4.58 | 4.66 | 4.10 | 2.69 |
+| T30 (s) of the room's energy, vector-based scattering | 15.64 | 13.95 | 7.29 | 6.29 | 4.96 | 2.87 |
+| T30 (s) of the room's energy, with surface size | 4.23 | 5.36 | 4.76 | 5.14 | 4.29 | 2.64 |
 | Eyring (s) | 0.83 | 0.69 | 0.52 | 0.37 | 0.30 | 0.25 |
 
 ![Specular box](validation/crosscheck_specular.png)
 
-**Diffuse box.** T30 agrees within 5 %; both programs stay within 8 % of the room's
-energy decay and within 13 % of Eyring's estimate. From 1 kHz up, pyroomacoustics gives
-14 to 25 % longer EDT and 1.5 to 2.3 dB lower C80 than this package, as its
+**Diffuse box.** T30 agrees within 5 %; this package stays within 8 % of the room's
+energy decay and within 10 % of Eyring's estimate, pyroomacoustics within 11 and 15 %.
+From 1 kHz up, pyroomacoustics gives 13 to 21 % longer EDT and 1.7 to 2.2 dB lower C80
+than this package, as its
 double-counted scattered energy predicts. Barron's revised theory sides with this
-package: computed from the simulated energies, as `simulate` prints them, C80 is within
-0.7 dB of the theory in every band. From the impulse responses it is up to 1.9 dB lower
-at 250 and 500 Hz, in both programs alike, because the direct sound and the first floor
-and ceiling reflections interfere within those octave bands. Surfaces that diffuse fully
+package: computed from the simulated energies, as `simulate` prints them, C80 is 0.6 to
+1.0 dB below the theory in every band, where pyroomacoustics' (from its impulse
+responses) is 1.1 to 3.2 dB below it. From the impulse responses this package's is about
+0.5 and 1.2 dB lower again at 250 and 500 Hz (2.0 dB below the theory at 500 Hz), because
+the direct sound and the first floor and ceiling reflections interfere within those
+octave bands. Surfaces that diffuse fully
 scatter no more for their size, so the default gives the same.
 
 | | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz |
 |---|---:|---:|---:|---:|---:|---:|
-| EDT (s), acoustic_spaces | 0.91 | 0.70 | 0.60 | 0.38 | 0.31 | 0.26 |
-| EDT (s), pyroomacoustics | 0.85 | 0.71 | 0.58 | 0.43 | 0.35 | 0.32 |
-| EDT (s), pyroomacoustics' spread over 5 runs | 0.17 | 0.05 | 0.04 | 0.02 | 0.03 | 0.02 |
-| EDT difference | -7 % | +2 % | -4 % | +14 % | +15 % | +25 % |
+| EDT (s), acoustic_spaces | 0.91 | 0.70 | 0.61 | 0.38 | 0.31 | 0.26 |
+| EDT (s), pyroomacoustics | 0.83 | 0.69 | 0.57 | 0.43 | 0.37 | 0.32 |
+| EDT (s), pyroomacoustics' spread over 5 runs | 0.13 | 0.09 | 0.04 | 0.02 | 0.03 | 0.02 |
+| EDT difference | -8 % | -1 % | -6 % | +13 % | +18 % | +21 % |
 | T30 (s), acoustic_spaces | 0.75 | 0.67 | 0.53 | 0.40 | 0.30 | 0.26 |
-| T30 (s), pyroomacoustics | 0.72 | 0.64 | 0.54 | 0.40 | 0.31 | 0.26 |
-| T30 (s), pyroomacoustics' spread over 5 runs | 0.08 | 0.03 | 0.04 | 0.02 | 0.02 | 0.01 |
-| T30 difference | -3 % | -5 % | +1 % | +1 % | +2 % | +0 % |
-| C80 (dB), acoustic_spaces | 4.9 | 5.6 | 7.2 | 12.8 | 15.6 | 19.0 |
-| C80 (dB), pyroomacoustics | 3.6 | 5.2 | 7.3 | 10.8 | 14.1 | 16.7 |
-| C80 (dB), pyroomacoustics' spread over 5 runs | 1.9 | 1.0 | 1.0 | 0.5 | 0.9 | 0.2 |
-| C80 difference | -1.3 dB | -0.4 dB | +0.1 dB | -2.1 dB | -1.5 dB | -2.3 dB |
-| C80 (dB), Barron's revised theory | 5.3 | 6.8 | 9.1 | 13.6 | 17.0 | 19.8 |
+| T30 (s), pyroomacoustics | 0.71 | 0.65 | 0.54 | 0.41 | 0.31 | 0.26 |
+| T30 (s), pyroomacoustics' spread over 5 runs | 0.04 | 0.04 | 0.03 | 0.02 | 0.01 | 0.01 |
+| T30 difference | -5 % | -4 % | +2 % | +4 % | +4 % | +2 % |
+| C80 (dB), acoustic_spaces | 4.9 | 5.6 | 7.1 | 12.8 | 15.6 | 19.0 |
+| C80 (dB), pyroomacoustics | 4.2 | 5.4 | 7.4 | 11.0 | 13.9 | 16.8 |
+| C80 (dB), pyroomacoustics' spread over 5 runs | 3.1 | 1.9 | 1.2 | 0.7 | 1.0 | 0.3 |
+| C80 difference | -0.7 dB | -0.2 dB | +0.3 dB | -1.8 dB | -1.7 dB | -2.2 dB |
+| C80 (dB), Barron's revised theory | 5.3 | 6.8 | 9.1 | 13.6 | 17.1 | 19.8 |
 | T30 (s), acoustic_spaces with surface size (default) | 0.75 | 0.67 | 0.53 | 0.40 | 0.30 | 0.26 |
 | T30 (s) of the room's energy, vector-based scattering | 0.78 | 0.66 | 0.52 | 0.37 | 0.30 | 0.26 |
 | T30 (s) of the room's energy, with surface size | 0.78 | 0.66 | 0.52 | 0.37 | 0.30 | 0.26 |
@@ -399,53 +402,53 @@ scatter no more for their size, so the default gives the same.
 
 ![Diffuse box](validation/crosscheck_diffuse.png)
 
-**Example box.** With smooth walls (scattering 0.05), T30 agrees within 2 %, EDT within
-7 % and C80 within 1.2 dB. Up to version 2 this package scattered a ray with the
+**Example box.** With smooth walls (scattering 0.05), T30 agrees within 4 %, EDT within
+7 % and C80 within 1.3 dB. Up to version 2 this package scattered a ray with the
 coefficient as probability, and pyroomacoustics' T30 came out 19 to 42 % shorter. The
 walls' size halves T30 at 125 and 250 Hz (0.86 s against 1.82 s) and shortens it by
 8 to 22 % from 500 Hz up; each run matches the room-energy decay of its model within 11 %.
 
 | | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz |
 |---|---:|---:|---:|---:|---:|---:|
-| EDT (s), acoustic_spaces | 1.27 | 1.27 | 1.19 | 1.10 | 1.08 | 0.92 |
-| EDT (s), pyroomacoustics | 1.23 | 1.37 | 1.16 | 1.15 | 1.13 | 0.92 |
-| EDT (s), pyroomacoustics' spread over 5 runs | 0.31 | 0.08 | 0.18 | 0.14 | 0.11 | 0.07 |
-| EDT difference | -3 % | +7 % | -2 % | +5 % | +4 % | +0 % |
+| EDT (s), acoustic_spaces | 1.27 | 1.29 | 1.19 | 1.09 | 1.08 | 0.92 |
+| EDT (s), pyroomacoustics | 1.30 | 1.20 | 1.12 | 1.14 | 1.08 | 0.86 |
+| EDT (s), pyroomacoustics' spread over 5 runs | 0.20 | 0.05 | 0.23 | 0.13 | 0.13 | 0.12 |
+| EDT difference | +2 % | -7 % | -6 % | +4 % | +0 % | -6 % |
 | T30 (s), acoustic_spaces | 1.82 | 1.76 | 1.57 | 1.52 | 1.44 | 1.23 |
-| T30 (s), pyroomacoustics | 1.80 | 1.73 | 1.60 | 1.52 | 1.44 | 1.24 |
-| T30 (s), pyroomacoustics' spread over 5 runs | 0.18 | 0.15 | 0.11 | 0.07 | 0.07 | 0.08 |
-| T30 difference | -1 % | -2 % | +2 % | +0 % | +0 % | +1 % |
-| C80 (dB), acoustic_spaces | 2.8 | 2.7 | 3.3 | 5.1 | 5.1 | 6.3 |
-| C80 (dB), pyroomacoustics | 3.0 | 3.4 | 4.5 | 4.9 | 5.0 | 6.2 |
-| C80 (dB), pyroomacoustics' spread over 5 runs | 1.0 | 0.9 | 0.9 | 0.6 | 0.5 | 0.4 |
-| C80 difference | +0.2 dB | +0.7 dB | +1.2 dB | -0.1 dB | -0.1 dB | -0.1 dB |
+| T30 (s), pyroomacoustics | 1.81 | 1.81 | 1.64 | 1.56 | 1.45 | 1.24 |
+| T30 (s), pyroomacoustics' spread over 5 runs | 0.27 | 0.12 | 0.09 | 0.14 | 0.15 | 0.07 |
+| T30 difference | +0 % | +3 % | +4 % | +3 % | +1 % | +1 % |
+| C80 (dB), acoustic_spaces | 2.7 | 2.5 | 3.3 | 5.1 | 5.1 | 6.3 |
+| C80 (dB), pyroomacoustics | 2.9 | 3.4 | 4.6 | 4.8 | 5.2 | 6.5 |
+| C80 (dB), pyroomacoustics' spread over 5 runs | 1.2 | 0.7 | 0.6 | 0.7 | 0.7 | 0.7 |
+| C80 difference | +0.2 dB | +0.8 dB | +1.3 dB | -0.3 dB | +0.1 dB | +0.2 dB |
 | T30 (s), acoustic_spaces with surface size (default) | 0.86 | 0.97 | 1.22 | 1.27 | 1.25 | 1.13 |
-| T30 (s) of the room's energy, vector-based scattering | 1.64 | 1.63 | 1.53 | 1.49 | 1.42 | 1.22 |
+| T30 (s) of the room's energy, vector-based scattering | 1.65 | 1.64 | 1.53 | 1.49 | 1.42 | 1.22 |
 | T30 (s) of the room's energy, with surface size | 0.90 | 0.93 | 1.29 | 1.28 | 1.36 | 1.18 |
 | Eyring (s) | 0.83 | 0.69 | 0.52 | 0.37 | 0.30 | 0.25 |
 
 ![Example box](validation/crosscheck_example.png)
 
-**Lecture hall.** T30 agrees within 4 % and EDT within 5 %; pyroomacoustics' C80 is 0.3 to
-1.7 dB lower, the double-counted scattered energy again. The surfaces' size shortens T30
-by 4 to 15 %, in line with the room-energy decay of that model within 6 %.
+**Lecture hall.** T30 agrees within 3 % and EDT within 5 %; pyroomacoustics' C80 is up to
+1.2 dB lower (at 125 Hz), the double-counted scattered energy again. The surfaces' size
+shortens T30 by 4 to 16 %, in line with the room-energy decay of that model within 6 %.
 
 | | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz |
 |---|---:|---:|---:|---:|---:|---:|
-| EDT (s), acoustic_spaces | 1.92 | 1.72 | 1.48 | 1.41 | 1.46 | 1.21 |
-| EDT (s), pyroomacoustics | 1.84 | 1.69 | 1.45 | 1.43 | 1.41 | 1.15 |
-| EDT (s), pyroomacoustics' spread over 5 runs | 0.13 | 0.07 | 0.13 | 0.12 | 0.12 | 0.11 |
-| EDT difference | -5 % | -2 % | -2 % | +1 % | -4 % | -5 % |
-| T30 (s), acoustic_spaces | 1.98 | 1.93 | 1.89 | 1.90 | 1.85 | 1.59 |
-| T30 (s), pyroomacoustics | 1.98 | 1.97 | 1.97 | 1.98 | 1.92 | 1.59 |
-| T30 (s), pyroomacoustics' spread over 5 runs | 0.17 | 0.16 | 0.14 | 0.15 | 0.11 | 0.12 |
-| T30 difference | +0 % | +2 % | +4 % | +4 % | +3 % | +0 % |
-| C80 (dB), acoustic_spaces | 0.5 | 0.1 | 1.6 | 3.0 | 3.0 | 3.9 |
-| C80 (dB), pyroomacoustics | -1.2 | -1.1 | 1.2 | 2.0 | 2.5 | 3.5 |
-| C80 (dB), pyroomacoustics' spread over 5 runs | 1.9 | 0.7 | 0.7 | 0.8 | 0.4 | 0.5 |
-| C80 difference | -1.7 dB | -1.2 dB | -0.5 dB | -1.0 dB | -0.5 dB | -0.3 dB |
-| T30 (s), acoustic_spaces with surface size (default) | 1.88 | 1.74 | 1.60 | 1.70 | 1.74 | 1.53 |
-| T30 (s) of the room's energy, vector-based scattering | 1.97 | 1.99 | 1.93 | 1.97 | 1.91 | 1.58 |
+| EDT (s), acoustic_spaces | 1.95 | 1.73 | 1.49 | 1.41 | 1.46 | 1.21 |
+| EDT (s), pyroomacoustics | 1.90 | 1.80 | 1.43 | 1.47 | 1.42 | 1.15 |
+| EDT (s), pyroomacoustics' spread over 5 runs | 0.30 | 0.23 | 0.12 | 0.05 | 0.10 | 0.07 |
+| EDT difference | -2 % | +4 % | -4 % | +4 % | -3 % | -5 % |
+| T30 (s), acoustic_spaces | 1.97 | 1.93 | 1.89 | 1.90 | 1.85 | 1.59 |
+| T30 (s), pyroomacoustics | 1.96 | 1.95 | 1.90 | 1.96 | 1.87 | 1.59 |
+| T30 (s), pyroomacoustics' spread over 5 runs | 0.12 | 0.14 | 0.10 | 0.03 | 0.06 | 0.06 |
+| T30 difference | -1 % | +1 % | +0 % | +3 % | +1 % | +0 % |
+| C80 (dB), acoustic_spaces | 0.2 | -0.1 | 1.6 | 3.0 | 3.0 | 3.9 |
+| C80 (dB), pyroomacoustics | -1.0 | -0.4 | 1.7 | 2.5 | 2.8 | 3.7 |
+| C80 (dB), pyroomacoustics' spread over 5 runs | 2.2 | 0.9 | 1.3 | 0.4 | 0.4 | 0.2 |
+| C80 difference | -1.2 dB | -0.3 dB | +0.1 dB | -0.6 dB | -0.2 dB | -0.1 dB |
+| T30 (s), acoustic_spaces with surface size (default) | 1.88 | 1.74 | 1.59 | 1.70 | 1.74 | 1.53 |
+| T30 (s) of the room's energy, vector-based scattering | 1.97 | 1.99 | 1.92 | 1.96 | 1.90 | 1.58 |
 | T30 (s) of the room's energy, with surface size | 1.84 | 1.84 | 1.55 | 1.69 | 1.77 | 1.54 |
 | Eyring (s) | 1.99 | 1.89 | 1.13 | 0.99 | 0.88 | 0.86 |
 
@@ -454,13 +457,14 @@ by 4 to 15 %, in line with the room-energy decay of that model within 6 %.
 ### Conclusions
 
 - With the same scattering model, the programs agree within 5 % on T30 in all four
-  rooms, from purely specular to fully diffusing surfaces, and within 7 % on EDT where
+  rooms, from purely specular to fully diffusing surfaces, and within 8 % on EDT where
   pyroomacoustics' double counting does not lengthen it. That is close to the 5 % and
   1 dB the plan aimed for. With 100,000 rays, pyroomacoustics' own runs differ by up to
-  11 % in T30, 25 % in EDT and 2.9 dB in C80, most at 125 Hz, which is why the tables
+  15 % in T30, 21 % in EDT and 3.1 dB in C80, most often at 125 Hz, which is why the tables
   average five of them; this package's numbers move by a few percent with the seed.
-- Where the theory is clear (the diffuse box), this package agrees with Eyring and with
-  Barron's revised theory; pyroomacoustics counts the scattered energy twice.
+- Where the theory is clear (the diffuse box), this package agrees with Eyring (T30
+  within 10 %) and with Barron's revised theory (C80 from the energies within 1.0 dB);
+  pyroomacoustics counts the scattered energy twice.
 - The scattering of a surface's size, which pyroomacoustics lacks, shortens the decay of
   rooms with smooth walls a lot at low frequencies and less at high ones. Measurements,
   not another program, decide whether it helps: in the two measured rooms below it does.
@@ -493,11 +497,13 @@ C80 0.6 dB higher; elsewhere within 3.2 % and 0.5 dB). Below that the octave hol
 third-octave bands whose values differ a lot, so averaging them is not the same analysis.
 G is left out because the responses have no free-field reference.
 
-The tables and plots in this section were made on 15 October 2026, before version
-3.0.0, and have not been run again since. The versions since then change the early part
-of the responses, so these are not this version's numbers. 4.0.0 could not run either
-room at its defaults (its early stage asked for 16.4 GiB at once in CR3 and 19.6 GiB in
-CR2); 4.0.1 runs both, CR3 peaking at 10.6 GB.
+The tables and plots in this section were made with version 4.0.1 on 27 and 28 October
+2026, on 4 cores of a cloud machine without a GPU, where the run times below were
+measured. 4.0.0 could not run either room at its defaults (its early stage asked for
+16.4 GiB at once in CR3 and 19.6 GiB in CR2); 4.0.1 runs the seminar room in 1.1 GiB
+(1.2 GiB in third-octave bands) and the hall in 10.0 GiB (10.4 GiB
+calibrated, 11.7 GiB in third-octave bands), most of it the edge fade's at one listener (see
+[Memory](simulation.md#memory)).
 
 BRAS gives two sets of absorption coefficients. The **fitted** set was adjusted until
 Eyring's formula gave the measured reverberation time; the scenes use it. The
@@ -509,13 +515,13 @@ band values are within one JND:
 
 | | CR2 fitted | CR3 fitted | CR2 initial | CR3 initial |
 |---|---:|---:|---:|---:|
-| EDT | 1.1 (44) | 2.6 (9) | 6.0 (7) | 5.9 (9) |
-| T20 | 1.0 (41) | 2.1 (9) | 6.5 (1) | 5.8 (12) |
-| T30 | 1.0 (43) | 1.8 (8) | 6.5 (0) | 5.7 (11) |
-| C50 | 1.0 (41) | 1.3 (33) | 1.7 (24) | 1.7 (21) |
-| C80 | 0.8 (46) | 1.0 (38) | 1.8 (25) | 1.6 (20) |
-| D50 | 1.1 (41) | 1.4 (33) | 1.8 (24) | 1.8 (20) |
-| Ts | 1.0 (38) | 1.3 (23) | 3.5 (11) | 3.0 (19) |
+| EDT | 1.0 (44) | 2.1 (20) | 5.9 (6) | 4.6 (9) |
+| T20 | 1.0 (41) | 2.0 (10) | 6.5 (1) | 5.7 (12) |
+| T30 | 1.0 (43) | 1.8 (9) | 6.5 (0) | 5.7 (11) |
+| C50 | 1.0 (41) | 1.2 (33) | 1.6 (26) | 1.6 (21) |
+| C80 | 0.7 (51) | 1.0 (40) | 1.6 (28) | 1.3 (27) |
+| D50 | 1.0 (40) | 1.4 (31) | 1.6 (24) | 1.7 (20) |
+| Ts | 0.8 (42) | 0.9 (33) | 3.2 (13) | 2.1 (24) |
 
 ![CR2, fitted absorption](validation/bras_CR2_fitted.png)
 
@@ -528,18 +534,36 @@ coefficients, averaged onto octaves, do not give the measured decay even in a di
 field. At 8 kHz they assume less air absorption than ISO 9613-1 gives at the octave's
 centre frequency; a measured decay follows the octave's slowest part, its lowest third
 (6.3 kHz). Simulated in third-octave bands, which keep both apart, the two bands come
-within 4 % of the measurement (see the third-octave results below).
+within 4.1 % of the measurement (see the third-octave results below).
 
 ![CR3, fitted absorption](validation/bras_CR3_fitted.png)
 
 **Chamber music hall, fitted absorption.** The reverberation time comes out 7 to 10 % long
-from 250 Hz to 4 kHz (T20 1.47 s against 1.34 s at 1 kHz), one and a half to two JNDs,
-and 13 and 20 % long at 63 and 125 Hz; EDT is 5 to 23 % long. From 125 Hz up, C50, C80
-and D50 are within about one JND, slightly low, as a slightly long decay predicts. Eyring's formula with the same absorption and air is
-within 5 % of the measurement from 63 Hz to 4 kHz, as the fitting intends, so in the
+from 250 Hz to 4 kHz (T20 1.47 s against 1.34 s at 1 kHz), 1.3 to 1.9 JNDs, and 11 and
+17 % long at 63 and 125 Hz. EDT is within 3 % at 250 and 500 Hz and 6 to 14 % long from
+1 to 4 kHz, but 19 and 13 % short at 63 and 125 Hz, where the early part is stronger
+than measured (see the next paragraph). From 125 Hz up, C50,
+C80 and D50 are within about one JND, mostly slightly low, as a slightly long decay
+predicts. Eyring's formula with the same absorption and air is within 5.1 % of the
+measurement from 63 Hz to 4 kHz, as the fitting intends, so in the
 model sound still reaches the absorbing seating a little less often than Eyring's
 diffuse field assumes, and than in the real hall, whose details the simplified BRAS
 model smooths away.
+
+**The hall's early part at low frequencies.** The plots of 15 October 2026 had the hall's
+EDT about 23 and 19 % long at 63 and 125 Hz and C80 about 1.5 and 1.3 dB low: their early
+part was weaker. Traced again at LS1's five positions without edge diffraction, that
+day's code and this version give the same early energy, bit for bit, with every band in
+energy as that day's code had them (with 63 and 125 Hz in pressure, this version's
+default, 0.5 and 0.2 dB more). With it (`first_order`) this version's early energy is
+6.6 and 5.8 dB higher at 63 and 125 Hz, 2.3 dB at 250 Hz and 1.0 dB at 500 Hz (means over
+the five positions; 4.7 to 9.8 dB at 63 Hz), and as high or higher with every band in
+energy (`coherent_max_band_hz: null`), so the reflections' phases are not the cause. The
+late part is the same. Without the
+[fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution), which
+4.0.0 added, it is 3.5 and 1.4 dB higher (1.0 to 6.4 dB at 63 Hz): the fade adds 3.1 and
+4.4 dB of the change. At 125 Hz C80 now comes within 0.3 dB of the measurement;
+at 63 Hz the early part is too strong (C80 1.0 dB high, EDT 3.5 JNDs short).
 
 **What scattering does.** Up to version 2 this package scattered a ray with the
 coefficient as probability, and from the surface's own coefficient alone. The hall then
@@ -565,8 +589,8 @@ From 500 Hz to 4 kHz, vector-based scattering alone takes the hall from 15 to 25
 down to 8 to 18 %, but makes the seminar room 5 to 9 % short. Adding the scattering of
 each surface's size brings the seminar room within 2 % of the measurement (and within
 4 % of Eyring's diffuse field), and the hall to 8 to 10 % long: one model now fits both rooms better than
-either did. The simulated responses decay like these room-energy curves, within 4 % in
-every band. The rest of the hall's gap is the model hall itself, as the paragraph above
+either did. The simulated responses decay like these room-energy curves, within 4.3 %
+in every band. The rest of the hall's gap is the model hall itself, as the paragraph above
 says. Fitting the absorption with this tracer instead of Eyring's formula takes up that
 gap (see "Calibrated absorption" below).
 
@@ -580,19 +604,19 @@ does. Simulated with `simulation.bands: third_octave`, which keeps the thirds ap
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | CR2 measured | 1.56 | 1.34 | 1.72 | 2.00 | 1.94 | 1.75 | 1.54 | 1.11 |
 | CR2 octave bands (default) | 1.69 | 1.49 | 1.50 | 1.97 | 1.92 | 1.76 | 1.53 | 0.91 |
-| CR2 third-octave bands | 1.78 | 1.52 | 1.65 | 1.98 | 1.92 | 1.78 | 1.51 | 1.07 |
+| CR2 third-octave bands | 1.77 | 1.51 | 1.65 | 1.98 | 1.92 | 1.78 | 1.51 | 1.07 |
 | CR3 measured | 1.77 | 1.57 | 1.46 | 1.28 | 1.34 | 1.30 | 1.03 | 0.78 |
-| CR3 octave bands (default) | 2.00 | 1.88 | 1.57 | 1.40 | 1.47 | 1.40 | 1.10 | 0.72 |
-| CR3 third-octave bands | 2.05 | 1.92 | 1.59 | 1.40 | 1.46 | 1.40 | 1.14 | 0.80 |
+| CR3 octave bands (default) | 1.96 | 1.83 | 1.56 | 1.40 | 1.47 | 1.40 | 1.10 | 0.72 |
+| CR3 third-octave bands | 2.00 | 1.88 | 1.57 | 1.40 | 1.46 | 1.40 | 1.13 | 0.80 |
 
 The seminar room's decay at 250 Hz and 8 kHz, 13 and 18 % short in octave bands, comes
-within 4 % of the measurement: there its thirds' absorption, and at 8 kHz the air's,
-differ most. The hall's 8 kHz goes from 8 % short to 2 % long. From 500 Hz to 2 kHz
-nothing changes. At 63 and 125 Hz both rooms come out 2 to 5 % longer than in octave
-bands, and the hall at 4 kHz 11 % long instead of 7 %. Over 125 Hz to 4 kHz the seminar
+within 4.1 % of the measurement: there its thirds' absorption, and at 8 kHz the air's,
+differ most. The hall's 8 kHz goes from 8 % short to 3 % long. From 500 Hz to 2 kHz T20
+changes by 0.02 s at most. At 63 and 125 Hz both rooms come out 1 to 5 % longer than in
+octave bands, and the hall at 4 kHz 10 % long instead of 7 %. Over 125 Hz to 4 kHz the seminar
 room's mean T30 difference goes from 1.0 to 0.9 JNDs; the hall's goes from 1.8 to 2.1,
 since its decay was long already and third octaves lengthen it. A third-octave run takes
-three times as long: 43 minutes for the seminar room instead of 15.
+9 minutes for the seminar room instead of 4, and 3.6 hours for the hall instead of 1.5.
 
 ![CR2, initial absorption](validation/bras_CR2_initial.png)
 
@@ -621,36 +645,37 @@ responses:
 
 | | CR2 calibrated | CR2 fitted | CR2 initial | CR3 calibrated | CR3 fitted | CR3 initial |
 |---|---:|---:|---:|---:|---:|---:|
-| EDT | 1.2 (18) | 1.1 | 6.0 | 1.1 (16) | 2.6 | 5.9 |
-| T20 | 0.9 (23) | 1.0 | 6.5 | 0.8 (20) | 2.1 | 5.8 |
-| T30 | 1.0 (21) | 1.0 | 6.5 | 0.5 (28) | 1.8 | 5.7 |
-| C50 | 1.0 (20) | 1.0 | 1.7 | 1.2 (15) | 1.3 | 1.7 |
-| C80 | 0.7 (25) | 0.8 | 1.8 | 0.8 (21) | 1.0 | 1.6 |
-| D50 | 1.1 (20) | 1.1 | 1.8 | 1.3 (14) | 1.4 | 1.8 |
-| Ts | 0.8 (24) | 1.0 | 3.5 | 0.7 (23) | 1.3 | 3.0 |
+| EDT | 1.1 (20) | 1.0 | 5.9 | 1.5 (15) | 2.1 | 4.6 |
+| T20 | 0.9 (23) | 1.0 | 6.5 | 1.2 (18) | 2.0 | 5.7 |
+| T30 | 1.0 (22) | 1.0 | 6.5 | 0.7 (25) | 1.8 | 5.7 |
+| C50 | 1.1 (20) | 1.0 | 1.6 | 1.2 (15) | 1.2 | 1.6 |
+| C80 | 0.7 (25) | 0.7 | 1.6 | 0.8 (20) | 1.0 | 1.3 |
+| D50 | 1.1 (20) | 1.0 | 1.6 | 1.3 (13) | 1.4 | 1.7 |
+| Ts | 0.7 (26) | 0.8 | 3.2 | 0.8 (20) | 0.9 | 2.1 |
 
 ![CR2, calibrated from the initial absorption](validation/bras_CR2_initial_calibrated.png)
 
 ![CR3, calibrated from the initial absorption](validation/bras_CR3_initial_calibrated.png)
 
 The initial estimates made the decay up to twice as long. From them, calibration brings
-both rooms to about one JND on responses it did not fit. In the seminar room it does as
-well as BRAS's fitted set. In the hall it does better: T30 is within 0.5 JNDs on
-average, with 28 of the 30 values within one JND, against 1.8 with the fitted set, and
-T20 and EDT gain as much. The fit uses the model's own rays rather than Eyring's
-formula, so it takes up what the model hall's sound misses of the seating.
+the seminar room to about one JND on responses it did not fit, as BRAS's fitted set
+does. In the hall it does better than the fitted set: T30 is within 0.7 JNDs on
+average, with 25 of the 30 values within one JND, against 1.8 with the fitted set, T20
+within 1.2 against 2.0 and EDT 1.5 against 2.1. The fit uses the model's own rays
+rather than Eyring's formula, so it takes up what the model hall's sound misses of the
+seating.
 
 In the seminar room the fit found nearly BRAS's fitted set, though it started from the
-initial one. The windows absorb 0.25 and 0.19 at 63 and 125 Hz (BRAS fitted 0.25 and
-0.19, initial 0.13 and 0.10), and the other values are within 0.03 of BRAS's but for
-the plaster at 63 Hz (0.15 against 0.08). In
-the hall it found more absorption than BRAS in the seating at 500 Hz (0.50 against
-0.38) and in the plaster at 125 and 250 Hz (0.22 and 0.28 against 0.11 and 0.15), and
-less in the structured plaster at 2 kHz (0.08 against 0.14).
+initial one. The windows absorb 0.28 and 0.22 at 63 and 125 Hz (BRAS fitted 0.25 and
+0.19, initial 0.13 and 0.10), and every other value is within 0.025 of BRAS's. In
+the hall it found more absorption than BRAS in the plaster at 125 and 250 Hz (0.20 and
+0.20 against 0.11 and 0.15) and in the seating at 2 kHz (0.63 against 0.41), and less
+in the seating at 125 and 250 Hz (0.11 and 0.22 against 0.21 and 0.37) and in the
+structured plaster at 2 kHz (0.09 against 0.14).
 
 These are what a model needs to match the room, not what each surface absorbs. With one
 loudspeaker position and five microphones, the uncertainty the fit reports is above 0.2
-for most materials and bands in the hall, and above 0.4 for all of them in the seminar
+for most materials and bands in the hall, and 0.38 or more for all of them in the seminar
 room. The
 measurements fix each band's total absorption, and the proportions between materials
 come from the initial estimates. Telling surfaces apart takes responses that hear them
@@ -658,19 +683,24 @@ differently, such as sources and microphones near different surfaces.
 
 Some differences remain:
 
-- **250 Hz in the seminar room.** T30 is 3.2 JNDs short on the second loudspeaker's
-  responses, though within 1.4 on the first's. The two positions measured 1.70 and
+- **250 Hz in the seminar room.** T30 is 3.1 JNDs short on the second loudspeaker's
+  responses, though 1.2 off on average on the first's. The two positions measured 1.70 and
   1.90 s on average. This is near the room's Schroeder frequency, about 230 Hz, where a
   decay depends on where it is measured.
 - **8 kHz in the seminar room.** The decay stays 2 JNDs short even with surfaces that
   absorb next to nothing, because in octave bands the air absorbs at the octave's centre
   frequency (see "Third-octave bands" above).
-- **63 Hz.** EDT stays 2 to 6 JNDs off in both rooms. Below the Schroeder frequency a
-  geometric model gives an average, not the room's modes.
+- **63 Hz in the seminar room.** EDT stays 5.8 JNDs long. Below the Schroeder frequency
+  a geometric model gives an average, not the room's modes.
+- **63 and 125 Hz in the hall.** EDT is 3.8 and 2.5 JNDs short and T20 1.7 and 3.2 JNDs
+  long, as with the fitted set: the early part there is stronger than measured (see
+  "The hall's early part at low frequencies" above). The hall's Schroeder frequency is
+  about 45 Hz.
 
-Fitting took 11 minutes for the seminar room and 8 for the hall: four rounds of tracing
-at the first position's 10,000 rays per band. Simulating each room again at 50,000 rays
-took 13 to 14 minutes.
+Fitting took 5 minutes for the seminar room (three rounds of tracing at the first
+position's 10,000 rays per band) and 3.8 hours for the hall (four rounds), nearly all of
+it the early stage's edge fade, which fewer rays do not shorten. Simulating again took
+4 minutes and 83 minutes.
 
 ## Edge diffraction against the exact solution
 
@@ -2864,9 +2894,12 @@ Models:
 Files and runs:
 
 - **No limit on time.** The numbers of rays have no upper bound: a mistyped count runs
-  as long as it asks for. (A run's memory is estimated before it starts, and a run that
-  would need more than the computer has is refused; see
-  [Performance](simulation.md#performance).)
+  as long as it asks for. (The memory of a run's late part is estimated before it
+  starts, and a run whose late part would need more than the computer has is refused.
+  The early stage's is not estimated, and in a room of many facets with edge
+  diffraction it is most of a run's: BRAS CR3 peaks at 10.0 GiB in its edge fade
+  (11.7 GiB in third-octave bands), which in third-octave bands starts each listener
+  from less than 0.9 GiB; see [Memory](simulation.md#memory).)
 - **No uncertainty.** A run gives no standard errors: nothing says how much its
   parameters would change with another seed or more rays. Only `calibrate` gives one,
   for the absorption it fits.
@@ -2983,7 +3016,7 @@ python validation/bras_validation.py --bands third_octave --json bras_third.json
 python validation/bras_validation.py --materials initial --calibrate LS1 --plots docs/validation
 ```
 
-The cross-check takes about 20 minutes on 4 cores, the benchmark about 2 minutes, the
+The cross-check takes about 10 minutes on 4 cores, the benchmark about 2 minutes, the
 wave solver's checks about 3.5 minutes (both stencils), the ground's about 7.5 (1.5 of
 them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5
 (3 with turbulence), the turbulence's about 7, the vegetation's about 6, the wave
@@ -2991,8 +3024,8 @@ solver's outdoors about 18, the outdoor results' about 3, the terrain's about 4.
 leaves' about 2, the fast field program's about 4, the benchmark's about 55 (much
 longer with `--far`), the weather zones' about 9 (2 the parabolic equation's, 7 the
 mean profile's), the long term's about 0.5, the moving sources' about 3, the fade at edges' about 55, the cities' about 1 (2 with `--sizes 10 20 30 40 60`) and each BRAS
-run about 30 minutes (85 in third-octave bands, or half that per room with
-`--scenes CR2`, 46 calibrated). The cross-check's numbers come from 3.0.0 with seed 1.
+run of the seminar room about 4 minutes (8.5 calibrated, 9 in third-octave bands) and of
+the hall about 1.5 hours (5.2 calibrated, 3.6 in third-octave bands). The cross-check's numbers come from 4.0.1 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
 (`--pra-runs`); the means still move by a few percent from one call to the next, and the
 differences in the tables with them. Other seeds move this package's numbers by a few

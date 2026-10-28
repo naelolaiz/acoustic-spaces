@@ -4,10 +4,20 @@ the band, and goes to the rows the pieces belong to."""
 
 from __future__ import annotations
 
+import platform
+import sys
+
 import numpy as np
 
 from acoustic_spaces.engine import clusters as clusters_module
-from acoustic_spaces.engine.clusters import Clusters, _pair_shares, _rule_size, _slice_shares
+from acoustic_spaces.engine.clusters import (
+    Clusters,
+    Pages,
+    _pair_shares,
+    _rule_size,
+    _slice_shares,
+    hand_back,
+)
 from acoustic_spaces.engine.diffraction import band_frequencies
 
 C = 343.0
@@ -74,6 +84,88 @@ def test_a_wave_of_many_pieces_arriving_together_is_their_coherent_sum() -> None
     coherent = np.mean(np.abs(pressure.sum(axis=0)) ** 2, axis=1)
     assert has.all() and (energy >= 0.0).all()
     np.testing.assert_allclose(energy.sum(axis=0), coherent, rtol=1e-5)
+
+
+def test_pages_keep_pieces_together_in_single_precision(monkeypatch) -> None:
+    """Pieces go into pages of _PAGE bytes, a new one where the last is full, as they
+    would be in single precision."""
+    monkeypatch.setattr(clusters_module, "_PAGE", 10 * BANDS * PER_BAND * 8)
+    rng = np.random.default_rng(9)
+    pressure, _ = _pieces(rng, 14, 0.0)
+    pages = Pages()
+    kept = [pages.keep(pressure[a:b]) for a, b in ((0, 4), (4, 9), (9, 14))]
+    for piece, (a, b) in zip(kept, ((0, 4), (4, 9), (9, 14)), strict=True):
+        assert piece.dtype == np.complex64
+        assert np.array_equal(piece, pressure[a:b].astype(np.complex64))
+    assert kept[0].base is kept[1].base is not kept[2].base
+    assert len(kept[0].base) == 10
+
+
+def test_pieces_added_in_many_parts_resolve_as_if_added_at_once(monkeypatch) -> None:
+    """The pieces stay in the parts they were added in (a room of many facets has
+    millions of them) and are taken from there a batch of waves at a time: their energy
+    is the same, bit for bit, as of pieces added at once, and within rounding however
+    many batches the waves take."""
+    rng = np.random.default_rng(8)
+    count = 300
+    pressure, distance = _pieces(rng, count, 5.0)
+    pressure = pressure.astype(np.complex64)  # as the edge fade adds them
+    keys = rng.integers(0, 12, count)
+    keys[:4] = np.arange(4)  # the specular paths' waves
+    keys[10:15] = 50 + np.arange(5)  # waves of one piece
+    rows = rng.permutation(count)
+    own = np.mean(np.abs(pressure[:4].astype(complex)) ** 2, axis=2)
+
+    def resolve(splits):
+        clusters = Clusters(SLICE_HZ, C, 10.0)
+        clusters.add(rows[:4], keys[:4], pressure[:4], distance[:4], anchor=True, own=own)
+        for part in np.split(np.arange(4, count), splits):
+            clusters.add(rows[part], keys[part], pressure[part], distance[part])
+        return clusters.resolve(count)
+
+    energy, has = resolve([])
+    assert has.all() and (energy >= 0.0).all()
+    split, split_has = resolve([30, 31, 150, 220])
+    assert np.array_equal(split, energy) and np.array_equal(split_has, has)
+    monkeypatch.setattr(clusters_module, "_VALUES", 200)
+    batched, batched_has = resolve([30, 31, 150, 220])
+    assert np.array_equal(batched_has, has)
+    np.testing.assert_allclose(batched, energy, rtol=1e-9, atol=1e-12 * energy.max())
+
+
+def test_the_energy_of_pieces_in_single_precision_is_worked_out_again(monkeypatch) -> None:
+    """Pieces in single precision added without their energy (the edge fade's, of which a
+    room of many facets has millions) keep only their pressure: their energy, worked out
+    again a few pieces at a time as they are resolved, is the same, bit for bit, as when
+    it is given."""
+    rng = np.random.default_rng(9)
+    count = 200
+    pressure, distance = _pieces(rng, count, 5.0)
+    pressure = pressure.astype(np.complex64)
+    keys = rng.integers(0, 10, count)
+    keys[:3] = np.arange(3)
+    rows = rng.permutation(count)
+    own = np.mean(np.abs(pressure[:3].astype(complex)) ** 2, axis=2)
+
+    def resolve(energy):
+        clusters = Clusters(SLICE_HZ, C, 10.0)
+        clusters.add(rows[:3], keys[:3], pressure[:3], distance[:3], anchor=True, own=own)
+        clusters.add(rows[3:], keys[3:], pressure[3:], distance[3:], own=energy)
+        return clusters, clusters.resolve(count)
+
+    monkeypatch.setattr(clusters_module, "_VALUES", 100)
+    kept, (energy, has) = resolve(None)
+    assert kept._parts[1]["own"] is None and has.all()
+    given = np.mean(np.abs(pressure[3:]) ** 2, axis=2)
+    _, (with_given, given_has) = resolve(given)
+    assert np.array_equal(with_given, energy) and np.array_equal(given_has, has)
+
+
+def test_the_memory_kept_free_is_handed_back_where_the_c_library_can() -> None:
+    """glibc's malloc_trim on Linux; nothing where there is none."""
+    hand_back()
+    if sys.platform.startswith("linux") and platform.libc_ver()[0] == "glibc":
+        assert clusters_module._malloc_trim() is not None
 
 
 def test_the_specular_path_takes_the_cross_terms_of_its_wave() -> None:

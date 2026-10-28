@@ -88,8 +88,11 @@ for speech (in `church`).
   again.
 - A room with a curved surface of many facets, whose events at the edges have hundreds
   of thousands of terms, no longer runs out of memory in the early stage: the BRAS CR3
-  room at its defaults peaks at 10.6 GB, where 4.0.0 asked for 16.4 GiB at once, and CR2
-  runs, where 4.0.0 asked for 19.6 GiB.
+  room at its defaults peaks at 10.0 GiB (11.7 GiB in third-octave bands), where 4.0.0
+  asked for 16.4 GiB at once, and CR2 at 1.1 GiB, where 4.0.0 asked for 19.6 GiB. The
+  edge fade keeps the pieces of its waves in single precision, leaves out those with
+  nothing in them before it keeps them, and hands back to the system what they leave
+  free in the C library's heap (glibc's `malloc_trim`).
 - A path that reflects and passes through three partitions or more (faces that reflect
   and let sound through) was counted by neither part: the early stage follows a path
   through two partitions at most, and the stochastic late stage left out the specular
@@ -299,8 +302,9 @@ for speech (in `church`).
   energy at every listener or map point for every source, and while a source is traced,
   the tracer's copies on the CPU's threads or its buffers on a GPU, the worst of the
   devices `late.device` may take on this computer. A simulation or a coverage map that
-  would need more than the computer's memory (or its container's limit) is refused with
-  a message that says what to lower, and `Room.warnings()` (the editor's messages)
+  would need more than the computer's memory (or its container's limit, on the
+  process's own control group or one above it) is refused with a message that says
+  what to lower, and `Room.warnings()` (the editor's messages)
   notes one that would need more than half. A map is checked again once its first
   source point is traced, with the early paths found there at every point.
   `performance.threads` above the computer's cores run as its cores. On the CPU the
@@ -323,6 +327,17 @@ for speech (in `church`).
   UndefinedBehaviorSanitizer (the CMake option `ACOUSTIC_SPACES_SANITIZE`), and measures
   the tests' coverage of the Python code. The `dev` extra and group install mypy and
   PyYAML's types.
+- The validation report's measured rooms (BRAS CR2 and CR3), made before 3.0.0, and its
+  cross-check with pyroomacoustics are run again with this version, with their run
+  times and memory measured on 4 cores (see
+  [Validation](docs/validation.md#measured-rooms-bras)). The seminar room's mean
+  differences from the measurement move by 0.3 JNDs at most. The hall's EDT and Ts come
+  closer (with the fitted absorption EDT 2.1 JNDs off on average instead of 2.6, Ts 0.9
+  instead of 1.3), but its EDT at 63 and 125 Hz, 23 and 19 % long before, comes out 19
+  and 13 % short: with edge diffraction its early part there is 6.6 and 5.8 dB stronger
+  than with that code, 3.1 and 4.4 dB of it from the fade at edges that 4.0.0 added. The
+  report said the diffuse box's C80 from the energies came within 0.7 dB of Barron's
+  revised theory; it is 0.6 to 1.0 dB below, as it was with the code of the report.
 - Known issue, documented: with vector-based scattering (the default) the late part
   carries the specular share of the first orders with more energy than the exact paths
   (a quarter more for orders 1 to 3 near the middle of a small box), so the total depends
