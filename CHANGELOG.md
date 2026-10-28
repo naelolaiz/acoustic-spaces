@@ -338,6 +338,30 @@ for speech (in `church`).
   than with that code, 3.1 and 4.4 dB of it from the fade at edges that 4.0.0 added. The
   report said the diffuse box's C80 from the energies came within 0.7 dB of Barron's
   revised theory; it is 0.6 to 1.0 dB below, as it was with the code of the report.
+- The edge fade is walked in CI (`tests/test_walks.py`): the `archway`'s whole line
+  behind its wall, the `gallery` round its corner and the `street`'s garden round its
+  four largest steps, each held to the steps it makes now. `validation/walks.py` makes
+  the whole walks, with the fade and without it. The validation report's table of the
+  steps along the street is made again with it, 1 cm apart round every step among the
+  four largest for its listener in a band or in dB(A): 20 places instead of 11, among
+  them the largest in dB(A), 0.52 dB(A) (1.13 dB at 1 kHz) in the garden with the car at
+  x = -41.39 m, where a term reaches the end of the barrier's top.
+- The validation report checks the edge diffraction and the fade against the exact
+  solution in three more places (`validation/edge_diffraction.py`,
+  `validation/edge_fade.py`): past the corner of a thin screen with `direct`, behind a
+  barrier 3 m high on a hard ground with `first_order` (`one_side` and `both_sides`) and
+  behind a barrier 1 m thick with `second_order`. `btm_first` there takes the ends of a
+  finite edge.
+- Known issues, measured: past the corners of edges, which the UTD has no terms for,
+  the level steps (by 2.8 dB at 63 Hz with `direct` past a thin screen's corner, where
+  BTM changes by 0.15 dB or less; along the `street` by up to 1.42 dB in a band and
+  0.52 dB(A)). Behind a barrier on a hard ground with `first_order`, the path over the
+  top with the reflection off the ground behind it is left out where the reflection
+  before the barrier is found: the level steps by 0.35 dB at 63 Hz there and is 0.33 dB
+  low above (`both_sides` is within 0.07 dB of the exact level from 125 Hz up). A fix
+  changes BRAS CR2's early level by up to 0.8 dB at 63 Hz, so it waits for a run of
+  BRAS with it. With `second_order` a path over two edges takes no reflections, so
+  behind a thick barrier on a hard ground the level is 1.7 to 5.7 dB low from 500 Hz up.
 - Known issue, documented: with vector-based scattering (the default) the late part
   carries the specular share of the first orders with more energy than the exact paths
   (a quarter more for orders 1 to 3 near the middle of a small box), so the total depends

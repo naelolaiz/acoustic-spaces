@@ -26,6 +26,9 @@ half-plane, which is exact far from the edge, and the engine against it:
 - a thick barrier (two right-angled corners 0.3, 1 and 3 m apart, sharing the top face),
   second order: the engine against BTM, at two pairs of positions, one of them oblique;
 - two thin screens in a row, second order;
+- the corner of a thin screen, first order: the listener walks past where the direct
+  sound comes round one edge while the path over the other still touches it, against
+  BTM over both edges, each ending at the corner;
 - the level as the source rises through the plane of the barrier's top, where the path
   over the far corner alone appears, and as the listener does on the other side;
 - the cost of the early stage with each mode, in a hall with alcoves.
@@ -118,11 +121,18 @@ def _beta(nu, argument, theta_s, theta_r):
     return out
 
 
-def btm_first(edge: Edge, source, receiver, k=K, du: float = 0.004) -> np.ndarray:
-    """The diffracted pressure at ``receiver``, per wave number."""
+def btm_first(
+    edge: Edge, source, receiver, k=K, du: float = 0.004, ends=(-np.inf, np.inf)
+) -> np.ndarray:
+    """The diffracted pressure at ``receiver``, per wave number; over the part of the
+    edge between ``ends`` (positions along it from its origin), where it ends there."""
     rs, ts, zs = edge.frame(source)
     rr, tr, zr = edge.frame(receiver)
     z, dz = _samples(zs + (zr - zs) * rs / (rs + rr), du)
+    if np.isfinite(ends).any():  # each piece cut to the ends: past them, nothing
+        lower, upper = np.maximum(z - dz / 2, ends[0]), np.minimum(z + dz / 2, ends[1])
+        keep = upper > lower
+        z, dz = 0.5 * (lower + upper)[keep], (upper - lower)[keep]
     m, el = np.hypot(rs, z - zs), np.hypot(rr, z - zr)
     beta = _beta(edge.nu, (m * el + (z - zs) * (z - zr)) / (rs * rr), ts, tr)
     weight = -edge.nu / (4.0 * np.pi) * beta / (m * el) * dz
@@ -408,6 +418,43 @@ def crossing(folder: Path) -> dict:
     return out
 
 
+def screen_corner(folder: Path) -> dict:
+    """The corner of a thin screen in the plane x = 0 that fills y < 0 and z < 0: the
+    listener walks along y, 1 cm at a time, past where the direct sound comes round the
+    side edge while the path over the top edge still touches it near the corner. The
+    engine (``direct``, every band in pressure) against BTM over both edges, each from
+    the corner on; the sound diffracted from one edge to the other is left out."""
+    a = EXTENT
+    quads = [[(0, -a, -a), (0, 0, -a), (0, 0, 0), (0, -a, 0)]]
+    top = Edge([0, 0, 0], [0, -1, 0], [0, 0, -1], [1, 0, 0], 2.0)
+    side = Edge([0, 0, 0], [0, 0, -1], [0, -1, 0], [1, 0, 0], 2.0)
+    source = np.array([-5.0, -3.0, -1.0])
+    ys = np.arange(2.5, 4.0 + 1e-9, 0.01) + 0.00317  # none exactly on a boundary
+    found, exact = [], []
+    for y in ys:
+        receiver = np.array([5.0, y, -2.0])
+        _, level = engine(_room(folder, "corner", quads, source, receiver), "direct", coherent=8)
+        found.append(level)
+        pressure = btm_first(top, source, receiver, ends=(0.0, np.inf))
+        pressure = pressure + btm_first(side, source, receiver, ends=(0.0, np.inf))
+        t = source[0] / (source[0] - receiver[0])  # where the line crosses x = 0
+        crossing = source[1:] + t * (receiver[1:] - source[1:])
+        distance = float(np.linalg.norm(receiver - source))
+        if not (crossing < 0.0).all():
+            pressure = pressure + np.exp(-1j * K * distance) / distance
+        exact.append(band_level(pressure, distance))
+    found, exact = np.array(found), np.array(exact)
+    steps = np.abs(np.diff(found, axis=0))
+    return {
+        "source": source.tolist(),
+        "line": [[5.0, float(ys[0]), -2.0], [5.0, float(ys[-1]), -2.0]],
+        "largest_step_db": steps.max(axis=0).tolist(),
+        "largest_step_at_y": ys[1:][steps.argmax(axis=0)].tolist(),
+        "exact_largest_step_db": np.abs(np.diff(exact, axis=0)).max(axis=0).tolist(),
+        "largest_difference_db": np.abs(found - exact).max(axis=0).tolist(),
+    }
+
+
 def alcove_hall() -> Room:
     """A 30 x 20 x 10 m hall with four 3 m alcoves, 2 m deep, along each long wall:
     16 vertical edges that diffract, with the source and the listener in the first and
@@ -487,6 +534,12 @@ def main() -> None:
             print(f"| engine in pressure - BTM | {_row(row['in_pressure_minus_btm_db'])} |")
         seconds = max(row["btm_seconds"] for row in results["second_order"])
         print(f"\n(BTM takes up to {seconds:.0f} s per case)")
+
+        results["screen_corner"] = corner = screen_corner(folder)
+        print(f"\n| a screen's corner, direct (dB) | {header} |\n{rule}")
+        print(f"| largest step, engine | {_row(corner['largest_step_db'])} |")
+        print(f"| largest step, BTM | {_row(corner['exact_largest_step_db'])} |")
+        print(f"| largest difference | {_row(corner['largest_difference_db'])} |")
 
         results["crossing"] = crossing(folder)
         print(f"\n| largest step over 1 mm (dB) | {header} |\n{rule}")

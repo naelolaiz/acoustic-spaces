@@ -773,6 +773,25 @@ the source and 0.72 dB for the listener at 63 Hz with the waves added in energy,
 with them in pressure (the default in that band), and at most 0.07 dB from 1 kHz up.
 With `first_order` the level drops from the path over one corner to nothing.
 
+At the corner of a thin screen, the quarter of the plane x = 0 below y = 0 and z = 0,
+the source at (-5, -3, -1) and the listener walking from (5, 2.5, -2) to (5, 4, -2)
+1 cm at a time with `direct` and every band in pressure, the direct sound comes round
+the screen's side edge at y = 3. The exact level, BTM over both edges, each from the
+corner on (the sound from one edge to the other left out), changes smoothly there; the
+engine's steps:
+
+| a screen's corner, `direct` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| largest step, engine | 2.82 | 1.81 | 1.37 | 0.50 | 0.28 | 0.27 | 0.10 | 0.15 |
+| largest step, BTM | 0.00 | 0.01 | 0.02 | 0.06 | 0.04 | 0.07 | 0.10 | 0.15 |
+| largest difference, engine - BTM | 1.83 | 0.99 | 1.06 | 0.41 | 0.21 | 0.22 | 0.04 | 0.08 |
+
+The path over the top edge still touches it 8 cm from the corner there, but its term is
+dropped as the direct sound it borders appears: a term counts only while the specular
+path is found on its lit side and missing on its dark side, and here the direct sound
+appears round the end of the edge, not across its boundary. The UTD has no terms for
+the corners of edges (see [Known issues](#known-issues)).
+
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
 sight, takes 55 ms per source and listener on four cores without diffraction (23
@@ -848,6 +867,45 @@ the wall's end a reflection off that plane from below came as strong as the soun
 round the end: 2.8 to 6.3 dB too loud, and 3.1 dB too soft at 1 kHz, where the two
 cancelled. Neither changes any of the levels above.
 
+Behind a barrier 3 m high on a rigid ground (a thin screen across x = 0), with the
+source at (-4, 0, 0.5) and a listener at x = 4 m rising from 1 to 8 m 1 cm at a time,
+the exact level is that of the geometric paths and of the four paths over the top, from
+the source and its image in the ground to the listener and its image, each by BTM. With
+`first_order` every path over the top is the edge diffraction's own, and the fade
+changes nothing (less than 0.001 dB):
+
+| barrier on a rigid ground, `first_order` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| largest difference, `one_side` | 2.20 | 3.00 | 2.62 | 0.89 | 0.79 | 0.67 | 0.75 | 0.72 |
+| largest difference, `both_sides` | 0.38 | 0.05 | 0.07 | 0.01 | 0.02 | 0.05 | 0.03 | 0.05 |
+| largest step, `both_sides` | 0.35 | 0.14 | 0.12 | 0.05 | 0.09 | 0.15 | 0.20 | 0.16 |
+| largest step, exact | 0.06 | 0.14 | 0.12 | 0.05 | 0.09 | 0.15 | 0.21 | 0.16 |
+
+`one_side` leaves out the fourth path, reflected off the ground before the top and
+again after it (see [Outdoor results](#outdoor-results-against-exact-solutions)).
+With `both_sides` the level is within 0.07 dB of the exact level from 125 Hz up, and
+steps like it but at 63 Hz: there it steps by 0.35 dB (`one_side` by 0.33 dB) at
+z = 6.5 m, where the listener rises into sight of the reflection off the ground before
+the barrier, and is 0.33 dB low on average above. The path over the top with the
+reflection off the ground behind it is left out there (see
+[Known issues](#known-issues)).
+
+Behind a barrier 1 m thick on the same ground (two right-angled edges 1 m apart, 3 m
+up), with the source at (-5, 0, 0.5), `second_order` and listeners 5 m behind it, the
+exact level is BTM's sound over both edges from the source and its image to the
+listener and its image (about 4 minutes a listener). The engine minus the exact level:
+
+| thick barrier, `second_order` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| listener 0.5 m up | -9.85 | -6.96 | +3.03 | -5.66 | -5.53 | -5.17 | -5.07 | -5.41 |
+| 1.5 m up | -5.05 | -0.27 | -0.48 | -3.21 | -2.43 | -2.13 | -2.17 | -2.41 |
+| 2.5 m up | -1.09 | -5.48 | +3.84 | -2.54 | -2.10 | -1.88 | -1.74 | -1.90 |
+
+A path over two edges takes no reflection off the ground, so of the four paths over
+the barrier the engine has one: 1.7 to 5.7 dB low from 500 Hz up, and up to 9.9 dB low
+and 3.8 dB high below, where the four interfere. `both_sides`, which pairs reflections
+round one edge, and the fade change nothing here (see [Known issues](#known-issues)).
+
 ### Round a corner indoors
 
 Indoors the paths that pass an edge reflect off the floor, the ceiling and the walls
@@ -916,8 +974,8 @@ The `street` example's car (see [A car passing by](demos.md#a-car-passing-by)) p
 the pavement, a balcony of the office block and the garden behind the noise barrier.
 No exact solution covers a street either, so the check is again that the level does not
 jump: the early level, A-weighted with the car's sound power, every 10 cm of the car's
-125 m, and again 1 cm apart round each place where a step of 10 cm stands out from its
-neighbours in some band (the four largest in each band and in dB(A)). Outdoors paths
+125 m, and again 1 cm apart round each step of 10 cm that is among the four largest for
+its listener in some band or in dB(A) (`validation/walks.py`). Outdoors paths
 add in pressure in every band, so the level also swings, smoothly, where they go in
 and out of step: in the garden by up to 3.2 dB(A) from one metre to the next, and 1 cm
 apart by up to 0.24 dB(A) and 0.7 dB at 8 kHz, where a centimetre is a quarter of a
@@ -934,32 +992,47 @@ level stepped by up to 11.4 dB(A) from one metre to the next. The steps of 0.90 
 dB that two events stopping a path made in the garden, at x = -41.60, 30.41, 32.00 and
 34.00 m (see the next paragraph), are gone: 1 cm apart, the level there now stands out
 from its neighbours' by at most 0.11 dB in any band. The steps left that stand out by
-more than 0.1 dB in some band 1 cm apart (but at 8 kHz, where a centimetre is a quarter
-of a wavelength and the level swings by up to 0.8 dB from one to the next), each within
-a centimetre:
+more than 0.1 dB in some band 1 cm apart, but at 8 kHz, where a centimetre is a quarter
+of a wavelength and the level swings by up to 0.8 dB from one to the next (three more
+at 4 kHz in the garden, at x = 19.40, 28.72 and 28.88 m, are swings too: 1 mm apart
+the level there changes smoothly, by at most 0.06 dB a millimetre), each the step from
+1 cm before x to x, and how far it stands out in dB(A) and in the same band without the
+fade (`validation/walks.py`):
 
-| car at x (m) | listener | step (dB) | in | dB(A) | without the fade (dB) |
+| car at x (m) | listener | stands out (dB) | in | dB(A) | without the fade (dB) |
 |---:|---|---:|---|---:|---:|
-| -14.05 | garden | 1.41 | 63 Hz | 0.35 | 0.34 |
-| -0.70 | garden | 1.37 | 63 Hz | 0.27 | 0.47 |
-| 10.00 | garden | 1.04 | 63 Hz | 0.27 | 1.0 |
-| 37.79 | pavement | 0.55 | 63 Hz | 0.03 | 1.09 |
-| 58.78 | garden | 0.82 | 250 Hz | 0.09 | 0.93 |
-| 60.79 | garden | 1.42 | 500 Hz | 0.32 | 0.29 |
-| 62.89 | pavement | 1.02 | 250 Hz | 0.23 | 0.61 |
-| 63.52 | balcony | 0.32 | 63 Hz | 0.00 | 0.18 |
-| 66.52 | balcony | 0.16 | 1 kHz | 0.10 | 0.05 |
-| 69.50 | balcony | 0.75 | 63 Hz | 0.09 | 0.70 |
-| 69.99 | pavement | 0.18 | 500 Hz | 0.05 | 1.48 |
+| -41.39 | garden | 1.13 | 1 kHz | 0.52 | 0.00 |
+| -14.04 | garden | 1.41 | 63 Hz | 0.27 | 0.33 |
+| -0.75 | garden | 1.29 | 63 Hz | 0.15 | 0.41 |
+| -0.69 | garden | 1.37 | 63 Hz | 0.27 | 0.47 |
+| 9.99 | garden | 0.82 | 63 Hz | 0.03 | 0.96 |
+| 37.80 | pavement | 0.55 | 63 Hz | 0.03 | 1.09 |
+| 58.79 | garden | 0.82 | 250 Hz | 0.09 | 0.93 |
+| 59.09 | balcony | 0.29 | 63 Hz | 0.05 | 0.04 |
+| 59.37 | balcony | 0.29 | 63 Hz | 0.07 | 0.15 |
+| 60.03 | balcony | 0.40 | 63 Hz | 0.04 | 0.00 |
+| 60.70 | pavement | 0.40 | 250 Hz | 0.00 | 0.00 |
+| 60.80 | garden | 1.42 | 500 Hz | 0.32 | 0.29 |
+| 60.87 | garden | 1.31 | 500 Hz | 0.19 | 0.26 |
+| 61.02 | pavement | 0.10 | 63 Hz | 0.03 | 0.00 |
+| 62.90 | pavement | 1.02 | 250 Hz | 0.23 | 0.61 |
+| 63.10 | pavement | 1.18 | 250 Hz | 0.27 | 0.60 |
+| 63.53 | balcony | 0.32 | 63 Hz | 0.00 | 0.18 |
+| 66.53 | balcony | 0.16 | 1 kHz | 0.10 | 0.05 |
+| 69.51 | balcony | 0.75 | 63 Hz | 0.09 | 0.70 |
+| 69.61 | balcony | 0.73 | 63 Hz | 0.03 | 0.67 |
 
-All but two are the corners of edges (see [Known issues](#known-issues-of-the-edge-fade)):
-a path over the barrier's top, on its own or with a reflection off the ground or the
-offices' façade before or after it, reaches an end of the top (x = 14 or 44 m), where
-its term stops, the edge diffraction's own as well as the fade's, whose term of the same
-path stops there with it and makes several of them larger (at 60.79 m 0.29 dB without
-the fade, 1.42 dB with it). At 69.99 m a reflection off the barrier's face reaches the
-barrier's end, where the fade brings the step down from 1.48 dB to 0.18 dB. The dip at
-10.00 m is the next paragraph's.
+All but the one at 9.99 m are the corners of edges (see
+[Known issues](#known-issues-of-the-edge-fade)): a path over the barrier's top, on its
+own or with a reflection off the ground or the offices' façade before or after it,
+reaches an end of the top (x = 14 or 44 m), or a path round the barrier's end at
+x = 44 m reaches the end's top, where its term stops, the edge diffraction's own as
+well as the fade's, whose term of the same path stops there with it and makes several
+of them larger (at 60.80 m 0.29 dB without the fade, 1.42 dB with it). The largest in
+dB(A), at -41.39 m, is the fade's alone: the term of a second-order reflection that the
+barrier's top cuts off reaches the top's end at x = 14 m. The dip at 9.99 m is the next
+paragraph's. `tests/test_walks.py` walks the garden round the four largest steps in CI
+and holds them to 1.5 dB in a band and 0.6 dB(A).
 
 The four steps that are gone came from paths that two events stop at once. At x =
 -41.60, 30.41 and 32.00 m the reflection off the offices' façade of a path that the
@@ -996,9 +1069,17 @@ would also be the better one here is not checked.
   its edge, as the UTD has no terms for the corners of edges, unless that end lies in a
   plane the path reflects off next to the event, where the edge goes on as its image in
   the plane (for a leg that stops a path, the image's term is found on the leg on the
-  other side of the reflection); the edge diffraction's own paths stop there alike. Along the street the paths over the barrier's top make steps of up to
-  1.42 dB in one band and 0.35 dB(A) where they reach its ends (see above), the edge
-  diffraction's own up to 1.09 dB without the fade.
+  other side of the reflection); the edge diffraction's own paths stop there alike.
+  Along the street the paths over the barrier's top make steps of up to 1.42 dB in one
+  band and 0.52 dB(A) where they reach its ends (see above), the edge diffraction's own
+  up to 1.09 dB without the fade. Past the corner of a thin screen the edge diffraction
+  alone steps by 2.8 dB at 63 Hz (see
+  [Edge diffraction against the exact solution](#edge-diffraction-against-the-exact-solution)).
+  A term weighted by the part of its Fresnel zone that the edge covers, as BTM's
+  integral over a finite edge has it, and kept where its path appears round the edge's
+  end, would remove these steps; it is an open item on the [roadmap](roadmap.md).
+  `tests/test_walks.py` holds the garden's four largest steps to 1.5 dB in a band and
+  0.6 dB(A).
 - **Terms that cancel, in the bands that add in energy.** Indoors paths add in energy
   from 250 Hz up (`coherent_max_band_hz`). Where both edges of a narrow face border its
   reflection, their terms nearly cancel there at low frequencies; added in energy they
@@ -1021,7 +1102,7 @@ would also be the better one here is not checked.
   sum stopped at zero, it stepped by 1.37 dB at 500 Hz and 1.06 dB at 250 Hz at
   y = 6.14 m and by 0.92 dB at 250 Hz at 7.33 m, and by up to 4.4 dB before the terms
   of one event took their cross terms with each other. The edge diffraction's own
-  paths, without the fade, step there by up to 1.57 dB at 63 Hz and 1.88 dB from 250 Hz
+  paths, without the fade, step there by up to 1.56 dB at 63 Hz and 1.88 dB from 250 Hz
   up. Averaged over the walk, the level is 0.4, 1.1 and 0.7 dB above that with every
   band in pressure (`coherent_max_band_hz: 8000`) at 250, 500 and 1000 Hz (4.0.0: 0.1,
   1.6 and 0.9 dB) and 0.1 to 0.4 dB below it from 2 kHz up: not traced.
@@ -1036,7 +1117,11 @@ would also be the better one here is not checked.
   stopped at two events, is left out at once; so it is not done. The other steps along
   the walk, of up to 0.24 dB at 63 and 125 Hz and 0.07 dB from 250 Hz up, are there in
   pressure too; at y = 6.83 to 6.84 m and 7.00 to 7.01 m, terms of cut-off second- and
-  third-order reflections come or go, and why is not traced.
+  third-order reflections come or go, and why is not traced. The fix would take a term
+  over both corners of the end in turn, as `second_order` has for the direct sound,
+  which the fade does not have (an open item on the [roadmap](roadmap.md)).
+  `tests/test_walks.py` walks the whole line in CI and holds the steps to 0.65 dB at
+  63 Hz, 0.5 dB at 125 Hz, 0.1 dB from 250 Hz to 2 kHz and 0.2 dB above.
 - **Products of terms.** The terms of a path's events multiply, as the path must get
   past each in turn, an approximation for terms at different edges. Each product is a
   path that arrives later by the detours of all its terms, an approximation too for
@@ -1052,13 +1137,14 @@ would also be the better one here is not checked.
   the specular paths.
 - **What is checked.** Against exact solutions: vertical edges standing on a rigid
   ground (a screen's end, a building's corner, a 2 m strip and a 4 m gap) with
-  `direct`, and the corner and the strip with `first_order` too. Only for steps, with
-  no exact level: paths of two or more reflections indoors (the gallery, and with
-  `second_order` behind the archway) and in a street. Only against the edge diffraction's own paths, where it bends every path: a
-  barrier's top with a reflection off the ground before or after it. Not checked:
-  surfaces with an impedance against an exact solution, `second_order` (whose paths
-  over two edges take no terms of the fade) and `both_sides`. Nothing is checked
-  against measurements.
+  `direct`, and the corner and the strip with `first_order` too; a barrier's top on a
+  rigid ground, with a reflection off the ground before or after it, with
+  `first_order` and with `both_sides`; and a thick barrier with `second_order`, whose
+  paths over two edges take no terms of the fade. Only for steps, with no exact level:
+  paths of two or more reflections indoors (the gallery, and with `second_order`
+  behind the archway) and in a street, walked in CI (`tests/test_walks.py`) and in full
+  by `validation/walks.py`. Not checked: surfaces with an impedance against an exact
+  solution. Nothing is checked against measurements.
 
 ## Ground reflection against the exact solution
 
@@ -2843,7 +2929,8 @@ its peak (single precision).
 
 ## Known issues
 
-A review of the code on 25 October 2026 found these. Each one was checked against the
+A review of the code on 25 October 2026 found these, but for the two about barriers,
+which the checks against the exact solution found. Each one was checked against the
 code, and the numbers come from probes or from the code's own formulas; they are open
 items on the [roadmap](roadmap.md).
 The edge fade's own are listed in
@@ -2886,6 +2973,23 @@ Results:
   lateral figures of eight behind LF, LFC and LG, at most 0.04 dB (the `street`'s
   balcony at 1 kHz) and 0.003 dB elsewhere. Impulse responses add the paths in pressure
   without it.
+- **A barrier on a hard ground with `first_order`.** The path over the barrier's top
+  with the reflection off the ground behind it is left out where the reflection off the
+  ground before the barrier is found: both come from the source's image in the ground,
+  and the edge diffraction takes that reflection for the geometric wave of both. 4 m
+  behind a barrier 3 m high the level at 63 Hz steps by 0.35 dB where the listener
+  rises into sight of that reflection, and is 0.33 dB low on average above it (0.07 dB
+  or less from 125 Hz up; see
+  [Reflections that fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution)).
+  A fix that tells the two paths apart removes the step, but changes the early level of
+  BRAS CR2 by up to 0.8 dB at 63 Hz, and by different amounts with the edge fade and
+  without it (up to 2.6 dB apart), so the fade's model of what the edge diffraction
+  adds would have to follow it; it waits for a run of BRAS with it.
+- **Paths over two edges take no reflections.** With `second_order` a path over two
+  edges reflects nowhere before, between or after them, so behind a thick barrier on a
+  hard ground the engine has one of the four paths over it: 1.7 to 5.7 dB low from
+  500 Hz up, and off by up to 9.9 dB below (see
+  [Reflections that fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution)).
 
 Models:
 
@@ -2989,6 +3093,7 @@ python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
 python validation/edge_diffraction.py --json diffraction.json
 python validation/edge_fade.py --json edge_fade.json
+python validation/walks.py --json walks.json   # --walks gallery archway street
 python validation/ground_reflection.py --wave --parabolic --extended --json ground.json
 python validation/outdoor_propagation.py --json outdoor.json --plots docs/validation
 python validation/outdoor_propagation.py --turbulence moderate
@@ -3023,7 +3128,8 @@ them the wave solver's, 2 the parabolic equation's), the outdoor measurements' a
 solver's outdoors about 18, the outdoor results' about 3, the terrain's about 4.5, the
 leaves' about 2, the fast field program's about 4, the benchmark's about 55 (much
 longer with `--far`), the weather zones' about 9 (2 the parabolic equation's, 7 the
-mean profile's), the long term's about 0.5, the moving sources' about 3, the fade at edges' about 55, the cities' about 1 (2 with `--sizes 10 20 30 40 60`) and each BRAS
+mean profile's), the long term's about 0.5, the moving sources' about 3, the fade at edges' about 80 (25 of them the barriers'), the
+walks' about 14, the cities' about 1 (2 with `--sizes 10 20 30 40 60`) and each BRAS
 run of the seminar room about 4 minutes (8.5 calibrated, 9 in third-octave bands) and of
 the hall about 1.5 hours (5.2 calibrated, 3.6 in third-octave bands). The cross-check's numbers come from 4.0.1 with seed 1.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
