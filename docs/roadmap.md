@@ -115,6 +115,19 @@ Edge diffraction:
   0.57 dB at 63 Hz where they go from hitting the jamb's end face to its far face, a
   face of the end's other corner. This and the fade's other known issues are listed in
   [Validation](validation.md#known-issues-of-the-edge-fade).
+- [ ] Terms at the corners of edges, which the UTD has none for: each term weighted by the
+  part of its Fresnel zone that the edge covers, as BTM's integral over a finite edge
+  has it, and kept where its path appears round the edge's end. Past a thin screen's
+  corner the edge diffraction steps by 2.8 dB at 63 Hz, and along the `street` the
+  level by up to 1.42 dB in a band (0.52 dB(A)).
+- [ ] The path over a barrier's top with the reflection off the ground behind it, kept
+  where the reflection before the barrier is found: 4 m behind a barrier 3 m high on a
+  hard ground the level steps by 0.35 dB at 63 Hz with `first_order`. A fix that tells
+  the two apart changes BRAS CR2's early level by up to 0.8 dB at 63 Hz, and the edge
+  fade's model would have to follow it; checked against BRAS before it goes in.
+- [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
+  hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
+  500 Hz up.
 
 Parameters:
 
@@ -374,6 +387,12 @@ Version 4.0.1:
   defaults instead of running out of memory, in octave and in third-octave bands.
 - [x] The validation report's measured rooms (BRAS) and its cross-check with
   pyroomacoustics run again with this version, with their run times and memory.
+- [x] The edge fade walked in CI: the `archway`'s whole line behind its wall, the
+  `gallery` round its corner and the `street`'s garden round its four largest steps
+  (`tests/test_walks.py`), with `validation/walks.py` for the whole walks. The edge
+  diffraction and the fade checked against the exact solution past a thin screen's
+  corner, behind a barrier on a hard ground with `first_order` (`one_side` and
+  `both_sides`) and behind a thick barrier with `second_order`.
 
 Known issues found by the review of 25 October 2026 (see
 [Validation](validation.md#known-issues)), in the order they come next:

@@ -29,11 +29,22 @@ and without the fade:
   point lies off the strip, the far end's are the fade's), and only the fade has those
   of its copy off the ground;
 - a gap of 4 m between two screens in line, on the ground, with ``direct``: the listener
-  passes behind one screen's end, through the gap and behind the other's.
+  passes behind one screen's end, through the gap and behind the other's;
+- a thin barrier 3 m high on the ground, with ``first_order`` and with ``both_sides``
+  too: the listener rises behind it through the shadow boundaries of the direct sound
+  and of its copy off the ground. The ground mirrors the barrier into a screen twice as
+  high, so the exact sound is that of its top from the source and its image to the
+  listener and its image: four terms, of which the edge diffraction takes three on one
+  side and all four with ``both_sides``.
 
-For the strip and the gap the reference adds each end's exact term (BTM) to the
-geometric paths; the sound diffracted from one end to the other is left out of both (at
+For the strip, the gap and the barrier the reference adds each edge's exact term (BTM)
+to the geometric paths; the sound diffracted from one edge to the other is left out (at
 the strip it changes the level by at most 0.1 dB at 63 to 250 Hz).
+
+A thick barrier on the ground, 1 m wide and 3 m high, with ``second_order``, alone or
+with ``both_sides``, is compared at three listeners in its shadow with the exact sound
+over both its top corners (BTM of second order), by images alike: four paths over the
+two corners, of which the edge diffraction follows only the one without the ground.
 
 Everything is added in pressure in every band, as outdoors, and the comparison is of
 the energy in each octave band relative to the direct sound in free field: the exact
@@ -51,13 +62,14 @@ import argparse
 import json
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from edge_diffraction import EXTENT, C, Edge, _room, btm_first  # noqa: E402
+from edge_diffraction import EXTENT, C, Edge, _room, btm_first, btm_second  # noqa: E402
 
 from acoustic_spaces.engine import early as early_stage  # noqa: E402
 from acoustic_spaces.engine.coherent import total_energy  # noqa: E402
@@ -84,6 +96,11 @@ SOURCE_Z, LISTENER_Z = 0.5, 1.5
 #: The gap between the two screens (m), and the width of the strip (m).
 GAP = 4.0
 STRIP = 2.0
+#: The height of the barriers on the ground (m), and the width of the thick one (m).
+BARRIER = 3.0
+THICK = 1.0
+#: The ground's mirror.
+MIRROR = np.array([1.0, 1.0, -1.0])
 
 
 def ground() -> list:
@@ -109,6 +126,19 @@ def corner() -> list:
     ]
 
 
+def barrier(width: float = 0.0) -> list:
+    """A barrier BARRIER m high along y, reaching down through the ground: a thin screen
+    in the plane x = 0, or a block from x = 0 to ``width`` with its faces facing out."""
+    a, h = EXTENT, BARRIER
+    if width == 0.0:
+        return [[(0.0, -a, -a), (0.0, a, -a), (0.0, a, h), (0.0, -a, h)]]
+    return [
+        [(0.0, -a, h), (width, -a, h), (width, a, h), (0.0, a, h)],  # the top
+        [(0.0, -a, -a), (0.0, -a, h), (0.0, a, h), (0.0, a, -a)],  # x = 0
+        [(width, -a, -a), (width, a, -a), (width, a, h), (width, -a, h)],  # x = width
+    ]
+
+
 def _crossing_y(source, receiver) -> float:
     """Where along y the line from ``source`` to ``receiver`` crosses x = 0 (infinity
     where it does not)."""
@@ -128,7 +158,16 @@ def exact(case: str, source, receiver) -> np.ndarray:
     images in the ground: for the source and its image, the geometric paths that reach
     the receiver and each edge's exact term."""
     out = np.zeros(len(K), dtype=complex)
-    for src in (source, source * np.array([1.0, 1.0, -1.0])):
+    if case == "barrier":  # the thin barrier: its top, for the listener and its image too
+        top = Edge([0, 0, BARRIER], [0, 1, 0], [0, 0, -1], [1, 0, 0], 2.0)
+        for src in (source, source * MIRROR):
+            t = src[0] / (src[0] - receiver[0])  # where the line crosses x = 0
+            if src[2] + t * (receiver[2] - src[2]) > BARRIER:
+                out += _free(src, receiver)
+            for rec in (receiver, receiver * MIRROR):
+                out += btm_first(top, src, rec, K)
+        return out
+    for src in (source, source * MIRROR):
         if case == "screen end":  # the screen fills y > 0
             if not 0.0 < _crossing_y(src, receiver) < np.inf:
                 out += _free(src, receiver)
@@ -173,7 +212,9 @@ class Engine:
     """The engine's early paths from ``source`` in a model of ``quads``, with the edge
     diffraction in ``mode`` and with or without the fade."""
 
-    def __init__(self, folder: Path, quads: list, source, mode: str) -> None:
+    def __init__(
+        self, folder: Path, quads: list, source, mode: str, both_sides: bool = False
+    ) -> None:
         self.source = np.asarray(source, dtype=float)
         room = _room(folder, "fade", quads, self.source, self.source + 1.0)
         self.model = TraceModel.from_room(room)
@@ -189,6 +230,7 @@ class Engine:
             mode=mode,
             edges=self.edges,
             coherent=BANDS,
+            both_sides=both_sides,
         )
         self.fade = EdgeFade(self.diffraction, self.candidates)
 
@@ -262,6 +304,22 @@ CASES = [
         (-4.0, 0.0, SOURCE_Z),
         ((4.0, -5.0, LISTENER_Z), (4.0, 5.0, LISTENER_Z)),
     ),
+    (
+        "barrier, first_order",
+        "barrier",
+        lambda: ground() + barrier(),
+        "first_order",
+        (-4.0, 0.0, SOURCE_Z),
+        ((4.0, 0.0, 1.0), (4.0, 0.0, 8.0)),
+    ),
+    (
+        "barrier, first_order, both_sides",
+        "barrier",
+        lambda: ground() + barrier(),
+        "first_order, both_sides",
+        (-4.0, 0.0, SOURCE_Z),
+        ((4.0, 0.0, 1.0), (4.0, 0.0, 8.0)),
+    ),
 ]
 
 
@@ -270,7 +328,8 @@ def run(case, folder: Path, step: float = STEP) -> dict:
     source = np.array(source)
     start, end = np.array(start), np.array(end)
     count = int(round(np.linalg.norm(end - start) / step)) + 1
-    engine = Engine(folder, quads(), source, mode)
+    mode, *sides = mode.split(", ")
+    engine = Engine(folder, quads(), source, mode, both_sides=bool(sides))
     rows = {"exact": [], "fade": [], "plain": []}
     along = (end - start) / np.linalg.norm(end - start)
     for t in np.linspace(0.0, 1.0, count):
@@ -298,6 +357,39 @@ def run(case, folder: Path, step: float = STEP) -> dict:
     return out
 
 
+def thick_barrier(folder: Path) -> list[dict]:
+    """The thick barrier on the ground with ``second_order``, alone and with
+    ``both_sides``, with and without the fade, against the exact sound over both its top
+    corners, by images, at three listeners in its shadow."""
+    near = Edge([0, 0, BARRIER], [0, 1, 0], [1, 0, 0], [0, 0, 1], 1.5)  # facing the source
+    far = Edge([THICK, 0, BARRIER], [0, 1, 0], [-1, 0, 0], [0, 0, 1], 1.5)
+    source = np.array([-5.0, 0.0, SOURCE_Z])
+    quads = ground() + barrier(THICK)
+    engines = {
+        mode: Engine(folder, quads, source, "second_order", both_sides=sides)
+        for mode, sides in (("second_order", False), ("second_order, both_sides", True))
+    }
+    rows = []
+    for z in (0.5, 1.5, 2.5):
+        receiver = np.array([THICK + 5.0, 0.0, z])
+        began = time.perf_counter()
+        pressure = np.zeros(len(K), dtype=complex)
+        for src in (source, source * MIRROR):
+            for rec in (receiver, receiver * MIRROR):  # every path touches both at y = 0
+                pressure += btm_second(near, far, src, rec, (0.0, 0.0), True, K)
+        seconds = time.perf_counter() - began
+        exact_db = level(pressure, float(np.linalg.norm(receiver - source)))
+        row = {"receiver": receiver.tolist(), "exact_db": exact_db.tolist()}
+        for mode, engine in engines.items():
+            row[mode] = {
+                kind: (engine.level(receiver, fade) - exact_db).tolist()
+                for kind, fade in (("fade_minus_exact_db", True), ("plain_minus_exact_db", False))
+            }
+        row["btm_seconds"] = seconds
+        rows.append(row)
+    return rows
+
+
 def _row(values) -> str:
     return " | ".join(f"{v:.2f}" for v in values)
 
@@ -322,6 +414,18 @@ def main() -> None:
                 print(f"| rms difference, {label} | {_row(found['rms_difference_db'])} |")
                 print(f"| largest step, {label} | {_row(found['largest_step_db'])} |")
             print(f"| largest step, exact | {_row(row['exact_largest_step_db'])} |")
+        thick = thick_barrier(Path(tmp))
+        print(f"\nthick barrier {THICK:g} m wide, {BARRIER:g} m high, on the ground")
+        print(f"| engine - exact (dB) | {header} |\n{rule}")
+        for row in thick:
+            print(f"| listener {row['receiver'][2]:g} m up: exact | {_row(row['exact_db'])} |")
+            for mode in ("second_order", "second_order, both_sides"):
+                for kind, label in (("fade", "with the fade"), ("plain", "without")):
+                    found = row[mode][f"{kind}_minus_exact_db"]
+                    print(f"| {mode}, {label} | {_row(found)} |")
+        seconds = max(row["btm_seconds"] for row in thick)
+        print(f"\n(BTM takes up to {seconds:.0f} s per listener)")
+        results.append({"case": "thick barrier, second_order", "listeners": thick})
     if args.json:
         Path(args.json).write_text(json.dumps(results, indent=2))
 

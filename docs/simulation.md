@@ -207,7 +207,10 @@ each octave band:
   edges, with the reflection before or after the edge.
 - `second_order`: as `first_order`, and the direct sound bends round two edges in turn:
   over a thick wall or barrier, round both corners of a doorway's jamb, over two screens
-  in a row.
+  in a row. A path over two edges reflects nowhere, so over a thick barrier on a hard
+  ground the reflections off the ground before and after it are missing, and the level
+  comes out 1.7 to 5.7 dB low from 500 Hz up (see the
+  [validation report](validation.md#known-issues)).
 - `direct`: only the direct sound.
 - `none`: specular paths only.
 
