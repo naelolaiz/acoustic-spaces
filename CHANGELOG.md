@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- EDT's line fit starts at the onset in every response. The decay curve was taken
+  against the response's total, summed in another order than the curve, so it started
+  a rounding above or below 0 dB, and above it the fit left out the slot holding the
+  direct sound: in 99 of the 152 octave-band EDTs of six examples (at 5,000 rays), by up
+  to 9.6 % (in `studio`). EDT of measured responses, read sample by sample, moves by
+  0.05 % at most in BRAS, whose `measured.json` files are made again.
 - Cleaning a model also splits a face where its edge runs past a corner at which three
   faces meet along the line, not only past the ends of open edges, and drops a sliver
   whose own corner lies on the edge it closes (within 10 µm, `T_JUNCTION_TOLERANCE_M`)

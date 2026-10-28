@@ -384,8 +384,10 @@ def _band_parameters(
         return undefined
 
     remaining = np.concatenate([np.cumsum(e[::-1])[::-1], [0.0]]) + tail
+    # Against the curve's own start, which is then 0 dB exactly: summed in another order,
+    # the total can come out a rounding below it, and EDT's fit would skip the onset.
     with np.errstate(divide="ignore"):
-        level = 10.0 * np.log10(np.maximum(remaining / total, 0.0))  # -inf: none left
+        level = 10.0 * np.log10(np.maximum(remaining / remaining[0], 0.0))  # -inf: none left
     out: dict[str, float] = {}
     for name, (top, bottom) in DECAY_RANGES.items():
         out[name], xi = _decay_time(level, edges, top, bottom)

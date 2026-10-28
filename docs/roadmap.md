@@ -454,3 +454,7 @@ Known issues found by the review of 25 October 2026 (see
 - [ ] Vector-based scattering with a lobe centred on the specular direction, so the late
   part carries the first orders' specular share as the exact paths do, checked against
   the BRAS rooms' decay.
+
+Next version:
+
+- [x] EDT's line fit always from the onset, however the energy is summed.

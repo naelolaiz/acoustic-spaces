@@ -37,6 +37,9 @@ request and checks:
   scattering) from 10k rays with splitting against 1 million rays: within 4 dB on
   average from 0.5 to 2.5 s, and splitting or thinning out every ray keeps the energy
   of plain ray tracing;
+- a response's decay times and ratios read the same however loud it is (20 gains, to
+  1e-9): the decay curve starts at 0 dB exactly, so EDT's fit always starts at the
+  onset;
 - the late part's last slots: the same rays traced 50 ms longer give the same echogram
   up to the end, where a ray's time runs out as it crosses a listener's sphere: with
   and without the rain on the CPU, without it on the GPU, and with rays bent by the
