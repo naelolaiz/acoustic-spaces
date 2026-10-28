@@ -102,6 +102,7 @@ from acoustic_spaces.engine.diffraction import (
     MIN_RELATIVE_ENERGY,
     EdgeDiffraction,
     _clear,
+    _closest,
     _first_solid,
     _image_sources,
     _match,
@@ -1993,22 +1994,6 @@ def _on_leg(model, point, images, ends, leg) -> np.ndarray:
             at = (np.einsum("ij,ij->i", normal, point) - offset) * np.sign(away)
             ok &= ~there | ((at >= 0.0) if side == 0 else (at > 0.0))
     return ok
-
-
-def _closest(start, end, edges, edge) -> np.ndarray:
-    """(n, 3) the points of the lines from ``start`` to ``end`` (n, 3) nearest to the
-    lines of ``edges`` ``edge`` (n,); ``start`` where they are parallel."""
-    line = end - start
-    u = edges.direction[edge]
-    w = start - edges.start[edge]
-    along = np.einsum("ij,ij->i", line, u)
-    square = np.einsum("ij,ij->i", line, line)
-    across = square - along**2  # |line|^2 sin^2 of the angle between them
-    usable = across > 1e-12 * np.maximum(square, 1e-300)
-    s = (along * np.einsum("ij,ij->i", u, w) - np.einsum("ij,ij->i", line, w)) / np.where(
-        usable, across, 1.0
-    )
-    return start + np.where(usable, s, 0.0)[:, None] * line
 
 
 def _towards(model, point, image, planes, fallback):

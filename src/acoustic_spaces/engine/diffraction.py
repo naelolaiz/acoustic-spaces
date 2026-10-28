@@ -928,6 +928,7 @@ class EdgeDiffraction:
         # order, or passes round the end of the edge) the term is left out.
         found, images, orders, front = self._specular(listener, paths, c)
         angle = boundary_angles(n, c["phi_r"], c["phi_s"])
+        self._own_paths(listener, c, found, angle[:, 0] < -_ON_BOUNDARY)
         lit = (angle > _ON_BOUNDARY) | ((np.abs(angle) <= _ON_BOUNDARY) & (found >= 0))
         kl = k * length_param[:, None, None]
         before = (kind == 1) | (kind == 3)  # a reflection before the edge
@@ -1468,6 +1469,58 @@ class EdgeDiffraction:
         )
         out = np.where(front, out, -1)
         return out, points, reflections, front
+
+    def _own_paths(self, listener, c: dict, found, dark) -> None:
+        """Set to -1, in ``found`` (C, 3, from :meth:`_specular`), the specular path of
+        the incident wave of each term on the ``dark`` side of its boundary (C,) where it
+        is not the term's geometric wave, as the edge fade decides it. A reflection off a
+        plane before the edge (kind 1) and one after it (kind 2) come from the same image
+        of the source, but the path is the dark term's only where the line through it
+        (from that image to the listener, or from the source to the listener's image)
+        comes nearest to the edge on the term's side of the plane: past it (kind 1) or
+        before it (kind 2). Behind a barrier on a rigid ground the term of the path over
+        the top with the reflection off the ground after it was left out where the
+        reflection before it was found."""
+        model, edges, kind = self.model, self.edges, c["kind"]
+        rows = np.flatnonzero(dark & ((kind == 1) | (kind == 2)) & (found[:, 0] >= 0))
+        # An edge along the plane's normal is its own image in it: there the term's point
+        # lies on the edge, on its side of the plane.
+        normal = model.plane_normal[c["plane"][rows]]
+        tilted = np.abs(np.einsum("ij,ij->i", normal, edges.direction[c["edge"][rows]]))
+        rows = rows[tilted <= 1.0 - 1e-9]
+        if not len(rows):
+            return
+        edge, plane = c["edge"][rows], c["plane"][rows]
+        normal, offset = model.plane_normal[plane], model.plane_offset[plane]
+        before = kind[rows] == 2
+        start = np.broadcast_to(self.source, (len(rows), 3)).copy()
+        end = np.broadcast_to(listener, (len(rows), 3)).copy()
+        start[~before] = model.mirror(start[~before], plane[~before])
+        end[before] = model.mirror(end[before], plane[before])
+        closest = _closest(start, end, edges, edge)
+        # The side of the plane away from the image across it; on the plane itself, the
+        # leg after it.
+        image = np.where(before[:, None], end, start)
+        away = np.sign(offset - np.einsum("ij,ij->i", normal, image))
+        at = (np.einsum("ij,ij->i", normal, closest) - offset) * away
+        mine = np.where(before, at > 0.0, at >= 0.0)
+        found[rows[~mine], 0] = -1
+
+
+def _closest(start, end, edges, edge) -> np.ndarray:
+    """(n, 3) the points of the lines from ``start`` to ``end`` (n, 3) nearest to the
+    lines of ``edges`` ``edge`` (n,); ``start`` where they are parallel."""
+    line = end - start
+    u = edges.direction[edge]
+    w = start - edges.start[edge]
+    along = np.einsum("ij,ij->i", line, u)
+    square = np.einsum("ij,ij->i", line, line)
+    across = square - along**2  # |line|^2 sin^2 of the angle between them
+    usable = across > 1e-12 * np.maximum(square, 1e-300)
+    s = (along * np.einsum("ij,ij->i", u, w) - np.einsum("ij,ij->i", line, w)) / np.where(
+        usable, across, 1.0
+    )
+    return start + np.where(usable, s, 0.0)[:, None] * line
 
 
 def _waves(n, phi, phi_source, kl, lit, reflection) -> np.ndarray:
