@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Cleaning a model also splits a face where its edge runs past a corner at which three
+  faces meet along the line, not only past the ends of open edges, and drops a sliver
+  whose own corner lies on the edge it closes (within 10 µm, `T_JUNCTION_TOLERANCE_M`)
+  instead of splitting it into two faces with a repeated corner. The BRAS auditorium
+  (CR4) is now closed, 8,656.6 m³; it had two open edges, 50 faces with a repeated corner
+  and no volume. No example's model changes, nor those of BRAS CR2 and CR3.
+
 ## 4.0.1
 
 Behind the `archway`'s wall, where the reflection off the arch's jamb appears, the level

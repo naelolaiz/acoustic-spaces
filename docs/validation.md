@@ -218,13 +218,15 @@ request and checks:
   rendered through its places;
 - models read from files: a room whose walls' edges run past the floor's corners
   (T-junctions, with or without the zero-area slivers SketchUp exports) cleaned into a
-  closed room of the right volume and area; two rooms touching along an edge closed; a
-  face given twice leaving the model open, with its odd edges counted; points inside a
-  model whichever way its faces point; an IFC office read as one room from its space
-  boundaries (closed, 75.6 m³) or as every element, in the file's units; a Collada room
-  in inches with its up axis as written, and instanced components placed by their
-  nodes; and materials from CATT-Acoustic files and ODEON libraries, the latter as
-  ODEON writes it (Windows encodings and six-band tables too);
+  closed room of the right volume and area; a wall's edge running past the corner where
+  three faces meet split there, and a sliver 1 µm high whose own corner splits the edge
+  it closes dropped, not split into faces with a repeated corner; two rooms touching
+  along an edge closed; a face given twice leaving the model open, with its odd edges
+  counted; points inside a model whichever way its faces point; an IFC office read as
+  one room from its space boundaries (closed, 75.6 m³) or as every element, in the
+  file's units; a Collada room in inches with its up axis as written, and instanced
+  components placed by their nodes; and materials from CATT-Acoustic files and ODEON
+  libraries, the latter as ODEON writes it (Windows encodings and six-band tables too);
 - outdoor scenes: over a flat ground under the open sky, exactly two paths, the direct
   sound and the ground's reflection, at their distances and with the reflection's
   energy (absorption, spreading and air) to rounding, from both early methods; a
