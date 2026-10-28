@@ -74,13 +74,15 @@ def march(
     screen=None,
     speed_at=None,
     threads: int = 1,
+    independent: bool = False,
 ) -> np.ndarray:
     """(F, n) the complex pressure at ``frequencies`` (F,) Hz (time as exp(-i omega t),
     free field exp(ikR) / R) at the points ``ranges`` (n,, m along the ground from the
     source) and ``heights`` (n,, m above it), from a source at height ``zs``, under the
     effective speed of sound ``speed(z)``: as :func:`acoustic_spaces.engine.parabolic.march`,
-    with the same ``impedance``, ``top``, ``screen`` and ``speed_at``, on ``threads``
-    threads."""
+    with the same ``impedance``, ``top``, ``screen``, ``speed_at`` and ``independent``, on
+    ``threads`` threads. The self-starter reaches the first step, or the nearest range
+    if that is nearer; ``independent`` starts each range nearer than a step on its own."""
     from acoustic_spaces import _native
 
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
@@ -114,49 +116,79 @@ def march(
     order = np.argsort(ranges, kind="stable")
     out = np.zeros((len(f), len(ranges)), dtype=complex)
 
-    # The self-starter: the delta at the source's height, smoothed by (1 - X)^-2, then
-    # the rest of the field at r0 as one rational function.
-    r = max(min(step, float(ranges[order[0]])), 1e-9) if len(ranges) else step
-    psi = np.zeros((len(f), n), dtype=complex)
-    at = min(zs / dz, n - 2.0)
-    below = int(at)
-    weight = np.sqrt(2.0 * math.pi / ka) * np.exp(0.25j * math.pi) / dz
-    psi[:, below] = (1.0 - (at - below)) * weight
-    psi[:, below + 1] = (at - below) * weight
-    smooth = np.zeros((len(f), 2), dtype=complex)
-    _native.RationalSteps(weights, operator, smooth, smooth - 1.0, threads).apply(psi, threads)
-    steps(weights, operator, r, alpha=-0.25, nu=1).apply(psi, threads)
+    def start(r: float) -> np.ndarray:
+        # The self-starter: the delta at the source's height, smoothed by (1 - X)^-2,
+        # then the rest of the field at r as one rational function.
+        psi = np.zeros((len(f), n), dtype=complex)
+        at = min(zs / dz, n - 2.0)
+        below = int(at)
+        weight = np.sqrt(2.0 * math.pi / ka) * np.exp(0.25j * math.pi) / dz
+        psi[:, below] = (1.0 - (at - below)) * weight
+        psi[:, below + 1] = (at - below) * weight
+        smooth = np.zeros((len(f), 2), dtype=complex)
+        _native.RationalSteps(weights, operator, smooth, smooth - 1.0, threads).apply(psi, threads)
+        steps(weights, operator, r, alpha=-0.25, nu=1).apply(psi, threads)
+        return psi
 
     made: dict[float, object] = {}
+
+    def advance(psi: np.ndarray, r: float, dr: float) -> None:
+        # psi a step dr further on from r, in place.
+        nonlocal key, current, weights, operator
+        value = impedances(r + 0.5 * dr)
+        changed = not np.array_equal(value, key)
+        if speed_at is not None:
+            there = speed_at(r + 0.5 * dr)
+            if there is not current:
+                current = there
+                changed = True
+        if changed:
+            key = value
+            weights, operator = _operators(f, ka, current(z), absorbing, key, dz)
+            made.clear()
+        if dr not in made:
+            if len(made) > 1:
+                # The full step stays compiled; a shorter one makes way for the next.
+                for other in [length for length in made if length != step]:
+                    del made[other]
+            made[dr] = steps(weights, operator, dr)
+        if screen is not None:
+            half = np.exp(0.5j * ka[:, None] * screen(r, dr, z)[None, :])
+            psi *= half
+        made[dr].apply(psi, threads)
+        if screen is not None:
+            psi *= half
+
+    def place(index: int, psi: np.ndarray, r: float) -> None:
+        p = psi * (np.exp(1j * ka * r) / math.sqrt(r))[:, None]
+        h = heights[index]
+        out[:, index] = [np.interp(h, z, row.real) + 1j * np.interp(h, z, row.imag) for row in p]
+
+    if independent:
+        near = [index for index in order if ranges[index] < step]
+        for index in near:
+            place(index, start(max(float(ranges[index]), 1e-9)), max(float(ranges[index]), 1e-9))
+        order = order[len(near) :]
+        r = step
+    else:
+        r = max(min(step, float(ranges[order[0]])), 1e-9) if len(ranges) else step
+    psi = start(r) if len(order) else None
+
     for index in order:
         goal = ranges[index]
         while goal - r > 1e-9:
             dr = min(step, goal - r)
-            value = impedances(r + 0.5 * dr)
-            changed = not np.array_equal(value, key)
-            if speed_at is not None:
-                there = speed_at(r + 0.5 * dr)
-                if there is not current:
-                    current = there
-                    changed = True
-            if changed:
-                key = value
-                weights, operator = _operators(f, ka, current(z), absorbing, key, dz)
-                made.clear()
-            if dr not in made:
-                if len(made) > 1:
-                    made.clear()
-                made[dr] = steps(weights, operator, dr)
-            if screen is not None:
-                half = np.exp(0.5j * ka[:, None] * screen(r, dr, z)[None, :])
-                psi *= half
-            made[dr].apply(psi, threads)
-            if screen is not None:
-                psi *= half
+            if independent and dr < step:
+                break
+            advance(psi, r, dr)
             r += dr
-        p = psi * (np.exp(1j * ka * r) / math.sqrt(r))[:, None]
-        h = heights[index]
-        out[:, index] = [np.interp(h, z, row.real) + 1j * np.interp(h, z, row.imag) for row in p]
+        if goal - r > 1e-9:
+            # Its own last step, off to the side of the march.
+            reached = psi.copy()
+            advance(reached, r, goal - r)
+            place(index, reached, goal)
+        else:
+            place(index, psi, r)
     return out
 
 

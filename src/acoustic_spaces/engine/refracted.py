@@ -247,6 +247,19 @@ class Refraction:
         """The paths to each of ``listeners`` (L, 3) bent by the atmosphere: ``paths``
         as found in still air (the edges' diffraction applied to them), ``straight``
         the specular ones before that, up to ``cutoffs`` (L,) s."""
+        planned = self.plan(listeners, straight, paths, cutoffs)
+        return planned.finish(solve([planned])[0])
+
+    def plan(
+        self,
+        listeners: np.ndarray,
+        straight: list[EarlyReflections],
+        paths: list[EarlyReflections],
+        cutoffs: np.ndarray,
+    ) -> Planned:
+        """:meth:`apply` up to the parabolic equation: the paths bent so far and what the
+        listeners ask of the equation, which :func:`solve` runs (for several sources at
+        once, sharing what they can) and :meth:`Planned.finish` puts in."""
         listeners = np.atleast_2d(np.asarray(listeners, dtype=float))
         cutoffs = np.broadcast_to(np.asarray(cutoffs, dtype=float), (len(listeners),))
         parts: list = [None] * len(listeners)
@@ -261,11 +274,25 @@ class Refraction:
             parts[k] = found
             if request is not None:
                 requests.append(request)
-        self._waves(requests, parts, listeners)
-        return [
-            p if isinstance(p, EarlyReflections) else EarlyReflections.concatenate(p, self.bands)
-            for p in parts
-        ]
+        return Planned(self, listeners, parts, requests)
+
+    def _sharing(self) -> tuple | None:
+        """What another source's runs of the parabolic equation must have in common with
+        this one's for the two to share them: none with weather or ground zones, where
+        the way from the source matters; otherwise the source's height, the ground under
+        it and the solver, the weather being the model's."""
+        if self.zoned or self.zones:
+            return None
+        here = self._ground_face(np.array([[*self.source[:2], self.ground]]))[0]
+        if here < 0:
+            here = int(np.flatnonzero(self.flat)[0])
+        return (
+            id(self.model),
+            self.zs,
+            self.ground,
+            self.wide_angle,
+            self._admittance(int(here)).tobytes(),
+        )
 
     # -- one listener ------------------------------------------------------------------
 
@@ -700,81 +727,6 @@ class Refraction:
         last = len(faces) - 1
         return lambda r: int(faces[min(int(round(r / GROUND_STEP_M)), last)])
 
-    def _waves(self, requests: list[_Wave], parts: list, listeners: np.ndarray) -> None:
-        """Runs the parabolic equation for ``requests`` and puts its sound into the
-        families (the first of each listener's ``parts``)."""
-        groups: dict[tuple, list[_Wave]] = {}
-        for request in requests:
-            groups.setdefault(request.key, []).append(request)
-        runs = []
-        for (key, azimuth), members in groups.items():
-            if azimuth is None:
-                direction = members[0].direction
-            else:
-                angle = math.radians(azimuth)
-                direction = np.array([math.cos(angle), math.sin(angle)])
-            reach = max(m.range for m in members)
-            face_at = self._grounds_along(direction, reach)
-            if self.zoned:
-                speed_at = self.weather.along(self.source[:2], direction, reach)
-                speed = speed_at(0.0)
-            else:
-                speed_at = None
-                speed = self.profile(key).speed
-            top = max(m.top for m in members)
-            for band in range(self.bands):
-                needing = [m for m in members if m.bands[band]]
-                if needing:
-                    runs.append((speed, speed_at, face_at, band, needing, top))
-
-        solver = wide_angle if self.wide_angle else parabolic
-        share = 1
-
-        def run(job) -> np.ndarray:
-            speed, speed_at, face_at, band, needing, top = job
-
-            def impedance(r):
-                beta = self._admittance(face_at(r))[band]
-                with np.errstate(divide="ignore"):
-                    return np.where(beta == 0.0, np.inf, 1.0 / np.conj(beta))
-
-            ranges = np.array([m.range for m in needing])
-            heights = np.array([m.height for m in needing])
-            # The wide-angle equation's frequencies share the threads the runs leave.
-            more = {"threads": share} if self.wide_angle else {}
-            return solver.march(
-                self.frequencies[band],
-                speed,
-                impedance,
-                self.zs,
-                ranges,
-                heights,
-                top,
-                speed_at=speed_at,
-                **more,
-            )
-
-        # The runs side by side, as many as the threads and the memory allow.
-        biggest = max(
-            (solver.footprint(self.frequencies[job[3]], self.c, job[5]) for job in runs),
-            default=0,
-        )
-        workers = min(self.threads, len(runs), max(1, WAVE_MEMORY_BYTES // max(biggest, 1)))
-        share = max(1, self.threads // max(workers, 1))
-        if workers > 1:
-            with ThreadPoolExecutor(workers) as pool:
-                results = list(pool.map(run, runs))
-        else:
-            results = [run(job) for job in runs]
-        pressure = {id(m): np.zeros(self.frequencies.shape, dtype=complex) for m in requests}
-        for (_, _, _, band, needing, _), values in zip(runs, results, strict=True):
-            for m, value in zip(needing, values.T, strict=True):
-                # Time as exp(j omega t), as the early paths have it.
-                pressure[id(m)][band] = np.conj(value)
-        for members in groups.values():
-            for m in members:
-                self._place(m, pressure[id(m)], parts, listeners)
-
     def _place(self, wave: _Wave, pressure: np.ndarray, parts: list, listeners: np.ndarray):
         bands = wave.bands
         excess = np.mean(np.abs(pressure) ** 2, axis=1) * wave.distance**2  # (bands,)
@@ -875,6 +827,129 @@ class Refraction:
             share = float(np.sum(together * weights) / weights.sum())
             out[band] = share * energy[band] + (1.0 - share) * alone.sum()
         return out
+
+
+@dataclass
+class Planned:
+    """A source's paths to its listeners waiting for the parabolic equation
+    (:meth:`Refraction.plan`): each listener's paths bent so far and the requests."""
+
+    refraction: Refraction
+    listeners: np.ndarray
+    parts: list
+    requests: list[_Wave]
+
+    def finish(self, pressures: dict[int, np.ndarray]) -> list[EarlyReflections]:
+        """The paths to each listener with the equation's ``pressures`` (by the id of
+        each request, as :func:`solve` gives them) put in."""
+        refraction = self.refraction
+        for request in self.requests:
+            refraction._place(request, pressures[id(request)], self.parts, self.listeners)
+        return [
+            p
+            if isinstance(p, EarlyReflections)
+            else EarlyReflections.concatenate(p, refraction.bands)
+            for p in self.parts
+        ]
+
+
+def solve(plans: list[Planned]) -> list[dict[int, np.ndarray]]:
+    """Runs the parabolic equation for ``plans`` (:meth:`Refraction.plan`): for each, the
+    pressure (bands, M) of each of its requests by the request's id. A source's listeners
+    that the sound goes the same way to share a run (the same profile; with weather or
+    ground zones the same direction too). So do several sources' at one height over one
+    ground, where the weather and the grounds have no zones (the places of a walk, say):
+    there a run from one source holds for any other alike, the way along the ground being
+    the same from each. A run marches out to the farthest of its listeners under an
+    absorbing layer above the highest of their ``top``; in a run shared that way each
+    listener is reached by a last step of its own, off to the side of the march, so that
+    it gets what its own source's run would give it alone."""
+    groups: dict[tuple, list[tuple[int, _Wave]]] = {}
+    for p, planned in enumerate(plans):
+        sharing = planned.refraction._sharing() if len(plans) > 1 else None
+        for request in planned.requests:
+            owner = ("own", p) if sharing is None else ("shared", sharing)
+            groups.setdefault((owner, request.key), []).append((p, request))
+    runs = []
+    for (owner, (key, azimuth)), members in groups.items():
+        refraction = plans[members[0][0]].refraction
+        if azimuth is None:
+            direction = members[0][1].direction
+        else:
+            angle = math.radians(azimuth)
+            direction = np.array([math.cos(angle), math.sin(angle)])
+        reach = max(m.range for _, m in members)
+        face_at = refraction._grounds_along(direction, reach)
+        if refraction.zoned:
+            speed_at = refraction.weather.along(refraction.source[:2], direction, reach)
+            speed = speed_at(0.0)
+        else:
+            speed_at = None
+            speed = refraction.profile(key).speed
+        top = max(m.top for _, m in members)
+        for band in range(refraction.bands):
+            needing = [m for _, m in members if m.bands[band]]
+            if needing:
+                # A shared run gives each listener what a run of its own would.
+                alone = owner[0] == "shared"
+                runs.append((refraction, speed, speed_at, face_at, band, needing, top, alone))
+    if not runs:
+        return [{} for _ in plans]
+
+    first = plans[0].refraction
+    solver = wide_angle if first.wide_angle else parabolic
+    share = 1
+
+    def run(job) -> np.ndarray:
+        refraction, speed, speed_at, face_at, band, needing, top, alone = job
+
+        def impedance(r):
+            beta = refraction._admittance(face_at(r))[band]
+            with np.errstate(divide="ignore"):
+                return np.where(beta == 0.0, np.inf, 1.0 / np.conj(beta))
+
+        ranges = np.array([m.range for m in needing])
+        heights = np.array([m.height for m in needing])
+        # The wide-angle equation's frequencies share the threads the runs leave.
+        more = {"threads": share} if refraction.wide_angle else {}
+        return solver.march(
+            refraction.frequencies[band],
+            speed,
+            impedance,
+            refraction.zs,
+            ranges,
+            heights,
+            top,
+            speed_at=speed_at,
+            independent=alone,
+            **more,
+        )
+
+    # The runs side by side, as many as the threads and the memory allow.
+    biggest = max(
+        (solver.footprint(job[0].frequencies[job[4]], job[0].c, job[6]) for job in runs),
+        default=0,
+    )
+    workers = min(first.threads, len(runs), max(1, WAVE_MEMORY_BYTES // max(biggest, 1)))
+    share = max(1, first.threads // max(workers, 1))
+    if workers > 1:
+        with ThreadPoolExecutor(workers) as pool:
+            results = list(pool.map(run, runs))
+    else:
+        results = [run(job) for job in runs]
+    pressures: list[dict[int, np.ndarray]] = [
+        {
+            id(m): np.zeros(planned.refraction.frequencies.shape, dtype=complex)
+            for m in planned.requests
+        }
+        for planned in plans
+    ]
+    owners = {id(m): p for members in groups.values() for p, m in members}
+    for (_, _, _, _, band, needing, _, _), values in zip(runs, results, strict=True):
+        for m, value in zip(needing, values.T, strict=True):
+            # Time as exp(j omega t), as the early paths have it.
+            pressures[owners[id(m)]][id(m)][band] = np.conj(value)
+    return pressures
 
 
 def _departure(points: np.ndarray) -> np.ndarray:
@@ -1000,8 +1075,10 @@ __all__ = [
     "SHADOW_WAVE_MAX_BAND_HZ",
     "WAVE_MAX_BAND_HZ",
     "WAVE_MIN_RANGE",
+    "Planned",
     "Refraction",
     "bending",
     "direct_times",
     "refraction_for",
+    "solve",
 ]

@@ -70,6 +70,7 @@ def march(
     top: float,
     screen=None,
     speed_at=None,
+    independent: bool = False,
 ) -> np.ndarray:
     """(F, n) the complex pressure at ``frequencies`` (F,) Hz (time as exp(-i omega t),
     free field exp(ikR) / R) at the points ``ranges`` (n,, m along the ground from the
@@ -83,7 +84,13 @@ def march(
     takes (for validation, :mod:`validation.turbulence`). ``speed_at(r)``, when given,
     returns the speed function that holds at range r (the same object wherever the
     weather is the same), ``speed`` being the one at the source: each step takes the
-    profile of its own middle, the reference wavenumber staying the source's."""
+    profile of its own middle, the reference wavenumber staying the source's.
+
+    The march goes out in full steps, and a range between two of them is reached by a
+    shorter last step. Unless ``independent``, the march goes on from there, so that the
+    ranges asked for break up each other's steps; ``independent`` takes each one's last
+    step off to the side, so that each range gets what a march to it alone gives, whatever
+    else is asked for (the places of a walk sharing a run, say)."""
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
@@ -129,56 +136,67 @@ def march(
         _starter(ka[:, None] * (z - zs)) + here.normal[:, None] * _starter(ka[:, None] * (z + zs))
     )
     key = here.key
+
+    def advance(psi: np.ndarray, r: float, dr: float) -> np.ndarray:
+        # The field a step dr further on from r, as a new array.
+        nonlocal here, key, current, k, delta
+        value = impedances(r + 0.5 * dr)
+        if not np.array_equal(value, key):
+            here = _Ground(value, ka, kz, z, width)
+            key = here.key
+        if speed_at is not None:
+            there = speed_at(r + 0.5 * dr)
+            if there is not current:
+                current = there
+                k = 2.0 * math.pi * f[:, None] / np.asarray(current(z), dtype=float)[None, :]
+                delta = (k - ka[:, None]) + 1j * LAYER_STRENGTH * depth**2
+                steps.clear()
+        half, propagate = stepping(dr)
+        if screen is not None:
+            half = half * np.exp(0.5j * ka[:, None] * screen(r, dr, z)[None, :])
+        screened = half * psi
+        tilted[:, :n] = screened
+        tilted[:, n:] = 0.0
+        # The ground's sample weighs half (the trapezoidal rule), as the reflection
+        # adds its mirror image.
+        tilted[here.plain, 0] *= 0.5
+        if here.image.any():
+            image = here.image
+            inner = here.growth[image] * screened[image]
+            integral = (np.cumsum(inner, axis=1) - 0.5 * (inner[:, :1] + inner)) * dz
+            below = screened[image] + here.scale[image, None] * here.shrink[image] * integral
+            below *= here.fade[image]
+            tilted[image, n + 1 :] = below[:, 1:][:, ::-1]
+        spectrum = np.fft.fft(tilted, axis=1) * dz
+        field = (
+            np.fft.ifft((spectrum + here.reflection * spectrum[:, mirror]) * propagate, axis=1) / dz
+        )
+        psi_next = field[:, :n]
+        surface = here.surface
+        if surface.any():
+            amplitude = np.sum(tilted[surface, :n] * here.decay[surface], axis=1) * dz
+            lift = (
+                2j
+                * here.beta[surface]
+                * amplitude
+                * np.exp(1j * dr * (here.wave[surface] - ka[surface]))
+            )
+            psi_next[surface] += lift[:, None] * here.decay[surface]
+        return half * psi_next
+
     for index in order:
         goal = ranges[index]
         while goal - r > 1e-9:
             dr = min(step, goal - r)
-            value = impedances(r + 0.5 * dr)
-            if not np.array_equal(value, key):
-                here = _Ground(value, ka, kz, z, width)
-                key = here.key
-            if speed_at is not None:
-                there = speed_at(r + 0.5 * dr)
-                if there is not current:
-                    current = there
-                    k = 2.0 * math.pi * f[:, None] / np.asarray(current(z), dtype=float)[None, :]
-                    delta = (k - ka[:, None]) + 1j * LAYER_STRENGTH * depth**2
-                    steps.clear()
-            half, propagate = stepping(dr)
-            if screen is not None:
-                half = half * np.exp(0.5j * ka[:, None] * screen(r, dr, z)[None, :])
-            screened = half * psi
-            tilted[:, :n] = screened
-            tilted[:, n:] = 0.0
-            # The ground's sample weighs half (the trapezoidal rule), as the reflection
-            # adds its mirror image.
-            tilted[here.plain, 0] *= 0.5
-            if here.image.any():
-                image = here.image
-                inner = here.growth[image] * screened[image]
-                integral = (np.cumsum(inner, axis=1) - 0.5 * (inner[:, :1] + inner)) * dz
-                below = screened[image] + here.scale[image, None] * here.shrink[image] * integral
-                below *= here.fade[image]
-                tilted[image, n + 1 :] = below[:, 1:][:, ::-1]
-            spectrum = np.fft.fft(tilted, axis=1) * dz
-            field = (
-                np.fft.ifft((spectrum + here.reflection * spectrum[:, mirror]) * propagate, axis=1)
-                / dz
-            )
-            psi_next = field[:, :n]
-            surface = here.surface
-            if surface.any():
-                amplitude = np.sum(tilted[surface, :n] * here.decay[surface], axis=1) * dz
-                lift = (
-                    2j
-                    * here.beta[surface]
-                    * amplitude
-                    * np.exp(1j * dr * (here.wave[surface] - ka[surface]))
-                )
-                psi_next[surface] += lift[:, None] * here.decay[surface]
-            psi = half * psi_next
+            if independent and dr < step:
+                break
+            psi = advance(psi, r, dr)
             r += dr
-        p = psi * (np.exp(1j * ka * r) / math.sqrt(max(r, 1e-9)))[:, None]
+        reached, at = psi, r
+        if goal - r > 1e-9:
+            # Its own last step, off to the side of the march.
+            reached, at = advance(psi, r, goal - r), goal
+        p = reached * (np.exp(1j * ka * at) / math.sqrt(max(at, 1e-9)))[:, None]
         h = heights[index]
         out[:, index] = [np.interp(h, z, row.real) + 1j * np.interp(h, z, row.imag) for row in p]
     return out

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Outdoors, the places of a walking source share the parabolic equation's runs where
+  they stand at one height over one ground and neither the weather nor the ground has
+  zones (`simulate(share_waves=...)`, which `simulate_walk` and `simulate_movement`
+  give it): a run from one place serves the listeners of every other that the sound
+  goes the same way to, each reached by a last step of its own
+  (`march(independent=True)` in `engine.parabolic` and `engine.wide_angle`), so that
+  it gets what a run of its own place would give it. An aircraft's 26 places 64 m
+  apart, 100 m up over 1.6 km of a meadow in the `windy` preset, take 31 s instead of
+  89 s on four cores, with the same early levels to 10⁻⁷ dB. Still scenes are
+  unchanged, bit for bit.
+
 ## 4.0.1
 
 Behind the `archway`'s wall, where the reflection off the arch's jamb appears, the level
