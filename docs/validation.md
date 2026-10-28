@@ -2982,9 +2982,9 @@ Results:
   or less from 125 Hz up; see
   [Reflections that fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution)).
   A fix that tells the two paths apart removes the step, but changes the early level of
-  BRAS CR2 by up to 0.8 dB at 63 Hz, and by different amounts with the edge fade and
-  without it (up to 2.6 dB apart), so the fade's model of what the edge diffraction
-  adds would have to follow it; it waits for a run of BRAS with it.
+  BRAS CR2 by up to 0.8 dB at 63 Hz, where 12 terms over its 10 pairs of a source and a
+  listener that were left out count with it (the edge fade's terms stay the same); it
+  waits for a run of BRAS with it.
 - **Paths over two edges take no reflections.** With `second_order` a path over two
   edges reflects nowhere before, between or after them, so behind a thick barrier on a
   hard ground the engine has one of the four paths over it: 1.7 to 5.7 dB low from

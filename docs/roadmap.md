@@ -123,8 +123,8 @@ Edge diffraction:
 - [ ] The path over a barrier's top with the reflection off the ground behind it, kept
   where the reflection before the barrier is found: 4 m behind a barrier 3 m high on a
   hard ground the level steps by 0.35 dB at 63 Hz with `first_order`. A fix that tells
-  the two apart changes BRAS CR2's early level by up to 0.8 dB at 63 Hz, and the edge
-  fade's model would have to follow it; checked against BRAS before it goes in.
+  the two apart changes BRAS CR2's early level by up to 0.8 dB at 63 Hz; checked against
+  BRAS before it goes in.
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
