@@ -339,9 +339,10 @@ Movement:
   the panel and in Run demo, with the pass's length, speed and duration.
 - [x] Faster walks outdoors: the places of a walking source share the parabolic
   equation's runs, each listener getting what a run of its own place would give it.
-- [ ] A helicopter flying over: the sound a source sends depending on the way it leaves,
-  a rotor noise model checked against hover theory and a certified level, a flyover
-  demo and a helicopter crossing over the stadium concert.
+- [x] The sound a source sends each way, along a walk with Doppler: each early path
+  carries what is sent the way it leaves the source (`acoustic_spaces.emission`).
+- [ ] A helicopter flying over: a rotor noise model checked against hover theory and a
+  certified level, a flyover demo and a helicopter crossing over the stadium concert.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:

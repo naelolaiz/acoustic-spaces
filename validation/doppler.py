@@ -17,6 +17,12 @@ walker goes (:mod:`acoustic_spaces.doppler`). Three checks:
   waveform's error relative to the field) and in 20 ms windows (the level's error).
   The same walks rendered without Doppler, crossfading from place to place, show what
   it changes.
+- **The sound sent each way.** The car and the train send a tone louder ahead than
+  behind and turned in phase with the elevation (an
+  :class:`~acoustic_spaces.emission.Emission`): each path, in the exact field, carries
+  what is sent the way it leaves the source at the time it leaves. Then the same with
+  the source given a cardioid directivity, which the emission takes the place of in
+  the early paths.
 - **The places.** The car at 1 kHz with places 0.25 to 4 m apart: how far apart they
   may be.
 - **The pass-by levels.** White noise through the car's walk over grass (Miki's
@@ -43,6 +49,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from acoustic_spaces import Room, Scene, synthesis  # noqa: E402
 from acoustic_spaces.air import energy_attenuation_per_m, speed_of_sound  # noqa: E402
+from acoustic_spaces.directivity import _from_angles, _grid  # noqa: E402
+from acoustic_spaces.emission import Mixture  # noqa: E402
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ  # noqa: E402
 from acoustic_spaces.spatial import Mono  # noqa: E402
 from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk  # noqa: E402
@@ -65,12 +73,15 @@ CASES = (
 #: after it starts to this much before it ends (s), clear of the sound's ends.
 WINDOW_S = 0.02
 MARGIN_S = (0.3, 0.1)
+#: The tone sent each way: its amplitude 1 + FORWARD x (x the way forward), its phase
+#: TURN z radians (z the way up), on a grid this fine (degrees).
+FORWARD, TURN, EMISSION_GRID_DEG = 0.8, 0.5 * math.pi, 2.0
 #: White noises through the walk for its energy, and where they stop (Hz).
 NOISES = 16
 NOISE_TOP_HZ = 18_000.0
 
 
-def scene(walker: str, speed: float, ground: str, doppler: bool = True) -> Scene:
+def scene(walker: str, speed: float, ground: str, doppler: bool = True, directivity=None) -> Scene:
     walk = {"to": [[X1, 0.0, ZS if walker == "source" else ZR]], "speed_m_s": speed}
     walk |= {"doppler": doppler, "face_forward": False}
     source = {"name": "s", "position": [0.0, D, ZS]}
@@ -79,6 +90,8 @@ def scene(walker: str, speed: float, ground: str, doppler: bool = True) -> Scene
         source = {"name": "s", "position": [X0, 0.0, ZS], "walk": walk}
     else:
         listener = {"name": "l", "position": [X0, 0.0, ZR], "walk": walk}
+    if directivity is not None:
+        source["directivity"] = directivity
     material = {"absorption": [0.0] * 8, "scattering": 0.0}
     if ground == "grass":
         material = {"impedance": {"preset": "grass"}}
@@ -100,10 +113,27 @@ def scene(walker: str, speed: float, ground: str, doppler: bool = True) -> Scene
     )
 
 
-def exact(walker, speed, tone, n) -> np.ndarray:
+def pattern(ways: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The amplitude and the phase of the tone sent the ways ``ways`` (n, 3)."""
+    return 1.0 + FORWARD * ways[:, 0], TURN * ways[:, 2]
+
+
+def emission(tone: float, n: int) -> Mixture:
+    """The tone sent each way as :func:`pattern` has it, for ``n`` samples."""
+    elevation, azimuth = _grid(EMISSION_GRID_DEG)
+    ways = _from_angles(azimuth[None, :], elevation[:, None]).reshape(-1, 3)
+    amplitude, phase = pattern(ways)
+    weights = np.column_stack([amplitude * np.cos(phase), amplitude * np.sin(phase)])
+    t = np.arange(n) / RATE
+    signals = np.array([np.sin(2.0 * np.pi * tone * t), np.cos(2.0 * np.pi * tone * t)])
+    return Mixture(signals, weights.reshape(len(elevation), len(azimuth), 2), RATE)
+
+
+def exact(walker, speed, tone, n, sent=False) -> np.ndarray:
     """The direct sound and the image source's of a tone ``tone`` (Hz) at each sample,
     each at its retarded time, as the walk has them (a walking source stands at the
-    end once there, a walking listener too)."""
+    end once there, a walking listener too); ``sent``, as :func:`pattern` sends it the
+    way the path leaves the source."""
     c = speed_of_sound(20.0)
     band = int(np.argmin(np.abs(np.log2(np.array(OCTAVE_BANDS_HZ) / tone))))
     m = energy_attenuation_per_m()[band]
@@ -129,7 +159,16 @@ def exact(walker, speed, tone, n) -> np.ndarray:
         r = np.sqrt(x**2 + b2)
         heard = (te >= 0.0) & (te < played)
         level = np.exp(-m * r / 2.0) / r
-        out += np.where(heard, level * np.sin(2.0 * np.pi * tone * te), 0.0)
+        amplitude, phase = np.ones(n), np.zeros(n)
+        if sent:
+            # From the source to the listener, or to the listener's image under the
+            # ground for the reflection.
+            along = -x if walker == "source" else x
+            across = D if walker == "source" else -D
+            up = (-ZR if image else ZR) - ZS
+            ways = np.column_stack([along, np.full(n, across), np.full(n, up)])
+            amplitude, phase = pattern(ways / np.linalg.norm(ways, axis=1, keepdims=True))
+        out += np.where(heard, level * amplitude * np.sin(2.0 * np.pi * tone * te + phase), 0.0)
     return out
 
 
@@ -179,6 +218,32 @@ def check_field(cases, ground: str) -> list[dict]:
                 f"{x['level_max_db']:.2f} dB",
                 flush=True,
             )
+    return rows
+
+
+def check_emission() -> list[dict]:
+    """The tone sent each way along each walk over the hard ground, the source without
+    a directivity and with a cardioid one for the emission to take the place of."""
+    rows = []
+    for label, walker, speed, _ in CASES:
+        walked = (X1 - X0) / speed
+        n_dry = int((walked + 0.5) * RATE)
+        for tone in TONES[1:]:
+            sent = emission(tone, n_dry)
+            for directivity in (None, "cardioid"):
+                room = Room.from_scene(scene(walker, speed, "hard", True, directivity))
+                walk = simulate_walk(room, step_m=STEP_M, late_step_m=None)
+                wet = render_walk(walk, {"s": sent}, Mono())[:, 0]
+                field = exact(walker, speed, tone, len(wet), sent=True)
+                row = {"case": label, "tone_hz": tone, "directivity": directivity or "none"}
+                row |= errors(wet, field, walked)
+                rows.append(row)
+                print(
+                    f"{label:26s} {tone:5.0f} Hz  {row['directivity']:8s}  waveform "
+                    f"{row['waveform_db']:6.1f} dB, level {row['level_mean_db']:.3f} / "
+                    f"{row['level_max_db']:.3f} dB",
+                    flush=True,
+                )
     return rows
 
 
@@ -297,6 +362,8 @@ def main(argv=None) -> int:
     worst = max(r["doppler"]["waveform_db"] for r in rows)
     level = max(r["doppler"]["level_max_db"] for r in rows)
     print(f"\nwith Doppler: the waveform within {worst:.1f} dB, the level within {level:.2f} dB")
+    print("\nThe tone sent each way, louder ahead and turned in phase with the elevation\n")
+    sent = check_emission()
     print("\nThe car at 1 kHz, its places further apart\n")
     steps = check_steps()
     print("\nWhite noise through the car's walk over grass: its energy per band re the source's")
@@ -306,7 +373,7 @@ def main(argv=None) -> int:
     seconds = time.perf_counter() - started
     print(f"\n{seconds:.0f} s")
     if args.json:
-        out = {"field": rows, "steps": steps, "levels": levels}
+        out = {"field": rows, "emission": sent, "steps": steps, "levels": levels}
         args.json.write_text(json.dumps(out, indent=2))
     return 0
 

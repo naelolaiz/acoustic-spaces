@@ -13,6 +13,8 @@ import pytest
 from acoustic_spaces import Room, Scene
 from acoustic_spaces import doppler as dp
 from acoustic_spaces.cli import main
+from acoustic_spaces.directivity import _grid
+from acoustic_spaces.emission import Mixture
 from acoustic_spaces.render import convolve
 from acoustic_spaces.scene.model import Walk
 from acoustic_spaces.spatial import Binaural, Mono
@@ -192,6 +194,46 @@ def test_a_passing_source_and_listener_sound_as_the_exact_field(short) -> None:
         assert with_doppler["level_max_db"] < 0.1, walker
         # Crossfading from place to place, the pitch stays put and the phase jumps.
         assert short.errors(faded, field, walked)["waveform_db"] > 0.0, walker
+
+
+@pytest.mark.parametrize("directivity", [None, "cardioid"])
+def test_the_sound_sent_each_way_as_the_exact_field(short, directivity) -> None:
+    """Each path carries what the source sends the way it leaves (a tone louder ahead,
+    turned in phase with the height), and a directivity of the source's own is taken
+    out of the early paths."""
+    speed, tone = 30.0, 1000.0
+    walked = (short.X1 - short.X0) / speed
+    sent = short.emission(tone, int((walked + 0.5) * RATE))
+    for walker in ("source", "listener"):
+        room = Room.from_scene(short.scene(walker, speed, "hard", True, directivity))
+        walk = simulate_walk(room, step_m=short.STEP_M, late_step_m=None)
+        wet = render_walk(walk, {"s": sent}, Mono())[:, 0]
+        field = short.exact(walker, speed, tone, len(wet), sent=True)
+        errors = short.errors(wet, field, walked)
+        assert errors["waveform_db"] < -45.0, walker
+        assert errors["level_max_db"] < 0.1, walker
+
+
+def test_the_same_sound_sent_every_way_is_the_signal_itself(short) -> None:
+    walked = (short.X1 - short.X0) / 30.0
+    tone = np.sin(2 * np.pi * 1000.0 * np.arange(int((walked + 0.5) * RATE)) / RATE)
+    elevation, azimuth = _grid(10.0)
+    every_way = Mixture(tone[None, :], np.ones((len(elevation), len(azimuth), 1)), RATE)
+    walk = simulate_walk(Room.from_scene(short.scene("source", 30.0, "hard")), late_step_m=None)
+    plain = render_walk(walk, {"s": tone}, Mono())
+    sent = render_walk(walk, {"s": every_way}, Mono())
+    np.testing.assert_allclose(sent, plain, rtol=0.0, atol=1e-12 * np.abs(plain).max())
+
+
+def test_the_sound_sent_each_way_needs_a_walk_with_doppler(short) -> None:
+    elevation, azimuth = _grid(30.0)
+    sent = Mixture(np.ones((1, 100)), np.ones((len(elevation), len(azimuth), 1)), RATE)
+    walk = simulate_walk(Room.from_scene(short.scene("source", 30.0, "hard", False)))
+    with pytest.raises(ValueError, match="plays only along a walk with Doppler"):
+        render_walk(walk, {"s": sent}, Mono())
+    walk = simulate_walk(Room.from_scene(short.scene("source", 30.0, "hard")), late_step_m=None)
+    with pytest.raises(ValueError, match="at 48000 Hz, the rendering at 44100 Hz"):
+        render_walk(walk, {"s": sent}, Mono(), sample_rate=44_100)
 
 
 def test_the_late_part_and_the_eddies_go_along(short) -> None:

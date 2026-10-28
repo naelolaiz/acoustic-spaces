@@ -52,7 +52,9 @@ from pathlib import Path
 
 import numpy as np
 
+from acoustic_spaces.emission import Emission
 from acoustic_spaces.engine.simulate import SimulationResult, simulate
+from acoustic_spaces.materials.bands import resolution_of
 from acoustic_spaces.render import (
     _as_2d,
     convolve,
@@ -636,7 +638,7 @@ def simulate_movement(
 
 def render_movement(
     movement: Movement,
-    signals: Mapping[str, np.ndarray | tuple[np.ndarray, float]],
+    signals: Mapping[str, np.ndarray | tuple[np.ndarray, float] | Emission],
     fmt=None,
     *,
     crossfade_s: float = CROSSFADE_S,
@@ -652,7 +654,9 @@ def render_movement(
     that moves crossfades from each moment's response to the next's, as a walk does, or
     with Doppler (:attr:`Movement.doppler`) plays each early path through its changing
     delay and crossfades the late part, as :func:`render_walk` does; a still pair plays
-    through its one response."""
+    through its one response. A source that moves with Doppler, or that a listener
+    passes with it, may send an :class:`~acoustic_spaces.emission.Emission` at
+    ``sample_rate``, the sound it sends each way, as :func:`render_walk` plays it."""
     from acoustic_spaces.spatial import Mono
 
     if not signals:
@@ -675,13 +679,12 @@ def render_movement(
     if not listeners:
         raise ValueError("no listener in use to hear the movement")
     gains = {} if equal_power else power_gains(scene.sources, signals)
-    dry = {}
-    for source, value in signals.items():
-        signal, signal_rate = value if isinstance(value, tuple) else (value, rate)
-        mono = _as_2d(signal, f"signal of {source!r}").mean(axis=1) * gains.get(source, 1.0)
-        dry[source] = resample(mono, signal_rate, rate)
+    each_way = set()
+    if movement.doppler:
+        each_way = {s for s in signals if all(movement.moves(s, lis) for lis in listeners)}
+    dry = _dry(signals, gains, rate, each_way)
     taps = int(math.ceil(max(r.length_s for r in result) * rate))
-    length = max(len(x) for x in dry.values()) + taps - 1
+    length = max(_samples(x) for x in dry.values()) + taps - 1
     # Outdoors in turbulence the early paths flicker as the eddies drift past, the same
     # eddies all along.
     turbulent = [r for r in result if flickers(r)]
@@ -846,7 +849,7 @@ def _sound_powers(walk: WalkResponses) -> dict[str, float]:
 
 def render_walk(
     walk: WalkResponses,
-    signals: Mapping[str, np.ndarray | tuple[np.ndarray, float]],
+    signals: Mapping[str, np.ndarray | tuple[np.ndarray, float] | Emission],
     fmt=None,
     *,
     crossfade_s: float = CROSSFADE_S,
@@ -858,7 +861,11 @@ def render_walk(
     pair) played along the walk, as (samples, channels) in format ``fmt`` (default
     mono) at ``sample_rate`` (default: the simulation's). As in
     :func:`~acoustic_spaces.render.auralize`, each signal is scaled by its source's
-    sound power against the loudest one's, unless ``equal_power``."""
+    sound power against the loudest one's, unless ``equal_power``. Along a walk with
+    Doppler, the source that walks (or every source, for a walking listener) may send an
+    :class:`~acoustic_spaces.emission.Emission` at ``sample_rate``, the sound it sends
+    each way: each early path carries what is sent the way it leaves the source, and the
+    late part the emission's sound averaged over the directions."""
     from acoustic_spaces.spatial import Mono
 
     if not signals:
@@ -882,11 +889,10 @@ def render_walk(
     if unknown:
         raise ValueError(f"no source {unknown[0]!r}; the walk has {', '.join(sorted(sources))}")
     gains = {} if equal_power else power_gains(_sound_powers(walk), signals)
-    dry = {}
-    for source, value in signals.items():
-        signal, signal_rate = value if isinstance(value, tuple) else (value, rate)
-        mono = _as_2d(signal, f"signal of {source!r}").mean(axis=1) * gains.get(source, 1.0)
-        dry[source] = resample(mono, signal_rate, rate)
+    each_way = set()
+    if walk.doppler:
+        each_way = set(signals) if walk.kind == "listeners" else {walk.name}
+    dry = _dry(signals, gains, rate, each_way)
 
     cache: dict[tuple[str, str], np.ndarray] = {}
 
@@ -909,7 +915,7 @@ def render_walk(
         # The paths' delays change along the walk: as long as the longest response.
         longest = max(result[key_of(s, k)].length_s for s in moving for k in range(len(walk.names)))
         taps = max(taps, int(math.ceil(longest * rate)))
-    length = max(len(x) for x in dry.values()) + taps - 1
+    length = max(_samples(x) for x in dry.values()) + taps - 1
     out = np.zeros((length, fmt.channels))
     # Outdoors in turbulence the early paths flicker as the eddies drift past, the same
     # eddies all along the walk.
@@ -986,14 +992,19 @@ def _doppler(
     source_walks: bool,
     crossfade_s: float,
 ) -> None:
-    """Adds to ``out`` the mono ``signal`` heard along a walk with Doppler, through
-    ``keys`` (the pair's response in ``result`` at each place, the walker there at
-    ``times`` and ``positions``; ``source_walks`` when the walker is the source): the late
-    parts crossfaded from place to place, the early paths each through its own changing
-    delay (:func:`acoustic_spaces.doppler.render`)."""
+    """Adds to ``out`` the mono ``signal`` (or the sound the source sends each way)
+    heard along a walk with Doppler, through ``keys`` (the pair's response in ``result``
+    at each place, the walker there at ``times`` and ``positions``; ``source_walks``
+    when the walker is the source): the late parts crossfaded from place to place, the
+    early paths each through its own changing delay
+    (:func:`acoustic_spaces.doppler.render`)."""
     from acoustic_spaces import doppler
     from acoustic_spaces.engine.early import EarlyReflections
 
+    sent = signal if isinstance(signal, Emission) else None
+    early = signal
+    if sent is not None:
+        signal = sent.averaged()
     length = len(out)
     starts, lengths = _boundaries(times, crossfade_s)
     late: dict[tuple[str, str], np.ndarray] = {}
@@ -1022,8 +1033,13 @@ def _doppler(
     # The most a path's delay moves from one place to the next and stays the same path's:
     # the step over the speed of sound, with room to spare.
     step_s = 1.5 * float(steps.max(initial=0.0)) / responses[0].speed_of_sound + 1e-4
+    axes, directivity = None, None
+    if sent is not None:
+        items = {item.name: item for item in result.room.scene.sources}
+        axes = np.array([items[key[0]].orientation.rotation() for key in keys])
+        directivity = result.room.directivity(keys[0][0], resolution_of(responses[0].bands))
     out += doppler.render(
-        signal,
+        early,
         responses,
         times,
         fmt,
@@ -1034,7 +1050,42 @@ def _doppler(
         step_s=step_s,
         gusts=gusts,
         seed=seed,
+        axes=axes,
+        directivity=directivity,
     )
+
+
+def _dry(
+    signals: Mapping[str, np.ndarray | tuple[np.ndarray, float] | Emission],
+    gains: Mapping[str, float],
+    rate: int,
+    each_way: set[str],
+) -> dict[str, np.ndarray | Emission]:
+    """``signals`` as mono signals at ``rate``, each times its source's gain; the sound
+    sent each way kept as it is, for the sources in ``each_way`` alone."""
+    dry: dict[str, np.ndarray | Emission] = {}
+    for source, value in signals.items():
+        if isinstance(value, Emission):
+            if source not in each_way:
+                raise ValueError(
+                    f"the sound {source!r} sends each way plays only along a walk with "
+                    "Doppler, as the source that walks or the one a listener passes"
+                )
+            if value.sample_rate != rate:
+                raise ValueError(
+                    f"the sound {source!r} sends each way is at {value.sample_rate} Hz, "
+                    f"the rendering at {rate} Hz"
+                )
+            dry[source] = value.scaled(gains.get(source, 1.0))
+            continue
+        signal, signal_rate = value if isinstance(value, tuple) else (value, rate)
+        mono = _as_2d(signal, f"signal of {source!r}").mean(axis=1) * gains.get(source, 1.0)
+        dry[source] = resample(mono, signal_rate, rate)
+    return dry
+
+
+def _samples(signal: np.ndarray | Emission) -> int:
+    return signal.length if isinstance(signal, Emission) else len(signal)
 
 
 @dataclass(frozen=True)

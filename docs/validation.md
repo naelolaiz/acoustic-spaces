@@ -2613,6 +2613,31 @@ walks crossfaded from place to place, as without Doppler, keep each place's pitc
 their phase jumps from place to place: the waveform has nothing in common with the
 field's (an error of 0 dB or more) and the level misses by 4 to 11 dB at times.
 
+**The sound sent each way.** The same walks with the source sending a tone each way
+(an `Emission`, `acoustic_spaces.emission`): 1 + 0.8 cos θ in amplitude, θ from
+straight ahead, and turned in phase by 90° times the sine of the elevation, on a grid
+2° apart. In the exact field each path carries what is sent the way it leaves the
+source, at the time it leaves:
+
+| case | tone | waveform | level |
+|---|---|---|---|
+| car, 30 m/s | 1 kHz | -53.2 dB | 0.005 / 0.039 dB |
+| | 4 kHz | -46.3 dB | 0.006 / 0.067 dB |
+| train, 80 m/s | 1 kHz | -45.3 dB | 0.016 / 0.057 dB |
+| | 4 kHz | -35.2 dB | 0.085 / 0.419 dB |
+| passing listener, 30 m/s | 1 kHz | -53.5 dB | 0.005 / 0.047 dB |
+| | 4 kHz | -46.1 dB | 0.007 / 0.105 dB |
+
+With a cardioid directivity on the source, which the emission takes the place of in
+the early paths, every number is the same to the digits shown. The level stays within
+0.11 dB at 30 m/s and 0.42 dB for the train at 4 kHz, as one signal's does there; the
+train's waveform at 4 kHz is 3.5 dB further than one signal's,
+as the tone sent ahead weighs the approach more, where the pitch is higher and the
+delays' error weighs more: sent louder behind instead (1 - 0.8 cos θ), it comes within
+42.7 dB, and with the amplitude alike every way (only the phase turning) within 38.6
+dB, as one signal. A grid 1° apart, or places 0.5 m apart, changes it by 0.3 dB at
+most.
+
 **The places.** The car at 1 kHz with its places further apart:
 
 | places apart | waveform | level |

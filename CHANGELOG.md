@@ -12,6 +12,17 @@
   apart, 100 m up over 1.6 km of a meadow in the `windy` preset, take 31 s instead of
   89 s on four cores, with the same early levels to 10⁻⁷ dB. Still scenes are
   unchanged, bit for bit.
+- The sound a source sends each way (`acoustic_spaces.emission`): along a walk with
+  Doppler, `render_walk` and `render_movement` take an `Emission` for the walker (or
+  for a source a walking listener passes) instead of one signal, and each early path
+  carries what is sent the way it leaves the source, at the time it leaves, the
+  source's directivity taken out of its filter; the late part plays the emission's
+  sound averaged over the directions. `Mixture` makes one of signals that do not
+  correlate, each with an amplitude per direction, and gives its directivity per band.
+  Against the exact field, a tone sent louder ahead and turned in phase with the height
+  is within 0.11 dB in level at 30 m/s and 0.42 dB for a train at 4 kHz, as one
+  signal is (`validation/doppler.py`). `directivity.on_grid` and `sphere_mean` read a
+  grid of directions as a balloon's is read.
 
 ## 4.0.1
 
