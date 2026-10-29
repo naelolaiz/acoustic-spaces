@@ -36,9 +36,9 @@ sound power, in the scene's air. The mixes keep one gain for all; the video turn
 stop up to the loudness of the loudest, as the stadium demo's does. The stadium's air is
 still: no wind or eddies bend the helicopter's sound. Its rotors' downwash is left out:
 flying past at this speed, their wake trails behind them and sinks a few metres a second
-(1.6 m/s through the main rotor's disc in its trim), far above the crowd. The rotors'
-model is louder than this helicopter's noise certificate (see the helicopter_flyover
-example).
+(1.6 m/s through the main rotor's disc in its trim), far above the crowd. With Pegg's
+broadband noise, the default, the rotors' model is louder than this helicopter's noise
+certificate, and with --broadband bpm quieter (see the helicopter_flyover example).
 """
 
 from __future__ import annotations

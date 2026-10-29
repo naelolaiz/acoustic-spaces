@@ -18,6 +18,7 @@ reports and the late part. Nothing of the simulation uses this module.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import functools
 import math
 import os
@@ -25,6 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
+from acoustic_spaces.demos import Option
 from acoustic_spaces.demos.audio import write as write_wav
 from acoustic_spaces.demos.passby import FADE_S, Vehicle, car_of, pass_s
 
@@ -65,12 +67,28 @@ def airspeed(source, scene, speed_m_s: float) -> float:
     return float(np.linalg.norm(ground - wind))
 
 
+#: Its broadband noise's models, in words.
+BROADBAND = {
+    "bpm": "Brooks, Pope and Marcolini's airfoil self-noise of each blade section",
+    "pegg": "Pegg's method (NASA TM-80200)",
+}
+
+
 @functools.lru_cache(maxsize=4)
-def _sent(airspeed_m_s: float, temperature_c: float, pressure_kpa: float, rate: int, n: int):
-    """The AS350 B3's trim and the ``n`` samples it sends at ``rate``."""
+def _sent(
+    airspeed_m_s: float,
+    temperature_c: float,
+    pressure_kpa: float,
+    rate: int,
+    n: int,
+    broadband: str,
+):
+    """The AS350 B3's trim and the ``n`` samples it sends at ``rate``, its broadband
+    noise by ``broadband``."""
     from acoustic_spaces import rotorcraft
 
-    trim = rotorcraft.trim(rotorcraft.AS350_B3, airspeed_m_s, temperature_c, pressure_kpa)
+    helicopter = dataclasses.replace(rotorcraft.AS350_B3, broadband=broadband)
+    trim = rotorcraft.trim(helicopter, airspeed_m_s, temperature_c, pressure_kpa)
     return trim, rotorcraft.emission(trim, seconds=n / rate, sample_rate=rate, seed=SEED)
 
 
@@ -88,8 +106,23 @@ class Helicopter(Vehicle):
     step_m = STEP_M
     sound_file, info_file = BELOW_FILE, INFO_FILE
 
-    def options(self) -> list:
-        return []
+    def options(self) -> list[Option]:
+        from acoustic_spaces import rotorcraft
+
+        return [
+            Option(
+                "broadband",
+                "how the rotors' broadband noise is found: pegg, Pegg's fit to measured "
+                "rotors' noise (NASA TM-80200), or bpm, each blade section's own noise in "
+                "the flow past it (Brooks, Pope and Marcolini's airfoil self-noise) summed "
+                "round the turn; in the certification's flyover pegg comes out over the "
+                "helicopter's certified level and bpm under it",
+                rotorcraft.AS350_B3.broadband,
+                "choice",
+                rotorcraft.BROADBAND_MODELS,
+                steps=(self.name, "scene", "walk"),
+            )
+        ]
 
     def check(self, args: argparse.Namespace) -> None:
         return None
@@ -116,11 +149,15 @@ class Helicopter(Vehicle):
         air = scene.air
         flying = round(airspeed(car_of(scene, self), scene, speed_kmh / 3.6), 4)
         rate = int(scene.simulation.sample_rate)
-        trim, sent = _sent(flying, air.temperature_c, air.pressure_kpa, rate, round(POWER_S * rate))
+        broadband = str(args.broadband)
+        trim, sent = _sent(
+            flying, air.temperature_c, air.pressure_kpa, rate, round(POWER_S * rate), broadband
+        )
         level = sent.sound_power_db(trim.density, trim.sound_speed)
         return {
             "helicopter": rotorcraft.AS350_B3.name,
             "mass_kg": rotorcraft.AS350_B3.mass_kg,
+            "broadband": broadband,
             "speed_kmh": round(speed_kmh, 6),
             "airspeed_m_s": flying,
             "temperature_c": air.temperature_c,
@@ -143,6 +180,7 @@ class Helicopter(Vehicle):
             info["pressure_kpa"],
             rate,
             round(seconds * rate),
+            info["broadband"],
         )
 
     def make(self, args: argparse.Namespace, info: dict, folder: Path) -> str:
@@ -194,13 +232,14 @@ class Helicopter(Vehicle):
     def played_by(self, args: argparse.Namespace) -> str:
         from acoustic_spaces.demos.passby import speed_of
 
-        return f"helicopter {round(speed_of(args, self), 4):g} km/h"
+        return f"helicopter {round(speed_of(args, self), 4):g} km/h {args.broadband}"
 
     def facts(self, args: argparse.Namespace, info: dict) -> dict:
         return {
             "helicopter": info["helicopter"],
             "airspeed_m_s": info["airspeed_m_s"],
             "sound_power_a_db": info["sound_power_a_db"],
+            "broadband": info["broadband"],
             "about": f"An {info['helicopter']} at {info['speed_kmh']:g} km/h, "
             f"{info['sound_power_a_db']:.1f} dB(A) of sound power (its rotors' model)",
         }
@@ -209,8 +248,8 @@ class Helicopter(Vehicle):
         return (
             f"Helicopter's sound: an {facts['helicopter']}'s two rotors at "
             f"{facts['airspeed_m_s']:.1f} m/s through the air, their tones from the blades' "
-            "steady loads (Ffowcs Williams and Hawkings) and their broadband noise by Pegg's "
-            f"method (NASA TM-80200); faded in and out over {FADE_S:g} s"
+            "steady loads (Ffowcs Williams and Hawkings) and their broadband noise by "
+            f"{BROADBAND[facts['broadband']]}; faded in and out over {FADE_S:g} s"
         )
 
     def texts(self) -> dict[str, str]:
@@ -235,4 +274,12 @@ class Helicopter(Vehicle):
 #: The helicopter of the helicopter_flyover example.
 HELICOPTER_VEHICLE = Helicopter()
 
-__all__ = ["HELICOPTER", "HELICOPTER_VEHICLE", "LEVEL_M", "STEP_M", "Helicopter", "airspeed"]
+__all__ = [
+    "BROADBAND",
+    "HELICOPTER",
+    "HELICOPTER_VEHICLE",
+    "LEVEL_M",
+    "STEP_M",
+    "Helicopter",
+    "airspeed",
+]

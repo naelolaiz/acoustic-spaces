@@ -2715,8 +2715,10 @@ at each ear in the tests), not against a moving head's exact field.
 `validation/rotorcraft.py` checks the sound a helicopter's rotors send (see
 [Helicopters](outdoor.md#helicopters)): its tones against Gutin's formula and against
 the far field summed over the blades in two other ways, the store that keeps them,
-Pegg's broadband noise against his worked example, and the whole against the certified
-noise level of the helicopter it describes, the AS350 B3, flying at 63 m/s (25 °C).
+the airfoil self-noise against the sample outputs of its authors' code, the blades'
+pitch against its closed form, Pegg's broadband noise against his worked example, and
+the whole, with either broadband noise, against the certified noise level of the
+helicopter it describes, the AS350 B3, flying at 63 m/s (25 °C).
 
 **The tones.** Each harmonic of the blade passing frequency, against:
 
@@ -2765,6 +2767,57 @@ helicopter heard 61.6 m from its main rotor, 5° under its disc, and 62.2 m from
 tail rotor, 10° off its axis: the broadband levels come out at 84.50 + S and 82.49 + S
 dB (his 84.5 and 82.5), and the peak frequencies at 289 and 545 Hz (his 289 and 544).
 
+**Airfoil self-noise.** Brooks, Pope and Marcolini's report (NASA RP-1218, 1989) gives
+two sample outputs of its code: one untripped segment of a 30.48 cm chord at 1.516°
+(table D2), and ten tripped segments of 15.24 cm at 5.4° with a rounded tip (D3), both
+in a 71.3 m/s flow heard 1.22 m away. Each mechanism's band levels from 100 Hz to 40
+kHz, against the tables:
+
+| table | mechanism | most off |
+|---|---|---|
+| D2 | turbulent boundary layer: pressure side, suction side, angle of attack | 0.006, 0.006, 0.008 dB |
+| | laminar boundary layer's vortex shedding | 0.003 dB |
+| | total | 0.006 dB |
+| D3 | turbulent boundary layer: pressure side, suction side, angle of attack | 0.006, 0.006, 0.006 dB |
+| | tip vortex at 7.7° | 0.188 dB |
+| | tip vortex at 7.668° | 0.006 dB |
+
+The tables are rounded to 0.001 dB. The tip vortex column is the code's equations at a
+tip angle of 7.668°, not at the 7.7° of the table's input; the code as the report
+prints it gives 7.7°'s levels, 0.19 dB over the table at 100 Hz and 0.04 dB under it at
+40 kHz, so the table may come from another version of it. Neither table has the
+trailing edge's bluntness or a stalled section. For the AS350 B3 at 63 m/s, straight
+down, the bluntness adds under 0.05 dB (its 0.5 mm trailing edges send theirs around
+20 kHz) and the 1.5 % of the places round the turn where a section stalls nothing to
+0.001 dB; the turbulent boundary layers give 106.8 of the main rotor's 107.5 dB 1 m
+away, and the laminar boundary layer's vortex shedding 3 dB of the tail rotor's 89.4.
+The directivity's angles are those of the report's figure B3: theta from the chord to
+the observer, phi from the span to the observer's projection across the chord.
+
+**The blades' pitch.** The collective and cyclic pitch that carry the trim's thrust
+with no flapping, for the main rotor's rigid blades taken from the hub to the tip (no
+root cut-out and no tip loss, so that it has a closed form), twisted by -10°, in an
+even inflow, against Johnson's closed form (*Helicopter Theory*, 5.6):
+
+| speed | theta_0 | theta_1s | most off |
+|---|---|---|---|
+| 0 m/s | 15.5675° | 0° | 9 x 10⁻¹² ° |
+| 30 m/s | 13.2553° | -1.7615° | 7 x 10⁻¹² ° |
+| 63 m/s | 14.5351° | -3.9524° | 2 x 10⁻¹¹ ° |
+
+`tests/test_rotorcraft.py` checks the blade sections' sum (`bpm_bands`) against one
+done place by place, each section's frame and motion through the air taken from the
+disc's own vectors, each mechanism's level with its own directivity and its bands
+moved one by one, hovering and at 63 m/s, to 10⁻⁹. Against 2,304 places round the
+turn, the default 144 hold the main rotor's level, on the 5° grid, to 0.01 dB
+everywhere below the horizon and to 0.7 dB above it, close to its disc's plane. The
+tail rotor's disc is upright, so listeners below the helicopter are close to its
+plane: there its level holds to 1.3 dB (0.6 dB with 288 places, 0.3 dB with 576),
+because BPM's directivity changes abruptly where a section's chord points at the
+listener, an angle where the report itself finds it inaccurate. The tail rotor's
+broadband noise is 36 dB under the helicopter's sound in the certification's overflight
+(below). 48 sections instead of 24 change the levels by under 0.06 dB.
+
 **The certified level.** The AS350 B3 at its maximum mass of 2,250 kg flying the
 overflight of ICAO Annex 16, chapter 11 (14 CFR part 36, appendix J): level, 150 m
 over a microphone 1.2 m above grass, at 0.9 V_H, in still air at 25 °C and 70 %
@@ -2784,15 +2837,29 @@ most, and the sound exposure level is the energy between them:
 | tail rotor's broadband noise | 64.9 dB(A) | 57.8 dB(A) | 11.0 s |
 | certified | 84.6 dB(A) | | |
 
-The model is 3.4 dB louder than the certified level, nearly all of it Pegg's
-broadband noise of the main rotor. Pegg's method is a correlation of the 1970s'
-measurements: in his own example the band of the broadband peak (315 Hz) comes out
-5.3 dB over the level measured there, though a tone of the tail rotor in that band is
-over it alone; the bands where only the broadband noise counts have no measured level
-in the report. The tones leave out the loads that change round the turn, which make a
-rotor's lower harmonics in forward flight louder than steady loads do. Some of the
-AS350 B3's inputs are assumed (the main blades' chord, the tail rotor's speed, chord
-and thickness, V_H); `AS350_B3`'s source code says which.
+That is with Pegg's broadband noise, the default. With each blade section's own
+(`broadband="bpm"`):
+
+| part | SEL | L_ASmax | 10 dB down for |
+|---|---|---|---|
+| all | 80.1 dB(A) | 72.4 dB(A) | 12.0 s |
+| main rotor's broadband noise | 68.6 dB(A) | 62.2 dB(A) | 8.4 s |
+| tail rotor's broadband noise | 44.3 dB(A) | 37.4 dB(A) | 10.2 s |
+
+With Pegg's noise the model is 3.4 dB louder than the certified level, nearly all of
+it Pegg's broadband noise of the main rotor; with the blade sections' own it is 4.5
+dB quieter, nearly all of it the tail rotor's tones, the main rotor's broadband noise
+19 dB under Pegg's. Self-noise is the noise of a blade in a smooth flow: it leaves out
+the blades cutting through the wake of those ahead and through turbulence, which a
+full-size rotor in flight makes and which Pegg's fit to measured rotors holds. Pegg's
+method is a correlation of the 1970s' measurements: in his own example the band of the
+broadband peak (315 Hz) comes out 5.3 dB over the level measured there, though a tone
+of the tail rotor in that band is over it alone; the bands where only the broadband
+noise counts have no measured level in the report. The tones leave out the loads that
+change round the turn, which make a rotor's lower harmonics in forward flight louder
+than steady loads do. Some of the AS350 B3's inputs are assumed (the main blades' chord
+and twist, the tail rotor's speed, chord and thickness, V_H); `AS350_B3`'s source code
+says which.
 
 ## Edge diffraction in whole cities
 

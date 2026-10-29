@@ -26,16 +26,36 @@ in every direction; its convective amplification is in it, and the walk adds the
 Doppler shift. They are kept as one period of the sound in each direction
 (:class:`~acoustic_spaces.emission.Periodic`).
 
-**The broadband noise.** Pegg's semi-empirical method (NASA TM-80200, 1979, equations
-7 and 8): the third-octave band levels ``20 log (V_T / c)^3 + 10 log (A_b / r^2)
-(cos^2 theta + 0.1) + S + f(C_L) + 130`` round a peak at ``-240 log T + 2.448 V_T +
-942`` Hz, with the spectrum's shape ``S`` of its figure 9, for each rotor (``theta``
-from the thrust's axis). It is a level for hovering; in flight it is sent with the
-convective amplification of a moving dipole, as the tones are. Its bands run from 1/32
-to 128 times the peak, the range of the figure.
+**The broadband noise**, by the helicopter's ``broadband`` model:
 
-**What it leaves out.** Loads that change round the turn (the rotor in forward flight
-carries less lift on its advancing side, and the blades flap), the blades meeting the
+- ``"pegg"`` (the default): Pegg's semi-empirical method (NASA TM-80200, 1979,
+  equations 7 and 8), a fit to measured rotors' broadband noise: the third-octave band
+  levels ``20 log (V_T / c)^3 + 10 log (A_b / r^2) (cos^2 theta + 0.1) + S + f(C_L) +
+  130`` round a peak at ``-240 log T + 2.448 V_T + 942`` Hz, with the spectrum's shape
+  ``S`` of its figure 9, for each rotor (``theta`` from the thrust's axis)
+  (:func:`pegg_broadband`). It is a level for hovering; in flight it is sent with the
+  convective amplification of a moving dipole, as the tones are. Its bands run from
+  1/32 to 128 times the peak, the range of the figure.
+- ``"bpm"``: each blade's own noise in the flow past it, Brooks, Pope and
+  Marcolini's airfoil self-noise (:mod:`acoustic_spaces.airfoil_noise`), summed over 24
+  sections from the blade's root to its tip at 144 places round the turn
+  (:func:`bpm_bands`). The blades' pitch is trimmed (:func:`pitch`): rigid blades whose
+  sections' lift is linear in their angle of attack (``lift_slope``), twisted by
+  ``twist_deg``, in the trim's inflow, even over the disc, carry its thrust and do not
+  flap. Each section's speed and angle of attack follow round the turn; its levels hold
+  the convective amplification of its own motion through the air, its bands are shifted
+  by its Doppler shift over the hub's (the walk adds the hub's), and each place round
+  the turn counts as long as its sound takes to arrive. The boundary layers turn
+  turbulent by themselves unless ``tripped``, the tips are square unless
+  ``rounded_tip``, the trailing edges ``trailing_edge_m`` thick; sections whose flow
+  reverses or whose angle of attack is beyond ``BPM_ALPHA_DEG`` are left out, and so is
+  the bluntness noise of sections faster than ``BLUNT_MACH``. It is the blades' noise in
+  a smooth flow only: the noise of the blades cutting through the wake of those before
+  (blade-wake interaction) and through turbulence is not in it.
+
+**What it leaves out.** For the tones, loads that change round the turn (in forward
+flight a blade's lift changes as it goes round, and the blades flap; BPM's sections
+follow their angle of attack round the turn, but do not flap), the blades meeting the
 tip vortices of those before (blade-vortex interaction), noise from the engine and the
 gearbox, the fuselage's reflection and shielding, and wind: the air is still, and the
 airspeed is the speed over the ground.
@@ -82,6 +102,14 @@ PEGG_SPECTRUM_DB = (
 PEGG_FIRST_OCTAVE = -5
 #: The standard pressure the levels are over (Pa).
 REFERENCE_PA = 2e-5
+#: The ways a helicopter's broadband noise can be found (:attr:`Helicopter.broadband`).
+BROADBAND_MODELS = ("bpm", "pegg")
+#: Brooks, Pope and Marcolini's bluntness noise is left out of blade sections faster
+#: than this Mach number, as their appendix C recommends for rotors.
+BLUNT_MACH = 0.45
+#: Their fits hold for angles of attack up to this (degrees); sections beyond it, in
+#: the slow flow next to where it reverses, are left out.
+BPM_ALPHA_DEG = 25.0
 
 
 @dataclass(frozen=True)
@@ -110,6 +138,20 @@ class Rotor:
     thickness: float = 0.12
     #: The blade sections' mean profile drag coefficient.
     profile_drag: float = 0.01
+    #: How much the blades' pitch changes from the hub to the tip (degrees, linearly;
+    #: negative, the tip pitched down), for the blade sections' angles of attack.
+    twist_deg: float = 0.0
+    #: The sections' lift curve slope (per radian).
+    lift_slope: float = 5.73
+    #: The trailing edge's thickness (m; 0 for a sharp edge, which sends none) and the
+    #: angle its surfaces meet at (0 to 14 degrees), for Brooks, Pope and Marcolini's
+    #: bluntness noise.
+    trailing_edge_m: float = 0.0005
+    trailing_edge_deg: float = 14.0
+    #: Whether the blades' boundary layers are tripped (else they go turbulent by
+    #: themselves), and whether their tips are rounded (else square).
+    tripped: bool = False
+    rounded_tip: bool = False
 
     def __post_init__(self) -> None:
         if self.turning not in ("counter-clockwise", "clockwise"):
@@ -120,6 +162,10 @@ class Rotor:
             raise ValueError("the blades begin inside the tip and are thinner than 40 %")
         if np.linalg.norm(self.thrust) == 0.0:
             raise ValueError("the thrust needs a direction")
+        if not self.lift_slope > 0.0:
+            raise ValueError("the sections' lift rises with their angle of attack")
+        if not (self.trailing_edge_m >= 0.0 and 0.0 <= self.trailing_edge_deg <= 14.0):
+            raise ValueError("the trailing edge's surfaces meet at 0 to 14 degrees")
 
     @property
     def omega(self) -> float:
@@ -163,6 +209,17 @@ class Helicopter:
     #: The induced power over that of momentum theory (Leishman's ``kappa``).
     induced: float = 1.15
     name: str = ""
+    #: How its rotors' broadband noise is found: "pegg" (Pegg's semi-empirical method
+    #: for the whole rotor) or "bpm" (Brooks, Pope and Marcolini's airfoil self-noise of
+    #: each blade section round the turn).
+    broadband: str = "pegg"
+
+    def __post_init__(self) -> None:
+        if self.broadband not in BROADBAND_MODELS:
+            raise ValueError(
+                f"a helicopter's broadband noise is found by {' or '.join(BROADBAND_MODELS)}, "
+                f"not {self.broadband!r}"
+            )
 
     @property
     def tail_arm_m(self) -> float:
@@ -570,12 +627,18 @@ def _noise(peak_hz: float, samples: int, sample_rate: int, rng: np.random.Genera
     return np.fft.irfft(magnitude * phase, samples)
 
 
-def broadband(
-    trim: Trim, *, samples: int, sample_rate: int = 48_000, grid_deg: float = 5.0, seed: int = 0
+def pegg_broadband(
+    trim: Trim,
+    *,
+    samples: int,
+    sample_rate: int = 48_000,
+    grid_deg: float = 5.0,
+    seed: int = 0,
+    rotors: tuple[str, ...] = ("main", "tail"),
 ) -> Mixture:
-    """Both rotors' broadband noise in a trim (Pegg's method, see the module's
+    """The rotors' broadband noise in a trim by Pegg's method (see the module's
     description), ``samples`` of it, its pattern on a grid ``grid_deg`` apart in the
-    helicopter's frame."""
+    helicopter's frame: one noise for each of ``rotors``."""
     rng = np.random.default_rng(seed)
     elevation, azimuth = _grid(grid_deg)
     ways = _from_angles(azimuth[None, :], elevation[:, None])
@@ -583,9 +646,10 @@ def broadband(
     signals, weights = [], []
     for which in ("main", "tail"):
         rotor, load = trim._rotor(which)
-        signals.append(
-            _noise(pegg_peak_hz(load.thrust_n, rotor.tip_speed), samples, sample_rate, rng)
-        )
+        noise = _noise(pegg_peak_hz(load.thrust_n, rotor.tip_speed), samples, sample_rate, rng)
+        if which not in rotors:
+            continue
+        signals.append(noise)
         pattern = np.sqrt((ways @ load.axis) ** 2 + 0.1)
         level_db = pegg_level_db(
             rotor.tip_speed, trim.sound_speed, rotor.blade_area_m2, trim.lift_coefficient(which)
@@ -593,6 +657,246 @@ def broadband(
         level = REFERENCE_PA * 10.0 ** (level_db / 20.0)
         weights.append(level * pattern / doppler**2)
     return Mixture(np.array(signals), np.stack(weights, axis=-1), sample_rate)
+
+
+def pitch(trim: Trim, which: str, stations: int = 24, azimuths: int = 64) -> np.ndarray:
+    """A rotor's blade pitch in a trim (radians at the hub, by ``twist_deg`` less at the
+    tip): its collective ``theta_0`` and its cyclic ``theta_1c``, ``theta_1s`` (with
+    ``cos psi`` and ``sin psi``, ``psi`` the blade's azimuth from straight downwind,
+    turning with the rotor), such that its blades carry the trim's thrust and do not
+    flap round the turn: their lift's moment about the hub has no part that goes once
+    round with it. The blades are rigid, their sections' lift linear in the angle of
+    attack (``lift_slope``), the inflow even over the disc (the trim's); the lift runs
+    from the root to the tip loss, as the tones' does."""
+    rotor, load = trim._rotor(which)
+    r, w = _gauss(rotor.root * rotor.radius_m, TIP_LOSS * rotor.radius_m, stations)
+    psi = 2.0 * math.pi * np.arange(azimuths) / azimuths
+    u_t, u_p = _flow(trim, which, r[None, :], psi[:, None])
+    shape = r[None, :] / rotor.radius_m * math.radians(rotor.twist_deg)
+    # The lift per length, rho c a (theta U_T^2 - U_P U_T) / 2, is linear in the three
+    # controls: rows thrust, moment with cos psi and with sin psi.
+    trig = [np.ones_like(psi), np.cos(psi), np.sin(psi)]
+    arms = [np.ones_like(r), r, r]
+    half = 0.5 * trim.density * rotor.chord_m * rotor.lift_slope
+    a = np.zeros((3, 3))
+    b = np.zeros(3)
+    for i in range(3):
+        mean = trig[i][:, None] * (arms[i] * w)[None, :] / azimuths
+        for j in range(3):
+            a[i, j] = half * np.sum(mean * trig[j][:, None] * u_t**2)
+        b[i] = -half * np.sum(mean * (shape * u_t**2 - u_p * u_t))
+    b[0] += load.thrust_n / rotor.blades
+    return np.linalg.solve(a, b)
+
+
+def _flow(trim: Trim, which: str, r, psi) -> tuple[np.ndarray, np.ndarray]:
+    """The air's speed past a blade section at radius ``r`` and azimuth ``psi``, in a
+    trim: along the turn (towards its leading edge, ``U_T``) and down through the disc
+    (``U_P``), the inflow even over the disc."""
+    rotor, load = trim._rotor(which)
+    across = trim.airspeed_m_s * math.sqrt(max(0.0, 1.0 - load.axis[0] ** 2))
+    through = trim.airspeed_m_s * load.axis[0] + load.induced_m_s
+    u_t = rotor.omega * np.asarray(r) + across * np.sin(psi)
+    return u_t, np.broadcast_to(through, np.broadcast(u_t, psi).shape).astype(float)
+
+
+def _frame(load: Load, rotor: Rotor) -> tuple[np.ndarray, np.ndarray]:
+    """A rotor's disc as two unit vectors in the helicopter's frame: straight downwind
+    across it (where ``psi`` is 0) and a quarter turn on, with the rotor's turn."""
+    a = load.axis
+    downwind = np.array([-1.0, 0.0, 0.0]) - a * (-a[0])
+    if np.linalg.norm(downwind) < 1e-9:
+        downwind = _basis(a)[0]
+    downwind = _unit(downwind)
+    return downwind, rotor.spin * np.cross(a, downwind)
+
+
+def _third_octaves(lo: int, hi: int) -> np.ndarray:
+    """Base-10 third-octave band centres ``10^(k / 10)`` Hz, for ``k`` from ``lo`` to
+    ``hi``."""
+    return 10.0 ** (np.arange(lo, hi + 1) / 10.0)
+
+
+#: The bands (``10^(k/10)`` Hz) BPM's levels are found in, in a blade section's frame,
+#: and those the noise is sent in from the hub, after each section's Doppler shift.
+BPM_SOURCE_BANDS = (7, 46)
+BPM_BANDS = (12, 43)
+
+
+def bpm_bands(
+    trim: Trim,
+    which: str,
+    ways: np.ndarray,
+    *,
+    segments: int = 24,
+    azimuths: int = 144,
+) -> tuple[np.ndarray, np.ndarray]:
+    """A rotor's broadband noise in a trim by Brooks, Pope and Marcolini's airfoil
+    self-noise (:mod:`acoustic_spaces.airfoil_noise`), sent towards ``ways`` (..., 3)
+    in the helicopter's frame: the third-octave bands' centres (Hz) and their mean
+    square pressures 1 m from the hub (Pa², ``(..., bands)``), averaged over a turn.
+
+    Each blade is ``segments`` sections from its root to its tip, each at ``azimuths``
+    places round the turn, with the flow past it and its angle of attack from the
+    trim's pitch (:func:`pitch`). A section's levels hold the convective amplification
+    of its motion through the air; its bands are shifted by its own Doppler shift over
+    the hub's (the walk adds the hub's), and each place round the turn counts as long
+    as its sound takes to arrive. The bluntness noise is left out of sections faster
+    than ``BLUNT_MACH`` and sections beyond ``BPM_ALPHA_DEG``, or where the flow
+    reverses, are left out; the tip's vortex is the outermost section's."""
+    from acoustic_spaces import airfoil_noise as bpm
+    from acoustic_spaces.air import viscosity
+
+    rotor, load = trim._rotor(which)
+    c, v = trim.sound_speed, trim.airspeed_m_s
+    nu = viscosity(trim.temperature_c, trim.pressure_kpa)
+    trip = bpm.TRIPPED if rotor.tripped else bpm.UNTRIPPED
+    ways = np.asarray(ways, dtype=float)
+    flat = ways.reshape(-1, 3)
+    flat = flat / np.linalg.norm(flat, axis=1, keepdims=True)
+    edges = np.linspace(rotor.root * rotor.radius_m, rotor.radius_m, segments + 1)
+    r, span = (edges[1:] + edges[:-1]) / 2.0, np.diff(edges)
+    theta0, theta1c, theta1s = pitch(trim, which)
+    downwind, quarter = _frame(load, rotor)
+    lo, hi = BPM_SOURCE_BANDS
+    f = _third_octaves(lo, hi)
+    out_lo, out_hi = BPM_BANDS
+    flight = 1.0 - v * flat[:, 0] / c
+    total = np.zeros((len(flat), out_hi - out_lo + 1))
+    for psi in 2.0 * math.pi * np.arange(azimuths) / azimuths:
+        u_t, u_p = _flow(trim, which, r, psi)
+        theta = (
+            theta0
+            + r / rotor.radius_m * math.radians(rotor.twist_deg)
+            + theta1c * math.cos(psi)
+            + theta1s * math.sin(psi)
+        )
+        with np.errstate(divide="ignore", invalid="ignore"):
+            alpha = np.degrees(theta - u_p / u_t)
+        speed = np.hypot(u_t, u_p)
+        kept = (u_t > 0.0) & (np.abs(alpha) <= BPM_ALPHA_DEG)
+        if not np.any(kept):
+            continue
+        # The section's frame: its chord from the leading edge back to the trailing
+        # edge, its span out along the blade, and the normal to its chord.
+        out = math.cos(psi) * downwind + math.sin(psi) * quarter
+        ahead = rotor.spin * np.cross(load.axis, out)
+        cos_t, sin_t = np.cos(theta), np.sin(theta)
+        chord = -cos_t[:, None] * ahead - sin_t[:, None] * load.axis
+        normal = -sin_t[:, None] * ahead + cos_t[:, None] * load.axis
+        dx, dz = flat @ chord.T, flat @ normal.T
+        dy = (flat @ out)[:, None]
+        # As the report's figure B3 has them: theta from the chord to the way, phi from
+        # the span to the way's projection across the chord.
+        theta_e = np.degrees(np.arctan2(np.hypot(dy, dz), dx))
+        phi_e = np.degrees(np.arctan2(np.abs(dz), dy))
+        moving = 1.0 - (v * flat[:, :1] + rotor.omega * r[None, :] * (flat @ ahead)[:, None]) / c
+        a, u = np.abs(alpha[kept]), speed[kept]
+        m = u / c
+        common: dict[str, Any] = {"trip": trip, "viscosity": nu, "sound_speed": c}
+        # Each mechanism's level 1 m away at theta = phi = 90 degrees, where both
+        # directivities are 1: the stalled sections' over D_l, the others' over D_h.
+        args = (f, rotor.chord_m, span[kept], 1.0, 90.0, 90.0, a, u)
+        pressure, suction, angle = bpm.tbl_te(*args, **common)
+        tbl = 10.0 ** (pressure / 10.0) + 10.0 ** (suction / 10.0) + 10.0 ** (angle / 10.0)
+        stall = bpm.stalled(a, m)[:, None]
+        high, low = np.where(stall, 0.0, tbl), np.where(stall, tbl, 0.0)
+        if trip == bpm.UNTRIPPED:
+            high = high + 10.0 ** (bpm.lbl_vs(*args, **common) / 10.0)
+        blunt = (m <= BLUNT_MACH)[:, None]
+        if rotor.trailing_edge_m > 0.0 and np.any(blunt):
+            level = bpm.bluntness(*args, rotor.trailing_edge_m, rotor.trailing_edge_deg, **common)
+            high = high + np.where(blunt, 10.0 ** (level / 10.0), 0.0)
+        index = np.nonzero(kept)[0]
+        if kept[-1]:
+            level = bpm.tip(
+                f,
+                rotor.chord_m,
+                1.0,
+                90.0,
+                90.0,
+                a[-1],
+                u[-1],
+                rounded=rotor.rounded_tip,
+                sound_speed=c,
+            )
+            high[-1] += 10.0 ** (level / 10.0)
+        # The section's Doppler shift over the hub's, in third-octave bands, each band
+        # shared between the two it lands across; and the time its sound takes to arrive
+        # over the hub's.
+        ratio = flight[:, None] / moving[:, index]
+        d_high = bpm.directivity_high(m[None, :], theta_e[:, index], phi_e[:, index]) / ratio
+        d_low = bpm.directivity_low(m[None, :], theta_e[:, index], phi_e[:, index]) / ratio
+        steps = 10.0 * np.log10(ratio)
+        whole = np.floor(steps).astype(int)
+        part = steps - whole
+        # A band ``shift`` bands up takes 1 - part of the sections whose shift's whole
+        # part it is and part of those one below.
+        for shift in range(int(whole.min()), int(whole.max()) + 2):
+            share = np.where(whole == shift, 1.0 - part, 0.0)
+            share += np.where(whole == shift - 1, part, 0.0)
+            source = np.arange(out_lo, out_hi + 1) - shift - lo
+            inside = (source >= 0) & (source <= hi - lo)
+            total[:, inside] += (share * d_high) @ high[:, source[inside]]
+            total[:, inside] += (share * d_low) @ low[:, source[inside]]
+    centres = _third_octaves(out_lo, out_hi)
+    total *= rotor.blades / azimuths * REFERENCE_PA**2
+    return centres, total.reshape(ways.shape[:-1] + (len(centres),))
+
+
+def _band_noises(centres: np.ndarray, samples: int, sample_rate: int, rng) -> np.ndarray:
+    """(bands, samples) noises of unit mean square, each even over its third-octave
+    band (base-10 edges) in random phases; a band with no frequency of the length in
+    it, or above half the rate, is silent."""
+    f = np.fft.rfftfreq(samples, 1.0 / sample_rate)
+    out = np.zeros((len(centres), samples))
+    for i, centre in enumerate(centres):
+        inside = (f >= centre * 10.0**-0.05) & (f < centre * 10.0**0.05) & (f > 0)
+        inside &= f < sample_rate / 2.0
+        if not np.any(inside):
+            continue
+        magnitude = np.where(inside, samples * math.sqrt(1.0 / (2.0 * inside.sum())), 0.0)
+        phase = np.exp(2j * math.pi * rng.random(len(f)))
+        out[i] = np.fft.irfft(magnitude * phase, samples)
+    return out
+
+
+def broadband(
+    trim: Trim,
+    *,
+    samples: int,
+    sample_rate: int = 48_000,
+    grid_deg: float = 5.0,
+    seed: int = 0,
+    rotors: tuple[str, ...] = ("main", "tail"),
+    model: str | None = None,
+) -> Mixture:
+    """The rotors' broadband noise in a trim, ``samples`` of it, its pattern on a grid
+    ``grid_deg`` apart in the helicopter's frame, by the helicopter's ``broadband``
+    model or ``model``: "bpm" (:func:`bpm_bands`, a noise in each third-octave band
+    with its level in every direction) or "pegg" (:func:`pegg_broadband`)."""
+    model = trim.helicopter.broadband if model is None else model
+    if model not in BROADBAND_MODELS:
+        raise ValueError(f"broadband noise by {' or '.join(BROADBAND_MODELS)}, not {model!r}")
+    if model == "pegg":
+        return pegg_broadband(
+            trim,
+            samples=samples,
+            sample_rate=sample_rate,
+            grid_deg=grid_deg,
+            seed=seed,
+            rotors=rotors,
+        )
+    elevation, azimuth = _grid(grid_deg)
+    ways = _from_angles(azimuth[None, :], elevation[:, None])
+    powers = None
+    for which in rotors:
+        centres, part = bpm_bands(trim, which, ways)
+        powers = part if powers is None else powers + part
+    assert powers is not None
+    keep = centres * 10.0**-0.05 < sample_rate / 2.0
+    signals = _band_noises(centres[keep], samples, sample_rate, np.random.default_rng(seed))
+    return Mixture(signals, np.sqrt(powers[..., keep]), sample_rate)
 
 
 def emission(
@@ -617,13 +921,15 @@ def emission(
 #: (Greenwood, Sim and Boyd, AHS Forum 72, 2016): the drag area (f / A = 0.0071), the
 #: main rotor's speed (394 turns a minute, its tip at 220.6 m/s from their weight
 #: coefficient) and its OA209 blades (9 % thick). Assumed, from no source to hand: the
-#: main blades' chord (0.35 m), the tail rotor's speed (2,086 turns a minute, its tip at
-#: 203 m/s), chord (0.185 m), thickness (12 %) and the way it turns, and its hub 6.67 m
-#: behind the main rotor's shaft (from Airbus's 12.94 m overall with the rotors turning,
-#: less both rotors' radii) and 1 m lower. The main rotor turns clockwise seen from above.
+#: main blades' chord (0.35 m) and twist (-10 degrees), the tail rotor's speed (2,086
+#: turns a minute, its tip at 203 m/s), chord (0.185 m), thickness (12 %), untwisted
+#: blades and the way it turns, both rotors' trailing edges (a rotor's default), and its
+#: hub 6.67 m behind the main rotor's shaft (from Airbus's 12.94 m overall with the rotors
+#: turning, less both rotors' radii) and 1 m lower. The main rotor turns clockwise seen
+#: from above.
 AS350_B3 = Helicopter(
     mass_kg=2250.0,
-    main=Rotor(3, 5.345, 0.35, 394.0, turning="clockwise", thickness=0.09),
+    main=Rotor(3, 5.345, 0.35, 394.0, turning="clockwise", thickness=0.09, twist_deg=-10.0),
     tail=Rotor(2, 0.93, 0.185, 2086.0, hub_m=(-6.665, 0.0, -1.0), thrust=(0.0, 1.0, 0.0)),
     drag_area_m2=0.674,
     name="AS350 B3",
@@ -631,6 +937,11 @@ AS350_B3 = Helicopter(
 
 __all__ = [
     "AS350_B3",
+    "BLUNT_MACH",
+    "BPM_ALPHA_DEG",
+    "BPM_BANDS",
+    "BPM_SOURCE_BANDS",
+    "BROADBAND_MODELS",
     "GRAVITY",
     "PEGG_SPECTRUM_DB",
     "QUIET_DB",
@@ -639,12 +950,15 @@ __all__ = [
     "Load",
     "Rotor",
     "Trim",
+    "bpm_bands",
     "broadband",
     "emission",
     "pegg_bands",
+    "pegg_broadband",
     "pegg_level_db",
     "pegg_lift_db",
     "pegg_peak_hz",
+    "pitch",
     "tones",
     "trim",
 ]

@@ -344,8 +344,13 @@ Movement:
 - [x] A helicopter's rotors: their tones from the blades' steady loads, checked against
   Gutin's hover formula and Farassat's formulation in time, and Pegg's broadband noise,
   checked against his worked example (`acoustic_spaces.rotorcraft`).
+- [x] A helicopter's broadband noise from each blade section's own noise (Brooks, Pope
+  and Marcolini's airfoil self-noise), checked against its authors' sample outputs, or
+  from Pegg's method, chosen per helicopter.
 - [ ] A helicopter's sound within its certified level: the AS350 B3's overflight comes
-  out 3.4 dB over, nearly all of it Pegg's broadband noise of the main rotor.
+  out 3.4 dB over with Pegg's broadband noise and 4.5 dB under with the blade
+  sections' own, which leaves out the blades cutting through the wake of those ahead
+  and through turbulence.
 - [x] A helicopter flying over a meadow: the `helicopter_flyover` example and its
   flyover demo, the rotors trimmed at the helicopter's airspeed against the wind.
 - [x] A helicopter crossing over the stadium concert: `helicopter_demo.py`, its pass

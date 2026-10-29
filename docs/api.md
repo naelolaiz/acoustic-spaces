@@ -167,6 +167,8 @@ Rotating sound fields, and decoding them to the ears:
 .. automodule:: acoustic_spaces.emission
 
 .. automodule:: acoustic_spaces.rotorcraft
+
+.. automodule:: acoustic_spaces.airfoil_noise
 ```
 
 ## Head tracking

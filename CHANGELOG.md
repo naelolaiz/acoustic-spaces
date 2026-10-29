@@ -58,6 +58,20 @@
   listener's mix of the concert, both at their simulated levels. An example may have
   more than one demo (`demos.demos_of`, `Demo.builds_on`): the editor's Run demo lists
   them, the example's own first. The stadium demo's stills take another heading.
+- A helicopter's broadband noise by either of two models, its `broadband`: Pegg's
+  method (`"pegg"`, the default) or each blade section's own noise in the flow past it
+  (`"bpm"`), Brooks, Pope and Marcolini's airfoil self-noise (NASA RP-1218,
+  `acoustic_spaces.airfoil_noise`) summed over the blades' sections round the turn,
+  each at its own speed and angle of attack from the blades' trimmed pitch
+  (`rotorcraft.pitch`), its bands moved by its own Doppler shift. A `Rotor` gives its
+  blades' twist, lift slope, trailing edge and tips. The airfoil self-noise matches
+  the two sample outputs of its authors' code to within 0.01 dB, the pitch its closed
+  form, and the sum over the blades one done place by place. In the AS350 B3's
+  certification overflight the two models fall on either side of the certified 84.6
+  dB(A): 88.0 with Pegg's, 80.1 with the blade sections', whose broadband noise is 19
+  dB under Pegg's for the main rotor (`validation/rotorcraft.py`). The flyover
+  and the stadium crossing demos take `--broadband bpm`. `air.viscosity` gives the
+  kinematic viscosity of dry air.
 
 ## 4.0.1
 

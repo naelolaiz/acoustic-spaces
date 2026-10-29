@@ -31,13 +31,24 @@ def test_the_examples_helicopter_is_its_rotors_model() -> None:
     assert helicopter.walk.speed_m_s == 63.0 and HELICOPTER_VEHICLE.problem(helicopter) is None
     wind = float(scene.atmosphere.wind_speed(np.array([150.0]))[0])
     assert airspeed(helicopter, scene, 63.0) == pytest.approx(63.0 + wind)
-    info = HELICOPTER_VEHICLE.info(argparse.Namespace(speed=None), scene, 63.0 * 3.6)
+    (broadband,) = HELICOPTER_VEHICLE.options()
+    assert broadband.default == "pegg" and broadband.choices == ("bpm", "pegg")
+    args = argparse.Namespace(speed=None, broadband=broadband.default)
+    info = HELICOPTER_VEHICLE.info(args, scene, 63.0 * 3.6)
     assert info["airspeed_m_s"] == pytest.approx(63.0 + wind, abs=1e-4)
     trim, sent = HELICOPTER_VEHICLE.emission(info, POWER_S)
     level = sent.sound_power_db(trim.density, trim.sound_speed)
     assert helicopter.level_db == pytest.approx(level, abs=0.051)
     table = read_directivity_csv(path.parent / "helicopter.csv")
     np.testing.assert_allclose(table.table, sent.directivity().table, rtol=2e-3)
+    # Each blade section's own noise is quieter than Pegg's fit to measured rotors:
+    # 124.3 dB(A) of sound power against 133.1, the tones in both.
+    args.broadband = "bpm"
+    by_sections = HELICOPTER_VEHICLE.info(args, scene, 63.0 * 3.6)
+    assert by_sections["sound_power_a_db"] == pytest.approx(124.3, abs=0.05)
+    assert info["sound_power_a_db"] == pytest.approx(133.1, abs=0.05)
+    facts = HELICOPTER_VEHICLE.facts(args, by_sections)
+    assert "Brooks, Pope and Marcolini" in HELICOPTER_VEHICLE.credit(facts)
 
 
 def _flyover(tmp_path: Path) -> Path:

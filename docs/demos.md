@@ -713,9 +713,11 @@ python flyover_demo.py all   # or helicopter, scene, walk, video one at a time
 ```
 
 Options: `--speed 200` how fast it flies over the ground (km/h; without it, the speed of
-its walk, 226.8 km/h), `--step 4` how far apart it is simulated along its walk (m),
-`--hrtf me.sofa` a measured head, `--input helicopter=WAV` a dry recording of yours. Its
-900 m of flight take 14.3 s at 63 m/s.
+its walk, 226.8 km/h), `--broadband bpm` its rotors' broadband noise from each blade
+section's own noise instead of Pegg's method ([Helicopters](outdoor.md#helicopters)),
+`--step 4` how far apart it is simulated along its walk (m), `--hrtf me.sofa` a
+measured head, `--input helicopter=WAV` a dry recording of yours. Its 900 m of flight
+take 14.3 s at 63 m/s.
 
 - **The helicopter** is the example's source `helicopter`, a point at the main rotor's
   hub, with a walk 150 m up with Doppler, facing the way it flies. Its rotors are
@@ -754,7 +756,8 @@ its walk, 226.8 km/h), `--step 4` how far apart it is simulated along its walk (
 What it leaves out: the rotors' model is louder than the helicopter's noise
 certificate. Flown over the microphone as the certification does, it gives a sound
 exposure level of 88.0 dB(A) where the AS350 B3 is certified at 84.6 dB(A), nearly all
-of it the main rotor's broadband noise (see
+of it the main rotor's broadband noise by Pegg's method; with `--broadband bpm` it gives
+80.1 dB(A), its tail rotor's tones then nearly all of it (see
 [Validation](validation.md#helicopter-rotors-against-theory-and-a-certified-level)).
 The helicopter keeps one trim along its walk, as in steady level flight: the slap of
 the blades meeting the vortices of those ahead, as a helicopter makes descending or
@@ -780,8 +783,8 @@ python helicopter_demo.py all     # or flight, helicopter, scene, walk, mix, vid
 
 Options: `--height 330` how high it flies (m), `--at 180` when it is over the centre
 spot, in seconds into the song as the sound system plays it (by default halfway
-through); `--speed`, `--step` and `--input helicopter=WAV` as in the flyover demo, and
-`--tour` as in the stadium demo. At the mix position the walk takes 3.3 minutes on 4
+through); `--speed`, `--broadband`, `--step` and `--input helicopter=WAV` as in the
+flyover demo, and `--tour` as in the stadium demo. At the mix position the walk takes 3.3 minutes on 4
 cores, most of it playing the 301 places through with Doppler, so some 40 for the 12
 listeners.
 

@@ -1,6 +1,7 @@
 """Check the helicopter's sound (:mod:`acoustic_spaces.rotorcraft`) against Gutin's
-formula, the far field summed over the blades in two independent ways, Pegg's worked
-example and the certified noise level of the helicopter it describes.
+formula, the far field summed over the blades in two independent ways, the sample
+outputs of Brooks, Pope and Marcolini's code, the blades' pitch in closed form, Pegg's
+worked example and the certified noise level of the helicopter it describes.
 
     python validation/rotorcraft.py [--json results.json]
 
@@ -15,6 +16,11 @@ example and the certified noise level of the helicopter it describes.
 - **The store.** What :class:`~acoustic_spaces.emission.Periodic` sends in random
   directions at random times, against the harmonics summed there, on grids 5 and 2.5
   degrees apart.
+- **Airfoil self-noise.** :mod:`acoustic_spaces.airfoil_noise` against the two sample
+  outputs of Brooks, Pope and Marcolini's code (NASA RP-1218, tables D2 and D3).
+- **The blades' pitch.** :func:`~acoustic_spaces.rotorcraft.pitch` against its closed
+  form (Johnson, *Helicopter Theory*, 5.6): rigid blades from the hub to the tip, in
+  an even inflow, with no flapping.
 - **Pegg.** His example I (NASA TM-80200): its broadband levels and peak frequencies.
 - **The certified level.** The AS350 B3 at 2,250 kg flying the overflight of ICAO Annex
   16 chapter 11 (14 CFR 36 appendix J): level at 150 m over a microphone 1.2 m above
@@ -23,7 +29,8 @@ example and the certified noise level of the helicopter it describes.
   ground's reflection (Weyl and van der Pol), each with the air's absorption, heard at
   the time it left the helicopter, A-weighted, with the slow time weighting to find the
   10 dB down points; its sound exposure level against the certified 84.6 dB(A) (EASA
-  type certificate data sheet for noise EASA.R.008), each part of the sound alone too.
+  type certificate data sheet for noise EASA.R.008), each part of the sound alone too,
+  with the broadband noise by each model.
 """
 
 from __future__ import annotations
@@ -32,17 +39,19 @@ import argparse
 import json
 import math
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 from scipy.signal import lfilter
 from scipy.special import jv
 
+from acoustic_spaces import airfoil_noise as bpm
 from acoustic_spaces import rotorcraft as rc
 from acoustic_spaces.air import absorption_db_per_m
 from acoustic_spaces.directivity import _sphere
 from acoustic_spaces.doppler import read
-from acoustic_spaces.emission import Mixture, Sum
+from acoustic_spaces.emission import Sum
 from acoustic_spaces.materials.ground import PRESETS, spherical_reflection, surface_impedance
 
 SPEED = 63.0
@@ -50,6 +59,8 @@ TEMPERATURE, HUMIDITY = 25.0, 70.0
 HEIGHT, MICROPHONE = 150.0, 1.2
 CERTIFIED_SEL = 84.6
 RATE = 48_000
+#: The report's sample outputs, as the tests read them.
+BPM_TABLES = Path(__file__).resolve().parent.parent / "tests" / "reference" / "bpm_tables.json"
 
 
 def _args(trim: rc.Trim, which: str) -> tuple[np.ndarray, dict]:
@@ -322,6 +333,81 @@ def check_pegg() -> dict:
     return {"main": main, "tail": tail, "peaks": list(peaks)}
 
 
+def check_bpm() -> dict:
+    """The two sample outputs: one untripped segment (D2) and ten tripped ones with a
+    rounded tip (D3), the largest difference of each mechanism's band levels."""
+    tables = json.loads(BPM_TABLES.read_text())
+    f = np.array(bpm.FREQUENCIES_HZ)
+    air = {"viscosity": 1.4529e-5, "sound_speed": 340.46}
+
+    def total(*levels):
+        return 10 * np.log10(sum(10 ** (level / 10) for level in levels))
+
+    out = {}
+    d2 = np.array(tables["D2"])
+    args = (f, 0.3048, 0.4572, 1.22, 90.0, 90.0, 1.516, 71.3)
+    p, s, a = bpm.tbl_te(*args, trip=bpm.UNTRIPPED, **air)
+    lam = bpm.lbl_vs(*args, trip=bpm.UNTRIPPED, **air)
+    names = ("pressure side", "suction side", "angle of attack", "vortex shedding", "total")
+    for name, ours, col in zip(
+        names, (p, s, a, lam, total(p, s, a, lam)), (1, 2, 3, 4, 7), strict=True
+    ):
+        out[f"D2 {name}"] = float(np.max(np.abs(ours - d2[:, col])))
+    d3 = np.array(tables["D3"])
+    n = 10
+    args = (f, [0.1524] * n, [0.0305] * n, [1.22] * n, [90.0] * n, [90.0] * n, [5.4] * n)
+    parts = bpm.tbl_te(*args, [71.3] * n, trip=bpm.TRIPPED, **air)
+    p, s, a = (10 * np.log10(np.sum(10 ** (x / 10), axis=0)) for x in parts)
+    for alpha in (7.7, 7.668):
+        tip = bpm.tip(f, 0.1524, 1.22, 90.0, 90.0, alpha, 71.3, rounded=True, sound_speed=340.46)
+        out[f"D3 tip vortex at {alpha} deg"] = float(np.max(np.abs(tip - d3[:, 6])))
+    for name, ours, col in zip(names[:3], (p, s, a), (1, 2, 3), strict=True):
+        out[f"D3 {name}"] = float(np.max(np.abs(ours - d3[:, col])))
+    for name, off in out.items():
+        print(f"  {name:28s} most off {off:.4f} dB")
+    return out
+
+
+def check_pitch() -> list[dict]:
+    """The pitch of rigid blades from the hub to the tip against its closed form."""
+    tip_loss, rc.TIP_LOSS = rc.TIP_LOSS, 1.0 - 1e-12
+    rows = []
+    try:
+        for speed in (0.0, 30.0, 63.0):
+            main = replace(rc.AS350_B3.main, root=0.0)
+            trim = rc.trim(replace(rc.AS350_B3, main=main), speed, TEMPERATURE)
+            theta0, theta1c, theta1s = rc.pitch(trim, "main", stations=48)
+            load, tip = trim.main, main.tip_speed
+            mu = speed * math.sqrt(1.0 - load.axis[0] ** 2) / tip
+            inflow = (speed * load.axis[0] + load.induced_m_s) / tip
+            twist = math.radians(main.twist_deg)
+            ct = load.thrust_n / (trim.density * main.disc_m2 * tip**2)
+            a = [[(1 + 1.5 * mu**2) / 3, mu / 2], [8 / 3 * mu / (1 + 1.5 * mu**2), 1.0]]
+            b = [
+                2 * ct / (main.solidity * main.lift_slope) - twist / 4 * (1 + mu**2) + inflow / 2,
+                -8 / 3 * mu * 0.75 * (twist - inflow) / (1 + 1.5 * mu**2),
+            ]
+            exact = np.degrees(np.linalg.solve(a, b))
+            row = {
+                "speed": speed,
+                "theta0": math.degrees(theta0),
+                "theta1s": math.degrees(theta1s),
+                "theta1c": math.degrees(theta1c),
+                "off": float(
+                    max(abs(math.degrees(theta0) - exact[0]), abs(math.degrees(theta1s) - exact[1]))
+                ),
+            }
+            rows.append(row)
+            print(
+                f"  {speed:4.0f} m/s: theta_0 {row['theta0']:.4f} deg, theta_1s "
+                f"{row['theta1s']:.4f} deg, theta_1c {row['theta1c']:.1e}; most off "
+                f"{row['off']:.1e} deg"
+            )
+    finally:
+        rc.TIP_LOSS = tip_loss
+    return rows
+
+
 def a_weighting_db(f: np.ndarray) -> np.ndarray:
     """IEC 61672's A weighting (dB)."""
     f2 = np.asarray(f, dtype=float) ** 2
@@ -392,22 +478,22 @@ def exposure(sent, trim: rc.Trim, seconds: float = 24.0) -> dict:
     return {"sel": sel, "max": float(level.max()), "seconds": (inside[-1] - inside[0]) / RATE}
 
 
-def check_certified() -> dict:
-    trim = rc.trim(rc.AS350_B3, SPEED, TEMPERATURE)
+def check_certified(model: str) -> dict:
+    """The overflight's exposure with the rotors' broadband noise by ``model``, and
+    each part of the sound alone."""
+    trim = rc.trim(replace(rc.AS350_B3, broadband=model), SPEED, TEMPERATURE)
     sent = rc.emission(trim, seconds=26.0)
-    main, tail, noise = sent.parts
+    main, tail = sent.parts[:2]
     rows = {"all": exposure(sent, trim)}
     quiet = main.scaled(0.0)
+    samples = int(26.0 * RATE)
     parts = {
         "main rotor tones": Sum((main,)),
         "tail rotor tones": Sum((tail,)),
-        "main rotor broadband": Sum(
-            (quiet, Mixture(noise.signals[:1], noise.weights[..., :1], RATE))
-        ),
-        "tail rotor broadband": Sum(
-            (quiet, Mixture(noise.signals[1:], noise.weights[..., 1:], RATE))
-        ),
     }
+    for which in ("main", "tail"):
+        noise = rc.broadband(trim, samples=samples, sample_rate=RATE, rotors=(which,))
+        parts[f"{which} rotor broadband"] = Sum((quiet, noise))
     for name, part in parts.items():
         rows[name] = exposure(part, trim)
     for name, row in rows.items():
@@ -434,10 +520,16 @@ def main(argv=None) -> int:
     heard = check_time(trim)
     print("\nThe store: one period in every direction, against the harmonics summed")
     store = check_store(trim)
+    print("\nAirfoil self-noise against the sample outputs of its code (tables D2, D3)")
+    airfoil = check_bpm()
+    print("\nThe blades' pitch against its closed form, the AS350 B3's main rotor")
+    pitch = check_pitch()
     print("\nPegg's example I")
     pegg = check_pegg()
-    print("\nThe AS350 B3's overflight (ICAO Annex 16 chapter 11) over grass")
-    certified = check_certified()
+    certified = {}
+    for model, name in (("bpm", "airfoil self-noise (BPM)"), ("pegg", "Pegg's method")):
+        print(f"\nThe AS350 B3's overflight (ICAO Annex 16 chapter 11) over grass, {name}")
+        certified[model] = check_certified(model)
     print(f"\n{time.perf_counter() - started:.0f} s")
     if args.json:
         out = {
@@ -445,6 +537,8 @@ def main(argv=None) -> int:
             "turn": turn,
             "time": heard,
             "store": store,
+            "airfoil": airfoil,
+            "pitch": pitch,
             "pegg": pegg,
             "certified": certified,
         }

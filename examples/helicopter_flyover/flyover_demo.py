@@ -8,13 +8,14 @@ AS350 B3 at its maximum mass, flying level along its walk at 63 m/s over the gro
 acoustic_spaces.rotorcraft, trimmed for level flight at its airspeed (its speed over the
 ground and the light wind against it): each harmonic of each rotor's blade passing
 frequency with a pattern of its own, from the blades' steady lift, drag and thickness,
-and broadband noise by Pegg's method. Each early path plays what the rotors send the way
-it leaves the helicopter, and the demo's scene gives the helicopter the sound power and
-the directivity of that sound, for its late part and the levels it reports; `--input
-helicopter=WAV` plays a dry recording of yours instead, sent with that directivity. Run
-it from the folder of the helicopter_flyover example (`acoustic-spaces examples --copy .
-helicopter_flyover && cd helicopter_flyover`), in the Python environment acoustic-spaces
-is installed in, with ffmpeg on the PATH:
+and broadband noise by Pegg's method (--broadband bpm: each blade section's own noise in
+the flow past it, Brooks, Pope and Marcolini's). Each early path plays what the rotors
+send the way it leaves the helicopter, and the demo's scene gives the helicopter the
+sound power and the directivity of that sound, for its late part and the levels it
+reports; `--input helicopter=WAV` plays a dry recording of yours instead, sent with that
+directivity. Run it from the folder of the helicopter_flyover example (`acoustic-spaces
+examples --copy . helicopter_flyover && cd helicopter_flyover`), in the Python
+environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
     python flyover_demo.py helicopter  # demo/helicopter/below.wav: its sound straight down
     python flyover_demo.py scene       # scene_demo.yaml: the helicopter alone, at --speed
@@ -33,8 +34,9 @@ behind down, and the eddies make it flicker. The captions give the level heard a
 moment, the loudest (L_Amax) and the sound exposure level (SEL) of the pass, as
 simulated. The rotors' model is louder than this helicopter's noise certificate: in the
 certification's own flyover it gives an SEL of 88.0 dB(A), where the AS350 B3 is
-certified at 84.6, nearly all of it the main rotor's broadband noise (see the
-validation). It flies one steady level flight: the slap of the blades meeting their own
+certified at 84.6, nearly all of it the main rotor's broadband noise by Pegg's method;
+with --broadband bpm it gives 80.1, the tail rotor's tones then nearly all of it (see
+the validation). It flies one steady level flight: the slap of the blades meeting their own
 wake, as a helicopter descending makes, is left out.
 """
 

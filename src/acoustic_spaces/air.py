@@ -31,6 +31,13 @@ def density(temperature_c: float = 15.0, pressure_kpa: float = 101.325) -> float
     return pressure_kpa * 1000.0 / (DRY_AIR_J_PER_KG_K * (temperature_c + 273.15))
 
 
+def viscosity(temperature_c: float = 15.0, pressure_kpa: float = 101.325) -> float:
+    """Kinematic viscosity of dry air (m²/s): Sutherland's law for the dynamic
+    viscosity (1.458e-6 T^1.5 / (T + 110.4) Pa s) over the density."""
+    t = temperature_c + 273.15
+    return 1.458e-6 * t**1.5 / (t + 110.4) / density(temperature_c, pressure_kpa)
+
+
 def absorption_db_per_m(
     frequencies_hz: Sequence[float] | np.ndarray,
     temperature_c: float = 20.0,
