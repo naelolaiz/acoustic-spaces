@@ -40,7 +40,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from acoustic_spaces.examples import FORMER_NAMES, examples_dir
+from acoustic_spaces.examples import examples_dir
 
 #: The kinds of option, for the parser and for the editor's form: a free text, a choice
 #: from a list, a number, a flag, a file to read, a file the demo writes (``path``), a
@@ -576,16 +576,16 @@ def list_demos() -> list[Demo]:
 
 
 def demos_of(example: str) -> list[Demo]:
-    """Every demo of the example ``example`` (a folder name, or a former name of one):
-    its own demo first, then those that build on it (:attr:`Demo.builds_on`)."""
-    folder = examples_dir() / FORMER_NAMES.get(example, example)
+    """Every demo of the example ``example`` (a folder name): its own demo first, then
+    those that build on it (:attr:`Demo.builds_on`)."""
+    folder = examples_dir() / example
     found = [load(script) for script in sorted(folder.glob("*_demo.py"))]
     return sorted(found, key=lambda demo: demo.builds_on is not None)
 
 
 def demo_for(example: str) -> Demo | None:
-    """The demo of the example ``example`` (a folder name, or a former name of one), or
-    None: its own, when it has more than one (:func:`demos_of`)."""
+    """The demo of the example ``example`` (a folder name), or None: its own, when it
+    has more than one (:func:`demos_of`)."""
     found = demos_of(example)
     return found[0] if found else None
 

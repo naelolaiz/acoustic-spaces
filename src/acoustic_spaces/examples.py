@@ -27,9 +27,6 @@ from acoustic_spaces.geometry.io import extra_for, missing_extra
 from acoustic_spaces.i18n import N_
 
 SCENE_FILE = "scene.yaml"
-#: Names examples had before they were merged into another, which still find it:
-#: ``gallery_walk`` is the gallery, whose visitor walks unless its walk is turned off.
-FORMER_NAMES = {"gallery_walk": "gallery"}
 
 #: The groups the examples are shown in, in order, each with its examples (folder names)
 #: from the simplest. The titles are English; the editor translates them.
@@ -153,9 +150,8 @@ def example_groups(examples: list[Example] | None = None) -> list[tuple[str, lis
 
 
 def example_path(name: str) -> Path:
-    """The scene file of the example ``name`` (a folder name from :func:`list_examples`,
-    or one of :data:`FORMER_NAMES`)."""
-    scene_file = examples_dir() / FORMER_NAMES.get(name, name) / SCENE_FILE
+    """The scene file of the example ``name`` (a folder name from :func:`list_examples`)."""
+    scene_file = examples_dir() / name / SCENE_FILE
     if not scene_file.is_file():
         names = ", ".join(e.name for e in list_examples())
         raise ValueError(f"no example named {name!r}; examples: {names}")
@@ -164,11 +160,11 @@ def example_path(name: str) -> Path:
 
 def example_of(scene_file: str | Path) -> str | None:
     """The example the scene file ``scene_file`` is, or is a copy of: its folder's name
-    when that names an example (or once did, :data:`FORMER_NAMES`), else the example
-    whose scene has the same ``name``, so that a copy saved anywhere keeps its example;
-    None for any other scene, or one that cannot be read."""
+    when that names an example, else the example whose scene has the same ``name``, so
+    that a copy saved anywhere keeps its example; None for any other scene, or one that
+    cannot be read."""
     path = Path(scene_file)
-    folder = FORMER_NAMES.get(path.parent.name, path.parent.name)
+    folder = path.parent.name
     if (examples_dir() / folder / SCENE_FILE).is_file():
         return folder
     try:
@@ -183,23 +179,19 @@ def example_of(scene_file: str | Path) -> str | None:
 
 def copy_examples(destination: str | Path, names: list[str] | None = None) -> list[Path]:
     """Copy examples (all, or ``names``) into ``destination``, one folder each, and
-    return their scene files. An example asked for by a former name (:data:`FORMER_NAMES`)
-    goes into a folder of that name, so that commands written for it still work. Raises
-    ``FileExistsError`` rather than overwrite a folder."""
+    return their scene files. Raises ``FileExistsError`` rather than overwrite a folder."""
     destination = Path(destination)
     chosen = list_examples()
-    folders = {e.name: e.name for e in chosen}
     if names is not None:
-        folders = {FORMER_NAMES.get(name, name): name for name in names}
-        chosen = [e for e in chosen if e.name in folders]
+        chosen = [e for e in chosen if e.name in names]
         found = {e.name for e in chosen}
-        missing = [name for name in names if FORMER_NAMES.get(name, name) not in found]
+        missing = [name for name in names if name not in found]
         if missing:
             raise ValueError(f"no example named {', '.join(missing)}")
     destination.mkdir(parents=True, exist_ok=True)
     copied = []
     for example in chosen:
-        target = destination / folders[example.name]
+        target = destination / example.name
         if target.exists():
             raise FileExistsError(f"{target} already exists")
         shutil.copytree(example.path.parent, target)
@@ -208,7 +200,6 @@ def copy_examples(destination: str | Path, names: list[str] | None = None) -> li
 
 
 __all__ = [
-    "FORMER_NAMES",
     "GROUPS",
     "OTHER_GROUP",
     "Example",

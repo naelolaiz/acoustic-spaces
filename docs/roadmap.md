@@ -323,9 +323,9 @@ Movement:
   add keyframes past the end, a preview of every mover in the 3D view and the plan,
   draggable keyframe handles, and the movement rendered in the background.
 - [x] One scene still or moving: walks turned on and off rather than copies of a scene
-  with and without them (`gallery_walk` merged into `gallery`); the demo of any scene
-  plays the walks that are on, with a moving picture, and `--moving` picks them for a
-  run; the Run demo window ticks what moves and opens the Movement panel.
+  with and without them; the demo of any scene plays the walks that are on, with a
+  moving picture, and `--moving` picks them for a run; the Run demo window ticks what
+  moves and opens the Movement panel.
 - [x] A car passing by with Doppler: a car in the `roadside` and `street` examples with
   CNOSSOS-EU's sound power, a pass-by demo for both with a sound made to that power and
   the level over time, the demo of any scene playing one walk with Doppler, and the

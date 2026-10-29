@@ -180,6 +180,8 @@
   stadium's stands, which the few rays that reach it may leave without energy in some
   bands: there the place's level is that of the energy its response holds, as
   outdoors (-inf where none arrives). Every other place's levels are unchanged.
+- Examples go by their names only: `examples.FORMER_NAMES` is removed, and
+  `gallery_walk` no longer finds the gallery.
 - One stadium: `stadium_pa` is merged into `stadium_concert`, whose sound system plays
   alone, for the crowd, with its Monitors and Stage groups left out, as `stadium_pa`
   had it. The concert's description takes the map's notes, measured on it: on the

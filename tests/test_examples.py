@@ -152,18 +152,15 @@ def test_examples_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     assert capsys.readouterr().out.strip() == str(tmp_path / "studio" / "scene.yaml")
     assert main(["examples", "cathedral"]) == 1
     assert "no example named cathedral" in capsys.readouterr().err
-    assert main(["examples", "gallery_walk"]) == 0  # the gallery's former name
-    assert capsys.readouterr().out.startswith("gallery: ")
 
 
 def test_the_gallery_stands_or_walks_in_one_scene(tmp_path: Path) -> None:
     """One gallery for the still listeners and the visitor who walks: the walk turns off
-    and on, and gallery_walk, its former name, still finds it and its demo."""
+    and on, and the gallery copies with its demo."""
     from acoustic_spaces.walkthrough import movers, with_moving
 
-    assert "gallery" in NAMES and "gallery_walk" not in NAMES
+    assert "gallery" in NAMES
     path = example_path("gallery")
-    assert example_path("gallery_walk") == path
     scene = Scene.from_yaml(path)
     listeners = {lis.name: lis for lis in scene.listeners}
     assert set(listeners) == {"in sight", "round the corner", "visitor"}
@@ -175,9 +172,8 @@ def test_the_gallery_stands_or_walks_in_one_scene(tmp_path: Path) -> None:
     assert movers(with_moving(scene, [])) == []
     assert scene.outputs[0].format == "binaural"  # what walkthrough plays by default
     assert demo_for("gallery").example == "gallery"
-    assert demo_for("gallery_walk").script == demo_for("gallery").script
-    copied = copy_examples(tmp_path, ["gallery_walk"])
-    assert copied == [tmp_path / "gallery_walk" / "scene.yaml"]
+    copied = copy_examples(tmp_path, ["gallery"])
+    assert copied == [tmp_path / "gallery" / "scene.yaml"]
     assert copied[0].read_bytes() == path.read_bytes()
     assert (copied[0].parent / "walk_demo.py").is_file()
 
