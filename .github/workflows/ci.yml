@@ -110,11 +110,13 @@ jobs:
           -C cmake.define.ACOUSTIC_SPACES_SANITIZE=ON
       - name: Test
         # Python itself is not built with them, so their runtimes are loaded first. Leaks
-        # are not checked: Python keeps some memory to the end on purpose.
+        # are not checked: Python keeps some memory to the end on purpose. The checks make
+        # the tests about three times as slow as on the plain Linux jobs: over 45 minutes
+        # in October 2026.
         env:
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1
-        timeout-minutes: 45
+        timeout-minutes: 75
         run: >-
           LD_PRELOAD="$(gcc -print-file-name=libasan.so) $(gcc -print-file-name=libubsan.so)"
           python -m pytest -q -W error
