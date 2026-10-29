@@ -22,6 +22,7 @@ from acoustic_spaces.demos import (
     audio,
     common_options,
     demo_for,
+    demos_of,
     input_option,
     list_demos,
     music,
@@ -418,13 +419,17 @@ def test_a_demo_stops_when_the_scene_is_missing(tmp_path: Path) -> None:
 
 def test_the_examples_demos_are_listed() -> None:
     """Every demo that comes with the examples describes itself, and each one belongs to
-    an example that is there."""
+    an example that is there; an example's own demo comes first, before those that build
+    on it (the helicopter over the stadium's concert)."""
     demos = list_demos()
-    assert {demo.name for demo in demos} >= {"church", "stadium", "walk"}
+    assert {demo.name for demo in demos} >= {"church", "stadium", "walk", "crossing"}
     for demo in demos:
         assert demo.title and demo.description and demo.steps
         assert demo.script.exists() and demo.script.parent.name == demo.example
-        assert demo_for(demo.example).name == demo.name
+        own = demos_of(demo.example)
+        assert demo.name in [d.name for d in own] and own[0].builds_on is None
+        assert demo_for(demo.example).name == own[0].name
+        assert demo.builds_on in (None, own[0].name)
         assert {o.name for o in demo.options} >= {"work", "hrtf", "no_mp4"}
         for option in demo.options:
             assert option.help and option.description

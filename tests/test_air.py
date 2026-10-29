@@ -6,6 +6,7 @@ from acoustic_spaces.air import (
     absorption_db_per_m,
     energy_attenuation_per_m,
     speed_of_sound,
+    viscosity,
 )
 
 
@@ -29,3 +30,10 @@ def test_energy_attenuation_matches_db() -> None:
 def test_speed_of_sound() -> None:
     assert speed_of_sound(0.0) == pytest.approx(331.3)
     assert speed_of_sound(20.0) == pytest.approx(343.2, abs=0.1)
+
+
+def test_viscosity() -> None:
+    # The ICAO standard atmosphere at sea level, 15 degrees: 1.4607e-5 m²/s.
+    assert viscosity() == pytest.approx(1.4607e-5, rel=1e-3)
+    # Thinner air, the same dynamic viscosity: half the pressure, twice the kinematic.
+    assert viscosity(15.0, 101.325 / 2) == pytest.approx(2 * viscosity())

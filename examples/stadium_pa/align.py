@@ -51,7 +51,7 @@ def arrivals(
     room: Room, rays: int | None = None, seed: int | None = None
 ) -> dict[str, list[Arrival]]:
     """Each listener's arrivals, earliest first (``rays`` per band, or the scene's; a
-    ``seed`` repeats a run's random rays)."""
+    ``seed`` repeats a run's random rays), of the sources and listeners in use."""
     settings = room.scene.simulation
     if rays:
         settings = settings.model_copy(
@@ -61,9 +61,10 @@ def arrivals(
         settings = settings.model_copy(update={"seed": seed})
     result = simulate(room, settings=settings)
     out = {}
-    for listener in room.scene.listeners:
+    # Those left out of simulations (``enabled: false``) have no responses.
+    for listener in (item for item in room.scene.listeners if item.in_use):
         rows = []
-        for source in room.scene.sources:
+        for source in (item for item in room.scene.sources if item.in_use):
             response = result[source.name, listener.name]
             power = source.power_db()
             # The direct sound is the path without reflections, of a source of unit power

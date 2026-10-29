@@ -109,6 +109,77 @@
   apart, 100 m up over 1.6 km of a meadow in the `windy` preset, take 31 s instead of
   89 s on four cores, with the same early levels to 10⁻⁷ dB. Still scenes are
   unchanged, bit for bit.
+- The sound a source sends each way (`acoustic_spaces.emission`): along a walk with
+  Doppler, `render_walk` and `render_movement` take an `Emission` for the walker (or
+  for a source a walking listener passes) instead of one signal, and each early path
+  carries what is sent the way it leaves the source, at the time it leaves, the
+  source's directivity taken out of its filter; the late part plays the emission's
+  sound averaged over the directions. `Mixture` makes one of signals that do not
+  correlate, each with an amplitude per direction, and gives its directivity per band.
+  Against the exact field, a tone sent louder ahead and turned in phase with the height
+  is within 0.11 dB in level at 30 m/s and 0.42 dB for a train at 4 kHz, as one
+  signal is (`validation/doppler.py`). `directivity.on_grid` and `sphere_mean` read a
+  grid of directions as a balloon's is read.
+- Helicopters (`acoustic_spaces.rotorcraft`): `trim` balances a helicopter flying
+  level by momentum theory, and `emission` gives the sound its main and tail rotors
+  send each way, for a walk with Doppler: each rotor's tones from its blades' steady
+  lift, drag and thickness (the Ffowcs Williams and Hawkings equation far from the
+  rotor, in closed form) and its broadband noise by Pegg's method (NASA TM-80200).
+  `AS350_B3` is an Airbus Helicopters AS350 B3. The tones agree with Gutin's formula
+  and with Farassat's formulation 1A in time, blade point by blade point, to within
+  2 x 10⁻⁵ of the loudest harmonic, and Pegg's worked example comes out as he gives it;
+  flying the AS350 B3's noise certification, the model's sound exposure level is 88.0
+  dB(A), 3.4 dB over the certified 84.6 dB(A), nearly all of it Pegg's broadband noise
+  of the main rotor (`validation/rotorcraft.py`).
+- `emission.Periodic`, a sound that repeats, kept as one period in each direction,
+  which may turn with a rotor and be sent from off the source's place; `emission.Sum`
+  adds emissions up; every `Emission` gives its `directivity()`. `air.density` gives
+  the density of dry air.
+- A helicopter flying over: the `helicopter_flyover` example, an AS350 B3 150 m up at
+  63 m/s over a meadow, against a light wind and through eddies, heard right under its
+  track and 150 m to its left and right, and `flyover_demo.py`, which plays its rotors'
+  sound down each early path with Doppler, the rotors trimmed at its airspeed (its
+  speed over the ground less the wind at its height). The pass-by demo takes the
+  vehicle that goes past (`demos.passby.Vehicle`; `demos.helicopter`); the car's demos
+  are unchanged. From 150 m up, places 4 m apart follow the exact field of a flyover
+  to within 55 dB at 4 kHz (`validation/doppler.py`), so the demo simulates the
+  helicopter every 4 m.
+- `Emission.sound_power_db` gives an emission's sound power per band, `emission.Faded`
+  fades one in and out, and `directivity.write_directivity_csv` writes a directivity
+  as a CSV table a scene reads.
+- A helicopter over the stadium concert: the `stadium_concert` example's scene has the
+  flyover's AS350 B3, left out of the concert's simulations, crossing the stadium 1200 m
+  at 63 m/s, 150 m up as a police or a television helicopter given leave may (without
+  leave the EU's rules of the air keep it 300 m above the roof: `--height 330`), with
+  its rotors' sound power and directivity. `helicopter_demo.py`, the example's second
+  demo, flies it over the stadium halfway through the song and adds its pass to each
+  listener's mix of the concert, both at their simulated levels; the editor shows its
+  walk, and the Run demo window lists it as what the demo moves. An example may have
+  more than one demo (`demos.demos_of`, `Demo.builds_on`): the editor's Run demo lists
+  them, the example's own first. The stadium demo's stills take another heading and
+  leave out the sources left out of its simulations, as the stadium examples'
+  `align.py`, `near_field.py` and `feedback.py` now do with the sources and listeners
+  left out (`align.py` and `feedback.py` failed on one before). The editor's plan fits
+  the places walks go through too.
+- A helicopter's broadband noise by either of two models, its `broadband`: Pegg's
+  method (`"pegg"`, the default) or each blade section's own noise in the flow past it
+  (`"bpm"`), Brooks, Pope and Marcolini's airfoil self-noise (NASA RP-1218,
+  `acoustic_spaces.airfoil_noise`) summed over the blades' sections round the turn,
+  each at its own speed and angle of attack from the blades' trimmed pitch
+  (`rotorcraft.pitch`), its bands moved by its own Doppler shift. A `Rotor` gives its
+  blades' twist, lift slope, trailing edge and tips. The airfoil self-noise matches
+  the two sample outputs of its authors' code to within 0.01 dB, the pitch its closed
+  form, and the sum over the blades one done place by place. In the AS350 B3's
+  certification overflight the two models fall on either side of the certified 84.6
+  dB(A): 88.0 with Pegg's, 80.1 with the blade sections', whose broadband noise is 19
+  dB under Pegg's for the main rotor (`validation/rotorcraft.py`). The flyover
+  and the stadium crossing demos take `--broadband bpm`. `air.viscosity` gives the
+  kinematic viscosity of dry air.
+- `walkthrough.pass_by` no longer gives NaN for L_Amax, the SEL and L_Aeq when a
+  place's G is undefined in a band, as at a helicopter's place 600 m away behind the
+  stadium's stands, which the few rays that reach it may leave without energy in some
+  bands: there the place's level is that of the energy its response holds, as
+  outdoors (-inf where none arrives). Every other place's levels are unchanged.
 
 ## 4.0.1
 

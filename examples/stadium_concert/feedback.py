@@ -5,10 +5,11 @@ that play it make it ring, at which frequencies it rings first, and how that sou
 
 The singer holds a supercardioid microphone 5 cm from the mouth, aimed at it, so its
 rear faces the wedges. Every loudspeaker that plays the voice feeds back into it: all
-but the subwoofers and the drum fill, at the scene's levels, EQ and delays, so the
-monitors and the PA keep the balance the scene gives them. The script simulates their
-responses at the microphone in first-order Ambisonics and turns them into the
-microphone's pattern; their sum, after 2 ms of latency in the console, is the loop.
+but the subwoofers, the drum fill and those left out of simulations, at the scene's
+levels, EQ and delays, so the monitors and the PA keep the balance the scene gives
+them. The script simulates their responses at the microphone in first-order Ambisonics
+and turns them into the microphone's pattern; their sum, after 2 ms of latency in the
+console, is the loop.
 
 It prints the potential acoustic gain (PAG) in each octave band: how much louder the
 system can make the voice than the voice alone is, at the mix position and at the
@@ -93,7 +94,7 @@ def loop(
     voice = Source(
         name="voice", position=tuple(mouth), orientation=head.orientation, directivity=VOICE
     )
-    speakers = [s for s in scene.sources if s.name not in NOT_THE_VOICE]
+    speakers = [s for s in scene.sources if s.in_use and s.name not in NOT_THE_VOICE]
     settings = scene.simulation
     if rays:
         settings = settings.model_copy(

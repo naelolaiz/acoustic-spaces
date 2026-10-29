@@ -2637,7 +2637,9 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
 
     dialog = DemoDialog(scene=example_path("stadium_concert"))
     names = [dialog.picker.itemData(k) for k in range(dialog.picker.count())]
-    assert names == ["scene", "stadium"] and dialog.picker.currentData() == "stadium"
+    # The example's own demo first, then the one that builds on it; the dialog starts on
+    # the example's own.
+    assert names == ["scene", "stadium", "crossing"] and dialog.picker.currentData() == "stadium"
     demo = dialog.demo
     assert [field for field in dialog.fields] == [option.name for option in demo.options]
     assert dialog.step.currentText() == ALL
@@ -2784,6 +2786,14 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     assert box.note.text().startswith("Nothing in this scene moves.")
     assert box.table.isHidden() and box.table.isRowHidden(0) and box.ticked() == []
     road.deleteLater()
+    # The stadium's helicopter likewise: the crossing flies it, the concert leaves it out.
+    stadium = DemoDialog(scene=example_path("stadium_concert"))
+    assert stadium.movement.walkers == [("sources", "helicopter", True)]
+    stadium.picker.setCurrentIndex(stadium.picker.findData("crossing"))
+    assert stadium.movement.ticked() == ["helicopter"] and not stadium.movement.table.isHidden()
+    stadium.picker.setCurrentIndex(stadium.picker.findData("stadium"))
+    assert stadium.movement.ticked() == [] and stadium.movement.table.isHidden()
+    stadium.deleteLater()
     # A scene of no example has This scene only, and one never saved cannot be run.
     plain = DemoDialog(scene=example_path("shoebox"))
     assert plain.movement.note.text().startswith("Nothing in this scene moves.")

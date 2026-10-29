@@ -269,7 +269,8 @@ room every corner is a handle:
 - Corners and points snap to the grid chosen under **Snap** (10 cm unless changed);
   hold Shift to place them freely. A move that would make walls cross is refused, with
   the reason under **Messages**.
-- The wheel zooms, dragging empty space pans and **Fit** shows the whole room again.
+- The wheel zooms, dragging empty space pans and **Fit** shows the whole room again,
+  with every source and listener and the places their walks go through.
 
 Rooms from model files show their outline, and their sources and listeners move the
 same way. Every change can be undone.

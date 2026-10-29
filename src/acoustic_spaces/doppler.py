@@ -28,17 +28,24 @@ place to place along the walk:
   windows that half overlap (squared sines, which add up to one), so a path heard
   from one place alone gives exactly the convolution with its response.
 
+- **The sound sent.** Every path carries the same signal, unless it is an
+  :class:`~acoustic_spaces.emission.Emission`, the sound a source sends each way: then
+  each path carries what is sent the way it leaves the source (its first leg, in the
+  source's frame at each place, in between turning from one place's to the next's) at
+  the time it leaves, and the source's directivity is taken out of its filter.
+
 The late part and the wave solver's bands have no Doppler shift here: the late part
 of each place is crossfaded as in a walkthrough without it, and the wave solver's
 bands are not taken (a walk with Doppler and the wave solver stops with an error).
 The source radiates as it would standing at each place, as road and rail emission data
 have it: the convective amplification of a moving source (for a monopole up to 0.8 dB
 ahead at 30 m/s, 2 dB at 70 m/s, less behind) is left out, and emission measured in a
-pass-by already carries it.
+pass-by already carries it, as an emission may.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -47,7 +54,9 @@ import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
 from acoustic_spaces import synthesis
+from acoustic_spaces.emission import Emission
 from acoustic_spaces.engine import coherent
+from acoustic_spaces.engine.model import source_weights
 
 #: How often each path's filter changes (s): the hop of the half-overlapping windows.
 HOP_S = 0.02
@@ -217,10 +226,16 @@ def hermite(x: np.ndarray, y: np.ndarray, at: np.ndarray, *, hold: bool = True) 
     return out
 
 
+def _reach(cutoff: float) -> int:
+    """How far the reading sinc for ``cutoff`` (share of Nyquist) reaches back from the
+    sample before the position, and on from it."""
+    return int(math.ceil(_ZEROS / cutoff))
+
+
 def _table(cutoff: float) -> tuple[np.ndarray, int]:
     """The reading sinc's taps (phases, taps) for ``cutoff`` (share of Nyquist), and how
     far it reaches back from the sample before the position."""
-    reach = int(math.ceil(_ZEROS / cutoff))
+    reach = _reach(cutoff)
     offsets = np.arange(-reach + 1, reach + 1)
     frac = np.arange(_PHASES) / _PHASES
     t = offsets[None, :] - frac[:, None]
@@ -260,10 +275,24 @@ def read(dry: np.ndarray, positions: np.ndarray, cutoff: float) -> np.ndarray:
 class Filters:
     """The filters of the paths at each place (and, in turbulence, each moment of the
     eddies): (paths, channels, bins) spectra on one FFT grid, kept for the places in
-    use."""
+    use. With the source's ``directivity`` and ``axes`` (its frame at each place), the
+    directivity is taken out of them."""
 
-    def __init__(self, responses, fmt, sample_rate: int, n_fft: int, delay: int, gusts, seed):
+    def __init__(
+        self,
+        responses,
+        fmt,
+        sample_rate: int,
+        n_fft: int,
+        delay: int,
+        gusts,
+        seed,
+        directivity=None,
+        axes=None,
+    ):
         self.responses = responses
+        self.directivity = directivity
+        self.axes = axes
         self.fmt = fmt
         self.rate = int(sample_rate)
         self.n_fft = n_fft
@@ -299,6 +328,18 @@ class Filters:
             else:
                 paths = response.moment(self.seed)
         paths = coherent.with_own_phases(paths, response.seed if self.seed is None else self.seed)
+        if self.directivity is not None:
+            weights = source_weights(
+                self.directivity,
+                self.axes[k],
+                _ways(paths),
+                paths.energy.shape[1],
+                distances=paths.distance_m,
+            )
+            energy = np.divide(
+                paths.energy, weights, out=np.zeros_like(paths.energy), where=weights > 0.0
+            )
+            paths = dataclasses.replace(paths, energy=energy)
         gains = synthesis.band_gains(self.n_fft, self.rate, response.bands)
         shaping = coherent.amplitude_spectra(paths, self.f, gains) * self.shift
         heads = to_head(paths.direction, response.orientation)
@@ -311,15 +352,43 @@ class Filters:
         return spectra.astype(np.complex64)
 
 
+def _ways(paths) -> np.ndarray:
+    """(n, 3) the unit vectors the paths leave the source along, in room coordinates."""
+    if len(paths.points) != len(paths):
+        raise ValueError("the sound sent each way needs the paths' corners")
+    first = np.array([p[1] - p[0] for p in paths.points], dtype=float).reshape(-1, 3)
+    return first / np.maximum(np.linalg.norm(first, axis=1, keepdims=True), 1e-300)
+
+
 @dataclass
 class _Reading:
-    """How a track is read: its places, the blocks it is heard in, its cutoff."""
+    """How a track is read: its places, the blocks it is heard in, its cutoff; with an
+    emission, the way its path leaves the source at each place (in the source's frame)."""
 
     track: Track
     heard: np.ndarray
     first: int
     last: int
     cutoff: float
+    ways: np.ndarray | None = None
+
+    def sent(self, emission: Emission, positions: np.ndarray, rate: int) -> np.ndarray:
+        """``emission`` read at ``positions`` (its samples): at each, the sound sent the
+        way the path leaves the source then, its way turning evenly from one place's to
+        the next's in the time the sound leaves them."""
+        assert self.ways is not None
+        # The samples the sinc reaches, within the emission, as :func:`read` reads them.
+        reach = _reach(min(self.cutoff, 1.0))
+        lo = max(int(math.floor(positions.min())) - reach - 2, 0)
+        hi = min(int(math.ceil(positions.max())) + reach + 3, emission.length)
+        if lo >= hi:
+            return np.zeros(len(positions))
+        heard = self.heard
+        left = (self.track.received - self.track.delays)[heard]
+        at = np.arange(lo, hi) / rate
+        ways = np.column_stack([np.interp(at, left, self.ways[heard, i]) for i in range(3)])
+        ways /= np.maximum(np.linalg.norm(ways, axis=1, keepdims=True), 1e-300)
+        return read(emission.sent(lo, hi, ways), positions - lo, self.cutoff)
 
     def delays(self, t: np.ndarray, walk_last: int) -> np.ndarray:
         track, heard = self.track, self.heard
@@ -343,7 +412,7 @@ _BLOCKS = 128
 
 
 def render(
-    dry: np.ndarray,
+    dry: np.ndarray | Emission,
     responses: list,
     times: np.ndarray,
     fmt,
@@ -355,16 +424,33 @@ def render(
     step_s: float,
     gusts=None,
     seed: int | None = None,
+    axes: np.ndarray | None = None,
+    directivity=None,
 ) -> np.ndarray:
     """(length, channels) the early paths of ``responses`` (the responses at the places
     of a walk, in order, the walker there at ``times``) heard as it goes, the mono
     ``dry`` signal through each path's changing delay and filter (see the module's
     description). ``step_s`` is the most a path's delay may jump from one place to the
     next; ``gusts`` gives the moments of the eddies in turbulence, ``seed`` the moment
-    of each place's eddies without them."""
+    of each place's eddies without them. ``dry`` may be the sound the source sends each
+    way, at ``sample_rate``: then ``axes`` (N, 3, 3) has the source's forward, left and
+    up axes as columns at each place, and ``directivity`` (the source's, if it has one)
+    is taken out of the paths' filters."""
     from acoustic_spaces.spatial.render import Binaural
 
     rate = int(sample_rate)
+    emission = dry if isinstance(dry, Emission) else None
+    plain = dry if not isinstance(dry, Emission) else np.zeros(0)
+    frames = np.zeros((0, 3, 3))
+    if emission is not None:
+        if emission.sample_rate != rate:
+            raise ValueError(
+                f"the sound sent each way is at {emission.sample_rate} Hz, the rendering "
+                f"at {rate} Hz"
+            )
+        if axes is None:
+            raise ValueError("the sound sent each way needs the source's axes at each place")
+        frames = np.asarray(axes, dtype=float).reshape(len(times), 3, 3)
     places = [r.early for r in responses]
     followed = tracks(places, times, source_walks=source_walks, planes=planes, step_s=step_s)
     hop = max(int(round(HOP_S * rate)), 1)
@@ -374,6 +460,7 @@ def render(
     n_fft = 1 << int(math.ceil(math.log2(2 * hop + kernel + taps)))
     blocks = int(math.ceil((length + half) / hop)) + 1
     last = len(times) - 1
+    leaving = [_ways(paths) for paths in places] if emission is not None else []
     readings = []
     for track in followed:
         first_k, last_k = track.span
@@ -393,7 +480,12 @@ def render(
             speed = float(
                 np.max(1.0 - np.diff(track.delays[heard]) / np.diff(track.received[heard]))
             )
-        readings.append(_Reading(track, heard, j0, j1, 0.97 / max(speed, 1.0)))
+        ways = None
+        if emission is not None:
+            ways = np.zeros((len(times), 3))
+            for k in heard:
+                ways[k] = leaving[k][track.rows[k]] @ frames[k]
+        readings.append(_Reading(track, heard, j0, j1, 0.97 / max(speed, 1.0), ways))
     # The places in use at once: for a walking source, those the paths' different
     # delays reach back to.
     spread = 2
@@ -401,7 +493,17 @@ def render(
         delays = np.concatenate([r.track.delays[r.heard] for r in readings] or [np.zeros(1)])
         interval = max(float(np.min(np.diff(times))), 1e-9)
         spread += int(math.ceil(float(np.ptp(delays)) / interval))
-    filters = Filters(responses, fmt, rate, n_fft, half, gusts, seed)
+    filters = Filters(
+        responses,
+        fmt,
+        rate,
+        n_fft,
+        half,
+        gusts,
+        seed,
+        directivity if emission is not None else None,
+        frames,
+    )
     filters.size = 2 * (min(spread, len(times)) + 4)
     window = np.sin(np.pi * np.arange(2 * hop) / (2 * hop)) ** 2
     out = np.zeros((blocks * hop + n_fft, fmt.channels))
@@ -414,7 +516,10 @@ def render(
             if reading.first > c1 - 1 or reading.last < c0:
                 continue
             positions = np.arange(n0, n1) - reading.delays(t, last) * rate
-            active.append((reading, read(dry, positions, reading.cutoff)))
+            if emission is not None:
+                active.append((reading, reading.sent(emission, positions, rate)))
+            else:
+                active.append((reading, read(plain, positions, reading.cutoff)))
         if not active:
             continue
         for j in range(c0, c1):

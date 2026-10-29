@@ -239,6 +239,21 @@ sources:
     orientation: {yaw: 90}
     level_db: 122
     directivity: {file: fill_array.yaml, near_field: true}
+  # An Airbus Helicopters AS350 B3 crossing the stadium 150 m up at 63 m/s, 1200 m along
+  # its long axis from behind the stage to past the east stand: the sound power per
+  # octave band and the directivity (helicopter.csv) of its rotors' sound in the still
+  # air (acoustic_spaces.rotorcraft). It is left out of the concert's simulations until
+  # ticked; helicopter_demo.py flies it over the concert.
+  - name: helicopter
+    group: Helicopter
+    enabled: false
+    position: [-600, 0, 150]
+    level_db: [134.0, 129.5, 130.7, 130.2, 127.0, 125.1, 122.0, 121.6]
+    directivity: {file: helicopter.csv}
+    walk:
+      to: [[600, 0, 150]]
+      speed_m_s: 63
+      doppler: true
 listeners:
   - name: singer
     group: Stage

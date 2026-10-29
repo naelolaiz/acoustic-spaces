@@ -372,6 +372,12 @@ def scene_of(args) -> dict:
     return yaml.safe_load(args.scene.read_text(encoding="utf-8"))
 
 
+def in_use(sources: list[dict]) -> list[dict]:
+    """The sources the concert's simulations take: not those left out of them
+    (``enabled: false``), as the helicopter is until helicopter_demo.py flies it."""
+    return [s for s in sources if s.get("enabled", True) is not False]
+
+
 def simulations(args) -> list[pipeline.Simulation]:
     """The one simulation the demo mixes from: the scene with the band, the mixes' output."""
     return [pipeline.Simulation(args.scene, args.results, args.format)]
@@ -421,9 +427,9 @@ def plays(args) -> dict[str, str]:
     sources of the scene with the band, or, before ``band`` writes it, of ``--from`` and
     the band."""
     if args.scene.exists():
-        sources = scene_of(args)["sources"]
+        sources = in_use(scene_of(args)["sources"])
     elif args.source.exists():
-        sources = yaml.safe_load(args.source.read_text(encoding="utf-8"))["sources"]
+        sources = in_use(yaml.safe_load(args.source.read_text(encoding="utf-8"))["sources"])
         names = {s["name"] for s in sources}
         sources += [{"name": name} | spec for name, spec in BAND.items() if name not in names]
     else:
@@ -498,7 +504,7 @@ def feeds(args) -> None:
         for k, v in signals.items()
         if v is not None
     }
-    sources = scene_of(args)["sources"]
+    sources = in_use(scene_of(args)["sources"])
     loudest = max(total_level(s.get("level_db", 94.0)) for s in sources)
     out = args.work / "feeds"
     table = {}
@@ -582,15 +588,25 @@ def gains_of(seats: dict, tour) -> dict[str, float]:
     return pipeline.gains_of(seats, [listener for listener, _, _ in tour])
 
 
-def video(args) -> None:
+def video(
+    args,
+    run_by: tuple[Demo, object] | None = None,
+    also: str = "",
+    heading: tuple[str, str] | None = None,
+) -> None:
     """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
-    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``).
+    ``run_by``, another demo and its arguments, makes the mixes in ``args.work`` (its
+    ``mix`` step) and is the run the stills give; ``also`` goes after their credit and
+    ``heading`` (a title and the line under it) replaces theirs."""
     from acoustic_spaces.demos.pictures import save, settings_lines
 
+    demo, run_args = run_by or (DEMO, args)
+    made_by = demo.command("render" if run_by is None else "mix", run_args)
     pictures = sibling(__file__, "stadium_pictures")
-    seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
+    seats = pipeline.seats_of(args.work / "seats", made_by)
     tour = tour_of(args, seats["seats"])
-    pipeline.missing_mixes(seats, [name for name, _, _ in tour], DEMO.command("render", args))
+    pipeline.missing_mixes(seats, [name for name, _, _ in tour], made_by)
     gains = gains_of(seats, tour)
     stops = [pipeline.TourStop(name, start, start, stop, gains[name]) for name, start, stop in tour]
     audio = pipeline.tour_audio(
@@ -608,11 +624,13 @@ def video(args) -> None:
         gains,
         credit=pipeline.credited(
             feeds_table(args)["song"]["credit"], seats, list(feeds_table(args)["sources"])
-        ),
+        )
+        + also,
         hrtf=args.hrtf,
         tool=settings_lines(
-            DEMO, args, scene_of(args), pipeline.read_json(args.results / pipeline.PARAMETERS)
+            demo, run_args, scene_of(args), pipeline.read_json(args.results / pipeline.PARAMETERS)
         ),
+        heading=heading or pictures.HEADING,
     )
     save(drawing.thumbnail(), args.work / "thumbnail.png")
     pipeline.video(

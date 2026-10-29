@@ -26,18 +26,18 @@ from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 
 
 def differences(room: Room) -> dict[str, dict[str, np.ndarray]]:
-    """For each array source that adds up its elements and each listener, the far-field
+    """For each array source that adds up its elements and each listener in use, the far-field
     pattern's level above the elements' sum (dB per octave band, NaN where the source's
     filter leaves the band out)."""
     out = {}
-    for source in room.scene.sources:
+    for source in (item for item in room.scene.sources if item.in_use):
         balloon = room.directivity(source.name)
         if getattr(balloon, "near", None) is None:
             continue
         turn = np.array(source.orientation.rotation())
         silent = source.feed_db() - source.gain_db < -30.0
         out[source.name] = {}
-        for listener in room.scene.listeners:
+        for listener in (item for item in room.scene.listeners if item.in_use):
             # The listener in the source's frame (x forward, y left, z up).
             where = turn.T @ (np.asarray(listener.position) - np.asarray(source.position))
             far = balloon.energy((where / np.linalg.norm(where))[None])[0]

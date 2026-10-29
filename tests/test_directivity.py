@@ -15,6 +15,7 @@ from acoustic_spaces.directivity import (
     load_directivity,
     read_directivity,
     read_directivity_csv,
+    write_directivity_csv,
 )
 from acoustic_spaces.engine import early_paths, trace_particles
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
@@ -114,6 +115,16 @@ def test_csv_tables(tmp_path: Path) -> None:
     expected = pattern.index()
     expected[0] = expected[1]
     assert balloon.index() == pytest.approx(expected, abs=0.1)
+
+
+def test_a_balloon_written_and_read_back(tmp_path: Path) -> None:
+    rng = np.random.default_rng(5)
+    balloon = Balloon.from_measurements(_sphere(300), rng.uniform(0.1, 2.0, (300, 8)))
+    path = write_directivity_csv(tmp_path / "made.csv", balloon, "made up\nfor a test")
+    assert path.read_text(encoding="utf-8").startswith("# made up\n# for a test\nazimuth")
+    back = read_directivity_csv(path)
+    assert back.extrapolated == ()
+    np.testing.assert_allclose(back.table, balloon.table, rtol=2e-3)
 
 
 def test_csv_errors(tmp_path: Path) -> None:
