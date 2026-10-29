@@ -116,6 +116,26 @@ def test_the_flyover_demo_flies_the_helicopter_over(tmp_path: Path) -> None:
     assert (work / "tour.wav").exists() and (work / "stills" / "00_under_track.png").exists()
 
 
+def test_the_stadiums_helicopter_is_its_rotors_model() -> None:
+    """The stadium_concert example's helicopter, left out of the concert's simulations,
+    crosses the stadium 150 m up at 63 m/s through still air: its sound power and its
+    directivity (helicopter.csv) are those of its rotors' sound at that airspeed."""
+    path = Path(example_path("stadium_concert"))
+    scene = Scene.from_yaml(path)
+    helicopter = next(s for s in scene.sources if s.name == "helicopter")
+    assert not helicopter.in_use and helicopter.walk.doppler and helicopter.position[2] == 150.0
+    assert helicopter.walk.speed_m_s == 63.0 and HELICOPTER_VEHICLE.problem(helicopter) is None
+    assert airspeed(helicopter, scene, 63.0) == pytest.approx(63.0)
+    args = argparse.Namespace(speed=None, broadband="pegg")
+    trim, sent = HELICOPTER_VEHICLE.emission(
+        HELICOPTER_VEHICLE.info(args, scene, 63.0 * 3.6), POWER_S
+    )
+    level = sent.sound_power_db(trim.density, trim.sound_speed)
+    assert helicopter.level_db == pytest.approx(level, abs=0.051)
+    table = read_directivity_csv(path.parent / "helicopter.csv")
+    np.testing.assert_allclose(table.table, sent.directivity().table, rtol=2e-3)
+
+
 def _stadium(tmp_path: Path) -> Path:
     """The stadium_concert example, quick: two listeners, 16 kHz, responses 0.3 s long
     after the sound arrives, few rays, in a folder named apart from the example's (see
@@ -175,8 +195,9 @@ def _concert(folder: Path, stadium, length_s: float, rate: int = 16_000) -> dict
 
 
 def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
-    """The stadium's second demo: the flight over the stadium (150 m up, the ground and
-    the sky widened, the responses as much longer as the helicopter is farther), the
+    """The stadium's second demo: the flight over the stadium (its scene's helicopter,
+    150 m up or at --height, the ground and the sky widened, the responses as much
+    longer as the helicopter is farther), the
     helicopter's pass at each listener, and each listener's mix of the concert with the
     pass added over the centre spot halfway through the song, in the feeds' units: a
     gated RMS of 0.1 for the loudest loudspeaker's sound power, as the pressure 1 m from
@@ -193,24 +214,32 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     assert [d.name for d in demos_of("stadium_concert")] == ["stadium", "crossing"]
     assert demo_for("stadium_concert").name == "stadium" and demo.builds_on == "stadium"
     args = demo.defaults()
-    assert args.height == 150.0 and args.at is None
+    assert args.height is None and args.at is None  # as in the scene, halfway through
     assert demo.check(argparse.Namespace(**vars(args) | {"height": 25.0})).endswith(
         "but the stadium's roof is 30 m up"
     )
     assert demo.check(args) is None  # the flight's scene is written by the first step
+    stadium_scene = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
+    (own,) = [s for s in stadium_scene["sources"] if s["name"] == "helicopter"]
+    low = argparse.Namespace(**vars(args) | {"height": None})
+    own["position"][2] = 20.0
+    (folder / "scene.yaml").write_text(yaml.safe_dump(stadium_scene, sort_keys=False), "utf-8")
+    assert demo.check(low) == (
+        "the helicopter in scene.yaml flies 20 m up, but the stadium's roof is 30 m up"
+    )
+    own["position"][2] = 150.0
+    (folder / "scene.yaml").write_text(yaml.safe_dump(stadium_scene, sort_keys=False), "utf-8")
 
     assert demo.main(["flight"]) == 0
     flown = yaml.safe_load((folder / "scene_flight.yaml").read_text(encoding="utf-8"))
     ground = flown["geometry"]["ground"]
     assert ground["extent"] == [[-650.0, -82], [650.0, 82]] and ground["sky"] == 190.0
-    helicopter = flown["sources"][-1]
-    assert helicopter == {
-        "name": "helicopter",
-        "group": "Helicopter",
-        "enabled": False,
-        "position": [-600.0, 0.0, 150.0],
-        "walk": {"to": [[600.0, 0.0, 150.0]], "speed_m_s": 63.0, "doppler": True},
-    }
+    (helicopter,) = [s for s in flown["sources"] if s["name"] == "helicopter"]
+    assert helicopter == own  # the scene's, left out of the concert's simulations
+    assert helicopter["enabled"] is False and helicopter["position"] == [-600, 0, 150]
+    assert helicopter["walk"] == {"to": [[600, 0, 150]], "speed_m_s": 63, "doppler": True}
+    lower = sibling(folder / "helicopter_demo.py", "helicopter_demo").flight_of(own, 40.0)
+    assert lower["position"] == [-600.0, 0.0, 40.0] and lower["walk"]["to"] == [[600.0, 0.0, 40.0]]
     farthest = max(math.dist((600.0, 0.0, 150.0), lis["position"]) for lis in flown["listeners"])
     later = math.ceil((0.3 + farthest / speed_of_sound(20.0)) * 10.0) / 10.0
     assert flown["simulation"]["ir_length_s"] == later

@@ -771,7 +771,10 @@ through them, and they are checked for sources up to 10 m up, not 150 m.
 `helicopter_demo.py`, the stadium example's second demo, flies the
 [flyover's helicopter](#a-helicopter-flying-over) over the
 [stadium concert](#a-concert-in-the-stadium) halfway through the song, and adds its pass to each
-listener's mix of the concert, both at their simulated levels. It builds on the stadium
+listener's mix of the concert, both at their simulated levels. The helicopter is in the
+stadium's scene, left out of the concert's own simulations: the editor shows its walk,
+the Run demo window lists it as what the demo moves, and what Edit movement… changes
+there the demo flies. It builds on the stadium
 demo: run that one first, in the same work folder, up to its `render` step, with the
 `--format` and the `--hrtf` this one gets.
 
@@ -781,17 +784,20 @@ python stadium_demo.py all        # the concert first (see above)
 python helicopter_demo.py all     # or flight, helicopter, scene, walk, mix, video one at a time
 ```
 
-Options: `--height 330` how high it flies (m), `--at 180` when it is over the centre
+Options: `--height 330` how high it flies (m, at every place of its walk; by default
+as the scene has it), `--at 180` when it is over the centre
 spot, in seconds into the song as the sound system plays it (by default halfway
 through); `--speed`, `--broadband`, `--step` and `--input helicopter=WAV` as in the
 flyover demo, and `--tour` as in the stadium demo. At the mix position the walk takes 3.3 minutes on 4
 cores, most of it playing the 301 places through with Doppler, so some 40 for the 12
 listeners.
 
-- **The flight.** `flight` writes `scene_flight.yaml`: the stadium example's scene with
-  the helicopter added, left out of the concert's own simulations, flying 1200 m along
-  the stadium's long axis at 63 m/s, from behind the stage over the centre spot to past
-  the east stand. By default it flies 150 m up, as a police or a television helicopter
+- **The flight.** The stadium's scene has the helicopter, left out of the concert's own
+  simulations, flying 1200 m along the stadium's long axis at 63 m/s, from behind the
+  stage over the centre spot to past the east stand, with its rotors' sound power and
+  directivity (`helicopter.csv`) at that speed through still air. `flight` writes
+  `scene_flight.yaml`: the stadium's scene with the helicopter at `--height` when that
+  is given. As the scene has it, it flies 150 m up, as a police or a television helicopter
   given leave may. Without leave the EU's rules of the air keep a flight by sight (VFR)
   over an open-air assembly of persons 300 m above the highest obstacle within 600 m
   (SERA.5005(f)), here the stadium's roof, 30 m up: `--height 330`. The ground and the

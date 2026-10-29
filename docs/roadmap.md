@@ -355,7 +355,9 @@ Movement:
   flyover demo, the rotors trimmed at the helicopter's airspeed against the wind.
 - [x] A helicopter crossing over the stadium concert: `helicopter_demo.py`, its pass
   added to the concert's mixes at their simulated levels, 150 m up halfway through the
-  song, or 330 m as the rules of the air ask over a crowd without leave.
+  song, or 330 m as the rules of the air ask over a crowd without leave. The helicopter
+  and its walk are in the stadium's scene, left out of the concert's simulations, to
+  see and change in the editor.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:

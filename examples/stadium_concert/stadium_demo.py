@@ -372,6 +372,12 @@ def scene_of(args) -> dict:
     return yaml.safe_load(args.scene.read_text(encoding="utf-8"))
 
 
+def in_use(sources: list[dict]) -> list[dict]:
+    """The sources the concert's simulations take: not those left out of them
+    (``enabled: false``), as the helicopter is until helicopter_demo.py flies it."""
+    return [s for s in sources if s.get("enabled", True) is not False]
+
+
 def simulations(args) -> list[pipeline.Simulation]:
     """The one simulation the demo mixes from: the scene with the band, the mixes' output."""
     return [pipeline.Simulation(args.scene, args.results, args.format)]
@@ -421,9 +427,9 @@ def plays(args) -> dict[str, str]:
     sources of the scene with the band, or, before ``band`` writes it, of ``--from`` and
     the band."""
     if args.scene.exists():
-        sources = scene_of(args)["sources"]
+        sources = in_use(scene_of(args)["sources"])
     elif args.source.exists():
-        sources = yaml.safe_load(args.source.read_text(encoding="utf-8"))["sources"]
+        sources = in_use(yaml.safe_load(args.source.read_text(encoding="utf-8"))["sources"])
         names = {s["name"] for s in sources}
         sources += [{"name": name} | spec for name, spec in BAND.items() if name not in names]
     else:
@@ -498,7 +504,7 @@ def feeds(args) -> None:
         for k, v in signals.items()
         if v is not None
     }
-    sources = scene_of(args)["sources"]
+    sources = in_use(scene_of(args)["sources"])
     loudest = max(total_level(s.get("level_db", 94.0)) for s in sources)
     out = args.work / "feeds"
     table = {}

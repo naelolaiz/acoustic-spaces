@@ -191,7 +191,8 @@ class Pictures:
         self.gains = gains or {}  # dB each listener is turned up by in the video
         self.credit = credit  # the song's, as its licence asks
         self.faces = read_obj(folder / scene["geometry"]["file"])
-        self.sources = scene["sources"]
+        # Not the sources left out of the simulations (the helicopter until it flies).
+        self.sources = [s for s in scene["sources"] if s.get("enabled", True) is not False]
         self.listeners = {item["name"]: item for item in scene["listeners"]}
         ground = scene["geometry"].get("ground", {}).get("extent", [[-100, -82], [100, 82]])
         self.box = (ground[0][0], ground[0][1], ground[1][0], ground[1][1])

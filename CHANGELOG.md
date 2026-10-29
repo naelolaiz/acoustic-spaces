@@ -50,14 +50,18 @@
 - `Emission.sound_power_db` gives an emission's sound power per band, `emission.Faded`
   fades one in and out, and `directivity.write_directivity_csv` writes a directivity
   as a CSV table a scene reads.
-- A helicopter over the stadium concert: `helicopter_demo.py`, the `stadium_concert`
-  example's second demo, flies the flyover's AS350 B3 1200 m over the stadium halfway
-  through the song, 150 m up as a police or a television helicopter given leave may
-  (without leave the EU's rules of the air keep it 300 m above the roof: `--height
-  330`), and adds its pass to each
-  listener's mix of the concert, both at their simulated levels. An example may have
+- A helicopter over the stadium concert: the `stadium_concert` example's scene has the
+  flyover's AS350 B3, left out of the concert's simulations, crossing the stadium 1200 m
+  at 63 m/s, 150 m up as a police or a television helicopter given leave may (without
+  leave the EU's rules of the air keep it 300 m above the roof: `--height 330`), with
+  its rotors' sound power and directivity. `helicopter_demo.py`, the example's second
+  demo, flies it over the stadium halfway through the song and adds its pass to each
+  listener's mix of the concert, both at their simulated levels; the editor shows its
+  walk, and the Run demo window lists it as what the demo moves. An example may have
   more than one demo (`demos.demos_of`, `Demo.builds_on`): the editor's Run demo lists
-  them, the example's own first. The stadium demo's stills take another heading.
+  them, the example's own first. The stadium demo's stills take another heading and
+  leave out the sources left out of its simulations. The editor's plan fits the places
+  walks go through too.
 - A helicopter's broadband noise by either of two models, its `broadband`: Pegg's
   method (`"pegg"`, the default) or each blade section's own noise in the flow past it
   (`"bpm"`), Brooks, Pope and Marcolini's airfoil self-noise (NASA RP-1218,

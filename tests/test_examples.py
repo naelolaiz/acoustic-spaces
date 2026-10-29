@@ -287,6 +287,7 @@ def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
 
     for kind in ("sources", "listeners"):
         whole = entries(folders[2], kind)
+        whole.pop("helicopter", None)  # the concert's own, which helicopter_demo.py flies
         parts = {**entries(folders[0], kind), **entries(folders[1], kind)}
         assert whole == parts, kind
     for folder in folders:
@@ -299,7 +300,11 @@ def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
         spec.loader.exec_module(module)
         module.main()  # writes next to itself, into the copy
         written = sorted(p.name for p in copy.iterdir() if p.suffix in (".obj", ".csv", ".yaml"))
-        kept = sorted(p.name for p in folder.iterdir() if p.suffix in (".obj", ".csv", ".yaml"))
+        kept = sorted(
+            p.name
+            for p in folder.iterdir()
+            if p.suffix in (".obj", ".csv", ".yaml") and p.name != "helicopter.csv"
+        )
         assert written == kept, folder.name
         for name in written:
             assert (copy / name).read_bytes() == (folder / name).read_bytes(), name
@@ -470,9 +475,11 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     assert roles["subs"] == "mono" and roles["vocal_wedges"] == "singer"
     assert roles["drum_fill"] == "drummer" and roles["side_fill_left"] == "stage"
     assert all(roles[name] == name for name in demo.BAND)
-    # --input takes the names of the scene's sources, before band writes it too.
+    # --input takes the names of the scene's sources, before band writes it too: not the
+    # helicopter, left out of the concert's simulations.
     plays = demo.plays(args)
-    assert list(plays) == list(sources)
+    assert not sources["helicopter"].in_use
+    assert list(plays) == [name for name, source in sources.items() if source.in_use]
     assert (
         plays["main_left"] == "spicy_funk_cake, the master's right channel, on the audience's right"
     )

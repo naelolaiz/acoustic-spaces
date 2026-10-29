@@ -2,14 +2,16 @@
 each listener over the band and the sound system, its pitch falling as it passes
 (Doppler); and a video that tours them, as the stadium demo's does.
 
-The helicopter is the flyover demo's (acoustic_spaces.demos.helicopter): an Airbus
-Helicopters AS350 B3 at its maximum mass, flying level at 63 m/s, straight over the
-stadium's long axis from behind the stage to past the east stand, 1200 m. It flies 150 m
-up (--height), as a police or a television helicopter given leave may: without leave,
-the EU's rules of the air keep a flight by sight (VFR) over an open-air assembly of
-persons 300 m above the highest obstacle within 600 m (SERA.5005(f)), here the
-stadium's roof, 30 m up, so --height 330. It is over the centre spot halfway through
-the song (--at, seconds into the song as the sound system plays it). Its sound is its
+The helicopter is the stadium scene's, left out of the concert's own simulations, and
+the flyover demo's (acoustic_spaces.demos.helicopter): an Airbus Helicopters AS350 B3
+at its maximum mass, flying level at 63 m/s, straight over the stadium's long axis from
+behind the stage to past the east stand, 1200 m. It flies 150 m up, as a police or a
+television helicopter given leave may: without leave, the EU's rules of the air keep a
+flight by sight (VFR) over an open-air assembly of persons 300 m above the highest
+obstacle within 600 m (SERA.5005(f)), here the stadium's roof, 30 m up, so --height
+330, which takes every place of its walk to that height. The editor shows its walk, and
+what it changes there the demo flies. It is over the centre spot halfway through the
+song (--at, seconds into the song as the sound system plays it). Its sound is its
 two rotors', sent each way down each early path, as in the helicopter_flyover example;
 the scene gives it the sound power and the directivity of that sound for its late
 part.
@@ -43,6 +45,8 @@ certificate, and with --broadband bpm quieter (see the helicopter_flyover exampl
 
 from __future__ import annotations
 
+import argparse
+import copy
 import dataclasses
 import math
 import sys
@@ -59,14 +63,7 @@ stadium = sibling(__file__, "stadium_demo")
 
 #: The stadium's roof (make_model.py's ROOF), its highest point (m).
 ROOF_M = 30.0
-#: How high the helicopter flies by default (m): as a police or a television helicopter
-#: given leave may, below the 300 m above the roof the rules of the air ask over a crowd
-#: without it (SERA.5005(f)).
-HEIGHT_M = 150.0
-#: How far the flight runs each way from over the centre spot (m), at what speed over
-#: the ground (m/s, the flyover example's), and how far the ground runs past its ends.
-SPAN_M = 600.0
-SPEED_M_S = 63.0
+#: How far the ground runs past the helicopter's walk (m).
 MARGIN_M = 50.0
 #: How far the sky stays above the helicopter (m).
 SKY_M = 40.0
@@ -97,59 +94,92 @@ VEHICLE = OverTheConcert("helicopter_demo.py")
 # --------------------------------------------------------------------------- the flight
 
 
-def flight_of(height_m: float) -> dict:
-    """The helicopter of the flight's scene: straight over the centre spot along the
-    stadium's long axis, from behind the stage (at -x) to past the east stand, at
-    ``height_m``, left out of the concert's simulations."""
-    return {
-        "name": HELICOPTER,
-        "group": "Helicopter",
-        "enabled": False,
-        "position": [-SPAN_M, 0.0, height_m],
-        "walk": {"to": [[SPAN_M, 0.0, height_m]], "speed_m_s": SPEED_M_S, "doppler": True},
-    }
+def helicopter_of(data: dict) -> dict:
+    """The helicopter of ``data``, a scene's dict: its source of that name."""
+    found = next((s for s in data.get("sources", []) if s.get("name") == HELICOPTER), None)
+    if found is None:
+        raise SystemExit(f"error: the stadium's scene has no source named {HELICOPTER!r}")
+    return found
+
+
+def places_of(source: dict) -> np.ndarray:
+    """(n, 3) where a source's walk goes: where it starts, then its points (or the places
+    of its keyframes)."""
+    walk = source.get("walk") or {}
+    keyframes = [k["position"] for k in walk.get("keyframes", []) if "position" in k]
+    return np.array([source["position"], *walk.get("to", []), *keyframes], dtype=float)
+
+
+def flight_of(helicopter: dict, height_m: float | None) -> dict:
+    """The flight's helicopter: the stadium scene's, every place of its walk ``height_m``
+    up (by default as the scene has them), left out of the concert's simulations."""
+    flown = copy.deepcopy(helicopter) | {"enabled": False}
+    if height_m is None:
+        return flown
+
+    def lifted(place) -> list[float]:
+        return [float(place[0]), float(place[1]), float(height_m)]
+
+    flown["position"] = lifted(flown["position"])
+    walk = flown.get("walk") or {}
+    if "to" in walk:
+        walk["to"] = [lifted(place) for place in walk["to"]]
+    for key in walk.get("keyframes", []):
+        if "position" in key:
+            key["position"] = lifted(key["position"])
+    return flown
 
 
 def flight(args) -> None:
     """``--flight`` (scene_flight.yaml) from ``--stadium`` (scene.yaml): the stadium with
-    the helicopter's flight 1200 m over it at ``--height``, the ground and the sky
-    widened to take it, and the responses as much longer as the helicopter is farther
-    than the stage, so that each keeps the decay after its sound arrives."""
+    its helicopter at ``--height``, the ground and the sky widened to take its walk, and
+    the responses as much longer as the helicopter is farther than the stage, so that
+    each keeps the decay after its sound arrives."""
     from acoustic_spaces.air import speed_of_sound
     from acoustic_spaces.scene import Scene
 
-    height = float(args.height)
     data = yaml.safe_load(args.stadium.read_text(encoding="utf-8"))
+    helicopter = flight_of(helicopter_of(data), args.height)
+    places = places_of(helicopter)
     ground = data["geometry"]["ground"]
     (x0, y0), (x1, y1) = ground["extent"]
-    ground["extent"] = [[min(x0, -SPAN_M - MARGIN_M), y0], [max(x1, SPAN_M + MARGIN_M), y1]]
-    ground["sky"] = max(float(ground.get("sky", 0.0)), height + SKY_M)
-    ends = np.array([[-SPAN_M, 0.0, height], [SPAN_M, 0.0, height]])
-    places = np.array([lis["position"] for lis in data["listeners"]], dtype=float)
-    farthest = float(np.linalg.norm(ends[:, None, :] - places[None, :, :], axis=2).max())
+    low = places[:, :2].min(axis=0) - MARGIN_M
+    high = places[:, :2].max(axis=0) + MARGIN_M
+    ground["extent"] = [
+        [min(x0, float(low[0])), min(y0, float(low[1]))],
+        [max(x1, float(high[0])), max(y1, float(high[1]))],
+    ]
+    ground["sky"] = max(float(ground.get("sky", 0.0)), float(places[:, 2].max()) + SKY_M)
+    listeners = np.array([lis["position"] for lis in data["listeners"]], dtype=float)
+    farthest = float(np.linalg.norm(places[:, None, :] - listeners[None, :, :], axis=2).max())
     scene = Scene.from_yaml(args.stadium)  # what the file leaves out at its defaults
     c = speed_of_sound(scene.air.temperature_c)
     length = scene.simulation.ir_length_s + farthest / c
     simulation = data.setdefault("simulation", {})
     simulation["ir_length_s"] = math.ceil(length * 10.0) / 10.0
-    data["sources"] = [s for s in data["sources"] if s["name"] != HELICOPTER]
-    data["sources"].append(flight_of(height))
+    data["sources"] = [helicopter if s.get("name") == HELICOPTER else s for s in data["sources"]]
     pipeline.write_scene(args.source, data, FLIGHT_HEADER, args.stadium.parent)
+    span = float(np.linalg.norm(np.diff(places, axis=0), axis=1).sum())
     print(
-        f"wrote {args.source}: the helicopter {height:g} m up, {2 * SPAN_M:g} m over the "
-        f"stadium at {SPEED_M_S:g} m/s; responses {simulation['ir_length_s']:g} s long"
+        f"wrote {args.source}: the helicopter {places[:, 2].min():g} m up, {span:g} m over the "
+        f"stadium; responses {simulation['ir_length_s']:g} s long"
     )
 
 
 def flight_done(args) -> bool:
-    """Whether the flight's scene is there, newer than the stadium's, at ``--height``."""
+    """Whether the flight's scene is there, newer than the stadium's, with the stadium's
+    helicopter at ``--height``."""
     if not args.source.exists() or not args.stadium.exists():
         return False
     if args.source.stat().st_mtime < args.stadium.stat().st_mtime:
         return False
     data = yaml.safe_load(args.source.read_text(encoding="utf-8")) or {}
     flown = next((s for s in data.get("sources", []) if s.get("name") == HELICOPTER), None)
-    return flown == flight_of(float(args.height))
+    try:
+        stadium = yaml.safe_load(args.stadium.read_text(encoding="utf-8"))
+        return flown == flight_of(helicopter_of(stadium), args.height)
+    except SystemExit:
+        return False
 
 
 # --------------------------------------------------------------------------- the mix
@@ -324,23 +354,43 @@ def video(args) -> None:
 # --------------------------------------------------------------------------- the demo
 
 
+def moving(args) -> list[str]:
+    """Who the demo plays moving: the stadium scene's helicopter, when it has a walk that
+    is on (:func:`acoustic_spaces.demos.passby.moving`, from the stadium's scene)."""
+    return passby.moving(argparse.Namespace(**vars(args) | {"source": args.stadium}), VEHICLE)
+
+
 def problems(demo, args) -> str | None:
-    """The flight is over the stadium (above its roof) and ``--at`` is a time; once the
-    flight's scene is there, the helicopter must fly as the flyover demo's does
-    (:func:`acoustic_spaces.demos.passby.problems`)."""
-    height = float(args.height)
-    if not math.isfinite(height) or height <= ROOF_M:
-        return f"--height is {args.height!r} m, but the stadium's roof is {ROOF_M:g} m up"
+    """The stadium's scene has the helicopter, its flight is over the stadium (above its
+    roof) and ``--at`` is a time; once the flight's scene is there, the helicopter must
+    fly as the flyover demo's does (:func:`acoustic_spaces.demos.passby.problems`)."""
+    if args.height is not None:
+        height = float(args.height)
+        if not math.isfinite(height) or height <= ROOF_M:
+            return f"--height is {args.height!r} m, but the stadium's roof is {ROOF_M:g} m up"
     if args.at is not None and not (math.isfinite(float(args.at)) and float(args.at) >= 0.0):
         return f"--at is a time into the song (s), not {args.at!r}"
     resolved = demo.resolved(args)
+    stadium = Path(resolved.stadium)
+    if not stadium.exists():
+        return f"no {stadium}"
+    try:
+        flown = flight_of(helicopter_of(yaml.safe_load(stadium.read_text("utf-8"))), args.height)
+    except SystemExit as exc:
+        return str(exc).removeprefix("error: ")
+    lowest = float(places_of(flown)[:, 2].min())
+    if lowest <= ROOF_M:
+        return (
+            f"the helicopter in {stadium.name} flies {lowest:g} m up, but the stadium's roof "
+            f"is {ROOF_M:g} m up"
+        )
     if Path(resolved.source).exists():
         return passby.problems(demo, args, VEHICLE)
     for name in ("speed", "step_m"):
         value = getattr(args, name, None)
         if value is not None and not (math.isfinite(float(value)) and float(value) > 0.0):
             return f"{demo.option(name).option} is a positive number, not {value!r}"
-    return None if Path(resolved.stadium).exists() else f"no {resolved.stadium}"
+    return None
 
 
 DEMO = passby.demo(
@@ -348,6 +398,7 @@ DEMO = passby.demo(
 )
 DEMO.builds_on = stadium.DEMO.name
 DEMO.problems = problems
+DEMO.moving = moving
 _FLIGHT = Option(
     "source",
     "the stadium with the helicopter's flight over it, which flight writes",
@@ -371,13 +422,15 @@ DEMO.options = [_REPLACED.get(o.name, o) for o in DEMO.options] + [
     ),
     Option(
         "height",
-        "how high the helicopter flies over the ground (m): by default as a police or a "
-        "television helicopter given leave may; without leave the EU's rules of the air keep "
-        "it 300 m above the stadium's roof, 330 m",
-        HEIGHT_M,
+        "how high the helicopter flies over the ground (m), at every place of its walk: by "
+        "default as the stadium's scene has it, 150 m, as a police or a television "
+        "helicopter given leave may; without leave the EU's rules of the air keep it 300 m "
+        "above the stadium's roof, 330 m",
+        None,
         "float",
         steps=("flight",),
         unit="m",
+        unset="as in the scene",
     ),
     Option(
         "at",
