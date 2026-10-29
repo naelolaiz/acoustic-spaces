@@ -197,6 +197,12 @@
   step, what fine-tunes the run, the files and folders the demo reads and writes and
   the command line under **Advanced**, closed until opened (`Option.advanced`); its
   introduction is one line. The labels are translated in the five catalogs.
+- The editor runs an example's scripts that are no demos too, listed in the Run demo
+  window after its demos: the stadium concert's and the concert stage's `align.py`,
+  `feedback.py` and `near_field.py`, the town hall's `delays.py` and the listening
+  room's `bass.py`, each one step, its options its own arguments, what it prints in the
+  Messages panel (`demos.scripts_of`, `demos.script_demo`: a script with a `TITLE` and
+  a `parser()`; `Demo.stepless`, `Option.positional`).
 
 ## 4.0.1
 

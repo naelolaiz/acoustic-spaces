@@ -134,7 +134,12 @@ which frequencies each octave band holds.
   in the church, the band in the stadium, the concert across the lake, the walk through
   the gallery, the car passing the roadside and driving down the street), or a copy of
   one, also has that demo, reading the open scene, and the window starts on it (a copy
-  is known by its folder's name or, saved anywhere, by the scene's name). Pick
+  is known by its folder's name or, saved anywhere, by the scene's name). The example's
+  scripts that are no demos follow, each one step that prints what it finds in the
+  **Messages** panel, its options its own arguments: the stadium concert's and the
+  concert stage's `align.py`, `feedback.py` (the singer's microphone's gain before
+  feedback) and `near_field.py`, the town hall's `delays.py` and the listening room's
+  `bass.py`. Pick
   the demo and fill in the options that change what it plays, labelled in words with
   each one's flag in its tip, which start at the same defaults the command line uses
   (the **What the sources play** table lists the sources, what

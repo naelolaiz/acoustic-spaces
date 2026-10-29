@@ -203,12 +203,25 @@ def render(response: np.ndarray, gain_db: float, seconds: float = RENDER_S) -> n
     return out[:total]
 
 
+#: Its name in the editor's Run demo window.
+TITLE = "Feedback of the singer's microphone"
+
+
+def parser() -> argparse.ArgumentParser:
+    """Its arguments, which the editor's Run demo window asks for too."""
+    found = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    found.add_argument(
+        "scene", nargs="?", default=Path(__file__).with_name("scene.yaml"), help="the scene"
+    )
+    found.add_argument("--rays", type=int, help="rays per band (fewer is quicker)")
+    found.add_argument(
+        "--out", type=Path, default=Path("feedback.wav"), help="the rendered loop (WAV)"
+    )
+    return found
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("scene", nargs="?", default=Path(__file__).with_name("scene.yaml"))
-    parser.add_argument("--rays", type=int, help="rays per band (fewer is quicker)")
-    parser.add_argument("--out", default="feedback.wav", help="the rendered loop (WAV)")
-    args = parser.parse_args(argv)
+    args = parser().parse_args(argv)
     found = loop(Room.from_yaml(args.scene), rays=args.rays)
     bands = " ".join(f"{f if f < 1000 else f'{f // 1000}k':>5}" for f in OCTAVE_BANDS_HZ)
     print(f"The singer's microphone feeds {len(found['speakers'])} loudspeakers.")

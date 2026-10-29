@@ -96,9 +96,10 @@ def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]
     """The demos of the open scene, each in the folder it runs in and with the arguments
     it starts with: *This scene* first, then the demos of the example the scene is or
     is a copy of (:func:`~acoustic_spaces.examples.example_of`: its folder's name, or
-    the example's scene name wherever the copy is saved), its own first, each reading
-    the open scene instead of the example's."""
-    from acoustic_spaces.demos import demos_of
+    the example's scene name wherever the copy is saved), its own first, then the
+    example's scripts that are no demos (:func:`~acoustic_spaces.demos.scripts_of`), each
+    reading the open scene instead of the example's."""
+    from acoustic_spaces.demos import demos_of, scripts_of
     from acoustic_spaces.demos.scene_demo import DEMO
     from acoustic_spaces.examples import example_of
 
@@ -113,7 +114,7 @@ def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]
         args.work = base / "demo"
     found.append((demo, args))
     name = example_of(path) if path is not None else None
-    for example in demos_of(name) if name is not None else []:
+    for example in [*demos_of(name), *scripts_of(name)] if name is not None else []:
         demo = example.at(writable(path.parent, example.example))
         args = starting_arguments(demo)
         option = reads_scene(demo)
@@ -677,7 +678,8 @@ class DemoDialog(QDialog):
         intro = QLabel(
             _(
                 "A demo plays sound through the scene and makes a video of what each listener "
-                "hears; the messages say what it is doing, and Cancel stops it."
+                "hears, and an example's script prints what it finds; the messages say what "
+                "they are doing, and Cancel stops them."
             )
         )
         intro.setWordWrap(True)
@@ -690,7 +692,8 @@ class DemoDialog(QDialog):
         self.picker.setToolTip(
             _(
                 "The demo to run: This scene, with the sounds its sources play, or one of "
-                "the example's own demos when the scene is an example's or a copy of one"
+                "the example's own demos or scripts when the scene is an example's or a "
+                "copy of one"
             )
         )
         if start is not None:
@@ -716,7 +719,9 @@ class DemoDialog(QDialog):
         layout.addWidget(self.about)
 
         self.movement = MovementBox(walkers_of(scene if demos is None else None))
-        self.movement.setVisible(demos is None and scene is not None)
+        #: Whether the Movement box shows: for a scene's demos, not for a script.
+        self._moves = demos is None and scene is not None
+        self.movement.setVisible(self._moves)
         self.movement.changed.connect(self._refresh)
         self.movement.edit.connect(self._edit_movement)
         layout.addWidget(self.movement)
@@ -747,7 +752,7 @@ class DemoDialog(QDialog):
         self.advanced = QWidget()
         inner = self._advanced_layout = QVBoxLayout(self.advanced)
         inner.setContentsMargins(0, 0, 0, 0)
-        steps = QFormLayout()
+        steps = self._steps = QFormLayout()
         label = QLabel(_("Step"))
         label.setBuddy(self.step)
         label.setToolTip(self.step.toolTip())
@@ -825,9 +830,13 @@ class DemoDialog(QDialog):
         self.about.setText(demo.description)
         self.step.blockSignals(True)
         self.step.clear()
-        self.step.addItems([step.name for step in demo.steps] + [ALL])
-        self.step.setCurrentText(ALL)
+        self.step.addItems([step.name for step in demo.steps] + ([] if demo.stepless else [ALL]))
+        self.step.setCurrentText(demo.steps[0].name if demo.stepless else ALL)
         self.step.blockSignals(False)
+        # A script is one step, and moves nothing.
+        self._steps.setRowVisible(self.step, not demo.stepless)
+        self.about_step.setVisible(not demo.stepless)
+        self.movement.setVisible(self._moves and not demo.stepless)
 
         form, more = QWidget(), QWidget()
         rows, more_rows = QFormLayout(form), QFormLayout(more)

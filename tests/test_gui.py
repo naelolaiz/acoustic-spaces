@@ -2639,7 +2639,8 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     names = [dialog.picker.itemData(k) for k in range(dialog.picker.count())]
     # The example's own demo first, then the one that builds on it; the dialog starts on
     # the example's own.
-    assert names == ["scene", "stadium", "crossing"] and dialog.picker.currentData() == "stadium"
+    assert names == ["scene", "stadium", "crossing", "align", "feedback", "near_field"]
+    assert dialog.picker.currentData() == "stadium"
     demo = dialog.demo
     assert [field for field in dialog.fields] == [option.name for option in demo.options]
     assert dialog.step.currentText() == ALL
@@ -2679,7 +2680,18 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     dialog.picker.setCurrentIndex(dialog.picker.findData("crossing"))  # stays open
     assert not dialog.advanced.isHidden() and dialog.advanced.isAncestorOf(dialog.fields["work"])
     assert dialog.options.isAncestorOf(dialog.fields["height"])
+    # An example's script is one step that moves nothing: the feedback of the singer's
+    # microphone, its rays above, the scene and the WAV file it writes under Advanced.
+    dialog.picker.setCurrentIndex(dialog.picker.findData("feedback"))
+    assert dialog.step.isHidden() and dialog.about_step.isHidden() and dialog.movement.isHidden()
+    assert dialog.options.isAncestorOf(dialog.fields["rays"])
+    assert dialog.advanced.isAncestorOf(dialog.fields["out"])
+    assert dialog.command.text() == "python feedback.py"
+    dialog.fields["rays"].setText("300")
+    assert dialog.command.text() == "python feedback.py --rays 300"
+    assert dialog.chosen()[1] == "run" and dialog.chosen()[2].rays == 300
     dialog.picker.setCurrentIndex(dialog.picker.findData("stadium"))
+    assert not dialog.step.isHidden() and not dialog.movement.isHidden()
     dialog.more.setChecked(False)
     assert dialog.advanced.isHidden()
 

@@ -167,6 +167,14 @@ msgstr "Erster Downbeat"
 msgid "Stems"
 msgstr "Stems"
 
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Rays per band"
+msgstr "Strahlen pro Band"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Written to"
+msgstr "Geschrieben nach"
+
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
 msgstr "Diese Szene"
@@ -1898,20 +1906,22 @@ msgstr "Demo ausführen"
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "A demo plays sound through the scene and makes a video of what each listener "
-"hears; the messages say what it is doing, and Cancel stops it."
+"hears, and an example's script prints what it finds; the messages say what "
+"they are doing, and Cancel stops them."
 msgstr ""
 "Eine Demo spielt Klang in der Szene ab und macht ein Video davon, was jeder "
-"Hörer hört; die Meldungen sagen, was sie gerade tut, und Abbrechen hält sie "
-"an."
+"Hörer hört, und ein Skript eines Beispiels gibt aus, was es findet; die "
+"Meldungen sagen, was sie gerade tun, und Abbrechen hält sie an."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "The demo to run: This scene, with the sounds its sources play, or one of the "
-"example's own demos when the scene is an example's or a copy of one"
+"example's own demos or scripts when the scene is an example's or a copy of "
+"one"
 msgstr ""
 "Die auszuführende Demo: Diese Szene, mit den Klängen, die ihre Quellen "
-"spielen, oder eine der eigenen Demos des Beispiels, wenn die Szene die eines "
-"Beispiels oder eine Kopie davon ist"
+"spielen, oder eine der eigenen Demos oder Skripte des Beispiels, wenn die "
+"Szene die eines Beispiels oder eine Kopie davon ist"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -4976,10 +4986,6 @@ msgstr ""
 "Berechnungen leicht variieren) oder automatisch: das schnellste Gerät auf "
 "diesem Computer, ermittelt durch CPU und GPU optimieren… oder einen kurzen "
 "Probelauf"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Rays per band"
-msgstr "Strahlen pro Band"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Reception"
