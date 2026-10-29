@@ -28,8 +28,10 @@ from acoustic_spaces.i18n import N_
 
 SCENE_FILE = "scene.yaml"
 #: Names examples had before they were merged into another, which still find it:
-#: ``gallery_walk`` is the gallery, whose visitor walks unless its walk is turned off.
-FORMER_NAMES = {"gallery_walk": "gallery"}
+#: ``gallery_walk`` is the gallery, whose visitor walks unless its walk is turned off,
+#: and ``stadium_pa`` the stadium concert, whose sound system plays alone with its stage
+#: and monitors left out.
+FORMER_NAMES = {"gallery_walk": "gallery", "stadium_pa": "stadium_concert"}
 
 #: The groups the examples are shown in, in order, each with its examples (folder names)
 #: from the simplest. The titles are English; the editor translates them.
@@ -42,7 +44,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         N_("Halls and churches"),
         ("lecture_hall", "concert_hall", "orchestra", "church", "gallery"),
     ),
-    (N_("Sound systems"), ("town_hall_pa", "concert_stage", "stadium_pa", "stadium_concert")),
+    (N_("Sound systems"), ("town_hall_pa", "concert_stage", "stadium_concert")),
     (
         N_("Outdoors"),
         (

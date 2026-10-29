@@ -584,9 +584,10 @@ bands), nearly all of it at one listener: the edge fade hands it back before the
 and in third-octave bands each listener's starts from less than 0.9 GiB. On the CPU
 the estimate came within 1 MiB of the late part's measured peak in `shoebox` at 1, 4
 and 64 threads (4 cores), with
-responses of 30 to 480 s and both kinds of scattering. Whole runs peaked a little above
-it: `stadium_pa` at 8 s (15 sources, 9 listeners) at 547 MiB against 537, `orchestra` at
-6 s at 723 MiB against 669. Traced on a software GPU (SwiftShader's Vulkan), the late
+responses of 30 to 480 s and both kinds of scattering. Whole runs, counted from the
+memory the process held before them, came near it: `stadium_concert` at 8 s (19 sources,
+12 listeners) peaked at 892 MiB against 901, `orchestra` at 6 s at 728 MiB against 669.
+Traced on a software GPU (SwiftShader's Vulkan), the late
 part peaked 60 to 100 MiB above the GPU's estimate, the driver's own. With both, the
 estimate takes the CPU's part and the GPU's at their peaks at once, which those runs
 never reached: up to 1.5 times what they used.

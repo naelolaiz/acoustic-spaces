@@ -224,9 +224,10 @@ def _with_left_out(example: str) -> Room:
 def test_stadium_sound_system_is_aligned(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """What the stadium's description says of its sound system."""
-    align = _script("stadium_pa", "align")
-    seats = align.arrivals(_with_left_out("stadium_pa"), rays=30, seed=1)
+    """What the stadium concert's description says of its sound system and its
+    monitors."""
+    align = _script("stadium_concert", "align")
+    seats = align.arrivals(_with_left_out("stadium_concert"), rays=30, seed=1)
     assert "left_out" not in seats
     assert not [row for rows in seats.values() for row in rows if row.source == "left_out"]
     time = {seat: {row.source: row.time_s for row in rows} for seat, rows in seats.items()}
@@ -241,17 +242,15 @@ def test_stadium_sound_system_is_aligned(
         ("east_stand", "delay_east_right", "main_right"),
     ):
         assert 0.005 < time[seat][delay] - time[seat][array] < 0.021, seat
-    # Nobody hears an echo.
-    assert not [(seat, row.source) for seat, rows in seats.items() for row in rows if row.echo]
+    _no_echo_and_own_monitors(align, seats)
     monkeypatch.setattr(align, "arrivals", lambda room, rays=None: seats)
     assert align.main([]) == 0
     out = capsys.readouterr().out
     assert "north_stand_far: " in out and "delay_north" in out and "  echo" not in out
 
 
-def test_each_player_hears_their_own_monitor_loudest() -> None:
-    align = _script("concert_stage", "align")
-    seats = align.arrivals(Room.from_yaml(example_path("concert_stage")), rays=30, seed=1)
+def _no_echo_and_own_monitors(align, seats: dict) -> None:
+    """Nobody hears an echo, and each player hears their own monitor loudest."""
     assert not [(seat, row.source) for seat, rows in seats.items() for row in rows if row.echo]
     for seat, monitor in (
         ("singer", "vocal_wedges"),
@@ -262,8 +261,15 @@ def test_each_player_hears_their_own_monitor_loudest() -> None:
         assert loudest.source == monitor, seat
 
 
+def test_each_player_hears_their_own_monitor_loudest() -> None:
+    align = _script("concert_stage", "align")
+    seats = align.arrivals(Room.from_yaml(example_path("concert_stage")), rays=30, seed=1)
+    _no_echo_and_own_monitors(align, seats)
+
+
 @pytest.mark.parametrize(
-    ("example", "low_db", "high_db"), [("stadium_pa", 3.5, 10.5), ("concert_stage", 3.0, 8.0)]
+    ("example", "low_db", "high_db"),
+    [("stadium_concert", 3.5, 10.5), ("concert_stage", 3.0, 8.0)],
 )
 def test_stadium_arrays_near_their_listeners(
     example: str,
@@ -291,9 +297,10 @@ def test_stadium_arrays_near_their_listeners(
 
 
 def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
-    """stadium_concert is stadium_pa and concert_stage together, and the three share their
-    scripts, their arrays and make_model.py, which writes each one's files as they are."""
-    folders = [EXAMPLES / name for name in ("stadium_pa", "concert_stage", "stadium_concert")]
+    """stadium_concert has concert_stage's sources and listeners as they are, and the two
+    share their scripts, their arrays and make_model.py, which writes each one's files as
+    they are."""
+    folders = [EXAMPLES / name for name in ("concert_stage", "stadium_concert")]
     for name in ("align.py", "near_field.py", "make_model.py", "feedback.py", "box.csv"):
         copies = {(f / name).read_bytes() for f in folders if (f / name).exists()}
         assert len(copies) == 1, name
@@ -306,10 +313,9 @@ def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
         return {entry["name"]: entry for entry in data}
 
     for kind in ("sources", "listeners"):
-        whole = entries(folders[2], kind)
-        whole.pop("helicopter", None)  # the concert's own, which helicopter_demo.py flies
-        parts = {**entries(folders[0], kind), **entries(folders[1], kind)}
-        assert whole == parts, kind
+        stage, whole = (entries(folder, kind) for folder in folders)
+        # Each of the stage's is the concert's, entry for entry: none drifts apart.
+        assert {name: whole.get(name) for name in stage} == stage, kind
     for folder in folders:
         copy = tmp_path / folder.name
         copy.mkdir()
@@ -330,11 +336,26 @@ def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
             assert (copy / name).read_bytes() == (folder / name).read_bytes(), name
 
 
+def test_the_stadium_sound_system_alone_is_the_concerts(tmp_path: Path) -> None:
+    """stadium_pa, the sound system alone, is merged into stadium_concert: its former
+    name finds the concert and its demos, whose Monitors and Stage left out give it."""
+    assert "stadium_pa" not in NAMES
+    assert example_path("stadium_pa") == example_path("stadium_concert")
+    assert demo_for("stadium_pa").script == demo_for("stadium_concert").script
+    scene = Scene.from_yaml(example_path("stadium_pa"))
+    alone = [s.name for s in scene.sources if s.in_use and s.group != "Monitors"]
+    assert len(alone) == 15 and "subs" in alone and "vocal_wedges" not in alone
+    copied = copy_examples(tmp_path, ["stadium_pa"])
+    assert copied == [tmp_path / "stadium_pa" / "scene.yaml"]
+    assert copied[0].read_bytes() == example_path("stadium_concert").read_bytes()
+
+
 def test_the_stadium_crowds_scatter_as_measured() -> None:
-    """The crowds of the three stadium scenes scatter as a measured theatre audience
-    does, little at 125 Hz and most from 1 kHz up, not at one value in every band."""
+    """The crowds of the stadium concert and of the concert stage scatter as a measured
+    theatre audience does, little at 125 Hz and most from 1 kHz up, not at one value in
+    every band."""
     measured = [0.3, 0.3, 0.5, 0.6, 0.6, 0.7, 0.7, 0.7]
-    for name in ("stadium_pa", "concert_stage", "stadium_concert"):
+    for name in ("concert_stage", "stadium_concert"):
         scene = Scene.from_yaml(example_path(name))
         crowds = [m for m in scene.materials.values() if m.audience]
         assert crowds, name
