@@ -167,6 +167,14 @@ msgstr "Eerste downbeat"
 msgid "Stems"
 msgstr "Stems"
 
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Rays per band"
+msgstr "Stralen per band"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Written to"
+msgstr "Geschreven naar"
+
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
 msgstr "Deze scène"
@@ -1883,19 +1891,22 @@ msgstr "Demo uitvoeren"
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "A demo plays sound through the scene and makes a video of what each listener "
-"hears; the messages say what it is doing, and Cancel stops it."
+"hears, and an example's script prints what it finds; the messages say what "
+"they are doing, and Cancel stops them."
 msgstr ""
 "Een demo speelt geluid af in de scène en maakt een video van wat elke "
-"luisteraar hoort; de meldingen zeggen wat hij doet, en Annuleren stopt hem."
+"luisteraar hoort, en een script van een voorbeeld toont wat het vindt; de "
+"meldingen zeggen wat ze doen, en Annuleren stopt ze."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "The demo to run: This scene, with the sounds its sources play, or one of the "
-"example's own demos when the scene is an example's or a copy of one"
+"example's own demos or scripts when the scene is an example's or a copy of "
+"one"
 msgstr ""
 "De demo die wordt uitgevoerd: Deze scène, met de klanken die de bronnen "
-"spelen, of een van de eigen demo's van het voorbeeld als de scène die van "
-"een voorbeeld is of een kopie ervan"
+"spelen, of een van de eigen demo's of scripts van het voorbeeld als de scène "
+"die van een voorbeeld is of een kopie ervan"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -4950,10 +4961,6 @@ msgstr ""
 "verdeelde stralen (met een GPU kunnen de resultaten tussen berekeningen "
 "licht variëren), of automatisch: het snelste apparaat op deze computer, "
 "bepaald door CPU en GPU optimaliseren… of een korte proef"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Rays per band"
-msgstr "Stralen per band"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Reception"
