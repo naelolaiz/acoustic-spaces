@@ -386,8 +386,14 @@ def simulate_walk(
         names[k]: {names[other]: weight for other, weight in parts.items()}
         for k, parts in mixing.items()
     }
+    # A walking source's places share the parabolic equation's runs where they can.
     result = simulate(
-        walked, settings=settings, threads=threads, progress=progress, late_from=late_from
+        walked,
+        settings=settings,
+        threads=threads,
+        progress=progress,
+        late_from=late_from,
+        share_waves=names if kind == "sources" else None,
     )
     late_places = tuple(k for k in range(len(names)) if k not in mixing)
     return WalkResponses(item.name, kind, points, names, result, late_places, doppler)
@@ -616,8 +622,14 @@ def simulate_movement(
                     f"the walk of {name.rpartition(' #')[0]!r} leaves the room at ({where}) m, "
                     f"{when} in"
                 )
+    # The moving sources' places share the parabolic equation's runs where they can.
     result = simulate(
-        walked, settings=settings, threads=threads, progress=progress, late_from=mixing
+        walked,
+        settings=settings,
+        threads=threads,
+        progress=progress,
+        late_from=mixing,
+        share_waves=[copy.name for copy in added["sources"]],
     )
     return Movement(room, times, result, copies, late_places, doppler is not None)
 

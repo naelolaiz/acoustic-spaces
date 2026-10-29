@@ -337,6 +337,11 @@ Movement:
   (points, one speed), keyframes at a steady speed accepted by the pass-by demo,
   **Render movement…** heard binaurally and with Doppler, and units for every number in
   the panel and in Run demo, with the pass's length, speed and duration.
+- [x] Faster walks outdoors: the places of a walking source share the parabolic
+  equation's runs, each listener getting what a run of its own place would give it.
+- [ ] A helicopter flying over: the sound a source sends depending on the way it leaves,
+  a rotor noise model checked against hover theory and a certified level, a flyover
+  demo and a helicopter crossing over the stadium concert.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:

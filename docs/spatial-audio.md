@@ -252,6 +252,10 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
 - A walk along [keyframes](scenes.md#walks) (timed places and facings, so the walker
   can wait, turn on the spot or go at any pace) is placed every `--step` along each leg
   and every `--turn-step` (20° by default) of a turn on the spot, and at every keyframe.
+- Outdoors in wind or a temperature gradient, the places of a walking source share the
+  parabolic equation's runs, with the results of a run per place: an aircraft's
+  flyover in the `windy` preset runs in about a third of the time (see
+  [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)).
 
 From Python:
 

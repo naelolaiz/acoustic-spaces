@@ -579,7 +579,14 @@ is an arc of a circle, so its travel time and its length are exact.
 Bending takes time: the `open_air_stage` example runs in 3 s instead of 0.2 s in still
 air, a scene's late rays take about three times as long, and coverage maps about six
 times, the parabolic equation running for each point; `simulation.performance.threads`
-shares the work out over the cores. An atmosphere in which sound goes straight (`neutral`, no wind
+shares the work out over the cores. The places of a walking source share the parabolic
+equation's runs where they stand at one height over one ground and neither the weather
+nor the ground has zones: a run from one place serves the listeners of every other that
+the sound goes the same way to, each reached by a last step of its own, so that it gets
+what a run of its own place would give it; only the absorbing layer can lie higher,
+where the farthest of the run's listeners needs it. An aircraft's 26 places 64 m apart,
+100 m up over 1.6 km of a meadow in the `windy` preset, take 31 s instead of 89 s on
+four cores, with the same early levels to 10⁻⁷ dB. An atmosphere in which sound goes straight (`neutral`, no wind
 and no temperature gradient) changes nothing: the results are those of still air, bit
 for bit.
 

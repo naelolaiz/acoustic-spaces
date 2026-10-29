@@ -282,6 +282,37 @@ def test_the_parabolic_equation_runs_the_same_on_any_number_of_threads() -> None
         assert np.array_equal(results[0][key].early.energy, results[1][key].early.energy)
 
 
+def test_sources_alike_share_the_parabolic_equation_s_runs(monkeypatch) -> None:
+    """Sources at one height over one ground (the places of a walk) asked to share the
+    parabolic equation's runs take fewer of them and get what runs of their own give."""
+    from acoustic_spaces.engine import parabolic
+
+    scene = field({"preset": "windy"}, ((80.0, 0.0, 1.5), (-60.0, 20.0, 1.5)))
+    item = scene.sources[0]
+    places = ((0.0, 0.0), (-30.0, 5.0), (25.0, -8.0))
+    sources = [
+        item.model_copy(update={"name": f"s{k}", "position": (x, y, 2.0)})
+        for k, (x, y) in enumerate(places)
+    ]
+    room = Room.from_scene(scene.model_copy(update={"sources": sources}))
+    runs = []
+    march_ = parabolic.march
+
+    def counted(*args, **kwargs):
+        runs.append(kwargs.get("independent", False))
+        return march_(*args, **kwargs)
+
+    monkeypatch.setattr(parabolic, "march", counted)
+    separate = simulate(room)
+    alone = len(runs)
+    runs.clear()
+    shared = simulate(room, share_waves=[s.name for s in sources])
+    assert 0 < len(runs) < alone and all(runs)
+    for key in separate.responses:
+        a, b = (r[key].early.energy.sum(axis=0) for r in (separate, shared))
+        np.testing.assert_allclose(10 * np.log10(b / a), 0.0, atol=0.01)
+
+
 def test_uniform_rows_trace_the_late_rays_as_straight_ones(monkeypatch) -> None:
     """The compiled tracer's bent rays, in an atmosphere where they go straight, give
     the straight tracer's late energy: the same ray paths, times and losses."""
