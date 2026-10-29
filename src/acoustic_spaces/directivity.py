@@ -422,6 +422,24 @@ def read_directivity_csv(path: str | Path) -> Balloon:
     return Balloon.from_measurements(directions, energy, f"file {path.name}", extrapolated)
 
 
+def write_directivity_csv(path: str | Path, balloon: Balloon, comment: str = "") -> Path:
+    """Write ``balloon`` (in octave bands) as the CSV table :func:`read_directivity_csv`
+    reads back: a row for each direction of its grid with its level in each band (dB
+    over the sphere's mean), under ``comment``'s lines."""
+    path = Path(path)
+    table = balloon.in_bands("octave").table
+    elevation, azimuth = _grid(180.0 / (table.shape[0] - 1))
+    levels = 10.0 * np.log10(np.maximum(table, 1e-30))
+    lines = [f"# {line}".rstrip() for line in comment.splitlines()]
+    lines.append(", ".join(["azimuth", "elevation", *(f"{f:g}" for f in OCTAVE_BANDS_HZ)]))
+    for i, el in enumerate(elevation):
+        for j, az in enumerate(azimuth):
+            values = ", ".join(f"{v:.2f}" for v in levels[i, j])
+            lines.append(f"{az:g}, {el:g}, {values}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
 def _frame(view: np.ndarray, up: np.ndarray) -> np.ndarray:
     """Rotation (3, 3) whose columns are forward, left and up for a view and up vector."""
     view = view / np.linalg.norm(view)
@@ -760,4 +778,5 @@ __all__ = [
     "read_directivity_csv",
     "read_directivity_sofa",
     "sphere_mean",
+    "write_directivity_csv",
 ]

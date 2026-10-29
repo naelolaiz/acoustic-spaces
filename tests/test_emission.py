@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from acoustic_spaces.directivity import _from_angles, _grid, _sphere
-from acoustic_spaces.emission import Mixture, Periodic, Sum
+from acoustic_spaces.emission import Faded, Mixture, Periodic, Sum
 
 RATE = 48_000
 
@@ -131,6 +131,10 @@ def test_a_periodic_sound_on_average_and_in_bands() -> None:
     # 100 Hz is in the second octave band.
     assert energy[0, 1] / energy[1, 1] == pytest.approx(9.0, rel=1e-3)
     np.testing.assert_allclose(sent.scaled(3.0).averaged(), 3.0 * sent.averaged(), atol=1e-12)
+    # As pascals 1 m away, its sound power: the bands share it out.
+    watts = 10.0 ** (sent.sound_power_db(1.2, 343.0) / 10.0) * 1e-12
+    assert watts.sum() == pytest.approx(4.0 * np.pi * power / (1.2 * 343.0), rel=1e-3)
+    assert np.argmax(watts) == 1
 
 
 def test_a_sum_of_emissions() -> None:
@@ -167,3 +171,33 @@ def test_what_a_periodic_sound_needs() -> None:
         Periodic(table, 0.01, RATE, 10, speed=400.0)
     with pytest.raises(ValueError, match="four samples"):
         Periodic(np.ones((19, 36, 3)), 0.01, RATE, 10)
+
+
+def test_a_faded_emission() -> None:
+    """An emission's first samples, faded in and out as the pass-by demo fades a plain
+    sound (a squared sine over the first and the last ``fade`` samples), with the
+    emission's bands and directivity."""
+    sent = _tone()
+    faded = Faded(sent, 100, 1000)
+    assert faded.length == 1000 and faded.sample_rate == RATE
+    ahead = np.tile([1.0, 0.0, 0.0], (1100, 1))
+    ramp = np.sin(np.linspace(0.0, np.pi / 2, 100)) ** 2
+    plain = sent.sent(0, 1000, ahead[:1000])
+    plain[:100] *= ramp
+    plain[-100:] *= ramp[::-1]
+    out = faded.sent(-50, 1050, ahead)
+    assert np.all(out[:50] == 0.0) and np.all(out[-50:] == 0.0)
+    np.testing.assert_allclose(out[50:-50], plain, atol=1e-15)
+    averaged = sent.averaged()[:1000]
+    averaged[:100] *= ramp
+    averaged[-100:] *= ramp[::-1]
+    np.testing.assert_allclose(faded.averaged(), averaged, atol=1e-15)
+    np.testing.assert_allclose(faded.scaled(2.0).sent(0, 1000, ahead[:1000]), 2.0 * plain)
+    np.testing.assert_array_equal(faded.directivity().table, sent.directivity().table)
+    assert np.array_equal(
+        Faded(sent, 0, 1000).sent(0, 1000, ahead[:1000]), sent.sent(0, 1000, ahead[:1000])
+    )
+    with pytest.raises(ValueError, match="sends 1 to"):
+        Faded(sent, 0, sent.length + 1)
+    with pytest.raises(ValueError, match="half its length"):
+        Faded(sent, 501, 1000)

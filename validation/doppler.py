@@ -4,7 +4,7 @@ listener, and the pass-by levels against the sound they render.
     python validation/doppler.py [--json results.json]
 
 A walk with ``doppler: true`` plays each early path through a delay that changes as the
-walker goes (:mod:`acoustic_spaces.doppler`). Three checks:
+walker goes (:mod:`acoustic_spaces.doppler`). Four checks:
 
 - **Over a hard ground.** A source passes a listener 10 m from its line, 1 m up, the
   listener 1.5 m up, over a rigid ground, at 30 m/s (a car) and 80 m/s (a train), and a
@@ -23,8 +23,9 @@ walker goes (:mod:`acoustic_spaces.doppler`). Three checks:
   what is sent the way it leaves the source at the time it leaves. Then the same with
   the source given a cardioid directivity, which the emission takes the place of in
   the early paths.
-- **The places.** The car at 1 kHz with places 0.25 to 4 m apart: how far apart they
-  may be.
+- **The places.** The car at 1 kHz with places 0.25 to 4 m apart, and a helicopter's
+  flyover, 150 m up at 63 m/s over a listener 1.2 m up right under its track, at 250
+  Hz, 1 kHz and 4 kHz with places 1 to 16 m apart: how far apart they may be.
 - **The pass-by levels.** White noise through the car's walk over grass (Miki's
   impedance, 200 kPa s/m²): the energy of the sound in each octave band against that of
   the noise through each place's own impulse response for as long as its sound is heard
@@ -81,31 +82,61 @@ NOISES = 16
 NOISE_TOP_HZ = 18_000.0
 
 
-def scene(walker: str, speed: float, ground: str, doppler: bool = True, directivity=None) -> Scene:
-    walk = {"to": [[X1, 0.0, ZS if walker == "source" else ZR]], "speed_m_s": speed}
-    walk |= {"doppler": doppler, "face_forward": False}
-    source = {"name": "s", "position": [0.0, D, ZS]}
-    listener = {"name": "l", "position": [0.0, D, ZR]}
+@dataclasses.dataclass(frozen=True)
+class Line:
+    """Where a walk goes: along x from ``x0`` to ``x1`` (m), the other standing ``d`` from
+    its line, the source ``zs`` and the listener ``zr`` up (m)."""
+
+    x0: float
+    x1: float
+    d: float
+    zs: float
+    zr: float
+
+
+def road() -> Line:
+    """A car's or a train's pass-by, as X0, X1, D, ZS and ZR have it."""
+    return Line(X0, X1, D, ZS, ZR)
+
+
+#: A helicopter's flyover: 150 m up at 63 m/s over a listener 1.2 m up right under its
+#: track, at the height and where the microphone stands in a helicopter's noise
+#: certification.
+FLYOVER = Line(-300.0, 300.0, 0.0, 150.0, 1.2)
+FLYOVER_SPEED = 63.0
+FLYOVER_STEPS = (1.0, 4.0, 8.0, 16.0)
+
+
+def scene(
+    walker: str, speed: float, ground: str, doppler: bool = True, directivity=None, line=None
+) -> Scene:
+    line = line or road()
+    walk = {"to": [[line.x1, 0.0, line.zs if walker == "source" else line.zr]]}
+    walk |= {"speed_m_s": speed, "doppler": doppler, "face_forward": False}
+    source = {"name": "s", "position": [0.0, line.d, line.zs]}
+    listener = {"name": "l", "position": [0.0, line.d, line.zr]}
     if walker == "source":
-        source = {"name": "s", "position": [X0, 0.0, ZS], "walk": walk}
+        source = {"name": "s", "position": [line.x0, 0.0, line.zs], "walk": walk}
     else:
-        listener = {"name": "l", "position": [X0, 0.0, ZR], "walk": walk}
+        listener = {"name": "l", "position": [line.x0, 0.0, line.zr], "walk": walk}
     if directivity is not None:
         source["directivity"] = directivity
     material = {"absorption": [0.0] * 8, "scattering": 0.0}
     if ground == "grass":
         material = {"impedance": {"preset": "grass"}}
+    farthest = math.hypot(max(abs(line.x0), abs(line.x1)), line.d, line.zs + line.zr)
+    extent = [[min(-100.0, line.x0 - 40.0), -40.0], [max(100.0, line.x1 + 40.0), 40.0]]
     return Scene.model_validate(
         {
             "name": "pass-by",
-            "geometry": {"ground": {"extent": [[-100, -40], [100, 40]], "sky": 30}},
+            "geometry": {"ground": {"extent": extent, "sky": max(30.0, 2.0 * line.zs)}},
             "materials": {"ground": material},
             "default_material": "ground",
             "sources": [source],
             "listeners": [listener],
             "simulation": {
                 "seed": 1,
-                "ir_length_s": 0.5,
+                "ir_length_s": max(0.5, round(farthest / 343.0 + 0.2, 1)),
                 "early": {"method": "image_sources", "max_order": 1, "diffraction": "none"},
                 "late": {"rays": 2000},
             },
@@ -129,32 +160,34 @@ def emission(tone: float, n: int) -> Mixture:
     return Mixture(signals, weights.reshape(len(elevation), len(azimuth), 2), RATE)
 
 
-def exact(walker, speed, tone, n, sent=False) -> np.ndarray:
+def exact(walker, speed, tone, n, sent=False, line=None) -> np.ndarray:
     """The direct sound and the image source's of a tone ``tone`` (Hz) at each sample,
     each at its retarded time, as the walk has them (a walking source stands at the
-    end once there, a walking listener too); ``sent``, as :func:`pattern` sends it the
-    way the path leaves the source."""
+    end once there, a walking listener too), along ``line`` (by default :func:`road`);
+    ``sent``, as :func:`pattern` sends it the way the path leaves the source."""
     c = speed_of_sound(20.0)
     band = int(np.argmin(np.abs(np.log2(np.array(OCTAVE_BANDS_HZ) / tone))))
     m = energy_attenuation_per_m()[band]
     t = np.arange(n) / RATE
-    walked = (X1 - X0) / speed
+    line = line or road()
+    x0, x1, d, zr = line.x0, line.x1, line.d, line.zr
+    walked = (x1 - x0) / speed
     played = walked + 0.5
     out = np.zeros(n)
     for image in (False, True):
-        zs = -ZS if image else ZS
-        b2 = D**2 + (zs - ZR) ** 2
+        zs = -line.zs if image else line.zs
+        b2 = d**2 + (zs - zr) ** 2
         if walker == "source":
             # c (t - t_e) = |x(t_e) - listener|: the earlier root of a quadratic.
             a2 = c**2 - speed**2
-            b = c**2 * t + X0 * speed
-            cc = c**2 * t**2 - X0**2 - b2
+            b = c**2 * t + x0 * speed
+            cc = c**2 * t**2 - x0**2 - b2
             te = (b - np.sqrt(b**2 - a2 * cc)) / a2
             done = te > walked
-            te[done] = t[done] - math.sqrt(X1**2 + b2) / c
-            x = X0 + speed * np.clip(te, 0.0, walked)
+            te[done] = t[done] - math.sqrt(x1**2 + b2) / c
+            x = x0 + speed * np.clip(te, 0.0, walked)
         else:
-            x = X0 + speed * np.clip(t, 0.0, walked)
+            x = x0 + speed * np.clip(t, 0.0, walked)
             te = t - np.sqrt(x**2 + b2) / c
         r = np.sqrt(x**2 + b2)
         heard = (te >= 0.0) & (te < played)
@@ -164,16 +197,18 @@ def exact(walker, speed, tone, n, sent=False) -> np.ndarray:
             # From the source to the listener, or to the listener's image under the
             # ground for the reflection.
             along = -x if walker == "source" else x
-            across = D if walker == "source" else -D
-            up = (-ZR if image else ZR) - ZS
+            across = d if walker == "source" else -d
+            up = (-zr if image else zr) - line.zs
             ways = np.column_stack([along, np.full(n, across), np.full(n, up)])
             amplitude, phase = pattern(ways / np.linalg.norm(ways, axis=1, keepdims=True))
         out += np.where(heard, level * amplitude * np.sin(2.0 * np.pi * tone * te + phase), 0.0)
     return out
 
 
-def errors(wet: np.ndarray, field: np.ndarray, walked: float) -> dict:
-    lo, hi = int(MARGIN_S[0] * RATE), int((walked - MARGIN_S[1]) * RATE)
+def errors(wet: np.ndarray, field: np.ndarray, walked: float, heard_s: float = 0.0) -> dict:
+    """The waveform's error and the level's in windows, from ``heard_s`` (s, when the
+    first sound arrives) and MARGIN_S on."""
+    lo, hi = int((heard_s + MARGIN_S[0]) * RATE), int((walked - MARGIN_S[1]) * RATE)
     a, b = wet[lo:hi], field[lo:hi]
     window = int(WINDOW_S * RATE)
     levels = []
@@ -188,8 +223,8 @@ def errors(wet: np.ndarray, field: np.ndarray, walked: float) -> dict:
     }
 
 
-def run(walker, speed, ground, doppler, signals, step_m=STEP_M) -> tuple:
-    room = Room.from_scene(scene(walker, speed, ground, doppler))
+def run(walker, speed, ground, doppler, signals, step_m=STEP_M, line=None) -> tuple:
+    room = Room.from_scene(scene(walker, speed, ground, doppler, line=line))
     walk = simulate_walk(room, step_m=step_m, late_step_m=None)
     name = "s"
     return walk, [render_walk(walk, {name: s}, Mono())[:, 0] for s in signals]
@@ -262,6 +297,32 @@ def check_steps() -> list[dict]:
             f"{row['level_mean_db']:.3f} / {row['level_max_db']:.3f} dB",
             flush=True,
         )
+    return rows
+
+
+def check_flyover() -> list[dict]:
+    """A helicopter's flyover (:data:`FLYOVER`) with its places further and further
+    apart, at 250 Hz and 1 kHz: how far apart they may be 150 m up."""
+    line, speed = FLYOVER, FLYOVER_SPEED
+    walked = (line.x1 - line.x0) / speed
+    t = np.arange(int((walked + 0.5) * RATE)) / RATE
+    tones = TONES
+    # The first sound arrives this long after the walk starts.
+    heard = math.hypot(line.x0, line.d, line.zs - line.zr) / speed_of_sound(20.0)
+    rows = []
+    for step in FLYOVER_STEPS:
+        signals = [np.sin(2.0 * np.pi * tone * t) for tone in tones]
+        _, wets = run("source", speed, "hard", True, signals, step, line)
+        for tone, wet in zip(tones, wets, strict=True):
+            field = exact("source", speed, tone, len(wet), line=line)
+            row = {"step_m": step, "tone_hz": tone, **errors(wet, field, walked, heard)}
+            rows.append(row)
+            print(
+                f"places {step:4.1f} m apart  {tone:5.0f} Hz   waveform "
+                f"{row['waveform_db']:6.1f} dB, level {row['level_mean_db']:.3f} / "
+                f"{row['level_max_db']:.3f} dB",
+                flush=True,
+            )
     return rows
 
 
@@ -366,6 +427,9 @@ def main(argv=None) -> int:
     sent = check_emission()
     print("\nThe car at 1 kHz, its places further apart\n")
     steps = check_steps()
+    print("\nA helicopter's flyover, 150 m up at 63 m/s over a listener under its track,")
+    print("its places further apart\n")
+    flyover = check_flyover()
     print("\nWhite noise through the car's walk over grass: its energy per band re the source's")
     print("(dB), as rendered, through the places' impulse responses and from the pass-by's")
     print("sound exposure level, and the rendered sound's difference from each\n")
@@ -373,7 +437,8 @@ def main(argv=None) -> int:
     seconds = time.perf_counter() - started
     print(f"\n{seconds:.0f} s")
     if args.json:
-        out = {"field": rows, "emission": sent, "steps": steps, "levels": levels}
+        out = {"field": rows, "emission": sent, "steps": steps, "flyover": flyover}
+        out["levels"] = levels
         args.json.write_text(json.dumps(out, indent=2))
     return 0
 

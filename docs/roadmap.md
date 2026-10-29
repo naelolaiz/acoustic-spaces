@@ -346,8 +346,9 @@ Movement:
   checked against his worked example (`acoustic_spaces.rotorcraft`).
 - [ ] A helicopter's sound within its certified level: the AS350 B3's overflight comes
   out 3.4 dB over, nearly all of it Pegg's broadband noise of the main rotor.
-- [ ] A helicopter flying over: a flyover demo and a helicopter crossing over the
-  stadium concert.
+- [x] A helicopter flying over a meadow: the `helicopter_flyover` example and its
+  flyover demo, the rotors trimmed at the helicopter's airspeed against the wind.
+- [ ] A helicopter crossing over the stadium concert.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:

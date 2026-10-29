@@ -1,13 +1,14 @@
 # Demos
 
 Five demos run recordings through example scenes, mix them at the scenes' listeners and
-make a video of the result, and a sixth drives a car past the listeners of two outdoor
-examples. Each shows one space and one kind of sound: a symphony orchestra on the stage
-of a shoebox concert hall, a choir and an organ in a reverberant stone church, a band
-with its sound system and stage monitors in a stadium, the same band's song carried
-across a lake on a summer evening, a guide talking to a visitor who walks away from them
-through a gallery and then turns their head, and a car passing on a road across a meadow
-and along a street, its pitch falling as it goes by. None of them
+make a video of the result, a sixth drives a car past the listeners of two outdoor
+examples and a seventh flies a helicopter over those of a third. Each shows one space
+and one kind of sound: a symphony orchestra on the stage of a shoebox concert hall, a
+choir and an organ in a reverberant stone church, a band with its sound system and
+stage monitors in a stadium, the same band's song carried across a lake on a summer
+evening, a guide talking to a visitor who walks away from them through a gallery and
+then turns their head, a car passing on a road across a meadow and along a street, its
+pitch falling as it goes by, and a helicopter flying over a meadow. None of them
 stands for what the simulator does elsewhere; the [examples](examples.md) cover far
 more, and any scene makes a demo of its own with the recordings its sources are given
 ([a demo of any scene](#a-demo-of-any-scene)).
@@ -693,3 +694,69 @@ gives the three under its options as they change.
   their edges each shift in pitch their own way. Between the buildings the late sound,
   which keeps the engine's pitch, is strong in the bass, so the engine's tone falls less
   plainly than by the open road.
+
+## A helicopter flying over
+
+`flyover_demo.py` comes with the outdoor example `helicopter_flyover`: an Airbus
+Helicopters AS350 B3 flies over a meadow 150 m up at 63 m/s, against a light wind, and
+each listener hears one pass in turn: right under its track, 1.2 m above the grass,
+where the microphone of its noise certification stands, and 150 m to its left and to
+its right. It is the [car's demo](#a-car-passing-by) with the helicopter in the car's
+place (`acoustic_spaces.demos.helicopter`): the same steps, options and video, but for
+the car's sound.
+
+```sh
+acoustic-spaces examples --copy . helicopter_flyover && cd helicopter_flyover
+python flyover_demo.py all   # or helicopter, scene, walk, video one at a time
+```
+
+Options: `--speed 200` how fast it flies over the ground (km/h; without it, the speed of
+its walk, 226.8 km/h), `--step 4` how far apart it is simulated along its walk (m),
+`--hrtf me.sofa` a measured head, `--input helicopter=WAV` a dry recording of yours. Its
+900 m of flight take 14.3 s at 63 m/s.
+
+- **The helicopter** is the example's source `helicopter`, a point at the main rotor's
+  hub, with a walk 150 m up with Doppler, facing the way it flies. Its rotors are
+  trimmed for level flight ([Helicopters](outdoor.md#helicopters)), so a walk that
+  climbs or descends by more than 0.5 m is refused. They are trimmed at its airspeed:
+  its speed over the ground less the wind of the scene's own weather at its height, as
+  vectors, in the scene's air. In the example the wind blows against it at 4.5 m/s
+  150 m up (3 m/s at 10 m), so it flies through the air at 67.5 m/s. It faces along
+  its walk, so it does not turn into a wind from the side, as a helicopter flying
+  crabwise would: a wind along its track, or none, suits it best. The demo's scene
+  (`scene_demo.yaml`) has the helicopter alone with the sound power per octave band and
+  the directivity of its rotors' sound at that airspeed, the directivity in a table
+  beside it (`scene_demo_helicopter.csv`): 138.9 dB, 133.1 dB(A) in the example, which
+  its own scene has too.
+- **Its sound** is what the rotors send each way: each harmonic of each rotor's blade
+  passing frequency with a pattern and a phase of its own, and broadband noise. Each
+  early path plays what is sent the way it leaves the helicopter, at the time it leaves
+  ([the sound sent each way](spatial-audio.md#moving-sources-and-doppler)); the late
+  sound plays it averaged over the directions. It fades in and out over its first and
+  last second. `demo/helicopter/below.wav` is what they send straight down, dry, to
+  listen to. `--input helicopter=WAV` plays a dry recording instead, mixed down to mono,
+  at least as long as the pass, sent every way with the rotors' directivity; the
+  captions still give the rotors' model.
+- **The pass**: the helicopter every 4 m along its walk, simulated at each listener in
+  turn, as the car's. From 150 m up, places 4 m apart follow the exact field of a
+  flyover to within 55 dB at 4 kHz, more closely than the car's places 1 m apart
+  ([validation](validation.md#moving-sources-against-the-exact-field)). Over the grass
+  the bands up to 500 Hz come from the wide-angle parabolic equation where the sound
+  comes in at 34° from the horizontal or flatter (`parabolic_equation: wide_angle`, as
+  the narrow-angle one holds within some 15°), and the rays give the rest
+  ([how the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)). The
+  wind bends the sound the helicopter sends ahead up and the sound it leaves behind
+  down, and the eddies (`moderate` at 2 m, weaker higher up) make it flicker in the
+  bands the rays give.
+
+What it leaves out: the rotors' model is louder than the helicopter's noise
+certificate. Flown over the microphone as the certification does, it gives a sound
+exposure level of 88.0 dB(A) where the AS350 B3 is certified at 84.6 dB(A), nearly all
+of it the main rotor's broadband noise (see
+[Validation](validation.md#helicopter-rotors-against-theory-and-a-certified-level)).
+The helicopter keeps one trim along its walk, as in steady level flight: the slap of
+the blades meeting the vortices of those ahead, as a helicopter makes descending or
+turning, and the loads that change round each turn are left out. The eddies flicker
+at the pace of their drift in the wind, not that of the helicopter sweeping the paths
+through them, and they are checked for sources up to 10 m up, not 150 m.
+

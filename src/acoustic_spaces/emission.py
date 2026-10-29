@@ -13,7 +13,9 @@ What the early paths carry then comes from the emission alone: each path's share
 the source's directivity is taken out of its filter. The directivity still gives the
 levels the simulation reports and the late part, which plays the emission's sound
 averaged over the directions (:meth:`Emission.averaged`). For the two to agree, give
-the source the emission's own directivity (:meth:`Emission.directivity`).
+the source the emission's own directivity (:meth:`Emission.directivity`, written for a
+scene by :func:`acoustic_spaces.directivity.write_directivity_csv`) and, for an
+emission in pascals 1 m away, its sound power (:meth:`Emission.sound_power_db`).
 
 - :class:`Mixture` is made of signals that do not correlate with one another
   (harmonics, as a cosine and a sine each, and noises in separate bands), each with an
@@ -21,6 +23,7 @@ the source the emission's own directivity (:meth:`Emission.directivity`).
 - :class:`Periodic` is a sound that repeats, such as a rotor's tones: one period of it
   in every direction, which keeps a long walk's emission small.
 - :class:`Sum` sends several emissions at once, such as a helicopter's two rotors.
+- :class:`Faded` fades one in and out, so that it does not start or stop at once.
 """
 
 from __future__ import annotations
@@ -78,10 +81,24 @@ class Emission:
         """The emission's directivity: its energy in each band and direction, on the
         grid ``GRID_STEP_DEG`` apart that measured balloons use, over the sphere's
         mean."""
+        return Balloon.from_table(self._grid_powers(bands), name)
+
+    def sound_power_db(
+        self, density: float, sound_speed: float, bands: Resolution = "octave"
+    ) -> np.ndarray:
+        """The sound power level (dB re 1 pW) in each band of an emission that sends
+        the far field's pressure 1 m from the source (Pa): its mean square over the
+        sphere times 4π m² over the air's impedance, ``density`` times
+        ``sound_speed``."""
+        watts = 4.0 * np.pi * sphere_mean(self._grid_powers(bands)) / (density * sound_speed)
+        return 10.0 * np.log10(np.maximum(watts, 1e-30) / 1e-12)
+
+    def _grid_powers(self, bands: Resolution) -> np.ndarray:
+        """(elevations, azimuths, bands) the mean square sent each way of the grid
+        ``GRID_STEP_DEG`` apart, in each band."""
         elevation, azimuth = _grid(GRID_STEP_DEG)
         ways = _from_angles(azimuth[None, :], elevation[:, None]).reshape(-1, 3)
-        powers = self._powers(bands, ways)
-        return Balloon.from_table(powers.reshape(len(elevation), len(azimuth), -1), name)
+        return self._powers(bands, ways).reshape(len(elevation), len(azimuth), -1)
 
     def _powers(self, bands: Resolution, directions: np.ndarray) -> np.ndarray:
         """(n, bands) the mean square of the sound sent the ways ``directions`` (n, 3),
@@ -345,4 +362,52 @@ class Sum(Emission):
         return np.sum(powers, axis=0)
 
 
-__all__ = ["Emission", "Mixture", "Periodic", "Sum"]
+@dataclass(frozen=True)
+class Faded(Emission):
+    """An emission's first ``length`` samples, faded in over the first ``fade`` and out
+    over the last, by a squared sine, so that it does not start or stop at once. Its
+    bands and its directivity are the emission's own."""
+
+    part: Emission = dataclasses.field(repr=False)
+    fade: int = 0
+    #: How many samples of it are sent.
+    length_samples: int = 0
+
+    def __post_init__(self) -> None:
+        if not 0 < self.length_samples <= self.part.length:
+            raise ValueError(f"a faded emission sends 1 to {self.part.length} samples")
+        if not 0 <= 2 * self.fade <= self.length_samples:
+            raise ValueError("an emission fades in and out over half its length at most")
+
+    @property
+    def sample_rate(self) -> int:  # type: ignore[override]
+        return self.part.sample_rate
+
+    @property
+    def length(self) -> int:
+        return self.length_samples
+
+    def _ramp(self, start: int, stop: int) -> np.ndarray:
+        """(stop - start,) the fade's gain at the samples ``start`` to ``stop``."""
+        k = np.arange(start, stop)
+        inside = (k >= 0) & (k < self.length_samples)
+        if self.fade == 0:
+            return inside.astype(float)
+        edge = np.minimum(k, self.length_samples - 1 - k)
+        ramp = np.sin(0.5 * np.pi * np.clip(edge / max(self.fade - 1, 1), 0.0, 1.0)) ** 2
+        return np.where(inside, ramp, 0.0)
+
+    def sent(self, start: int, stop: int, directions: np.ndarray) -> np.ndarray:
+        return self.part.sent(start, stop, directions) * self._ramp(start, stop)
+
+    def averaged(self) -> np.ndarray:
+        return self.part.averaged()[: self.length_samples] * self._ramp(0, self.length_samples)
+
+    def scaled(self, gain: float) -> Faded:
+        return Faded(self.part.scaled(gain), self.fade, self.length_samples)
+
+    def _powers(self, bands: Resolution, directions: np.ndarray) -> np.ndarray:
+        return self.part._powers(bands, directions)
+
+
+__all__ = ["Emission", "Faded", "Mixture", "Periodic", "Sum"]

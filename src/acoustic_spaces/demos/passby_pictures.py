@@ -1,5 +1,5 @@
 """The pictures of the pass-by demos (:mod:`acoustic_spaces.demos.passby`): the scene from
-above with the car where it is at that moment and the listener of the moment, under it
+above with the vehicle where it is at that moment and the listener of the moment, under it
 the level heard there over the pass, as simulated, and what the pass gives there; the
 frame round them is the demos' (:mod:`acoustic_spaces.demos.pictures`)."""
 
@@ -52,9 +52,9 @@ class Pictures(scene_pictures.Pictures):
     of it (:meth:`still`) and a :meth:`thumbnail`.
 
     ``scene`` is scene_demo.yaml as data, ``outline`` the model's edges from above,
-    ``facts`` the passes' walk.json (the car's places and, per listener, the level heard
-    along the pass and what it gives), ``seats`` their entries of seats.json, ``stops``
-    the tour and ``path`` the car's knots
+    ``facts`` the passes' walk.json (the vehicle's places and, per listener, the level
+    heard along the pass and what it gives), ``seats`` their entries of seats.json,
+    ``stops`` the tour and ``path`` the vehicle's knots
     (:class:`~acoustic_spaces.walkthrough.Knots`)."""
 
     def __init__(
@@ -71,9 +71,10 @@ class Pictures(scene_pictures.Pictures):
         fmt: str = "binaural",
     ):
         heard = facts["listeners"]
+        noun = facts.get("source", CAR)
         movement = {
             "times": facts["times"],
-            "levels_a_db": {name: {CAR: v["levels_a_db"]} for name, v in heard.items()},
+            "levels_a_db": {name: {noun: v["levels_a_db"]} for name, v in heard.items()},
         }
         super().__init__(
             scene,
@@ -81,11 +82,11 @@ class Pictures(scene_pictures.Pictures):
             {"responses": []},
             seats,
             stops,
-            playing=[CAR],
+            playing=[noun],
             credit=credit,
             tool=tool,
             fmt=fmt,
-            paths={("sources", CAR): path},
+            paths={("sources", noun): path},
             movement=movement,
         )
         self.facts, self.heard = facts, heard
@@ -109,14 +110,14 @@ class Pictures(scene_pictures.Pictures):
         super().draw_scene(img, plan, current, t)
 
     def label_source(self, draw, at: tuple[float, float], r: float, name: str, f) -> None:
-        """The car's name under it, clear of the listeners beside the road."""
+        """The vehicle's name under it, clear of the listeners beside its way."""
         text(draw, (at[0], at[1] + r + 3), name, f, MUTED, "ma")
 
     # -- what is heard -----------------------------------------------------------------
 
     def heard_at(self, listener: str, t: float) -> float | None:
         """The A-weighted level heard at ``listener`` ``t`` s into its pass (dB), as
-        simulated; None before the car's sound arrives and after its last place's."""
+        simulated; None before the vehicle's sound arrives and after its last place's."""
         times = self.heard[listener]["heard_s"]
         if not times[0] <= t <= times[-1]:
             return None
@@ -138,13 +139,11 @@ class Pictures(scene_pictures.Pictures):
         ]
         if stop.gain_db > 0.5:
             lines.append(f"Turned up {stop.gain_db:.0f} dB here so you can hear it")
-        lines.append(
-            (
-                f"A car at {self.facts['speed_kmh']:g} km/h, "
-                f"{self.facts['sound_power_a_db']:.1f} dB(A) of sound power (CNOSSOS-EU)",
-                MUTED,
-            )
+        about = self.facts.get("about") or (
+            f"A car at {self.facts['speed_kmh']:g} km/h, "
+            f"{self.facts['sound_power_a_db']:.1f} dB(A) of sound power (CNOSSOS-EU)"
         )
+        lines.append((about, MUTED))
         if self.fmt == "binaural":
             lines.append(("L and R mark your ears", MUTED))
         return lines
@@ -209,7 +208,7 @@ class Pictures(scene_pictures.Pictures):
     # -- the pictures ------------------------------------------------------------------
 
     def still(self, k: int, t: float | None = None) -> Image.Image:
-        """The still of stop ``k``, ``t`` s into its pass, the car where it is then."""
+        """The still of stop ``k``, ``t`` s into its pass, the vehicle where it is then."""
         stop = self.stops[k]
         img = canvas()
         draw = ImageDraw.Draw(img)
@@ -234,7 +233,7 @@ class Pictures(scene_pictures.Pictures):
         return img
 
     def thumbnail(self) -> Image.Image:
-        """The scene with the car where the first listener hears it loudest."""
+        """The scene with the vehicle where the first listener hears it loudest."""
         img = canvas(THUMBNAIL)
         first = self.stops[0].key
         self.draw_scene(img, self.plan(560, 60, 680, 600), first, self.heard[first]["max_s"])

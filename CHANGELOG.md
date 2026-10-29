@@ -38,6 +38,18 @@
   which may turn with a rotor and be sent from off the source's place; `emission.Sum`
   adds emissions up; every `Emission` gives its `directivity()`. `air.density` gives
   the density of dry air.
+- A helicopter flying over: the `helicopter_flyover` example, an AS350 B3 150 m up at
+  63 m/s over a meadow, against a light wind and through eddies, heard right under its
+  track and 150 m to its left and right, and `flyover_demo.py`, which plays its rotors'
+  sound down each early path with Doppler, the rotors trimmed at its airspeed (its
+  speed over the ground less the wind at its height). The pass-by demo takes the
+  vehicle that goes past (`demos.passby.Vehicle`; `demos.helicopter`); the car's demos
+  are unchanged. From 150 m up, places 4 m apart follow the exact field of a flyover
+  to within 55 dB at 4 kHz (`validation/doppler.py`), so the demo simulates the
+  helicopter every 4 m.
+- `Emission.sound_power_db` gives an emission's sound power per band, `emission.Faded`
+  fades one in and out, and `directivity.write_directivity_csv` writes a directivity
+  as a CSV table a scene reads.
 
 ## 4.0.1
 

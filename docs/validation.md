@@ -2650,6 +2650,31 @@ most.
 The delays are curves through the places, so the further apart the places, the more
 they stray between them; up to 1 m they hardly do.
 
+**A helicopter's places.** A source flying over a listener 150 m up at 63 m/s, from
+300 m before it to 300 m past, over the rigid ground, the listener 1.2 m up right under
+its track, as in a helicopter's flyover, with its places further apart (the level's
+windows from 0.3 s after the first sound arrives):
+
+| places apart | tone | waveform | level |
+|---|---|---|---|
+| 1 m | 250 Hz | -71.8 dB | 0.000 / 0.001 dB |
+| | 1 kHz | -71.8 dB | 0.000 / 0.003 dB |
+| | 4 kHz | -67.9 dB | 0.000 / 0.005 dB |
+| 4 m | 250 Hz | -71.3 dB | 0.001 / 0.015 dB |
+| | 1 kHz | -66.8 dB | 0.002 / 0.045 dB |
+| | 4 kHz | -55.1 dB | 0.004 / 0.089 dB |
+| 8 m | 250 Hz | -63.0 dB | 0.003 / 0.094 dB |
+| | 1 kHz | -50.3 dB | 0.007 / 0.202 dB |
+| | 4 kHz | -37.2 dB | 0.019 / 0.309 dB |
+| 16 m | 250 Hz | -45.8 dB | 0.015 / 0.813 dB |
+| | 1 kHz | -32.2 dB | 0.026 / 0.478 dB |
+| | 4 kHz | -19.4 dB | 0.074 / 0.993 dB |
+
+From 150 m up the delays curve far less than from a road 10 m away, so places 4 m
+apart follow the field to within 55 dB at 4 kHz, more closely than the car's places 1 m
+apart (45.4 dB at 4 kHz); the [flyover demo](demos.md#a-helicopter-flying-over)
+simulates its helicopter every 4 m.
+
 **The levels.** White noise through the car's walk over grass (Miki's impedance, 200
 kPa s/m²), 16 noises up to 18 kHz: the energy of the sound in each octave band over the
 pass-by, relative to the source's, against the noise through each place's own impulse

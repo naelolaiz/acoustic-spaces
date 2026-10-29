@@ -1070,11 +1070,22 @@ dB(A) on its own). Pegg's method is a correlation of the 1970s' measurements; in
 own worked example the band of the broadband peak comes out 5 dB over the level
 measured there, though a tone of the tail rotor falls in that band too.
 
+A scene's source carries the sound power and the directivity of what the rotors send,
+for the levels the simulation and the pass-by report and for the late part:
+`sent.sound_power_db(trim.density, trim.sound_speed)` gives the one per octave band
+and `sent.directivity()` the other, which
+`acoustic_spaces.directivity.write_directivity_csv` writes as a table a scene reads
+(`directivity: {file: helicopter.csv}`). The `helicopter_flyover` example has them for
+an AS350 B3 150 m up at 63 m/s against a light wind, and its
+[flyover demo](demos.md#a-helicopter-flying-over) flies it over a meadow, its rotors
+trimmed at its airspeed: its speed over the ground less the wind at its height.
+
 What it leaves out: loads that change round the turn (in forward flight the
 advancing blade carries less lift than the retreating one, and the blades flap), the
 blades meeting the tip vortices of those ahead (blade-vortex interaction, the slap
-of a descent or a turn), the engine and the gearbox, the fuselage's reflection and
-shadow, and wind: the air is still and the airspeed is the speed over the ground.
+of a descent or a turn), the engine and the gearbox, and the fuselage's reflection and
+shadow. `trim` takes the airspeed it is given, through still air: the flyover demo
+gives it the speed over the ground less the wind.
 
 ## In the editor
 

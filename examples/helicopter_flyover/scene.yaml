@@ -1,0 +1,51 @@
+# Outdoors: a helicopter flying over a meadow 150 m up at 63 m/s, heard right under its
+# track 1.2 m above the grass, where the microphone of its noise certification stands,
+# and 150 m to its left and to its right. Its two rotors send each harmonic of their
+# blades' passing with a pattern of its own, louder to its left, the side where the main
+# rotor's blades advance, and broadband noise; the sound comes down to the meadow and
+# off it, its pitch falling as the helicopter passes (Doppler). A light wind blows
+# against it along its track, so the sound it sends ahead bends up and the sound it
+# leaves behind bends down, and eddies make it flicker. flyover_demo.py plays it past
+# each listener.
+name: Helicopter over a meadow
+geometry:
+  ground:
+    extent: [[-550, -250], [550, 250]]
+    sky: 200
+materials:
+  meadow:
+    impedance: grass
+assignments:
+  ground: meadow
+atmosphere:
+  wind: {speed_m_s: 3, direction_deg: 180}
+  turbulence: {preset: moderate, height_m: 2}  # weaker higher up
+sources:
+  # An Airbus Helicopters AS350 B3 at its maximum mass of 2,250 kg, the sound of its
+  # rotors from acoustic_spaces.rotorcraft at its airspeed (its 63 m/s over the ground
+  # and the wind against it): the sound power per octave band and the directivity
+  # (helicopter.csv) of what they send, which flyover_demo.py plays down each path.
+  - name: helicopter
+    position: [-450, 0, 150]
+    level_db: [134.8, 130.4, 131.2, 130.5, 127.1, 125.2, 122.1, 121.7]
+    directivity: {file: helicopter.csv}
+    walk:
+      to: [[450, 0, 150]]
+      speed_m_s: 63
+      doppler: true
+listeners:
+  - name: under_track
+    position: [0, 0, 1.2]
+    orientation: {yaw: 90}
+  - name: left_150m
+    position: [0, 150, 1.2]
+    orientation: {yaw: -90}
+  - name: right_150m
+    position: [0, -150, 1.2]
+    orientation: {yaw: 90}
+simulation:
+  early: {method: image_sources, max_order: 1, diffraction: none, parabolic_equation: wide_angle}
+  late: {method: stochastic_ray_tracing}
+  ir_length_s: 2.0
+outputs:
+  - mono
