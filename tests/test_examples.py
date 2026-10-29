@@ -336,20 +336,6 @@ def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
             assert (copy / name).read_bytes() == (folder / name).read_bytes(), name
 
 
-def test_the_stadium_sound_system_alone_is_the_concerts(tmp_path: Path) -> None:
-    """stadium_pa, the sound system alone, is merged into stadium_concert: its former
-    name finds the concert and its demos, whose Monitors and Stage left out give it."""
-    assert "stadium_pa" not in NAMES
-    assert example_path("stadium_pa") == example_path("stadium_concert")
-    assert demo_for("stadium_pa").script == demo_for("stadium_concert").script
-    scene = Scene.from_yaml(example_path("stadium_pa"))
-    alone = [s.name for s in scene.sources if s.in_use and s.group != "Monitors"]
-    assert len(alone) == 15 and "subs" in alone and "vocal_wedges" not in alone
-    copied = copy_examples(tmp_path, ["stadium_pa"])
-    assert copied == [tmp_path / "stadium_pa" / "scene.yaml"]
-    assert copied[0].read_bytes() == example_path("stadium_concert").read_bytes()
-
-
 def test_the_stadium_crowds_scatter_as_measured() -> None:
     """The crowds of the stadium concert and of the concert stage scatter as a measured
     theatre audience does, little at 125 Hz and most from 1 kHz up, not at one value in

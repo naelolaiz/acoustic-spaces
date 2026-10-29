@@ -182,15 +182,14 @@
   outdoors (-inf where none arrives). Every other place's levels are unchanged.
 - One stadium: `stadium_pa` is merged into `stadium_concert`, whose sound system plays
   alone, for the crowd, with its Monitors and Stage groups left out, as `stadium_pa`
-  had it. The name `stadium_pa` still finds it (`examples`, `examples --copy`, which
-  copies it under that name). The concert's description takes the map's notes,
-  measured on it: on the pitch from the mix position back, nine points in ten within
-  2.6 dB, the map in under five minutes on 4 cores. The two had drifted apart: since
-  the tuning of 23 October `stadium_pa`'s front fills played at 122 dB and the
-  concert's at 116 dB, which it keeps; at 122 dB they brought the front rows up to
-  104.5 dB(A), 7 dB over the mix position. The test of the stadium examples' shared
-  parts compares each of `concert_stage`'s sources and listeners with the concert's one
-  by one, which would have caught it. The memory estimate's checks in the docs, in one
+  had it. The concert's description takes the map's notes, measured on it: on the
+  pitch from the mix position back, nine points in ten within 2.6 dB, the map in under
+  five minutes on 4 cores. The two had drifted apart: since the tuning of 23 October
+  `stadium_pa`'s front fills played at 122 dB and the concert's at 116 dB, which it
+  keeps; at 122 dB they brought the front rows up to 104.5 dB(A), 7 dB over the mix
+  position. The test of the stadium examples' shared parts compares each of
+  `concert_stage`'s sources and listeners with the concert's one by one, which would
+  have caught it. The memory estimate's checks in the docs, in one
   batch and in the default 10, are measured again on `stadium_concert`.
 
 ## 4.0.1

@@ -283,11 +283,10 @@ Examples:
 
 - [x] A concert in a stadium with a sound system: main line arrays, subwoofers, fills,
   delay towers and delays timed to them, with the stage's monitors (`stadium_concert`,
-  into which `stadium_pa`, the sound system alone, is merged: its stage and monitors
-  left out give it); the stage alone with the singer's microphone's gain before
-  feedback (`concert_stage`); every array added up box by box near its listeners; the
-  system tuned at the mix position, as a system engineer tunes it; and the editor's
-  examples in groups.
+  whose sound system plays alone with its stage and monitors left out); the stage
+  alone with the singer's microphone's gain before feedback (`concert_stage`); every
+  array added up box by box near its listeners; the system tuned at the mix position,
+  as a system engineer tunes it; and the editor's examples in groups.
 - [x] Demos with their scripts: a choir and an organ in the church, a band with its
   sound system in the stadium (one of three songs) and a song carried across a lake by
   a lawn concert's line arrays and subwoofers, in the evening's weather and in still
