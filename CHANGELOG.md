@@ -2,23 +2,22 @@
 
 ## Unreleased
 
-- Standard errors: the late rays are traced in batches (`simulation.late.batches`, 10
-  by default; **Batches** in the editor), each with the random streams of its share of
-  the rays: the same rays as at once, with the same result but for rounding, which can
-  tip a split or a roulette the other way. A jackknife over the batches gives each
-  parameter its standard error, one standard deviation of how much it would change
-  between runs with other seeds: in `parameters.json` (`standard_errors`), as the
-  largest in JNDs from 125 Hz to 4 kHz in `simulate`'s output (with a suggestion of
-  more rays when it is over half a JND, `compare.CONVERGED_JND`), and in the tips of
-  the editor's results, amber over half a JND (`Response.standard_errors()`,
-  `compare.in_jnds()`). Over 60 seeds of a diffuse box, their root mean square came
-  within 0.91 to 1.18 of the spread between the runs. The 10 batches make the late part 10 to 16 % slower in
-  the shoebox and concert hall examples on 4 cores and take about an eighth more of its
-  memory, which the estimate of a run's memory includes; `batches: 1` traces the rays
-  at once.
+- Standard errors: the late rays are traced in batches (`simulation.late.batches`, 10 by
+  default; **Batches** in the editor), each with the random streams of its share of the
+  rays: the same rays as at once, with the same result but for rounding, which can tip a
+  split or a roulette the other way. A jackknife over the batches gives each parameter
+  its standard error, one standard deviation of how much it would change between runs
+  with other seeds: in `parameters.json` (`standard_errors`), as the largest in JNDs
+  from 125 Hz to 4 kHz in `simulate`'s output (with a suggestion of more rays when it is
+  over half a JND, `compare.CONVERGED_JND`), and in the tips of the editor's results,
+  amber over half a JND (`Response.standard_errors()`, `compare.in_jnds()`). Over 60
+  seeds of a diffuse box, their root mean square came within 0.91 to 1.18 of the spread
+  between the runs. The 10 batches make the late part 10 to 16 % slower in the shoebox
+  and concert hall examples on 4 cores and take about an eighth more of its memory,
+  which the estimate of a run's memory includes; `batches: 1` traces the rays at once.
 - EDT's line fit starts at the onset in every response. The decay curve was taken
-  against the response's total, summed in another order than the curve, so it started
-  a rounding above or below 0 dB, and above it the fit left out the slot holding the
+  against the response's total, summed in another order than the curve, so it started a
+  rounding above or below 0 dB, and above it the fit left out the slot holding the
   direct sound: in 99 of the 152 octave-band EDTs of six examples (at 5,000 rays), by up
   to 9.6 % (in `studio`). EDT of measured responses, read sample by sample, moves by
   0.05 % at most in BRAS, whose `measured.json` files are made again.
@@ -26,8 +25,45 @@
   faces meet along the line, not only past the ends of open edges, and drops a sliver
   whose own corner lies on the edge it closes (within 10 µm, `T_JUNCTION_TOLERANCE_M`)
   instead of splitting it into two faces with a repeated corner. The BRAS auditorium
-  (CR4) is now closed, 8,656.6 m³; it had two open edges, 50 faces with a repeated corner
-  and no volume. No example's model changes, nor those of BRAS CR2 and CR3.
+  (CR4) is now closed, 8,656.6 m³; it had two open edges, 50 faces with a repeated
+  corner and no volume. No example's model changes, nor those of BRAS CR2 and CR3.
+- Behind a barrier on a hard ground with `first_order`, the path over the top with the
+  reflection off the ground behind it is kept where the reflection off the ground before
+  the barrier is found. Both come from the source's image in the ground, and the edge
+  diffraction took the one it found for the geometric wave of both, so 4 m behind a
+  barrier 3 m high the level stepped by 0.35 dB at 63 Hz where the listener rose into
+  sight of that reflection, and stayed 0.33 dB low above. With `both_sides` it now
+  follows the exact level within 0.05 dB in every band. No example changes; in BRAS CR2,
+  12 terms over its 10 pairs that were left out count now, which moves the early level
+  by up to 0.8 dB at 63 Hz.
+- The validation report's measured rooms hold four of BRAS's, all run again with this
+  version (see [Validation](docs/validation.md#measured-rooms-bras)): the coupled rooms
+  (CR1, a reverberation chamber and a laboratory with the door between them open by
+  4.1°) and the auditorium (CR4) beside the seminar room and the hall. With the fitted
+  absorption the auditorium's decay comes out 12 to 21 % long from 125 Hz to 4 kHz, and
+  its clarity within about one JND; calibrated on one loudspeaker position's responses,
+  its T20 and T30 at the other come within 0.7 JNDs on average. In the coupled rooms the
+  chamber's sound decays as two-room theory gives for the model's slit by the door,
+  within 4 %, but the real rooms are joined about ten times more strongly, so its EDT
+  and T20 come out 2 to 25 JNDs long from 63 Hz to 2 kHz. G is compared from seat to
+  seat, as the level of the measured responses is uncertain by about 3 dB; the report
+  gives the offset, with checks against diffuse theory and the direct sound. IACC_E and
+  IACC_L are compared with BRAS's binaural responses in the seminar room, the hall and
+  the auditorium (`validation/bras_binaural.py`, with FABIAN's head-related impulse
+  responses and the directivity of the QSC K8 loudspeakers): IACC_L is within one JND in
+  19 to 25 of each room's 30 loudspeaker and band values, IACC_E in 16 to 26, low in the
+  hall from 500 Hz to 2 kHz where many diffracted paths arrive together (see below). The
+  tables give each room's largest standard error, and in the coupled rooms each source's
+  averages. Since 4.0.1 the seminar room's and the hall's average differences in each
+  band move by 0.15 JNDs at most, but for the calibrated hall's (up to 0.67 JNDs), whose
+  fit lands on slightly different coefficients.
+- Known issue, documented: above the bands that add in pressure, a rendered response
+  adds the early paths that arrive within a fraction of a band's period of one another
+  in amplitude, where the echogram adds them in energy. Many diffracted paths do: at the
+  dummy head in the BRAS hall they render 64, 9 and 6 times their energy in the echogram
+  at 250 Hz, 500 Hz and 1 kHz, in the examples with edges 0.4 to 1.5 times from 250 Hz
+  up. The parameters `simulate` reports come from the echograms and are not affected
+  (see [Validation](docs/validation.md#known-issues)).
 
 ## 4.0.1
 

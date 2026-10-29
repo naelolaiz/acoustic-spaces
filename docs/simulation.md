@@ -610,7 +610,7 @@ The estimate leaves out the model, a simulation's early paths and a GPU driver's
 memory. The early paths take little beside the late part at a few listeners, but not in
 a room of many facets with edge diffraction, where the edge fade keeps the pieces of
 the waves round the edges in single precision: about 17 million at the third listener of
-BRAS CR3 in third-octave bands. Its run peaks at 10.0 GiB (11.7 GiB in third-octave
+BRAS CR3 in third-octave bands. Its run peaks at 10.0 GiB (11.8 GiB in third-octave
 bands), nearly all of it at one listener: the edge fade hands it back before the next,
 and in third-octave bands each listener's starts from less than 0.9 GiB. On the CPU
 the estimate came within 1 MiB of the late part's measured peak in `shoebox` at 1, 4
@@ -750,10 +750,14 @@ box, ISO 3382-1 parameters of known decays, spatial encoders against closed form
 convolvers against direct convolution, and sweep measurements of synthetic rooms. A
 cross-check against pyroomacoustics in four rooms agrees within 5 % on T30 with the same
 scattering model, from purely specular to fully diffusing surfaces.
-Against measurements in two rooms of the BRAS benchmark, a seminar room comes out
-within 2 % on reverberation time from 500 Hz to 4 kHz and within one JND on clarity, and
-a chamber music hall within about one JND on clarity and 7 to 20 % long on reverberation
-time. Edge diffraction
+Against measurements in four rooms of the BRAS benchmark, a seminar room comes out
+within 2 % on reverberation time from 500 Hz to 4 kHz and within one JND on clarity,
+and a chamber music hall and an auditorium within about one JND on clarity and 6 to
+10 % and 12 to 21 % long on reverberation time (from 250 and 125 Hz to 4 kHz), which
+comes within about one JND once their absorption is fitted with this package's own
+rays. The model of two coupled rooms joins them about ten times less than the real
+rooms are joined, and IACC_L comes within one JND of binaural responses in 19 to 25 of
+30 values per room. Edge diffraction
 is checked against the exact solutions for a half-plane and for wedges, against
 Maekawa's chart, and over two edges against the exact BTM solution. The
 wave solver matches the frequencies of a box's modes within 0.25 % and their decay rates

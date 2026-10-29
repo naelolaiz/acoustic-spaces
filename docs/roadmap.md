@@ -120,11 +120,6 @@ Edge diffraction:
   has it, and kept where its path appears round the edge's end. Past a thin screen's
   corner the edge diffraction steps by 2.8 dB at 63 Hz, and along the `street` the
   level by up to 1.42 dB in a band (0.52 dB(A)).
-- [ ] The path over a barrier's top with the reflection off the ground behind it, kept
-  where the reflection before the barrier is found: 4 m behind a barrier 3 m high on a
-  hard ground the level steps by 0.35 dB at 63 Hz with `first_order`. A fix that tells
-  the two apart changes BRAS CR2's early level by up to 0.8 dB at 63 Hz; checked against
-  BRAS before it goes in.
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
@@ -461,3 +456,21 @@ Next version:
   in `parameters.json`, `simulate`'s output and the editor's results; checked against
   the spread over seeds.
 - [x] EDT's line fit always from the onset, however the energy is summed.
+- [x] The path over a barrier's top with the reflection off the ground behind it, kept
+  where the reflection before the barrier is found: behind a barrier on a hard ground
+  the level follows the exact one within 0.05 dB with `first_order` and `both_sides`,
+  instead of stepping by 0.35 dB at 63 Hz. Checked against BRAS: the seminar room's and
+  the hall's average differences from the measurement move by 0.15 JNDs at most in
+  each band, but for the calibrated hall's (0.67), whose fit lands on other
+  coefficients.
+- [x] Models cleaned where an edge runs past a corner at which three faces meet: BRAS's
+  auditorium (CR4) is closed.
+- [x] More measured rooms: BRAS's coupled rooms (CR1, the door open by 4.1°) and
+  auditorium (CR4) beside the seminar room and the hall, G from seat to seat in all four
+  with the measured level's 3 dB question reported, IACC of FABIAN's binaural responses
+  in three (`validation/bras_binaural.py`), and each run's largest standard error.
+- [ ] BRAS's coupled rooms with the door open by 30.4°, whose model has no closed inside:
+  the door leaf cuts some 2 cm into the wall at its hinge.
+- [ ] Early paths that arrive together added in energy in rendered responses, as in the
+  echogram: many diffracted paths now add in amplitude there, up to 64 times their
+  energy at 250 Hz at the dummy head in the BRAS hall.

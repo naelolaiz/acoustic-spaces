@@ -283,9 +283,10 @@ materials, with words to search for as in the built-in database, and in the edit
 **Edit > Add material from a library** picks one. The `material_libraries` example
 takes its carpet and walls from a CATT file and its ceiling from an ODEON one.
 
-Two rooms of the BRAS benchmark, converted from its SketchUp models, are in
+Four rooms of the BRAS benchmark, converted from its SketchUp models, are in
 [`validation/bras`](https://github.com/naelolaiz/acoustic-spaces/blob/main/validation/bras)
-as scenes with their surface data and measurements.
+as scenes with their surface data and measurements (the coupled rooms twice, with the
+door between them at two angles).
 
 ## Walls, doors and openings
 

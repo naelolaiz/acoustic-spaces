@@ -205,10 +205,12 @@ T30 after       0.04    0.07    0.07    0.11    0.08    0.08    0.06    0.09
   reported after the fit come from a last trace. A round costs about one simulation of the measured sources at the scene's rays
   (`--rays` overrides them).
 - It needs stochastic ray tracing in octave bands, without the wave solver.
-- On the two measured rooms of the validation report, fitted to one loudspeaker
-  position from tabulated absorption, the responses at the other position come within
-  about one JND: as close as with the absorption BRAS fitted with Eyring's formula, or
-  closer.
+- On the measured rooms of the validation report, fitted to one loudspeaker position
+  from tabulated absorption, the responses at the other position come within about one
+  JND in the seminar room, as with the absorption BRAS fitted with Eyring's formula,
+  and closer than with it on the decay in the hall and the auditorium. Coupled rooms
+  need responses in each room: fitted to the loudspeaker in one of BRAS's two coupled
+  rooms, the responses to the one in the other come out 55 JNDs off in EDT.
 
 The `fitting` example goes through it with made-up measurements of a seminar room whose
 back wall was built without the absorbing panels of its design.
