@@ -359,6 +359,8 @@ Movement:
 
 Editor:
 
+- [x] A simpler Run demo window: the options that change what a demo plays, in words,
+  and the step, the paths, what fine-tunes a run and the command under Advanced.
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.

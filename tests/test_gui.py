@@ -2651,6 +2651,37 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     assert dialog.command.text() == "python stadium_demo.py all"
     assert str(demo.folder) in dialog.folder.text()
     assert dialog.chosen()[1] == ALL
+    # The form shows what changes what the demo plays, labelled in words with the flag
+    # in the tip; Advanced, shut until asked, the step, the files and folders, what
+    # fine-tunes the run and the command.
+    labels = {
+        dialog.options.layout().labelForField(w).text(): name
+        for name, w in dialog.fields.items()
+        if dialog.options.isAncestorOf(w)
+    }
+    assert labels == {
+        "Song": "song",
+        "Your own song": "music",
+        "Stems": "stems",
+        "Format": "format",
+        "HRTFs": "hrtf",
+        "What the sources play": "inputs",
+    }
+    assert "(--song)" in dialog.options.layout().labelForField(dialog.fields["song"]).toolTip()
+    for name in ("work", "results", "source", "scene", "tour", "bpm", "again"):
+        assert dialog.advanced.isAncestorOf(dialog.fields[name]), name
+    assert dialog.advanced.isAncestorOf(dialog.step) and dialog.advanced.isAncestorOf(
+        dialog.command
+    )
+    assert dialog.advanced.isHidden() and not dialog.more.isChecked()
+    dialog.more.setChecked(True)
+    assert not dialog.advanced.isHidden()
+    dialog.picker.setCurrentIndex(dialog.picker.findData("crossing"))  # stays open
+    assert not dialog.advanced.isHidden() and dialog.advanced.isAncestorOf(dialog.fields["work"])
+    assert dialog.options.isAncestorOf(dialog.fields["height"])
+    dialog.picker.setCurrentIndex(dialog.picker.findData("stadium"))
+    dialog.more.setChecked(False)
+    assert dialog.advanced.isHidden()
 
     # A field that differs shows in the command, and the song is a list of the songs.
     song = dialog.fields["song"]
