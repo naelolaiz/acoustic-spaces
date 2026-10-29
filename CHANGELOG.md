@@ -51,9 +51,10 @@
   fades one in and out, and `directivity.write_directivity_csv` writes a directivity
   as a CSV table a scene reads.
 - A helicopter over the stadium concert: `helicopter_demo.py`, the `stadium_concert`
-  example's second demo, flies the flyover's AS350 B3 1200 m over the stadium as the
-  song ends, 330 m up (300 m above its roof, the lowest the EU's rules of the air let a
-  VFR flight cross an open-air crowd without leave), and adds its pass to each
+  example's second demo, flies the flyover's AS350 B3 1200 m over the stadium halfway
+  through the song, 150 m up as a police or a television helicopter given leave may
+  (without leave the EU's rules of the air keep it 300 m above the roof: `--height
+  330`), and adds its pass to each
   listener's mix of the concert, both at their simulated levels. An example may have
   more than one demo (`demos.demos_of`, `Demo.builds_on`): the editor's Run demo lists
   them, the example's own first. The stadium demo's stills take another heading.

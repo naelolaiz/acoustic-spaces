@@ -9,7 +9,7 @@ church, a band with its sound system and stage monitors in a stadium, the same b
 song carried across a lake on a summer evening, a guide talking to a visitor who walks
 away from them through a gallery and then turns their head, a car passing on a road
 across a meadow and along a street, its pitch falling as it goes by, and a helicopter
-flying over a meadow and over the stadium as the song ends. None of them
+flying over a meadow and low over the stadium during the song. None of them
 stands for what the simulator does elsewhere; the [examples](examples.md) cover far
 more, and any scene makes a demo of its own with the recordings its sources are given
 ([a demo of any scene](#a-demo-of-any-scene)).
@@ -767,7 +767,7 @@ through them, and they are checked for sources up to 10 m up, not 150 m.
 
 `helicopter_demo.py`, the stadium example's second demo, flies the
 [flyover's helicopter](#a-helicopter-flying-over) over the
-[stadium concert](#a-concert-in-the-stadium) as the song ends, and adds its pass to each
+[stadium concert](#a-concert-in-the-stadium) halfway through the song, and adds its pass to each
 listener's mix of the concert, both at their simulated levels. It builds on the stadium
 demo: run that one first, in the same work folder, up to its `render` step, with the
 `--format` and the `--hrtf` this one gets.
@@ -779,8 +779,8 @@ python helicopter_demo.py all     # or flight, helicopter, scene, walk, mix, vid
 ```
 
 Options: `--height 330` how high it flies (m), `--at 180` when it is over the centre
-spot, in seconds into the song as the sound system plays it (by default the song's
-end); `--speed`, `--step` and `--input helicopter=WAV` as in the flyover demo, and
+spot, in seconds into the song as the sound system plays it (by default halfway
+through); `--speed`, `--step` and `--input helicopter=WAV` as in the flyover demo, and
 `--tour` as in the stadium demo. At the mix position the walk takes 3.3 minutes on 4
 cores, most of it playing the 301 places through with Doppler, so some 40 for the 12
 listeners.
@@ -788,21 +788,21 @@ listeners.
 - **The flight.** `flight` writes `scene_flight.yaml`: the stadium example's scene with
   the helicopter added, left out of the concert's own simulations, flying 1200 m along
   the stadium's long axis at 63 m/s, from behind the stage over the centre spot to past
-  the east stand. By default it flies 330 m up, the lowest the EU's rules of the air let
-  a flight by sight (VFR) cross an open-air assembly of persons without leave: 300 m
-  above the highest obstacle within 600 m (SERA.5005(f)), here the stadium's roof,
-  30 m up. A police or a news helicopter given leave flies lower. The ground and the sky
-  are widened to take the flight, and the responses are as much longer as the
-  helicopter is farther than the stage (4.2 s against the concert's 2.0 s), so each
+  the east stand. By default it flies 150 m up, as a police or a television helicopter
+  given leave may. Without leave the EU's rules of the air keep a flight by sight (VFR)
+  over an open-air assembly of persons 300 m above the highest obstacle within 600 m
+  (SERA.5005(f)), here the stadium's roof, 30 m up: `--height 330`. The ground and the
+  sky are widened to take the flight, and the responses are as much longer as the
+  helicopter is farther than the stage (4.1 s against the concert's 2.0 s), so each
   keeps the stadium's decay after the helicopter's sound arrives.
 - **The helicopter and its pass** are the flyover demo's steps on that scene:
   `helicopter` its rotors' sound, `scene` the helicopter alone (`scene_overhead.yaml`)
   with the sound power and the directivity of its rotors at 63 m/s through still air
   (138.3 dB, 132.9 dB(A)), and `walk` the helicopter every 4 m along its flight at
-  each of the 12 listeners, with Doppler. At the mix position it is at its loudest
-  74.2 dB(A), where the sound system's loudspeakers, simulated at their sound power,
-  give 96.9 dB(A): over the song it is some 20 dB under the music, and it is heard as
-  the song ends.
+  each of the 12 listeners, with Doppler. At the mix position it peaks at about
+  81 dB(A) (about 74 from 330 m), where the sound system's loudspeakers, simulated at
+  their sound power, give 97 dB(A): it is some 15 dB under the music, heard most in the
+  song's quiet passages. High in the north stand, under the roof, it peaks 10 dB lower.
 - **The mix.** `mix` adds the helicopter's pass at each listener to the concert's mix
   there (`demo/seats`), the helicopter over the centre spot at `--at`. The feeds stand
   for the loudspeakers' sound power, a gated RMS of 0.1 for the loudest one's (the main
@@ -813,9 +813,10 @@ listeners.
   `demo/crossing/feeds` with the song lasting until the helicopter has gone.
 - **The video** is the stadium demo's, made from those mixes into `demo/crossing`: the
   same tour, each stop turned up to the loudness of the loudest, the helicopter named
-  in the title and in the credit. The default tour ends at the mix position, so that is
-  where the helicopter is heard coming in over the last phrase and going on after the
-  song.
+  in the title and in the credit. The tour goes on as the stadium demo's does: halfway
+  through each of the three songs it is in the north stand, at its far seats and then
+  at its top row, under the roof, where the helicopter is quietest. `--at 10` brings
+  the helicopter over during the first stop, at the mix position.
 
 What it leaves out: the stadium's air is still, so no wind or eddies bend the
 helicopter's sound. The rotors' downwash does not reach the crowd: flying past at this

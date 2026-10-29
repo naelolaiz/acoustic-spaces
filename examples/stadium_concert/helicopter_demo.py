@@ -1,18 +1,18 @@
-"""A helicopter flying over the stadium concert as the song ends, heard at each listener
-over the band and the sound system, its pitch falling as it passes (Doppler); and a
-video that tours them, as the stadium demo's does.
+"""A helicopter flying low over the stadium concert halfway through the song, heard at
+each listener over the band and the sound system, its pitch falling as it passes
+(Doppler); and a video that tours them, as the stadium demo's does.
 
 The helicopter is the flyover demo's (acoustic_spaces.demos.helicopter): an Airbus
 Helicopters AS350 B3 at its maximum mass, flying level at 63 m/s, straight over the
-stadium's long axis from behind the stage to past the east stand, 1200 m. It flies 330 m
-up (--height), the lowest the EU's rules of the air let a flight by sight (VFR) cross an
-open-air assembly of persons without leave: 300 m above the highest obstacle within 600
-m (SERA.5005(f)), here the stadium's roof, 30 m up; a police or a news helicopter given
-leave flies lower. It is over the centre spot at the song's end (--at, seconds into the
-song as the sound system plays it), so you hear it come in over the last phrase and go
-on after the song. Its sound is its two rotors', sent each way down each early path, as in
-the helicopter_flyover example; the scene gives it the sound power and the directivity
-of that sound for its late part.
+stadium's long axis from behind the stage to past the east stand, 1200 m. It flies 150 m
+up (--height), as a police or a television helicopter given leave may: without leave,
+the EU's rules of the air keep a flight by sight (VFR) over an open-air assembly of
+persons 300 m above the highest obstacle within 600 m (SERA.5005(f)), here the
+stadium's roof, 30 m up, so --height 330. It is over the centre spot halfway through
+the song (--at, seconds into the song as the sound system plays it). Its sound is its
+two rotors', sent each way down each early path, as in the helicopter_flyover example;
+the scene gives it the sound power and the directivity of that sound for its late
+part.
 
 The concert is the stadium demo's: run it first, in the same work folder, up to its
 render step (`python stadium_demo.py render`, or `all`), with the --format and the --hrtf
@@ -57,10 +57,12 @@ from acoustic_spaces.demos.helicopter import HELICOPTER, Helicopter
 
 stadium = sibling(__file__, "stadium_demo")
 
-#: The stadium's roof (make_model.py's ROOF), its highest point, and the lowest the
-#: helicopter may fly over the concert without leave (m): 300 m above it (SERA.5005(f)).
+#: The stadium's roof (make_model.py's ROOF), its highest point (m).
 ROOF_M = 30.0
-HEIGHT_M = ROOF_M + 300.0
+#: How high the helicopter flies by default (m): as a police or a television helicopter
+#: given leave may, below the 300 m above the roof the rules of the air ask over a crowd
+#: without it (SERA.5005(f)).
+HEIGHT_M = 150.0
 #: How far the flight runs each way from over the centre spot (m), at what speed over
 #: the ground (m/s, the flyover example's), and how far the ground runs past its ends.
 SPAN_M = 600.0
@@ -166,8 +168,8 @@ def band_args(args, crossing: bool = False):
 
 def crossing_times(args, facts: dict, table: dict) -> tuple[float, float]:
     """When the helicopter is over the centre spot (nearest to it in plan, between the
-    places of its walk) along its walk, and in the song: ``--at``, or the song's end
-    (s)."""
+    places of its walk) along its walk, and in the song: ``--at``, or halfway through
+    it (s)."""
     times = np.asarray(facts["times"], dtype=float)
     plan = np.asarray(facts["positions"], dtype=float)[:, :2]
     legs = np.diff(plan, axis=0)
@@ -176,7 +178,7 @@ def crossing_times(args, facts: dict, table: dict) -> tuple[float, float]:
     )
     k = int(np.argmin(np.linalg.norm(plan[:-1] + along[:, None] * legs, axis=1)))
     middle = float(times[k] + along[k] * (times[k + 1] - times[k]))
-    at = float(table["length_s"]) if args.at is None else float(args.at)
+    at = float(table["length_s"]) / 2.0 if args.at is None else float(args.at)
     if at < middle:
         raise SystemExit(
             f"error: --at is {at:g} s, but the helicopter takes {middle:.1f} s to get over the "
@@ -293,7 +295,7 @@ def mix_done(args) -> bool:
         table = stadium.feeds_table(band_args(args))
     except SystemExit:
         return False
-    at = float(table["length_s"]) if args.at is None else float(args.at)
+    at = float(table["length_s"]) / 2.0 if args.at is None else float(args.at)
     return pipeline.read_json(feeds).get("helicopter", {}).get("at_s") == round(at, 6)
 
 
@@ -369,8 +371,9 @@ DEMO.options = [_REPLACED.get(o.name, o) for o in DEMO.options] + [
     ),
     Option(
         "height",
-        "how high the helicopter flies over the ground (m); the default is the lowest the EU's "
-        "rules of the air allow over a crowd without leave, 300 m above the stadium's roof",
+        "how high the helicopter flies over the ground (m): by default as a police or a "
+        "television helicopter given leave may; without leave the EU's rules of the air keep "
+        "it 300 m above the stadium's roof, 330 m",
         HEIGHT_M,
         "float",
         steps=("flight",),
@@ -384,7 +387,7 @@ DEMO.options = [_REPLACED.get(o.name, o) for o in DEMO.options] + [
         "float",
         steps=("mix",),
         unit="s",
-        unset="the song's end",
+        unset="halfway through the song",
     ),
     Option(
         "band",

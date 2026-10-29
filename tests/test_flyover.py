@@ -42,8 +42,10 @@ def test_the_examples_helicopter_is_its_rotors_model() -> None:
 
 def _flyover(tmp_path: Path) -> Path:
     """The helicopter_flyover example, quick: 40 m of its flight right over the listener
-    under its track, 16 kHz."""
-    folder = tmp_path / "helicopter_flyover"
+    under its track, 16 kHz. The copy's folder is named apart from the example's: demo
+    scripts are imported under their folder's name, so a copy named as the example would
+    stand in for it in later tests."""
+    folder = tmp_path / "flyover_copy"
     shutil.copytree(Path(example_path("helicopter_flyover")).parent, folder)
     data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
     (helicopter,) = data["sources"]
@@ -105,8 +107,9 @@ def test_the_flyover_demo_flies_the_helicopter_over(tmp_path: Path) -> None:
 
 def _stadium(tmp_path: Path) -> Path:
     """The stadium_concert example, quick: two listeners, 16 kHz, responses 0.3 s long
-    after the sound arrives, few rays."""
-    folder = tmp_path / "stadium_concert"
+    after the sound arrives, few rays, in a folder named apart from the example's (see
+    :func:`_flyover`)."""
+    folder = tmp_path / "stadium_copy"
     shutil.copytree(Path(example_path("stadium_concert")).parent, folder)
     data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
     data["listeners"] = [
@@ -161,12 +164,12 @@ def _concert(folder: Path, stadium, length_s: float, rate: int = 16_000) -> dict
 
 
 def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
-    """The stadium's second demo: the flight over the stadium (300 m above its roof, the
-    ground and the sky widened, the responses as much longer as the helicopter is
-    farther), the helicopter's pass at each listener, and each listener's mix of the
-    concert with the pass added over the centre spot as the song ends, in the feeds'
-    units: a gated RMS of 0.1 for the loudest loudspeaker's sound power, as the pressure 1
-    m from it; then the stadium demo's video of those mixes."""
+    """The stadium's second demo: the flight over the stadium (150 m up, the ground and
+    the sky widened, the responses as much longer as the helicopter is farther), the
+    helicopter's pass at each listener, and each listener's mix of the concert with the
+    pass added over the centre spot halfway through the song, in the feeds' units: a
+    gated RMS of 0.1 for the loudest loudspeaker's sound power, as the pressure 1 m from
+    it; then the stadium demo's video of those mixes."""
     pytest.importorskip("PIL")
     from acoustic_spaces.air import density, speed_of_sound
     from acoustic_spaces.demos import demo_for, demos_of, load, sibling
@@ -179,7 +182,7 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     assert [d.name for d in demos_of("stadium_concert")] == ["stadium", "crossing"]
     assert demo_for("stadium_concert").name == "stadium" and demo.builds_on == "stadium"
     args = demo.defaults()
-    assert args.height == 330.0 and args.at is None
+    assert args.height == 150.0 and args.at is None
     assert demo.check(argparse.Namespace(**vars(args) | {"height": 25.0})).endswith(
         "but the stadium's roof is 30 m up"
     )
@@ -188,24 +191,24 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     assert demo.main(["flight"]) == 0
     flown = yaml.safe_load((folder / "scene_flight.yaml").read_text(encoding="utf-8"))
     ground = flown["geometry"]["ground"]
-    assert ground["extent"] == [[-650.0, -82], [650.0, 82]] and ground["sky"] == 370.0
+    assert ground["extent"] == [[-650.0, -82], [650.0, 82]] and ground["sky"] == 190.0
     helicopter = flown["sources"][-1]
     assert helicopter == {
         "name": "helicopter",
         "group": "Helicopter",
         "enabled": False,
-        "position": [-600.0, 0.0, 330.0],
-        "walk": {"to": [[600.0, 0.0, 330.0]], "speed_m_s": 63.0, "doppler": True},
+        "position": [-600.0, 0.0, 150.0],
+        "walk": {"to": [[600.0, 0.0, 150.0]], "speed_m_s": 63.0, "doppler": True},
     }
-    farthest = max(math.dist((600.0, 0.0, 330.0), lis["position"]) for lis in flown["listeners"])
+    farthest = max(math.dist((600.0, 0.0, 150.0), lis["position"]) for lis in flown["listeners"])
     later = math.ceil((0.3 + farthest / speed_of_sound(20.0)) * 10.0) / 10.0
     assert flown["simulation"]["ir_length_s"] == later
     resolved = demo.resolved(args)
     assert demo.step("flight").done(resolved)
     assert not demo.step("flight").done(argparse.Namespace(**vars(resolved) | {"height": 400.0}))
     # Quick: 40 m of the flight over the centre spot, responses 1.5 s long.
-    helicopter["position"] = [-20.0, 0.0, 330.0]
-    helicopter["walk"]["to"] = [[20.0, 0.0, 330.0]]
+    helicopter["position"] = [-20.0, 0.0, 150.0]
+    helicopter["walk"]["to"] = [[20.0, 0.0, 150.0]]
     flown["simulation"]["ir_length_s"] = 1.5
     (folder / "scene_flight.yaml").write_text(yaml.safe_dump(flown, sort_keys=False), "utf-8")
     for step in ("helicopter", "scene", "walk"):
@@ -226,11 +229,11 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     crossed = pipeline.read_json(work / "crossing" / "seats" / pipeline.SEATS)
     table = pipeline.read_json(work / "crossing" / "feeds" / "feeds.json")
     crossing = table["helicopter"]
-    assert crossing["at_s"] == 6.0 and crossing["height_m"] == 330.0
-    assert crossing["start_s"] == pytest.approx(6.0 - middle, abs=1e-4)
+    assert crossing["at_s"] == 3.0 and crossing["height_m"] == 150.0  # halfway through
+    assert crossing["start_s"] == pytest.approx(3.0 - middle, abs=1e-4)
     start = round(crossing["start_s"] * 16_000)
-    length = crossing["start_s"] + passes["seats"]["singer"]["length_s"]
-    assert table["length_s"] == pytest.approx(length)
+    heard = max(seat["length_s"] for seat in passes["seats"].values())
+    assert table["length_s"] == pytest.approx(max(6.0, crossing["start_s"] + heard))
     # The scale, from the pressure 1 m from a source of the main arrays' sound power,
     # found here through the emissions' own sound power: of a tone of 1 Pa (RMS) sent
     # every way alike.
