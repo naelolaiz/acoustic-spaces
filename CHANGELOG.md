@@ -192,6 +192,11 @@
   parts compares each of `concert_stage`'s sources and listeners with the concert's one
   by one, which would have caught it. The memory estimate's checks in the docs, in one
   batch and in the default 10, are measured again on `stadium_concert`.
+- The editor's Run demo window is simpler: it shows the options that change what a demo
+  plays, labelled in words (`Option.label`, each one's flag in its tip), and keeps the
+  step, what fine-tunes the run, the files and folders the demo reads and writes and
+  the command line under **Advanced**, closed until opened (`Option.advanced`); its
+  introduction is one line. The labels are translated in the five catalogs.
 
 ## 4.0.1
 
