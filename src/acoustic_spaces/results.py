@@ -199,6 +199,9 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
             "speech": response.speech(power, noise_db, parameters=params, talker=talker).as_dict(),
             "echo": _echo(mono, sample_rate),
         }
+        errors = response.standard_errors()
+        if errors is not None:
+            entry["standard_errors"] = errors.as_dict()
         if response.free_field is not None:
             relative = response.relative_to_free_field()
             entry["re_free_field_db"] = [_plain(v) for v in relative]

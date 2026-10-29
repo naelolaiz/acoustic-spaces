@@ -120,11 +120,6 @@ Edge diffraction:
   has it, and kept where its path appears round the edge's end. Past a thin screen's
   corner the edge diffraction steps by 2.8 dB at 63 Hz, and along the `street` the
   level by up to 1.42 dB in a band (0.52 dB(A)).
-- [ ] The path over a barrier's top with the reflection off the ground behind it, kept
-  where the reflection before the barrier is found: 4 m behind a barrier 3 m high on a
-  hard ground the level steps by 0.35 dB at 63 Hz with `first_order`. A fix that tells
-  the two apart changes BRAS CR2's early level by up to 0.8 dB at 63 Hz; checked against
-  BRAS before it goes in.
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
@@ -196,11 +191,13 @@ Outdoor acoustics, in steps:
   ground solution in still air, and `validation/benchmark_1995.py`, the benchmark's
   still air and 0.1/s gradients down and up, and the same stopping 100 m up, at 10, 100
   and 1000 Hz to 10 km through the engine's parabolic equation and as whole scenes per
-  band. The parabolic equation is within 0.1 dB of the program to 1 km and within 3 dB
-  to 10 km with the gradient stopping 100 m up, as the weather's do, and parts from it
-  beyond 1 to 2 km with the benchmark's gradient going on to a kilometre up (O21's
-  wide-angle parabolic equation carries that); whole scenes within 0.11 dB per band
-  to 1 km in every case. The comparison found and fixed a notch at the join of the
+  band. With the gradient stopping 100 m up, as the weather's do, the parabolic
+  equation is within 0.35 dB of the program to 1 km downwind and within 3 dB at 10 km
+  at 100 Hz (11 dB at 1 kHz, 47 dB down), and parts from it beyond 1 to 2 km with the
+  benchmark's gradient going on to a kilometre up (O21's wide-angle parabolic equation
+  carries that); whole scenes are within 0.11 dB per band to 1 km downwind in every
+  case and upwind with the benchmark's gradient, 1.5 dB at 1 km upwind with the
+  gradient stopping 100 m up, 44 dB down. The comparison found and fixed a notch at the join of the
   parabolic equation's bands and the rays' (see the changelog).
 - [x] O12 Outdoor scenes on the GPU: the GPU traces the rays bent by wind and
   temperature through the same chords as the CPU (ray for ray: the same turns and the
@@ -467,7 +464,6 @@ Known issues found by the review of 25 October 2026 (see
   kept after 50 ms, the tracer's reflection counts in 32 bits, and `from_impulse_response`
   and `wave_responses` checking what they are given. The others were not borne out, or
   only a direct caller of the native module can reach them.
-- [ ] Uncertainty: how much each parameter scatters over seeds, as a standard error.
 - [x] CI: type checks, sanitizers for the native code and the tests' coverage.
 - [ ] Type checks passing in the modules that did not when they began (listed in
   `pyproject.toml`), a few at a time.
@@ -475,3 +471,30 @@ Known issues found by the review of 25 October 2026 (see
 - [ ] Vector-based scattering with a lobe centred on the specular direction, so the late
   part carries the first orders' specular share as the exact paths do, checked against
   the BRAS rooms' decay.
+
+Next version:
+
+- [x] Uncertainty: each parameter's standard error, how much it would change between
+  runs with other seeds, from the late rays traced in batches (a jackknife over them),
+  in `parameters.json`, `simulate`'s output and the editor's results; checked against
+  the spread over seeds.
+- [x] EDT's line fit always from the onset, however the energy is summed.
+- [x] The path over a barrier's top with the reflection off the ground behind it, kept
+  where the reflection before the barrier is found: behind a barrier on a hard ground
+  the level follows the exact one within 0.05 dB with `first_order` and `both_sides`,
+  instead of stepping by 0.35 dB at 63 Hz. Checked against BRAS: the seminar room's and
+  the hall's average differences from the measurement move by 0.15 JNDs at most in
+  each band, but for the calibrated hall's (0.67), whose fit lands on other
+  coefficients.
+- [x] Models cleaned where an edge runs past a corner at which three faces meet: BRAS's
+  auditorium (CR4) is closed.
+- [x] More measured rooms: BRAS's coupled rooms (CR1, the door open by 4.1°) and
+  auditorium (CR4) beside the seminar room and the hall, G from seat to seat in all four
+  with the measured level's 3 dB question reported, IACC of FABIAN's binaural responses
+  in three (`validation/bras_binaural.py`), and each run's largest standard error.
+- [ ] BRAS's coupled rooms with the door open by 30.4°, whose model has no closed inside:
+  the door leaf cuts some 2 cm into the wall at its hinge.
+- [x] Paths over edges that arrive together rendered with phases of their own, so they
+  render their energy on average over seeds instead of adding in amplitude; the
+  echogram's 63 and 125 Hz reading no longer takes their interference a second time
+  from the band above.

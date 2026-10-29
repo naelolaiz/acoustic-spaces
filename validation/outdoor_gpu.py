@@ -13,10 +13,8 @@ how much two runs differ by the ray count's noise alone. The settings come first
 a Markdown table with aligned columns: where the late rays went, the late stage's time
 (summed over the sources), how many times faster than on the CPU it was, and how far
 the late sound's level per band and its centre time are from the CPU's, averaged over
-every listener and band. The next seed also redraws the eddies of a scene with
-turbulence (the open-air stage), which move the levels in the wind's shadow by several
-dB on their own; the GPU run shares the CPU's eddies, so its differences are the rays'
-alone.
+every listener and band. The eddies of a scene with turbulence (the open-air stage) act
+on its early paths only, so they play no part in this comparison of the late sound.
 """
 
 from __future__ import annotations

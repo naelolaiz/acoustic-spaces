@@ -88,6 +88,10 @@ class EarlyReflections:
     #: turned_paths`); NaN for a reflection whose phase comes from elsewhere (a ground's
     #: impedance). Empty without a spectrum.
     cosines: list[np.ndarray] = field(default_factory=list)
+    #: (n,) in the bands above the coherent ones, the phase factor a rendered response
+    #: gives each path beyond the one held from those bands
+    #: (:func:`~acoustic_spaces.engine.coherent.with_own_phases`); None outside one.
+    own_phase: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         if self.edge is None:
@@ -118,6 +122,7 @@ class EarlyReflections:
             wander=None if self.wander is None else self.wander[rows],
             lag=None if self.lag is None else self.lag[rows],
             cosines=[self.cosines[i] for i in rows] if self.cosines else [],
+            own_phase=None if self.own_phase is None else self.own_phase[rows],
         )
 
     @property

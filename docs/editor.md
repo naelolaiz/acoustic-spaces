@@ -107,7 +107,8 @@ which frequencies each octave band holds.
   [Simulation](simulation.md): the early part's method, highest order, rays,
   diffraction, **Reflections over an edge** (on one side of it or on both) and **In
   pressure up to**; the late part's method, rays per band,
-  reception, ray splitting and **Run on** (*default*: this computer's default, the CPU
+  reception, arrival directions, **Batches** (from 2, standard errors for the
+  parameters), ray splitting and **Run on** (*default*: this computer's default, the CPU
   unless the tune window made it *auto*; or the CPU, a GPU, both, or *auto*); the
   scattering model; the wave solver, its highest band, how it takes the wind outdoors
   (**Wind**: an effective speed of sound or moving air) and where it runs; **Performance** (CPU
@@ -172,7 +173,10 @@ which frequencies each octave band holds.
   loss and the level over a long term, see [Results outdoors](outdoor.md#results-outdoors)
   and [Levels over a long term](outdoor.md#levels-over-a-long-term)), the echogram
   and decay curves and the arrival directions of any source and listener, and draws
-  their reflection paths in the room. **Export**
+  their reflection paths in the room. With the late rays in batches, each parameter's
+  tip gives its standard error, how much it would change between runs with other seeds
+  ([Simulation](simulation.md)), and the value is amber where that is over half a JND:
+  more rays per band would make it smaller. **Export**
   writes the same files as `simulate`, in the background (**Cancel** stops it);
   **Listen** plays a dry WAV file through the
   response on the sound card, binaurally (through the HRTF of the scene's binaural

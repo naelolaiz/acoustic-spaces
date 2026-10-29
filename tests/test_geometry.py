@@ -516,6 +516,55 @@ def test_faces_are_split_where_an_edge_runs_past_a_corner(sliver: bool) -> None:
     assert len(cleaned.faces) == 4 + 10 + 2  # each wall's bottom face split in two
 
 
+def test_a_face_is_split_where_its_edge_runs_past_three_faces() -> None:
+    # Two boxes touching at x = 2, each with its own wall there. Both floors and the left
+    # box's wall have a corner in the middle of the line where they meet, the right
+    # box's wall not: three faces share each half of the line, and the right wall's
+    # bottom edge runs past them. It is split there too, not left as an open edge.
+    left, right = _box(2, 2, 2), _box(2, 2, 2)
+    middle = [[2.0, 1.0, 0.0]]
+    left_faces = np.vstack(
+        [[[0, 1, 8], [0, 8, 2], [0, 2, 3]], left.faces[2:6], [[1, 5, 6], [2, 8, 6], [8, 1, 6]]]
+        + [left.faces[8:]]
+    )
+    right_faces = np.vstack([[[0, 1, 2], [3, 8, 2], [8, 0, 2]], right.faces[2:]])
+    mesh = RoomMesh.concatenate(
+        [
+            RoomMesh(np.vstack([left.vertices, middle]), left_faces, np.zeros(14), left.labels),
+            RoomMesh(
+                np.vstack([right.vertices + [2.0, 0.0, 0.0], middle]),
+                right_faces,
+                np.zeros(13),
+                right.labels,
+            ),
+        ]
+    )
+    report = check_mesh(*clean_mesh(mesh))
+    assert report.boundary_edges == 0 and report.odd_edges == 0
+    assert report.closed and report.room_volumes_m3 == pytest.approx((8.0, 8.0))
+    assert report.faces == 14 + 13 + 1  # the right box's wall split in two
+
+
+def test_a_sliver_whose_corner_lies_on_its_edge_is_dropped() -> None:
+    # The floor is cut across its middle, the front wall not; a sliver 1 micrometre high
+    # closes the gap, and a panel hangs from the floor's corner on the wall's edge. That
+    # corner splits the wall's face; the sliver, whose own corner it is, was split into
+    # two faces with a repeated corner, which left the model open.
+    box = _box(8, 6, 3)
+    vertices = np.vstack([box.vertices, [[4, 0, 1e-6], [4, 6, 0], [4, 1, 1.5], [5, 1, 1.5]]])
+    floor = [[0, 8, 9], [0, 9, 3], [8, 1, 2], [8, 2, 9]]
+    faces = np.vstack([floor, box.faces[2:], [[0, 1, 8], [2, 3, 9], [8, 10, 11]]])
+    mesh = RoomMesh(vertices, faces, np.zeros(len(faces)), box.labels)
+
+    cleaned, _, removed = clean_mesh(mesh)
+    report = check_mesh(cleaned)
+    assert removed == 1  # the other sliver, with no area
+    assert (np.diff(np.sort(cleaned.faces, axis=1), axis=1) > 0).all()
+    assert report.closed and report.volume_m3 == pytest.approx(144.0)
+    # The front and back walls' bottom faces split in two, and the panel.
+    assert len(cleaned.faces) == 4 + 10 + 2 + 1
+
+
 def test_rooms_touching_along_an_edge_are_closed() -> None:
     # Two boxes that share one vertical edge: four faces meet along it, in pairs.
     a = _box(1, 1, 1)

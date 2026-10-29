@@ -4767,6 +4767,20 @@ msgstr ""
 "weergeven"
 
 #: acoustic_spaces/gui/inspector.py
+msgid ""
+"How many batches the rays are traced in: the same rays as in one, and so the "
+"same result but for rounding. From 2, each parameter gets a standard error "
+"from how the batches differ, which the results show: how much it would "
+"change between runs with other seeds (10 batches take about 10 to 15 % "
+"longer)"
+msgstr ""
+"In hoeveel batches de stralen worden gevolgd: dezelfde stralen als in één, "
+"en dus op afronding na hetzelfde resultaat. Vanaf 2 krijgt elke parameter "
+"een standaardfout uit hoe de batches verschillen, die de resultaten tonen: "
+"hoeveel hij zou veranderen tussen berekeningen met andere startwaarden (10 "
+"batches duren ongeveer 10 tot 15 % langer)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Split strong rays, thin out weak ones"
 msgstr "Sterke stralen splitsen, zwakke uitdunnen"
 
@@ -4807,6 +4821,10 @@ msgstr "Ontvangst"
 #: acoustic_spaces/gui/inspector.py
 msgid "Arrival directions"
 msgstr "Aankomstrichtingen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Batches"
+msgstr "Batches"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Run on"
@@ -6661,6 +6679,25 @@ msgstr ""
 #, python-brace-format
 msgid "{tip}. Not defined for this response"
 msgstr "{tip}. Niet gedefinieerd voor deze respons"
+
+#. Translators: {error} is a number in the parameter's unit.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "Standard error {error}, from {count} batch of rays"
+msgid_plural "Standard error {error}, from {count} batches of rays"
+msgstr[0] "Standaardfout {error}, uit {count} batch stralen"
+msgstr[1] "Standaardfout {error}, uit {count} batches stralen"
+
+#. Translators: {tip} is the standard error's sentence; {jnd} a number.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"{tip}: {jnd:.1f} JND, so the value can change noticeably between runs with "
+"other seeds; more rays per band make the error smaller"
+msgstr ""
+"{tip}: {jnd:.1f} JND, dus de waarde kan merkbaar veranderen tussen "
+"berekeningen met andere startwaarden; meer stralen per band maken de fout "
+"kleiner"
 
 #. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
 #: acoustic_spaces/gui/results_view.py

@@ -24,8 +24,11 @@ height instead (see the code), and marched in free field. An absorbing layer at 
 takes the sound that goes up; the ground's impedance may change along the way. Greene's
 starting field (Greene 1984; Jensen et al., Computational Ocean Acoustics, ch. 6), the
 Gaussian's of Salomons' eq. G.67 widened, makes the free field exp(ikR) / R up to some
-35 degrees from the horizontal (0.2 dB; the Gaussian's falls 2 dB short there). Over
-grass, and over hard grounds, in still air it is within 0.25 dB of the exact solution.
+35 degrees from the horizontal (0.2 dB; the Gaussian's falls 2 dB short there). In
+still air over grass and over hard grounds it is within 0.2 dB of the exact solution
+from a source 1 m up, 25 to 400 m away, and within 0.45 dB from a wind turbine's hub
+178 m away, where the sound comes in at 34 degrees (``validation/ground_reflection.py
+--parabolic``).
 
 The frequencies of one band are marched together, on the grid and in the steps of the
 highest, under the absorbing layer of the lowest.

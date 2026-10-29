@@ -170,7 +170,7 @@ def test_it_starts_wide(f) -> None:
         for solver in (march, parabolic.march)
     ]
     assert levels[0] == pytest.approx(0.0, abs=0.15)
-    assert abs(levels[1]) > 0.6
+    assert -1.4 < levels[1] < -0.9
 
 
 def test_a_deep_gradient_against_the_fast_field_program() -> None:

@@ -374,6 +374,7 @@ def tune(
             splitting=late_cfg.splitting,
             threads=threads,
             device=plan,
+            batches=late_cfg.batches,
         )
         if late.plan is not None and late.plan.device != plan.device:
             raise ValueError(f"tune needs a scene the GPU can trace: {late.plan.reason}")

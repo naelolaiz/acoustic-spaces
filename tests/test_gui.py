@@ -2087,6 +2087,50 @@ def test_a_decay_that_is_not_straight_is_flagged(window) -> None:
     assert "Here the decay is curved: more than 10 %" in tip()
 
 
+def test_a_parameter_that_would_change_with_the_seed_is_flagged(window, qapp) -> None:
+    """Each value's tip gives its standard error from the late rays' batches, and those
+    more than half a JND turn amber: some do with 500 rays, some do not."""
+    from PySide6.QtWidgets import QTableWidgetItem
+
+    from acoustic_spaces.compare import CONVERGED_JND, in_jnds
+    from acoustic_spaces.gui.results_view import ROWS
+
+    _quick(window.document)
+    window.document.edit("1 s", lambda d: d["simulation"].update(ir_length_s=1.0))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    assert page.batches.value() == 10 and page.batches.isEnabled()
+    page.batches.setValue(4)
+    assert window.document.scene.simulation.late.batches == 4
+    page.batches.setValue(10)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    response = window.result[("source", "listener")]
+    parameters = response.parameters()
+    jnds = in_jnds(parameters, response.standard_errors())
+    table = window.results.table
+    for row in range(len(ROWS)):
+        for col in range(8):
+            item = QTableWidgetItem("1.0")
+            item.setToolTip("Tip")
+            table.setItem(row, col, item)
+    window.results._flag_errors(parameters, response)
+    amber = level_colour(table, "warning")
+    rows = [name for name, _label, _template in ROWS]
+    flagged = []
+    for name, values in jnds.items():
+        for col, jnd in enumerate(values):
+            if name not in rows or not np.isfinite(jnd):
+                continue
+            item = table.item(rows.index(name), col)
+            assert item.toolTip().startswith("Tip. Standard error "), (name, col)
+            assert "from 10 batches of rays" in item.toolTip()
+            assert (item.foreground().color() == amber) == (jnd > CONVERGED_JND), (name, col)
+            flagged.append(jnd > CONVERGED_JND)
+    assert any(flagged) and not all(flagged)
+    assert "change noticeably between runs" in table.item(rows.index("edt"), 7).toolTip()
+
+
 def test_model_units_default_to_the_file(window) -> None:
     window.open_example(example_path("shoebox"))  # its scene says units: m
     window.select("geometry", None)

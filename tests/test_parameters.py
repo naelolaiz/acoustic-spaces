@@ -46,6 +46,19 @@ def test_energy_ratios_of_an_exponential() -> None:
     np.testing.assert_allclose(p.ts, 1.0 / k, rtol=0.01)
 
 
+def test_a_louder_response_has_the_same_decay() -> None:
+    # The decay curve starts at 0 dB exactly, so EDT's fit starts at the onset however
+    # the energy is scaled; summed in another order, the total could come out a rounding
+    # below the curve's start, which left the onset out at random.
+    rng = np.random.default_rng(3)
+    energy = _exponential(1.0, 1.5) * rng.exponential(1.0, 1500)
+    p = from_energy(np.tile(energy, (8, 1)), DT, onset_s=0.0)
+    for gain in rng.uniform(0.5, 4.0, 20):
+        louder = from_energy(np.tile(energy * gain, (8, 1)), DT, onset_s=0.0)
+        for name in ("edt", "t20", "t30", "c80", "ts"):
+            np.testing.assert_allclose(getattr(louder, name), getattr(p, name), rtol=1e-9)
+
+
 def test_strength_against_free_field() -> None:
     reference = 1.0 / (4 * math.pi * 100)
     energy = np.zeros((8, 100))

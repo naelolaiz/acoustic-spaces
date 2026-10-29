@@ -2,7 +2,7 @@
 from sound passing through it, against the limits a thin disc's scattering has in
 closed form and against ISO 9613-2's dense-foliage table.
 
-    python validation/leaves.py [--rays N] [--json results.json]
+    python validation/leaves.py [--rays N] [--seeds N] [--json results.json]
 
 ``foliage: {leaf_area_per_m3: F, leaf_width: a}`` makes the engine work out what the
 leaves scatter and absorb in each band from thin rigid discs of that size, turned
@@ -27,6 +27,11 @@ every way alike (:func:`acoustic_spaces.engine.vegetation.disc_scattering`,
   leaves give about what the standard gives, and how the loss grows with their area
   and width. What the leaves scatter comes back as late sound, so the loss is far less
   than what the early paths lose (their extinction, which the table shows too).
+
+Behind dense leaves at 4 and 8 kHz what arrives is the rare ray that slips through,
+so the level there takes many rays to settle: the wood runs with 10 million late rays
+per band and ``--seeds`` seeds (3), and the table gives the mean over the seeds and
+the largest spread between them behind the wood.
 """
 
 from __future__ import annotations
@@ -103,7 +108,7 @@ def check_absorption() -> dict:
     return {"band_hz": f.tolist(), "engine": engine.tolist(), "exact": exact.tolist()}
 
 
-def wood_scene(area: float | None, width: float, rays: int) -> Scene:
+def wood_scene(area: float | None, width: float, rays: int, seed: int = 1) -> Scene:
     """A wood of these leaves across the ground, or without any (None)."""
     vegetation = []
     if area is not None:
@@ -130,7 +135,7 @@ def wood_scene(area: float | None, width: float, rays: int) -> Scene:
             ],
             "simulation": {
                 "ir_length_s": 1.0,
-                "seed": 1,
+                "seed": seed,
                 "early": {"method": "image_sources", "max_order": 1, "diffraction": "none"},
                 "late": {"rays": rays},
             },
@@ -138,7 +143,7 @@ def wood_scene(area: float | None, width: float, rays: int) -> Scene:
     )
 
 
-def check_wood(rays: int) -> list[dict]:
+def check_wood(rays: int, seeds: int) -> list[dict]:
     """The wood's insertion loss against ISO 9613-2's table for 50 m of dense foliage."""
     depth = WOOD_TO - WOOD_FROM
     iso = depth * np.array(DENSE_FOLIAGE_DB_PER_M)
@@ -150,16 +155,29 @@ def check_wood(rays: int) -> list[dict]:
         medium = leaves_medium(area, width, "octave", C)
         extinction = depth * medium.extinction * DB_PER_NEPER
         started = time.perf_counter()
-        scene = wood_scene(area, width, rays)
-        result = insertion.simulate(Room.from_scene(scene), without=["wood"])
+        losses = []  # (seeds, listeners, bands)
+        for seed in range(1, seeds + 1):
+            scene = wood_scene(area, width, rays, seed)
+            result = insertion.simulate(Room.from_scene(scene), without=["wood"])
+            losses.append([result.insertion_loss[("s", f"l{k}")] for k in range(len(BEHIND))])
+        loss = np.asarray(losses, dtype=float)
         seconds = time.perf_counter() - started
         name = f"{area:g} m²/m³, {100 * width:g} cm wide ({seconds:.0f} s)"
         print(f"{name:34}" + "".join(f"{v:7.2f}" for v in extinction) + "  early paths' loss")
-        row = {"leaf_area_per_m3": area, "leaf_width": width, "extinction_db": extinction.tolist()}
+        row = {
+            "leaf_area_per_m3": area,
+            "leaf_width": width,
+            "extinction_db": extinction.tolist(),
+            "seeds": seeds,
+        }
         for k, x in enumerate(BEHIND):
-            loss = np.asarray(result.insertion_loss[("s", f"l{k}")])
-            print(f"{f'  {x:g} m behind it':34}" + "".join(f"{v:7.2f}" for v in loss))
-            row[f"insertion_loss_db_{x:g}_m"] = loss.tolist()
+            mean = loss[:, k].mean(axis=0)
+            print(f"{f'  {x:g} m behind it':34}" + "".join(f"{v:7.2f}" for v in mean))
+            row[f"insertion_loss_db_{x:g}_m"] = mean.tolist()
+            row[f"insertion_loss_db_{x:g}_m_seeds"] = loss[:, k].tolist()
+        spread = (loss.max(axis=0) - loss.min(axis=0)).max(axis=0)
+        print(f"{f'  spread over {seeds} seeds':34}" + "".join(f"{v:7.2f}" for v in spread))
+        row["spread_db"] = spread.tolist()
         rows.append(row)
     print()
     return rows
@@ -167,13 +185,14 @@ def check_wood(rays: int) -> list[dict]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--rays", type=int, default=100_000, help="late rays per band")
+    parser.add_argument("--rays", type=int, default=10_000_000, help="late rays per band")
+    parser.add_argument("--seeds", type=int, default=3, help="runs of the wood, one per seed")
     parser.add_argument("--json", help="write the results to this JSON file")
     args = parser.parse_args(argv)
     results = {
         "disc": check_disc(),
         "absorption": check_absorption(),
-        "wood": check_wood(args.rays),
+        "wood": check_wood(args.rays, args.seeds),
     }
     if args.json:
         Path(args.json).write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")

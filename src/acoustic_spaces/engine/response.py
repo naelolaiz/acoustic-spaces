@@ -74,6 +74,12 @@ class Response:
     #: :meth:`reweighted`; else empty.
     late_moments: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
     moment_step: float = 0.0
+    #: With the late rays traced in batches (``simulation.late.batches`` of 2 or more):
+    #: ``late`` as each batch gives it (batches, bands, slots of ``batch_step``, a whole
+    #: number of ``time_step``), each an estimate of its own and their mean ``late``, for
+    #: :meth:`standard_errors`; else empty.
+    late_batches: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
+    batch_step: float = 0.01
     #: Outdoors: the energy per band of the same source at the listener in free field
     #: (its direct sound over the straight line, with the air's attenuation and the
     #: source's directivity, without the feed), for :meth:`relative_to_free_field`; else
@@ -222,10 +228,14 @@ class Response:
         moments = self.late_moments
         if moments.size:
             moments = _delayed(moments * gain[None, :, None], delay_s / self.moment_step)
+        batches = self.late_batches
+        if batches.size:
+            batches = _delayed(batches * gain[None, :, None], delay_s / self.batch_step)
         return dataclasses.replace(
             self,
             early=early,
             late_moments=moments,
+            late_batches=batches,
             late=_delayed(self.late * gain[:, None], delay_s / self.time_step),
             length_s=self.length_s + delay_s,
             direct_delay_s=self.direct_delay_s + delay_s,
@@ -289,16 +299,24 @@ class Response:
                     "traced and as re-weighted for"
                 )
         exponent = reweight.moment_exponent(self.late_moments, ratio)
-        late = self.late * reweight.slot_factor(
+        factor = reweight.slot_factor(
             exponent, self.late.shape[1], self.time_step, self.moment_step
         )
+        late = self.late * factor
+        batches = self.late_batches
+        if batches.size:
+            batches = batches * reweight.slot_factor(
+                exponent, batches.shape[2], self.batch_step, self.moment_step
+            )
         directional = self.late_directional
         if directional.size:
             factor = reweight.slot_factor(
                 exponent, directional.shape[2], self.direction_step, self.moment_step
             )
             directional = directional * factor[None]
-        return dataclasses.replace(self, early=early, late=late, late_directional=directional)
+        return dataclasses.replace(
+            self, early=early, late=late, late_directional=directional, late_batches=batches
+        )
 
     def parameters(self) -> iso3382.RoomParameters:
         """ISO 3382-1 parameters per octave band, straight from the energies.
@@ -311,23 +329,73 @@ class Response:
         :attr:`free_field`), G of a band that does not decay as a room's does is that of
         the energy the response holds.
         """
-        reference = self._reference()  # free field at 10 m
         side = self.lateral_axis()
 
         def weighted(axis, exponent=2):
             return to_octaves(self.weighted_energy(axis, exponent))
 
-        return iso3382.from_energy(
+        return self._parameters(
             self.octave_energy(),
-            self.time_step,
-            self.direct_delay_s,
-            reference_energy=reference,
-            stage=(self.direct_delay_s - self.feed_delay_s) * self.speed_of_sound
-            <= STAGE_DISTANCE_M,
             lateral=(weighted(side), weighted(side, 1)),
             directional=[weighted(self.orientation[:, k]) for k in range(3)],
-            open_air=self.free_field is not None,
         )
+
+    def _parameters(self, energy: np.ndarray, **directions) -> iso3382.RoomParameters:
+        """:meth:`parameters` from the echogram ``energy`` in octave bands, with those
+        from the directions of the energy given in ``directions`` (else NaN)."""
+        return iso3382.from_energy(
+            energy,
+            self.time_step,
+            self.direct_delay_s,
+            reference_energy=self._reference(),  # free field at 10 m
+            stage=(self.direct_delay_s - self.feed_delay_s) * self.speed_of_sound
+            <= STAGE_DISTANCE_M,
+            open_air=self.free_field is not None,
+            **directions,
+        )
+
+    def standard_errors(self) -> iso3382.RoomParameters | None:
+        """The standard error of each of :meth:`parameters` from the late rays' batches
+        (``simulation.late.batches``): one standard deviation of how much it would
+        change between runs with other random seeds and as many rays. A jackknife: the
+        parameters again without each of the n batches in turn, whose spread, times
+        (n - 1) / n under the root, is the standard error. The early paths and the wave
+        solver's bands do not depend on the seed, and add none. Those from the
+        directions the late energy arrives from (LF, LFC, LJ and the decay times along
+        the listener's axes) are NaN, as IACC is; so is a parameter some batches leave
+        undefined or infinite (a clarity without late energy). None without 2 batches or more.
+
+        The batches hold the energy in slots of :attr:`batch_step`; without a batch,
+        each slot of :attr:`time_step` keeps its share of its slot of
+        :attr:`batch_step`, so a strong arrival in one of them (a ray through the
+        listener long after the rest, in a room whose walls keep a few going) leaves
+        with the batch it came in."""
+        batches = self.late_batches
+        n = len(batches)
+        if n < 2:
+            return None
+        echogram = self.energy()
+        late = self.late[:, : echogram.shape[1]]
+        step = max(1, round(self.batch_step / self.time_step))
+        mean = batches.mean(axis=0)
+        values = []
+        for k in range(n):
+            # The late energy without batch k (the mean of the others), as a factor on it.
+            factor = np.ones_like(mean)
+            np.divide(n * mean - batches[k], (n - 1) * mean, out=factor, where=mean > 0)
+            factor = np.repeat(factor, step, axis=1)[:, : late.shape[1]]
+            energy = echogram.copy()
+            energy[:, : factor.shape[1]] += late[:, : factor.shape[1]] * (factor - 1.0)
+            if self.wave is not None:
+                energy[: self.wave.bands] = echogram[: self.wave.bands]
+            values.append(self._parameters(to_octaves(np.maximum(energy, 0.0))))
+        errors = {}
+        for f in dataclasses.fields(iso3382.RoomParameters):
+            replicas = np.array([getattr(v, f.name) for v in values], dtype=float)
+            replicas[~np.isfinite(replicas)] = math.nan  # no spread to a clarity of inf
+            spread = ((replicas - replicas.mean(axis=0)) ** 2).sum(axis=0)
+            errors[f.name] = np.sqrt((n - 1) / n * spread)
+        return iso3382.RoomParameters(**errors)
 
     def relative_to_free_field(self) -> np.ndarray:
         """The level relative to free field per octave band (dB): how much louder (or,
@@ -414,7 +482,7 @@ class Response:
         """
         n = int(math.ceil(self.length_s * sample_rate))
         scale = synthesis.ENERGY_TO_IR
-        paths = self.moment(seed)
+        paths = coherent.with_own_phases(self.moment(seed), self.seed if seed is None else seed)
         band_signals, quadrature = coherent.band_impulses(paths, n, sample_rate)
         low = coherent.signal(paths, n, sample_rate)[:, 0]
         noise_signals = np.zeros_like(band_signals)

@@ -154,26 +154,29 @@ def _edge_counts(faces: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]
 def _split_t_junctions(
     vertices: np.ndarray, faces: np.ndarray, labels: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """The faces split at the vertices of open edges that lie on their edges, with
+    """The faces split at the vertices of odd edges that lie on their edges, with
     their labels.
 
-    An open edge is one no other face shares. Each end of one within
-    ``T_JUNCTION_TOLERANCE_M`` of another face's edge, between its ends, becomes a
-    corner of that face: it turns into a fan of faces from its opposite corner, in the
-    same orientation. The edge may be open too, or shared: a partition drawn between two
-    rooms ends on the edge where their floors meet. A face with T-junctions on more than
-    one edge is split one edge per pass.
+    An odd edge is one shared by an odd number of faces: an open edge, which no other
+    face shares, or one of three faces along a line that the edge of a fourth runs past.
+    Each end of one within ``T_JUNCTION_TOLERANCE_M`` of another face's edge, between
+    its ends, becomes a corner of that face: it turns into a fan of faces from its
+    opposite corner, in the same orientation. The edge may be open too, or shared: a
+    partition drawn between two rooms ends on the edge where their floors meet. A face
+    whose own opposite corner lies on the edge has no area at that tolerance: an
+    exporter's sliver closing the T-junction, which the split closes instead, so it is
+    dropped. A face with T-junctions on more than one edge is split one edge per pass.
     """
     for _ in range(8):
         if len(faces) == 0:
             break
         directed, edge, counts = _edge_counts(faces)
-        open_rows = np.flatnonzero(counts[edge] == 1)
-        if len(open_rows) == 0:
+        odd_rows = np.flatnonzero(counts[edge] % 2 == 1)
+        if len(odd_rows) == 0:
             break
-        # Only the ends of open edges can lie on another edge: sorted along x, the ones
+        # Only the ends of odd edges can lie on another edge: sorted along x, the ones
         # within an edge's reach are one slice.
-        ends = np.unique(directed[open_rows])
+        ends = np.unique(directed[odd_rows])
         order = np.argsort(vertices[ends, 0], kind="stable")
         ends, xs = ends[order], vertices[ends[order], 0]
         n = len(faces)
@@ -209,16 +212,19 @@ def _split_t_junctions(
             )
             if not inside.any():
                 continue
-            corners = [int(a), *near[inside][np.argsort(t[inside])].tolist(), int(b)]
             k = row // n  # the face runs a -> b from its corner k
             c = int(faces[face, (k + 2) % 3])
+            if c in near[inside]:
+                replaced[face] = []
+                continue
+            corners = [int(a), *near[inside][np.argsort(t[inside])].tolist(), int(b)]
             replaced[face] = [[p, q, c] for p, q in zip(corners[:-1], corners[1:], strict=True)]
         if not replaced:
             break
         kept = np.setdiff1d(np.arange(n), list(replaced))
         new = [f for split in replaced.values() for f in split]
         new_labels = [labels[face] for face, split in replaced.items() for _ in split]
-        faces = np.concatenate([faces[kept], np.array(new, dtype=faces.dtype)])
+        faces = np.concatenate([faces[kept], np.array(new, dtype=faces.dtype).reshape(-1, 3)])
         labels = np.concatenate([labels[kept], np.array(new_labels, dtype=labels.dtype)])
     return faces, labels
 

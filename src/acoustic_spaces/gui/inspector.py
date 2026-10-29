@@ -3508,6 +3508,16 @@ class SimulationPage(Page):
                 "comes from"
             )
         )
+        self.batches = int_spin(1, 100, 1)
+        self.batches.setToolTip(
+            _(
+                "How many batches the rays are traced in: the same rays as in one, and so the "
+                "same result but for rounding. From 2, each parameter gets a standard error "
+                "from how the batches differ, which the results show: how much it would "
+                "change between runs with other seeds (10 batches take about 10 to 15 % "
+                "longer)"
+            )
+        )
         self.splitting = QCheckBox(_("Split strong rays, thin out weak ones"))
         self.splitting.setToolTip(
             _(
@@ -3531,6 +3541,7 @@ class SimulationPage(Page):
         late_form.addRow(_("Rays per band"), self.late_rays)
         late_form.addRow(_("Reception"), self.reception)
         late_form.addRow(_("Arrival directions"), self.directions)
+        late_form.addRow(_("Batches"), self.batches)
         late_form.addRow(self.splitting)
         late_form.addRow(_("Run on"), self.late_device)
         layout.addWidget(late)
@@ -3741,6 +3752,7 @@ class SimulationPage(Page):
             (self.early_rays, "early.rays"),
             (self.late_rays, "late.rays"),
             (self.directions, "late.directions"),
+            (self.batches, "late.batches"),
             (self.threads, "performance.threads"),
             (self.length, "ir_length_s"),
             (self.transition, "transition_ms"),
@@ -3789,6 +3801,7 @@ class SimulationPage(Page):
         self.late_rays.setValue(s.late.rays)
         _choose(self.reception, s.late.reception)
         self.directions.setValue(s.late.directions)
+        self.batches.setValue(s.late.batches)
         self.splitting.setChecked(s.late.splitting)
         _set_device(self.late_device, s.late.device)
         _choose(self.scattering_method, s.scattering.method)
@@ -3834,6 +3847,7 @@ class SimulationPage(Page):
             self.late_rays,
             self.reception,
             self.directions,
+            self.batches,
             self.splitting,
             self.late_device,
         ):

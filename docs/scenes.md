@@ -55,7 +55,9 @@ model keeps the orientation most of its area has), so a few
 faces flipped by the exporter do not spoil the volume or the inside checks. Where a
 face's edge runs past the corners of faces on its other side (a T-junction, which
 SketchUp stitches with faces of zero area), the edge is split at those corners, so the
-model stays closed. A model with no faces left is refused, as is one with coordinates
+model stays closed; also where two surfaces and a third face meet along the line it runs
+past. A stitch whose own corner lies on its edge (within 10 µm) is dropped there, as the
+split closes the gap. A model with no faces left is refused, as is one with coordinates
 that are not finite numbers or a face that names a vertex the file does not have.
 `validate` then reports surfaces without a material, sources or listeners outside the
 room or on a surface (within 1 µm of it; an opening, with air on both sides, does not
@@ -281,9 +283,10 @@ materials, with words to search for as in the built-in database, and in the edit
 **Edit > Add material from a library** picks one. The `material_libraries` example
 takes its carpet and walls from a CATT file and its ceiling from an ODEON one.
 
-Two rooms of the BRAS benchmark, converted from its SketchUp models, are in
+Four rooms of the BRAS benchmark, converted from its SketchUp models, are in
 [`validation/bras`](https://github.com/naelolaiz/acoustic-spaces/blob/main/validation/bras)
-as scenes with their surface data and measurements.
+as scenes with their surface data and measurements (the coupled rooms twice, with the
+door between them at two angles).
 
 ## Walls, doors and openings
 

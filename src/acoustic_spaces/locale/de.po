@@ -4790,6 +4790,21 @@ msgstr ""
 "Nachhalls wiedergeben"
 
 #: acoustic_spaces/gui/inspector.py
+msgid ""
+"How many batches the rays are traced in: the same rays as in one, and so the "
+"same result but for rounding. From 2, each parameter gets a standard error "
+"from how the batches differ, which the results show: how much it would "
+"change between runs with other seeds (10 batches take about 10 to 15 % "
+"longer)"
+msgstr ""
+"In wie vielen Durchgängen die Strahlen verfolgt werden: dieselben Strahlen "
+"wie in einem, also bis auf Rundung dasselbe Ergebnis. Ab 2 erhält jeder "
+"Parameter aus den Unterschieden zwischen den Durchgängen einen "
+"Standardfehler, den die Ergebnisse zeigen: wie stark er sich zwischen "
+"Berechnungen mit anderen Zufallsstartwerten ändern würde (10 Durchgänge "
+"dauern etwa 10 bis 15 % länger)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Split strong rays, thin out weak ones"
 msgstr "Starke Strahlen aufteilen, schwache ausdünnen"
 
@@ -4831,6 +4846,10 @@ msgstr "Empfang"
 #: acoustic_spaces/gui/inspector.py
 msgid "Arrival directions"
 msgstr "Ankunftsrichtungen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Batches"
+msgstr "Durchgänge"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Run on"
@@ -6691,6 +6710,25 @@ msgstr ""
 #, python-brace-format
 msgid "{tip}. Not defined for this response"
 msgstr "{tip}. Für diese Antwort nicht definiert"
+
+#. Translators: {error} is a number in the parameter's unit.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "Standard error {error}, from {count} batch of rays"
+msgid_plural "Standard error {error}, from {count} batches of rays"
+msgstr[0] "Standardfehler {error}, aus {count} Durchgang mit Strahlen"
+msgstr[1] "Standardfehler {error}, aus {count} Durchgängen mit Strahlen"
+
+#. Translators: {tip} is the standard error's sentence; {jnd} a number.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"{tip}: {jnd:.1f} JND, so the value can change noticeably between runs with "
+"other seeds; more rays per band make the error smaller"
+msgstr ""
+"{tip}: {jnd:.1f} JND, der Wert kann sich also zwischen Berechnungen mit "
+"anderen Zufallsstartwerten merklich ändern; mehr Strahlen pro Band "
+"verkleinern den Fehler"
 
 #. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
 #: acoustic_spaces/gui/results_view.py

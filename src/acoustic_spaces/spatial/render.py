@@ -131,7 +131,7 @@ def _late_impulses(response: Response, n: int, sample_rate: float, seed: int | N
 def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed):
     """``response`` in ``fmt`` (n, channels), and its early paths alone when the wave
     solver's bands are to take their place (else None)."""
-    early = response.moment(seed)
+    early = coherent.with_own_phases(response.moment(seed), response.seed if seed is None else seed)
     early_gains = fmt.gains(to_head(early.direction, response.orientation))
     low = coherent.signal(early, n, sample_rate, early_gains)
     has_late = bool(np.any(response.late > 0))
@@ -156,7 +156,7 @@ def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, see
     out = np.zeros((2, n + hrtf.taps))
 
     # Early paths: band shaping, fractional delay and HRTF in one short filter each.
-    early = response.moment(seed)
+    early = coherent.with_own_phases(response.moment(seed), response.seed if seed is None else seed)
     if len(early):
         n_k = 1 << int(math.ceil(math.log2(_KERNEL_S * sample_rate)))
         half = n_k // 2

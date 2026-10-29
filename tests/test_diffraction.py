@@ -634,6 +634,23 @@ def test_a_barrier_on_the_ground_gets_its_fourth_path(tmp_path: Path) -> None:
     assert absorbing.order.tolist() == [0]
 
 
+@pytest.mark.parametrize("both_sides", [False, True])
+def test_no_step_where_the_reflection_off_the_ground_comes_over_the_barrier(
+    both_sides: bool,
+) -> None:
+    """10 m behind the barrier, where the listener rises into sight of the reflection
+    off the ground before it (7 m up): the level changes by 0.04 dB or less in 1 cm.
+    The term of the path over the top with the reflection after it comes from the same
+    image of the source and took that reflection for its own geometric wave, so it was
+    left out above, and the level stepped by 0.17 dB (one_side) and 0.20 dB (both_sides)
+    at 125 Hz."""
+    levels = []
+    for z in (6.995, 7.005):
+        paths = early_paths(_ground_barrier(both_sides, listener=(20.0, 0.0, z)))
+        levels.append(10 * np.log10(total_energy(paths)))
+    assert np.abs(levels[1] - levels[0]).max() < 0.06
+
+
 def test_both_sides_is_off_by_default_and_a_setting() -> None:
     assert EarlyStage().diffraction_reflections == "one_side"
     with pytest.raises(ValueError):

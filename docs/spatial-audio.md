@@ -224,10 +224,10 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
 - The dry signals play through the response of the place the walker is nearest to,
   with a `--crossfade` (a raised cosine, 50 ms by default) half-way between two places,
   so the sound changes smoothly as it walks: the crossfades' weights always add up to
-  one, and one response at every place gives exactly the convolution with it. Through
-  the gallery's walk, a 440 Hz tone has at least 75 dB less energy above 2 kHz than in
-  the tone in every 10 ms, much as through a single response; linear crossfades left
-  only 60 dB at their corners. Every place's late part is drawn from the same random
+  one, and one response at every place gives exactly the convolution with it. The
+  raised cosine changes the gains without the corners of a linear crossfade, whose
+  sudden change of slope spreads a tone's energy to higher frequencies, and never
+  faster than π/2 times a linear crossfade's mean slope (the tests). Every place's late part is drawn from the same random
   sequence, so the tails that cross fade differ only in their level and decay, not in
   their noise. Once the walk is over, the walker stays where it ends for as long as the
   signals last.
@@ -353,8 +353,9 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   sound is within 38 dB of the field, 4 m apart only within 18 dB.
 - The source is quasi-static: its sound power and directivity are those of a source
   standing at each place. A moving source's convective amplification, which makes it
-  louder ahead of it and quieter behind, is left out: the most it adds ahead is 0.8 dB
-  at 30 m/s and 2 dB at 70 m/s.
+  louder ahead of it and quieter behind, is left out: taking its intensity as
+  (1 − M cos θ)⁻², one common form whose exponent depends on the source, it would add
+  up to 0.8 dB ahead at 30 m/s and 2.0 dB at 70 m/s, and take 0.7 and 1.6 dB behind.
 - **The sound sent each way.** From Python, the walker (or, for a walking listener, a
   source it passes) may send an `Emission` (`acoustic_spaces.emission`) instead of one
   signal: the sound it sends in every direction of its own frame, as a rotor sends
@@ -390,8 +391,9 @@ those of noise mapping's quasi-static source. In a band where a place's G is und
 as where the few rays that reach a far place carry no energy in it, the place's level
 is that of the energy its response holds, as outdoors (-inf where none arrives).
 Through the walk's sound over grass, each band's energy came within 0.25 dB of them,
-0.8 dB in the band of the ground's dip, the same difference as between a response's
-band levels and its impulse response filtered into bands at a place standing still.
+0.8 dB in the band of the ground's dip, where the band levels are averages over the
+band and the sound is read through band filters, whose skirts fill a dip (see
+[Validation](validation.md#moving-sources-against-the-exact-field)).
 
 ```python
 from acoustic_spaces.walkthrough import pass_by
@@ -433,7 +435,7 @@ still the block.
 The decoder fits the HRTF (a SOFA file with `--hrtf`, or the spherical head model) with
 the spherical harmonics up to the response's order. Above 600 Hz per order it fits the
 magnitudes only (MagLS, after Schörkhuber, Zaunschirm and Höldrich, 2018): with the
-spherical head at third order, every octave from 125 Hz to 16 kHz keeps its level within
+spherical head at third order, every octave from 250 Hz to 16 kHz keeps its level within
 0.1 dB, and the level difference between the ears is within 0.5 dB rms over all
 directions, where a plain least-squares fit (`--decoder ls`) is 16 dB short at 16 kHz.
 

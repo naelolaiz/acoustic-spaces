@@ -327,6 +327,7 @@ class Filters:
                 paths = paths.at_moment(roots, self.gusts.draws(roots, paths.point, moment))
             else:
                 paths = response.moment(self.seed)
+        paths = coherent.with_own_phases(paths, response.seed if self.seed is None else self.seed)
         if self.directivity is not None:
             weights = source_weights(
                 self.directivity,

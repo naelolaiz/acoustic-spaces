@@ -32,6 +32,9 @@ _DECAY = 6.0 * math.log(10.0)  # 60 dB in nepers of energy
 
 #: Time resolution of the late energy's arrival directions (s).
 DIRECTION_STEP = 0.01
+#: Time resolution of the late energy as each batch of rays gives it (s), for the
+#: standard errors of the parameters (:func:`stochastic_energy`).
+BATCH_STEP = 0.01
 
 #: Reception modes: (diffuse rain, specular rain) in the compiled tracer.
 #:
@@ -73,6 +76,11 @@ class LateEnergy:
     moment_step: float = 0.0
     #: Where the rays were traced (stochastic ray tracing only).
     plan: ray_device.Plan | None = None
+    #: With ``stochastic_energy(batches=...)`` of 2 or more: ``energy`` as each batch of
+    #: rays gives it (listeners, batches, bands, slots of ``batch_step``), each an
+    #: estimate of its own and their mean ``energy``; else without batches.
+    batches: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0, 0)))
+    batch_step: float = BATCH_STEP
 
 
 #: Weight window of the stochastic tracer (see :func:`stochastic_energy`): resolution of
@@ -241,34 +249,104 @@ def _split_target(ray_energy: np.ndarray, reflections: np.ndarray) -> np.ndarray
     return np.where(target > 0, np.exp2(quarter_octaves / 4.0), 0.0)
 
 
-def _in_batches(trace, rays: int, splitting: bool, own: np.ndarray | None = None):
+def _in_batches(
+    trace,
+    rays: int,
+    splitting: bool,
+    own: np.ndarray | None = None,
+    batches: int = 1,
+    coarse: int = 1,
+):
     """Runs ``trace(count, first, target)``, which returns (arrays, escaped rays,
     ray_energy, reflections, traced rays), for all ``rays``: at once, or with
     ``splitting`` in two batches where the second uses the weight window measured by
-    the first. Returns (arrays, escaped rays, traced rays), each array the mean of the
-    batches weighted by their share of rays.
+    the first. Returns (arrays, escaped rays, traced rays, estimates), each array the
+    mean of the batches weighted by their share of rays.
+
+    With ``batches`` of 2 or more, each of those is traced in that many runs of about
+    equal size. Each ray has its own random stream, and its run's rays carry their
+    share of the energy, as does their weight window, so the runs trace the rays one
+    run would: only rounding can tip a split or a roulette the other way.
+    ``estimates`` is then the energy (the first array) as each run and its part of the
+    first batch give it, an estimate of its own, in slots of ``coarse`` of the energy's
+    (rows, batches, bands, slots), weighted so that their mean is the energy; else it
+    has no batches.
 
     ``own`` says for each row of the arrays (listener or map point) whether it lies in
     the source's room. The first batch sends few rays to the other rooms (no copies
     pass into them), so rows elsewhere take the second batch alone."""
     first = max(min(rays // 2, MIN_FIRST_RAYS), rays // 10, 1) if splitting else rays
-    arrays, escaped, ray_energy, reflections, traced = trace(first, 0, np.zeros(0))
+    parts = max(1, min(batches, first, rays - first if first < rays else rays))
+    arrays: list[np.ndarray] = []
+    estimates = np.zeros(0)
+    escaped = traced = 0
+
+    def rows(factor: np.ndarray, a: np.ndarray) -> np.ndarray:
+        return factor.reshape(-1, *[1] * (a.ndim - 1))
+
+    def summed(energy: np.ndarray) -> np.ndarray:
+        return np.add.reduceat(energy, np.arange(0, energy.shape[-1], coarse), axis=-1)
+
+    def run(count: int, start: int, target: np.ndarray, scale: np.ndarray | None):
+        """Traces rays ``start`` .. ``start + count - 1`` and adds them to ``arrays``
+        (and each run to ``estimates``), times ``scale`` per row: the first batch with
+        None, which also returns its ray_energy and reflections."""
+        nonlocal estimates, escaped, traced
+        ray_energy = reflections = np.zeros(0)
+        edges = [start + count * k // parts for k in range(parts + 1)]
+        for k in range(parts):
+            n = edges[k + 1] - edges[k]
+            found, more_escaped, more_energy, more_reflections, more_traced = trace(
+                n, edges[k], target * (count / n)
+            )
+            weight = n / count
+            if parts > 1:
+                estimate = summed(found[0])
+                if scale is None:
+                    if k == 0:
+                        estimates = np.empty((len(estimate), parts, *estimate.shape[1:]))
+                    estimate *= weight * parts
+                    estimates[:, k] = estimate
+                else:
+                    estimate *= rows(scale * (weight * parts), estimate)
+                    estimates[:, k] += estimate
+            if scale is None:
+                if k == 0:
+                    for a in found:
+                        a *= weight
+                    arrays.extend(found)
+                    ray_energy, reflections = more_energy * weight, more_reflections
+                else:
+                    for a, b in zip(arrays, found, strict=True):
+                        b *= weight
+                        a += b
+                    ray_energy = ray_energy + more_energy * weight
+                    reflections = reflections + more_reflections
+            else:
+                # In place, so that the batches take no more memory than one run's arrays
+                # besides the sums.
+                for a, b in zip(arrays, found, strict=True):
+                    b *= rows(scale * weight, b)
+                    a += b
+            del found
+            escaped += more_escaped
+            traced += more_traced
+        return ray_energy, reflections
+
+    ray_energy, reflections = run(first, 0, np.zeros(0), None)
     if first < rays:
         # Each batch carries the whole source energy; weight them by their share of rays.
         target = _split_target(ray_energy, reflections) * first / (rays - first)
-        more, more_escaped, _, _, more_traced = trace(rays - first, first, target)
         share = np.full(len(arrays[0]), first / rays)
         if own is not None:
             share = np.where(own, share, 0.0)
-        # In place, so that the two batches take no more memory than their arrays.
-        for a, b in zip(arrays, more, strict=True):
-            a *= share.reshape(-1, *[1] * (a.ndim - 1))
-            b *= (1.0 - share).reshape(-1, *[1] * (b.ndim - 1))
-            a += b
-        del more
-        escaped += more_escaped
-        traced += more_traced
-    return arrays, escaped, traced
+        for a in [*arrays, estimates] if parts > 1 else arrays:
+            a *= rows(share, a)
+        run(rays - first, first, target, 1.0 - share)
+    if parts == 1:
+        energy = arrays[0]
+        estimates = np.zeros((len(energy), 0, *energy.shape[1:-1], 0))
+    return arrays, escaped, traced, estimates
 
 
 def _rooms(model: TraceModel, source: np.ndarray, air: np.ndarray, points) -> tuple:
@@ -414,6 +492,7 @@ def stochastic_energy(
     groups: np.ndarray | None = None,
     moment_step: float = MOMENT_STEP,
     device: str | ray_device.Plan = "cpu",
+    batches: int = 1,
 ) -> LateEnergy:
     """Energy per listener, band and time slot by stochastic ray tracing.
 
@@ -436,6 +515,12 @@ def stochastic_energy(
     ``device`` says where the rays are traced: cpu, gpu, both or auto (see
     :mod:`acoustic_spaces.engine.ray_device`), or a ``ray_device.Plan`` to follow; the
     result's ``plan`` says where they went.
+
+    With ``batches`` of 2 or more the rays are traced in that many batches, the same
+    rays as at once (only rounding can tip a split or a roulette the other way), and
+    the result's ``batches`` holds the energy as each gives it, in slots of about
+    ``BATCH_STEP``, for the standard errors of what comes from it
+    (:meth:`~acoustic_spaces.engine.response.Response.standard_errors`).
     """
     if reception not in RECEPTION:
         raise ValueError(f"unknown reception {reception!r}; use one of {', '.join(RECEPTION)}")
@@ -453,6 +538,7 @@ def stochastic_energy(
     )
     face_room, source_room, level, own = _rooms(model, source, air, listeners)
     bent = bending(model)
+    coarse = max(1, round(BATCH_STEP / time_step))
     if groups is None:
         face_group, n_groups = np.zeros(0, dtype=np.int64), 0
     else:
@@ -515,9 +601,14 @@ def stochastic_energy(
             energy, directional, moments, *rest = found
             return [energy, directional, moments], *rest
 
-        return _in_batches(trace, count, splitting, own)
+        arrays, escaped, traced, estimates = _in_batches(
+            trace, count, splitting, own, batches, coarse
+        )
+        return [*arrays, estimates], escaped, traced
 
-    (energy, directional, moments), escaped, traced = _by_band(band_groups(model), rays, run)
+    (energy, directional, moments, estimates), escaped, traced = _by_band(
+        band_groups(model), rays, run
+    )
     return LateEnergy(
         energy=energy,
         time_step=time_step,
@@ -529,6 +620,8 @@ def stochastic_energy(
         moments=moments,
         moment_step=float(moment_step) if n_groups else 0.0,
         plan=plans[0] if plans else None,
+        batches=estimates,
+        batch_step=coarse * time_step,
     )
 
 
@@ -639,7 +732,8 @@ def stochastic_map_energy(
             )
             return [energy], *rest
 
-        return _in_batches(trace, count, splitting, own)
+        arrays, escaped, traced, _ = _in_batches(trace, count, splitting, own)
+        return arrays, escaped, traced
 
     (energy,), escaped, traced = _by_band(band_groups(model), rays, run)
     return MapEnergy(

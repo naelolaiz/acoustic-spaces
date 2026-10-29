@@ -37,6 +37,17 @@ request and checks:
   scattering) from 10k rays with splitting against 1 million rays: within 4 dB on
   average from 0.5 to 2.5 s, and splitting or thinning out every ray keeps the energy
   of plain ray tracing;
+- the late rays in batches: the same late energy as at once (to rounding without
+  splitting; with it, a tipped split moved EDT by at most 0.2 %), and the batches'
+  mean is the late energy; standard errors (a jackknife over 10 batches, 2,000 rays,
+  30 seeds of a diffuse box) of EDT, T30, C80 and G against the spread of the
+  parameters between the runs, from 125 Hz to 4 kHz: their ratio held within 0.6 to
+  1.6 band by band and 0.8 to 1.25 on average (over 60 seeds, the root mean square of
+  the standard errors came within 0.91 to 1.18 of the spread); and they follow a
+  source's feed and new absorption (re-weighted) along with the rest;
+- a response's decay times and ratios read the same however loud it is (20 gains, to
+  1e-9): the decay curve starts at 0 dB exactly, so EDT's fit always starts at the
+  onset;
 - the late part's last slots: the same rays traced 50 ms longer give the same echogram
   up to the end, where a ray's time runs out as it crosses a listener's sphere: with
   and without the rain on the CPU, without it on the GPU, and with rays bent by the
@@ -168,9 +179,13 @@ request and checks:
   rise through the plane of its top, continuous within 1 dB (0.1 dB from 1 kHz up); a
   thin screen's diffracted wave in its lit zone, all four terms of the UTD within 0.2 %;
 - early reflections in pressure at low frequencies: an impulse response and the
-  echogram it came from in a 7.3 x 5.1 x 3 m box, early part alone, G within 0.02 dB,
-  C50 within 0.05 dB and Ts within 0.3 ms at 63 and 125 Hz (G 2.1 dB and C50 1.6 dB
-  apart when the paths add in energy); a source and a listener 0.3 m above a floor 10 m apart, the direct
+  echogram it came from in a 7.3 x 5.1 x 3 m box without edge diffraction, early part
+  alone, G within 0.02 dB, C50 within 0.05 dB and Ts within 0.3 ms at 63 and 125 Hz
+  (G 2.1 dB and C50 1.6 dB apart when the paths add in energy); forty pieces of a
+  diffracted wave within a millisecond rendering their energy within 0.2 of it from
+  250 Hz up on average over 100 seeds, where forty reflections of one phase render
+  more than 20 times theirs at 250 Hz, and the echogram's 63 and 125 Hz bands
+  independent of how much the pieces carry above them; a source and a listener 0.3 m above a floor 10 m apart, the direct
   sound and the floor reflection 5.5 dB above the free-field level over a hard floor
   and 4 dB below it over an absorbing one at 63 and 125 Hz, the echogram within 0.3 dB
   of the paths' pressures added; the phase of the reflection factor, none off a hard
@@ -218,13 +233,15 @@ request and checks:
   rendered through its places;
 - models read from files: a room whose walls' edges run past the floor's corners
   (T-junctions, with or without the zero-area slivers SketchUp exports) cleaned into a
-  closed room of the right volume and area; two rooms touching along an edge closed; a
-  face given twice leaving the model open, with its odd edges counted; points inside a
-  model whichever way its faces point; an IFC office read as one room from its space
-  boundaries (closed, 75.6 m³) or as every element, in the file's units; a Collada room
-  in inches with its up axis as written, and instanced components placed by their
-  nodes; and materials from CATT-Acoustic files and ODEON libraries, the latter as
-  ODEON writes it (Windows encodings and six-band tables too);
+  closed room of the right volume and area; a wall's edge running past the corner where
+  three faces meet split there, and a sliver 1 µm high whose own corner splits the edge
+  it closes dropped, not split into faces with a repeated corner; two rooms touching
+  along an edge closed; a face given twice leaving the model open, with its odd edges
+  counted; points inside a model whichever way its faces point; an IFC office read as
+  one room from its space boundaries (closed, 75.6 m³) or as every element, in the
+  file's units; a Collada room in inches with its up axis as written, and instanced
+  components placed by their nodes; and materials from CATT-Acoustic files and ODEON
+  libraries, the latter as ODEON writes it (Windows encodings and six-band tables too);
 - outdoor scenes: over a flat ground under the open sky, exactly two paths, the direct
   sound and the ground's reflection, at their distances and with the reflection's
   energy (absorption, spreading and air) to rounding, from both early methods; a
@@ -472,103 +489,145 @@ shortens T30 by 4 to 16 %, in line with the room-energy decay of that model with
 ## Measured rooms (BRAS)
 
 The *Benchmark for Room Acoustical Simulation* (BRAS; Aspöck, Brinkmann, Ackermann,
-Weinzierl and Vorländer, 2020,
-[DOI 10.14279/depositonce-6726.3](https://doi.org/10.14279/depositonce-6726.3), CC BY-SA
-4.0) measured real rooms and published their models, the absorption and scattering of
-their surfaces, and the impulse responses. Two of its rooms are in `validation/bras` as
+Weinzierl and Vorländer, 2020, [DOI
+10.14279/depositonce-6726.3](https://doi.org/10.14279/depositonce-6726.3), CC BY-SA 4.0)
+measured real rooms and published their models, the absorption and scattering of their
+surfaces, and the impulse responses. Four of its rooms are in `validation/bras` as
 scenes (its README says how they were made):
 
+- **CR1**, two coupled rooms, a laboratory of 102 m³ and a reverberation chamber of 121
+  m³, with the door between them open by 4.1°, four materials. BRAS also measured them
+  with the door open by 30.4°, but in that model the door leaf cuts into the wall, which
+  leaves it without a closed inside, so it is left out;
 - **CR2**, a seminar room of 146 m³ with five surface materials;
 - **CR3**, a chamber music hall of 3331 m³ with upholstered seating, stage panels and
-  structured plaster, seven materials.
+  structured plaster, seven materials;
+- **CR4**, an auditorium of 8657 m³ with eight materials.
 
-In each, a dodecahedron loudspeaker stood at two positions and an omnidirectional
-microphone at five, giving ten measured responses. Each scene was simulated as it stands,
-with this package's defaults: ray tracing up to the 3rd order, first-order edge
-diffraction, 50,000 late rays per band and vector-based scattering with the scattering
-of each surface's size, in the air measured on the day. Simulated and measured
-parameters were compared pair by pair in just noticeable differences
-(`acoustic_spaces.compare`, the same JNDs as `acoustic-spaces compare`) and averaged over
-the ten pairs. The measured responses were analysed by this package too. Its octave
-values, averaged over the ten pairs, are within 3 % of the mean of the three third-octave
-averages BRAS publishes for T20, within 5 % for EDT and within 0.7 dB for C80, from
-500 Hz to 4 kHz (the largest differences are in the hall at 500 Hz: EDT 4.3 % lower,
-C80 0.6 dB higher; elsewhere within 3.2 % and 0.5 dB). Below that the octave holds three
-third-octave bands whose values differ a lot, so averaging them is not the same analysis.
-G is left out because the responses have no free-field reference.
+In CR2, CR3 and CR4 a dodecahedron loudspeaker stood at two positions and an
+omnidirectional microphone at five, giving ten measured responses in each. In CR1 the
+loudspeaker stood once in each room (LS1 in the chamber, LS2 in the laboratory) and the
+microphone at two positions in the laboratory, giving four. Each scene was simulated as
+it stands, with this package's defaults: ray tracing up to the 3rd order, first-order
+edge diffraction, 50,000 late rays per band and vector-based scattering with the
+scattering of each surface's size, in the air measured on the day. Simulated and
+measured parameters were compared pair by pair in just noticeable differences
+(`acoustic_spaces.compare`, the same JNDs as `acoustic-spaces compare`) and averaged
+over the pairs, in CR1 over each source's. The measured responses were analysed by this
+package too. Its octave values, averaged over the ten pairs, are within 3 % of the mean
+of the three third-octave averages BRAS publishes for T20, within 5 % for EDT and within
+0.8 dB for C80, from 500 Hz to 4 kHz in CR2, CR3 and CR4 (the largest differences are
+EDT 4.3 % lower in the hall at 500 Hz and C80 0.8 dB higher in the auditorium at 500 Hz
+and 1 kHz; elsewhere within 3.8 % and 0.6 dB). BRAS publishes none for CR1. Below 500 Hz
+the octave holds three third-octave bands whose values differ a lot, so averaging them
+is not the same analysis. G is compared from seat to seat, as the level of the measured
+responses is uncertain by about 3 dB (see [Strength](#strength-g) below).
 
-The tables and plots in this section were made with version 4.0.1 on 27 and 28 October
-2026, on 4 cores of a cloud machine without a GPU, where the run times below were
-measured. 4.0.0 could not run either room at its defaults (its early stage asked for
-16.4 GiB at once in CR3 and 19.6 GiB in CR2); 4.0.1 runs the seminar room in 1.1 GiB
-(1.2 GiB in third-octave bands) and the hall in 10.0 GiB (10.4 GiB
-calibrated, 11.7 GiB in third-octave bands), most of it the edge fade's at one listener (see
-[Memory](simulation.md#memory)).
+The tables and plots in this section were made with this version on 29 October 2026, on
+4 cores of a cloud machine without a GPU, where the run times below were measured. The
+coupled rooms, the seminar room and the auditorium each run in 2 to 4.5 minutes and 0.6
+to 1.1 GiB (up to 1.3 GiB in third-octave bands); the hall takes 1.5 hours and 10.0 GiB
+(5.2 hours and 10.4 GiB calibrated, 3.3 hours and 11.8 GiB in third-octave bands),
+nearly all of it the early stage's edge diffraction at one listener (see
+[Memory](simulation.md#memory)). 4.0.0 could not run the seminar room or the hall at
+their defaults: its early stage asked for 16.4 GiB at once in CR3 and 19.6 GiB in CR2.
 
 BRAS gives two sets of absorption coefficients. The **fitted** set was adjusted until
-Eyring's formula gave the measured reverberation time; the scenes use it. The
-**initial** set is BRAS's estimate before that, from tables and measurements of the
-materials, which is the blind case (`--materials initial`).
+Eyring's formula gave the measured reverberation time (in CR1 for each of the two rooms
+on its own); the scenes use it. The **initial** set is BRAS's estimate before that, from
+tables and measurements of the materials, which is the blind case (`--materials
+initial`).
 
-Mean absolute difference from 125 Hz to 4 kHz in JNDs, and how many of the 60 pair and
-band values are within one JND:
+Mean absolute difference from 125 Hz to 4 kHz in JNDs (for G in dB, the JND being 1 dB),
+and how many of the pair and band values are within one JND: of 60 in CR2, CR3 and CR4,
+of 24 in CR1 (23 for T30, which one of LS1's responses does not decay far enough for at
+125 Hz). With the fitted absorption:
 
-| | CR2 fitted | CR3 fitted | CR2 initial | CR3 initial |
+| | CR1 | CR2 | CR3 | CR4 |
 |---|---:|---:|---:|---:|
-| EDT | 1.0 (44) | 2.1 (20) | 5.9 (6) | 4.6 (9) |
-| T20 | 1.0 (41) | 2.0 (10) | 6.5 (1) | 5.7 (12) |
-| T30 | 1.0 (43) | 1.8 (9) | 6.5 (0) | 5.7 (11) |
-| C50 | 1.0 (41) | 1.2 (33) | 1.6 (26) | 1.6 (21) |
-| C80 | 0.7 (51) | 1.0 (40) | 1.6 (28) | 1.3 (27) |
-| D50 | 1.0 (40) | 1.4 (31) | 1.6 (24) | 1.7 (20) |
-| Ts | 0.8 (42) | 0.9 (33) | 3.2 (13) | 2.1 (24) |
+| EDT | 7.7 (2) | 1.0 (44) | 2.1 (20) | 3.7 (3) |
+| T20 | 6.7 (1) | 1.0 (41) | 2.0 (10) | 3.0 (1) |
+| T30 | 7.7 (0) | 1.0 (43) | 1.8 (9) | 3.0 (0) |
+| C50 | 4.3 (2) | 1.0 (41) | 1.3 (34) | 1.3 (31) |
+| C80 | 4.0 (1) | 0.7 (51) | 1.0 (40) | 1.3 (27) |
+| D50 | 4.0 (2) | 1.0 (39) | 1.4 (30) | 1.3 (30) |
+| Ts | 3.6 (2) | 0.8 (42) | 0.9 (34) | 2.5 (9) |
+| G, seat to seat | 1.8 (5) | 0.3 (55) | 0.6 (52) | 0.5 (50) |
+
+With the initial absorption:
+
+| | CR1 | CR2 | CR3 | CR4 |
+|---|---:|---:|---:|---:|
+| EDT | 16.2 (0) | 5.9 (6) | 4.6 (9) | 4.0 (8) |
+| T20 | 11.0 (1) | 6.5 (1) | 5.7 (12) | 3.7 (13) |
+| T30 | 5.6 (4) | 6.5 (0) | 5.7 (11) | 3.8 (10) |
+| C50 | 6.0 (3) | 1.5 (25) | 1.6 (20) | 1.6 (23) |
+| C80 | 6.0 (4) | 1.6 (28) | 1.3 (28) | 1.5 (28) |
+| D50 | 5.9 (3) | 1.6 (24) | 1.7 (18) | 1.7 (23) |
+| Ts | 12.5 (4) | 3.2 (14) | 2.0 (24) | 2.8 (16) |
+| G, seat to seat | 2.9 (2) | 0.3 (54) | 0.7 (51) | 0.5 (50) |
 
 ![CR2, fitted absorption](validation/bras_CR2_fitted.png)
 
 **Seminar room, fitted absorption.** From 500 Hz to 4 kHz the reverberation time is
-within 2 % of the measured one (T20 1.92 s against 1.94 s at 1 kHz), well within one JND,
-and C50, C80 and D50 are within one JND from 500 Hz up. At 250 Hz and 8 kHz the simulated
-decay is 13 and 18 % short, and so is Eyring's formula with the same absorption and air (1.48 s
-against 1.72 s measured at 250 Hz, 0.93 s against 1.11 s at 8 kHz), so there the fitted
-coefficients, averaged onto octaves, do not give the measured decay even in a diffuse
-field. At 8 kHz they assume less air absorption than ISO 9613-1 gives at the octave's
-centre frequency; a measured decay follows the octave's slowest part, its lowest third
-(6.3 kHz). Simulated in third-octave bands, which keep both apart, the two bands come
-within 4.1 % of the measurement (see the third-octave results below).
+within 2 % of the measured one (T20 1.92 s against 1.94 s at 1 kHz), well within one
+JND, and C50, C80 and D50 are within one JND from 500 Hz up. At 250 Hz and 8 kHz the
+simulated decay is 13 and 18 % short, and so is Eyring's formula with the same
+absorption and air (1.48 s against 1.72 s measured at 250 Hz, 0.93 s against 1.11 s at 8
+kHz), so there the fitted coefficients, averaged onto octaves, do not give the measured
+decay even in a diffuse field. At 8 kHz they assume less air absorption than ISO 9613-1
+gives at the octave's centre frequency; a measured decay follows the octave's slowest
+part, its lowest third (6.3 kHz). Simulated in third-octave bands, which keep both
+apart, the two bands come within 4.1 % of the measurement (see the third-octave results
+below).
 
 ![CR3, fitted absorption](validation/bras_CR3_fitted.png)
 
-**Chamber music hall, fitted absorption.** The reverberation time comes out 7 to 10 % long
-from 250 Hz to 4 kHz (T20 1.47 s against 1.34 s at 1 kHz), 1.3 to 1.9 JNDs, and 11 and
-17 % long at 63 and 125 Hz. EDT is within 3 % at 250 and 500 Hz and 6 to 14 % long from
-1 to 4 kHz, but 19 and 13 % short at 63 and 125 Hz, where the early part is stronger
-than measured (see the next paragraph). From 125 Hz up, C50,
-C80 and D50 are within about one JND, mostly slightly low, as a slightly long decay
-predicts. Eyring's formula with the same absorption and air is within 5.1 % of the
-measurement from 63 Hz to 4 kHz, as the fitting intends, so in the
-model sound still reaches the absorbing seating a little less often than Eyring's
-diffuse field assumes, and than in the real hall, whose details the simplified BRAS
-model smooths away.
+**Chamber music hall, fitted absorption.** The reverberation time comes out 6 to 10 %
+long from 250 Hz to 4 kHz (T20 1.47 s against 1.34 s at 1 kHz), 1.3 to 1.9 JNDs, and 11
+and 17 % long at 63 and 125 Hz. EDT is within 3.3 % at 250 and 500 Hz and 5 to 14 % long
+from 1 to 4 kHz, but 20 and 13 % short at 63 and 125 Hz, where the early part is
+stronger than measured (see the next paragraph). From 125 Hz up, C50, C80 and D50 are
+within about one JND, mostly slightly low, as a slightly long decay predicts. Eyring's
+formula with the same absorption and air is within 5.1 % of the measurement from 63 Hz
+to 4 kHz, as the fitting intends. That the model decays more slowly suggests that in
+it sound reaches the absorbing seating a little less often than Eyring's diffuse field
+assumes; why the real hall decays as Eyring's formula gives and the model does not is
+not traced (the simplified BRAS model, which smooths the hall's details away, is one
+candidate).
 
-**The hall's early part at low frequencies.** The plots of 15 October 2026 had the hall's
-EDT about 23 and 19 % long at 63 and 125 Hz and C80 about 1.5 and 1.3 dB low: their early
-part was weaker. Traced again at LS1's five positions without edge diffraction, that
-day's code and this version give the same early energy, bit for bit, with every band in
-energy as that day's code had them (with 63 and 125 Hz in pressure, this version's
-default, 0.5 and 0.2 dB more). With it (`first_order`) this version's early energy is
-6.6 and 5.8 dB higher at 63 and 125 Hz, 2.3 dB at 250 Hz and 1.0 dB at 500 Hz (means over
-the five positions; 4.7 to 9.8 dB at 63 Hz), and as high or higher with every band in
-energy (`coherent_max_band_hz: null`), so the reflections' phases are not the cause. The
-late part is the same. Without the
-[fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution), which
-4.0.0 added, it is 3.5 and 1.4 dB higher (1.0 to 6.4 dB at 63 Hz): the fade adds 3.1 and
-4.4 dB of the change. At 125 Hz C80 now comes within 0.3 dB of the measurement;
-at 63 Hz the early part is too strong (C80 1.0 dB high, EDT 3.5 JNDs short).
+**The hall's early part at low frequencies.** The plots of 15 October 2026 had the
+hall's EDT about 23 and 19 % long at 63 and 125 Hz and C80 about 1.5 and 1.3 dB low:
+their early part was weaker. Traced again at LS1's five positions without edge
+diffraction, that day's code and 4.0.1 give the same early energy, bit for bit, with
+every band in energy as that day's code had them (with 63 and 125 Hz in pressure,
+4.0.1's default, 0.5 and 0.2 dB more). With it (`first_order`) 4.0.1's early energy is
+6.6 and 5.8 dB higher at 63 and 125 Hz, 2.3 dB at 250 Hz and 1.0 dB at 500 Hz (means
+over the five positions; 4.7 to 9.8 dB at 63 Hz), and as high or higher with every band
+in energy (`coherent_max_band_hz: null`), so the reflections' phases are not the cause.
+The late part is the same. Without the [fade at
+edges](#reflections-that-fade-at-edges-against-the-exact-solution), which 4.0.0 added,
+it is 3.5 and 1.4 dB higher (1.0 to 6.4 dB at 63 Hz): the fade adds 3.1 and 4.4 dB of
+the change. At 125 Hz C80 now comes within 0.2 dB of the measurement; at 63 Hz the early
+part is too strong (C80 1.1 dB high, EDT 3.6 JNDs short).
+
+![CR4, fitted absorption](validation/bras_CR4_fitted.png)
+
+**Auditorium, fitted absorption.** The decay comes out 12 to 21 % long from 125 Hz to 4
+kHz (T20 2.37 s against 2.11 s at 1 kHz), 2.5 to 4.2 JNDs, and EDT 12 to 21 % long too.
+Eyring's formula with the same absorption and air is within 5 % of the measured T20 from
+63 Hz to 4 kHz, so here too the fitting did what it intends; that the model decays
+more slowly still suggests that its sound reaches the absorbing surfaces less often
+than Eyring's diffuse field assumes, more so than in the hall (see "Calibrated
+absorption" below). C50, C80 and D50 are within about
+one JND from 125 Hz up (C80 1.4 JNDs low at 500 Hz), and like the hall's mostly low. At
+8 kHz the decay is 7 % short, as in the seminar room: Eyring's formula with the same
+absorption and air gives 0.82 s against 0.96 s measured.
 
 **What scattering does.** Up to version 2 this package scattered a ray with the
 coefficient as probability, and from the surface's own coefficient alone. The hall then
-came out 20 to 32 % long, EDT 11 to 24 %, and the seminar room 0 to 10 % long from 250 Hz
-to 4 kHz. Tracing the total sound energy in each room without listeners (as in the
+came out 20 to 32 % long, EDT 11 to 24 %, and the seminar room 0 to 10 % long from 250
+Hz to 4 kHz. Tracing the total sound energy in each room without listeners (as in the
 cross-check above, each band with rays of its own) and fitting T20 to its decay shows
 what each part of the new model does:
 
@@ -587,12 +646,13 @@ what each part of the new model does:
 
 From 500 Hz to 4 kHz, vector-based scattering alone takes the hall from 15 to 25 % long
 down to 8 to 18 %, but makes the seminar room 5 to 9 % short. Adding the scattering of
-each surface's size brings the seminar room within 2 % of the measurement (and within
-4 % of Eyring's diffuse field), and the hall to 8 to 10 % long: one model now fits both rooms better than
-either did. The simulated responses decay like these room-energy curves, within 4.3 %
-in every band. The rest of the hall's gap is the model hall itself, as the paragraph above
-says. Fitting the absorption with this tracer instead of Eyring's formula takes up that
-gap (see "Calibrated absorption" below).
+each surface's size brings the seminar room within 2 % of the measurement (and within 4
+% of Eyring's diffuse field), and the hall to 8 to 10 % long: one model now fits both
+rooms better than either did. The simulated responses decay like these room-energy
+curves, within 0.2 % in the seminar room and 4.8 % in the hall in every band. The rest
+of the hall's gap is not traced further (see the hall's fitted absorption above). Fitting the
+absorption with this tracer instead of Eyring's formula takes up that gap, in the hall
+and in the auditorium (see "Calibrated absorption" below).
 
 **Third-octave bands.** BRAS gives its coefficients in third octaves. Averaged onto
 octaves, an octave's three thirds decay as one, at their mean absorption, while three
@@ -606,101 +666,281 @@ does. Simulated with `simulation.bands: third_octave`, which keeps the thirds ap
 | CR2 octave bands (default) | 1.69 | 1.49 | 1.50 | 1.97 | 1.92 | 1.76 | 1.53 | 0.91 |
 | CR2 third-octave bands | 1.77 | 1.51 | 1.65 | 1.98 | 1.92 | 1.78 | 1.51 | 1.07 |
 | CR3 measured | 1.77 | 1.57 | 1.46 | 1.28 | 1.34 | 1.30 | 1.03 | 0.78 |
-| CR3 octave bands (default) | 1.96 | 1.83 | 1.56 | 1.40 | 1.47 | 1.40 | 1.10 | 0.72 |
+| CR3 octave bands (default) | 1.96 | 1.83 | 1.55 | 1.40 | 1.47 | 1.40 | 1.10 | 0.72 |
 | CR3 third-octave bands | 2.00 | 1.88 | 1.57 | 1.40 | 1.46 | 1.40 | 1.13 | 0.80 |
+| CR4 measured | 2.36 | 2.43 | 2.34 | 2.10 | 2.11 | 1.84 | 1.39 | 0.96 |
+| CR4 octave bands (default) | 2.86 | 2.83 | 2.82 | 2.42 | 2.37 | 2.07 | 1.57 | 0.89 |
+| CR4 third-octave bands | 2.96 | 2.92 | 2.87 | 2.45 | 2.38 | 2.07 | 1.63 | 1.03 |
 
 The seminar room's decay at 250 Hz and 8 kHz, 13 and 18 % short in octave bands, comes
 within 4.1 % of the measurement: there its thirds' absorption, and at 8 kHz the air's,
-differ most. The hall's 8 kHz goes from 8 % short to 3 % long. From 500 Hz to 2 kHz T20
-changes by 0.02 s at most. At 63 and 125 Hz both rooms come out 1 to 5 % longer than in
-octave bands, and the hall at 4 kHz 10 % long instead of 7 %. Over 125 Hz to 4 kHz the seminar
-room's mean T30 difference goes from 1.0 to 0.9 JNDs; the hall's goes from 1.8 to 2.1,
-since its decay was long already and third octaves lengthen it. A third-octave run takes
-9 minutes for the seminar room instead of 4, and 3.6 hours for the hall instead of 1.5.
+differ most. The hall's 8 kHz goes from 8 % short to 2 % long, and the auditorium's from
+7 % short to 7 % long. From 500 Hz to 2 kHz T20 changes by 0.03 s at most. At 63 and 125
+Hz the rooms come out 1 to 5 % longer than in octave bands, and the hall at 4 kHz 10 %
+long instead of 7 %. Over 125 Hz to 4 kHz the seminar room's mean T30 difference goes
+from 1.0 to 0.9 JNDs; the hall's goes from 1.8 to 2.1 and the auditorium's from 3.0 to
+3.5, since their decays were long already and third octaves lengthen them. In the
+coupled rooms they lengthen the decay of LS1's sound further (T20 13.8 s at 125 Hz
+against 12.1 s in octave bands and 6.7 s measured). A third-octave run takes 9 to 11
+minutes for the seminar room and the auditorium instead of 4, and 3.3 hours for the hall
+instead of 1.5.
 
 ![CR2, initial absorption](validation/bras_CR2_initial.png)
 
 ![CR3, initial absorption](validation/bras_CR3_initial.png)
 
-**Initial absorption.** With the absorption estimated before fitting, the decay at 63
-and 125 Hz comes out 1.5 to 2.2 times as long as measured in both rooms, and at 250 Hz in
-the hall too (T20 2.71 s against 1.34 s in CR2 at 125 Hz). The initial coefficients have
-far less absorption there than the fitted ones. In real rooms much of it comes from
-structures that flex, such as panels, windows and doors, which tables of materials
-rarely capture. From 500 Hz to 4 kHz the seminar room's decay is 13 to 29 % short, and at
-2 and 4 kHz the hall's is 7 to 18 % short. The simulation follows Eyring's formula with
-the same coefficients within 15 % in every band of both rooms (within 3 % from 250 Hz up
-in the seminar room), so the error is in the coefficients. This is the error to expect from tabulated coefficients alone, before a
-room has been measured.
+![CR4, initial absorption](validation/bras_CR4_initial.png)
+
+**Initial absorption.** With the absorption estimated before fitting, T20 at 63 and 125
+Hz comes out 1.5 to 2.2 times as long as measured in the seminar room and the hall, and
+at 250 Hz in the hall too (2.71 s against 1.34 s in CR2 at 125 Hz), and 1.4 times in the
+auditorium. The initial coefficients have far less absorption there than the fitted
+ones. In real rooms much of it comes from structures that flex, such as panels, windows
+and doors, which tables of materials rarely capture. From 500 Hz to 4 kHz the seminar
+room's decay is 12 to 29 % short, and at 2 and 4 kHz the hall's is 6 to 18 % short and
+the auditorium's 26 and 25 %. The simulation follows Eyring's formula with the same
+coefficients within 15 % in every band of the seminar room and the hall (within 3 % from
+250 Hz up in the seminar room), and is 15 to 22 % longer in every band of the
+auditorium, as with the fitted set, so the error is in the coefficients. This is the
+error to expect from tabulated coefficients alone, before a room has been measured.
 
 **Calibrated absorption.** `--calibrate LS1` first fits the absorption of every surface
-(`acoustic-spaces calibrate`, see [Measurements](measurements.md#fitting-materials-to-measurements)). It fits to the T30, EDT and C80 of the
-five responses of the first loudspeaker position, starting from the initial set, with
-10,000 rays per band while fitting. Then it simulates the room with what the fit found,
-as above, and compares the five responses of the second position, which the fit did
-not see. The table gives the mean absolute difference from 125 Hz to 4 kHz in JNDs over
-those five responses, with how many of their 30 pair and band values are within one
-JND. The fitted and initial columns repeat the table above, which averages all ten
-responses:
+(`acoustic-spaces calibrate`, see
+[Measurements](measurements.md#fitting-materials-to-measurements)). It fits to the T30,
+EDT and C80 of the five responses of the first loudspeaker position, starting from the
+initial set, with 10,000 rays per band while fitting. Then it simulates the room with
+what the fit found, as above, and compares the five responses of the second position,
+which the fit did not see. The table gives the mean absolute difference from 125 Hz to 4
+kHz in JNDs over those five responses, with how many of their 30 pair and band values
+are within one JND. The fitted and initial columns repeat the tables above, which
+average all ten responses:
 
-| | CR2 calibrated | CR2 fitted | CR2 initial | CR3 calibrated | CR3 fitted | CR3 initial |
-|---|---:|---:|---:|---:|---:|---:|
-| EDT | 1.1 (20) | 1.0 | 5.9 | 1.5 (15) | 2.1 | 4.6 |
-| T20 | 0.9 (23) | 1.0 | 6.5 | 1.2 (18) | 2.0 | 5.7 |
-| T30 | 1.0 (22) | 1.0 | 6.5 | 0.7 (25) | 1.8 | 5.7 |
-| C50 | 1.1 (20) | 1.0 | 1.6 | 1.2 (15) | 1.2 | 1.6 |
-| C80 | 0.7 (25) | 0.7 | 1.6 | 0.8 (20) | 1.0 | 1.3 |
-| D50 | 1.1 (20) | 1.0 | 1.6 | 1.3 (13) | 1.4 | 1.7 |
-| Ts | 0.7 (26) | 0.8 | 3.2 | 0.8 (20) | 0.9 | 2.1 |
+| | CR2 calibrated | CR2 fitted | CR2 initial | CR3 calibrated | CR3 fitted | CR3 initial | CR4 calibrated | CR4 fitted | CR4 initial |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| EDT | 1.1 (19) | 1.0 | 5.9 | 1.4 (15) | 2.1 | 4.6 | 1.5 (12) | 3.7 | 4.0 |
+| T20 | 0.9 (23) | 1.0 | 6.5 | 1.1 (18) | 2.0 | 5.7 | 0.7 (26) | 3.0 | 3.7 |
+| T30 | 1.0 (22) | 1.0 | 6.5 | 0.6 (25) | 1.8 | 5.7 | 0.6 (26) | 3.0 | 3.8 |
+| C50 | 1.1 (20) | 1.0 | 1.5 | 1.2 (15) | 1.3 | 1.6 | 1.4 (13) | 1.3 | 1.6 |
+| C80 | 0.7 (25) | 0.7 | 1.6 | 0.8 (21) | 1.0 | 1.3 | 1.0 (17) | 1.3 | 1.5 |
+| D50 | 1.1 (20) | 1.0 | 1.6 | 1.3 (13) | 1.4 | 1.7 | 1.4 (14) | 1.3 | 1.7 |
+| Ts | 0.7 (26) | 0.8 | 3.2 | 0.8 (22) | 0.9 | 2.0 | 1.2 (14) | 2.5 | 2.8 |
 
 ![CR2, calibrated from the initial absorption](validation/bras_CR2_initial_calibrated.png)
 
 ![CR3, calibrated from the initial absorption](validation/bras_CR3_initial_calibrated.png)
 
-The initial estimates made the decay up to twice as long. From them, calibration brings
-the seminar room to about one JND on responses it did not fit, as BRAS's fitted set
-does. In the hall it does better than the fitted set: T30 is within 0.7 JNDs on
-average, with 25 of the 30 values within one JND, against 1.8 with the fitted set, T20
-within 1.2 against 2.0 and EDT 1.5 against 2.1. The fit uses the model's own rays
-rather than Eyring's formula, so it takes up what the model hall's sound misses of the
-seating.
+![CR4, calibrated from the initial absorption](validation/bras_CR4_initial_calibrated.png)
+
+The initial estimates made the decay up to 2.2 times as long. From them, calibration
+brings the seminar room to about one JND on responses it did not fit, as BRAS's fitted
+set does. In the hall and the auditorium it does better than the fitted set on the
+decay. In the hall T30 is within 0.6 JNDs on average, with 25 of the 30 values within
+one JND, against 1.8 with the fitted set, T20 within 1.1 against 2.0 and EDT 1.4 against
+2.1. In the auditorium T20 and T30 are within 0.7 and 0.6 JNDs, with 26 of the 30 values
+within one JND, against 3.0 with the fitted set, and EDT 1.5 against 3.7. The fit uses
+the model's own rays rather than Eyring's formula, so it takes up what the model's sound
+misses of the absorbing surfaces: from 63 Hz to 4 kHz it found 3 to 21 % more absorption
+in all than BRAS's fitted set in the hall, and 17 to 33 % more in the auditorium. The
+clarity stays within 0.8 to 1.4 JNDs on average, as with the fitted set (1.0 to 1.4).
 
 In the seminar room the fit found nearly BRAS's fitted set, though it started from the
-initial one. The windows absorb 0.28 and 0.22 at 63 and 125 Hz (BRAS fitted 0.25 and
-0.19, initial 0.13 and 0.10), and every other value is within 0.025 of BRAS's. In
-the hall it found more absorption than BRAS in the plaster at 125 and 250 Hz (0.20 and
-0.20 against 0.11 and 0.15) and in the seating at 2 kHz (0.63 against 0.41), and less
-in the seating at 125 and 250 Hz (0.11 and 0.22 against 0.21 and 0.37) and in the
-structured plaster at 2 kHz (0.09 against 0.14).
+initial one. The windows absorb 0.24 and 0.30 at 63 and 125 Hz (BRAS fitted 0.25 and
+0.19, initial 0.13 and 0.10), and every other value is within 0.021 of BRAS's. In the
+hall it found more absorption than BRAS in the plaster at 125 and 250 Hz (0.18 and 0.20
+against 0.11 and 0.15) and in the seating at 63 Hz and 2 kHz (0.25 and 0.56 against 0.17
+and 0.41), and less in the seating at 125 and 250 Hz (0.13 and 0.23 against 0.21 and
+0.37) and in the structured plaster at 2 kHz (0.10 against 0.14). In the auditorium the
+linoleum absorbs 0.27 and 0.25 at 63 and 125 Hz (BRAS fitted 0.15 and 0.10), the brick
+wall 0.30 at 500 Hz (0.20) and the wood panels 0.26 at 4 kHz (0.13).
 
 These are what a model needs to match the room, not what each surface absorbs. With one
 loudspeaker position and five microphones, the uncertainty the fit reports is above 0.2
-for most materials and bands in the hall, and 0.38 or more for all of them in the seminar
-room. The
-measurements fix each band's total absorption, and the proportions between materials
-come from the initial estimates. Telling surfaces apart takes responses that hear them
-differently, such as sources and microphones near different surfaces.
+for most materials and bands in the hall and the auditorium, and 0.43 or more for all of
+them in the seminar room. The measurements fix each band's total absorption, and the
+proportions between materials come from the initial estimates. Telling surfaces apart
+takes responses that hear them differently, such as sources and microphones near
+different surfaces.
 
 Some differences remain:
 
 - **250 Hz in the seminar room.** T30 is 3.1 JNDs short on the second loudspeaker's
-  responses, though 1.2 off on average on the first's. The two positions measured 1.70 and
-  1.90 s on average. This is near the room's Schroeder frequency, about 230 Hz, where a
-  decay depends on where it is measured.
+  responses, though 1.2 off on average on the first's. The two positions measured 1.70
+  and 1.90 s on average. This is near the room's Schroeder frequency, about 230 Hz,
+  where a decay depends on where it is measured.
 - **8 kHz in the seminar room.** The decay stays 2 JNDs short even with surfaces that
   absorb next to nothing, because in octave bands the air absorbs at the octave's centre
   frequency (see "Third-octave bands" above).
-- **63 Hz in the seminar room.** EDT stays 5.8 JNDs long. Below the Schroeder frequency
-  a geometric model gives an average, not the room's modes.
-- **63 and 125 Hz in the hall.** EDT is 3.8 and 2.5 JNDs short and T20 1.7 and 3.2 JNDs
-  long, as with the fitted set: the early part there is stronger than measured (see
-  "The hall's early part at low frequencies" above). The hall's Schroeder frequency is
-  about 45 Hz.
+- **63 Hz in the seminar room.** EDT stays 6.0 JNDs long. This is below the room's
+  Schroeder frequency, where a geometric model gives an average rather than the room's
+  modes: a likely cause, not traced.
+- **63 and 125 Hz in the hall.** EDT is 3.8 and 2.5 JNDs short and T20 1.8 and 3.0 JNDs
+  long, as with the fitted set: the early part there is stronger than measured (see "The
+  hall's early part at low frequencies" above). The hall's Schroeder frequency is about
+  45 Hz.
+- **63 Hz in the auditorium.** EDT is 5.1 JNDs long and T30 3.4 JNDs short.
 
-Fitting took 5 minutes for the seminar room (three rounds of tracing at the first
-position's 10,000 rays per band) and 3.8 hours for the hall (four rounds), nearly all of
-it the early stage's edge fade, which fewer rays do not shorten. Simulating again took
-4 minutes and 83 minutes.
+Fitting took 3.7 minutes for the seminar room (two rounds of tracing at the first
+position's 10,000 rays per band), 4 minutes for the auditorium (four rounds) and 3.6
+hours for the hall (four rounds), nearly all of it the early stage's edge diffraction,
+which fewer rays do not shorten. Simulating again took about 4 minutes in the seminar
+room and the auditorium and 91 minutes in the hall.
+
+### Coupled rooms
+
+![CR1, fitted absorption](validation/bras_CR1_DoorAngle1_fitted.png)
+
+In CR1 the door, open by 4.1°, leaves the rooms joined by a slit: about 4 cm between
+the leaf's free end and the jamb, over the door's height, and a wedge above the leaf,
+about 0.1 m² in all. In the model, nothing else joins them. The scene's absorption is
+BRAS's fitted set, fitted to each room on its own, so the chamber alone decays in 12.4 s
+at 125 Hz and 5.5 s at 500 Hz by Eyring's formula, and the laboratory in 1.0 and 0.7 s
+(with each room's volume and surface as BRAS's material file gives them).
+
+LS1's sound reaches the microphones in the laboratory from the chamber. Simulated, it
+decays in 12.1 s at 125 Hz and 5.4 s at 500 Hz (T20), within 5.3 % of what the diffuse
+theory of two coupled rooms gives from 125 Hz to 2 kHz with those Eyring times and an
+opening of 0.1 m² (11.7 and 5.4 s; `validation/coupled_rooms.py`). Near that opening
+the decay changes little with it, so the simulated decays correspond to openings from
+0.04 to 0.33 m² in the same theory. The measured sound decays in 6.7 and 4.3 s: in
+the theory the rooms would need to be joined by 1.5 and 1.6 m² at 125 and 250 Hz and
+1.0 m² from 500 Hz to 2 kHz, 10 to 16 times the model's opening. The model's door
+is a rigid slab, without the transmission BRAS gives no data for, and its rooms meet
+nowhere else, so what joins the real rooms that strongly is not in the model. LS1's EDT
+and T20 are 2 to 25 JNDs long from 63 Hz to 2 kHz, and C80 4 to 14 dB high.
+
+LS2's sound decays in the laboratory, where the measured decays bend: their EDT is 0.80
+s at 1 kHz and their T30 1.41 s, at 125 Hz 0.97 and 4.38 s, the chamber's sound coming
+back through the door. The simulated decays are single slopes, so T30 is 5 to 14 JNDs
+short from 125 Hz to 1 kHz. Their EDT is 1.1 s at 1 kHz, a third longer than the 0.8 s
+Eyring's formula gives for the laboratory with the fitted set, which is what was
+measured: as in the hall and the auditorium, the model decays more slowly than Eyring's
+diffuse field with the same absorption, here more so.
+
+Calibrated on LS1's responses from the initial set (`--calibrate LS1`), the fit raised
+the absorption of the chamber's painted concrete to 4.3 times BRAS's fitted value at 125
+Hz and 1.2 to 1.8 times from 250 Hz to 4 kHz, which brings LS1's EDT and T20 within 15 %
+from 125 Hz to 4 kHz, and took the laboratory's absorber down from 0.49 to 0.20 at 1
+kHz, as LS1's responses do not pin it (the fit reports an uncertainty of 0.33 to 2.4 for
+it). LS2's responses, which the fit did not see, then decay in 2.2 s at 1 kHz against
+0.8 s measured, 55 JNDs off in EDT on average. A calibration fits the responses it is
+given; in coupled rooms each room needs responses of its own.
+
+The CR1 runs take 2 minutes and 0.6 GiB (5 minutes and 0.7 GiB in third-octave bands, 4
+minutes calibrated).
+
+### Strength (G)
+
+The measured responses are in pascals. BRAS calibrated the measuring chain to 80 dB at 2
+m in front of the dodecahedron at 1 kHz, and corrected each room's level by 6 dB by hand
+to meet the expected direct sound. Read with the dodecahedron's directivity (BRAS's
+data, averaged over all directions) and 80 dB as the level of the 1 kHz sine, the
+measured G is 2.3 to 3.3 dB above classic diffuse theory (10 log10(100/r² + 31,200
+T30/V), with the measured T30) at 500 Hz, 1 kHz and 4 kHz in the seminar room and the
+hall, and 1.7 to 2.4 dB in the auditorium, and the direct sound is about 2 to 3 dB above
+the calibration even in the dodecahedron's loudest direction, in the hall's pairs where
+it stands apart. At 2 kHz it is within 0.6 dB of the theory, about 3 dB below the
+neighbouring octaves in all three rooms, which the dodecahedron's directivity data do
+not explain. The simulated G is within 1.3 dB of the same theory there (0.0 in the
+seminar room). Read with 80 dB as the sine's peak instead, which lowers the measured G
+by 3 dB, it comes within 1.3 dB of the theory at 500 Hz, 1 and 4 kHz in all three rooms,
+and 2.4 to 3.5 dB below it at 2 kHz. Which reading BRAS meant is not stated, so an
+absolute G against these responses would test the reading, not the simulation.
+
+Simulated minus measured G with the first reading, at 500 Hz, 1, 2 and 4 kHz (means over
+the pairs, standard deviations 0.2 to 0.9 dB):
+
+| | 500 Hz | 1 kHz | 2 kHz | 4 kHz |
+|---|---:|---:|---:|---:|
+| CR2 | -2.3 | -3.1 | +0.2 | -2.9 |
+| CR3 | -1.3 | -2.1 | +0.1 | -3.2 |
+| CR4 | -1.7 | -2.1 | +0.5 | -2.2 |
+
+These are left out of the JND counts. What is compared is G from seat to seat: each
+pair's simulated G less the mean over the room's pairs, against each pair's measured
+level less its mean, which the level's reference does not touch. From 125 Hz to 4 kHz it
+is within one JND (1 dB) in 55 of the 60 values in the seminar room, 52 in the hall and
+50 in the auditorium, 0.3 to 0.6 dB off on average. In the coupled rooms, where it holds
+the level of the chamber's sound against the laboratory's own, it is 1.8 dB off, 5 of 24
+within 1 dB: the coupling again.
+
+### Interaural cross-correlation
+
+BRAS also measured binaural responses in the seminar room, the hall and the auditorium:
+five QSC K8 loudspeakers (LS3 to LS7), one at a time, aimed at FABIAN, a head and torso
+simulator 4 to 5 m away in the seminar room and 10 to 11 m in the hall and the
+auditorium, facing LS7 with its head straight. `validation/bras_binaural.py` simulates
+each loudspeaker with the K8's measured directivity (`validation/bras/QSC_K8.csv`) and
+the fitted absorption, renders the response through FABIAN's head-related impulse
+responses (every 2°), and compares IACC_E (the first 80 ms) and IACC_L (from 80 ms) with
+those of the measured responses, analysed by this package, in JNDs of 0.075 (ISO
+3382-1). The late part of a rendered response is noise drawn anew with each seed, so the
+simulated values are means over 10 seeds, whose standard deviation is 0.07 at most.
+Means over the five loudspeakers, measured / simulated, and how many of the 30
+loudspeaker and band values from 125 Hz to 4 kHz are within one JND:
+
+| IACC_E | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz | within 1 JND | mean (JNDs) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| CR2 | 0.90 / 0.93 | 0.66 / 0.86 | 0.38 / 0.39 | 0.37 / 0.34 | 0.42 / 0.38 | 0.36 / 0.32 | 18 | 1.3 |
+| CR3 | 0.94 / 0.92 | 0.79 / 0.80 | 0.48 / 0.34 | 0.48 / 0.27 | 0.65 / 0.50 | 0.55 / 0.46 | 16 | 1.4 |
+| CR4 | 0.96 / 0.96 | 0.87 / 0.89 | 0.86 / 0.71 | 0.81 / 0.81 | 0.87 / 0.88 | 0.87 / 0.88 | 26 | 0.6 |
+
+| IACC_L | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz | within 1 JND | mean (JNDs) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| CR2 | 0.90 / 0.89 | 0.54 / 0.67 | 0.14 / 0.18 | 0.11 / 0.09 | 0.07 / 0.08 | 0.06 / 0.07 | 25 | 0.6 |
+| CR3 | 0.95 / 0.92 | 0.73 / 0.81 | 0.20 / 0.26 | 0.14 / 0.13 | 0.11 / 0.09 | 0.10 / 0.09 | 23 | 0.7 |
+| CR4 | 0.92 / 0.92 | 0.72 / 0.75 | 0.33 / 0.34 | 0.34 / 0.25 | 0.29 / 0.29 | 0.26 / 0.17 | 19 | 0.9 |
+
+IACC_L, which the late part's arrival directions decide, is within one JND in 19 to 25
+of the 30 values. IACC_E is within one JND in 26 in the auditorium, and in the seminar
+room on average from 500 Hz up, but 2.5 JNDs high there at 250 Hz and 1.8 to 2.7 JNDs
+low in the hall from 500 Hz to 2 kHz. Split into the direct sound (its first 5 ms) and
+the rest of the first 80 ms, and the simulated responses also into their direct sound,
+specular reflections, diffracted paths and late part, rendered one at a time:
+
+- **The hall from 500 Hz to 4 kHz, and the seminar room at 250 Hz.** The diffracted
+  paths carry most of the simulated early sound at the head: 63 % of it at 1 kHz from
+  LS7 in the hall, with an IACC of 0.39, and 81 and 98 % at 250 Hz from LS3 and LS4 in
+  the seminar room, with an IACC of 0.96 and 0.95 (one seed of the rendering). In the
+  echogram they are about as strong as the specular reflections (in the hall at 1 kHz
+  1.2 times the direct sound within 80 ms, as the reflections), but rendered they are
+  several times stronger, as many of them arrive together (see [Known
+  issues](#known-issues)), so they decide the simulated IACC_E there. Without edge
+  diffraction, LS7's IACC_E in the hall is 0.51 at 1 kHz against 0.75 measured, and
+  within 0.03 of the measurement at 2 and 4 kHz.
+- **The auditorium at 500 Hz.** The simulated sound in the 75 ms after the direct sound
+  is 6.5 and 7.1 dB stronger against the direct sound than measured (LS4 and LS5), 1.6
+  and 1.8 dB at 1 kHz, and within 0.8 dB at 2 and 4 kHz. There the diffracted paths
+  render about as strong as in the echogram (0.8 to 1.3 times from 500 Hz up), and at
+  500 Hz the specular reflections, the diffracted paths and the late part each carry
+  about as much as all of the measured sound in that time. At 1 kHz the simulated sound
+  after the direct sound is more correlated than the measured (0.42 against 0.28 at
+  LS4), which makes up for its level in IACC_E.
+
+### How much a run varies
+
+The late rays are traced in 10 batches by default, which gives each simulated parameter
+a standard error: one standard deviation of how much it would change between runs with
+other seeds (see [Simulation](simulation.md), late reverberation). `bras_validation.py`
+prints the largest over each room's pairs from 125 Hz to 4 kHz, in JNDs. With the fitted
+absorption, at 50,000 rays per band:
+
+| largest standard error (JNDs) | CR1 | CR2 | CR3 | CR4 |
+|---|---:|---:|---:|---:|
+| EDT | 1.08 | 0.12 | 0.56 | 0.48 |
+| T20 | 0.42 | 0.07 | 0.34 | 0.36 |
+| T30 | 0.22 | 0.05 | 0.25 | 0.20 |
+| C50 | 0.46 | 0.06 | 0.23 | 0.15 |
+| C80 | 0.57 | 0.05 | 0.22 | 0.20 |
+| D50 | 0.52 | 0.06 | 0.25 | 0.17 |
+| Ts | 0.88 | 0.06 | 0.14 | 0.20 |
+
+In the seminar room no standard error is above an eighth of a JND. In the hall and the
+auditorium EDT's standard error is a third of a JND for a typical pair and band (the
+median, 0.33 and 0.28) and half a JND at most, so there a difference from the
+measurement below one JND is partly the run's own; decays 2 to 4 JNDs long are not. In
+the coupled rooms the largest are those of LS1's sound, which reaches the laboratory
+through the slit by the door: EDT 1.08 JNDs at 4 kHz. With the initial absorption the
+hall's largest is T30's, 0.92 JNDs at one pair at 4 kHz.
 
 ## Edge diffraction against the exact solution
 
@@ -877,18 +1117,19 @@ changes nothing (less than 0.001 dB):
 | barrier on a rigid ground, `first_order` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | largest difference, `one_side` | 2.20 | 3.00 | 2.62 | 0.89 | 0.79 | 0.67 | 0.75 | 0.72 |
-| largest difference, `both_sides` | 0.38 | 0.05 | 0.07 | 0.01 | 0.02 | 0.05 | 0.03 | 0.05 |
-| largest step, `both_sides` | 0.35 | 0.14 | 0.12 | 0.05 | 0.09 | 0.15 | 0.20 | 0.16 |
+| largest difference, `both_sides` | 0.04 | 0.02 | 0.02 | 0.01 | 0.02 | 0.05 | 0.03 | 0.05 |
+| largest step, `both_sides` | 0.06 | 0.14 | 0.12 | 0.05 | 0.09 | 0.15 | 0.20 | 0.16 |
 | largest step, exact | 0.06 | 0.14 | 0.12 | 0.05 | 0.09 | 0.15 | 0.21 | 0.16 |
 
 `one_side` leaves out the fourth path, reflected off the ground before the top and
 again after it (see [Outdoor results](#outdoor-results-against-exact-solutions)).
-With `both_sides` the level is within 0.07 dB of the exact level from 125 Hz up, and
-steps like it but at 63 Hz: there it steps by 0.35 dB (`one_side` by 0.33 dB) at
+With `both_sides` the level is within 0.05 dB of the exact level in every band, and
+steps as it does. Up to 4.0.1 it stepped by 0.35 dB at 63 Hz (`one_side` by 0.33 dB) at
 z = 6.5 m, where the listener rises into sight of the reflection off the ground before
-the barrier, and is 0.33 dB low on average above. The path over the top with the
-reflection off the ground behind it is left out there (see
-[Known issues](#known-issues)).
+the barrier, and was 0.33 dB low on average above (0.38 dB at most): the path over the
+top with the reflection off the ground behind it was left out there. Both reflections
+come from the source's image in the ground, and the edge diffraction took the one it
+found for the geometric wave of both.
 
 Behind a barrier 1 m thick on the same ground (two right-angled edges 1 m apart, 3 m
 up), with the source at (-5, 0, 0.5), `second_order` and listeners 5 m behind it, the
@@ -1195,8 +1436,8 @@ high:
 | forest floor (31.5) | 0.14 | 0.35 | 0.35 | 0.09 | 0.29 | 0.29 |
 | grass (200) | 0.06 | 0.09 | 0.10 | 0.04 | 0.09 | 0.11 |
 
-The extended reaction tells by a tenth of a decibel over grass, by a third to one
-decibel over snow and forest floors and by 2.5 to 4 dB over the thin layer of snow,
+The extended reaction tells by a tenth of a decibel over grass, by 0.3 to 1 dB over
+snow and forest floors and by 2.4 to 3.7 dB over the thin layer of snow,
 and Q with the impedance at the angle follows it to within half a decibel but over
 the layer, where it still misses the exact field by 1.5 dB at 20 m: Q is the
 locally reacting plane's spherical wave with the impedance swapped in, and the ground
@@ -1213,8 +1454,10 @@ against the same exact field at 63 Hz to 2 kHz:
 | grass (200) | 0.12 | 0.16 |
 
 The engine's early part over grass (image sources to first order, the direct sound and
-its reflection added in pressure, as outdoors by default) against the exact solution,
-whose energy is averaged over each octave band, as the engine reads a band:
+its reflection added in pressure, as outdoors by default) against the exact solution:
+the paths' energy in each octave band, their interference averaged over the band
+(`coherent.total_energy`), against the exact solution's energy averaged over the same
+band:
 
 | over grass, exact (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -1229,8 +1472,10 @@ whose energy is averaged over each octave band, as the engine reads a band:
 | 100 m, heights 1 and 1.5 m | -0.01 | -0.01 | -0.07 | +0.01 | +0.00 | +0.00 | -0.00 | -0.00 |
 
 The ground dip near 500 Hz deepens with distance, as the reflection comes in nearer
-grazing. Read through the analysis filters, whose skirts reach into the neighbouring
-bands, a sharp dip fills in by up to about 1 dB more than the band averages show.
+grazing. These are band averages. The level a run reports reads the bands up to 500 Hz
+through analysis filters instead, whose skirts reach into the neighbouring bands, and
+there a sharp dip fills in by up to about 0.9 dB more (the grass table in
+[Outdoor results against exact solutions](#outdoor-results-against-exact-solutions)).
 
 The parabolic equation that gives the sound over the open ground in wind and
 temperature gradients (see [Outdoor scenes](outdoor.md#wind-and-temperature)), here in
@@ -1247,10 +1492,14 @@ at the third-octave centres from 63 Hz to 2 kHz, from a source 1 m high to a lis
 | asphalt (20000) | 0.17 | 0.05 | 0.09 | 0.26 | 0.04 | 0.02 |
 
 It is furthest off over the softest grounds near a low source at low frequencies (the
-1.81 dB in a dip 36 dB deep at 160 Hz), where the field it starts from, which stands
-for the source and its image, matters most. From the hub, 178 m away comes in 33
-degrees from the horizontal, about as steep as it is used (34 degrees); in the engine
-the paths come in flatter there, and rays take the steeper ones.
+1.81 dB in a dip 36 dB deep at 160 Hz; the script prints where each row's largest
+difference falls), where the field it starts from, which stands for the source and its
+image, matters most. From the hub, 178 m away, the direct sound comes in 33 degrees
+from the horizontal and the reflection 34, a little steeper than the engine uses the
+equation for: it takes it from 1.5 times the source's and the listener's heights
+together (181 m here), where the reflection comes in at 33.7 degrees or flatter, and
+rays nearer. So the 178 m column shows the equation just outside its range, not what a
+run gives there; from 535 m it is within 0.1 dB.
 
 The wave solver fits the ground's admittance with branches without mass (see
 [Simulation](simulation.md#low-frequencies-the-wave-solver)). Over grass, against a
@@ -1296,31 +1545,38 @@ loss over the bands. Each pair is at 535 m / 845 m, in dB:
 | 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 22.0 / 27.8 | 3.2 / 8.3 | 2.0 / 2.6 |
 | 10 | strong upwind | 23.1 / 27.2 | 19.9 / 50.0 | 22.1 / 27.9 | 3.1 / 7.7 | 2.0 / 2.5 |
 
-In the eight cases of light winds, this package is about as close to the measurements
-as the authors' model: 1.7 to 2.4 dB per band on average at 535 m, 2.1 to 2.7 dB at 845
+In the eight cases other than strong upwind (light winds, and cross winds in cases 3 to
+6), this package is about as close to the measurements as the authors' model: 1.7 to 2.4 dB per band on average at 535 m, 2.1 to 2.7 dB at 845
 m, against their 1.6 to 2.2 and 2.2 to 3.2 dB; the spread of the measurements over the
-five minutes is 1 to 3 dB. Both lose a few decibels more than was measured from 80 to
-160 Hz, this package more (overall 1 to 2.5 dB more loss at 845 m). These winds bend
+five minutes is 1 to 3 dB. From 80 to 160 Hz this package loses more than was
+measured, 2.6 to 6.1 dB on average over those bands at 845 m and up to 4.2 dB at 535 m,
+which puts its overall loss at 845 m 0.9 to 2.6 dB above the measured one. With the
+same inputs the authors' model loses 3.4 to 5.2 dB less than this package in those
+bands, from 4.3 dB less to 1.3 dB more than was measured. This package's parabolic
+equation matches the exact solution in still air from the hub within 0.1 dB from
+535 m (see [Ground reflection](#ground-reflection-against-the-exact-solution)); what
+parts the two models there is not traced. These winds bend
 the sound little over these distances: in still air (`--still`) the overall losses
 move by 1.1 dB at most and the mean differences by 0.4 dB at most, except downwind at
 845 m in cases 1 and 2, which still air matches better (1.4 and 1.8 dB): there the wind
-takes 1 to 3 dB more from 100 to 250 Hz than was measured, the dip of the ground
-moving down in frequency as the sound comes in steeper. The field is flat and smooth,
+takes 1 to 3 dB more than still air from 100 to 160 Hz and up to 2 dB less at 250 Hz,
+as the dip of the ground moves down in frequency when the sound comes in steeper. The field is flat and smooth,
 as the authors modelled it, so its material scatters nothing: with the few late rays
-that get this far, random scattering would only add noise (up to 1 dB in a band).
+that get this far, random scattering would only add noise.
 
 Cases 9 and 10 are strong upwind. The published model puts 845 m deep in a shadow,
 50 dB overall where 27 dB was measured, and the authors put the gap down to
 turbulence, which scatters sound into a shadow and which neither model has. Here the
-rays in the same profile reach 845 m from the two upper sources: the shadow starts 690
-m away for the source 71 m up, but 980 and 1230 m away for those 119 and 167 m up, so
-only the lowest one is in it, and the loss stays within about 1 dB of the measured
-one overall.
+engine's rays in the same profile still reach the microphones' height at 845 m from the
+two upper sources: in case 9 they reach it up to 690 m from the source 71 m up, but up
+to 980 and 1230 m from those 119 and 167 m up (the script prints this for every case
+with a shadow), so only the lowest one is in shadow there, and the loss stays within
+about 1 dB of the measured one overall.
 
 The data gives no measure of the eddies. With `--turbulence moderate` the overall
 losses drop by up to 0.4 dB at 845 m and 0.2 dB at 535 m, as the eddies fill the ground
-dip a little; the mean differences move by 0.3 dB at most, better at 845 m in eight
-cases and 0.2 dB worse in case 8. In cases 9 and 10 the overall loss at 845 m comes to
+dip a little; the mean differences move by 0.3 dB at most, better at 845 m in the nine
+other cases and 0.2 dB worse in case 8. In cases 9 and 10 the overall loss at 845 m comes to
 27.5 dB, against 27.4 and 27.2 measured.
 
 ## Turbulence against a parabolic equation through random eddies
@@ -1352,9 +1608,9 @@ in dB:
 | asphalt | 5 / 1.5 | 0.93 (7.2) | 0.91 (7.7) |
 | compacted soil | 3 / 3 | 0.75 (3.5) | 1.49 (7.8) |
 
-Over the five soft grounds the engine is 0.9 dB off on average, against 2.1 for the
-Markov approximation alone; over the three hard ones (asphalt and compacted soil) 0.9
-against 1.1.
+Over the four soft grounds (grass and loose soil) the engine is 0.8 dB off on average,
+against 2.2 for the Markov approximation alone; over the four harder ones (compacted
+soil, gravel and asphalt) 1.0 against 1.3.
 
 **Into a shadow.** Over grass, the source 2 m and the listener 1.5 m up, on a sunny day
 and upwind in the `windy` preset, deep in the shadow (2.5 to 9 times as far as it
@@ -1400,18 +1656,11 @@ height right down to the ground instead:
 | asphalt | 5 / 1.5 | 1.60 (10.3) | 1.52 (8.6) | 1.45 (7.0) |
 | compacted soil | 3 / 3 | 1.10 (4.0) | 1.48 (8.0) | 1.37 (6.7) |
 
-Over the five soft grounds the engine is 1.1 dB off on average (0.9 with eddies
-the same at every height, 1.8 taking Cn² down to the ground), over the three
-hard ones 1.4 (0.9 and 1.3). The field's thin layer of stronger
-eddies near the ground hardly tells in the parabolic equation: fields scaled only above
-2 m and fields scaled only below it fill the dip within 2 dB of the fields weakened
-above and strengthened below, and of the same fields the same at every height,
-respectively, because the waves average over the layer, which is thinner than their
-Fresnel zone, and both the direct sound and its reflection cross it alike; what parts
-them is the eddies over the Fresnel zone's height, most of it above the paths. Cn² at
-the greater of a pair's mean height and the Fresnel zone's half-width, sqrt(lambda L /
-4), does as well (1.1 dB over all the cases against 1.2 at the outer scale); the engine
-keeps the outer scale, one rule for the coherence, the scattering and the shaking alike.
+Over the four soft grounds the engine is 0.9 dB off on average (0.8 with eddies the
+same at every height, 1.7 taking Cn² down to the ground), over the four harder ones 1.5
+(1.0 and 1.6). Taking Cn² right down to the ground puts the engine further off over
+the soft grounds and no nearer over the harder ones, so the engine keeps the outer
+scale, one rule for the coherence, the scattering and the shaking alike.
 Into the shadows, with the same profile:
 
 | atmosphere | shadow from | `moderate` eddies | `strong` eddies |
@@ -1421,8 +1670,8 @@ Into the shadows, with the same profile:
 
 Deep in the shadow the eddies that scatter and shake sound in are those over the
 limiting rays, tens of metres up, where the profile leaves a third to a seventh of the
-strength at 2 m: the parabolic equation's level through these eddies is 4 to 10 dB
-(sunny day) and up to 6 dB (upwind) below that through eddies the same at every height
+strength at 2 m: the parabolic equation's level through these eddies is 6 to 10 dB
+(sunny day) and 4 to 7 dB (upwind) below that through eddies the same at every height
 at the farthest points from 500 Hz, and the engine follows within 1.3 to 2.9 dB on
 average (2.8 to 3.3 with Cn² at the geometric mean of the source's and the listener's
 heights right down to the ground). Its largest misses are at the nearest points upwind
@@ -1483,8 +1732,10 @@ particles within 1 % through the slab (0.4 % with one medium alone) and 0.3 % be
 it and behind the source, with the spheres and with the rain: at most two to three of
 their standard errors, and the particles' own runs differ as much from one set of
 seeds to another (0.990 and 0.988 through the slab, rain, the same foliage alone and
-in two bands). Next to the slab
-the rain gives a little less than the spheres in both programs alike, as it takes
+in two bands). In empty air the two differ by 0.8 % beside the slab (1.003 and 1.011),
+each within 0.5 % of the exact 1.008: the runs' own noise. Next to the slab
+the rain gives a little less than the spheres in both programs alike (the same with
+stems), as it takes
 the scattered sound at the sphere's centre and the spheres its mean over the sphere.
 Beside and behind the slab the rain is steadier than the spheres. Only a slab was
 checked, and against a simulation of the same model, not against measurements
@@ -1515,36 +1766,43 @@ the frequency.
 Then a wood of leaves 50 m deep over a ground that absorbs everything, the source and
 listeners 1.5 m up, the listeners 5, 20 and 50 m behind it: the wood's insertion loss
 (the level without it less the level with it, from two runs of the early paths and
-100,000 late rays per band), compared with ISO 9613-2's dense-foliage attenuation for
-50 m of foliage (Annex A, its rates per metre for 20 to 200 m), and with what the
+10 million late rays per band, the mean of three seeds; the last row of each case is
+the largest spread between the seeds behind the wood), compared with ISO 9613-2's
+dense-foliage attenuation for 50 m of foliage (Annex A, its rates per metre for 20 to 200 m), and with what the
 early paths alone lose (the leaves' extinction):
 
 | leaves | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
 |---|---|---|---|---|---|---|---|---|---|
 | ISO 9613-2, dense foliage | 1.00 | 1.50 | 2.00 | 2.50 | 3.00 | 4.00 | 4.50 | 6.00 | dB |
 | 0.1 m²/m³, 5 cm wide | 0.01 | 0.01 | 0.02 | 0.02 | 0.06 | 0.45 | 4.66 | 16.49 | early paths' loss |
-| | 0.01 | 0.01 | 0.02 | 0.02 | 0.05 | 0.31 | 2.92 | 8.76 | 5 m behind |
-| | 0.01 | 0.01 | 0.02 | 0.02 | 0.05 | 0.36 | 3.48 | 10.47 | 50 m behind |
+| | 0.01 | 0.01 | 0.02 | 0.02 | 0.05 | 0.32 | 2.95 | 8.58 | 5 m behind |
+| | 0.01 | 0.01 | 0.02 | 0.02 | 0.05 | 0.36 | 3.46 | 10.23 | 50 m behind |
+| | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.02 | 0.08 | spread over seeds |
 | 0.25 m²/m³, 5 cm wide | 0.02 | 0.03 | 0.04 | 0.06 | 0.14 | 1.11 | 11.65 | 41.22 | early paths' loss |
-| | 0.02 | 0.03 | 0.04 | 0.06 | 0.12 | 0.79 | 7.06 | 17.33 | 5 m behind |
-| | 0.02 | 0.03 | 0.04 | 0.06 | 0.13 | 0.90 | 8.17 | 19.98 | 50 m behind |
+| | 0.02 | 0.03 | 0.04 | 0.06 | 0.12 | 0.79 | 6.96 | 17.37 | 5 m behind |
+| | 0.02 | 0.03 | 0.04 | 0.06 | 0.13 | 0.89 | 8.20 | 20.41 | 50 m behind |
+| | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.07 | 0.17 | spread over seeds |
 | 0.5 m²/m³, 5 cm wide | 0.04 | 0.06 | 0.08 | 0.12 | 0.29 | 2.23 | 23.30 | 82.45 | early paths' loss |
-| | 0.04 | 0.06 | 0.08 | 0.12 | 0.24 | 1.57 | 11.88 | 32.19 | 5 m behind |
-| | 0.04 | 0.06 | 0.08 | 0.12 | 0.26 | 1.78 | 14.79 | 30.69 | 50 m behind |
+| | 0.04 | 0.06 | 0.08 | 0.12 | 0.25 | 1.57 | 12.60 | 26.83 | 5 m behind |
+| | 0.04 | 0.06 | 0.08 | 0.12 | 0.26 | 1.78 | 14.75 | 30.69 | 50 m behind |
+| | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.01 | 0.13 | 0.95 | spread over seeds |
 | 1 m²/m³, 5 cm wide | 0.08 | 0.11 | 0.16 | 0.24 | 0.57 | 4.45 | 46.61 | 164.90 | early paths' loss |
-| | 0.08 | 0.11 | 0.16 | 0.23 | 0.49 | 3.08 | 20.12 | 36.15 | 5 m behind |
-| | 0.08 | 0.11 | 0.16 | 0.24 | 0.51 | 3.37 | 23.22 | 39.98 | 50 m behind |
+| | 0.08 | 0.11 | 0.16 | 0.23 | 0.49 | 3.13 | 20.44 | 40.50 | 5 m behind |
+| | 0.08 | 0.11 | 0.16 | 0.24 | 0.52 | 3.54 | 23.47 | 44.39 | 50 m behind |
+| | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.04 | 0.48 | 1.65 | spread over seeds |
 | 0.25 m²/m³, 2 cm wide | 0.02 | 0.03 | 0.04 | 0.06 | 0.08 | 0.14 | 0.58 | 5.92 | early paths' loss |
-| | 0.02 | 0.03 | 0.04 | 0.06 | 0.08 | 0.13 | 0.45 | 4.21 | 5 m behind |
-| | 0.02 | 0.03 | 0.04 | 0.06 | 0.08 | 0.13 | 0.50 | 4.78 | 50 m behind |
+| | 0.02 | 0.03 | 0.04 | 0.06 | 0.08 | 0.13 | 0.45 | 4.24 | 5 m behind |
+| | 0.02 | 0.03 | 0.04 | 0.06 | 0.08 | 0.13 | 0.49 | 4.79 | 50 m behind |
+| | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.02 | spread over seeds |
 | 0.25 m²/m³, 10 cm wide | 0.02 | 0.03 | 0.04 | 0.12 | 1.08 | 11.61 | 41.16 | 53.29 | early paths' loss |
-| | 0.02 | 0.03 | 0.04 | 0.10 | 0.75 | 6.78 | 15.88 | 19.27 | 5 m behind |
-| | 0.02 | 0.03 | 0.04 | 0.11 | 0.85 | 7.99 | 18.41 | 22.07 | 50 m behind |
+| | 0.02 | 0.03 | 0.04 | 0.10 | 0.75 | 6.72 | 15.00 | 18.64 | 5 m behind |
+| | 0.02 | 0.03 | 0.04 | 0.11 | 0.86 | 7.97 | 18.03 | 21.81 | 50 m behind |
+| | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.03 | 0.27 | 0.59 | spread over seeds |
 
 The standard's table is empirical, for the foliage of whole woods, so this compares
 magnitudes rather than checking against an exact answer. Leaves 5 cm wide at 0.1 m²
 per m³, about a wood's trunk space with some foliage in it, take about what the table
-gives at 4 kHz (3 to 3.5 dB against 4.5) and more at 8 kHz (9 to 10 against 6); below
+gives at 4 kHz (3.0 to 3.5 dB against 4.5) and more at 8 kHz (8.6 to 10.2 against 6); below
 1 kHz they take next to nothing, where the table's 1 to 3 dB are the standard's
 allowance for the whole wood, not what leaves scatter. The loss rises far more
 steeply with frequency than the table, and with the leaves' area and width, as
@@ -1554,9 +1812,11 @@ nears the wavelength, so wider
 leaves take hold at lower frequencies, and leaves 2 cm wide hardly matter below
 8 kHz. What the leaves scatter comes back as late sound, so a listener loses far less
 than the early paths do (the extinction row): with 1 m² per m³ the early paths lose
-165 dB at 8 kHz and the listener 36 to 40, the rest arriving scattered. The level
-behind dense leaves comes with the late rays' noise, a few tenths of a decibel at
-100,000 rays. No measurement of a known leaf area and width was available to check
+165 dB at 8 kHz and the listener 40 to 44, the rest arriving scattered. Behind
+dense leaves at 4 and 8 kHz what arrives is the rare ray that slips through, so the
+level takes many rays to settle: with 100,000 rays (`--rays 100000`) it swings by up to
+22 dB from one seed to another at 8 kHz, with 10 million the seeds agree within
+1.7 dB. No measurement of a known leaf area and width was available to check
 against; the bridge between the disc's two limits, the discs standing in for real
 leaves, which flex and hang in clumps, and the single phase function per band are
 the model's assumptions.
@@ -1564,8 +1824,8 @@ the model's assumptions.
 ## The wave solver in wind and temperature against a parabolic equation
 
 `validation/wave_outdoor.py` checks the wave solver's speed of sound per cell against
-the engine's parabolic equation (itself within 0.25 dB of the exact solution over grass
-in still air, see [above](#ground-reflection-against-the-exact-solution)), marched in
+the engine's parabolic equation (itself within 0.2 dB of the exact solution over grass
+in still air from a source 1 m up, see [above](#ground-reflection-against-the-exact-solution)), marched in
 the vertical plane through the source and the listener with the effective speed of
 sound along it. Both take the same profiles; the wave solver steps the scene in three
 dimensions. Over grass (Miki's impedance, 200 kPa s/m²), the source 2 m up, the
@@ -1595,11 +1855,10 @@ of the pressure over the band's slices, wave solver / parabolic equation:
 The weathers are the presets: downwind and upwind in the `windy` one (5 m/s 10 m up),
 `sunny_day` and `clear_night`. The wave solver is within 0.7 dB of the parabolic
 equation everywhere, 0.23 dB on average at 63 Hz and 0.17 dB at 125 Hz, and follows
-the weather as it does: 2 dB louder downwind than in still air at 200 m, 3.3 dB
-quieter upwind. At 63 Hz it comes out a little low downwind and under the night's
+the weather as it does: 2 dB louder downwind than in still air at 200 m and 1.5 m up,
+3.3 dB quieter upwind (1.0 and 2.4 dB 5 m up). At 63 Hz it comes out a little low downwind and under the night's
 inversion (by up to 0.7 dB), where the wind and the temperature change fastest in the
-lowest cells, and comes closer on a finer grid: downwind at 50 m, 63 Hz, 0.44 dB below at 8 points per
-wavelength and 0.21 dB at 12 (in a narrower scene). Neither the deep shadow upwind (it
+lowest cells. Neither the deep shadow upwind (it
 starts a few hundred metres away at these heights) nor reflections off buildings, where
 the effective speed of sound along the horizontal from the source stands in for the
 flow, were checked (moving air is, [below](#moving-air-in-the-wave-solver)).
@@ -1646,8 +1905,11 @@ air. Against the still air's run on the same grid:
 | moving air | +1.80 ms | +0.02 ms |
 
 The effective speed of sound sends the echo back at the speed of sound going away from
-the source, 80 v / (c² - v²) = 10.2 ms too soon over its 40 m back to the source;
-moving air gets it within 0.02 ms. The wind is the uniform profile everywhere, the
+the source: over its 40 m back to the source that makes it 80 v / (c² - v²) = 10.2 ms
+too soon, and the run gives 10.6 ms. The 0.4 ms between the two is not fully traced:
+the effective run's grid steps for the fastest sound, c + v, and the still air's for
+c, so the two disperse differently, which accounts for part of it. Moving air gets the
+echo within 0.02 ms. The wind is the uniform profile everywhere, the
 building included: the check is of the sound in moving air, not of the flow round a
 building, which the engine does not compute.
 
@@ -1702,7 +1964,8 @@ Maekawa's chart for reference:
 | | -0.00 | -0.00 | -0.00 | +0.00 | +0.00 | +0.00 | +0.01 | +0.02 | engine - exact |
 | | -1.55 | -1.79 | -1.87 | -1.88 | -1.92 | -1.99 | -2.06 | -2.11 | Maekawa - exact |
 
-The engine agrees within 0.07 dB; Maekawa's chart is within 2 dB.
+The engine agrees within 0.07 dB. Maekawa's chart is within 2.1 dB, giving less loss
+than the exact solution from 10 m behind the barrier.
 
 The same barrier on a rigid ground, against the four paths over its top (the source
 and its image in the ground, to the listener and its image), each by the exact
@@ -1756,9 +2019,11 @@ sound over it, is left out:
 | | +1.78 | +0.91 | -1.88 | +1.46 | -0.52 | -0.74 | +0.77 | +0.67 | through the filters |
 
 Without that path the insertion loss comes out 0.3 to 0.8 dB too high from 1 kHz up,
-and in the bands below, where the four paths interfere, up to 3 dB off either way.
-Over grass and other soft grounds, whose reflections near grazing are weak, the gap is
-smaller. The sound that goes over the top, down to the ground and over the top again
+but for 1 and 2 kHz 90 m behind, where it is 0.5 and 0.7 dB too low; in the bands
+below, where the four paths interfere, it is up to 3 dB off either way read through
+the filters (5 dB against the exact band averages). Over grass and other soft grounds, whose
+reflections near grazing are weaker, the path left out should carry less, but no
+check here runs `one_side` over such a ground. The sound that goes over the top, down to the ground and over the top again
 is left out of both.
 
 A source 1 m over grass and nothing else, the listener 1.5 m up: the level relative to
@@ -1777,8 +2042,8 @@ band:
 
 From 1 kHz up the engine averages each pair of paths' interference over the band
 exactly and agrees within 0.01 dB; in the bands up to 500 Hz it reads the early paths
-through band filters, whose skirts fill the ground dip by up to about 0.9 dB, as in the
-ground's own check above. Both results are checked against theory, not against
+through band filters, whose skirts fill the ground dip by up to 0.87 dB (the ground's
+own check above compares the band averages, without the filters). Both results are checked against theory, not against
 measurements of a barrier or a ground.
 
 ## Outdoor sound in wind against a fast field program
@@ -1824,7 +2089,8 @@ and over grass. With the speed of sound rising 0.1 m/s per metre of height, halv
 layers changes the level by 0.006 dB at most (100 Hz and 1 kHz, 1 and 10 km out), so the
 staircase is converged. In a deep shadow its layers scatter a little sound: the field
 has a floor near -60 dB re free field, lower with thinner layers, so nothing is compared
-below -60 dB, where nothing is heard anyway.
+below -60 dB, where nothing is heard anyway. The tables below still print the program's
+level there, down to -125 dB: those values are its floor, not the field.
 
 `validation/benchmark_1995.py` runs the benchmark's cases 1 to 3 through the program
 and the engine: a source 5 m and a listener 1 m over a ground of flow resistivity
@@ -1897,17 +2163,19 @@ level re free field and each equation's difference from it (`-`: deeper than -60
 | | -0.00 | -0.00 | -0.01 | - | - | - | - | wide - ffp |
 
 In still air the narrow-angle equation and the program agree within 0.05 dB to 5 km and
-0.1 dB at 10 km; at 10 Hz, below the engine's lowest band, the narrow-angle equation is
-0.2 to 0.5 dB off in every case. In
+0.1 dB at 10 km. At 10 Hz, below the engine's lowest band, the narrow-angle equation is
+up to 0.5 dB off in the refracting cases out to 2 km, and further out 0.5 dB downwind
+and 1.4 dB upwind with the gradient stopping at 100 m, 2 to 9 dB with the benchmark's
+gradients. In
 wind the agreement holds as far as the sound reaches the listener at the flat angles a
 parabolic equation carries. With the gradient stopping 100 m up, which turns back only
 the sound within 14 degrees of the horizontal, the parabolic equation is within 0.05 dB
 at 100 Hz and 0.35 dB at 1 kHz up to 1 km downwind, 1 to 3 dB at 2 km, where the bent
 paths interfere and the two place a dip a little apart, within 2 dB at 5 km, and 3 dB
 at 10 km at 100 Hz (11 dB at 1 kHz, 47 dB down, a band the engine's rays give
-downwind anyway). Upwind, in the shadow, it is within 0.1 dB until the sound is 20 dB
-down and strays by 6 dB (100 Hz, 2 km, 46 dB down) to 8 dB (1 kHz, 500 m, 52 dB down)
-deeper in, below where the eddies keep a shadow in practice (see
+downwind anyway). Upwind, in the shadow, it is within 0.1 dB at 100 Hz and 1 kHz until the
+sound is 20 dB down (0.33 dB at 1 kHz 500 m, 52 dB down) and strays by up to 6 dB
+deeper in (100 Hz, 2 km, 46 dB down; 1.4 dB at 10 Hz, 5 km, 44 dB down), below where the eddies keep a shadow in practice (see
 [Turbulence](outdoor.md#turbulence)). With the benchmark's gradient going on to 1000 m,
 sound that has risen hundreds of metres comes back down at 17 degrees and more, and
 upwind the speed of sound a kilometre up is 100 m/s below the ground's, an index of
@@ -2044,16 +2312,19 @@ where the rays average the paths' interference over the band exactly, within
 0.005 dB. In wind the bands up to 500 Hz come from the parabolic equation, whose band
 levels are the averages over its eight frequencies, and the engine reports them as
 computed, so there the plain average is the row to read: within 0.11 dB to 1 km in
-every case, downwind as upwind, and at 2 km downwind 0.5 to 0.8 dB with the gradient
+every case downwind, and upwind with the benchmark's gradient (upwind with the
+gradient stopping at 100 m, see below); at 2 km downwind 0.5 to 0.8 dB with the gradient
 going on to 1000 m, where the pure tones above show the parabolic equation itself
 parting from the program, and 0.1 (0.4 at 500 Hz) with it stopping at 100 m. Upwind
 the engine follows the program into the shadow within 0.1 dB to 500 m and 45 dB below
-free field, and within 1.5 dB at 1 km with the gradient stopping at 100 m (250 Hz,
+free field (0.21 dB with the gradient stopping at 100 m, at 500 Hz), and within 1.5 dB
+at 1 km with the gradient stopping at 100 m (250 Hz,
 44 dB down, where the pure tones above show the parabolic equation straying deep in
 the shadow); the comparison stops 60 dB down. The 1 kHz band comes from the rays: within
-0.5 dB but for 1.8 dB at 500 m downwind, under a caustic (the rays' own check allows
-1.5 dB there, see [Outdoor scenes](outdoor.md#how-the-simulation-bends-sound)), and
-1 dB at 2 km, where the bent paths crowd.
+0.5 dB but for 1.8 dB at 500 m downwind, under a caustic, where ray theory is least
+reliable and the engine caps the level (see
+[Outdoor scenes](outdoor.md#how-the-simulation-bends-sound)), and 1 dB at 2 km, where
+the bent paths crowd.
 
 This comparison found two faults at the join between the parabolic equation's bands
 and the rays', fixed in the same change (see the changelog): the response had a notch
@@ -2103,7 +2374,8 @@ field, but for 0.11 dB at 1 kHz 10 km downwind; deeper in the shadow it is withi
 0.07 dB at 100 Hz and 1 kHz, and 0.3 to 0.4 dB at 10 Hz 5 km upwind, 41 to 44 dB down.
 With the benchmark's gradients going on to a kilometre up, where the narrow-angle
 equation strays by 3 to 20 dB beyond 1 to 2 km downwind and by 8 dB 500 m into the
-shadow upwind at 1 kHz, the wide-angle one stays within 0.11 dB.
+shadow upwind at 1 kHz, the wide-angle one stays within 0.11 dB wherever the sound is
+within 40 dB of free field (0.28 dB at 10 Hz 5 km upwind, 41 dB down).
 
 **The weather presets.** The gradients the engine is meant for change fastest near the
 ground. Both equations against the fast field program in the presets: a source 2 m and
@@ -2167,9 +2439,8 @@ most (125 Hz, 300 m upwind in `windy`), the wide-angle one within 0.04 dB on ave
 and 0.18 dB at most. Over each band as the engine reads it, the mean energy over its
 eight frequencies, the narrow-angle equation is within 0.08 dB on average and 0.38 dB
 at most, the wide-angle one within 0.02 dB and 0.12 dB. In the weather near the
-ground both hold, so the narrow-angle equation stays the default. In the
-`open_air_stage` example the two equations differ by 0.15 dB at most, and the run
-takes 13 s instead of 4 on four cores.
+ground both hold, so the narrow-angle equation stays the default, being the faster
+of the two.
 
 **Whole scenes.** The benchmark's cases 2 and 3 as whole scenes again (see
 [Outdoor sound in wind](#outdoor-sound-in-wind-against-a-fast-field-program)), with
@@ -2268,10 +2539,10 @@ with the reflections off both slopes in its four terms:
 | | +0.10 | +0.09 | +0.09 | +0.09 | +0.09 | +0.12 | +0.07 | +0.06 | engine - exact |
 
 The engine agrees within 0.1 dB up to 1 kHz and 0.21 dB above, where the two slopes'
-reflections interfere with the direct wave within a band: a ridge sampled on a grid is
-the exact wedge, because the wedge sits at the crest with no width, its faces are the
-slopes and the uniform theory's four terms are the exact solution's away from its
-boundaries. The third pair is oblique, 30 m aside of the plane through the source and
+reflections interfere with the direct wave within a band. A ridge sampled on a grid is
+the exact wedge, which sits at the crest with no width and has the slopes for its
+faces; the uniform theory's four terms, a high-frequency form of the exact solution,
+come that close to it here. The third pair is oblique, 30 m aside of the plane through the source and
 the crest.
 
 **A smooth hill**, 12 m high with a Gaussian profile 25 m wide at half its height, the
@@ -2293,14 +2564,16 @@ reflections off a typical ground:
 | | +4.32 | -0.77 | -0.43 | +4.16 | +2.40 | +1.76 | +2.57 | +2.43 | engine - ISO |
 
 Over the soft ground the engine lets 1.4 to 1.8 dB more over the hill than the thin
-screen, evenly across the bands: the crest is the wedge of the hill's chords, open
-wider than a half-plane, which bends more sound into its shadow. Over the rigid ground
-the reflections off both flanks join the direct wave, each by way of the ground near
-its foot, about 0.85 m longer than the straight line to the crest: in phase at 63 Hz
-(5.1 dB more than over the soft ground, 4.3 above the standard's typical ground),
-against it at 125 and 250 Hz, where that extra path is near half a wavelength (the
-ground dip: 0.2 to 0.7 dB more than over the soft ground, a little below the
-standard's figure), and from 500 Hz up 3.3 to 5.6 dB more than over the soft ground
+screen, evenly across the bands. The engine bends the sound over the wedge of the
+hill's chords at the crest, open wider than a half-plane, where Maekawa's chart is for
+a thin screen; this check does not separate how much of the difference that makes.
+Over the rigid ground the reflections off both flanks join the direct wave, each by way
+of the ground near its foot, 0.86 m longer than the straight line to the crest (the
+source's image in the flat ground before the hill is that much farther from the crest
+than the source): in phase at 63 Hz (5.1 dB more than over the soft ground, 4.3 above
+the standard's typical ground), against it near 200 Hz, where that extra path is half
+a wavelength (the ground dip: 0.2 to 0.7 dB more than over the soft ground at 125 and
+250 Hz, a little below the standard's figure), and from 500 Hz up 3.3 to 5.6 dB more than over the soft ground
 (1.8 to 4.2 above the standard), where the waves no longer interfere alike across a
 band and add in energy: 6 dB for four of a size, less because the reflected ones come
 from images deeper in the shadow. The standard's figure stands for a ground that
@@ -2331,8 +2604,9 @@ At 63 Hz the level first falls as the listener rises, from -6.8 dB at 1.5 m to -
 6.5 m: the reflection off the ground behind the hill, in phase with the wave over the
 crest at the ground, lags it more the higher the listener. From there every band rises
 through the edge of the shadow, 12 dB in the 2.5 m round the line of sight at 8 kHz,
-to within 1 dB of free field above it, where the direct sound, the ground's reflection
-and the crest's wave ripple together.
+and every band but 125 Hz comes to within 1 dB of free field above it, where the
+direct sound, the ground's reflection and the crest's wave ripple together; 125 Hz
+stays 3 to 4 dB down (-3.9 and -3.3 dB at 26.5 and 29 m).
 
 **Cost.** Rolling hills 2 km across on a 20 m grid (10,000 cells, 21,233 triangles with
 a building): the model builds in 3.9 s, its 8 diffracting edges (the building's) are found in
@@ -2397,17 +2671,21 @@ alone moves them:
 | hillside | 3,730 | 50,000 | gpu | 11.49 | 1.88 | 1.6 |
 
 On SwiftShader, a software Vulkan driver on the container's 4 cores (the CPU runs took
-0.4 to 1.0 s), which shows that the two agree, not how fast a GPU is; `python
-validation/outdoor_gpu.py` times your own. The tree belt's rays through its foliage and
+0.3 to 1.1 s), which shows that the two agree, not how fast a GPU is; `python
+validation/outdoor_gpu.py` times your own. The GPU rows are from that run, when the
+port was added; the CPU's next-seed rows come out the same with this version's code
+(the container that checked them has no GPU driver). The tree belt's rays through its foliage and
 stems come out as far from the CPU's as the next seed's do. The stage in the wind
-agrees to 0.02 dB: its late sound is the rain of a flat ground, which 50,000 rays sum
-closely, while the next seed also redraws the eddies, which move the levels in the
-wind's shadow by several dB on their own (the GPU run shares the CPU's eddies). On the
-hillside the late sound at the listener on the slope is a handful of rays, so the mean
-difference between CPU seeds ranges from 0.3 to 2.3 dB over six of them, and the GPU's
-two seeds fall inside that range against every one (0.2 to 2.1 dB); the listener in
-the shadow gets no late rays at all, and the one on the crest the same level from every
-run within 0.02 dB.
+agrees to 0.02 dB with the same seed, whose rays start where the CPU's do; the next
+seed starts them elsewhere and moves the late sound at the two listeners downwind by
+4.2 dB on average (upwind, in the wind's shadow, no late ray arrives in either run).
+The stage's eddies play no part in this: they act on the early paths only, and the
+script compares the late sound (without them the next seed differs by the same
+4.21 dB). On the hillside the GPU is 1.9 dB from the CPU against the next seed's
+1.2 dB: the listener in the shadow gets no late rays, the one on the crest about the
+same level from every run, and the one on the slope a level that moves by several
+decibels with the seed, so one run of each, as here, cannot tell the GPU's difference
+from the rays' noise there.
 
 **The wave solver in wind.** The GPU steps the tests' grids with a speed of sound that
 grows with height, bending the sound as the rays do, to within 3e-5 of the largest
@@ -2427,9 +2705,9 @@ lower boundary, a Gaussian starter and an absorbing layer at the top, which take
 speed of sound of whichever zone each step lies in. The script first checks the
 reference itself: against the exact solution for the reflection off grass in still air
 it is within 0.17 dB at 63 to 500 Hz out to 800 m, and against the engine's own
-parabolic equation in the `windy` preset over the whole way it is within 0.5 dB to 400
-m, and 1.4 dB at 500 Hz 800 m out, where the two equations' starters and absorbing
-layers part.
+parabolic equation in the `windy` preset over the whole way it is within 0.35 dB to
+400 m, 0.5 dB at 63 Hz 800 m out and 1.4 dB at 500 Hz 800 m out, where the two
+equations' starters and absorbing layers part.
 
 The source is 2 m high and the listener 1.5 m, over grass (flow resistivity 200 kPa
 s/m²), and the weather changes 150 m from the source:
@@ -2473,8 +2751,8 @@ its wide-angle one (see
 | cool water downwind, 500 Hz | -4.54 (+0.01, -0.01) | -0.95 (-0.07, +0.04) | 3.66 (+0.01, -0.03) | 0.89 (-1.19, -1.20) |
 
 The engine is within 0.15 dB of the reference on average and 1.19 dB at most, at 500
-Hz 800 m out over the cool water, where the two equations already part by 1.4 dB in
-the uniform wind; the zones themselves add nothing to that. The wide-angle equation
+Hz 800 m out over the cool water, where the two equations part by 1.4 dB in the
+uniform wind too. The wide-angle equation
 is within 0.09 dB on average and 1.20 dB at most, at the same point, where the
 engine's two equations agree within 0.01 dB and the reference, a narrow-angle
 equation with a Gaussian starter, is the one that parts; elsewhere it is within
@@ -2484,7 +2762,7 @@ the uniform wind at 250 Hz 800 m out and 10 dB less at 500 Hz, where the wind wo
 bring the sound back to the ground; the gust turns still air's ground dip into the
 wind's pattern past the border; the inversion past the shore carries 20 dB more than
 still air at 500 Hz 800 m out; and the cool water deepens the 125 Hz dip 400 m out by
-1.5 dB.
+about 1.5 dB.
 
 **The mean profile along the way.** The early paths bend through one profile, the mean
 along their way, each zone's weighted by the length of the way over it. The parabolic
@@ -2495,31 +2773,32 @@ field through the zones, and in brackets the mean profile's difference from it:
 
 | case, band | 200 m | 400 m | 800 m |
 |---|---|---|---|
-| shelter downwind, 500 Hz | -4.54 (+0.01, -0.01) | -4.37 (+0.13, +0.03) | -7.94 (+0.10, +0.08) | -9.24 (+0.08, +0.10) |
+| shelter downwind, 500 Hz | -1.35 (+0.51) | -5.21 (+3.33) | -6.13 (+4.22) |
 | shelter downwind, 1 kHz | 3.11 (+1.38) | 3.87 (-0.72) | 4.06 (+1.75) |
 | shelter downwind, 2 kHz | 3.45 (+1.84) | 1.96 (+3.60) | 0.33 (+6.57) |
-| gust downwind, 500 Hz | -10.77 (-0.07, -0.01) | -11.59 (-0.12, +0.05) | -2.05 (-0.02, +0.05) | 1.88 (-0.36, -0.36) |
+| gust downwind, 500 Hz | -9.12 (+0.72) | -0.49 (+3.32) | -0.93 (+1.97) |
 | gust downwind, 1 kHz | 3.22 (+1.28) | 2.24 (+1.25) | -0.88 (-2.71) |
 | gust downwind, 2 kHz | 1.75 (+3.78) | -0.30 (+3.55) | -0.33 (-1.23) |
 | shelter upwind, 500 Hz | -34.56 (+1.97) | -46.14 | -58.52 |
 | shelter upwind, 1 kHz | -62.73 | -77.33 | -89.45 |
 | shelter upwind, 2 kHz | -58.80 | -79.26 | -96.83 |
-| inversion past a lake shore, 500 Hz | -11.44 (-0.07, -0.00) | -15.67 (-0.11, +0.01) | -14.45 (-0.11, +0.01) | -8.31 (-0.07, +0.03) |
+| inversion past a lake shore, 500 Hz | -13.92 (+0.29) | -11.21 (-0.02) | -4.08 (+1.21) |
 | inversion past a lake shore, 1 kHz | 1.91 (+2.02) | 5.98 (+2.05) | 3.63 (+3.32) |
 | inversion past a lake shore, 2 kHz | 3.67 (-0.13) | 5.80 (+1.65) | 4.04 (+2.48) |
-| cool water downwind, 500 Hz | -4.54 (+0.01, -0.01) | -0.95 (-0.07, +0.04) | 3.66 (+0.01, -0.03) | 0.89 (-1.19, -1.20) |
+| cool water downwind, 500 Hz | 1.99 (+0.08) | 0.97 (+0.29) | 1.21 (-0.02) |
 | cool water downwind, 1 kHz | 3.47 (-0.06) | -0.66 (-0.01) | -2.39 (-0.10) |
 | cool water downwind, 2 kHz | 3.11 (+0.18) | 1.89 (-0.34) | -1.10 (-0.11) |
 
 Over the 37 points above -40 dB re free field the mean profile is within 1.6 dB on
 average and 6.6 dB at most; the 8 points deeper in the upwind shadow are left out, as
 sound there is inaudible next to any other and the parabolic equation itself is at
-the floor of its absorbing layer. Where only the temperature changes on the way (the
-cool water) the mean profile is within 0.3 dB. Where the wind changes it gives 1 to 4
-dB more sound, 6.6 at most at 2 kHz 800 m downwind of the shelter: one profile cannot
-both bend the sound down over the first 150 m and let it go straight after, so it
-bends it a little the whole way and keeps the ground's reflection in step with the
-direct sound further out. That is the cost of the equivalent profile the standards
+the floor of its absorbing layer. Over the cool water, which changes the air near the
+ground for 200 m, the mean profile is within 0.35 dB. Where the wind changes, or an
+inversion sets in past the shore, it gives more sound at most points, mostly 1 to 4 dB
+and 6.6 dB at most (2 kHz, 800 m downwind of the shelter), but up to 2.7 dB less at
+800 m past the gust and 0.7 dB less at 1 kHz 400 m past the shelter: one profile
+cannot both bend the sound down over the first 150 m and let it go straight after,
+and bends it a little the whole way instead. That is the cost of the equivalent profile the standards
 take (Nord2000, Harmonoise), and the reason the bands up to 500 Hz, and up to 2 kHz in
 a shadow, come from the parabolic equation, which goes through the zones.
 
@@ -2610,8 +2889,8 @@ error, mean and most), away from the walk's ends:
 With Doppler the sound follows the field to within 39 dB and its level to within 0.42
 dB, the most for the train at 4 kHz, where its two paths cancel for a moment. The same
 walks crossfaded from place to place, as without Doppler, keep each place's pitch, so
-their phase jumps from place to place: the waveform has nothing in common with the
-field's (an error of 0 dB or more) and the level misses by 4 to 11 dB at times.
+their phase jumps from place to place: the waveform's error is about as large as the
+field itself (-2.4 dB or more) and the level misses by 4 to 11 dB at times.
 
 **The sound sent each way.** The same walks with the source sending a tone each way
 (an `Emission`, `acoustic_spaces.emission`): 1 + 0.8 cos θ in amplitude, θ from
@@ -2698,14 +2977,17 @@ late part and without. The late part is crossfaded as in any walk, drawn from on
 sequence for every place; the responses here are drawn from the same one, as otherwise
 their late parts' chance correlation with the early sound would differ by up to 0.25
 dB in a band. The pass-by's band levels are within 0.25 dB of the sound, 0.8 dB in the
-500 Hz band, where the ground's dip falls: the same difference as between a place's
-band levels and its impulse response filtered into bands. For a car at 30 m/s over
+500 Hz band, where the ground's dip falls: the pass-by takes the places' band levels,
+averaged over each band, where the sound is read through band filters, whose skirts
+fill a dip (a cause not checked separately). For a car at 30 m/s over
 this grass with 94 dB of sound power, the listener has L_Amax 61.4 dB(A) 2.03 s into
 the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A) over 4 s.
 
 **What it leaves out.** The engine's source is quasi-static, as the field it is
-compared with: a moving source's convective amplification (louder ahead of it by up to
-0.8 dB at 30 m/s and 2 dB at 70 m/s, as much quieter behind) is left out, and so is the
+compared with: a moving source's convective amplification is left out (taking its
+intensity as (1 − M cos θ)⁻², one common form whose exponent depends on the source,
+up to 0.8 dB louder ahead of it at 30 m/s and 2.0 dB at 70 m/s, 0.7 and 1.6 dB
+quieter behind), and so is the
 Doppler shift of the late part, which is crossfaded. Binaural walks are checked
 against the convolution with a response when the walker stands still (to within 45 dB
 at each ear in the tests), not against a moving head's exact field.
@@ -2911,9 +3193,10 @@ turned at random angles and paths that reflect on both sides of an edge. It runs
 sources, one in a street and one over the roofs, to two listeners, once as the engine
 runs, on one thread and on every core, and once with every pair tested. Every path, its
 energy and its spectrum come out the same bit for bit; the early paths took 1.1 s
-instead of 4.3 s. The same comparison over every example and three test cities, 468
-source and listener pairs with paths reflecting on one side and on both sides of an
-edge, and over two edges, found no difference. The tests check the culling against
+instead of 4.3 s. When the culling was written, the same comparison over every example
+and three test cities, with paths reflecting on one side and on both sides of an edge
+and over two edges, found no difference either (a one-off check; the script repeats
+the 4 by 4 city). The tests check the culling against
 rays traced from random edges to a tilted rectangle of faces, at grazing angles, for
 faces that stray from their plane and for planes with only openings.
 
@@ -2927,8 +3210,7 @@ rooms take. Each check runs with both where both apply. (Each takes its Laplacia
 times 1 − 2⁻¹⁸, which slows sound by 2⁻¹⁹: at the limit itself the highest modes, the
 7-point stencil's checkerboard and the 19-point one's modes alternating along two
 axes, sit on the edge of stability, where a kick grows linearly and single precision's
-rounding can take them over it. 2⁻¹⁶ inside it, they swing within 259 times a kick
-over 300,000 steps in single precision.)
+rounding can take them over it.)
 
 **Speed of sound on the grid.** Waves on the grid travel a little slower the shorter
 they are. From the peaks of a rigid 2.4 x 2.4 x 0.2 m box (10 cm cells) ringing for
@@ -2954,7 +3236,7 @@ envelope match first-order perturbation theory: the decay rate δ = c Re(β)/2 �
 along each axis the mode varies, 2/L along the others), β the walls' admittance at the
 mode, and the rigid box's frequency moved by −c Im(β)/(4π) times the same sum. With
 either stencil the frequencies come out within 0.25 % of theory (the walls move them by
-up to 0.6 %), the decay rates, which differ fivefold, within 1.7 %:
+up to 0.5 %), the decay rates, which differ more than fourfold, within 1.8 %:
 
 | mode | rigid box (Hz) | theory (Hz) | 7-point (Hz) | 19-point (Hz) | Re(β) | decay, theory (1/s) | 7-point (1/s) | 19-point (1/s) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -2973,7 +3255,8 @@ Axial modes lose energy at walls they meet head-on and at walls they graze, so t
 checks absorption at all angles.
 
 **Walls.** A plane wave down a duct (10 cm cells) reflects off its end as
-(1 − β)/(1 + β) predicts at normal incidence, and grazing its absorbing walls it decays
+(1 − β)/(1 + β) predicts at normal incidence within 0.004 for β up to 0.5, but returns
+0.044 where it predicts nothing (β = 1); grazing its absorbing walls it decays
 as exp(−βP/(2A)) per metre (perimeter P, cross-section A), whatever the cell size:
 
 | end admittance β | 0 | 0.1 | 0.25 | 0.5 | 1 |
@@ -3039,7 +3322,10 @@ itself,
 | matched layer, 8 cells (the default) | −66.6 | −74.0 | −69.7 | 104,076 |
 | matched layer, 12 cells | −73.6 | −77.0 | −62.4 | 168,036 |
 
-The edge alone absorbs only sound that meets it head-on. In the layer the sound keeps
+The edge alone absorbs only sound that meets it head-on. At listener 3, by the plate's
+edge 0.9 m from the layer, the 12-cell layer does worse than the 8-cell one: what comes
+back there in the first 50 ms falls with the layer's depth, but not later in the run,
+for a reason not traced. Runs take 8 cells, which is not a setting. In the layer the sound keeps
 falling over 59,409 steps (20 s): 79 dB below the first second's level after one second,
 175 dB below after 18.
 
@@ -3130,10 +3416,10 @@ its peak (single precision).
 
 ## Known issues
 
-A review of the code on 25 October 2026 found these, but for the two about barriers,
+A review of the code on 25 October 2026 found these, but for the one about barriers,
 which the checks against the exact solution found. Each one was checked against the
-code, and the numbers come from probes or from the code's own formulas; they are open
-items on the [roadmap](roadmap.md).
+code; the numbers come from the tests or scripts named, and a number from a one-off
+check says so. They are open items on the [roadmap](roadmap.md).
 The edge fade's own are listed in
 [Known issues of the edge fade](#known-issues-of-the-edge-fade).
 
@@ -3143,49 +3429,34 @@ Results:
   together from its bands with zero-phase filters (`synthesis.combine_bands`), which
   spread each arrival both ways in time, and what would fall before the response's
   first sample is lost. For an arrival whose level differs from band to band, that
-  changes its level in the low bands when it comes in the first milliseconds: the
-  direct sound of a source whose level towards the listener is 1.5 dB lower at 125 Hz
-  than at 63 Hz, 4.7 dB at 250 Hz and 20 dB from 2 kHz up has a G 0.33 dB lower at
-  63 Hz and 0.55 dB higher at 125 Hz at 1 m (2.9 ms in), and 0.31 dB lower and 0.15 dB
-  higher at 2 m, than the same sound 200 ms later; an omnidirectional source's direct
-  sound changes by 0.014 dB or less. The echograms, and the parameters `simulate`
-  prints and writes from them, are not affected; the parameters `analyze` takes from
-  the WAV files are.
+  changes its level in the low bands when it comes in the first milliseconds: a sound
+  1.5 dB lower at 125 Hz than at 63 Hz, 4.7 dB at 250 Hz, 10 dB at 500 Hz, 15 dB at
+  1 kHz and 20 dB from 2 kHz up gives a G 0.14 dB lower at 63 Hz 2.9 ms in than the
+  same sound 200 ms later, and within 0.05 dB in the other bands; a sound of the same
+  level in every band does not change (`tests/test_coherent.py`). The echograms, and
+  the parameters `simulate` prints and writes from them, are not affected; the
+  parameters `analyze` takes from the WAV files are.
 - **The early order with vector-based scattering.** Vector-based scattering (the
   default) sends each reflection along the sum of its specular direction and a Lambert
   direction, which leans towards the wall's normal, so the late part carries the
   specular share of the first orders along other paths than the exact ones, and with
   more energy at the listener: in a 4 x 3.5 x 3 m box (absorption 0.15, scattering
-  0.3), a quarter more for orders 1 to 3 near the middle of the room, and 4 to 53 % more
-  over four positions and scattering from 0.1 to 0.6. The early part replaces those
-  orders with the exact paths, so the total depends a little on how many it takes:
-  with the default `early.max_order: 3` it is within 0.04 dB of taking orders 1 to 9,
-  and with `max_order: 0` 0.15 to 0.2 dB higher (from 250 Hz up). Random scattering
-  keeps the specular share on the specular paths: within 0.03 dB either way
-  (`tests/test_scattering.py`). A lobe centred on the specular direction would remove
+  0.3), about a quarter more for orders 1 to 3 near the middle of the room. The early
+  part replaces those orders with the exact paths, so the total depends a little on how
+  many it takes: with the default `early.max_order: 3` it is within 0.04 dB of taking
+  orders 1 to 9, and with `max_order: 0` 0.14 to 0.2 dB higher (from 250 Hz up).
+  Random scattering keeps the specular share on the specular paths: within 0.02 dB
+  either way (the room of `tests/test_scattering.py` with its seed; the test's bounds
+  are looser, to allow for other seeds). A lobe centred on the specular direction would remove
   this, but changes the late part's decay, which the default was chosen to match in
   the BRAS rooms.
 - **Pairs of paths from 1 kHz up.** In the bands above 500 Hz that add in pressure
   (outdoors, 1 to 8 kHz), the echogram shares each pair of paths' cross term between
   their two time slots, and a slot that would go below zero is set to zero
-  (`coherent.pair_energy`). That adds energy where paths cancel. Over all 419 pairs of
-  a source and a listener in the nine outdoor examples, it adds at most 0.009 dB to a
-  band's response (the `street`'s garden at 1 kHz) and nothing elsewhere; to the
-  lateral figures of eight behind LF, LFC and LG, at most 0.04 dB (the `street`'s
-  balcony at 1 kHz) and 0.003 dB elsewhere. Impulse responses add the paths in pressure
-  without it.
-- **A barrier on a hard ground with `first_order`.** The path over the barrier's top
-  with the reflection off the ground behind it is left out where the reflection off the
-  ground before the barrier is found: both come from the source's image in the ground,
-  and the edge diffraction takes that reflection for the geometric wave of both. 4 m
-  behind a barrier 3 m high the level at 63 Hz steps by 0.35 dB where the listener
-  rises into sight of that reflection, and is 0.33 dB low on average above it (0.07 dB
-  or less from 125 Hz up; see
-  [Reflections that fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution)).
-  A fix that tells the two paths apart removes the step, but changes the early level of
-  BRAS CR2 by up to 0.8 dB at 63 Hz, where 12 terms over its 10 pairs of a source and a
-  listener that were left out count with it (the edge fade's terms stay the same); it
-  waits for a run of BRAS with it.
+  (`coherent.pair_energy`). That adds energy where paths cancel; a one-off check over
+  the nine outdoor examples, when this was found, put it at hundredths of a decibel at
+  most, in a band's response and in the lateral figures of eight behind LF, LFC and
+  LG. Impulse responses add the paths in pressure without it.
 - **Paths over two edges take no reflections.** With `second_order` a path over two
   edges reflects nowhere before, between or after them, so behind a thick barrier on a
   hard ground the engine has one of the four paths over it: 1.7 to 5.7 dB low from
@@ -3203,18 +3474,19 @@ Files and runs:
   starts, and a run whose late part would need more than the computer has is refused.
   The early stage's is not estimated, and in a room of many facets with edge
   diffraction it is most of a run's: BRAS CR3 peaks at 10.0 GiB in its edge fade
-  (11.7 GiB in third-octave bands), which in third-octave bands starts each listener
+  (11.8 GiB in third-octave bands), which in third-octave bands starts each listener
   from less than 0.9 GiB; see [Memory](simulation.md#memory).)
-- **No uncertainty.** A run gives no standard errors: nothing says how much its
-  parameters would change with another seed or more rays. Only `calibrate` gives one,
-  for the absorption it fits.
 
 ## Not validated yet
 
-- **More measured rooms.** Two rooms have been compared with measurements, by their
-  ISO 3382-1 parameters. G, the spatial outputs and the parameters that need directions
-  (LF, IACC, stage support, directional decay; BRAS also has binaural responses) and
-  BRAS's auditorium, CR4, whose SketchUp file no free reader opens, have not.
+- **More measured rooms.** Four rooms have been compared with measurements (see
+  [Measured rooms](#measured-rooms-bras)): their ISO 3382-1 parameters and G from seat
+  to seat, and in three of them IACC with a dummy head. G's absolute level has not,
+  as BRAS's calibration leaves the measured level uncertain by about 3 dB, nor the
+  lateral parameters (LF, LFC, LG), stage support and directional decay, which BRAS did
+  not measure, nor coupled rooms whose model joins them as the real ones are joined:
+  in two-room diffuse theory BRAS's door ajar joins its two rooms 10 to 16 times more
+  strongly than its model does.
 - **Wave effects.** Above the wave solver's bands the simulation is geometric. Edge
   diffraction is modelled (UTD, for the direct sound and first-order reflections, and
   the direct sound over two edges; the fade of every other specular path at edges,
@@ -3235,7 +3507,7 @@ Files and runs:
   fine).
 - **Outdoor propagation** is checked against geometry, closed forms, the exact solution
   for the reflection off a ground and one set of measurements, a wind turbine up to 845
-  m away in light winds. A terrain is checked against the exact solution for a wedge,
+  m away in light to strong winds. A terrain is checked against the exact solution for a wedge,
   the flat ground, the image source in a slope and the thin screen's closed forms, not
   against measurements over hills (see
   [Terrain](#terrain-against-closed-forms-and-the-exact-wedge)), and a rounded crest,
@@ -3285,8 +3557,9 @@ Files and runs:
 - **Spatial outputs** are checked against closed forms and energy balances, not by
   listening tests.
 - **Speed on a hardware GPU.** CI checks the wave solver's and the late stage's GPU
-  paths on Mesa's software Vulkan driver, which shows that they agree with the CPU, not
-  how fast they are; `validation/wave_gpu.py`, `validation/late_gpu.py` and
+  paths on software and virtual GPUs (Mesa's software Vulkan driver on Linux, Direct3D
+  12's WARP on Windows and the virtual machines' Metal GPUs on macOS), which shows
+  that they agree with the CPU, not how fast they are; `validation/wave_gpu.py`, `validation/late_gpu.py` and
   `validation/outdoor_gpu.py` time them on your own GPU.
 
 ## Reproducing
@@ -3302,6 +3575,7 @@ python validation/walks.py --json walks.json   # --walks gallery archway street
 python validation/ground_reflection.py --wave --parabolic --extended --json ground.json
 python validation/outdoor_propagation.py --json outdoor.json --plots docs/validation
 python validation/outdoor_propagation.py --turbulence moderate
+python validation/outdoor_propagation.py --still   # the same cases in still air
 python validation/turbulence.py --json turbulence.json
 python validation/turbulence.py --profile --json turbulence_profile.json
 python validation/vegetation.py --json vegetation.json
@@ -3325,6 +3599,8 @@ python validation/bras_validation.py --json bras.json --plots docs/validation
 python validation/bras_validation.py --materials initial --plots docs/validation
 python validation/bras_validation.py --bands third_octave --json bras_third.json
 python validation/bras_validation.py --materials initial --calibrate LS1 --plots docs/validation
+python validation/bras_binaural.py path/to/BRAS --json binaural.json   # FABIAN's responses from BRAS
+python validation/coupled_rooms.py --results bras.json   # CR1 against two-room diffuse theory
 ```
 
 The cross-check takes about 10 minutes on 4 cores, the benchmark about 2 minutes, the
@@ -3335,9 +3611,12 @@ solver's outdoors about 18, the outdoor results' about 3, the terrain's about 4.
 leaves' about 2, the fast field program's about 4, the benchmark's about 55 (much
 longer with `--far`), the weather zones' about 9 (2 the parabolic equation's, 7 the
 mean profile's), the long term's about 0.5, the moving sources' about 3, the fade at edges' about 80 (25 of them the barriers'), the
-walks' about 14, the cities' about 1 (2 with `--sizes 10 20 30 40 60`) and each BRAS
-run of the seminar room about 4 minutes (8.5 calibrated, 9 in third-octave bands) and of
-the hall about 1.5 hours (5.2 calibrated, 3.6 in third-octave bands). The cross-check's numbers come from 4.0.1 with seed 1.
+walks' about 14, the cities' about 1 (2 with `--sizes 10 20 30 40 60`), each BRAS run
+of the coupled rooms, the seminar room or the auditorium 2 to 4.5 minutes (4 to 8
+calibrated, 5 to 11 in third-octave bands) and of the hall about 1.5 hours (5.2
+calibrated, 3.3 in third-octave bands), and the binaural comparison 9.5 minutes in the
+seminar room, 6 in the auditorium and an hour in the hall. The cross-check's numbers come from 4.0.1 with seed 1;
+this version's own are within 0.01 % of them.
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
 (`--pra-runs`); the means still move by a few percent from one call to the next, and the
 differences in the tables with them. Other seeds move this package's numbers by a few

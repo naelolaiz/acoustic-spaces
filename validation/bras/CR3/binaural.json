@@ -1,0 +1,64 @@
+{
+ "scene": "CR3",
+ "source": "BRAS benchmark (Aspöck, Brinkmann, Ackermann, Weinzierl, Vorländer, 2020), DOI 10.14279/depositonce-6726.3, CC BY-SA 4.0",
+ "responses": "CR3_BRIRs.sofa: FABIAN, a head and torso simulator, its head straight on the torso (view 0, 0 degrees), facing LS7; one QSC K8 loudspeaker at a time",
+ "setup": "positions from CR3_BRIRs.sofa (the loudspeakers' tweeters), yaw and pitch from the labels of CR3_BRIR.skp",
+ "analysis": "acoustic_spaces.parameters.interaural_cross_correlation: IEC octave filters; IACC_E from the direct sound to 80 ms, IACC_L from there to the end (ISO 3382-1, annex B)",
+ "sample_rate": 44100.0,
+ "bands_hz": [63, 125, 250, 500, 1000, 2000, 4000, 8000],
+ "listener": {
+  "name": "FABIAN",
+  "position": [7.84, 0.0, 1.23],
+  "yaw": 180.0,
+  "pitch": 0.0
+ },
+ "sources": {
+  "LS3": {
+   "position": [-2.02, -1.5, 2.03],
+   "yaw": 8.7,
+   "pitch": -4.6
+  },
+  "LS4": {
+   "position": [-3.32, -0.75, 2.03],
+   "yaw": 3.8,
+   "pitch": -4.1
+  },
+  "LS5": {
+   "position": [-3.32, 0.75, 2.03],
+   "yaw": -3.8,
+   "pitch": -4.1
+  },
+  "LS6": {
+   "position": [-2.02, 1.5, 1.81],
+   "yaw": -8.7,
+   "pitch": -3.3
+  },
+  "LS7": {
+   "position": [-2.02, 0.0, 2.5],
+   "yaw": 0.0,
+   "pitch": 0.0
+  }
+ },
+ "iacc": {
+  "LS3": {
+   "iacc_e": [0.9671, 0.9304, 0.8118, 0.4592, 0.4247, 0.6662, 0.5739, 0.4053],
+   "iacc_l": [0.9691, 0.9455, 0.7142, 0.1025, 0.0971, 0.0841, 0.1409, 0.0742]
+  },
+  "LS4": {
+   "iacc_e": [0.9939, 0.9456, 0.714, 0.3526, 0.4034, 0.6645, 0.6144, 0.4055],
+   "iacc_l": [0.9549, 0.9278, 0.7173, 0.1646, 0.0822, 0.0851, 0.1075, 0.0819]
+  },
+  "LS5": {
+   "iacc_e": [0.9875, 0.9105, 0.7494, 0.4695, 0.4147, 0.6345, 0.4977, 0.332],
+   "iacc_l": [0.9854, 0.9471, 0.7098, 0.2277, 0.0828, 0.1058, 0.0835, 0.0475]
+  },
+  "LS6": {
+   "iacc_e": [0.9527, 0.9244, 0.7126, 0.3301, 0.3913, 0.5953, 0.5187, 0.1683],
+   "iacc_l": [0.9169, 0.9422, 0.6574, 0.1353, 0.1624, 0.1178, 0.1139, 0.0619]
+  },
+  "LS7": {
+   "iacc_e": [0.9973, 0.989, 0.9475, 0.7819, 0.7455, 0.6715, 0.5617, 0.3703],
+   "iacc_l": [0.983, 0.9772, 0.8472, 0.3521, 0.2525, 0.1543, 0.0647, 0.0573]
+  }
+ }
+}

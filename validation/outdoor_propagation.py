@@ -33,8 +33,11 @@ down to turbulence, which their model does not have.
 
 The script prints a Markdown table: per case the measured, published and simulated
 overall losses, and the mean absolute difference from the measured losses over the
-bands, of the published model and of this package. ``--plots`` draws the band losses
-of every case (needs matplotlib). Progress goes to standard error.
+bands, of the published model and of this package; then, where the wind bends sound
+up, how far the engine's rays from each source reach the microphones' height without
+touching the ground (in 10 m steps, up to 2 km): past that, a source's direct sound is
+in its shadow. ``--plots`` draws the band losses of every case (needs matplotlib).
+Progress goes to standard error.
 """
 
 from __future__ import annotations
@@ -50,6 +53,7 @@ import numpy as np
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.air import SOUND_SPEED_0C
+from acoustic_spaces.engine.refraction import Profile, Rays
 from acoustic_spaces.materials import THIRD_OCTAVE_BANDS_HZ
 
 #: Where the ten cases are published (CKAN resources of DOI 10.25835/0012136).
@@ -159,6 +163,30 @@ def scene_of(case: int, inputs, still: bool = False, turbulence: str | None = No
     return Scene.model_validate(data)
 
 
+#: The ranges (m) over which :func:`direct_reach` looks for the direct rays.
+REACH_RANGES = np.arange(300.0, 2001.0, 10.0)
+
+
+def direct_reach(scene: Scene) -> list[float | None]:
+    """Per source, the farthest of :data:`REACH_RANGES` at which the engine's rays reach
+    the listeners' height without touching the ground, along +x (None: at every one)."""
+    atmosphere = scene.atmosphere
+    if atmosphere is None:
+        return [None] * len(scene.sources)
+    profile = Profile.of(atmosphere, float(scene.air.temperature_c), np.array([1.0, 0.0]))
+    height = float(scene.listeners[0].position[2])
+    reach: list[float | None] = []
+    for source in scene.sources:
+        rays = Rays(profile, float(source.position[2]))
+        found = [
+            r
+            for r in REACH_RANGES
+            if (np.asarray(rays.eigenrays(height, float(r), 0).ground_bounces) == 0).any()
+        ]
+        reach.append(None if len(found) == len(REACH_RANGES) else float(max(found, default=0.0)))
+    return reach
+
+
 def run_case(case: int, folder: Path, still: bool, turbulence: str | None = None) -> dict:
     content = load(fetch(case, folder))
     inputs, measured, model = (
@@ -195,6 +223,8 @@ def run_case(case: int, folder: Path, still: bool, turbulence: str | None = None
             "published_model": np.abs(model_loss - measured_loss).mean(axis=0).tolist(),
             "simulated": np.abs(loss - measured_loss).mean(axis=0).tolist(),
         },
+        "source_heights_m": [float(s.position[2]) for s in scene.sources],
+        "direct_reach_m": direct_reach(scene),
     }
 
 
@@ -219,6 +249,21 @@ def table(results: dict) -> str:
             f"| {case} | {r['weather']} | {pair(o['measured'])} | {pair(o['published_model'])} "
             f"| {pair(o['simulated'])} | {pair(d['published_model'])} | {pair(d['simulated'])} |"
         )
+    shadows = {c: r for c, r in results.items() if any(x is not None for x in r["direct_reach_m"])}
+    if shadows:
+        heights = next(iter(shadows.values()))["source_heights_m"]
+        lines += [
+            "",
+            "Where the rays from each source stop reaching the microphones' height (m):",
+            "",
+            "| Case | " + " | ".join(f"{h:g} m up" for h in heights) + " |",
+            "|---|" + "---:|" * len(heights),
+        ]
+        for case, r in shadows.items():
+            cells = " | ".join(
+                "beyond 2 km" if x is None else f"{x:.0f}" for x in r["direct_reach_m"]
+            )
+            lines.append(f"| {case} | {cells} |")
     return "\n".join(lines)
 
 
