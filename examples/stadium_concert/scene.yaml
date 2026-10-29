@@ -1,5 +1,5 @@
 # A concert in a football stadium, with a sound system as tours hang it and the stage's
-# monitors: stadium_pa and concert_stage together. The stadium is a bowl of four stands
+# monitors (concert_stage has the stage alone). The stadium is a bowl of four stands
 # under a ring of roof, open to the sky over the pitch; the stage stands at the west
 # end, and the stand behind it is empty. The stage's back is hung with drapes, as
 # touring stages are, so little of the sound that reaches it comes back onto the pitch.
@@ -31,17 +31,21 @@
 # boxes one by one (`near_field: true`). The sources and listeners sit in groups: the
 # PA's mains, subwoofers, fills and delays, the monitors, the stage, and the audience
 # standing and seated. The editor's scene tree shows or hides each group, and its tick
-# uses it in simulations or leaves it out.
+# uses it in simulations or leaves it out: with the monitors and the stage left out, the
+# sound system plays alone, for the crowd.
 #
+#   acoustic-spaces map scene.yaml --parameter spl --plot spl.png
 #   python align.py
 #   python near_field.py
 #   python feedback.py
 #   python make_model.py
 #
+# On the pitch from the mix position back, nine points of the map in ten get the same
+# level within 2.6 dB (all bands together). The map takes under five minutes on 4 cores.
 # align.py prints when and how loud each loudspeaker arrives at each listener, and which
 # would be heard as an echo: none, and each player hears their own monitor loudest.
 # near_field.py prints how far each array's far-field pattern would be off at each
-# listener: within 3.5 dB up to 2 kHz, but up to 10 dB at 4 and 8 kHz near the main
+# listener: within 3.5 dB up to 2 kHz, but up to 10.2 dB at 4 and 8 kHz near the main
 # arrays. feedback.py finds how much gain the singer's microphone allows before the
 # loudspeakers that play it make it ring, at the mix position and at the singer's ears,
 # and the frequencies where it rings first, then renders the loop below and above that
