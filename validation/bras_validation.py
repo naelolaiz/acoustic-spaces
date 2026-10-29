@@ -74,6 +74,10 @@ LABELS = {
     "ts": "Ts (s)",
 }
 SUMMARY = np.isin(OCTAVE_BANDS_HZ, SUMMARY_BANDS_HZ)
+#: Scenes whose loudspeakers stand in different rooms (CR1: LS1 in the reverberation
+#: chamber, LS2 in the laboratory with the microphones). An average over all their pairs
+#: would mix two decays, so their tables and plots give each source's averages.
+COUPLED = ("CR1_DoorAngle1", "CR1_DoorAngle3")
 
 
 def _band(f: int) -> str:
@@ -257,6 +261,7 @@ def validate(
         if held_out:
             pairs = held_out
             out["averaged_over"] = sorted({k.split()[0] for k in held_out})
+            out["g_seat_to_seat"] = _seat_to_seat({k: levels[k] for k in held_out})
     out["average"] = _averages(pairs)
     return out
 
@@ -295,6 +300,20 @@ def calibration_table(result: dict) -> str:
     return "\n".join(lines)
 
 
+def _groups(result: dict) -> dict[str, dict]:
+    """The averages a table or plot shows: over the pairs averaged (``""``), or per
+    source where the sources stand in different rooms."""
+    if result["scene"] not in COUPLED:
+        return {"": result["average"]}
+    shown = result.get("averaged_over")
+    sources = sorted({k.split()[0] for k in result["pairs"]})
+    return {
+        source: _averages({k: v for k, v in result["pairs"].items() if k.split()[0] == source})
+        for source in sources
+        if shown is None or source in shown
+    }
+
+
 def table(result: dict) -> str:
     bands = result["bands_hz"]
     absorption = result["materials"]
@@ -313,13 +332,15 @@ def table(result: dict) -> str:
         "|---|" + "---:|" * len(bands),
     ]
     for p in PARAMETERS:
-        avg = result["average"][p]
         fmt = ".1f" if "dB" in LABELS[p] else ".2f"
-        for side, label in (("measured", "measured"), ("simulated", "simulated")):
-            cells = ["-" if v is None else f"{v:{fmt}}" for v in avg[side]]
-            lines.append(f"| {LABELS[p]} {label} | " + " | ".join(cells) + " |")
-        cells = ["-" if v is None else f"{v:+.1f}" for v in avg["difference_jnd"]]
-        lines.append(f"| {LABELS[p]} JNDs | " + " | ".join(cells) + " |")
+        for source, averages in _groups(result).items():
+            avg = averages[p]
+            label = f"{LABELS[p]} {source}".rstrip()
+            for side in ("measured", "simulated"):
+                cells = ["-" if v is None else f"{v:{fmt}}" for v in avg[side]]
+                lines.append(f"| {label} {side} | " + " | ".join(cells) + " |")
+            cells = ["-" if v is None else f"{v:+.1f}" for v in avg["difference_jnd"]]
+            lines.append(f"| {label} JNDs | " + " | ".join(cells) + " |")
     errors = all("largest_standard_error_jnd" in result["average"][p] for p in PARAMETERS)
     lines += [
         "",
@@ -365,31 +386,36 @@ def plot(result: dict, path: Path) -> None:
     bands = result["bands_hz"]
     x = np.arange(len(bands))
     shown = ("edt", "t20", "c80", "d50")
+    groups = _groups(result)
     fig, axes = plt.subplots(1, len(shown), figsize=(12, 3.2), layout="constrained")
     for ax, p in zip(axes, shown, strict=True):
-        avg = result["average"][p]
-        measured = _values(avg["measured"])
-        step, relative = JND[p]
-        jnd = step * np.abs(measured) if relative else np.full(len(bands), step)
-        ax.fill_between(x, measured - jnd, measured + jnd, color="C1", alpha=0.2, label="1 JND")
-        ax.plot(x, measured, "s-", color="C1", label="measured")
-        ax.plot(x, _values(avg["simulated"]), "o-", color="C0", label="simulated")
+        for k, (source, averages) in enumerate(groups.items()):
+            avg = averages[p]
+            measured = _values(avg["measured"])
+            step, relative = JND[p]
+            jnd = step * np.abs(measured) if relative else np.full(len(bands), step)
+            line = "-" if k == 0 else "--"
+            name = f"{source} " if source else ""
+            band = None if k else "1 JND"
+            ax.fill_between(x, measured - jnd, measured + jnd, color="C1", alpha=0.2, label=band)
+            ax.plot(x, measured, "s" + line, color="C1", label=f"{name}measured")
+            ax.plot(x, _values(avg["simulated"]), "o" + line, color="C0", label=f"{name}simulated")
         ax.set_xticks(x, [f"{f // 1000}k" if f >= 1000 else str(f) for f in bands], fontsize=7)
         ax.set_xlabel("octave band (Hz)", fontsize=7)
         ax.set_title(LABELS[p])
         ax.grid(alpha=0.3)
         ax.legend(fontsize=7)
-    title = (
-        f"{result['name']}, {result['materials']} absorption: averages of "
-        f"{len(result['pairs'])} responses"
+    count = sum(
+        k.split()[0] in result.get("averaged_over", [k.split()[0]]) for k in result["pairs"]
     )
+    averages = f"averages of {count} responses"
+    if len(groups) > 1:
+        averages = f"averages of {count // len(groups)} responses per source"
+    title = f"{result['name']}, {result['materials']} absorption: {averages}"
     if "calibration" in result:
-        count = sum(
-            k.split()[0] in result.get("averaged_over", [k.split()[0]]) for k in result["pairs"]
-        )
         title = (
             f"{result['name']}, calibrated from the {result['materials']} absorption: "
-            f"averages of {count} responses" + (", not fitted" if "averaged_over" in result else "")
+            f"{averages}" + (", not fitted" if "averaged_over" in result else "")
         )
     fig.suptitle(title, fontsize=9)
     fig.savefig(path, dpi=110)
