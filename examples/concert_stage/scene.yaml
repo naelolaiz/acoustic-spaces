@@ -122,6 +122,16 @@ sources:
     orientation: {yaw: 90}
     level_db: 122
     directivity: {file: fill_array.yaml, near_field: true}
+  # The singer's voice: the sound power (dB re 1 pW) of a singer singing loud, just in
+  # front of the singer's head. It is left out of simulations until ticked; feedback.py
+  # takes it.
+  - name: singer_voice
+    group: Band
+    enabled: false
+    position: [-44.6, 0, 3.7]
+    orientation: {yaw: 0}
+    level_db: 98
+    directivity: subcardioid
 listeners:
   - name: singer
     group: Stage
@@ -136,6 +146,15 @@ listeners:
     group: Audience/Standing
     position: [-5, 0, 1.6]
     orientation: {yaw: 180}
+  # The singer's microphone, a supercardioid held 5 cm from the mouth and aimed at it,
+  # its rear to the wedges. It is left out of simulations until ticked; feedback.py
+  # finds the gain it allows before feedback.
+  - name: singer_mic
+    group: Stage
+    enabled: false
+    position: [-44.55, 0, 3.7]
+    orientation: {yaw: 180}
+    pattern: supercardioid
 simulation:
   early: {method: image_sources, max_order: 2, diffraction: none}
   late: {method: stochastic_ray_tracing}

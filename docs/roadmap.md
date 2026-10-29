@@ -294,6 +294,10 @@ Examples:
   movements; each downloads its recordings, mixes them at every listener and makes a
   video that tours them. The stadium's pictures show where the crowd stands and sits,
   the empty seats, and how much each takes up.
+- [x] Everything a demo plays in its example's scene, left out of the example's own
+  simulations until ticked, so the editor shows it: the stadium's band and the singer's
+  microphone, the church's choir, organ pipes and toured places, the lakeside's sound
+  system and its listener behind the stage, the gallery's place to look round from.
 - [x] A walk through a gallery, the fifth demo and the first of speech: a guide talks
   while a visitor walks away and round a corner, then turns their head in front of
   them (the `gallery` example).

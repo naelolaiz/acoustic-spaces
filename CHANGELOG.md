@@ -218,11 +218,27 @@
   microphone's balloon in the 3D view, one for each capsule of a pair; its angles' tips
   say they aim it. Translated in the five catalogs. A listener without a pattern renders
   as before.
-- `feedback.py` (the stadium concert's and the concert stage's) takes its microphone as
-  a supercardioid listener facing the mouth instead of turning first-order Ambisonics
-  into the pattern by hand: the same loop, the supercardioid's a now 0.37 as the
-  scene's patterns have it (0.366 before), its gain before feedback within 0.05 dB.
 - `scene` exports `Orientation`, `XYPair`, `BlumleinPair` and `MSPair`.
+- Everything a demo plays is in its example's scene, so the editor shows it: the stadium
+  concert's band (its Band group: the drum kit, the singer's voice, the guitar
+  amplifier), the church's choir, organ pipes and the places its demo tours (Choir,
+  Organ pipes, Choir concert), the lakeside concert's sound system (PA) and its listener
+  behind the stage, and the gallery's listener `standing`, where the visitor looks
+  round. Each is left out of the example's own simulations until ticked, so the
+  examples' results stay as they were (the same to the last bit); the demos take them in
+  instead of adding their own, and a test fails when a demo plays a source or listener
+  its example lacks. The church demo's places take the church's names for `--tour` and
+  `--listeners` (`nave-back`, `side-aisle`, `front-pews`, `conductor`, `in-the-choir`,
+  `nave-middle`), and the gallery demo's `--stand` moves its listener when given.
+- The stadium concert and the concert stage also hold the singer's microphone
+  (`singer_mic`, a supercardioid listener 5 cm in front of the singer's voice, aimed at
+  it). `feedback.py` (both examples') takes the microphone and the voice from the scene
+  as they are, instead of turning first-order Ambisonics into the pattern by hand at a
+  mouth of its own: the voice is where the stadium demo has always had it, 20 cm in
+  front of the singer's head (`feedback.py` put the mouth 9 cm in front and 8 cm down),
+  and the supercardioid's a is 0.37, as the scene's patterns have it (0.366 before). Its
+  gain before feedback moves by up to 0.8 dB in a band and 0.4 dB as it stands, and the
+  frequencies where it rings first change.
 
 ## 4.0.1
 
