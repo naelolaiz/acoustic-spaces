@@ -167,6 +167,14 @@ msgstr "Primo battere"
 msgid "Stems"
 msgstr "Tracce"
 
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Rays per band"
+msgstr "Raggi per banda"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Written to"
+msgstr "Scritto in"
+
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
 msgstr "Questa scena"
@@ -1889,19 +1897,22 @@ msgstr "Esegui una dimostrazione"
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "A demo plays sound through the scene and makes a video of what each listener "
-"hears; the messages say what it is doing, and Cancel stops it."
+"hears, and an example's script prints what it finds; the messages say what "
+"they are doing, and Cancel stops them."
 msgstr ""
 "Una dimostrazione riproduce suono nella scena e fa un video di ciò che sente "
-"ogni ascoltatore; i messaggi dicono cosa sta facendo, e Annulla la ferma."
+"ogni ascoltatore, e uno script di un esempio stampa ciò che trova; i "
+"messaggi dicono cosa stanno facendo, e Annulla li ferma."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "The demo to run: This scene, with the sounds its sources play, or one of the "
-"example's own demos when the scene is an example's or a copy of one"
+"example's own demos or scripts when the scene is an example's or a copy of "
+"one"
 msgstr ""
 "La dimostrazione da eseguire: Questa scena, con i suoni che riproducono le "
-"sue sorgenti, o una delle dimostrazioni proprie dell'esempio quando la scena "
-"è di un esempio o una sua copia"
+"sue sorgenti, o una delle dimostrazioni o degli script propri dell'esempio "
+"quando la scena è di un esempio o una sua copia"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -4959,10 +4970,6 @@ msgstr ""
 "aggiuntivo gpu), entrambi suddividendo i raggi (con una GPU i risultati "
 "possono variare leggermente tra i calcoli), oppure automatico: il più veloce "
 "su questo computer, determinato da Ottimizza CPU e GPU… o da una breve prova"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Rays per band"
-msgstr "Raggi per banda"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Reception"

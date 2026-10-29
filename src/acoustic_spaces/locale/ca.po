@@ -167,6 +167,14 @@ msgstr "Primer temps fort"
 msgid "Stems"
 msgstr "Pistes"
 
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Rays per band"
+msgstr "Raigs per banda"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Written to"
+msgstr "S'escriu a"
+
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
 msgstr "Aquesta escena"
@@ -1879,18 +1887,21 @@ msgstr "Executa una demostració"
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "A demo plays sound through the scene and makes a video of what each listener "
-"hears; the messages say what it is doing, and Cancel stops it."
+"hears, and an example's script prints what it finds; the messages say what "
+"they are doing, and Cancel stops them."
 msgstr ""
 "Una demostració reprodueix so a l'escena i fa un vídeo del que sent cada "
-"oient; els missatges diuen què fa, i Cancel·la l'atura."
+"oient, i un script d'un exemple mostra el que troba; els missatges diuen què "
+"fan, i Cancel·la els atura."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "The demo to run: This scene, with the sounds its sources play, or one of the "
-"example's own demos when the scene is an example's or a copy of one"
+"example's own demos or scripts when the scene is an example's or a copy of "
+"one"
 msgstr ""
 "La demostració que s'executarà: Aquesta escena, amb els sons que "
-"reprodueixen les seves fonts, o una de les demostracions pròpies de "
+"reprodueixen les seves fonts, o una de les demostracions o scripts propis de "
 "l'exemple quan l'escena és d'un exemple o una còpia d'un"
 
 #: acoustic_spaces/gui/demo_dialog.py
@@ -4936,10 +4947,6 @@ msgstr ""
 "els raigs (amb GPU, els resultats poden variar lleugerament entre càlculs), "
 "o automàtic: el més ràpid d'aquest ordinador, segons Ajustar CPU i GPU… o "
 "una prova breu"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Rays per band"
-msgstr "Raigs per banda"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Reception"

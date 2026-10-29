@@ -46,10 +46,21 @@ def differences(room: Room) -> dict[str, dict[str, np.ndarray]]:
     return out
 
 
+#: Its name in the editor's Run demo window.
+TITLE = "How far the arrays' far fields would be off"
+
+
+def parser() -> argparse.ArgumentParser:
+    """Its arguments, which the editor's Run demo window asks for too."""
+    found = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    found.add_argument(
+        "scene", nargs="?", default=Path(__file__).with_name("scene.yaml"), help="the scene"
+    )
+    return found
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("scene", nargs="?", default=Path(__file__).with_name("scene.yaml"))
-    args = parser.parse_args(argv)
+    args = parser().parse_args(argv)
     bands = " ".join(f"{f if f < 1000 else f'{f // 1000}k':>5}" for f in OCTAVE_BANDS_HZ)
     for source, rows in differences(Room.from_yaml(args.scene)).items():
         print(f"\n{source + ', far field above the elements added up (dB)'}")

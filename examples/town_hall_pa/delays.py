@@ -20,10 +20,21 @@ from acoustic_spaces.engine import coverage_map
 ZONES = {"front, to 10 m": (0, 10), "middle, 10 to 18 m": (10, 18), "back, from 18 m": (18, 28)}
 
 
+#: Its name in the editor's Run demo window.
+TITLE = "The STI with and without the delays"
+
+
+def parser() -> argparse.ArgumentParser:
+    """Its arguments, which the editor's Run demo window asks for too."""
+    found = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    found.add_argument(
+        "scene", nargs="?", default=Path(__file__).with_name("scene.yaml"), help="the scene"
+    )
+    return found
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("scene", nargs="?", default=Path(__file__).with_name("scene.yaml"))
-    args = parser.parse_args()
+    args = parser().parse_args()
     columns = coverage_map(args.scene, sources=["column_left", "column_right"]).get()
     everything = coverage_map(args.scene).get()
     x = everything.grid.points[:, 0]

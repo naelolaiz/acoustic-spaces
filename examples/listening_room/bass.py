@@ -43,10 +43,19 @@ def levels(room: Room, coherent: int | None, rays: int) -> dict[str, tuple[np.nd
     return out
 
 
+#: Its name in the editor's Run demo window.
+TITLE = "Bass against the wall and a metre out"
+
+
+def parser() -> argparse.ArgumentParser:
+    """Its arguments, which the editor's Run demo window asks for too."""
+    found = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    found.add_argument("--rays", type=int, default=20_000, help="late rays per band")
+    return found
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--rays", type=int, default=20_000, help="late rays per band")
-    args = parser.parse_args(argv)
+    args = parser().parse_args(argv)
     room = Room.from_yaml(HERE / "scene.yaml")
     header = "".join(f"{f'{hz} Hz':>9}" for hz in BANDS)
     print(f"{'G at the sofa (dB)':<34}{header}{header}")

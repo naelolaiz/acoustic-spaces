@@ -61,7 +61,8 @@ demos take `--input car=engine.wav`, a dry recording played as the car's sound.
 
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demos
-(the stadium has two: its concert first, then the helicopter over it), each reading the
+(the stadium has two: its concert first, then the helicopter over it), then the
+example's scripts that are no demos (the stadium's `feedback.py`, say), each reading the
 open scene where it would read the example's (a copy is known by its
 folder's name or, saved anywhere, by the scene's name: a renamed scene is a scene of
 its own). Pick the demo and fill in the options that change what it plays, labelled in
