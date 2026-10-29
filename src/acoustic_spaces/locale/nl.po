@@ -1757,12 +1757,12 @@ msgstr ""
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"The demo to run: This scene, with the sounds its sources play, or the "
-"example's own demo when the scene is an example's or a copy of one"
+"The demo to run: This scene, with the sounds its sources play, or one of the "
+"example's own demos when the scene is an example's or a copy of one"
 msgstr ""
 "De demo die wordt uitgevoerd: Deze scène, met de klanken die de bronnen "
-"spelen, of de eigen demo van het voorbeeld als de scène die van een "
-"voorbeeld is of een kopie ervan"
+"spelen, of een van de eigen demo's van het voorbeeld als de scène die van "
+"een voorbeeld is of een kopie ervan"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""

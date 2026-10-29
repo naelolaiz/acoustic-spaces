@@ -582,15 +582,25 @@ def gains_of(seats: dict, tour) -> dict[str, float]:
     return pipeline.gains_of(seats, [listener for listener, _, _ in tour])
 
 
-def video(args) -> None:
+def video(
+    args,
+    run_by: tuple[Demo, object] | None = None,
+    also: str = "",
+    heading: tuple[str, str] | None = None,
+) -> None:
     """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
-    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``).
+    ``run_by``, another demo and its arguments, makes the mixes in ``args.work`` (its
+    ``mix`` step) and is the run the stills give; ``also`` goes after their credit and
+    ``heading`` (a title and the line under it) replaces theirs."""
     from acoustic_spaces.demos.pictures import save, settings_lines
 
+    demo, run_args = run_by or (DEMO, args)
+    made_by = demo.command("render" if run_by is None else "mix", run_args)
     pictures = sibling(__file__, "stadium_pictures")
-    seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
+    seats = pipeline.seats_of(args.work / "seats", made_by)
     tour = tour_of(args, seats["seats"])
-    pipeline.missing_mixes(seats, [name for name, _, _ in tour], DEMO.command("render", args))
+    pipeline.missing_mixes(seats, [name for name, _, _ in tour], made_by)
     gains = gains_of(seats, tour)
     stops = [pipeline.TourStop(name, start, start, stop, gains[name]) for name, start, stop in tour]
     audio = pipeline.tour_audio(
@@ -608,11 +618,13 @@ def video(args) -> None:
         gains,
         credit=pipeline.credited(
             feeds_table(args)["song"]["credit"], seats, list(feeds_table(args)["sources"])
-        ),
+        )
+        + also,
         hrtf=args.hrtf,
         tool=settings_lines(
-            DEMO, args, scene_of(args), pipeline.read_json(args.results / pipeline.PARAMETERS)
+            demo, run_args, scene_of(args), pipeline.read_json(args.results / pipeline.PARAMETERS)
         ),
+        heading=heading or pictures.HEADING,
     )
     save(drawing.thumbnail(), args.work / "thumbnail.png")
     pipeline.video(

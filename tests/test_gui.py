@@ -2593,7 +2593,9 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
 
     dialog = DemoDialog(scene=example_path("stadium_concert"))
     names = [dialog.picker.itemData(k) for k in range(dialog.picker.count())]
-    assert names == ["scene", "stadium"] and dialog.picker.currentData() == "stadium"
+    # The example's own demo first, then the one that builds on it; the dialog starts on
+    # the example's own.
+    assert names == ["scene", "stadium", "crossing"] and dialog.picker.currentData() == "stadium"
     demo = dialog.demo
     assert [field for field in dialog.fields] == [option.name for option in demo.options]
     assert dialog.step.currentText() == ALL

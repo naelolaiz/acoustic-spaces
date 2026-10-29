@@ -75,9 +75,14 @@ def _sent(airspeed_m_s: float, temperature_c: float, pressure_kpa: float, rate: 
 
 
 class Helicopter(Vehicle):
-    """The AS350 B3 (:data:`acoustic_spaces.rotorcraft.AS350_B3`) flying over."""
+    """The AS350 B3 (:data:`acoustic_spaces.rotorcraft.AS350_B3`) flying over, in the demo
+    that ``script`` runs."""
 
     name, demo_name = HELICOPTER, "flyover"
+
+    def __init__(self, script: str = "flyover_demo.py") -> None:
+        self.script = script
+
     go, goes, going, way = "fly", "flies", "flying over", "its flight path"
     steady = "its rotors are trimmed for one steady speed"
     step_m = STEP_M
@@ -165,7 +170,7 @@ class Helicopter(Vehicle):
             table,
             sent.directivity(),
             f"The directivity of an {info['helicopter']}'s rotors at "
-            f"{info['airspeed_m_s']:.1f} m/s through the air, written by flyover_demo.py",
+            f"{info['airspeed_m_s']:.1f} m/s through the air, written by {self.script}",
         )
         named = Path(os.path.relpath(table, args.source.parent)).as_posix()
         source["directivity"] = {"file": named}
@@ -184,7 +189,7 @@ class Helicopter(Vehicle):
         return self.emission(info, duration_s)[1]
 
     def plays(self, args: argparse.Namespace, speed: str) -> str:
-        return f"a helicopter {speed}its rotors' sound sent each way"
+        return f"a helicopter {speed}with its rotors' sound sent each way"
 
     def played_by(self, args: argparse.Namespace) -> str:
         from acoustic_spaces.demos.passby import speed_of
@@ -223,7 +228,7 @@ class Helicopter(Vehicle):
             "down, dry",
             "header": "# The example with its helicopter flying over alone, at the speed and "
             "with the sound\n# power and directivity of its rotors, written by "
-            "flyover_demo.py.\n",
+            f"{self.script}.\n",
         }
 
 

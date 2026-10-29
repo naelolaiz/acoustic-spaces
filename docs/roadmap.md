@@ -348,7 +348,9 @@ Movement:
   out 3.4 dB over, nearly all of it Pegg's broadband noise of the main rotor.
 - [x] A helicopter flying over a meadow: the `helicopter_flyover` example and its
   flyover demo, the rotors trimmed at the helicopter's airspeed against the wind.
-- [ ] A helicopter crossing over the stadium concert.
+- [x] A helicopter crossing over the stadium concert: `helicopter_demo.py`, its pass
+  added to the concert's mixes at their simulated levels, 330 m up as the rules of the
+  air ask over a crowd.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:

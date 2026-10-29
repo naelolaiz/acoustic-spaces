@@ -278,6 +278,10 @@ class Demo:
     #: form that follows the options (how far and how fast the pass-by demos' car drives,
     #: and so for how long); None to say nothing.
     summary: Callable[[argparse.Namespace], str | None] | None = None
+    #: The demo of the same example whose work this one plays (``stadium``, for the
+    #: helicopter over its concert), to run first in the same work folder; None for the
+    #: example's own demo, the one :func:`demo_for` gives.
+    builds_on: str | None = None
     _folder: Path | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -571,12 +575,19 @@ def list_demos() -> list[Demo]:
     return found
 
 
+def demos_of(example: str) -> list[Demo]:
+    """Every demo of the example ``example`` (a folder name, or a former name of one):
+    its own demo first, then those that build on it (:attr:`Demo.builds_on`)."""
+    folder = examples_dir() / FORMER_NAMES.get(example, example)
+    found = [load(script) for script in sorted(folder.glob("*_demo.py"))]
+    return sorted(found, key=lambda demo: demo.builds_on is not None)
+
+
 def demo_for(example: str) -> Demo | None:
     """The demo of the example ``example`` (a folder name, or a former name of one), or
-    None."""
-    for script in sorted((examples_dir() / FORMER_NAMES.get(example, example)).glob("*_demo.py")):
-        return load(script)
-    return None
+    None: its own, when it has more than one (:func:`demos_of`)."""
+    found = demos_of(example)
+    return found[0] if found else None
 
 
 __all__ = [
@@ -591,6 +602,7 @@ __all__ = [
     "common_options",
     "input_option",
     "demo_for",
+    "demos_of",
     "list_demos",
     "load",
     "moving_names",

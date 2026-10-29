@@ -2,13 +2,14 @@
 
 Five demos run recordings through example scenes, mix them at the scenes' listeners and
 make a video of the result, a sixth drives a car past the listeners of two outdoor
-examples and a seventh flies a helicopter over those of a third. Each shows one space
-and one kind of sound: a symphony orchestra on the stage of a shoebox concert hall, a
-choir and an organ in a reverberant stone church, a band with its sound system and
-stage monitors in a stadium, the same band's song carried across a lake on a summer
-evening, a guide talking to a visitor who walks away from them through a gallery and
-then turns their head, a car passing on a road across a meadow and along a street, its
-pitch falling as it goes by, and a helicopter flying over a meadow. None of them
+examples, a seventh flies a helicopter over those of a third and an eighth flies it over
+the stadium's concert. Each shows one space and one kind of sound: a symphony orchestra
+on the stage of a shoebox concert hall, a choir and an organ in a reverberant stone
+church, a band with its sound system and stage monitors in a stadium, the same band's
+song carried across a lake on a summer evening, a guide talking to a visitor who walks
+away from them through a gallery and then turns their head, a car passing on a road
+across a meadow and along a street, its pitch falling as it goes by, and a helicopter
+flying over a meadow and over the stadium as the song ends. None of them
 stands for what the simulator does elsewhere; the [examples](examples.md) cover far
 more, and any scene makes a demo of its own with the recordings its sources are given
 ([a demo of any scene](#a-demo-of-any-scene)).
@@ -59,8 +60,9 @@ loud it is heard, and the captions' level and STI stay the scene's voice; the pa
 demos take `--input car=engine.wav`, a dry recording played as the car's sound.
 
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
-scene* (below), and for an example's scene, or a copy of one, the example's own demo,
-reading the open scene where it would read the example's (a copy is known by its
+scene* (below), and for an example's scene, or a copy of one, the example's own demos
+(the stadium has two: its concert first, then the helicopter over it), each reading the
+open scene where it would read the example's (a copy is known by its
 folder's name or, saved anywhere, by the scene's name: a renamed scene is a scene of
 its own). Pick the demo and the step,
 fill in the options (they start at the same defaults the command line uses), and it
@@ -760,3 +762,65 @@ turning, and the loads that change round each turn are left out. The eddies flic
 at the pace of their drift in the wind, not that of the helicopter sweeping the paths
 through them, and they are checked for sources up to 10 m up, not 150 m.
 
+
+## A helicopter over the stadium concert
+
+`helicopter_demo.py`, the stadium example's second demo, flies the
+[flyover's helicopter](#a-helicopter-flying-over) over the
+[stadium concert](#a-concert-in-the-stadium) as the song ends, and adds its pass to each
+listener's mix of the concert, both at their simulated levels. It builds on the stadium
+demo: run that one first, in the same work folder, up to its `render` step, with the
+`--format` and the `--hrtf` this one gets.
+
+```sh
+acoustic-spaces examples --copy . stadium_concert && cd stadium_concert
+python stadium_demo.py all        # the concert first (see above)
+python helicopter_demo.py all     # or flight, helicopter, scene, walk, mix, video one at a time
+```
+
+Options: `--height 330` how high it flies (m), `--at 180` when it is over the centre
+spot, in seconds into the song as the sound system plays it (by default the song's
+end); `--speed`, `--step` and `--input helicopter=WAV` as in the flyover demo, and
+`--tour` as in the stadium demo. At the mix position the walk takes 3.3 minutes on 4
+cores, most of it playing the 301 places through with Doppler, so some 40 for the 12
+listeners.
+
+- **The flight.** `flight` writes `scene_flight.yaml`: the stadium example's scene with
+  the helicopter added, left out of the concert's own simulations, flying 1200 m along
+  the stadium's long axis at 63 m/s, from behind the stage over the centre spot to past
+  the east stand. By default it flies 330 m up, the lowest the EU's rules of the air let
+  a flight by sight (VFR) cross an open-air assembly of persons without leave: 300 m
+  above the highest obstacle within 600 m (SERA.5005(f)), here the stadium's roof,
+  30 m up. A police or a news helicopter given leave flies lower. The ground and the sky
+  are widened to take the flight, and the responses are as much longer as the
+  helicopter is farther than the stage (4.2 s against the concert's 2.0 s), so each
+  keeps the stadium's decay after the helicopter's sound arrives.
+- **The helicopter and its pass** are the flyover demo's steps on that scene:
+  `helicopter` its rotors' sound, `scene` the helicopter alone (`scene_overhead.yaml`)
+  with the sound power and the directivity of its rotors at 63 m/s through still air
+  (138.3 dB, 132.9 dB(A)), and `walk` the helicopter every 4 m along its flight at
+  each of the 12 listeners, with Doppler. At the mix position it is at its loudest
+  74.2 dB(A), where the sound system's loudspeakers, simulated at their sound power,
+  give 96.9 dB(A): over the song it is some 20 dB under the music, and it is heard as
+  the song ends.
+- **The mix.** `mix` adds the helicopter's pass at each listener to the concert's mix
+  there (`demo/seats`), the helicopter over the centre spot at `--at`. The feeds stand
+  for the loudspeakers' sound power, a gated RMS of 0.1 for the loudest one's (the main
+  arrays', 134 dB), and the helicopter's sound is in pascals 1 m from its hub, so the
+  mix scales it by 0.1 over the pressure 1 m from a source of the main arrays' sound
+  power, in the scene's air. The mixes get one gain for all (the loudest peak at
+  -1 dBFS), into `demo/crossing/seats`, and the feeds' table goes to
+  `demo/crossing/feeds` with the song lasting until the helicopter has gone.
+- **The video** is the stadium demo's, made from those mixes into `demo/crossing`: the
+  same tour, each stop turned up to the loudness of the loudest, the helicopter named
+  in the title and in the credit. The default tour ends at the mix position, so that is
+  where the helicopter is heard coming in over the last phrase and going on after the
+  song.
+
+What it leaves out: the stadium's air is still, so no wind or eddies bend the
+helicopter's sound. The rotors' downwash does not reach the crowd: flying past at this
+speed, their wake trails behind them and sinks a few metres a second (1.6 m/s through
+the main rotor's disc in its trim). The rotors' model is 3.4 dB louder than the
+helicopter's noise certificate, as in the flyover. The stills draw the stadium as the
+stadium demo's do, without the helicopter, and the concert's mixes are taken as they
+are: one rendered with other HRTFs than `--hrtf` names is not caught.
