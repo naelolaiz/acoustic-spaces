@@ -204,12 +204,31 @@ def test_listening_room_bass(capsys: pytest.CaptureFixture[str]) -> None:
     assert "in pressure up to 125 Hz" in capsys.readouterr().out
 
 
+def _with_left_out(example: str) -> Room:
+    """The example's room with a copy of its main left array and of a listener left out
+    of simulations (``enabled: false``), as the stadium's helicopter is: the stadium
+    scripts take neither, and everything else simulates as without them."""
+    scene = Scene.from_yaml(example_path(example))
+    array = next(s for s in scene.sources if s.name == "main_left")
+    out = {"name": "left_out", "enabled": False}
+    return Room.from_scene(
+        scene.model_copy(
+            update={
+                "sources": [*scene.sources, array.model_copy(update=out)],
+                "listeners": [*scene.listeners, scene.listeners[0].model_copy(update=out)],
+            }
+        )
+    )
+
+
 def test_stadium_sound_system_is_aligned(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """What the stadium's description says of its sound system."""
     align = _script("stadium_pa", "align")
-    seats = align.arrivals(Room.from_yaml(example_path("stadium_pa")), rays=30, seed=1)
+    seats = align.arrivals(_with_left_out("stadium_pa"), rays=30, seed=1)
+    assert "left_out" not in seats
+    assert not [row for rows in seats.values() for row in rows if row.source == "left_out"]
     time = {seat: {row.source: row.time_s for row in rows} for seat, rows in seats.items()}
     # The subwoofers arrive with the main arrays at the mix position, and each fill or
     # delay comes 5 to 20 ms after the main array it backs up, so that one hears the stage.
@@ -258,8 +277,9 @@ def test_stadium_arrays_near_their_listeners(
     by adding up their boxes one by one; the subwoofers' within 0.6 dB in their bands,
     and the bands their filter leaves out are not counted."""
     near = _script(example, "near_field")
-    found = near.differences(Room.from_yaml(example_path(example)))
+    found = near.differences(_with_left_out(example))
     assert {"main_left", "subs"} <= set(found)
+    assert "left_out" not in found and "left_out" not in found["main_left"]
     arrays = np.array([db for s, rows in found.items() if s != "subs" for db in rows.values()])
     low, high = np.abs(arrays[:, :6]).max(), np.abs(arrays[:, 6:]).max()
     assert 1.0 < low < low_db and high_db - 3.0 < high < high_db
@@ -328,8 +348,9 @@ def test_stadium_feedback(
     """The singer's microphone: its gain before feedback, where it rings, and a loop
     that dies away below unity gain and grows above it."""
     feedback = _script("concert_stage", "feedback")
-    found = feedback.loop(Room.from_yaml(example_path("concert_stage")), rays=30, seed=1)
+    found = feedback.loop(_with_left_out("concert_stage"), rays=30, seed=1)
     assert "vocal_wedges" in found["speakers"] and "subs" not in found["speakers"]
+    assert "left_out" not in found["speakers"]
     for where in ("mix", "ears"):
         assert np.all(np.isfinite(found["pag"][where]))
     # The system can lift the voice far more at the mix position than at the singer's

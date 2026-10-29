@@ -60,8 +60,10 @@
   walk, and the Run demo window lists it as what the demo moves. An example may have
   more than one demo (`demos.demos_of`, `Demo.builds_on`): the editor's Run demo lists
   them, the example's own first. The stadium demo's stills take another heading and
-  leave out the sources left out of its simulations. The editor's plan fits the places
-  walks go through too.
+  leave out the sources left out of its simulations, as the stadium examples'
+  `align.py`, `near_field.py` and `feedback.py` now do with the sources and listeners
+  left out (`align.py` and `feedback.py` failed on one before). The editor's plan fits
+  the places walks go through too.
 - A helicopter's broadband noise by either of two models, its `broadband`: Pegg's
   method (`"pegg"`, the default) or each blade section's own noise in the flow past it
   (`"bpm"`), Brooks, Pope and Marcolini's airfoil self-noise (NASA RP-1218,
