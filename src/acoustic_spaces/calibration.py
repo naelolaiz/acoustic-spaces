@@ -40,7 +40,7 @@ import numpy as np
 from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.compare import JND
 from acoustic_spaces.engine import reweight
-from acoustic_spaces.engine.coherent import EarlyPressure, filtered_bands
+from acoustic_spaces.engine.coherent import EarlyPressure, filtered_bands, with_mean_phases
 from acoustic_spaces.engine.late import MAX_GROUPS
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.simulate import _as_room, simulate
@@ -237,7 +237,7 @@ class _Band:
             alike, label = np.unique(every, axis=0, return_inverse=True)
             weights = np.zeros((len(early), len(alike)))
             weights[np.arange(len(early)), label.reshape(-1)] = 1.0
-            signals = EarlyPressure(early, weights).band(
+            signals = EarlyPressure(with_mean_phases(early), weights).band(
                 band, step, slots, start=response.direct_delay_s
             )
             pressure = (alike, *signals)

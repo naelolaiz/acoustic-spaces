@@ -11,10 +11,13 @@ from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import early_paths
 from acoustic_spaces.engine.coherent import (
+    arriving_with,
     band_count,
+    own_phases,
     reflection_phases,
     sample_frequencies,
     total_energy,
+    with_own_phases,
 )
 from acoustic_spaces.engine.diffraction import (
     EdgeDiffraction,
@@ -24,9 +27,10 @@ from acoustic_spaces.engine.diffraction import (
 )
 from acoustic_spaces.engine.impedance import fit_admittance
 from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.simulate import coherent_bands
 from acoustic_spaces.materials.ground import band_absorption, plane_reflection, surface_impedance
-from acoustic_spaces.parameters import from_impulse_response
+from acoustic_spaces.parameters import from_impulse_response, octave_bands
 from acoustic_spaces.scene.model import EarlyStage
 from acoustic_spaces.synthesis import REFERENCE_ENERGY_10M
 
@@ -247,3 +251,115 @@ def test_each_band_keeps_its_own_shape_into_the_crossovers() -> None:
     inside = (f > samples[0, 0]) & (f < samples[0, -1]) & (gains[1] == 0.0)
     phase = np.interp(np.log2(f[inside]), np.log2(samples[0]), np.linspace(0.0, 0.5, 16)[:8])
     np.testing.assert_allclose(np.angle(out[inside]), phase, atol=1e-12)
+
+
+def _arriving(delay, energy: float, edge: bool, together: int = 1) -> early_stage.EarlyReflections:
+    """Paths straight ahead at ``delay`` (s), over edges of their own or reflections, with
+    ``energy`` in all in each band. In the two coherent bands they are in phase, each
+    with its share of the pressure, so that there too they come to ``energy`` when they
+    arrive ``together`` (their count) or apart (1)."""
+    delay = np.atleast_1d(np.asarray(delay, dtype=float))
+    n = len(delay)
+    energies = np.full((n, 8), energy / n)
+    energies[:, :2] = energy / (n * together)
+    return early_stage.EarlyReflections(
+        order=np.ones(n, dtype=np.int64),
+        delay_s=delay,
+        distance_m=delay * 343.0,
+        direction=np.tile([1.0, 0.0, 0.0], (n, 1)),
+        energy=energies,
+        edge=np.arange(n) if edge else None,
+        spectrum=np.ones((n, 2, 8), dtype=complex),
+    )
+
+
+def _early(paths: early_stage.EarlyReflections, seed: int = 0) -> Response:
+    """A response of ``paths`` alone."""
+    return Response(
+        source="s",
+        listener="l",
+        early=paths,
+        late=np.zeros((8, 100)),
+        time_step=1e-3,
+        length_s=0.1,
+        direct_delay_s=0.04,
+        transition_s=0.1,
+        volume_m3=None,
+        speed_of_sound=343.0,
+        seed=seed,
+    )
+
+
+def _octaves(paths: early_stage.EarlyReflections, seed: int = 0) -> np.ndarray:
+    """The energy of each octave band of the mono impulse response of ``paths``."""
+    ir = _early(paths, seed).impulse_response(48_000)
+    return (octave_bands(ir, 48_000) ** 2).sum(axis=1)
+
+
+def test_paths_over_edges_that_arrive_together_render_their_energy() -> None:
+    # Forty pieces of sound bent round edges within a millisecond, as the facets of a
+    # curved surface give: each one's energy holds its share of their interference
+    # already (engine.clusters). Each takes a phase of its own, drawn from the seed, so
+    # that they add in energy on average, as one path of all their energy renders.
+    delay = 0.05 + np.linspace(0.0, 0.001, 40)
+    alone = _octaves(_arriving(0.0505, 1e-3, edge=True))
+    pieces = _arriving(delay, 1e-3, edge=True, together=40)
+    rendered = np.array([_octaves(pieces, seed) for seed in range(100)]) / alone
+    np.testing.assert_allclose(rendered.mean(axis=0)[2:], 1.0, atol=0.2)
+    # One response scatters about that, as in a room from seat to seat.
+    assert rendered[:, 2:].std(axis=0).min() > 0.2
+    # Reflections of one phase arriving so close add in pressure, at a point of a room
+    # as here: many times their energy where the band's period is longer than they are
+    # apart.
+    reflections = _octaves(_arriving(delay, 1e-3, edge=False, together=40)) / alone
+    assert reflections[2] > 20.0 and reflections[3] > 10.0
+
+
+def test_the_echogram_reads_paths_over_edges_that_arrive_together_once() -> None:
+    # The 63 and 125 Hz bands are read through filters that let in a little of the
+    # 250 Hz band. There the pieces' energies hold their interference already: they add
+    # nothing more in pressure, so how much energy they carry there leaves the low bands
+    # as they are, their energy in them.
+    delay = 0.05 + np.linspace(0.0, 0.001, 40)
+
+    def low(edge: bool, louder: float) -> np.ndarray:
+        paths = _arriving(delay, 1e-3, edge=edge, together=40)
+        paths.energy[:, 2:] *= louder
+        return _early(paths).energy().sum(axis=1)[:2]
+
+    np.testing.assert_allclose(low(True, 10.0), low(True, 1.0), rtol=1e-9)
+    np.testing.assert_allclose(low(True, 1.0), 1e-3, rtol=0.1)
+
+
+def test_a_path_that_arrives_alone_keeps_its_phase() -> None:
+    # Over an edge, 40 ms after two reflections: farther from them than the band filters
+    # ring, it keeps the phase the coherent bands give it, which carries its bands into
+    # theirs.
+    paths = early_stage.EarlyReflections.concatenate(
+        [_arriving([0.01, 0.0102], 1e-3, edge=False), _arriving(0.05, 1e-3, edge=True)], 8
+    )
+    paths.edge[2] = 5
+    assert arriving_with(paths)[2] < 0.01
+    np.testing.assert_allclose(own_phases(paths, 0), 1.0, atol=0.01)
+    assert np.all(own_phases(paths, 0)[:2] == 1.0)  # reflections are never turned
+    # Two over edges at one delay: each hears the other as loud as itself.
+    two = _arriving([0.05, 0.05], 1e-3, edge=True, together=2)
+    np.testing.assert_allclose(arriving_with(two), 1.0, rtol=1e-6)
+    # Paths that add in energy in every band, or without paths over edges, stay as they are.
+    without = _arriving([0.05, 0.05], 1e-3, edge=False)
+    assert with_own_phases(without, 0) is without
+    coherent = dataclasses.replace(two, spectrum=np.ones((2, 8, 8), dtype=complex))
+    assert with_own_phases(coherent, 0) is coherent
+
+
+def test_each_path_over_an_edge_takes_the_same_phase_wherever_it_is() -> None:
+    delay = 0.05 + np.linspace(0.0, 0.001, 10)
+    paths = _arriving(delay, 1e-3, edge=True, together=10)
+    phases = own_phases(paths, 7)
+    # Whatever order the paths come in, and wherever the source and listener stand.
+    np.testing.assert_array_equal(own_phases(paths[::-1], 7), phases[::-1])
+    later = dataclasses.replace(paths, delay_s=paths.delay_s + 0.0123)
+    np.testing.assert_allclose(own_phases(later, 7), phases, atol=1e-12)
+    # Another seed draws other phases; the same one, the same response.
+    assert np.abs(np.angle(own_phases(paths, 8) / phases)).max() > 0.5
+    np.testing.assert_array_equal(_octaves(paths, 3), _octaves(paths, 3))

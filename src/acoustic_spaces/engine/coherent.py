@@ -20,18 +20,38 @@ every angle; an absorbing one turns the phase of sound that grazes it, by half a
 grazing incidence. Above those bands each path keeps the phase it has at their top
 (:func:`held_phase`).
 
+But for the paths over an edge: in those bands the energy of a wave bent round edges is
+that of its pieces added up in pressure already (:mod:`~acoustic_spaces.engine.clusters`),
+and each piece carries its share of it. Added in pressure once more, with the phases
+held from the bands below, the pieces of one wave counted their interference twice: the
+facets of BRAS's hall, thousands of pieces within a period, rendered 16 times their
+energy at 250 Hz at the dummy head. A rendered response therefore turns each path over
+an edge by a phase of its own (:func:`own_phases`), drawn from the path and the
+response's seed, as far as other paths' sound reaches it where it arrives, so that it
+adds to them in energy on average, as in the echogram. One that arrives alone keeps its
+held phase, which its bands need to join the coherent ones. Reflections keep theirs: two
+that arrive together add in pressure, as at a point of a real room, where the echogram
+gives their average over the band.
+
 The impulse response builds those bands' early part from the pressures, and the
 echogram reads each band's early energy from the same signal through the band filters
 of the analysis of measured responses
 (:func:`~acoustic_spaces.parameters.band_filter_gains`), as for the wave solver's bands:
 an impulse response and the echogram it came from now give the same parameters in those
-bands. The late part still adds in energy, and so do the uncorrelated points of a line
-or surface source.
+bands. The filters let in a little of the bands above, where the echogram gives each
+path over an edge the mean over seeds of the phase factor a rendered response turns it
+by (:func:`with_mean_phases`): with the phases held, the pieces' interference counted
+twice reached it through them, twice the early energy at 125 Hz at BRAS's hall's dummy
+head.
+The late part still adds in energy, and so do the uncorrelated points of a line or
+surface source.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import functools
+import hashlib
 import math
 from typing import TYPE_CHECKING
 
@@ -62,6 +82,14 @@ FILTERED_MAX_BAND_HZ = 500
 #: How much longer than the last early path the echogram's early part is taken (s),
 #: for the band filters' ringing.
 _TAIL_S = 0.3
+#: Taps of the windowed sinc that puts the paths on, and reads them off, the grid on
+#: which :func:`arriving_with` finds the other paths' sound where each arrives.
+_TAPS = 32
+#: That grid's sample rate, in times the highest frequency of the band.
+_OVERSAMPLE = 4.0
+#: Silence before the first path and after the last on that grid, in times the inverse
+#: of the band's width: longer than the band's filter rings.
+_PAD = 12.0
 
 
 def band_count(max_band_hz: int | None, bands: int, wave_max_band_hz: int | None = None) -> int:
@@ -294,12 +322,166 @@ def held_phase(paths: EarlyReflections) -> np.ndarray:
     """(n,) the phase factor of each path at the top of the coherent bands, which it
     keeps in the bands above them: there the paths add in energy, and a path whose
     phase stepped back to zero at the crossover would cancel itself in it, as two bands
-    half a turn apart do (ones without coherent bands)."""
+    half a turn apart do (ones without coherent bands). Times the path's own phase
+    (:attr:`~acoustic_spaces.engine.early.EarlyReflections.own_phase`) where a rendered
+    response gives it one (:func:`with_own_phases`)."""
+    top = _top_phase(paths)
+    return top if paths.own_phase is None else top * paths.own_phase
+
+
+def _top_phase(paths: EarlyReflections) -> np.ndarray:
+    """(n,) the phase factor of each path at the top of the coherent bands (ones
+    without them)."""
     if paths.coherent_bands == 0 or len(paths) == 0:
         return np.ones(len(paths), dtype=complex)
     top = paths.spectrum[:, -1, -1]
     magnitude = np.abs(top)
     return np.where(magnitude > 1e-12, top / np.maximum(magnitude, 1e-300), 1.0)
+
+
+def with_own_phases(paths: EarlyReflections, seed: int | None) -> EarlyReflections:
+    """``paths`` as a rendered response has them: each path over an edge turned by its
+    :func:`own_phases` in the bands above the coherent ones. The same paths without such
+    bands or such paths."""
+    if paths.coherent_bands >= paths.energy.shape[1] or not paths.diffracted.any():
+        return paths
+    return dataclasses.replace(paths, own_phase=own_phases(paths, seed))
+
+
+def own_phases(paths: EarlyReflections, seed: int | None) -> np.ndarray:
+    """(n,) the phase factor beyond the one held from the coherent bands that a rendered
+    response gives each path above them. A path over an edge is turned by an angle
+    drawn uniformly from the path (its edge, order, faces, crossings and source point,
+    and which of the paths alike it is) and ``seed``, times how loud the other paths'
+    sound is where it arrives against its own (:func:`arriving_with`), up to one: so it
+    adds to the paths it arrives with in energy on average, and one that arrives alone
+    keeps its phase. A reflection keeps its phase (one)."""
+    return np.exp(1j * _angles(paths, seed) * _turns(paths))
+
+
+def with_mean_phases(paths: EarlyReflections) -> EarlyReflections:
+    """``paths`` as the echogram reads the coherent bands from them
+    (:class:`EarlyPressure`), through filters that let in a little of the bands above:
+    each path over an edge with the mean over seeds of the phase factor
+    :func:`own_phases` gives it there, sinc of how far it is turned. One turned all the
+    way adds nothing to the others there in pressure, as on average in a rendered
+    response. The same paths without such bands or such paths."""
+    if paths.coherent_bands >= paths.energy.shape[1] or not paths.diffracted.any():
+        return paths
+    return dataclasses.replace(paths, own_phase=np.sinc(_turns(paths)).astype(complex))
+
+
+def _turns(paths: EarlyReflections) -> np.ndarray:
+    """(n,) how far each path over an edge is turned, as a share of its angle: how loud
+    the other paths' sound is where it arrives against its own (:func:`arriving_with`),
+    up to one; zero for reflections."""
+    return np.where(paths.diffracted, np.minimum(arriving_with(paths), 1.0), 0.0)
+
+
+def arriving_with(paths: EarlyReflections) -> np.ndarray:
+    """(n,) for each path, the largest over the bands above the coherent ones of how loud
+    the other paths' sound is where it arrives against its own, each path with the
+    phase held from the coherent bands: the magnitude of the sum over the others of
+    their pressure times the band filter's autocorrelation at the difference of their
+    delays, over its pressure. Zero for a path that arrives alone; about one or more
+    for one that others arrive with."""
+    bands = paths.energy.shape[1]
+    held = _top_phase(paths)
+    out = np.zeros(len(paths))
+    for b in range(paths.coherent_bands, bands):
+        amplitude = np.sqrt(paths.energy[:, b])
+        live = amplitude > 0
+        if live.sum() < 2:
+            continue
+        delay = paths.delay_s if paths.lag is None else paths.delay_s + paths.lag[:, b]
+        own = amplitude * held
+        others = np.abs(_band_field(delay, own, b, bands, live) - own)
+        out = np.maximum(out, np.where(live, others / np.where(live, amplitude, 1.0), 0.0))
+    return out
+
+
+def _band_field(
+    delay: np.ndarray, values: np.ndarray, b: int, bands: int, live: np.ndarray
+) -> np.ndarray:
+    """(n,) the sound of all ``values`` (n,) (complex pressures at ``delay`` s) in band
+    ``b`` where each arrives: their sum, each times the autocorrelation of the band's
+    filter (its gains squared, positive frequencies) at the difference of their delays,
+    over its value at zero, so that a path alone gives its own value. On a grid of
+    :data:`_OVERSAMPLE` times the band's highest frequency, the paths placed and read
+    with a windowed sinc."""
+    lo, hi = _band_support(b, bands)
+    rate = _OVERSAMPLE * hi
+    pad = _PAD / (hi - lo)
+    start = float(delay[live].min()) - pad
+    span = (float(delay[live].max()) - start + pad) * rate + _TAPS
+    size = 1 << int(math.ceil(math.log2(span)))
+    position = (delay - start) * rate
+    base = np.floor(position).astype(np.int64)
+    taps = np.arange(-_TAPS // 2 + 1, _TAPS // 2 + 1)
+    x = taps[None, :] - (position - base)[:, None]
+    kernel = np.sinc(x) * np.cos(np.pi * x / _TAPS) ** 2
+    index = ((base[:, None] + taps[None, :]) % size).ravel()
+    f = np.fft.fftfreq(size, 1.0 / rate)
+    power = np.where(f > 0, _band_shape(np.abs(f), b, bands) ** 2, 0.0)
+    correlation = np.fft.ifft(power)[(taps[:, None] - taps[None, :]) % size]
+    alone = np.einsum("nk,kl,nl->n", kernel, correlation, kernel).real
+    placed = (np.where(live, values, 0.0)[:, None] * kernel).ravel()
+    grid = np.bincount(index, placed.real, size) + 1j * np.bincount(index, placed.imag, size)
+    field = np.fft.ifft(np.fft.fft(grid) * power)
+    return (field[index].reshape(kernel.shape) * kernel).sum(axis=1) / alone
+
+
+def _band_edges(bands: int) -> tuple[np.ndarray, float]:
+    """The log2 frequencies of the edges between the synthesis's bands, with one more
+    a band above the top one, and the crossovers' width (octaves)."""
+    edges = np.log2(synthesis.crossover_frequencies(bands))
+    per_octave = BANDS_PER_OCTAVE[resolution_of(bands)]
+    return np.append(edges, edges[-1] + 1.0 / per_octave), synthesis.crossover_width(bands)
+
+
+def _band_support(b: int, bands: int) -> tuple[float, float]:
+    """The lowest and highest frequency (Hz) of band ``b`` of the synthesis, the top
+    band as wide as the others."""
+    edges, width = _band_edges(bands)
+    lo = 2.0 ** (edges[b - 1] - width / 2) if b > 0 else 0.0
+    return lo, float(2.0 ** (edges[b] + width / 2))
+
+
+def _band_shape(f: np.ndarray, b: int, bands: int) -> np.ndarray:
+    """The synthesis's gain of band ``b`` at frequencies ``f`` (Hz)
+    (:func:`~acoustic_spaces.synthesis.band_gains`), the top band as wide as the
+    others."""
+    edges, width = _band_edges(bands)
+    log_f = np.log2(np.maximum(f, 1e-6))
+
+    def step(edge: float) -> np.ndarray:
+        x = np.clip((log_f - (edge - width / 2)) / width, 0.0, 1.0)
+        return np.sin(0.5 * np.pi * x) ** 2
+
+    lower = step(edges[b - 1]) if b > 0 else np.ones_like(log_f)
+    return lower - step(edges[b])
+
+
+def _angles(paths: EarlyReflections, seed: int | None) -> np.ndarray:
+    """(n,) an angle in [-pi, pi) for each path over an edge, zero for the others,
+    drawn from what the path is and ``seed``: wherever the source and the listener
+    stand, the same path gets the same angle."""
+    out = np.zeros(len(paths))
+    seen: dict[tuple, int] = {}
+    for i in np.flatnonzero(paths.diffracted):
+        faces = tuple(int(face) for face in paths.faces[i]) if paths.faces else ()
+        key = (
+            int(paths.edge[i]),
+            int(paths.order[i]),
+            int(paths.crossings[i]),
+            int(paths.point[i]),
+            faces,
+        )
+        repeat = seen.get(key, 0)
+        seen[key] = repeat + 1
+        digest = hashlib.blake2b(repr((seed, key, repeat)).encode(), digest_size=8).digest()
+        out[i] = 2.0 * math.pi * (int.from_bytes(digest, "little") / 2.0**64) - math.pi
+    return out
 
 
 def amplitude_spectra(
@@ -496,8 +678,10 @@ def coherent_energy(
     for :meth:`EarlyPressure.energy`): through the band filters up to
     :data:`FILTERED_MAX_BAND_HZ` and by :func:`pair_energy` above. The paths of each of
     a line's or a surface's points add in pressure, those of different points in
-    energy. ``cache`` (a dict) keeps the :class:`EarlyPressure` of each point between
-    calls on the same paths."""
+    energy. The band filters let in a little of the bands above, where each path over an
+    edge has the mean of the phase a rendered response turns it by
+    (:func:`with_mean_phases`). ``cache`` (a dict) keeps the :class:`EarlyPressure` of
+    each point between calls on the same paths."""
     count = paths.coherent_bands
     filtered = filtered_bands(paths)
     points = np.unique(paths.point)
@@ -519,9 +703,9 @@ def coherent_energy(
 
 def _pressure(paths: EarlyReflections, point: int, cache: dict | None) -> EarlyPressure:
     if cache is None:
-        return EarlyPressure(paths)
+        return EarlyPressure(with_mean_phases(paths))
     if point not in cache:
-        cache[point] = EarlyPressure(paths)
+        cache[point] = EarlyPressure(with_mean_phases(paths))
     return cache[point]
 
 
@@ -690,16 +874,20 @@ __all__ = [
     "EarlyPressure",
     "absorption_phases",
     "amplitude_spectra",
+    "arriving_with",
     "band_count",
     "band_impulses",
     "coherent_energy",
     "filtered_bands",
     "ground_factors",
     "held_phase",
+    "own_phases",
     "pair_energy",
     "reflection_phases",
     "sample_frequencies",
     "shaped",
     "signal",
     "total_energy",
+    "with_mean_phases",
+    "with_own_phases",
 ]

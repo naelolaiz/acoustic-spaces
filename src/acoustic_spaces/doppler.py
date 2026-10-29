@@ -298,6 +298,7 @@ class Filters:
                 paths = paths.at_moment(roots, self.gusts.draws(roots, paths.point, moment))
             else:
                 paths = response.moment(self.seed)
+        paths = coherent.with_own_phases(paths, response.seed if self.seed is None else self.seed)
         gains = synthesis.band_gains(self.n_fft, self.rate, response.bands)
         shaping = coherent.amplitude_spectra(paths, self.f, gains) * self.shift
         heads = to_head(paths.direction, response.orientation)

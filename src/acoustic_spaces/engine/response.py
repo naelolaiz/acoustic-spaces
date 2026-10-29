@@ -482,7 +482,7 @@ class Response:
         """
         n = int(math.ceil(self.length_s * sample_rate))
         scale = synthesis.ENERGY_TO_IR
-        paths = self.moment(seed)
+        paths = coherent.with_own_phases(self.moment(seed), self.seed if seed is None else seed)
         band_signals, quadrature = coherent.band_impulses(paths, n, sample_rate)
         low = coherent.signal(paths, n, sample_rate)[:, 0]
         noise_signals = np.zeros_like(band_signals)
