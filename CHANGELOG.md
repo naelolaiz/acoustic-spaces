@@ -23,6 +23,21 @@
   is within 0.11 dB in level at 30 m/s and 0.42 dB for a train at 4 kHz, as one
   signal is (`validation/doppler.py`). `directivity.on_grid` and `sphere_mean` read a
   grid of directions as a balloon's is read.
+- Helicopters (`acoustic_spaces.rotorcraft`): `trim` balances a helicopter flying
+  level by momentum theory, and `emission` gives the sound its main and tail rotors
+  send each way, for a walk with Doppler: each rotor's tones from its blades' steady
+  lift, drag and thickness (the Ffowcs Williams and Hawkings equation far from the
+  rotor, in closed form) and its broadband noise by Pegg's method (NASA TM-80200).
+  `AS350_B3` is an Airbus Helicopters AS350 B3. The tones agree with Gutin's formula
+  and with Farassat's formulation 1A in time, blade point by blade point, to within
+  2 x 10⁻⁵ of the loudest harmonic, and Pegg's worked example comes out as he gives it;
+  flying the AS350 B3's noise certification, the model's sound exposure level is 88.0
+  dB(A), 3.4 dB over the certified 84.6 dB(A), nearly all of it Pegg's broadband noise
+  of the main rotor (`validation/rotorcraft.py`).
+- `emission.Periodic`, a sound that repeats, kept as one period in each direction,
+  which may turn with a rotor and be sent from off the source's place; `emission.Sum`
+  adds emissions up; every `Emission` gives its `directivity()`. `air.density` gives
+  the density of dry air.
 
 ## 4.0.1
 

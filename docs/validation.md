@@ -2685,6 +2685,90 @@ Doppler shift of the late part, which is crossfaded. Binaural walks are checked
 against the convolution with a response when the walker stands still (to within 45 dB
 at each ear in the tests), not against a moving head's exact field.
 
+## Helicopter rotors against theory and a certified level
+
+`validation/rotorcraft.py` checks the sound a helicopter's rotors send (see
+[Helicopters](outdoor.md#helicopters)): its tones against Gutin's formula and against
+the far field summed over the blades in two other ways, the store that keeps them,
+Pegg's broadband noise against his worked example, and the whole against the certified
+noise level of the helicopter it describes, the AS350 B3, flying at 63 m/s (25 °C).
+
+**The tones.** Each harmonic of the blade passing frequency, against:
+
+- Gutin's (1936) formula for a hovering rotor whose thrust and torque act on one
+  radius, in 18 directions from the axis;
+- the far field's integral over a turn, summed numerically with 4,096 instants a turn
+  over the blades' points where they truly are, each a moving force (the lift and the
+  drag) or a source (the thickness) on its straight chord, in 24 directions;
+- Farassat's formulation 1A in time, the same points each heard at the time it left
+  (solved by Newton's method) at an observer 20,000 km away in eight directions, its
+  harmonics taken from 1,024 instants a turn. This check shares nothing with the
+  closed form but the blade's loads.
+
+| check | rotor | harmonics | most off |
+|---|---|---|---|
+| Gutin | 3 blades, 41.3 rad/s | 6 | 3 x 10⁻¹⁵ |
+| the integral round the turn | main | 12 | 6.5 x 10⁻⁷ |
+| | tail | 12 | 1.7 x 10⁻⁴ |
+| in time (Farassat 1A) | main | 12 | 7.5 x 10⁻⁶ |
+| | tail | 12 | 1.6 x 10⁻⁵ |
+
+"Most off" is the largest difference of a harmonic's complex amplitude, over that
+harmonic's loudest in any direction (over the loudest harmonic in the direction, in
+time). The tail rotor's 1.7 x 10⁻⁴ comes from the chord's points' radius, taken to
+second order: its chord is a fifth of its radius. In time the observer stands so far
+away that the blade's radius squared over twice the distance, which the far field
+leaves out of the phase, does not count: at 200 km it puts the main rotor 7.5 x 10⁻⁴
+off, at 2,000 km 7.4 x 10⁻⁵, falling as one over the distance.
+
+**The store.** A rotor's tones are kept as one period of the sound in each direction
+on a grid (`Periodic`); what it sends over 4,000 samples 8.3 s in, each sample a
+random direction, against the harmonics summed there:
+
+| rotor | grid | harmonics | rms error | size | made in |
+|---|---|---|---|---|---|
+| main | 5° | 33 | -44 dB | 11 MB | 3.6 s |
+| | 2.5° | 33 | -56 dB | 44 MB | 11.9 s |
+| tail | 5° | 31 | -48 dB | 11 MB | 2.6 s |
+| | 2.5° | 31 | -59 dB | 42 MB | 7.8 s |
+
+The harmonics kept reach 90 dB under the loudest (`QUIET_DB`). The default grid is 5°
+apart.
+
+**Pegg's example.** Pegg's example I (NASA TM-80200, 1979), a hovering transport
+helicopter heard 61.6 m from its main rotor, 5° under its disc, and 62.2 m from its
+tail rotor, 10° off its axis: the broadband levels come out at 84.50 + S and 82.49 + S
+dB (his 84.5 and 82.5), and the peak frequencies at 289 and 545 Hz (his 289 and 544).
+
+**The certified level.** The AS350 B3 at its maximum mass of 2,250 kg flying the
+overflight of ICAO Annex 16, chapter 11 (14 CFR part 36, appendix J): level, 150 m
+over a microphone 1.2 m above grass, at 0.9 V_H, in still air at 25 °C and 70 %
+humidity at sea level. Its type certificate data sheet for noise (EASA.R.008) gives
+no speed; V_H is taken as Airbus's fast cruise speed, 136 kt, so 63.0 m/s. The direct
+sound and the ground's reflection (Weyl and van der Pol's, with Miki's impedance of
+200 kPa s/m²), each heard at the time it left the helicopter with the air's absorption
+(ISO 9613-1), A-weighted; the slow time weighting finds the points 10 dB under the
+most, and the sound exposure level is the energy between them:
+
+| part | SEL | L_ASmax | 10 dB down for |
+|---|---|---|---|
+| all | 88.0 dB(A) | 81.7 dB(A) | 9.4 s |
+| main rotor's tones | 63.3 dB(A) | 55.6 dB(A) | 8.9 s |
+| tail rotor's tones | 79.8 dB(A) | 72.4 dB(A) | 10.8 s |
+| main rotor's broadband noise | 87.3 dB(A) | 81.5 dB(A) | 7.9 s |
+| tail rotor's broadband noise | 64.9 dB(A) | 57.8 dB(A) | 11.0 s |
+| certified | 84.6 dB(A) | | |
+
+The model is 3.4 dB louder than the certified level, nearly all of it Pegg's
+broadband noise of the main rotor. Pegg's method is a correlation of the 1970s'
+measurements: in his own example the band of the broadband peak (315 Hz) comes out
+5.3 dB over the level measured there, though a tone of the tail rotor in that band is
+over it alone; the bands where only the broadband noise counts have no measured level
+in the report. The tones leave out the loads that change round the turn, which make a
+rotor's lower harmonics in forward flight louder than steady loads do. Some of the
+AS350 B3's inputs are assumed (the main blades' chord, the tail rotor's speed, chord
+and thickness, V_H); `AS350_B3`'s source code says which.
+
 ## Edge diffraction in whole cities
 
 Edge diffraction looks, for the source and for each listener, at every pair of an edge
@@ -3084,6 +3168,10 @@ Files and runs:
   rigid ground, not against measured pass-bys, and leave out the convective
   amplification of a moving source (see
   [Moving sources](#moving-sources-against-the-exact-field)).
+  A helicopter's tones are checked against theory, its broadband noise against Pegg's
+  worked example, and the whole against one certified level, which it is 3.4 dB over
+  (see [Helicopter rotors](#helicopter-rotors-against-theory-and-a-certified-level));
+  not against measured spectra or directivity.
   Vegetation is checked against a particle simulation of the same model, not against
   measurements through trees; its foliage takes ISO 9613-2's rates, which the
   standard gives for depths of 20 to 200 m, or leaves as thin rigid discs, whose
@@ -3135,6 +3223,7 @@ python validation/benchmark_1995.py --json benchmark.json   # --far: whole scene
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
 python validation/long_term.py --json long_term.json
 python validation/doppler.py --json doppler.json
+python validation/rotorcraft.py --json rotorcraft.json
 python validation/city_speed.py --json city_speed.json   # --sizes 10 20 30 40 60
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters

@@ -172,21 +172,28 @@ class FirstOrder(Directivity):
         return all(a == 1.0 for a in self.a)
 
 
-def on_grid(table: np.ndarray, directions) -> np.ndarray:
-    """(n, ...) the values ``table`` (elevations, azimuths, ...) holds on a grid of
-    elevations from -90 to 90 degrees and azimuths from 0 up to 360, each evenly spaced,
-    read bilinearly at unit vectors (n, 3) in the source's frame."""
+def _cell(shape: tuple[int, ...], directions) -> tuple[np.ndarray, ...]:
+    """The cell of the grid of :func:`on_grid` (``shape``: elevations, azimuths) round
+    each direction: its lower elevation's index, its two azimuths' indices, and how far
+    across the cell the direction lies in elevation and in azimuth (0 to 1)."""
     v = _unit(directions)
-    n_el, n_az = table.shape[:2]
+    n_el, n_az = shape[:2]
     el = np.degrees(np.arcsin(np.clip(v[:, 2], -1.0, 1.0)))
     az = np.degrees(np.arctan2(v[:, 1], v[:, 0])) % 360.0
     fi = (el + 90.0) / (180.0 / (n_el - 1))
     fj = az / (360.0 / n_az)
     i0 = np.clip(np.floor(fi).astype(int), 0, n_el - 2)
     j0 = np.floor(fj).astype(int) % n_az
+    return i0, j0, (j0 + 1) % n_az, fi - i0, fj - np.floor(fj)
+
+
+def on_grid(table: np.ndarray, directions) -> np.ndarray:
+    """(n, ...) the values ``table`` (elevations, azimuths, ...) holds on a grid of
+    elevations from -90 to 90 degrees and azimuths from 0 up to 360, each evenly spaced,
+    read bilinearly at unit vectors (n, 3) in the source's frame."""
+    i0, j0, j1, ti, tj = _cell(table.shape[:2], directions)
     shape = (-1,) + (1,) * (table.ndim - 2)
-    ti, tj = (fi - i0).reshape(shape), (fj - np.floor(fj)).reshape(shape)
-    j1 = (j0 + 1) % n_az
+    ti, tj = ti.reshape(shape), tj.reshape(shape)
     t = table
     return (1 - ti) * ((1 - tj) * t[i0, j0] + tj * t[i0, j1]) + ti * (
         (1 - tj) * t[i0 + 1, j0] + tj * t[i0 + 1, j1]

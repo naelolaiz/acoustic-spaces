@@ -1027,6 +1027,55 @@ Over a hard ground, the sound is within 45 dB of the exact field at 30 m/s (see
 [Validation](validation.md#moving-sources-against-the-exact-field)). A walking
 listener passes standing sources the same way.
 
+### Helicopters
+
+From Python, `acoustic_spaces.rotorcraft` gives the sound a helicopter's two rotors
+send each way, as an `Emission` for a walk with Doppler (see
+[Moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)):
+
+- `trim` balances a `Helicopter` flying level at an airspeed by momentum theory: the
+  main rotor's thrust holds up its weight and holds back its fuselage's drag, the disc
+  tilted forward between them; Glauert's inflow gives the induced velocity through the
+  disc, and the tail rotor's thrust holds the main rotor's torque.
+- `emission` then gives each rotor's **tones**, the harmonics of its blade passing
+  frequency from its blades' steady lift, drag and thickness (the Ffowcs Williams and
+  Hawkings equation far from the rotor, Farassat's formulation 1A, up to the harmonic
+  90 dB under the loudest), and each rotor's **broadband noise** by Pegg's
+  semi-empirical method (NASA TM-80200), louder ahead and quieter behind as a moving
+  source is. It is the pressure 1 m from the main rotor's hub, in pascals, as the far
+  field has it, in the helicopter's frame: x along its flight, y to its left, z up;
+  a walk with `face_forward` turns it along its path.
+- `AS350_B3` is an Airbus Helicopters AS350 B3 at its maximum mass of 2,250 kg, from
+  its type certificate and NASA's flight tests of the type; its main blades' chord
+  and its tail rotor's speed, chord and thickness are assumed (the source code says
+  which is which).
+
+```python
+from acoustic_spaces import rotorcraft
+from acoustic_spaces.walkthrough import render_walk
+
+trim = rotorcraft.trim(rotorcraft.AS350_B3, 63.0, temperature_c=25.0)  # 63 m/s
+sent = rotorcraft.emission(trim, seconds=30.0)  # 48 kHz: tones and broadband noise
+sound = render_walk(walk, {"helicopter": sent})  # its walk with doppler: true
+```
+
+The tones agree with Gutin's formula for a hovering rotor and with Farassat's
+formulation in time, blade point by blade point, to within 10⁻⁵ of the loudest
+harmonic, and Pegg's worked example comes out as he gives it (see
+[Validation](validation.md#helicopter-rotors-against-theory-and-a-certified-level)).
+Flying the AS350 B3 over a microphone as its noise certification does, 150 m up at
+63 m/s, gives a sound exposure level of 88.0 dB(A) against the certified 84.6 dB(A):
+3.4 dB louder, and nearly all of it is Pegg's broadband noise of the main rotor (87.3
+dB(A) on its own). Pegg's method is a correlation of the 1970s' measurements; in his
+own worked example the band of the broadband peak comes out 5 dB over the level
+measured there, though a tone of the tail rotor falls in that band too.
+
+What it leaves out: loads that change round the turn (in forward flight the
+advancing blade carries less lift than the retreating one, and the blades flap), the
+blades meeting the tip vortices of those ahead (blade-vortex interaction, the slap
+of a descent or a turn), the engine and the gearbox, the fuselage's reflection and
+shadow, and wind: the air is still and the airspeed is the speed over the ground.
+
 ## In the editor
 
 **File > New outdoor scene** starts one: a flat meadow 200 m across, with a source and

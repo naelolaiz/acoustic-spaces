@@ -341,8 +341,13 @@ Movement:
   equation's runs, each listener getting what a run of its own place would give it.
 - [x] The sound a source sends each way, along a walk with Doppler: each early path
   carries what is sent the way it leaves the source (`acoustic_spaces.emission`).
-- [ ] A helicopter flying over: a rotor noise model checked against hover theory and a
-  certified level, a flyover demo and a helicopter crossing over the stadium concert.
+- [x] A helicopter's rotors: their tones from the blades' steady loads, checked against
+  Gutin's hover formula and Farassat's formulation in time, and Pegg's broadband noise,
+  checked against his worked example (`acoustic_spaces.rotorcraft`).
+- [ ] A helicopter's sound within its certified level: the AS350 B3's overflight comes
+  out 3.4 dB over, nearly all of it Pegg's broadband noise of the main rotor.
+- [ ] A helicopter flying over: a flyover demo and a helicopter crossing over the
+  stadium concert.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:

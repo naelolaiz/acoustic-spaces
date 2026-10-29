@@ -362,9 +362,13 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   then carries what is sent the way it leaves the source (its first leg, turning from
   one place's way to the next's) at the time it leaves, and the source's directivity
   is taken out of the path's filter; the late part plays the emission's sound averaged
-  over the directions. The directivity still gives the band levels the simulation and
-  the pass-by report, so give the source the emission's own
-  (`Mixture.directivity()`). A tone sent louder ahead (1 + 0.8 cos θ in amplitude) and
+  over the directions. `Mixture` makes one of signals that do not correlate, each
+  with an amplitude per direction; `Periodic` one of a sound that repeats, one period
+  of it in each direction, which may turn with a rotor and be sent from off the
+  source's place (a helicopter's tones, see [Helicopters](outdoor.md#helicopters));
+  `Sum` adds emissions up. The directivity still gives the band levels the simulation
+  and the pass-by report, so give the source the emission's own (its
+  `directivity()`). A tone sent louder ahead (1 + 0.8 cos θ in amplitude) and
   turned in phase with the height follows the exact field within 0.11 dB in level at
   30 m/s and 0.42 dB for the train at 4 kHz, as one signal does there, with a cardioid
   directivity on the source or without (see

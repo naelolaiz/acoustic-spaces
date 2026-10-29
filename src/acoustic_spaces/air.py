@@ -22,6 +22,15 @@ def speed_of_sound(temperature_c: float) -> float:
     return SOUND_SPEED_0C * math.sqrt(1.0 + temperature_c / 273.15)
 
 
+#: Specific gas constant of dry air (J/(kg K)).
+DRY_AIR_J_PER_KG_K = 287.05
+
+
+def density(temperature_c: float = 15.0, pressure_kpa: float = 101.325) -> float:
+    """Density of dry air (kg/m³) at the given temperature and pressure, as an ideal gas."""
+    return pressure_kpa * 1000.0 / (DRY_AIR_J_PER_KG_K * (temperature_c + 273.15))
+
+
 def absorption_db_per_m(
     frequencies_hz: Sequence[float] | np.ndarray,
     temperature_c: float = 20.0,
@@ -74,6 +83,7 @@ __all__ = [
     "EXACT_OCTAVE_HZ",
     "OCTAVE_BANDS_HZ",
     "absorption_db_per_m",
+    "density",
     "energy_attenuation_per_m",
     "speed_of_sound",
 ]
