@@ -16,7 +16,7 @@ plane, so that the phase a wave gathers along x has the three-dimensional field'
 structure function in height. Each step of the march takes the phase k times mu
 integrated over the step. The outer scale L is 10 m. Two checks:
 
-- The coherence factor. In still air, over five soft grounds and three hard ones with
+- The coherence factor. In still air, over four soft grounds and four harder ones with
   the source and the listener at several heights, 50 to 400 m apart, at 13 frequencies
   from 125 Hz to 2 kHz through the ground dip, with the engine's strong preset: the
   level of the direct sound and its reflection (the Weyl-van der Pol factor Q) added
@@ -39,7 +39,9 @@ realisation's field is scaled in height by the square root of that, strengthenin
 down to the roughness length 5 cm above the ground, while the engine takes Cn² no nearer
 the ground than the outer scale (:meth:`~acoustic_spaces.engine.turbulence.Eddies.
 strength`). Those fits were made with eddies the same at every height, so this shows how
-they carry over.
+they carry over. Each check then also gives the engine taking Cn² right down to the
+roughness length, as the field has it (:class:`GroundEddies`): the rule the engine does
+not take, against the same parabolic equation.
 """
 
 from __future__ import annotations
@@ -71,6 +73,9 @@ PROFILE_FLOOR_M = 0.05
 #: parabolic equation takes.
 FIELD_DX = 0.5
 FIELD_DZ = 0.1
+#: Grounds up to this flow resistivity (kPa s/m²: grass, loose soil) count as soft in the
+#: coherence check's averages; compacted soil, gravel and asphalt as harder.
+SOFT_FLOW_RESISTIVITY = 200.0
 #: Source and listener heights (m) and grounds of the coherence check.
 COHERENCE_CASES = [
     (2.0, 1.5, "grass"),
@@ -100,6 +105,19 @@ def cn2_of(preset: str) -> float:
         values["temperature_structure"] / (4.0 * t0**2)
         + 11.0 / 6.0 * values["wind_structure"] / SPEED_OF_SOUND**2
     )
+
+
+class GroundEddies(Eddies):
+    """The engine's eddies weakening with height, but with Cn² taken right down to
+    :data:`PROFILE_FLOOR_M` instead of the outer scale."""
+
+    def strength(self, height) -> np.ndarray:
+        height = np.asarray(height, dtype=float)
+        return (np.maximum(height, PROFILE_FLOOR_M) / self.height_m) ** -self.falloff
+
+
+def ground_eddies(cn2: float, c: float) -> GroundEddies:
+    return GroundEddies(cn2, OUTER_SCALE_M, c, height_m=PROFILE_HEIGHT_M, falloff=PROFILE_FALLOFF)
 
 
 def make_eddies(cn2: float, c: float, profile: bool) -> Eddies:
@@ -180,6 +198,7 @@ def check_coherence(realisations: int, seed: int = 21, profile: bool = False) ->
     preset = "strong"
     cn2 = cn2_of(preset)
     eddies = make_eddies(cn2, SPEED_OF_SOUND, profile)
+    grounded = ground_eddies(cn2, SPEED_OF_SOUND) if profile else None
     ranges = np.array(COHERENCE_RANGES)
     still = lambda z: np.full(np.shape(z), SPEED_OF_SOUND)  # noqa: E731
     out = {}
@@ -193,7 +212,7 @@ def check_coherence(realisations: int, seed: int = 21, profile: bool = False) ->
             realisation(ranges.max() + 10.0, top + 5.0, cn2, OUTER_SCALE_M, rng, eddies)
             for _ in range(realisations)
         ]
-        engine, markov = [], []
+        engine, markov, down = [], [], []
         for f in COHERENCE_FREQUENCIES:
             impedance = _impedance(f, sigma)
             energy = np.zeros(len(ranges))
@@ -220,6 +239,12 @@ def check_coherence(realisations: int, seed: int = 21, profile: bool = False) ->
                 plain = math.exp(-0.5 * (2.0 * math.pi * f) ** 2 * variance[0, 1])
                 engine.append(_db(apart_energy + together * cross) - reference)
                 markov.append(_db(apart_energy + plain * cross) - reference)
+                if grounded is not None:
+                    variance, apart = grounded._apart(points)
+                    ground_pair = np.where(np.eye(2, dtype=bool), 0.0, apart)
+                    wander = Wander(variance, ground_pair, SPEED_OF_SOUND)
+                    together = float(wander.coherence(f)[0, 1, 0])
+                    down.append(_db(apart_energy + together * cross) - reference)
         engine, markov = np.abs(engine), np.abs(markov)
         name = f"{ground} {zs:g}/{zr:g} m"
         out[name] = {
@@ -228,9 +253,31 @@ def check_coherence(realisations: int, seed: int = 21, profile: bool = False) ->
             "markov_mean_db": float(markov.mean()),
             "markov_max_db": float(markov.max()),
         }
-        print(
+        line = (
             f"  {name:24s} engine {engine.mean():4.2f} dB (largest {engine.max():4.1f}), "
-            f"Markov alone {markov.mean():4.2f} dB (largest {markov.max():4.1f})",
+            f"Markov alone {markov.mean():4.2f} dB (largest {markov.max():4.1f})"
+        )
+        if down:
+            off = np.abs(down)
+            out[name]["ground_mean_db"] = float(off.mean())
+            out[name]["ground_max_db"] = float(off.max())
+            line += f", Cn² down to the ground {off.mean():4.2f} dB (largest {off.max():4.1f})"
+        print(line, flush=True)
+    for label, soft in (("soft", True), ("harder", False)):
+        names = [
+            f"{ground} {zs:g}/{zr:g} m"
+            for zs, zr, ground in COHERENCE_CASES
+            if (PRESETS[ground][0] <= SOFT_FLOW_RESISTIVITY) == soft
+        ]
+        means = {
+            key: float(np.mean([out[n][key] for n in names]))
+            for key in out[names[0]]
+            if key.endswith("_mean_db")
+        }
+        out[f"{label} grounds"] = {"cases": names, **means}
+        print(
+            f"  {label} grounds ({len(names)}), on average: "
+            + ", ".join(f"{key.removesuffix('_mean_db')} {v:4.2f} dB" for key, v in means.items()),
             flush=True,
         )
     return out
@@ -268,6 +315,7 @@ def check_shadow(realisations: int, seed: int = 31, profile: bool = False) -> di
         for preset in ("moderate", "strong"):
             cn2 = cn2_of(preset)
             eddies = make_eddies(cn2, c0, profile)
+            grounded = ground_eddies(cn2, c0) if profile else None
             rng = np.random.default_rng(seed)
             energy = {f: np.zeros(len(ranges)) for f in SHADOW_FREQUENCIES}
             for _ in range(realisations):
@@ -292,22 +340,29 @@ def check_shadow(realisations: int, seed: int = 31, profile: bool = False) -> di
                     d2 = r**2 + (zs - zr) ** 2
                     still = abs(plain[f][i]) ** 2 * d2
                     added = float(eddies.scattered(weather, zs, zr, r, [f], start)[0])
-                    rows.append(
-                        {
-                            "f": f,
-                            "range_m": float(r),
-                            "still_db": _db(still),
-                            "eddies_db": _db(energy[f][i] / realisations * d2),
-                            "engine_db": _db(still + added),
-                        }
-                    )
+                    row = {
+                        "f": f,
+                        "range_m": float(r),
+                        "still_db": _db(still),
+                        "eddies_db": _db(energy[f][i] / realisations * d2),
+                        "engine_db": _db(still + added),
+                    }
+                    if grounded is not None:
+                        deeper = float(grounded.scattered(weather, zs, zr, r, [f], start)[0])
+                        row["ground_db"] = _db(still + deeper)
+                    rows.append(row)
             error = np.array([abs(row["engine_db"] - row["eddies_db"]) for row in rows])
             out[f"{name} {preset}"] = {"start_m": start, "rows": rows}
-            print(
+            line = (
                 f"  {name:9s} {preset:8s} shadow from {start:5.1f} m: engine within "
-                f"{error.mean():4.1f} dB on average (largest {error.max():4.1f})",
-                flush=True,
+                f"{error.mean():4.1f} dB on average (largest {error.max():4.1f})"
             )
+            if grounded is not None:
+                miss = np.array([abs(row["ground_db"] - row["eddies_db"]) for row in rows])
+                line += (
+                    f"; Cn² down to the ground {miss.mean():4.1f} dB (largest {miss.max():4.1f})"
+                )
+            print(line, flush=True)
             for row in rows:
                 print(
                     f"    {row['f']:5.0f} Hz {row['range_m']:6.0f} m: still {row['still_db']:6.1f}"

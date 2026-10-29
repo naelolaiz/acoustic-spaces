@@ -20,9 +20,11 @@ of that integral (see :mod:`acoustic_spaces.materials.ground`). The checks:
 - the engine's early part in an outdoor scene, a source and a listener over grass and
   nothing else, against the exact solution: the energy in each octave band, with the
   direct sound and its reflection added in pressure (the engine's default outdoors),
-  over the free field's. A band's energy is its average over the band, as the engine
-  reads it; the analysis filters' skirts, which reach into the neighbouring bands, fill
-  a sharp dip in a band by up to about 1 dB more;
+  over the free field's. A band's energy is its average over the band
+  (:func:`acoustic_spaces.engine.coherent.total_energy`); the level a run reports reads
+  the bands up to 500 Hz through analysis filters, whose skirts reach into the
+  neighbouring bands and fill a sharp dip more (``insertion_loss.py`` shows by how
+  much);
 - with ``--wave``, the wave solver: its ground is fitted to the impedance itself (see
   :func:`acoustic_spaces.engine.impedance.fit_impedance`); the level over grass over the
   level over a rigid ground, from 40 to 315 Hz, against the exact solution. About a
@@ -31,7 +33,8 @@ of that integral (see :mod:`acoustic_spaces.materials.ground`). The checks:
   ground in wind and temperature gradients (:mod:`acoustic_spaces.engine.parabolic`),
   here in still air: the level over the same grounds at the third-octave centres from
   63 Hz to 2 kHz, from a source 1 m high at 25, 100 and 400 m and from one 119 m high
-  (as a wind turbine's hub) at 178, 535 and 845 m, 1.5 and 1.7 m up;
+  (as a wind turbine's hub) at 178, 535 and 845 m, 1.5 and 1.7 m up, and where each
+  ground's largest difference falls;
 - with ``--extended``, grounds of extended reaction (``impedance.reaction``), whose
   impedance changes with the angle of incidence: the exact field from the fast field
   program (:mod:`validation.ffp`, in still air, with the plane wave's reflection at each
@@ -279,6 +282,9 @@ def check_parabolic() -> dict:
         top = max(1.5 * zs, zs + 20.0, 0.15 * ranges.max())
         for name, sigma, thickness in GROUNDS:
             worst = np.zeros(len(ranges))
+            # The largest miss over the ranges: its size, tone, range and the exact
+            # field's level there over the free field's (dB).
+            largest = (0.0, 0.0, 0.0, 0.0)
             for f in PE_FREQUENCIES:
                 k = 2.0 * math.pi * f / SPEED_OF_SOUND
                 z = complex(surface_impedance(np.array(f), sigma, thickness=thickness))
@@ -293,10 +299,19 @@ def check_parabolic() -> dict:
                         20.0 * math.log10(abs(pressure[i]) * r1) - 20.0 * math.log10(abs(exact))
                     )
                     worst[i] = max(worst[i], miss)
-            out[f"{name}, heights {zs:g} and {zr:g} m"] = dict(
-                zip((f"{r:g} m" for r in ranges), worst.tolist(), strict=True)
+                    if miss > largest[0]:
+                        largest = (miss, float(f), float(r), 20.0 * math.log10(abs(exact)))
+            out[f"{name}, heights {zs:g} and {zr:g} m"] = {
+                **dict(zip((f"{r:g} m" for r in ranges), worst.tolist(), strict=True)),
+                "largest": dict(
+                    zip(("miss_db", "f_hz", "range_m", "exact_db"), largest, strict=True)
+                ),
+            }
+            print(
+                f"{name:34}"
+                + "".join(f"{w:10.2f}" for w in worst)
+                + f"   largest at {largest[1]:.4g} Hz, {largest[2]:g} m, exact {largest[3]:+.1f} dB"
             )
-            print(f"{name:34}" + "".join(f"{w:10.2f}" for w in worst))
         print()
     print(f"({time.time() - start:.0f} s)\n")
     return out

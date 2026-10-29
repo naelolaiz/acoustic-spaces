@@ -475,8 +475,9 @@ is an arc of a circle, so its travel time and its length are exact.
   that turn back in the air a few layers above and below it, as the layers' corners
   would otherwise make it jump. Where neighbouring rays cross (a caustic) the level is
   capped at 10 dB over a straight path's, and each caustic delays the phase by a
-  quarter period. Against an independent ray tracer on the smooth profiles, the levels
-  of these paths are within 1 dB, 1.5 dB near a caustic.
+  quarter period. Against an independent ray tracer on the smooth profile of the
+  `windy` preset downwind, the levels of three such paths 100 and 300 m away are within
+  0.05 dB (the tests allow 0.2 dB); no such check is made near a caustic.
 - **In the bands up to 500 Hz** rays fail over the ground, as the profiles change most
   within a wavelength of it, where the direct sound and its reflection meet. There the
   sound over the open ground comes from a parabolic equation (the Green's function
@@ -487,14 +488,17 @@ is an arc of a circle, so its travel time and its length are exact.
   the octave below. It applies from 1.5 times the source's and the listener's heights
   added away along the ground, where the sound comes in at 34 degrees from the
   horizontal or flatter; nearer, the atmosphere has had little room to bend it, and the
-  rays give it. In still air the parabolic equation is within 0.25 dB of the exact
-  solution over grass and harder grounds (see
+  rays give it. In still air the parabolic equation is within 0.2 dB of the exact
+  solution over grass and harder grounds from a source 1 m up, 25 to 400 m away, and
+  within 0.45 dB from a wind turbine's hub 178 m away (see
   [Validation](validation.md#ground-reflection-against-the-exact-solution)). In wind,
-  against a fast field program on the 1995 benchmark cases, it is within 0.1 dB to 1 km
-  and within 3 dB to 10 km when the wind stops growing 100 m up, as it does; a gradient
-  that goes on to a kilometre up bends sound back at angles it does not carry, and
-  beyond 1 to 2 km its pure tones stray there by 3 to 20 dB, though the bands a scene
-  reports hold to 2 km (see
+  against a fast field program on the 1995 benchmark cases with the gradient stopping
+  100 m up, as the wind's does, it is within 0.35 dB to 1 km downwind, and at 10 km
+  within 3 dB at 100 Hz and 11 dB at 1 kHz (47 dB down); upwind within 0.1 dB until the
+  sound is 20 dB down and up to 6 dB off deeper into the shadow. A gradient that goes on
+  to a kilometre up bends sound back at angles it does not carry, and beyond 1 to 2 km
+  its pure tones stray there by 3 to 20 dB, though the bands a scene reports stay within
+  0.8 dB of the program to 2 km (see
   [Validation](validation.md#outdoor-sound-in-wind-against-a-fast-field-program)).
 - **The wide-angle parabolic equation** takes its place with
   `simulation.early.parabolic_equation: wide_angle` (`--parabolic-equation wide_angle`
@@ -568,10 +572,11 @@ is an arc of a circle, so its travel time and its length are exact.
   the zones, the engine's parabolic equation is within 0.15 dB on average and 1.2 dB
   at most to 800 m, over shelter and gusts downwind and upwind, an inversion past a
   lake shore and cool water downwind. The mean profile, at the bands the rays give,
-  is within 0.3 dB where only the temperature changes on the way, and gives 1 to 4 dB
-  more sound where the wind changes, 6.6 at most at 2 kHz 800 m downwind of a shelter:
-  one profile cannot both bend the sound down over the first 150 m and let it go
-  straight after, the cost of the equivalent profile the standards take (see
+  is within 0.35 dB over the cool water; where the wind changes, or an inversion sets
+  in, it is up to 6.6 dB off (at 2 kHz 800 m downwind of a shelter), mostly giving 1
+  to 4 dB more sound and in a few places up to 2.7 dB less: one profile cannot both
+  bend the sound down over the first 150 m and let it go straight after, the cost of
+  the equivalent profile the standards take (see
   [Validation](validation.md#weather-zones-against-a-crank-nicholson-parabolic-equation)).
 - **The animation's particles** and **the drawn paths** (`view --paths`, the Blender
   export) curve as the sound does.
@@ -591,13 +596,14 @@ and no temperature gradient) changes nothing: the results are those of still air
 for bit.
 
 **Without turbulence, shadows come out deeper than measured.** The eddies of the wind
-and of the temperature scatter sound into a shadow and keep it to some 20 to 30 dB in
-practice; without them a shadow far from its start can be 60 dB deep at high
-frequencies. Give the atmosphere its `turbulence` (see [Turbulence](#turbulence)).
+and of the temperature scatter sound into a shadow: in the validation's shadows, 280 to
+500 m out and from 500 Hz up, they keep it 5 to 25 dB below the free field, where
+without them it is 50 to 70 dB deep. Give the atmosphere its `turbulence` (see [Turbulence](#turbulence)).
 
-Against measurements of a wind turbine up to 845 m away in light winds, the bands from
-80 Hz to 2 kHz are within 1.7 to 2.7 dB on average, about as close as the published
-parabolic equation model (see [Validation](validation.md#outdoor-propagation-against-measurements-hannover)).
+Against measurements of a wind turbine up to 845 m away in ten spells of different
+weather, from light winds to strong upwind, the bands from 80 Hz to 2 kHz are within
+1.7 to 2.7 dB on average, about as close as the published parabolic equation model in
+the eight cases other than strong upwind, and closer in those two (see [Validation](validation.md#outdoor-propagation-against-measurements-hannover)).
 
 `acoustic-spaces inspect` describes the atmosphere and gives the speed of sound across
 the wind, downwind and upwind at a few heights up to the sky. From Python,
@@ -614,7 +620,8 @@ sound flickers with them. Outdoors that matters in three ways:
   where the direct sound and its reflection off the ground cancel, fills in at long
   distances and high frequencies.
 - Sound is **scattered into shadows**: a shadow of the wind or of the sun's warmth
-  stays some 15 to 30 dB deep instead of 60.
+  stays some 5 to 25 dB below the free field instead of 50 to 70 (see
+  [Validation](validation.md#turbulence-against-a-parabolic-equation-through-random-eddies)).
 - The sound of a far source **flickers**, louder and softer by several decibels from
   one second to the next, as the eddies drift past.
 
@@ -683,10 +690,10 @@ C_v² / c0² (Ostashev and Wilson 2015).
   shaking of the refraction Cn² at the geometric mean of the source's and the listener's
   heights; all of them no nearer the ground than the eddies' outer scale. Against the
   parabolic equation through eddies strengthening right down to the ground, the ground
-  dip is within 1.1 dB on average over the soft grounds and 1.4 over the hard ones (0.9
-  and 0.9 with eddies the same at every height) and the shadows within 1.3 to 2.9 dB
-  (0.7 to 1.2); taking Cn² at the mean height itself, right down to the ground, would
-  put the dip 1.8 dB off (see
+  dip is within 0.9 dB on average over the soft grounds and 1.5 over the harder ones
+  (0.8 and 1.0 with eddies the same at every height) and the shadows within 1.3 to
+  2.9 dB (0.7 to 1.2); taking Cn² at the mean height itself, right down to the ground,
+  would put the dip 1.7 dB off over the soft grounds (see
   [Validation](validation.md#turbulence-against-a-parabolic-equation-through-random-eddies)).
 - **In the parabolic equation's bands** (in wind or temperature gradients, see
   [How the simulation bends sound](#how-the-simulation-bends-sound)) the eddies blur its
@@ -1135,9 +1142,11 @@ reflections and a diffraction) is left out unless
 `simulation.early.diffraction_reflections` is `both_sides`: by default a path
 reflects before or after the edge, not both. Over a rigid ground that path carries a
 quarter of the sound over a barrier, so without it the barrier's insertion loss comes
-out 0.3 to 0.8 dB too high from 1 kHz up and a few decibels off in the bands below,
-where the paths interfere; with it the engine is within 0.15 dB of the exact solution.
-Over grass and other soft grounds, whose reflections near grazing are weak, the gap is
-smaller (see [Validation](validation.md#outdoor-results-against-exact-solutions)).
+out up to 0.8 dB off from 1 kHz up (mostly too high, 0.7 dB too low at 2 kHz 90 m
+behind) and a few decibels off in the bands below, where the paths interfere; with it
+the engine is within 0.15 dB of the exact solution (see
+[Validation](validation.md#outdoor-results-against-exact-solutions)). Over grass and
+other soft grounds, whose reflections near grazing are weaker, the path left out
+should matter less, but that is not checked.
 Sound that goes over a barrier, down to the ground and over the barrier again is left
 out either way.

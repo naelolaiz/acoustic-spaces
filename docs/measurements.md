@@ -89,6 +89,8 @@ acoustic-spaces compare sim/talker__seat-a.wav hall/ir.wav --measured-channel 2 
     --plot compare.png --json compare.json
 ```
 
+Its output, for a made-up hall (the numbers show the form, not a result):
+
 ```
 simulated: talker__seat-a.wav, channel 1, 48000 Hz, direct sound at 10.1 ms
 measured:  ir.wav, channel 2, 48000 Hz, direct sound at 10.0 ms
@@ -161,6 +163,8 @@ acoustic-spaces calibrate hall.yaml \
     --measured talker seat-a hall/ir_a.wav --measured talker seat-b hall/ir_b.wav \
     -o hall_fitted.yaml --json calibration.json
 ```
+
+Its output, for the same made-up hall:
 
 ```
 absorption     63 Hz  125 Hz  250 Hz  500 Hz   1 kHz   2 kHz   4 kHz   8 kHz

@@ -108,6 +108,34 @@ def test_impulse_response_and_echogram_agree_where_paths_add_in_pressure() -> No
     assert np.abs(energy["g"]).max() > 1.0 or np.abs(energy["c50"]).max() > 3.0
 
 
+def test_a_coloured_sound_in_the_first_milliseconds() -> None:
+    # The bands are put together with zero-phase filters, which spread an arrival both
+    # ways in time; what falls before the response's first sample is lost. The
+    # echogram is not affected; the G an impulse response gives is, a little, for a
+    # sound whose level changes from band to band, 2.9 ms in against 202.9 ms.
+    def strength(delay, levels):
+        paths = early_stage.EarlyReflections(
+            order=np.zeros(1, dtype=np.int64),
+            delay_s=np.array([delay]),
+            distance_m=np.array([delay * 343.0]),
+            direction=np.array([[1.0, 0.0, 0.0]]),
+            energy=1e-2 * 10 ** (np.asarray(levels, dtype=float)[None, :] / 10),
+        )
+        response = Response(
+            source="s", listener="l", early=paths, late=np.zeros((8, 500)), time_step=1e-3,
+            length_s=0.5, direct_delay_s=delay, transition_s=0.3, volume_m3=None,
+            speed_of_sound=343.0, seed=0,
+        )  # fmt: skip
+        ir = response.impulse_response(48_000)
+        return response.energy().sum(axis=1), from_impulse_response(ir, 48_000, 1.0).g
+
+    for levels, bound in (([0.0] * 8, 1e-3), ([0, -1.5, -4.7, -10, -15, -20, -20, -20], 0.15)):
+        early, g_early = strength(0.0029, levels)
+        late, g_late = strength(0.2029, levels)
+        np.testing.assert_allclose(early, late, rtol=1e-9)
+        assert np.abs(g_early - g_late).max() < bound
+
+
 def test_reflection_phases_of_hard_and_absorbing_surfaces(tmp_path: Path) -> None:
     # At 3 degrees above the surface; at exactly grazing incidence every surface that
     # absorbs at all reflects half a turn out of phase.

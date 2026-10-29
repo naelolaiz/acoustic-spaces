@@ -44,7 +44,8 @@
   its clarity within about one JND; calibrated on one loudspeaker position's responses,
   its T20 and T30 at the other come within 0.7 JNDs on average. In the coupled rooms the
   chamber's sound decays as two-room theory gives for the model's slit by the door,
-  within 4 %, but the real rooms are joined about ten times more strongly, so its EDT
+  within 5.3 % (`validation/coupled_rooms.py`, new), but in that theory the real rooms
+  are joined 10 to 16 times more strongly, so its EDT
   and T20 come out 2 to 25 JNDs long from 63 Hz to 2 kHz. G is compared from seat to
   seat, as the level of the measured responses is uncertain by about 3 dB; the report
   gives the offset, with checks against diffuse theory and the direct sound. IACC_E and
@@ -57,13 +58,47 @@
   averages. Since 4.0.1 the seminar room's and the hall's average differences in each
   band move by 0.15 JNDs at most, but for the calibrated hall's (up to 0.67 JNDs), whose
   fit lands on slightly different coefficients.
-- Known issue, documented: above the bands that add in pressure, a rendered response
-  adds the early paths that arrive within a fraction of a band's period of one another
-  in amplitude, where the echogram adds them in energy. Many diffracted paths do: at the
-  dummy head in the BRAS hall they render 64, 9 and 6 times their energy in the echogram
-  at 250 Hz, 500 Hz and 1 kHz, in the examples with edges 0.4 to 1.5 times from 250 Hz
-  up. The parameters `simulate` reports come from the echograms and are not affected
-  (see [Validation](docs/validation.md#known-issues)).
+- Rendered responses (mono, binaural, Ambisonics and loudspeakers) give each path over
+  an edge a phase of its own above the bands that add in pressure, drawn from the path
+  and the response's seed and turned as far as other paths' sound reaches it where it
+  arrives; a path over an edge that arrives alone keeps its phase, and reflections keep
+  theirs. The pieces a diffracted wave is cut into carry energies that already hold
+  their interference, and a rendered response added them in pressure again with one
+  phase, counting it twice: forty pieces within a millisecond rendered more than 20
+  times their energy at 250 Hz, as forty reflections of one phase still do. They now
+  render their energy on average over seeds, within 0.2 of it from 250 Hz up, one
+  response scattering about that as a room does from seat to seat
+  (`tests/test_coherent.py`).
+- The echogram's 63 and 125 Hz bands, read through band filters that let in a little
+  of the 250 Hz band, took the same pieces' interference a second time from there.
+  Each path over an edge now takes the mean of those phases over seeds in that
+  reading, which needs no seed, so the low bands no longer depend on how much the
+  pieces carry above them (`tests/test_coherent.py`); calibration reads the same way.
+  The parameters `simulate` reports at 125 Hz move where many diffracted paths arrive
+  together, as in BRAS's rooms (see
+  [Validation](docs/validation.md#measured-rooms-bras)); outdoors every band adds in
+  pressure, and nothing changes.
+- The validation report was checked claim by claim against the scripts and tests its
+  numbers come from, and corrected where a statement went further than they do; among
+  others: the barrier's insertion loss without the path reflected on both sides is
+  0.5 and 0.7 dB too low at 1 and 2 kHz 90 m behind, not only too high; the parabolic
+  equation is within 0.35 dB of the fast field program to 1 km with the gradient
+  stopping 100 m up (not 0.1 dB), and 11 dB at 1 kHz 10 km out; the weather zones'
+  mean-profile table had four rows from the zones' table; the turbulence check's
+  averages took gravel as soft and compacted soil as hard; the matched layer at its
+  default 8 cells returns 67 dB down or more (not 57); a coverage map's T30 is within
+  5 % of full simulations at the tests' three points, not everywhere; the GPU's
+  outdoor comparison does not depend on the eddies. Numbers that came from one-off
+  checks are now printed by the scripts or tests, or left out:
+  `outdoor_propagation.py` gives where each source's rays stop reaching the
+  microphones' height; `turbulence.py --profile` the engine with Cn² taken down to the
+  ground, and averages over the soft and the harder grounds; `ground_reflection.py
+  --parabolic` where each ground's largest difference falls; `leaves.py` runs 10
+  million late rays and three seeds and gives their spread (at 100,000 rays the level
+  behind dense leaves at 8 kHz moved by up to 22 dB from one seed to another); the new
+  `validation/coupled_rooms.py` compares BRAS's coupled rooms with two-room diffuse
+  theory; and a test pins how a coloured sound in a rendered response's first
+  milliseconds moves G.
 - Outdoors, the places of a walking source share the parabolic equation's runs where
   they stand at one height over one ground and neither the weather nor the ground has
   zones (`simulate(share_waves=...)`, which `simulate_walk` and `simulate_movement`

@@ -26,8 +26,10 @@ exact at every point, as at a listener. The late part comes from one ray tracing
 source in which every ray adds its path length through a slab of air around each point
 (a track-length estimate), so a map of hundreds of points costs about as much as a few
 listeners: the concert hall example (480 points, two sources, 50,000 rays per band)
-takes about a minute on 4 cores. In the shoebox example, full simulations at map points
-give G within 0.2 dB of the map and T30 within 5 %. With the statistical late method
+takes about a minute on 4 cores. In the shoebox example, full simulations at three of
+the map's points give G within 0.3 dB of the map and T30 within 5 % from 125 Hz to
+4 kHz (the tests, with one seed); at other points and seeds T30 strays further now and
+then, as both carry the late rays' noise. With the statistical late method
 each point gets the late part a listener there would, and G agrees within 0.01 dB.
 
 Each source radiates its sound power per band (its `level_db`, `spectrum`, `gain_db`

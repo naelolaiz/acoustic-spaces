@@ -191,11 +191,13 @@ Outdoor acoustics, in steps:
   ground solution in still air, and `validation/benchmark_1995.py`, the benchmark's
   still air and 0.1/s gradients down and up, and the same stopping 100 m up, at 10, 100
   and 1000 Hz to 10 km through the engine's parabolic equation and as whole scenes per
-  band. The parabolic equation is within 0.1 dB of the program to 1 km and within 3 dB
-  to 10 km with the gradient stopping 100 m up, as the weather's do, and parts from it
-  beyond 1 to 2 km with the benchmark's gradient going on to a kilometre up (O21's
-  wide-angle parabolic equation carries that); whole scenes within 0.11 dB per band
-  to 1 km in every case. The comparison found and fixed a notch at the join of the
+  band. With the gradient stopping 100 m up, as the weather's do, the parabolic
+  equation is within 0.35 dB of the program to 1 km downwind and within 3 dB at 10 km
+  at 100 Hz (11 dB at 1 kHz, 47 dB down), and parts from it beyond 1 to 2 km with the
+  benchmark's gradient going on to a kilometre up (O21's wide-angle parabolic equation
+  carries that); whole scenes are within 0.11 dB per band to 1 km downwind in every
+  case and upwind with the benchmark's gradient, 1.5 dB at 1 km upwind with the
+  gradient stopping 100 m up, 44 dB down. The comparison found and fixed a notch at the join of the
   parabolic equation's bands and the rays' (see the changelog).
 - [x] O12 Outdoor scenes on the GPU: the GPU traces the rays bent by wind and
   temperature through the same chords as the CPU (ray for ray: the same turns and the
@@ -476,6 +478,7 @@ Next version:
   in three (`validation/bras_binaural.py`), and each run's largest standard error.
 - [ ] BRAS's coupled rooms with the door open by 30.4°, whose model has no closed inside:
   the door leaf cuts some 2 cm into the wall at its hinge.
-- [ ] Early paths that arrive together added in energy in rendered responses, as in the
-  echogram: many diffracted paths now add in amplitude there, up to 64 times their
-  energy at 250 Hz at the dummy head in the BRAS hall.
+- [x] Paths over edges that arrive together rendered with phases of their own, so they
+  render their energy on average over seeds instead of adding in amplitude; the
+  echogram's 63 and 125 Hz reading no longer takes their interference a second time
+  from the band above.

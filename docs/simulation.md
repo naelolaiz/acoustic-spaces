@@ -243,12 +243,12 @@ edge, off the ground on the way to a barrier or off a façade behind it; or
 `both_sides`, before and after, which adds the path reflected off the ground on the
 way to a barrier and again behind it, the fourth of the four paths over a barrier on
 the ground. Over a hard ground that path carries a quarter of the sound over the
-barrier, and without it the insertion loss comes out 0.3 to 0.8 dB too high from 1 kHz
-up and a few decibels off in the bands below, where the four paths interfere; with it
-the engine is within 0.15 dB of the exact solution (see the
+barrier, and without it the insertion loss comes out up to 0.8 dB off from 1 kHz up
+(mostly too high) and a few decibels off in the bands below, where the four paths
+interfere; with it the engine is within 0.15 dB of the exact solution (see the
 [validation report](validation.md#outdoor-results-against-exact-solutions)). Over grass
-and other soft grounds, whose reflections near grazing are weak, the path matters
-less. `both_sides` pairs every reflection before an edge with every one after it, so
+and other soft grounds, whose reflections near grazing are weaker, the path should
+matter less, but that is not checked. `both_sides` pairs every reflection before an edge with every one after it, so
 it costs more where many faces reflect (in the `street` example about a sixth more
 diffracted paths and a few tens of milliseconds per listener);
 `--diffraction-reflections` sets it for one run of `simulate` or `map`, and the editor
@@ -265,7 +265,9 @@ changes by less than 0.25 dB where specular paths alone drop by more than 5 dB; 
 reflection off one of the corner's walls ends and the direct sound carries on, by less
 than 0.05 dB. The
 diffraction coefficient matches the exact solutions for a half-plane and for wedges
-(within 0.25 dB), and a thin screen matches Maekawa's chart within 1.5 dB.
+(within 0.25 dB), and a thin screen comes within 1.5 dB of Maekawa's chart in the
+tests' geometry (the chart, an empirical one, is itself up to 2.1 dB from the exact
+solution behind a barrier 40 to 90 m away).
 
 Behind a thick wall or barrier, whose two corners share its top, no edge sees both the
 source and the listener: `first_order` finds nothing there, or only a way round one
@@ -280,8 +282,8 @@ edge appears: as the listener rises past the top of a barrier, it changes by at 
 energy). Against the exact solution (BTM, in the
 [validation report](validation.md#edge-diffraction-against-the-exact-solution)),
 the level over barriers 0.3 to 3 m thick is within 0.3 dB from 500 Hz up, and over two
-screens in a row within 0.45 dB; at 63 and 125 Hz, in pressure, within 0.6 and 0.12 dB
-(1.7 and 1.9 dB with the waves in energy).
+screens in a row within 0.45 dB; at 63 and 125 Hz, in pressure, within 0.6 dB over
+the barriers and 0.12 dB over the screens (1.7 and 1.9 dB with the waves in energy).
 
 ```sh
 acoustic-spaces simulate examples/gallery/scene.yaml --out gallery
@@ -383,8 +385,13 @@ simulation:
   fits it but without its grid, so the phase in a band does not depend on how many
   bands add in pressure. A hard surface reflects in phase at every angle; an absorbing
   one turns the phase of sound that grazes it, by half a turn at grazing incidence.
-  Above those bands each path keeps the phase it has at their top,
-  so the bands join without a step. A surface whose material has an impedance (a
+  Above those bands each reflection keeps the phase it has at their top, so the bands
+  join without a step. A path over an edge does too where it arrives alone; where
+  other paths' sound reaches it, a rendered response turns it by a phase of its own,
+  drawn from the path and the response's seed, as far as that sound reaches it. The
+  pieces a diffracted wave is cut into carry energies that already hold their
+  interference, so they render their energy on average over seeds rather than adding
+  in pressure a second time. A surface whose material has an impedance (a
   ground's) reflects with its spherical wave's factor instead, in every band (see
   [Ground impedance](outdoor.md#ground-impedance)).
 - Outdoors the paths are few, and the ground dip spans several bands: the early paths
@@ -400,9 +407,13 @@ simulation:
   terms that stand for that interference in the higher bands.
 - The echogram reads those bands' early energy from the paths' pressure, through the
   band filters the analysis of measured responses uses, and so do coverage maps and the
-  material fit. An impulse response and the echogram it came from now give the same
-  parameters in those bands: in a 7.3 x 5.1 x 3 m box, G within 0.01 dB and C50 within
-  0.05 dB, where adding the paths in energy leaves them up to 2.1 and 1.6 dB apart.
+  material fit. Those filters let in a little of the band above, so there each path
+  over an edge takes the mean of its rendered phases over seeds, which needs no seed.
+  An impulse response and the echogram it came from give the same parameters in those
+  bands: in a 7.3 x 5.1 x 3 m box without edge diffraction, G within 0.01 dB and C50
+  within 0.05 dB, where adding the paths in energy leaves them up to 2.1 and 1.6 dB
+  apart. With paths over edges they agree on average over seeds, one response
+  scattering about the echogram.
 - Outdoors in turbulence the echogram takes each two paths' coherence factor, the
   average over the eddies, and an impulse response is one moment of them, whose levels
   scatter about the echogram's (see [Turbulence](outdoor.md#turbulence)).
@@ -476,7 +487,7 @@ simulation:
   the exact solution within 0.12 dB from 40 to 315 Hz. One run covers all the bands.
 - Closed rooms, open models and thin screens all work. Round an open model the grid
   grows by a perfectly matched layer of 8 cells, which takes in the sound leaving it:
-  what comes back is 57 to 74 dB down, against 7 to 14 dB from the grid's edge alone.
+  what comes back is 67 to 74 dB down, against 7 to 14 dB from the grid's edge alone.
 - Outdoors in wind and temperature (an [atmosphere](outdoor.md#wind-and-temperature)
   in which sound bends), the speed of sound changes from cell to cell: the still air's
   at the cell's height, plus the wind's component along the horizontal from the source.
@@ -507,8 +518,9 @@ dispersion. Grids of more than 40 million cells are refused, and on a GPU so is 
 with a buffer larger than the GPU binds: the field's or, round an open model, the
 matched layer's, of nine values a cell. `python
 validation/wave_gpu.py` times your GPU against your CPU; Mesa's lavapipe, a Vulkan
-driver that runs on the CPU (and what CI tests with), takes roughly 8 to 9 times as long
-as the CPU solver in a whole run (the [validation report](validation.md) has the times).
+driver that runs on the CPU (and what CI tests with on Linux), took 7.5 to 9 times as
+long as the CPU solver in a whole run with an earlier version of the script (the
+[validation report](validation.md) has the times).
 
 ![Transfer function of a 7 x 5 x 3 m box from the sum of its modes, the wave solver and rays](images/wave.png)
 
@@ -755,15 +767,15 @@ within 2 % on reverberation time from 500 Hz to 4 kHz and within one JND on clar
 and a chamber music hall and an auditorium within about one JND on clarity and 6 to
 10 % and 12 to 21 % long on reverberation time (from 250 and 125 Hz to 4 kHz), which
 comes within about one JND once their absorption is fitted with this package's own
-rays. The model of two coupled rooms joins them about ten times less than the real
-rooms are joined, and IACC_L comes within one JND of binaural responses in 19 to 25 of
+rays. In two-room diffuse theory the model of two coupled rooms joins them 10 to 16
+times less strongly than the real rooms are joined, and IACC_L comes within one JND of binaural responses in 19 to 25 of
 30 values per room. Edge diffraction
 is checked against the exact solutions for a half-plane and for wedges, against
 Maekawa's chart, and over two edges against the exact BTM solution. The
 wave solver matches the frequencies of a box's modes within 0.25 % and their decay rates
 within 2 % with walls whose admittance changes with frequency, the reflection and
 absorption of walls, and the free-field level within 0.35 dB, and round an open model
-what comes back from the grid's edge is 57 dB down or more. Sound
+what comes back from the grid's edge is 67 dB down or more. Sound
 through a partition reaches the level behind it that diffuse-field theory gives within
 0.3 dB, and coupled rooms decay in the two slopes of the two-room model.
 The [validation report](validation.md)
