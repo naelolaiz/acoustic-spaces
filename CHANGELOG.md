@@ -72,6 +72,11 @@
   dB under Pegg's for the main rotor (`validation/rotorcraft.py`). The flyover
   and the stadium crossing demos take `--broadband bpm`. `air.viscosity` gives the
   kinematic viscosity of dry air.
+- `walkthrough.pass_by` no longer gives NaN for L_Amax, the SEL and L_Aeq when a
+  place's G is undefined in a band, as at a helicopter's place 600 m away behind the
+  stadium's stands, which the few rays that reach it may leave without energy in some
+  bands: there the place's level is that of the energy its response holds, as
+  outdoors (-inf where none arrives). Every other place's levels are unchanged.
 
 ## 4.0.1
 

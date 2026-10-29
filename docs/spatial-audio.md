@@ -386,10 +386,12 @@ listener's L_Amax and when it is reached, the sound exposure level (SEL) and L_A
 the pass-by, and `--levels CSV` (for any walk) saves the level over time, A-weighted
 and in each octave band. Each is the level of the source's sound power at a place, as
 `simulate` gives it, at the time its sound arrives, so its maximum and its exposure are
-those of noise mapping's quasi-static source. Through the walk's sound over grass,
-each band's energy came within 0.25 dB of them, 0.8 dB in the band of the ground's dip,
-the same difference as between a response's band levels and its impulse response
-filtered into bands at a place standing still.
+those of noise mapping's quasi-static source. In a band where a place's G is undefined,
+as where the few rays that reach a far place carry no energy in it, the place's level
+is that of the energy its response holds, as outdoors (-inf where none arrives).
+Through the walk's sound over grass, each band's energy came within 0.25 dB of them,
+0.8 dB in the band of the ground's dip, the same difference as between a response's
+band levels and its impulse response filtered into bands at a place standing still.
 
 ```python
 from acoustic_spaces.walkthrough import pass_by

@@ -1,3 +1,5 @@
+import dataclasses
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,6 +23,7 @@ from acoustic_spaces.walkthrough import (
     knots,
     late_mixing,
     movers,
+    pass_by,
     render_movement,
     render_walk,
     save_movement,
@@ -310,6 +313,41 @@ def test_a_walk_with_doppler_moves_alone_on_the_clock() -> None:
     supersonic = {**car, "walk": {**car["walk"], "speed_m_s": 400.0}}
     with pytest.raises(ValueError, match="as fast as sound"):
         simulate_movement(Room.from_scene(_scene(sources=[supersonic], listeners=[seat])))
+
+
+def test_pass_by_of_a_place_a_band_gets_no_sound_in() -> None:
+    """As at a far place the few rays reach: in a band without sound, the place's level
+    is -inf, and in one whose decay cannot be read, that of the energy it holds."""
+    from acoustic_spaces.parameters import a_weighted
+
+    car = {
+        "name": "car",
+        "position": [1.0, 2.0, 1.0],
+        "walk": {"to": [[7.0, 2.0, 1.0]], "speed_m_s": 10.0, "doppler": True},
+    }
+    scene = _scene(sources=[car], listeners=[{"name": "l", "position": [4.0, 3.0, 1.5]}])
+    walk = simulate_walk(Room.from_scene(scene), step_m=1.0, late_step_m=None)
+    before = pass_by(walk)
+    k = 1
+    key = (walk.names[k], "l")
+    response = walk.result.responses[key]
+    first = int(response.direct_delay_s / response.time_step)
+    flat = np.zeros_like(response.late)
+    flat[0, first:] = 1e-4  # the lowest band only, and not decaying at all
+    early = dataclasses.replace(response.early, energy=np.zeros_like(response.early.energy))
+    sparse = dataclasses.replace(response, late=flat, early=early)
+    assert np.isnan(sparse.parameters().g).all()
+    walk.result.responses[key] = sparse
+    after = pass_by(walk)
+    held = flat[0].sum() / sparse._reference()[0]
+    power = scene.sources[0].power_db("octave")[0]
+    expected = power + 10.0 * math.log10(held / (4.0 * math.pi * 100.0))
+    assert after.levels[k, 0] == pytest.approx(expected)
+    assert np.isneginf(after.levels[k, 1:]).all()
+    assert after.levels_a[k] == pytest.approx(a_weighted(after.levels[k]))
+    assert np.isfinite([after.max_a, after.exposure_a, after.equivalent_a]).all()
+    # Every other place as before.
+    assert np.array_equal(np.delete(after.levels, k, 0), np.delete(before.levels, k, 0))
 
 
 def test_save_movement_writes_a_file_per_listener(tmp_path: Path) -> None:
