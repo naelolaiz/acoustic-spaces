@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Generator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -22,7 +22,7 @@ from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edge
 from acoustic_spaces.engine.edge_fade import EdgeFade
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel, free_field_energy
-from acoustic_spaces.engine.refracted import direct_times, refraction_for
+from acoustic_spaces.engine.refracted import direct_times, refraction_for, solve
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.turbulence import Eddies
 from acoustic_spaces.geometry import distance_to_surface
@@ -464,6 +464,7 @@ def simulate(
     progress: Callable[[str], None] | None = None,
     groups: np.ndarray | None = None,
     late_from: Mapping[str, Mapping[str, float]] | None = None,
+    share_waves: Collection[str] | None = None,
 ) -> SimulationResult:
     """Simulate the room's impulse responses as set in ``scene.simulation``.
 
@@ -484,6 +485,13 @@ def simulate(
     tracer, by far the costliest stage; the statistical method gives everyone their own.
     Walks use it (:func:`acoustic_spaces.walkthrough.simulate_walk`): the late field
     changes slowly from place to place, the early sound does not.
+
+    ``share_waves`` names sources whose runs of the parabolic equation (outdoors in wind
+    or temperature gradients) may serve one another: those at one height over one
+    ground, the sound going the same way to their listeners, where the weather and the
+    grounds have no zones (:func:`~acoustic_spaces.engine.refracted.solve`), each
+    listener getting what its own source's run would give it. Walks give it the places
+    of a walking source, which would otherwise each run the equation anew.
     """
     room = _as_room(room)
     problems = room.problems()
@@ -563,13 +571,17 @@ def simulate(
         info[key] = info.get(key, 0.0) + value
 
     def trace_point(
-        label, position, directivity, orientation, point_seed, rays, info, single, own_late
-    ):
+        name, label, position, directivity, orientation, point_seed, rays, info, single, own_late
+    ) -> Generator:
         """Direct sound times, early paths and late energy at every listener of one point
-        source, which radiates all the power; timings and counts go into ``info``.
+        of the source ``name``, which radiates all the power; timings and counts go into
+        ``info``.
         Unless ``single``, one of the uncorrelated points of a line or surface, whose
         paths add in energy (indoors; outdoors in pressure among themselves). Unless
-        ``own_late``, no late energy (None): it comes from other sources."""
+        ``own_late``, no late energy (None): it comes from other sources. A generator: in
+        wind or temperature gradients it yields its requests of the parabolic equation
+        (:meth:`~acoustic_spaces.engine.refracted.Refraction.plan`) and takes their
+        pressures back (:func:`~acoustic_spaces.engine.refracted.solve`)."""
         coherent = low_bands if single or room.outdoor is not None else 0
         direct = np.linalg.norm(listener_pos - position, axis=1) / c
         cutoff = np.minimum(direct + transition, length)
@@ -599,7 +611,7 @@ def simulate(
             early_cfg.diffraction,
             position,
             room,
-            source.name,
+            name,
             orientation,
             coherent,
             both_sides=early_cfg.diffraction_reflections == "both_sides",
@@ -628,7 +640,9 @@ def simulate(
         )
         if refraction is not None:
             say(f"{label}: paths bent by the wind and the temperature")
-            paths = refraction.apply(listener_pos, straight, paths, cutoff)
+            # The parabolic equation's runs come back from whoever drives this.
+            planned = refraction.plan(listener_pos, straight, paths, cutoff)
+            paths = planned.finish((yield planned))
             direct = direct_times(direct, paths)
         if model.plants is not None:
             say(f"{label}: paths through vegetation")
@@ -701,7 +715,10 @@ def simulate(
         return direct, paths, late
 
     done = {}
-    for source in chosen_sources:
+
+    def trace_source(source) -> Generator:
+        """Traces ``source`` into ``done`` and ``details``, its points in turn, yielding
+        their requests of the parabolic equation as :func:`trace_point` does."""
         src = np.array(source.position, dtype=float)
         elements = source.elements()
         directivity = room.directivity(source.name, model.bands)
@@ -716,7 +733,8 @@ def simulate(
         for e_index, position in enumerate(elements):
             # One point source of a line or surface: its share of the rays, a seed of its own.
             single = len(elements) == 1
-            found = trace_point(
+            found = yield from trace_point(
+                source.name,
                 source.name if single else f"{source.name} ({e_index + 1})",
                 position,
                 directivity,
@@ -779,6 +797,15 @@ def simulate(
         details[source.name] = info
         done[source.name] = (src, direct, cutoff, paths, late, waves)
 
+    sharing = set(share_waves or ()) & {source.name for source in chosen_sources}
+    for source in chosen_sources:
+        if source.name not in sharing:
+            _drive([trace_source(source)])
+    # The sources that share the parabolic equation: each traced up to its requests,
+    # then all of them run at once, and each traced on.
+    _drive([trace_source(source) for source in chosen_sources if source.name in sharing])
+    details = {source.name: details[source.name] for source in chosen_sources}
+
     for s_index, source in enumerate(chosen_sources):
         src, direct, cutoff, paths, late, waves = done[source.name]
         if source_mix is None:
@@ -833,6 +860,27 @@ def simulate(
                 response = response.fed(source.feed_db(model.bands), source.delay_ms * 1e-3)
             responses[(source.name, listener.name)] = response
     return SimulationResult(room=room, settings=settings, responses=responses, details=details)
+
+
+def _drive(steps: list[Generator]) -> None:
+    """Runs the generators ``steps`` (sources being traced) to their ends, the requests
+    of the parabolic equation each yields solved together with the others' at that
+    point (:func:`~acoustic_spaces.engine.refracted.solve`)."""
+    waiting = []
+    for step in steps:
+        try:
+            waiting.append((step, next(step)))
+        except StopIteration:
+            pass
+    while waiting:
+        solved = solve([planned for _, planned in waiting])
+        going = []
+        for (step, _), pressures in zip(waiting, solved, strict=True):
+            try:
+                going.append((step, step.send(pressures)))
+            except StopIteration:
+                pass
+        waiting = going
 
 
 __all__ = [

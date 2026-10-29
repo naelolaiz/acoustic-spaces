@@ -229,6 +229,25 @@ def test_the_weather_and_the_ground_along_the_way() -> None:
     np.testing.assert_allclose(20 * np.log10(np.abs(wide / narrow)), 0.0, atol=0.3)
 
 
+def test_independent_ranges_get_what_they_would_alone() -> None:
+    """With ``independent`` each range gets, to the bit, what a march to it alone gives,
+    in either equation, however near the source or each other the ranges are."""
+    f = [63.0, 100.0]
+    grass = np.conj(surface_impedance(np.array(f), 200.0))
+
+    def windy(h):
+        return C + 0.05 * np.minimum(np.asarray(h, dtype=float), 100.0)
+
+    ranges = np.array([180.3, 5.2, 37.7, 180.9, 0.7])
+    heights = np.array([1.5, 2.0, 4.0, 1.5, 1.0])
+    for solver in (parabolic, wide_angle):
+        args = (f, windy, lambda r: grass, 30.0)
+        together = solver.march(*args, ranges, heights, 60.0, independent=True)
+        for i in range(len(ranges)):
+            alone = solver.march(*args, ranges[i : i + 1], heights[i : i + 1], 60.0)
+            assert np.array_equal(together[:, i], alone[:, 0])
+
+
 # -- in a scene ---------------------------------------------------------------------------
 
 
