@@ -440,6 +440,8 @@ sources:
   positive upwards, in degrees. Any set of directions works: they are interpolated
   onto a 5 degree grid. Bands are averaged into octaves, and octaves with no data copy
   the nearest one; in third-octave runs each octave's pattern holds for its thirds.
+  From Python, `acoustic_spaces.directivity.write_directivity_csv(path, balloon)` writes
+  a directivity (a `Balloon`) as such a table, its octave bands on its grid.
 - CLF (Common Loudspeaker Format) files are not read: their specification is not
   public. Convert them to SOFA or CSV.
 

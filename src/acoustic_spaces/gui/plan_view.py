@@ -329,14 +329,15 @@ class PlanCanvas(QWidget):
         return "plan" if geometry.floor_plan is not None else "box" if geometry.box else "file"
 
     def fit(self) -> None:
-        """Show the whole room and every source and listener; resizing the view keeps
-        them in it until the view is zoomed or panned."""
+        """Show the whole room and every source and listener, with the places their walks
+        go through; resizing the view keeps them in it until the view is zoomed or
+        panned."""
         self._user_view = False
         if self.room is None:
             return
         points = [self.room.mesh.vertices[:, :2]]
         for kind in ("sources", "listeners"):
-            points.append(np.array([p.position[:2] for p in getattr(self.room.scene, kind)]))
+            points += [handles_of(item)[:, :2] for item in getattr(self.room.scene, kind)]
         if self.drawing:
             points.append(np.array(self.drawing))
         points = np.vstack(points)

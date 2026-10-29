@@ -90,11 +90,11 @@ def reads_scene(demo: Demo) -> Option | None:
 
 def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]:
     """The demos of the open scene, each in the folder it runs in and with the arguments
-    it starts with: *This scene* first, then the demo of the example the scene is or is
-    a copy of (:func:`~acoustic_spaces.examples.example_of`: its folder's name, or the
-    example's scene name wherever the copy is saved), reading the open scene instead of
-    the example's."""
-    from acoustic_spaces.demos import demo_for
+    it starts with: *This scene* first, then the demos of the example the scene is or
+    is a copy of (:func:`~acoustic_spaces.examples.example_of`: its folder's name, or
+    the example's scene name wherever the copy is saved), its own first, each reading
+    the open scene instead of the example's."""
+    from acoustic_spaces.demos import demos_of
     from acoustic_spaces.demos.scene_demo import DEMO
     from acoustic_spaces.examples import example_of
 
@@ -109,8 +109,7 @@ def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]
         args.work = base / "demo"
     found.append((demo, args))
     name = example_of(path) if path is not None else None
-    example = demo_for(name) if name is not None else None
-    if example is not None:
+    for example in demos_of(name) if name is not None else []:
         demo = example.at(writable(path.parent, example.example))
         args = starting_arguments(demo)
         option = reads_scene(demo)
@@ -658,8 +657,8 @@ class DemoDialog(QDialog):
             pairs = [(d.at(work_base(d)), None) for d in demos]
         else:
             pairs = demos_for(scene)
-            if start is None:
-                start = pairs[-1][0].name
+            if start is None:  # the example's own demo, after This scene
+                start = pairs[min(1, len(pairs) - 1)][0].name
         self.demos = [demo for demo, _args in pairs]
         self.starts = {demo.name: args for demo, args in pairs if args is not None}
         self.unsaved = unsaved or (demos is None and scene is None)
@@ -689,8 +688,8 @@ class DemoDialog(QDialog):
             self.picker.addItem(_(demo.title), demo.name)  # This scene is translated
         self.picker.setToolTip(
             _(
-                "The demo to run: This scene, with the sounds its sources play, or the "
-                "example's own demo when the scene is an example's or a copy of one"
+                "The demo to run: This scene, with the sounds its sources play, or one of "
+                "the example's own demos when the scene is an example's or a copy of one"
             )
         )
         if start is not None:

@@ -1027,6 +1027,89 @@ Over a hard ground, the sound is within 45 dB of the exact field at 30 m/s (see
 [Validation](validation.md#moving-sources-against-the-exact-field)). A walking
 listener passes standing sources the same way.
 
+### Helicopters
+
+From Python, `acoustic_spaces.rotorcraft` gives the sound a helicopter's two rotors
+send each way, as an `Emission` for a walk with Doppler (see
+[Moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)):
+
+- `trim` balances a `Helicopter` flying level at an airspeed by momentum theory: the
+  main rotor's thrust holds up its weight and holds back its fuselage's drag, the disc
+  tilted forward between them; Glauert's inflow gives the induced velocity through the
+  disc, and the tail rotor's thrust holds the main rotor's torque.
+- `emission` then gives each rotor's **tones**, the harmonics of its blade passing
+  frequency from its blades' steady lift, drag and thickness (the Ffowcs Williams and
+  Hawkings equation far from the rotor, Farassat's formulation 1A, up to the harmonic
+  90 dB under the loudest), and each rotor's **broadband noise**, louder ahead and
+  quieter behind as a moving source is. It is the pressure 1 m from the main rotor's
+  hub, in pascals, as the far field has it, in the helicopter's frame: x along its
+  flight, y to its left, z up; a walk with `face_forward` turns it along its path.
+- The broadband noise comes from one of two models, the helicopter's `broadband`:
+  `"pegg"`, the default, is Pegg's semi-empirical method (NASA TM-80200), a fit to
+  measured rotors' noise, one spectrum for each rotor round a peak set by its thrust
+  and its tip speed. `"bpm"` is each blade section's own noise in the flow past it,
+  by Brooks, Pope and Marcolini's airfoil self-noise (NASA RP-1218,
+  `acoustic_spaces.airfoil_noise`): the turbulent boundary layer at the trailing edge,
+  the laminar one's vortex shedding, the trailing edge's bluntness and the tip's
+  vortex, for 24 sections of each blade at 144 places round the turn, each at its own
+  speed and angle of attack from the blades' trimmed pitch (`rotorcraft.pitch`), its
+  bands moved by its own Doppler shift. A `Rotor` gives the blades' twist, lift
+  slope, trailing edge and tips, and whether their boundary layers are tripped.
+  `rotorcraft.broadband(trim, ..., model="bpm")` picks one model for a call.
+- `AS350_B3` is an Airbus Helicopters AS350 B3 at its maximum mass of 2,250 kg, from
+  its type certificate and NASA's flight tests of the type; its main blades' chord
+  and twist and its tail rotor's speed, chord and thickness are assumed (the source
+  code says which is which).
+
+```python
+from acoustic_spaces import rotorcraft
+from acoustic_spaces.walkthrough import render_walk
+
+trim = rotorcraft.trim(rotorcraft.AS350_B3, 63.0, temperature_c=25.0)  # 63 m/s
+sent = rotorcraft.emission(trim, seconds=30.0)  # 48 kHz: tones and broadband noise
+sound = render_walk(walk, {"helicopter": sent})  # its walk with doppler: true
+```
+
+The tones agree with Gutin's formula for a hovering rotor and with Farassat's
+formulation in time, blade point by blade point, to within 10⁻⁵ of the loudest
+harmonic; Pegg's worked example comes out as he gives it, and the airfoil self-noise
+matches the two sample outputs of its authors' code to within 0.01 dB (see
+[Validation](validation.md#helicopter-rotors-against-theory-and-a-certified-level)).
+Flying the AS350 B3 over a microphone as its noise certification does, 150 m up at
+63 m/s, the two models fall on either side of the certified 84.6 dB(A) of sound
+exposure:
+
+| broadband noise | sound exposure level | against the certified 84.6 dB(A) | main rotor's broadband alone |
+|---|---|---|---|
+| Pegg's (`"pegg"`, the default) | 88.0 dB(A) | 3.4 dB over | 87.3 dB(A) |
+| each blade section's own (`"bpm"`) | 80.1 dB(A) | 4.5 dB under | 68.6 dB(A) |
+
+With Pegg's noise the main rotor's broadband noise is nearly all of it. Pegg's method
+is a correlation of the 1970s' measurements; in his own worked example the band of the
+broadband peak comes out 5 dB over the level measured there, though a tone of the tail
+rotor falls in that band too. The blade sections' own noise is 19 dB under Pegg's for
+the main rotor, and the tail rotor's tones (79.8 dB(A) on their own) are then nearly all of it: self-noise
+is the noise of a blade in a smooth flow, and leaves out the blades cutting through the
+wake of those ahead and through turbulence, which a full-size rotor in flight makes
+and which Pegg's fit to measured rotors holds.
+
+A scene's source carries the sound power and the directivity of what the rotors send,
+for the levels the simulation and the pass-by report and for the late part:
+`sent.sound_power_db(trim.density, trim.sound_speed)` gives the one per octave band
+and `sent.directivity()` the other, which
+`acoustic_spaces.directivity.write_directivity_csv` writes as a table a scene reads
+(`directivity: {file: helicopter.csv}`). The `helicopter_flyover` example has them for
+an AS350 B3 150 m up at 63 m/s against a light wind, and its
+[flyover demo](demos.md#a-helicopter-flying-over) flies it over a meadow, its rotors
+trimmed at its airspeed: its speed over the ground less the wind at its height.
+
+What it leaves out: loads that change round the turn (in forward flight the
+advancing blade carries less lift than the retreating one, and the blades flap), the
+blades meeting the tip vortices of those ahead (blade-vortex interaction, the slap
+of a descent or a turn), the engine and the gearbox, and the fuselage's reflection and
+shadow. `trim` takes the airspeed it is given, through still air: the flyover demo
+gives it the speed over the ground less the wind.
+
 ## In the editor
 
 **File > New outdoor scene** starts one: a flat meadow 200 m across, with a source and

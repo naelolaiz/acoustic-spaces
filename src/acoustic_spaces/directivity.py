@@ -172,6 +172,40 @@ class FirstOrder(Directivity):
         return all(a == 1.0 for a in self.a)
 
 
+def _cell(shape: tuple[int, ...], directions) -> tuple[np.ndarray, ...]:
+    """The cell of the grid of :func:`on_grid` (``shape``: elevations, azimuths) round
+    each direction: its lower elevation's index, its two azimuths' indices, and how far
+    across the cell the direction lies in elevation and in azimuth (0 to 1)."""
+    v = _unit(directions)
+    n_el, n_az = shape[:2]
+    el = np.degrees(np.arcsin(np.clip(v[:, 2], -1.0, 1.0)))
+    az = np.degrees(np.arctan2(v[:, 1], v[:, 0])) % 360.0
+    fi = (el + 90.0) / (180.0 / (n_el - 1))
+    fj = az / (360.0 / n_az)
+    i0 = np.clip(np.floor(fi).astype(int), 0, n_el - 2)
+    j0 = np.floor(fj).astype(int) % n_az
+    return i0, j0, (j0 + 1) % n_az, fi - i0, fj - np.floor(fj)
+
+
+def on_grid(table: np.ndarray, directions) -> np.ndarray:
+    """(n, ...) the values ``table`` (elevations, azimuths, ...) holds on a grid of
+    elevations from -90 to 90 degrees and azimuths from 0 up to 360, each evenly spaced,
+    read bilinearly at unit vectors (n, 3) in the source's frame."""
+    i0, j0, j1, ti, tj = _cell(table.shape[:2], directions)
+    shape = (-1,) + (1,) * (table.ndim - 2)
+    ti, tj = ti.reshape(shape), tj.reshape(shape)
+    t = table
+    return (1 - ti) * ((1 - tj) * t[i0, j0] + tj * t[i0, j1]) + ti * (
+        (1 - tj) * t[i0 + 1, j0] + tj * t[i0 + 1, j1]
+    )
+
+
+def sphere_mean(table: np.ndarray) -> np.ndarray:
+    """(...) the mean over the sphere of what ``table`` holds on the grid of
+    :func:`on_grid`, read bilinearly as it reads them."""
+    return on_grid(table, _sphere(8192)).mean(axis=0)
+
+
 def _grid(step: float) -> tuple[np.ndarray, np.ndarray]:
     elevation = np.linspace(-90.0, 90.0, int(round(180.0 / step)) + 1)
     azimuth = np.arange(0.0, 360.0, 360.0 / int(round(360.0 / step)))
@@ -230,8 +264,7 @@ class Balloon(Directivity):
         360) that ``table`` (elevations, azimuths, bands) spans, each band scaled to
         average 1 over the sphere; silent bands become omnidirectional."""
         table = np.asarray(table, dtype=float)
-        balloon = cls(table, name, tuple(extrapolated))
-        mean = balloon._interpolate(_sphere(8192)).mean(axis=0)
+        mean = sphere_mean(table)
         silent = mean <= 0.0
         table = np.where(silent, 1.0, table / np.where(silent, 1.0, mean))
         centres = OCTAVE_BANDS_HZ if table.shape[-1] == _BANDS else THIRD_OCTAVE_BANDS_HZ
@@ -239,20 +272,7 @@ class Balloon(Directivity):
         return cls(table, name, tuple(sorted(set(extrapolated) | set(missing))))
 
     def _interpolate(self, directions) -> np.ndarray:
-        v = _unit(directions)
-        n_el, n_az = self.table.shape[:2]
-        el = np.degrees(np.arcsin(np.clip(v[:, 2], -1.0, 1.0)))
-        az = np.degrees(np.arctan2(v[:, 1], v[:, 0])) % 360.0
-        fi = (el + 90.0) / (180.0 / (n_el - 1))
-        fj = az / (360.0 / n_az)
-        i0 = np.clip(np.floor(fi).astype(int), 0, n_el - 2)
-        j0 = np.floor(fj).astype(int) % n_az
-        ti, tj = (fi - i0)[:, None], (fj - np.floor(fj))[:, None]
-        j1 = (j0 + 1) % n_az
-        t = self.table
-        return (1 - ti) * ((1 - tj) * t[i0, j0] + tj * t[i0, j1]) + ti * (
-            (1 - tj) * t[i0 + 1, j0] + tj * t[i0 + 1, j1]
-        )
+        return on_grid(self.table, directions)
 
     def energy(self, directions) -> np.ndarray:
         return self._interpolate(directions)
@@ -400,6 +420,24 @@ def read_directivity_csv(path: str | Path) -> Balloon:
     directions = _from_angles(data[:, 0], data[:, 1])
     energy, extrapolated = _octaves(frequencies, 10.0 ** (data[:, 2:] / 10.0))
     return Balloon.from_measurements(directions, energy, f"file {path.name}", extrapolated)
+
+
+def write_directivity_csv(path: str | Path, balloon: Balloon, comment: str = "") -> Path:
+    """Write ``balloon`` (in octave bands) as the CSV table :func:`read_directivity_csv`
+    reads back: a row for each direction of its grid with its level in each band (dB
+    over the sphere's mean), under ``comment``'s lines."""
+    path = Path(path)
+    table = balloon.in_bands("octave").table
+    elevation, azimuth = _grid(180.0 / (table.shape[0] - 1))
+    levels = 10.0 * np.log10(np.maximum(table, 1e-30))
+    lines = [f"# {line}".rstrip() for line in comment.splitlines()]
+    lines.append(", ".join(["azimuth", "elevation", *(f"{f:g}" for f in OCTAVE_BANDS_HZ)]))
+    for i, el in enumerate(elevation):
+        for j, az in enumerate(azimuth):
+            values = ", ".join(f"{v:.2f}" for v in levels[i, j])
+            lines.append(f"{az:g}, {el:g}, {values}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
 
 
 def _frame(view: np.ndarray, up: np.ndarray) -> np.ndarray:
@@ -734,8 +772,11 @@ __all__ = [
     "far_field_distance",
     "lambert",
     "load_directivity",
+    "on_grid",
     "read_array",
     "read_directivity",
     "read_directivity_csv",
     "read_directivity_sofa",
+    "sphere_mean",
+    "write_directivity_csv",
 ]

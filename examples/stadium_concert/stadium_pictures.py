@@ -63,6 +63,12 @@ CREDIT = (
     'Music: Rhythmussportgruppe, "Spicy Funk Cake" (Niklas Dahlheimer), recorded for the DEGA '
     "at Hochschule Düsseldorf, CC BY 4.0 · doi.org/10.5281/zenodo.3601032"
 )
+#: The stills' title and the line under it.
+HEADING = (
+    "A concert in a stadium, simulated",
+    "The stadium example's sound system, stage monitors and band, heard binaurally at its "
+    "listeners",
+)
 STAGE_BOX = (-60.0, -29.0, -37.0, 29.0)  # x0, y0, x1, y1 of the close-up
 #: How far apart (m) the dots that stand for the crowd are where one person stands on
 #: each square metre; closer where more do. Each dot is some ten people.
@@ -172,7 +178,9 @@ class Pictures:
         credit=CREDIT,
         hrtf=None,
         tool=None,
+        heading=HEADING,
     ):
+        self.heading = heading  # the title and the line under it
         self.scene, self.levels, self.seats, self.tour, self.titles = (
             scene,
             levels,
@@ -183,7 +191,8 @@ class Pictures:
         self.gains = gains or {}  # dB each listener is turned up by in the video
         self.credit = credit  # the song's, as its licence asks
         self.faces = read_obj(folder / scene["geometry"]["file"])
-        self.sources = scene["sources"]
+        # Not the sources left out of the simulations (the helicopter until it flies).
+        self.sources = [s for s in scene["sources"] if s.get("enabled", True) is not False]
         self.listeners = {item["name"]: item for item in scene["listeners"]}
         ground = scene["geometry"].get("ground", {}).get("extent", [[-100, -82], [100, 82]])
         self.box = (ground[0][0], ground[0][1], ground[1][0], ground[1][1])
@@ -455,12 +464,7 @@ class Pictures:
         listener, _start, _stop = self.tour[k]
         img = canvas()
         draw = ImageDraw.Draw(img)
-        heading(
-            draw,
-            "A concert in a stadium, simulated",
-            "The stadium example's sound system, stage monitors and band, "
-            "heard binaurally at its listeners",
-        )
+        heading(draw, *self.heading)
         width, height = 860, 626
         scale = min(width / (self.box[2] - self.box[0]), height / (self.box[3] - self.box[1]))
         plan = Plan(80, 172, scale, self.box)
