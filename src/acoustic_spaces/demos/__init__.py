@@ -41,6 +41,7 @@ from types import ModuleType
 from typing import Any
 
 from acoustic_spaces.examples import FORMER_NAMES, examples_dir
+from acoustic_spaces.i18n import N_
 
 #: The kinds of option, for the parser and for the editor's form: a free text, a choice
 #: from a list, a number, a flag, a file to read, a file the demo writes (``path``), a
@@ -69,6 +70,65 @@ MAP_KINDS = ("inputs", "files")
 
 #: What a ``movers`` option takes for nothing moving.
 NO_MOVERS = "none"
+
+#: The editor's label of each option, in words, by its flag (the Run demo window gives
+#: the flag in the label's tip); an option not named here shows its flag.
+LABELS = {
+    "--scene": N_("Scene"),
+    "--seconds": N_("Time per listener"),
+    "--tour": N_("Tour"),
+    "--credit": N_("Credit"),
+    "--work": N_("Work folder"),
+    "--input": N_("What the sources play"),
+    "--format": N_("Format"),
+    "--hrtf": N_("HRTFs"),
+    "--again": N_("Mix again"),
+    "--no-mp4": N_("No video"),
+    "--from": N_("Example's scene"),
+    "--results": N_("Results folder"),
+    "--listeners": N_("Listeners"),
+    "--talker": N_("Talker"),
+    "--voice": N_("Voice"),
+    "--stand": N_("Where the visitor stands"),
+    "--turn": N_("Head turns"),
+    "--speed": N_("Speed"),
+    "--broadband": N_("Broadband noise"),
+    "--step": N_("Places apart"),
+    "--song": N_("Song"),
+    "--music": N_("Your own song"),
+    "--bpm": N_("Tempo"),
+    "--still": N_("Scene in still air"),
+    "--still-results": N_("Results in still air"),
+    "--last-phrases": N_("Last stop's phrases"),
+    "--zips": N_("Downloads folder"),
+    "--movements": N_("Movements"),
+    "--rpm": N_("Engine speed"),
+    "--flight": N_("Flight's scene"),
+    "--stadium": N_("Stadium's scene"),
+    "--height": N_("Height"),
+    "--at": N_("Overhead at"),
+    "--band": N_("Band's scene"),
+    "--downbeat": N_("First downbeat"),
+    "--stem": N_("Stems"),
+}
+#: The options the editor keeps under Advanced besides the files and folders a demo
+#: writes, the example's scenes it reads and the flags, by flag: what fine-tunes a run
+#: rather than what it plays.
+ADVANCED = frozenset(
+    {
+        "--scene",
+        "--credit",
+        "--tour",
+        "--listeners",
+        "--movements",
+        "--bpm",
+        "--downbeat",
+        "--last-phrases",
+        "--step",
+        "--stand",
+        "--turn",
+    }
+)
 
 
 def moving_names(text: str | None) -> list[str] | None:
@@ -133,6 +193,21 @@ class Option:
     @property
     def option(self) -> str:
         return self.flag or "--" + self.name.replace("_", "-")
+
+    @property
+    def label(self) -> str:
+        """The editor's label, in English (:data:`LABELS`), or the flag."""
+        return LABELS.get(self.option, self.option)
+
+    @property
+    def advanced(self) -> bool:
+        """Whether the editor keeps it under Advanced: a file or a folder the demo
+        writes, a scene of the example's it reads, a flag, or one of :data:`ADVANCED`."""
+        return (
+            self.kind in ("path", "folder", "flag")
+            or (self.kind == "file" and self.default is not None)
+            or self.option in ADVANCED
+        )
 
     @property
     def metavar(self) -> str:
@@ -591,7 +666,9 @@ def demo_for(example: str) -> Demo | None:
 
 
 __all__ = [
+    "ADVANCED",
     "KINDS",
+    "LABELS",
     "MAP_KINDS",
     "NO_MOVERS",
     "PATH_KINDS",

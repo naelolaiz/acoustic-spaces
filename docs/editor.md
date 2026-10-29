@@ -135,22 +135,24 @@ which frequencies each octave band holds.
   the gallery, the car passing the roadside and driving down the street), or a copy of
   one, also has that demo, reading the open scene, and the window starts on it (a copy
   is known by its folder's name or, saved anywhere, by the scene's name). Pick
-  the demo and the step (*all* runs it from nothing to its video, leaving out what is
-  done already), fill in the options, which start at the same defaults the command
-  line uses (the **--input** table lists the sources, what
+  the demo and fill in the options that change what it plays, labelled in words with
+  each one's flag in its tip, which start at the same defaults the command line uses
+  (the **What the sources play** table lists the sources, what
   each plays and the WAV file it plays instead: **Choose WAV…** gives the selected one a
   file, **Default** takes it back; the **Movement** box ticks the sources and listeners
   whose walk moves in the run, which *This scene* lets you change for that run,
   `--moving`, a walker left out of the scene showing only when the demo moves it, and
   **Edit movement…** opens the Movement panel on the selected one; a number shows its
-  unit, and the pass-by demos' **--speed** reads *as in the scene* at zero, the speed of
+  unit, and the pass-by demos' **Speed** reads *as in the scene* at zero, the speed of
   the car's walk, with the line under the Movement box saying how far, how fast (km/h
   and m/s) and so for how long the car drives, as the options stand), and
   it runs in its own process in the background, with what it prints in the **Messages**
-  panel and **Cancel** to stop it.
-  The window shows the command line it is about to run, so the same run can be
-  repeated in a terminal, and asks for a scene with changes to be saved first, as the
-  demo reads the file. An example's demo plays recordings it downloads, or a sound it
+  panel and **Cancel** to stop it. **Advanced**, closed until opened, holds the step
+  (*all* runs the demo from nothing to its video, leaving out what is done already),
+  what fine-tunes the run (the tour's stops, how far apart a walk's places are
+  simulated), the files and folders the demo reads and writes, and the command line it
+  is about to run, so the same run can be repeated in a terminal. The window asks for a
+  scene with changes to be saved first, as the demo reads the file. An example's demo plays recordings it downloads, or a sound it
   makes (the pass-by demos' car), and can take a while. A demo writes beside the scene
   (*This scene* into `demo/`), or under your home folder when that folder cannot be
   written.
