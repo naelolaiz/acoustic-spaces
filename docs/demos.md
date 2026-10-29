@@ -64,10 +64,11 @@ scene* (below), and for an example's scene, or a copy of one, the example's own 
 (the stadium has two: its concert first, then the helicopter over it), each reading the
 open scene where it would read the example's (a copy is known by its
 folder's name or, saved anywhere, by the scene's name: a renamed scene is a scene of
-its own). Pick the demo and the step,
-fill in the options (they start at the same defaults the command line uses), and it
-runs in the background with its messages in the **Messages** panel, **Cancel** stopping
-it. The sources are a table, each with what it plays and the file it plays instead:
+its own). Pick the demo and fill in the options that change what it plays, labelled in
+words (they start at the same defaults the command line uses, each one's flag in its
+tip), and it runs in the background with its messages in the **Messages** panel,
+**Cancel** stopping it. **Advanced** holds the step, what fine-tunes the run, the files
+and folders the demo reads and writes, and the command line. The sources are a table, each with what it plays and the file it plays instead:
 **Choose WAV…** gives the selected one a file, **Default** takes it back. The
 **Movement** box lists the sources and listeners of the scene that have a walk, each
 with how it goes, how far and for how long, ticked when it moves in the run: *This

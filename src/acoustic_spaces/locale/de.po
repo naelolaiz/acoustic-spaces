@@ -23,6 +23,150 @@ msgstr "die dieses Computers"
 msgid "language: {language} ({source})"
 msgstr "Sprache: {language} ({source})"
 
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/app.py acoustic_spaces/gui/tree.py
+msgid "Scene"
+msgstr "Szene"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Time per listener"
+msgstr "Zeit je Empfänger"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Tour"
+msgstr "Rundgang"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Credit"
+msgstr "Nachweis"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Work folder"
+msgstr "Arbeitsordner"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "What the sources play"
+msgstr "Was die Quellen spielen"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Format"
+msgstr "Format"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "HRTFs"
+msgstr "HRTFs"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Mix again"
+msgstr "Neu mischen"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "No video"
+msgstr "Kein Video"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Example's scene"
+msgstr "Szene des Beispiels"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Results folder"
+msgstr "Ergebnisordner"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/tree.py
+msgid "Listeners"
+msgstr "Empfänger"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Talker"
+msgstr "Sprecher"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Voice"
+msgstr "Stimme"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Where the visitor stands"
+msgstr "Wo der Besucher steht"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Head turns"
+msgstr "Kopfdrehungen"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Speed"
+msgstr "Geschwindigkeit"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Broadband noise"
+msgstr "Breitbandrauschen"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Places apart"
+msgstr "Abstand der Orte"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Song"
+msgstr "Lied"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Your own song"
+msgstr "Eigenes Lied"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Tempo"
+msgstr "Tempo"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Scene in still air"
+msgstr "Szene bei ruhender Luft"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Results in still air"
+msgstr "Ergebnisse bei ruhender Luft"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Last stop's phrases"
+msgstr "Phrasen des letzten Halts"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Downloads folder"
+msgstr "Download-Ordner"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Movements"
+msgstr "Sätze"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Engine speed"
+msgstr "Motordrehzahl"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Flight's scene"
+msgstr "Szene des Flugs"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Stadium's scene"
+msgstr "Szene des Stadions"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Height"
+msgstr "Höhe"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Overhead at"
+msgstr "Darüber bei"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Band's scene"
+msgstr "Szene der Band"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "First downbeat"
+msgstr "Erster Downbeat"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Stems"
+msgstr "Stems"
+
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
 msgstr "Diese Szene"
@@ -337,10 +481,6 @@ msgstr "Der Raum in 3D: zum Auswählen anklicken, Quellen und Empfänger ziehen"
 #: acoustic_spaces/gui/app.py
 msgid "The room from above: draw floor plans, drag corners and points"
 msgstr "Der Raum von oben: Grundrisse zeichnen, Ecken und Punkte ziehen"
-
-#: acoustic_spaces/gui/app.py acoustic_spaces/gui/tree.py
-msgid "Scene"
-msgstr "Szene"
 
 #: acoustic_spaces/gui/app.py
 msgid "Properties"
@@ -1757,18 +1897,12 @@ msgstr "Demo ausführen"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"A demo plays sound through the open scene, mixes what every listener hears "
-"and puts a video together. This scene plays the WAV file each source's Plays "
-"names; an example's own demo plays recordings it downloads, or a sound it "
-"makes (the pass-by demos' car), and can take a while. The messages say what "
-"it is doing, and Cancel stops it."
+"A demo plays sound through the scene and makes a video of what each listener "
+"hears; the messages say what it is doing, and Cancel stops it."
 msgstr ""
-"Eine Demo spielt Klang in der offenen Szene ab, mischt, was jeder Hörer "
-"hört, und stellt ein Video zusammen. Diese Szene spielt die WAV-Datei ab, "
-"die das Feld Spielt jeder Quelle nennt; die eigene Demo eines Beispiels "
-"spielt Aufnahmen, die sie herunterlädt, oder einen Klang, den sie erzeugt "
-"(das Auto der Vorbeifahrt-Demos), und kann eine Weile dauern. Die Meldungen "
-"sagen, was sie gerade tut, und Abbrechen hält sie an."
+"Eine Demo spielt Klang in der Szene ab und macht ein Video davon, was jeder "
+"Hörer hört; die Meldungen sagen, was sie gerade tut, und Abbrechen hält sie "
+"an."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -1790,6 +1924,18 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Demo"
 msgstr "Demo"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Advanced"
+msgstr "Erweitert"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Show the step to run, what fine-tunes the run, the files and folders the "
+"demo reads and writes, and the same run as a command"
+msgstr ""
+"Zeigt den auszuführenden Schritt, was den Lauf fein einstellt, die Dateien "
+"und Ordner, die die Demo liest und schreibt, und denselben Lauf als Befehl"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Step"
@@ -3055,10 +3201,6 @@ msgstr ""
 msgid "Remove the selected corner, or the last one when none is selected"
 msgstr ""
 "Die ausgewählte Ecke entfernen oder die letzte, wenn keine ausgewählt ist"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Height"
-msgstr "Höhe"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "The model file the room comes from"
@@ -6909,10 +7051,6 @@ msgstr "Materialien"
 #: acoustic_spaces/gui/tree.py
 msgid "Sources"
 msgstr "Quellen"
-
-#: acoustic_spaces/gui/tree.py
-msgid "Listeners"
-msgstr "Empfänger"
 
 #: acoustic_spaces/gui/tree.py
 msgid "Simulation"
