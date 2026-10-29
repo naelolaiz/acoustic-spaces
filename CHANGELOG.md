@@ -204,6 +204,25 @@
   room's `bass.py`, each one step, its options its own arguments, what it prints in the
   Messages panel (`demos.scripts_of`, `demos.script_demo`: a script with a `TITLE` and
   a `parser()`; `Demo.stepless`, `Option.positional`).
+- Listeners can be microphones: a listener's `pattern` is what its mono output picks up
+  through, aimed where it faces: a first-order pattern (subcardioid to figure8, as
+  sources take them), or a coincident pair in two channels, left and right: an XY pair
+  (`{pair: xy, angle_deg, capsule}`), a Blumlein pair or an MS pair decoded to left and
+  right (`{pair: ms, mid, side_db}`). Each early path and late impulse is picked up from
+  its direction (`spatial.Microphone`, `spatial.for_listener`), in `simulate`'s mono
+  files, `auralize`, walkthroughs, movements and the editor's listening; the report's
+  mono output names the microphone. The parameters, the echo check and the other
+  outputs stay an omnidirectional listener's, and `validate` warns about a pattern in a
+  scene without a mono output. The editor's listener form has a **Microphone** choice
+  (with a pair's angle, capsules, mid and side), and the selected listener shows its
+  microphone's balloon in the 3D view, one for each capsule of a pair; its angles' tips
+  say they aim it. Translated in the five catalogs. A listener without a pattern renders
+  as before.
+- `feedback.py` (the stadium concert's and the concert stage's) takes its microphone as
+  a supercardioid listener facing the mouth instead of turning first-order Ambisonics
+  into the pattern by hand: the same loop, the supercardioid's a now 0.37 as the
+  scene's patterns have it (0.366 before), its gain before feedback within 0.05 dB.
+- `scene` exports `Orientation`, `XYPair`, `BlumleinPair` and `MSPair`.
 
 ## 4.0.1
 

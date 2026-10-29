@@ -212,6 +212,12 @@ which frequencies each octave band holds.
   directivity index per band, opens the polar patterns, and the selected source shows
   its balloon in the 3D view. **Plays** names the WAV file the source plays in a demo of
   the scene: **Choose WAV…** picks a dry recording, **Silent** takes it away.
+- A listener's form sets its **Microphone**, what its mono output picks up through,
+  aimed where it faces: omni, a first-order pattern, or an XY pair (with its **Angle**
+  and **Capsules**), a Blumlein pair or an MS pair (with its **Mid** capsule and its
+  **Side**'s gain), which write two channels ([microphones](spatial-audio.md#microphones)).
+  The selected listener shows its microphone's balloon in the 3D view, one for each
+  capsule of a pair.
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
   as you edit, with the number of problems in red.
 - **Messages** shows warnings (leaks, results from before the latest changes, dropouts

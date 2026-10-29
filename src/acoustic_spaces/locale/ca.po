@@ -2354,6 +2354,18 @@ msgid "lambert"
 msgstr "lambertià"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "XY pair"
+msgstr "parell XY"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Blumlein pair"
+msgstr "parell Blumlein"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "MS pair"
+msgstr "parell MS"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "point"
 msgstr "puntual"
 
@@ -2548,6 +2560,34 @@ msgid ""
 msgstr ""
 "El nivell de potència acústica de la font amb totes les bandes juntes (dB re "
 "1 pW); Espectre el reparteix entre les bandes"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The microphone the listener's mono output picks up through, aimed where it "
+"faces: omni hears every way alike; subcardioid to hypercardioid ever more to "
+"the front; figure8 to the front and the back. A pair writes two channels, "
+"left and right: XY two capsules aimed apart, Blumlein two figure8s crossed, "
+"MS a mid capsule and a figure8 to the side. The parameters and the other "
+"outputs stay an omni listener's"
+msgstr ""
+"El micròfon a través del qual capta la sortida mono del receptor, orientat "
+"cap a on mira: omnidireccional sent igual en totes direccions; de "
+"subcardioide a hipercardioide cada cop més cap endavant; figura de vuit cap "
+"endavant i enrere. Un parell escriu dos canals, esquerre i dret: XY, dues "
+"càpsules orientades per separat; Blumlein, dues figures de vuit creuades; "
+"MS, una càpsula central i una figura de vuit cap al costat. Els paràmetres i "
+"les altres sortides continuen sent els d'un receptor omnidireccional"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The pattern of both of the XY pair's capsules"
+msgstr "El patró de les dues càpsules del parell XY"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The pattern of the MS pair's mid capsule, aimed where the listener faces"
+msgstr ""
+"El patró de la càpsula central del parell MS, orientada cap a on mira el "
+"receptor"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "(default material)"
@@ -4445,29 +4485,31 @@ msgstr ""
 msgid ""
 "Turns the listener left, from facing +x towards +y (degrees). The way it "
 "faces sets what the binaural, Ambisonics and loudspeaker outputs hear as the "
-"front"
+"front, and where its microphone points"
 msgstr ""
 "Gira el receptor cap a l'esquerra, de +x cap a +y (graus). L'orientació "
 "determina què consideren davant les sortides binaurals, Ambisonics i "
-"d'altaveus"
+"d'altaveus, i cap on apunta el seu micròfon"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Tilts the listener to look up (degrees). The way it faces sets what the "
-"binaural, Ambisonics and loudspeaker outputs hear as the front"
+"binaural, Ambisonics and loudspeaker outputs hear as the front, and where "
+"its microphone points"
 msgstr ""
 "Inclina el receptor cap amunt (graus). L'orientació determina què consideren "
-"davant les sortides binaurals, Ambisonics i d'altaveus"
+"davant les sortides binaurals, Ambisonics i d'altaveus, i cap on apunta el "
+"seu micròfon"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Tilts the listener to the right, round the way it faces (degrees). The way "
 "it faces sets what the binaural, Ambisonics and loudspeaker outputs hear as "
-"the front"
+"the front, and where its microphone points"
 msgstr ""
 "Inclina el receptor cap a la dreta al voltant del seu eix frontal (graus). "
 "L'orientació determina què consideren davant les sortides binaurals, "
-"Ambisonics i d'altaveus"
+"Ambisonics i d'altaveus, i cap on apunta el seu micròfon"
 
 #: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/results_view.py
 msgid "Yaw"
@@ -4613,6 +4655,40 @@ msgstr ""
 "potència acústica"
 
 #: acoustic_spaces/gui/inspector.py
+msgid ""
+"The angle between the XY pair's capsules (degrees), the left one aimed to "
+"the left of where the listener faces: 90 is usual, wider spreads the sound "
+"wider"
+msgstr ""
+"L'angle entre les càpsules del parell XY (graus), l'esquerra orientada a "
+"l'esquerra d'on mira el receptor: 90 és l'habitual; més obert reparteix el "
+"so més ample"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The MS pair's figure8 to the side against its mid capsule (dB): more sounds "
+"wider, less narrower"
+msgstr ""
+"La figura de vuit lateral del parell MS respecte a la seva càpsula central "
+"(dB): més sona més ample, menys més estret"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Microphone"
+msgstr "Micròfon"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Angle"
+msgstr "Angle"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Capsules"
+msgstr "Càpsules"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Side"
+msgstr "Lateral"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Length"
 msgstr "Llargada"
 
@@ -4668,6 +4744,10 @@ msgstr ""
 "La guinyada gira a l'esquerra de +x cap a +y, el capcineig mira amunt i el "
 "balanceig inclina a la dreta. A la vista 3D, la fletxa llarga apunta "
 "endavant i la curta amunt."
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Mid"
+msgstr "Central"
 
 #. Translators: the directivity list's tip, then the choice it shows.
 #: acoustic_spaces/gui/inspector.py

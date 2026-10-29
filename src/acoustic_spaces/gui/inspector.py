@@ -91,6 +91,17 @@ DIRECTIVITIES = [
     ("figure8", N_("figure8")),
     ("lambert", N_("lambert")),
 ]
+#: A listener's microphone: a first-order pattern, or a coincident pair.
+MICROPHONES = [
+    *DIRECTIVITIES[:6],
+    ("xy", N_("XY pair")),
+    ("blumlein", N_("Blumlein pair")),
+    ("ms", N_("MS pair")),
+]
+#: The patterns a pair's capsules take.
+CAPSULES = DIRECTIVITIES[:6]
+#: The coincident pairs, which give two channels.
+PAIRS = ("xy", "blumlein", "ms")
 #: A source is a point, a line or a surface.
 SHAPES = [("point", N_("point")), ("line", N_("line")), ("surface", N_("surface"))]
 EARLY_METHODS = [("ray_tracing", N_("ray_tracing")), ("image_sources", N_("image_sources"))]
@@ -158,6 +169,17 @@ LEVEL_TIP = N_(
     "The source's sound power level in all bands together (dB re 1 pW); Spectrum spreads "
     "it over the bands"
 )
+#: The tip of a listener's microphone.
+MICROPHONE_TIP = N_(
+    "The microphone the listener's mono output picks up through, aimed where it faces: "
+    "omni hears every way alike; subcardioid to hypercardioid ever more to the front; "
+    "figure8 to the front and the back. A pair writes two channels, left and right: XY "
+    "two capsules aimed apart, Blumlein two figure8s crossed, MS a mid capsule and a "
+    "figure8 to the side. The parameters and the other outputs stay an omni listener's"
+)
+#: The tips of an XY pair's capsules and of an MS pair's mid capsule.
+CAPSULES_TIP = N_("The pattern of both of the XY pair's capsules")
+MID_TIP = N_("The pattern of the MS pair's mid capsule, aimed where the listener faces")
 SAMPLE_RATES = [16_000, 22_050, 32_000, 44_100, 48_000, 88_200, 96_000]
 #: Shown in the material list of a surface for "no assignment of its own".
 FALLBACK = N_("(default material)")
@@ -2818,7 +2840,7 @@ def _directivity_label(spec) -> str:
 
 class PointPage(Page):
     """A source or listener: name, position and orientation; sources also have a
-    directivity and a sound power level."""
+    directivity and a sound power level, listeners a microphone."""
 
     #: Edit movement… was clicked: the kind and index of the point.
     movement = Signal(str, object)
@@ -2964,16 +2986,17 @@ class PointPage(Page):
                 _(
                     "Turns the listener left, from facing +x towards +y (degrees). The way it "
                     "faces sets what the binaural, Ambisonics and loudspeaker outputs hear as "
-                    "the front"
+                    "the front, and where its microphone points"
                 ),
                 _(
                     "Tilts the listener to look up (degrees). The way it faces sets what the "
-                    "binaural, Ambisonics and loudspeaker outputs hear as the front"
+                    "binaural, Ambisonics and loudspeaker outputs hear as the front, and where "
+                    "its microphone points"
                 ),
                 _(
                     "Tilts the listener to the right, round the way it faces (degrees). The way "
                     "it faces sets what the binaural, Ambisonics and loudspeaker outputs hear "
-                    "as the front"
+                    "as the front, and where its microphone points"
                 ),
             )
         )
@@ -3107,7 +3130,37 @@ class PointPage(Page):
         self.elements.setToolTip(
             _("The line or surface is made of these point sources; they share its sound power")
         )
+        self.microphone = QComboBox()
+        _fill(self.microphone, MICROPHONES)
+        self.microphone.setToolTip(_(MICROPHONE_TIP))
+        self.microphone.activated.connect(self._microphone)
+        self.pair_angle = spin(1, 180, 0, 5, "°")
+        self.pair_angle.setToolTip(
+            _(
+                "The angle between the XY pair's capsules (degrees), the left one aimed to "
+                "the left of where the listener faces: 90 is usual, wider spreads the sound "
+                "wider"
+            )
+        )
+        self.pair_angle.valueChanged.connect(lambda value: self._pair(angle_deg=value))
+        self.capsule = QComboBox()
+        _fill(self.capsule, CAPSULES)
+        self.capsule.setToolTip(_(CAPSULES_TIP))
+        self.capsule.activated.connect(self._capsule)
+        self.side = spin(-40, 20, 1, 1, "dB")
+        self.side.setToolTip(
+            _(
+                "The MS pair's figure8 to the side against its mid capsule (dB): more sounds "
+                "wider, less narrower"
+            )
+        )
+        self.side.valueChanged.connect(lambda value: self._pair(side_db=value))
         self._form = form
+        if kind == "listeners":
+            form.addRow(_("Microphone"), self.microphone)
+            form.addRow(_("Angle"), self.pair_angle)
+            form.addRow(_("Capsules"), self.capsule)
+            form.addRow(_("Side"), self.side)
         if kind == "sources":
             form.addRow(_("Shape"), self.shape)
             form.addRow(_("Length"), self.extent[0])
@@ -3168,6 +3221,25 @@ class PointPage(Page):
         o = item.orientation
         for box, value in zip(self.angles, (o.yaw, o.pitch, o.roll), strict=True):
             box.setValue(value)
+        if self.kind == "listeners":
+            pattern = item.pattern
+            pair = getattr(pattern, "pair", None)
+            _choose(self.microphone, pair or pattern or "omni")
+            self._form.setRowVisible(self.pair_angle, pair == "xy")
+            self._form.setRowVisible(self.capsule, pair in ("xy", "ms"))
+            self._form.setRowVisible(self.side, pair == "ms")
+            if pair == "xy":
+                self.pair_angle.setValue(pattern.angle_deg)
+                _choose(self.capsule, pattern.capsule)
+            elif pair == "ms":
+                _choose(self.capsule, pattern.mid)
+                self.side.setValue(pattern.side_db)
+            # One list for an XY pair's capsules and an MS pair's mid one.
+            label = self._form.labelForField(self.capsule)
+            label.setText(_("Mid") if pair == "ms" else _("Capsules"))
+            tip = _(MID_TIP) if pair == "ms" else _(CAPSULES_TIP)
+            self.capsule.setToolTip(tip)
+            label.setToolTip(tip)
         if self.kind == "sources":
             self.directivity.clear()
             _fill(self.directivity, DIRECTIVITIES)
@@ -3306,6 +3378,25 @@ class PointPage(Page):
                 self._update(directivity={"file": path})
             else:
                 self.reload()
+
+    def _microphone(self, index: int) -> None:
+        value = self.microphone.itemData(index)
+        pattern = self._item().pattern
+        if value == getattr(pattern, "pair", pattern or "omni"):
+            return  # the same choice: a pair keeps its settings
+        if value in PAIRS:
+            self._update(pattern={"pair": value})
+        else:
+            self._update(pattern=None if value == "omni" else value)
+
+    def _pair(self, **fields) -> None:
+        """Change a pair's settings, keeping the others."""
+        if not self._loading:
+            self._update(pattern={**self._item().pattern.model_dump(), **fields})
+
+    def _capsule(self, index: int) -> None:
+        name = "mid" if self._item().pattern.pair == "ms" else "capsule"
+        self._pair(**{name: self.capsule.itemData(index)})
 
     def _near_field(self, on: bool) -> None:
         if self._loading:

@@ -21,6 +21,7 @@ from acoustic_spaces.gui.document import LISTENER_HEIGHT, SOURCE_HEIGHT, follow_
 from acoustic_spaces.gui.movement import handles_of, moves_at, path_of, pose_at
 from acoustic_spaces.i18n import _
 from acoustic_spaces.room import UNASSIGNED, Room
+from acoustic_spaces.spatial.microphone import of_listener
 from acoustic_spaces.viz import (
     BACKGROUND,
     EDGE_COLOUR,
@@ -322,10 +323,17 @@ class Viewport(QWidget):
                     up = np.array(item.orientation.rotation())[:, 2]
                     top = pv.Arrow(start=item.position, direction=up, scale=0.5 * arrow * scale)
                     parts.append(plotter.add_mesh(top, color=SELECTED_COLOUR, render=False))
+            # The selected source's balloon, or its microphone's for a listener: one
+            # for each capsule of a pair.
+            balloons = []
             if chosen and directivity is not None and not directivity.omni:
-                balloon = balloon_polydata(
-                    directivity, item.position, item.orientation.rotation(), size=10 * radius
-                )
+                balloons.append((directivity, item.orientation.rotation()))
+            microphone = of_listener(item) if chosen and group == "listeners" else None
+            if microphone is not None:
+                turn = np.array(item.orientation.rotation())
+                balloons += [(capsule, turn @ aim) for capsule, aim in microphone.capsules()]
+            for pattern, turn in balloons:
+                balloon = balloon_polydata(pattern, item.position, turn, size=10 * radius)
                 parts.append(
                     plotter.add_mesh(
                         balloon,

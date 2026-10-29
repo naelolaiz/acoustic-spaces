@@ -50,6 +50,62 @@ The statistical tail arrives evenly from all around.
 Levels match the mono response: an arrival from straight ahead has the same height in
 W, in the speaker it is panned to, and, below the head's influence, at both ears.
 
+### Microphones
+
+A listener can be a microphone: its `pattern` is what its mono output picks up through,
+aimed where the listener faces.
+
+```yaml
+listeners:
+  - name: vocal_mic
+    position: [0.0, 0.3, 1.6]
+    orientation: {yaw: 180, pitch: -10}
+    pattern: supercardioid        # omni (the default), subcardioid, cardioid,
+                                  # supercardioid, hypercardioid or figure8
+  - name: main_pair
+    position: [6.0, 0.0, 3.0]
+    orientation: {yaw: 180, pitch: -15}
+    pattern: {pair: xy, angle_deg: 90, capsule: cardioid}
+  - name: blumlein
+    position: [8.0, 0.0, 3.0]
+    orientation: {yaw: 180}
+    pattern: {pair: blumlein}     # two figure8s aimed 45 degrees to each side
+  - name: ms
+    position: [10.0, 0.0, 3.0]
+    orientation: {yaw: 180}
+    pattern: {pair: ms, mid: cardioid, side_db: 0}
+```
+
+- A first-order pattern picks up a + (1 - a) cos θ of sound arriving θ off its aim,
+  with the `a` the sources' patterns take (0.7, 0.5, 0.37, 0.25 and 0 from subcardioid
+  to figure8): 1 straight ahead, the same at every frequency, as an ideal capsule.
+- A coincident pair writes two channels, left and right, in the mono output's file:
+  `xy`, two capsules of one pattern (cardioids by default) aimed `angle_deg` apart (90
+  by default), the left one to the left of the front; `blumlein`, two figure8s aimed 45
+  degrees to each side; `ms`, a `mid` capsule aimed forward and a figure8 aimed left,
+  decoded to M + gS on the left and M - gS on the right, g the side's gain `side_db` (0
+  dB by default; more is wider). The report's mono output names the microphone
+  (`"microphone": "xy"`, say) and its channels.
+- Each early path is picked up from the direction it arrives from, and each impulse of
+  the late part from the one it is drawn from, so a pattern's response is the first
+  order of the field the simulation gives (to the 64 directions the tracer sorts the
+  late energy into), and the wave solver's bands are their first-order field too. A
+  pair's channels hold the same late impulses, as two capsules in one place hear the
+  same reverberation.
+- The pattern changes what the mono output holds, in `simulate`'s files, `auralize`,
+  walkthroughs, movements and the editor's listening; not the parameters
+  (`parameters.json` and the editor's results stay those of an omnidirectional
+  listener, as ISO 3382 measures them), the echo check, or the binaural, Ambisonics and
+  loudspeaker outputs. `validate` warns about a pattern in a scene whose outputs leave
+  mono out.
+
+Spaced pairs (AB, ORTF, a Decca tree) are a listener for each capsule, each with its
+pattern and its orientation. Their direct sound and early reflections arrive with the
+delays between the capsules' places, but each listener's late part is drawn from noise
+of its own, so their reverberation does not correlate at any frequency, where real
+capsules d apart correlate below about c / 2d (1 kHz for 17 cm): the bass of such a
+pair sounds wider than it would.
+
 ### HRTF sets to download
 
 A measured head places sounds better than the spherical head model, front from back

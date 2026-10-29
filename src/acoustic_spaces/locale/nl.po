@@ -2356,6 +2356,18 @@ msgid "lambert"
 msgstr "lambertiaans"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "XY pair"
+msgstr "XY-paar"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Blumlein pair"
+msgstr "Blumlein-paar"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "MS pair"
+msgstr "MS-paar"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "point"
 msgstr "punt"
 
@@ -2550,6 +2562,34 @@ msgid ""
 msgstr ""
 "Het geluidsvermogenniveau van de bron over alle banden samen (dB t.o.v. 1 "
 "pW); Spectrum verdeelt dit over de banden"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The microphone the listener's mono output picks up through, aimed where it "
+"faces: omni hears every way alike; subcardioid to hypercardioid ever more to "
+"the front; figure8 to the front and the back. A pair writes two channels, "
+"left and right: XY two capsules aimed apart, Blumlein two figure8s crossed, "
+"MS a mid capsule and a figure8 to the side. The parameters and the other "
+"outputs stay an omni listener's"
+msgstr ""
+"De microfoon waardoor de mono-uitvoer van de ontvanger opneemt, gericht waar "
+"hij naartoe kijkt: rondomstralend hoort alle kanten gelijk; van subcardioïde "
+"tot hypercardioïde steeds meer naar voren; achtvormig naar voren en "
+"achteren. Een paar schrijft twee kanalen, links en rechts: XY twee uit "
+"elkaar gerichte kapsels, Blumlein twee gekruiste achtvormige, MS een "
+"middenkapsel en een achtvormige naar opzij. De parameters en de andere "
+"uitvoer blijven die van een rondomstralende ontvanger"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The pattern of both of the XY pair's capsules"
+msgstr "De karakteristiek van beide kapsels van het XY-paar"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The pattern of the MS pair's mid capsule, aimed where the listener faces"
+msgstr ""
+"De karakteristiek van het middenkapsel van het MS-paar, gericht waar de "
+"ontvanger naartoe kijkt"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "(default material)"
@@ -4459,29 +4499,31 @@ msgstr ""
 msgid ""
 "Turns the listener left, from facing +x towards +y (degrees). The way it "
 "faces sets what the binaural, Ambisonics and loudspeaker outputs hear as the "
-"front"
+"front, and where its microphone points"
 msgstr ""
 "Draait de ontvanger naar links, van +x naar +y (graden). De oriëntatie "
 "bepaalt de voorwaartse richting van de binaurale, Ambisonics- en "
-"luidsprekeruitvoer"
+"luidsprekeruitvoer, en waar zijn microfoon naartoe wijst"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Tilts the listener to look up (degrees). The way it faces sets what the "
-"binaural, Ambisonics and loudspeaker outputs hear as the front"
+"binaural, Ambisonics and loudspeaker outputs hear as the front, and where "
+"its microphone points"
 msgstr ""
 "Kantelt de ontvanger omhoog (graden). De oriëntatie bepaalt de voorwaartse "
-"richting van de binaurale, Ambisonics- en luidsprekeruitvoer"
+"richting van de binaurale, Ambisonics- en luidsprekeruitvoer, en waar zijn "
+"microfoon naartoe wijst"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Tilts the listener to the right, round the way it faces (degrees). The way "
 "it faces sets what the binaural, Ambisonics and loudspeaker outputs hear as "
-"the front"
+"the front, and where its microphone points"
 msgstr ""
 "Kantelt de ontvanger naar rechts rond de kijkrichting (graden). De "
 "oriëntatie bepaalt de voorwaartse richting van de binaurale, Ambisonics- en "
-"luidsprekeruitvoer"
+"luidsprekeruitvoer, en waar zijn microfoon naartoe wijst"
 
 #: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/results_view.py
 msgid "Yaw"
@@ -4627,6 +4669,40 @@ msgstr ""
 "geluidsvermogen"
 
 #: acoustic_spaces/gui/inspector.py
+msgid ""
+"The angle between the XY pair's capsules (degrees), the left one aimed to "
+"the left of where the listener faces: 90 is usual, wider spreads the sound "
+"wider"
+msgstr ""
+"De hoek tussen de kapsels van het XY-paar (graden), het linker links gericht "
+"van waar de ontvanger naartoe kijkt: 90 is gebruikelijk, wijder spreidt het "
+"geluid breder"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The MS pair's figure8 to the side against its mid capsule (dB): more sounds "
+"wider, less narrower"
+msgstr ""
+"De achtvormige naar opzij van het MS-paar tegenover zijn middenkapsel (dB): "
+"meer klinkt breder, minder smaller"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Microphone"
+msgstr "Microfoon"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Angle"
+msgstr "Hoek"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Capsules"
+msgstr "Kapsels"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Side"
+msgstr "Zijkant"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Length"
 msgstr "Lengte"
 
@@ -4683,6 +4759,10 @@ msgstr ""
 "De gierhoek draait naar links van +x naar +y, de stamphoek kantelt omhoog en "
 "de rolhoek kantelt naar rechts. In de 3D-weergave wijst de lange pijl naar "
 "voren en de korte omhoog."
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Mid"
+msgstr "Midden"
 
 #. Translators: the directivity list's tip, then the choice it shows.
 #: acoustic_spaces/gui/inspector.py

@@ -2209,6 +2209,69 @@ def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
     page.pattern_window.close()
 
 
+def test_listener_microphone(window) -> None:
+    window.open_example(example_path("studio"))
+    window.select("listeners", 0)
+    page = window.inspector.pages["listeners"]
+    form, box = page._form, page.microphone
+    document = window.document
+
+    def pattern():
+        return document.scene.listeners[0].pattern
+
+    # Omni by default, without a pair's settings.
+    assert box.currentData() == "omni" and pattern() is None
+    assert not any(form.isRowVisible(w) for w in (page.pair_angle, page.capsule, page.side))
+    box.activated.emit(box.findData("cardioid"))
+    assert pattern() == "cardioid" and box.currentText() == "cardioid"
+    # An XY pair: its angle and capsules.
+    box.activated.emit(box.findData("xy"))
+    assert (pattern().pair, pattern().angle_deg, pattern().capsule) == ("xy", 90.0, "cardioid")
+    assert form.isRowVisible(page.pair_angle) and form.isRowVisible(page.capsule)
+    assert not form.isRowVisible(page.side)
+    assert form.labelForField(page.capsule).text() == "Capsules"
+    page.pair_angle.setValue(110.0)
+    page.capsule.activated.emit(page.capsule.findData("supercardioid"))
+    assert (pattern().angle_deg, pattern().capsule) == (110.0, "supercardioid")
+    box.activated.emit(box.findData("xy"))  # the same choice keeps its settings
+    assert pattern().angle_deg == 110.0
+    # An MS pair: its mid capsule and its side's gain.
+    box.activated.emit(box.findData("ms"))
+    assert form.labelForField(page.capsule).text() == "Mid"
+    assert form.labelForField(page.capsule).toolTip() == page.capsule.toolTip()
+    assert form.isRowVisible(page.side) and not form.isRowVisible(page.pair_angle)
+    page.side.setValue(3.0)
+    page.capsule.activated.emit(page.capsule.findData("figure8"))
+    assert (pattern().pair, pattern().mid, pattern().side_db) == ("ms", "figure8", 3.0)
+    box.activated.emit(box.findData("blumlein"))
+    assert pattern().pair == "blumlein" and not form.isRowVisible(page.capsule)
+    # Omni leaves the pattern out of the scene file.
+    box.activated.emit(box.findData("omni"))
+    assert pattern() is None and "pattern" not in document.scene.to_data()["listeners"][0]
+    window.undo()
+    assert pattern().pair == "blumlein" and box.currentData() == "blumlein"
+
+
+@pytest.mark.render
+def test_a_listeners_microphone_in_the_3d_view(window, qapp) -> None:
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    window.open_example(example_path("studio"))
+
+    def drawn() -> int:
+        window.select("listeners", 0)
+        qapp.processEvents()
+        return len(viewport._point_actors["listeners", 0])
+
+    # The sphere and the arrows forward and up; a balloon for each capsule.
+    assert drawn() == 3
+    window.document.update_point("listeners", 0, pattern="cardioid")
+    assert drawn() == 4
+    window.document.update_point("listeners", 0, pattern={"pair": "xy"})
+    assert drawn() == 5
+
+
 def test_tree_selects(window) -> None:
     tree = window.tree
     for item in tree._items():

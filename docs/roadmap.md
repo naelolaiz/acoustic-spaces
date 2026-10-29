@@ -502,3 +502,8 @@ Next version:
   render their energy on average over seeds instead of adding in amplitude; the
   echogram's 63 and 125 Hz reading no longer takes their interference a second time
   from the band above.
+- [x] Listeners as microphones: a first-order pattern, or a coincident pair (XY,
+  Blumlein, MS) in two channels, that the mono output picks up through, aimed where the
+  listener faces; chosen in the editor's listener form and drawn as balloons in the 3D
+  view.
+- [ ] Spaced pairs whose late parts correlate as real capsules' do at low frequencies.

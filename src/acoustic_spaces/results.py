@@ -123,7 +123,7 @@ def write_results(
 
 def _write_results(result, out: Path, formats, sample_rate, normalize, plots, say) -> dict:
     """:func:`write_results`, its files written straight into ``out``."""
-    from acoustic_spaces.spatial import Binaural, from_output
+    from acoustic_spaces.spatial import Binaural, for_listener, from_output
 
     if formats is None:
         formats = [from_output(o) for o in result.room.scene.outputs]
@@ -155,6 +155,7 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
 
     scene = result.room.scene
     sources = {s.name: s for s in scene.sources}
+    listeners = {item.name: item for item in scene.listeners}
     noise_db = scene.coverage.noise_db if scene.coverage is not None else None
     long_term = result.long_term
 
@@ -166,15 +167,20 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
         stem = stems[key]
         written, peak, ears, mono = [], 0.0, None, None
         for k, (fmt, part) in enumerate(zip(formats, parts, strict=True)):
-            say(f"{source} -> {listener}: rendering {fmt.label}")
-            ir = response.spatial_impulse_response(fmt, sample_rate)
+            # The mono output through the listener's microphone, when it has a pattern.
+            heard = for_listener(fmt, listeners.get(listener))
+            say(f"{source} -> {listener}: rendering {heard.label}")
+            ir = response.spatial_impulse_response(heard, sample_rate)
             peak = max(peak, float(abs(ir).max(initial=0.0)))
             name = f"{stem}{part}.wav"
             write_wav(out / name, ir, sample_rate, masks[k])
-            written.append({"format": fmt.label, "wav": name, "channels": fmt.channel_names})
+            output = {"format": fmt.label, "wav": name, "channels": heard.channel_names}
+            if heard is not fmt:
+                output["microphone"] = heard.label
+            written.append(output)
             if binaural and k == binaural[0]:
                 ears = ir
-            if mono_at and k == mono_at[0]:
+            if mono_at and k == mono_at[0] and heard is fmt:
                 mono = ir[:, 0]
         params = response.parameters()
         if ears is not None:

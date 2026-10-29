@@ -7,9 +7,9 @@ The singer holds a supercardioid microphone 5 cm from the mouth, aimed at it, so
 rear faces the wedges. Every loudspeaker that plays the voice feeds back into it: all
 but the subwoofers, the drum fill and those left out of simulations, at the scene's
 levels, EQ and delays, so the monitors and the PA keep the balance the scene gives
-them. The script simulates their responses at the microphone in first-order Ambisonics
-and turns them into the microphone's pattern; their sum, after 2 ms of latency in the
-console, is the loop.
+them. The microphone is a listener with the supercardioid pattern, facing the mouth, and
+its mono response picks up each loudspeaker through it; their sum, after 2 ms of latency
+in the console, is the loop.
 
 It prints the potential acoustic gain (PAG) in each octave band: how much louder the
 system can make the voice than the voice alone is, at the mix position and at the
@@ -38,16 +38,16 @@ from acoustic_spaces import Room, simulate
 from acoustic_spaces.audio import write_wav
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import octave_filter_gains
-from acoustic_spaces.scene import Listener, Source
-from acoustic_spaces.spatial.ambisonics import Ambisonics, real_spherical_harmonics
+from acoustic_spaces.scene import Listener, Orientation, Source
+from acoustic_spaces.spatial import Mono, for_listener
 
 #: The loudspeakers the voice is not sent to.
 NOT_THE_VOICE = ("subs", "drum_fill")
 #: The singer's mouth from the middle of the head (m, forward and up); the microphone's
-#: distance from it and its pattern (a + (1 - a) cos theta: a supercardioid); and the
-#: distance from the mouth to the ears.
+#: distance from it and its pattern (a listener's: a + (1 - a) cos theta, a = 0.37); and
+#: the distance from the mouth to the ears.
 MOUTH = (0.09, -0.08)
-MIC_DISTANCE, MIC_PATTERN = 0.05, 0.366
+MIC_DISTANCE, MIC_PATTERN = 0.05, "supercardioid"
 EARS = 0.15
 #: The voice's pattern, a talker's, as a + (1 - a) cos theta (a subcardioid).
 VOICE, VOICE_PATTERN = "subcardioid", 0.7
@@ -89,7 +89,14 @@ def loop(
     turn = np.array(head.orientation.rotation())
     aim = turn[:, 0]
     mouth = np.asarray(head.position) + MOUTH[0] * aim + MOUTH[1] * turn[:, 2]
-    mic = Listener(name="microphone", position=tuple(mouth + MIC_DISTANCE * aim))
+    # The microphone faces the mouth, its rear the way the singer faces.
+    o = head.orientation
+    mic = Listener(
+        name="microphone",
+        position=tuple(mouth + MIC_DISTANCE * aim),
+        orientation=Orientation(yaw=o.yaw + 180.0, pitch=-o.pitch),
+        pattern=MIC_PATTERN,
+    )
     mix = next(listener for listener in scene.listeners if listener.name == "mix_position")
     voice = Source(
         name="voice", position=tuple(mouth), orientation=head.orientation, directivity=VOICE
@@ -108,16 +115,14 @@ def loop(
     result = simulate(Room.from_scene(copy, reuse=room), settings=settings)
     copy = scene.model_copy(update={"sources": [voice], "listeners": [mix]})
     heard = simulate(Room.from_scene(copy, reuse=room), settings=settings)
-    # The microphone's pattern from first-order Ambisonics (ACN / SN3D), aimed at the mouth.
-    harmonics = real_spherical_harmonics(1, -aim[None])[0]
-    pattern = np.concatenate([[MIC_PATTERN], (1.0 - MIC_PATTERN) * harmonics[1:]])
+    through = for_listener(Mono(), mic)
     lag = int(round(LATENCY_S * RATE))
     parts, system = [], {"mix": 0.0, "ears": 0.0}
     for speaker in speakers:
         # The response holds the feed (EQ, delay); the sound power without it scales it.
         power = speaker.power_db() - speaker.feed_db()
-        ir = result[speaker.name, mic.name].spatial_impulse_response(Ambisonics(1), RATE)
-        parts.append(10.0 ** (power.mean() / 20.0) * (ir @ pattern))
+        ir = result[speaker.name, mic.name].spatial_impulse_response(through, RATE)[:, 0]
+        parts.append(10.0 ** (power.mean() / 20.0) * ir)
         for where, listener in (("mix", mix), ("ears", head)):
             levels = result[speaker.name, listener.name].levels(speaker.power_db())
             system[where] = system[where] + 10.0 ** (levels / 10.0)

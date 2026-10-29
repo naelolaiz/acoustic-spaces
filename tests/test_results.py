@@ -11,6 +11,7 @@ from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.cli import main
 from acoustic_spaces.engine import simulate
 from acoustic_spaces.engine.response import Response
+from acoustic_spaces.render import auralize
 from acoustic_spaces.results import (
     REPORT_FILE,
     file_name,
@@ -20,7 +21,9 @@ from acoustic_spaces.results import (
     write_results,
 )
 from acoustic_spaces.room import Room
+from acoustic_spaces.scene import Listener
 from acoustic_spaces.spatial import Ambisonics, Binaural, Mono, spherical_head
+from acoustic_spaces.spatial.microphone import xy
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
 
@@ -103,6 +106,40 @@ def test_write_results(result, tmp_path: Path) -> None:
     loudest = max(np.abs(read_wav(p)[0]).max() for p in (tmp_path / "out").glob("*.wav"))
     assert loudest == pytest.approx(10 ** (-1 / 20), rel=1e-6)
     assert [p.name for p in (tmp_path / "out").iterdir() if p.name.startswith(".")] == []
+
+
+def test_a_listeners_microphone_writes_its_mono_output(result, tmp_path: Path) -> None:
+    # The same run with an XY pair at the listener: the pattern changes no response.
+    room = Room.from_yaml(SHOEBOX)
+    seat = room.scene.listeners[0].model_dump()
+    paired = room.scene.model_copy(
+        update={"listeners": [Listener.model_validate({**seat, "pattern": {"pair": "xy"}})]}
+    )
+    again = simulate(Room.from_scene(paired, reuse=room), settings=result.settings)
+    rate = 16_000
+    report = write_results(again, tmp_path / "out", [Mono(), Ambisonics(1)], sample_rate=rate)
+    plain = write_results(result, tmp_path / "plain", [Mono(), Ambisonics(1)], sample_rate=rate)
+    (entry,) = report["responses"]
+    mono, ambisonics = entry["outputs"]
+    assert mono == {
+        "format": "mono",
+        "wav": "talker__seat-a.wav",
+        "channels": ["L", "R"],
+        "microphone": "xy",
+    }
+    assert ambisonics == plain["responses"][0]["outputs"][1]
+    data, _ = read_wav(tmp_path / "out" / "talker__seat-a.wav")
+    expected = result["talker", "seat-a"].spatial_impulse_response(xy(), rate)
+    np.testing.assert_allclose(data, expected, atol=1e-6 * np.abs(expected).max())
+    # The parameters and the echo check stay an omnidirectional listener's.
+    (before,) = plain["responses"]
+    for key in ("parameters", "spl_db", "echo", "speech"):
+        assert entry[key] == before[key]
+    # Auralized, the listener hears through it too.
+    click = np.zeros(50)
+    click[0] = 1.0
+    mix = auralize(again, {"talker": click}, sample_rate=rate)
+    np.testing.assert_allclose(mix[: len(expected)], expected, atol=1e-12)
 
 
 def test_a_write_that_fails_leaves_the_folder_as_it_was(
