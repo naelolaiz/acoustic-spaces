@@ -226,23 +226,9 @@ MONITOR_MIXES: dict[str, tuple[dict[str, float], float | None]] = {
     "drummer": (DRUMMER_MIX, None),
     "stage": (STAGE_MIX, 0.0),
 }
-#: The band itself, as sources on the stage (added by ``band``): sound power (dB re 1 pW)
-#: of a rock drum kit, a singer singing loud and an instrument amplifier turned up.
-BAND = {
-    "drum_kit": {"position": [-52.3, 0.0, 2.8], "level_db": 116.0, "directivity": "omni"},
-    "singer_voice": {
-        "position": [-44.6, 0.0, 3.7],
-        "orientation": {"yaw": 0.0},
-        "level_db": 98.0,
-        "directivity": "subcardioid",
-    },
-    "guitar_amp": {
-        "position": [-49.0, 8.0, 2.5],
-        "orientation": {"yaw": 0.0, "pitch": 20.0},
-        "level_db": 112.0,
-        "directivity": "cardioid",
-    },
-}
+#: The band itself: the scene's sources in this group, left out of its simulations until
+#: ``band`` takes them in, and the stem each plays.
+BAND = "Band"
 BAND_MIX = {"drum_kit": {"drums": 0}, "singer_voice": {"vocal": 0}, "guitar_amp": {"guitar": 0}}
 
 #: The default tour: listener and how many phrases it lasts (0.5: 4 bars); the last one
@@ -351,14 +337,11 @@ def music_step(args) -> None:
 
 def band(args) -> None:
     """``--scene`` (default scene_band.yaml) written from ``--from`` (scene.yaml) with the
-    band on the stage: the drum kit, the singer's voice and the guitarist's amplifier,
-    so that the players are heard from where they stand and not only through the
-    loudspeakers."""
+    band on the stage, its Band group taken into the simulation: the drum kit, the
+    singer's voice and the guitarist's amplifier, so that the players are heard from
+    where they stand and not only through the loudspeakers."""
     scene = yaml.safe_load(args.source.read_text(encoding="utf-8"))
-    names = {s["name"] for s in scene["sources"]}
-    scene["sources"] += [
-        {"name": name, "group": "Band"} | spec for name, spec in BAND.items() if name not in names
-    ]
+    scene["sources"] = with_band(scene["sources"], args.source)
     pipeline.write_scene(
         args.scene,
         scene,
@@ -370,6 +353,16 @@ def band(args) -> None:
 
 def scene_of(args) -> dict:
     return yaml.safe_load(args.scene.read_text(encoding="utf-8"))
+
+
+def with_band(sources: list[dict], path: Path) -> list[dict]:
+    """The scene's sources (``path``'s) with its band in use."""
+    if not any(s.get("group") == BAND for s in sources):
+        raise SystemExit(f"error: {path} has no band: no source in the {BAND} group")
+    return [
+        {k: v for k, v in s.items() if k != "enabled"} if s.get("group") == BAND else s
+        for s in sources
+    ]
 
 
 def in_use(sources: list[dict]) -> list[dict]:
@@ -400,7 +393,7 @@ def role(source: dict) -> str:
     """What a source plays: a monitor mix, the master in mono (subwoofers and
     loudspeakers on the stage's axis) or the master's left or right channel, as the
     audience sees it (facing the stage, which is at -x: left is -y)."""
-    if source["name"] in BAND:
+    if source["name"] in BAND_MIX:
         return source["name"]
     for prefix, mix in MONITORS.items():
         if source["name"].startswith(prefix):
@@ -429,9 +422,8 @@ def plays(args) -> dict[str, str]:
     if args.scene.exists():
         sources = in_use(scene_of(args)["sources"])
     elif args.source.exists():
-        sources = in_use(yaml.safe_load(args.source.read_text(encoding="utf-8"))["sources"])
-        names = {s["name"] for s in sources}
-        sources += [{"name": name} | spec for name, spec in BAND.items() if name not in names]
+        data = yaml.safe_load(args.source.read_text(encoding="utf-8"))
+        sources = in_use(with_band(data["sources"], args.source))
     else:
         return {}
     song = song_of(args)

@@ -86,10 +86,10 @@ ANNOTATIONS_DOI = "10.5281/zenodo.7061507"
 VCSL_COMMIT = "c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e"
 VCSL = f"https://raw.githubusercontent.com/sgossner/VCSL/{VCSL_COMMIT}/Aerophones/Edge-blown%20Aerophones/Pipe%20Organ/"
 
-#: The singers of VocalSet (its voice types) and where each stands: the women in the
-#: front row, the men on a step behind them, both facing the nave. The back row leaves
-#: the middle free for the listener "in_the_choir". The countertenor (m9) is left out:
-#: the annotation of that take belongs to a longer take than the one in the archive.
+#: The singers of VocalSet (its voice types), in the order the scene's Choir group stands
+#: them: the women in the front row, the men on a step behind them, both facing the
+#: nave. The countertenor (m9) is left out: the annotation of that take belongs to a
+#: longer take than the one in the archive.
 FRONT = ["f1", "f5", "f2", "f3", "f8", "f4", "f6", "f7", "f9"]
 BACK = ["m1", "m4", "m2", "m10", "m3", "m5", "m8", "m7", "m6", "m11"]
 VOICES = {
@@ -164,65 +164,34 @@ FULL = {"manual": "Loud", "pedal": "Loud Pedal", "four_foot_db": -6.0}
 QUIET = {"manual": "Quiet", "pedal": "Quiet Pedal", "four_foot_db": None}
 QUIET_DB = -11.0
 
-#: Sound power (dB re 1 pW) of each singer, each side of the manual, each pedal tower.
-SINGER_DB = 88.0
-MANUAL_DB = 105.0
-PEDAL_DB = 102.0
-#: Voices are near omni in the bass and beam forwards in the treble.
-VOICE_PATTERN = [
-    "omni",
-    "omni",
-    "omni",
-    "subcardioid",
-    "subcardioid",
-    "cardioid",
-    "cardioid",
-    "cardioid",
-]
-ORGAN_PATTERN = [
-    "omni",
-    "omni",
-    "omni",
-    "omni",
-    "subcardioid",
-    "subcardioid",
-    "cardioid",
-    "cardioid",
-]
-
-#: The organ in the gallery over the entrance: each division's pipes stand in two halves,
-#: the C side (C, D, E, F#, G#, A#) to the south and the C# side to the north.
+#: The groups of the scene's sources the demo plays, left out of the church's own
+#: simulations: the choir, and the organ's pipes in the gallery over the entrance.
+CHOIR, ORGAN_PIPES = "Choir", "Organ pipes"
+#: The organ's sources: each division's pipes stand in two halves, the C side (C, D, E,
+#: F#, G#, A#) to the south and the C# side to the north.
 ORGAN_SOURCES = {
-    "organ_manual_c": {"position": [1.2, -1.6, 9.5], "division": "manual", "side": 0},
-    "organ_manual_cis": {"position": [1.2, 1.6, 9.5], "division": "manual", "side": 1},
-    "organ_pedal_c": {"position": [0.9, -3.8, 8.6], "division": "pedal", "side": 0},
-    "organ_pedal_cis": {"position": [0.9, 3.8, 8.6], "division": "pedal", "side": 1},
+    "organ_manual_c": {"division": "manual", "side": 0},
+    "organ_manual_cis": {"division": "manual", "side": 1},
+    "organ_pedal_c": {"division": "pedal", "side": 0},
+    "organ_pedal_cis": {"division": "pedal", "side": 1},
 }
-#: The listeners: name, position, yaw (0 faces the altar, +x).
-LISTENERS = {
-    "nave_back": ([5.0, 2.0, 1.2], 0.0),
-    "side_aisle": ([13.0, -6.0, 1.2], 0.0),
-    "nave_middle": ([18.0, -4.0, 1.2], 0.0),
-    "nave_front": ([26.5, 2.5, 1.2], 0.0),
-    "conductor": ([29.4, 0.0, 1.7], 0.0),
-    "in_the_choir": ([31.8, 0.0, 1.95], 180.0),
-}
-#: The tour: listener and from when (s); each runs until the next one starts.
+#: The tour: the scene's listener and from when (s); each runs until the next one starts.
+#: The demo's scene has these listeners, in this order.
 TOUR = [
-    ("nave_back", 0.0),
-    ("side_aisle", 11.5),
-    ("nave_front", 25.0),
+    ("nave-back", 0.0),
+    ("side-aisle", 11.5),
+    ("front-pews", 25.0),
     ("conductor", 37.5),
-    ("in_the_choir", 51.0),
-    ("nave_middle", 63.5),
+    ("in-the-choir", 51.0),
+    ("nave-middle", 63.5),
 ]
 TITLES = {
-    "nave_back": ("Back of the nave", "under the organ gallery, by the entrance"),
-    "side_aisle": ("Side of the nave", "against the south wall, halfway down"),
-    "nave_middle": ("Middle of the nave", "in the pews, a little to the south"),
-    "nave_front": ("Front pews", "five metres from the choir"),
+    "nave-back": ("Back of the nave", "under the organ gallery, by the entrance"),
+    "side-aisle": ("Side of the nave", "against the south wall, halfway down"),
+    "nave-middle": ("Middle of the nave", "in the pews, a little to the south"),
+    "front-pews": ("Front pews", "five metres from the choir"),
     "conductor": ("The conductor", "standing in front of the choir"),
-    "in_the_choir": ("In the choir", "in the back row, among the men, facing the nave"),
+    "in-the-choir": ("In the choir", "in the back row, among the men, facing the nave"),
 }
 CROSSFADE_S = 1.0
 FADE_OUT_S = 2.0
@@ -399,47 +368,27 @@ def music(args) -> None:
 # --------------------------------------------------------------------------- the scene
 
 
-def choir_positions() -> dict[str, list[float]]:
-    """Two gently curved rows, 0.6 m apart, in front of the altar (x 35)."""
-    places = {}
-    for k, singer in enumerate(FRONT):
-        y = -0.3 * (len(FRONT) - 1) + 0.6 * k
-        places[singer] = [round(31.0 - 0.05 * y * y, 3), round(y, 2), 1.6]
-    back_y = [-3.0, -2.4, -1.8, -1.2, -0.6, 0.6, 1.2, 1.8, 2.4, 3.0]
-    for singer, y in zip(BACK, back_y, strict=True):
-        places[singer] = [round(31.9 - 0.05 * y * y, 3), y, 1.95]
-    return places
-
-
 def scene(args) -> None:
     """``--scene`` (scene_choir.yaml) written from ``--from`` (the example's scene.yaml):
-    the same church with the choir and the organ as sources, and the tour's listeners."""
+    the same church with the choir and the organ's pipes as sources, its Choir and Organ
+    pipes groups, and the places the tour visits as listeners, in the tour's order."""
     base = yaml.safe_load(args.source.read_text(encoding="utf-8"))
     base["name"] = "Church with a choir and an organ"
     sources = [
-        {
-            "name": f"singer_{singer}",
-            "position": place,
-            "orientation": {"yaw": 180.0},
-            "level_db": SINGER_DB,
-            "directivity": {"pattern": list(VOICE_PATTERN)},
-        }
-        for singer, place in choir_positions().items()
+        {k: v for k, v in s.items() if k != "enabled"}
+        for s in base["sources"]
+        if s.get("group") in (CHOIR, ORGAN_PIPES)
     ]
-    sources += [
-        {
-            "name": name,
-            "position": spec["position"],
-            "orientation": {"yaw": 0.0},
-            "level_db": MANUAL_DB if spec["division"] == "manual" else PEDAL_DB,
-            "directivity": {"pattern": list(ORGAN_PATTERN)},
-        }
-        for name, spec in ORGAN_SOURCES.items()
-    ]
+    names = {s["name"] for s in sources}
+    wanted = [f"singer_{singer}" for singer in SINGERS] + list(ORGAN_SOURCES)
+    missing = [name for name in wanted if name not in names]
+    listeners = {item["name"]: item for item in base["listeners"]}
+    missing += [name for name, _ in TOUR if name not in listeners]
+    if missing:
+        raise SystemExit(f"error: {args.source} has no {', '.join(missing)}")
     base["sources"] = sources
     base["listeners"] = [
-        {"name": name, "position": position, "orientation": {"yaw": yaw}}
-        for name, (position, yaw) in LISTENERS.items()
+        {k: v for k, v in listeners[name].items() if k != "enabled"} for name, _ in TOUR
     ]
     # The bass rings for up to ten seconds here: keep the responses long enough.
     base.setdefault("simulation", {})["ir_length_s"] = max(
@@ -795,7 +744,8 @@ def render(args) -> None:
     the loudest peak at -1 dBFS. auralize gives each source its level_db; when the sound
     arrives counts each source as loud as that."""
     table = feeds_table(args)
-    listeners = args.listeners.split(",") if args.listeners else list(LISTENERS)
+    every = [item["name"] for item in scene_of(args)["listeners"]]
+    listeners = args.listeners.split(",") if args.listeners else every
     feeds = {name: args.work / "feeds" / f"{name}.wav" for name in table["sources"]}
     weights = {source["name"]: source["level_db"] for source in scene_of(args)["sources"]}
     simulation = simulations(args)[0]

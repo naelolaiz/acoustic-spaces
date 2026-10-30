@@ -648,16 +648,17 @@ def render_movement(
 ) -> dict[str, np.ndarray]:
     """``signals`` (source names to a signal at ``sample_rate``, or a (signal, rate)
     pair) played through the movement, as heard at every listener in use: each as
-    (samples, channels) in format ``fmt`` (default mono) at ``sample_rate`` (default: the
-    simulation's), all of one length and, as in :func:`render_walk`, each signal scaled
-    by its source's sound power against the loudest one's unless ``equal_power``. A pair
+    (samples, channels) in format ``fmt`` (default mono; mono through each listener's
+    microphone when it has a pattern) at ``sample_rate`` (default: the simulation's), all
+    of one length and, as in :func:`render_walk`, each signal scaled by its source's
+    sound power against the loudest one's unless ``equal_power``. A pair
     that moves crossfades from each moment's response to the next's, as a walk does, or
     with Doppler (:attr:`Movement.doppler`) plays each early path through its changing
     delay and crossfades the late part, as :func:`render_walk` does; a still pair plays
     through its one response. A source that moves with Doppler, or that a listener
     passes with it, may send an :class:`~acoustic_spaces.emission.Emission` at
     ``sample_rate``, the sound it sends each way, as :func:`render_walk` plays it."""
-    from acoustic_spaces.spatial import Mono
+    from acoustic_spaces.spatial import Mono, for_listener
 
     if not signals:
         raise ValueError("no signals to render")
@@ -699,24 +700,28 @@ def render_movement(
         for item in getattr(result.room.scene, kind)
     }
 
-    def response(key: tuple[str, str]) -> np.ndarray:
+    def response(key: tuple[str, str], fmt) -> np.ndarray:
         if key not in cache:
             if len(cache) > 2 * len(dry):
                 cache.clear()  # a moment's responses are used one after the other
             cache[key] = result[key].spatial_impulse_response(fmt, rate, seed)
         return cache[key]
 
+    items = {item.name: item for item in scene.listeners}
     outputs = {}
     for listener in listeners:
-        out = np.zeros((length, fmt.channels))
+        heard = for_listener(fmt, items[listener])
+        out = np.zeros((length, heard.channels))
         for source, signal in dry.items():
             if not movement.moves(source, listener):
                 key = movement.key(source, listener, 0)
                 if flickers(result[key]):
-                    end = len(signal) + len(response(key)) - 1
-                    out[:end] += through_eddies(signal, result[key], fmt, rate, seed, gusts, 0, end)
+                    end = len(signal) + len(response(key, heard)) - 1
+                    out[:end] += through_eddies(
+                        signal, result[key], heard, rate, seed, gusts, 0, end
+                    )
                 else:
-                    wet = convolve(signal, response(key))
+                    wet = convolve(signal, response(key, heard))
                     out[: len(wet)] += wet
                 continue
             if movement.doppler:
@@ -730,7 +735,7 @@ def render_movement(
                     positions,
                     signal,
                     out,
-                    fmt,
+                    heard,
                     rate,
                     seed,
                     gusts,
@@ -752,10 +757,10 @@ def render_movement(
                 weight = (_past(starts, lengths, k, t) - _past(starts, lengths, k + 1, t))[:, None]
                 key = movement.key(source, listener, k)
                 if flickers(result[key]):
-                    wet = through_eddies(signal, result[key], fmt, rate, seed, gusts, begin, end)
+                    wet = through_eddies(signal, result[key], heard, rate, seed, gusts, begin, end)
                     out[begin:end] += weight[: len(wet)] * wet
                     continue
-                ir = response(key)
+                ir = response(key, heard)
                 first = max(begin - len(ir) + 1, 0)
                 piece = signal[first:end]
                 if len(piece) == 0:
@@ -859,14 +864,15 @@ def render_walk(
 ) -> np.ndarray:
     """``signals`` (source names to a signal at ``sample_rate``, or a (signal, rate)
     pair) played along the walk, as (samples, channels) in format ``fmt`` (default
-    mono) at ``sample_rate`` (default: the simulation's). As in
+    mono; mono through the listener's microphone when it has a pattern) at
+    ``sample_rate`` (default: the simulation's). As in
     :func:`~acoustic_spaces.render.auralize`, each signal is scaled by its source's
     sound power against the loudest one's, unless ``equal_power``. Along a walk with
     Doppler, the source that walks (or every source, for a walking listener) may send an
     :class:`~acoustic_spaces.emission.Emission` at ``sample_rate``, the sound it sends
     each way: each early path carries what is sent the way it leaves the source, and the
     late part the emission's sound averaged over the directions."""
-    from acoustic_spaces.spatial import Mono
+    from acoustic_spaces.spatial import Mono, for_listener
 
     if not signals:
         raise ValueError("no signals to render")
@@ -885,6 +891,9 @@ def render_walk(
     else:
         (listener,) = {lis for _, lis in result.responses}
         sources = {s for s, _ in result.responses if s not in walk.names} | {walk.name}
+    # A walking listener's places are copies of it, its microphone too.
+    items = {item.name: item for item in result.room.scene.listeners}
+    fmt = for_listener(fmt, items.get(walk.names[0] if listener is None else listener))
     unknown = sorted(set(signals) - sources)
     if unknown:
         raise ValueError(f"no source {unknown[0]!r}; the walk has {', '.join(sorted(sources))}")

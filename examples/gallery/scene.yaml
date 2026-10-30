@@ -42,6 +42,12 @@ listeners:
     walk:
       to: [[4.0, 4.0, 1.6], [4.0, 16.0, 1.6]]
       speed_m_s: 1.2
+  # Where walk_demo.py's visitor stands to look round, 4 m from the guide and facing
+  # them: left out of the scene's simulations until ticked.
+  - name: standing
+    enabled: false
+    position: [16, 4, 1.6]
+    orientation: {yaw: 0}
 simulation:
   early: {method: ray_tracing, max_order: 3, diffraction: first_order}
   late: {method: stochastic_ray_tracing}

@@ -41,6 +41,7 @@ from types import ModuleType
 from typing import Any
 
 from acoustic_spaces.examples import examples_dir
+from acoustic_spaces.i18n import N_
 
 #: The kinds of option, for the parser and for the editor's form: a free text, a choice
 #: from a list, a number, a flag, a file to read, a file the demo writes (``path``), a
@@ -69,6 +70,67 @@ MAP_KINDS = ("inputs", "files")
 
 #: What a ``movers`` option takes for nothing moving.
 NO_MOVERS = "none"
+
+#: The editor's label of each option, in words, by its flag (the Run demo window gives
+#: the flag in the label's tip); an option not named here shows its flag.
+LABELS = {
+    "--scene": N_("Scene"),
+    "--seconds": N_("Time per listener"),
+    "--tour": N_("Tour"),
+    "--credit": N_("Credit"),
+    "--work": N_("Work folder"),
+    "--input": N_("What the sources play"),
+    "--format": N_("Format"),
+    "--hrtf": N_("HRTFs"),
+    "--again": N_("Mix again"),
+    "--no-mp4": N_("No video"),
+    "--from": N_("Example's scene"),
+    "--results": N_("Results folder"),
+    "--listeners": N_("Listeners"),
+    "--talker": N_("Talker"),
+    "--voice": N_("Voice"),
+    "--stand": N_("Where the visitor stands"),
+    "--turn": N_("Head turns"),
+    "--speed": N_("Speed"),
+    "--broadband": N_("Broadband noise"),
+    "--step": N_("Places apart"),
+    "--song": N_("Song"),
+    "--music": N_("Your own song"),
+    "--bpm": N_("Tempo"),
+    "--still": N_("Scene in still air"),
+    "--still-results": N_("Results in still air"),
+    "--last-phrases": N_("Last stop's phrases"),
+    "--zips": N_("Downloads folder"),
+    "--movements": N_("Movements"),
+    "--rpm": N_("Engine speed"),
+    "--flight": N_("Flight's scene"),
+    "--stadium": N_("Stadium's scene"),
+    "--height": N_("Height"),
+    "--at": N_("Overhead at"),
+    "--band": N_("Band's scene"),
+    "--downbeat": N_("First downbeat"),
+    "--stem": N_("Stems"),
+    "--rays": N_("Rays per band"),
+    "--out": N_("Written to"),
+}
+#: The options the editor keeps under Advanced besides the files and folders a demo
+#: writes, the example's scenes it reads and the flags, by flag: what fine-tunes a run
+#: rather than what it plays.
+ADVANCED = frozenset(
+    {
+        "--scene",
+        "--credit",
+        "--tour",
+        "--listeners",
+        "--movements",
+        "--bpm",
+        "--downbeat",
+        "--last-phrases",
+        "--step",
+        "--stand",
+        "--turn",
+    }
+)
 
 
 def moving_names(text: str | None) -> list[str] | None:
@@ -123,6 +185,8 @@ class Option:
     #: What a number without a default stands for when not given ("as in the scene"):
     #: the editor's field shows it at its lowest, zero.
     unset: str = ""
+    #: Given without its flag, before the others (an example script's scene).
+    positional: bool = False
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -133,6 +197,21 @@ class Option:
     @property
     def option(self) -> str:
         return self.flag or "--" + self.name.replace("_", "-")
+
+    @property
+    def label(self) -> str:
+        """The editor's label, in English (:data:`LABELS`), or the flag."""
+        return LABELS.get(self.option, self.option)
+
+    @property
+    def advanced(self) -> bool:
+        """Whether the editor keeps it under Advanced: a file or a folder the demo
+        writes, a scene of the example's it reads, a flag, or one of :data:`ADVANCED`."""
+        return (
+            self.kind in ("path", "folder", "flag")
+            or (self.kind == "file" and self.default is not None)
+            or self.option in ADVANCED
+        )
 
     @property
     def metavar(self) -> str:
@@ -148,6 +227,12 @@ class Option:
         return text
 
     def add_to(self, parser: argparse.ArgumentParser) -> None:
+        if self.positional:
+            kind = Path if self.kind in PATH_KINDS else None
+            parser.add_argument(
+                self.name, nargs="?", default=self.default, type=kind, help=self.description
+            )
+            return
         if self.kind == "flag":
             parser.add_argument(self.option, dest=self.name, action="store_true", help=self.help)
             return
@@ -282,6 +367,9 @@ class Demo:
     #: helicopter over its concert), to run first in the same work folder; None for the
     #: example's own demo, the one :func:`demo_for` gives.
     builds_on: str | None = None
+    #: Whether it is a script of one step, run without naming it (an example's script
+    #: that is no demo, :func:`script_demo`).
+    stepless: bool = False
     _folder: Path | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -336,6 +424,7 @@ class Demo:
         path named as its default is, wherever it lies; ``relative_to`` gives a path
         under that folder relative to it."""
         argv: list[str] = []
+        lead: list[str] = []
         for option in self.options:
             value = getattr(args, option.name, option.default) if args is not None else None
             if value is None or value == option.default:
@@ -357,13 +446,18 @@ class Demo:
                     continue
             if option.kind == "flag":
                 argv.append(option.option)
-            elif names_only and option.kind in PATH_KINDS:
-                argv += [option.option, Path(value).name]
+                continue
+            if names_only and option.kind in PATH_KINDS:
+                shown = Path(value).name
             elif relative_to is not None and option.kind in PATH_KINDS:
-                argv += [option.option, _relative(Path(value), relative_to)]
+                shown = _relative(Path(value), relative_to)
             else:
-                argv += [option.option, str(value)]
-        return argv
+                shown = str(value)
+            if option.positional:
+                lead.append(shown)
+            else:
+                argv += [option.option, shown]
+        return lead + argv
 
     def command(
         self, step: str, args: argparse.Namespace | None = None, *, names_only: bool = False
@@ -379,7 +473,8 @@ class Demo:
             args, names_only=names_only, relative_to=self.folder if here else None
         )
         if self.program is None:
-            return f"python {self.script.name} {step} {shell_line(argv)}".rstrip()
+            named = "" if self.stepless else f" {step}"
+            return f"python {self.script.name}{named} {shell_line(argv)}".rstrip()
         lead: list[str] = []
         if self.leading is not None:
             flag = self.option(self.leading).option
@@ -395,7 +490,8 @@ class Demo:
         defaults, paths in full so that it runs from any folder."""
         start = ["-m", self.module] if self.module else [str(self.script)]
         values = self.resolved(args) if args is not None else None
-        return [sys.executable, *start, step, *self.arguments(values)]
+        named = [] if self.stepless else [step]
+        return [sys.executable, *start, *named, *self.arguments(values)]
 
     # -- arguments ------------------------------------------------------------------
 
@@ -590,11 +686,89 @@ def demo_for(example: str) -> Demo | None:
     return found[0] if found else None
 
 
+#: The step of an example's script run as a demo: the script itself.
+RUN = "run"
+
+
+def _option_of(action: argparse.Action, folder: Path) -> Option:
+    """The :class:`Option` of a script's argument: a number, a flag, a choice, a path
+    (read when the example has the file its default names, else written) or a text."""
+    default = action.default
+    if isinstance(action, argparse._StoreTrueAction):
+        kind = "flag"
+    elif action.choices:
+        kind = "choice"
+    elif action.type in (int, float):
+        kind = action.type.__name__
+    elif action.type is Path or isinstance(default, Path):
+        if default is not None:
+            default = Path(default)
+            if default.is_absolute() and default.parent == folder:
+                default = Path(default.name)  # the example's own file, by its name
+        kind = "file" if default is not None and (folder / default).is_file() else "path"
+    else:
+        kind = "text"
+    flag = next((s for s in action.option_strings if s.startswith("--")), None)
+    return Option(
+        action.dest,
+        action.help or "",
+        default,
+        kind,
+        tuple(action.choices or ()),
+        flag=flag,
+        filter="Scene files (*.yaml *.yml)" if action.dest == "scene" else "",
+        positional=not action.option_strings,
+    )
+
+
+def script_demo(script: str | Path) -> Demo:
+    """An example's script that is no demo (``feedback.py``) as a demo of one step the
+    editor runs: its ``TITLE``, its docstring, and its options from its own
+    ``parser()``, the scene it reads given first without a flag; run as ``python
+    feedback.py [SCENE] [--rays N]``."""
+    script = Path(script).resolve()
+    module = sibling(script, script.stem)
+    parser = module.parser()
+    options = [
+        _option_of(action, script.parent)
+        for action in parser._actions
+        if not isinstance(action, argparse._HelpAction)
+    ]
+    return Demo(
+        name=script.stem,
+        example=script.parent.name,
+        title=module.TITLE,
+        description=module.__doc__ or "",
+        script=script,
+        steps=[Step(RUN, None, "run the script")],
+        options=options,
+        stepless=True,
+    )
+
+
+def scripts_of(example: str) -> list[Demo]:
+    """The scripts of the example ``example`` (a folder name) that the editor runs as
+    demos (:func:`script_demo`): those with a ``parser()``, which are neither its demos
+    nor what writes its model."""
+    folder = examples_dir() / example
+    found = []
+    for script in sorted(folder.glob("*.py")):
+        stem = script.stem
+        if stem.endswith(("_demo", "_pictures")) or stem.startswith("make_"):
+            continue
+        if "\ndef parser(" in script.read_text(encoding="utf-8"):
+            found.append(script_demo(script))
+    return found
+
+
 __all__ = [
+    "ADVANCED",
     "KINDS",
+    "LABELS",
     "MAP_KINDS",
     "NO_MOVERS",
     "PATH_KINDS",
+    "RUN",
     "SIMULATE",
     "Demo",
     "Option",
@@ -606,6 +780,8 @@ __all__ = [
     "list_demos",
     "load",
     "moving_names",
+    "script_demo",
+    "scripts_of",
     "shell_line",
     "sibling",
 ]

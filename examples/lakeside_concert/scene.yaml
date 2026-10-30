@@ -61,6 +61,45 @@ sources:
   - name: stage
     position: [0, 0, 6]
     level_db: 120
+  # The stage's sound system that lakeside_demo.py plays in place of the stage, left out
+  # of the scene's simulations until ticked, as a lawn concert hangs it: two line arrays
+  # of eight boxes (lake_array.yaml, the box's own pattern in box.csv, both made with
+  # the stadium example's make_model.py) flown 6.5 m up on the audience's left (-y: the
+  # audience looks towards -x) and right, aimed straight down the lawn and, box by box,
+  # from 5 degrees down at the last rows, where the lawn meets the water, to 36 at the
+  # front rows; and a block of four cardioid subwoofers on the ground under the middle
+  # of the stage front, 2 m nearer the audience than the arrays and delayed by as much,
+  # so that both arrive together there. Levels are sound power (dB re 1 pW); the arrays
+  # play the song's channels, the subwoofers both. The system is tuned at the audience,
+  # as a system engineer tunes it (eq_db per octave band, 63 Hz to 8 kHz): the
+  # subwoofers rolled off above 125 Hz and 3 dB over the arrays together, the arrays'
+  # low mids up and their top octave up by what 30 m of air takes, so that at the
+  # audience every octave from 250 Hz to 4 kHz is within 1 dB of 1 kHz, 8 kHz 1.5 dB
+  # down and the two lowest 2 dB up.
+  - name: main_left
+    group: PA
+    enabled: false
+    position: [0, -6, 6.5]
+    orientation: {yaw: 0}
+    level_db: 124
+    eq_db: [0, 0, 5, 0, 0, 1, 1, 2]
+    directivity: {file: lake_array.yaml, near_field: true}
+  - name: main_right
+    group: PA
+    enabled: false
+    position: [0, 6, 6.5]
+    orientation: {yaw: 0}
+    level_db: 124
+    eq_db: [0, 0, 5, 0, 0, 1, 1, 2]
+    directivity: {file: lake_array.yaml, near_field: true}
+  - name: subs
+    group: PA
+    enabled: false
+    position: [1, 0, 0.6]
+    level_db: 130
+    eq_db: [0, 0, -18, -40, -40, -40, -40, -40]
+    delay_ms: 6
+    directivity: {file: sub_array.yaml, near_field: true}
 listeners:
   - name: audience
     position: [30, 0, 1.5]
@@ -74,6 +113,12 @@ listeners:
   - name: bedroom_window
     position: [568, -16, 5]
     orientation: {yaw: 180}
+  # Behind the stage, as far upwind as the park reaches: lakeside_demo.py's, left out of
+  # the scene's simulations until ticked.
+  - name: behind_stage
+    enabled: false
+    position: [-140, 0, 1.5]
+    orientation: {yaw: 0}
 simulation:
   early: {method: image_sources, max_order: 1, diffraction: none}
   late: {method: stochastic_ray_tracing}

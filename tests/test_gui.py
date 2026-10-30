@@ -2209,6 +2209,69 @@ def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
     page.pattern_window.close()
 
 
+def test_listener_microphone(window) -> None:
+    window.open_example(example_path("studio"))
+    window.select("listeners", 0)
+    page = window.inspector.pages["listeners"]
+    form, box = page._form, page.microphone
+    document = window.document
+
+    def pattern():
+        return document.scene.listeners[0].pattern
+
+    # Omni by default, without a pair's settings.
+    assert box.currentData() == "omni" and pattern() is None
+    assert not any(form.isRowVisible(w) for w in (page.pair_angle, page.capsule, page.side))
+    box.activated.emit(box.findData("cardioid"))
+    assert pattern() == "cardioid" and box.currentText() == "cardioid"
+    # An XY pair: its angle and capsules.
+    box.activated.emit(box.findData("xy"))
+    assert (pattern().pair, pattern().angle_deg, pattern().capsule) == ("xy", 90.0, "cardioid")
+    assert form.isRowVisible(page.pair_angle) and form.isRowVisible(page.capsule)
+    assert not form.isRowVisible(page.side)
+    assert form.labelForField(page.capsule).text() == "Capsules"
+    page.pair_angle.setValue(110.0)
+    page.capsule.activated.emit(page.capsule.findData("supercardioid"))
+    assert (pattern().angle_deg, pattern().capsule) == (110.0, "supercardioid")
+    box.activated.emit(box.findData("xy"))  # the same choice keeps its settings
+    assert pattern().angle_deg == 110.0
+    # An MS pair: its mid capsule and its side's gain.
+    box.activated.emit(box.findData("ms"))
+    assert form.labelForField(page.capsule).text() == "Mid"
+    assert form.labelForField(page.capsule).toolTip() == page.capsule.toolTip()
+    assert form.isRowVisible(page.side) and not form.isRowVisible(page.pair_angle)
+    page.side.setValue(3.0)
+    page.capsule.activated.emit(page.capsule.findData("figure8"))
+    assert (pattern().pair, pattern().mid, pattern().side_db) == ("ms", "figure8", 3.0)
+    box.activated.emit(box.findData("blumlein"))
+    assert pattern().pair == "blumlein" and not form.isRowVisible(page.capsule)
+    # Omni leaves the pattern out of the scene file.
+    box.activated.emit(box.findData("omni"))
+    assert pattern() is None and "pattern" not in document.scene.to_data()["listeners"][0]
+    window.undo()
+    assert pattern().pair == "blumlein" and box.currentData() == "blumlein"
+
+
+@pytest.mark.render
+def test_a_listeners_microphone_in_the_3d_view(window, qapp) -> None:
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    window.open_example(example_path("studio"))
+
+    def drawn() -> int:
+        window.select("listeners", 0)
+        qapp.processEvents()
+        return len(viewport._point_actors["listeners", 0])
+
+    # The sphere and the arrows forward and up; a balloon for each capsule.
+    assert drawn() == 3
+    window.document.update_point("listeners", 0, pattern="cardioid")
+    assert drawn() == 4
+    window.document.update_point("listeners", 0, pattern={"pair": "xy"})
+    assert drawn() == 5
+
+
 def test_tree_selects(window) -> None:
     tree = window.tree
     for item in tree._items():
@@ -2639,7 +2702,8 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     names = [dialog.picker.itemData(k) for k in range(dialog.picker.count())]
     # The example's own demo first, then the one that builds on it; the dialog starts on
     # the example's own.
-    assert names == ["scene", "stadium", "crossing"] and dialog.picker.currentData() == "stadium"
+    assert names == ["scene", "stadium", "crossing", "align", "feedback", "near_field"]
+    assert dialog.picker.currentData() == "stadium"
     demo = dialog.demo
     assert [field for field in dialog.fields] == [option.name for option in demo.options]
     assert dialog.step.currentText() == ALL
@@ -2651,6 +2715,48 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     assert dialog.command.text() == "python stadium_demo.py all"
     assert str(demo.folder) in dialog.folder.text()
     assert dialog.chosen()[1] == ALL
+    # The form shows what changes what the demo plays, labelled in words with the flag
+    # in the tip; Advanced, shut until asked, the step, the files and folders, what
+    # fine-tunes the run and the command.
+    labels = {
+        dialog.options.layout().labelForField(w).text(): name
+        for name, w in dialog.fields.items()
+        if dialog.options.isAncestorOf(w)
+    }
+    assert labels == {
+        "Song": "song",
+        "Your own song": "music",
+        "Stems": "stems",
+        "Format": "format",
+        "HRTFs": "hrtf",
+        "What the sources play": "inputs",
+    }
+    assert "(--song)" in dialog.options.layout().labelForField(dialog.fields["song"]).toolTip()
+    for name in ("work", "results", "source", "scene", "tour", "bpm", "again"):
+        assert dialog.advanced.isAncestorOf(dialog.fields[name]), name
+    assert dialog.advanced.isAncestorOf(dialog.step) and dialog.advanced.isAncestorOf(
+        dialog.command
+    )
+    assert dialog.advanced.isHidden() and not dialog.more.isChecked()
+    dialog.more.setChecked(True)
+    assert not dialog.advanced.isHidden()
+    dialog.picker.setCurrentIndex(dialog.picker.findData("crossing"))  # stays open
+    assert not dialog.advanced.isHidden() and dialog.advanced.isAncestorOf(dialog.fields["work"])
+    assert dialog.options.isAncestorOf(dialog.fields["height"])
+    # An example's script is one step that moves nothing: the feedback of the singer's
+    # microphone, its rays above, the scene and the WAV file it writes under Advanced.
+    dialog.picker.setCurrentIndex(dialog.picker.findData("feedback"))
+    assert dialog.step.isHidden() and dialog.about_step.isHidden() and dialog.movement.isHidden()
+    assert dialog.options.isAncestorOf(dialog.fields["rays"])
+    assert dialog.advanced.isAncestorOf(dialog.fields["out"])
+    assert dialog.command.text() == "python feedback.py"
+    dialog.fields["rays"].setText("300")
+    assert dialog.command.text() == "python feedback.py --rays 300"
+    assert dialog.chosen()[1] == "run" and dialog.chosen()[2].rays == 300
+    dialog.picker.setCurrentIndex(dialog.picker.findData("stadium"))
+    assert not dialog.step.isHidden() and not dialog.movement.isHidden()
+    dialog.more.setChecked(False)
+    assert dialog.advanced.isHidden()
 
     # A field that differs shows in the command, and the song is a list of the songs.
     song = dialog.fields["song"]

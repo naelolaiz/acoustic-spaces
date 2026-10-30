@@ -24,6 +24,158 @@ msgstr "el del sistema"
 msgid "language: {language} ({source})"
 msgstr "idioma: {language} ({source})"
 
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/app.py acoustic_spaces/gui/tree.py
+msgid "Scene"
+msgstr "Escena"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Time per listener"
+msgstr "Tiempo por receptor"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Tour"
+msgstr "Recorrido"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Credit"
+msgstr "Créditos"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Work folder"
+msgstr "Carpeta de trabajo"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "What the sources play"
+msgstr "Lo que reproducen las fuentes"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Format"
+msgstr "Formato"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "HRTFs"
+msgstr "HRTF"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Mix again"
+msgstr "Mezclar de nuevo"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "No video"
+msgstr "Sin vídeo"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Example's scene"
+msgstr "Escena del ejemplo"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Results folder"
+msgstr "Carpeta de resultados"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/tree.py
+msgid "Listeners"
+msgstr "Receptores"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Talker"
+msgstr "Hablante"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Voice"
+msgstr "Voz"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Where the visitor stands"
+msgstr "Dónde está el visitante"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Head turns"
+msgstr "Giros de cabeza"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Speed"
+msgstr "Velocidad"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Broadband noise"
+msgstr "Ruido de banda ancha"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Places apart"
+msgstr "Distancia entre puntos"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Song"
+msgstr "Canción"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Your own song"
+msgstr "Tu propia canción"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Tempo"
+msgstr "Tempo"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Scene in still air"
+msgstr "Escena con el aire en calma"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Results in still air"
+msgstr "Resultados con el aire en calma"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Last stop's phrases"
+msgstr "Frases de la última parada"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Downloads folder"
+msgstr "Carpeta de descargas"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Movements"
+msgstr "Movimientos"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Engine speed"
+msgstr "Régimen del motor"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Flight's scene"
+msgstr "Escena del vuelo"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Stadium's scene"
+msgstr "Escena del estadio"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Height"
+msgstr "Altura"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Overhead at"
+msgstr "Encima en"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Band's scene"
+msgstr "Escena de la banda"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "First downbeat"
+msgstr "Primer tiempo fuerte"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Stems"
+msgstr "Pistas"
+
+#: acoustic_spaces/demos/__init__.py acoustic_spaces/gui/inspector.py
+msgid "Rays per band"
+msgstr "Rayos por banda"
+
+#: acoustic_spaces/demos/__init__.py
+msgid "Written to"
+msgstr "Se escribe en"
+
 #: acoustic_spaces/demos/scene_demo.py
 msgid "This scene"
 msgstr "Esta escena"
@@ -342,10 +494,6 @@ msgstr ""
 msgid "The room from above: draw floor plans, drag corners and points"
 msgstr ""
 "El recinto visto desde arriba: dibujar plantas; arrastrar vértices y puntos"
-
-#: acoustic_spaces/gui/app.py acoustic_spaces/gui/tree.py
-msgid "Scene"
-msgstr "Escena"
 
 #: acoustic_spaces/gui/app.py
 msgid "Properties"
@@ -1756,27 +1904,23 @@ msgstr "Ejecutar una demostración"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
-"A demo plays sound through the open scene, mixes what every listener hears "
-"and puts a video together. This scene plays the WAV file each source's Plays "
-"names; an example's own demo plays recordings it downloads, or a sound it "
-"makes (the pass-by demos' car), and can take a while. The messages say what "
-"it is doing, and Cancel stops it."
+"A demo plays sound through the scene and makes a video of what each listener "
+"hears, and an example's script prints what it finds; the messages say what "
+"they are doing, and Cancel stops them."
 msgstr ""
-"Una demostración reproduce sonido en la escena abierta, mezcla lo que oye "
-"cada oyente y monta un vídeo. Esta escena reproduce el archivo WAV que "
-"indica el campo Reproduce de cada fuente; la demostración propia de un "
-"ejemplo reproduce grabaciones que descarga, o un sonido que genera (el coche "
-"de las demostraciones de paso), y puede tardar. Los mensajes dicen qué está "
-"haciendo, y Cancelar la detiene."
+"Una demostración reproduce sonido en la escena y hace un vídeo de lo que oye "
+"cada oyente, y un script de un ejemplo muestra lo que encuentra; los "
+"mensajes dicen qué están haciendo, y Cancelar los detiene."
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
 "The demo to run: This scene, with the sounds its sources play, or one of the "
-"example's own demos when the scene is an example's or a copy of one"
+"example's own demos or scripts when the scene is an example's or a copy of "
+"one"
 msgstr ""
 "La demostración que se ejecutará: Esta escena, con los sonidos que "
-"reproducen sus fuentes, o una de las demostraciones propias del ejemplo "
-"cuando la escena es de un ejemplo o una copia de uno"
+"reproducen sus fuentes, o una de las demostraciones o scripts propios del "
+"ejemplo cuando la escena es de un ejemplo o una copia de uno"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -1789,6 +1933,18 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Demo"
 msgstr "Demostración"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Advanced"
+msgstr "Avanzado"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Show the step to run, what fine-tunes the run, the files and folders the "
+"demo reads and writes, and the same run as a command"
+msgstr ""
+"Muestra el paso que se ejecutará, lo que ajusta la ejecución, los archivos y "
+"carpetas que la demostración lee y escribe, y la misma ejecución como orden"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid "Step"
@@ -2216,6 +2372,18 @@ msgid "lambert"
 msgstr "Lambert"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "XY pair"
+msgstr "par XY"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Blumlein pair"
+msgstr "par Blumlein"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "MS pair"
+msgstr "par MS"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "point"
 msgstr "punto"
 
@@ -2411,6 +2579,35 @@ msgid ""
 msgstr ""
 "El nivel de potencia acústica de la fuente en todas las bandas juntas (dB re "
 "1 pW); Espectro lo reparte entre las bandas"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The microphone the listener's mono output picks up through, aimed where it "
+"faces: omni hears every way alike; subcardioid to hypercardioid ever more to "
+"the front; figure8 to the front and the back. A pair writes two channels, "
+"left and right: XY two capsules aimed apart, Blumlein two figure8s crossed, "
+"MS a mid capsule and a figure8 to the side. The parameters and the other "
+"outputs stay an omni listener's"
+msgstr ""
+"El micrófono a través del que capta la salida mono del receptor, orientado "
+"hacia donde mira: omnidireccional oye igual en todas direcciones; de "
+"subcardioide a hipercardioide cada vez más hacia delante; figura de ocho "
+"hacia delante y hacia atrás. Un par escribe dos canales, izquierdo y "
+"derecho: XY, dos cápsulas orientadas por separado; Blumlein, dos figuras de "
+"ocho cruzadas; MS, una cápsula central y una figura de ocho hacia el lado. "
+"Los parámetros y las demás salidas siguen siendo los de un receptor "
+"omnidireccional"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "The pattern of both of the XY pair's capsules"
+msgstr "El patrón de las dos cápsulas del par XY"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The pattern of the MS pair's mid capsule, aimed where the listener faces"
+msgstr ""
+"El patrón de la cápsula central del par MS, orientada hacia donde mira el "
+"receptor"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "(default material)"
@@ -3059,10 +3256,6 @@ msgstr "Añadir un vértice a medio camino entre el último y el primero"
 msgid "Remove the selected corner, or the last one when none is selected"
 msgstr ""
 "Eliminar el vértice seleccionado, o el último si no hay ninguno seleccionado"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Height"
-msgstr "Altura"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "The model file the room comes from"
@@ -4336,30 +4529,31 @@ msgstr ""
 msgid ""
 "Turns the listener left, from facing +x towards +y (degrees). The way it "
 "faces sets what the binaural, Ambisonics and loudspeaker outputs hear as the "
-"front"
+"front, and where its microphone points"
 msgstr ""
 "Gira el receptor hacia la izquierda, desde +x hacia +y (grados). Su "
 "orientación determina qué oyen como frente las salidas binaural, Ambisonics "
-"y de altavoces"
+"y de altavoces, y hacia dónde apunta su micrófono"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Tilts the listener to look up (degrees). The way it faces sets what the "
-"binaural, Ambisonics and loudspeaker outputs hear as the front"
+"binaural, Ambisonics and loudspeaker outputs hear as the front, and where "
+"its microphone points"
 msgstr ""
 "Inclina el receptor para que mire hacia arriba (grados). Su orientación "
 "determina qué oyen como frente las salidas binaural, Ambisonics y de "
-"altavoces"
+"altavoces, y hacia dónde apunta su micrófono"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Tilts the listener to the right, round the way it faces (degrees). The way "
 "it faces sets what the binaural, Ambisonics and loudspeaker outputs hear as "
-"the front"
+"the front, and where its microphone points"
 msgstr ""
 "Inclina el receptor hacia la derecha, alrededor de la dirección en la que "
 "mira (grados). Su orientación determina qué oyen como frente las salidas "
-"binaural, Ambisonics y de altavoces"
+"binaural, Ambisonics y de altavoces, y hacia dónde apunta su micrófono"
 
 #: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/results_view.py
 msgid "Yaw"
@@ -4507,6 +4701,40 @@ msgstr ""
 "reparten su potencia acústica"
 
 #: acoustic_spaces/gui/inspector.py
+msgid ""
+"The angle between the XY pair's capsules (degrees), the left one aimed to "
+"the left of where the listener faces: 90 is usual, wider spreads the sound "
+"wider"
+msgstr ""
+"El ángulo entre las cápsulas del par XY (grados), la izquierda orientada a "
+"la izquierda de donde mira el receptor: 90 es lo habitual; más abierto "
+"reparte el sonido más ancho"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The MS pair's figure8 to the side against its mid capsule (dB): more sounds "
+"wider, less narrower"
+msgstr ""
+"La figura de ocho lateral del par MS respecto a su cápsula central (dB): más "
+"suena más ancho, menos más estrecho"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Microphone"
+msgstr "Micrófono"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Angle"
+msgstr "Ángulo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Capsules"
+msgstr "Cápsulas"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Side"
+msgstr "Lateral"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Length"
 msgstr "Longitud"
 
@@ -4562,6 +4790,10 @@ msgstr ""
 "La guiñada gira hacia la izquierda desde +x hacia +y, el cabeceo mira hacia "
 "arriba y el alabeo inclina hacia la derecha. En la vista 3D, la flecha larga "
 "apunta hacia delante y la corta hacia arriba."
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Mid"
+msgstr "Central"
 
 #. Translators: the directivity list's tip, then the choice it shows.
 #: acoustic_spaces/gui/inspector.py
@@ -4843,10 +5075,6 @@ msgstr ""
 "una GPU, los resultados pueden variar ligeramente de un cálculo a otro), o "
 "auto: la más rápida de ellas en este equipo, según Ajustar CPU y GPU… o una "
 "breve prueba"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "Rays per band"
-msgstr "Rayos por banda"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Reception"
@@ -6965,10 +7193,6 @@ msgid "Sources"
 msgstr "Fuentes"
 
 #: acoustic_spaces/gui/tree.py
-msgid "Listeners"
-msgstr "Receptores"
-
-#: acoustic_spaces/gui/tree.py
 msgid "Simulation"
 msgstr "Simulación"
 
@@ -8054,18 +8278,20 @@ msgid ""
 "stand nearer the arrays than their far-field patterns hold, so every array "
 "adds up its boxes one by one (`near_field: true`). The sources and listeners "
 "sit in groups: the PA's mains, subwoofers, fills and delays, the monitors, "
-"the stage, and the audience standing and seated. The editor's scene tree "
-"shows or hides each group, and its tick uses it in simulations or leaves it "
-"out: with the monitors and the stage left out, the sound system plays alone, "
-"for the crowd.  acoustic-spaces map scene.yaml --parameter spl --plot "
-"spl.png python align.py python near_field.py python feedback.py python "
-"make_model.py  On the pitch from the mix position back, nine points of the "
-"map in ten get the same level within 2.6 dB (all bands together). The map "
-"takes under five minutes on 4 cores. align.py prints when and how loud each "
-"loudspeaker arrives at each listener, and which would be heard as an echo: "
-"none, and each player hears their own monitor loudest. near_field.py prints "
-"how far each array's far-field pattern would be off at each listener: within "
-"3.5 dB up to 2 kHz, but up to 10.2 dB at 4 and 8 kHz near the main arrays. "
+"the stage, the audience standing and seated, and the band and the "
+"helicopter, which the concert's simulations leave out until they are ticked, "
+"as they do the singer's microphone. The editor's scene tree shows or hides "
+"each group, and its tick uses it in simulations or leaves it out: with the "
+"monitors and the stage left out, the sound system plays alone, for the "
+"crowd.  acoustic-spaces map scene.yaml --parameter spl --plot spl.png python "
+"align.py python near_field.py python feedback.py python make_model.py  On "
+"the pitch from the mix position back, nine points of the map in ten get the "
+"same level within 2.6 dB (all bands together). The map takes under five "
+"minutes on 4 cores. align.py prints when and how loud each loudspeaker "
+"arrives at each listener, and which would be heard as an echo: none, and "
+"each player hears their own monitor loudest. near_field.py prints how far "
+"each array's far-field pattern would be off at each listener: within 3.5 dB "
+"up to 2 kHz, but up to 10.2 dB at 4 and 8 kHz near the main arrays. "
 "feedback.py finds how much gain the singer's microphone allows before the "
 "loudspeakers that play it make it ring, at the mix position and at the "
 "singer's ears, and the frequencies where it rings first, then renders the "
@@ -8118,12 +8344,14 @@ msgstr ""
 "receptores están más cerca de los arrays de lo que valen sus patrones de "
 "campo lejano, así que cada array suma sus cajas una a una (`near_field: "
 "true`). Las fuentes y los receptores están en grupos: los principales, los "
-"subgraves, los refuerzos y los retardos del PA, los monitores, el escenario "
-"y el público de pie y sentado. El árbol de la escena del editor muestra u "
-"oculta cada grupo, y su casilla lo incluye en las simulaciones o lo excluye: "
-"con los monitores y el escenario excluidos, el sistema de sonido suena solo, "
-"para el público.  acoustic-spaces map scene.yaml --parameter spl --plot "
-"spl.png python align.py python near_field.py python feedback.py python "
+"subgraves, los refuerzos y los retardos del PA, los monitores, el escenario, "
+"el público de pie y sentado, y la banda y el helicóptero, que las "
+"simulaciones del concierto excluyen hasta que se marcan, como hacen con el "
+"micrófono de voz. El árbol de la escena del editor muestra u oculta cada "
+"grupo, y su casilla lo incluye en las simulaciones o lo excluye: con los "
+"monitores y el escenario excluidos, el sistema de sonido suena solo, para el "
+"público.  acoustic-spaces map scene.yaml --parameter spl --plot spl.png "
+"python align.py python near_field.py python feedback.py python "
 "make_model.py  En el campo, desde la posición de mezcla hacia atrás, nueve "
 "de cada diez puntos del mapa reciben el mismo nivel con 2,6 dB de diferencia "
 "como mucho (todas las bandas juntas). El mapa de cobertura tarda menos de "

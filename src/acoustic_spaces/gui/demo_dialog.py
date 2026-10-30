@@ -6,9 +6,12 @@ play the WAV files their ``signal`` names, and every listener is heard in turn i
 video. A scene of an example that comes with a demo (:mod:`acoustic_spaces.demos`), or
 a copy of one, also has that demo, with its own recordings, reading the open scene. The
 form is built from the demo's own options, so the editor and the command line run
-exactly the same thing; the line at the bottom shows that command, to run again or to
-put in a script. A demo whose sources can play files of the user's (``--input``) lists
-them in a table, each with what it plays and the WAV file it plays instead. A number
+exactly the same thing. It shows the options that change what the demo plays, each
+labelled in words with its flag in the tip; Advanced shows the step to run, what
+fine-tunes the run, the files and folders the demo reads and writes, and that command,
+to run again or to put in a script. A demo whose sources can play files of the user's
+(``--input``) lists them in a table, each with what it plays and the WAV file it plays
+instead. A number
 shows its unit, and one whose default the scene gives (the pass-by demos' ``--speed``)
 says so at zero; the line under the form says what the options make of the run, where
 the demo says (how far, how fast and how long the car drives), under the Movement box.
@@ -43,6 +46,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -92,9 +96,10 @@ def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]
     """The demos of the open scene, each in the folder it runs in and with the arguments
     it starts with: *This scene* first, then the demos of the example the scene is or
     is a copy of (:func:`~acoustic_spaces.examples.example_of`: its folder's name, or
-    the example's scene name wherever the copy is saved), its own first, each reading
-    the open scene instead of the example's."""
-    from acoustic_spaces.demos import demos_of
+    the example's scene name wherever the copy is saved), its own first, then the
+    example's scripts that are no demos (:func:`~acoustic_spaces.demos.scripts_of`), each
+    reading the open scene instead of the example's."""
+    from acoustic_spaces.demos import demos_of, scripts_of
     from acoustic_spaces.demos.scene_demo import DEMO
     from acoustic_spaces.examples import example_of
 
@@ -109,7 +114,7 @@ def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]
         args.work = base / "demo"
     found.append((demo, args))
     name = example_of(path) if path is not None else None
-    for example in demos_of(name) if name is not None else []:
+    for example in [*demos_of(name), *scripts_of(name)] if name is not None else []:
         demo = example.at(writable(path.parent, example.example))
         args = starting_arguments(demo)
         option = reads_scene(demo)
@@ -672,11 +677,9 @@ class DemoDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         intro = QLabel(
             _(
-                "A demo plays sound through the open scene, mixes what every listener hears "
-                "and puts a video together. This scene plays the WAV file each source's Plays "
-                "names; an example's own demo plays recordings it downloads, or a sound it "
-                "makes (the pass-by demos' car), and can take a while. The messages say what "
-                "it is doing, and Cancel stops it."
+                "A demo plays sound through the scene and makes a video of what each listener "
+                "hears, and an example's script prints what it finds; the messages say what "
+                "they are doing, and Cancel stops them."
             )
         )
         intro.setWordWrap(True)
@@ -689,7 +692,8 @@ class DemoDialog(QDialog):
         self.picker.setToolTip(
             _(
                 "The demo to run: This scene, with the sounds its sources play, or one of "
-                "the example's own demos when the scene is an example's or a copy of one"
+                "the example's own demos or scripts when the scene is an example's or a "
+                "copy of one"
             )
         )
         if start is not None:
@@ -703,23 +707,21 @@ class DemoDialog(QDialog):
                 "the steps whose result is there already"
             )
         )
-        for text, widget in ((_("Demo"), self.picker), (_("Step"), self.step)):
-            label = QLabel(text)
-            label.setBuddy(widget)
-            label.setToolTip(widget.toolTip())
-            head.addRow(label, widget)
+        label = QLabel(_("Demo"))
+        label.setBuddy(self.picker)
+        label.setToolTip(self.picker.toolTip())
+        head.addRow(label, self.picker)
         # One demo only (a scene of no example): nothing to pick from.
         head.setRowVisible(self.picker, len(self.demos) > 1)
         layout.addLayout(head)
         self.about = QLabel()
         self.about.setWordWrap(True)
         layout.addWidget(self.about)
-        self.about_step = QLabel()
-        self.about_step.setWordWrap(True)
-        layout.addWidget(self.about_step)
 
         self.movement = MovementBox(walkers_of(scene if demos is None else None))
-        self.movement.setVisible(demos is None and scene is not None)
+        #: Whether the Movement box shows: for a scene's demos, not for a script.
+        self._moves = demos is None and scene is not None
+        self.movement.setVisible(self._moves)
         self.movement.changed.connect(self._refresh)
         self.movement.edit.connect(self._edit_movement)
         layout.addWidget(self.movement)
@@ -731,6 +733,36 @@ class DemoDialog(QDialog):
         self.options = QWidget()
         layout.addWidget(self.options)
 
+        # What fine-tunes a run, the files and folders it reads and writes and the
+        # command line: shown on asking.
+        self.more = QToolButton()
+        self.more.setText(_("Advanced"))
+        self.more.setCheckable(True)
+        self.more.setArrowType(Qt.ArrowType.RightArrow)
+        self.more.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.more.setAutoRaise(True)
+        self.more.setToolTip(
+            _(
+                "Show the step to run, what fine-tunes the run, the files and folders the "
+                "demo reads and writes, and the same run as a command"
+            )
+        )
+        self.more.toggled.connect(self._show_advanced)
+        layout.addWidget(self.more)
+        self.advanced = QWidget()
+        inner = self._advanced_layout = QVBoxLayout(self.advanced)
+        inner.setContentsMargins(0, 0, 0, 0)
+        steps = self._steps = QFormLayout()
+        label = QLabel(_("Step"))
+        label.setBuddy(self.step)
+        label.setToolTip(self.step.toolTip())
+        steps.addRow(label, self.step)
+        inner.addLayout(steps)
+        self.about_step = QLabel()
+        self.about_step.setWordWrap(True)
+        inner.addWidget(self.about_step)
+        self.advanced_options = QWidget()
+        inner.addWidget(self.advanced_options)
         self.command = QLineEdit()
         self.command.setReadOnly(True)
         self.command.setToolTip(_("The same run from a terminal, in the folder below"))
@@ -741,8 +773,10 @@ class DemoDialog(QDialog):
         command_label.setToolTip(self.command.toolTip())
         row = QFormLayout()
         row.addRow(command_label, self.command)
-        layout.addLayout(row)
-        layout.addWidget(self.folder)
+        inner.addLayout(row)
+        inner.addWidget(self.folder)
+        self.advanced.setVisible(False)
+        layout.addWidget(self.advanced)
         self.problem = QLabel()
         self.problem.setWordWrap(True)
         layout.addWidget(self.problem)
@@ -796,16 +830,22 @@ class DemoDialog(QDialog):
         self.about.setText(demo.description)
         self.step.blockSignals(True)
         self.step.clear()
-        self.step.addItems([step.name for step in demo.steps] + [ALL])
-        self.step.setCurrentText(ALL)
+        self.step.addItems([step.name for step in demo.steps] + ([] if demo.stepless else [ALL]))
+        self.step.setCurrentText(demo.steps[0].name if demo.stepless else ALL)
         self.step.blockSignals(False)
+        # A script is one step, and moves nothing.
+        self._steps.setRowVisible(self.step, not demo.stepless)
+        self.about_step.setVisible(not demo.stepless)
+        self.movement.setVisible(self._moves and not demo.stepless)
 
-        form = QWidget()
-        rows = QFormLayout(form)
-        rows.setContentsMargins(0, 0, 0, 0)
+        form, more = QWidget(), QWidget()
+        rows, more_rows = QFormLayout(form), QFormLayout(more)
+        for layout in (rows, more_rows):
+            layout.setContentsMargins(0, 0, 0, 0)
         self.fields = {}
         args = self.starts.get(demo.name) or starting_arguments(demo)
         self._show_movement(demo, args)
+        reads = reads_scene(demo)
         for option in demo.options:
             if option.kind == "movers":  # the Movement box's ticks
                 self.fields[option.name] = self.movement
@@ -823,17 +863,26 @@ class DemoDialog(QDialog):
                 widget.currentIndexChanged.connect(self._refresh)
             else:
                 widget.valueChanged.connect(self._refresh)
-            label = QLabel(option.option)
+            label = QLabel(_(option.label))
             label.setBuddy(widget)
-            label.setToolTip(tip)
-            rows.addRow(label, widget)
+            label.setToolTip(f"{tip} ({option.option})")
+            (more_rows if option.advanced or option is reads else rows).addRow(label, widget)
             self.fields[option.name] = widget
         self._layout.replaceWidget(self.options, form)
-        self.options.setParent(None)  # off the window at once, not when Qt deletes it
-        self.options.deleteLater()
-        self.options = form
+        self._advanced_layout.replaceWidget(self.advanced_options, more)
+        for old in (self.options, self.advanced_options):
+            old.setParent(None)  # off the window at once, not when Qt deletes it
+            old.deleteLater()
+        self.options, self.advanced_options = form, more
         self._refresh()
         if self.isVisible():  # another demo: as tall as its form, as wide as the window
+            self._fit(self.width())
+
+    def _show_advanced(self, shown: bool) -> None:
+        """Advanced: the step, what fine-tunes the run, its files and the command."""
+        self.more.setArrowType(Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow)
+        self.advanced.setVisible(shown)
+        if self.isVisible():
             self._fit(self.width())
 
     def _show_movement(self, demo: Demo, args: argparse.Namespace) -> None:

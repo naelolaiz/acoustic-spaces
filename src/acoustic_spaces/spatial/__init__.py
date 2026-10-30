@@ -6,7 +6,9 @@ Every format turns the arrival directions of a simulated response into channels:
 - :class:`Loudspeakers`: vector base amplitude panning onto a named layout (stereo, 5.0,
   7.0, 5.0.4, 7.0.4, and 5.1 to 7.1.4 with a silent LFE channel) or any list of speakers;
 - :class:`Binaural`: the two ears, with HRTFs from a SOFA file or a spherical head model;
-- :class:`Mono`: the omnidirectional response.
+- :class:`Mono`: the omnidirectional response;
+- :class:`Microphone`: a listener's microphone, a first-order pattern or a coincident
+  pair (XY, Blumlein, MS) that its mono output picks up through (:func:`for_listener`).
 
 Early reflections keep their exact direction. The late part comes from the arrival
 directions the stochastic ray tracer records (or from all around, for the statistical
@@ -18,6 +20,7 @@ from acoustic_spaces.spatial.ambisonics import MAX_ORDER, Ambisonics, real_spher
 from acoustic_spaces.spatial.directions import fibonacci_sphere, from_angles, to_angles, to_head
 from acoustic_spaces.spatial.hrtf import HRTF, read_sofa, spherical_head
 from acoustic_spaces.spatial.loudspeakers import LAYOUTS, Loudspeakers, Speaker
+from acoustic_spaces.spatial.microphone import Microphone, for_listener
 from acoustic_spaces.spatial.render import (
     Binaural,
     Format,
@@ -34,9 +37,11 @@ __all__ = [
     "Binaural",
     "Format",
     "Loudspeakers",
+    "Microphone",
     "Mono",
     "Speaker",
     "fibonacci_sphere",
+    "for_listener",
     "from_angles",
     "from_output",
     "read_sofa",

@@ -193,6 +193,52 @@
   `concert_stage`'s sources and listeners with the concert's one by one, which would
   have caught it. The memory estimate's checks in the docs, in one
   batch and in the default 10, are measured again on `stadium_concert`.
+- The editor's Run demo window is simpler: it shows the options that change what a demo
+  plays, labelled in words (`Option.label`, each one's flag in its tip), and keeps the
+  step, what fine-tunes the run, the files and folders the demo reads and writes and
+  the command line under **Advanced**, closed until opened (`Option.advanced`); its
+  introduction is one line. The labels are translated in the five catalogs.
+- The editor runs an example's scripts that are no demos too, listed in the Run demo
+  window after its demos: the stadium concert's and the concert stage's `align.py`,
+  `feedback.py` and `near_field.py`, the town hall's `delays.py` and the listening
+  room's `bass.py`, each one step, its options its own arguments, what it prints in the
+  Messages panel (`demos.scripts_of`, `demos.script_demo`: a script with a `TITLE` and
+  a `parser()`; `Demo.stepless`, `Option.positional`).
+- Listeners can be microphones: a listener's `pattern` is what its mono output picks up
+  through, aimed where it faces: a first-order pattern (subcardioid to figure8, as
+  sources take them), or a coincident pair in two channels, left and right: an XY pair
+  (`{pair: xy, angle_deg, capsule}`), a Blumlein pair or an MS pair decoded to left and
+  right (`{pair: ms, mid, side_db}`). Each early path and late impulse is picked up from
+  its direction (`spatial.Microphone`, `spatial.for_listener`), in `simulate`'s mono
+  files, `auralize`, walkthroughs, movements and the editor's listening; the report's
+  mono output names the microphone. The parameters, the echo check and the other
+  outputs stay an omnidirectional listener's, and `validate` warns about a pattern in a
+  scene without a mono output. The editor's listener form has a **Microphone** choice
+  (with a pair's angle, capsules, mid and side), and the selected listener shows its
+  microphone's balloon in the 3D view, one for each capsule of a pair; its angles' tips
+  say they aim it. Translated in the five catalogs. A listener without a pattern renders
+  as before.
+- `scene` exports `Orientation`, `XYPair`, `BlumleinPair` and `MSPair`.
+- Everything a demo plays is in its example's scene, so the editor shows it: the stadium
+  concert's band (its Band group: the drum kit, the singer's voice, the guitar
+  amplifier), the church's choir, organ pipes and the places its demo tours (Choir,
+  Organ pipes, Choir concert), the lakeside concert's sound system (PA) and its listener
+  behind the stage, and the gallery's listener `standing`, where the visitor looks
+  round. Each is left out of the example's own simulations until ticked, so the
+  examples' results stay as they were (the same to the last bit); the demos take them in
+  instead of adding their own, and a test fails when a demo plays a source or listener
+  its example lacks. The church demo's places take the church's names for `--tour` and
+  `--listeners` (`nave-back`, `side-aisle`, `front-pews`, `conductor`, `in-the-choir`,
+  `nave-middle`), and the gallery demo's `--stand` moves its listener when given.
+- The stadium concert and the concert stage also hold the singer's microphone
+  (`singer_mic`, a supercardioid listener 5 cm in front of the singer's voice, aimed at
+  it). `feedback.py` (both examples') takes the microphone and the voice from the scene
+  as they are, instead of turning first-order Ambisonics into the pattern by hand at a
+  mouth of its own: the voice is where the stadium demo has always had it, 20 cm in
+  front of the singer's head (`feedback.py` put the mouth 9 cm in front and 8 cm down),
+  and the supercardioid's a is 0.37, as the scene's patterns have it (0.366 before). Its
+  gain before feedback moves by up to 0.8 dB in a band and 0.4 dB as it stands, and the
+  frequencies where it rings first change.
 
 ## 4.0.1
 

@@ -294,6 +294,10 @@ Examples:
   movements; each downloads its recordings, mixes them at every listener and makes a
   video that tours them. The stadium's pictures show where the crowd stands and sits,
   the empty seats, and how much each takes up.
+- [x] Everything a demo plays in its example's scene, left out of the example's own
+  simulations until ticked, so the editor shows it: the stadium's band and the singer's
+  microphone, the church's choir, organ pipes and toured places, the lakeside's sound
+  system and its listener behind the stage, the gallery's place to look round from.
 - [x] A walk through a gallery, the fifth demo and the first of speech: a guide talks
   while a visitor walks away and round a corner, then turns their head in front of
   them (the `gallery` example).
@@ -359,6 +363,10 @@ Movement:
 
 Editor:
 
+- [x] A simpler Run demo window: the options that change what a demo plays, in words,
+  and the step, the paths, what fine-tunes a run and the command under Advanced.
+- [x] An example's scripts that are no demos (the singer's microphone's feedback, the
+  loudspeakers' alignment) run from the Run demo window.
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.
@@ -498,3 +506,8 @@ Next version:
   render their energy on average over seeds instead of adding in amplitude; the
   echogram's 63 and 125 Hz reading no longer takes their interference a second time
   from the band above.
+- [x] Listeners as microphones: a first-order pattern, or a coincident pair (XY,
+  Blumlein, MS) in two channels, that the mono output picks up through, aimed where the
+  listener faces; chosen in the editor's listener form and drawn as balloons in the 3D
+  view.
+- [ ] Spaced pairs whose late parts correlate as real capsules' do at low frequencies.

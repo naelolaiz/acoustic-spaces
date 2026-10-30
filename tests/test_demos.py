@@ -27,7 +27,9 @@ from acoustic_spaces.demos import (
     list_demos,
     music,
     pipeline,
+    scripts_of,
     shell_line,
+    sibling,
 )
 
 RATE = 8000
@@ -437,6 +439,49 @@ def test_the_examples_demos_are_listed() -> None:
         if demo.scene_from:
             assert demo.scene_step() is not None
     assert demo_for("shoebox") is None
+
+
+def test_an_examples_script_runs_as_a_demo_of_one_step(tmp_path: Path) -> None:
+    """An example's scripts with a parser() (not its demos, nor what writes its model)
+    run as demos of one step: their options from their own arguments, the scene they
+    read given first without a flag, a file they write under its own flag."""
+    scripts = {demo.name: demo for demo in scripts_of("stadium_concert")}
+    assert set(scripts) == {"align", "feedback", "near_field"}
+    feedback = scripts["feedback"]
+    assert feedback.stepless and [s.name for s in feedback.steps] == ["run"]
+    assert feedback.title == "Feedback of the singer's microphone"
+    assert feedback.description.startswith("Feedback of the singer's microphone: how much")
+    options = {o.name: o for o in feedback.options}
+    scene, rays, out = options["scene"], options["rays"], options["out"]
+    assert scene.positional and scene.kind == "file" and scene.default == Path("scene.yaml")
+    assert scene.advanced and out.advanced and not rays.advanced
+    assert (rays.kind, rays.default, rays.option) == ("int", None, "--rays")
+    assert (out.kind, out.default) == ("path", Path("feedback.wav"))
+    assert feedback.command("run", feedback.defaults()) == "python feedback.py"
+    args = feedback.defaults()
+    args.scene, args.rays, args.out = tmp_path / "copy.yaml", 30, Path("loop.wav")
+    assert feedback.arguments(args) == [
+        str(tmp_path / "copy.yaml"),
+        "--rays",
+        "30",
+        "--out",
+        "loop.wav",
+    ]
+    argv = feedback.run_argv("run", args)
+    assert argv[1:] == [
+        str(feedback.script),
+        str(tmp_path / "copy.yaml"),
+        "--rays",
+        "30",
+        "--out",
+        str(feedback.folder / "loop.wav"),
+    ]
+    # Its arguments parse as the script's own parser parses them.
+    parsed = sibling(feedback.script, "feedback").parser().parse_args(argv[2:])
+    assert Path(parsed.scene) == tmp_path / "copy.yaml" and parsed.rays == 30
+    assert [d.name for d in scripts_of("town_hall_pa")] == ["delays"]
+    assert [d.name for d in scripts_of("listening_room")] == ["bass"]
+    assert scripts_of("shoebox") == [] and scripts_of("measurement") == []
 
 
 # --------------------------------------------------------------------------- the mixes

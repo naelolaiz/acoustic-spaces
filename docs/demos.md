@@ -61,13 +61,15 @@ demos take `--input car=engine.wav`, a dry recording played as the car's sound.
 
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demos
-(the stadium has two: its concert first, then the helicopter over it), each reading the
+(the stadium has two: its concert first, then the helicopter over it), then the
+example's scripts that are no demos (the stadium's `feedback.py`, say), each reading the
 open scene where it would read the example's (a copy is known by its
 folder's name or, saved anywhere, by the scene's name: a renamed scene is a scene of
-its own). Pick the demo and the step,
-fill in the options (they start at the same defaults the command line uses), and it
-runs in the background with its messages in the **Messages** panel, **Cancel** stopping
-it. The sources are a table, each with what it plays and the file it plays instead:
+its own). Pick the demo and fill in the options that change what it plays, labelled in
+words (they start at the same defaults the command line uses, each one's flag in its
+tip), and it runs in the background with its messages in the **Messages** panel,
+**Cancel** stopping it. **Advanced** holds the step, what fine-tunes the run, the files
+and folders the demo reads and writes, and the command line. The sources are a table, each with what it plays and the file it plays instead:
 **Choose WAV…** gives the selected one a file, **Default** takes it back. The
 **Movement** box lists the sources and listeners of the scene that have a walk, each
 with how it goes, how far and for how long, ticked when it moves in the run: *This
@@ -238,7 +240,10 @@ pacem" three times: the organ alone on full stops, the choir alone, then the cho
 the organ on quiet stops, slowing into a held last chord and the church's reverberation
 (1:26 in all). It mixes the piece at six places and makes a video that tours them: under
 the organ at the back, along the south wall, the front pews, the conductor, the back row
-of the choir and the middle of the nave.
+of the choir and the middle of the nave. The choir, the organ's pipes and those places
+are the example's: its Choir, Organ pipes and Choir concert groups, left out of the
+church's own simulations until ticked in the editor, and its listeners `nave-back` and
+`nave-middle`.
 
 ```sh
 acoustic-spaces examples --copy . church && cd church
@@ -250,7 +255,7 @@ python church_demo.py render    # demo/seats: the whole piece at each listener
 python church_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
-Options: `--tour nave_back:0,conductor:25,...` (listener:start in seconds),
+Options: `--tour nave-back:0,conductor:25,...` (listener:start in seconds),
 `--listeners a,b` for `render`, `--format` for another output the simulation wrote
 (`ambix3`, `5.0`, ...; the video takes its first two channels), `--no-mp4` for the audio
 and stills only. The scene and its simulation go beside the script (`scene_choir.yaml`,
@@ -373,11 +378,12 @@ the line the video shows, the file's name unless given. Nothing is downloaded; t
 music goes to `demo/music/<file name>`, a folder of its own beside the presets', and
 `--input` goes on working on top of it.
 
-- **The band.** The example has loudspeakers only, so `band` adds the players as sources
-  on the stage, in a group of their own: a drum kit beside the drummer (116 dB sound
-  power, omni) playing the drums, the singer's voice (98 dB, subcardioid, facing the
-  audience) playing the vocal, and an amplifier behind the guitarist (112 dB, cardioid,
-  tilted up) playing the guitar, each from its own stem. On stage and near it the players
+- **The band.** The players are the example's sources on the stage, in its Band group,
+  which the concert's own simulations leave out until it is ticked; `band` takes them
+  in: a drum kit beside the drummer (116 dB sound power, omni) playing the drums, the
+  singer's voice (98 dB, subcardioid, facing the audience) playing the
+  vocal, and an amplifier behind the guitarist (112 dB, cardioid, tilted up) playing the
+  guitar, each from its own stem. On stage and near it the players
   are heard from where they stand; further out the sound system covers them.
 - **Who plays what.** The sound system plays the song's stereo master: the arrays, fills,
   towers and delays on the audience's left (-y) take the left channel, those on its right
@@ -492,8 +498,9 @@ to the end of the song; 2 by default), `--format` for another output the simulat
 wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and video;
 `scenes` and the two simulations come before it.
 
-- **The sound system.** `scenes` replaces the example's single source (120 dB sound
-  power) with a system as a lawn concert hangs it: two line arrays of eight boxes
+- **The sound system.** `scenes` plays, in place of the example's single source (120 dB
+  sound power), the example's PA group, left out of its own simulations until ticked: a
+  system as a lawn concert hangs it: two line arrays of eight boxes
   (`lake_array.yaml`, a generic box's pattern in `box.csv`, both made with the stadium
   example's `make_model.py`), 6.5 m up either side of the stage, 124 dB each, aimed down
   the lawn and, box by box, from 5° down at the last rows, where the lawn meets the water,
@@ -503,9 +510,10 @@ wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and vi
   that both arrive together there, playing both channels, rolled off above 125 Hz. The
   system is tuned at the audience as a system engineer tunes it (`eq_db`: the arrays' low
   mids up, their top octave up for the air): at 30 m every octave from 250 Hz to 4 kHz is
-  within 1 dB of 1 kHz, 8 kHz 1.5 dB down and 63 and 125 Hz 2 dB up. `scenes` also adds
-  a listener 140 m behind the stage, upwind, and lets the responses run 3.5 s, as the far
-  shore hears the stage 1.6 s late.
+  within 1 dB of 1 kHz, 8 kHz 1.5 dB down and 63 and 125 Hz 2 dB up. `scenes` also takes
+  in the example's listener 140 m behind the stage, upwind (`behind_stage`, left out as
+  the system is), and lets the responses run 3.5 s, as the far shore hears the stage
+  1.6 s late.
 - **The weather** is the example's: a breeze from the park out over the lake, 2.5 m/s
   10 m up, and two weather zones, the lake's (air 17 °C at the water, a degree warmer
   every 10 m up, and a 3.5 m/s breeze) and the village's (a 1 m/s breeze among the
@@ -582,7 +590,9 @@ python walk_demo.py all   # or speech, scene, walk, turn, video one at a time
 
 Options: `--talker M4` picks one of the corpus's 14 talkers, `--voice` how loud the
 guide speaks (relaxed, normal, raised, loud), `--stand 16,4` where the visitor stands
-for the turn, `--turn` the angles it holds, `--hrtf me.sofa` a measured head.
+for the turn (by default where the scene's `standing` listener does, left out of the
+gallery's own simulations), `--turn` the angles it holds, `--hrtf me.sofa` a measured
+head.
 
 - **The walk** is the example's visitor's: responses every 25 cm along it
   (`acoustic-spaces walkthrough`), the talk played along them so that the voice changes

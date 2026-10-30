@@ -34,6 +34,218 @@ sources:
   - name: organ
     position: [1.5, 0.0, 9.0]    # in the gallery above the entrance
     orientation: {yaw: 0}
+  # The choir and the organ church_demo.py plays, left out of the church's simulations
+  # until ticked. Nineteen singers stand in two gently curved rows 0.6 m apart in front
+  # of the altar, facing the nave: the women in the front row, the men on a step behind
+  # them, the back row's middle left free for the listener in-the-choir. Each sings at
+  # 88 dB of sound power (re 1 pW), near omni in the bass and beaming forward in the
+  # treble.
+  - name: singer_f1
+    group: Choir
+    enabled: false
+    position: [30.712, -2.4, 1.6]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_f5
+    group: Choir
+    enabled: false
+    position: [30.838, -1.8, 1.6]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_f2
+    group: Choir
+    enabled: false
+    position: [30.928, -1.2, 1.6]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_f3
+    group: Choir
+    enabled: false
+    position: [30.982, -0.6, 1.6]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_f8
+    group: Choir
+    enabled: false
+    position: [31, 0, 1.6]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_f4
+    group: Choir
+    enabled: false
+    position: [30.982, 0.6, 1.6]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_f6
+    group: Choir
+    enabled: false
+    position: [30.928, 1.2, 1.6]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_f7
+    group: Choir
+    enabled: false
+    position: [30.838, 1.8, 1.6]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_f9
+    group: Choir
+    enabled: false
+    position: [30.712, 2.4, 1.6]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_m1
+    group: Choir
+    enabled: false
+    position: [31.45, -3, 1.95]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_m4
+    group: Choir
+    enabled: false
+    position: [31.612, -2.4, 1.95]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_m2
+    group: Choir
+    enabled: false
+    position: [31.738, -1.8, 1.95]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_m10
+    group: Choir
+    enabled: false
+    position: [31.828, -1.2, 1.95]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_m3
+    group: Choir
+    enabled: false
+    position: [31.882, -0.6, 1.95]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_m5
+    group: Choir
+    enabled: false
+    position: [31.882, 0.6, 1.95]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_m8
+    group: Choir
+    enabled: false
+    position: [31.828, 1.2, 1.95]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_m7
+    group: Choir
+    enabled: false
+    position: [31.738, 1.8, 1.95]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_m6
+    group: Choir
+    enabled: false
+    position: [31.612, 2.4, 1.95]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  - name: singer_m11
+    group: Choir
+    enabled: false
+    position: [31.45, 3, 1.95]
+    orientation: {yaw: 180}
+    level_db: 88
+    directivity:
+      pattern: [omni, omni, omni, subcardioid, subcardioid,
+                cardioid, cardioid, cardioid]
+  # The organ in the gallery over the entrance: each division's pipes stand in two
+  # halves, the C side (C, D, E, F#, G#, A#) to the south and the C# side to the north,
+  # the manual's at 105 dB of sound power each, the pedal towers' at 102.
+  - name: organ_manual_c
+    group: Organ pipes
+    enabled: false
+    position: [1.2, -1.6, 9.5]
+    orientation: {yaw: 0}
+    level_db: 105
+    directivity:
+      pattern: [omni, omni, omni, omni, subcardioid, subcardioid, cardioid, cardioid]
+  - name: organ_manual_cis
+    group: Organ pipes
+    enabled: false
+    position: [1.2, 1.6, 9.5]
+    orientation: {yaw: 0}
+    level_db: 105
+    directivity:
+      pattern: [omni, omni, omni, omni, subcardioid, subcardioid, cardioid, cardioid]
+  - name: organ_pedal_c
+    group: Organ pipes
+    enabled: false
+    position: [0.9, -3.8, 8.6]
+    orientation: {yaw: 0}
+    level_db: 102
+    directivity:
+      pattern: [omni, omni, omni, omni, subcardioid, subcardioid, cardioid, cardioid]
+  - name: organ_pedal_cis
+    group: Organ pipes
+    enabled: false
+    position: [0.9, 3.8, 8.6]
+    orientation: {yaw: 0}
+    level_db: 102
+    directivity:
+      pattern: [omni, omni, omni, omni, subcardioid, subcardioid, cardioid, cardioid]
 listeners:
   - name: nave-front
     position: [28.0, 3.0, 1.2]
@@ -42,6 +254,28 @@ listeners:
     position: [18.0, -4.0, 1.2]
   - name: nave-back
     position: [5.0, 2.0, 1.2]
+  # The other places church_demo.py tours, with nave-back and nave-middle, left out of
+  # the church's simulations until ticked.
+  - name: side-aisle
+    group: Choir concert
+    enabled: false
+    position: [13, -6, 1.2]
+    orientation: {yaw: 0}
+  - name: front-pews
+    group: Choir concert
+    enabled: false
+    position: [26.5, 2.5, 1.2]
+    orientation: {yaw: 0}
+  - name: conductor
+    group: Choir concert
+    enabled: false
+    position: [29.4, 0, 1.7]
+    orientation: {yaw: 0}
+  - name: in-the-choir
+    group: Choir concert
+    enabled: false
+    position: [31.8, 0, 1.95]
+    orientation: {yaw: 180}
 simulation:
   early: {method: ray_tracing, max_order: 3}
   late: {method: stochastic_ray_tracing, rays: 25000}

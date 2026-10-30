@@ -8,7 +8,8 @@ import numpy as np
 import pytest
 
 from acoustic_spaces import Scene, simulate
-from acoustic_spaces.scene import Output
+from acoustic_spaces.directivity import PATTERNS
+from acoustic_spaces.scene import Listener, Output
 from acoustic_spaces.scene.model import Orientation
 from acoustic_spaces.spatial import (
     HRTF,
@@ -19,6 +20,7 @@ from acoustic_spaces.spatial import (
     Mono,
     Speaker,
     fibonacci_sphere,
+    for_listener,
     from_angles,
     from_output,
     read_sofa,
@@ -27,6 +29,7 @@ from acoustic_spaces.spatial import (
     to_angles,
     to_head,
 )
+from acoustic_spaces.spatial.microphone import blumlein, first_order, ms, xy
 
 SHOEBOX_OBJ = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "shoebox.obj"
 FS = 48_000
@@ -432,6 +435,112 @@ def test_statistical_tail_arrives_from_all_around() -> None:
     order = np.floor(np.sqrt(np.arange(9))).astype(int)
     # In a diffuse field each SN3D channel of order n carries 1 / (2n + 1) of W.
     np.testing.assert_allclose(energy[1:] * (2 * order[1:] + 1) / energy[0], 1.0, atol=0.25)
+
+
+def _first_order(ambisonics: np.ndarray, w: float, d) -> np.ndarray:
+    """What a capsule ``w + d . v`` picks up, from first-order AmbiX (W, Y, Z, X)."""
+    x, y, z = d
+    return ambisonics @ np.array([w, y, z, x])
+
+
+def test_a_listeners_microphone_is_its_first_order_field(response) -> None:
+    ambisonics = response.spatial_impulse_response(Ambisonics(1), FS)
+    scale = np.abs(ambisonics[:, 0]).max()
+    for pattern in ("subcardioid", "cardioid", "supercardioid", "hypercardioid", "figure8"):
+        a = PATTERNS[pattern]
+        ir = response.spatial_impulse_response(first_order(pattern), FS)
+        assert ir.shape == (len(ambisonics), 1)
+        expected = _first_order(ambisonics, a, (1.0 - a, 0.0, 0.0))
+        np.testing.assert_allclose(ir[:, 0], expected, atol=1e-9 * scale)
+    # A pair's channels too, the left capsule aimed to the left of the front.
+    half = math.radians(110.0) / 2.0
+    ir = response.spatial_impulse_response(xy(110.0, "supercardioid"), FS)
+    a = PATTERNS["supercardioid"]
+    for channel, sign in zip(ir.T, (1.0, -1.0), strict=True):
+        d = (1.0 - a) * np.array([math.cos(half), sign * math.sin(half), 0.0])
+        np.testing.assert_allclose(channel, _first_order(ambisonics, a, d), atol=1e-9 * scale)
+    ir = response.spatial_impulse_response(ms("cardioid", 6.0), FS)
+    g = 10.0 ** (6.0 / 20.0)
+    for channel, sign in zip(ir.T, (1.0, -1.0), strict=True):
+        expected = _first_order(ambisonics, 0.5, (0.5, sign * g, 0.0))
+        np.testing.assert_allclose(channel, expected, atol=1e-9 * scale)
+
+
+def test_a_microphone_hears_the_direct_sound_through_its_pattern(response) -> None:
+    mono = response.impulse_response(FS)
+    k = _direct(response)
+    direct = slice(k - 2, k + 3)
+    # The source is 30 degrees to the listener's left.
+    for pattern in ("cardioid", "figure8"):
+        a = PATTERNS[pattern]
+        ir = response.spatial_impulse_response(first_order(pattern), FS)[:, 0]
+        gain = a + (1.0 - a) * math.cos(math.radians(30.0))
+        np.testing.assert_allclose(ir[direct], gain * mono[direct], atol=0.02 * abs(mono).max())
+    left, right = response.spatial_impulse_response(blumlein(), FS)[direct].T
+    peak = np.argmax(np.abs(mono[direct]))
+    # Figure-eights aimed 45 degrees to each side: cos 15 and cos 75 degrees.
+    assert left[peak] / mono[direct][peak] == pytest.approx(math.cos(math.radians(15.0)), abs=0.02)
+    assert right[peak] / mono[direct][peak] == pytest.approx(math.cos(math.radians(75.0)), abs=0.02)
+
+
+def test_a_microphone_in_a_diffuse_field_picks_up_its_random_energy_efficiency() -> None:
+    response = simulate(_scene({"method": "statistical"}))["s", "l"]
+    tail = slice(_direct(response) + int(0.1 * FS), None)
+    omni = np.sum(response.impulse_response(FS)[tail] ** 2)
+    for pattern in ("cardioid", "supercardioid", "figure8"):
+        a = PATTERNS[pattern]
+        ir = response.spatial_impulse_response(first_order(pattern), FS)
+        # Its energy over the sphere: a^2 + (1 - a)^2 / 3, 1/3 for a cardioid.
+        efficiency = a**2 + (1.0 - a) ** 2 / 3.0
+        assert np.sum(ir[tail] ** 2) / omni == pytest.approx(efficiency, rel=0.25)
+
+
+def test_a_listeners_pattern_picks_its_mono_output() -> None:
+    scene = _scene({})
+    plain = scene.listeners[0]
+    assert for_listener(Mono(), plain) == Mono()
+    omni = plain.model_copy(update={"pattern": "omni"})
+    assert for_listener(Mono(), omni) == Mono()
+    listener = Listener.model_validate({"name": "m", "position": [0, 0, 0], "pattern": "cardioid"})
+    assert for_listener(Mono(), listener) == first_order("cardioid")
+    # Only the mono output: the others hear as they do.
+    assert for_listener(Binaural(), listener) == Binaural()
+    pairs = {
+        "xy": (
+            {"pair": "xy", "angle_deg": 120, "capsule": "hypercardioid"},
+            xy(120, "hypercardioid"),
+        ),
+        "blumlein": ({"pair": "blumlein"}, blumlein()),
+        "ms": ({"pair": "ms", "mid": "figure8", "side_db": -3}, ms("figure8", -3)),
+    }
+    for spec, expected in pairs.values():
+        listener = Listener.model_validate({"name": "m", "position": [0, 0, 0], "pattern": spec})
+        heard = for_listener(Mono(), listener)
+        assert heard == expected
+        assert heard.channel_names == ["L", "R"]
+    for bad in (
+        "lambert",
+        {"pair": "ab"},
+        {"pair": "blumlein", "angle_deg": 90},
+        {"pair": "xy", "angle_deg": 0},
+        {"pair": "xy", "mid": "cardioid"},
+    ):
+        with pytest.raises(ValueError):
+            Listener.model_validate({"name": "m", "position": [0, 0, 0], "pattern": bad})
+
+
+def test_a_microphones_capsules_are_its_channels() -> None:
+    directions = fibonacci_sphere(200)
+    for microphone in (first_order("supercardioid"), xy(70.0, "cardioid"), blumlein(), ms()):
+        gains = microphone.gains(directions)
+        for k, (pattern, turn) in enumerate(microphone.capsules()):
+            # The pattern aimed by the turn, scaled to the channel's gain straight ahead.
+            on_axis = microphone.gains(turn[:, 0])[0, k]
+            local = directions @ turn
+            a = pattern.a[0]
+            np.testing.assert_allclose(
+                on_axis * (a + (1.0 - a) * local[:, 0]), gains[:, k], atol=1e-12
+            )
 
 
 def test_outputs_in_scene_files() -> None:

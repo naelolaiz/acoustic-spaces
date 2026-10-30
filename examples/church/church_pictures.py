@@ -302,7 +302,7 @@ class Pictures:
         img.alpha_composite(layer)
         crop = Image.new("RGBA", img.size, (0, 0, 0, 0))
         ImageDraw.Draw(crop).rectangle(view.rect(34.6, -1.2, 35.6, 1.2), fill=ALTAR)
-        if listener in ("conductor", "in_the_choir"):
+        if listener in ("conductor", "in-the-choir"):
             self.rays(crop, view, listener)
         self.draw_sources(crop, view, 9)
         draw_crop = ImageDraw.Draw(crop)
@@ -328,7 +328,7 @@ class Pictures:
                         MUTED,
                         "ma" if front else "md",
                     )
-        for name in ("conductor", "in_the_choir"):
+        for name in ("conductor", "in-the-choir"):
             if name in self.listeners:
                 item = self.listeners[name]
                 if name == listener:
@@ -469,7 +469,7 @@ class Pictures:
         section = View(
             "section", 600, 90 + (y1 - y0) * scale + 30, scale, (x0, 0.0, x1, self.height)
         )
-        listener = "nave_middle" if "nave_middle" in self.listeners else None
+        listener = "nave-middle" if "nave-middle" in self.listeners else None
         self.now = ("choir", "organ")
         self.church(img, plan, listener, 5)
         self.church(img, section, listener, 5)

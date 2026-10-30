@@ -85,11 +85,22 @@ def arrivals(
     return out
 
 
+#: Its name in the editor's Run demo window.
+TITLE = "When and how loud each loudspeaker arrives"
+
+
+def parser() -> argparse.ArgumentParser:
+    """Its arguments, which the editor's Run demo window asks for too."""
+    found = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    found.add_argument(
+        "scene", nargs="?", default=Path(__file__).with_name("scene.yaml"), help="the scene"
+    )
+    found.add_argument("--rays", type=int, help="rays per band (fewer is quicker)")
+    return found
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("scene", nargs="?", default=Path(__file__).with_name("scene.yaml"))
-    parser.add_argument("--rays", type=int, help="rays per band (fewer is quicker)")
-    args = parser.parse_args(argv)
+    args = parser().parse_args(argv)
     for listener, rows in arrivals(Room.from_yaml(args.scene), args.rays).items():
         everything = total([total(row.levels) for row in rows])
         print(f"\n{listener}: {everything:.1f} dB from all of them")
