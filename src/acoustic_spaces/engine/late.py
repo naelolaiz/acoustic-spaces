@@ -364,36 +364,36 @@ def _rooms(model: TraceModel, source: np.ndarray, air: np.ndarray, points) -> tu
 
 
 def band_groups(model: TraceModel) -> list[slice]:
-    """The bands each ray carries. Vector-based scattering turns a ray by its surface's
-    scattering coefficient, so where the bands' coefficients differ (the scattering of a
-    surface's size always makes them differ), every band is traced with rays of its own:
-    one direction for all would scatter the treble as much as the bass. With random
-    scattering, which weights each band by its own coefficient, or the same coefficient
-    in every band, one ray carries them all; so it does when the model asks for one
-    ray for all bands (``by_band`` off). Either way each band has the rays asked for,
-    so tracing band by band traces that many rays per band."""
+    """The bands each ray carries. Where the bands' scattering coefficients differ (the
+    scattering of a surface's size always makes them differ), every band is traced with
+    rays of its own. One ray for all bands would, with vector-based scattering, turn the
+    treble as much as the bass. With random scattering it goes diffusely with the bands'
+    mean coefficient as probability, and each band's energy is re-weighted by its own
+    coefficient over that mean: right on average, but over many reflections a band's
+    weight drifts towards zero and its energy rides on a few rays. With the same
+    coefficient in every band, one ray carries them all; so it does when the model asks
+    for one ray for all bands (``by_band`` off). Either way each band has the rays asked
+    for, so tracing band by band traces that many rays per band."""
     return group_bands(
         model.absorption,
         model.scattering,
         sized=model.surface_size is not None,
-        vector=model.vector_scattering,
         by_band=model.by_band,
     )
 
 
 def group_bands(
-    absorption: np.ndarray, scattering: np.ndarray, *, sized: bool, vector: bool, by_band: bool
+    absorption: np.ndarray, scattering: np.ndarray, *, sized: bool, by_band: bool
 ) -> list[slice]:
     """:func:`band_groups` for surfaces of ``absorption`` and ``scattering`` (rows of
-    bands), with the scattering of their size (``sized``), vector-based scattering
-    (``vector``) and ``by_band``."""
+    bands), with the scattering of their size (``sized``) and ``by_band``."""
     bands = np.shape(absorption)[1]
     # Faces that reflect nothing (openings) scatter nothing either.
     scattering = np.asarray(scattering)[np.any(np.asarray(absorption) < 1.0, axis=1)]
     uniform = bool(np.all(scattering == scattering[:, :1]))
     if sized:
         uniform = uniform and bool(np.all(scattering == 1.0))  # fully diffuse at any size
-    if not vector or not by_band or uniform:
+    if not by_band or uniform:
         return [slice(0, bands)]
     return [slice(b, b + 1) for b in range(bands)]
 

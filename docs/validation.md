@@ -31,7 +31,7 @@ request and checks:
 - G in the same box against Barron's revised theory: within 1 dB;
 - the statistical late method against the stochastic one in the same box, with the
   same absorption on every surface and scattering 0.3 and 1: G within 0.7 dB (up to
-  0.62 dB at scattering 0.3 and 0.43 dB at 1), C80 within 2.5 dB (higher from 1 kHz up,
+  0.60 dB at scattering 0.3 and 0.43 dB at 1), C80 within 2.5 dB (higher from 1 kHz up,
   where the rays decay up to 7 % slower than Eyring);
 - the late tail of the example box (absorbing ceiling, smooth walls, random
   scattering) from 10k rays with splitting against 1 million rays: within 4 dB on
@@ -58,7 +58,7 @@ request and checks:
   random scattering; a box of tiny surfaces decaying at Eyring's rate within 10 % where
   its smooth walls alone decay far slower; and a box that diffuses the bass and
   reflects the treble decaying at Eyring's rate in the bass only, each band traced with
-  rays of its own;
+  rays of its own, with vector-based and with random scattering;
 - third-octave bands: statistical runs in third octaves give the octave runs'
   parameters within 1 % or 0.1 dB from 250 Hz up (within 5 % or 0.4 dB at 63 and
   125 Hz, where the early paths add in pressure and three filters weigh their

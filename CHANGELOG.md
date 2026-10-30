@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Random scattering (`simulation.scattering.method: random`) traces each band with rays
+  of its own where the bands' scattering coefficients differ, as vector-based scattering
+  does: `by_band` applies to both now, and so does the editor's **Trace each band with
+  rays of its own**. With one ray for all bands, a reflection sends the ray in a Lambert
+  direction with the bands' mean coefficient as probability and re-weights each band by
+  its own coefficient over that mean: right on average, but over many reflections a
+  band's weight drifts towards zero and its energy rides on a few rays. The scattering
+  of the surfaces' size (on by default) makes the bands' coefficients differ, and in the
+  BRAS rooms random's T30 then had standard errors 15 to 180 times vector's; in the
+  coupled rooms (CR1) the reverberation chamber's T20 at 63 Hz from the first
+  loudspeaker came out 3.1 s against 8.9 s measured. A box that diffuses the bass and
+  reflects the treble now decays with random scattering as with vector-based scattering
+  in every band; with one ray, its treble decayed 146 times as fast as Eyring's rate. A
+  simulation with random scattering takes 3 to 4 times as long as before in the example
+  box and the lecture hall (about two thirds of vector's time); `by_band: false` traces
+  one ray for all bands as before. Vector-based scattering (the default) does not
+  change, nor does random scattering where every band has the same coefficient.
 - Standard errors: the late rays are traced in batches (`simulation.late.batches`, 10 by
   default; **Batches** in the editor), each with the random streams of its share of the
   rays: the same rays as at once, with the same result but for rounding, which can tip a

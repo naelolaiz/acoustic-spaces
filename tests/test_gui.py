@@ -679,7 +679,7 @@ def test_selection_and_forms(window) -> None:
     page.from_size.setChecked(False)
     scattering = window.document.scene.simulation.scattering
     assert scattering.method == "random" and not scattering.from_size
-    assert not page.by_band.isEnabled()  # random scattering weights every band anyway
+    assert page.by_band.isEnabled()  # random scattering traces band by band too
     assert window.document.scene.simulation.wave.enabled
     window.select("outputs")
     window.inspector.pages["outputs"].binaural.setChecked(False)

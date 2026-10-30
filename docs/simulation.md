@@ -153,7 +153,7 @@ simulation:
   scattering:
     method: vector     # or random
     from_size: true    # small, distant and grazed surfaces scatter more
-    by_band: true      # each band follows its own scattering (vector only)
+    by_band: true      # each band follows its own scattering
 ```
 
 - `vector` (default): every reflection sends the ray in the direction of the sum of its
@@ -169,7 +169,17 @@ simulation:
   `by_band: false` goes back to one ray for all bands, turned by their mean scattering.
 - `random`: the ray reflects specularly or, with the coefficient as probability, in a
   Lambert direction. This was the only model up to version 2. With smooth walls a few
-  rays then keep running between them, and the decay comes out longer.
+  rays then keep running between them, and the decay comes out longer. Where the bands'
+  coefficients differ, each band is traced with rays of its own here too; in the
+  example box and the lecture hall a simulation then takes about two thirds of vector's
+  time. `by_band: false` traces one ray for all bands, as random did up to 4.0.1: it
+  goes in a Lambert direction with the bands' mean coefficient as probability, and each
+  band's energy is re-weighted by its own coefficient over that mean. That is right on
+  average, but over many reflections a band's weight drifts towards zero and its energy
+  rides on a few rays. In the BRAS rooms, with the scattering of the surfaces' size,
+  T30's standard errors came out 15 to 180 times vector's, and the coupled rooms'
+  reverberation chamber decayed far too fast (from its first loudspeaker, T20 at 63 Hz
+  3.1 s against 8.9 s measured).
 - `from_size` (default on): a surface also scatters for its size, after Christensen and
   Rindel (2005), as in ODEON. The specular share falls below f_w = c d / (2 (w cos θ)²)
   and again below f_l = c d / (2 l²), where w and l are the surface's width and length,

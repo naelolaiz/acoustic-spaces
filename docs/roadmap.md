@@ -504,6 +504,9 @@ Next version:
   in three (`validation/bras_binaural.py`), and each run's largest standard error.
 - [ ] BRAS's coupled rooms with the door open by 30.4°, whose model has no closed inside:
   the door leaf cuts some 2 cm into the wall at its hinge.
+- [x] Random scattering traced band by band where the bands scatter differently, as
+  vector-based scattering is: with one ray for all bands, re-weighted band by band, its
+  decays in BRAS were noisy, and in the coupled rooms far too short.
 - [x] Paths over edges that arrive together rendered with phases of their own, so they
   render their energy on average over seeds instead of adding in amplitude; the
   echogram's 63 and 125 Hz reading no longer takes their interference a second time

@@ -3658,9 +3658,10 @@ class SimulationPage(Page):
         self.by_band = QCheckBox(_("Trace each band with rays of its own"))
         self.by_band.setToolTip(
             _(
-                "Vector-based scattering: where the bands scatter differently, each band "
-                "follows its own scattering (exact). Off: one ray for all bands, turned by "
-                "their mean scattering (faster)"
+                "Where the bands scatter differently, each band follows its own scattering "
+                "(exact). Off: one ray for all bands (faster). Vector-based scattering then "
+                "turns it by their mean scattering; random scattering re-weights each band, "
+                "which is noisy where the bands differ much"
             )
         )
         scattering_form.addRow(_("Direction"), self.scattering_method)
@@ -3898,7 +3899,6 @@ class SimulationPage(Page):
         _choose(self.scattering_method, s.scattering.method)
         self.from_size.setChecked(s.scattering.from_size)
         self.by_band.setChecked(s.scattering.by_band)
-        self.by_band.setEnabled(s.scattering.method == "vector")
         self.wave.setChecked(s.wave.enabled)
         self.wave_band.setCurrentText(str(s.wave.max_band_hz))
         self.wave_band.setEnabled(s.wave.enabled)
