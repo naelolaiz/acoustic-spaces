@@ -125,8 +125,8 @@ class TraceModel:
     surface_size: np.ndarray | None = None
     #: Vector-based scattering (the scene's ``simulation.scattering.method``).
     vector_scattering: bool = True
-    #: With vector-based scattering, each band traced with rays of its own where the
-    #: bands scatter differently (``simulation.scattering.by_band``).
+    #: Each band traced with rays of its own where the bands scatter differently
+    #: (``simulation.scattering.by_band``).
     by_band: bool = True
     #: The bands the coefficients (and so every energy traced) are in.
     bands: Resolution = "octave"

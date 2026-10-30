@@ -5101,13 +5101,15 @@ msgstr "Traccia ogni banda con raggi propri"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"Vector-based scattering: where the bands scatter differently, each band "
-"follows its own scattering (exact). Off: one ray for all bands, turned by "
-"their mean scattering (faster)"
+"Where the bands scatter differently, each band follows its own scattering "
+"(exact). Off: one ray for all bands (faster). Vector-based scattering then "
+"turns it by their mean scattering; random scattering re-weights each band, "
+"which is noisy where the bands differ much"
 msgstr ""
-"Dispersione vettoriale: dove le bande hanno dispersioni diverse, ciascuna "
-"segue la propria (esatto). Disattivato: un raggio per tutte le bande, "
-"deviato dalla dispersione media (più rapido)"
+"Dove le bande hanno dispersioni diverse, ciascuna segue la propria (esatto). "
+"Disattivato: un raggio per tutte le bande (più rapido). La dispersione "
+"vettoriale lo devia allora con la dispersione media; quella casuale ripesa "
+"ciascuna banda, il che dà rumore dove le bande differiscono molto"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Direction"

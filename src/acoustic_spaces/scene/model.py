@@ -2512,9 +2512,11 @@ class Scattering(_Model):
     by_band: bool = Field(
         default=True,
         description=(
-            "vector only: where the bands scatter differently, trace each band with rays "
-            "of its own (exact; slower), or turn one ray for all bands by their mean "
-            "scattering (faster; scatters the treble like the bass)"
+            "where the bands scatter differently, trace each band with rays of its own "
+            "(exact; slower), or one ray for all bands (faster): vector turns it by their "
+            "mean scattering, which scatters the treble like the bass; random re-weights "
+            "each band by its own scattering, which is right on average but noisy where "
+            "the bands differ much"
         ),
     )
 

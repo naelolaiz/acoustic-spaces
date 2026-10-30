@@ -250,7 +250,6 @@ def _band_groups(room: Room, settings: Simulation) -> int:
         np.array([a for a, _ in coefficients]),
         np.array([s for _, s in coefficients]),
         sized=scattering.from_size,
-        vector=scattering.method == "vector",
         by_band=scattering.by_band,
     )
     return len(found)

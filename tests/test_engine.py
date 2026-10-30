@@ -450,17 +450,17 @@ def test_statistical_tail_follows_eyring() -> None:
 
 @pytest.mark.parametrize("scattering", [0.3, 1.0])
 def test_statistical_and_stochastic_methods_agree(scattering) -> None:
-    # The shoebox example's box with the same absorption on every surface, so the field
-    # is about diffuse. Over both listeners, every band and seeds 3, 5, 7 and 11, the
-    # statistical G is within 0.62 dB of the stochastic one at scattering 0.3 (vector-based
-    # scattering, with the walls' size; 0.23 dB with random scattering) and within 0.43
-    # dB at 1.0 (before its late part held the scattered share of the early reflections
-    # and the paths above the early order, it was up to 0.9 and 1.8 dB low). Its C80 is
-    # up to 1.3 and 2.2 dB higher, from 1 kHz up, where the tracer decays up to 7 %
-    # slower than Eyring; the statistical C80 is Barron's within 0.03 dB. With the
-    # example's own materials (absorbing ceiling, smooth walls) the tail at 0.3 is far
-    # from diffuse and C80 differs by up to 9 dB at 4 and 8 kHz, beyond any statistical
-    # tail.
+    # The shoebox example's box with the same absorption on every surface, so the field is
+    # about diffuse. Over both listeners, every band and seeds 3, 5, 7 and 11, the
+    # statistical G is within 0.60 dB of the stochastic one at scattering 0.3 (vector-based
+    # scattering, with the walls' size; 0.37 dB with random scattering, 0.23 dB with random
+    # scattering without the walls' size) and within 0.43 dB at 1.0 (before its late part
+    # held the scattered share of the early reflections and the paths above the early order,
+    # it was up to 0.9 and 1.8 dB low). Its C80 is up to 1.3 and 2.2 dB higher, from 1 kHz
+    # up, where the tracer decays up to 7 % slower than Eyring; the statistical C80 is
+    # Barron's within 0.03 dB. With the example's own materials (absorbing ceiling, smooth
+    # walls) the tail at 0.3 is far from diffuse and C80 differs by up to 9 dB at 4 and
+    # 8 kHz, beyond any statistical tail.
     results = {
         method: simulate(_diffuse_box({"late": {"method": method, "rays": 20_000}}, scattering))
         for method in ("stochastic_ray_tracing", "statistical")
