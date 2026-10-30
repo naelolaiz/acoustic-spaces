@@ -367,6 +367,8 @@ Editor:
   and the step, the paths, what fine-tunes a run and the command under Advanced.
 - [x] An example's scripts that are no demos (the singer's microphone's feedback, the
   loudspeakers' alignment) run from the Run demo window.
+- [x] The Run demo window says what a run downloads and how much, above Run; the
+  orchestra demo downloads its tracks itself, as the other demos do their recordings.
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.

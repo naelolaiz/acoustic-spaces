@@ -2001,6 +2001,11 @@ msgid "Runs in {folder}"
 msgstr "Draait in {folder}"
 
 #: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "This run downloads {what}."
+msgstr "Deze uitvoering downloadt {what}."
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "save the scene first (File > Save): the demo reads it from its file"
 msgstr ""
 "sla de scène eerst op (Bestand > Opslaan): de demo leest haar uit haar "

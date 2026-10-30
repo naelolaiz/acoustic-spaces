@@ -15,6 +15,9 @@ instead. A number
 shows its unit, and one whose default the scene gives (the pass-by demos' ``--speed``)
 says so at zero; the line under the form says what the options make of the run, where
 the demo says (how far, how fast and how long the car drives), under the Movement box.
+Above Run, a line says what the run downloads and how much: the recordings of a demo
+whose steps fetch them (:attr:`~acoustic_spaces.demos.Step.downloads`), until they are
+there.
 
 The Movement box lists the sources and listeners of the scene that have a walk, ticked
 when they move in the run. This scene's ticks start as Moves sets them in the scene and
@@ -777,6 +780,10 @@ class DemoDialog(QDialog):
         inner.addWidget(self.folder)
         self.advanced.setVisible(False)
         layout.addWidget(self.advanced)
+        # What the run downloads, where its steps say: above Run, whatever is open.
+        self.downloads = QLabel()
+        self.downloads.setWordWrap(True)
+        layout.addWidget(self.downloads)
         self.problem = QLabel()
         self.problem.setWordWrap(True)
         layout.addWidget(self.problem)
@@ -946,6 +953,9 @@ class DemoDialog(QDialog):
         self.folder.setText(_("Runs in {folder}").format(folder=demo.folder))
         self.summary.setText(self._summary(demo, args) or "")
         self.summary.setVisible(bool(self.summary.text()))
+        what = self._downloads(demo, step, args)
+        self.downloads.setText(_("This run downloads {what}.").format(what=what) if what else "")
+        self.downloads.setVisible(bool(what))
         problem = demo.check(args)
         if self.unsaved:
             problem = _("save the scene first (File > Save): the demo reads it from its file")
@@ -962,6 +972,25 @@ class DemoDialog(QDialog):
             return demo.summary(demo.resolved(args))
         except Exception:
             return None
+
+    @staticmethod
+    def _downloads(demo: Demo, step: str, args: argparse.Namespace) -> str | None:
+        """What the run downloads, as its steps say (:attr:`Step.downloads`), leaving out
+        the steps that are done; none when it downloads nothing or the options cannot
+        tell (the line below says what is wrong)."""
+        try:
+            values = demo.resolved(args)
+            steps = demo.steps if step == ALL else [demo.step(step)]
+            found = [
+                what
+                for s in steps
+                if s.downloads is not None
+                and not (s.done is not None and s.done(values))
+                and (what := s.downloads(values))
+            ]
+        except Exception:
+            return None
+        return "; ".join(found) or None
 
     @staticmethod
     def _plays(demo: Demo, args: argparse.Namespace) -> dict[str, str]:

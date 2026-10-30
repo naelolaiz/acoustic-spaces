@@ -4,13 +4,14 @@ video that tours them through three movements.
 The recording is the TU Berlin's anechoic one (Böhm, Ackermann and Weinzierl, Orchester
 Wiener Akademie; CC BY 4.0, https://doi.org/10.14279/depositonce-6729.2): 61 tracks, one
 per player, which the `orchestra` example puts on the stage as 61 sources. The three
-movements it has (I, II and IV) come as movement1.zip, movement2.zip and movement4.zip
-(560 to 710 MB each), downloaded by hand from the page behind that DOI. Run this from
-the folder of the example (`acoustic-spaces examples --copy . orchestra && cd orchestra`),
-in the Python environment acoustic-spaces is installed in, with ffmpeg on the PATH and
-the zips in it (or `--zips FOLDER`):
+movements it has (I, II and IV) come as movement1.zip, movement2.zip and movement4.zip:
+`tracks` reads the 61 tracks out of each on the TU Berlin's server, by HTTP range
+requests, without keeping the zip (2.0 GB for the three), or out of a copy of the zip
+downloaded before (`--zips FOLDER`, the example's folder by default). Run this from the
+folder of the example (`acoustic-spaces examples --copy . orchestra && cd orchestra`),
+in the Python environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
-    python orchestra_demo.py tracks    # the 61 tracks of each movement, out of the zips
+    python orchestra_demo.py tracks    # download the 61 tracks of each movement (2.0 GB)
     python orchestra_demo.py simulate  # acoustic-spaces simulate scene.yaml --out results
     python orchestra_demo.py render    # each stop of the tour: a movement at a seat, binaural
     python orchestra_demo.py video     # demo/tour.wav, the stills, demo/tour.mp4
@@ -67,6 +68,21 @@ MOVEMENTS = {
     2: ("II", "Allegretto scherzando", "movement2"),
     4: ("IV", "Allegro vivace", "movement4"),
 }
+#: Each movement's zip on the TU Berlin's server (DepositOnce), which answers range
+#: requests.
+BITSTREAMS = "https://api-depositonce.tu-berlin.de/server/api/core/bitstreams/"
+ZIPS = {
+    1: BITSTREAMS + "9fc848cb-33ec-435f-a6ea-bb73294a01b8/content",
+    2: BITSTREAMS + "5e704ff9-53c0-4378-a8ef-5d2e6cdc8388/content",
+    4: BITSTREAMS + "2b54758e-148e-439d-b687-2a960d704611/content",
+}
+#: Bytes a range request reads of a zip: the tracks lie one after the other in it, and
+#: the server takes about half a second to answer each request (in blocks of 4 MiB the
+#: three movements took 622 s, in these 189 s).
+BLOCK = 32 << 20
+#: MB the 61 tracks of each movement take to download in those blocks, as measured:
+#: nearly the whole zip, as the blocks of the last tracks hold the movement's mix.
+DOWNLOAD_MB = {1: 642, 2: 605, 4: 743}
 #: Source name = track file, as in auralize.sh.
 TRACKS = {
     "fl1": "01_Fl_1.wav",
@@ -135,45 +151,76 @@ def tracks_folder(args, movement: int) -> Path:
     return args.work / "tracks" / MOVEMENTS[movement][2]
 
 
+def missing_tracks(args, movement: int) -> list[str]:
+    """The tracks of ``movement`` not in the work folder yet."""
+    folder = tracks_folder(args, movement)
+    return [track for track in TRACKS.values() if not (folder / track).exists()]
+
+
 def tracks_done(args) -> bool:
     """Whether every track of every movement of the tour is in the work folder."""
-    return all(
-        (tracks_folder(args, movement) / track).exists()
-        for movement in movements_of(args)
-        for track in TRACKS.values()
-    )
+    return not any(missing_tracks(args, movement) for movement in movements_of(args))
+
+
+def copy_of(args, movement: int) -> Path | None:
+    """The movement's zip downloaded before, in ``--zips``: the zip, or the folder it was
+    unpacked into (movementN/anechoic, with every track); None when neither is there."""
+    name = MOVEMENTS[movement][2]
+    unpacked = args.zips / name / "anechoic"
+    if all((unpacked / track).exists() for track in TRACKS.values()):
+        return unpacked
+    zip_path = args.zips / f"{name}.zip"
+    return zip_path if zip_path.exists() else None
+
+
+def tracks_download(args) -> str | None:
+    """What ``tracks`` downloads: the tracks of the tour's movements that are neither in
+    the work folder nor in ``--zips``, and how much at most; None for nothing."""
+    needed = [m for m in movements_of(args) if missing_tracks(args, m) and copy_of(args, m) is None]
+    if not needed:
+        return None
+    numerals = [MOVEMENTS[m][0] for m in needed]
+    which = " and ".join([", ".join(numerals[:-1]), numerals[-1]] if len(needed) > 1 else numerals)
+    mb = sum(DOWNLOAD_MB[m] for m in needed)
+    size = f"{mb} MB" if mb < 1000 else f"{mb / 1000:.1f} GB"
+    if any(len(missing_tracks(args, m)) < len(TRACKS) for m in needed):
+        size = "at most " + size  # a download cut short goes on where it stopped
+    plural = "s" if len(needed) > 1 else ""
+    return f"the 61 tracks of movement{plural} {which} from the TU Berlin's server ({size})"
 
 
 def tracks(args) -> None:
-    """The 61 tracks of each movement of the tour, out of movementN.zip (``--zips``, the
-    example's folder by default), into demo/tracks/movementN; a folder already full is
-    kept, as is one the zip was unpacked into by hand (movementN/anechoic)."""
+    """The 61 tracks of each movement of the tour (not the zip's mix) into
+    demo/tracks/movementN, read out of movementN.zip on the TU Berlin's server by range
+    requests of :data:`BLOCK`, or out of the copy of it in ``--zips`` (:func:`copy_of`).
+    Tracks there already are kept, so a download cut short goes on where it stopped."""
     for movement in movements_of(args):
-        name = MOVEMENTS[movement][2]
         folder = tracks_folder(args, movement)
-        if all((folder / track).exists() for track in TRACKS.values()):
+        missing = missing_tracks(args, movement)
+        if not missing:
             print(f"{folder}: all {len(TRACKS)} tracks there")
             continue
-        unpacked = args.zips / name / "anechoic"
-        if all((unpacked / track).exists() for track in TRACKS.values()):
-            print(f"{name}: tracks in {unpacked}")
+        copy = copy_of(args, movement)
+        if copy is not None and copy.is_dir():
+            print(f"copying the tracks from {copy}")
             folder.mkdir(parents=True, exist_ok=True)
-            for track in TRACKS.values():
-                shutil.copyfile(unpacked / track, folder / track)
-            continue
-        zip_path = args.zips / f"{name}.zip"
-        if not zip_path.exists():
-            raise SystemExit(
-                f"error: no {zip_path}: download it from https://doi.org/10.14279/depositonce-6729.2"
-            )
-        with zipfile.ZipFile(zip_path) as archive:
-            members = {Path(name).name: name for name in archive.namelist()}
-            missing = [track for track in TRACKS.values() if track not in members]
-            if missing:
-                raise SystemExit(f"error: {zip_path} has no {missing[0]}")
-            for track in TRACKS.values():
-                fetch.copy_member(archive, members[track], folder / track)
-        print(f"wrote {len(TRACKS)} tracks to {folder}")
+            for track in missing:
+                part = folder / f"{track}.part"
+                shutil.copyfile(copy / track, part)
+                part.replace(folder / track)
+        else:
+            source = str(copy) if copy is not None else ZIPS[movement]
+            print(f"reading {source}" + ("" if copy is not None else " (range requests)"))
+            archive = zipfile.ZipFile(copy) if copy is not None else fetch.open_zip(source, BLOCK)
+            with archive:
+                members = {Path(name).name: name for name in archive.namelist()}
+                absent = [track for track in missing if track not in members]
+                if absent:
+                    raise SystemExit(f"error: {source} has no {absent[0]}")
+                for k, track in enumerate(missing, 1):
+                    fetch.copy_member(archive, members[track], folder / track)
+                    print(f"  {track} ({k} of {len(missing)})")
+        print(f"wrote {len(missing)} tracks to {folder}")
 
 
 # --------------------------------------------------------------------------- the mixes
@@ -388,7 +435,13 @@ DEMO = Demo(
     description=__doc__,
     script=Path(__file__),
     steps=[
-        Step("tracks", tracks, "the 61 tracks of each movement, out of the zips", tracks_done),
+        Step(
+            "tracks",
+            tracks,
+            "download the 61 tracks of each movement (2.0 GB for the three)",
+            tracks_done,
+            tracks_download,
+        ),
         SIMULATE,
         Step("render", render, "each stop of the tour: a movement at a seat, binaural"),
         Step("video", video, "tour.wav, the stills and tour.mp4 in the work folder"),
@@ -402,7 +455,14 @@ DEMO = Demo(
             filter="Scene files (*.yaml *.yml)",
         ),
         Option("results", "folder written by simulate", Path("results"), "folder"),
-        Option("zips", "the folder with movementN.zip", Path("."), "folder", steps=("tracks",)),
+        Option(
+            "zips",
+            "a folder with movementN.zip downloaded before (or unpacked into movementN); "
+            "the tracks of a movement not there come from the TU Berlin's server",
+            Path("."),
+            "folder",
+            steps=("tracks",),
+        ),
         *common_options(),
         input_option(),
         Option("movements", "only these movements, comma separated", None, steps=("tracks",)),

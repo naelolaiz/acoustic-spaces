@@ -43,13 +43,17 @@ def urlopen(url: str, headers: dict[str, str] | None = None, timeout: float = TI
 
 class RangeFile(io.RawIOBase):
     """A remote file read by HTTP range requests, in blocks kept for reuse, so that
-    zipfile can take a few members out of a large archive without downloading it."""
+    zipfile can take a few members out of a large archive without downloading it.
+    Each request costs a round trip to the server: larger blocks (``block``, bytes)
+    read large members faster, smaller ones waste less around small ones."""
 
     BLOCK = 4 << 20
-    KEPT = 16
+    #: Bytes of blocks kept (at least two blocks).
+    KEPT = 64 << 20
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, block: int = BLOCK):
         self.url, self.pos, self.cache = url, 0, {}
+        self.block, self.kept = block, max(2, self.KEPT // block)
         with urlopen(url, {"Range": "bytes=0-0"}) as response:
             content_range = response.headers.get("Content-Range")
             if content_range is None:
@@ -71,7 +75,7 @@ class RangeFile(io.RawIOBase):
 
     def _block(self, i: int) -> bytes:
         if i not in self.cache:
-            a, b = i * self.BLOCK, min(self.size, (i + 1) * self.BLOCK) - 1
+            a, b = i * self.block, min(self.size, (i + 1) * self.block) - 1
             data = b""
             for attempt in range(RETRIES):
                 try:
@@ -84,7 +88,7 @@ class RangeFile(io.RawIOBase):
                         raise
             if len(data) != b - a + 1:  # cut short every time: never pass it on as whole
                 raise OSError(f"{self.url}: bytes {a}-{b} came {len(data)} long, {RETRIES} times")
-            if len(self.cache) >= self.KEPT:
+            if len(self.cache) >= self.kept:
                 self.cache.pop(next(iter(self.cache)))
             self.cache[i] = data
         return self.cache[i]
@@ -95,7 +99,7 @@ class RangeFile(io.RawIOBase):
         n = max(0, min(n, self.size - self.pos))
         out = bytearray()
         while n > 0:
-            i, offset = divmod(self.pos, self.BLOCK)
+            i, offset = divmod(self.pos, self.block)
             chunk = self._block(i)[offset : offset + n]
             out += chunk
             self.pos += len(chunk)
@@ -108,9 +112,10 @@ class RangeFile(io.RawIOBase):
         return len(data)
 
 
-def open_zip(url: str) -> zipfile.ZipFile:
-    """A remote zip archive, its members read on demand by range requests."""
-    return zipfile.ZipFile(io.BufferedReader(RangeFile(url), 1 << 20))
+def open_zip(url: str, block: int = RangeFile.BLOCK) -> zipfile.ZipFile:
+    """A remote zip archive, its members read on demand by range requests of ``block``
+    bytes (:class:`RangeFile`)."""
+    return zipfile.ZipFile(io.BufferedReader(RangeFile(url, block), 1 << 20))
 
 
 def _copy(source, target, total: int | None, progress: Progress | None) -> None:

@@ -2927,6 +2927,48 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
     dialog.deleteLater()
 
 
+def test_demo_dialog_says_what_a_run_downloads(qapp, tmp_path: Path) -> None:
+    """Above Run, whatever is open, the Run demo window says what the run downloads and
+    how much, until it is there: the orchestra's tracks of the movements neither in the
+    work folder nor in --zips, nothing for a step that downloads nothing or a song of
+    your own."""
+    from acoustic_spaces.examples import copy_examples
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+
+    orchestra, stadium = copy_examples(tmp_path, ["orchestra", "stadium_concert"])
+    dialog = DemoDialog(scene=orchestra)
+    line = dialog.downloads
+    says = "This run downloads the 61 tracks of movement"
+    server = "from the TU Berlin's server"
+    assert dialog.picker.currentData() == "orchestra"
+    assert line.text() == f"{says}s I, II and IV {server} (2.0 GB)."
+    assert not line.isHidden() and not dialog.advanced.isAncestorOf(line)
+    dialog.step.setCurrentText("render")
+    assert line.isHidden()
+    dialog.step.setCurrentText("tracks")
+    assert not line.isHidden()
+    dialog.fields["movements"].setText("1")
+    assert line.text() == f"{says} I {server} (642 MB)."
+    zips = tmp_path / "zips"
+    zips.mkdir()
+    (zips / "movement1.zip").touch()
+    dialog.fields["zips"].set_value(zips)
+    assert line.isHidden() and not line.text()
+    dialog.fields["movements"].setText("")
+    assert line.text() == f"{says}s II and IV {server} (1.3 GB)."
+    dialog.deleteLater()
+    concert = DemoDialog(scene=stadium)
+    assert concert.picker.currentData() == "stadium"
+    assert concert.downloads.text().startswith(
+        "This run downloads the master and the 7 stems of spicy_funk_cake ("
+    )
+    song = tmp_path / "song.wav"
+    song.touch()
+    concert.fields["music"].set_value(song)
+    assert concert.downloads.isHidden()
+    concert.deleteLater()
+
+
 def test_run_demo_in_the_editor(window, qapp, monkeypatch, tmp_path: Path) -> None:
     """Run demo… runs the step it asks for in its own process, its messages in the
     panel, and Cancel stops it."""

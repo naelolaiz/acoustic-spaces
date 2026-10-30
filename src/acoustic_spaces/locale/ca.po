@@ -1998,6 +1998,11 @@ msgid "Runs in {folder}"
 msgstr "S'executa a {folder}"
 
 #: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "This run downloads {what}."
+msgstr "Aquesta execució baixa {what}."
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "save the scene first (File > Save): the demo reads it from its file"
 msgstr ""
 "deseu primer l'escena (Fitxer > Desar): la demostració la llegeix del seu "

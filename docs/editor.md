@@ -157,7 +157,9 @@ which frequencies each octave band holds.
   what fine-tunes the run (the tour's stops, how far apart a walk's places are
   simulated), the files and folders the demo reads and writes, and the command line it
   is about to run, so the same run can be repeated in a terminal. The window asks for a
-  scene with changes to be saved first, as the demo reads the file. An example's demo plays recordings it downloads, or a sound it
+  scene with changes to be saved first, as the demo reads the file. An example's demo
+  plays recordings it downloads, which the line above **Run** names with their size
+  until they are there (the orchestra's three movements are 2.0 GB), or a sound it
   makes (the pass-by demos' car), and can take a while. A demo writes beside the scene
   (*This scene* into `demo/`), or under your home folder when that folder cannot be
   written.

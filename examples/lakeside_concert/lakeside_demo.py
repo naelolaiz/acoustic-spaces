@@ -63,8 +63,9 @@ from acoustic_spaces.demos.audio import mono, read, write
 
 #: The songs the demo can play (``--song``): the files each one is made of (one here,
 #: a member of a zip archive read by HTTP range requests or a file of its own, as
-#: :mod:`acoustic_spaces.demos.music` fetches them), its tempo (beats a minute; the tour
-#: moves on every 8 bars) and the credit its licence asks for.
+#: :mod:`acoustic_spaces.demos.music` fetches them), the MB they take to download, its
+#: tempo (beats a minute; the tour moves on every 8 bars) and the credit its licence
+#: asks for.
 SONGS = {
     "spicy_funk_cake": {
         "files": [
@@ -74,6 +75,7 @@ SONGS = {
                 "Spicy_Funk_Cake.wav",
             )
         ],
+        "download_mb": 61,
         "bpm": 110.0,
         "credit": 'Music: Rhythmussportgruppe, "Spicy Funk Cake" (Niklas Dahlheimer), recorded '
         "for the DEGA at Hochschule Düsseldorf, CC BY 4.0 · doi.org/10.5281/zenodo.3601032",
@@ -85,6 +87,7 @@ SONGS = {
                 "masters_stereo/09 - Great British Summer.wav",
             )
         ],
+        "download_mb": 50,
         "bpm": 120.0,
         "credit": 'Music: Tom McKenzie, "Great British Summer" (album "Extraordinary", AlbumDB), '
         "CC BY 4.0 · doi.org/10.5281/zenodo.19683001",
@@ -97,6 +100,7 @@ SONGS = {
                 None,
             )
         ],
+        "download_mb": 6,
         "bpm": 90.0,
         "credit": 'Music: Software-Entwicklungskit, "Potassium" (album "Everything is Free"), '
         "CC0 1.0 · github.com/ichbinsoftware/everythingisfree",
@@ -175,6 +179,13 @@ def music_done(args) -> bool:
     folder = music_folder(args)
     names = [song_of(args)["name"], *CHANNELS]
     return all((folder / f"{name}.wav").exists() for name in names)
+
+
+def music_download(args) -> str | None:
+    """What ``music`` downloads: ``--song``, nothing for a song of your own."""
+    if args.music is not None:
+        return None
+    return f"the song {args.song} ({SONGS[args.song]['download_mb']} MB)"
 
 
 def music_step(args) -> None:
@@ -380,7 +391,13 @@ DEMO = Demo(
     description=__doc__,
     script=Path(__file__),
     steps=[
-        Step("music", music_step, "download the song and a signal per loudspeaker", music_done),
+        Step(
+            "music",
+            music_step,
+            "download the song and a signal per loudspeaker",
+            music_done,
+            music_download,
+        ),
         Step(
             "scenes",
             scenes,

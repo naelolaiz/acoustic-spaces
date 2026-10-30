@@ -204,6 +204,28 @@
   room's `bass.py`, each one step, its options its own arguments, what it prints in the
   Messages panel (`demos.scripts_of`, `demos.script_demo`: a script with a `TITLE` and
   a `parser()`; `Demo.stepless`, `Option.positional`).
+- The orchestra demo downloads its recording: `tracks` reads the 61 tracks of each
+  movement out of its zip on the TU Berlin's server by HTTP range requests, without
+  keeping the zip (2.0 GB for the three movements), where it asked for the zips to be
+  downloaded by hand. A zip downloaded before, or the folder it was unpacked
+  into, is read from `--zips` as before, and the tracks there already are kept, so a
+  download cut short goes on where it stopped.
+- The Run demo window says above **Run** what the run downloads and how much, until it
+  is there (`Step.downloads`): the orchestra's tracks of the movements still missing,
+  the church's takes and organ samples, the stadium's and the lake's song (nothing for
+  a song of your own), the gallery's talk.
+- `fetch.open_zip` and `fetch.RangeFile` take the size of the blocks they ask the
+  server for (`block`; 4 MiB as before), and keep 64 MiB of them. The orchestra's zips
+  are read in blocks of 32 MiB, as their server takes about half a second to answer
+  each request (189 s for the three movements here, 622 s in blocks of 4 MiB); the
+  church's archives in blocks of 1 MiB, as its takes are 1 to 2 MB each, which brings
+  its download from 183 MB to 127 MB.
+- The download sizes the demos give are the ones measured: the stadium's
+  "Spicy Funk Cake" is 313 MB to download (450 MB unpacked, which the docs gave as the
+  download), "Francium" 42 MB and "Rubidium" 43 MB (the docs said 800 MB for
+  "Francium"), the church's music 127 MB (it said about 100 MB), and the gallery's talk
+  reads 16 MB of the corpus's 148 MB archive for the default talker, up to 145 MB for
+  another.
 - Listeners can be microphones: a listener's `pattern` is what its mono output picks up
   through, aimed where it faces: a first-order pattern (subcardioid to figure8, as
   sources take them), or a coincident pair in two channels, left and right: an XY pair

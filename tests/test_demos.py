@@ -165,6 +165,41 @@ def test_a_remote_block_cut_short_every_time_fails(monkeypatch) -> None:
     assert asked.count("bytes=0-99") == fetch.RETRIES
 
 
+def test_a_remote_file_is_read_in_blocks_of_the_size_asked(monkeypatch) -> None:
+    """A remote archive is asked for in blocks of the size given (large ones read large
+    members in fewer requests), and keeps 64 MiB of them, two blocks at the least."""
+    data = bytes(range(256)) * 400
+    asked: list[str] = []
+
+    class Response:
+        def __init__(self, headers: dict, body: bytes) -> None:
+            self.headers, self.body = headers, body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return self.body
+
+    def urlopen(url, headers=None, timeout=fetch.TIMEOUT):
+        asked.append(headers["Range"])
+        a, b = (int(x) for x in headers["Range"].removeprefix("bytes=").split("-"))
+        return Response({"Content-Range": f"bytes {a}-{b}/{len(data)}"}, data[a : b + 1])
+
+    monkeypatch.setattr(fetch, "urlopen", urlopen)
+    remote = fetch.RangeFile("https://example.org/tracks.zip", 40_000)
+    remote.seek(39_990)
+    assert remote.read(20) == data[39_990:40_010]
+    remote.seek(-10, 2)
+    assert remote.read() == data[-10:]
+    assert asked == ["bytes=0-0", "bytes=0-39999", "bytes=40000-79999", "bytes=80000-102399"]
+    assert fetch.RangeFile("https://example.org/tracks.zip").kept == 16
+    assert fetch.RangeFile("https://example.org/tracks.zip", 64 << 20).kept == 2
+
+
 def test_music_fetches_tracks_once_and_sums_them(tmp_path: Path) -> None:
     """A track is the sum of its files, fetched once: a second run writes nothing, and
     the files it downloaded stay for it."""

@@ -15,7 +15,7 @@ lead, for the album's songs). Run it from the folder of the stadium example
 (`acoustic-spaces examples --copy . stadium_concert && cd stadium_concert`), in the
 Python environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
-    python stadium_demo.py music     # download the master and the stems (0.4 to 0.8 GB)
+    python stadium_demo.py music     # download the master and the stems (42 to 313 MB)
     python stadium_demo.py band      # scene_band.yaml: the scene with the band on the stage
     python stadium_demo.py simulate  # simulate scene_band.yaml into results_band, binaural
     python stadium_demo.py feeds     # one signal per loudspeaker, as loud as the scene says
@@ -123,6 +123,9 @@ def album_song(number: int, title: str, groups: dict[str, list[str]], **more) ->
     } | more
 
 
+#: The songs the demo can play (``--song``): the master and the stems, the MB they take
+#: to download (``music`` reads only them out of an archive), the tempo and the first
+#: downbeat, the tour's changes, the credit and what SOURCES.txt says of them.
 SONGS = {
     "spicy_funk_cake": {
         "master": [(RSG, RSG_SONG + "1_REFERENCE-MIX/Spicy_Funk_Cake.wav")],
@@ -136,6 +139,7 @@ SONGS = {
             "vocal": [(RSG, RSG_STEMS + "6_STEM_PROCESSED_VOX.wav")],
             "backing": [(RSG, RSG_STEMS + "7_STEM_PROCESSED_SHOUTS.wav")],
         },
+        "download_mb": 313,
         "bpm": 110.0,
         # After a pickup; the song is eleven phrases long, so the tour leaves out the
         # side of the pitch and the north stand's near seats.
@@ -182,6 +186,7 @@ SONGS = {
                 "BGVOX SCATTER OUTRO",
             ],
         },
+        download_mb=42,
         bpm=FRANCIUM_BPM,
         downbeat_s=FRANCIUM_DOWNBEAT_S,
         # Nineteen phrases and a half: the stops that take a section's start last two.
@@ -203,6 +208,7 @@ SONGS = {
             "vocal": ["VOX LEAD"],
             "backing": ["BGVOX"],
         },
+        download_mb=43,
         bpm=132.0,
         downbeat_s=0.0,  # the master starts on its first downbeat
         tour={},
@@ -318,6 +324,16 @@ def music_done(args) -> bool:
     """Whether the song's master and stems are in the folder."""
     folder = music_folder(args)
     return all((folder / f"{name}.wav").exists() for name in ("master", *song_of(args)["stems"]))
+
+
+def music_download(args) -> str | None:
+    """What ``music`` downloads: ``--song``'s master and stems, nothing for a song of
+    your own."""
+    if args.music is not None:
+        return None
+    song = SONGS[args.song]
+    stems = sum(len(files) for files in song["stems"].values())
+    return f"the master and the {stems} stems of {args.song} ({song['download_mb']} MB)"
 
 
 def music_step(args) -> None:
@@ -641,7 +657,13 @@ DEMO = Demo(
     description=__doc__,
     script=Path(__file__),
     steps=[
-        Step("music", music_step, "download the master and the stems (0.4 to 0.8 GB)", music_done),
+        Step(
+            "music",
+            music_step,
+            "download the master and the stems (42 to 313 MB)",
+            music_done,
+            music_download,
+        ),
         Step(
             "band",
             band,
