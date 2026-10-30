@@ -52,12 +52,14 @@
   IACC_L are compared with BRAS's binaural responses in the seminar room, the hall and
   the auditorium (`validation/bras_binaural.py`, with FABIAN's head-related impulse
   responses and the directivity of the QSC K8 loudspeakers): IACC_L is within one JND in
-  19 to 25 of each room's 30 loudspeaker and band values, IACC_E in 16 to 26, low in the
-  hall from 500 Hz to 2 kHz where many diffracted paths arrive together (see below). The
-  tables give each room's largest standard error, and in the coupled rooms each source's
-  averages. Since 4.0.1 the seminar room's and the hall's average differences in each
-  band move by 0.15 JNDs at most, but for the calibrated hall's (up to 0.67 JNDs), whose
-  fit lands on slightly different coefficients.
+  19 to 26 of each room's 30 loudspeaker and band values, IACC_E in 18 to 25, low in the
+  hall from 500 Hz to 2 kHz, where the simulated early sound is less alike at the two ears
+  than the measured (`validation/bras_iacc_parts.py`, new, renders one loudspeaker's
+  response whole and in parts). The tables give each room's largest standard error, and
+  in the coupled rooms each source's averages. Since 4.0.1 the seminar room's and the
+  hall's average differences move by 0.16 JNDs at most in every band but 125 Hz (which
+  the echogram's fix below moves by up to 2.6 JNDs), except the calibrated hall's (up to
+  0.68 JNDs), whose fit lands on slightly different coefficients.
 - Rendered responses (mono, binaural, Ambisonics and loudspeakers) give each path over
   an edge a phase of its own above the bands that add in pressure, drawn from the path
   and the response's seed and turned as far as other paths' sound reaches it where it
@@ -75,7 +77,9 @@
   reading, which needs no seed, so the low bands no longer depend on how much the
   pieces carry above them (`tests/test_coherent.py`); calibration reads the same way.
   The parameters `simulate` reports at 125 Hz move where many diffracted paths arrive
-  together, as in BRAS's rooms (see
+  together, as in BRAS's rooms: with the fitted absorption, the hall's EDT goes from 13
+  to 3.8 % short, its T20 from 17 to 19 % long and its C80 from 0.18 to 0.58 dB low, and
+  the seminar room's EDT from 1.5 to 3.9 % long and its C80 from 0.58 to 0.95 dB low (see
   [Validation](docs/validation.md#measured-rooms-bras)); outdoors every band adds in
   pressure, and nothing changes.
 - The validation report was checked claim by claim against the scripts and tests its

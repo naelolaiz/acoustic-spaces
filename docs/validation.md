@@ -523,11 +523,15 @@ the octave holds three third-octave bands whose values differ a lot, so averagin
 is not the same analysis. G is compared from seat to seat, as the level of the measured
 responses is uncertain by about 3 dB (see [Strength](#strength-g) below).
 
-The tables and plots in this section were made with this version on 29 October 2026, on
-4 cores of a cloud machine without a GPU, where the run times below were measured. The
-coupled rooms, the seminar room and the auditorium each run in 2 to 4.5 minutes and 0.6
-to 1.1 GiB (up to 1.3 GiB in third-octave bands); the hall takes 1.5 hours and 10.0 GiB
-(5.2 hours and 10.4 GiB calibrated, 3.3 hours and 11.8 GiB in third-octave bands),
+The tables and plots in this section were made with this version on 29 and 30 October
+2026, on 4 cores of a cloud machine without a GPU, where the run times below were
+measured (the coupled rooms', the seminar room's and the auditorium's in a run earlier
+on 29 October, before the fixes of paths over edges in rendered responses and at 125 Hz,
+which leave a run's time as it was: the hall's runs took as long as before them, within
+4 %). The coupled rooms, the seminar room and the auditorium each run in 2 to 4.5
+minutes and 0.6 to 1.1 GiB (up to 1.2 GiB in third-octave bands); the hall takes 1.5
+hours and 10.0 GiB (5.2 hours and 10.5 GiB calibrated, 3.4 hours and 11.8 GiB in
+third-octave bands),
 nearly all of it the early stage's edge diffraction at one listener (see
 [Memory](simulation.md#memory)). 4.0.0 could not run the seminar room or the hall at
 their defaults: its early stage asked for 16.4 GiB at once in CR3 and 19.6 GiB in CR2.
@@ -545,27 +549,27 @@ of 24 in CR1 (23 for T30, which one of LS1's responses does not decay far enough
 
 | | CR1 | CR2 | CR3 | CR4 |
 |---|---:|---:|---:|---:|
-| EDT | 7.7 (2) | 1.0 (44) | 2.1 (20) | 3.7 (3) |
-| T20 | 6.7 (1) | 1.0 (41) | 2.0 (10) | 3.0 (1) |
+| EDT | 7.8 (2) | 1.0 (44) | 2.0 (20) | 3.7 (3) |
+| T20 | 6.7 (1) | 1.0 (41) | 2.0 (9) | 3.0 (1) |
 | T30 | 7.7 (0) | 1.0 (43) | 1.8 (9) | 3.0 (0) |
-| C50 | 4.3 (2) | 1.0 (41) | 1.3 (34) | 1.3 (31) |
-| C80 | 4.0 (1) | 0.7 (51) | 1.0 (40) | 1.3 (27) |
-| D50 | 4.0 (2) | 1.0 (39) | 1.4 (30) | 1.3 (30) |
-| Ts | 3.6 (2) | 0.8 (42) | 0.9 (34) | 2.5 (9) |
-| G, seat to seat | 1.8 (5) | 0.3 (55) | 0.6 (52) | 0.5 (50) |
+| C50 | 4.3 (1) | 1.0 (41) | 1.2 (34) | 1.3 (29) |
+| C80 | 4.0 (1) | 0.7 (52) | 1.0 (40) | 1.3 (26) |
+| D50 | 4.1 (1) | 1.0 (39) | 1.3 (31) | 1.3 (28) |
+| Ts | 3.6 (2) | 0.8 (41) | 1.0 (33) | 2.5 (9) |
+| G, seat to seat | 1.8 (5) | 0.3 (53) | 0.6 (52) | 0.5 (50) |
 
 With the initial absorption:
 
 | | CR1 | CR2 | CR3 | CR4 |
 |---|---:|---:|---:|---:|
-| EDT | 16.2 (0) | 5.9 (6) | 4.6 (9) | 4.0 (8) |
-| T20 | 11.0 (1) | 6.5 (1) | 5.7 (12) | 3.7 (13) |
+| EDT | 16.3 (0) | 5.9 (6) | 4.8 (8) | 4.0 (8) |
+| T20 | 11.0 (1) | 6.5 (1) | 5.8 (12) | 3.7 (13) |
 | T30 | 5.6 (4) | 6.5 (0) | 5.7 (11) | 3.8 (10) |
-| C50 | 6.0 (3) | 1.5 (25) | 1.6 (20) | 1.6 (23) |
-| C80 | 6.0 (4) | 1.6 (28) | 1.3 (28) | 1.5 (28) |
-| D50 | 5.9 (3) | 1.6 (24) | 1.7 (18) | 1.7 (23) |
-| Ts | 12.5 (4) | 3.2 (14) | 2.0 (24) | 2.8 (16) |
-| G, seat to seat | 2.9 (2) | 0.3 (54) | 0.7 (51) | 0.5 (50) |
+| C50 | 6.1 (3) | 1.6 (24) | 1.5 (23) | 1.6 (24) |
+| C80 | 6.0 (4) | 1.7 (28) | 1.4 (26) | 1.5 (27) |
+| D50 | 5.9 (3) | 1.7 (23) | 1.6 (21) | 1.7 (24) |
+| Ts | 12.5 (4) | 3.3 (14) | 2.2 (22) | 2.8 (16) |
+| G, seat to seat | 2.9 (2) | 0.3 (54) | 0.6 (51) | 0.5 (50) |
 
 ![CR2, fitted absorption](validation/bras_CR2_fitted.png)
 
@@ -585,9 +589,9 @@ below).
 
 **Chamber music hall, fitted absorption.** The reverberation time comes out 6 to 10 %
 long from 250 Hz to 4 kHz (T20 1.47 s against 1.34 s at 1 kHz), 1.3 to 1.9 JNDs, and 11
-and 17 % long at 63 and 125 Hz. EDT is within 3.3 % at 250 and 500 Hz and 5 to 14 % long
-from 1 to 4 kHz, but 20 and 13 % short at 63 and 125 Hz, where the early part is
-stronger than measured (see the next paragraph). From 125 Hz up, C50, C80 and D50 are
+and 19 % long at 63 and 125 Hz. EDT is within 3.8 % at 125, 250 and 500 Hz and 5 to 14 %
+long from 1 to 4 kHz, but 20 % short at 63 Hz, where the early part is stronger than
+measured (see the next paragraph). From 125 Hz up, C50, C80 and D50 are
 within about one JND, mostly slightly low, as a slightly long decay predicts. Eyring's
 formula with the same absorption and air is within 5.1 % of the measurement from 63 Hz
 to 4 kHz, as the fitting intends. That the model decays more slowly suggests that in
@@ -601,15 +605,18 @@ hall's EDT about 23 and 19 % long at 63 and 125 Hz and C80 about 1.5 and 1.3 dB 
 their early part was weaker. Traced again at LS1's five positions without edge
 diffraction, that day's code and 4.0.1 give the same early energy, bit for bit, with
 every band in energy as that day's code had them (with 63 and 125 Hz in pressure,
-4.0.1's default, 0.5 and 0.2 dB more). With it (`first_order`) 4.0.1's early energy is
-6.6 and 5.8 dB higher at 63 and 125 Hz, 2.3 dB at 250 Hz and 1.0 dB at 500 Hz (means
-over the five positions; 4.7 to 9.8 dB at 63 Hz), and as high or higher with every band
-in energy (`coherent_max_band_hz: null`), so the reflections' phases are not the cause.
-The late part is the same. Without the [fade at
+4.0.1's default, 0.5 and 0.2 dB more). With it (`first_order`) this version's early
+energy is 6.6 and 3.9 dB higher than that day's at 63 and 125 Hz, 2.3 dB at 250 Hz and
+1.0 dB at 500 Hz (means over the five positions; 4.7 to 9.8 dB at 63 Hz). The late part
+is the same. Without the [fade at
 edges](#reflections-that-fade-at-edges-against-the-exact-solution), which 4.0.0 added,
-it is 3.5 and 1.4 dB higher (1.0 to 6.4 dB at 63 Hz): the fade adds 3.1 and 4.4 dB of
-the change. At 125 Hz C80 now comes within 0.2 dB of the measurement; at 63 Hz the early
-part is too strong (C80 1.1 dB high, EDT 3.6 JNDs short).
+it is 3.9 and 1.4 dB higher (1.8 to 6.8 dB at 63 Hz): the fade adds 2.7 and 2.5 dB of
+the change. In 4.0.1 it was 5.8 dB higher at 125 Hz, 1.9 dB more than now: its
+echogram's 125 Hz reading took the interference of the paths over edges a second time
+from the 250 Hz band, which this version no longer does. These traces are one-off
+checks, which no script in the repository makes. At 125 Hz C80 is now 0.6 dB low and
+EDT 3.8 % short; at 63 Hz the early part is too strong (C80 1.1 dB high, EDT 3.6 JNDs
+short).
 
 ![CR4, fitted absorption](validation/bras_CR4_fitted.png)
 
@@ -666,8 +673,8 @@ does. Simulated with `simulation.bands: third_octave`, which keeps the thirds ap
 | CR2 octave bands (default) | 1.69 | 1.49 | 1.50 | 1.97 | 1.92 | 1.76 | 1.53 | 0.91 |
 | CR2 third-octave bands | 1.77 | 1.51 | 1.65 | 1.98 | 1.92 | 1.78 | 1.51 | 1.07 |
 | CR3 measured | 1.77 | 1.57 | 1.46 | 1.28 | 1.34 | 1.30 | 1.03 | 0.78 |
-| CR3 octave bands (default) | 1.96 | 1.83 | 1.55 | 1.40 | 1.47 | 1.40 | 1.10 | 0.72 |
-| CR3 third-octave bands | 2.00 | 1.88 | 1.57 | 1.40 | 1.46 | 1.40 | 1.13 | 0.80 |
+| CR3 octave bands (default) | 1.96 | 1.87 | 1.55 | 1.40 | 1.47 | 1.40 | 1.10 | 0.72 |
+| CR3 third-octave bands | 2.00 | 1.90 | 1.57 | 1.40 | 1.46 | 1.40 | 1.13 | 0.80 |
 | CR4 measured | 2.36 | 2.43 | 2.34 | 2.10 | 2.11 | 1.84 | 1.39 | 0.96 |
 | CR4 octave bands (default) | 2.86 | 2.83 | 2.82 | 2.42 | 2.37 | 2.07 | 1.57 | 0.89 |
 | CR4 third-octave bands | 2.96 | 2.92 | 2.87 | 2.45 | 2.38 | 2.07 | 1.63 | 1.03 |
@@ -682,7 +689,7 @@ from 1.0 to 0.9 JNDs; the hall's goes from 1.8 to 2.1 and the auditorium's from 
 3.5, since their decays were long already and third octaves lengthen them. In the
 coupled rooms they lengthen the decay of LS1's sound further (T20 13.8 s at 125 Hz
 against 12.1 s in octave bands and 6.7 s measured). A third-octave run takes 9 to 11
-minutes for the seminar room and the auditorium instead of 4, and 3.3 hours for the hall
+minutes for the seminar room and the auditorium instead of 4, and 3.4 hours for the hall
 instead of 1.5.
 
 ![CR2, initial absorption](validation/bras_CR2_initial.png)
@@ -717,13 +724,13 @@ average all ten responses:
 
 | | CR2 calibrated | CR2 fitted | CR2 initial | CR3 calibrated | CR3 fitted | CR3 initial | CR4 calibrated | CR4 fitted | CR4 initial |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| EDT | 1.1 (19) | 1.0 | 5.9 | 1.4 (15) | 2.1 | 4.6 | 1.5 (12) | 3.7 | 4.0 |
-| T20 | 0.9 (23) | 1.0 | 6.5 | 1.1 (18) | 2.0 | 5.7 | 0.7 (26) | 3.0 | 3.7 |
-| T30 | 1.0 (22) | 1.0 | 6.5 | 0.6 (25) | 1.8 | 5.7 | 0.6 (26) | 3.0 | 3.8 |
-| C50 | 1.1 (20) | 1.0 | 1.5 | 1.2 (15) | 1.3 | 1.6 | 1.4 (13) | 1.3 | 1.6 |
-| C80 | 0.7 (25) | 0.7 | 1.6 | 0.8 (21) | 1.0 | 1.3 | 1.0 (17) | 1.3 | 1.5 |
-| D50 | 1.1 (20) | 1.0 | 1.6 | 1.3 (13) | 1.4 | 1.7 | 1.4 (14) | 1.3 | 1.7 |
-| Ts | 0.7 (26) | 0.8 | 3.2 | 0.8 (22) | 0.9 | 2.0 | 1.2 (14) | 2.5 | 2.8 |
+| EDT | 1.1 (17) | 1.0 | 5.9 | 1.4 (14) | 2.0 | 4.8 | 1.5 (12) | 3.7 | 4.0 |
+| T20 | 0.9 (24) | 1.0 | 6.5 | 1.0 (18) | 2.0 | 5.8 | 0.7 (24) | 3.0 | 3.7 |
+| T30 | 1.0 (22) | 1.0 | 6.5 | 0.5 (26) | 1.8 | 5.7 | 0.6 (25) | 3.0 | 3.8 |
+| C50 | 1.1 (20) | 1.0 | 1.6 | 1.2 (14) | 1.2 | 1.5 | 1.4 (13) | 1.3 | 1.6 |
+| C80 | 0.6 (26) | 0.7 | 1.7 | 0.8 (19) | 1.0 | 1.4 | 1.0 (16) | 1.3 | 1.5 |
+| D50 | 1.1 (20) | 1.0 | 1.7 | 1.3 (12) | 1.3 | 1.6 | 1.4 (14) | 1.3 | 1.7 |
+| Ts | 0.7 (26) | 0.8 | 3.3 | 0.8 (21) | 1.0 | 2.2 | 1.2 (14) | 2.5 | 2.8 |
 
 ![CR2, calibrated from the initial absorption](validation/bras_CR2_initial_calibrated.png)
 
@@ -734,28 +741,29 @@ average all ten responses:
 The initial estimates made the decay up to 2.2 times as long. From them, calibration
 brings the seminar room to about one JND on responses it did not fit, as BRAS's fitted
 set does. In the hall and the auditorium it does better than the fitted set on the
-decay. In the hall T30 is within 0.6 JNDs on average, with 25 of the 30 values within
-one JND, against 1.8 with the fitted set, T20 within 1.1 against 2.0 and EDT 1.4 against
-2.1. In the auditorium T20 and T30 are within 0.7 and 0.6 JNDs, with 26 of the 30 values
-within one JND, against 3.0 with the fitted set, and EDT 1.5 against 3.7. The fit uses
-the model's own rays rather than Eyring's formula, so it takes up what the model's sound
-misses of the absorbing surfaces: from 63 Hz to 4 kHz it found 3 to 21 % more absorption
-in all than BRAS's fitted set in the hall, and 17 to 33 % more in the auditorium. The
-clarity stays within 0.8 to 1.4 JNDs on average, as with the fitted set (1.0 to 1.4).
+decay. In the hall T30 is within 0.5 JNDs on average, with 26 of the 30 values within
+one JND, against 1.8 with the fitted set, T20 within 1.0 against 2.0 and EDT 1.4 against
+2.0. In the auditorium T20 and T30 are within 0.7 and 0.6 JNDs, with 24 and 25 of the 30
+values within one JND, against 3.0 with the fitted set, and EDT 1.5 against 3.7. The
+fit uses the model's own rays rather than Eyring's formula, so it takes up what the
+model's sound misses of the absorbing surfaces: from 63 Hz to 4 kHz it found 3 to 23 %
+more absorption in all than BRAS's fitted set in the hall, and 18 to 30 % more in the
+auditorium. The clarity stays within 0.8 to 1.4 JNDs on average, as with the fitted set
+(1.0 to 1.3).
 
 In the seminar room the fit found nearly BRAS's fitted set, though it started from the
-initial one. The windows absorb 0.24 and 0.30 at 63 and 125 Hz (BRAS fitted 0.25 and
-0.19, initial 0.13 and 0.10), and every other value is within 0.021 of BRAS's. In the
-hall it found more absorption than BRAS in the plaster at 125 and 250 Hz (0.18 and 0.20
-against 0.11 and 0.15) and in the seating at 63 Hz and 2 kHz (0.25 and 0.56 against 0.17
+initial one. The windows absorb 0.24 and 0.31 at 63 and 125 Hz (BRAS fitted 0.25 and
+0.19, initial 0.13 and 0.10), and every other value is within 0.022 of BRAS's. In the
+hall it found more absorption than BRAS in the plaster at 125 and 250 Hz (0.22 and 0.20
+against 0.11 and 0.15) and in the seating at 63 Hz and 2 kHz (0.29 and 0.58 against 0.17
 and 0.41), and less in the seating at 125 and 250 Hz (0.13 and 0.23 against 0.21 and
 0.37) and in the structured plaster at 2 kHz (0.10 against 0.14). In the auditorium the
-linoleum absorbs 0.27 and 0.25 at 63 and 125 Hz (BRAS fitted 0.15 and 0.10), the brick
-wall 0.30 at 500 Hz (0.20) and the wood panels 0.26 at 4 kHz (0.13).
+linoleum absorbs 0.23 and 0.28 at 63 and 125 Hz (BRAS fitted 0.15 and 0.10), the brick
+wall 0.31 at 500 Hz (0.20) and the wood panels 0.27 at 4 kHz (0.12).
 
 These are what a model needs to match the room, not what each surface absorbs. With one
 loudspeaker position and five microphones, the uncertainty the fit reports is above 0.2
-for most materials and bands in the hall and the auditorium, and 0.43 or more for all of
+for most materials and bands in the hall and the auditorium, and 0.49 or more for all of
 them in the seminar room. The measurements fix each band's total absorption, and the
 proportions between materials come from the initial estimates. Telling surfaces apart
 takes responses that hear them differently, such as sources and microphones near
@@ -770,20 +778,20 @@ Some differences remain:
 - **8 kHz in the seminar room.** The decay stays 2 JNDs short even with surfaces that
   absorb next to nothing, because in octave bands the air absorbs at the octave's centre
   frequency (see "Third-octave bands" above).
-- **63 Hz in the seminar room.** EDT stays 6.0 JNDs long. This is below the room's
+- **63 Hz in the seminar room.** EDT stays 5.9 JNDs long. This is below the room's
   Schroeder frequency, where a geometric model gives an average rather than the room's
   modes: a likely cause, not traced.
-- **63 and 125 Hz in the hall.** EDT is 3.8 and 2.5 JNDs short and T20 1.8 and 3.0 JNDs
-  long, as with the fitted set: the early part there is stronger than measured (see "The
-  hall's early part at low frequencies" above). The hall's Schroeder frequency is about
-  45 Hz.
+- **63 and 125 Hz in the hall.** EDT is 3.7 and 1.6 JNDs short and T20 1.7 and 2.4 JNDs
+  long. At 63 Hz the early part is stronger than measured, as with the fitted set (see
+  "The hall's early part at low frequencies" above). The hall's Schroeder frequency is
+  about 45 Hz.
 - **63 Hz in the auditorium.** EDT is 5.1 JNDs long and T30 3.4 JNDs short.
 
-Fitting took 3.7 minutes for the seminar room (two rounds of tracing at the first
-position's 10,000 rays per band), 4 minutes for the auditorium (four rounds) and 3.6
-hours for the hall (four rounds), nearly all of it the early stage's edge diffraction,
-which fewer rays do not shorten. Simulating again took about 4 minutes in the seminar
-room and the auditorium and 91 minutes in the hall.
+Fitting took 4 minutes for the auditorium (four rounds of tracing at the first
+position's 10,000 rays per band) and 3.7 hours for the hall (four rounds), nearly all of
+it the early stage's edge diffraction, which fewer rays do not shorten; the seminar
+room's took three rounds. Simulating again took about 4 minutes in the seminar room and
+the auditorium and 89 minutes in the hall.
 
 ### Coupled rooms
 
@@ -817,13 +825,13 @@ measured: as in the hall and the auditorium, the model decays more slowly than E
 diffuse field with the same absorption, here more so.
 
 Calibrated on LS1's responses from the initial set (`--calibrate LS1`), the fit raised
-the absorption of the chamber's painted concrete to 4.3 times BRAS's fitted value at 125
-Hz and 1.2 to 1.8 times from 250 Hz to 4 kHz, which brings LS1's EDT and T20 within 15 %
-from 125 Hz to 4 kHz, and took the laboratory's absorber down from 0.49 to 0.20 at 1
-kHz, as LS1's responses do not pin it (the fit reports an uncertainty of 0.33 to 2.4 for
-it). LS2's responses, which the fit did not see, then decay in 2.2 s at 1 kHz against
-0.8 s measured, 55 JNDs off in EDT on average. A calibration fits the responses it is
-given; in coupled rooms each room needs responses of its own.
+the absorption of the chamber's painted concrete to 4.5 times BRAS's fitted value at 125
+Hz and 1.2 to 1.7 times from 250 Hz to 4 kHz, which brings LS1's EDT within 16 % and its
+T20 within 11 % from 125 Hz to 4 kHz, and took the laboratory's absorber down from 0.49
+to 0.20 at 1 kHz, as LS1's responses do not pin it (the fit reports an uncertainty of
+0.33 to 6.7 for it). LS2's responses, which the fit did not see, then decay in 2.2 s at
+1 kHz against 0.8 s measured, 55 JNDs off in EDT on average. A calibration fits the
+responses it is given; in coupled rooms each room needs responses of its own.
 
 The CR1 runs take 2 minutes and 0.6 GiB (5 minutes and 0.7 GiB in third-octave bands, 4
 minutes calibrated).
@@ -844,7 +852,10 @@ not explain. The simulated G is within 1.3 dB of the same theory there (0.0 in t
 seminar room). Read with 80 dB as the sine's peak instead, which lowers the measured G
 by 3 dB, it comes within 1.3 dB of the theory at 500 Hz, 1 and 4 kHz in all three rooms,
 and 2.4 to 3.5 dB below it at 2 kHz. Which reading BRAS meant is not stated, so an
-absolute G against these responses would test the reading, not the simulation.
+absolute G against these responses would test the reading, not the simulation. These
+absolute levels come from one-off checks with BRAS's dodecahedron data and measured
+responses, and the simulated ones from the fitted runs, which the fixes at 125 Hz leave
+as they were from 250 Hz up; no script in the repository makes them yet.
 
 Simulated minus measured G with the first reading, at 500 Hz, 1, 2 and 4 kHz (means over
 the pairs, standard deviations 0.2 to 0.9 dB):
@@ -858,7 +869,7 @@ the pairs, standard deviations 0.2 to 0.9 dB):
 These are left out of the JND counts. What is compared is G from seat to seat: each
 pair's simulated G less the mean over the room's pairs, against each pair's measured
 level less its mean, which the level's reference does not touch. From 125 Hz to 4 kHz it
-is within one JND (1 dB) in 55 of the 60 values in the seminar room, 52 in the hall and
+is within one JND (1 dB) in 53 of the 60 values in the seminar room, 52 in the hall and
 50 in the auditorium, 0.3 to 0.6 dB off on average. In the coupled rooms, where it holds
 the level of the chamber's sound against the laboratory's own, it is 1.8 dB off, 5 of 24
 within 1 dB: the coupling again.
@@ -873,48 +884,49 @@ each loudspeaker with the K8's measured directivity (`validation/bras/QSC_K8.csv
 the fitted absorption, renders the response through FABIAN's head-related impulse
 responses (every 2°), and compares IACC_E (the first 80 ms) and IACC_L (from 80 ms) with
 those of the measured responses, analysed by this package, in JNDs of 0.075 (ISO
-3382-1). The late part of a rendered response is noise drawn anew with each seed, so the
-simulated values are means over 10 seeds, whose standard deviation is 0.07 at most.
+3382-1). The late part of a rendered response is noise drawn anew with each seed, and so
+are the phases of paths over edges that arrive together, so the simulated values are
+means over 10 seeds. From 125 Hz to 4 kHz their standard deviation, averaged over a
+room's loudspeakers, is 0.10 at most, and 0.14 for one loudspeaker.
 Means over the five loudspeakers, measured / simulated, and how many of the 30
 loudspeaker and band values from 125 Hz to 4 kHz are within one JND:
 
 | IACC_E | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz | within 1 JND | mean (JNDs) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| CR2 | 0.90 / 0.93 | 0.66 / 0.86 | 0.38 / 0.39 | 0.37 / 0.34 | 0.42 / 0.38 | 0.36 / 0.32 | 18 | 1.3 |
-| CR3 | 0.94 / 0.92 | 0.79 / 0.80 | 0.48 / 0.34 | 0.48 / 0.27 | 0.65 / 0.50 | 0.55 / 0.46 | 16 | 1.4 |
-| CR4 | 0.96 / 0.96 | 0.87 / 0.89 | 0.86 / 0.71 | 0.81 / 0.81 | 0.87 / 0.88 | 0.87 / 0.88 | 26 | 0.6 |
+| CR2 | 0.90 / 0.91 | 0.66 / 0.74 | 0.38 / 0.32 | 0.37 / 0.32 | 0.42 / 0.37 | 0.36 / 0.31 | 18 | 1.1 |
+| CR3 | 0.94 / 0.93 | 0.79 / 0.71 | 0.48 / 0.31 | 0.48 / 0.40 | 0.65 / 0.53 | 0.55 / 0.52 | 19 | 1.2 |
+| CR4 | 0.96 / 0.96 | 0.87 / 0.85 | 0.86 / 0.81 | 0.81 / 0.83 | 0.87 / 0.87 | 0.87 / 0.87 | 25 | 0.5 |
 
 | IACC_L | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz | within 1 JND | mean (JNDs) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | CR2 | 0.90 / 0.89 | 0.54 / 0.67 | 0.14 / 0.18 | 0.11 / 0.09 | 0.07 / 0.08 | 0.06 / 0.07 | 25 | 0.6 |
-| CR3 | 0.95 / 0.92 | 0.73 / 0.81 | 0.20 / 0.26 | 0.14 / 0.13 | 0.11 / 0.09 | 0.10 / 0.09 | 23 | 0.7 |
-| CR4 | 0.92 / 0.92 | 0.72 / 0.75 | 0.33 / 0.34 | 0.34 / 0.25 | 0.29 / 0.29 | 0.26 / 0.17 | 19 | 0.9 |
+| CR3 | 0.95 / 0.91 | 0.73 / 0.71 | 0.20 / 0.17 | 0.14 / 0.12 | 0.11 / 0.09 | 0.10 / 0.10 | 26 | 0.6 |
+| CR4 | 0.92 / 0.92 | 0.72 / 0.74 | 0.33 / 0.27 | 0.34 / 0.20 | 0.29 / 0.25 | 0.26 / 0.15 | 19 | 1.2 |
 
-IACC_L, which the late part's arrival directions decide, is within one JND in 19 to 25
-of the 30 values. IACC_E is within one JND in 26 in the auditorium, and in the seminar
-room on average from 500 Hz up, but 2.5 JNDs high there at 250 Hz and 1.8 to 2.7 JNDs
-low in the hall from 500 Hz to 2 kHz. Split into the direct sound (its first 5 ms) and
-the rest of the first 80 ms, and the simulated responses also into their direct sound,
-specular reflections, diffracted paths and late part, rendered one at a time:
+IACC_L is within one JND in 19 to 26 of the 30 values; in the auditorium it is 2.0 and
+1.4 JNDs low at 1 and 4 kHz, which is not traced. IACC_E is within one JND in 25 in the
+auditorium, and in the seminar room within about one JND on average in every band, but
+1.0 to 2.2 JNDs low in the hall from 500 Hz to 2 kHz. Split into the direct sound (its
+first 5 ms) and the rest of the first 80 ms, and the simulated responses also into their
+direct sound, specular reflections, diffracted paths and late part, rendered one at a
+time (one seed of the rendering, `validation/bras_iacc_parts.py`):
 
-- **The hall from 500 Hz to 4 kHz, and the seminar room at 250 Hz.** The diffracted
-  paths carry most of the simulated early sound at the head: 63 % of it at 1 kHz from
-  LS7 in the hall, with an IACC of 0.39, and 81 and 98 % at 250 Hz from LS3 and LS4 in
-  the seminar room, with an IACC of 0.96 and 0.95 (one seed of the rendering). In the
-  echogram they are about as strong as the specular reflections (in the hall at 1 kHz
-  1.2 times the direct sound within 80 ms, as the reflections), but rendered they are
-  several times stronger, as many of them arrive together (see [Known
-  issues](#known-issues)), so they decide the simulated IACC_E there. Without edge
-  diffraction, LS7's IACC_E in the hall is 0.51 at 1 kHz against 0.75 measured, and
-  within 0.03 of the measurement at 2 and 4 kHz.
+- **The hall from 500 Hz to 2 kHz.** From LS7 the simulated sound after the first 5 ms
+  is about as strong against the direct sound as measured (3.0 dB above it at 1 kHz in
+  both, 4.3 and 0.6 dB against 5.8 and 1.3 dB at 500 Hz and 2 kHz), but far less alike
+  at the two ears: its IACC is 0.18 at 1 kHz against 0.63 measured, and 0.35 against
+  0.73 at 500 Hz. At 1 kHz the direct sound, the specular reflections, the diffracted
+  paths and the late part each carry a quarter to a third of the early sound, and the
+  diffracted paths and the late part are the least alike at the ears (0.25 and 0.21).
+  Why the simulated early sound is less alike at the ears than the measured is not
+  traced.
 - **The auditorium at 500 Hz.** The simulated sound in the 75 ms after the direct sound
-  is 6.5 and 7.1 dB stronger against the direct sound than measured (LS4 and LS5), 1.6
-  and 1.8 dB at 1 kHz, and within 0.8 dB at 2 and 4 kHz. There the diffracted paths
-  render about as strong as in the echogram (0.8 to 1.3 times from 500 Hz up), and at
-  500 Hz the specular reflections, the diffracted paths and the late part each carry
-  about as much as all of the measured sound in that time. At 1 kHz the simulated sound
-  after the direct sound is more correlated than the measured (0.42 against 0.28 at
-  LS4), which makes up for its level in IACC_E.
+  is 4.4 and 6.7 dB stronger against the direct sound than measured (LS4 and LS5), and
+  within 1.2 dB from 1 to 4 kHz. At 500 Hz the specular reflections alone, over the first
+  80 ms, are 1.3 dB below the direct sound from both loudspeakers, where all of the
+  measured sound after the direct sound is 5.9 and 6.3 dB below it. IACC_E there is
+  within one JND on average all the same (0.81 against 0.86); those reflections reach the
+  two ears nearly alike (0.89 and 0.90).
 
 ### How much a run varies
 
@@ -3608,6 +3620,7 @@ python validation/bras_validation.py --materials initial --plots docs/validation
 python validation/bras_validation.py --bands third_octave --json bras_third.json
 python validation/bras_validation.py --materials initial --calibrate LS1 --plots docs/validation
 python validation/bras_binaural.py path/to/BRAS --json binaural.json   # FABIAN's responses from BRAS
+python validation/bras_iacc_parts.py path/to/BRAS CR3 LS7   # one loudspeaker's response in parts
 python validation/coupled_rooms.py --results bras.json   # CR1 against two-room diffuse theory
 ```
 
@@ -3622,9 +3635,11 @@ mean profile's), the long term's about 0.5, the moving sources' about 3, the fad
 walks' about 14, the cities' about 1 (2 with `--sizes 10 20 30 40 60`), each BRAS run
 of the coupled rooms, the seminar room or the auditorium 2 to 4.5 minutes (4 to 8
 calibrated, 5 to 11 in third-octave bands) and of the hall about 1.5 hours (5.2
-calibrated, 3.3 in third-octave bands), and the binaural comparison 9.5 minutes in the
-seminar room, 6 in the auditorium and an hour in the hall. The cross-check's numbers come from 4.0.1 with seed 1;
-this version's own are within 0.01 % of them.
+calibrated, 3.4 in third-octave bands), the binaural comparison 9.5 minutes in the
+seminar room, 6 in the auditorium and an hour in the hall, and a loudspeaker of the hall
+in parts about 10 minutes. The cross-check's numbers come from 4.0.1 with seed 1;
+this version's own are within 0.012 % of them (EDT, whose line fit now starts at the
+onset in every response).
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
 (`--pra-runs`); the means still move by a few percent from one call to the next, and the
 differences in the tables with them. Other seeds move this package's numbers by a few
