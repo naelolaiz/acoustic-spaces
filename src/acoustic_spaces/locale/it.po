@@ -2008,6 +2008,11 @@ msgid "Runs in {folder}"
 msgstr "Si esegue in {folder}"
 
 #: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid "This run downloads {what}."
+msgstr "Questa esecuzione scarica {what}."
+
+#: acoustic_spaces/gui/demo_dialog.py
 msgid "save the scene first (File > Save): the demo reads it from its file"
 msgstr ""
 "salvate prima la scena (File > Salva): la dimostrazione la legge dal suo file"

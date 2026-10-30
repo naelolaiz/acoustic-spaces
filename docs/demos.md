@@ -16,8 +16,8 @@ more, and any scene makes a demo of its own with the recordings its sources are 
 
 The scripts come with the examples: `acoustic-spaces examples --copy . NAME` copies them
 with the scene. The recordings do not: they are other people's work under their own
-licences, named below with each demo, and the church, stadium and lake scripts download
-them from where their authors publish them. The videos need [ffmpeg](https://ffmpeg.org)
+licences, named below with each demo, and the scripts download them from where their
+authors publish them. The videos need [ffmpeg](https://ffmpeg.org)
 on the PATH and the pictures Pillow (the `viz` extra brings it). The mixes are binaural:
 use headphones. They go through the spherical head model unless every step and the
 `simulate` command get `--hrtf me.sofa`, a SOFA file of your own or measured HRTFs (the
@@ -69,7 +69,9 @@ its own). Pick the demo and fill in the options that change what it plays, label
 words (they start at the same defaults the command line uses, each one's flag in its
 tip), and it runs in the background with its messages in the **Messages** panel,
 **Cancel** stopping it. **Advanced** holds the step, what fine-tunes the run, the files
-and folders the demo reads and writes, and the command line. The sources are a table, each with what it plays and the file it plays instead:
+and folders the demo reads and writes, and the command line. Above **Run**, a line says
+what the run downloads and how much, until it is there: the orchestra's tracks, the
+church's takes and organ samples, the stadium's and the lake's song, the gallery's talk. The sources are a table, each with what it plays and the file it plays instead:
 **Choose WAV…** gives the selected one a file, **Default** takes it back. The
 **Movement** box lists the sources and listeners of the scene that have a walk, each
 with how it goes, how far and for how long, ticked when it moves in the run: *This
@@ -188,19 +190,18 @@ conductor's podium to the back of the hall.
 
 ```sh
 acoustic-spaces examples --copy . orchestra && cd orchestra
-# put movement1.zip, movement2.zip and movement4.zip here, from
-# https://doi.org/10.14279/depositonce-6729.2 (560 to 710 MB each)
+python orchestra_demo.py tracks   # demo/tracks: the 61 tracks of each movement (2.0 GB)
 acoustic-spaces simulate scene.yaml --out results
-python orchestra_demo.py tracks   # demo/tracks: the 61 tracks of each movement
 python orchestra_demo.py render   # demo/seats: each stop of the tour, binaural (~1 min each)
 python orchestra_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
 Options: `--tour 1:stalls-middle,1:conductor,2:stalls-rear` (the seats of a movement take
-equal shares of it), `--zips FOLDER` for the zips, `--movements 1,2` for `tracks`,
-`--format` for another output the simulation wrote, `--no-mp4` for the audio and stills
-only. `demo/chapters.txt` lists the stops' times for a video description. `all` runs
-tracks, render and video, after the simulation.
+equal shares of it), `--zips FOLDER` for a folder with zips downloaded before,
+`--movements 1,2` for `tracks`, `--format` for another output the simulation wrote,
+`--no-mp4` for the audio and stills only. `demo/chapters.txt` lists the stops' times for
+a video description. `all` runs tracks, the simulation, render and video, leaving out
+what is there already.
 
 - **The cuts.** Within a movement the seat changes at the quietest moment within 10 s of
   each equal share's end (the lowest half-second RMS of the first seat's mix), so the
@@ -227,8 +228,13 @@ scrolling spectrogram of the mix under the cover.
 
 **Recording.** Böhm, Ackermann and Weinzierl, *Beethoven, Symphony No. 8*, TU Berlin,
 <https://doi.org/10.14279/depositonce-6729.2>, CC BY 4.0: movements 1, 2 and 4, 61 mono
-tracks each (zips of 560 to 710 MB), downloaded by hand; `tracks` takes the 61 WAV files
-of each out of its zip.
+tracks each, in a zip with the movement's mix (590 to 740 MB). `tracks` reads the 61 WAV
+files of each out of its zip on the TU Berlin's server by HTTP range requests, without
+keeping the zip: 640, 600 and 740 MB, 2.0 GB for the three (nearly the whole zip, as the
+blocks of 32 MiB it reads of the last tracks hold the mix), 2.6 GB on disk. It reads
+them out of the zip, or the folder it was unpacked into (`movementN/anechoic`), in
+`--zips` instead, the example's folder by default. Tracks there already are kept, so a
+download cut short goes on where it stopped.
 
 ## A choir and an organ in the church
 
@@ -247,7 +253,7 @@ church's own simulations until ticked in the editor, and its listeners `nave-bac
 
 ```sh
 acoustic-spaces examples --copy . church && cd church
-python church_demo.py music     # 19 takes, their annotations, 27 organ samples (about 100 MB)
+python church_demo.py music     # 19 takes, their annotations, 27 organ samples (127 MB)
 python church_demo.py scene     # scene_choir.yaml: the church with the choir and the organ
 acoustic-spaces simulate scene_choir.yaml --out results_choir --output binaural   # 10-20 min on 4 cores
 python church_demo.py feeds     # demo/feeds: one WAV per singer and per side of the organ
@@ -308,7 +314,8 @@ spherical head model unless `--hrtf` names a SOFA file.
   12(18), 2022), <https://doi.org/10.5281/zenodo.7061507>, **CC BY 4.0**: the start, end
   and mean F0 of each sung note. Its ground truth for the fourth note says F4; the score
   and the singers have G4, which the demo uses. Both archives are read by HTTP range
-  requests, so only the files needed (about 36 MB) are downloaded, not the 2.5 GB.
+  requests, so only the parts holding the files needed (69 MB) are downloaded, not the
+  2.5 GB.
 - The organ: the Versilian Community Sample Library's pipe organ, sampled by Simon
   Dalzell of Ivy Audio, Versilian Studios, <https://github.com/sgossner/VCSL> (pinned
   commit), **CC0 1.0**, credited as its notes encourage. Sampled every minor third; each
@@ -351,7 +358,7 @@ Software-Entwicklungskit released with their stems.
 
 ```sh
 acoustic-spaces examples --copy . stadium_concert && cd stadium_concert
-python stadium_demo.py music     # the reference mix and 7 stems (WAV, 450 MB)
+python stadium_demo.py music     # the reference mix and 7 stems (WAV, 313 MB to download)
 python stadium_demo.py band      # scene_band.yaml: the scene with the band on the stage
 acoustic-spaces simulate scene_band.yaml --out results_band --output binaural   # ~3 min on 4 cores
 python stadium_demo.py feeds     # demo/feeds: one WAV per loudspeaker and player
@@ -440,16 +447,17 @@ for the sound database of the DEGA (German Acoustical Society) at Hochschule
 Düsseldorf's studio, <https://doi.org/10.5281/zenodo.3601032>, **CC BY 4.0**. `music`
 reads the reference mix and the seven processed stems (drums, bass, guitar, keys, brass,
 vocal, shouts; stereo WAV, 24-bit, 48 kHz) out of the release's 3.5 GB archive by HTTP
-range requests, so only those 450 MB are downloaded. The stems start 58 ms before the
-reference mix; `feeds` lines them up with it by cross-correlation.
+range requests, so only those are downloaded: 313 MB (450 MB unpacked). The stems
+start 58 ms before the reference mix; `feeds` lines them up with it by
+cross-correlation.
 
 "Francium" (127.75 BPM, 4:54) and "Rubidium" (132 BPM, 3:52) by Software-Entwicklungskit,
 from the album *Everything is Free*, <https://github.com/ichbinsoftware/everythingisfree>,
 **CC0 1.0**: electronic songs released with their stems. `music --song francium` downloads
-the master and the 26 stems (M4A, 800 MB in all; "Rubidium" has 9) from the album's
-repository at a fixed commit, decodes them with ffmpeg and sums the stems into the groups
-the mixes use: drums, bass, guitar (the synth lead, which the guitarist's amplifier
-plays), keys, vocal and backing vocals.
+the master and the 26 stems (M4A, 42 MB in all; "Rubidium" has 9, 43 MB) from the
+album's repository at a fixed commit, decodes them with ffmpeg and sums the stems into
+the groups the mixes use: drums, bass, guitar (the synth lead, which the guitarist's
+amplifier plays), keys, vocal and backing vocals.
 
 Either way the master plays through the sound system, the stems through the monitors
 and the band, and the credit goes to `demo/music/<song>/SOURCES.txt`.
@@ -557,7 +565,8 @@ the video shows it.
 
 - `spicy_funk_cake` (the default): "Spicy Funk Cake" by the Rhythmussportgruppe, the
   recording of the [stadium demo](#a-concert-in-the-stadium), **CC BY 4.0**; its reference
-  mix (56 MB) is read out of the release's preview archive by HTTP range requests.
+  mix (a 56 MB WAV file, 61 MB to download) is read out of the release's preview archive
+  by HTTP range requests.
 - `great_british_summer`: "Great British Summer" by Tom McKenzie, from the album
   *Extraordinary* in AlbumDB, <https://doi.org/10.5281/zenodo.19683001>, **CC BY 4.0**,
   read out of its archive of masters the same way.
@@ -619,7 +628,8 @@ head.
 
 **Recording.** The ACE challenge corpus (Eaton, Gaubitch, Moore and Naylor, Imperial
 College London), **CC BY 4.0**: an anechoic talk, a man describing his way to work
-through Delft; `speech` reads it out of the corpus's 148 MB archive.
+through Delft; `speech` reads the corpus's 148 MB archive as it comes, up to the
+talk: 16 MB for that talker, up to 145 MB for another (`--talker`).
 
 ## A car passing by
 

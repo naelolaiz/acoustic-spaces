@@ -3,6 +3,8 @@ import importlib.util
 import json
 import os
 import re
+import shutil
+import zipfile
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -768,6 +770,55 @@ def test_orchestra_demo_tour(tmp_path: Path) -> None:
     assert np.abs(pause).max() == 0.0  # between the movements
     assert np.abs(audio[int(5 * rate) : int(6 * rate)]).max() > 0.4  # playing before the cut
     assert np.abs(audio[int(20 * rate) : int(21 * rate)]).max() > 0.4  # and after it
+
+
+def test_orchestra_demo_downloads_the_tracks(tmp_path: Path, monkeypatch) -> None:
+    """orchestra_demo.py's tracks come from the TU Berlin's server, the 61 of each
+    movement, not the zip's mix; a zip downloaded before (--zips) is read instead,
+    a download cut short goes on where it stopped, and the step says what it would
+    download until the tracks are there."""
+    demo = _script("orchestra", "orchestra_demo")
+    served = {}
+    for movement, (_, _, name) in demo.MOVEMENTS.items():
+        path = tmp_path / "server" / f"{name}.zip"
+        path.parent.mkdir(exist_ok=True)
+        with zipfile.ZipFile(path, "w") as archive:
+            for track in demo.TRACKS.values():
+                archive.writestr(f"anechoic/{track}", f"{name} {track}")
+            archive.writestr(f"mix/{name}_mix.wav", "the mix")
+        served[demo.ZIPS[movement]] = path
+    opened: list[tuple[str, int]] = []
+
+    def open_zip(url: str, block: int) -> zipfile.ZipFile:
+        opened.append((url, block))
+        return zipfile.ZipFile(served[url])
+
+    monkeypatch.setattr(demo.fetch, "open_zip", open_zip)
+    work, zips = tmp_path / "demo", tmp_path / "zips"
+    args = _demo_args(demo.DEMO, work=work, zips=zips)
+    step = demo.DEMO.step("tracks")
+    server = "from the TU Berlin's server"
+    assert step.downloads(args) == f"the 61 tracks of movements I, II and IV {server} (2.0 GB)"
+    zips.mkdir()
+    shutil.copyfile(served[demo.ZIPS[2]], zips / "movement2.zip")
+    assert step.downloads(args) == f"the 61 tracks of movements I and IV {server} (1.4 GB)"
+    args.movements = "2"
+    assert step.downloads(args) is None
+    args.movements = None
+    demo.tracks(args)
+    assert opened == [(demo.ZIPS[1], demo.BLOCK), (demo.ZIPS[4], demo.BLOCK)]
+    assert step.done(args) and step.downloads(args) is None
+    for _, _, name in demo.MOVEMENTS.values():
+        folder = work / "tracks" / name
+        assert sorted(path.name for path in folder.iterdir()) == sorted(demo.TRACKS.values())
+        assert (folder / "01_Fl_1.wav").read_text(encoding="utf-8") == f"{name} 01_Fl_1.wav"
+    # Cut short: the tracks left come, from where they came before.
+    (work / "tracks" / "movement1" / "05_Cl_1.wav").unlink()
+    (work / "tracks" / "movement2" / "13_Tp.wav").unlink()
+    assert step.downloads(args) == f"the 61 tracks of movement I {server} (at most 642 MB)"
+    opened.clear()
+    demo.tracks(args)
+    assert opened == [(demo.ZIPS[1], demo.BLOCK)] and step.done(args)
 
 
 def test_stadium_pictures_show_the_crowd() -> None:

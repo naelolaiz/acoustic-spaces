@@ -29,7 +29,7 @@ the music; the stills' captions go on describing the demo's music, and their cre
 line names the files. The editor runs the same steps from Simulation > Run demo…
 
 The recordings are not part of acoustic_spaces: `music` downloads them from where their
-authors publish them (about 100 MB; only the needed files are read out of VocalSet's and
+authors publish them (127 MB; only the needed files are read out of VocalSet's and
 Annotated-VocalSet's archives, by HTTP range requests) and writes their credits to
 demo/music/SOURCES.txt. The singers are CC BY 4.0, so whoever shares a render must credit
 VocalSet as that file says; the organ samples are CC0.
@@ -85,6 +85,12 @@ ANNOTATIONS = "https://zenodo.org/api/records/7061507/files/Annotated%20VocalSet
 ANNOTATIONS_DOI = "10.5281/zenodo.7061507"
 VCSL_COMMIT = "c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e"
 VCSL = f"https://raw.githubusercontent.com/sgossner/VCSL/{VCSL_COMMIT}/Aerophones/Edge-blown%20Aerophones/Pipe%20Organ/"
+#: Bytes a range request reads of the two archives: the takes are 1 to 2 MB each, far
+#: apart in them.
+BLOCK = 1 << 20
+#: MB ``music`` downloads: the takes and their notes out of the two archives, by range
+#: requests (their 2.5 GB are not), and the organ samples.
+MUSIC_MB = 127
 
 #: The singers of VocalSet (its voice types), in the order the scene's Choir group stands
 #: them: the women in the front row, the men on a step behind them, both facing the
@@ -322,9 +328,15 @@ def music_done(args) -> bool:
     return all(path.exists() for path in wanted) and (folder / "SOURCES.txt").exists()
 
 
+def music_download(args) -> str:
+    """What ``music`` downloads."""
+    samples = sum(len(names) for names in organ_needed().values())
+    return f"the 19 singers' takes, their notes and {samples} organ samples ({MUSIC_MB} MB)"
+
+
 def music(args) -> None:
     """Download the 19 takes of "Dona nobis pacem" (straight tone) and their note
-    annotations out of the two Zenodo archives, by range requests (36 MB of 2.5 GB), and
+    annotations out of the two Zenodo archives, by range requests (69 MB of 2.5 GB), and
     the organ samples the arrangement needs from VCSL (pinned commit)."""
     folder = args.work / "music"
     takes = folder / "vocalset"
@@ -333,7 +345,7 @@ def music(args) -> None:
     missing = [s for s in SINGERS if not (takes / f"{take_name(s)}.wav").exists()]
     if missing:
         print(f"reading {VOCALSET} (range requests)")
-        with fetch.open_zip(VOCALSET) as archive:
+        with fetch.open_zip(VOCALSET, BLOCK) as archive:
             names = {
                 Path(name).name: name for name in archive.namelist() if "excerpts/straight/" in name
             }
@@ -346,7 +358,7 @@ def music(args) -> None:
     missing = [s for s in SINGERS if not (notes / f"{take_name(s)}.csv").exists()]
     if missing:
         print(f"reading {ANNOTATIONS} (range requests)")
-        with fetch.open_zip(ANNOTATIONS) as archive:
+        with fetch.open_zip(ANNOTATIONS, BLOCK) as archive:
             for singer in missing:
                 member = (
                     "Annotated VocalSet/extended 1/with file header/straight/"
@@ -833,8 +845,9 @@ DEMO = Demo(
         Step(
             "music",
             music,
-            "download the 19 takes, their notes and the organ samples (about 100 MB)",
+            f"download the 19 takes, their notes and the organ samples ({MUSIC_MB} MB)",
             music_done,
+            music_download,
         ),
         Step(
             "scene",

@@ -271,6 +271,9 @@ class Step:
     help: str
     #: Whether ``all`` may leave the step out (its result is there already).
     done: Callable[[argparse.Namespace], bool] | None = None
+    #: What the step downloads with the arguments, in words and with its size (the Run
+    #: demo window says it before a run); None when it downloads nothing.
+    downloads: Callable[[argparse.Namespace], str | None] | None = None
 
 
 def input_option(steps: tuple[str, ...] = ("render",)) -> Option:

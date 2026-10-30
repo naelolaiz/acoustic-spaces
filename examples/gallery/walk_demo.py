@@ -9,7 +9,7 @@ Run it from the folder of the gallery example (`acoustic-spaces examples --copy 
 gallery && cd gallery`), in the Python environment acoustic-spaces is installed in, with
 ffmpeg on the PATH:
 
-    python walk_demo.py speech  # the talk (reads the corpus's 148 MB speech archive)
+    python walk_demo.py speech  # the talk (reads the corpus's archive up to it: 16 MB)
     python walk_demo.py scene   # scene_demo.yaml: the guide with a normal voice
     python walk_demo.py walk    # responses every 25 cm along the walk, the talk through them
     python walk_demo.py turn    # the visitor stands 4 m from the guide and turns round
@@ -81,6 +81,23 @@ ACE_DOI = "10.5281/zenodo.6257551"
 #: The corpus's talkers (5 women, 9 men): each one's take 4, about a minute on how they
 #: get to work.
 TALKERS = tuple(f"F{k}" for k in range(1, 6)) + tuple(f"M{k}" for k in range(1, 10))
+#: MB of the archive read before each talker's take is out: it is read as it comes.
+TALK_MB = {
+    "M4": 16,
+    "M2": 43,
+    "M8": 49,
+    "F2": 49,
+    "M1": 79,
+    "M6": 87,
+    "M5": 99,
+    "M3": 110,
+    "F4": 120,
+    "F3": 125,
+    "M7": 133,
+    "M9": 135,
+    "F5": 136,
+    "F1": 145,
+}
 CREDITS = f"""\
 Speech: the ACE challenge corpus, anechoic speech, by James Eaton, Nikolay D. Gaubitch,
 Alastair H. Moore and Patrick A. Naylor (Imperial College London, 2015),
@@ -141,6 +158,14 @@ VISITOR = "visitor"
 
 def speech_path(args) -> Path:
     return args.work / "speech" / f"{args.talker}.wav"
+
+
+def speech_download(args) -> str:
+    """What ``speech`` downloads: the archive as far as the talk (:data:`TALK_MB`)."""
+    return (
+        f"the talk of {args.talker} out of the ACE corpus's speech archive "
+        f"({TALK_MB[args.talker]} of its 148 MB, read as far as the talk)"
+    )
 
 
 def speech(args) -> None:
@@ -585,7 +610,13 @@ DEMO = Demo(
     description=__doc__,
     script=Path(__file__),
     steps=[
-        Step("speech", speech, "download the talk (the corpus's 148 MB archive)", speech_done),
+        Step(
+            "speech",
+            speech,
+            "download the talk (16 to 145 MB of the corpus's 148 MB archive)",
+            speech_done,
+            speech_download,
+        ),
         Step(
             "scene",
             scene,
