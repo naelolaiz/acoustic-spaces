@@ -525,13 +525,12 @@ responses is uncertain by about 3 dB (see [Strength](#strength-g) below).
 
 The tables and plots in this section were made with this version on 29 and 30 October
 2026, on 4 cores of a cloud machine without a GPU, where the run times below were
-measured (the coupled rooms', the seminar room's and the auditorium's in a run earlier
-on 29 October, before the fixes of paths over edges in rendered responses and at 125 Hz,
-which leave a run's time as it was: the hall's runs took as long as before them, within
-4 %). The coupled rooms, the seminar room and the auditorium each run in 2 to 4.5
-minutes and 0.6 to 1.1 GiB (up to 1.2 GiB in third-octave bands); the hall takes 1.5
-hours and 10.0 GiB (5.2 hours and 10.5 GiB calibrated, 3.4 hours and 11.8 GiB in
-third-octave bands),
+measured with each run alone on the machine (the coupled rooms', the seminar room's and
+the auditorium's in a second run on 30 October, which gave the same numbers). The
+coupled rooms, the seminar room and the auditorium each run in 2 to 4 minutes and 0.7
+to 1.1 GiB (4 to 9 minutes calibrated, 5 to 11 minutes and up to 1.2 GiB in
+third-octave bands); the hall takes 1.5 hours and 10.0 GiB (5.2 hours and 10.5 GiB
+calibrated, 3.4 hours and 11.8 GiB in third-octave bands),
 nearly all of it the early stage's edge diffraction at one listener (see
 [Memory](simulation.md#memory)). 4.0.0 could not run the seminar room or the hall at
 their defaults: its early stage asked for 16.4 GiB at once in CR3 and 19.6 GiB in CR2.
@@ -688,7 +687,7 @@ long instead of 7 %. Over 125 Hz to 4 kHz the seminar room's mean T30 difference
 from 1.0 to 0.9 JNDs; the hall's goes from 1.8 to 2.1 and the auditorium's from 3.0 to
 3.5, since their decays were long already and third octaves lengthen them. In the
 coupled rooms they lengthen the decay of LS1's sound further (T20 13.8 s at 125 Hz
-against 12.1 s in octave bands and 6.7 s measured). A third-octave run takes 9 to 11
+against 12.1 s in octave bands and 6.7 s measured). A third-octave run takes 10 and 11
 minutes for the seminar room and the auditorium instead of 4, and 3.4 hours for the hall
 instead of 1.5.
 
@@ -787,11 +786,11 @@ Some differences remain:
   about 45 Hz.
 - **63 Hz in the auditorium.** EDT is 5.1 JNDs long and T30 3.4 JNDs short.
 
-Fitting took 4 minutes for the auditorium (four rounds of tracing at the first
-position's 10,000 rays per band) and 3.7 hours for the hall (four rounds), nearly all of
-it the early stage's edge diffraction, which fewer rays do not shorten; the seminar
-room's took three rounds. Simulating again took about 4 minutes in the seminar room and
-the auditorium and 89 minutes in the hall.
+Fitting took 5.3 minutes for the seminar room (three rounds of tracing at the first
+position's 10,000 rays per band), 4.4 minutes for the auditorium (four rounds) and 3.7
+hours for the hall (four rounds), where nearly all of it is the early stage's edge
+diffraction, which fewer rays do not shorten. Simulating again took about 4 minutes in
+the seminar room and the auditorium and 89 minutes in the hall.
 
 ### Coupled rooms
 
@@ -833,7 +832,7 @@ to 0.20 at 1 kHz, as LS1's responses do not pin it (the fit reports an uncertain
 1 kHz against 0.8 s measured, 55 JNDs off in EDT on average. A calibration fits the
 responses it is given; in coupled rooms each room needs responses of its own.
 
-The CR1 runs take 2 minutes and 0.6 GiB (5 minutes and 0.7 GiB in third-octave bands, 4
+The CR1 runs take 2 minutes and 0.7 GiB (5 minutes and 0.9 GiB in third-octave bands, 4
 minutes calibrated).
 
 ### Strength (G)
@@ -3633,9 +3632,9 @@ leaves' about 2, the fast field program's about 4, the benchmark's about 55 (muc
 longer with `--far`), the weather zones' about 9 (2 the parabolic equation's, 7 the
 mean profile's), the long term's about 0.5, the moving sources' about 3, the fade at edges' about 80 (25 of them the barriers'), the
 walks' about 14, the cities' about 1 (2 with `--sizes 10 20 30 40 60`), each BRAS run
-of the coupled rooms, the seminar room or the auditorium 2 to 4.5 minutes (4 to 8
+of the coupled rooms, the seminar room or the auditorium 2 to 4 minutes (4 to 9
 calibrated, 5 to 11 in third-octave bands) and of the hall about 1.5 hours (5.2
-calibrated, 3.4 in third-octave bands), the binaural comparison 9.5 minutes in the
+calibrated, 3.4 in third-octave bands), the binaural comparison 10 minutes in the
 seminar room, 6 in the auditorium and an hour in the hall, and a loudspeaker of the hall
 in parts about 10 minutes. The cross-check's numbers come from 4.0.1 with seed 1;
 this version's own are within 0.012 % of them (EDT, whose line fit now starts at the
