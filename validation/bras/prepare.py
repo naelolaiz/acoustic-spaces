@@ -152,8 +152,11 @@ def _json(data: dict) -> str:
     return re.sub(r"\[\s*([^\[\]{}]*?)\s*\]", lambda m: "[" + " ".join(m[1].split()) + "]", text)
 
 
-def prepare_binaural(bras: Path, room: str) -> None:
-    """``binaural.json``: the setup and the measured IACC of a room's binaural responses."""
+def read_binaural(bras: Path, room: str) -> dict:
+    """A room's measured binaural responses with FABIAN's head straight on the torso (the
+    view nearest 0, 0 degrees): ``ir`` (ears, emitters, samples), ``rate``, ``emitters``
+    (positions), ``emitter_ids`` (BRAS's numbers), ``listener`` (position), ``view``
+    (degrees) and ``file``."""
     import h5py
 
     responses = f"{room}_BRIRs.sofa"
@@ -161,11 +164,23 @@ def prepare_binaural(bras: Path, room: str) -> None:
     with h5py.File(sofa, "r") as f:
         views = np.asarray(f["ListenerView"][()], dtype=float)
         view = int(np.argmin(np.abs(views[:, 0]) + np.abs(views[:, 1])))
-        ir = np.asarray(f["Data.IR"][view], dtype=float)  # (ears, emitters, samples)
-        rate = float(f["Data.SamplingRate"][()][0])
-        emitters = np.squeeze(f["EmitterPosition"][()], axis=-1)
-        emitter_ids = [int(v) for v in np.ravel(f["EmitterID"][()])]
-        listener = np.ravel(f["ListenerPosition"][()])
+        return {
+            "ir": np.asarray(f["Data.IR"][view], dtype=float),
+            "rate": float(f["Data.SamplingRate"][()][0]),
+            "emitters": np.squeeze(f["EmitterPosition"][()], axis=-1),
+            "emitter_ids": [int(v) for v in np.ravel(f["EmitterID"][()])],
+            "listener": np.ravel(f["ListenerPosition"][()]),
+            "view": views[view],
+            "file": responses,
+        }
+
+
+def prepare_binaural(bras: Path, room: str) -> None:
+    """``binaural.json``: the setup and the measured IACC of a room's binaural responses."""
+    found = read_binaural(bras, room)
+    ir, rate, emitters = found["ir"], found["rate"], found["emitters"]
+    emitter_ids, listener, view = found["emitter_ids"], found["listener"], found["view"]
+    responses = found["file"]
     angles = BRIR_ANGLES[room]
     sources = {}
     iacc = {}
@@ -180,7 +195,7 @@ def prepare_binaural(bras: Path, room: str) -> None:
         "scene": room,
         "source": CITATION,
         "responses": f"{responses}: FABIAN, a head and torso simulator, its head straight "
-        f"on the torso (view {views[view, 0]:g}, {views[view, 1]:g} degrees), facing LS7; "
+        f"on the torso (view {view[0]:g}, {view[1]:g} degrees), facing LS7; "
         "one QSC K8 loudspeaker at a time",
         "setup": f"positions from {responses} (the loudspeakers' tweeters), yaw and pitch "
         f"from the labels of {room}_BRIR.skp",
