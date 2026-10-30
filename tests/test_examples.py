@@ -3,6 +3,8 @@ import importlib.util
 import json
 import os
 import re
+import shutil
+import zipfile
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -13,7 +15,7 @@ from conftest import skip_without_extra
 
 from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.cli import main
-from acoustic_spaces.demos import PATH_KINDS, demo_for, load, pipeline
+from acoustic_spaces.demos import PATH_KINDS, demo_for, list_demos, load, pipeline
 from acoustic_spaces.engine import simulate
 from acoustic_spaces.examples import (
     GROUPS,
@@ -152,21 +154,19 @@ def test_examples_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     assert capsys.readouterr().out.strip() == str(tmp_path / "studio" / "scene.yaml")
     assert main(["examples", "cathedral"]) == 1
     assert "no example named cathedral" in capsys.readouterr().err
-    assert main(["examples", "gallery_walk"]) == 0  # the gallery's former name
-    assert capsys.readouterr().out.startswith("gallery: ")
 
 
 def test_the_gallery_stands_or_walks_in_one_scene(tmp_path: Path) -> None:
     """One gallery for the still listeners and the visitor who walks: the walk turns off
-    and on, and gallery_walk, its former name, still finds it and its demo."""
+    and on, and the gallery copies with its demo."""
     from acoustic_spaces.walkthrough import movers, with_moving
 
-    assert "gallery" in NAMES and "gallery_walk" not in NAMES
+    assert "gallery" in NAMES
     path = example_path("gallery")
-    assert example_path("gallery_walk") == path
     scene = Scene.from_yaml(path)
     listeners = {lis.name: lis for lis in scene.listeners}
-    assert set(listeners) == {"in sight", "round the corner", "visitor"}
+    assert set(listeners) == {"in sight", "round the corner", "visitor", "standing"}
+    assert not listeners["standing"].in_use  # walk_demo.py's, left out of simulations
     assert listeners["in sight"].walk is None and listeners["round the corner"].walk is None
     visitor = listeners["visitor"]
     assert visitor.position == (17.0, 4.0, 1.6) and visitor.walk.enabled
@@ -175,9 +175,8 @@ def test_the_gallery_stands_or_walks_in_one_scene(tmp_path: Path) -> None:
     assert movers(with_moving(scene, [])) == []
     assert scene.outputs[0].format == "binaural"  # what walkthrough plays by default
     assert demo_for("gallery").example == "gallery"
-    assert demo_for("gallery_walk").script == demo_for("gallery").script
-    copied = copy_examples(tmp_path, ["gallery_walk"])
-    assert copied == [tmp_path / "gallery_walk" / "scene.yaml"]
+    copied = copy_examples(tmp_path, ["gallery"])
+    assert copied == [tmp_path / "gallery" / "scene.yaml"]
     assert copied[0].read_bytes() == path.read_bytes()
     assert (copied[0].parent / "walk_demo.py").is_file()
 
@@ -224,9 +223,10 @@ def _with_left_out(example: str) -> Room:
 def test_stadium_sound_system_is_aligned(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """What the stadium's description says of its sound system."""
-    align = _script("stadium_pa", "align")
-    seats = align.arrivals(_with_left_out("stadium_pa"), rays=30, seed=1)
+    """What the stadium concert's description says of its sound system and its
+    monitors."""
+    align = _script("stadium_concert", "align")
+    seats = align.arrivals(_with_left_out("stadium_concert"), rays=30, seed=1)
     assert "left_out" not in seats
     assert not [row for rows in seats.values() for row in rows if row.source == "left_out"]
     time = {seat: {row.source: row.time_s for row in rows} for seat, rows in seats.items()}
@@ -241,17 +241,15 @@ def test_stadium_sound_system_is_aligned(
         ("east_stand", "delay_east_right", "main_right"),
     ):
         assert 0.005 < time[seat][delay] - time[seat][array] < 0.021, seat
-    # Nobody hears an echo.
-    assert not [(seat, row.source) for seat, rows in seats.items() for row in rows if row.echo]
+    _no_echo_and_own_monitors(align, seats)
     monkeypatch.setattr(align, "arrivals", lambda room, rays=None: seats)
     assert align.main([]) == 0
     out = capsys.readouterr().out
     assert "north_stand_far: " in out and "delay_north" in out and "  echo" not in out
 
 
-def test_each_player_hears_their_own_monitor_loudest() -> None:
-    align = _script("concert_stage", "align")
-    seats = align.arrivals(Room.from_yaml(example_path("concert_stage")), rays=30, seed=1)
+def _no_echo_and_own_monitors(align, seats: dict) -> None:
+    """Nobody hears an echo, and each player hears their own monitor loudest."""
     assert not [(seat, row.source) for seat, rows in seats.items() for row in rows if row.echo]
     for seat, monitor in (
         ("singer", "vocal_wedges"),
@@ -262,8 +260,15 @@ def test_each_player_hears_their_own_monitor_loudest() -> None:
         assert loudest.source == monitor, seat
 
 
+def test_each_player_hears_their_own_monitor_loudest() -> None:
+    align = _script("concert_stage", "align")
+    seats = align.arrivals(Room.from_yaml(example_path("concert_stage")), rays=30, seed=1)
+    _no_echo_and_own_monitors(align, seats)
+
+
 @pytest.mark.parametrize(
-    ("example", "low_db", "high_db"), [("stadium_pa", 3.5, 10.5), ("concert_stage", 3.0, 8.0)]
+    ("example", "low_db", "high_db"),
+    [("stadium_concert", 3.5, 10.5), ("concert_stage", 3.0, 8.0)],
 )
 def test_stadium_arrays_near_their_listeners(
     example: str,
@@ -291,9 +296,10 @@ def test_stadium_arrays_near_their_listeners(
 
 
 def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
-    """stadium_concert is stadium_pa and concert_stage together, and the three share their
-    scripts, their arrays and make_model.py, which writes each one's files as they are."""
-    folders = [EXAMPLES / name for name in ("stadium_pa", "concert_stage", "stadium_concert")]
+    """stadium_concert has concert_stage's sources and listeners as they are, and the two
+    share their scripts, their arrays and make_model.py, which writes each one's files as
+    they are."""
+    folders = [EXAMPLES / name for name in ("concert_stage", "stadium_concert")]
     for name in ("align.py", "near_field.py", "make_model.py", "feedback.py", "box.csv"):
         copies = {(f / name).read_bytes() for f in folders if (f / name).exists()}
         assert len(copies) == 1, name
@@ -306,10 +312,9 @@ def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
         return {entry["name"]: entry for entry in data}
 
     for kind in ("sources", "listeners"):
-        whole = entries(folders[2], kind)
-        whole.pop("helicopter", None)  # the concert's own, which helicopter_demo.py flies
-        parts = {**entries(folders[0], kind), **entries(folders[1], kind)}
-        assert whole == parts, kind
+        stage, whole = (entries(folder, kind) for folder in folders)
+        # Each of the stage's is the concert's, entry for entry: none drifts apart.
+        assert {name: whole.get(name) for name in stage} == stage, kind
     for folder in folders:
         copy = tmp_path / folder.name
         copy.mkdir()
@@ -331,10 +336,11 @@ def test_the_stadium_examples_share_their_parts(tmp_path: Path) -> None:
 
 
 def test_the_stadium_crowds_scatter_as_measured() -> None:
-    """The crowds of the three stadium scenes scatter as a measured theatre audience
-    does, little at 125 Hz and most from 1 kHz up, not at one value in every band."""
+    """The crowds of the stadium concert and of the concert stage scatter as a measured
+    theatre audience does, little at 125 Hz and most from 1 kHz up, not at one value in
+    every band."""
     measured = [0.3, 0.3, 0.5, 0.6, 0.6, 0.7, 0.7, 0.7]
-    for name in ("stadium_pa", "concert_stage", "stadium_concert"):
+    for name in ("concert_stage", "stadium_concert"):
         scene = Scene.from_yaml(example_path(name))
         crowds = [m for m in scene.materials.values() if m.audience]
         assert crowds, name
@@ -385,11 +391,35 @@ def _demo_args(demo, **values) -> argparse.Namespace:
     return demo.resolved(args)
 
 
+#: The steps that write a demo's scenes, when its scene step reads one another writes.
+SCENE_STEPS = {"crossing": ["flight", "scene"]}
+
+
+@pytest.mark.parametrize("demo", list_demos(), ids=lambda demo: f"{demo.example}-{demo.name}")
+def test_a_demo_plays_only_what_its_example_holds(demo, tmp_path: Path) -> None:
+    """Every source and listener in the scenes a demo writes is its example's, where the
+    example's scene has it: a demo brings none of its own, so the editor shows all it
+    plays (what the example's own simulations leave out it ticks, as the stadium's band)."""
+    folder = copy_examples(tmp_path, [demo.example])[0].parent
+    demo = demo.at(folder)
+    args = demo.resolved(demo.defaults())
+    demo.run(SCENE_STEPS.get(demo.name, [demo.scene_from] if demo.scene_from else []), args)
+    own = Scene.from_yaml(folder / "scene.yaml")
+    items = {item.name: item for item in [*own.sources, *own.listeners]}
+    written = sorted(folder.glob("scene_*.yaml"))
+    assert bool(written) == bool(demo.scene_from), written
+    for path in written:
+        scene = Scene.from_yaml(path)
+        for item in [*scene.sources, *scene.listeners]:
+            assert item.name in items, (path.name, item.name)
+            assert item.position == items[item.name].position, (path.name, item.name)
+
+
 def test_church_demo_scene_and_organ(tmp_path: Path) -> None:
     """church_demo.py's choir and organ: the tune and every voice of the organ fill a
     verse, every key has a sample at most two semitones away, the two sides of the organ
     share the notes, and the scene it writes is the church with 19 singers, the organ's
-    four sources and the tour's listeners, without problems."""
+    four sources and the tour's listeners, the example's own, without problems."""
     demo = _script("church", "church_demo")
     assert sum(beats for _, beats in demo.TUNE) == demo.BEATS
     for voice, notes in demo.ORGAN.items():
@@ -423,8 +453,21 @@ def test_church_demo_scene_and_organ(tmp_path: Path) -> None:
     assert room.scene.simulation.ir_length_s >= 9.0
     # The mixes weigh each source by the sound power the scene gives it.
     weights = {source["name"]: source["level_db"] for source in demo.scene_of(args)["sources"]}
-    assert weights[f"singer_{demo.SINGERS[0]}"] == demo.SINGER_DB
-    assert weights["organ_pedal_c"] == demo.PEDAL_DB
+    church = Scene.from_yaml(example_path("church"))
+    assert weights == {s.name: s.level_db for s in church.sources if s.name in weights}
+    assert weights[f"singer_{demo.SINGERS[0]}"] == 88.0 and weights["organ_pedal_c"] == 102.0
+    # Its choir, organ and places are the church's, left out of the church's simulations
+    # (but nave-back and nave-middle, which the tour shares): the editor shows them.
+    own = {item.name: item for item in [*church.sources, *church.listeners]}
+    for item in [*room.scene.sources, *room.scene.listeners]:
+        assert item.model_copy(update={"enabled": own[item.name].enabled}) == own[item.name]
+    assert [name for name, item in own.items() if item.in_use] == [
+        "altar",
+        "organ",
+        "nave-front",
+        "nave-middle",
+        "nave-back",
+    ]
     # --input takes the names of the scene's sources, as the editor's table lists them.
     plays = demo.plays(args)
     assert list(plays) == names
@@ -488,14 +531,19 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     room = Room.from_yaml(args.scene)
     assert room.problems() == []
     sources = {source.name: source for source in room.scene.sources}
-    assert [name for name in sources if name in demo.BAND] == list(demo.BAND)
-    assert {sources[name].group for name in demo.BAND} == {"Band"}
+    band = [name for name, source in sources.items() if source.group == demo.BAND]
+    assert band == list(demo.BAND_MIX) and all(sources[name].in_use for name in band)
+    # The band is the concert's, left out of its own simulations: the editor shows it.
+    concert = {s.name: s for s in Scene.from_yaml(example_path("stadium_concert")).sources}
+    for name in band:
+        assert not concert[name].in_use
+        assert concert[name].model_copy(update={"enabled": None}) == sources[name]
     scene = demo.scene_of(args)
     roles = {source["name"]: demo.role(source) for source in scene["sources"]}
     assert roles["main_right"] == "left" and roles["main_left"] == "right"
     assert roles["subs"] == "mono" and roles["vocal_wedges"] == "singer"
     assert roles["drum_fill"] == "drummer" and roles["side_fill_left"] == "stage"
-    assert all(roles[name] == name for name in demo.BAND)
+    assert all(roles[name] == name for name in demo.BAND_MIX)
     # --input takes the names of the scene's sources, before band writes it too: not the
     # helicopter, left out of the concert's simulations.
     plays = demo.plays(args)
@@ -724,6 +772,55 @@ def test_orchestra_demo_tour(tmp_path: Path) -> None:
     assert np.abs(audio[int(20 * rate) : int(21 * rate)]).max() > 0.4  # and after it
 
 
+def test_orchestra_demo_downloads_the_tracks(tmp_path: Path, monkeypatch) -> None:
+    """orchestra_demo.py's tracks come from the TU Berlin's server, the 61 of each
+    movement, not the zip's mix; a zip downloaded before (--zips) is read instead,
+    a download cut short goes on where it stopped, and the step says what it would
+    download until the tracks are there."""
+    demo = _script("orchestra", "orchestra_demo")
+    served = {}
+    for movement, (_, _, name) in demo.MOVEMENTS.items():
+        path = tmp_path / "server" / f"{name}.zip"
+        path.parent.mkdir(exist_ok=True)
+        with zipfile.ZipFile(path, "w") as archive:
+            for track in demo.TRACKS.values():
+                archive.writestr(f"anechoic/{track}", f"{name} {track}")
+            archive.writestr(f"mix/{name}_mix.wav", "the mix")
+        served[demo.ZIPS[movement]] = path
+    opened: list[tuple[str, int]] = []
+
+    def open_zip(url: str, block: int) -> zipfile.ZipFile:
+        opened.append((url, block))
+        return zipfile.ZipFile(served[url])
+
+    monkeypatch.setattr(demo.fetch, "open_zip", open_zip)
+    work, zips = tmp_path / "demo", tmp_path / "zips"
+    args = _demo_args(demo.DEMO, work=work, zips=zips)
+    step = demo.DEMO.step("tracks")
+    server = "from the TU Berlin's server"
+    assert step.downloads(args) == f"the 61 tracks of movements I, II and IV {server} (2.0 GB)"
+    zips.mkdir()
+    shutil.copyfile(served[demo.ZIPS[2]], zips / "movement2.zip")
+    assert step.downloads(args) == f"the 61 tracks of movements I and IV {server} (1.4 GB)"
+    args.movements = "2"
+    assert step.downloads(args) is None
+    args.movements = None
+    demo.tracks(args)
+    assert opened == [(demo.ZIPS[1], demo.BLOCK), (demo.ZIPS[4], demo.BLOCK)]
+    assert step.done(args) and step.downloads(args) is None
+    for _, _, name in demo.MOVEMENTS.values():
+        folder = work / "tracks" / name
+        assert sorted(path.name for path in folder.iterdir()) == sorted(demo.TRACKS.values())
+        assert (folder / "01_Fl_1.wav").read_text(encoding="utf-8") == f"{name} 01_Fl_1.wav"
+    # Cut short: the tracks left come, from where they came before.
+    (work / "tracks" / "movement1" / "05_Cl_1.wav").unlink()
+    (work / "tracks" / "movement2" / "13_Tp.wav").unlink()
+    assert step.downloads(args) == f"the 61 tracks of movement I {server} (at most 642 MB)"
+    opened.clear()
+    demo.tracks(args)
+    assert opened == [(demo.ZIPS[1], demo.BLOCK)] and step.done(args)
+
+
 def test_stadium_pictures_show_the_crowd() -> None:
     """The stadium demo's stills draw the crowd where the scene has its audience: standing
     on the pitch, seated in three stands, and the stand behind the stage as empty seats,
@@ -828,9 +925,10 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     evening, still = Room.from_yaml(args.scene), Room.from_yaml(args.still)
     for room in (evening, still):
         assert room.problems() == []
-        assert [source.name for source in room.scene.sources] == list(demo.SYSTEM)
+        assert [source.name for source in room.scene.sources] == list(demo.CHANNELS)
+        assert all(source.in_use for source in room.scene.sources)
         names = [listener.name for listener in room.scene.listeners]
-        assert names.count(demo.UPWIND["name"]) == 1 and set(demo.TITLES) == set(names)
+        assert names.count(demo.UPWIND) == 1 and set(demo.TITLES) == set(names)
         assert room.scene.simulation.ir_length_s == demo.IR_LENGTH_S
     assert evening.scene.atmosphere is not None and still.scene.atmosphere is None
     assert demo.plays(args) == {
@@ -904,7 +1002,7 @@ def test_lakeside_demo_plays_a_song_of_your_own(tmp_path: Path, monkeypatch) -> 
     x, got = read_wav(demo.song_path(args))
     assert demo.song_path(args) == work / "music" / "mine.wav"
     assert got == demo.RATE and x.shape == (40 * demo.RATE, 2)
-    assert all((work / "music" / f"{name}.wav").exists() for name in demo.SYSTEM)
+    assert all((work / "music" / f"{name}.wav").exists() for name in demo.CHANNELS)
     assert demo.played(args) == {"name": "mine", "bpm": 100.0, "credit": "Music: mine.wav"}
     # A phrase is 8 bars of the tempo given: 19.2 s; the 40 s song holds two stops.
     tour = demo.tour_of(args)
@@ -959,8 +1057,15 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path) -> None:
     assert float(at_1m_a) == pytest.approx(demo.VOICES["normal"], abs=6.0)  # the pattern's gain
     assert guide.spectrum == "speech_male"
     standing = next(lis for lis in room.scene.listeners if lis.name == "standing")
-    assert tuple(standing.position[:2]) == demo.STAND
+    # The gallery's own, left out of its simulations; --stand moves it, facing the guide.
+    placed = next(lis for lis in Scene.from_yaml(args.source).listeners if lis.name == "standing")
+    assert standing.in_use and not placed.in_use and standing.position == placed.position
     assert standing.orientation.yaw == pytest.approx(0.0, abs=0.1)  # facing the guide
+    moved = argparse.Namespace(**vars(args) | {"stand": "16,7", "scene": tmp_path / "moved.yaml"})
+    demo.scene(moved)
+    standing = next(lis for lis in Scene.from_yaml(moved.scene).listeners if lis.name == "standing")
+    assert standing.position == (16.0, 7.0, 1.6)
+    assert standing.orientation.yaw == pytest.approx(-36.87, abs=0.01)  # facing the guide
     # A female talker speaks with the female spectrum, and a louder voice is louder.
     assert demo.voice_level("speech_female", demo.VOICE_PATTERN, 60.0) != guide.level_db
     assert demo.VOICES["raised"] > demo.VOICES["normal"] > demo.VOICES["relaxed"]

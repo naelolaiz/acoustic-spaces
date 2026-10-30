@@ -454,11 +454,26 @@ class Room:
             out.extend(f"material {name!r}: {note}" for note in material.clipped)
         out.extend(self._near_arrays())
         out.extend(self._near_surfaces())
+        out.extend(self._unheard_microphones())
         if self.outdoor is not None:
             out.extend(self.scene.geometry.footprint_notes())
         out.extend(self._run_size())
         out.extend(self._wave_grid())
         return out
+
+    def _unheard_microphones(self) -> list[str]:
+        """Listeners with a pattern in a scene whose outputs leave out mono, the only one
+        that picks up through it."""
+        from acoustic_spaces.spatial.microphone import of_listener
+
+        if any(output.format == "mono" for output in self.scene.outputs):
+            return []
+        return [
+            f"the microphone of listener {item.name!r} ({of_listener(item).label}) is heard "
+            "only in the mono output, which the scene's outputs leave out"
+            for item in self._used("listeners")
+            if of_listener(item) is not None
+        ]
 
     def _wave_grid(self) -> list[str]:
         """A wave solver's grid coarser than the default, whose shortest waves travel

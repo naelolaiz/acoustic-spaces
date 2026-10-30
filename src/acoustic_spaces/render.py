@@ -185,7 +185,9 @@ def auralize(
     ``signals`` maps source names to a signal at ``sample_rate``, or to a
     (signal, rate) pair, resampled when the rates differ; multichannel signals are mixed
     down, as sources are points. ``fmt`` is a format of :mod:`acoustic_spaces.spatial`
-    (default mono); ``listener`` may be left out when the result has one listener.
+    (default mono, through the listener's microphone when it has a pattern:
+    :func:`~acoustic_spaces.spatial.for_listener`); ``listener`` may be left out when
+    the result has one listener.
     Returns (samples, channels) at ``sample_rate`` (default: the simulation's), with the
     sources at the levels the simulation gives them: the responses carry each source's
     feed (gain, equalizer, delay) but are per unit of sound power, so each signal is
@@ -193,15 +195,16 @@ def auralize(
     ``signals`` (:func:`power_gains`). ``equal_power`` leaves that out, as if every
     source had the loudest one's power.
     """
-    from acoustic_spaces.spatial import Mono
+    from acoustic_spaces.spatial import Mono, for_listener
 
-    fmt = fmt or Mono()
     sample_rate = int(sample_rate or result.settings.sample_rate)
     listeners = sorted({lis for _, lis in result.responses})
     if listener is None:
         if len(listeners) != 1:
             raise ValueError(f"pick a listener: {', '.join(listeners)}")
         listener = listeners[0]
+    items = {item.name: item for item in result.room.scene.listeners}
+    fmt = for_listener(fmt or Mono(), items.get(listener))
     if not signals:
         raise ValueError("no signals to auralize")
     mix = np.zeros((0, fmt.channels))

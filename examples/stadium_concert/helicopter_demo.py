@@ -150,7 +150,10 @@ def flight(args) -> None:
         [max(x1, float(high[0])), max(y1, float(high[1]))],
     ]
     ground["sky"] = max(float(ground.get("sky", 0.0)), float(places[:, 2].max()) + SKY_M)
-    listeners = np.array([lis["position"] for lis in data["listeners"]], dtype=float)
+    listeners = np.array(
+        [lis["position"] for lis in data["listeners"] if lis.get("enabled", True) is not False],
+        dtype=float,
+    )
     farthest = float(np.linalg.norm(places[:, None, :] - listeners[None, :, :], axis=2).max())
     scene = Scene.from_yaml(args.stadium)  # what the file leaves out at its defaults
     c = speed_of_sound(scene.air.temperature_c)

@@ -9,7 +9,7 @@ Run it from the folder of the gallery example (`acoustic-spaces examples --copy 
 gallery && cd gallery`), in the Python environment acoustic-spaces is installed in, with
 ffmpeg on the PATH:
 
-    python walk_demo.py speech  # the talk (reads the corpus's 148 MB speech archive)
+    python walk_demo.py speech  # the talk (reads the corpus's archive up to it: 16 MB)
     python walk_demo.py scene   # scene_demo.yaml: the guide with a normal voice
     python walk_demo.py walk    # responses every 25 cm along the walk, the talk through them
     python walk_demo.py turn    # the visitor stands 4 m from the guide and turns round
@@ -31,7 +31,8 @@ corner (the scene simulates first-order diffraction). The demo hears the visitor
 the gallery's two other listeners stand where they are and are left out. Edit the walk
 in the editor's Movement panel and the demo walks it as edited; with the visitor's walk
 turned off (Moves) there is no walk to play, and the demo says so. Then the turn: the visitor stands
-4 m in front of the guide (--stand), faces them and turns left a quarter at a time,
+4 m in front of the guide, where the scene's listener standing is (left out of its own
+simulations; --stand moves it), faces them and turns left a quarter at a time,
 holding each (--turn): the voice moves to the right ear, behind, to the left ear and
 back in front. The turn goes through the engine's head tracker,
 scripted: the place's response in Ambisonics of order 7, the sound field turned against
@@ -80,6 +81,23 @@ ACE_DOI = "10.5281/zenodo.6257551"
 #: The corpus's talkers (5 women, 9 men): each one's take 4, about a minute on how they
 #: get to work.
 TALKERS = tuple(f"F{k}" for k in range(1, 6)) + tuple(f"M{k}" for k in range(1, 10))
+#: MB of the archive read before each talker's take is out: it is read as it comes.
+TALK_MB = {
+    "M4": 16,
+    "M2": 43,
+    "M8": 49,
+    "F2": 49,
+    "M1": 79,
+    "M6": 87,
+    "M5": 99,
+    "M3": 110,
+    "F4": 120,
+    "F3": 125,
+    "M7": 133,
+    "M9": 135,
+    "F5": 136,
+    "F1": 145,
+}
 CREDITS = f"""\
 Speech: the ACE challenge corpus, anechoic speech, by James Eaton, Nikolay D. Gaubitch,
 Alastair H. Moore and Patrick A. Naylor (Imperial College London, 2015),
@@ -108,9 +126,10 @@ VOICE_PATTERN = [
     "cardioid",
     "cardioid",
 ]
-#: Where the visitor stands to look round (x, y; m), and the head's turn: yaw (degrees,
-#: turning left; 0 faces the guide) at each time (s).
-STAND = (16.0, 4.0)
+#: The scene's listener where the visitor stands to look round, left out of its own
+#: simulations, and the head's turn there: yaw (degrees, turning left; 0 faces the
+#: guide) at each time (s).
+STANDING = "standing"
 TURN = [
     (0.0, 0.0),
     (4.0, 0.0),
@@ -139,6 +158,14 @@ VISITOR = "visitor"
 
 def speech_path(args) -> Path:
     return args.work / "speech" / f"{args.talker}.wav"
+
+
+def speech_download(args) -> str:
+    """What ``speech`` downloads: the archive as far as the talk (:data:`TALK_MB`)."""
+    return (
+        f"the talk of {args.talker} out of the ACE corpus's speech archive "
+        f"({TALK_MB[args.talker]} of its 148 MB, read as far as the talk)"
+    )
 
 
 def speech(args) -> None:
@@ -204,7 +231,8 @@ def voice_level(spectrum: str, pattern: list[str], at_1m_a: float) -> float:
 def scene(args) -> None:
     """``--scene`` (scene_demo.yaml) from ``--from`` (scene.yaml): the gallery with the
     guide's voice as IEC 60268-16 gives it (``--voice``, the talker's spectrum) and its
-    directivity, the visitor's walk, and where it stands to look round (``--stand``)."""
+    directivity, the visitor's walk, and the scene's listener where it stands to look
+    round taken in (moved to ``--stand`` and turned to the guide, when given)."""
     base = yaml.safe_load(args.source.read_text(encoding="utf-8"))
     base["name"] = "Gallery walkthrough with a guide talking"
     spectrum = "speech_female" if female(args) else "speech_male"
@@ -216,17 +244,15 @@ def scene(args) -> None:
             "directivity": {"pattern": list(VOICE_PATTERN)},
         }
     )
-    visitor = next(lis for lis in base["listeners"] if lis["name"] == VISITOR)
-    x, y = stand_of(args)
-    gx, gy = guide["position"][:2]
-    yaw = round(math.degrees(math.atan2(gy - y, gx - x)), 2)
-    standing = {
-        "name": "standing",
-        "position": [x, y, visitor["position"][2]],
-        "orientation": {"yaw": yaw},
-    }
-    base["listeners"] = [lis for lis in base["listeners"] if lis["name"] != "standing"]
-    base["listeners"].append(standing)
+    standing = next((lis for lis in base["listeners"] if lis["name"] == STANDING), None)
+    if standing is None:
+        raise SystemExit(f"error: {args.source} has no listener {STANDING!r}")
+    standing.pop("enabled", None)
+    if args.stand:
+        x, y = stand_of(args)
+        gx, gy = guide["position"][:2]
+        standing["position"] = [x, y, standing["position"][2]]
+        standing["orientation"] = {"yaw": round(math.degrees(math.atan2(gy - y, gx - x)), 2)}
     pipeline.write_scene(
         args.scene,
         base,
@@ -392,10 +418,10 @@ def yaws_of(walked, room) -> np.ndarray:
 
 
 def turn(args) -> None:
-    """The turn: the visitor standing at ``--stand``, simulated there once, the talk
-    from the first cut through its response in Ambisonics, turned against the head as
-    ``--turn`` scripts it and decoded to the ears (the engine's head tracker);
-    ``turn/turn.<label>.wav`` and turn.json."""
+    """The turn: the visitor where the scene's listener standing is, simulated there
+    once, the talk from the first cut through its response in Ambisonics, turned against
+    the head as ``--turn`` scripts it and decoded to the ears (the engine's head
+    tracker); ``turn/turn.<label>.wav`` and turn.json."""
     from acoustic_spaces import Room, simulate
     from acoustic_spaces.headtracking import HeadTrackedBinaural
     from acoustic_spaces.render import resample
@@ -404,13 +430,13 @@ def turn(args) -> None:
     room = room_of(args)
     x, rate = talk(args)
     first, second = cuts(args, room)
-    standing = [lis for lis in room.scene.listeners if lis.name == "standing"]
+    standing = [lis for lis in room.scene.listeners if lis.name == STANDING]
     if not standing:
-        raise SystemExit(f"error: {args.scene} has no listener 'standing'; run: scene")
+        raise SystemExit(f"error: {args.scene} has no listener {STANDING!r}; run: scene")
     alone = Room.from_scene(room.scene.model_copy(update={"listeners": standing}), reuse=room)
     print("simulating the place the visitor looks round from")
     result = simulate(alone, progress=print)
-    response = result["guide", "standing"]
+    response = result["guide", STANDING]
     rate_out = result.settings.sample_rate
     seed = result.settings.seed if result.settings.seed is not None else response.seed
     field = response.spatial_impulse_response(Ambisonics(TURN_ORDER), rate_out, seed)
@@ -584,7 +610,13 @@ DEMO = Demo(
     description=__doc__,
     script=Path(__file__),
     steps=[
-        Step("speech", speech, "download the talk (the corpus's 148 MB archive)", speech_done),
+        Step(
+            "speech",
+            speech,
+            "download the talk (16 to 145 MB of the corpus's 148 MB archive)",
+            speech_done,
+            speech_download,
+        ),
         Step(
             "scene",
             scene,
@@ -634,8 +666,9 @@ DEMO = Demo(
         Option("scene", "the scene with the guide's voice", Path("scene_demo.yaml"), "path"),
         Option(
             "stand",
-            "x,y where the visitor stands to look round (m)",
-            f"{STAND[0]:g},{STAND[1]:g}",
+            "x,y where the visitor stands to look round (m); by default the scene's listener"
+            " 'standing'",
+            None,
             steps=("scene",),
         ),
         Option(

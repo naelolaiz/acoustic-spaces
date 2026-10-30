@@ -134,23 +134,32 @@ which frequencies each octave band holds.
   in the church, the band in the stadium, the concert across the lake, the walk through
   the gallery, the car passing the roadside and driving down the street), or a copy of
   one, also has that demo, reading the open scene, and the window starts on it (a copy
-  is known by its folder's name or, saved anywhere, by the scene's name). Pick
-  the demo and the step (*all* runs it from nothing to its video, leaving out what is
-  done already), fill in the options, which start at the same defaults the command
-  line uses (the **--input** table lists the sources, what
+  is known by its folder's name or, saved anywhere, by the scene's name). The example's
+  scripts that are no demos follow, each one step that prints what it finds in the
+  **Messages** panel, its options its own arguments: the stadium concert's and the
+  concert stage's `align.py`, `feedback.py` (the singer's microphone's gain before
+  feedback) and `near_field.py`, the town hall's `delays.py` and the listening room's
+  `bass.py`. Pick
+  the demo and fill in the options that change what it plays, labelled in words with
+  each one's flag in its tip, which start at the same defaults the command line uses
+  (the **What the sources play** table lists the sources, what
   each plays and the WAV file it plays instead: **Choose WAV…** gives the selected one a
   file, **Default** takes it back; the **Movement** box ticks the sources and listeners
   whose walk moves in the run, which *This scene* lets you change for that run,
   `--moving`, a walker left out of the scene showing only when the demo moves it, and
   **Edit movement…** opens the Movement panel on the selected one; a number shows its
-  unit, and the pass-by demos' **--speed** reads *as in the scene* at zero, the speed of
+  unit, and the pass-by demos' **Speed** reads *as in the scene* at zero, the speed of
   the car's walk, with the line under the Movement box saying how far, how fast (km/h
   and m/s) and so for how long the car drives, as the options stand), and
   it runs in its own process in the background, with what it prints in the **Messages**
-  panel and **Cancel** to stop it.
-  The window shows the command line it is about to run, so the same run can be
-  repeated in a terminal, and asks for a scene with changes to be saved first, as the
-  demo reads the file. An example's demo plays recordings it downloads, or a sound it
+  panel and **Cancel** to stop it. **Advanced**, closed until opened, holds the step
+  (*all* runs the demo from nothing to its video, leaving out what is done already),
+  what fine-tunes the run (the tour's stops, how far apart a walk's places are
+  simulated), the files and folders the demo reads and writes, and the command line it
+  is about to run, so the same run can be repeated in a terminal. The window asks for a
+  scene with changes to be saved first, as the demo reads the file. An example's demo
+  plays recordings it downloads, which the line above **Run** names with their size
+  until they are there (the orchestra's three movements are 2.0 GB), or a sound it
   makes (the pass-by demos' car), and can take a while. A demo writes beside the scene
   (*This scene* into `demo/`), or under your home folder when that folder cannot be
   written.
@@ -205,6 +214,12 @@ which frequencies each octave band holds.
   directivity index per band, opens the polar patterns, and the selected source shows
   its balloon in the 3D view. **Plays** names the WAV file the source plays in a demo of
   the scene: **Choose WAV…** picks a dry recording, **Silent** takes it away.
+- A listener's form sets its **Microphone**, what its mono output picks up through,
+  aimed where it faces: omni, a first-order pattern, or an XY pair (with its **Angle**
+  and **Capsules**), a Blumlein pair or an MS pair (with its **Mid** capsule and its
+  **Side**'s gain), which write two channels ([microphones](spatial-audio.md#microphones)).
+  The selected listener shows its microphone's balloon in the 3D view, one for each
+  capsule of a pair.
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
   as you edit, with the number of problems in red.
 - **Messages** shows warnings (leaks, results from before the latest changes, dropouts

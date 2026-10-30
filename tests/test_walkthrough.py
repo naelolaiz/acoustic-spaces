@@ -12,6 +12,7 @@ from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.cli import main
 from acoustic_spaces.render import convolve
 from acoustic_spaces.spatial import Mono
+from acoustic_spaces.spatial.microphone import first_order, xy
 from acoustic_spaces.walkthrough import (
     CROSSFADE_S,
     LATE_STEP_M,
@@ -480,6 +481,38 @@ def test_a_walking_listener() -> None:
     assert simulate_walk(room, step_m=0.5, settings=statistical).late_places == tuple(range(15))
 
 
+def test_walks_and_movements_are_heard_through_a_listeners_microphone() -> None:
+    walk = {"to": [[5.0, 1.0, 1.5]], "speed_m_s": 2.0}
+    sources = [{"name": "s", "position": [7.0, 5.0, 1.5]}]
+    click = np.zeros(200)
+    click[0] = 1.0
+    heard = {}
+    for pattern in (None, "cardioid"):
+        walker = _walker(walk, **({"pattern": pattern} if pattern else {}))
+        room = Room.from_scene(_scene(sources=sources, listeners=[walker]))
+        walked = simulate_walk(room, step_m=1.0)
+        heard[pattern] = render_walk(walked, {"s": click})
+    # The walker's places are copies of it, its microphone too.
+    assert heard["cardioid"].shape == heard[None].shape == (len(heard[None]), 1)
+    np.testing.assert_allclose(
+        heard["cardioid"], render_walk(walked, {"s": click}, first_order("cardioid"))
+    )
+    assert np.sum(heard["cardioid"] ** 2) < 0.9 * np.sum(heard[None] ** 2)
+    # In a movement each listener hears through its own: a pair in two channels.
+    listeners = [
+        _walker(walk),
+        {"name": "pair", "position": [5.0, 4.0, 1.2], "pattern": {"pair": "xy"}},
+    ]
+    room = Room.from_scene(_scene(sources=sources, listeners=listeners))
+    movement = simulate_movement(room, step_m=1.0)
+    out = render_movement(movement, {"s": click})
+    assert out["w"].shape[1] == 1 and out["pair"].shape[1] == 2
+    rate = room.scene.simulation.sample_rate
+    seed = room.scene.simulation.seed
+    ir = movement.result["s", "pair"].spatial_impulse_response(xy(), rate, seed)
+    np.testing.assert_allclose(out["pair"][: len(ir)], ir, atol=1e-12)
+
+
 def test_places_less_than_10_ms_apart_have_names_of_their_own() -> None:
     # 2 m at 30 m/s in steps of 0.25 m: 8.3 ms apart, two places at 0.03 s.
     walk = {"to": [[3.0, 1.0, 1.5]], "speed_m_s": 30.0}
@@ -555,9 +588,9 @@ class _Settings:
 class _Result:
     responses: dict
     settings: _Settings = field(default_factory=_Settings)
-    # No scene sources: every signal plays at the one power.
+    # No scene sources or listeners: every signal plays at the one power, in mono.
     room: SimpleNamespace = field(
-        default_factory=lambda: SimpleNamespace(scene=SimpleNamespace(sources=[]))
+        default_factory=lambda: SimpleNamespace(scene=SimpleNamespace(sources=[], listeners=[]))
     )
 
     def __getitem__(self, key):

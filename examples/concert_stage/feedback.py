@@ -3,20 +3,23 @@ that play it make it ring, at which frequencies it rings first, and how that sou
 
     python feedback.py [scene.yaml] [--rays N] [--out feedback.wav]
 
-The singer holds a supercardioid microphone 5 cm from the mouth, aimed at it, so its
-rear faces the wedges. Every loudspeaker that plays the voice feeds back into it: all
-but the subwoofers, the drum fill and those left out of simulations, at the scene's
-levels, EQ and delays, so the monitors and the PA keep the balance the scene gives
-them. The script simulates their responses at the microphone in first-order Ambisonics
-and turns them into the microphone's pattern; their sum, after 2 ms of latency in the
-console, is the loop.
+The singer's voice and microphone are the scene's, in its Band and Stage groups and left
+out of its simulations: the voice (singer_voice) a talker's, subcardioid, just in front
+of the singer's head, and the microphone (singer_mic) a listener with the supercardioid
+pattern 5 cm in front of it, aimed at it, so its rear faces the wedges. Moved or given
+another pattern in the editor, they are taken as they are. Every loudspeaker that plays
+the voice feeds back into the microphone: all but the subwoofers, the drum fill, the
+band's own sound and those left out of simulations, at the scene's levels, EQ and
+delays, so the monitors and the PA keep the balance the scene gives them. The
+microphone's mono response picks up each loudspeaker through its pattern; their sum,
+after 2 ms of latency in the console, is the loop.
 
 It prints the potential acoustic gain (PAG) in each octave band: how much louder the
 system can make the voice than the voice alone is, at the mix position and at the
 singer's ears, before the loop reaches unity gain and rings on its own. The voice alone
-is a talker's (subcardioid) from the singer's mouth, 15 cm from the ears. First as if
-the system were rung out, each band's peaks taken down to its average; then as it
-stands, where the loop's highest peak rings first and sets the gain for every band.
+is the scene's, 15 cm from the singer's ears. First as if the system were rung out,
+each band's peaks taken down to its average; then as it stands, where the loop's highest
+peak rings first and sets the gain for every band.
 Last it renders what the microphone picks up when a burst of noise is sung into it,
 with the loop 6 dB below, 2 dB below and 1 dB above unity gain: the first dies away,
 the second rings on and the third howls, up to where the amplifiers clip.
@@ -36,21 +39,18 @@ import numpy as np
 
 from acoustic_spaces import Room, simulate
 from acoustic_spaces.audio import write_wav
+from acoustic_spaces.directivity import PATTERNS
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import octave_filter_gains
-from acoustic_spaces.scene import Listener, Source
-from acoustic_spaces.spatial.ambisonics import Ambisonics, real_spherical_harmonics
+from acoustic_spaces.spatial import Microphone, Mono, for_listener
 
-#: The loudspeakers the voice is not sent to.
+#: The loudspeakers the voice is not sent to, and the group of the band's own sound.
 NOT_THE_VOICE = ("subs", "drum_fill")
-#: The singer's mouth from the middle of the head (m, forward and up); the microphone's
-#: distance from it and its pattern (a + (1 - a) cos theta: a supercardioid); and the
-#: distance from the mouth to the ears.
-MOUTH = (0.09, -0.08)
-MIC_DISTANCE, MIC_PATTERN = 0.05, 0.366
+BAND = "Band"
+#: The scene's voice and microphone (a source and a listener), and the distance from the
+#: mouth to the ears (m).
+VOICE, MIC = "singer_voice", "singer_mic"
 EARS = 0.15
-#: The voice's pattern, a talker's, as a + (1 - a) cos theta (a subcardioid).
-VOICE, VOICE_PATTERN = "subcardioid", 0.7
 #: The console's latency (s); the loop gains rendered (dB re unity gain), each for
 #: RENDER_S, the burst sung into the microphone (s), and where the amplifiers clip
 #: (re the burst's level, dB).
@@ -60,12 +60,19 @@ RENDER_S, BURST_S, CLIP_DB = 3.0, 0.3, 12.0
 RATE = 48_000
 
 
-def _voice_energy(distance: float, cos_angle: float) -> float:
+def _voice_energy(distance: float, cos_angle: float, a: float) -> float:
     """The voice's energy per unit sound power ``distance`` from the mouth in free
-    field, ``cos_angle`` off its aim."""
-    a = VOICE_PATTERN
+    field, ``cos_angle`` off its aim, for its pattern a + (1 - a) cos theta."""
     q = (a + (1.0 - a) * cos_angle) ** 2 / (a**2 + (1.0 - a) ** 2 / 3.0)
     return q / (4.0 * math.pi * distance**2)
+
+
+def _named(items, name: str):
+    """The scene's source or listener ``name``."""
+    found = next((item for item in items if item.name == name), None)
+    if found is None:
+        raise SystemExit(f"error: the scene has no {name!r}")
+    return found
 
 
 def _bands(n_fft: int) -> list[np.ndarray]:
@@ -85,16 +92,17 @@ def loop(
     ``speakers``, the loudspeakers in the loop. ``rays`` sets the late stage's rays, and
     ``seed`` repeats a run's random rays."""
     scene = room.scene
-    head = next(listener for listener in scene.listeners if listener.name == singer)
-    turn = np.array(head.orientation.rotation())
-    aim = turn[:, 0]
-    mouth = np.asarray(head.position) + MOUTH[0] * aim + MOUTH[1] * turn[:, 2]
-    mic = Listener(name="microphone", position=tuple(mouth + MIC_DISTANCE * aim))
-    mix = next(listener for listener in scene.listeners if listener.name == "mix_position")
-    voice = Source(
-        name="voice", position=tuple(mouth), orientation=head.orientation, directivity=VOICE
-    )
-    speakers = [s for s in scene.sources if s.in_use and s.name not in NOT_THE_VOICE]
+    head = _named(scene.listeners, singer)
+    mix = _named(scene.listeners, "mix_position")
+    # Left out of the scene's simulations, the voice and the microphone are taken in here.
+    voice = _named(scene.sources, VOICE).model_copy(update={"enabled": True})
+    mic = _named(scene.listeners, MIC).model_copy(update={"enabled": True})
+    if voice.directivity not in PATTERNS:
+        raise SystemExit(f"error: {VOICE} takes a first-order pattern by name here")
+    a = PATTERNS[voice.directivity]
+    speakers = [
+        s for s in scene.sources if s.in_use and s.name not in NOT_THE_VOICE and s.group != BAND
+    ]
     settings = scene.simulation
     if rays:
         settings = settings.model_copy(
@@ -108,16 +116,22 @@ def loop(
     result = simulate(Room.from_scene(copy, reuse=room), settings=settings)
     copy = scene.model_copy(update={"sources": [voice], "listeners": [mix]})
     heard = simulate(Room.from_scene(copy, reuse=room), settings=settings)
-    # The microphone's pattern from first-order Ambisonics (ACN / SN3D), aimed at the mouth.
-    harmonics = real_spherical_harmonics(1, -aim[None])[0]
-    pattern = np.concatenate([[MIC_PATTERN], (1.0 - MIC_PATTERN) * harmonics[1:]])
+    through = for_listener(Mono(), mic)
+    # The voice at the microphone in free field, picked up from where the mouth is.
+    mouth = np.asarray(voice.position)
+    gap = np.asarray(mic.position) - mouth
+    distance = float(np.linalg.norm(gap))
+    aim = np.array(voice.orientation.rotation())[:, 0]
+    toward = np.array(mic.orientation.rotation()).T @ (-gap / distance)
+    pickup = through.gains(toward)[0, 0] if isinstance(through, Microphone) else 1.0
+    at_mouth = _voice_energy(distance, float(aim @ gap) / distance, a) * pickup**2
     lag = int(round(LATENCY_S * RATE))
     parts, system = [], {"mix": 0.0, "ears": 0.0}
     for speaker in speakers:
         # The response holds the feed (EQ, delay); the sound power without it scales it.
         power = speaker.power_db() - speaker.feed_db()
-        ir = result[speaker.name, mic.name].spatial_impulse_response(Ambisonics(1), RATE)
-        parts.append(10.0 ** (power.mean() / 20.0) * (ir @ pattern))
+        ir = result[speaker.name, mic.name].spatial_impulse_response(through, RATE)[:, 0]
+        parts.append(10.0 ** (power.mean() / 20.0) * ir)
         for where, listener in (("mix", mix), ("ears", head)):
             levels = result[speaker.name, listener.name].levels(speaker.power_db())
             system[where] = system[where] + 10.0 ** (levels / 10.0)
@@ -133,10 +147,9 @@ def loop(
     at_mic = octave_filter_gains(n_fft, RATE) ** 2 @ (weights * spectrum) / n_fft
     at_mic = at_mic / (4.0 * math.pi)
     alone = {
-        "mix": 10.0 ** (heard["voice", mix.name].levels(np.zeros(len(OCTAVE_BANDS_HZ))) / 10),
-        "ears": np.full(len(OCTAVE_BANDS_HZ), _voice_energy(EARS, 0.0)),
+        "mix": 10.0 ** (heard[voice.name, mix.name].levels(np.zeros(len(OCTAVE_BANDS_HZ))) / 10),
+        "ears": np.full(len(OCTAVE_BANDS_HZ), _voice_energy(EARS, 0.0, a)),
     }
-    at_mouth = _voice_energy(MIC_DISTANCE, 1.0)
     # At unity gain the loudspeakers give the listener, for the voice at the microphone,
     # the system's energy there over its energy at the microphone.
     pag = {
@@ -203,12 +216,25 @@ def render(response: np.ndarray, gain_db: float, seconds: float = RENDER_S) -> n
     return out[:total]
 
 
+#: Its name in the editor's Run demo window.
+TITLE = "Feedback of the singer's microphone"
+
+
+def parser() -> argparse.ArgumentParser:
+    """Its arguments, which the editor's Run demo window asks for too."""
+    found = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    found.add_argument(
+        "scene", nargs="?", default=Path(__file__).with_name("scene.yaml"), help="the scene"
+    )
+    found.add_argument("--rays", type=int, help="rays per band (fewer is quicker)")
+    found.add_argument(
+        "--out", type=Path, default=Path("feedback.wav"), help="the rendered loop (WAV)"
+    )
+    return found
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("scene", nargs="?", default=Path(__file__).with_name("scene.yaml"))
-    parser.add_argument("--rays", type=int, help="rays per band (fewer is quicker)")
-    parser.add_argument("--out", default="feedback.wav", help="the rendered loop (WAV)")
-    args = parser.parse_args(argv)
+    args = parser().parse_args(argv)
     found = loop(Room.from_yaml(args.scene), rays=args.rays)
     bands = " ".join(f"{f if f < 1000 else f'{f // 1000}k':>5}" for f in OCTAVE_BANDS_HZ)
     print(f"The singer's microphone feeds {len(found['speakers'])} loudspeakers.")

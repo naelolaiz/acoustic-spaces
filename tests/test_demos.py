@@ -27,7 +27,9 @@ from acoustic_spaces.demos import (
     list_demos,
     music,
     pipeline,
+    scripts_of,
     shell_line,
+    sibling,
 )
 
 RATE = 8000
@@ -161,6 +163,41 @@ def test_a_remote_block_cut_short_every_time_fails(monkeypatch) -> None:
     with pytest.raises(OSError, match="came 9 long, 5 times"):
         remote.read(10)
     assert asked.count("bytes=0-99") == fetch.RETRIES
+
+
+def test_a_remote_file_is_read_in_blocks_of_the_size_asked(monkeypatch) -> None:
+    """A remote archive is asked for in blocks of the size given (large ones read large
+    members in fewer requests), and keeps 64 MiB of them, two blocks at the least."""
+    data = bytes(range(256)) * 400
+    asked: list[str] = []
+
+    class Response:
+        def __init__(self, headers: dict, body: bytes) -> None:
+            self.headers, self.body = headers, body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return self.body
+
+    def urlopen(url, headers=None, timeout=fetch.TIMEOUT):
+        asked.append(headers["Range"])
+        a, b = (int(x) for x in headers["Range"].removeprefix("bytes=").split("-"))
+        return Response({"Content-Range": f"bytes {a}-{b}/{len(data)}"}, data[a : b + 1])
+
+    monkeypatch.setattr(fetch, "urlopen", urlopen)
+    remote = fetch.RangeFile("https://example.org/tracks.zip", 40_000)
+    remote.seek(39_990)
+    assert remote.read(20) == data[39_990:40_010]
+    remote.seek(-10, 2)
+    assert remote.read() == data[-10:]
+    assert asked == ["bytes=0-0", "bytes=0-39999", "bytes=40000-79999", "bytes=80000-102399"]
+    assert fetch.RangeFile("https://example.org/tracks.zip").kept == 16
+    assert fetch.RangeFile("https://example.org/tracks.zip", 64 << 20).kept == 2
 
 
 def test_music_fetches_tracks_once_and_sums_them(tmp_path: Path) -> None:
@@ -437,6 +474,49 @@ def test_the_examples_demos_are_listed() -> None:
         if demo.scene_from:
             assert demo.scene_step() is not None
     assert demo_for("shoebox") is None
+
+
+def test_an_examples_script_runs_as_a_demo_of_one_step(tmp_path: Path) -> None:
+    """An example's scripts with a parser() (not its demos, nor what writes its model)
+    run as demos of one step: their options from their own arguments, the scene they
+    read given first without a flag, a file they write under its own flag."""
+    scripts = {demo.name: demo for demo in scripts_of("stadium_concert")}
+    assert set(scripts) == {"align", "feedback", "near_field"}
+    feedback = scripts["feedback"]
+    assert feedback.stepless and [s.name for s in feedback.steps] == ["run"]
+    assert feedback.title == "Feedback of the singer's microphone"
+    assert feedback.description.startswith("Feedback of the singer's microphone: how much")
+    options = {o.name: o for o in feedback.options}
+    scene, rays, out = options["scene"], options["rays"], options["out"]
+    assert scene.positional and scene.kind == "file" and scene.default == Path("scene.yaml")
+    assert scene.advanced and out.advanced and not rays.advanced
+    assert (rays.kind, rays.default, rays.option) == ("int", None, "--rays")
+    assert (out.kind, out.default) == ("path", Path("feedback.wav"))
+    assert feedback.command("run", feedback.defaults()) == "python feedback.py"
+    args = feedback.defaults()
+    args.scene, args.rays, args.out = tmp_path / "copy.yaml", 30, Path("loop.wav")
+    assert feedback.arguments(args) == [
+        str(tmp_path / "copy.yaml"),
+        "--rays",
+        "30",
+        "--out",
+        "loop.wav",
+    ]
+    argv = feedback.run_argv("run", args)
+    assert argv[1:] == [
+        str(feedback.script),
+        str(tmp_path / "copy.yaml"),
+        "--rays",
+        "30",
+        "--out",
+        str(feedback.folder / "loop.wav"),
+    ]
+    # Its arguments parse as the script's own parser parses them.
+    parsed = sibling(feedback.script, "feedback").parser().parse_args(argv[2:])
+    assert Path(parsed.scene) == tmp_path / "copy.yaml" and parsed.rays == 30
+    assert [d.name for d in scripts_of("town_hall_pa")] == ["delays"]
+    assert [d.name for d in scripts_of("listening_room")] == ["bass"]
+    assert scripts_of("shoebox") == [] and scripts_of("measurement") == []
 
 
 # --------------------------------------------------------------------------- the mixes

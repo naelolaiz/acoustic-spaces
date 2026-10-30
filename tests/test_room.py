@@ -35,6 +35,17 @@ def test_shoebox_room() -> None:
     assert room.listeners_inside.tolist() == [True]
 
 
+def test_a_microphone_no_output_hears_is_warned_about(tmp_path: Path) -> None:
+    seat = {"name": "seat-a", "position": [6.0, 3.0, 1.2], "pattern": {"pair": "ms"}}
+    heard = Room.from_yaml(_scene(tmp_path, listeners=[seat]))
+    assert not [w for w in heard.warnings() if "microphone" in w]
+    unheard = Room.from_yaml(_scene(tmp_path, listeners=[seat], outputs=["binaural"]))
+    assert [w for w in unheard.warnings() if "microphone" in w] == [
+        "the microphone of listener 'seat-a' (ms) is heard only in the mono output, which "
+        "the scene's outputs leave out"
+    ]
+
+
 def test_sabine_and_eyring_match_the_formulas() -> None:
     room = Room.from_yaml(SHOEBOX)
     materials = room.scene.materials

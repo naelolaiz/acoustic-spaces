@@ -63,8 +63,9 @@ from acoustic_spaces.demos.audio import mono, read, write
 
 #: The songs the demo can play (``--song``): the files each one is made of (one here,
 #: a member of a zip archive read by HTTP range requests or a file of its own, as
-#: :mod:`acoustic_spaces.demos.music` fetches them), its tempo (beats a minute; the tour
-#: moves on every 8 bars) and the credit its licence asks for.
+#: :mod:`acoustic_spaces.demos.music` fetches them), the MB they take to download, its
+#: tempo (beats a minute; the tour moves on every 8 bars) and the credit its licence
+#: asks for.
 SONGS = {
     "spicy_funk_cake": {
         "files": [
@@ -74,6 +75,7 @@ SONGS = {
                 "Spicy_Funk_Cake.wav",
             )
         ],
+        "download_mb": 61,
         "bpm": 110.0,
         "credit": 'Music: Rhythmussportgruppe, "Spicy Funk Cake" (Niklas Dahlheimer), recorded '
         "for the DEGA at Hochschule Düsseldorf, CC BY 4.0 · doi.org/10.5281/zenodo.3601032",
@@ -85,6 +87,7 @@ SONGS = {
                 "masters_stereo/09 - Great British Summer.wav",
             )
         ],
+        "download_mb": 50,
         "bpm": 120.0,
         "credit": 'Music: Tom McKenzie, "Great British Summer" (album "Extraordinary", AlbumDB), '
         "CC BY 4.0 · doi.org/10.5281/zenodo.19683001",
@@ -97,6 +100,7 @@ SONGS = {
                 None,
             )
         ],
+        "download_mb": 6,
         "bpm": 90.0,
         "credit": 'Music: Software-Entwicklungskit, "Potassium" (album "Everything is Free"), '
         "CC0 1.0 · github.com/ichbinsoftware/everythingisfree",
@@ -108,48 +112,13 @@ RATE = 48000
 SONG_KEPT = ("name", "bpm", "credit")
 
 
-#: The stage's sound system, as a lawn concert hangs it: two line arrays of eight boxes
-#: (lake_array.yaml, the box's own pattern in box.csv, both made with the stadium
-#: example's make_model.py) flown 6.5 m up on the audience's left (-y: the audience looks
-#: towards -x) and right, aimed straight down the lawn and, box by box, from 5 degrees
-#: down at the last rows, where the lawn meets the water, to 36 at the front rows; and
-#: a block of four cardioid subwoofers
-#: on the ground under the middle of the stage front, 2 m nearer the audience than the
-#: arrays and delayed by as much, so that both arrive together there. Levels are sound
-#: power (dB re 1 pW); the arrays play the song's channels, the subwoofers both. The
-#: system is tuned at the audience, as a system engineer tunes it (eq_db per octave band,
-#: 63 Hz to 8 kHz): the subwoofers rolled off above 125 Hz and 3 dB over the arrays
-#: together, the arrays' low mids up and their top octave up by what 30 m of air takes,
-#: so that at the audience every octave from 250 Hz to 4 kHz is within 1 dB of 1 kHz,
-#: 8 kHz 1.5 dB down and the two lowest 2 dB up.
-SYSTEM = {
-    "main_left": {
-        "position": [0.0, -6.0, 6.5],
-        "orientation": {"yaw": 0.0},
-        "level_db": 124.0,
-        "eq_db": [0, 0, 5, 0, 0, 1, 1, 2],
-        "directivity": {"file": "lake_array.yaml", "near_field": True},
-        "channel": 0,
-    },
-    "main_right": {
-        "position": [0.0, 6.0, 6.5],
-        "orientation": {"yaw": 0.0},
-        "level_db": 124.0,
-        "eq_db": [0, 0, 5, 0, 0, 1, 1, 2],
-        "directivity": {"file": "lake_array.yaml", "near_field": True},
-        "channel": 1,
-    },
-    "subs": {
-        "position": [1.0, 0.0, 0.6],
-        "level_db": 130.0,
-        "eq_db": [0, 0, -18, -40, -40, -40, -40, -40],
-        "delay_ms": 6,
-        "directivity": {"file": "sub_array.yaml", "near_field": True},
-        "channel": "mono",
-    },
-}
-#: A listener behind the stage, as far upwind as the park reaches.
-UPWIND = {"name": "behind_stage", "position": [-140.0, 0.0, 1.5], "orientation": {"yaw": 0.0}}
+#: The stage's sound system: the scene's sources in this group, left out of its own
+#: simulations, and the channel of the song each plays (the subwoofers both, in mono).
+PA = "PA"
+CHANNELS = {"main_left": 0, "main_right": 1, "subs": "mono"}
+#: The scene's listener behind the stage, as far upwind as the park reaches, left out of
+#: its own simulations.
+UPWIND = "behind_stage"
 #: How long the responses run: the far shore hears the stage 1.6 s late.
 IR_LENGTH_S = 3.5
 
@@ -208,23 +177,29 @@ def song_path(args) -> Path:
 def music_done(args) -> bool:
     """Whether the song and each loudspeaker's signal are there."""
     folder = music_folder(args)
-    names = [song_of(args)["name"], *SYSTEM]
+    names = [song_of(args)["name"], *CHANNELS]
     return all((folder / f"{name}.wav").exists() for name in names)
+
+
+def music_download(args) -> str | None:
+    """What ``music`` downloads: ``--song``, nothing for a song of your own."""
+    if args.music is not None:
+        return None
+    return f"the song {args.song} ({SONGS[args.song]['download_mb']} MB)"
 
 
 def music_step(args) -> None:
     """Download ``--song`` (one member of a zip archive, or the file itself), or read the
     song of your own ``--music`` names, bring it to 48 kHz stereo, and write what each
-    loudspeaker plays (SYSTEM, "channel"). A song downloaded before is kept."""
+    loudspeaker plays (CHANNELS). A song downloaded before is kept."""
     song = song_of(args)
     folder = music_folder(args)
     music.write_tracks({song["name"]: song["files"]}, folder, rate=RATE, channels=2)
     x, rate = read(song_path(args))
-    for name, source in SYSTEM.items():
-        channel = source["channel"]
+    for name, channel in CHANNELS.items():
         write(folder / f"{name}.wav", mono(x) if channel == "mono" else x[:, channel], rate)
     pipeline.write_json(folder / "song.json", {k: v for k, v in song.items() if k in SONG_KEPT})
-    print(f"wrote {', '.join(SYSTEM)} ({len(x) / rate:.0f} s of {song['name']}) to {folder}")
+    print(f"wrote {', '.join(CHANNELS)} ({len(x) / rate:.0f} s of {song['name']}) to {folder}")
 
 
 def plays(args) -> dict[str, str]:
@@ -232,7 +207,7 @@ def plays(args) -> dict[str, str]:
     song."""
     channels = {0: "left channel", 1: "right channel", "mono": "both channels in mono"}
     song = song_of(args)["name"]
-    return {name: f"{song}, {channels[s['channel']]}" for name, s in SYSTEM.items()}
+    return {name: f"{song}, {channels[channel]}" for name, channel in CHANNELS.items()}
 
 
 def played(args) -> dict:
@@ -248,17 +223,26 @@ def played(args) -> dict:
 
 def scenes(args) -> None:
     """``--scene`` (scene_demo.yaml) from ``--from`` (scene.yaml), with the stage's
-    sound system (SYSTEM) in place of the example's one source, a listener behind the
-    stage and responses long enough for the far shore; and ``--still``
-    (scene_still.yaml), the same in still air."""
+    sound system (its PA group) in place of the example's one source, its listener
+    behind the stage taken in and responses long enough for the far shore; and
+    ``--still`` (scene_still.yaml), the same in still air."""
     scene = yaml.safe_load(args.source.read_text(encoding="utf-8"))
     scene["name"] = scene["name"] + " (demo)"
     scene["sources"] = [
-        {"name": name} | {k: v for k, v in source.items() if k != "channel"}
-        for name, source in SYSTEM.items()
+        {k: v for k, v in s.items() if k != "enabled"}
+        for s in scene["sources"]
+        if s.get("group") == PA
     ]
-    if UPWIND["name"] not in {item["name"] for item in scene["listeners"]}:
-        scene["listeners"].append(dict(UPWIND))
+    names = [s["name"] for s in scene["sources"]]
+    missing = [name for name in CHANNELS if name not in names]
+    if UPWIND not in {item["name"] for item in scene["listeners"]}:
+        missing.append(UPWIND)
+    if missing:
+        raise SystemExit(f"error: {args.source} has no {', '.join(missing)}")
+    scene["listeners"] = [
+        {k: v for k, v in item.items() if k != "enabled" or item["name"] != UPWIND}
+        for item in scene["listeners"]
+    ]
     scene.setdefault("simulation", {})["ir_length_s"] = IR_LENGTH_S
     still = dict(scene, name=scene["name"].replace("(demo)", "(demo, still air)"))
     still.pop("atmosphere", None)
@@ -300,7 +284,7 @@ def responses_of(args, weather: str) -> list[dict]:
 def render(args) -> None:
     """Every listener's mix in both weathers (``--format``, binaural by default), with one
     gain for all: the loudest peak at -1 dBFS; and each one's level and delay."""
-    feeds = {name: music_folder(args) / f"{name}.wav" for name in SYSTEM}
+    feeds = {name: music_folder(args) / f"{name}.wav" for name in CHANNELS}
     mixes = []
     for weather, simulation in weathers(args).items():
         for listener in sorted({e["listener"] for e in responses_of(args, weather)}):
@@ -380,7 +364,7 @@ def video(args) -> None:
         tour,
         TITLES,
         gains,
-        pipeline.credited(played(args)["credit"], seats, list(SYSTEM)),
+        pipeline.credited(played(args)["credit"], seats, list(CHANNELS)),
         folder=args.scene.parent,
         hrtf=args.hrtf,
         tool={
@@ -407,7 +391,13 @@ DEMO = Demo(
     description=__doc__,
     script=Path(__file__),
     steps=[
-        Step("music", music_step, "download the song and a signal per loudspeaker", music_done),
+        Step(
+            "music",
+            music_step,
+            "download the song and a signal per loudspeaker",
+            music_done,
+            music_download,
+        ),
         Step(
             "scenes",
             scenes,

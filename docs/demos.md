@@ -16,8 +16,8 @@ more, and any scene makes a demo of its own with the recordings its sources are 
 
 The scripts come with the examples: `acoustic-spaces examples --copy . NAME` copies them
 with the scene. The recordings do not: they are other people's work under their own
-licences, named below with each demo, and the church, stadium and lake scripts download
-them from where their authors publish them. The videos need [ffmpeg](https://ffmpeg.org)
+licences, named below with each demo, and the scripts download them from where their
+authors publish them. The videos need [ffmpeg](https://ffmpeg.org)
 on the PATH and the pictures Pillow (the `viz` extra brings it). The mixes are binaural:
 use headphones. They go through the spherical head model unless every step and the
 `simulate` command get `--hrtf me.sofa`, a SOFA file of your own or measured HRTFs (the
@@ -61,13 +61,17 @@ demos take `--input car=engine.wav`, a dry recording played as the car's sound.
 
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demos
-(the stadium has two: its concert first, then the helicopter over it), each reading the
+(the stadium has two: its concert first, then the helicopter over it), then the
+example's scripts that are no demos (the stadium's `feedback.py`, say), each reading the
 open scene where it would read the example's (a copy is known by its
 folder's name or, saved anywhere, by the scene's name: a renamed scene is a scene of
-its own). Pick the demo and the step,
-fill in the options (they start at the same defaults the command line uses), and it
-runs in the background with its messages in the **Messages** panel, **Cancel** stopping
-it. The sources are a table, each with what it plays and the file it plays instead:
+its own). Pick the demo and fill in the options that change what it plays, labelled in
+words (they start at the same defaults the command line uses, each one's flag in its
+tip), and it runs in the background with its messages in the **Messages** panel,
+**Cancel** stopping it. **Advanced** holds the step, what fine-tunes the run, the files
+and folders the demo reads and writes, and the command line. Above **Run**, a line says
+what the run downloads and how much, until it is there: the orchestra's tracks, the
+church's takes and organ samples, the stadium's and the lake's song, the gallery's talk. The sources are a table, each with what it plays and the file it plays instead:
 **Choose WAV…** gives the selected one a file, **Default** takes it back. The
 **Movement** box lists the sources and listeners of the scene that have a walk, each
 with how it goes, how far and for how long, ticked when it moves in the run: *This
@@ -186,19 +190,18 @@ conductor's podium to the back of the hall.
 
 ```sh
 acoustic-spaces examples --copy . orchestra && cd orchestra
-# put movement1.zip, movement2.zip and movement4.zip here, from
-# https://doi.org/10.14279/depositonce-6729.2 (560 to 710 MB each)
+python orchestra_demo.py tracks   # demo/tracks: the 61 tracks of each movement (2.0 GB)
 acoustic-spaces simulate scene.yaml --out results
-python orchestra_demo.py tracks   # demo/tracks: the 61 tracks of each movement
 python orchestra_demo.py render   # demo/seats: each stop of the tour, binaural (~1 min each)
 python orchestra_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
 Options: `--tour 1:stalls-middle,1:conductor,2:stalls-rear` (the seats of a movement take
-equal shares of it), `--zips FOLDER` for the zips, `--movements 1,2` for `tracks`,
-`--format` for another output the simulation wrote, `--no-mp4` for the audio and stills
-only. `demo/chapters.txt` lists the stops' times for a video description. `all` runs
-tracks, render and video, after the simulation.
+equal shares of it), `--zips FOLDER` for a folder with zips downloaded before,
+`--movements 1,2` for `tracks`, `--format` for another output the simulation wrote,
+`--no-mp4` for the audio and stills only. `demo/chapters.txt` lists the stops' times for
+a video description. `all` runs tracks, the simulation, render and video, leaving out
+what is there already.
 
 - **The cuts.** Within a movement the seat changes at the quietest moment within 10 s of
   each equal share's end (the lowest half-second RMS of the first seat's mix), so the
@@ -225,8 +228,13 @@ scrolling spectrogram of the mix under the cover.
 
 **Recording.** Böhm, Ackermann and Weinzierl, *Beethoven, Symphony No. 8*, TU Berlin,
 <https://doi.org/10.14279/depositonce-6729.2>, CC BY 4.0: movements 1, 2 and 4, 61 mono
-tracks each (zips of 560 to 710 MB), downloaded by hand; `tracks` takes the 61 WAV files
-of each out of its zip.
+tracks each, in a zip with the movement's mix (590 to 740 MB). `tracks` reads the 61 WAV
+files of each out of its zip on the TU Berlin's server by HTTP range requests, without
+keeping the zip: 640, 600 and 740 MB, 2.0 GB for the three (nearly the whole zip, as the
+blocks of 32 MiB it reads of the last tracks hold the mix), 2.6 GB on disk. It reads
+them out of the zip, or the folder it was unpacked into (`movementN/anechoic`), in
+`--zips` instead, the example's folder by default. Tracks there already are kept, so a
+download cut short goes on where it stopped.
 
 ## A choir and an organ in the church
 
@@ -238,11 +246,14 @@ pacem" three times: the organ alone on full stops, the choir alone, then the cho
 the organ on quiet stops, slowing into a held last chord and the church's reverberation
 (1:26 in all). It mixes the piece at six places and makes a video that tours them: under
 the organ at the back, along the south wall, the front pews, the conductor, the back row
-of the choir and the middle of the nave.
+of the choir and the middle of the nave. The choir, the organ's pipes and those places
+are the example's: its Choir, Organ pipes and Choir concert groups, left out of the
+church's own simulations until ticked in the editor, and its listeners `nave-back` and
+`nave-middle`.
 
 ```sh
 acoustic-spaces examples --copy . church && cd church
-python church_demo.py music     # 19 takes, their annotations, 27 organ samples (about 100 MB)
+python church_demo.py music     # 19 takes, their annotations, 27 organ samples (127 MB)
 python church_demo.py scene     # scene_choir.yaml: the church with the choir and the organ
 acoustic-spaces simulate scene_choir.yaml --out results_choir --output binaural   # 10-20 min on 4 cores
 python church_demo.py feeds     # demo/feeds: one WAV per singer and per side of the organ
@@ -250,7 +261,7 @@ python church_demo.py render    # demo/seats: the whole piece at each listener
 python church_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
-Options: `--tour nave_back:0,conductor:25,...` (listener:start in seconds),
+Options: `--tour nave-back:0,conductor:25,...` (listener:start in seconds),
 `--listeners a,b` for `render`, `--format` for another output the simulation wrote
 (`ambix3`, `5.0`, ...; the video takes its first two channels), `--no-mp4` for the audio
 and stills only. The scene and its simulation go beside the script (`scene_choir.yaml`,
@@ -303,7 +314,8 @@ spherical head model unless `--hrtf` names a SOFA file.
   12(18), 2022), <https://doi.org/10.5281/zenodo.7061507>, **CC BY 4.0**: the start, end
   and mean F0 of each sung note. Its ground truth for the fourth note says F4; the score
   and the singers have G4, which the demo uses. Both archives are read by HTTP range
-  requests, so only the files needed (about 36 MB) are downloaded, not the 2.5 GB.
+  requests, so only the parts holding the files needed (69 MB) are downloaded, not the
+  2.5 GB.
 - The organ: the Versilian Community Sample Library's pipe organ, sampled by Simon
   Dalzell of Ivy Audio, Versilian Studios, <https://github.com/sgossner/VCSL> (pinned
   commit), **CC0 1.0**, credited as its notes encourage. Sampled every minor third; each
@@ -346,7 +358,7 @@ Software-Entwicklungskit released with their stems.
 
 ```sh
 acoustic-spaces examples --copy . stadium_concert && cd stadium_concert
-python stadium_demo.py music     # the reference mix and 7 stems (WAV, 450 MB)
+python stadium_demo.py music     # the reference mix and 7 stems (WAV, 313 MB to download)
 python stadium_demo.py band      # scene_band.yaml: the scene with the band on the stage
 acoustic-spaces simulate scene_band.yaml --out results_band --output binaural   # ~3 min on 4 cores
 python stadium_demo.py feeds     # demo/feeds: one WAV per loudspeaker and player
@@ -373,11 +385,12 @@ the line the video shows, the file's name unless given. Nothing is downloaded; t
 music goes to `demo/music/<file name>`, a folder of its own beside the presets', and
 `--input` goes on working on top of it.
 
-- **The band.** The example has loudspeakers only, so `band` adds the players as sources
-  on the stage, in a group of their own: a drum kit beside the drummer (116 dB sound
-  power, omni) playing the drums, the singer's voice (98 dB, subcardioid, facing the
-  audience) playing the vocal, and an amplifier behind the guitarist (112 dB, cardioid,
-  tilted up) playing the guitar, each from its own stem. On stage and near it the players
+- **The band.** The players are the example's sources on the stage, in its Band group,
+  which the concert's own simulations leave out until it is ticked; `band` takes them
+  in: a drum kit beside the drummer (116 dB sound power, omni) playing the drums, the
+  singer's voice (98 dB, subcardioid, facing the audience) playing the
+  vocal, and an amplifier behind the guitarist (112 dB, cardioid, tilted up) playing the
+  guitar, each from its own stem. On stage and near it the players
   are heard from where they stand; further out the sound system covers them.
 - **Who plays what.** The sound system plays the song's stereo master: the arrays, fills,
   towers and delays on the audience's left (-y) take the left channel, those on its right
@@ -434,16 +447,17 @@ for the sound database of the DEGA (German Acoustical Society) at Hochschule
 Düsseldorf's studio, <https://doi.org/10.5281/zenodo.3601032>, **CC BY 4.0**. `music`
 reads the reference mix and the seven processed stems (drums, bass, guitar, keys, brass,
 vocal, shouts; stereo WAV, 24-bit, 48 kHz) out of the release's 3.5 GB archive by HTTP
-range requests, so only those 450 MB are downloaded. The stems start 58 ms before the
-reference mix; `feeds` lines them up with it by cross-correlation.
+range requests, so only those are downloaded: 313 MB (450 MB unpacked). The stems
+start 58 ms before the reference mix; `feeds` lines them up with it by
+cross-correlation.
 
 "Francium" (127.75 BPM, 4:54) and "Rubidium" (132 BPM, 3:52) by Software-Entwicklungskit,
 from the album *Everything is Free*, <https://github.com/ichbinsoftware/everythingisfree>,
 **CC0 1.0**: electronic songs released with their stems. `music --song francium` downloads
-the master and the 26 stems (M4A, 800 MB in all; "Rubidium" has 9) from the album's
-repository at a fixed commit, decodes them with ffmpeg and sums the stems into the groups
-the mixes use: drums, bass, guitar (the synth lead, which the guitarist's amplifier
-plays), keys, vocal and backing vocals.
+the master and the 26 stems (M4A, 42 MB in all; "Rubidium" has 9, 43 MB) from the
+album's repository at a fixed commit, decodes them with ffmpeg and sums the stems into
+the groups the mixes use: drums, bass, guitar (the synth lead, which the guitarist's
+amplifier plays), keys, vocal and backing vocals.
 
 Either way the master plays through the sound system, the stems through the monitors
 and the band, and the credit goes to `demo/music/<song>/SOURCES.txt`.
@@ -492,8 +506,9 @@ to the end of the song; 2 by default), `--format` for another output the simulat
 wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and video;
 `scenes` and the two simulations come before it.
 
-- **The sound system.** `scenes` replaces the example's single source (120 dB sound
-  power) with a system as a lawn concert hangs it: two line arrays of eight boxes
+- **The sound system.** `scenes` plays, in place of the example's single source (120 dB
+  sound power), the example's PA group, left out of its own simulations until ticked: a
+  system as a lawn concert hangs it: two line arrays of eight boxes
   (`lake_array.yaml`, a generic box's pattern in `box.csv`, both made with the stadium
   example's `make_model.py`), 6.5 m up either side of the stage, 124 dB each, aimed down
   the lawn and, box by box, from 5° down at the last rows, where the lawn meets the water,
@@ -503,9 +518,10 @@ wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and vi
   that both arrive together there, playing both channels, rolled off above 125 Hz. The
   system is tuned at the audience as a system engineer tunes it (`eq_db`: the arrays' low
   mids up, their top octave up for the air): at 30 m every octave from 250 Hz to 4 kHz is
-  within 1 dB of 1 kHz, 8 kHz 1.5 dB down and 63 and 125 Hz 2 dB up. `scenes` also adds
-  a listener 140 m behind the stage, upwind, and lets the responses run 3.5 s, as the far
-  shore hears the stage 1.6 s late.
+  within 1 dB of 1 kHz, 8 kHz 1.5 dB down and 63 and 125 Hz 2 dB up. `scenes` also takes
+  in the example's listener 140 m behind the stage, upwind (`behind_stage`, left out as
+  the system is), and lets the responses run 3.5 s, as the far shore hears the stage
+  1.6 s late.
 - **The weather** is the example's: a breeze from the park out over the lake, 2.5 m/s
   10 m up, and two weather zones, the lake's (air 17 °C at the water, a degree warmer
   every 10 m up, and a 3.5 m/s breeze) and the village's (a 1 m/s breeze among the
@@ -549,7 +565,8 @@ the video shows it.
 
 - `spicy_funk_cake` (the default): "Spicy Funk Cake" by the Rhythmussportgruppe, the
   recording of the [stadium demo](#a-concert-in-the-stadium), **CC BY 4.0**; its reference
-  mix (56 MB) is read out of the release's preview archive by HTTP range requests.
+  mix (a 56 MB WAV file, 61 MB to download) is read out of the release's preview archive
+  by HTTP range requests.
 - `great_british_summer`: "Great British Summer" by Tom McKenzie, from the album
   *Extraordinary* in AlbumDB, <https://doi.org/10.5281/zenodo.19683001>, **CC BY 4.0**,
   read out of its archive of masters the same way.
@@ -582,7 +599,9 @@ python walk_demo.py all   # or speech, scene, walk, turn, video one at a time
 
 Options: `--talker M4` picks one of the corpus's 14 talkers, `--voice` how loud the
 guide speaks (relaxed, normal, raised, loud), `--stand 16,4` where the visitor stands
-for the turn, `--turn` the angles it holds, `--hrtf me.sofa` a measured head.
+for the turn (by default where the scene's `standing` listener does, left out of the
+gallery's own simulations), `--turn` the angles it holds, `--hrtf me.sofa` a measured
+head.
 
 - **The walk** is the example's visitor's: responses every 25 cm along it
   (`acoustic-spaces walkthrough`), the talk played along them so that the voice changes
@@ -609,7 +628,8 @@ for the turn, `--turn` the angles it holds, `--hrtf me.sofa` a measured head.
 
 **Recording.** The ACE challenge corpus (Eaton, Gaubitch, Moore and Naylor, Imperial
 College London), **CC BY 4.0**: an anechoic talk, a man describing his way to work
-through Delft; `speech` reads it out of the corpus's 148 MB archive.
+through Delft; `speech` reads the corpus's 148 MB archive as it comes, up to the
+talk: 16 MB for that talker, up to 145 MB for another (`--talker`).
 
 ## A car passing by
 

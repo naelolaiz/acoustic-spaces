@@ -1701,6 +1701,43 @@ class Source(_Model):
         return power_levels(levels, bands) + self.feed_db(bands)
 
 
+class XYPair(_Model):
+    """Two capsules of one pattern in one place, aimed apart in the horizontal plane."""
+
+    pair: Literal["xy"]
+    angle_deg: float = Field(
+        default=90.0,
+        gt=0.0,
+        le=180.0,
+        description="the angle between the capsules' aims (degrees), the left one to the left",
+    )
+    capsule: PatternName = Field(default="cardioid", description="the two capsules' pattern")
+
+
+class BlumleinPair(_Model):
+    """Two figure-eights in one place, aimed 45 degrees to each side."""
+
+    pair: Literal["blumlein"]
+
+
+class MSPair(_Model):
+    """A mid capsule aimed forward and a figure-eight aimed left, decoded to left and
+    right."""
+
+    pair: Literal["ms"]
+    mid: PatternName = Field(default="cardioid", description="the mid capsule's pattern")
+    side_db: float = Field(
+        default=0.0,
+        ge=-40.0,
+        le=20.0,
+        description="the figure-eight's gain against the mid (dB): more is wider",
+    )
+
+
+#: A coincident pair of capsules, which gives two channels, left and right.
+MicrophonePair = Annotated[XYPair | BlumleinPair | MSPair, Field(discriminator="pair")]
+
+
 class Listener(_Model):
     name: str
     group: str | None = _group_field()
@@ -1708,6 +1745,15 @@ class Listener(_Model):
     position: Vector3
     orientation: Orientation = Field(default_factory=Orientation)
     walk: Walk | None = Field(default=None, description="a path to walk, for a walkthrough")
+    pattern: PatternName | MicrophonePair | None = Field(
+        default=None,
+        description=(
+            "the microphone its mono output picks up through, aimed where it faces: a "
+            "first-order pattern, or a coincident pair (two channels, left and right); "
+            "omni when left out. The parameters and the other outputs stay an omni "
+            "listener's"
+        ),
+    )
 
     @field_validator("group")
     @classmethod
