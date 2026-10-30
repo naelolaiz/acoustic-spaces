@@ -978,7 +978,7 @@ edges and obliquely (the second from (-6, -2, -0.3) to (w + 2, 3, -4)):
 | two screens 1 m apart | -1.86 | -1.23 | -0.74 | -0.37 | -0.12 | +0.00 | +0.01 | +0.02 |
 | two screens 2 m apart, the second 0.4 m higher | -1.29 | -0.92 | -0.65 | -0.44 | -0.29 | -0.18 | -0.10 | -0.04 |
 
-The levels themselves run from -9 dB at 63 Hz to -41 dB at 8 kHz. Adding its waves in
+The levels themselves run from -9 dB at 63 Hz to -42 dB at 8 kHz. Adding its waves in
 energy, the engine is low at low frequencies where the edges are close together, as over
 a thin screen: the waves of an edge add in energy near their boundaries, where the exact
 solution adds them with their phases. In the 63 and 125 Hz bands the engine adds them in
@@ -1195,18 +1195,21 @@ every order of reflections off perpendicular planes.
 The largest steps left stand out from their neighbours' by at most 0.08 dB, all at 63
 and 125 Hz; from 250 Hz up by at most 0.01 dB, where in 4.0.0 they stood out by up to
 0.10 dB at 500 Hz to 1 kHz as the listener crossed the plane of wall_3 (y = 8 m). The
-largest, 0.08 dB at 125 Hz (y = 13.33 m on x = 5.5 m), and one of 0.03 dB at 63 Hz
-(9.81 m on x = 4 m) come from a path that the corner stops on one leg while another of
-its reflection points slides past the end of its face into a corner of the room: the
-path is left out there, though its path over the corner still reflects on the face. One
-of 0.02 dB at 125 Hz (12.99 m on x = 3 m) is a leg that takes the corner's term on the
-lit side on one side of the step and not on the other; the others, of up to 0.035 dB,
-are not traced.
+largest, 0.08 dB at 125 Hz between y = 13.33 and 13.34 m on x = 5.5 m, and a smaller
+one at 63 Hz near y = 9.81 m on x = 4 m come from a path that the corner stops on one
+leg while another of its reflection points slides past the end of its face into a
+corner of the room: the path is left out there, though its path over the corner still
+reflects on the face. The largest on x = 3 m at 125 Hz, 0.02 dB between y = 12.99 and
+13.00 m, is a leg that takes the corner's term on the lit side on one side of the step
+and not on the other; the others, of up to 0.035 dB (63 Hz, y = 12.00 m on x = 4 m),
+are not traced. `validation/walks.py` prints how far the steps stand out on each line,
+and where.
 
 Where the edge diffraction already bends every path the early stage follows
 (`max_order: 0` with `direct`, `max_order: 1` with `first_order`), the fade changes the
-level along x = 4 m by less than 0.05 dB. It had taken away the terms of reflections
-off faces the listener was behind, which the early stage follows nowhere at that order:
+level along x = 4 m by less than 0.05 dB (a one-off check). It had taken away the
+terms of reflections off faces the listener was behind, which the early stage follows
+nowhere at that order:
 2.9 dB less at once at 63 Hz behind the plane of the wall round the corner.
 
 ### Along a street
@@ -1218,25 +1221,26 @@ jump: the early level, A-weighted with the car's sound power, every 10 cm of the
 125 m, and again 1 cm apart round each step of 10 cm that is among the four largest for
 its listener in some band or in dB(A) (`validation/walks.py`). Outdoors paths
 add in pressure in every band, so the level also swings, smoothly, where they go in
-and out of step: in the garden by up to 3.2 dB(A) from one metre to the next, and 1 cm
-apart by up to 0.24 dB(A) and 0.7 dB at 8 kHz, where a centimetre is a quarter of a
-wavelength. The late part is left out, as its rays are drawn at random (the early
-level repeats to the last bit): with the scene's rays few of them reach the garden,
-and two runs of the same pass without a `seed` put the garden's level up to 2.3 dB(A)
-apart at one place (x = -47 m; 0.45 dB(A) rms over the pass), the pavement's and the
-balcony's up to 0.8 and 0.5 dB(A), each L_Amax within 0.02 dB.
+and out of step: at 8 kHz, where a centimetre is a quarter of a wavelength, the
+garden's level changes by up to 0.76 dB from one centimetre to the next. The late part
+is left out, as its rays are drawn at random (the early level repeats to the last
+bit): with the scene's rays few of them reach the garden, and in a one-off check two
+runs of the same pass without a `seed` put the garden's level up to 2.3 dB(A) apart at
+one place (x = -47 m; 0.45 dB(A) rms over the pass), the pavement's and the balcony's
+up to 0.8 and 0.5 dB(A), each L_Amax within 0.02 dB.
 
 On the pavement and the balcony the early level changes by at most 0.24 and 0.15 dB(A)
 from one 10 cm to the next, and in the garden by at most 1.33 dB(A), where 1 kHz swings
 by 2.5 dB at x = 28.8 m and does so smoothly 1 cm apart; without the fade the garden's
-level stepped by up to 11.4 dB(A) from one metre to the next. The steps of 0.90 to 1.90
+level steps by up to 12.3 dB(A) from one 10 cm to the next. The steps of 0.90 to 1.90
 dB that two events stopping a path made in the garden, at x = -41.60, 30.41, 32.00 and
-34.00 m (see the next paragraph), are gone: 1 cm apart, the level there now stands out
-from its neighbours' by at most 0.11 dB in any band. The steps left that stand out by
-more than 0.1 dB in some band 1 cm apart, but at 8 kHz, where a centimetre is a quarter
-of a wavelength and the level swings by up to 0.8 dB from one to the next (three more
-at 4 kHz in the garden, at x = 19.40, 28.72 and 28.88 m, are swings too: 1 mm apart
-the level there changes smoothly, by at most 0.06 dB a millimetre), each the step from
+34.00 m (see the next paragraph), are gone: 1 cm apart, the level there stood out from
+its neighbours' by at most 0.11 dB in any band when they were fixed. The steps left
+that stand out by more than 0.1 dB in some band 1 cm apart, but at 8 kHz, where a
+centimetre is a quarter of a wavelength and the level swings by up to 0.76 dB from one
+to the next (three more at 4 kHz in the garden, at x = 19.40, 28.72 and 28.88 m, are
+swings too: in a one-off check 1 mm apart the level there changed smoothly, by at most
+0.06 dB a millimetre), each the step from
 1 cm before x to x, and how far it stands out in dB(A) and in the same band without the
 fade (`validation/walks.py`):
 
@@ -1244,7 +1248,7 @@ fade (`validation/walks.py`):
 |---:|---|---:|---|---:|---:|
 | -41.39 | garden | 1.13 | 1 kHz | 0.52 | 0.00 |
 | -14.04 | garden | 1.41 | 63 Hz | 0.27 | 0.33 |
-| -0.75 | garden | 1.29 | 63 Hz | 0.15 | 0.41 |
+| -0.75 | garden | 1.29 | 63 Hz | 0.15 | 0.42 |
 | -0.69 | garden | 1.37 | 63 Hz | 0.27 | 0.47 |
 | 9.99 | garden | 0.82 | 63 Hz | 0.03 | 0.96 |
 | 37.80 | pavement | 0.55 | 63 Hz | 0.03 | 1.09 |
@@ -1305,7 +1309,7 @@ would also be the better one here is not checked.
   gallery's corner (see above). The edge diffraction's own paths over an edge with a
   reflection before or after it stop where that reflection leaves its face, which the
   fade makes up for where it follows the path; without the fade the street's garden
-  steps by 0.60 dB at 125 Hz there.
+  stepped by 0.60 dB at 125 Hz there when this was fixed.
 - **Corners of edges.** A term stops where the point it diffracts at leaves the end of
   its edge, as the UTD has no terms for the corners of edges, unless that end lies in a
   plane the path reflects off next to the event, where the edge goes on as its image in
@@ -1344,21 +1348,23 @@ would also be the better one here is not checked.
   y = 6.14 m and by 0.92 dB at 250 Hz at 7.33 m, and by up to 4.4 dB before the terms
   of one event took their cross terms with each other. The edge diffraction's own
   paths, without the fade, step there by up to 1.56 dB at 63 Hz and 1.88 dB from 250 Hz
-  up. Averaged over the walk, the level is 0.4, 1.1 and 0.7 dB above that with every
-  band in pressure (`coherent_max_band_hz: 8000`) at 250, 500 and 1000 Hz (4.0.0: 0.1,
-  1.6 and 0.9 dB) and 0.1 to 0.4 dB below it from 2 kHz up: not traced.
+  up. Averaged over the walk, in a one-off check, the level was 0.4, 1.1 and 0.7 dB
+  above that with every band in pressure (`coherent_max_band_hz: 8000`) at 250, 500 and
+  1000 Hz (4.0.0: 0.1, 1.6 and 0.9 dB) and 0.1 to 0.4 dB below it from 2 kHz up: not
+  traced.
 - **Cut off by a thick end.** Behind the `archway`'s wall the level steps by 0.57 dB at
   63 Hz and 0.41 dB at 125 Hz between y = 5.39 and 5.40 m, and by 0.08 dB or less from
-  250 Hz up, as it does with every band in pressure. Reflections that the end of the
-  arch's jamb cuts off are followed while the leg they are cut off on hits the end's
+  250 Hz up, as it did with every band in pressure in a one-off check. Reflections
+  that the end of the arch's jamb cuts off are followed while the leg they are cut off
+  on hits the end's
   face, and left out once it hits the jamb's face on the far side, 40 cm on, which is a
   face of the end's other corner and not of the edge whose shadow they are in. Letting
   that other corner explain them removed the step but made one of 1.75 dB at y = 5.90 m,
   where a reflection point of one of those paths also leaves its face and the path,
   stopped at two events, is left out at once; so it is not done. The other steps along
-  the walk, of up to 0.24 dB at 63 and 125 Hz and 0.07 dB from 250 Hz up, are there in
-  pressure too; at y = 6.83 to 6.84 m and 7.00 to 7.01 m, terms of cut-off second- and
-  third-order reflections come or go, and why is not traced. The fix would take a term
+  the walk, of up to 0.24 dB at 63 and 125 Hz and 0.07 dB from 250 Hz up, were there in
+  pressure too (a one-off check); at y = 6.83 to 6.84 m and 7.00 to 7.01 m, terms of
+  cut-off second- and third-order reflections come or go, and why is not traced. The fix would take a term
   over both corners of the end in turn, as `second_order` has for the direct sound,
   which the fade does not have (an open item on the [roadmap](roadmap.md)).
   `tests/test_walks.py` walks the whole line in CI and holds the steps to 0.65 dB at
@@ -1510,7 +1516,7 @@ solver up to its 250 Hz band):
 | Hz | 40 | 63 | 80 | 100 | 125 | 160 | 200 | 250 | 315 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | exact (dB) | -0.17 | -0.43 | -0.66 | -0.98 | -1.44 | -2.20 | -3.21 | -4.73 | -7.11 |
-| wave - exact (dB) | +0.02 | -0.02 | +0.01 | +0.01 | +0.02 | +0.02 | +0.05 | +0.10 | +0.11 |
+| wave - exact (dB) | +0.02 | -0.02 | +0.01 | +0.01 | +0.02 | +0.02 | +0.05 | +0.10 | +0.12 |
 
 ## Outdoor propagation against measurements (Hannover)
 
@@ -1702,21 +1708,21 @@ mean ± standard error of 16 runs of a million particles:
 | none (exact 1.008) | through | 1.008 ± 0.002 | 1.010 ± 0.002 | - | - |
 | none (exact 1.008) | beside | 1.003 ± 0.003 | 1.011 ± 0.003 | - | - |
 | none (exact 1.008) | behind | 1.009 ± 0.002 | 1.006 ± 0.002 | - | - |
-| isotropic | through | 0.997 ± 0.002 | 0.995 ± 0.003 | 0.990 ± 0.002 | 0.988 ± 0.002 |
-| isotropic | beside | 1.418 ± 0.002 | 1.419 ± 0.002 | 1.418 ± 0.000 | 1.418 ± 0.000 |
-| isotropic | behind | 1.204 ± 0.002 | 1.202 ± 0.001 | 1.202 ± 0.000 | 1.202 ± 0.000 |
+| isotropic | through | 0.997 ± 0.002 | 0.996 ± 0.003 | 0.990 ± 0.002 | 0.988 ± 0.002 |
+| isotropic | beside | 1.418 ± 0.002 | 1.420 ± 0.002 | 1.418 ± 0.000 | 1.418 ± 0.000 |
+| isotropic | behind | 1.204 ± 0.002 | 1.203 ± 0.001 | 1.202 ± 0.000 | 1.202 ± 0.000 |
 | forward | through | 0.737 ± 0.002 | 0.734 ± 0.003 | 0.730 ± 0.001 | 0.732 ± 0.002 |
 | forward | beside | 1.103 ± 0.001 | 1.102 ± 0.001 | 1.098 ± 0.000 | 1.098 ± 0.000 |
 | forward | behind | 1.030 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 |
 | stems | through | 0.685 ± 0.003 | 0.682 ± 0.002 | 0.685 ± 0.002 | 0.682 ± 0.001 |
 | stems | beside | 1.254 ± 0.001 | 1.253 ± 0.001 | 1.254 ± 0.001 | 1.254 ± 0.001 |
 | stems | behind | 1.187 ± 0.001 | 1.185 ± 0.001 | 1.186 ± 0.000 | 1.185 ± 0.000 |
-| leaves | through | 0.947 ± 0.003 | 0.949 ± 0.002 | 0.939 ± 0.002 | 0.943 ± 0.002 |
-| leaves | beside | 1.529 ± 0.002 | 1.525 ± 0.002 | 1.528 ± 0.001 | 1.527 ± 0.001 |
-| leaves | behind | 1.252 ± 0.001 | 1.252 ± 0.001 | 1.251 ± 0.000 | 1.252 ± 0.000 |
-| two bands, band 1 | through | 0.994 ± 0.003 | 1.004 ± 0.004 | 0.988 ± 0.002 | 0.991 ± 0.003 |
+| leaves | through | 0.947 ± 0.003 | 0.950 ± 0.002 | 0.939 ± 0.002 | 0.943 ± 0.002 |
+| leaves | beside | 1.529 ± 0.002 | 1.526 ± 0.002 | 1.528 ± 0.001 | 1.527 ± 0.001 |
+| leaves | behind | 1.252 ± 0.001 | 1.253 ± 0.001 | 1.251 ± 0.000 | 1.252 ± 0.000 |
+| two bands, band 1 | through | 0.994 ± 0.003 | 1.005 ± 0.004 | 0.988 ± 0.002 | 0.991 ± 0.003 |
 | two bands, band 1 | beside | 1.418 ± 0.002 | 1.421 ± 0.002 | 1.417 ± 0.000 | 1.417 ± 0.000 |
-| two bands, band 1 | behind | 1.203 ± 0.001 | 1.203 ± 0.002 | 1.202 ± 0.000 | 1.202 ± 0.000 |
+| two bands, band 1 | behind | 1.203 ± 0.001 | 1.204 ± 0.002 | 1.202 ± 0.000 | 1.202 ± 0.000 |
 | two bands, band 2 | through | 0.736 ± 0.002 | 0.743 ± 0.003 | 0.732 ± 0.001 | 0.734 ± 0.003 |
 | two bands, band 2 | beside | 1.101 ± 0.001 | 1.103 ± 0.001 | 1.098 ± 0.000 | 1.098 ± 0.000 |
 | two bands, band 2 | behind | 1.030 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 | 1.030 ± 0.000 |
@@ -1728,11 +1734,11 @@ per m³, 5 cm wide, as the engine works them out in the 4 kHz band
 ([Leaves](#leaves-against-closed-forms-and-iso-9613-2): 0.0535 per metre scattered
 with a mean cosine of 0.14, 0.00075 absorbed); and the first two in two bands at
 once, which the engine traces with one set of rays. The engine agrees with the
-particles within 1 % through the slab (0.4 % with one medium alone) and 0.3 % beside
+particles within 1.1 % through the slab (0.4 % with one medium alone) and 0.3 % beside
 it and behind the source, with the spheres and with the rain: at most two to three of
 their standard errors, and the particles' own runs differ as much from one set of
 seeds to another (0.990 and 0.988 through the slab, rain, the same foliage alone and
-in two bands). In empty air the two differ by 0.8 % beside the slab (1.003 and 1.011),
+in two bands). In empty air the two differ by 0.7 % beside the slab (1.003 and 1.011),
 each within 0.5 % of the exact 1.008: the runs' own noise. Next to the slab
 the rain gives a little less than the spheres in both programs alike (the same with
 stems), as it takes
@@ -1838,23 +1844,23 @@ of the pressure over the band's slices, wave solver / parabolic equation:
 
 | 63 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up | 200 m, 1.5 m up | 200 m, 5 m up |
 |---|---|---|---|---|---|---|
-| still | +5.2 / +5.2 | +4.3 / +4.4 | +5.0 / +5.2 | +4.2 / +4.4 | +5.0 / +5.0 | +4.0 / +4.0 |
-| downwind | +5.2 / +5.8 | +3.9 / +4.4 | +5.8 / +6.3 | +4.2 / +5.0 | +7.0 / +7.2 | +5.0 / +5.4 |
+| still | +5.2 / +5.2 | +4.3 / +4.4 | +5.0 / +5.2 | +4.2 / +4.4 | +5.0 / +5.0 | +4.0 / +4.1 |
+| downwind | +5.2 / +5.7 | +3.9 / +4.4 | +5.8 / +6.3 | +4.3 / +4.9 | +7.0 / +7.2 | +5.0 / +5.4 |
 | upwind | +4.4 / +4.6 | +4.0 / +4.3 | +3.5 / +3.8 | +3.4 / +3.4 | +1.7 / +1.8 | +1.6 / +1.6 |
-| sunny day | +4.9 / +5.1 | +4.2 / +4.4 | +4.5 / +4.8 | +3.9 / +4.1 | +4.0 / +4.0 | +3.3 / +3.3 |
+| sunny day | +4.9 / +5.1 | +4.3 / +4.4 | +4.5 / +4.8 | +3.9 / +4.1 | +4.0 / +4.0 | +3.3 / +3.3 |
 | clear night | +5.1 / +5.4 | +4.1 / +4.4 | +5.2 / +5.6 | +4.1 / +4.6 | +5.6 / +5.8 | +4.4 / +4.6 |
 
 | 125 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up |
 |---|---|---|---|---|
 | still | +2.6 / +2.8 | +0.6 / +0.8 | +1.9 / +1.9 | +0.2 / +0.3 |
-| downwind | +2.9 / +3.3 | -0.5 / -0.2 | +2.6 / +2.9 | -1.1 / -0.9 |
+| downwind | +2.9 / +3.3 | -0.5 / -0.2 | +2.6 / +2.9 | -1.0 / -0.9 |
 | upwind | +2.4 / +2.1 | +1.6 / +1.4 | +0.2 / +0.1 | +0.4 / +0.4 |
 | sunny day | +2.4 / +2.6 | +0.8 / +1.0 | +1.4 / +1.4 | +0.3 / +0.4 |
 | clear night | +3.0 / +3.0 | +0.6 / +0.5 | +2.5 / +2.3 | +0.2 / +0.0 |
 
 The weathers are the presets: downwind and upwind in the `windy` one (5 m/s 10 m up),
 `sunny_day` and `clear_night`. The wave solver is within 0.7 dB of the parabolic
-equation everywhere, 0.23 dB on average at 63 Hz and 0.17 dB at 125 Hz, and follows
+equation everywhere, 0.22 dB on average at 63 Hz and 0.17 dB at 125 Hz, and follows
 the weather as it does: 2 dB louder downwind than in still air at 200 m and 1.5 m up,
 3.3 dB quieter upwind (1.0 and 2.4 dB 5 m up). At 63 Hz it comes out a little low downwind and under the night's
 inversion (by up to 0.7 dB), where the wind and the temperature change fastest in the
@@ -1929,9 +1935,10 @@ equation:
 | upwind, moving | +4.5 | +4.2 | +3.5 | +3.4 | +1.9 | +1.5 |
 
 Moving air is within 0.34 dB of the parabolic equation, 0.13 dB on average; the
-effective speed of sound within 0.69 dB, 0.31 dB on average. Downwind, where the
-effective speed of sound comes out about 0.5 dB low at 50 and 100 m, moving air is
-within 0.05 dB on the same grid.
+effective speed of sound within 0.69 dB, 0.31 dB on average. Downwind at 50 m and at
+100 m 1.5 m up, where the effective speed of sound comes out about 0.5 dB low, moving
+air is within 0.03 dB on the same grid; at 100 m 5 m up the effective speed of sound is
+0.69 dB low and moving air 0.25 dB.
 
 Moving air takes three to four times as long as the effective speed of sound: 23 s
 against 7 s in the free field (3.2 million cells), 47 s against 15 s with the façade
@@ -2513,12 +2520,12 @@ pressure in every band and the air's attenuation taken off each path over its ow
 
 **A flat terrain** (every height alike, 101 × 101 points 10 m apart) against the flat
 ground: the direct sound and the one reflection have the same distances to the bit and
-energies within 2e-16, and whole runs (20,000 rays, the same seed) the same level relative
+energies within 2.2e-16, and whole runs (20,000 rays, the same seed) the same level relative
 to free field in every band, the two models differing only in how the ground is cut into
 triangles.
 
 **A plane sloping up 20 %** against the image source in the tilted plane: the reflected
-path's distance is the image's to 2e-9 m and its energy within 1e-15 straight up the
+path's distance is the image's to 2e-9 m and its energy within 1.1e-15 straight up the
 slope, and within 2 mm and 7e-5 with the listener 160 m aside, where the ground also
 tilts across the profile, which the mean plane, level across it as the standards have
 it, leaves out.
@@ -2572,7 +2579,7 @@ of the ground near its foot, 0.86 m longer than the straight line to the crest (
 source's image in the flat ground before the hill is that much farther from the crest
 than the source): in phase at 63 Hz (5.1 dB more than over the soft ground, 4.3 above
 the standard's typical ground), against it near 200 Hz, where that extra path is half
-a wavelength (the ground dip: 0.2 to 0.7 dB more than over the soft ground at 125 and
+a wavelength (the ground dip: 0.15 and 0.65 dB more than over the soft ground at 125 and
 250 Hz, a little below the standard's figure), and from 500 Hz up 3.3 to 5.6 dB more than over the soft ground
 (1.8 to 4.2 above the standard), where the waves no longer interfere alike across a
 band and add in energy: 6 dB for four of a size, less because the reflected ones come
@@ -2603,7 +2610,7 @@ interference and the lit zone's ripples:
 At 63 Hz the level first falls as the listener rises, from -6.8 dB at 1.5 m to -9.9 at
 6.5 m: the reflection off the ground behind the hill, in phase with the wave over the
 crest at the ground, lags it more the higher the listener. From there every band rises
-through the edge of the shadow, 12 dB in the 2.5 m round the line of sight at 8 kHz,
+through the edge of the shadow, 12.6 dB in the 2.5 m round the line of sight at 8 kHz,
 and every band but 125 Hz comes to within 1 dB of free field above it, where the
 direct sound, the ground's reflection and the crest's wave ripple together; 125 Hz
 stays 3 to 4 dB down (-3.9 and -3.3 dB at 26.5 and 29 m).
@@ -2912,10 +2919,10 @@ the early paths, every number is the same to the digits shown. The level stays w
 0.11 dB at 30 m/s and 0.42 dB for the train at 4 kHz, as one signal's does there; the
 train's waveform at 4 kHz is 3.5 dB further than one signal's,
 as the tone sent ahead weighs the approach more, where the pitch is higher and the
-delays' error weighs more: sent louder behind instead (1 - 0.8 cos θ), it comes within
-42.7 dB, and with the amplitude alike every way (only the phase turning) within 38.6
-dB, as one signal. A grid 1° apart, or places 0.5 m apart, changes it by 0.3 dB at
-most.
+delays' error weighs more. In one-off checks, not repeated by the script, the tone sent
+louder behind instead (1 - 0.8 cos θ) came within 42.7 dB, and with the amplitude alike
+every way (only the phase turning) within 38.6 dB, as one signal; a grid 1° apart, or
+places 0.5 m apart, changed it by 0.3 dB at most.
 
 **The places.** The car at 1 kHz with its places further apart:
 
@@ -2976,7 +2983,7 @@ The sound keeps the energy of the responses to within 0.07 dB in every band, wit
 late part and without. The late part is crossfaded as in any walk, drawn from one random
 sequence for every place; the responses here are drawn from the same one, as otherwise
 their late parts' chance correlation with the early sound would differ by up to 0.25
-dB in a band. The pass-by's band levels are within 0.25 dB of the sound, 0.8 dB in the
+dB in a band (a one-off check). The pass-by's band levels are within 0.25 dB of the sound, 0.8 dB in the
 500 Hz band, where the ground's dip falls: the pass-by takes the places' band levels,
 averaged over each band, where the sound is read through band filters, whose skirts
 fill a dip (a cause not checked separately). For a car at 30 m/s over
@@ -3027,8 +3034,8 @@ harmonic's loudest in any direction (over the loudest harmonic in the direction,
 time). The tail rotor's 1.7 x 10⁻⁴ comes from the chord's points' radius, taken to
 second order: its chord is a fifth of its radius. In time the observer stands so far
 away that the blade's radius squared over twice the distance, which the far field
-leaves out of the phase, does not count: at 200 km it puts the main rotor 7.5 x 10⁻⁴
-off, at 2,000 km 7.4 x 10⁻⁵, falling as one over the distance.
+leaves out of the phase, does not count: in a one-off check at 200 km it put the main
+rotor 7.5 x 10⁻⁴ off, at 2,000 km 7.4 x 10⁻⁵, falling as one over the distance.
 
 **The store.** A rotor's tones are kept as one period of the sound in each direction
 on a grid (`Periodic`); what it sends over 4,000 samples 8.3 s in, each sample a
@@ -3068,8 +3075,8 @@ The tables are rounded to 0.001 dB. The tip vortex column is the code's equation
 tip angle of 7.668°, not at the 7.7° of the table's input; the code as the report
 prints it gives 7.7°'s levels, 0.19 dB over the table at 100 Hz and 0.04 dB under it at
 40 kHz, so the table may come from another version of it. Neither table has the
-trailing edge's bluntness or a stalled section. For the AS350 B3 at 63 m/s, straight
-down, the bluntness adds under 0.05 dB (its 0.5 mm trailing edges send theirs around
+trailing edge's bluntness or a stalled section. In one-off checks for the AS350 B3 at
+63 m/s, straight down, the bluntness adds under 0.05 dB (its 0.5 mm trailing edges send theirs around
 20 kHz) and the 1.5 % of the places round the turn where a section stalls nothing to
 0.001 dB; the turbulent boundary layers give 106.8 of the main rotor's 107.5 dB 1 m
 away, and the laminar boundary layer's vortex shedding 3 dB of the tail rotor's 89.4.
@@ -3085,20 +3092,21 @@ even inflow, against Johnson's closed form (*Helicopter Theory*, 5.6):
 |---|---|---|---|
 | 0 m/s | 15.5675° | 0° | 9 x 10⁻¹² ° |
 | 30 m/s | 13.2553° | -1.7615° | 7 x 10⁻¹² ° |
-| 63 m/s | 14.5351° | -3.9524° | 2 x 10⁻¹¹ ° |
+| 63 m/s | 14.5351° | -3.9524° | 1.5 x 10⁻¹¹ ° |
 
 `tests/test_rotorcraft.py` checks the blade sections' sum (`bpm_bands`) against one
 done place by place, each section's frame and motion through the air taken from the
 disc's own vectors, each mechanism's level with its own directivity and its bands
-moved one by one, hovering and at 63 m/s, to 10⁻⁹. Against 2,304 places round the
-turn, the default 144 hold the main rotor's level, on the 5° grid, to 0.01 dB
+moved one by one, hovering and at 63 m/s, to 10⁻⁹. In one-off checks against 2,304
+places round the turn, the default 144 hold the main rotor's level, on the 5° grid, to 0.01 dB
 everywhere below the horizon and to 0.7 dB above it, close to its disc's plane. The
 tail rotor's disc is upright, so listeners below the helicopter are close to its
 plane: there its level holds to 1.3 dB (0.6 dB with 288 places, 0.3 dB with 576),
 because BPM's directivity changes abruptly where a section's chord points at the
 listener, an angle where the report itself finds it inaccurate. The tail rotor's
-broadband noise is 36 dB under the helicopter's sound in the certification's overflight
-(below). 48 sections instead of 24 change the levels by under 0.06 dB.
+broadband noise of this kind is 36 dB under the helicopter's sound in the
+certification's overflight (below). 48 sections instead of 24 changed the levels by
+under 0.06 dB.
 
 **The certified level.** The AS350 B3 at its maximum mass of 2,250 kg flying the
 overflight of ICAO Annex 16, chapter 11 (14 CFR part 36, appendix J): level, 150 m
@@ -3327,7 +3335,7 @@ edge 0.9 m from the layer, the 12-cell layer does worse than the 8-cell one: wha
 back there in the first 50 ms falls with the layer's depth, but not later in the run,
 for a reason not traced. Runs take 8 cells, which is not a setting. In the layer the sound keeps
 falling over 59,409 steps (20 s): 79 dB below the first second's level after one second,
-175 dB below after 18.
+at least 134 dB below it through the second half.
 
 **One run for all bands.** A 7 x 5 x 3 m box whose absorption differs in every band
 (0.10 to 0.25 from 63 to 500 Hz), the wave solver up to the 500 Hz band: one run of
@@ -3352,9 +3360,9 @@ analysed alike (ISO 3382-1, octave filters):
 |---|---:|---:|---:|---:|---:|---:|
 | sum of the modes | 20.3 | 23.5 | 1.02 | 0.96 | 0.94 | 0.90 |
 | wave solver | 21.1 | 22.9 | 1.04 | 0.95 | 0.94 | 0.87 |
-| wave solver, 7-point stencil | 21.1 | 22.9 | 1.04 | 0.93 | 0.94 | 0.86 |
-| wave solver, 16 cells per wavelength | 20.8 | 23.7 | 1.01 | 0.84 | 0.90 | 0.90 |
-| rays only | 25.6 | 21.8 | 0.71 | 0.77 | 0.91 | 0.79 |
+| wave solver, 7-point stencil | 21.1 | 22.9 | 1.04 | 0.94 | 0.94 | 0.86 |
+| wave solver, 16 cells per wavelength | 20.8 | 23.7 | 1.01 | 0.85 | 0.90 | 0.90 |
+| rays only | 25.6 | 21.8 | 0.72 | 0.78 | 0.91 | 0.79 |
 
 ![Transfer function of the box from the sum of its modes, the wave solver and rays](images/wave.png)
 
@@ -3363,7 +3371,7 @@ mostly from where the grid puts the walls: within half a cell of the model's, he
 6.93 x 4.95 x 2.97 m with 20 cm cells, which moves each mode by up to 1 %. In a room
 this sparse in modes, that moves G by up to 1 dB, EDT by up to 12 % and T20 by up to
 5 %; more cells per wavelength move the walls but do not make every figure converge.
-The two stencils agree within 0.02 s: in this band their dispersion moves the modes
+The two stencils agree within 0.01 s: in this band their dispersion moves the modes
 less than the walls' placement does. Rays give the average over the room instead: 5.3 dB more at this seat in the 63 Hz
 band, where the listener sits near the nodes of most modes.
 

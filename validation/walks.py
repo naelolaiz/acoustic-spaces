@@ -22,8 +22,11 @@ indoors", "Along a street" and "Known issues of the edge fade"):
 Each walk is made with the edge fade and without it (the early stage with the edge
 diffraction alone). The level is each octave band's early energy, the street's also
 A-weighted with the car's sound power. The tables give the largest step between
-neighbours in each band, and for the street each place where one stands out by more
-than 0.1 dB in some band but 8 kHz, where a centimetre is a quarter of a wavelength.
+neighbours in each band, and for the gallery and the archway how far a step stands out
+from the steps either side, and where. For the street they give the largest step of
+10 cm and of 1 cm (round the places walked again) for each listener, and each place
+where a step stands out by more than 0.1 dB in some band but 8 kHz, where a centimetre
+is a quarter of a wavelength.
 """
 
 from __future__ import annotations
@@ -164,6 +167,7 @@ def street(fade: bool, places: list | None = None) -> dict:
                     "stands_out_db": out[i].tolist(),
                     "steps_db": np.diff(heard, axis=0)[i].tolist(),
                     "walked": fine[1:].tolist(),
+                    "steps_walked_db": np.diff(heard, axis=0).tolist(),
                     "stands_out_walked_db": out.tolist(),
                 }
             )
@@ -208,7 +212,15 @@ def main() -> None:
                 where = {
                     x: found["positions"][1:][s.argmax(axis=0)].tolist() for x, s in steps.items()
                 }
-                results[name][label].update(largest_step_db=largest.tolist(), at=where)
+                out = {f"{x:g}": _stands_out(levels) for x, levels in found["lines"].items()}
+                results[name][label].update(
+                    largest_step_db=largest.tolist(),
+                    at=where,
+                    stands_out_db={x: o.max(axis=0).tolist() for x, o in out.items()},
+                    stands_out_at={
+                        x: found["positions"][1:][o.argmax(axis=0)].tolist() for x, o in out.items()
+                    },
+                )
                 continue
             places = found["places"]  # walked again without the fade
             results[name][label].update(
@@ -221,7 +233,25 @@ def main() -> None:
             print(f"| largest step (dB) | {header} |\n{rule}")
             for label, row in results[name].items():
                 print(f"| {label} | {_row(row['largest_step_db'])} |")
+            print(f"\n| stands out from the steps either side (dB) | {header} |\n{rule}")
+            for label, row in results[name].items():
+                for x, values in row["stands_out_db"].items():
+                    print(f"| {label}, x = {x} m | {_row(values)} |")
+            print(f"\n| where, with the fade (y, m) | {header} |\n{rule}")
+            for x, values in results[name]["with the fade"]["stands_out_at"].items():
+                print(f"| x = {x} m | {_row(values)} |")
             continue
+        print(f"| largest step of 10 cm (dB) | {header} | dB(A) |\n{rule}---:|")
+        for label, row in results[name].items():
+            for listener, values in zip(row["listeners"], row["largest_step_10cm_db"], strict=True):
+                print(f"| {listener}, {label} | {_row(values)} |")
+        print(f"\n| largest step of 1 cm round them (dB) | {header} | dB(A) |\n{rule}---:|")
+        for label, row in results[name].items():
+            for listener in row["listeners"]:
+                walked = [p["steps_walked_db"] for p in row["places"] if p["listener"] == listener]
+                largest = np.abs(np.concatenate(walked)).max(axis=0)
+                print(f"| {listener}, {label} | {_row(largest)} |")
+        print()
         print("| car at x (m) | listener | stands out (dB) | in | dB(A) | without the fade (dB) |")
         print("|---:|---|---:|---|---:|---:|")
         rows = zip(

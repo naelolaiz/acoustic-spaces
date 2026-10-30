@@ -44,7 +44,7 @@ def test_the_street_walk(x: float) -> None:
     """The car 1 cm at a time round the largest steps in the garden's early level, where
     a path over the barrier's top or a reflection off it reaches an end of the top (a
     known issue): the step there stands out from the steps either side by at most
-    1.42 dB in a band below 8 kHz and 0.53 dB(A)."""
+    1.42 dB in a band below 8 kHz and 0.52 dB(A)."""
     street = walks._Street()
     heard = [street.levels(at, ["garden"])[0] for at in np.round(x + np.arange(-3, 3) * 0.01, 2)]
     out = walks._stands_out(np.array(heard))

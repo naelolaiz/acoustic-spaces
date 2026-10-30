@@ -171,9 +171,9 @@ def main() -> None:
                         "weather": weather,
                         "band_hz": band,
                         "listener": name,
-                        "wave_db": round(wave[name], 2),
-                        "pe_db": round(pe[name], 2),
-                        "difference_db": round(wave[name] - pe[name], 2),
+                        "wave_db": wave[name],
+                        "pe_db": pe[name],
+                        "difference_db": wave[name] - pe[name],
                     }
                 )
     print(
@@ -191,8 +191,13 @@ def main() -> None:
         miss = np.abs([row["difference_db"] for row in rows if row["band_hz"] == band])
         print(f"{band} Hz: mean difference {miss.mean():.2f} dB, largest {miss.max():.2f} dB")
     if args.json:
+        # Rounded only here: the table above takes the levels as they are, not rounded twice.
+        rounded = [
+            {key: round(v, 2) if isinstance(v, float) else v for key, v in row.items()}
+            for row in rows
+        ]
         with open(args.json, "w") as out:
-            json.dump(rows, out, indent=1)
+            json.dump(rounded, out, indent=1)
 
 
 if __name__ == "__main__":
