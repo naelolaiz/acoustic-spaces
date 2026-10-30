@@ -180,6 +180,19 @@
   stadium's stands, which the few rays that reach it may leave without energy in some
   bands: there the place's level is that of the energy its response holds, as
   outdoors (-inf where none arrives). Every other place's levels are unchanged.
+- Examples go by their names only: `examples.FORMER_NAMES` is removed, and
+  `gallery_walk` no longer finds the gallery.
+- One stadium: `stadium_pa` is merged into `stadium_concert`, whose sound system plays
+  alone, for the crowd, with its Monitors and Stage groups left out, as `stadium_pa`
+  had it. The concert's description takes the map's notes, measured on it: on the
+  pitch from the mix position back, nine points in ten within 2.6 dB, the map in under
+  five minutes on 4 cores. The two had drifted apart: since the tuning of 23 October
+  `stadium_pa`'s front fills played at 122 dB and the concert's at 116 dB, which it
+  keeps; at 122 dB they brought the front rows up to 104.5 dB(A), 7 dB over the mix
+  position. The test of the stadium examples' shared parts compares each of
+  `concert_stage`'s sources and listeners with the concert's one by one, which would
+  have caught it. The memory estimate's checks in the docs, in one
+  batch and in the default 10, are measured again on `stadium_concert`.
 
 ## 4.0.1
 

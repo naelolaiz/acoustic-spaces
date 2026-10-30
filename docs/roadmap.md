@@ -282,11 +282,11 @@ Sources:
 Examples:
 
 - [x] A concert in a stadium with a sound system: main line arrays, subwoofers, fills,
-  delay towers and delays timed to them (`stadium_pa`); the stage's monitors and the
-  singer's microphone's gain before feedback (`concert_stage`); both together
-  (`stadium_concert`); every array added up box by box near its listeners; the system
-  tuned at the mix position, as a system engineer tunes it; and the editor's examples
-  in groups.
+  delay towers and delays timed to them, with the stage's monitors (`stadium_concert`,
+  whose sound system plays alone with its stage and monitors left out); the stage
+  alone with the singer's microphone's gain before feedback (`concert_stage`); every
+  array added up box by box near its listeners; the system tuned at the mix position,
+  as a system engineer tunes it; and the editor's examples in groups.
 - [x] Demos with their scripts: a choir and an organ in the church, a band with its
   sound system in the stadium (one of three songs) and a song carried across a lake by
   a lawn concert's line arrays and subwoofers, in the evening's weather and in still
@@ -323,9 +323,9 @@ Movement:
   add keyframes past the end, a preview of every mover in the 3D view and the plan,
   draggable keyframe handles, and the movement rendered in the background.
 - [x] One scene still or moving: walks turned on and off rather than copies of a scene
-  with and without them (`gallery_walk` merged into `gallery`); the demo of any scene
-  plays the walks that are on, with a moving picture, and `--moving` picks them for a
-  run; the Run demo window ticks what moves and opens the Movement panel.
+  with and without them; the demo of any scene plays the walks that are on, with a
+  moving picture, and `--moving` picks them for a run; the Run demo window ticks what
+  moves and opens the Movement panel.
 - [x] A car passing by with Doppler: a car in the `roadside` and `street` examples with
   CNOSSOS-EU's sound power, a pass-by demo for both with a sound made to that power and
   the level over time, the demo of any scene playing one walk with Doppler, and the

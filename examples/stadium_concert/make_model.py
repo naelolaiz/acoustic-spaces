@@ -1,7 +1,7 @@
 """Writes this example's model and its loudspeakers' arrays and patterns: the stadium
 with its stage (stadium.obj) or the stage alone on open ground (stage.obj), whichever
 this folder's scene.yaml names, and the array files and patterns its sources use. The
-three stadium examples (stadium_pa, concert_stage and stadium_concert) share it.
+stadium concert and the concert stage share it.
 
 A football stadium seen as a bowl: a pitch of 105 x 68 m with 8 m of grass round it and
 a wall 2 m high, then stands on all four sides that rise at 30 degrees, 38 m deep, to

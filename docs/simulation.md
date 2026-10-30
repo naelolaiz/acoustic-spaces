@@ -601,12 +601,12 @@ worst of the CPU, the GPU and the two together. So the memory grows with
 `simulation.ir_length_s`, the listeners, `late.directions`, `late.batches`, the sources
 and their points, and the map points (`coverage.spacing`). On the CPU the rays cost
 time, not memory. The 10 batches of the default add about an eighth to the late part's
-memory with 64 arrival directions: in the estimate, the late part of `stadium_pa` at 8 s
-went from 537 to 607 MiB and `orchestra`'s at 6 s from 669 to 759 MiB; measured on 4
-threads, the whole runs went from 544 to 635 MiB and from 729 to 820 MiB. `orchestra`'s
-grew as estimated, `stadium_pa`'s by 21 MiB more, as the batches' many smaller arrays
-leave the memory allocator more to hold (with glibc's mmap threshold fixed at 128 KiB,
-that run grew by 75 MiB against the estimate's 70).
+memory with 64 arrival directions: in the estimate, the late part of `stadium_concert`
+at 8 s went from 901 to 1,019 MiB and `orchestra`'s at 6 s from 669 to 759 MiB; measured
+on 4 threads, the whole runs went from 887 to 1,020 MiB and from 729 to 820 MiB.
+`orchestra`'s grew as estimated, `stadium_concert`'s by 15 MiB more, as the batches' many
+smaller arrays leave the memory allocator more to hold (with glibc's mmap threshold fixed
+at 128 KiB, that run grew by 124 MiB against the estimate's 118).
 
 A run that would need more memory than the computer has (or than its container may
 use: on Linux, the lowest limit on the process's control groups and on those above
@@ -627,9 +627,11 @@ bands), nearly all of it at one listener: the edge fade hands it back before the
 and in third-octave bands each listener's starts from less than 0.9 GiB. On the CPU
 the estimate came within 1 MiB of the late part's measured peak in `shoebox` at 1, 4
 and 64 threads (4 cores), with
-responses of 30 to 480 s and both kinds of scattering. Whole runs peaked a little above
-it: `stadium_pa` at 8 s (15 sources, 9 listeners) at 635 MiB against 607, `orchestra` at
-6 s at 820 MiB against 759 (544 against 537 and 729 against 669 in one batch). Traced on a software GPU (SwiftShader's Vulkan), the late
+responses of 30 to 480 s and both kinds of scattering. Whole runs, counted from the
+memory the process held before them, came near it or a little above: `stadium_concert`
+at 8 s (19 sources, 12 listeners) at 1,020 MiB against 1,019, `orchestra` at 6 s at
+820 MiB against 759 (887 against 901 and 729 against 669 in one batch). Traced on a
+software GPU (SwiftShader's Vulkan), the late
 part peaked 60 to 100 MiB above the GPU's estimate, the driver's own. With both, the
 estimate takes the CPU's part and the GPU's at their peaks at once, which those runs
 never reached: up to 1.5 times what they used.
