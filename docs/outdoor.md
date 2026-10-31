@@ -717,9 +717,14 @@ C_v² / c0² (Ostashev and Wilson 2015).
 - **Listening and walkthroughs flicker.** `acoustic_spaces.render.auralize`, the
   editor's **Listen** and `walkthrough` send the sound through a new moment of the
   eddies every sixteenth of the time they take to drift past (the outer scale over the
-  wind's speed, at least 1 m/s; at most every 50 ms), each crossfaded into the next; the
-  moments change as an Ornstein-Uhlenbeck process, so the delays drift rather than
-  jump, and a walker keeps the same eddies from place to place. The `auralize` command
+  wind's speed, at least 1 m/s; at most every 50 ms). Each early path plays through its
+  own delay, which goes from one moment's to the next's (its top band's; how its other
+  bands lag behind it goes into its filter), as along a
+  [walk with Doppler](spatial-audio.md#moving-sources-and-doppler): crossfading the
+  moments' responses instead would mix each path at two delays a few microseconds
+  apart, which cancels the treble half-way between them. The moments change as an
+  Ornstein-Uhlenbeck process, so the delays drift rather than jump, and a walker keeps
+  the same eddies from place to place. The `auralize` command
   and live playback (`play`, head tracking) go through the saved responses, one moment
   each.
 

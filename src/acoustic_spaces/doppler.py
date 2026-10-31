@@ -21,19 +21,24 @@ place to place along the walk:
   shift, so a raised pitch does not alias.
 - **The filter.** What else the path does to the sound (the air, the ground's
   reflection, a diffracting edge, the source's directivity, the direction it arrives
-  from in the output format, and in turbulence the eddies' delays at that moment)
-  goes into a filter, the path's spectrum without its delay as the impulse response
-  has it. The filter changes every :data:`HOP_S`, taken between the places on either
-  side in proportion to how near they are; the delayed signal goes through it in
-  windows that half overlap (squared sines, which add up to one), so a path heard
-  from one place alone gives exactly the convolution with its response.
+  from in the output format, and in turbulence how the eddies delay its other bands
+  from its top one at that moment) goes into a filter, the path's spectrum without its
+  delay as the impulse response has it. The filter changes every :data:`HOP_S`, taken
+  between the places on either side in proportion to how near they are; the delayed
+  signal goes through it in windows that half overlap (squared sines, which add up to
+  one), so a path heard from one place alone gives exactly the convolution with its
+  response.
 - **The ears.** Where each ear's response starts (its onset, as the ears are mixed
   between measured directions: :meth:`~acoustic_spaces.spatial.hrtf.HRTF.interpolate`)
   is a delay too: it goes into that ear's delay, read through the cubic and the sinc
   as the path's is, and out of its filter. Measured ears can start a few samples apart
   from one direction to the next; filters that start apart, mixed between two places
   or in the overlapping windows, would cancel the treble there.
-
+- **The eddies.** In turbulence the eddies move each path's delay from one moment to
+  the next (by microseconds, as :class:`~acoustic_spaces.engine.turbulence.Gusts`
+  draws them): the top band's goes into the path's delay, taken between the places and
+  the moments on either side as the filter is, so that two moments' filters mixed do
+  not cancel the treble either.
 - **The sound sent.** Every path carries the same signal, unless it is an
   :class:`~acoustic_spaces.emission.Emission`, the sound a source sends each way: then
   each path carries what is sent the way it leaves the source (its first leg, in the
@@ -310,6 +315,8 @@ class Filters:
         self.seed = seed
         self.cache: OrderedDict = OrderedDict()
         self.size = 8
+        self.roots: OrderedDict = OrderedDict()
+        self.moves: OrderedDict = OrderedDict()
 
     def at(self, k: int, moment: int = 0) -> np.ndarray:
         key = (k, moment)
@@ -322,19 +329,54 @@ class Filters:
             self.cache.popitem(last=False)
         return spectra
 
+    def _place_roots(self, k: int) -> list:
+        """The eddies' :meth:`~acoustic_spaces.engine.early.EarlyReflections.wander_roots`
+        at place ``k``, kept for the places in use."""
+        if k in self.roots:
+            self.roots.move_to_end(k)
+            return self.roots[k]
+        roots = self.responses[k].early.wander_roots()
+        self.roots[k] = roots
+        while len(self.roots) > self.size:
+            self.roots.popitem(last=False)
+        return roots
+
+    def _paths(self, k: int, moment: int):
+        """The early paths at place ``k`` and, in turbulence, moment ``moment``."""
+        response = self.responses[k]
+        paths = response.early
+        if paths.wander is None:
+            return paths
+        if self.gusts is None:
+            return response.moment(self.seed)
+        roots = self._place_roots(k)
+        return paths.at_moment(roots, self.gusts.draws(roots, paths.point, moment))
+
+    def moved(self, k: int, moment: int = 0) -> np.ndarray:
+        """(paths,) how far the eddies move each path's delay (its top band's, s) at
+        place ``k`` and moment ``moment``: zero without turbulence."""
+        paths = self.responses[k].early
+        if paths.wander is None:
+            return np.zeros(len(paths))
+        key = (k, moment if self.gusts is not None else 0)
+        if key in self.moves:
+            self.moves.move_to_end(key)
+            return self.moves[key]
+        out = self._paths(k, moment).delay_s - paths.delay_s
+        self.moves[key] = out
+        while len(self.moves) > 64 * self.size:
+            self.moves.popitem(last=False)
+        return out
+
     def _spectra(self, k: int, moment: int) -> np.ndarray:
         from acoustic_spaces.spatial.directions import to_head
         from acoustic_spaces.spatial.microphone import Microphone
         from acoustic_spaces.spatial.render import Binaural
 
         response = self.responses[k]
-        paths = response.early
-        if paths.wander is not None:
-            if self.gusts is not None:
-                roots = paths.wander_roots()
-                paths = paths.at_moment(roots, self.gusts.draws(roots, paths.point, moment))
-            else:
-                paths = response.moment(self.seed)
+        # In turbulence the top band's delay at the moment is in the path's delay
+        # (:meth:`moved`); its other bands' lags behind it stay here.
+        paths = self._paths(k, moment)
         paths = coherent.with_own_phases(paths, response.seed if self.seed is None else self.seed)
         if self.directivity is not None:
             weights = source_weights(
@@ -467,6 +509,7 @@ def render(
     seed: int | None = None,
     axes: np.ndarray | None = None,
     directivity=None,
+    span: tuple[int, int] | None = None,
 ) -> np.ndarray:
     """(length, channels) the early paths of ``responses`` (the responses at the places
     of a walk, in order, the walker there at ``times``) heard as it goes, the mono
@@ -476,7 +519,8 @@ def render(
     of each place's eddies without them. ``dry`` may be the sound the source sends each
     way, at ``sample_rate``: then ``axes`` (N, 3, 3) has the source's forward, left and
     up axes as columns at each place, and ``directivity`` (the source's, if it has one)
-    is taken out of the paths' filters."""
+    is taken out of the paths' filters. With ``span`` (begin, end), samples begin to end
+    alone: (end - begin, channels)."""
     from acoustic_spaces.spatial.render import Binaural
 
     rate = int(sample_rate)
@@ -549,10 +593,18 @@ def render(
         frames,
     )
     filters.size = 2 * (min(spread, len(times)) + 4)
+    turbulent = any(r.early.wander is not None for r in responses)
     window = np.sin(np.pi * np.arange(2 * hop) / (2 * hop)) ** 2
-    out = np.zeros((blocks * hop + n_fft, fmt.channels))
-    for c0 in range(0, blocks, _BLOCKS):
-        c1 = min(c0 + _BLOCKS, blocks)
+    begin, end = (0, length) if span is None else (max(int(span[0]), 0), int(span[1]))
+    end = min(end, length)
+    # Block j adds to the samples from (j - 1) hops on, heard half a kernel later: the
+    # blocks that reach samples begin to end, and ``out`` from block j_lo's first.
+    j_lo = max((begin + half - n_fft) // hop + 1, 0)
+    j_hi = min(-(-(end + half) // hop) + 1, blocks)
+    base = (j_lo - 1) * hop
+    out = np.zeros((max(j_hi - j_lo + 2, 0) * hop + n_fft, fmt.channels))
+    for c0 in range(j_lo, j_hi, _BLOCKS):
+        c1 = min(c0 + _BLOCKS, j_hi)
         n0, n1 = (c0 - 1) * hop, (c1 + 1) * hop
         t = np.arange(n0, n1) / rate
         active = []
@@ -560,6 +612,8 @@ def render(
             if reading.first > c1 - 1 or reading.last < c0:
                 continue
             delay = reading.delays(t, last)
+            if turbulent:
+                delay = delay + _moved(filters, reading.track, t, gusts)
             # At the ears, each ear's own delay (its onset added): (samples, 2).
             ears = (
                 [delay] if reading.onsets is None else [delay + reading.onset(t, e) for e in (0, 1)]
@@ -592,10 +646,44 @@ def render(
             if total is None:
                 continue
             wet = np.fft.irfft(total, n_fft, axis=-1).T
-            if start < 0:
-                wet, start = wet[-start:], 0
-            out[start : start + len(wet)] += wet[: len(out) - start]
-    return out[half : half + length]
+            at = start - base
+            if at < 0:
+                wet, at = wet[-at:], 0
+            out[at : at + len(wet)] += wet[: len(out) - at]
+    lo = begin + half - base
+    return out[lo : lo + max(end - begin, 0)]
+
+
+def _moved(filters: Filters, track: Track, t: np.ndarray, gusts) -> np.ndarray:
+    """(len(t),) how far the eddies move the track's delay at times ``t`` (s): between
+    the places on either side in proportion to how near they are, as
+    :func:`_filter_at` takes the filter (the one that hears the path alone where the
+    other does not), and between the moments on either side."""
+    received = track.received
+    last = len(received) - 1
+    j = np.searchsorted(received, t, side="right") - 1
+    k0, k1 = np.clip(j, 0, last), np.clip(j + 1, 0, last)
+    span = received[k1] - received[k0]
+    w = np.where(k1 > k0, (t - received[k0]) / np.where(span > 0.0, span, 1.0), 0.0)
+    w = np.where(track.present[k1], np.where(track.present[k0], w, 1.0), 0.0)
+    if gusts is None:
+        m0 = m1 = np.zeros(len(t), dtype=np.int64)
+        wm = np.zeros(len(t))
+    else:
+        m = t / gusts.step_s
+        m0 = np.clip(np.floor(m), 0, gusts.count - 1).astype(np.int64)
+        m1 = np.minimum(m0 + 1, gusts.count - 1)
+        wm = np.where(m1 > m0, np.clip(m - m0, 0.0, 1.0), 0.0)
+    out = np.zeros(len(t))
+    for k in np.unique(np.concatenate([k0, k1])):
+        if not track.present[k]:
+            continue
+        wk = np.where(k0 == k, 1.0 - w, 0.0) + np.where(k1 == k, w, 0.0)
+        for moment in np.unique(np.concatenate([m0, m1])):
+            weight = wk * (np.where(m0 == moment, 1.0 - wm, 0.0) + np.where(m1 == moment, wm, 0.0))
+            if np.any(weight):
+                out += weight * filters.moved(int(k), int(moment))[track.rows[k]]
+    return out
 
 
 def _filter_at(filters: Filters, track: Track, centre: float, gusts) -> np.ndarray | None:

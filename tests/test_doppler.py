@@ -15,7 +15,7 @@ from acoustic_spaces import doppler as dp
 from acoustic_spaces.cli import main
 from acoustic_spaces.directivity import _grid
 from acoustic_spaces.emission import Mixture
-from acoustic_spaces.render import convolve
+from acoustic_spaces.render import convolve, gusts_for
 from acoustic_spaces.scene.model import Walk
 from acoustic_spaces.spatial import Binaural, Mono
 from acoustic_spaces.spatial.directions import fibonacci_sphere
@@ -293,6 +293,28 @@ def test_the_late_part_and_the_eddies_go_along(short) -> None:
     assert not np.allclose(wet, still)
     # Rendered again, the same: the eddies and the late part are drawn the same way.
     assert np.array_equal(wet, render_walk(walk, {"s": dry}, Mono()))
+
+
+def test_a_walker_standing_in_the_eddies_hears_each_path_half_way_between_moments() -> None:
+    """With Doppler too, each path's delay goes from one moment of the eddies to the
+    next's, its top band's in the delay and the rest in the filter: half-way, a tone
+    at 8 kHz has the response whose paths are delayed half-way. The filter alone held
+    only how the other bands lag behind the top one, so the eddies did not move the
+    top band at all: off by 7 dB under the response's rms at 8 kHz here (now 81 dB
+    under)."""
+    from test_turbulence import half_way_errors
+
+    data = _standing("hard").model_dump(mode="json", exclude_none=True)
+    data["atmosphere"] = {"turbulence": {"preset": "strong", "outer_scale_m": 2.0}}
+    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), late_step_m=None)
+    response = next(iter(walk.result.responses.values()))
+    rate, f = RATE, 8000.0
+    dry = np.sin(2 * np.pi * f * np.arange(3 * rate) / rate)
+    wet = render_walk(walk, {"s": dry}, Mono())[:, 0]
+    seed = walk.result.settings.seed
+    gusts = gusts_for(response, len(wet) / rate, seed)
+    moments = range(4, int(2.5 / gusts.step_s))
+    assert half_way_errors(response, wet, f, rate, gusts, seed, moments) < -40.0
 
 
 def test_a_walking_listener_hears_a_moving_and_a_standing_source(short) -> None:

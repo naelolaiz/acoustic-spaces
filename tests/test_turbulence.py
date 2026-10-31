@@ -22,7 +22,7 @@ from acoustic_spaces.engine.turbulence import (
     ground_share,
     von_karman,
 )
-from acoustic_spaces.render import auralize, flickers
+from acoustic_spaces.render import auralize, flickers, gusts_for
 from acoustic_spaces.scene import Atmosphere, Coverage, Turbulence
 from acoustic_spaces.scene.model import TURBULENCE_PRESETS
 
@@ -416,6 +416,54 @@ def test_sound_flickers_through_the_eddies() -> None:
     plain = 10 * np.log10(np.mean(steady[: 160 * frame].reshape(160, frame)[10:] ** 2, axis=1))
     assert np.ptp(level) > 3.0 > np.ptp(plain)
     assert len(wet) == len(steady)
+
+
+def tone_at(signal: np.ndarray, f: float, rate: int, t: float, half: float = 0.005) -> complex:
+    """The complex amplitude of a sine at ``f`` (Hz) in ``signal`` over the ``2 half``
+    seconds about ``t``: the response at ``f`` of whatever the sine went through."""
+    k = np.arange(int(round((t - half) * rate)), int(round((t + half) * rate)))
+    return complex(2j * np.mean(signal[k] * np.exp(-2j * np.pi * f * k / rate)))
+
+
+def half_way_errors(response, wet: np.ndarray, f: float, rate: int, gusts, seed, moments):
+    """How far a sine at ``f`` played through ``response`` in turbulence (``wet``) is,
+    half-way between each two of ``moments`` and the next, from the response whose
+    paths are delayed half-way (the eddies' delays are linear in their draws): the
+    largest error, in dB of the rms response."""
+    from acoustic_spaces.spatial import Mono
+
+    early = response.early
+    roots = early.wander_roots()
+    errors, scale = [], []
+    for j in moments:
+        a, b = gusts.draws(roots, early.point, j), gusts.draws(roots, early.point, j + 1)
+        paths = early.at_moment(roots, [(x + y) / 2.0 for x, y in zip(a, b, strict=True)])
+        ir = dataclasses.replace(response, early=paths).spatial_impulse_response(
+            Mono(), rate, seed
+        )[:, 0]
+        expected = np.sum(ir * np.exp(-2j * np.pi * f * np.arange(len(ir)) / rate))
+        errors.append(abs(tone_at(wet, f, rate, (j + 0.5) * gusts.step_s) - expected))
+        scale.append(abs(expected) ** 2)
+    return 20.0 * math.log10(max(errors) / math.sqrt(np.mean(scale)))
+
+
+def test_half_way_between_two_moments_each_path_is_half_way_there() -> None:
+    """Between two moments of the eddies each path's delay goes from one moment's to
+    the next's, so half-way a tone has the response whose paths are delayed half-way.
+    Crossfading the two moments' responses instead mixed each path at two delays,
+    which half-way cancels the treble: at 8 kHz here that was off by 14 dB under the
+    response's rms (now 66 dB under)."""
+    turbulence = {"preset": "strong", "outer_scale_m": 2.0}
+    scene = in_turbulence(turbulence, listeners=((140.0, 0.0, 1.5),), ir_length_s=0.6)
+    result = simulate(Room.from_scene(scene))
+    response = result["s", "l0"]
+    rate, f = 48_000, 8000.0
+    dry = np.sin(2 * np.pi * f * np.arange(3 * rate) / rate)
+    wet = auralize(result, {"s": dry}, sample_rate=rate)[:, 0]
+    n = int(math.ceil(response.length_s * rate))
+    gusts = gusts_for(response, (len(dry) + n) / rate)
+    moments = range(4, int(2.5 / gusts.step_s))
+    assert half_way_errors(response, wet, f, rate, gusts, None, moments) < -40.0
 
 
 def test_a_walk_goes_through_the_eddies() -> None:

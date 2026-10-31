@@ -3647,6 +3647,9 @@ Files and runs:
   Turbulence is checked against a parabolic equation through random eddies in two
   dimensions, with the source and the listener near the ground, not against
   measurements; how much the sound flickers over time is not checked against either.
+  Between two moments of the eddies, a tone played through them, standing and along a
+  walk with Doppler, is checked to have the response whose paths are delayed half-way
+  (to within 40 dB in the tests).
   The wave solver in wind and temperature is checked against the parabolic equation
   over open ground up to 200 m, not against measurements, nor round buildings; its
   moving air against the exact field in a uniform wind and a façade's echo against
