@@ -49,7 +49,7 @@ from acoustic_spaces import Room, simulate  # noqa: E402
 from acoustic_spaces.compare import JND, SUMMARY_BANDS_HZ  # noqa: E402
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ  # noqa: E402
 from acoustic_spaces.parameters import interaural_cross_correlation  # noqa: E402
-from acoustic_spaces.scene.model import Listener, Source  # noqa: E402
+from acoustic_spaces.scene.model import Listener, Scene, Source  # noqa: E402
 from acoustic_spaces.spatial.hrtf import HRTF  # noqa: E402
 from acoustic_spaces.spatial.render import Binaural  # noqa: E402
 
@@ -93,17 +93,11 @@ def fabian(bras: Path, step: int = FABIAN_STEP_DEG) -> HRTF:
     return HRTF(directions, hrir, 44_100.0, "FABIAN, BRAS (head straight)")
 
 
-def simulate_source(
-    name: str,
-    loudspeaker: str,
-    hrtf: HRTF,
-    materials: str,
-    rays: int | None,
-    diffraction: str | None,
-    seeds: int,
-) -> dict:
-    """IACC_E and IACC_L of one loudspeaker's simulated response, over ``seeds`` seeds of
-    the rendering, against the measured ones."""
+def loudspeaker_scene(
+    name: str, loudspeaker: str, materials: str, rays: int | None, diffraction: str | None
+) -> tuple[Scene, dict]:
+    """The room with one loudspeaker and FABIAN in it, as measured, and the setup of the
+    room's binaural measurements (``binaural.json``)."""
     setup = json.loads((HERE / name / "binaural.json").read_text(encoding="utf-8"))
     scene = load_scene(name, materials, rays, diffraction)
     source = setup["sources"][loudspeaker]
@@ -127,6 +121,22 @@ def simulate_source(
             }
         )
     ]
+    return scene, setup
+
+
+def simulate_source(
+    name: str,
+    loudspeaker: str,
+    hrtf: HRTF,
+    materials: str,
+    rays: int | None,
+    diffraction: str | None,
+    seeds: int,
+) -> dict:
+    """IACC_E and IACC_L of one loudspeaker's simulated response, over ``seeds`` seeds of
+    the rendering, against the measured ones."""
+    scene, setup = loudspeaker_scene(name, loudspeaker, materials, rays, diffraction)
+    head = setup["listener"]
     start = time.perf_counter()
 
     def progress(message: str) -> None:

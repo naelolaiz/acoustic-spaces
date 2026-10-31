@@ -118,18 +118,34 @@ parameters as it goes:
 ```
 talker -> seat-a: direct sound at 11.7 ms, 63 early paths
                  63 Hz  125 Hz  250 Hz  500 Hz   1 kHz   2 kHz   4 kHz   8 kHz
-EDT (s)          0.691   0.506   0.695   0.738   0.869   0.981   0.932   0.604
-T30 (s)          0.713   0.860   0.936   1.202   1.265   1.278   1.156   0.769
-C80 (dB)           6.0     8.9     6.2     6.3     5.9     5.5     5.7     8.6
-G (dB)            22.2    24.5    20.8    20.0    18.7    17.9    17.0    15.7
-LF               0.184   0.089   0.302   0.302   0.330   0.344   0.345   0.329
-IACC_E           0.988   0.991   0.779   0.513   0.391   0.635   0.558   0.478
-T30_X (s)        0.712   0.792   0.968   1.177   1.239   1.231   1.128   0.751
-T30_Z (s)        0.711   0.816   0.874   1.077   1.195   1.204   1.134   0.755
-...
-SPL 79.0 dB(A); per octave band, dB: 76.2 78.5 74.8 73.9 72.7 71.8 71.0 69.6
-STI 0.66 (STIPA 0.66), echo criterion 0.73 for speech (echo above 1.0), 0.70 for music (echo above 1.8)
+EDT (s)          0.682   0.534   0.704   0.752   0.906   0.991   0.928   0.591
+T20 (s)          0.709   0.781   0.889   1.161   1.244   1.286   1.133   0.773
+T30 (s)          0.709   0.837   0.947   1.255   1.298   1.278   1.140   0.777
+C50 (dB)           2.6     5.6     2.6     3.0     2.9     2.8     3.0     5.3
+C80 (dB)           6.1     8.6     6.1     6.2     5.8     5.5     5.8     8.7
+D50              0.644   0.786   0.646   0.666   0.661   0.655   0.667   0.772
+Ts (s)           0.050   0.038   0.051   0.052   0.056   0.058   0.053   0.035
+G (dB)            22.2    24.2    20.8    19.9    18.7    17.9    17.0    15.7
+LF               0.177   0.095   0.299   0.302   0.330   0.344   0.345   0.328
+LFC              0.265   0.143   0.433   0.431   0.447   0.454   0.451   0.430
+LJ (dB)           10.8    10.9     9.8     9.4     9.0     8.4     7.3     3.5
+IACC_E           0.991   0.985   0.874   0.631   0.512   0.700   0.661   0.607
+IACC_L           0.978   0.954   0.786   0.135   0.340   0.129   0.073   0.080
+T30_X (s)        0.710   0.792   0.969   1.229   1.290   1.280   1.107   0.767
+T30_Y (s)        0.709   1.106   0.963   1.318   1.333   1.275   1.168   0.785
+T30_Z (s)        0.709   0.826   0.884   1.129   1.212   1.255   1.122   0.760
+ξ_T20 (‰)          0.0     0.6     2.9     4.5     0.4     0.3     0.5     0.9
+ξ_T30 (‰)          0.0     2.4     2.5     3.6     1.3     0.6     0.9     0.5
+Curvature (%)      0.1     7.3     6.5     8.1     4.4    -0.6     0.5     0.5
+standard errors from 10 batches of rays: at most 0.61 JND from 125 Hz to 4 kHz (T30 at 500 Hz); more rays (simulation.late.rays) would change the parameters less from seed to seed
+SPL 79.0 dB(A); per octave band, dB: 76.2 78.2 74.8 73.9 72.7 71.8 71.0 69.7
+STI 0.66 (STIPA 0.66), echo criterion 0.70 for speech (echo above 1.0), 0.69 for music (echo above 1.8)
 ```
+
+Unless the scene sets `simulation.seed`, its rays and the noise of its rendered late part
+are drawn anew on each run, so these numbers move from run to run: IACC most, as it is
+read from one rendered response, and the others about as much as the standard errors
+say.
 
 With `--plot`, each response gets an echogram (the late energy per millisecond and the
 early paths by order) with the decay curves of every band, and a map of where the sound
