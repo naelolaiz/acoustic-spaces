@@ -216,7 +216,7 @@ class Helicopter(Vehicle):
         source["directivity"] = {"file": named}
         source.setdefault("walk", {})["face_forward"] = True
 
-    def made(self, args: argparse.Namespace, rate: int, duration_s: float):
+    def made(self, args: argparse.Namespace, rate: int, duration_s: float, part: str = ""):
         """What its rotors send along its pass, at ``rate``."""
         from acoustic_spaces.demos.passby import car_info
 

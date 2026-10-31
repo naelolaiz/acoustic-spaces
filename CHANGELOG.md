@@ -11,7 +11,13 @@
   medium heavy vehicles; 4b, motorcycles, which have propulsion noise alone;
   `acoustic_spaces.demos.road`) and a sound made to it from their tyres and an engine of
   their own (`--rpm`: six cylinders at 1200 rpm, six at 1500, two at 4000). The police
-  car plays its siren 1.5 m up on its roof, facing the way it drives: wail, yelp or two
+  car is two sources along one walk: the car itself (`police_car`), CNOSSOS-EU's
+  passenger car 0.05 m above the road, and its siren (`police_car_siren`), 1.5 m up on
+  its roof, facing the way it drives, each simulated alone and the two heard together
+  (`--police-car siren` plays the siren alone). The car is 32 dB(A) under the siren,
+  but the siren sends next to nothing under its pitch: in the octaves of 63 to 250 Hz
+  the police car's sound is the car's, the rumble of it going by. The siren plays wail,
+  yelp or two
   tones (`--siren`), a square wave at the sweep rates California's rule for sirens asks
   and at the two tones and the cycle the Swiss rule for priority vehicles asks, with the
   level and the directivity (`siren.csv`) of a 100 W electronic siren the National
@@ -21,7 +27,8 @@
   class B everywhere from 0 to 50 degrees off its axis, 1 to 2 dB under class A),
   the octave band the rule wants it loudest in and the Swiss rule's levels on the test
   bench and 7 m in front of the vehicle. In the editor's Run demo window the vehicle,
-  the engine's speed and the siren are options with their tips.
+  the engine's speed, the siren and what the police car plays are options with their
+  tips.
 - The road vehicles' sound power is CNOSSOS-EU's Table F-1 as amended in 2021
   (Commission Delegated Directive (EU) 2021/1226), which has a vehicle's point radiate
   alike every way instead of into the half space above the road, with coefficients A
@@ -36,7 +43,8 @@
   `CATEGORIES` instead of `ROLLING_A` and the like; `VehiclePower` has the category
   first. The pass-by demos' step that makes the vehicle's sound is `sound` instead of
   `car` (`passby_demo.py sound`), and writes `demo/NAME/NAME.wav` for the vehicle NAME
-  (`demo/police_car/siren.wav` for the police car).
+  (`demo/police_car/police_car.wav` and `siren.wav` for the police car's car and its
+  siren).
 - Fixed: a walk with Doppler in binaural through measured ears (a SOFA file, such as
   `kemar`) lost the treble for a moment between each two places, audible as a vehicle
   passes. Where each ear's response starts was in its filter, and

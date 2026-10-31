@@ -367,11 +367,13 @@ Movement:
 - [x] Trucks, buses, motorcycles and a police car with its siren on, in the pass-by
   demos as the car is (`--vehicle`): CNOSSOS-EU's sound power of their category, and the
   siren's level and directivity as measured, checked against California's and the
-  Swiss rules for sirens.
+  Swiss rules for sirens; the police car's own sound (CNOSSOS-EU's car) along with its
+  siren, or the siren alone.
 - [ ] Trains and trams: Schall 03 by default, CNOSSOS-EU's railway noise to choose, in a
   `railway` example and a tram in the street.
 - [ ] Construction plant (breakers, excavators, generators), car horns and reversing
-  alarms.
+  alarms; a fire engine, a heavy vehicle (CNOSSOS-EU's category 3) with its siren and
+  air horns, from measured levels.
 - [ ] Aircraft taking off, landing and flying over.
 - [ ] Ground-borne vibration from trains and construction plant, and the noise it makes
   in the rooms of a building.

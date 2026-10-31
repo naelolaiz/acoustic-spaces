@@ -686,7 +686,8 @@ drives past and each listener hears one pass in turn, its pitch falling as it go
 The video follows the vehicle on the plan, with the level heard over the pass drawn
 under it. `--vehicle` picks what goes past: in the roadside a passenger car (`car`) or
 an articulated truck (`truck`), in the street the car, a city bus (`bus`), a motorcycle
-(`motorcycle`) or a police car with its siren on (`police_car`).
+(`motorcycle`) or a police car with its siren on (`police_car`, the car itself, and
+`police_car_siren`).
 
 ```sh
 acoustic-spaces examples --copy . roadside && cd roadside   # or street
@@ -698,12 +699,15 @@ drives (km/h; without it, the speed of its walk in the example's scene: 70 km/h 
 truck, 50 km/h for the others), `--rpm 2000` how fast its engine turns, for its made
 sound (by default its own: the car's four cylinders at 2000 rpm, the truck's six at
 1200, the bus's six at 1500 and the motorcycle's two at 4000), `--siren wail` the police
-car's siren (`wail`, `yelp` or `two_tone`), `--step 1` how far apart the vehicle is
-simulated along its walk (m), `--hrtf me.sofa` a measured head, `--input NAME=WAV` a dry
-recording of yours for the vehicle NAME. The vehicle drives the length of its walk at
+car's siren (`wail`, `yelp` or `two_tone`), `--police-car car_and_siren` what the police
+car plays (the car itself and its siren, or `siren` alone), `--step 1` how far apart the
+vehicle is simulated along its walk (m), `--hrtf me.sofa` a measured head, `--input
+NAME=WAV` a dry recording of yours for the vehicle NAME (`police_car_siren=WAV` for the
+police car's siren). The vehicle drives the length of its walk at
 that speed, so the pass lasts the length divided by the speed: the 150 m of the roadside
 take 10.8 s at 50 km/h, 7.7 s at 70 km/h. The **Run demo** window gives the three under
-its options as they change, and ticks the vehicle in its Movement box.
+its options as they change, and ticks the vehicle (the police car's two sources) in its
+Movement box.
 
 - **The road vehicles** are the example's sources of their names: point sources 0.05 m
   above the road, where CNOSSOS-EU puts a vehicle's sound, each with a walk along its
@@ -747,9 +751,15 @@ its options as they change, and ticks the vehicle in its Movement box.
   car=engine.wav` plays a dry recording instead (on board, or at the wheel), mixed down
   to mono and at least as long as the pass; the captions still give CNOSSOS-EU's
   vehicle.
-- **The police car** (`police_car`, in the street) plays its siren from its roof, 1.5 m
-  up, facing the way it drives (its walk's `face_forward`), with the level and the
-  directivity of a commercial 100 W electronic siren the National Bureau of Standards
+- **The police car** (in the street) is two sources along one walk: the car itself
+  (`police_car`), a passenger car 0.05 m above the road with CNOSSOS-EU's sound power
+  and a sound made as the car's (its engine four cylinders at 2000 rpm, `--rpm`), and
+  its siren (`police_car_siren`), the walk's points at the height of its roof, 1.5 m up,
+  facing the way it drives (its walk's `face_forward`). Each is simulated along the walk
+  alone, and the two are heard together: their sounds added, and the energies of their
+  levels band by band. The demo refuses a siren whose walk goes elsewhere in plan or at
+  other times than the car's. `--police-car siren` plays the siren alone. The siren
+  has the level and the directivity of a commercial 100 W electronic siren the National Bureau of Standards
   measured in an anechoic room (NBS Special Publication 480-28, 1978): 3 m away, its
   yelp averaged over 20 s, 118 dB(A) on its axis, 112 dB(A) 50 degrees off it and 107
   dB(A) at 90 degrees. The scene's `siren.csv` goes through those three, in dB linearly
@@ -763,8 +773,11 @@ its options as they change, and ticks the vehicle in its Movement box.
   of 360 to 630 Hz in the ratio 3:4 and a cycle of 2.5 to 3.5 s). The loudspeaker is
   taken to send every harmonic alike and the same power in every pattern, the yelp's:
   130.9 dB in all, 130.6 dB(A) for the wail and the yelp and 128.6 dB(A) for the two
-  tones, which sit lower where the ear weighs less. The car's own sound is left out: at
-  50 km/h its sound power is 32 dB(A) under the wail's and 30 under the two tones'.
+  tones, which sit lower where the ear weighs less. At 50 km/h the car's sound power is
+  32 dB(A) under the wail's and 30 under the two tones', but a square wave sends its odd
+  harmonics alone, nothing under its fundamental: in the octaves of 63 to 250 Hz the
+  police car's sound is the car's, the rumble of it going by (the siren's `level_db`
+  gives those octaves 44 to 55 dB under its whole power).
   Against the rules (`validation/urban_sources.py`): 3.0 m away the wail and the yelp
   give 118.0 dB(A) on the axis and 112.0 dB(A) 50 degrees off it, above the least
   levels of California's class B siren at every angle of its table and 1 to 2 dB under
@@ -811,6 +824,12 @@ its options as they change, and ticks the vehicle in its Movement box.
   | pavement | 79.4 | 90.3 | 78.1 | 114.8 |
   | balcony | 74.0 | 80.3 | 73.4 | 104.5 |
   | garden | 62.7 | 71.3 | 61.5 | 95.1 |
+
+  The police car's column is its siren's, which the car itself does not change at this
+  precision: the car goes where the bus does, with a sound power at least 4.6 dB under
+  the bus's in every octave band, so its passes peak at least 28 dB(A) under the
+  siren's at every listener and add 0.01 dB at most. It is heard under the siren's
+  pitch, which dB(A) weighs little.
 
   The garden hears the car loudest where the car sees it straight through the 4 m gap
   between the houses and the barrier (14 m short of the gap), less while the barrier

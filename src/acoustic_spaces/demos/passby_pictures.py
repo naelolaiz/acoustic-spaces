@@ -72,6 +72,15 @@ class Pictures(scene_pictures.Pictures):
     ):
         heard = facts["listeners"]
         noun = facts.get("source", CAR)
+        # A vehicle of several sources (the police car and its siren) is drawn as one,
+        # under its own name, whichever of them play.
+        carried = set(facts.get("parts", [noun])) - {noun}
+        sources = [
+            {**s, "enabled": True} if s["name"] == noun else s
+            for s in scene.get("sources", [])
+            if s["name"] not in carried
+        ]
+        scene = {**scene, "sources": sources}
         movement = {
             "times": facts["times"],
             "levels_a_db": {name: {noun: v["levels_a_db"]} for name, v in heard.items()},
@@ -143,7 +152,7 @@ class Pictures(scene_pictures.Pictures):
             f"A car at {kmh(self.facts['speed_kmh'])} km/h, "
             f"{self.facts['sound_power_a_db']:.1f} dB(A) of sound power (CNOSSOS-EU)"
         )
-        lines.append((about, MUTED))
+        lines += [(line, MUTED) for line in about.split("\n")]
         if self.fmt == "binaural":
             lines.append(("L and R mark your ears", MUTED))
         return lines

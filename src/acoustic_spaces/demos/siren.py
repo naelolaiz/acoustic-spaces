@@ -43,10 +43,24 @@ import numpy as np
 
 from acoustic_spaces.demos import Option
 from acoustic_spaces.demos.audio import write as write_wav
-from acoustic_spaces.demos.passby import FADE_S, Vehicle, car_of, kmh, pass_s, speed_of
+from acoustic_spaces.demos.passby import (
+    CYLINDER_WORDS,
+    FADE_S,
+    RoadVehicle,
+    Vehicle,
+    car_of,
+    kmh,
+    pass_s,
+    speed_of,
+)
 
-#: The source of the street example that drives past with its siren on.
+#: The sources of the street example's police car: the car itself, tyres and engine,
+#: 0.05 m above the road; and its siren, on its roof, along the same walk.
 POLICE_CAR = "police_car"
+SIREN = "police_car_siren"
+#: What the police car plays (``--police-car``): the car with its siren on, or the siren
+#: alone.
+PLAYS = ("car_and_siren", "siren")
 #: The siren's patterns.
 PATTERNS = ("wail", "yelp", "two_tone")
 #: The patterns in words.
@@ -81,7 +95,7 @@ POWER_S = 15.0
 #: ``level_db``, not the file's.
 SOUND_RMS = 0.1
 SIREN_FILE = "siren.wav"
-SIREN_INFO = "siren.json"
+POLICE_CAR_INFO = "police_car.json"
 
 
 def fundamental_hz(pattern: str, times: np.ndarray) -> np.ndarray:
@@ -169,23 +183,32 @@ def siren_power(pattern: str, sample_rate: int) -> np.ndarray:
     return total + 10.0 * np.log10(np.array(_bands(pattern, sample_rate)))
 
 
-class SirenVehicle(Vehicle):
-    """A police car driving past with its siren on: the street example's source
-    ``police_car``, at the height of a siren on a car's roof, facing the way it drives,
-    playing :func:`siren_sound` in ``--siren``'s pattern with :func:`siren_power` and the
-    measured siren's directivity. The car's own sound (CNOSSOS-EU's category 1) is
-    left out: at 50 km/h its sound power is 32 dB(A) under the wail's and the yelp's, 30
-    under the two tones'."""
+class PoliceCar(Vehicle):
+    """A police car driving past with its siren on: the street example's sources
+    ``police_car``, the car itself (tyres and engine, CNOSSOS-EU's passenger car, as
+    :class:`~acoustic_spaces.demos.passby.RoadVehicle` makes it) 0.05 m above the road,
+    and ``police_car_siren`` along the same walk at the height of a siren on its roof,
+    facing the way it drives, playing :func:`siren_sound` in ``--siren``'s pattern with
+    :func:`siren_power` and the measured siren's directivity; ``--police-car siren``
+    plays the siren alone. At 50 km/h the car's sound power is some 32 dB(A) under the
+    wail's, but the siren sends next to nothing under its fundamental (a square wave has
+    its odd harmonics alone): in the octaves of 63 to 250 Hz the police car's sound is
+    the car's, the rumble of it going by (:func:`siren_power` gives those octaves 44 to
+    55 dB under the siren's whole power)."""
 
     name, demo_name = POLICE_CAR, "passby"
     title = "a police car with its siren on"
-    steady = "the demo plays the police car's pass at one steady speed"
-    sound_file, info_file = SIREN_FILE, SIREN_INFO
+    sound_file, info_file = SIREN_FILE, POLICE_CAR_INFO
     #: The vehicle in a word, for the demo's words.
     noun = "police car"
 
     def __init__(self, script: str = "passby_demo.py") -> None:
         self.script = script
+        #: The car itself: a passenger car, its engine four cylinders at 2000 rpm.
+        self.car = RoadVehicle(
+            POLICE_CAR, "1", "a passenger car", rpm=2000.0, cylinders=4, noun=self.noun
+        )
+        self.steady = self.car.steady
 
     def options(self) -> list[Option]:
         return [
@@ -201,84 +224,182 @@ class SirenVehicle(Vehicle):
                 "choice",
                 PATTERNS,
                 steps=(self.sound_step, "scene", "walk"),
-            )
+            ),
+            Option(
+                "police_car",
+                "what the police car plays: car_and_siren, the car itself (tyres and its "
+                "engine, CNOSSOS-EU's passenger car at --speed, from 0.05 m above the road) "
+                "and its siren on its roof, as a police car going by sounds; siren, the "
+                "siren alone",
+                PLAYS[0],
+                "choice",
+                PLAYS,
+                steps=(self.sound_step, "scene", "walk"),
+            ),
+            *self.car.options(),
         ]
 
     def pattern_of(self, args: argparse.Namespace) -> str:
         """The siren's pattern: ``--siren``, or PATTERN."""
         return getattr(args, "siren", None) or PATTERN
 
+    def plays_of(self, args: argparse.Namespace) -> str:
+        """What it plays: ``--police-car``, or the car with its siren."""
+        return getattr(args, "police_car", None) or PLAYS[0]
+
+    def with_car(self, args: argparse.Namespace) -> bool:
+        """Whether the car itself plays along with its siren."""
+        return self.plays_of(args) == "car_and_siren"
+
+    def check(self, args: argparse.Namespace) -> None:
+        if self.plays_of(args) not in PLAYS:
+            raise SystemExit(
+                f"error: --police-car is one of {', '.join(PLAYS)}, not {self.plays_of(args)!r}"
+            )
+        self.car.check(args)
+
+    def parts(self, args: argparse.Namespace) -> tuple[str, ...]:
+        return (POLICE_CAR, SIREN) if self.with_car(args) else (SIREN,)
+
+    def every_part(self) -> tuple[str, ...]:
+        return (POLICE_CAR, SIREN)
+
+    def engines(self) -> tuple[RoadVehicle, ...]:
+        return (self.car,)
+
     def info(self, args: argparse.Namespace, scene, speed_kmh: float) -> dict:
-        """What its sound is made of: the pattern, the speed, the length and the siren's
-        sound power."""
+        """What its sounds are made of, at ``speed_kmh`` in ``scene``: the pattern, the
+        speed, the length and the siren's sound power, and the car's (CNOSSOS-EU's, with
+        its engine), unless the siren plays alone; ``sound_power_db`` and
+        ``sound_power_a_db`` of what it plays, in all."""
         from acoustic_spaces.parameters import a_weighted
 
         pattern = self.pattern_of(args)
         rate = int(scene.simulation.sample_rate)
         level = siren_power(pattern, rate)
+        car = self.car.info(args, scene, speed_kmh) if self.with_car(args) else None
+        bands = 10.0 ** (level / 10.0)
+        if car is not None:
+            bands = bands + 10.0 ** (np.asarray(car["level_db"]) / 10.0)
         return {
+            "plays": self.plays_of(args),
             "siren": pattern,
             "speed_kmh": round(speed_kmh, 6),
             "rate": rate,
             "duration_s": round(pass_s(car_of(scene, self), args.speed), 6),
-            "level_db": [round(float(v), 1) for v in level],
-            "sound_power_db": round(10.0 * math.log10(float(np.sum(10.0 ** (level / 10.0)))), 2),
-            "sound_power_a_db": round(a_weighted(level), 2),
+            "siren_level_db": [round(float(v), 1) for v in level],
+            "siren_sound_power_a_db": round(a_weighted(level), 2),
             "directivity_index_db": round(directivity_index_db(), 2),
+            "car": car,
+            "sound_power_db": round(10.0 * math.log10(float(np.sum(bands))), 2),
+            "sound_power_a_db": round(a_weighted(10.0 * np.log10(bands)), 2),
         }
 
+    def levels(self, info: dict) -> dict[str, list[float]]:
+        siren = {SIREN: info["siren_level_db"]}
+        return siren if info["car"] is None else {POLICE_CAR: info["car"]["level_db"], **siren}
+
+    def sound_files(self, args: argparse.Namespace) -> tuple[str, ...]:
+        car = (self.car.sound_file,) if self.with_car(args) else ()
+        return (*car, SIREN_FILE)
+
+    def sound_path(self, args: argparse.Namespace, part: str) -> Path:
+        file = self.car.sound_file if part == POLICE_CAR else SIREN_FILE
+        return args.work / self.name / file
+
     def make(self, args: argparse.Namespace, info: dict, folder: Path) -> str:
+        said = [] if info["car"] is None else [self.car.make(args, info["car"], folder)]
         x = siren_sound(info["siren"], info["rate"], info["duration_s"])
-        write_wav(folder / self.sound_file, x, info["rate"])
-        return (
+        write_wav(folder / SIREN_FILE, x, info["rate"])
+        said.append(
             f"{info['duration_s']:.1f} s of a siren's {info['siren'].replace('_', '-')}, "
-            f"{info['sound_power_a_db']:.1f} dB(A) of sound power"
+            f"{info['siren_sound_power_a_db']:.1f} dB(A) of sound power"
         )
+        return "; ".join(said)
 
     def edit(self, source: dict, info: dict, args: argparse.Namespace) -> None:
-        """Its sound power, and the siren's directivity in a CSV table beside the demo's
-        scene, facing the way it drives."""
+        """The sound power of each of its sources, and the siren's directivity in a CSV
+        table beside the demo's scene, facing the way it drives."""
         from acoustic_spaces.directivity import write_directivity_csv
 
-        source["level_db"] = info["level_db"]
-        source.pop("spectrum", None)
-        table = args.scene.with_name(f"{args.scene.stem}_{self.name}.csv")
+        super().edit(source, info, args)
+        if source["name"] != SIREN:
+            return
+        table = args.scene.with_name(f"{args.scene.stem}_{SIREN}.csv")
         write_directivity_csv(table, directivity(), directivity_comment(self.script))
         named = Path(os.path.relpath(table, args.source.parent)).as_posix()
         source["directivity"] = {"file": named}
         source.setdefault("walk", {})["face_forward"] = True
 
+    def feeds(self, args: argparse.Namespace, speed: str) -> dict[str, str]:
+        pattern = self.pattern_of(args).replace("_", "-")
+        if not self.with_car(args):
+            return {SIREN: f"a police car's siren alone {speed}{pattern}"}
+        return {POLICE_CAR: self.car.plays(args, speed), SIREN: f"its siren on its roof, {pattern}"}
+
     def plays(self, args: argparse.Namespace, speed: str) -> str:
-        return f"a police car {speed}with its siren on, {self.pattern_of(args).replace('_', '-')}"
+        return "; ".join(self.feeds(args, speed).values())
 
     def played_by(self, args: argparse.Namespace) -> str:
-        return f"{self.name} {round(speed_of(args, self), 4):g} km/h {self.pattern_of(args)}"
+        speed = f"{round(speed_of(args, self), 4):g} km/h"
+        car = f" {self.car.rpm_of(args):g} rpm" if self.with_car(args) else ""
+        return f"{self.name} {speed} {self.pattern_of(args)} {self.plays_of(args)}{car}"
 
     def facts(self, args: argparse.Namespace, info: dict) -> dict:
-        return {
+        pattern = info["siren"].replace("_", "-")
+        siren = f"siren {info['siren_sound_power_a_db']:.1f} dB(A)"
+        facts = {
             "siren": info["siren"],
+            "plays": info["plays"],
             "sound_power_a_db": info["sound_power_a_db"],
-            "about": f"A police car at {kmh(info['speed_kmh'])} km/h, its siren on "
-            f"{info['siren'].replace('_', '-')}, {info['sound_power_a_db']:.1f} dB(A) of "
-            "sound power",
+            "siren_sound_power_a_db": info["siren_sound_power_a_db"],
+        }
+        if info["car"] is None:
+            about = f"A police car's siren alone at {kmh(info['speed_kmh'])} km/h, {pattern}"
+            return facts | {"about": f"{about}\n{siren} of sound power"}
+        car = info["car"]
+        return facts | {
+            "car_sound_power_a_db": car["sound_power_a_db"],
+            "rpm": car["rpm"],
+            "cylinders": car["cylinders"],
+            "about": f"A police car at {kmh(info['speed_kmh'])} km/h, its siren on {pattern}\n"
+            f"{siren}, car {car['sound_power_a_db']:.1f} dB(A) of sound power",
         }
 
     def credit(self, facts: dict) -> str:
-        return (
-            f"Siren's sound: {PATTERN_WORDS[facts['siren']]}, a square wave, at the level "
-            "and the directivity of a 100 W electronic siren measured by the National "
-            f"Bureau of Standards (SP 480-28, 1978); faded in and out over {FADE_S:g} s"
+        return self.credits(facts, {})
+
+    def credits(self, facts: dict, files: dict[str, Path | None]) -> str:
+        said = []
+        if facts.get("plays", PLAYS[0]) == "car_and_siren":
+            file = files.get(POLICE_CAR)
+            cylinders = CYLINDER_WORDS.get(facts["cylinders"], facts["cylinders"])
+            said.append(
+                f"car: {file.name}"
+                if file is not None
+                else f"car: tyres and a {cylinders}-cylinder engine at {facts['rpm']:g} rpm "
+                "(CNOSSOS-EU's)"
+            )
+        file = files.get(SIREN)
+        said.append(
+            f"siren: {file.name}"
+            if file is not None
+            else f"siren: {facts['siren'].replace('_', '-')}, a square wave, as loud and "
+            "directional as a 100 W siren NBS measured (SP 480-28, 1978)"
         )
+        return f"Police car's sound, {'; '.join(said)}; faded in and out over {FADE_S:g} s"
 
     def texts(self) -> dict[str, str]:
         return {
             "speed": "how fast the police car drives along its walk (km/h; m/s times 3.6), "
-            "which sets how long its pass and its siren's sound last; by default as its walk "
-            "in the scene goes",
-            "input": "a WAV file the police car plays instead of its siren, as "
-            "police_car=WAV: a dry recording of a siren, mixed down to mono and sent with "
-            "the measured siren's directivity, at least as long as the pass",
-            "sound": f"demo/{self.name}/{self.sound_file}: the siren's sound, dry",
+            "which sets how long its pass and its sound last, and the car's sound power; by "
+            "default as its walk in the scene goes",
+            "input": "a WAV file a source of the police car plays instead of its made sound, "
+            f"as {POLICE_CAR}=WAV for the car itself (a dry recording, on board or close to "
+            f"it) or {SIREN}=WAV for its siren (a dry recording of a siren, sent with the "
+            "measured siren's directivity), mixed down to mono, at least as long as the pass",
+            "sound": f"demo/{self.name}/{self.car.sound_file} and {SIREN_FILE}: the car's "
+            "sound, made to CNOSSOS-EU, and the siren's, dry",
             "header": "# The example with its police car driving past alone with its siren "
             "on, at the speed\n# of the pass-by demo, written by passby_demo.py.\n",
         }
@@ -294,7 +415,7 @@ def directivity_comment(script: str) -> str:
 
 
 #: The police car of the street example.
-POLICE_CAR_VEHICLE = SirenVehicle()
+POLICE_CAR_VEHICLE = PoliceCar()
 
 __all__ = [
     "AT_M",
@@ -302,16 +423,18 @@ __all__ = [
     "LOW_HZ",
     "ON_AXIS_DB_A",
     "PATTERNS",
+    "PLAYS",
     "POLICE_CAR",
     "POLICE_CAR_VEHICLE",
     "POLAR_DB",
     "POLAR_DEG",
+    "SIREN",
     "SOUND_RMS",
     "TWO_TONE_HZ",
     "TWO_TONE_PERIOD_S",
     "WAIL_PER_MINUTE",
     "YELP_PER_MINUTE",
-    "SirenVehicle",
+    "PoliceCar",
     "directivity",
     "directivity_index_db",
     "fundamental_hz",

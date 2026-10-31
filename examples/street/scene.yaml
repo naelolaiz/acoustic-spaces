@@ -76,11 +76,23 @@ sources:
       to: [[70, -2, 0.05]]
       speed_m_s: 13.89
       doppler: true
-  # A police car with its siren on, wailing: a 100 W electronic siren on its roof, 1.5 m
-  # up, facing the way it drives, at the level and with the directivity the National
-  # Bureau of Standards measured (siren.csv; passby_demo.py --siren picks the pattern).
-  # The car's own sound is some 32 dB(A) under the siren's and left out.
+  # A police car with its siren on, in the lane on the houses' side, the other way, at
+  # 50 km/h: the car itself, a passenger car, its tyres and engine heard from 0.05 m
+  # above the road with CNOSSOS-EU's sound power (as the car's); and its siren, wailing:
+  # a 100 W electronic siren on its roof, 1.5 m up, along the same walk, facing the way
+  # it drives, at the level and with the directivity the National Bureau of Standards
+  # measured (siren.csv; passby_demo.py --siren picks the pattern, --police-car siren
+  # plays the siren alone). The car is some 32 dB(A) under the siren, but under the
+  # siren's pitch, in the octaves of 63 to 250 Hz, it is all the police car's sound.
   - name: police_car
+    enabled: false
+    position: [70, 2, 0.05]
+    level_db: [98.3, 91.2, 89.4, 90.7, 95.6, 92.3, 84.6, 76.1]
+    walk:
+      to: [[-55, 2, 0.05]]
+      speed_m_s: 13.89
+      doppler: true
+  - name: police_car_siren
     enabled: false
     position: [70, 2, 1.5]
     level_db: [76.1, 76.1, 81.4, 123.3, 128.6, 120.5, 120.0, 118.8]

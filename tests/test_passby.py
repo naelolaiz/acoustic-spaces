@@ -73,12 +73,13 @@ def test_the_table_is_the_2021_one_not_2015s() -> None:
         ("street", THE_CAR),
         ("street", BUS),
         ("street", MOTORCYCLE),
+        ("street", siren.POLICE_CAR_VEHICLE.car),
     ],
 )
 def test_the_examples_road_vehicles_are_cnossos_at_their_speed(example: str, vehicle) -> None:
-    """The road vehicles of the roadside and the street: point sources 0.05 m up, left out
-    of the example's simulations, CNOSSOS-EU's levels for their category at the speed of
-    their walk, with Doppler."""
+    """The road vehicles of the roadside and the street, the police car's car too: point
+    sources 0.05 m up, left out of the example's simulations, CNOSSOS-EU's levels for
+    their category at the speed of their walk, with Doppler."""
     scene = Scene.from_yaml(example_path(example))
     (source,) = [s for s in scene.sources if s.name == vehicle.name]
     assert not source.in_use and not source.extended and source.position[2] == 0.05
@@ -88,16 +89,30 @@ def test_the_examples_road_vehicles_are_cnossos_at_their_speed(example: str, veh
 
 
 def test_the_streets_police_car_has_the_measured_siren(tmp_path: Path) -> None:
-    """The street's police car: left out, its siren 1.5 m up on its walk, facing the way
-    it drives, with the wail's sound power and siren.csv, the siren's directivity as the
-    module writes it."""
+    """The street's police car: left out, its siren 1.5 m up along the car's walk, facing
+    the way it drives, with the wail's sound power and siren.csv, the siren's directivity
+    as the module writes it."""
+    from acoustic_spaces.demos.passby import car_problem
     from acoustic_spaces.directivity import write_directivity_csv
 
     path = Path(example_path("street"))
     scene = Scene.from_yaml(path)
-    (car,) = [s for s in scene.sources if s.name == "police_car"]
+    (car,) = [s for s in scene.sources if s.name == "police_car_siren"]
     assert not car.in_use and car.position[2] == 1.5
     assert car.walk.doppler and car.walk.face_forward
+    assert car_problem(scene, path.name, siren.POLICE_CAR_VEHICLE) is None
+    # A siren whose walk goes elsewhere does not go along with its car.
+    walk = car.walk.model_copy(update={"to": [(-50.0, 2.0, 1.5)]})
+    moved = scene.model_copy(
+        update={
+            "sources": [
+                s.model_copy(update={"walk": walk}) if s.name == car.name else s
+                for s in scene.sources
+            ]
+        }
+    )
+    problem = car_problem(moved, path.name, siren.POLICE_CAR_VEHICLE)
+    assert problem is not None and "must go where the police_car's does" in problem
     rate = scene.simulation.sample_rate
     assert car.level_db == pytest.approx(siren.siren_power("wail", rate), abs=0.05)
     assert car.directivity.file == path.parent / "siren.csv"
@@ -397,17 +412,19 @@ def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, caps
 
 def _street(tmp_path: Path) -> Path:
     """The street example, quick: no buildings nor barrier, the police car's walk 40 m
-    long, the pavement alone, 16 kHz."""
+    long, the pavement alone, 16 kHz, seeded (two runs trace the same rays)."""
     folder = tmp_path / "street"
     shutil.copytree(Path(example_path("street")).parent, folder)
     data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
     data["geometry"] = {"ground": {"extent": [[-30, -15], [30, 15]], "sky": 10}}
     data["assignments"] = {"ground": "asphalt"}
-    (police,) = [s for s in data["sources"] if s["name"] == "police_car"]
-    police["position"] = [20, 2, 1.5]
-    police["walk"]["to"] = [[-20, 2, 1.5]]
+    for police in data["sources"]:
+        if police["name"].startswith("police_car"):
+            z = police["position"][2]
+            police["position"] = [20, 2, z]
+            police["walk"]["to"] = [[-20, 2, z]]
     data["listeners"] = [lis for lis in data["listeners"] if lis["name"] == "pavement"]
-    data["simulation"].update({"sample_rate": 16_000, "ir_length_s": 0.2})
+    data["simulation"].update({"sample_rate": 16_000, "ir_length_s": 0.2, "seed": 1})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 500}
     data["simulation"]["early"]["diffraction"] = "none"
     (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
@@ -415,42 +432,88 @@ def _street(tmp_path: Path) -> Path:
 
 
 def test_the_passby_demo_drives_the_police_car_with_its_siren(tmp_path: Path) -> None:
-    """--vehicle police_car on the quick street: the siren's sound in the pattern of
-    --siren, the scene with the police car alone, at the siren's sound power, with its
-    directivity table beside the scene and facing the way it drives, and its pass; the
-    motorcycle's sound has no tyres in it."""
+    """--vehicle police_car on the quick street: the car's sound (CNOSSOS-EU's car) and
+    the siren's in the pattern of --siren, the scene with the police car's two sources
+    alone, at their sound powers, the siren's directivity table beside the scene and
+    facing the way it drives, and its pass, the two heard together: their levels'
+    energies added, the car's rumble below the siren's pitch, the siren the same as
+    alone (--police-car siren); the motorcycle's sound has no tyres in it."""
     pytest.importorskip("PIL")
     from acoustic_spaces.demos import load
+    from acoustic_spaces.synthesis import split_bands
 
     folder = _street(tmp_path)
     demo = load(folder / "passby_demo.py").at(folder)
     args = demo.parser().parse_args(["all", "--vehicle", "police_car", "--siren", "two_tone"])
-    assert demo.check(args) is None and demo.moving(demo.resolved(args)) == ["police_car"]
-    assert demo.plays(demo.resolved(args)) == {
-        "police_car": "a police car at 50 km/h, with its siren on, two-tone"
+    resolved = demo.resolved(args)
+    assert demo.check(args) is None
+    assert demo.moving(resolved) == ["police_car", "police_car_siren"]
+    assert demo.plays(resolved) == {
+        "police_car": "a police car at 50 km/h, made to CNOSSOS-EU's sound power",
+        "police_car_siren": "its siren on its roof, two-tone",
     }
     run = ["all", "--vehicle", "police_car", "--siren", "two_tone", "--step", "4", "--no-mp4"]
     assert demo.main(run) == 0
     work = folder / "demo"
-    info = pipeline.read_json(work / "police_car" / "siren.json")
-    assert info["siren"] == "two_tone" and info["sound_power_a_db"] == pytest.approx(128.6, abs=0.1)
-    x, rate = audio.read(work / "police_car" / "siren.wav")
-    assert rate == 16_000 and len(x) == pytest.approx(40.0 / 13.89 * rate, abs=2)
+    info = pipeline.read_json(work / "police_car" / "police_car.json")
+    assert info["siren"] == "two_tone" and info["plays"] == "car_and_siren"
+    assert info["siren_sound_power_a_db"] == pytest.approx(128.6, abs=0.1)
+    assert info["car"]["category"] == "1" and info["car"]["sound_power_a_db"] == pytest.approx(
+        98.4, abs=0.1
+    )
+    for name in ("police_car.wav", "siren.wav"):
+        x, rate = audio.read(work / "police_car" / name)
+        assert rate == 16_000 and len(x) == pytest.approx(40.0 / 13.89 * rate, abs=2)
     scene = Scene.from_yaml(folder / "scene_demo.yaml")
-    assert [s.name for s in scene.sources if s.in_use] == ["police_car"]
-    (car,) = [s for s in scene.sources if s.name == "police_car"]
-    assert car.level_db == info["level_db"] and car.walk.face_forward and car.walk.doppler
-    assert car.directivity.file == folder / "scene_demo_police_car.csv"
+    assert [s.name for s in scene.sources if s.in_use] == ["police_car", "police_car_siren"]
+    car, top = (
+        next(s for s in scene.sources if s.name == n) for n in ("police_car", "police_car_siren")
+    )
+    assert car.level_db == info["car"]["level_db"] and car.directivity == "omni"
+    assert top.level_db == info["siren_level_db"] and top.walk.face_forward and top.walk.doppler
+    assert top.directivity.file == folder / "scene_demo_police_car_siren.csv"
     table, own = (
         f.read_text(encoding="utf-8").split("azimuth", 1)[1]
-        for f in (car.directivity.file, folder / "siren.csv")
+        for f in (top.directivity.file, folder / "siren.csv")
     )
     assert table == own  # the example's table, but for the comment over it
     facts = pipeline.read_json(work / "walk" / "walk.json")
     assert facts["siren"] == "two_tone" and facts["source"] == "police_car"
-    pavement = facts["listeners"]["pavement"]
-    assert pavement["max_a_db"] == max(pavement["levels_a_db"]) and pavement["closest_m"] < 3.0
+    assert facts["parts"] == ["police_car", "police_car_siren"]
+    both = facts["listeners"]["pavement"]
+    assert both["max_a_db"] == max(both["levels_a_db"]) and both["closest_m"] < 3.0
+    parts = both["parts"]
+    energy = sum(10.0 ** (p["sel_a_db"] / 10.0) for p in parts.values())
+    assert both["sel_a_db"] == pytest.approx(10.0 * math.log10(energy), abs=0.02)
+    assert parts["police_car"]["max_a_db"] < parts["police_car_siren"]["max_a_db"] - 20.0
     assert (work / "stills" / "00_pavement.png").exists()
+    seats = pipeline.read_json(work / "walk" / pipeline.SEATS)
+    mix, _ = audio.read(work / "walk" / "pavement.binaural.wav")
+    mixed = mix / seats["gain"]
+    # The siren alone: the same siren, without the car's rumble.
+    run = [*run, "--police-car", "siren"]
+    args = demo.resolved(demo.parser().parse_args(run))
+    assert demo.moving(args) == ["police_car_siren"]
+    assert not demo.is_done(demo.step("sound"), args)
+    assert not demo.is_done(demo.step("scene"), args)
+    assert demo.main(run) == 0
+    scene = Scene.from_yaml(folder / "scene_demo.yaml")
+    assert [s.name for s in scene.sources if s.in_use] == ["police_car_siren"]
+    facts = pipeline.read_json(work / "walk" / "walk.json")
+    alone = facts["listeners"]["pavement"]
+    assert alone["sel_a_db"] == pytest.approx(parts["police_car_siren"]["sel_a_db"], abs=0.01)
+    assert alone["max_a_db"] == pytest.approx(parts["police_car_siren"]["max_a_db"], abs=0.01)
+    seats = pipeline.read_json(work / "walk" / pipeline.SEATS)
+    mix, _ = audio.read(work / "walk" / "pavement.binaural.wav")
+    siren_only = mix / seats["gain"]
+    n = min(len(mixed), len(siren_only))
+    low = {}
+    for key, x in (("both", mixed), ("siren", siren_only)):
+        bands = split_bands(x[:n, 0], 16_000)
+        low[key] = [float(np.sum(bands[k] ** 2)) for k in (0, 1)]
+    more = [10.0 * math.log10(b / a) for b, a in zip(low["both"], low["siren"], strict=True)]
+    # At 63 and 125 Hz the siren sends nothing: the police car's sound is the car's.
+    assert more[0] > 40.0 and more[1] > 40.0
     # Another pattern makes the sound and the scene again, with the wail's sound power.
     args = demo.resolved(demo.parser().parse_args(["all", "--vehicle", "police_car"]))
     assert not demo.is_done(demo.step("sound"), args)
