@@ -95,9 +95,9 @@ song, the HRTFs).
 
 ## A demo of any scene
 
-Any scene makes a demo: each source plays a recording of its own, every listener is
-heard in turn, and a video tours them. A source names what it plays in the scene file,
-or with **Plays** on its page in the editor (**Choose WAV…**; **Silent** takes it away):
+Any scene makes a demo: each source plays a recording, every listener is heard in
+turn, and a video tours them. A source names what it plays in the scene file, or with
+**Plays** on its page in the editor (**Choose WAV…**; **Silent** takes it away):
 
 ```yaml
 sources:
@@ -108,20 +108,67 @@ sources:
     signal: sounds/talk.wav   # a dry recording, relative to the scene's folder
 ```
 
+A sound system plays one recording through all its loudspeakers instead: the scene
+names it once, as its `recording` (**Recording** on the scene's page in the editor),
+and each loudspeaker that plays it gets a `channel` (**Channel** on its page): `left`
+or `right`, or `mono`, both mixed down, as subwoofers and loudspeakers in the middle
+play. The recording is a file of yours, such as a band's stereo mix (WAV, or anything
+ffmpeg decodes), or the name of a free one, downloaded the first time a demo plays it:
+
+```yaml
+recording: spicy_funk_cake    # or a file of yours: music/our_band.flac
+sources:
+  - name: house_left          # on the audience's left
+    position: [-40.0, -19.0, 14.0]
+    channel: left
+  - name: subs
+    position: [-41.0, 0.0, 0.6]
+    channel: mono
+```
+
+| Free recording | What it is | Licence | Download |
+| --- | --- | --- | --- |
+| `spicy_funk_cake` | "Spicy Funk Cake" by the Rhythmussportgruppe, a nine-piece funk band, its stereo mix ([Zenodo](https://doi.org/10.5281/zenodo.3601032)) | CC BY 4.0 | 61 MB |
+| `great_british_summer` | "Great British Summer" by Tom McKenzie, its stereo master ([Zenodo](https://doi.org/10.5281/zenodo.19683001)) | CC BY 4.0 | 50 MB |
+| `potassium` | "Potassium" by Software-Entwicklungskit, its stereo master ([album](https://github.com/ichbinsoftware/everythingisfree)) | CC0 1.0 | 6 MB |
+| `speech_male` | a man talking, anechoic: talker M4 of the ACE challenge corpus ([Zenodo](https://doi.org/10.5281/zenodo.6257551)) | CC BY 4.0 | 16 MB |
+| `speech_female` | a woman talking, anechoic: talker F2 of the same corpus | CC BY 4.0 | 49 MB |
+
+They are the songs the lakeside demo plays and the talks of the gallery's. A free
+recording is kept as one WAV file in the user's data folder (`acoustic-spaces/recordings`
+under `~/.local/share` on Linux, `~/Library/Application Support` on macOS,
+`%LOCALAPPDATA%` on Windows; `ACOUSTIC_SPACES_RECORDINGS` names another), so every
+scene that names it plays the same file and none downloads it again. The stills credit
+it as its licence asks unless `--credit` says otherwise. A source's own `signal` wins
+over the recording, and its `channel` then picks a channel of that file; a source with
+neither stays silent. The examples with a stage, a sound system or a talker name a free
+recording and give their loudspeakers or talker a channel, so their demo plays out of
+the box: concert_stage, stadium_concert, lakeside_concert (its stage; ticked, its PA
+group as lakeside_demo.py feeds it), open_air_stage and studio a song; town_hall_pa,
+lecture_hall, leaky_classroom, shoebox, bim_office, material_libraries and gallery the
+male talk. A stereo mix has none of the parts that the monitors or a band on the stage
+play, so they stay silent; the stadium demo plays its song's stems through them.
+
 ```sh
 acoustic-spaces demo scene.yaml                 # every step, into demo/ beside the scene
+acoustic-spaces demo scene.yaml recording       # download the scene's free recording
 acoustic-spaces demo scene.yaml feeds           # one step: feeds, simulate, render, video
 acoustic-spaces demo scene.yaml --seconds 15 --tour front,back --hrtf me.sofa
 acoustic-spaces demo scene.yaml --moving none   # every walker standing where it starts
 ```
 
-- **feeds**: each source's recording mixed down to mono, at the scene's sample rate and
-  brought to the same gated RMS (unweighted), so that how loud each plays
+- **recording**: downloads the free recording the scene names, unless it is there or
+  no source plays it; the editor's Run demo window says so above Run, with its size.
+- **feeds**: each source's file (its `signal`, or the scene's `recording`), at the
+  scene's sample rate, its `channel` or mixed down to mono. Each file is brought to one
+  gated RMS (unweighted, its channels mixed down) and every channel taken out of it
+  keeps that gain, so a recording's stereo balance stays and how loud each source plays
   against the others is its sound power in the scene (`level_db`, with its feed's gain
   and equalizer), as the simulation says, and not how loud the recording happens to
-  be. Sources without a `signal` stay silent and are listed as such. `--input
-  SOURCE=WAV` plays another file instead of a source's signal, without changing the
-  scene, and gives a silent source one.
+  be. Sources with neither stay silent and are listed as such. `--input
+  SOURCE=WAV` plays another file instead of a source's signal or the recording, without
+  changing the scene (the source's `channel` is taken out of it in the same way), and
+  gives a silent source one.
 - **simulate**: `acoustic-spaces simulate` on the scene, its binaural output through the
   HRTFs the scene's binaural output names, `--hrtf` instead, or the spherical head
   model when neither names any. A scene changed since its results is simulated again.
@@ -138,7 +185,8 @@ acoustic-spaces demo scene.yaml --moving none   # every walker standing where it
   as simulated, when their sound arrives, the reverberation time T30 at mid frequencies
   (the mean of the 500 Hz and 1 kHz bands) and the nearest source that plays. `--credit`
   puts a line about the recordings on the stills (who made them, their licence); without
-  it the line says which source plays which file.
+  it the line gives the free recording's credit, when one plays, and says which source
+  plays which other file.
 
 **Movement.** Sources and listeners whose [walk](scenes.md#walks) is on move along it
 while the recordings play, all on one clock from their start, as `walkthrough --all`

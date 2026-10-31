@@ -23,8 +23,16 @@ assignments:
   walls: painted_concrete
   floor: carpet_on_concrete
   ceiling: acoustic_ceiling
+# In a demo of the scene (acoustic-spaces demo) the talker says what the recording
+# below says, downloaded the first time: the ACE corpus's talker M4 (CC BY 4.0).
+# The talker speaks at normal effort, 60 dB(A) 1 m in front (IEC 60268-16), which
+# with a man's speech spectrum and no directivity (omni) is 78.0 dB of sound power.
+recording: speech_male
 sources:
   - name: talker
+    level_db: 78.0
+    spectrum: speech_male
+    channel: mono
     position: [2.0, 3.0, 1.5]
     orientation: {yaw: 0, pitch: 0, roll: 0}
     directivity: omni

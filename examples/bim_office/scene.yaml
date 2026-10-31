@@ -25,8 +25,16 @@ assignments:
   Plaster on brick: plaster
   IfcWindow: glass                  # every element of a class
   Door: wood                        # one element, by name
+# In a demo of the scene (acoustic-spaces demo) the talker says what the recording
+# below says, downloaded the first time: the ACE corpus's talker M4 (CC BY 4.0).
+# The talker speaks at normal effort, 60 dB(A) 1 m in front (IEC 60268-16), which
+# with a man's speech spectrum and a cardioid pattern is 73.3 dB of sound power.
+recording: speech_male
 sources:
   - name: talker
+    level_db: 73.3
+    spectrum: speech_male
+    channel: mono
     position: [1.5, 2.25, 1.2]
     orientation: {yaw: 0}
     directivity: cardioid

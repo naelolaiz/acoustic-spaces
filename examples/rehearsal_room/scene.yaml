@@ -16,6 +16,9 @@ assignments:
   wood_floor_light: wood_floor
   brick_rough: brick
   roof_boards: boards
+# Both sources keep the default sound power, 94 dB (re 1 pW) spread evenly over the
+# bands: not measured levels of a guitar amplifier and a drum kit, so the balance
+# between them is not a band's. Give each its level_db for that.
 sources:
   - name: guitar amp
     position: [1.2, 1.5, 0.5]

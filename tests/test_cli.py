@@ -154,8 +154,12 @@ def test_inspect(capsys: pytest.CaptureFixture[str]) -> None:
     assert "note: the absorption is spread unevenly" in out
     assert "seat-a" in out and "inside" in out
     assert "sound power (dB re 1 pW per octave band" in out
-    row = next(line for line in out.splitlines() if line.startswith("talker ") and "85.0" in line)
-    assert row.split()[1:9] == ["85.0"] * 8
+    # The talker's 78 dB in all, spread as a man's speech is (IEC 60268-16).
+    power = out.split("sound power (dB re 1 pW")[1]
+    row = next(line for line in power.splitlines() if line.startswith("talker "))
+    bands = [float(v) for v in row.split()[1:9]]
+    assert 10 * math.log10(sum(10 ** (v / 10) for v in bands)) == pytest.approx(78.0, abs=0.05)
+    assert max(bands) == bands[1] == bands[2] and "speech_male spectrum" in power
 
 
 def test_inspect_gives_the_air_volume_of_walls_drawn_as_a_shell(
@@ -1084,14 +1088,24 @@ def test_hrtf_downloads_another_sofa_file(tmp_path: Path, capsys) -> None:
     assert "error:" in capsys.readouterr().err
 
 
-def test_demo_of_a_scene_explains_itself(capsys: pytest.CaptureFixture[str]) -> None:
+def test_demo_of_a_scene_explains_itself(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """``acoustic-spaces demo`` lists its steps and options, and stops with a reason on a
     scene whose sources play nothing (the run itself is in test_demos)."""
     with pytest.raises(SystemExit) as stopped:
         main(["demo", "--help"])
     assert stopped.value.code == 0
     out = capsys.readouterr().out
-    for word in ("feeds", "simulate", "render", "video", "--hrtf", "--seconds", "--tour"):
+    for word in ("recording", "feeds", "simulate", "render", "video", "--hrtf", "--seconds"):
         assert word in out
-    assert main(["demo", str(SHOEBOX)]) == 2
+    assert "--tour" in out
+    # The shoebox without its recording: its talker plays nothing.
+    data = yaml.safe_load(SHOEBOX.read_text(encoding="utf-8"))
+    data["geometry"]["file"] = (SHOEBOX.parent / data["geometry"]["file"]).as_posix()
+    data.pop("recording")
+    data["sources"][0].pop("channel")
+    silent = tmp_path / "scene.yaml"
+    silent.write_text(yaml.safe_dump(data), encoding="utf-8")
+    assert main(["demo", str(silent)]) == 2
     assert "no source plays anything" in capsys.readouterr().err

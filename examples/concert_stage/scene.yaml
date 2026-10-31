@@ -60,8 +60,18 @@ assignments:
   stage_deck: stage
   stage_back: stage_drape
   stage_roof: stage
+# In a demo of the scene (acoustic-spaces demo) the sound system plays the recording
+# below, downloaded the first time: the stereo mix of "Spicy Funk Cake" by the
+# Rhythmussportgruppe (CC BY 4.0). Give `recording:` a file of yours, a band's stereo
+# mix, to hear that instead. The loudspeakers on the audience's left play its left
+# channel and those on its right the right one: the names say the stage's side, so
+# main_left, on stage left, is on the audience's right. The subwoofers play both
+# channels mixed down. The monitors and the band play nothing: a stereo mix has none
+# of the parts they play.
+recording: spicy_funk_cake
 sources:
   - name: main_left
+    channel: right
     group: PA/Mains
     position: [-40, 19, 14]
     orientation: {yaw: 8}
@@ -69,6 +79,7 @@ sources:
     eq_db: [0, 0, -2, -1, 0, 0, 0, 4]
     directivity: {file: main_array.yaml, near_field: true}
   - name: main_right
+    channel: left
     group: PA/Mains
     position: [-40, -19, 14]
     orientation: {yaw: -8}
@@ -76,6 +87,7 @@ sources:
     eq_db: [0, 0, -2, -1, 0, 0, 0, 4]
     directivity: {file: main_array.yaml, near_field: true}
   - name: subs
+    channel: mono
     group: PA/Subwoofers
     position: [-41, 0, 0.6]
     level_db: 132
@@ -83,6 +95,7 @@ sources:
     delay_ms: 17
     directivity: {file: sub_array.yaml, near_field: true}
   - name: front_fill_left
+    channel: right
     group: PA/Fills
     position: [-42.3, 6, 2.3]
     orientation: {yaw: -10, pitch: -3}
@@ -91,6 +104,7 @@ sources:
     delay_ms: 33
     directivity: {file: wedge.csv}
   - name: front_fill_right
+    channel: left
     group: PA/Fills
     position: [-42.3, -6, 2.3]
     orientation: {yaw: 10, pitch: -3}

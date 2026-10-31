@@ -169,8 +169,10 @@ def test_map_matches_listeners_at_its_points() -> None:
         np.testing.assert_allclose(values["c80"][k, bands], p.c80[bands], atol=0.6)
         np.testing.assert_allclose(values["edt"][k, bands], p.edt[bands], rtol=0.08)
         np.testing.assert_allclose(values["t30"][k, bands], p.t30[bands], rtol=0.05)
-        # The talker's 94 dB of sound power, spread evenly over the eight bands.
-        spl = 94.0 - 10 * math.log10(8) + p.g + 10 * math.log10(1 / (400 * math.pi))
+        # The talker's sound power per band (a man's speech spectrum), plus G less the
+        # free-field level 10 m from a source of 1 pW: 10 log10(1 / (4 pi 10^2)).
+        power = room.scene.sources[0].power_db("octave")
+        spl = power + p.g + 10 * math.log10(1 / (400 * math.pi))
         np.testing.assert_allclose(values["spl"][k, bands], spl[bands], atol=0.3)
         sti = speech_transmission_index(response.energy(), response.time_step, signal_db=spl)
         assert values["sti"][k] == pytest.approx(sti, abs=0.02)

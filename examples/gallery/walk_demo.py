@@ -73,11 +73,10 @@ from acoustic_spaces.demos import (
     sibling,
 )
 from acoustic_spaces.demos.audio import envelope, mono, quiet_moment, read, write
+from acoustic_spaces.recordings import ACE, ACE_DOI
 
 # --------------------------------------------------------------------------- sources
 
-ACE = "https://zenodo.org/api/records/6257551/files/ACE_Corpus_Speech.tbz2/content"
-ACE_DOI = "10.5281/zenodo.6257551"
 #: The corpus's talkers (5 women, 9 men): each one's take 4, about a minute on how they
 #: get to work.
 TALKERS = tuple(f"F{k}" for k in range(1, 6)) + tuple(f"M{k}" for k in range(1, 10))

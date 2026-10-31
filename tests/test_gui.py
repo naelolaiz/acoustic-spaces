@@ -918,6 +918,7 @@ def test_a_source_plays_a_wav_in_a_demo(window, monkeypatch, tmp_path: Path) -> 
     from PySide6.QtWidgets import QFileDialog
 
     window.open_example(example_path("studio"))
+    window.document.update_point("sources", 0, channel=None)
     window.select("sources", 0)
     page = window.inspector.pages["sources"]
     assert page.signal.text() == "nothing (silent in a demo)"
@@ -934,6 +935,74 @@ def test_a_source_plays_a_wav_in_a_demo(window, monkeypatch, tmp_path: Path) -> 
     assert "signal: talk.wav" in (tmp_path / "scene.yaml").read_text(encoding="utf-8")
     page.silent.click()
     assert window.document.scene.sources[0].signal is None
+    assert page.signal.text() == "nothing (silent in a demo)"
+
+
+def test_a_scene_names_the_recording_its_sources_play(
+    window, monkeypatch, tmp_path: Path, recordings_folder: Path
+) -> None:
+    """The scene's page names its recording, a free one or a file of yours (Choose
+    recording…); each source's Channel picks the side of it the source plays, and its
+    Plays row says so; Silent takes both its file and its channel away."""
+    from PySide6.QtWidgets import QFileDialog
+
+    from acoustic_spaces import recordings
+
+    window.open_example(example_path("studio"))
+    window.select("sources", 0)
+    page = window.inspector.pages["sources"]
+    title = recordings.named("spicy_funk_cake").title
+    assert page.channel.currentData() == "left" and page.channel.toolTip()
+    assert page._form.labelForField(page.channel).toolTip()
+    assert page.signal.text() == f"the scene's recording: {title}"
+    index = page.channel.findData("right")
+    page.channel.setCurrentIndex(index)
+    page.channel.activated.emit(index)
+    assert window.document.scene.sources[0].channel == "right"
+    assert window.undo_action.text() == "&Undo change source"
+    window.select("scene")
+    scene_page = window.inspector.pages["scene"]
+    assert scene_page.recording.toolTip() and scene_page.choose_recording.toolTip()
+    assert scene_page.recording.currentData() == "spicy_funk_cake"
+    names = [scene_page.recording.itemData(k) for k in range(scene_page.recording.count())]
+    assert names == [None, *recordings.NAMES]
+    assert scene_page.recording.itemText(3) == (
+        '"Potassium", Software-Entwicklungskit: a song in stereo, CC0 1.0, 6 MB to download'
+    )
+    # The long items do not widen the panel; the list shows them whole.
+    view = scene_page.recording.view()
+    widest = view.fontMetrics().horizontalAdvance(scene_page.recording.itemText(3))
+    assert scene_page.recording.sizeHint().width() < widest < view.minimumWidth()
+    # Downloaded, it says so (the list is filled again when the scene's page shows).
+    recordings_folder.mkdir()
+    (recordings_folder / "potassium.wav").write_bytes(b"")
+    window.select("sources", 0)
+    window.select("scene")
+    assert scene_page.recording.itemText(3) == (
+        '"Potassium", Software-Entwicklungskit: a song in stereo, CC0 1.0, downloaded'
+    )
+    scene_page.recording.setCurrentIndex(3)
+    scene_page.recording.activated.emit(3)
+    assert window.document.scene.recording == "potassium"
+    assert window.undo_action.text() == "&Undo change recording"
+    band = tmp_path / "band.flac"
+    band.write_bytes(b"")
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(band), ""))
+    scene_page.choose_recording.click()
+    assert window.document.scene.recording == band
+    assert scene_page.recording.currentText() == "band.flac"
+    window.document.scene.to_yaml(tmp_path / "scene.yaml")
+    assert "recording: band.flac" in (tmp_path / "scene.yaml").read_text(encoding="utf-8")
+    window.select("sources", 0)
+    assert page.signal.text() == "the scene's recording: band.flac"
+    scene_page.recording.setCurrentIndex(0)
+    window.select("scene")
+    scene_page.recording.activated.emit(0)
+    assert window.document.scene.recording is None
+    window.select("sources", 0)
+    assert page.signal.text() == "nothing: the scene names no recording (silent in a demo)"
+    page.silent.click()
+    assert window.document.scene.sources[0].channel is None
     assert page.signal.text() == "nothing (silent in a demo)"
 
 
@@ -2880,12 +2949,15 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     stems.table.item(rows.index("vocal"), stems.FILE).setText("")
     assert dialog.problem.text() == "" and "--music" not in dialog.command.text()
 
-    # This scene: the sounds its sources play, which the stadium's sources name none of.
+    # This scene: the sounds its sources play, the channels of the stadium's free song,
+    # which the run downloads first.
     dialog.picker.setCurrentIndex(names.index("scene"))
     assert dialog.command.text() == "acoustic-spaces demo scene.yaml all"
-    assert [step.name for step in dialog.demo.steps] == ["feeds", "simulate", "render", "video"]
+    steps = [step.name for step in dialog.demo.steps]
+    assert steps == ["recording", "feeds", "simulate", "render", "video"]
     assert "song" not in dialog.fields and "seconds" in dialog.fields
-    assert "no source plays anything" in dialog.problem.text() and not ok.isEnabled()
+    assert dialog.problem.text() == "" and ok.isEnabled()
+    assert '"Spicy Funk Cake"' in dialog.downloads.text() and "61 MB" in dialog.downloads.text()
 
     # Another example's scene: its own demo, steps, options and command.
     walk = DemoDialog(scene=example_path("gallery"))

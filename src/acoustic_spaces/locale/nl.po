@@ -2486,6 +2486,7 @@ msgstr "octaaf"
 msgid "third_octave"
 msgstr "terts"
 
+#. Translators: this and the entries below are channels as the scene file names them; (none) leaves the source's channel out.
 #: acoustic_spaces/gui/inspector.py
 msgid "(none)"
 msgstr "(geen)"
@@ -2553,12 +2554,63 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "The WAV file the source plays in a demo of the scene (Simulation > Run "
-"demo…, This scene): a dry recording, mixed down to mono and played at the "
-"source's sound power"
+"demo…, This scene): a dry recording, played at the source's sound power and "
+"mixed down to mono unless Channel picks one of its channels. Without one, a "
+"source with a channel plays the scene's recording (on the scene's page)"
 msgstr ""
 "Het WAV-bestand dat de bron speelt in een demo van de scène (Simulatie > "
-"Demo uitvoeren…, Deze scène): een droge opname, naar mono gemengd en "
-"afgespeeld met het geluidsvermogen van de bron"
+"Demo uitvoeren…, Deze scène): een droge opname, afgespeeld met het "
+"geluidsvermogen van de bron en naar mono gemengd tenzij Kanaal een van de "
+"kanalen kiest. Zonder bestand speelt een bron met een kanaal de opname van "
+"de scène (op de pagina van de scène)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The channel the source plays in a demo of the scene: left or right, or both "
+"mixed down (mono), of its WAV file or, without one, of the scene's recording "
+"(on the scene's page), so that a sound system's left and right loudspeakers "
+"play the two sides of one stereo recording. (none): its WAV file mixed down "
+"to mono, or silent"
+msgstr ""
+"Het kanaal dat de bron speelt in een demo van de scène: links of rechts, of "
+"beide samengemengd (mono), van het WAV-bestand of, zonder bestand, van de "
+"opname van de scène (op de pagina van de scène), zodat de linker- en "
+"rechterluidspreker van een geluidsinstallatie de twee kanten van één "
+"stereo-opname spelen. (geen): het WAV-bestand naar mono gemengd, of stil"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"What the sources with a channel and no WAV file of their own play in a demo "
+"of the scene (Simulation > Run demo…, This scene), each its channel: a "
+"recording of yours, stereo or mono, such as a band's mix, or one of the free "
+"recordings, downloaded the first time a demo plays it and kept for every "
+"scene"
+msgstr ""
+"Wat de bronnen met een kanaal en zonder eigen WAV-bestand spelen in een demo "
+"van de scène (Simulatie > Demo uitvoeren…, Deze scène), elk het eigen "
+"kanaal: een eigen opname, stereo of mono, zoals de mix van een band, of een "
+"van de vrije opnamen, die gedownload wordt de eerste keer dat een demo hem "
+"speelt en bewaard blijft voor elke scène"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py
+msgid "left"
+msgstr "links"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py
+msgid "right"
+msgstr "rechts"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
+msgid "mono"
+msgstr "mono"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a song in stereo"
+msgstr "een nummer in stereo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "speech"
+msgstr "spraak"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2667,6 +2719,23 @@ msgstr "Relatieve luchtvochtigheid"
 #: acoustic_spaces/gui/inspector.py
 msgid "Air pressure"
 msgstr "Luchtdruk"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Recording"
+msgstr "Opname"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Choose recording…"
+msgstr "Opname kiezen…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Pick a recording of yours for the scene's sources with a channel to play in "
+"a demo: a dry one, stereo or mono, WAV or anything ffmpeg decodes"
+msgstr ""
+"Kies een eigen opname die de bronnen van de scène met een kanaal in een demo "
+"spelen: een droge, stereo of mono, als WAV of in elk formaat dat ffmpeg "
+"decodeert"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -3121,6 +3190,10 @@ msgstr "Probleem: {problem}"
 #, python-brace-format
 msgid "Warning: {warning}"
 msgstr "Waarschuwing: {warning}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change recording"
+msgstr "opname wijzigen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "rename scene"
@@ -4311,6 +4384,31 @@ msgstr "coëfficiënten zijn getallen van 0 tot 1"
 msgid "the sound reduction is in dB"
 msgstr "de geluidreductie-index wordt in dB uitgedrukt"
 
+#. Translators: {title} is a recording's title, {kind} what it is ("a song in stereo") and {licence} its licence (CC BY 4.0).
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{title}: {kind}, {licence}, downloaded"
+msgstr "{title}: {kind}, {licence}, gedownload"
+
+#. Translators: {title} is a recording's title, {kind} what it is ("a song in stereo"), {licence} its licence (CC BY 4.0) and {size} the MB it downloads.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{title}: {kind}, {licence}, {size} MB to download"
+msgstr "{title}: {kind}, {licence}, {size} MB te downloaden"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "nothing (silent in a demo)"
+msgstr "niets (stil in een demo)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "nothing: the scene names no recording (silent in a demo)"
+msgstr "niets: de scène noemt geen opname (stil in een demo)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "the scene's recording: {what}"
+msgstr "de opname van de scène: {what}"
+
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
 msgid "file: {name}"
@@ -4740,6 +4838,10 @@ msgid "Delay"
 msgstr "Vertraging"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Channel"
+msgstr "Kanaal"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Remove source"
 msgstr "Bron verwijderen"
 
@@ -4794,10 +4896,6 @@ msgstr "Richtingsindex: {values} dB (63 Hz tot 8 kHz)"
 #, python-brace-format
 msgid "{tip}. Given per band in the scene file; this is their sum"
 msgstr "{tip}. Per band opgegeven in het scènebestand; dit is de som"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "nothing (silent in a demo)"
-msgstr "niets (stil in een demo)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Width"
@@ -5738,10 +5836,6 @@ msgstr "Rolhoek (°)"
 #: acoustic_spaces/gui/movement.py
 msgid "Speed (m/s)"
 msgstr "Snelheid (m/s)"
-
-#: acoustic_spaces/gui/movement.py
-msgid "mono"
-msgstr "mono"
 
 #: acoustic_spaces/gui/movement.py
 msgid "binaural"
@@ -7282,6 +7376,26 @@ msgstr "De 3D-weergave is hier niet beschikbaar: {reason}"
 msgid "The 3D view needs a display with OpenGL."
 msgstr "De 3D-weergave vereist een scherm met OpenGL."
 
+#: acoustic_spaces/recordings.py
+msgid "\"Spicy Funk Cake\", Rhythmussportgruppe"
+msgstr "\"Spicy Funk Cake\", Rhythmussportgruppe"
+
+#: acoustic_spaces/recordings.py
+msgid "\"Great British Summer\", Tom McKenzie"
+msgstr "\"Great British Summer\", Tom McKenzie"
+
+#: acoustic_spaces/recordings.py
+msgid "\"Potassium\", Software-Entwicklungskit"
+msgstr "\"Potassium\", Software-Entwicklungskit"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M4)"
+msgstr "Een man die spreekt (ACE-corpus, spreker M4)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F2)"
+msgstr "Een vrouw die spreekt (ACE-corpus, spreekster F2)"
+
 #. Translators: the wind over an outdoor scene, as the 3D view's legend shows it.
 #: acoustic_spaces/viz.py
 #, python-brace-format
@@ -7405,16 +7519,8 @@ msgid "back"
 msgstr "achter"
 
 #: acoustic_spaces/viz.py
-msgid "left"
-msgstr "links"
-
-#: acoustic_spaces/viz.py
 msgid "front"
 msgstr "voor"
-
-#: acoustic_spaces/viz.py
-msgid "right"
-msgstr "rechts"
 
 #: acoustic_spaces/viz.py
 msgid "azimuth (degrees)"

@@ -104,8 +104,18 @@ assignments:
   stage_deck: stage
   stage_back: stage_drape
   stage_roof: stage
+# In a demo of the scene (acoustic-spaces demo) the sound system plays the recording
+# below, downloaded the first time: the stereo mix of "Spicy Funk Cake" by the
+# Rhythmussportgruppe (CC BY 4.0). Give `recording:` a file of yours, a band's stereo
+# mix, to hear that instead. The loudspeakers on the audience's left play its left
+# channel and those on its right the right one: the names say the stage's side, so
+# main_left, on stage left, is on the audience's right. The subwoofers play both
+# channels mixed down. The monitors and the band play nothing: a stereo mix has none
+# of the parts they play (stadium_demo.py plays its song's stems through them).
+recording: spicy_funk_cake
 sources:
   - name: main_left
+    channel: right
     group: PA/Mains
     position: [-40, 19, 14]
     orientation: {yaw: 8}
@@ -113,6 +123,7 @@ sources:
     eq_db: [0, 0, -2, -1, 0, 0, 0, 4]
     directivity: {file: main_array.yaml, near_field: true}
   - name: main_right
+    channel: left
     group: PA/Mains
     position: [-40, -19, 14]
     orientation: {yaw: -8}
@@ -120,6 +131,7 @@ sources:
     eq_db: [0, 0, -2, -1, 0, 0, 0, 4]
     directivity: {file: main_array.yaml, near_field: true}
   - name: subs
+    channel: mono
     group: PA/Subwoofers
     position: [-41, 0, 0.6]
     level_db: 132
@@ -127,6 +139,7 @@ sources:
     delay_ms: 17
     directivity: {file: sub_array.yaml, near_field: true}
   - name: outfill_left
+    channel: right
     group: PA/Fills
     position: [-40, 27, 12]
     orientation: {yaw: 70, pitch: 2}
@@ -135,6 +148,7 @@ sources:
     delay_ms: 25
     directivity: {file: fill_array.yaml, near_field: true}
   - name: outfill_right
+    channel: left
     group: PA/Fills
     position: [-40, -27, 12]
     orientation: {yaw: -70, pitch: 2}
@@ -143,6 +157,7 @@ sources:
     delay_ms: 25
     directivity: {file: fill_array.yaml, near_field: true}
   - name: infill_left
+    channel: right
     group: PA/Fills
     position: [-44, 10, 12]
     orientation: {yaw: -24, pitch: -24}
@@ -151,6 +166,7 @@ sources:
     delay_ms: 12
     directivity: {file: fill_array.yaml, near_field: true}
   - name: infill_right
+    channel: left
     group: PA/Fills
     position: [-44, -10, 12]
     orientation: {yaw: 24, pitch: -24}
@@ -159,6 +175,7 @@ sources:
     delay_ms: 12
     directivity: {file: fill_array.yaml, near_field: true}
   - name: front_fill_left
+    channel: right
     group: PA/Fills
     position: [-42.3, 6, 2.3]
     orientation: {yaw: -10, pitch: -3}
@@ -167,6 +184,7 @@ sources:
     delay_ms: 33
     directivity: {file: wedge.csv}
   - name: front_fill_right
+    channel: left
     group: PA/Fills
     position: [-42.3, -6, 2.3]
     orientation: {yaw: 10, pitch: -3}
@@ -175,6 +193,7 @@ sources:
     delay_ms: 33
     directivity: {file: wedge.csv}
   - name: tower_left
+    channel: right
     group: PA/Delays
     position: [10, 15, 12]
     level_db: 132
@@ -182,6 +201,7 @@ sources:
     delay_ms: 152
     directivity: {file: tower_array.yaml, near_field: true}
   - name: tower_right
+    channel: left
     group: PA/Delays
     position: [10, -15, 12]
     level_db: 132
@@ -189,6 +209,7 @@ sources:
     delay_ms: 152
     directivity: {file: tower_array.yaml, near_field: true}
   - name: delay_north
+    channel: right
     group: PA/Delays
     position: [25, 49, 28.5]
     orientation: {yaw: 75, pitch: -12}
@@ -197,6 +218,7 @@ sources:
     delay_ms: 202
     directivity: {file: fill_array.yaml, near_field: true}
   - name: delay_south
+    channel: left
     group: PA/Delays
     position: [25, -49, 28.5]
     orientation: {yaw: -75, pitch: -12}
@@ -205,6 +227,7 @@ sources:
     delay_ms: 202
     directivity: {file: fill_array.yaml, near_field: true}
   - name: delay_east_left
+    channel: right
     group: PA/Delays
     position: [67.5, 20, 28.5]
     orientation: {yaw: 25, pitch: -12}
@@ -213,6 +236,7 @@ sources:
     delay_ms: 314
     directivity: {file: fill_array.yaml, near_field: true}
   - name: delay_east_right
+    channel: left
     group: PA/Delays
     position: [67.5, -20, 28.5]
     orientation: {yaw: -25, pitch: -12}

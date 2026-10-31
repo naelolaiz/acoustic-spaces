@@ -539,6 +539,18 @@ sources:
     eq_db: [0, 0, -3, 0, 0, 0, 2, 4]   # equalizer per band, dB
     delay_ms: 18.5                     # plays this long after emission starts
     signal: sounds/announcement.wav    # what it plays in a demo of the scene
+    channel: mono                      # of it: left, right or mono (both mixed down)
+```
+
+The scene's `recording` is what its sources with a `channel` and no `signal` play,
+so a stage's loudspeakers play the two channels of a band's stereo master:
+
+```yaml
+recording: spicy_funk_cake   # a free song, downloaded the first time; or a file
+sources:
+  - {name: house_left, position: [0, 6, 6], channel: left}   # on the audience's left
+  - {name: house_right, position: [0, -6, 6], channel: right}
+  - {name: subs, position: [0, 0, 0.5], channel: mono}
 ```
 
 - `level_db` is the sound power level, in all or per band. A level in all is spread
@@ -557,10 +569,19 @@ sources:
 - `delay_ms` delays everything the source sends. Its impulse responses start that much
   later, and in the coverage map of all sources together its sound arrives that much
   later, as when delay loudspeakers are aligned with a stage.
-- `signal` is the WAV file the source plays in a demo of the scene (`acoustic-spaces
+- `signal` is the file the source plays in a demo of the scene (`acoustic-spaces
   demo`, see [a demo of any scene](demos.md#a-demo-of-any-scene)): a dry recording,
-  relative to the scene's folder, mixed down to mono and played at the source's sound
-  power. A source without one is silent there. The simulation does not read it.
+  relative to the scene's folder, played at the source's sound power. A WAV file is
+  read as it is; another format (FLAC, MP3, M4A...) needs ffmpeg on the PATH.
+  `channel` picks what of it the source plays: `left`, `right`, or `mono`, both
+  mixed down; without a channel it is mixed down to mono.
+- The scene's `recording` is the file a source with a `channel` and no `signal`
+  plays: a file relative to the scene's folder, or the name of one of the free
+  recordings (`spicy_funk_cake`, `great_british_summer`, `potassium`, `speech_male`,
+  `speech_female`; see [a demo of any scene](demos.md#a-demo-of-any-scene)), which
+  the demo downloads the first time and keeps for every scene. Left and right are the
+  recording's, so the loudspeaker on the audience's left plays `left`. A source with
+  neither a signal nor a channel is silent in the demo. The simulation reads neither.
 - `simulate` reports the sound pressure level per octave band and A-weighted
   (`spl_db` and `spl_a_db` in `parameters.json`), the editor's results show it per
   band, and `inspect` lists each source's sound power. In free field, the level 4 m from

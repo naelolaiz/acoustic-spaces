@@ -98,6 +98,29 @@ def test_resampled_keeps_the_tone(tmp_path: Path) -> None:
     assert audio.decoded(tmp_path / "a" / "tone.wav")[1] == RATE
 
 
+def test_decoded_reads_other_formats_through_ffmpeg(tmp_path: Path, monkeypatch) -> None:
+    """A file that is no WAV (a band's FLAC mix, say) is decoded by ffmpeg with its own
+    channels, and refused with a reason where ffmpeg is not on the PATH."""
+    import shutil
+    import subprocess
+
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("needs ffmpeg")
+    mix = np.stack([_tone(0.5, 440.0), 0.5 * _tone(0.5, 660.0)], axis=1)
+    audio.write(tmp_path / "mix.wav", mix, RATE)
+    flac = tmp_path / "mix.flac"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(tmp_path / "mix.wav"), str(flac)], check=True
+    )
+    x, rate = audio.decoded(flac)
+    assert rate == RATE and x.shape == mix.shape
+    np.testing.assert_allclose(x, mix, atol=1e-3)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["mix.flac", "mix.wav"]
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    with pytest.raises(SystemExit, match="ffmpeg is needed to decode mix.flac"):
+        audio.decoded(flac)
+
+
 # --------------------------------------------------------------------------- downloads
 
 
@@ -815,6 +838,9 @@ def _any_scene(tmp_path: Path, **outputs) -> Path:
         "sample_rate": 16_000,
     }
     data["outputs"] = outputs.get("outputs", ["binaural"])
+    # The talker plays a file of its own, mixed down, and the scene no recording.
+    data.pop("recording", None)
+    data["sources"][0].pop("channel", None)
     data["sources"][0]["signal"] = "sounds/talk.wav"
     data["sources"] += [
         {"name": "radio", "position": [3.0, 2.0, 1.0], "level_db": 74.0, "signal": "radio.wav"},
@@ -1127,6 +1153,141 @@ def test_a_demo_of_any_scene_plays_the_files_given_to_its_sources(
     assert not feeds_done(args)  # the radio's own signal and a silent fan now
     args.inputs = {"nobody": scene.parent / "hum.wav"}
     assert demo.check(args).startswith("--input nobody: no such source plays here")
+
+
+def test_a_demo_of_any_scene_plays_the_channels_of_its_recording(
+    tmp_path: Path, monkeypatch, recordings_folder: Path
+) -> None:
+    """Sources with a channel and no signal play that channel of the scene's recording:
+    left and right keep the recording's stereo balance (one gain for the file, its
+    channels mixed down to the feeds' gated RMS), mono plays both mixed down; a source's
+    own signal still wins, and its channel picks a channel of it. A free recording not
+    downloaded yet is the recording step's download; there, it plays as a file would,
+    and the stills credit it as its licence asks."""
+    import yaml
+
+    from acoustic_spaces import recordings
+    from acoustic_spaces.cli import main as cli
+    from acoustic_spaces.demos.scene_demo import (
+        DEMO,
+        FEED_RMS,
+        feeds_done,
+        plays,
+        plays_line,
+        recording_download,
+    )
+
+    scene = _any_scene(tmp_path)
+    monkeypatch.chdir(scene.parent)
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    rate = 16_000
+    band = np.stack([_tone(2.0, 200.0, rate, 0.4), _tone(2.0, 300.0, rate, 0.1)], axis=1)
+    audio.write(scene.parent / "band.wav", band, rate)
+    data["recording"] = "band.wav"
+    data["sources"][0]["channel"] = "right"  # of its own signal, talk.wav
+    data["sources"][1].pop("signal")
+    data["sources"][1]["channel"] = "left"  # the radio: the band's left
+    data["sources"][2]["channel"] = "mono"  # the fan: both mixed down
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    demo = DEMO.at(scene.parent)
+    args = demo.defaults()
+    args.scene = Path("scene.yaml")
+    args = demo.resolved(args)
+    assert demo.check(args) is None
+    assert plays(args) == {
+        "talker": "talk.wav, right channel",
+        "radio": "band.wav, left channel",
+        "fan": "band.wav, mixed down to mono",
+    }
+    assert recording_download(args) is None  # a file of its own: nothing to download
+    assert cli(["demo", "scene.yaml", "feeds"]) == 0
+    table = pipeline.read_json(scene.parent / "demo" / "feeds" / "feeds.json")
+    assert {k: v["channel"] for k, v in table["sources"].items()} == {
+        "talker": "right",
+        "radio": "left",
+        "fan": "mono",
+    }
+    assert feeds_done(args)
+    feed = {
+        k: audio.read(scene.parent / "demo" / "feeds" / f"{k}.wav")[0].ravel()
+        for k in table["sources"]
+    }
+    gain = FEED_RMS / audio.gated_rms(band, rate)
+    np.testing.assert_allclose(feed["radio"], band[:, 0] * gain, atol=1e-6)
+    np.testing.assert_allclose(feed["fan"], band.mean(axis=1) * gain, atol=1e-6)
+    assert audio.gated_rms(feed["fan"], rate) == pytest.approx(FEED_RMS, rel=1e-6)
+    talk, talk_rate = audio.read(scene.parent / "sounds" / "talk.wav")
+    right = audio.resampled(talk, talk_rate, rate)
+    np.testing.assert_allclose(
+        feed["talker"], right[:, 1] * FEED_RMS / audio.gated_rms(right, rate), atol=1e-6
+    )
+    # A free recording: the recording step downloads it, the feeds wait for it.
+    data["recording"] = "potassium"
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    assert not feeds_done(args)
+    assert demo.check(args) is None
+    assert plays(args)["radio"] == '"Potassium", Software-Entwicklungskit, left channel'
+    assert recording_download(args) == (
+        '"Potassium", Software-Entwicklungskit (CC0 1.0, 6 MB), kept for every scene'
+    )
+    assert cli(["demo", "scene.yaml", "feeds"]) == 1
+    kept = recordings.file_of("potassium")
+    assert kept.parent == recordings_folder
+    audio.write(kept, band, rate)
+    assert recording_download(args) is None
+    assert cli(["demo", "scene.yaml", "feeds"]) == 0
+    table = pipeline.read_json(scene.parent / "demo" / "feeds" / "feeds.json")
+    assert table["sources"]["fan"]["signal"] == str(kept)
+    credit = plays_line(table, recordings.named("potassium"))
+    assert credit.startswith(recordings.named("potassium").credit)
+    assert credit.endswith("Playing talker: talk.wav")
+    # A channel with no recording plays nothing.
+    data.pop("recording")
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    assert plays(args) == {"talker": "talk.wav, right channel", "radio": "silent", "fan": "silent"}
+
+
+def test_free_recordings_are_downloaded_once(tmp_path: Path, monkeypatch) -> None:
+    """A free recording comes as one WAV file in the recordings folder: a song's files
+    decoded and added together, or a talk taken out of its corpus's tar archive; one
+    there already is kept, and what it was made from is not."""
+    import dataclasses
+
+    from acoustic_spaces import recordings
+
+    rate = 8000
+    source = tmp_path / "server"
+    left = np.stack([_tone(1.0, 200.0, rate, 0.2), _tone(1.0, 300.0, rate, 0.1)], axis=1)
+    audio.write(source / "a.wav", left, rate)
+    audio.write(source / "b.wav", left[:, ::-1], rate)
+    audio.write(source / "talk.wav", _tone(1.0, 150.0, rate, 0.3), rate)
+    with tarfile.open(source / "corpus.tar.bz2", "w:bz2") as archive:
+        archive.add(source / "talk.wav", arcname="Speech/talk.wav")
+    song = dataclasses.replace(
+        recordings.named("potassium"),
+        name="test_song",
+        files=((str((source / "a.wav").as_uri()), None), ((source / "b.wav").as_uri(), None)),
+    )
+    talk = dataclasses.replace(
+        recordings.named("speech_male"),
+        name="test_talk",
+        tar=((source / "corpus.tar.bz2").as_uri(), "Speech/talk.wav"),
+    )
+    monkeypatch.setattr(recordings, "RECORDINGS", (song, talk))
+    path = recordings.get("test_song")
+    assert path == recordings.data_folder() / "test_song.wav"
+    x, got = audio.read(path)
+    assert got == rate
+    np.testing.assert_allclose(x, left + left[:, ::-1], atol=1e-6)
+    assert sorted(p.name for p in path.parent.iterdir()) == ["test_song.wav"]
+    (source / "a.wav").unlink()
+    assert recordings.get("test_song") == path  # kept: nothing fetched again
+    talked = recordings.get("test_talk")
+    np.testing.assert_allclose(
+        audio.read(talked)[0].ravel(), _tone(1.0, 150.0, rate, 0.3), atol=1e-6
+    )
+    with pytest.raises(KeyError, match="no free recording 'nothing'"):
+        recordings.named("nothing")
 
 
 def test_a_demo_scene_written_elsewhere_still_finds_its_files(tmp_path: Path) -> None:

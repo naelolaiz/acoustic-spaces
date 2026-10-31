@@ -33,6 +33,8 @@ assignments:
   floor: wooden_floor
   ceiling: ceiling
   walls: plaster
+# The singer keeps the default sound power, 94 dB (re 1 pW) spread evenly over the
+# bands, not a measured singer's level; give it its level_db for that.
 sources:
   - name: singer
     position: [12.6, 6.4, 1.6]

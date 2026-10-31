@@ -406,14 +406,17 @@ def total_level(level: float | list[float]) -> float:
 
 
 def role(source: dict) -> str:
-    """What a source plays: a monitor mix, the master in mono (subwoofers and
-    loudspeakers on the stage's axis) or the master's left or right channel, as the
-    audience sees it (facing the stage, which is at -x: left is -y)."""
+    """What a source plays: a monitor mix, or the channel of the master its ``channel``
+    names in the scene; a loudspeaker of a scene that names none plays the master in
+    mono (subwoofers and loudspeakers on the stage's axis) or its left or right
+    channel, as the audience sees it (facing the stage, which is at -x: left is -y)."""
     if source["name"] in BAND_MIX:
         return source["name"]
     for prefix, mix in MONITORS.items():
         if source["name"].startswith(prefix):
             return mix
+    if source.get("channel") is not None:
+        return source["channel"]
     y = source["position"][1]
     if "sub" in source["name"] or abs(y) < 1.0:
         return "mono"
