@@ -40,20 +40,27 @@ assignments:
   ceiling: ceiling
   wall_4: stage_wall   # x = 0, behind the stage
   walls: stone
+# In a demo of the scene (acoustic-spaces demo) the sound system plays the recording
+# below, downloaded the first time: the ACE corpus's talker M4 (CC BY 4.0), a man
+# talking, each loudspeaker all of it (mono).
+recording: speech_male
 sources:
   - name: column_left
+    channel: mono
     position: [1.0, -5.0, 3.0]
     level_db: 98
     spectrum: speech_male
     directivity:
       array: {element: cardioid, count: 8, spacing_m: 0.15, steer_deg: -8}
   - name: column_right
+    channel: mono
     position: [1.0, 5.0, 3.0]
     level_db: 98
     spectrum: speech_male
     directivity:
       array: {element: cardioid, count: 8, spacing_m: 0.15, steer_deg: -8}
   - name: delay_left
+    channel: mono
     position: [17.0, -7.6, 3.5]
     orientation: {yaw: 20}
     level_db: 98
@@ -64,6 +71,7 @@ sources:
     eq_db: [-12, -9, -6, -3, 0, 0, 0, 0]
     delay_ms: 60
   - name: delay_right
+    channel: mono
     position: [17.0, 7.6, 3.5]
     orientation: {yaw: -20}
     level_db: 98

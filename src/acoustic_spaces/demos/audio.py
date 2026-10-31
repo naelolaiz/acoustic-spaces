@@ -14,6 +14,7 @@ from __future__ import annotations
 import math
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -176,13 +177,12 @@ def decoded(path: Path) -> tuple[np.ndarray, int]:
         return read(path)
     if shutil.which("ffmpeg") is None:
         raise SystemExit(f"error: ffmpeg is needed to decode {path.name}")
-    wav = path.with_name(path.name + ".decoded.wav")
-    command = ["ffmpeg", "-v", "error", "-y", "-i", str(path), "-c:a", "pcm_f32le", str(wav)]
-    subprocess.run(command, check=True)
-    try:
+    # Into a folder of its own: the file's may be read-only (an installed example's).
+    with tempfile.TemporaryDirectory() as folder:
+        wav = Path(folder) / "decoded.wav"
+        command = ["ffmpeg", "-v", "error", "-y", "-i", str(path), "-c:a", "pcm_f32le", str(wav)]
+        subprocess.run(command, check=True)
         return read(wav)
-    finally:
-        wav.unlink()
 
 
 def mmss(t: float) -> str:

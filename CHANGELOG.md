@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- A scene can name the `recording` its sound system plays in a demo of it
+  (`acoustic-spaces demo`, the editor's *This scene*), and each source the `channel` of
+  it that it plays (`left`, `right`, or `mono`, both mixed down), so that a stage's
+  loudspeakers play the two sides of one stereo mix and nobody has to mix the band's
+  instruments. The recording is a file (WAV, or anything ffmpeg decodes) or one of five
+  free recordings by name: three songs in stereo (`spicy_funk_cake` and
+  `great_british_summer`, CC BY 4.0; `potassium`, CC0) and a man and a woman talking
+  (`speech_male`, `speech_female`, from the ACE corpus, CC BY 4.0). A free recording is
+  downloaded the first time a demo plays it (the demo's new first step, `recording`; the
+  Run demo window says so above Run, with its size), kept in the user's data folder for
+  every scene, and credited on the video's stills. A source's own `signal` can have a
+  `channel` too, and be any format ffmpeg decodes. Each file is brought to one gated
+  RMS and its channels keep that gain, so the stereo balance stays. In the editor:
+  **Recording** on the scene's page, **Channel** on a source's.
+- The examples with a stage, a sound system or a talker play in their demo out of the
+  box: concert_stage, stadium_concert, lakeside_concert, open_air_stage and studio a
+  song through their loudspeakers, left and right as the audience sees them, and
+  town_hall_pa, lecture_hall, leaky_classroom, shoebox, bim_office, material_libraries
+  and gallery the man talking. Their talkers now speak at the normal vocal effort of
+  IEC 60268-16, 60 dB(A) 1 m in front, with a man's speech spectrum: 73.3 dB of sound
+  power for the cardioid ones and 78.0 dB for the shoebox's omnidirectional one, instead
+  of the default 94 dB spread evenly over the bands (81 dB(A) at 1 m, a shout). Their
+  levels and speech intelligibility change with it: the shoebox's seat hears 60.1 dB(A)
+  instead of 79.0, and the lecture hall's median STI is 0.54 instead of 0.58 (one seed),
+  as the quieter speech nears the threshold of hearing in the outer bands. The rehearsal
+  room's guitar amplifier and drum kit, the concert hall's soloist and piano and the
+  archway's singer keep 94 dB, as no sound power of theirs that could be cited was
+  found; their scene files say so.
 - A listener's microphone can have a pattern that changes with frequency, as a real
   capsule's does: `pattern` takes one per octave band (8) or third-octave band (24), as
   names or values of `a`, for a single capsule, an XY pair's `capsule` or an MS pair's

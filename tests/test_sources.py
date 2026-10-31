@@ -163,7 +163,8 @@ def test_delay_and_gain_shift_and_scale_the_response() -> None:
     lag = int(np.argmax(np.abs(ir))) - int(np.argmax(np.abs(reference)))
     assert lag == 600  # 12.5 ms at 48 kHz
     level = fed.levels(_shoebox(gain_db=6.0, eq_db=eq).sources[0].power_db(), b)
-    np.testing.assert_allclose(level - plain.levels(94.0, a), np.add(6.0, eq), atol=0.02)
+    unfed = plain.levels(_shoebox().sources[0].power_db(), a)
+    np.testing.assert_allclose(level - unfed, np.add(6.0, eq), atol=0.02)
 
 
 def test_delay_and_gain_of_the_wave_bands() -> None:

@@ -316,6 +316,11 @@ Examples:
 - [x] A song of the user's own in the stadium and lakeside demos (`--music`, `--bpm`,
   `--credit`; the stadium's stems with `--stem NAME=WAV` and its first downbeat), nothing
   downloaded, with a file field, a number and a table of the stems in Run demo…
+- [x] A recording for a scene's sound system in the demo of any scene: the scene's
+  `recording` (a file of the user's, or a free song or talk downloaded the first time)
+  and each source's `channel` of it (left, right or mono), on the scene's and the
+  source's pages in the editor; every example with a stage, a sound system or a talker
+  plays one out of the box, its talkers at the normal vocal effort of IEC 60268-16.
 
 Movement:
 

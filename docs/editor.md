@@ -119,7 +119,10 @@ which frequencies each octave band holds.
   threads and the ray search tree); and, under **Response**, the length, the sample
   rate, octave or third-octave **Bands**, the early-to-late transition and the seed.
   The scene's own entry sets the air's temperature, humidity and pressure, and shows
-  the volume and the rooms the model holds.
+  the volume and the rooms the model holds. Its **Recording** is what the sources with
+  a **Channel** play in a demo of the scene: one of the free recordings, each with its
+  licence and download size, or a file of yours (**Choose recording…**; *(none)* takes
+  it away).
 - **Simulation > Tune CPU and GPU…** times the CPU and the GPU on the open scene (or
   on the concert hall example when the scene cannot run as it is), as
   `acoustic-spaces tune` does (see
@@ -132,8 +135,9 @@ which frequencies each octave band holds.
   other, undone with Undo). **OK** saves the timings and these choices; **Cancel**
   saves nothing, not even the timings.
 - **Simulation > Run demo…** runs a [demo](demos.md) of the open scene. *This scene*
-  plays the WAV file each source's **Plays** names through it, mixes every listener and
-  makes a video ([a demo of any scene](demos.md#a-demo-of-any-scene)); the scene of an
+  plays what each source's **Plays** says through it (its own file, or its channel of
+  the scene's **Recording**, downloaded first when it is a free one), mixes every
+  listener and makes a video ([a demo of any scene](demos.md#a-demo-of-any-scene)); the scene of an
   example that comes with a demo (the orchestra in the concert hall, the choir and organ
   in the church, the band in the stadium, the concert across the lake, the walk through
   the gallery, the car passing the roadside and driving down the street), or a copy of
@@ -216,8 +220,10 @@ which frequencies each octave band holds.
   its listeners), its sound power per band, its **Spectrum** (flat, or male or female
   speech) and the **Gain**, **Equalizer** and **Delay** of its feed. It shows the
   directivity index per band, opens the polar patterns, and the selected source shows
-  its balloon in the 3D view. **Plays** names the WAV file the source plays in a demo of
-  the scene: **Choose WAV…** picks a dry recording, **Silent** takes it away.
+  its balloon in the 3D view. **Plays** says what the source plays in a demo of the
+  scene: **Choose WAV…** picks a dry recording, **Silent** takes it away, and without
+  one it plays its **Channel** (left, right or mono) of the scene's **Recording**.
+  The channel of a file of its own is picked the same way; *(none)* mixes it down.
 - A listener's form sets its **Microphone**, what its mono output picks up through,
   aimed where it faces: omni, a first-order pattern, or an XY pair (with its **Angle**
   and **Capsules**), a Blumlein pair or an MS pair (with its **Mid** capsule and its

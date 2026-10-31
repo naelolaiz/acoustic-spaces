@@ -56,6 +56,15 @@ def device_choices(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def recordings_folder(monkeypatch, tmp_path):
+    """Keeps the free recordings a test's demo would download in the test's own folder,
+    not the user's data folder: a test that needs one puts a file there."""
+    folder = tmp_path / "recordings"
+    monkeypatch.setenv("ACOUSTIC_SPACES_RECORDINGS", str(folder))
+    return folder
+
+
+@pytest.fixture(autouse=True)
 def english(monkeypatch, tmp_path):
     """Runs every test in English, whatever the computer's language, with the language
     picked in the editor kept in the test's own folder."""

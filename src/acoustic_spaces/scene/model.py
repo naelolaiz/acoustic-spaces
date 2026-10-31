@@ -85,6 +85,7 @@ from acoustic_spaces.materials.ground import PRESETS as GROUND_PRESETS
 from acoustic_spaces.materials.ground import band_absorption, surface_impedance
 from acoustic_spaces.materials.libraries import find_material, read_library
 from acoustic_spaces.parameters import SPEECH_SPECTRUM_DB
+from acoustic_spaces.recordings import NAMES as RECORDING_NAMES
 
 Vector3 = tuple[float, float, float]
 Coefficient = Annotated[float, Field(ge=0.0, le=1.0)]
@@ -1578,8 +1579,17 @@ class Source(_Model):
         default=None,
         description=(
             "a WAV file of what the source plays, dry: its feed in a demo of the scene "
-            "(acoustic-spaces demo), mixed down to mono and played at the source's "
-            "level_db; None leaves the source silent there"
+            "(acoustic-spaces demo), played at the source's level_db, mixed down to mono "
+            "unless channel picks one of its channels; None: the scene's recording if "
+            "channel is given, else silent there"
+        ),
+    )
+    channel: Literal["left", "right", "mono"] | None = Field(
+        default=None,
+        description=(
+            "the channel of what the source plays in a demo of the scene: left, right, "
+            "or both mixed down (mono), of its signal, or, with no signal, of the scene's "
+            "recording; None: its signal mixed down to mono, and silent without one"
         ),
     )
 
@@ -2765,6 +2775,17 @@ class Scene(_Model):
     default_material: str | None = Field(
         default=None, description="material for surfaces that no assignment matches"
     )
+    recording: Path | str | None = Field(
+        default=None,
+        description=(
+            "what the sources with a channel and no signal of their own play in a demo of "
+            "the scene (acoustic-spaces demo), each its channel: a recording file, stereo "
+            "or mono (WAV, or anything ffmpeg decodes), or the name of a free one, "
+            "downloaded the first time a demo plays it (acoustic_spaces.recordings: "
+            + ", ".join(RECORDING_NAMES)
+            + ")"
+        ),
+    )
     sources: list[Source] = Field(min_length=1)
     listeners: list[Listener] = Field(min_length=1)
     air: Air = Field(default_factory=Air)
@@ -2787,6 +2808,23 @@ class Scene(_Model):
             "long term are rated over (L_den); the scene is run once in each class"
         ),
     )
+
+    @field_validator("recording", mode="before")
+    @classmethod
+    def _resolve_recording(cls, value, info: ValidationInfo):
+        """A free recording's name as it is; a file resolved against the scene's folder."""
+        if value is None or (isinstance(value, str) and value in RECORDING_NAMES):
+            return value
+        if isinstance(value, str) and not value.strip():
+            raise ValueError(f"a recording file, or one of {', '.join(RECORDING_NAMES)}")
+        if not isinstance(value, (str, Path)):
+            raise ValueError(f"a recording file, or one of {', '.join(RECORDING_NAMES)}")
+        return _resolve_path(Path(value), info)
+
+    @property
+    def recording_file(self) -> Path | None:
+        """The scene's recording when it is a file of its own (not a free one), or None."""
+        return self.recording if isinstance(self.recording, Path) else None
 
     @model_validator(mode="after")
     def _check_references(self) -> Scene:
@@ -2943,8 +2981,8 @@ class Scene(_Model):
     def files(self) -> list[Path]:
         """The files the scene uses, each once: its model, terrain and map of buildings,
         material tables, source directivities (with the files a coherent array names for
-        its element, in the scene or in its YAML file), the sources' signals and
-        HRTFs."""
+        its element, in the scene or in its YAML file), the sources' signals, the scene's
+        recording when it is a file, and HRTFs."""
         from acoustic_spaces.directivity import directivity_files
 
         geometry = self.geometry
@@ -2957,6 +2995,7 @@ class Scene(_Model):
         for source in self.sources:
             files += directivity_files(source.directivity)
         files += [s.signal for s in self.sources if s.signal is not None]
+        files += [self.recording_file] if self.recording_file is not None else []
         files += [o.hrtf for o in self.outputs if o.hrtf is not None]
         return list(dict.fromkeys(Path(f) for f in files))
 
@@ -2986,6 +3025,8 @@ def _map_files(data: dict, change: Callable[[str], str]) -> None:
         places += [(spec, "file") for spec in directivity_entries(source.get("directivity"))]
         places.append((source, "signal"))
     places += [(output, "hrtf") for output in data["outputs"]]
+    if data.get("recording") not in (None, *RECORDING_NAMES):
+        places.append((data, "recording"))
     for holder, key in places:
         if key in holder:
             holder[key] = change(holder[key])

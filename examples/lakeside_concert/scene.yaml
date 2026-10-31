@@ -57,8 +57,16 @@ atmosphere:
       polygon: [[520, -120], [700, -120], [700, 120], [520, 120]]
       roughness_m: 0.5
       wind: {speed_m_s: 1}
+# In a demo of the scene (acoustic-spaces demo) the stage plays the recording below,
+# downloaded the first time: the stereo mix of "Spicy Funk Cake" by the
+# Rhythmussportgruppe (CC BY 4.0), both channels mixed down; give `recording:` a file
+# of yours to hear that instead. Ticked, the PA group plays it as lakeside_demo.py
+# does: main_left, on the audience's left, the left channel, main_right the right
+# one and the subwoofers both mixed down.
+recording: spicy_funk_cake
 sources:
   - name: stage
+    channel: mono
     position: [0, 0, 6]
     level_db: 120
   # The stage's sound system that lakeside_demo.py plays in place of the stage, left out
@@ -77,6 +85,7 @@ sources:
   # audience every octave from 250 Hz to 4 kHz is within 1 dB of 1 kHz, 8 kHz 1.5 dB
   # down and the two lowest 2 dB up.
   - name: main_left
+    channel: left
     group: PA
     enabled: false
     position: [0, -6, 6.5]
@@ -85,6 +94,7 @@ sources:
     eq_db: [0, 0, 5, 0, 0, 1, 1, 2]
     directivity: {file: lake_array.yaml, near_field: true}
   - name: main_right
+    channel: right
     group: PA
     enabled: false
     position: [0, 6, 6.5]
@@ -93,6 +103,7 @@ sources:
     eq_db: [0, 0, 5, 0, 0, 1, 1, 2]
     directivity: {file: lake_array.yaml, near_field: true}
   - name: subs
+    channel: mono
     group: PA
     enabled: false
     position: [1, 0, 0.6]

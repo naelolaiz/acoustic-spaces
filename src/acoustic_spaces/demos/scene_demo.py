@@ -2,15 +2,23 @@
 
 Each source plays the WAV file its ``signal`` names (set on the source's page in the
 editor, **Plays**, or in the scene file), or the one ``--input SOURCE=WAV`` gives it
-instead, dry: mixed down to mono and brought to the same gated RMS, so that its sound
-power in the scene (``level_db``) sets how loud it is against the others, as the
-simulation says and not as the recordings happen to be. Sources without one stay
+instead, dry: mixed down to mono, or the channel its ``channel`` names (**Channel** on
+its page): left, right, or both mixed down (mono). A source with a channel and no signal
+of its own plays that channel of the scene's ``recording`` (**Recording** on the scene's
+page): a file of yours, such as a band's stereo mix, or one of the free recordings
+(:mod:`acoustic_spaces.recordings`), which the ``recording`` step downloads the first
+time and keeps for every scene that names it. So the left and right loudspeakers of a
+sound system play the two sides of one recording, and its subwoofers both mixed down.
+Each file is brought to one gated RMS (its channels mixed down) and every channel taken
+out of it keeps that gain, so a recording's stereo balance stays; then each source's
+sound power in the scene (``level_db``) sets how loud it is against the others, as the
+simulation says and not as the recordings happen to be. Sources with neither stay
 silent. Every listener in use is heard in turn, in the scene's order (or ``--tour``),
 for ``--seconds`` each while the piece runs on, with one gain for all the stops and a
 crossfade between them, binaural through the HRTFs of the scene's binaural output (or
-``--hrtf``, or a spherical head model when neither names any). The stills show the
-scene from above with the listener of the moment, the level there, how long the sound
-takes to arrive and T30 at mid frequencies, and say how the sound was made.
+``--hrtf``, or a spherical head model when neither names any). The stills show the scene
+from above with the listener of the moment, the level there, how long the sound takes to
+arrive and T30 at mid frequencies, and say how the sound was made.
 
 Sources and listeners whose walk is on move along it while the piece plays, all on one
 clock from its start (:func:`acoustic_spaces.walkthrough.simulate_movement`): every
@@ -24,6 +32,7 @@ shifts as it passes, the late sound crossfaded from place to place
 (:func:`acoustic_spaces.walkthrough.render_movement`), all from one simulation.
 
     acoustic-spaces demo scene.yaml              # every step, into demo/ beside the scene
+    acoustic-spaces demo scene.yaml recording    # download the scene's free recording
     acoustic-spaces demo scene.yaml feeds        # one step
     acoustic-spaces demo scene.yaml --hrtf me.sofa --seconds 15 --tour front,back
     acoustic-spaces demo scene.yaml --input talker=other_take.wav
@@ -41,9 +50,13 @@ import argparse
 import dataclasses
 import functools
 import math
+import shutil
 import sys
 from pathlib import Path
 
+import numpy as np
+
+from acoustic_spaces import recordings
 from acoustic_spaces.demos import (
     SIMULATE,
     Demo,
@@ -55,12 +68,14 @@ from acoustic_spaces.demos import (
     pipeline,
 )
 from acoustic_spaces.demos.audio import (
+    decoded,
     gated_rms,
     level_db,
     loudness_db,
     mono,
     read,
     resampled,
+    stereo,
     write,
 )
 from acoustic_spaces.i18n import N_
@@ -76,6 +91,10 @@ HRTF_HELP = (
     "binaural mixes through this SOFA file of HRTFs, your own or measured, instead of the "
     "one the scene's binaural output names (or a spherical head model when it names none)"
 )
+#: What a source plays: the file, and the channel of it (None: mixed down to mono).
+Played = tuple[Path, str | None]
+#: How :func:`plays` names a channel.
+CHANNEL_WORDS = {"left": "left channel", "right": "right channel", "mono": "mixed down to mono"}
 CROSSFADE_S = 1.0
 FADE_OUT_S = 3.0
 #: The folder of the mixes when something moves (the still ones go to ``seats``).
@@ -111,23 +130,94 @@ def _scene_hrtf(scene: str | Path | None) -> Path | None:
     return next((o.hrtf for o in found.outputs if o.format == "binaural" and o.hrtf), None)
 
 
+def recording_of(scene: Scene) -> Path | None:
+    """The file the scene's ``recording`` is: its own, or where the free one it names is
+    kept (downloaded or not yet); None when it names none."""
+    if scene.recording is None:
+        return None
+    if isinstance(scene.recording, Path):
+        return scene.recording
+    return recordings.file_of(scene.recording)
+
+
+def free_of(scene: Scene) -> recordings.Recording | None:
+    """The free recording the scene names, or None."""
+    return recordings.named(scene.recording) if isinstance(scene.recording, str) else None
+
+
+def signals_of(args: argparse.Namespace, scene: Scene) -> dict[str, Played | None]:
+    """What each source in use plays, and which channel of it: the file ``--input``
+    gives it, else its signal, else, with a channel, the scene's recording (None:
+    silent)."""
+    inputs = getattr(args, "inputs", None) or {}
+    recording = recording_of(scene)
+    out: dict[str, Played | None] = {}
+    for source in scene.sources:
+        if not source.in_use:
+            continue
+        file = inputs.get(source.name) or source.signal
+        if file is None and source.channel is not None:
+            file = recording
+        out[source.name] = None if file is None else (Path(file), source.channel)
+    return out
+
+
 def plays(args: argparse.Namespace) -> dict[str, str]:
-    """Every source in use and what it plays: the name of its signal, or silent."""
+    """Every source in use and what it plays unless ``--input`` gives it a file: the name
+    of its signal or of the scene's recording, and the channel, or silent."""
     found = _current(getattr(args, "scene", None))
     if found is None:
         return {}
-    return {
-        s.name: (s.signal.name if s.signal is not None else "silent")
-        for s in found.sources
-        if s.in_use
-    }
+    free = free_of(found)
+    free_file = recordings.file_of(free) if free is not None else None
+    out = {}
+    own = argparse.Namespace(**{**vars(args), "inputs": None})
+    for name, played in signals_of(own, found).items():
+        if played is None:
+            out[name] = "silent"
+            continue
+        file, channel = played
+        what = free.title if free is not None and file == free_file else file.name
+        out[name] = what if channel is None else f"{what}, {CHANNEL_WORDS[channel]}"
+    return out
 
 
-def signals_of(args: argparse.Namespace, scene: Scene) -> dict[str, Path | None]:
-    """What each source in use plays: the file ``--input`` gives it, else its signal
-    (None: silent)."""
-    inputs = getattr(args, "inputs", None) or {}
-    return {s.name: inputs.get(s.name, s.signal) for s in scene.sources if s.in_use}
+def recording_needed(args: argparse.Namespace) -> recordings.Recording | None:
+    """The free recording the run plays and has not downloaded yet, or None."""
+    scene = _current(getattr(args, "scene", None))
+    free = free_of(scene) if scene is not None else None
+    if free is None:
+        return None
+    path = recordings.file_of(free)
+    if path.exists():
+        return None
+    played = [v[0] for v in signals_of(args, scene).values() if v is not None]
+    return free if path in played else None
+
+
+def recording_download(args: argparse.Namespace) -> str | None:
+    """What ``recording`` downloads: the free recording, its licence and size."""
+    free = recording_needed(args)
+    if free is None:
+        return None
+    return f"{free.title} ({free.licence}, {free.download_mb:g} MB), kept for every scene"
+
+
+def recording(args: argparse.Namespace) -> None:
+    """The free recording the scene names, downloaded into the recordings folder
+    (:func:`acoustic_spaces.recordings.data_folder`) unless it is there or nothing plays
+    it."""
+    free = recording_needed(args)
+    if free is None:
+        scene = _current(args.scene)
+        named = free_of(scene) if scene is not None else None
+        if named is None:
+            print("the scene names no free recording: nothing to download")
+        else:
+            print(f"{named.title}: there already, or nothing plays it")
+        return
+    path = recordings.get(free)
+    print(f"{free.title}: {path}")
 
 
 def completed(args: argparse.Namespace) -> argparse.Namespace:
@@ -200,11 +290,20 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
     if not signals:
         return (
             "no source plays anything: give one a WAV file (Plays on its page in the "
-            "editor, signal: in the scene file, or --input SOURCE=WAV)"
+            "editor, signal: in the scene file, or --input SOURCE=WAV), or give the scene "
+            "a recording and the sources that play it a channel"
         )
-    for name, signal in signals.items():
-        if not Path(signal).exists():
+    free = free_of(scene)
+    downloaded = recordings.file_of(free) if free is not None else None
+    for name, (signal, _channel) in signals.items():
+        if signal == downloaded:  # the recording step downloads it
+            continue
+        if not signal.exists():
             return f"{name} plays {signal}, which is not there"
+        if signal.suffix.lower() != ".wav" and shutil.which("ffmpeg") is None:
+            return (
+                f"{name} plays {signal.name}: ffmpeg is needed to decode it, and is not on the PATH"
+            )
     from acoustic_spaces.walkthrough import movers, with_moving
 
     try:
@@ -242,45 +341,67 @@ def feeds_done(args: argparse.Namespace) -> bool:
     scene = _current(args.scene)
     if scene is None:
         return False
-    wanted = {k: str(v) for k, v in signals_of(args, scene).items() if v is not None}
-    if wanted != {k: v["signal"] for k, v in table["sources"].items()}:
+    wanted = {k: [str(v[0]), v[1]] for k, v in signals_of(args, scene).items() if v is not None}
+    if wanted != {k: [v["signal"], v.get("channel")] for k, v in table["sources"].items()}:
         return False
-    files = [Path(args.scene), *(Path(v) for v in wanted.values())]
+    files = [Path(args.scene), *(Path(v[0]) for v in wanted.values())]
     return all(not f.exists() or f.stat().st_mtime <= made for f in files)
 
 
+def channel_of(x: np.ndarray, channel: str | None) -> np.ndarray:
+    """The ``channel`` of ``x`` (samples, or samples by channels): left or right (a mono
+    file's one channel for both), or all of them mixed down (mono, or None)."""
+    if channel in ("left", "right"):
+        return stereo(x)[:, 0 if channel == "left" else 1]
+    return mono(x)
+
+
 def feeds(args: argparse.Namespace) -> None:
-    """One WAV per source that plays: its signal (or what ``--input`` gives it), mono,
-    at the scene's sample rate and at one gated RMS (FEED_RMS), so that ``auralize`` sets
-    the balance from the sources' sound powers; sources without one are listed as
-    silent."""
+    """One WAV per source that plays: its file (its signal, what ``--input`` gives it, or
+    the scene's recording), at the scene's sample rate, the channel the source names or
+    mixed down to mono. Each file is brought to one gated RMS (FEED_RMS; its channels
+    mixed down), and the channels taken out of it keep that gain, so that its stereo
+    balance stays and ``auralize`` sets the balance between the sources from their sound
+    powers; sources without one are listed as silent."""
     scene = scene_of(args)
     rate = scene.simulation.sample_rate
     out = work_of(args) / "feeds"
     table: dict[str, dict] = {}
     silent: list[str] = []
     length = 0
-    for name, signal in signals_of(args, scene).items():
-        if signal is None:
+    free = free_of(scene)
+    read_in: dict[Path, tuple[np.ndarray, float]] = {}
+    for name, played in signals_of(args, scene).items():
+        if played is None:
             silent.append(name)
             continue
-        signal = Path(signal)
+        signal, channel = played
         if not signal.exists():
+            if free is not None and signal == recordings.file_of(free):
+                raise SystemExit(
+                    f"error: {name} plays {free.title}, not downloaded yet; run first: "
+                    f"{DEMO.command('recording', args)}"
+                )
             raise SystemExit(f"error: {name} plays {signal}, which is not there")
-        x, r = read(signal)
-        x = resampled(mono(x), r, rate)
-        rms = gated_rms(x, rate)
-        if rms <= 0.0:
-            raise SystemExit(f"error: {signal} is silent")
-        x = x * (FEED_RMS / rms)
-        write(out / f"{name}.wav", x, rate)
-        length = max(length, len(x))
-        table[name] = {"signal": str(signal), "length_s": len(x) / rate}
-        print(f"{name:>20}: {signal.name} ({len(x) / rate:.1f} s)")
+        if signal not in read_in:
+            x, r = decoded(signal)
+            x = resampled(x, r, rate)
+            rms = gated_rms(x, rate)
+            if rms <= 0.0:
+                raise SystemExit(f"error: {signal} is silent")
+            read_in[signal] = (x, FEED_RMS / rms)
+        x, gain = read_in[signal]
+        y = channel_of(x, channel) * gain
+        write(out / f"{name}.wav", y, rate)
+        length = max(length, len(y))
+        table[name] = {"signal": str(signal), "channel": channel, "length_s": len(y) / rate}
+        which = "" if channel is None else f", {CHANNEL_WORDS[channel]}"
+        print(f"{name:>20}: {signal.name}{which} ({len(y) / rate:.1f} s)")
     if not table:
         raise SystemExit(
             f"error: no source of {args.scene} plays anything; give one a WAV file: Plays on "
-            "the source's page in the editor, signal: in the scene file, or --input SOURCE=WAV"
+            "the source's page in the editor, signal: in the scene file, or --input "
+            "SOURCE=WAV; or give the scene a recording and the sources that play it a channel"
         )
     for name in silent:
         print(f"{name:>20}: silent (no signal)")
@@ -515,7 +636,7 @@ def video(args: argparse.Namespace) -> None:
         seats["seats"],
         stops,
         playing=list(table["sources"]),
-        credit=args.credit or plays_line(table),
+        credit=args.credit or plays_line(table, free_of(scene)),
         tool=pictures.settings_lines(DEMO, args, data, report),
         fmt=args.format,
         paths={(kind, item.name): knots(item) for kind, item in movers(scene)},
@@ -541,10 +662,24 @@ def video(args: argparse.Namespace) -> None:
     )
 
 
-def plays_line(table: dict) -> str:
-    """What each source plays, for the stills when ``--credit`` says nothing."""
-    plays = [f"{name}: {Path(v['signal']).name}" for name, v in table["sources"].items()]
-    return "Playing " + ", ".join(plays)
+def plays_line(table: dict, free: recordings.Recording | None = None) -> str:
+    """What the sources play, for the stills when ``--credit`` says nothing: the credit
+    the free recording's licence asks for, when one plays, and each other file by
+    source."""
+    kept = str(recordings.file_of(free)) if free is not None else None
+    parts = (
+        [free.credit]
+        if free is not None and any(v["signal"] == kept for v in table["sources"].values())
+        else []
+    )
+    others = [
+        f"{name}: {Path(v['signal']).name}"
+        for name, v in table["sources"].items()
+        if v["signal"] != kept
+    ]
+    if others:
+        parts.append("Playing " + ", ".join(others))
+    return " · ".join(parts)
 
 
 DEMO = Demo(
@@ -555,9 +690,16 @@ DEMO = Demo(
     script=Path(__file__),
     steps=[
         Step(
+            "recording",
+            recording,
+            "download the scene's free recording, if it names one and it is not there",
+            lambda args: recording_needed(args) is None,
+            recording_download,
+        ),
+        Step(
             "feeds",
             feeds,
-            "one WAV per source that plays: its signal, mono, at one gated RMS",
+            "one WAV per source that plays: its file, its channel or mono, at one gated RMS",
             feeds_done,
         ),
         SIMULATE,

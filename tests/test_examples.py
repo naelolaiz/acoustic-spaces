@@ -1235,3 +1235,98 @@ def test_a_demo_reads_only_options_it_has(path: Path | None) -> None:
         and node.value.id == "args"
     }
     assert sorted(used - have) == []
+
+
+#: The examples whose demo of the scene plays a free recording through the sources with
+#: a channel, and what it is.
+RECORDING_EXAMPLES = {
+    "concert_stage": "spicy_funk_cake",
+    "stadium_concert": "spicy_funk_cake",
+    "lakeside_concert": "spicy_funk_cake",
+    "open_air_stage": "spicy_funk_cake",
+    "studio": "spicy_funk_cake",
+    "town_hall_pa": "speech_male",
+    "lecture_hall": "speech_male",
+    "leaky_classroom": "speech_male",
+    "shoebox": "speech_male",
+    "bim_office": "speech_male",
+    "material_libraries": "speech_male",
+    "gallery": "speech_male",
+}
+
+
+@pytest.mark.parametrize("name", sorted(RECORDING_EXAMPLES))
+def test_the_stages_and_talkers_play_out_of_the_box(name: str) -> None:
+    """The examples with a sound system, a stage or a talker play a free recording in
+    the demo of the scene, each source with a channel its channel of it: the demo has
+    nothing to ask for (the recording step downloads it), and the editor's Run demo
+    window says what each source plays."""
+    skip_without_extra(name)
+    from acoustic_spaces import recordings
+    from acoustic_spaces.demos.scene_demo import DEMO, plays, recording_download
+
+    scene = Scene.from_yaml(example_path(name))
+    assert scene.recording == RECORDING_EXAMPLES[name]
+    free = recordings.named(scene.recording)
+    playing = [s for s in scene.sources if s.in_use and s.channel is not None]
+    assert playing and all(s.signal is None for s in playing)
+    demo = DEMO.at(example_path(name).parent)
+    args = demo.defaults()
+    args.scene = example_path(name)
+    args = demo.resolved(args)
+    assert demo.check(args) is None
+    said = plays(args)
+    assert all(said[s.name].startswith(free.title) for s in playing)
+    assert recording_download(args).startswith(f"{free.title} ({free.licence}")
+
+
+def test_left_and_right_are_the_audience_s_in_every_example() -> None:
+    """A sound system's left channel plays on the audience's left: the stadium's and the
+    stage's loudspeakers as stadium_demo.py would place them by their position, and the
+    lake's as lakeside_demo.py feeds them; the studio's as the listener sits."""
+    stadium = _script("stadium_concert", "stadium_demo")
+    for example in ("stadium_concert", "concert_stage"):
+        data = yaml.safe_load((EXAMPLES / example / "scene.yaml").read_text(encoding="utf-8"))
+        given = [s for s in data["sources"] if "channel" in s]
+        assert given
+        for source in given:
+            guessed = stadium.role({k: v for k, v in source.items() if k != "channel"})
+            assert source["channel"] == guessed == stadium.role(source), source["name"]
+    lake = _script("lakeside_concert", "lakeside_demo")
+    words = {0: "left", 1: "right", "mono": "mono"}
+    scene = Scene.from_yaml(example_path("lakeside_concert"))
+    channels = {s.name: s.channel for s in scene.sources}
+    assert {name: words[c] for name, c in lake.CHANNELS.items()} == {
+        name: channels[name] for name in lake.CHANNELS
+    }
+    studio = Scene.from_yaml(example_path("studio"))
+    (seat,) = studio.listeners
+    left = np.array(seat.orientation.rotation())[:, 1]  # the listener's left
+    for source in studio.sources:
+        side = float(np.dot(np.subtract(source.position, seat.position), left))
+        assert source.channel == ("left" if side > 0 else "right")
+
+
+#: The talkers of the examples, by example.
+TALKERS = {
+    "lecture_hall": "lecturer",
+    "leaky_classroom": "teacher",
+    "shoebox": "talker",
+    "bim_office": "talker",
+    "material_libraries": "lecturer",
+    "gallery": "guide",
+}
+
+
+@pytest.mark.parametrize("name", sorted(TALKERS))
+def test_the_talkers_speak_at_normal_effort(name: str) -> None:
+    """Every example's talker speaks as IEC 60268-16 has normal speech: 60 dB(A) 1 m in
+    front, a man's speech spectrum, its sound power from its directivity (the gallery
+    demo's voice_level), not the default 94 dB, which is a shout."""
+    skip_without_extra(name)
+    walk = _script("gallery", "walk_demo")
+    talker = next(s for s in Scene.from_yaml(example_path(name)).sources if s.name == TALKERS[name])
+    assert talker.spectrum == "speech_male"
+    pattern = [talker.directivity] * 8
+    expected = walk.voice_level("speech_male", pattern, walk.VOICES["normal"])
+    assert talker.level_db == pytest.approx(expected, abs=0.05)

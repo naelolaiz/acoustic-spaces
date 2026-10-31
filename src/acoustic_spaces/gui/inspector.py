@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from acoustic_spaces import recordings
 from acoustic_spaces.engine import tuning
 from acoustic_spaces.engine.long_term import rating_name
 from acoustic_spaces.geometry import UNIT_SCALE
@@ -163,8 +164,33 @@ DIRECTIVITY_TIP = N_(
 #: The tip of a source's sound power level.
 PLAYS_TIP = N_(
     "The WAV file the source plays in a demo of the scene (Simulation > Run demo…, This "
-    "scene): a dry recording, mixed down to mono and played at the source's sound power"
+    "scene): a dry recording, played at the source's sound power and mixed down to mono "
+    "unless Channel picks one of its channels. Without one, a source with a channel plays "
+    "the scene's recording (on the scene's page)"
 )
+CHANNEL_TIP = N_(
+    "The channel the source plays in a demo of the scene: left or right, or both mixed "
+    "down (mono), of its WAV file or, without one, of the scene's recording (on the "
+    "scene's page), so that a sound system's left and right loudspeakers play the two "
+    "sides of one stereo recording. (none): its WAV file mixed down to mono, or silent"
+)
+RECORDING_TIP = N_(
+    "What the sources with a channel and no WAV file of their own play in a demo of the "
+    "scene (Simulation > Run demo…, This scene), each its channel: a recording of yours, "
+    "stereo or mono, such as a band's mix, or one of the free recordings, downloaded the "
+    "first time a demo plays it and kept for every scene"
+)
+#: The channels a source can play (Channel on its page).
+CHANNELS = [
+    # Translators: this and the entries below are channels as the scene file names
+    # them; (none) leaves the source's channel out.
+    (None, N_("(none)")),
+    ("left", N_("left")),
+    ("right", N_("right")),
+    ("mono", N_("mono")),
+]
+#: What each kind of free recording is, for the scene's Recording list.
+RECORDING_KINDS = {"song": N_("a song in stereo"), "speech": N_("speech")}
 LEVEL_TIP = N_(
     "The source's sound power level in all bands together (dB re 1 pW); Spectrum spreads "
     "it over the bands"
@@ -335,6 +361,25 @@ class ScenePage(Page):
         form.addRow(_("Air temperature"), self.temperature)
         form.addRow(_("Relative humidity"), self.humidity)
         form.addRow(_("Air pressure"), self.pressure)
+        self.recording = QComboBox()
+        # Its items are long: they must not widen the panel (the list shows them whole).
+        self.recording.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.recording.setMinimumContentsLength(16)
+        self.recording.setToolTip(_(RECORDING_TIP))
+        self.recording.activated.connect(self._recording)
+        form.addRow(_("Recording"), self.recording)
+        form.labelForField(self.recording).setToolTip(_(RECORDING_TIP))
+        self.choose_recording = QPushButton(_("Choose recording…"))
+        self.choose_recording.setToolTip(
+            _(
+                "Pick a recording of yours for the scene's sources with a channel to play in "
+                "a demo: a dry one, stereo or mono, WAV or anything ffmpeg decodes"
+            )
+        )
+        self.choose_recording.clicked.connect(self._choose_recording)
+        form.addRow("", self.choose_recording)
         form.addRow(self._weather_group())
         self.stats = QLabel()
         self.stats.setTextFormat(Qt.TextFormat.RichText)
@@ -819,6 +864,7 @@ class ScenePage(Page):
         self.temperature.setValue(scene.air.temperature_c)
         self.humidity.setValue(scene.air.humidity_percent)
         self.pressure.setValue(scene.air.pressure_kpa)
+        self._load_recording(scene)
         outdoors = scene.geometry.ground is not None
         self.weather_group.setVisible(outdoors)
         if outdoors:
@@ -870,6 +916,58 @@ class ScenePage(Page):
             for warning in room.warnings()
         ]
         self.stats.setText(rich_lines(self.stats, shown))
+
+    def _load_recording(self, scene) -> None:
+        """The free recordings, and the scene's own file when it names one."""
+        self.recording.clear()
+        self.recording.addItem(_("(none)"), None)
+        for item in recordings.recordings():
+            self.recording.addItem(recording_text(item), item.name)
+            self.recording.setItemData(
+                self.recording.count() - 1, item.credit, Qt.ItemDataRole.ToolTipRole
+            )
+        own = scene.recording_file
+        if own is not None:
+            self.recording.addItem(own.name, str(own))
+            self.recording.setItemData(
+                self.recording.count() - 1, str(own), Qt.ItemDataRole.ToolTipRole
+            )
+        value = str(own) if own is not None else scene.recording
+        self.recording.setCurrentIndex(
+            0 if value is None else max(self.recording.findData(value), 0)
+        )
+        view = self.recording.view()
+        widest = max(
+            view.fontMetrics().horizontalAdvance(self.recording.itemText(k))
+            for k in range(self.recording.count())
+        )
+        view.setMinimumWidth(widest + 4 * view.frameWidth() + view.fontMetrics().height() * 2)
+
+    def _recording(self, index: int) -> None:
+        self._set_recording(self.recording.itemData(index))
+
+    def _choose_recording(self) -> None:
+        from acoustic_spaces.demos.music import AUDIO_FILTER
+
+        path, _filter = QFileDialog.getOpenFileName(
+            self, _("Recording"), str(self.document.base_dir), AUDIO_FILTER
+        )
+        if path:
+            self._set_recording(path)
+
+    def _set_recording(self, value: str | None) -> None:
+        scene = self.document.scene
+        now = str(scene.recording_file) if scene.recording_file is not None else scene.recording
+        if value == now:
+            return
+
+        def change(data: dict) -> None:
+            if value is None:
+                data.pop("recording", None)
+            else:
+                data["recording"] = value
+
+        self.apply(_("change recording"), change)
 
     def _name(self) -> None:
         name = self.name.text().strip() or "untitled"  # a scene-file value
@@ -2813,6 +2911,39 @@ class MaterialPage(Page):
         self.run(lambda: self.document.set_material(self.key, fields))
 
 
+def recording_text(item: recordings.Recording) -> str:
+    """How the scene's Recording list shows a free recording: what it is, its licence and
+    what it costs to download, or that it is downloaded."""
+    title, kind = _(item.title), _(RECORDING_KINDS[item.kind])
+    if recordings.file_of(item).exists():
+        # Translators: {title} is a recording's title, {kind} what it is ("a song in
+        # stereo") and {licence} its licence (CC BY 4.0).
+        return _("{title}: {kind}, {licence}, downloaded").format(
+            title=title, kind=kind, licence=item.licence
+        )
+    # Translators: {title} is a recording's title, {kind} what it is ("a song in
+    # stereo"), {licence} its licence (CC BY 4.0) and {size} the MB it downloads.
+    return _("{title}: {kind}, {licence}, {size} MB to download").format(
+        title=title, kind=kind, licence=item.licence, size=number(item.download_mb, "g")
+    )
+
+
+def plays_text(scene, item) -> str:
+    """What a source plays in a demo of the scene, for its Plays row: its WAV file, the
+    scene's recording (with a channel and no file), or nothing."""
+    if item.signal is not None:
+        return item.signal.name
+    if item.channel is None:
+        return _("nothing (silent in a demo)")
+    if scene.recording is None:
+        return _("nothing: the scene names no recording (silent in a demo)")
+    if isinstance(scene.recording, str):
+        what = _(recordings.named(scene.recording).title)
+    else:
+        what = scene.recording.name
+    return _("the scene's recording: {what}").format(what=what)
+
+
 def _fill(combo: QComboBox, choices) -> None:
     """Fill a list with (value, text) pairs: the text shows, translated, and the value
     is the item's data."""
@@ -3110,11 +3241,18 @@ class PointPage(Page):
         self.choose_signal.clicked.connect(self._choose_signal)
         self.silent = QPushButton(_("Silent"))
         self.silent.setToolTip(_("The source plays nothing in a demo of the scene"))
-        self.silent.clicked.connect(lambda: self._update(signal=None))
+        # Silent: neither a file nor the scene's recording.
+        self.silent.clicked.connect(lambda: self._update(signal=None, channel=None))
         self.signal_buttons = QHBoxLayout()
         self.signal_buttons.addWidget(self.choose_signal)
         self.signal_buttons.addWidget(self.silent)
         self.signal_buttons.addStretch(1)
+        self.channel = QComboBox()
+        _fill(self.channel, CHANNELS)
+        self.channel.setToolTip(_(CHANNEL_TIP))
+        self.channel.activated.connect(
+            lambda index: self._update(channel=self.channel.itemData(index))
+        )
         self.shape = QComboBox()
         _fill(self.shape, SHAPES)
         self.shape.setToolTip(
@@ -3196,6 +3334,8 @@ class PointPage(Page):
             form.addRow(_("Plays"), self.signal)
             self._form.labelForField(self.signal).setToolTip(_(PLAYS_TIP))
             form.addRow("", self.signal_buttons)
+            form.addRow(_("Channel"), self.channel)
+            self._form.labelForField(self.channel).setToolTip(_(CHANNEL_TIP))
         remove = QPushButton(_("Remove source") if source else _("Remove listener"))
         remove.setToolTip(
             _("Remove this source from the scene (Delete in the tree or a view)")
@@ -3308,9 +3448,8 @@ class PointPage(Page):
             self.gain.setValue(item.gain_db)
             self.eq.setText("" if item.eq_db is None else numbers_text(item.eq_db))
             self.delay.setValue(item.delay_ms)
-            self.signal.setText(
-                item.signal.name if item.signal is not None else _("nothing (silent in a demo)")
-            )
+            self.signal.setText(plays_text(self.document.scene, item))
+            _choose(self.channel, item.channel)
             self.signal.setToolTip(
                 f"{_(PLAYS_TIP)}. {item.signal}" if item.signal is not None else _(PLAYS_TIP)
             )

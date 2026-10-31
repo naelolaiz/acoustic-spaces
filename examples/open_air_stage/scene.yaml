@@ -21,8 +21,14 @@ atmosphere:
   preset: windy
   wind: {direction_deg: 0}
   turbulence: moderate
+# In a demo of the scene (acoustic-spaces demo) the stage plays the recording below,
+# downloaded the first time: the stereo mix of "Spicy Funk Cake" by the
+# Rhythmussportgruppe (CC BY 4.0), both channels mixed down; give `recording:` a file
+# of yours to hear that instead.
+recording: spicy_funk_cake
 sources:
   - name: stage
+    channel: mono
     position: [0, 0, 5]
     level_db: 120
 listeners:

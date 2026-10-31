@@ -24,8 +24,15 @@ assignments:
   floor: marble
   ceiling: ceiling
   walls: brick
+# In a demo of the scene (acoustic-spaces demo) the guide says what the recording
+# below says, downloaded the first time: the ACE corpus's talker M4 (CC BY 4.0).
+# The guide speaks at normal effort, 60 dB(A) 1 m in front (IEC 60268-16), which
+# with a man's speech spectrum and a cardioid pattern is 73.3 dB of sound power.
+recording: speech_male
 sources:
   - name: guide
+    level_db: 73.3
+    channel: mono
     position: [20.0, 4.0, 1.6]
     orientation: {yaw: 180}
     directivity: cardioid

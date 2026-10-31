@@ -48,6 +48,7 @@ from pathlib import Path
 
 import yaml
 
+from acoustic_spaces import recordings
 from acoustic_spaces.demos import (
     SIMULATE,
     Demo,
@@ -61,50 +62,21 @@ from acoustic_spaces.demos import (
 )
 from acoustic_spaces.demos.audio import mono, read, write
 
-#: The songs the demo can play (``--song``): the files each one is made of (one here,
-#: a member of a zip archive read by HTTP range requests or a file of its own, as
+#: The songs the demo can play (``--song``): the free songs of
+#: :mod:`acoustic_spaces.recordings`, each with the files it is made of (one here, a
+#: member of a zip archive read by HTTP range requests or a file of its own, as
 #: :mod:`acoustic_spaces.demos.music` fetches them), the MB they take to download, its
 #: tempo (beats a minute; the tour moves on every 8 bars) and the credit its licence
 #: asks for.
 SONGS = {
-    "spicy_funk_cake": {
-        "files": [
-            (
-                "https://zenodo.org/records/3601032/files/Rhythmussportgruppe_Preview.zip",
-                "Rhythmussportgruppe_Preview/Spicy_Fun_cake_Preview/1_REFERENCE-MIX/"
-                "Spicy_Funk_Cake.wav",
-            )
-        ],
-        "download_mb": 61,
-        "bpm": 110.0,
-        "credit": 'Music: Rhythmussportgruppe, "Spicy Funk Cake" (Niklas Dahlheimer), recorded '
-        "for the DEGA at Hochschule Düsseldorf, CC BY 4.0 · doi.org/10.5281/zenodo.3601032",
-    },
-    "great_british_summer": {
-        "files": [
-            (
-                "https://zenodo.org/records/19683001/files/masters_stereo.zip",
-                "masters_stereo/09 - Great British Summer.wav",
-            )
-        ],
-        "download_mb": 50,
-        "bpm": 120.0,
-        "credit": 'Music: Tom McKenzie, "Great British Summer" (album "Extraordinary", AlbumDB), '
-        "CC BY 4.0 · doi.org/10.5281/zenodo.19683001",
-    },
-    "potassium": {
-        "files": [
-            (
-                "https://raw.githubusercontent.com/ichbinsoftware/everythingisfree/"
-                "e1d0d5c0422d2626c211d5d877e6f69c37ce8712/src/4.Potassium/4.Potassium_Master.m4a",
-                None,
-            )
-        ],
-        "download_mb": 6,
-        "bpm": 90.0,
-        "credit": 'Music: Software-Entwicklungskit, "Potassium" (album "Everything is Free"), '
-        "CC0 1.0 · github.com/ichbinsoftware/everythingisfree",
-    },
+    item.name: {
+        "files": list(item.files),
+        "download_mb": item.download_mb,
+        "bpm": item.bpm,
+        "credit": item.credit,
+    }
+    for item in recordings.recordings()
+    if item.kind == "song"
 }
 #: The rate the songs are brought to, that of the simulation's responses.
 RATE = 48000

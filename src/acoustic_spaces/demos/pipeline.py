@@ -61,7 +61,7 @@ def write_json(path: Path, data: dict) -> None:
 
 
 #: The keys of a scene file whose values name files, relative to the scene's folder.
-FILE_KEYS = ("file", "hrtf", "signal")
+FILE_KEYS = ("file", "hrtf", "signal", "recording")
 
 
 def write_scene(path: Path, data: dict, header: str, source_dir: Path) -> None:
@@ -84,10 +84,16 @@ def write_scene(path: Path, data: dict, header: str, source_dir: Path) -> None:
         except ValueError:
             return full.as_posix()
 
+    def free(key: str, value: str) -> bool:
+        """Whether ``value`` is a free recording's name, not a file."""
+        from acoustic_spaces.recordings import NAMES
+
+        return key == "recording" and value in NAMES
+
     def fix(node):
         if isinstance(node, dict):
             return {
-                k: moved(v) if k in FILE_KEYS and isinstance(v, str) else fix(v)
+                k: moved(v) if k in FILE_KEYS and isinstance(v, str) and not free(k, v) else fix(v)
                 for k, v in node.items()
             }
         if isinstance(node, list):

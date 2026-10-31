@@ -146,6 +146,57 @@ def test_a_source_names_what_it_plays(tmp_path: Path) -> None:
     assert Scene.from_yaml(tmp_path / "elsewhere" / "scene.yaml").sources[0].signal == signal
 
 
+def test_a_scene_names_its_recording_and_each_source_a_channel(tmp_path: Path) -> None:
+    """A scene's ``recording`` is a free recording's name, kept as it is, or a file,
+    which counts from the scene's folder, is saved relative to it and is one of the
+    files the scene uses; a source's ``channel`` is left, right or mono, or none; a
+    name that is neither a free recording nor a file is refused, as is any other
+    channel."""
+    import shutil
+
+    from acoustic_spaces.demos import pipeline
+    from acoustic_spaces.recordings import NAMES
+
+    shutil.copytree(EXAMPLES / "shoebox", tmp_path / "shoebox")
+    path = tmp_path / "shoebox" / "scene.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data.pop("recording", None)
+    data["sources"][0].pop("channel", None)
+    scene = Scene.model_validate(data)
+    assert scene.recording is None and scene.recording_file is None
+    assert scene.sources[0].channel is None
+    assert "recording" not in scene.to_data() and "channel" not in scene.to_data()["sources"][0]
+    for name in NAMES:
+        data["recording"] = name
+        scene = Scene.model_validate(data)
+        assert scene.recording == name and scene.recording_file is None
+        assert all(Path(name).name != f.name for f in scene.files())
+    data["recording"], data["sources"][0]["channel"] = "music/band.flac", "left"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    scene = Scene.from_yaml(path)
+    band = (tmp_path / "shoebox" / "music" / "band.flac").resolve()
+    assert scene.recording == band == scene.recording_file and band in scene.files()
+    assert scene.sources[0].channel == "left"
+    scene.to_yaml(tmp_path / "shoebox" / "again.yaml")
+    text = (tmp_path / "shoebox" / "again.yaml").read_text(encoding="utf-8")
+    assert "recording: music/band.flac" in text and "channel: left" in text
+    (tmp_path / "elsewhere").mkdir()
+    scene.to_yaml(tmp_path / "elsewhere" / "scene.yaml")
+    assert Scene.from_yaml(tmp_path / "elsewhere" / "scene.yaml").recording == band
+    # A demo's scene written in another folder keeps a free name and finds a file.
+    for value, expected in (("potassium", "potassium"), ("music/band.flac", band.as_posix())):
+        pipeline.write_scene(tmp_path / "work" / "s.yaml", {"recording": value}, "", path.parent)
+        written = yaml.safe_load((tmp_path / "work" / "s.yaml").read_text(encoding="utf-8"))
+        assert written["recording"] == expected
+    for wrong in ("", "   ", 3):
+        data["recording"] = wrong
+        with pytest.raises(ValidationError, match="a recording file, or one of"):
+            Scene.model_validate(data)
+    data["recording"], data["sources"][0]["channel"] = None, "centre"
+    with pytest.raises(ValidationError, match="channel"):
+        Scene.model_validate(data)
+
+
 def test_seed_is_zero_or_more() -> None:
     # Numpy takes no negative seed, which used to fail only once a run had started.
     data = yaml.safe_load((EXAMPLES / "shoebox" / "scene.yaml").read_text(encoding="utf-8"))

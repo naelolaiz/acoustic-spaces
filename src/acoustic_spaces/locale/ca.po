@@ -2484,6 +2484,7 @@ msgstr "octava"
 msgid "third_octave"
 msgstr "terç d'octava"
 
+#. Translators: this and the entries below are channels as the scene file names them; (none) leaves the source's channel out.
 #: acoustic_spaces/gui/inspector.py
 msgid "(none)"
 msgstr "(cap)"
@@ -2551,12 +2552,64 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "The WAV file the source plays in a demo of the scene (Simulation > Run "
-"demo…, This scene): a dry recording, mixed down to mono and played at the "
-"source's sound power"
+"demo…, This scene): a dry recording, played at the source's sound power and "
+"mixed down to mono unless Channel picks one of its channels. Without one, a "
+"source with a channel plays the scene's recording (on the scene's page)"
 msgstr ""
 "El fitxer WAV que reprodueix la font en una demostració de l'escena "
 "(Simulació > Executa una demostració…, Aquesta escena): una gravació seca, "
-"mesclada a mono i reproduïda amb la potència acústica de la font"
+"reproduïda amb la potència acústica de la font i mesclada a mono si Canal no "
+"tria un dels seus canals. Sense fitxer, una font amb un canal reprodueix la "
+"gravació de l'escena (a la pàgina de l'escena)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The channel the source plays in a demo of the scene: left or right, or both "
+"mixed down (mono), of its WAV file or, without one, of the scene's recording "
+"(on the scene's page), so that a sound system's left and right loudspeakers "
+"play the two sides of one stereo recording. (none): its WAV file mixed down "
+"to mono, or silent"
+msgstr ""
+"El canal que reprodueix la font en una demostració de l'escena: l'esquerre o "
+"el dret, o tots dos mesclats (mono), del seu fitxer WAV o, sense fitxer, de "
+"la gravació de l'escena (a la pàgina de l'escena), perquè els altaveus "
+"esquerre i dret d'un sistema de so reprodueixin els dos costats d'una "
+"mateixa gravació estèreo. (cap): el seu fitxer WAV mesclat a mono, o silenci"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"What the sources with a channel and no WAV file of their own play in a demo "
+"of the scene (Simulation > Run demo…, This scene), each its channel: a "
+"recording of yours, stereo or mono, such as a band's mix, or one of the free "
+"recordings, downloaded the first time a demo plays it and kept for every "
+"scene"
+msgstr ""
+"El que reprodueixen en una demostració de l'escena (Simulació > Executa una "
+"demostració…, Aquesta escena) les fonts amb un canal i sense fitxer WAV "
+"propi, cadascuna el seu canal: una gravació vostra, estèreo o mono, com la "
+"mescla d'un grup, o una de les gravacions lliures, que es baixa la primera "
+"vegada que una demostració la reprodueix i es conserva per a totes les "
+"escenes"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py
+msgid "left"
+msgstr "esquerra"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py
+msgid "right"
+msgstr "dreta"
+
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/movement.py
+msgid "mono"
+msgstr "mono"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "a song in stereo"
+msgstr "una cançó en estèreo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "speech"
+msgstr "veu parlada"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -2665,6 +2718,23 @@ msgstr "Humitat relativa"
 #: acoustic_spaces/gui/inspector.py
 msgid "Air pressure"
 msgstr "Pressió de l'aire"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Recording"
+msgstr "Gravació"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Choose recording…"
+msgstr "Tria una gravació…"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Pick a recording of yours for the scene's sources with a channel to play in "
+"a demo: a dry one, stereo or mono, WAV or anything ffmpeg decodes"
+msgstr ""
+"Tria una gravació vostra perquè la reprodueixin en una demostració les fonts "
+"de l'escena que tenen un canal: una gravació seca, estèreo o mono, en WAV o "
+"en qualsevol format que descodifiqui ffmpeg"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -3120,6 +3190,10 @@ msgstr "Problema: {problem}"
 #, python-brace-format
 msgid "Warning: {warning}"
 msgstr "Avís: {warning}"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "change recording"
+msgstr "canvia la gravació"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "rename scene"
@@ -4298,6 +4372,31 @@ msgstr "els coeficients són nombres de 0 a 1"
 msgid "the sound reduction is in dB"
 msgstr "la reducció sonora s'expressa en dB"
 
+#. Translators: {title} is a recording's title, {kind} what it is ("a song in stereo") and {licence} its licence (CC BY 4.0).
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{title}: {kind}, {licence}, downloaded"
+msgstr "{title}: {kind}, {licence}, baixada"
+
+#. Translators: {title} is a recording's title, {kind} what it is ("a song in stereo"), {licence} its licence (CC BY 4.0) and {size} the MB it downloads.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{title}: {kind}, {licence}, {size} MB to download"
+msgstr "{title}: {kind}, {licence}, {size} MB per baixar"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "nothing (silent in a demo)"
+msgstr "res (en silenci en una demostració)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "nothing: the scene names no recording (silent in a demo)"
+msgstr "res: l'escena no indica cap gravació (silenci en una demostració)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "the scene's recording: {what}"
+msgstr "la gravació de l'escena: {what}"
+
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
 msgid "file: {name}"
@@ -4726,6 +4825,10 @@ msgid "Delay"
 msgstr "Retard"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Channel"
+msgstr "Canal"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Remove source"
 msgstr "Eliminar font"
 
@@ -4779,10 +4882,6 @@ msgstr "Índex de directivitat: {values} dB (de 63 Hz a 8 kHz)"
 #, python-brace-format
 msgid "{tip}. Given per band in the scene file; this is their sum"
 msgstr "{tip}. Indicat per banda al fitxer d'escena; això és la suma"
-
-#: acoustic_spaces/gui/inspector.py
-msgid "nothing (silent in a demo)"
-msgstr "res (en silenci en una demostració)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Width"
@@ -5720,10 +5819,6 @@ msgstr "Balanceig (°)"
 #: acoustic_spaces/gui/movement.py
 msgid "Speed (m/s)"
 msgstr "Velocitat (m/s)"
-
-#: acoustic_spaces/gui/movement.py
-msgid "mono"
-msgstr "mono"
 
 #: acoustic_spaces/gui/movement.py
 msgid "binaural"
@@ -7273,6 +7368,26 @@ msgstr "La vista 3D no està disponible aquí: {reason}"
 msgid "The 3D view needs a display with OpenGL."
 msgstr "La vista 3D necessita una pantalla amb OpenGL."
 
+#: acoustic_spaces/recordings.py
+msgid "\"Spicy Funk Cake\", Rhythmussportgruppe"
+msgstr "\"Spicy Funk Cake\", Rhythmussportgruppe"
+
+#: acoustic_spaces/recordings.py
+msgid "\"Great British Summer\", Tom McKenzie"
+msgstr "\"Great British Summer\", Tom McKenzie"
+
+#: acoustic_spaces/recordings.py
+msgid "\"Potassium\", Software-Entwicklungskit"
+msgstr "\"Potassium\", Software-Entwicklungskit"
+
+#: acoustic_spaces/recordings.py
+msgid "A man talking (ACE corpus, talker M4)"
+msgstr "Un home que parla (corpus ACE, locutor M4)"
+
+#: acoustic_spaces/recordings.py
+msgid "A woman talking (ACE corpus, talker F2)"
+msgstr "Una dona que parla (corpus ACE, locutora F2)"
+
 #. Translators: the wind over an outdoor scene, as the 3D view's legend shows it.
 #: acoustic_spaces/viz.py
 #, python-brace-format
@@ -7396,16 +7511,8 @@ msgid "back"
 msgstr "darrere"
 
 #: acoustic_spaces/viz.py
-msgid "left"
-msgstr "esquerra"
-
-#: acoustic_spaces/viz.py
 msgid "front"
 msgstr "davant"
-
-#: acoustic_spaces/viz.py
-msgid "right"
-msgstr "dreta"
 
 #: acoustic_spaces/viz.py
 msgid "azimuth (degrees)"

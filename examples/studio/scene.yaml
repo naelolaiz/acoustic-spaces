@@ -27,8 +27,14 @@ assignments:
   wall_3: side_panels
   wall_2: diffuser
   wall_4: front_wall
+# In a demo of the scene (acoustic-spaces demo) the loudspeakers play the recording
+# below, downloaded the first time: the stereo mix of "Spicy Funk Cake" by the
+# Rhythmussportgruppe (CC BY 4.0), each its side; give `recording:` a file of yours to
+# hear that instead.
+recording: spicy_funk_cake
 sources:
   - name: left-speaker
+    channel: left
     position: [0.67, 1.25, 1.2]
     orientation: {yaw: 30}       # aimed at the listening position
     # A small two-way monitor: omni in the bass, narrowing towards the treble (one
@@ -37,6 +43,7 @@ sources:
     directivity:
       pattern: [omni, omni, omni, subcardioid, subcardioid, cardioid, cardioid, supercardioid]
   - name: right-speaker
+    channel: right
     position: [0.67, 3.25, 1.2]
     orientation: {yaw: -30}
     directivity:

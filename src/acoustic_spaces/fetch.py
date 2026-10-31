@@ -11,8 +11,10 @@ their recordings this way and the editor its HRTF sets.
 from __future__ import annotations
 
 import io
+import os
 import shutil
 import ssl
+import sys
 import tarfile
 import urllib.request
 import zipfile
@@ -32,6 +34,23 @@ CHUNK = 1 << 20
 Progress = Callable[[int, int | None], None]
 
 _CONTEXT = ssl.create_default_context()
+
+
+def data_folder(name: str, variable: str) -> Path:
+    """``acoustic-spaces/<name>`` under the user's data folder, where downloads are kept
+    (``%LOCALAPPDATA%`` on Windows, ``~/Library/Application Support`` on macOS,
+    ``$XDG_DATA_HOME`` or ``~/.local/share`` elsewhere); the environment variable
+    ``variable`` names another folder instead."""
+    named = os.environ.get(variable)
+    if named:
+        return Path(named)
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    return base / "acoustic-spaces" / name
 
 
 def urlopen(url: str, headers: dict[str, str] | None = None, timeout: float = TIMEOUT):
@@ -253,6 +272,7 @@ __all__ = [
     "CHUNK",
     "RangeFile",
     "copy_member",
+    "data_folder",
     "download",
     "extract",
     "extract_tar",

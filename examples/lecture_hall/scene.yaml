@@ -23,8 +23,16 @@ assignments:
   ceiling: plaster
   wall_1: wood       # stage wall
   walls: concrete    # the side and back walls
+# In a demo of the scene (acoustic-spaces demo) the lecturer says what the recording
+# below says, downloaded the first time: the ACE corpus's talker M4 (CC BY 4.0).
+# The lecturer speaks at normal effort, 60 dB(A) 1 m in front (IEC 60268-16), which
+# with a man's speech spectrum and a cardioid pattern is 73.3 dB of sound power.
+recording: speech_male
 sources:
   - name: lecturer
+    level_db: 73.3
+    spectrum: speech_male
+    channel: mono
     position: [1.5, 0.0, 1.6]
     directivity: cardioid
 listeners:

@@ -14,12 +14,11 @@ person best and others as far as their ears are alike.
 
 from __future__ import annotations
 
-import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from acoustic_spaces.fetch import Progress, fetch
+from acoustic_spaces.fetch import data_folder as user_folder
 
 #: The folder the sets are kept in, under the user's data folder.
 FOLDER = "hrtf"
@@ -128,16 +127,7 @@ def named(name: str) -> HrtfSet:
 def data_folder() -> Path:
     """The folder downloaded sets are kept in: ``acoustic-spaces/hrtf`` under the user's
     data folder (``ACOUSTIC_SPACES_HRTF`` moves it)."""
-    named_folder = os.environ.get("ACOUSTIC_SPACES_HRTF")
-    if named_folder:
-        return Path(named_folder)
-    if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return base / "acoustic-spaces" / FOLDER
+    return user_folder(FOLDER, "ACOUSTIC_SPACES_HRTF")
 
 
 def file_of(item: HrtfSet, member: str | None = None, folder: str | Path | None = None) -> Path:

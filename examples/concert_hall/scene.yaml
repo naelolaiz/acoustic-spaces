@@ -28,6 +28,9 @@ assignments:
   rear_wall: wood_panels
   side_walls: plaster
   ceiling: ceiling
+# Both sources keep the default sound power, 94 dB (re 1 pW) spread evenly over the
+# bands: not measured levels of a soloist and a piano, so the balance between them is
+# not a performance's. Give each its level_db for that.
 sources:
   - name: soloist
     position: [4.5, 10.0, 2.6]   # 1.6 m above the stage floor

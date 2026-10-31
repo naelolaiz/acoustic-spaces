@@ -129,7 +129,7 @@ def test_room_surfaces_and_materials(tmp_path: Path) -> None:
         "kind": "source",
         "directivity": "omni",
         "directivity_index_db": [0.0] * 8,
-        "level_db": 94.0,
+        "level_db": 78.0,
     }
     assert "children" not in talker  # no aim for an omnidirectional source
     seat = nodes_named(doc)["seat-a"]
