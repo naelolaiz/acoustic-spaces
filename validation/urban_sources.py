@@ -1,5 +1,5 @@
-"""Check the pass-by demos' siren and road vehicles against rules and data published
-apart from the models they come from.
+"""Check the pass-by demos' sirens, horn and road vehicles against rules and data
+published apart from the models they come from.
 
     python validation/urban_sources.py [--json results.json]
 
@@ -19,6 +19,13 @@ apart from the models they come from.
   0.5, 1.0 and 1.5 m up, its siren 1.5 m up as in the street example, over the street's
   asphalt, as the engine gives it, which the rule asks to be 100 to 115 dB(A) on the
   vehicle.
+- **The fire engine.** Its two tones, 3.0 m up, 7.00 m in front of the vehicle every 0.1
+  m from 0.5 to 1.5 m up over asphalt and on the Swiss rule's bench; its air horn, 1.2
+  m up, against the rule for vehicles' horns (Council Directive 70/388/EEC, Annex I): on
+  its bench, 2 m away on its axis in a free field (105 to 118 dB(A)), its band 1800 to
+  3550 Hz there (105 dB(A) at least, and over any component above it), its rise (0.2 s
+  at most) and its level 7 m in front of the vehicle, 0.5 to 1.5 m up (93 dB(A) at
+  least).
 - **The car's table.** The car's sound power by Table F-1 of CNOSSOS-EU as amended in
   2021 (:mod:`acoustic_spaces.demos.road`) and by the table of Directive (EU) 2015/996,
   which the car of acoustic-spaces 4.0.1 had, from 30 to 130 km/h.
@@ -41,7 +48,8 @@ from pathlib import Path
 import numpy as np
 
 from acoustic_spaces import Room, Scene, simulate
-from acoustic_spaces.demos import road, siren
+from acoustic_spaces.demos import horn, road, siren
+from acoustic_spaces.demos.audio import a_gain
 from acoustic_spaces.directivity import write_directivity_csv
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import A_WEIGHTING_DB, a_weighted
@@ -68,6 +76,11 @@ SWISS_VEHICLE_M = 7.0
 SWISS_HEIGHTS_M = (0.5, 1.0, 1.5)
 #: The siren's height on the police car (m), as in the street example.
 SIREN_HEIGHT_M = 1.5
+#: The fire engine's siren and horn are heard on the vehicle this far apart in height (m).
+FIRE_STEP_M = 0.1
+#: The rule for horns' bench (Council Directive 70/388/EEC, Annex I, point 1.2.1.6):
+#: 105 to 118 dB(A) 2 m away.
+HORN_BENCH = (105.0, 118.0)
 #: Directive (EU) 2015/996's Table F-1, category 1, as acoustic-spaces 4.0.1's car had it:
 #: rolling noise A_R and B_R, propulsion noise A_P and B_P, per octave band (dB).
 ROLLING_2015 = (
@@ -81,11 +94,16 @@ PROPULSION_2015 = (
 SPEEDS_KMH = (30.0, 50.0, 70.0, 90.0, 110.0, 130.0)
 
 
-def engine_levels(listeners: list[tuple[str, tuple]], ground: dict, folder: Path) -> dict:
-    """The siren 1.5 m up at the origin facing +x, its directivity table written as the
-    street's is, heard at ``listeners`` (name, position) over ``ground`` (a material):
-    each listener's octave-band level per 0 dB of sound power in each band (dB), as the
-    engine gives it."""
+def engine_levels(
+    listeners: list[tuple[str, tuple]],
+    ground: dict,
+    folder: Path,
+    height_m: float = SIREN_HEIGHT_M,
+) -> dict:
+    """The siren ``height_m`` up at the origin facing +x (the police car's 1.5 m by
+    default), its directivity table written as the street's is, heard at ``listeners``
+    (name, position) over ``ground`` (a material): each listener's octave-band level per
+    0 dB of sound power in each band (dB), as the engine gives it."""
     table = write_directivity_csv(
         folder / "siren.csv", siren.directivity(), siren.directivity_comment("check")
     )
@@ -97,7 +115,7 @@ def engine_levels(listeners: list[tuple[str, tuple]], ground: dict, folder: Path
             "sources": [
                 {
                     "name": "siren",
-                    "position": [0, 0, SIREN_HEIGHT_M],
+                    "position": [0, 0, height_m],
                     "directivity": {"file": str(table)},
                 }
             ],
@@ -212,6 +230,74 @@ def check_swiss(folder: Path) -> dict:
     return {"ratio_off": ratio, "bench_db_a": bench, "vehicle_db_a": vehicle}
 
 
+def check_fire_engine(folder: Path) -> dict:
+    """The fire engine's two tones and air horn against their rules: the siren's level
+    on the bench and on the vehicle, every FIRE_STEP_M from 0.5 to 1.5 m up; the horn's
+    on its bench, its band 1800 to 3550 Hz there, its rise and its level on the vehicle."""
+    free = {"absorption": [1.0] * 8, "scattering": 0.0}
+    asphalt = {"preset": "concrete_floor", "scattering": 0.05}
+    heights = np.round(np.arange(0.5, 1.5 + 1e-9, FIRE_STEP_M), 2)
+    front = [(f"{h:g} m", (SWISS_VEHICLE_M, 0.0, float(h))) for h in heights]
+    out: dict = {}
+    for name, power, height, bench_m, bench_rule, vehicle_rule in (
+        (
+            "siren",
+            siren.siren_power("two_tone", RATE) + siren.FIRE_SIREN_GAIN_DB,
+            siren.FIRE_SIREN_HEIGHT_M,
+            SWISS_BENCH_M,
+            SWISS_BENCH,
+            SWISS_VEHICLE,
+        ),
+        (
+            "horn",
+            horn.blast_power(RATE),
+            horn.HEIGHT_M,
+            horn.AT_M,
+            HORN_BENCH,
+            (horn.VEHICLE_DB_A, math.inf),
+        ),
+    ):
+        bench = engine_levels([("bench", (bench_m, 0.0, height))], free, folder, height)
+        on_bench = a_weighted(np.array(bench["bench"]) + power)
+        road_levels = engine_levels(front, asphalt, folder, height)
+        heard = {n: a_weighted(np.array(road_levels[n]) + power) for n, _ in front}
+        loudest = max(heard, key=heard.get)
+        out[name] = {"bench_db_a": on_bench, "vehicle_db_a": heard}
+        rule = f"{vehicle_rule[0]:g} to {vehicle_rule[1]:g}"
+        print(
+            f"{name}, {height:g} m up: on the bench {bench_m:g} m away on the axis in a free "
+            f"field {on_bench:.1f} dB(A) (rule {bench_rule[0]:g} to {bench_rule[1]:g}); on "
+            f"the vehicle {SWISS_VEHICLE_M:g} m in front over asphalt {min(heard.values()):.1f} "
+            f"to {heard[loudest]:.1f} dB(A) from 0.5 to 1.5 m up, the most {loudest} up "
+            f"(rule {rule.replace(' to inf', ' at least')})"
+        )
+    band, above = horn_band()
+    out["horn"] |= {"band_db_a": out["horn"]["bench_db_a"] + band, "band_over_above_db": above}
+    print(
+        f"horn's band {horn.RULE_BAND_HZ[0]:g} to {horn.RULE_BAND_HZ[1]:g} Hz on the bench: "
+        f"{out['horn']['band_db_a']:.1f} dB(A) (rule: 105 at least), its loudest component "
+        f"{above:.1f} dB over the loudest above {horn.RULE_BAND_HZ[1]:g} Hz (rule: over); "
+        f"each blast at its level {horn.RISE_S:g} s after it starts (rule: 0.2 s at most)"
+    )
+    return out
+
+
+def horn_band() -> tuple[float, float]:
+    """The air horn's blast against the rule's band, from the spectrum of its made sound
+    (1 s, whole periods of both trumpets): the A-weighted level of its components
+    between RULE_BAND_HZ re the blast's whole A-weighted level, and how far its loudest
+    component there is over its loudest above them (dB)."""
+    x = horn.blast(RATE, 1.0)
+    power = np.abs(np.fft.rfft(x)) ** 2
+    freq = np.fft.rfftfreq(len(x), 1.0 / RATE)
+    weighted = power * a_gain(freq) ** 2
+    low, high = horn.RULE_BAND_HZ
+    band = (freq >= low) & (freq <= high)
+    share = float(weighted[band].sum() / weighted.sum())
+    over = float(power[band].max() / power[freq > high].max())
+    return 10.0 * math.log10(share), 10.0 * math.log10(over)
+
+
 def power_2015(speed_kmh: float) -> np.ndarray:
     """The car's sound power per octave band (dB) by 2015/996's table at 20 °C."""
     v = max(speed_kmh, road.MIN_SPEED_KMH)
@@ -253,12 +339,17 @@ def main(argv=None) -> int:
         california = check_california(folder)
         print("\nThe two tones against the Swiss rule (SR 741.41, annex 11)")
         swiss = check_swiss(folder)
+        print("\nThe fire engine's two tones and air horn (SR 741.41; 70/388/EEC, Annex I)")
+        fire = check_fire_engine(folder)
     print("\nThe car's sound power, CNOSSOS-EU's Table F-1 of 2021 and of 2015/996, at 20 °C")
     car = check_car()
     print(f"\n{time.perf_counter() - started:.0f} s")
     if args.json:
         args.json.write_text(
-            json.dumps({"california": california, "swiss": swiss, "car": car}, indent=2),
+            json.dumps(
+                {"california": california, "swiss": swiss, "fire_engine": fire, "car": car},
+                indent=2,
+            ),
             encoding="utf-8",
         )
     return 0

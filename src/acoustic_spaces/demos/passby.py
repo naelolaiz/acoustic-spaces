@@ -1,7 +1,8 @@
 """A vehicle going past, heard at each listener of an outdoor example, its pitch falling
 as it goes by (Doppler): the pass-by demos of the roadside and the street examples
-(``passby_demo.py`` beside each scene), where a car, a truck, a bus, a motorcycle or a
-police car with its siren on drives past (``--vehicle``), and of the helicopter_flyover
+(``passby_demo.py`` beside each scene), where a car, a truck, a bus, a motorcycle, a
+police car with its siren on or a fire engine with its siren and its air horn drives past
+(``--vehicle``), and of the helicopter_flyover
 example (``flyover_demo.py``), where a helicopter flies over; one module for all of them,
 each with its :class:`Vehicle`.
 
@@ -19,7 +20,8 @@ vehicle is heard alone. It plays a sound made to that power (``demo/car/car.wav`
 the car: tyre noise and an engine at ``--rpm``), or the dry recording ``--input
 car=WAV`` gives. The police car is two sources along one walk, the car's sound and its
 siren on its roof, with the level and the directivity of a measured one
-(:mod:`acoustic_spaces.demos.siren`); a helicopter plays the sound its rotors send each
+(:mod:`acoustic_spaces.demos.siren`); the fire engine three, the vehicle, its siren and
+its air horn (:mod:`acoustic_spaces.demos.horn`); a helicopter plays the sound its rotors send each
 way (:mod:`acoustic_spaces.demos.helicopter`).
 
 Each listener in use is simulated with the vehicle every ``--step`` along its walk
@@ -155,6 +157,16 @@ class Vehicle:
             return None
         x, r = read(path)
         return resampled(mono(x), r, rate)
+
+    def input_gain(self, part: str, x: np.ndarray, rate: int) -> float | None:
+        """The gain of ``x``, a recording ``--input`` gives the source ``part``, so that it
+        plays as loud as a made sound: its gated RMS
+        (:func:`~acoustic_spaces.demos.audio.gated_rms`) brought to SOUND_RMS, the RMS of
+        a made sound that has no pauses; None when it is silent."""
+        from acoustic_spaces.demos.road import SOUND_RMS
+
+        rms = gated_rms(x, rate)
+        return SOUND_RMS / rms if rms > 0.0 else None
 
     def plays(self, args: argparse.Namespace, speed: str) -> str:
         """What it plays unless ``--input`` gives it a file, ``speed`` its speed in words."""
@@ -585,9 +597,9 @@ def feed(
 ):
     """What the vehicle (or its source ``part``) plays along its pass, at ``rate``: its
     made sound (:meth:`Vehicle.made`), or the file ``--input NAME=WAV`` gives it (mixed
-    down to mono, cut to the pass, at the made car's RMS), faded in and out over
+    down to mono, cut to the pass, as loud as its made sound,
+    :meth:`Vehicle.input_gain`), faded in and out over
     FADE_S."""
-    from acoustic_spaces.demos.road import SOUND_RMS
     from acoustic_spaces.emission import Emission, Faded
 
     n = int(round(duration_s * rate))
@@ -616,10 +628,10 @@ def feed(
                 f"error: {file.name} is {len(x) / rate:.1f} s long; the {vehicle.name} takes "
                 f"{duration_s:.1f} s along its walk"
             )
-        rms = gated_rms(x[:n], rate)
-        if rms <= 0.0:
+        gain = vehicle.input_gain(part, x[:n], rate)
+        if gain is None:
             raise SystemExit(f"error: {file} is silent")
-        x = x * (SOUND_RMS / rms)
+        x = x * gain
     x = np.array(x[:n], dtype=float)
     if len(x) < n:
         raise SystemExit(
