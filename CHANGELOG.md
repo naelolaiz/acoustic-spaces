@@ -93,7 +93,8 @@
   default 8 cells returns 67 dB down or more (not 57); a coverage map's T30 is within
   5 % of full simulations at the tests' three points, not everywhere; the GPU's
   outdoor comparison does not depend on the eddies. Numbers that came from one-off
-  checks are now printed by the scripts or tests, or left out:
+  checks are now printed by the scripts or tests, labelled as one-off checks, or left
+  out:
   `outdoor_propagation.py` gives where each source's rays stop reaching the
   microphones' height; `turbulence.py --profile` the engine with Cn² taken down to the
   ground, and averages over the soft and the harder grounds; `ground_reflection.py
@@ -101,8 +102,15 @@
   million late rays and three seeds and gives their spread (at 100,000 rays the level
   behind dense leaves at 8 kHz moved by up to 22 dB from one seed to another); the new
   `validation/coupled_rooms.py` compares BRAS's coupled rooms with two-room diffuse
-  theory; and a test pins how a coloured sound in a rendered response's first
-  milliseconds moves G.
+  theory; the new `validation/bras_room_energy.py` prints the table of what each part of
+  the scattering model does in BRAS's rooms, which no script printed (it gives the
+  report's numbers; the report now says that the random model's row moves most from one
+  seed to another); and a test pins how
+  a coloured sound in a rendered response's first milliseconds moves G. Every run time
+  in the report was measured again, each run alone on the machine: most runs are faster
+  than the report said (the real-time convolver's blocks take 0.13 ms on average, not
+  0.30), and the edge diffraction's timing is the mean of three runs, as the script
+  takes it, not the median of nine.
 - Outdoors, the places of a walking source share the parabolic equation's runs where
   they stand at one height over one ground and neither the weather nor the ground has
   zones (`simulate(share_waves=...)`, which `simulate_walk` and `simulate_movement`

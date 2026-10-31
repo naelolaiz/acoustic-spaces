@@ -633,9 +633,13 @@ absorption and air gives 0.82 s against 0.96 s measured.
 **What scattering does.** Up to version 2 this package scattered a ray with the
 coefficient as probability, and from the surface's own coefficient alone. The hall then
 came out 20 to 32 % long, EDT 11 to 24 %, and the seminar room 0 to 10 % long from 250
-Hz to 4 kHz. Tracing the total sound energy in each room without listeners (as in the
-cross-check above, each band with rays of its own) and fitting T20 to its decay shows
-what each part of the new model does:
+Hz to 4 kHz. Tracing the total sound energy in each room without listeners, as the
+cross-check above does, and fitting T20 to its decay shows what each part of the new
+model does (`validation/bras_room_energy.py`: 20,000 rays from LS1,
+seed 0). The two vector-based models trace each band with rays of its own; random
+scattering, as version 2 did, traces one ray for all bands and re-weights each band by
+its own coefficient, which makes it noisier: with another seed its row moves by up to
+8 % (the hall at 63 Hz), the others by up to 1.3 %.
 
 | T20 (s) | 63 Hz | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz | 8 kHz |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -1045,13 +1049,15 @@ the corners of edges (see [Known issues](#known-issues)).
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
-sight, takes 55 ms per source and listener on four cores without diffraction (23
-paths), 650 ms with `first_order` (995 paths) and 710 ms with `second_order` (1,010
-paths), the medians of nine runs; on the same computer 4.0.0 takes about 1.0 and
-1.1 s. The terms that make the other specular paths fade at the edges (next section)
-take about 580 ms of that with `first_order` and give most of the paths, as each term
-is a path over its edge, and so is each product of terms: without them the early stage
-takes 70 ms with `first_order` (71 paths) and 135 ms with `second_order` (86 paths).
+sight, takes 36 ms per source and listener on four cores without diffraction (23
+paths), 478 ms with `first_order` (995 paths) and 524 ms with `second_order` (1,010
+paths), the mean of three runs after a first one, with nothing else running on the
+machine. The terms that make the other specular paths fade at the edges (next section)
+give most of the paths, as each term is a path over its edge, and so is each product of
+terms. In a one-off check when they were written, on a run where the early stage took
+650 ms with `first_order` and 710 ms with `second_order`, they took about 580 ms of the
+first; without them it took 70 ms (71 paths) and 135 ms (86 paths), and 4.0.0 took
+about 1.0 and 1.1 s on the same computer.
 
 ## Reflections that fade at edges against the exact solution
 
@@ -1145,7 +1151,8 @@ found for the geometric wave of both.
 Behind a barrier 1 m thick on the same ground (two right-angled edges 1 m apart, 3 m
 up), with the source at (-5, 0, 0.5), `second_order` and listeners 5 m behind it, the
 exact level is BTM's sound over both edges from the source and its image to the
-listener and its image (about 4 minutes a listener). The engine minus the exact level:
+listener and its image (up to about 4 minutes a listener). The engine minus the exact
+level:
 
 | thick barrier, `second_order` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -1951,9 +1958,10 @@ effective speed of sound within 0.69 dB, 0.31 dB on average. Downwind at 50 m an
 air is within 0.03 dB on the same grid; at 100 m 5 m up the effective speed of sound is
 0.69 dB low and moving air 0.25 dB.
 
-Moving air takes three to four times as long as the effective speed of sound: 23 s
-against 7 s in the free field (3.2 million cells), 47 s against 15 s with the façade
-(6 million) and 5 to 6 minutes against 1.5 with the preset (23 million), on 4 cores.
+Moving air takes 2.7 to 3.7 times as long as the effective speed of sound: 11.6 s
+against 4.3 s in the free field (3.2 million cells), 26 s against 7.6 s with the façade
+(6 million) and 3.2 minutes against 53 s with the preset (23 million), on 4 cores with
+nothing else running.
 
 ## Outdoor results against exact solutions
 
@@ -2627,9 +2635,10 @@ direct sound, the ground's reflection and the crest's wave ripple together; 125 
 stays 3 to 4 dB down (-3.9 and -3.3 dB at 26.5 and 29 m).
 
 **Cost.** Rolling hills 2 km across on a 20 m grid (10,000 cells, 21,233 triangles with
-a building): the model builds in 3.9 s, its 8 diffracting edges (the building's) are found in
-0.1 s, the early path over the hills in 0.3 s and a whole run with 20,000 rays takes
-0.6 s, on four cores of the test container. The terrain costs the late rays nothing
+a building): the model builds in 2.4 s, its 8 diffracting edges (the building's) are
+found in 0.1 s, the early path over the hills in 0.2 s and a whole run with 20,000 rays
+takes 0.5 s, on four cores of a cloud machine with nothing else running. The terrain
+costs the late rays nothing
 beyond the triangles it adds, and the early sound the profile and the string over it,
 once per listener.
 
@@ -2837,7 +2846,7 @@ a weather statistic might give them:
 | inversion | `clear_night` (air warming with height) | 0 % | 20 % | 50 % |
 
 The downwind class is the scene's own weather, so the four classes take four runs,
-about 20 s together. The level in each class, each period (12, 4 and 8 hours), over
+15 s together. The level in each class, each period (12, 4 and 8 hours), over
 the long term and L_den (5 dB in the evening, 10 at night), in dB(A):
 
 | | downwind | upwind | still | inversion | day | evening | night | long term | L_den |
@@ -3054,10 +3063,10 @@ random direction, against the harmonics summed there:
 
 | rotor | grid | harmonics | rms error | size | made in |
 |---|---|---|---|---|---|
-| main | 5° | 33 | -44 dB | 11 MB | 3.6 s |
-| | 2.5° | 33 | -56 dB | 44 MB | 11.9 s |
-| tail | 5° | 31 | -48 dB | 11 MB | 2.6 s |
-| | 2.5° | 31 | -59 dB | 42 MB | 7.8 s |
+| main | 5° | 33 | -44 dB | 11 MB | 2.6 s |
+| | 2.5° | 33 | -56 dB | 44 MB | 8.4 s |
+| tail | 5° | 31 | -48 dB | 11 MB | 1.8 s |
+| | 2.5° | 31 | -59 dB | 42 MB | 5.6 s |
 
 The harmonics kept reach 90 dB under the loudest (`QUIET_DB`). The default grid is 5°
 apart.
@@ -3184,22 +3193,25 @@ of random size (12 to 20 m a side) and height (6 to 30 m), with grass in the str
 A source stands in a street crossing in the middle, 1 m up, and two listeners stand 3
 and 5 blocks off. The simulation is the outdoor default: early reflections to the third
 order, the direct sound and first-order reflections bending over the edges, and 50,000
-rays per band for the late part. Times are on 4 cores of a cloud machine:
+rays per band for the late part. Times are from one run (`--sizes 10 20 30 40 60`) on 4
+cores of a cloud machine with nothing else running:
 
-| Buildings | Faces | Edges | Build (s) | Simulation (s) | Of it diffraction (s) | Pairs tested | Peak memory | Before (s) |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 100 | 1,012 | 800 | 0.2 | 3.7 | 3.0 | 8.5 % | 0.2 GB | 1.3 |
-| 400 | 4,012 | 3,200 | 1.1 | 9.1 | 8.4 | 4.3 % | 0.3 GB | 15.1 |
-| 900 | 9,012 | 7,200 | 2.1 | 16.6 | 15.6 | 2.9 % | 0.3 GB | 81.1 (7.1 GB) |
-| 1,600 | 16,012 | 12,800 | 4.2 | 21.4 | 20.1 | 2.7 % | 0.5 GB | out of 14 GB |
-| 3,600 | 36,012 | 28,800 | 10.2 | 56.4 | 54.5 | 3.3 % | 1.7 GB | |
+| Buildings | Faces | Edges | Build (s) | Simulation (s) | Of it diffraction (s) | Pairs tested | Peak memory |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 100 | 1,012 | 800 | 0.1 | 2.1 | 1.7 | 8.5 % | 0.3 GB |
+| 400 | 4,012 | 3,200 | 0.5 | 5.1 | 4.6 | 4.3 % | 0.3 GB |
+| 900 | 9,012 | 7,200 | 1.2 | 9.3 | 8.6 | 2.9 % | 0.4 GB |
+| 1,600 | 16,012 | 12,800 | 2.2 | 12.9 | 12.1 | 2.7 % | 0.5 GB |
+| 3,600 | 36,012 | 28,800 | 5.5 | 33.3 | 32.1 | 3.3 % | 1.7 GB |
 
 Diffraction includes the terms that make the other specular paths fade at the edges
-([above](#reflections-that-fade-at-edges-against-the-exact-solution)): without them,
-900 buildings simulate in 2.6 s (1.6 s of it diffraction), 1,600 in 4.8 s (3.6 s) and
-3,600 in 24.4 s (22.4 s).
-"Before" is the same run with every pair tested and without those terms, as in
-earlier versions. The tested
+([above](#reflections-that-fade-at-edges-against-the-exact-solution)). In a one-off
+check when the culling was written, on a run where 900 buildings simulated in 16.6 s
+(15.6 s of it diffraction), 1,600 in 21.4 s (20.1 s) and 3,600 in 56.4 s (54.5 s),
+they did so without those terms in 2.6 s (1.6 s), 4.8 s (3.6 s) and 24.4 s (22.4 s);
+and with every pair tested and without those terms, as in earlier versions, 100
+buildings took 1.3 s (3.7 s in that run), 400 took 15.1 s (9.1 s) and 900 81.1 s and
+7.1 GB (16.6 s), and 1,600 ran out of 14 GB. The tested
 share stays near 3 %: the shadow of a wall facing the source covers a wedge of the city
 that widens away from it, and only the ray tests tell whether other buildings hide the
 wall. The work therefore still grows with the square of the buildings, and a few
@@ -3211,8 +3223,8 @@ grows with the edges alone.
 turned at random angles and paths that reflect on both sides of an edge. It runs two
 sources, one in a street and one over the roofs, to two listeners, once as the engine
 runs, on one thread and on every core, and once with every pair tested. Every path, its
-energy and its spectrum come out the same bit for bit; the early paths took 1.1 s
-instead of 4.3 s. When the culling was written, the same comparison over every example
+energy and its spectrum come out the same bit for bit; the early paths took 0.7 s
+instead of 1.9 s. When the culling was written, the same comparison over every example
 and three test cities, with paths reflecting on one side and on both sides of an edge
 and over two edges, found no difference either (a one-off check; the script repeats
 the 4 by 4 city). The tests check the culling against
@@ -3350,10 +3362,10 @@ at least 134 dB below it through the second half.
 
 **One run for all bands.** A 7 x 5 x 3 m box whose absorption differs in every band
 (0.10 to 0.25 from 63 to 500 Hz), the wave solver up to the 500 Hz band: one run of
-868,701 cells and 3,997 steps of the 19-point stencil, 7.8 s on 4 cores with the fit and
-the grid's set-up, where 2.0.0 ran one per band. The run itself takes 7.0 s, against
-5.0 s for the same grid with constant walls: the branches cost about 40 % more than a
-run with constant walls, and save three runs.
+868,701 cells and 3,997 steps of the 19-point stencil, 2.8 s on 4 cores with the fit and
+the grid's set-up, where 2.0.0 ran one per band. Timed on its own, the same grid runs in
+2.9 s with the walls' six branches and in 1.9 s with constant walls: the branches cost
+about 50 % more than a run with constant walls, and save three runs.
 
 **Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's
 energy in the 63 and 125 Hz bands at 1 to 8 m is within 0.2 dB of the free-field level
@@ -3414,20 +3426,22 @@ hardware GPU.
 The plan's target: a 3 s response with 16 output channels (third-order Ambisonics), fed
 by one input in blocks of 128 frames at 48 kHz, without dropouts for 10 minutes. The
 benchmark sends 10 minutes of noise (225,000 blocks) through the convolver from Python,
-as the playback callback does, on one core of a shared 4-core x86-64 cloud machine, and
-times every block:
+as the playback callback does, on one core of a 4-core x86-64 cloud machine with
+nothing else running, and times every block:
 
 | per block | mean | median | 99 % | 99.9 % | max | over the 2.667 ms budget |
 |---|---:|---:|---:|---:|---:|---:|
-| thread CPU time | 0.298 ms | 0.239 ms | 0.736 ms | 0.903 ms | 2.055 ms | 0 of 225,000 |
-| wall-clock time | 0.304 ms | 0.241 ms | 0.763 ms | 1.531 ms | 6.874 ms | 48 of 225,000 |
+| thread CPU time | 0.127 ms | 0.096 ms | 0.248 ms | 0.295 ms | 1.175 ms | 0 of 225,000 |
+| wall-clock time | 0.128 ms | 0.097 ms | 0.250 ms | 0.305 ms | 3.663 ms | 1 of 225,000 |
 
 The response is split into 16 partitions of 128 samples, 14 of 1024 and 16 of 8192, and
 the work of the long partitions is spread over the blocks in between. The convolver's
-own work (CPU time) never took longer than a block lasts: on average 11 % of it, at most
-77 %. In wall-clock time, 48 blocks (0.02 %) were late because the shared machine took
-the core away; on a desktop with a real-time audio thread and the usual two or more
-buffers at the sound card, such single late blocks are absorbed. Whether a given sound
+own work (CPU time) never took longer than a block lasts: on average 4.8 % of it, at
+most 44 %. In wall-clock time, one block was late (3.7 ms), while no block's own work
+took more than 1.2 ms: the thread was kept off the core for a moment. On an earlier
+run, on a machine shared with other work, 48 blocks of 225,000 (0.02 %) were late that
+way. On a desktop with a real-time audio thread and the usual two or more buffers at
+the sound card, such single late blocks are absorbed. Whether a given sound
 card plays 10 minutes without a dropout can only be checked on that machine:
 `acoustic-spaces play ir.wav --live --block 128 --seconds 600` reports the longest time a block
 took and every block the sound card dropped. The output matched offline convolution to 2.6 × 10⁻⁷ of
@@ -3621,22 +3635,27 @@ python validation/bras_validation.py --materials initial --calibrate LS1 --plots
 python validation/bras_binaural.py path/to/BRAS --json binaural.json   # FABIAN's responses from BRAS
 python validation/bras_iacc_parts.py path/to/BRAS CR3 LS7   # one loudspeaker's response in parts
 python validation/coupled_rooms.py --results bras.json   # CR1 against two-room diffuse theory
+python validation/bras_room_energy.py --results bras.json   # what scattering does, rooms' own decay
 ```
 
-The cross-check takes about 10 minutes on 4 cores, the benchmark about 2 minutes, the
-wave solver's checks about 3.5 minutes (both stencils), the ground's about 7.5 (1.5 of
-them the wave solver's, 2 the parabolic equation's), the outdoor measurements' about 2.5
-(3 with turbulence), the turbulence's about 7, the vegetation's about 6, the wave
-solver's outdoors about 18, the outdoor results' about 3, the terrain's about 4.5, the
-leaves' about 2, the fast field program's about 4, the benchmark's about 55 (much
-longer with `--far`), the weather zones' about 9 (2 the parabolic equation's, 7 the
-mean profile's), the long term's about 0.5, the moving sources' about 3, the fade at edges' about 80 (25 of them the barriers'), the
-walks' about 14, the cities' about 1 (2 with `--sizes 10 20 30 40 60`), each BRAS run
-of the coupled rooms, the seminar room or the auditorium 2 to 4 minutes (4 to 9
-calibrated, 5 to 11 in third-octave bands) and of the hall about 1.5 hours (5.2
-calibrated, 3.4 in third-octave bands), the binaural comparison 10 minutes in the
-seminar room, 6 in the auditorium and an hour in the hall, and a loudspeaker of the hall
-in parts about 10 minutes. The cross-check's numbers come from 4.0.1 with seed 1;
+On 4 cores of a cloud machine without a GPU, each run alone on the machine (30 and 31
+October 2026), the cross-check takes about 10 minutes, the convolver benchmark half a
+minute, the wave solver's checks 1.2 minutes (both stencils), the edge diffraction's 40
+seconds, the fade at edges' 53 minutes, the walks' 14, the ground's 5.5 (51 s of them
+the wave solver's, 100 s the parabolic equation's), the outdoor measurements' 3.1 (3.0
+with turbulence, 20 seconds in still air), the turbulence's 3.9 (3.8 with `--profile`),
+the vegetation's 5.2, the leaves' 2.6, the wave solver's outdoors 11, the moving air's
+9.3, the insertion loss's 1.8, the terrain's 2.7, the fast field program's 5.7, the
+benchmark's 55 (much longer with `--far`), the weather zones' 7.2 (46 s of them the
+parabolic equation's, 6.4 minutes the mean profile's), the long term's 16 seconds, the
+moving sources' 5.6 minutes, the rotors' 3.3, the cities' 22 seconds (1.3 minutes with
+`--sizes 10 20 30 40 60`), each BRAS run of the coupled rooms, the seminar room or the
+auditorium 2 to 4 minutes (4 to 9 calibrated, 5 to 11 in third-octave bands) and of
+the hall about 1.5 hours (5.2 calibrated, 3.4 in third-octave bands), the binaural
+comparison 10 minutes in the seminar room, 6 in the auditorium and an hour in the
+hall, a loudspeaker of the hall in parts about 10 minutes, the coupled rooms against
+theory under a second, and the rooms' own decay 5.8 minutes. The cross-check's numbers
+come from 4.0.1 with seed 1;
 this version's own are within 0.012 % of them (EDT, whose line fit now starts at the
 onset in every response).
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
