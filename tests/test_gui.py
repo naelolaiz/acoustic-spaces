@@ -637,6 +637,10 @@ def test_scene_yaml_panel(window, qapp, tmp_path: Path) -> None:
     panel.view.setPlainText(panel.view.toPlainText().replace("level_db: 94.0", "level_db: 90.0", 1))
     assert panel.edited() and panel.apply_button.isEnabled()
     assert "Edited: Apply makes the text the scene" in panel.status.text()
+    # A shortcut works in the active window (under Xvfb it starts inactive).
+    window.activateWindow()
+    panel.view.setFocus()
+    assert QTest.qWaitForWindowActive(window, 2000)
     QTest.keyClick(panel.view, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
     assert document.scene.sources[0].level_db == 90.0 and not panel.edited()
     assert window.undo_action.text() == "&Undo edit scene YAML"
