@@ -3649,7 +3649,7 @@ Files and runs:
   measurements; how much the sound flickers over time is not checked against either.
   Between two moments of the eddies, a tone played through them, standing and along a
   walk with Doppler, is checked to have the response whose paths are delayed half-way
-  (to within 40 dB in the tests).
+  (in the tests, to within 1 % of the tone's amplitude).
   The wave solver in wind and temperature is checked against the parabolic equation
   over open ground up to 200 m, not against measurements, nor round buildings; its
   moving air against the exact field in a uniform wind and a façade's echo against

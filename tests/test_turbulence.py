@@ -429,7 +429,7 @@ def half_way_errors(response, wet: np.ndarray, f: float, rate: int, gusts, seed,
     """How far a sine at ``f`` played through ``response`` in turbulence (``wet``) is,
     half-way between each two of ``moments`` and the next, from the response whose
     paths are delayed half-way (the eddies' delays are linear in their draws): the
-    largest error, in dB of the rms response."""
+    largest difference, in dB of the response's rms amplitude (-40 dB is 1 %)."""
     from acoustic_spaces.spatial import Mono
 
     early = response.early
@@ -451,8 +451,8 @@ def test_half_way_between_two_moments_each_path_is_half_way_there() -> None:
     """Between two moments of the eddies each path's delay goes from one moment's to
     the next's, so half-way a tone has the response whose paths are delayed half-way.
     Crossfading the two moments' responses instead mixed each path at two delays,
-    which half-way cancels the treble: at 8 kHz here that was off by 14 dB under the
-    response's rms (now 66 dB under)."""
+    which half-way cancels the treble: at 8 kHz here the largest difference was 19 % of
+    the tone's rms amplitude (now 0.05 %)."""
     turbulence = {"preset": "strong", "outer_scale_m": 2.0}
     scene = in_turbulence(turbulence, listeners=((140.0, 0.0, 1.5),), ir_length_s=0.6)
     result = simulate(Room.from_scene(scene))

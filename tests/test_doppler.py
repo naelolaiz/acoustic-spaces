@@ -300,8 +300,8 @@ def test_a_walker_standing_in_the_eddies_hears_each_path_half_way_between_moment
     next's, its top band's in the delay and the rest in the filter: half-way, a tone
     at 8 kHz has the response whose paths are delayed half-way. The filter alone held
     only how the other bands lag behind the top one, so the eddies did not move the
-    top band at all: off by 7 dB under the response's rms at 8 kHz here (now 81 dB
-    under)."""
+    top band at all: the largest difference here was 43 % of the tone's rms amplitude
+    (now 0.009 %)."""
     from test_turbulence import half_way_errors
 
     data = _standing("hard").model_dump(mode="json", exclude_none=True)

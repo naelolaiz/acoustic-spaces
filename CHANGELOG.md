@@ -53,9 +53,10 @@
   one, and its delay none of the eddies', so they did not move the top band at all
   and moved the others by their difference from it. The `helicopter_flyover` example's
   flyovers had it. The top band's delay at each moment now goes into the path's delay,
-  taken between the moments on either side; a test of a tone at 8 kHz half-way between
-  two moments, against the response whose paths are delayed half-way, finds an error
-  81 dB under the response where it was 7 dB under.
+  taken between the moments on either side. A test plays a tone at 8 kHz and compares
+  it, half-way between two moments, with the tone through the response whose paths are
+  delayed half-way: the largest difference was 43 % of the tone's amplitude and is now
+  0.009 %.
 - Fixed: listening in turbulence (`auralize`, the editor's **Listen**, walks without
   Doppler) crossfaded each moment of the eddies into the next (every 125 ms in
   `open_air_stage`), which mixed each early path at two delays a few microseconds apart
@@ -63,8 +64,8 @@
   20 ms at a time at `open_air_stage`'s listener 300 m downwind. Each early path now
   plays through its own delay, which goes from one moment's to the next's, as along a
   walk with Doppler (`acoustic_spaces.doppler.render` takes a `span` of samples for
-  it), in about the same time; the same test finds an error 66 dB under the response
-  where it was 14 dB under.
+  it), in about the same time. The same test, standing still: the largest difference
+  was 19 % of the tone's amplitude and is now 0.05 %.
 
 - A scene can name the `recording` its sound system plays in a demo of it
   (`acoustic-spaces demo`, the editor's *This scene*), and each source the `channel` of
