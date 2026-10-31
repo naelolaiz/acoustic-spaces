@@ -742,3 +742,12 @@ def test_the_passby_demo_drives_the_fire_engine_with_its_siren_and_horn(
     truck = every[:n] - mixes["siren_and_horn"][:n]
     low = [float(np.sum(split_bands(x[:, 0], 16_000)[0] ** 2)) for x in (truck, alone)]
     assert low[0] > 10.0 * low[1]
+    # And it plays at its own sound power: as far under the siren's and the horn's
+    # sound as its level is under theirs.
+    under = 10.0 * math.log10(a_energy(mixes["siren_and_horn"][:n]) / a_energy(truck))
+    devices = sum(
+        10.0 ** (heard["parts"][name]["sel_a_db"] / 10.0)
+        for name in ("fire_engine_siren", "fire_engine_horn")
+    )
+    told = 10.0 * math.log10(devices) - heard["parts"]["fire_engine"]["sel_a_db"]
+    assert told > 20.0 and under == pytest.approx(told, abs=1.5)
