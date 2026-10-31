@@ -489,7 +489,10 @@ Known issues found by the review of 25 October 2026 (see
   part carries the first orders' specular share as the exact paths do, checked against
   the BRAS rooms' decay.
 
-Next version:
+Version 4.1.0 (and, in the sections above, the helicopters and the faster walks
+outdoors under Movement, the demos' elements in their scenes and a recording for a
+scene's sound system under Examples, and the Run demo window and the Scene YAML panel
+under Editor):
 
 - [x] Uncertainty: each parameter's standard error, how much it would change between
   runs with other seeds, from the late rays traced in batches (a jackknife over them),
@@ -499,18 +502,15 @@ Next version:
 - [x] The path over a barrier's top with the reflection off the ground behind it, kept
   where the reflection before the barrier is found: behind a barrier on a hard ground
   the level follows the exact one within 0.05 dB with `first_order` and `both_sides`,
-  instead of stepping by 0.35 dB at 63 Hz. Checked against BRAS: the seminar room's and
-  the hall's average differences from the measurement move by 0.15 JNDs at most in
-  each band, but for the calibrated hall's (0.67), whose fit lands on other
-  coefficients.
+  instead of stepping by 0.35 dB at 63 Hz. Checked against BRAS: in the seminar room 12
+  terms over its 10 pairs that were left out count now, which moves its early level
+  by up to 0.8 dB at 63 Hz.
 - [x] Models cleaned where an edge runs past a corner at which three faces meet: BRAS's
   auditorium (CR4) is closed.
 - [x] More measured rooms: BRAS's coupled rooms (CR1, the door open by 4.1°) and
   auditorium (CR4) beside the seminar room and the hall, G from seat to seat in all four
   with the measured level's 3 dB question reported, IACC of FABIAN's binaural responses
   in three (`validation/bras_binaural.py`), and each run's largest standard error.
-- [ ] BRAS's coupled rooms with the door open by 30.4°, whose model has no closed inside:
-  the door leaf cuts some 2 cm into the wall at its hinge.
 - [x] Random scattering traced band by band where the bands scatter differently, as
   vector-based scattering is: with one ray for all bands, re-weighted band by band, its
   decays in BRAS were noisy, and in the coupled rooms far too short.
@@ -524,6 +524,11 @@ Next version:
   view.
 - [x] Microphone patterns that change with frequency: one per octave or third-octave
   band, for a capsule or a pair's capsules, rendered exactly from the same paths.
+
+Next:
+
+- [ ] BRAS's coupled rooms with the door open by 30.4°, whose model has no closed inside:
+  the door leaf cuts some 2 cm into the wall at its hinge.
 - [ ] A microphone's measured on-axis response and measured patterns (files), as
   sources have.
 - [ ] Spaced pairs whose late parts correlate as real capsules' do at low frequencies.
