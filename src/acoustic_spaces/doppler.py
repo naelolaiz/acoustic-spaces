@@ -27,6 +27,12 @@ place to place along the walk:
   side in proportion to how near they are; the delayed signal goes through it in
   windows that half overlap (squared sines, which add up to one), so a path heard
   from one place alone gives exactly the convolution with its response.
+- **The ears.** Where each ear's response starts (its onset, as the ears are mixed
+  between measured directions: :meth:`~acoustic_spaces.spatial.hrtf.HRTF.interpolate`)
+  is a delay too: it goes into that ear's delay, read through the cubic and the sinc
+  as the path's is, and out of its filter. Measured ears can start a few samples apart
+  from one direction to the next; filters that start apart, mixed between two places
+  or in the overlapping windows, would cancel the treble there.
 
 - **The sound sent.** Every path carries the same signal, unless it is an
   :class:`~acoustic_spaces.emission.Emission`, the sound a source sends each way: then
@@ -297,6 +303,7 @@ class Filters:
         self.rate = int(sample_rate)
         self.n_fft = n_fft
         self.f = np.fft.rfftfreq(n_fft, 1.0 / sample_rate)
+        self.cycles = np.fft.rfftfreq(n_fft)  # per sample
         # The filters are zero-phase about the path's delay: ``delay`` samples later.
         self.shift = np.exp(-2j * np.pi * self.f * delay / sample_rate)
         self.gusts = gusts
@@ -346,13 +353,36 @@ class Filters:
         heads = to_head(paths.direction, response.orientation)
         if isinstance(self.fmt, Binaural):
             hrtf = self.fmt.at(self.rate)
-            ears = np.fft.rfft(hrtf.interpolate(heads), self.n_fft, axis=-1)
+            ears, onsets = hrtf.interpolate(heads, onsets=True)
+            # Each ear's onset is in its delay (see :func:`_onsets`), so out of its
+            # filter: the samples before it wrap round to the end, and the shift to the
+            # middle of the kernel brings them back before it.
+            ears = np.fft.rfft(ears, self.n_fft, axis=-1)
+            ears *= np.exp(2j * np.pi * self.cycles * onsets[..., None])
             spectra = shaping[:, None, :] * ears
         elif isinstance(self.fmt, Microphone):  # its pattern may change with frequency
             spectra = shaping[:, None, :] * self.fmt.spectral_gains(heads, gains)
         else:
             spectra = shaping[:, None, :] * self.fmt.gains(heads)[:, :, None]
         return spectra.astype(np.complex64)
+
+
+def _onsets(responses, track: Track, hrtf, rate: int) -> np.ndarray:
+    """(N, 2) where each ear's response starts (s) on ``track``'s path at each place
+    (zero where it is not heard), as :class:`Filters` takes it out of the ears."""
+    from acoustic_spaces.spatial.directions import to_head
+
+    onsets = np.zeros((len(track.present), 2))
+    heard = np.flatnonzero(track.present)
+    if len(heard):
+        heads = np.array(
+            [
+                to_head(responses[k].early.direction[track.rows[k]], responses[k].orientation)
+                for k in heard
+            ]
+        )
+        onsets[heard] = hrtf.interpolate(heads, onsets=True)[1] / rate
+    return onsets
 
 
 def _ways(paths) -> np.ndarray:
@@ -374,6 +404,8 @@ class _Reading:
     last: int
     cutoff: float
     ways: np.ndarray | None = None
+    #: (N, 2) at the ears, where each ear's response starts at each place (s).
+    onsets: np.ndarray | None = None
 
     def sent(self, emission: Emission, positions: np.ndarray, rate: int) -> np.ndarray:
         """``emission`` read at ``positions`` (its samples): at each, the sound sent the
@@ -392,6 +424,12 @@ class _Reading:
         ways = np.column_stack([np.interp(at, left, self.ways[heard, i]) for i in range(3)])
         ways /= np.maximum(np.linalg.norm(ways, axis=1, keepdims=True), 1e-300)
         return read(emission.sent(lo, hi, ways), positions - lo, self.cutoff)
+
+    def onset(self, t: np.ndarray, ear: int) -> np.ndarray:
+        """Where ``ear``'s response starts at times ``t`` (s): through the places as
+        the delay goes, held past the path's ends."""
+        assert self.onsets is not None
+        return hermite(self.track.received[self.heard], self.onsets[self.heard, ear], t)
 
     def delays(self, t: np.ndarray, walk_last: int) -> np.ndarray:
         track, heard = self.track, self.heard
@@ -464,10 +502,12 @@ def render(
     blocks = int(math.ceil((length + half) / hop)) + 1
     last = len(times) - 1
     leaving = [_ways(paths) for paths in places] if emission is not None else []
+    hrtf = fmt.at(rate) if isinstance(fmt, Binaural) else None
     readings = []
     for track in followed:
         first_k, last_k = track.span
         heard = np.flatnonzero(track.present)
+        onsets = None if hrtf is None else _onsets(responses, track, hrtf, rate)
         # Heard from the place before its first to the place after its last, or to
         # either end of the sound where it is heard at the walk's.
         lo = 0.0 if first_k == 0 else track.received[first_k - 1]
@@ -480,15 +520,16 @@ def render(
         )
         speed = 1.0
         if len(heard) > 1:
+            total = track.delays[heard, None] + (0.0 if onsets is None else onsets[heard])
             speed = float(
-                np.max(1.0 - np.diff(track.delays[heard]) / np.diff(track.received[heard]))
+                np.max(1.0 - np.diff(total, axis=0) / np.diff(track.received[heard])[:, None])
             )
         ways = None
         if emission is not None:
             ways = np.zeros((len(times), 3))
             for k in heard:
                 ways[k] = leaving[k][track.rows[k]] @ frames[k]
-        readings.append(_Reading(track, heard, j0, j1, 0.97 / max(speed, 1.0), ways))
+        readings.append(_Reading(track, heard, j0, j1, 0.97 / max(speed, 1.0), ways, onsets))
     # The places in use at once: for a walking source, those the paths' different
     # delays reach back to.
     spread = 2
@@ -518,11 +559,19 @@ def render(
         for reading in readings:
             if reading.first > c1 - 1 or reading.last < c0:
                 continue
-            positions = np.arange(n0, n1) - reading.delays(t, last) * rate
-            if emission is not None:
-                active.append((reading, reading.sent(emission, positions, rate)))
-            else:
-                active.append((reading, read(plain, positions, reading.cutoff)))
+            delay = reading.delays(t, last)
+            # At the ears, each ear's own delay (its onset added): (samples, 2).
+            ears = (
+                [delay] if reading.onsets is None else [delay + reading.onset(t, e) for e in (0, 1)]
+            )
+            reads = []
+            for each in ears:
+                positions = np.arange(n0, n1) - each * rate
+                if emission is not None:
+                    reads.append(reading.sent(emission, positions, rate))
+                else:
+                    reads.append(read(plain, positions, reading.cutoff))
+            active.append((reading, np.column_stack(reads)))
         if not active:
             continue
         for j in range(c0, c1):
@@ -535,10 +584,10 @@ def render(
                 spectrum = _filter_at(filters, reading.track, centre, gusts)
                 if spectrum is None:
                     continue
-                piece = signal[start - n0 : start - n0 + 2 * hop] * window
+                piece = signal[start - n0 : start - n0 + 2 * hop] * window[:, None]
                 if not np.any(piece):
                     continue
-                part = np.fft.rfft(piece, n_fft)[None, :] * spectrum
+                part = np.fft.rfft(piece, n_fft, axis=0).T * spectrum
                 total = part if total is None else total + part
             if total is None:
                 continue

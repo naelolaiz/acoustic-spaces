@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal, overload
 
 import numpy as np
 
@@ -80,34 +81,52 @@ class HRTF:
             self._aligned = (onsets, spectra)
         return self._aligned
 
-    def interpolate(self, directions: np.ndarray) -> np.ndarray:
+    @overload
+    def interpolate(
+        self, directions: np.ndarray, *, onsets: Literal[False] = False
+    ) -> np.ndarray: ...
+
+    @overload
+    def interpolate(
+        self, directions: np.ndarray, *, onsets: Literal[True]
+    ) -> tuple[np.ndarray, np.ndarray]: ...
+
+    def interpolate(
+        self, directions: np.ndarray, *, onsets: bool = False
+    ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
         """Responses (dirs, 2, taps) for head directions (dirs, 3), between the measured
-        ones.
+        ones; with ``onsets``, also the onset (dirs, 2) each starts at (samples,
+        fractions included).
 
         The measured directions are triangulated (the faces of their convex hull, as
         for VBAP). Each direction mixes the responses at the corners of the triangle it
         falls in, aligned at their onsets, with its barycentric weights, and the mix is
-        delayed by the same mix of the onsets, to a fraction of a sample. A measured
-        direction gives its own response, and the weights, and with them the responses
-        and the interaural time difference, change smoothly with the direction. Where no
-        triangle covers a direction (a set that leaves part of the sphere out), the
-        nearest response is used.
+        delayed by the same mix of the onsets, to a fraction of a sample: that mix is
+        the onset given. A measured direction gives its own response, and the weights,
+        and with them the responses and the interaural time difference, change smoothly
+        with the direction. Where no triangle covers a direction (a set that leaves part
+        of the sphere out), the nearest response is used, and its onset.
         """
         v = np.atleast_2d(np.asarray(directions, dtype=float))
         v = v / np.linalg.norm(v, axis=1, keepdims=True)
         if len(self.directions) < 4:
-            return self.hrir[self.nearest(v)]
-        onsets, spectra = self._alignment()
+            nearest = self.nearest(v)
+            if onsets:
+                return self.hrir[nearest], self.onsets()[nearest]
+            return self.hrir[nearest]
+        measured, spectra = self._alignment()
         n_fft = spectra.shape[-1] * 2 - 2
         frequency = np.fft.rfftfreq(n_fft)  # cycles per sample
         out = np.empty((len(v), 2, self.taps))
+        delays = np.empty((len(v), 2))
         for start in range(0, len(v), _CHUNK):
             index, weights = self._corners(v[start : start + _CHUNK])
             spectrum = np.einsum("kj,kjeb->keb", weights, spectra[index])
-            delay = np.einsum("kj,kje->ke", weights, onsets[index])
+            delay = np.einsum("kj,kje->ke", weights, measured[index])
             spectrum *= np.exp(-2j * np.pi * frequency * delay[..., None])
             out[start : start + _CHUNK] = np.fft.irfft(spectrum, n_fft, axis=-1)[..., : self.taps]
-        return out
+            delays[start : start + _CHUNK] = delay
+        return (out, delays) if onsets else out
 
     def _corners(self, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """The measured directions (k, 3) to mix for unit directions (k, 3), and their

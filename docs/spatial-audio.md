@@ -415,7 +415,11 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   shifts a little differently from the direct sound, and their interference sweeps as
   it does by a road. Each path keeps its filter (the ground's, the air's, a barrier's,
   the ears' in binaural), which changes from one place to the next as before, and in
-  turbulence the eddies drift past as in any walkthrough.
+  turbulence the eddies drift past as in any walkthrough. In binaural, where each ear's
+  response starts goes into that ear's delay instead of its filter: measured ears start
+  a few samples apart from one direction to the next (KEMAR's far ear by up to 11
+  samples between places 1 m apart along a road 25 m away), and two places' filters
+  that start apart, mixed, would cancel the treble between them.
 - The late part is crossfaded from place to place as without Doppler, its pitch
   unshifted; outdoors it is far below the early sound.
 - Against the exact field of a source passing 10 m from a listener over a hard ground,

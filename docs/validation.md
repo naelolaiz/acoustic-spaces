@@ -3020,7 +3020,11 @@ up to 0.8 dB louder ahead of it at 30 m/s and 2.0 dB at 70 m/s, 0.7 and 1.6 dB
 quieter behind), and so is the
 Doppler shift of the late part, which is crossfaded. Binaural walks are checked
 against the convolution with a response when the walker stands still (to within 45 dB
-at each ear in the tests), not against a moving head's exact field.
+at each ear in the tests), not against a moving head's exact field. A test drives a
+source past a listener whose ears' responses start 4 samples apart from one direction
+to the next, as a measured set's may, and holds its treble (6 to 16 kHz, frame by
+frame) within 0.3 dB of the same walk with ears that start together; before each ear's
+onset went into its delay, it lost 5.4 dB between places.
 
 ## Helicopter rotors against theory and a certified level
 

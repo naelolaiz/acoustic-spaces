@@ -37,6 +37,17 @@
   first. The pass-by demos' step that makes the vehicle's sound is `sound` instead of
   `car` (`passby_demo.py sound`), and writes `demo/NAME/NAME.wav` for the vehicle NAME
   (`demo/police_car/siren.wav` for the police car).
+- Fixed: a walk with Doppler in binaural through measured ears (a SOFA file, such as
+  `kemar`) lost the treble for a moment between each two places, audible as a vehicle
+  passes. Where each ear's response starts was in its filter, and
+  measured ears start a few samples apart from one direction to the next (KEMAR's far
+  ear by up to 11 samples between places 1 m apart along a road 25 m away), so two
+  places' filters mixed, or two windows overlapping, cancelled each other: for the truck
+  heard 25 m from the road (the `roadside` example's `yard_25m`), up to 6.8 dB lost at
+  8 to 16 kHz for 40 ms at a time. Each ear's
+  onset now goes into that ear's delay, read through the same cubic and sinc as the
+  path's. The spherical head's onsets move at most half a sample from place to place,
+  and lost up to 0.8 dB there.
 
 - A scene can name the `recording` its sound system plays in a demo of it
   (`acoustic-spaces demo`, the editor's *This scene*), and each source the `channel` of
