@@ -467,6 +467,7 @@ def test_the_passby_demo_drives_the_police_car_with_its_siren(tmp_path: Path) ->
         x, rate = audio.read(work / "police_car" / name)
         assert rate == 16_000 and len(x) == pytest.approx(40.0 / 13.89 * rate, abs=2)
     scene = Scene.from_yaml(folder / "scene_demo.yaml")
+    assert scene.name.endswith(": a police car passing")
     assert [s.name for s in scene.sources if s.in_use] == ["police_car", "police_car_siren"]
     car, top = (
         next(s for s in scene.sources if s.name == n) for n in ("police_car", "police_car_siren")

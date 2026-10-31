@@ -642,7 +642,8 @@ def scene(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     (:meth:`Vehicle.edit`), every other source left out."""
     info = car_info(args, vehicle)
     data = yaml.safe_load(args.source.read_text(encoding="utf-8"))
-    data["name"] = f"{data.get('name', 'scene')}: a {vehicle.name} passing"
+    noun = vehicle.name.replace("_", " ")
+    data["name"] = f"{data.get('name', 'scene')}: a {noun} passing"
     own = {s.name: s for s in source_scene(args).sources}
     parts = vehicle.parts(args)
     for source in data["sources"]:
